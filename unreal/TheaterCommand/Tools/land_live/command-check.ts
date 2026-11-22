@@ -117,19 +117,19 @@ if (hidden !== woods.length) fail(`only ${hidden} of the walk's ${woods.length} 
         if (e.what === 'land:smoke' && e.unit === f.id) smokeSaid++;
       }
       for (const r of d.rounds as { w?: string; by?: number; hang?: number }[]) if (r.w === 'smoke' && r.by === f.id && r.hang !== undefined) hang = Math.max(hang, r.hang);
-      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[]; cuts?: { unit: number }[]; screens?: { unit?: number }[] } | undefined;
-      if (v?.cuts?.some((c) => c.unit === tank.id)) cutViews++;
+      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[]; screens?: { unit?: number }[] } | undefined;
+      for (const c of d.cuts ?? []) if (c.unit === tank.id) cutViews++;
       if (v?.screens?.some((c) => c.unit === f.id)) screenViews++;
       if (v?.units?.find((u) => u.id === tank.id)?.cutter) cutterShown++;
       const s = v?.units?.find((u) => u.id === f.id)?.smoke;
       if (s !== undefined) smokeShown = s;
-      if (cutSaid && smokeSaid && cutViews > 2 && screenViews > 2 && hang >= 0) break;
+      if (cutSaid && smokeSaid && cutViews && screenViews > 2 && hang >= 0) break;
     }
     console.log(`cutters and smoke: with no hedge "${noHedge}"; tank ${tank.id} told to cut ${cut ? 'taken' : `refused (${cutNo})`}, began ${cutSaid ? 'yes' : 'no'}, cutters shown in ${cutterShown} views; section ${f.id} told to lay smoke ${smoke ? 'taken' : `refused (${smokeNo})`}, laid ${smokeSaid ? 'yes' : 'no'}, ${smokeShown} screens left`);
     if (!cut || !cutSaid || !cutterShown) fail('his tank did not cut the gap he picked');
     if (!smoke || !smokeSaid) fail('his section did not lay the screen he dragged');
-    console.log(`  the 3D field hears of them: the cut in ${cutViews} views, the screen in ${screenViews}, its smoke rounds hang ${hang} s`);
-    if (!cutViews || !screenViews || hang < 0) fail('the views do not carry the cut and the screen for the 3D field');
+    console.log(`  the 3D field hears of them: the cut in ${cutViews} delta (once), the screen in ${screenViews} views, its smoke rounds hang ${hang} s`);
+    if (cutViews !== 1 || !screenViews || hang < 0) fail('the deltas do not carry the cut once and the screen for the 3D field');
   }
 }
 console.log(failures ? `FAIL (${failures})` : 'the rules took every order');
