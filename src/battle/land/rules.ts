@@ -489,7 +489,61 @@ export const LAND = {
     } as Record<string, SmokeMeans>,
     kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA' } as Record<string, string>,
   },
+  /**
+   * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+   * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+   * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+   * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+   * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+   * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+   * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+   * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+   * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+   * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+   * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+   * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+   * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+   *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+   *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+   *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+   *     Division, 1945).
+   *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+   *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+   *     battle seconds a real minute. Finding the break is not counted (no source).
+   *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+   *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+   *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+   *     Every other army 1 ('_').
+   *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+   *     nations): how orders go once the wire is down.
+   *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+   *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+   *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+   *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+   *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+   *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+   *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+   *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+   *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+   */
+  phones: {
+    cut: 0.12,
+    splice: 30,
+    runner: 6,
+    lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 } as Record<string, number>,
+    fallback: {
+      USA: [[1942, 'runner'], [9999, 'radio']], UK: [[9999, 'radio']], CAN: [[9999, 'radio']], AUS: [[9999, 'radio']], NZL: [[9999, 'radio']], SAF: [[9999, 'radio']], IND: [[9999, 'radio']],
+      GER: [[1942, 'runner'], [9999, 'radio']], SOV: [[9999, 'runner']], JAP: [[9999, 'runner']], ITA: [[9999, 'runner']], FRA: [[9999, 'runner']], VIC: [[9999, 'runner']], _: [[9999, 'runner']],
+    } as Record<string, [number, PhoneFallback][]>,
+  },
 };
+/** How orders go to a block whose telephone wire is down (LAND.phones.fallback): by the wireless or by a runner. */
+export type PhoneFallback = 'radio' | 'runner';
+/** Field telephone lines: the lines to each block of this army (LAND.phones.lines; '_' for an army not listed). */
+export const phoneLines = (nat: string): number => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+/** Field telephone lines: how this army's orders go in this year once a wire is down (LAND.phones.fallback). */
+export const phoneFallback = (nat: string, year: number): PhoneFallback => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? 'runner';
 
 /** How far a block's fire carries: its team's reach, or its kind's. */
 export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);

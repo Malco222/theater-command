@@ -268,6 +268,8 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   // drag). ?hedges: three test hedge lines with gateways across the middle of the field (the browser's fields have
   // none), laid before the clock, so cutters can be tried.
   b.cutters = flagged('cutters'); b.smoke = flagged('smoke');
+  // ?phones (release 2; the design director, 18:36Z): the defence's field telephone lines; guns, mortars and tanks cut them.
+  b.phones = flagged('phones');
   if (flagged('hedges')) { const H = practiceHedges(b.field.w, b.field.h); b.hedgesOn(H.hedges, H.gates); }
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();

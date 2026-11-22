@@ -65,7 +65,9 @@ export type Role = 'officer' | 'rifle' | 'mg' | 'at' | 'sapper' | 'holder' | 'ta
 export type Pose =
   | 'idle' | 'walk' | 'run' | 'advance' | 'creep' | 'crawl' | 'flee' | 'fire_stand' | 'fire_kneel' | 'fire_prone' | 'lmg_burst'
   | 'throw_grenade' | 'cower' | 'wait' | 'hide' | 'observe' | 'mounted' | 'ride' | 'horses' | 'down'
-  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked';
+  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked'
+  // Field telephone lines (release 2): a lineman walking his wire out with the cable reel, and kneeling at the cut, splicing.
+  | 'reel' | 'splice';
 /** What the block as a whole is doing, as its men see it. */
 export type Phase = 'column' | 'deploy' | 'bound' | 'startline' | 'fight' | 'hold' | 'rest' | 'pinned' | 'fallback' | 'flee' | 'rally' | 'gone' | 'battery' | 'limbered';
 /** What shelters a man where he stands. */
@@ -230,6 +232,11 @@ export interface MenBlock {
   /** The foot block the spotter is with, and the block his guns fire on (absent while they are quiet). */
   foWith?: number;
   foOn?: number;
+  /**
+   * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire, each with ln: 1 (absent
+   * where none is out, and while the switch is off).
+   */
+  ln?: MenOut[];
 }
 export interface MenOut {
   k: number; j?: number; r: Role; x: number; y: number; f: number; p: Pose; v: number; c: CoverKind;
@@ -239,6 +246,8 @@ export interface MenOut {
   e?: 1 | 2; cl?: number;
   /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
   ld?: 1;
+  /** Field telephone lines (release 2): a lineman, outside the block's squads (MenBlock.ln). */
+  ln?: 1;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -3188,7 +3197,32 @@ export class Drill {
       for (const v of sq.veh) if (live(u)) men.push(one(v));
       const blk: MenBlock = { id: u.id, ph: sq.phase, men };
       if (sq.fo && live(u)) { blk.fo = sq.fo.map(one); blk.foWith = sq.foWith; blk.foOn = sq.foOn; }
+      if (b.phones && b.phonesSeen(as)) { const ln = this.linemen(u.id); if (ln.length) blk.ln = ln; }
       out.push(blk);
+    }
+    return out;
+  }
+
+  /**
+   * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire now, one for each mend.
+   * He leaves the headquarters at the mend's t0 with the cable reel ('reel'), walking the wire at foot pace to the cut,
+   * kneels there splicing ('splice') from t1, as he gets there, until the mend's t, then walks back along it ('walk') and
+   * is gone once he is home. Worked out from the mend alone, as the clock stands: looks only, and nothing here draws.
+   * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
+   */
+  private linemen(id: number): MenOut[] {
+    const b = this.b, t = b.t, out: MenOut[] = [], pace = LAND.speed.inf;
+    const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
+    for (const m of b.wireMends) {
+      const w = b.wires[m.wire - 1];
+      if (!w || w.unit !== id || t < m.t0) continue;
+      const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace;
+      if (t >= home) continue;
+      const out1 = bearing(hx, hy, m.x, m.y);
+      // Out along the wire, at the cut, or back along it: how far out from the headquarters he stands (0 to 1).
+      const k = t < m.t1 ? (m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1) : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - ((t - m.t) * pace) / d) : 0;
+      const p: Pose = t < m.t1 ? 'reel' : t < m.t ? 'splice' : 'walk';
+      out.push({ k: 300 + m.man, r: 'rifle', x: r1(hx + (m.x - hx) * k), y: r1(hy + (m.y - hy) * k), f: r2(wrap(p === 'walk' ? out1 + Math.PI : out1)), p, v: p === 'splice' ? 0 : pace, c: 'none', ln: 1 });
     }
     return out;
   }

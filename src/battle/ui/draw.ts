@@ -223,6 +223,8 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
 
   // Hedges, the gaps cut through them and the smoke screens standing (release 2), under the orders and the blocks.
   hedgeMarks(x, b, s);
+  // Field telephone lines (release 2): the defence's wires, its headquarters and its linemen, under the blocks too.
+  if (b.phones) wireMarks(x, b, s);
 
   // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
   // down, the staff's pencil, ink and thinner. Gold is what you hold, pencil is what stands ordered; never red. An
@@ -351,6 +353,42 @@ function hedgeMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void 
     x.strokeStyle = BRASS; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke(); x.setLineDash([]);
   }
   x.lineCap = 'butt';
+}
+
+/**
+ * Field telephone lines (release 2), plainly, as the player's side sees them (the view's phones): the headquarters a
+ * small dark square; each wire a thin dark line from it to its block, dashed while it is down; each cut not yet
+ * mended a short red cross; each lineman out a brass dot, moving along his wire.
+ */
+function wireMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  const P = b.phonesView(s.me).phones;
+  if (!P) return;
+  const [hx, hy] = toScreen(s, P.hq[0], P.hq[1]);
+  x.fillStyle = 'rgba(40,40,36,.9)'; x.fillRect(hx - 4, hy - 4, 8, 8);
+  x.lineWidth = 1;
+  for (const w of P.wires) {
+    const [a, c] = toScreen(s, w.pts[1][0], w.pts[1][1]);
+    x.strokeStyle = w.cut >= w.lines ? 'rgba(150,40,30,.7)' : 'rgba(40,40,36,.45)';
+    if (w.cut >= w.lines) x.setLineDash([4, 4]);
+    x.beginPath(); x.moveTo(hx, hy); x.lineTo(a, c); x.stroke(); x.setLineDash([]);
+  }
+  // A cut stands until its wire's next mend (or the end, where none is out).
+  const mended = new Map<number, number[]>();
+  for (const m of P.mends) if (m.t <= b.t) mended.set(m.wire, [...(mended.get(m.wire) ?? []), m.t]);
+  x.strokeStyle = 'rgba(190,40,30,.9)'; x.lineWidth = 2;
+  for (const c of P.cuts) {
+    if ((mended.get(c.wire) ?? []).some((t) => t >= c.t)) continue;
+    const [a, e] = toScreen(s, c.x, c.y);
+    x.beginPath(); x.moveTo(a - 4, e - 4); x.lineTo(a + 4, e + 4); x.moveTo(a + 4, e - 4); x.lineTo(a - 4, e + 4); x.stroke();
+  }
+  x.fillStyle = BRASS;
+  for (const m of P.mends) {
+    const d = Math.hypot(m.x - P.hq[0], m.y - P.hq[1]), home = m.t + d / LAND.speed.inf;
+    if (b.t < m.t0 || b.t >= home) continue;
+    const k = b.t < m.t1 ? (b.t - m.t0) / Math.max(1e-6, m.t1 - m.t0) : b.t < m.t ? 1 : Math.max(0, 1 - ((b.t - m.t) * LAND.speed.inf) / Math.max(1e-6, d));
+    const [a, e] = toScreen(s, P.hq[0] + (m.x - P.hq[0]) * k, P.hq[1] + (m.y - P.hq[1]) * k);
+    x.beginPath(); x.arc(a, e, 3, 0, Math.PI * 2); x.fill();
+  }
 }
 
 function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {

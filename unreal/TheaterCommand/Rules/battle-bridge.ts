@@ -95,6 +95,21 @@
 //                                   Both staffs lay screens as their foot goes in. view.screens (below), a land:smoke event,
 //                                   and the screen's rounds in TC.battleMen (w smoke, hang) draw it; with it on, the drill's
 //                                   own smoke salvoes are not fired. Off: no block ever carries smoke, and there are no screens
+//                                   Field telephone lines (release 2; Brian, 22 November 17:33Z; the design director, 18:36Z,
+//                                   PHONES Q1 to Q3): { phones: true }: as the clock starts every block of the defence on the
+//                                   field has a telephone wire from the defence's headquarters (the middle of its zone's back
+//                                   edge; a corps that comes up from next door later has none). Each blow from an enemy gun
+//                                   block or mortar team on the block (each tenth of a battle second it is struck) cuts a line
+//                                   at 0.12, and an enemy tank block driving across the wire cuts one outright; a German wire
+//                                   is two lines and needs two cuts.
+//                                   Once its lines are cut the wire is down, and every order to that block, the player's
+//                                   (radio on or off) and every staff's, waits the army's fallback from when it was given:
+//                                   the wireless (the radio wait), or a runner from the headquarters (its distance over 6 m a
+//                                   battle second). A lineman walks out from the headquarters at the first cut, splices it in
+//                                   30 battle seconds, and whatever was waiting goes at once. His own blocks whose wire is down
+//                                   carry wire: 0 (draw the cut line and the runner's wait, orderIn as ever). view.phones
+//                                   (below), the lineman in TC.battleMen (ln, below), and land:wire and land:mend events
+//                                   say the rest. Off: there are no wires, no block carries wire, and orders go as ever
 //   TC.battleWaitWhy(id)         -> { why, due }: hold until relieved, before he gives the wait order to one of his blocks:
 //                                   why, null where it may wait, else the reason in words for its card (the design director,
 //                                   129(d)); due, the battle second help could reach it there, or null. Moves nothing
@@ -187,6 +202,24 @@
 // until 'until' (draw it thick from t, thinning towards until; gone then); listed while it stands. Smoke is seen by both
 // sides: 'unit' is left out for an enemy block he has not met. Event { what: 'land:smoke', unit, side, x, y, extra: {
 // screen, until } } as one is laid ("1st Regiment lays a smoke screen."). Its rounds come in TC.battleMen (below).
+// Field telephone lines (release 2; the design director, 18:36Z), only with { phones: true }: phones, { hq: [x, y],
+// wires, cuts, mends, held }, from the first battle step, for the defence's own side, and everything where the view is
+// unfogged (the card knew the defence): hq, the defence's headquarters (draw a command post dugout there). wires, each
+// { id, side, pts, hq, unit, lines, cut }: a telephone wire from hq to block 'unit', pts [hq, the block's middle now]
+// (it follows the block: draw it lying on the ground along pts); lines, 1 (2 for a German wire: two lines laid side by
+// side); cut, the lines cut now (down while cut >= lines: draw it broken at the cuts). cuts, each { t, wire, x, y, by? }:
+// a line cut at battle second t at x, y on the wire, by block 'by' (a gun or mortar team's shell, or a tank driving
+// across it; left out where the side has not met it): draw the break there from t until the wire's next mend. mends,
+// each { t, wire, man, t0, t1, x, y }: lineman 'man' leaves hq at t0, walks the wire to the cut at x, y by t1, kneels
+// splicing there until t, when every cut on the wire is mended (listed from t0, so t may lie ahead: draw him from his
+// track, TC.battleMen's ln). held, each { t, unit, due, went? }: an order given at t to a block whose wire was down,
+// due by the runner or the wireless at 'due', and 'went' when it reached the block (absent while on its way, and for
+// good where a later order took its place; a mend sends it at once). Events, the defence's side only: { what:
+// 'land:wire', unit, side, x, y, extra: { wire, down, by, mend } } as a line is cut ("The telephone line to 21st
+// Infantry Division is cut. Orders go by runner until it is mended."; the first of a German wire's two, down 0: "One of
+// the two telephone lines to 21st Infantry Division is cut. Orders still go by the other."; by: 'runner' or 'radio';
+// mend: when the lineman will have it mended), and { what: 'land:mend', unit, side, x, y, extra: { wire, man } } ("The
+// line to 21st Infantry Division is mended."). A recording names them wires, wireCuts and wireMends.
 // Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
 // cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
@@ -416,6 +449,12 @@
 //   spotter (fo) goes up with the friendly foot block foWith when its guns first fire at block foOn from further than
 //   500 m, and the pair stays out to the battle's end (foOn absent while the guns are quiet): a new foWith or foOn
 //   sends the same pair there on foot, so it moves, never jumps.
+//   Field telephone lines (release 2), only with { phones: true }: ln on a block of the defence, the linemen out on its
+//   wire (shown where view.phones is), each a man { k, r, x, y, f, p, v, c, ln: 1 } outside its squads and outside the
+//   battle's N, k 300 and on by his mend's man (view.phones.mends). He leaves the headquarters at the mend's t0 in
+//   pose reel (walking, the cable reel in his hands), walks the wire to the cut at 6 m a battle second, kneels there in
+//   pose splice (the two ends in his hands) from t1 until the mend's t, then walks back along the wire (walk) and leaves
+//   the list at the headquarters. He is never struck. r rifle (a signaller's rifle slung).
 // Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
 // in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
 // fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
@@ -632,6 +671,8 @@ export function unitOut(u: UnitBase, t = 0, me?: Side, sim?: LandBattle): Record
     ...(sim?.cutters && sim.cutterOf(land) && !(land.hid && u.side !== me) ? { cutter: 1 } : {}),
     // Smoke on call (release 2): the screens one of the player's own blocks has left to lay (never the enemy's).
     ...(sim?.smoke && me !== undefined && u.side === me ? smokeOut(sim, land) : {}),
+    // Field telephone lines (release 2): one of the player's own blocks whose wire is down (never the enemy's).
+    ...(sim?.phones && me !== undefined && u.side === me && sim.wireDown(land) ? { wire: 0 } : {}),
     // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line; and the
     // share of its men new this month, in new kit (0 none), which 'wear' counts in.
     ...(land.short ? { wear: land.wear ?? WEAR_FRESH, fresh: land.fresh ?? 0 } : {}),
@@ -710,6 +751,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // Hedge cutters and smoke on call (release 2, land): the cuts and screens his side sees, only with their switches.
     ...(v.cuts ? { cuts: v.cuts } : {}),
     ...(v.screens ? { screens: v.screens } : {}),
+    // Field telephone lines (release 2, land): the defence's wires, as his side sees them, only with { phones: true }.
+    ...(v.phones ? { phones: v.phones } : {}),
   };
 }
 
@@ -750,7 +793,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; phones?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -806,6 +849,8 @@ export function battleCalls(h: BattleHooks) {
       // Hedge cutters and smoke on call (release 2, ruling 242): each by its own switch.
       if (opts?.cutters) sim.cutters = true;
       if (opts?.smoke) sim.smoke = true;
+      // Field telephone lines (release 2; the design director, 18:36Z): by its own switch.
+      if (opts?.phones) sim.phones = true;
       const f = sim.field;
       return {
         field: {

@@ -20,6 +20,7 @@ import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from '
 import { turnToDate } from '../../core/ticket';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
+import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -39,6 +40,18 @@ export interface Cut { t0: number; t1: number; unit: number; side: Side; x: numb
  * to x1, y1, standing while t < until. Numbered from 1 in the order laid.
  */
 export interface Screen { id: number; side: Side; unit: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }
+/**
+ * A field telephone wire (field telephone lines, release 2; LAND.phones): wire 'id', laid as the clock starts from the
+ * defence's headquarters 'hq' to block 'unit' of 'side', following it as it moves; 'lines' lines in it (Germany's two),
+ * 'cut' of them cut now (down once cut >= lines); 'out', the lineman's mend while one is out on it.
+ */
+export interface Wire { id: number; side: Side; unit: number; hq: [number, number]; lines: number; cut: number; out: WireMend | null }
+/** A line of wire 'wire' cut at battle second t, at x, y on it, by block 'by' (a gun block, a mortar team or a tank). */
+export interface WireCut { t: number; wire: number; x: number; y: number; by: number }
+/** Lineman 'man' sent out on wire 'wire': he leaves the headquarters at t0, reaches the cut at x, y at t1, and it is mended at t. */
+export interface WireMend { t: number; wire: number; man: number; t0: number; t1: number; x: number; y: number }
+/** An order for block 'unit' that waited for its down wire: given at t, due at 'due'; 'went', when it reached the block. */
+export interface WireHeld { t: number; unit: number; due: number; went?: number }
 /** The squares the hedge lines are mapped by, for hiding (metres). */
 const HEDGE_CELL = 10;
 /** Ground with nothing to hide men on the move: caught there by an ambush, they are shaken worst (LAND.hide.surprise.open). */
@@ -263,8 +276,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
   /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
   private models = new Map<number, string | null>();
-  /** The player's orders on the air (radio): each block's, with the battle time it lands. */
-  private pending: { at: number; id: number; go: () => void }[] = [];
+  /**
+   * The player's orders on the air (radio): each block's, with the battle time it lands. An order waiting for a down wire
+   * (field telephone lines) also carries the order it is (key) and its stamp (held).
+   */
+  private pending: { at: number; id: number; go: () => void; key?: string; held?: WireHeld }[] = [];
   /**
    * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
    * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
@@ -302,6 +318,24 @@ export class LandBattle implements BattleSim<LandUnit> {
   smoke = false;
   /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
   readonly screens: Screen[] = [];
+  /**
+   * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off
+   * if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LAND.phones; "Field telephone
+   * lines" below): the defence's blocks are on the telephone from its headquarters; guns, mortars and tanks cut the wires,
+   * and an order to a block whose wire is down waits its army's runner or wireless, the player's and every staff's alike.
+   * Off unless whoever opens the field turns it on (the 2D page's ?phones, the bridge's { phones: true }); off, nothing
+   * below is read.
+   */
+  phones = false;
+  /** The defence's wires (field telephone lines), laid as the clock starts, numbered from 1. Empty while the switch is off. */
+  readonly wires: Wire[] = [];
+  /** Every line cut, every lineman sent, and every order that waited for a down wire, in order. Empty while the switch is off. */
+  readonly wireCuts: WireCut[] = [];
+  readonly wireMends: WireMend[] = [];
+  readonly wireHeld: WireHeld[] = [];
+  /** Each block's wire, by its id; and the wires' own dice (never the battle's), from when they are laid. */
+  private wireBy = new Map<number, Wire>();
+  private phoneRng: Rng | null = null;
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -1096,6 +1130,184 @@ export class LandBattle implements BattleSim<LandUnit> {
     };
   }
 
+  // ---- Field telephone lines (release 2) ----------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off"); the design director's
+  // rulings of 18:36Z, PHONES Q1 to Q3 (LAND.phones). As the clock starts, every block of the defence on the field has a
+  // wire from its headquarters (the middle of the defence zone's back edge); a corps that comes up from next door later
+  // has none, and its orders go as ever. The wire runs straight to its block's middle and follows it: moving never cuts
+  // it. Each blow on the block from an enemy gun block or mortar team cuts a line at LAND.phones.cut, drawn from the
+  // wires' own stream ('phones:' and the seed), only for such blows and only while the wire has a line up; the cut lies
+  // where the wire comes nearest the block's front. An enemy tank block whose step, its middle from where it stood to
+  // where it stands, crosses the wire cuts a line outright, where it crosses. A wire is down once all its lines are cut
+  // (Germany's double lines need two cuts). While it is down, every order to its block, the player's (radio switch on or
+  // off) or a staff's, waits its army's fallback from when it was given: the wireless, LAND.radio's wait (longer for a
+  // block whose headquarters is hit, as the radio switch reckons it), or a runner, the metres from the headquarters over
+  // LAND.phones.runner. A later order takes its place and waits afresh, but a staff giving the same order again (it
+  // thinks every second) leaves the one on its way be. At a wire's first cut with no lineman out on it, one leaves the
+  // headquarters, walks the wire to the cut at foot pace and splices it in LAND.phones.splice seconds: the mend clears
+  // every cut on the wire, and whatever was waiting for it goes at once. He is looks only: never struck, no harm. The
+  // rules' own moves (the joiners walking on, a block giving ground at the brink) are no orders and never wait. Nothing
+  // here draws on the battle's dice.
+
+  /** The defence's headquarters, where every wire runs from: the middle of its zone's back edge (field.ts zonesOf). */
+  phonesHq(): [number, number] {
+    const z = this.field.zones.def, r1 = (v: number): number => Math.round(v * 10) / 10;
+    return [r1((z[0] + z[2]) / 2), r1(z[3])];
+  }
+
+  /** This block's wire, where it has one (the switch on, a block of the defence on the field as the clock started). */
+  wireOf(u: LandUnit): Wire | null { return this.phones ? this.wireBy.get(u.id) ?? null : null; }
+
+  /** This block's wire is down: every line of it cut, and no lineman has mended it yet. */
+  wireDown(u: LandUnit): boolean { const w = this.wireOf(u); return !!w && w.cut >= w.lines; }
+
+  /** How orders go to this block while its wire is down: its army's fallback in the battle's year (LAND.phones.fallback). */
+  fallbackOf(u: LandUnit): PhoneFallback { return phoneFallback(u.nat, turnToDate(this.ticket.turn).year); }
+
+  /**
+   * How long an order to this block waits while its wire is down, battle seconds: the wireless, LAND.radio's wait as the
+   * radio switch reckons it (its headquarters hit: wavering or under hqAt of its strength); or a runner from the
+   * headquarters to where it stands.
+   */
+  fallbackWait(u: LandUnit): number {
+    if (this.fallbackOf(u) === 'radio') {
+      const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
+      return R.delay * (hit ? R.cut : 1) * this.radioOf(u);
+    }
+    const [hx, hy] = this.phonesHq();
+    return Math.hypot(u.x - hx, u.y - hy) / LAND.phones.runner;
+  }
+
+  /** Each tick, before the orders land and the staffs think: the wires laid as the clock starts, and the mends whose time has come. */
+  private phonesOn(): void {
+    if (!this.phoneRng) this.layWires();
+    for (const w of this.wires) if (w.out && this.t >= w.out.t - 1e-9) this.mend(w);
+  }
+
+  /** The clock starts: a wire to every block of the defence on the field, its own dice made (the day's luck's way). */
+  private layWires(): void {
+    this.phoneRng = new Rng(hashString(this.ticket.attempt ? `phones:${this.ticket.seed}:${this.ticket.attempt}` : `phones:${this.ticket.seed}`));
+    const hq = this.phonesHq();
+    for (const u of this.units) {
+      if (u.side !== 'def' || !live(u)) continue;
+      const w: Wire = { id: this.wires.length + 1, side: u.side, unit: u.id, hq, lines: phoneLines(u.nat), cut: 0, out: null };
+      this.wires.push(w);
+      this.wireBy.set(u.id, w);
+    }
+  }
+
+  /**
+   * A blow struck on a block at its wire's end: from an enemy gun block or mortar team, while the wire has a line up, it
+   * cuts one at LAND.phones.cut, where the wire comes nearest the block's front. Machine guns, foot and tanks never.
+   */
+  private wireBlow(u: LandUnit, t: LandUnit): void {
+    const w = this.wireBy.get(t.id);
+    if (!w || w.cut >= w.lines || u.side === w.side || !(u.team === 'mor' || (u.kind === 'art' && !u.team))) return;
+    if (this.phoneRng!.next() >= LAND.phones.cut) return;
+    const [fx, fy] = ahead(t.face), px = t.x + (fx * t.d) / 2, py = t.y + (fy * t.d) / 2;
+    const dx = t.x - w.hq[0], dy = t.y - w.hq[1], l = dx * dx + dy * dy;
+    const k = l > 0 ? Math.max(0, Math.min(1, ((px - w.hq[0]) * dx + (py - w.hq[1]) * dy) / l)) : 1;
+    this.wireCut(w, w.hq[0] + k * dx, w.hq[1] + k * dy, u);
+  }
+
+  /** Each tick, once the blocks have moved: an enemy tank block whose step crossed a wire with a line up cuts one there. */
+  private wireTanks(was: [LandUnit, number, number][]): void {
+    for (const [u, x0, y0] of was) {
+      if (u.x === x0 && u.y === y0) continue;
+      for (const w of this.wires) {
+        const e = w.cut < w.lines && w.side !== u.side ? this.unit(w.unit) : undefined;
+        if (!e || !live(e)) continue;
+        const k = segHit(x0, y0, u.x, u.y, w.hq[0], w.hq[1], e.x, e.y);
+        if (k !== null) this.wireCut(w, x0 + (u.x - x0) * k, y0 + (u.y - y0) * k, u);
+      }
+    }
+  }
+
+  /**
+   * A line of the wire is cut: kept, and told to the defence (land:wire). At the wire's first cut with no lineman out, one
+   * leaves the headquarters now; he reaches the cut at foot pace and the wire is mended LAND.phones.splice seconds later.
+   */
+  private wireCut(w: Wire, x: number, y: number, by: LandUnit): void {
+    const r1 = (v: number): number => Math.round(v * 10) / 10, r3 = (v: number): number => Math.round(v * 1000) / 1000;
+    w.cut++;
+    const c: WireCut = { t: r3(this.t), wire: w.id, x: r1(x), y: r1(y), by: by.id };
+    this.wireCuts.push(c);
+    if (!w.out) {
+      const t1 = r3(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND.speed.inf);
+      w.out = { t: r3(t1 + LAND.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+      this.wireMends.push(w.out);
+    }
+    const u = this.unit(w.unit);
+    if (!u || !this.phoneWords()) return;
+    const down = w.cut >= w.lines, how = this.fallbackOf(u) === 'radio' ? 'by radio' : 'by runner';
+    this.say({
+      what: 'land:wire', unit: u.id, side: u.side, x: c.x, y: c.y, extra: { wire: w.id, down: down ? 1 : 0, by: this.fallbackOf(u), mend: w.out.t },
+      text: down ? `The telephone line to ${this.named(u)} is cut. Orders go ${how} until it is mended.`
+        : `One of the ${w.lines === 2 ? 'two telephone lines' : 'telephone lines'} to ${this.named(u)} is cut. Orders still go by the ${w.lines - w.cut === 1 ? 'other' : 'others'}.`,
+    });
+  }
+
+  /** A lineman's splice is done: every cut on the wire is mended, and whatever was waiting for it goes at once. */
+  private mend(w: Wire): void {
+    const m = w.out!, r3 = (v: number): number => Math.round(v * 1000) / 1000;
+    w.out = null; w.cut = 0;
+    const u = this.unit(w.unit);
+    const now = this.pending.filter((p) => p.id === w.unit && p.held);
+    if (now.length) {
+      this.pending = this.pending.filter((p) => !(p.id === w.unit && p.held));
+      if (u) delete u.orderAt;
+      if (u && fighting(u)) for (const p of now) { p.go(); p.held!.went = r3(this.t); }
+    }
+    if (u && this.phoneWords()) this.say({ what: 'land:mend', unit: u.id, side: u.side, x: m.x, y: m.y, extra: { wire: w.id, man: m.man }, text: `The line to ${this.named(u)} is mended.` });
+  }
+
+  /** The wires' events go to the defence alone: told where it is the player's, or nobody's (a recording), never to a player attacking. */
+  private phoneWords(): boolean { return this.ticket.def.human || !this.ticket.att.human; }
+
+  /**
+   * An order for a block whose wire is down: it waits its army's fallback from when it was given (from). A staff giving
+   * the very same order again leaves the one on its way be; any other order takes its place and waits afresh. Stamped
+   * (wireHeld) as it is given, and as it goes.
+   */
+  private byFallback(u: LandUnit, go: () => void, from: number, c?: Command): void {
+    const r3 = (v: number): number => Math.round(v * 1000) / 1000, key = c ? JSON.stringify(c) : undefined;
+    const was = this.pending.find((p) => p.id === u.id);
+    if (this.staffing && was?.held && key !== undefined && was.key === key) return;
+    const held: WireHeld = { t: r3(from), unit: u.id, due: r3(from + this.fallbackWait(u)) };
+    this.wireHeld.push(held);
+    this.pending = this.pending.filter((p) => p.id !== u.id);
+    if (held.due <= this.t + 1e-9) { delete u.orderAt; go(); held.went = r3(this.t); return; }
+    this.pending.push({ at: held.due, id: u.id, go, key, held });
+    u.orderAt = held.due;
+  }
+
+  /**
+   * The wires as a side sees them: the defence its own, and everyone everything where the view is unfogged (no side, or
+   * the card knew the defence). A cut's striker is named only where the side has met it.
+   */
+  phonesView(as?: Side): Pick<BattleView, 'phones'> {
+    if (!this.phonesSeen(as)) return {};
+    const hq = this.phonesHq(), r1 = (v: number): number => Math.round(v * 10) / 10;
+    return {
+      phones: {
+        hq: [...hq] as [number, number],
+        wires: this.wires.map((w) => {
+          const u = this.unit(w.unit)!;
+          return { id: w.id, side: w.side, pts: [[...w.hq], [r1(u.x), r1(u.y)]] as [number, number][], hq: [...w.hq] as [number, number], unit: w.unit, lines: w.lines, cut: w.cut };
+        }),
+        cuts: this.wireCuts.map((c) => { const by = this.unit(c.by); return { t: c.t, wire: c.wire, x: c.x, y: c.y, ...(as === undefined || !by || by.side === as || this.known(by) ? { by: c.by } : {}) }; }),
+        mends: this.wireMends.map((m) => ({ ...m })),
+        held: this.wireHeld.map((h) => ({ ...h })),
+      },
+    };
+  }
+
+  /** Whether a side sees the wires (phonesView): once they are laid, the defence, and everyone where the view is unfogged. */
+  phonesSeen(as?: Side): boolean {
+    return this.phones && this.phoneRng !== null && (as === undefined || as === 'def' || !this.fog);
+  }
+
   /**
    * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
    * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
@@ -1130,7 +1342,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The battle time he gave it, as the 3D game shows it (it runs the rules a little ahead of the picture): the radio's
     // wait counts from there, never from before it. Absent: now.
     const said = (c as { at?: unknown }).at, from = typeof said === 'number' && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air, from);
+    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air, from, c);
     switch (c.do) {
       case 'move': {
         const us = mine(c.units);
@@ -1327,7 +1539,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
    * when its headquarters is hit. A later order on the air replaces the one still on the way.
    */
-  private order(u: LandUnit, go: () => void, air: boolean, from = this.t): void {
+  private order(u: LandUnit, go: () => void, air: boolean, from = this.t, c?: Command): void {
+    // Field telephone lines (release 2): to a block whose wire is down, whoever gives it, by its army's fallback.
+    if (this.phones && this.t > 0 && this.wireDown(u)) { this.byFallback(u, go, from, c); return; }
     if (!air) { go(); return; }
     const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
     const at = Math.round((from + R.delay * (hit ? R.cut : 1) * this.radioOf(u)) * 1000) / 1000;
@@ -1348,7 +1562,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const u = this.unit(p.id);
       if (!u) continue;
       delete u.orderAt;
-      if (fighting(u)) p.go();
+      if (fighting(u)) { p.go(); if (p.held) p.held.went = Math.round(this.t * 1000) / 1000; }
     }
   }
 
@@ -1933,6 +2147,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Hidden in the woods (release 2): as the clock starts, the computer's defence lays its ambushes and every block
     // then standing in woods is hidden from the other side.
     if (this.hide && !this.hidStarted) this.hideStart();
+    // Field telephone lines (release 2): the wires laid as the clock starts, before any joiner comes on; mends due.
+    if (this.phones) this.phonesOn();
     // Corps from next door whose time has come walk on (release 2): seen by both staffs this same tick.
     if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
     // The player's orders on the air that have reached their blocks (direct command, release 2).
@@ -1971,6 +2187,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; if (!blind) t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
+      // Field telephone lines (release 2): a gun's or a mortar team's blow may cut the wire to the block it falls on.
+      if (this.phones && this.wires.length) this.wireBlow(u, t);
       if (blind) {
         const F = LAND.hide.search;
         blow.dmg *= F.blow;
@@ -2006,9 +2224,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) if (live(u)) this.nerve(u);
     // Hedge cutters (release 2): where each block stood before it moved, to find where its way crossed a hedge.
     const before = this.cutters && this.hedges.length ? new Map(this.units.map((u): [number, [number, number]] => [u.id, [u.x, u.y]])) : null;
+    // Field telephone lines (release 2): where each enemy tank block stood before it moved, to find a wire its way crossed.
+    const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === 'att' && u.kind === 'arm' && live(u)).map((u): [LandUnit, number, number] => [u, u.x, u.y]) : null;
     for (const u of this.units) if (live(u)) this.move(u);
     this.spread();
     if (before) this.cutOn(before);
+    if (tanks) this.wireTanks(tanks);
     if (this.hide) this.spotHidden();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     // Cuts whose time is up stand open as gaps, before the drill's men walk this tick (hedge cutters, release 2).
@@ -3419,7 +3640,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
     // and screens a side sees (hedge cutters, smoke on call; release 2).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

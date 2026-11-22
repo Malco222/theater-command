@@ -558,6 +558,24 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * second it is gone (until). A direct blow across it strikes at half. Left out where none stands.
    */
   screens?: { id: number; side: Side; unit?: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }[];
+  /**
+   * Land, field telephone lines (release 2; the design director, 18:36Z; LandBattle.phones on): the defence's wires, from
+   * the first step. Seen by the defence, and by everyone where the view is unfogged (no side given, or the card knew the
+   * defence). hq: the headquarters every wire runs from. wires: each { id, side, pts: [hq, its block's middle now], hq,
+   * unit, lines (2 for Germany's double lines), cut (lines cut now: down once cut >= lines) }. cuts: each line cut, { t,
+   * wire, x, y, by? } (by: the gun, mortar team or tank that cut it, left out where the side has not met it). mends: each
+   * lineman sent, { t, wire, man, t0, t1, x, y }: he leaves hq at t0, reaches the cut at x, y at t1, and the wire is mended
+   * at t (listed from t0, so a mend's t may lie ahead). held: each order that waited for a down wire, { t, unit, due,
+   * went? }: given at t, due at due; went, when it reached the block (absent while on its way, and for good where a later
+   * order took its place). Left out with the switch off.
+   */
+  phones?: {
+    hq: [number, number];
+    wires: { id: number; side: Side; pts: [number, number][]; hq: [number, number]; unit: number; lines: number; cut: number }[];
+    cuts: { t: number; wire: number; x: number; y: number; by?: number }[];
+    mends: { t: number; wire: number; man: number; t0: number; t1: number; x: number; y: number }[];
+    held: { t: number; unit: number; due: number; went?: number }[];
+  };
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */
