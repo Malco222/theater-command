@@ -31,7 +31,7 @@ import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
 import { STRENGTH, reckon, type Reckoning } from './ashore';
-import { NAVY, canPass, closedTo, crossingRisk, seaPath, seaRisk } from './navy';
+import { NAVY, canPass, closedTo, crossingRisk, seaPath, seaRisk, strait } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
@@ -281,7 +281,8 @@ function monthReach(g: Game, nat: string, ours: number[], side: Int8Array, label
     // (The march is made toward the front: each step costs what entering the province nearer to it costs.)
     for (const j of g.regions[at].nb) {
       if (side[j] !== 1 || !areas.has(label[j])) continue;
-      const w = d + marchWeeks(g, nat, g.regions[at], j, mud);
+      // (The strait: over a short crossing a corps comes by ship, its whole month, so only from the bank itself.)
+      const w = strait(g, at, j) ? (d === 0 ? 4 : 255) : d + marchWeeks(g, nat, g.regions[at], j, mud);
       if (w <= MOST && w < weeks[j]) { weeks[j] = w; rings[w].push(j); }
     }
   }

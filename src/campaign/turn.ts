@@ -10,7 +10,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, strait, straitBars, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -348,6 +348,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
       if (blocked(g, c, r, a)) continue; // tanks and the steepest ground, wheels and a river with its bridges down
+      if (a !== c.reg && strait(g, a, j)) continue; // the strait: a corps that has marched this month cannot embark
       // An attack on the province next door takes one move of the month, whatever the ground would cost to march
       // over: the battle charges one, and the attack's card and its order ask only for a move left. So the gate
       // below is for a march alone, and an army that has come up with a move in hand is shown its attack (Version
@@ -573,7 +574,8 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
 
 export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
   if (onEve(g)) return null;
-  const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
+  // (The strait: a corps that would come over a short crossing and cannot make it by ship this month is left out.)
+  const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id) && !straitBars(g, c, target)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
   return resolveBattle(g, ok, target);
 }

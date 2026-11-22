@@ -30,7 +30,7 @@ import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps, crossStrait, strait, straitShare, straitWave } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -44,7 +44,7 @@ import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
-import { STRATEGY, torchBook, torchWeek } from './strategy';
+import { STRATEGY, straitsOn, torchBook, torchWeek } from './strategy';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -1093,6 +1093,11 @@ export interface AttackOpts {
    * landing's fight in its first week). Both sides lose that share of the month's toll in men. Unset, a month's.
    */
   weeks?: number;
+  /**
+   * The strait (strategy.json 'straits'): the corps of this attack already put over a short crossing by ship for it,
+   * by id. Set by the battle itself once they have crossed; unset, the reckoning works out who can cross.
+   */
+  over?: Set<number>;
 }
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
@@ -1130,14 +1135,19 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
   const wide = groundRules(g);
   const land = opts.sea === undefined;
+  // The strait (strategy.json 'straits'): corps that reach this fight over a short crossing come by ship, as a
+  // landing does. Those their nation has no shipping left for take no part; the rest fight at a landing's share.
+  const wave = land && !town && !opts.sally && !opts.over && straitsOn(g) ? straitWave(g, attackers, target) : null;
+  const overIds = opts.over ?? (wave && wave.over.length ? new Set(wave.over.map((c) => c.id)) : null), leftIds = wave && wave.left.size ? wave.left : null;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
-  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id) && !leftIds?.has(c.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  let noBoats = 0, overWater = 0, waterShare = 1;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '', streets = false;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
   // Engineers in the assault breach the works, clear lanes through the mines and put the infantry over a bridgeless river.
-  const sap = wide ? sappers(attackers.filter((c) => !land || !blocked(g, c, target))) : 0;
+  const sap = wide ? sappers(attackers.filter((c) => !land || overIds?.has(c.id) || !blocked(g, c, target))) : 0;
   const breach = sap ? Math.min(ENGINEERING.breach.most, ENGINEERING.breach.perDiv * sap) : 0;
   const mineLv = wide ? minesAt(g, target) : 0;
   const mined = mineLv ? 1 - ENGINEERING.mines.attack * mineLv * (1 - Math.min(1, sap)) : 1;
@@ -1164,8 +1174,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
     if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
+    if (leftIds?.has(c.id)) { noBoats++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (hasty) p *= rushed;
+    if (overIds?.has(c.id)) { const share = straitShare(g, c, target); p *= share; overWater++; waterShare = Math.min(waterShare, share); }
     if (wide) {
       const suits = groundAttack(g, c.kind, target);
       if (suits !== 1) p *= suits;
@@ -1424,6 +1436,13 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       value: inBoats || noBridge ? `The bridges over the ${name} are down` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
       effect: fx[0].toUpperCase() + fx.slice(1),
     });
+  }
+  if (overWater || noBoats) {
+    const fx = [
+      overWater ? (waterShare < 1 ? `${overWater === 1 ? 'the corps that crosses fights' : `the ${overWater} corps that cross fight`} at ${Math.round(waterShare * 100)}%, as a landing does` : `${overWater === 1 ? 'the corps that crosses' : `the ${overWater} corps that cross`} catch the defenders unready and fight at full strength`) : '',
+      noBoats ? `${noBoats === 1 ? 'one corps has' : `${noBoats} corps have`} no shipping left this month and ${noBoats === 1 ? 'takes' : 'take'} no part` : '',
+    ].filter(Boolean).join('; ');
+    lines.push({ label: 'The crossing', value: 'Over the water by ship, onto a shore the enemy holds', effect: fx[0].toUpperCase() + fx.slice(1) });
   }
   if (mineLv) lines.push({
     label: 'Minefields', value: mineLv > 1 ? 'Two belts of minefields and booby traps on every road in' : 'Minefields and booby traps on every road in',
@@ -1760,8 +1779,10 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
     if (c.reg === target.id) continue;
     if (lead && !fights(c) && !gunsMayFollow(g, c, target)) { c.ap = Math.max(0, c.ap - 1); continue; }
     // A force that came by sea all goes ashore together.
-    const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
+    // (And so does a corps that came over a short crossing by ship for this fight: the strait.)
+    const byShip = opts.sea !== undefined || !!opts.over?.has(c.id);
+    const cost = byShip ? 0 : moveCost(g, c, target);
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (byShip ? barred(g, c, target) : blocked(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
     leaveWorks(g, c);
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
@@ -1889,7 +1910,24 @@ function ticketAfter(lines: TicketLine[]): TicketLine[] {
   } : l));
 }
 
+/**
+ * Fights a battle. Where every short crossing is water (strategy.json 'straits'), the corps that reach a land attack
+ * over one go by ship first: each takes one of its nation's lifts and the sea's dangers, those there is no shipping
+ * left for stay out of the fight, and the crossing is the month of every corps that makes it, won or lost.
+ */
 export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
+  const wave = opts.sea === undefined && !opts.town && !opts.sally && !opts.over && straitsOn(g) ? straitWave(g, attackers, target) : null;
+  if (!wave || (!wave.over.length && !wave.left.size)) return fightBattle(g, attackers, target, opts);
+  const going = attackers.filter((c) => !wave.left.has(c.id));
+  // (Nobody can cross and nobody comes by land: the reckoning gives the attack no weight, as with a river nobody can cross.)
+  if (!going.length) return fightBattle(g, attackers, target, opts);
+  crossStrait(g, wave.over, target);
+  const rep = fightBattle(g, going, target, { ...opts, over: new Set(wave.over.map((c) => c.id)) });
+  for (const c of wave.over) if (!c.dead) c.ap = 0;
+  return rep;
+}
+
+function fightBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
@@ -2320,8 +2358,12 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   moveWatch.tell?.({ c, from, to, cost });
   g.week = weekOf(c, cost);
   leaveWorks(g, c);
+  // The strait (strategy.json 'straits'): over a short crossing the corps goes by ship. It takes a lift and the sea's
+  // dangers, and the crossing is its month (`blocked` above has asked whether it can cross at all).
+  const over = strait(g, from.id, to.id);
+  if (over) crossStrait(g, [c], to);
   place(g, c, to);
-  c.ap = Math.max(0, c.ap - cost);
+  c.ap = over ? 0 : Math.max(0, c.ap - cost);
   // A relief in place: works standing empty on ground its side holds are its own from the moment it marches in.
   if (friendly) takeWorks(g, c, to);
   // Ground a corps walks into is taken for the army it marches with: the province too, unless its town is held
@@ -2345,6 +2387,7 @@ export function whyNoSwap(g: Game, a: Corps, b: Corps): string | null {
   if (ra === rb || !ra.nb.includes(rb.id)) return 'They do not stand in neighbouring provinces.';
   if (!allied(g, a.nat, ra.ctrl) || !allied(g, a.nat, rb.ctrl) || hostileUnits(g, ra, a.nat).length || hostileUnits(g, rb, a.nat).length) return 'Both provinces must be in your side\'s hands, with no enemy in them.';
   if (blocked(g, a, rb) || blocked(g, b, ra)) return 'The way between them is closed to one of them.';
+  if (strait(g, ra.id, rb.id)) return 'They are joined by water: each crosses by ship in an order of its own.';
   if ((a.kind === 'eng') !== (b.kind === 'eng')) return 'Engineers change places only with engineers.';
   for (const [c, to] of [[a, rb], [b, ra]] as [Corps, Region][]) { const cost = moveCost(g, c, to); if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`; }
   return null;

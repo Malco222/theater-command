@@ -19,7 +19,7 @@ import { clamp } from '../core/math';
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
-import { STRATEGY, mounts } from './strategy';
+import { STRATEGY, mounts, straitsOn } from './strategy';
 import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
@@ -675,6 +675,88 @@ export function shipCorps(g: Game, c: Corps, to: Region): boolean {
   g.week = 2;
   if (lost >= 500) headline(g, 'battle', `${c.name} loses ${lost.toLocaleString('en-US')} men to enemy ships and aircraft on the crossing to ${to.name}.`, c.nat, to.id, { arm: 'sea', lost: c.nat });
   return true;
+}
+
+// ---- The strait ------------------------------------------------------------------------------------
+// Every short crossing of the sea is water (strategy.json 'straits'; the design director, 22 November 2026, 09:20Z;
+// the grand campaign, every nation, a key of its own). A corps crosses to a bank its side holds by ship: its whole
+// month, one of its nation's lifts and room on the far bank, and the crossing carries its own quays, so no harbour
+// is asked on either bank. A side that holds both banks crosses whoever holds the seas beyond, and the convoy may
+// still be found. An attack across onto an enemy bank is a landing: each corps that crosses takes a lift and fights
+// at the landing's share of its strength (game.ts, assess), and it crosses only where a sea both banks touch is open
+// to its troopships and the enemy's fighters do not hold the sky, unless it is the month war was declared. Supply
+// and the railways run over a crossing as they did.
+
+const straitSets = new WeakMap<Game, { n: number; set: Set<number> }>();
+const pairKey = (a: number, b: number): number => Math.min(a, b) * 65536 + Math.max(a, b);
+/** True where two provinces are joined by a short crossing of the sea, and the strait rule is on. */
+export function strait(g: Game, a: number, b: number): boolean {
+  if (!straitsOn(g)) return false;
+  let m = straitSets.get(g);
+  if (!m || m.n !== g.links.length) { m = { n: g.links.length, set: new Set(g.links.map(([x, y]) => pairKey(x, y))) }; straitSets.set(g, m); }
+  return m.set.has(pairKey(a, b));
+}
+/** The seas a short crossing lies on: those both its banks touch. */
+export const straitSeas = (a: Region, b: Region): number[] => a.seas.filter((z) => b.seas.includes(z));
+/**
+ * Why a corps cannot make a short crossing this month, or null if it can. `spoken` is how many of its nation's lifts
+ * other corps of the same order have already taken.
+ */
+export function whyNotCross(g: Game, c: Corps, to: Region, from: Region = g.regions[c.reg], spoken = 0): string | null {
+  const n = g.nations[c.nat];
+  if (n.sealift <= 0) return `${n.name} has no shipping to take an army over the water between ${from.name} and ${to.name}.`;
+  if (c.ap < Math.min(4, c.apMax)) return `${from.name} and ${to.name} are joined by water: only a corps that has not moved this month can embark.`;
+  if (liftLeft(g, c.nat) - spoken < 1) return 'All the shipping is in use this month.';
+  if (allied(g, c.nat, to.ctrl)) return null;
+  // An enemy bank: a landing. The month war is declared it sails before any fleet or fighter can stop it.
+  if (surpriseOn(g, c.nat, to)) return null;
+  const seas = straitSeas(from, to);
+  if (seas.length && seas.every((z) => closedTo(g, z, c.nat))) return closedLine(g, seas[0], c.nat);
+  if (skyDenies(g, c.nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
+  return null;
+}
+/**
+ * True where a corps would go by a short crossing and cannot (rivers.ts `blocked` reads it). From where it stands,
+ * that is whether it can cross this month. From anywhere else it is a road looked over for the months to come, and
+ * the only bar is a nation with no shipping at all (a month's own reach leaves such a step out itself: a corps that
+ * has marched cannot embark).
+ */
+export const straitBars = (g: Game, c: Corps, to: Region, from = c.reg): boolean =>
+  strait(g, from, to.id) && (from === c.reg ? whyNotCross(g, c, to, g.regions[from]) !== null : g.nations[c.nat].sealift <= 0);
+/** The share of its strength a corps keeps fighting its way over a short crossing onto an enemy bank: a landing's. */
+export const straitShare = (g: Game, c: Corps, to: Region): number => (surpriseOn(g, c.nat, to) ? NAVY.landing.surprise : assaultStrength(g, c.nat));
+/**
+ * Of a land attack's corps, those that go over a short crossing to reach the place: `over`, the ones that can make
+ * it with the lifts their nations have left, in the order given, and `left`, the ones that cannot and take no part.
+ */
+export function straitWave(g: Game, attackers: Corps[], target: Region): { over: Corps[]; left: Set<number> } {
+  const over: Corps[] = [], left = new Set<number>(), spoken = new Map<string, number>();
+  for (const c of attackers) {
+    if (!strait(g, c.reg, target.id)) continue;
+    if (whyNotCross(g, c, target, g.regions[c.reg], spoken.get(c.nat) ?? 0)) { left.add(c.id); continue; }
+    spoken.set(c.nat, (spoken.get(c.nat) ?? 0) + 1);
+    over.push(c);
+  }
+  return { over, left };
+}
+/**
+ * Puts corps over a short crossing: each takes a lift, and the enemy's ships and aircraft on the water may find them
+ * (on the least dangerous sea the two banks share). Onto an enemy bank the crossing is marked as a landing is.
+ * Returns the men lost on the water.
+ */
+export function crossStrait(g: Game, cs: Corps[], to: Region): number {
+  let lost = 0;
+  for (const c of cs) {
+    const from = g.regions[c.reg], enemy = !allied(g, c.nat, to.ctrl), surprise = enemy && surpriseOn(g, c.nat, to);
+    const seas = straitSeas(from, to);
+    if (seas.length) {
+      const z = seas.reduce((a, b) => (seaRisk(g, b, c.nat) < seaRisk(g, a, c.nat) ? b : a), seas[0]);
+      lost += crossing(g, [c], [z], surprise, enemy ? to : undefined);
+    }
+    useLift(g, c.nat);
+    if (enemy) { for (const z of to.seas) g.flags[`landed:${z}:${c.nat}`] = g.turn; g.flags[`landedAt:${to.id}:${c.nat}`] = g.turn; }
+  }
+  return lost;
 }
 
 /** Why no sea lane serves a landing (ruling 207): a sea closed to the troopships, a coast too far, a strait shut, or waters that do not join. */

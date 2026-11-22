@@ -30,6 +30,8 @@ export const STRATEGY = data as unknown as {
     ceasefire?: boolean; week?: number };
   /** The one-map fault's mend (the design director, 22 November 2026, 13:27Z; its own key, off): a front counts only what the month's moves can bring. */
   fronts?: { month: boolean };
+  /** The strait: every short crossing is water (a key of its own). */
+  straits?: { on: boolean };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */
@@ -61,6 +63,11 @@ export const torchWeek = (g: Game): number => (torchBook(g) ? Math.max(0, Math.m
  * grand campaign, every staff, every stop. A key of its own; off, the sum is the one every war was measured with.
  */
 export const frontMonth = (g: Game): boolean => !!STRATEGY.fronts?.month && g.flags.open === 1;
+/**
+ * True where every short crossing of the sea is water (strategy.json 'straits'; the design director, 22 November
+ * 2026, 09:20Z): the grand campaign, every nation, every stop. A key of its own; off, a crossing is a land border.
+ */
+export const straitsOn = (g: Game): boolean => !!STRATEGY.straits?.on && g.flags.open === 1;
 /** True for the event that is the French turn where Torch is the book's: its partition runs as the record wrote it. */
 export const torchTurn = (g: Game, eventId: string): boolean => torchBook(g) && STRATEGY.torch!.turn === eventId;
 // (The book's word on its own choices: history.ts asks here whether one of them is switched on.)

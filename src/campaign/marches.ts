@@ -40,6 +40,7 @@ import { hashString } from '../core/rng';
 import { garrisonLine } from './armies';
 import { allied, atWar, headline, moveCost } from './game';
 import { blocked } from './rivers';
+import { strait } from './navy';
 import { canOrder, humanUp, onEve, orderMove, reach, sight, type Reach } from './turn';
 import type { Corps, Game } from './types';
 
@@ -78,7 +79,8 @@ export function farGround(g: Game, c: Corps): Map<number, { cost: number; prev: 
       if (done.has(j) || !friendlyTo(g, c, j)) continue;
       const r = g.regions[j];
       if (blocked(g, c, r, a)) continue;
-      const step = Math.max(1, moveCost(g, c, r, a));
+      // (The strait: a short crossing by ship is the corps' month.)
+      const step = strait(g, a, j) ? 4 : Math.max(1, moveCost(g, c, r, a));
       const old = out.get(j);
       if (old && old.cost <= ca + step) continue;
       out.set(j, { cost: ca + step, prev: a });
