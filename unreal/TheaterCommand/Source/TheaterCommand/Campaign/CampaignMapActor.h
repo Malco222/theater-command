@@ -267,6 +267,16 @@ public:
 	 */
 	void GetCrowds(TArray<TPair<AArmyPiece*, int32>>& Out) const;
 
+	/**
+	 * (Release 2: camps you can see. Brian, 22 November 2026; the art director's paintover.) Lays the camp of every army
+	 * that stays put on the ground round its base, by the stage its fieldwork months have reached (see
+	 * AArmyPiece::GetCampStage): tents and a vehicle park on trodden ground; then part of a trench toward the enemy;
+	 * then the whole trench, a belt of wire before it, gun pits behind it and the vehicles under nets. Each part keeps
+	 * to open ground of the army's own side: off water, towns, airfields, rivers, railways, woods and other armies'
+	 * bases and guns. A camp is laid again only when what it is laid from has changed (CampaignCamps.cpp).
+	 */
+	void BuildCamps();
+
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }
 	FVector2D ParadeSpot(int32 Index) const;
@@ -782,6 +792,11 @@ private:
 	FString GunLinesBuilt = TEXT("-"); // (what the lines were last made from)
 	TArray<FString> GunStanding; // how each province stands to the player, as the armies were last laid out
 	TSet<FString> GunFoes; // the countries at war with the player
+	/** (Release 2: camps you can see.) The way from a base toward the enemy of the nation it belongs to, on the map: see BuildCamps. */
+	FVector2D CampFacing(int32 HomeRegion, const FString& Nation, const FVector2D& FromSpot) const;
+	TArray<FString> CampHolders; // who holds each province, as the armies were last laid out
+	TArray<FString> CampWars; // every pair of nations at war, two by two, as then
+	TArray<FBox2D> CampRiverBoxes; // the box each river runs in, so that a camp looks only at rivers near it
 	/**
 	 * (Brian, 16 November 2026: "if the air raid is at night have search lights shown from the cities"; ruling 107
 	 * (f); the art director's brief.) The searchlights of every place under raid by night: lamps on the ground round

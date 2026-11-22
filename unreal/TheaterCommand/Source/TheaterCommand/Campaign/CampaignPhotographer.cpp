@@ -106,8 +106,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Route = Shot.Hover = TEXT("Hamburg");
 	}
 	{
-		// What stands round an army's base says what it is about: entrenched behind sandbags and wire, in camp by
-		// its fire, supplied by its lorries, or cut off; and one that is still digging.
+		// What stands round an army's base says what it is about: dug in behind its trench and wire (release 2: on the
+		// side toward the enemy), in camp by its fire, supplied by its lorries, or cut off; and one that is still digging.
 		FShot& Shot = Add(TEXT("09f-armies-at-a-glance"), TEXT("Grenzmark"), 0.22f);
 		Shot.Dress = TEXT("Farther Pomerania:2:0:1;Grenzmark:0:1:1;Pomorze:1:0:2;Poznan:2:1:1");
 	}
@@ -700,6 +700,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shots.Reset();
 		Add(TEXT("40-works"), *WorksAt, 0.16f).bWorks = true;
 		Add(TEXT("40b-works-close"), *WorksAt, 0.1f, 200.0f, 8.0f).bWorks = true;
+	}
+
+	// (Release 2: camps you can see.) "-TheaterCamps=North Texas" takes four pictures of the army standing in that
+	// province, one at each stage of its camp: in the open, a month in camp, two months digging, and dug in with its
+	// works finished. Each dresses the army as that stage and leaves the rest of the table as the rules have it.
+	FString CampsAt;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterCamps="), CampsAt, false))
+	{
+		Shots.Reset();
+		const FString Framed = TEXT("@army ") + CampsAt;
+		const TCHAR* const Stages[4] = { TEXT("50a-camp-in-the-open"), TEXT("50b-camp-one-month"), TEXT("50c-camp-two-months"), TEXT("50d-camp-dug-in") };
+		const int32 WorksFor[4] = { 0, 1, 1, 2 }; // (the old dressing's works under each: none, digging, digging, entrenched)
+		for (int32 Stage = 0; Stage < 4; ++Stage)
+		{
+			Add(Stages[Stage], *Framed, 0.16f, 0.0f, 6.0f).Dress = FString::Printf(TEXT("%s:%d:0:1:%d"), *CampsAt, WorksFor[Stage], Stage);
+		}
 	}
 
 	// "-TheaterLook=Ardennes:0.1:20:4;Tobruk:0.2" takes one picture of each place named instead: a region,
@@ -1813,7 +1829,8 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 					AArmyPiece* Piece = Table->FindPiece(*Where, Unit.Nation);
 					if (Piece && Nation)
 					{
-						Piece->DressAs(Table, *Nation, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) != 0, FCString::Atoi(*Part[3]));
+						// (a fifth part, where given, is the stage of its camp: 0 in the open to 3 dug in; see AArmyPiece::GetCampStage)
+						Piece->DressAs(Table, *Nation, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) != 0, FCString::Atoi(*Part[3]), Part.Num() >= 5 ? FCString::Atoi(*Part[4]) : -1);
 					}
 					break;
 				}

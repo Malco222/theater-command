@@ -9999,6 +9999,11 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 	// The first month is September 1939.
 	FMiniatureMesh::Year = 1939 + (FMath::Max(View.Turn, 1) + 7) / 12;
 	FMiniatureMesh::DesignYears = View.DesignYears;
+	// (Release 2: camps you can see.) How many months finish an army's works, for the stage each piece's camp has
+	// reached; and who holds what and who is at war with whom, for the side each camp's trench faces.
+	AArmyPiece::FullWorks = FMath::Max(1, View.DugFull);
+	CampHolders = View.RegionHolder;
+	CampWars = View.Wars;
 
 	// Where every corps' piece stood before this change, for the ones that are about to march.
 	TMap<int32, FVector> Before;
@@ -10197,6 +10202,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		}
 	}
 	BuildGunLines();
+	BuildCamps(); // (after the guns, which a camp keeps clear of)
 
 	// The fleets and the air fleets are part of the same picture.
 	ShowFleets(View);
@@ -15568,6 +15574,23 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 				if (Based)
 				{
 					Based->SetFlockShown(bTurfNear);
+				}
+			}
+		}
+	}
+
+	// (Release 2.) The camps round the bases are seen from the height the gun lines are, and are put away above it
+	// with them: from higher their tents and trenches are specks, and the frame is better spent elsewhere.
+	{
+		const bool bCampsSeen = CameraDistance < (AArmyPiece::bCampsNear ? 12500.0f : 12000.0f);
+		if (bCampsSeen != AArmyPiece::bCampsNear)
+		{
+			AArmyPiece::bCampsNear = bCampsSeen;
+			for (AArmyPiece* Camped : Pieces)
+			{
+				if (Camped)
+				{
+					Camped->SetCampShown(bCampsSeen);
 				}
 			}
 		}
