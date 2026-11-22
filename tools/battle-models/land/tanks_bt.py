@@ -8,17 +8,65 @@ or taken from any other model. What tells her from across a field: how long and 
 set forward, the four big wheels with the track sagging between them, the pointed nose.
 """
 
+import math
+
 from mathutils import Vector
 
 from motorpool import LEFT, RIGHT, X, Y, Z
 from tanks_any import rivets
-from tanks_ger import coat
+from tanks_ger import BY_MONTH_HOW, coat
 from tanks_jap import ring_rivets
 from works import Works
 
+# The BT-7's turrets by the month: the round one alone to the end of 1937, then the round and the cone side by side,
+# half and half (the art director, 22 Nov 20:46Z: mixed shapes in a battalion break up the clone look; a starting
+# share for the historian to correct).
+BT7_MONTHS = [{"to": "1937-12", "turret": "round"},
+              {"from": "1938-01", "turret": {"mix": {"round": 0.5, "cone": 0.5}, "one": "round"}}]
 
-def bt7(fine=True, tag="SOV"):
-    """BT-7 (1935): the fast tank of the tank brigades from Khalkhin Gol to the first year of the German war."""
+
+def _round_turret(v, x0, zt, th):
+    """The round turret of 1935: a rolled drum standing upright, a box out behind it, rivets round it top and foot."""
+    low = {"z": zt + 0.02, "xc": x0, "yc": 0.0, "af": 0.64, "ar": 0.64, "b": 0.64, "n": 2.0}
+    high = {"z": zt + th - 0.025, "xc": x0, "yc": 0.0, "af": 0.64, "ar": 0.64, "b": 0.64, "n": 2.0}
+    v.cast([low, high], "upper", sides=v.n(48, 14), top=0.025, steps=2, between=2)
+    v.hull([(x0 - 0.36, 0.47, zt + 0.08), (x0 - 0.98, 0.44, zt + 0.16), (x0 - 1.00, 0.44, zt + th - 0.04), (x0 - 0.36, 0.47, zt + th - 0.015)], "upper", bevel=0.02, part="turret_round")
+    roof = zt + th
+    ring_rivets(v, low, zt + 0.07, 40, part="turret_round")
+    ring_rivets(v, high, roof - 0.06, 40, part="turret_round")
+    v.use("turret_round")
+    if v.fine:
+        for s in (LEFT, RIGHT):
+            n = Vector((0.45, s * 0.89, 0.0)).normalized()
+            v.visor(Vector((x0 + 0.29, s * 0.57, zt + 0.40)), n, 0.16, 0.06, 0.03, brow=False)
+            v.port(Vector((x0 - 0.62, s * 0.475, zt + 0.32)), Vector((0, s, 0)), 0.035)
+            rivets(v, (x0 - 0.40, s * 0.471, roof - 0.04), (x0 - 0.97, s * 0.441, roof - 0.04), Vector((0, s, 0)), 0.10, part="turret_round")
+        rivets(v, (x0 - 1.001, 0.40, zt + 0.40), (x0 - 1.001, -0.40, zt + 0.40), -X, 0.10, part="turret_round")
+
+
+def _cone_turret(v, x0, zt, th):
+    """The cone turret of 1937: welded plate, its sides leaning in about 18 degrees all round, the box behind leaning
+    with them; the welds standing proud where the box meets the cone."""
+    lean = math.tan(math.radians(18.0))
+    r0, r1 = 0.66, 0.66 - lean * (th - 0.045)
+    low = {"z": zt + 0.02, "xc": x0, "yc": 0.0, "af": r0, "ar": r0, "b": r0, "n": 2.0}
+    high = {"z": zt + th - 0.025, "xc": x0, "yc": 0.0, "af": r1, "ar": r1, "b": r1, "n": 2.0}
+    v.cast([low, high], "upper", sides=v.n(48, 14), top=0.025, steps=2, between=2)
+    v.hull([(x0 - 0.40, 0.50, zt + 0.06), (x0 - 1.00, 0.46, zt + 0.12), (x0 - 0.86, 0.33, zt + th - 0.03), (x0 - 0.28, 0.40, zt + th - 0.015)], "upper", bevel=0.02, part="turret_cone")
+    v.use("turret_cone")
+    if v.fine:
+        for s in (LEFT, RIGHT):
+            a = math.radians(30.0)
+            r = r0 - lean * 0.40
+            n = Vector((math.cos(a), s * math.sin(a), lean)).normalized()
+            v.visor(Vector((x0 + r * math.cos(a), s * r * math.sin(a), zt + 0.40)), n, 0.16, 0.06, 0.03, brow=False)
+            v.port(Vector((x0 - 0.62, s * 0.455, zt + 0.30)), Vector((0, s, 0.28)), 0.035)
+            v.weld(Vector((x0 - 0.38, s * 0.50, zt + 0.08)), Vector((x0 - 0.28, s * 0.40, zt + th - 0.03)), Vector((0, s, 0.3)), part="turret_cone")
+
+
+def bt7(fine=True, tag="SOV", turret="round"):
+    """BT-7: the fast tank of the tank brigades from Khalkhin Gol to the first year of the German war. One model by a
+    swap: turret "round" (1935), "cone" (1937 on, beside the round one), or "all" (both, for the game's file)."""
     v = Works("BT7", "BT-7 fast tank", "tank", tag, fine)
     # (the art director's E7 surface pass from the first build: shade from her shape, dirt of her ground, the steppe)
     v.dice = 0.2
@@ -111,30 +159,27 @@ def bt7(fine=True, tag="SOV"):
     for s in (LEFT, RIGHT):
         v.lathe((-2.55, s * (hw - 0.01), 0.56), Y * s, [(0.16, 0.0), (0.16, 0.09), (0.08, 0.13), (0.0, 0.14), (0.0, 0.0)], "upper", v.n(20, 8))
 
-    # ---- the turret, set forward: a short rolled drum, a box out behind it, one big lid ---------------------------------
+    # ---- the turret, set forward: one of two shells on the same ring, with the same lid, sights and gun -------------------
     x0, zt, th = 0.55, zr, 0.60
     v.ring_well((x0, 0.0, zt), 0.66)
     v.part("turret", "hull", (x0, 0.0, zt), axis=(0, 0, -1), kind="turn", note="trains all round: + to the right, clockwise seen from above; the game turns it")
-    low = {"z": zt + 0.02, "xc": x0, "yc": 0.0, "af": 0.64, "ar": 0.64, "b": 0.64, "n": 2.0}
-    high = {"z": zt + th - 0.025, "xc": x0, "yc": 0.0, "af": 0.64, "ar": 0.64, "b": 0.64, "n": 2.0}
-    v.cast([low, high], "upper", sides=v.n(48, 14), top=0.025, steps=2, between=2)
-    v.hull([(x0 - 0.36, 0.47, zt + 0.08), (x0 - 0.98, 0.44, zt + 0.16), (x0 - 1.00, 0.44, zt + th - 0.04), (x0 - 0.36, 0.47, zt + th - 0.015)], "upper", bevel=0.02, part="turret")
     v.lathe((x0, 0.0, zt - 0.03), Z, [(0.06, 0.66), (0.0, 0.68), (0.0, 0.0)], "shade", v.n(32, 10))
     roof = zt + th
-    ring_rivets(v, low, zt + 0.07, 40, part="turret")
-    ring_rivets(v, high, roof - 0.06, 40, part="turret")
+    shells = []
+    if turret in ("round", "all"):
+        v.part("turret_round", "turret", (x0, 0.0, zt), kind="fixed", note="the round turret of 1935: a rolled drum, a box behind, riveted")
+        _round_turret(v, x0, zt, th)
+        shells.append("turret_round")
+    if turret in ("cone", "all"):
+        v.part("turret_cone", "turret", (x0, 0.0, zt), kind="fixed", note="the cone turret of 1937: welded, its sides and its box leaning in")
+        _cone_turret(v, x0, zt, th)
+        shells.append("turret_cone")
+    v.use("turret")
     v.hatch_rect("hatch_commander", "turret", (x0 - 0.30, 0.0, roof), (0.56, 0.50), Z, X, hinge="front", opens=100.0, thick=0.022)
     v.socket("commander", (x0 - 0.30, 0.10, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     v.use("turret")
     v.periscope((x0 + 0.30, 0.30, roof), X, (0.08, 0.15, 0.10))
     v.vent((x0 + 0.26, -0.28, roof), 0.08, 0.04)
-    if fine:
-        for s in (LEFT, RIGHT):
-            n = Vector((0.45, s * 0.89, 0.0)).normalized()
-            v.visor(Vector((x0 + 0.29, s * 0.57, zt + 0.40)), n, 0.16, 0.06, 0.03, brow=False)
-            v.port(Vector((x0 - 0.62, s * 0.475, zt + 0.32)), Vector((0, s, 0)), 0.035)
-            rivets(v, (x0 - 0.40, s * 0.471, roof - 0.04), (x0 - 0.97, s * 0.441, roof - 0.04), Vector((0, s, 0)), 0.10)
-        rivets(v, (x0 - 1.001, 0.40, zt + 0.40), (x0 - 1.001, -0.40, zt + 0.40), -X, 0.10)
     # (no star: bare is the common read for Khalkhin Gol and 1941; the art director, 22 Nov 20:46Z, for the historian to confirm)
 
     # ---- the gun: the 45 mm in a flat shield, the machine gun beside it on its right ---------------------------------
@@ -165,5 +210,13 @@ def bt7(fine=True, tag="SOV"):
     v.socket("case", (x0 - 0.30, -0.64, zt + 0.32), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.25, kick=0.5, gun_low=-8.0, hatches=["hatch_commander", "hatch_driver"],
                  traverse=18.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.2, 0.36, 165.0))
-    v.name_place((x0 + 0.02, zt + 0.30), long=0.62, high=0.10, part="turret", lines=2, bend=0.035)     # the slogan (b477): on the turret's side, in two lines
+    v.name_place((x0 + 0.02, zt + 0.30), long=0.62, high=0.10, part="turret", lines=2, bend=0.035, parts=shells)     # the slogan (b477): on the turret's side, in two lines
+    if turret == "all":
+        v.m.info.setdefault("file", {})["swaps"] = {
+            "how": "one model for her years. turret: show the chosen turret's part and scale the other's to nothing (a part scaled to "
+                   "nothing is not drawn); the lid, the sights and the gun serve both. " + BY_MONTH_HOW,
+            "turret": {"default": "round", "choices": {
+                "round": {"what": "the round turret of 1935, riveted, with a box behind", "years": "1935 on", "parts": ["turret_round"]},
+                "cone": {"what": "the welded cone turret of 1937", "years": "1938 on (beside the round one)", "parts": ["turret_cone"]}}},
+            "by_month": BT7_MONTHS}
     return v

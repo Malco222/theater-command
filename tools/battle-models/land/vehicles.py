@@ -174,3 +174,6 @@ import tanks_us_light  # noqa: E402
 BUILDERS["Stuart"] = tanks_us_light.stuart
 ABOUT["Stuart"] = {"nation": "USA", "role": "light tank", "years": "1941-45",
                    "units": "armor (USA and the Marines: the light tank of 1941-43, the Philippines, Guadalcanal, Tunisia; Britain's 'Honey' in the desert and Burma; China's tank brigades); the American light tank wherever a light kind is drawn"}
+WHOLE["BT7"] = {"turret": "all"}
+FACES["BT7"] = [("1935: the round turret", {"turret": "round"}),
+                ("1937 on: the cone turret (half the BT-7s from 1938)", {"turret": "cone"})]
