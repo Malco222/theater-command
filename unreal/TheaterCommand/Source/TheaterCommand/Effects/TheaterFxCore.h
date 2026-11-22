@@ -264,6 +264,7 @@ namespace TheaterFx
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
+		double LensNear = 0.0; // (game.lens_cap: its burst's own near_m, sizes.<size>.lens_near_m, where that is more than the cap's)
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
 		// (a piece laid by a fire, a steam vent or a cook-off that rides a moving ship, BurnMove. bCarried: it was born
@@ -944,6 +945,20 @@ namespace TheaterFx
 			Rgb MassCol, MassTop, SootCol;
 			Rgb Bed; // (bBed: the foot's own colour in place of the fire's yellow heart)
 			bool bBed = false;
+			// (the art director's mends of 06:43Z 22 November on head C. BedOver: the foot burns that far past white, so its
+			// base metre lands yellow-orange, 0 as before; MassOver: the body puffs' own, 1 as before; MassInner: how far out
+			// from its middle a body puff stays dense, 0.5 as before, higher a crisper edge; Flare, bFlare: about one lick
+			// every FlareEvery seconds out of the fire's tallest seat, up to FlareTall times its height, rising and falling
+			// over FlareS, its top torn off as it falls;
+			// BedEdge, bBedEdge, BedInner: the foot's colour at its rim (the fire's flame colour as before) and how far out it
+			// stays dense (0.4 as before))
+			double BedOver = 0.0, MassOver = 1.0, MassInner = 0.5, FlareTall = 1.5, FlareS = 0.5;
+			double Inner = 0.0; // (Inner: how far out a tongue's body and fork stay dense, 0.8 and 0.78 as before; higher, a crisper edge)
+			double BedInner = 0.4, BedTall = 1.0; // (BedTall: the foot and its heart licks that many times taller, 1 as before)
+			Rgb BedEdge;
+			bool bBedEdge = false;
+			Span FlareEvery{ 2.0, 3.0 };
+			bool bFlare = false;
 		};
 		/** fire.glow: a burning thing's warm light on the ground round it, read once a frame. */
 		struct GlowRow
@@ -1153,6 +1168,11 @@ namespace TheaterFx
 		double TrailNearK(double OffEye, double HalfWide) const;
 		// (SetLensFade: the land battle's fade by depth in front of the lens, and its near plane. 0, 0: none)
 		double LensGone = 0.0, LensWhole = 0.0, LensPlane = 0.0;
+		// (game.lens_cap, read at Setup: thrown clods fade out between CapThrownGone and CapThrownWhole metres in front of the
+		// lens; a smoke or dust card wider than CapCard of the picture, or a light wider than CapLight, fades away over the
+		// last CapSoft of that, when it is nearer the lens than CapNear metres (by degrees over the last three tenths of that,
+		// so a column of smoke filling the picture from further off is never touched). 0: none, as before)
+		double CapThrownGone = 0.0, CapThrownWhole = 0.0, CapCard = 0.0, CapLight = 0.0, CapSoft = 0.3, CapNear = 10.0;
 		bool bScars = true; // (SetScars)
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
@@ -1363,7 +1383,11 @@ namespace TheaterFx
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
-		TongueRow TongueRowOf() const;
+		TongueRow TongueRowOf(bool bLand = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues)
+		/** A burning thing on land under a ship's size (a tank's, not a ship's): no wider than fire.smoke_column.from_m,
+		 * no higher over the ground than fire.land_column.above_m, and not under way. The test OwnColumn's land column
+		 * makes, without its from_m and from_s; fire.land_tongues and fire.lamp.land_strength are for these. */
+		bool LandFire(const Source& Fire) const;
 		GlowRow GlowRowOf() const;
 		LateRow LateRowOf() const;
 		/** How far a fire lit at Start with seed Seed has burnt down by T (fire.late): 0 not yet, 1 all the way. */

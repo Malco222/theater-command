@@ -271,6 +271,14 @@ namespace TheaterFx
 		DayLampCol = Picture("game.day_lamp_colour", Rgb::FromPicture(255, 240, 215));
 		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
 		LitGain = std::clamp(Num("picture.lit_gain", 1.0), 1.0, 4.0);
+		// (game.lens_cap, the art director 22:46Z 21 November, on clods and cards right in front of the lens: "clods
+		// faded 4 to 8 m from the lens, no card over 15% of the frame, no flash or flame over 20%, never a blackout")
+		CapThrownGone = SafeNum(Num("game.lens_cap.thrown_gone_m", 0.0), 0.0, 100.0, 0.0);
+		CapThrownWhole = std::max(CapThrownGone, SafeNum(Num("game.lens_cap.thrown_whole_m", 0.0), 0.0, 200.0, 0.0));
+		CapCard = SafeNum(Num("game.lens_cap.card_most", 0.0), 0.0, 10.0, 0.0);
+		CapLight = SafeNum(Num("game.lens_cap.light_most", 0.0), 0.0, 10.0, 0.0);
+		CapSoft = SafeNum(Num("game.lens_cap.soft", 0.3), 0.01, 1.0, 0.3);
+		CapNear = SafeNum(Num("game.lens_cap.near_m", 10.0), 0.1, 1000.0, 10.0);
 		PutK = 1.0;
 		TracerDayPx = std::max(0.0, Num("tracer.day_px", 0.0));
 		TracerDayCorePx = std::clamp(Num("tracer.day_core_px", TracerDayPx * 0.6), 0.0, TracerDayPx);
@@ -376,6 +384,8 @@ namespace TheaterFx
 		EyeMoved = EyeTurned = 0.0;
 		DustInSight = DustSince = 0;
 		CaseUntil.clear();
+		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
+		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
 		for (size_t I = 0; I < OutRgba.size(); ++I)
 		{
 			OutRgba[I] = 0;
@@ -916,6 +926,17 @@ namespace TheaterFx
 		if (bSeaFar && !bQuiet && Ground != "water")
 		{
 			SeaFlash(Now, HitFrom); // (a hit on a ship or the shore: a shell falling in the sea is read by its column)
+		}
+		// (sizes.<size>.lens_near_m, the art director 07:22Z 22 November: the camera keeps out of a burst's cloud, and as
+		// a backstop the lens cap's near_m grows with the burst, 10 m for a 75, 12 for a 105, 30 for a 500 lb bomb, so a
+		// lens caught inside a big cloud dims and never goes black. No such key: the cap's own near_m)
+		const double LensNear = SafeNum(Num(S + "lens_near_m", 0.0), 0.0, 1000.0, 0.0);
+		if (LensNear > 0.0)
+		{
+			for (size_t I = HitFrom; I < Bits.size(); ++I)
+			{
+				Bits[I].LensNear = LensNear;
+			}
 		}
 		if (bQuiet)
 		{
@@ -3319,7 +3340,7 @@ namespace TheaterFx
 			// white: at the muzzle's own height a lamp of a shell's strength burns a white pool there. Its strength is cut
 			// by the square of how much lower it hangs than a shell's lamp of the same strength, so its brightest spot on
 			// the ground is no brighter than that shell's: 1700, a tank gun at night lit 1 m round its foot to 249 of 255)
-			const double Watts = std::max(0.0, Num(M + "light_w", 0.0) / 8500.0);
+			const double Watts = SafeNum(Num(M + "light_w", 0.0), 0.0, 1.0e7, 0.0) / 8500.0; // (held, the pre-check of 22 November: an infinite light_w was an infinite lamp)
 			const double Hang = Num("game.muzzle_lamp_height_m", 6.0) * std::sqrt(Watts);
 			const double ShellHang = std::max(1.0, Num("burst.flash.light.height_m", 16.0) * std::sqrt(Watts));
 			Flash F;
@@ -4744,20 +4765,22 @@ namespace TheaterFx
 		}
 		else
 		{
-			R.Rate = Num(P + "rate_per_min", 800.0);
-			R.Mps = Num(P + "muzzle_mps", 870.0);
-			R.Flash = Num(P + "flash_m", 0.45);
-			R.Strike = Num(P + "strike_m", 0.8);
-			R.Drag = Num(P + "drag", 0.36);
-			R.Drop = Num(P + "drop", 1.0) > 0.0 ? Num("air_guns.gravity", 9.81) : 0.0;
-			R.TracerS = Num(P + "tracer_s", 2.4);
-			R.Spread = Num(P + "spread_mil", 4.0) * 0.001;
-			R.OneIn = std::max(1, static_cast<int>(Num(P + "tracer_every", Num("tracer.one_in", 5.0))));
-			R.SmokeEvery = std::max(1, static_cast<int>(Num(P + "smoke_every", 3.0)));
-			R.SmokeS = Num(P + "smoke_s", 0.8);
-			R.SmokeAlpha = Num(P + "smoke_alpha", 0.1);
+			// (each held to a sane span, the pre-check of 22 November: a value that is no number, infinite or huge drew
+			// no-number points and lamps through the ships' AA rows; a sane value is as it was)
+			R.Rate = SafeNum(Num(P + "rate_per_min", 800.0), 1.0, 60000.0, 800.0);
+			R.Mps = SafeNum(Num(P + "muzzle_mps", 870.0), 1.0, 5000.0, 870.0);
+			R.Flash = SafeNum(Num(P + "flash_m", 0.45), 0.0, 50.0, 0.45);
+			R.Strike = SafeNum(Num(P + "strike_m", 0.8), 0.0, 50.0, 0.8);
+			R.Drag = SafeNum(Num(P + "drag", 0.36), 0.0, 100.0, 0.36);
+			R.Drop = Num(P + "drop", 1.0) > 0.0 ? SafeNum(Num("air_guns.gravity", 9.81), 0.0, 100.0, 9.81) : 0.0;
+			R.TracerS = SafeNum(Num(P + "tracer_s", 2.4), 0.0, 60.0, 2.4);
+			R.Spread = SafeNum(Num(P + "spread_mil", 4.0), 0.0, 1000.0, 4.0) * 0.001;
+			R.OneIn = static_cast<int>(SafeNum(Num(P + "tracer_every", Num("tracer.one_in", 5.0)), 1.0, 1.0e6, 5.0));
+			R.SmokeEvery = static_cast<int>(SafeNum(Num(P + "smoke_every", 3.0), 1.0, 1.0e6, 3.0));
+			R.SmokeS = SafeNum(Num(P + "smoke_s", 0.8), 0.0, 60.0, 0.8);
+			R.SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.1), 0.0, 1.0, 0.1);
 			R.Licks = static_cast<int>(SafeNum(Num(P + "licks", 0.0), 0.0, 16.0, 0.0)); // (held to 16: a wild recipe value asked a billion licks a shot, the fuzz of 22 November)
-			R.Lamp = Num(P + "lamp", 0.0);
+			R.Lamp = SafeNum(Num(P + "lamp", 0.0), 0.0, 100.0, 0.0);
 			R.FlashLeastPx = std::max(0.0, Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)));
 			// (the close view: what only shows within a few tens of metres of the eye)
 			const std::string C = "air_guns.close.";
@@ -8883,12 +8906,22 @@ namespace TheaterFx
 		}
 	}
 
-	Battle::TongueRow Battle::TongueRowOf() const
+	bool Battle::LandFire(const Source& Fire) const
+	{
+		const double Wide = std::max(Fire.Across, Fire.AcrossTo);
+		const double Below = SafeNum(Num("fire.smoke_column.from_m", 8.0), 0.0, 1e6, 8.0), Above = SafeNum(Num("fire.land_column.above_m", 6.0), 0.0, 1e6, 6.0);
+		return Wide < Below && !(Fire.At.Z - Height(Fire.At.X, Fire.At.Y) > Above) && !Fire.bMoves;
+	}
+
+	Battle::TongueRow Battle::TongueRowOf(bool bLand) const
 	{
 		// (fire.tongues, every dial held to a sane span. Without the row's every_s: off, and a burning thing's flames
-		// are the upright cones they were)
+		// are the upright cones they were. bLand, the pre-check of 22 November: head C's numbers and its mends are the
+		// art director's for a burning tank, and in fire.tongues they reached every ship's fire too, twice the pieces
+		// and redder. A recipe with fire.land_tongues gives a fire on land (LandFire) that whole row instead, and leaves
+		// fire.tongues to the ships as they were)
 		TongueRow R;
-		const std::string P = "fire.tongues.";
+		const std::string P = bLand && Has("fire.land_tongues.every_s") ? "fire.land_tongues." : "fire.tongues.";
 		R.bOn = Has(P + "every_s");
 		if (!R.bOn)
 		{
@@ -8952,6 +8985,18 @@ namespace TheaterFx
 		R.SootCol = Picture(P + "soot_colour", Rgb::FromPicture(30, 26, 24));
 		R.bBed = Has(P + "bed.0");
 		R.Bed = Picture(P + "bed", Rgb());
+		R.BedOver = Safe(Num(P + "bed_over", 0.0), 0.0, 4.0, 0.0);
+		R.BedInner = Safe(Num(P + "bed_inner", 0.4), 0.0, 0.95, 0.4);
+		R.BedTall = Safe(Num(P + "bed_tall", 1.0), 0.3, 3.0, 1.0);
+		R.Inner = Safe(Num(P + "inner", 0.0), 0.0, 0.97, 0.0);
+		R.bBedEdge = Has(P + "bed_edge.0");
+		R.BedEdge = Picture(P + "bed_edge", Rgb());
+		R.MassOver = Safe(Num(P + "mass_over", 1.0), 0.25, 4.0, 1.0);
+		R.MassInner = Safe(Num(P + "mass_inner", 0.5), 0.0, 0.95, 0.5);
+		R.bFlare = Has(P + "flare_every_s.0");
+		R.FlareEvery = Held(P + "flare_every_s", 2.0, 3.0, 0.3, 60.0);
+		R.FlareTall = Safe(Num(P + "flare_tall", 1.5), 1.0, 3.0, 1.5);
+		R.FlareS = std::min(Safe(Num(P + "flare_s", 0.5), 0.1, 3.0, 0.5), 0.9 * R.FlareEvery.A);
 		return R;
 	}
 
@@ -9256,9 +9301,13 @@ namespace TheaterFx
 			const SeatIs Seat = SeatOf(Turn);
 			const double Stays = Shown * R.Every * D.U(1.0, 1.2) * R.BedOverlap;
 			const double HalfH = Seat.Half * D.U(0.85, 1.05);
-			Tongue(Seat.At - ZUp * (0.25 * HalfH), Leaning(Bent(0.1), D.U(0.0, 8.0)), Seat.Tall * D.U(0.15, 0.3), 3.0, HalfH, HalfH * D.U(0.5, 0.7), std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.45) / HalfH, 1.0, 2.2), Heart, Flame.Mix(Heart, 0.5), Stays, 0.05, 0.2);
+			Tongue(Seat.At - ZUp * (0.25 * HalfH), Leaning(Bent(0.1), D.U(0.0, 8.0)), Seat.Tall * D.U(0.15, 0.3) * R.BedTall, 3.0, HalfH, HalfH * D.U(0.5, 0.7), std::clamp(0.5 * Seat.Tall * R.BedTall * D.U(0.3, 0.45) / HalfH, 1.0, 2.2 * R.BedTall), Heart, Flame.Mix(Heart, 0.5), Stays, 0.05, 0.2);
 			Bits.back().Point = 0.6;
-			Rooted(0.6, Flame, 0.45, 0.4);
+			if (R.BedOver > 0.0)
+			{
+				Bits.back().Over = R.BedOver; // (bed_over: the base metre yellow-orange, the art director 06:43Z 22 November)
+			}
+			Rooted(0.6, R.bBedEdge ? R.BedEdge : Flame, 0.45, R.BedInner);
 			Flick(Seat);
 			// and its heart (the art director: the round root "reads as a lamp. Spread the heart along the foot as a
 			// ragged white-yellow band under the tongues, brightest under the tallest, never a disc"): two short licks
@@ -9269,7 +9318,7 @@ namespace TheaterFx
 			{
 				const double Side = (Q == 0 ? -1.0 : 1.0) * D.U(0.3, 0.6);
 				const double HalfR = Seat.Half * D.U(0.4, 0.55) * (0.85 + 0.25 * Seat.High);
-				Tongue(Seat.At + Flat * (Side * Seat.Half) + ZUp * (0.1 * HalfR), Leaning(Bent(0.1), D.U(0.0, 14.0)), Seat.Tall * D.U(0.05, 0.12), 4.0, HalfR, HalfR * D.U(0.6, 0.8), D.U(1.4, 2.1), R.Root, Heart, Stays, 0.1 + 0.02 * Q, 0.1);
+				Tongue(Seat.At + Flat * (Side * Seat.Half) + ZUp * (0.1 * HalfR), Leaning(Bent(0.1), D.U(0.0, 14.0)), Seat.Tall * D.U(0.05, 0.12) * R.BedTall, 4.0, HalfR, HalfR * D.U(0.6, 0.8), D.U(1.4, 2.1) * R.BedTall, R.Root, Heart, Stays, 0.1 + 0.02 * Q, 0.1);
 				Bit& B = Bits.back();
 				B.Over = 1.0 + (R.RootOver - 1.0) * (0.5 + 0.5 * Seat.High);
 				B.Alpha = 1.0;
@@ -9309,7 +9358,7 @@ namespace TheaterFx
 			Bits.back().Heart = 0.9;
 			Bits.back().Hold = 0.6;
 			Bits.back().Over = BodyOver;
-			Rooted(0.75, Flame.Mix(R.Tip, 0.6) * (1.0 / BodyOver), 0.45, 0.8); // (dense to near its tip, and reddening there and along its edge)
+			Rooted(0.75, Flame.Mix(R.Tip, 0.6) * (1.0 / BodyOver), 0.45, R.Inner > 0.0 ? R.Inner : 0.8); // (dense to near its tip, and reddening there and along its edge; inner: crisper)
 			Flick(Seat);
 			if (D.U() < R.Forks * Fine)
 			{
@@ -9320,7 +9369,7 @@ namespace TheaterFx
 				Tongue(Seat.At + Around() * (0.5 * Seat.Half * D.U()), Leaning(Bent(0.5), D.U(10.0, 24.0)), Seat.Tall * D.U(0.15, 0.3) * (2.0 / LifeF) / 0.8647, 2.0 / LifeF, HalfF, HalfF * D.U(0.25, 0.4), LongF, R.Body.Mix(Flame, 0.4), Flame.Mix(R.Tip, 0.6), LifeF, 0.0, 0.3);
 				Bits.back().Heart = 0.9;
 				Bits.back().Hold = 0.55;
-				Rooted(0.7, R.Tip, 0.6, 0.78);
+				Rooted(0.7, R.Tip, 0.6, R.Inner > 0.0 ? R.Inner : 0.78);
 				Flick(Seat);
 			}
 			if (D.U() < R.Tips * Fine)
@@ -9336,17 +9385,14 @@ namespace TheaterFx
 				Flick(Seat);
 			}
 		}
-		if (D.U() < R.Torn * Left * Fine)
+		auto Tear = [&](const SeatIs& Seat, double AtLo, double AtHi)
 		{
 			// (a tip torn off: out of a tall tongue's top, the first thing left out when the room fills. The art
 			// director, 23:19Z: the first were "pointed darts flying across the smoke, which read as sparks. Each
 			// should be gone in 0.2 to 0.3 s within one tongue's height of the top, ragged and darkening into smoke as
 			// it goes." So a ragged scrap, blunt, thrown up a little faster than the tongue climbs and slowed at once,
 			// dull red going to the smoke's own dark, gone in a quarter of a second)
-			// (off the taller of two seats: the low ones have no tips to lose)
-			const SeatIs SeatA = SeatOf(D.Whole(0, Shown - 1)), SeatB = SeatOf(D.Whole(0, Shown - 1));
-			const SeatIs& Seat = SeatA.Tall > SeatB.Tall ? SeatA : SeatB;
-			const double At_ = D.U(0.6, 0.9), HalfA = Seat.Half * D.U(0.3, 0.5);
+			const double At_ = D.U(AtLo, AtHi), HalfA = Seat.Half * D.U(0.3, 0.5);
 			const Vec Aside = Around();
 			const Vec Dir = (Bent(At_) + Down * D.U(0.2, 0.6) + Aside * std::tan(Radians(D.U(6.0, 22.0)))).Unit(ZUp);
 			Tongue(Spine(Seat.At, At_, Seat.Tall) + Aside * (Seat.Half * D.U(0.2, 0.7)), Dir, Seat.Tall * D.U(1.5, 2.5), 4.0, HalfA, HalfA * 0.35, D.U(1.3, 1.9), Flame.Mix(R.Tip, 0.5), Rgb::FromPicture(62, 46, 40), D.U(0.2, 0.3), 0.0, 1.0);
@@ -9355,6 +9401,13 @@ namespace TheaterFx
 			Bits.back().Hold = 0.7;
 			Rooted(0.4, R.Tip.Mix(Ember, 0.4), 0.5, 0.6);
 			Flick(Seat);
+		};
+		if (D.U() < R.Torn * Left * Fine)
+		{
+			// (off the taller of two seats: the low ones have no tips to lose)
+			const SeatIs SeatA = SeatOf(D.Whole(0, Shown - 1)), SeatB = SeatOf(D.Whole(0, Shown - 1));
+			const SeatIs& Seat = SeatA.Tall > SeatB.Tall ? SeatA : SeatB;
+			Tear(Seat, 0.6, 0.9);
 		}
 		// (the fire's body, TongueRow::Mass, the art director's ruling: "one merged body, not tongues side by side:
 		// overlapping, camera-facing flame puffs". Soft round puffs out of the seats, born small, swelling and rising
@@ -9393,13 +9446,14 @@ namespace TheaterFx
 			B.FadeIn = std::max(0.03, R.FadeShare * Life);
 			B.Hold = 0.45;
 			B.Heart = 0.85;
-			B.Inner = 0.5;
+			B.Inner = R.MassInner; // (mass_inner: crisper toward its rim, the art director 06:43Z 22 November)
 			B.Rim = 0.0;
 			B.Rough = 0.25;
 			B.LumpSeed = static_cast<uint32_t>(Jit.U() * 4294967295.0);
 			B.Nearer = Over - 0.05 * Wide;
 			B.bLight = true;
-			B.Edge = R.MassTop;
+			B.Over = R.MassOver;
+			B.Edge = R.MassTop * (1.0 / R.MassOver);
 			B.EdgeK = 0.85;
 			B.EdgeIn = 0.35;
 			Bits.push_back(B);
@@ -9439,6 +9493,57 @@ namespace TheaterFx
 			B.LumpSeed = static_cast<uint32_t>(Jit.U() * 4294967295.0);
 			B.Nearer = Over;
 			Bits.push_back(B);
+		}
+		// (a flare, TongueRow::bFlare, the art director 06:43Z 22 November: "about one lick every 2 to 3 s reaching 5 to
+		// 6 m over the roof". Out of the fire's tallest seat by its own clock and seed: time cut into slots of the mean
+		// gap, one flare in each at a point of its own within the span, swelling to flare_tall of the seat's height and
+		// back over flare_s, throwing a tall lick and its tip a step, its top torn off as it falls. Laid after every
+		// other piece and with dice of its own, so the rest of the fire is drawn as without it)
+		if (R.bFlare && Left > 0.5)
+		{
+			const double Gap = 0.5 * (R.FlareEvery.A + R.FlareEvery.B), Since = T - S.Start;
+			const double SlotAt = std::floor(Since / Gap);
+			double Swell = 0.0, Past = 0.0;
+			for (double N = SlotAt - 1.0; N <= SlotAt && SlotAt == SlotAt && std::abs(SlotAt) < 1e12; N += 1.0)
+			{
+				Dice Fd(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(N) + 7) * 0xF1A3E5D7C9B2A4E1ull + 0xF1A2Eull));
+				const double U = (Since - (N * Gap + Fd.U(0.0, R.FlareEvery.B - R.FlareEvery.A))) / R.FlareS;
+				if (U >= 0.0 && U < 1.0)
+				{
+					Swell = std::sin(Pi * U) * std::sin(Pi * U);
+					Past = U;
+				}
+			}
+			if (Swell > 0.02)
+			{
+				Dice Fl(S.Seed ^ (static_cast<uint64_t>(Step) * 0xE7037ED1A0B428DBull + 0xF1A3ull));
+				SeatIs Seat = SeatOf(0);
+				Seat.Tall *= 1.0 + (R.FlareTall - 1.0) * Swell;
+				const double Life = R.Life.Pick(Fl);
+				const double HalfA = Seat.Half * Fl.U(0.8, 1.0), HalfB = HalfA * Fl.U(0.4, 0.55);
+				const double Long = std::clamp(0.5 * Seat.Tall * Fl.U(0.9, 1.1) / HalfA, 1.3, 10.0); // (thin and long, the seat's whole height: a lick, not a heap)
+				const double Reach = Seat.Tall * Fl.U(0.25, 0.35);
+				Tongue(Seat.At + Vec(Fl.Bell(), Fl.Bell(), 0.0) * (0.2 * Seat.Half), Bent(0.3), Reach * (2.0 / Life) / 0.8647, 2.0 / Life, HalfA, HalfB, Long, R.Body, Flame.Mix(R.Tip, 0.4), Life, 0.0, 0.2);
+				Bits.back().Point = std::max(R.Point, 0.55);
+				Bits.back().Alpha = 1.0;
+				Bits.back().Heart = 0.9;
+				Bits.back().Hold = 0.6;
+				Bits.back().Over = BodyOver;
+				Rooted(0.75, Flame.Mix(R.Tip, 0.6) * (1.0 / BodyOver), 0.45, R.Inner > 0.0 ? R.Inner : 0.8);
+				Flick(Seat);
+				const double At_ = Fl.U(0.55, 0.7), HalfT = HalfA * Fl.U(0.5, 0.7);
+				const double LongT = std::clamp(0.5 * Seat.Tall * Fl.U(0.3, 0.45) / HalfT, 1.5, 5.0);
+				Tongue(Spine(Seat.At, At_, Seat.Tall), Bent(At_), Seat.Tall * Fl.U(0.6, 1.0), 3.0, HalfT, HalfT * 0.3, LongT, Flame.Mix(R.Tip, 0.3), R.Tip.Mix(Ember, 0.5), Life * Fl.U(0.6, 0.85), 0.0, 0.5);
+				Bits.back().Point = 0.8;
+				Bits.back().Heart = 0.9;
+				Bits.back().Hold = 0.65;
+				Rooted(0.6, R.Tip.Mix(Ember, 0.3), 0.7, 0.75);
+				Flick(Seat);
+				if (Past > 0.45 && Fl.U() < 0.6)
+				{
+					Tear(Seat, 0.8, 1.0); // (and as it falls its top breaks off and goes)
+				}
+			}
 		}
 	}
 
@@ -11262,6 +11367,8 @@ namespace TheaterFx
 		const double FootClearIs = bSmokeFoot ? Num("fire.smoke_foot_clear", 1.0) : 0.0, FootFromA = Num("fire.smoke_foot_from_m.0", 8.0), FootFromB = Num("fire.smoke_foot_from_m.1", 20.0);
 		const double FootClear = FootClearIs == FootClearIs ? std::min(10.0, std::max(0.0, FootClearIs)) : 0.0;
 		const TongueRow Tongues = TongueRowOf();
+		const bool bLandTongues = Has("fire.land_tongues.every_s");
+		const TongueRow LandTongues = bLandTongues ? TongueRowOf(true) : TongueRow();
 		const GlowRow Glow = GlowRowOf();
 		const LateRow Late = LateRowOf();
 		// (fire.land_column: a burning vehicle's plain smoke under its own column is only its foot, base_r1 as wide and
@@ -11540,13 +11647,14 @@ namespace TheaterFx
 					FireGlow(S, Now, Glow, 1.0 - (1.0 - Late.Light) * LateShare(Late, S.Seed, S.Start, Now));
 				}
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
+				const TongueRow& Row = bLandTongues && S.Next <= Now && S.Next < S.Flames && LandFire(S) ? LandTongues : Tongues;
 				while (S.Next <= Now && S.Next < S.Flames)
 				{
-					if (Tongues.bOn)
+					if (Row.bOn)
 					{
 						// (fire.tongues: ragged tongues at the fire's own seats, in place of the upright cones below)
-						FireTongues(S, S.Next, Tongues, Flame, Heart, Ember, &Late, LateShare(Late, S.Seed, S.Start, S.Next));
-						S.Next += Tongues.Every;
+						FireTongues(S, S.Next, Row, Flame, Heart, Ember, &Late, LateShare(Late, S.Seed, S.Start, S.Next));
+						S.Next += Row.Every;
 						continue;
 					}
 					Dice D(S.Seed ^ static_cast<uint64_t>(static_cast<int64_t>(S.Next * 1000.0)));
@@ -13187,6 +13295,39 @@ namespace TheaterFx
 				}
 			}
 		}
+		if ((CapThrownWhole > 0.0 || CapCard > 0.0 || CapLight > 0.0) && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright))
+		{
+			// (game.lens_cap, the art director 22:46Z 21 November; cut 4's still 06, 22 November: a clod thrown a few
+			// metres in front of the lens filled a twentieth of the picture as a flat black slab. A thrown clod fades out
+			// as it comes within thrown_whole_m of the lens, gone by thrown_gone_m; a card of smoke or dust wider than
+			// card_most of the picture, or a light wider than light_most, within near_m of the lens, fades away over the
+			// last soft of that, so nothing near the lens ever blacks the picture out or blinds it)
+			const double Depth = (P - Eye.Eye).Dot(Eye.Forward);
+			if (Depth > 1e-3)
+			{
+				if (B.bThrown && CapThrownWhole > 0.0)
+				{
+					const double T = CapThrownWhole > CapThrownGone ? Clamp01((Depth - CapThrownGone) / (CapThrownWhole - CapThrownGone)) : (Depth > CapThrownGone ? 1.0 : 0.0);
+					A *= T * T * (3.0 - 2.0 * T);
+				}
+				const double Most = B.bLight ? CapLight : (B.bThrown ? 0.0 : CapCard);
+				const double NearM = std::max(CapNear, B.LensNear); // (a big burst's own, further: sizes.<size>.lens_near_m)
+				if (Most > 0.0 && Eye.HalfAcross > 0.0 && Depth < NearM)
+				{
+					const double Share = Rad / (Depth * Eye.HalfAcross); // (its width over the picture's)
+					if (Share > Most * (1.0 - CapSoft))
+					{
+						const double T = Clamp01((Most - Share) / (Most * CapSoft));
+						const double Near = Clamp01((NearM - Depth) / (0.3 * NearM)); // (only near the lens: a column filling the picture from further off is untouched)
+						A *= 1.0 - Near * (1.0 - T * T * (3.0 - 2.0 * T));
+					}
+				}
+				if (A < 0.004)
+				{
+					return 0;
+				}
+			}
+		}
 		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)
 		Vec Outward; // (and which way on the screen is out of its cloud)
 		if (B.CloudShade > 0.0 && !B.bLight)
@@ -14573,6 +14714,12 @@ namespace TheaterFx
 		const double Flick = SafeNum(Num(P + "flicker", 0.25), 0.0, 0.9, 0.25);
 		const Span Hz = Range(P + "flicker_hz", 3.0, 6.0);
 		const double Keep = SafeNum(Num(P + "keep", 1.5), 1.0, 100.0, 1.5);
+		// (land_strength, land_reach, land_up: a fire on land's (LandFire), the tank's lamp of head C and the art director's
+		// dusk deck mend of 22 November; strength, reach and up stay the ships'. No such key: the same for all)
+		const bool bLandPower = Has(P + "land_strength"), bLandReach = Has(P + "land_reach"), bLandUp = Has(P + "land_up");
+		const double PowerLand = bLandPower ? SafeNum(Num(P + "land_strength", 0.25), 0.0, 100.0, 0.25) : Power;
+		const double ReachLand = bLandReach ? SafeNum(Num(P + "land_reach", 8.0), 0.1, 100.0, 8.0) : Reach;
+		const double UpLand = bLandUp ? SafeNum(Num(P + "land_up", 0.6), -10.0, 20.0, 0.6) : UpBy;
 		const int Steady = std::clamp(static_cast<int>(SafeNum(Num("game.steady_lamps", 1.0), 0.0, 64.0, 1.0)), 0, Room);
 		const LateRow LateNow = LateRowOf();
 		const double Since = Now == Now && Now >= LampsAt ? std::min(Now - LampsAt, 1.0) : 0.0;
@@ -14668,15 +14815,16 @@ namespace TheaterFx
 			{
 				On *= Clamp01(1.0 - (Now - S.OutAt) / std::max(S.OutOver, 1e-3));
 			}
-			const double Steadily = ByDay * Power * std::sqrt(std::min(S.Across, 5000.0)) * On * (1.0 - (1.0 - LateNow.Light) * LateShare(LateNow, S.Seed, S.Start, Now));
+			const bool bOnLand = (bLandPower || bLandReach || bLandUp) && LandFire(S);
+			const double Steadily = ByDay * (bOnLand ? PowerLand : Power) * std::sqrt(std::min(S.Across, 5000.0)) * On * (1.0 - (1.0 - LateNow.Light) * LateShare(LateNow, S.Seed, S.Start, Now));
 			if (Steadily <= 1e-4)
 			{
 				continue;
 			}
-			Is.L.At = S.At + ZUp * (std::min(S.Across, 5000.0) * UpBy);
+			Is.L.At = S.At + ZUp * (std::min(S.Across, 5000.0) * (bOnLand ? UpLand : UpBy));
 			Is.L.Col = Flame.Mix(DayLampCol, Day);
 			Is.L.Strength = Steadily * (1.0 + Flick * Flickering(Seed32, 3u, Now, Hz.A, Hz.B));
-			Is.L.Radius = std::max(ReachLeast, Reach * std::min(S.Across, 5000.0));
+			Is.L.Radius = std::max(ReachLeast, (bOnLand ? ReachLand : Reach) * std::min(S.Across, 5000.0));
 			Is.Rank = RankOf(Is, Steadily);
 			Steadies.push_back(Is);
 		}
