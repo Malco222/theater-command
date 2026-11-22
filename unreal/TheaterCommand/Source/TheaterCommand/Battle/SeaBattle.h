@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Effects/BattleEffects.h"
+#include "Battle/ConvoyLooks.h" // D1 hook (convoy looks)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -145,6 +146,7 @@ private:
 
 	TSharedPtr<FSeaBattleState> State;
 	TUniquePtr<FBattleEffects> Effects;
+	TUniquePtr<FConvoyLooks> Looks; // D1 hook (convoy looks)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;

@@ -1906,7 +1906,7 @@ void ASeaBattle::LayAndSteer()
 		}
 		// A boat (ruling 241) drawn as far under as the show has her dived. D1 hook (convoy looks): the submarine scene's
 		// boat states (surfaced, periscope, deep) may give her own heave here.
-		const double Heave = Ship.Heave - Ship.Dived;
+		const double Heave = FConvoyLooks::Steer(Looks, Root, Stage, Effects.Get(), S.Show, UnitsPerMetre, S.BattleT, bSkipping, bOnWater, Ship); // D1 hook (convoy looks)
 		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Heave);
 		LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
 	}
@@ -1945,6 +1945,7 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			// sinks: the stage knows a ship's six ways, and is the air scene's too)
 			Stage->Sink(E.Key, StageWay(E.What), E.Size > 0.5, Now);
 			// D1 hook (convoy looks): Sink (E.What "crushed": the hump of air and the boil; "scuttled": men and rafts)
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		// (the torpedo tracks: a track begun while a run skips is drawn from where it was fired, its head where it is now)
 		case SeaShow::FxKind::TrackStart:
@@ -2023,19 +2024,23 @@ void ASeaBattle::PlayEffects(bool bSkip)
 		// own), at the hooks marked so; until they land, only the drop is told to the log.
 		case SeaShow::FxKind::ChargeDrop:
 			// D1 hook (convoy looks): ChargeDrop
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			UE_LOG(LogTheater, Verbose, TEXT("Sea battle %.0f s: %s depth charges from ship %d, %d of them"), Now, *Wide(E.What), E.Key, static_cast<int32>(E.Size));
 			break;
 		case SeaShow::FxKind::ChargeBurst:
 			// D1 hook (convoy looks): ChargeBurst
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		case SeaShow::FxKind::Dive:
 			// D1 hook (convoy looks): Dive
 			break;
 		case SeaShow::FxKind::Starshell:
 			// D1 hook (convoy looks): Starshell
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		case SeaShow::FxKind::Rescue:
 			// D1 hook (convoy looks): Rescue
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		case SeaShow::FxKind::Salvo:
 		{
