@@ -37,10 +37,11 @@ LIGHT_L = 50.0               # (tallies.LIGHT_L: a finish is light when its ligh
 INK = ("one colour. Read the paint under the middle of the line as she flies (her scheme, her owner's colours; a "
        "second colour where it has faces of its own there; a sprayed mottle's soft blend is not read, so a line partly "
        "on one takes her base coat's ink, as the C202's does). On an American machine (her owner the USA) where that "
-       "paint is olive drab (a dark brownish green: L* under 45, its red and green within a tenth of each other, both 10 or more above its blue and at least 1.15 times "
-       "it): yellow D9B43A (the art director, 2026-11-22). Otherwise the bombers' record rule (tallies.py): black 1A1A1A "
-       "where its lightness L* is 50 or more (bare metal, light grey, sand), else off-white F2F0E8. The paint "
-       "under a point is the one with the most of her skin within 2 cm of it, not the nearest face (often a rivet)")
+       "paint is olive drab (a dark brownish green: L* under 45, its red and green within a tenth of each other, both "
+       "10 or more above its blue and at least 1.15 times it): yellow D9B43A (the art director, 2026-11-22). Otherwise "
+       "the bombers' record rule (tallies.py): black 1A1A1A where its lightness L* is 50 or more (bare metal, light "
+       "grey, sand), else off-white F2F0E8. The paint under a point is the one with the most of her skin within 2 cm of "
+       "it, not the nearest face (often a rivet)")
 LETTERS = ("plain block capitals, even stroke, about 0.7 as wide as high, no outline, shadow or script, upright on her "
            "side; the rank short as his nation wrote it, then his name (ACES.md): F/LT T. HARLAND. Fit it to `long` at "
            "`cap`, smaller down to `cap_min`; longer still, his first names to initials, then rank and surname, then the "
