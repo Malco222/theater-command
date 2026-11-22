@@ -13,6 +13,7 @@
 #include "Battle/LandBattle.h"
 
 #include "Battle/LandBattleState.h"
+#include "Battle/LandFell.h"
 #include "Battle/LandScript.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -247,6 +248,7 @@ void ALandBattle::ShowGeneral()
 		G.FoeHidden.clear();
 		return;
 	}
+	LandFell::Phase("general: the clipboard");
 	G.Clipboard.Update(S.Rec, S.Battle);
 	// (the enemy's hidden from him: kept off the screen in the film too, so it never gives the ambush away)
 	G.FoeHidden.clear();
@@ -265,6 +267,7 @@ void ALandBattle::ShowGeneral()
 	{
 		return;
 	}
+	LandFell::Phase("general: the tags and routes");
 	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
 	auto OnView = [&View](const FVector2D& P, double Margin) { return P.X > -Margin && P.Y > -Margin && P.X < View.X + Margin && P.Y < View.Y + Margin; };
 	// A line along the ground, a point every few metres so it lies over the rises: broken where it goes behind the eye.
@@ -367,6 +370,7 @@ void ALandBattle::ShowGeneral()
 	// His ground, while he stands his blocks on it; and the woods on and near it, where a block starts hidden.
 	if (G.Clipboard.Deploying())
 	{
+		LandFell::Phase("general: his ground and the woods");
 		const double* Room = G.Clipboard.Room();
 		if (!G.bWoodsMade)
 		{
@@ -407,6 +411,7 @@ void ALandBattle::ShowGeneral()
 	// a map's margin pointing to the next sheet.
 	if (!G.Clipboard.Neighbours().empty() && Eye)
 	{
+		LandFell::Phase("general: the neighbours coming");
 		const UCameraComponent* Lens = Eye->GetCameraComponent();
 		const FTransform& Frame = Lens->GetComponentTransform();
 		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
@@ -454,6 +459,7 @@ void ALandBattle::ShowGeneral()
 		}
 	}
 	// The mark answering his last order, a second and a bit.
+	LandFell::Phase("general: the ping");
 	FVector2D Ping;
 	G.bPingOn = RealT - G.PingAt < 1.2 && PixelOf(G.PingFieldX, G.PingFieldY, 0.5, Ping);
 	if (G.bPingOn)
@@ -465,6 +471,7 @@ void ALandBattle::ShowGeneral()
 	// What a click would do under a still pointer (the battle moves under it).
 	if (GeneralButton < 0 && G.PointerX >= 0.0)
 	{
+		LandFell::Phase("general: under the still pointer");
 		GeneralMove(FVector2D(G.PointerX, G.PointerY), G.Hover);
 	}
 }
@@ -858,6 +865,7 @@ void ALandBattle::GeneralView(double Real)
 			Mine = 1;
 		}
 		const double Heading = G.Clipboard.Side() == 1 ? UE_DOUBLE_PI : 0.0;
+		LandFell::Phase("general: his eye begun");
 		S.bGeneralEye = S.GeneralEye.Begin(S.Rec, S.EyeWorld, LandPlay::Vec(X / Mine, Y / Mine, 0.0), Heading, 250.0);
 		if (!S.bGeneralEye)
 		{
@@ -872,6 +880,7 @@ void ALandBattle::GeneralView(double Real)
 	}
 	if (!G.bFilm)
 	{
+		LandFell::Phase("general: his eye moved", In.bGoTo ? 1 : 0);
 		S.Pose = S.GeneralEye.Update(In, Real, S.Battle);
 	}
 	if (S.bEyeSwitched)

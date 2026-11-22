@@ -6,6 +6,7 @@
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
+#include "Battle/LandFell.h"
 #include "Battle/LandShade.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -1838,6 +1839,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	// The grass round the eye and round what it looks at: its squares coming into reach laid, those leaving it given
 	// back, every frame (nothing to do while the eye stays within its squares).
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
+	LandFell::Phase("ground: the clutter");
 	LayClutter(EyeAt, LookAt, State->Pose.bCut, EyeWorld.Z / UnitsPerMetre - GroundZ(EyeAt.X, EyeAt.Y));
 }
 
@@ -1882,12 +1884,14 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 	// The squares brought up to date: within 20 m of the eye or what it looks at made now (32 m on a cut), four more a
 	// frame, nearest first (the old way made the whole 90 m box again every 12 m: 2.1 to 2.9 ms on the Mac each time).
 	std::vector<LandCarpet::Op> Ops;
+	LandFell::Phase("ground: the carpet's squares");
 	Carpet->Update(*State->Field, EyeAt.X, EyeAt.Y, LookAt.X, LookAt.Y, bCut, 4, RealT, Ops);
 	if (Ops.empty())
 	{
 		return;
 	}
 	// Each change into its mesh: a place given back shrunk to nothing where it stood; a new place added at the end.
+	LandFell::Phase("ground: the clutter's meshes", static_cast<int>(Ops.size()));
 	const double U = UnitsPerMetre;
 	TArray<TArray<FTransform>> Added;
 	Added.SetNum(Copies);
@@ -2137,6 +2141,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	};
 	TArray<FSkinJob> Jobs;
 	int32 Floats = 0;
+	LandFell::Phase("men: who is drawn", Crowd.Count());
 	// (the banked men's meshes made as first needed: at most four a frame; a man whose mesh waits is skinned meanwhile)
 	int32 Builds = 4;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
@@ -2238,6 +2243,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Floats += Job.Points * 3;
 	}
 	// (the banked instances moved this frame sent once a mesh; a mesh holding no one now hidden)
+	LandFell::Phase("men: the bank sent", BankCopies.Num());
 	for (int32 K = 0; K < BankCopies.Num(); ++K)
 	{
 		if (BankDirty[K] && BankCopies[K])
@@ -2251,6 +2257,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	{
 		return;
 	}
+	LandFell::Phase("men: skinned", Jobs.Num());
 	SkinAt.SetNumUninitialized(Floats);
 	SkinFacing.SetNumUninitialized(Floats);
 	// (a body's first skin at a level lays him on the ground through the field: those here, one at a time; the rest
@@ -2274,6 +2281,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		const FSkinJob& Job = Jobs[Spread[K]];
 		Crowd.Skin(Job.Man, Job.Level, SkinAt.GetData() + Job.Offset, SkinFacing.GetData() + Job.Offset);
 	});
+	LandFell::Phase("men: their meshes sent", Jobs.Num());
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
@@ -2344,6 +2352,7 @@ int32 ALandBattle::BankCopyFor(int32 Set, int32 Pose, int32& Builds)
 		return -1;
 	}
 	--Builds;
+	LandFell::Phase("men: a banked pose's mesh made", Id);
 	const double Began = LandParts::Seconds();
 	std::vector<float> At, Facing;
 	const FString Name = FString::Printf(TEXT("LandBankMan_%d_%d"), Set, Pose);
@@ -3748,8 +3757,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// (a live battle: first what the rules have fought since the last frame; its contact unknown until it is made)
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the rules' pieces taken");
 		PumpLive();
 	}
+	LandFell::Phase("tick: the clock");
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
 	if (S.bOwnSpeed)
 	{
@@ -3768,12 +3779,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The cores, in order: the tanks and the men posed first (their muzzles and hulls are where the rounds start and
 	// strike), then the fire, then the camera, then the words.
 	double Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the tanks posed");
 	if (S.Armour)
 	{
 		S.Armour->Update(S.Battle);
 	}
 	ArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the men posed");
 	if (S.Men)
 	{
 		// (the men's detail by how big the lens draws them, the usual 50 deg lens as one: a long lens's far men drawn as
@@ -3788,27 +3801,36 @@ void ALandBattle::Tick(float DeltaSeconds)
 	S.Noises.clear();
 	S.Losses.clear();
 	S.Takes.clear();
+	LandFell::Phase("tick: the fire stepped");
 	S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
 	if (bShotHeld)
 	{
 		S.Eye.Hold(true);
 	}
+	LandFell::Phase("tick: the movers placed");
 	LandParts::PlaceMovers(S);
+	LandFell::Phase("tick: the film's eye");
 	S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the general's view");
 		GeneralView(Real);
 	}
+	LandFell::Phase("tick: the dispatches");
 	S.Words = S.Desk.Update(S.Battle, Real);
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The picture: the camera, the ground round it, the men and the tanks.
+	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the general's screen");
 		ShowGeneral();
+		LandFell::Phase("tick: the walk", ScriptStep);
 		TickScript();
 	}
+	LandFell::Phase("tick: a cut told");
 	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
 	// not carried over a frame into the new one (the film check's smoke popping in a frame after a cut).
 	if (S.Pose.bCut)
@@ -3823,21 +3845,31 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	const FVector EyeWorld = Eye ? Eye->GetActorLocation() : World(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z);
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the ground shown");
 	ShowField(EyeWorld, S.Battle);
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the men drawn");
 	DrawMen(EyeWorld);
+	LandFell::Phase("tick: the tanks drawn");
 	DrawArmour(EyeWorld);
+	LandFell::Phase("tick: the men's shades");
 	DrawManShades();
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
+	LandFell::Phase("tick: the effects played");
 	PlayEffects();
 	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the craters");
 	MakeCraters();
+	LandFell::Phase("tick: the ruts");
 	MakeRuts();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the tanks' beats");
 	PlayArmourEvents();
+	LandFell::Phase("tick: the men's beats");
 	PlayMenEvents();
+	LandFell::Phase("tick: the effects kit");
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 900;
@@ -3851,7 +3883,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 		const FBattleJolt Jolt = Effects->Tick(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
 		Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
 	}
+	LandFell::Phase("tick: the sound");
 	PlaySound(Real);
+	LandFell::Phase("tick: the end and the notes");
 
 	// The battle's end: the last words shown, then the after card a few seconds on.
 	if (S.Words.bOver && S.Battle >= S.Rec.End)
@@ -3876,7 +3910,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 			S.Note.clear();
 		}
 	}
+	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
+	LandFell::Phase("tick: the 10 s log");
 
 	// The log, every 10 s: the frames, the slowest, and what each part cost.
 	const double FrameMs = (LandParts::Seconds() - FrameBegan) * 1000.0;
@@ -3892,6 +3928,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
 	}
+	LandFell::Phase("tick: done");
 }
 
 void ALandBattle::AimEye(float DeltaSeconds)

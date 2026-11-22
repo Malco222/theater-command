@@ -15,10 +15,13 @@
 #include "Battle/LandBattle.h"
 
 #include "Battle/LandBattleState.h"
+#include "Battle/LandFell.h"
 #include "Battle/LandLive.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "TheaterCommand.h"
 
@@ -108,6 +111,19 @@ bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me,
 	if (!Me.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScript="), ScriptFolder) && !ScriptFolder.IsEmpty())
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (script): his steps will be pressed in code, stills into %s"), *ScriptFolder);
+	}
+	// The crash locator (LandFell): on for the walk, or by -TheaterLandFell=<folder> for any live battle; a crash then
+	// leaves fell-over.txt (where it fell, its stack as library and offset) and fell-over-ring.txt (the frame's last
+	// parts, kept as it goes) in that folder.
+	FString FellFolder = ScriptFolder;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFell="), FellFolder);
+	if (!FellFolder.IsEmpty() && !LandFell::Armed())
+	{
+		IFileManager::Get().MakeDirectory(*FellFolder, true);
+		const FString Report = FPaths::ConvertRelativePathToFull(FPaths::Combine(FellFolder, TEXT("fell-over.txt")));
+		const FString Ring = FPaths::ConvertRelativePathToFull(FPaths::Combine(FellFolder, TEXT("fell-over-ring.txt")));
+		const bool bOn = LandFell::Arm(TCHAR_TO_UTF8(*Report), TCHAR_TO_UTF8(*Ring));
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the crash locator %s: %s"), bOn ? TEXT("on") : TEXT("not on this machine"), *Report);
 	}
 	bLiveWaiting = true;
 	bLiveBroken = false;
@@ -257,12 +273,14 @@ void ALandBattle::PumpLive()
 		const int32 VehiclesBefore = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
 		LandFeed::Grown G;
 		std::string Error;
+		LandFell::Phase("live: a piece read", Taken);
 		if (!LandFeed::AppendDelta(Delta, S.Rec, G, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): a piece at %.1f s not read: %s"), S.Rec.Fought, *WideOf(Error));
 			continue;
 		}
 		S.Play.Extend(G);
+		LandFell::Phase("live: the men grown", G.bReset ? 1 : 0);
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the men not grown at %.1f s: %s"), G.T, *WideOf(Error));
@@ -276,6 +294,7 @@ void ALandBattle::PumpLive()
 				WordsBefore.push_back(V.Words());
 			}
 		}
+		LandFell::Phase("live: the tanks grown", G.bReset ? 1 : 0);
 		if (S.Armour && !S.Armour->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the tanks not grown at %.1f s: %s"), G.T, *WideOf(Error));
@@ -291,6 +310,7 @@ void ALandBattle::PumpLive()
 				bVehiclesKept = W.Block == WordsBefore[V].Block && W.K == WordsBefore[V].K && W.J == WordsBefore[V].J;
 			}
 		}
+		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
 		if (G.bBegun)
 		{
@@ -478,6 +498,7 @@ void ALandBattle::CloseLive()
 	if (Live.IsValid())
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (live): closed at %.1f s fought; the rules' last piece %.0f ms, the slowest %.0f ms"), Live->Fought(), Live->LastMs(), Live->MostMs());
+		LandFell::Disarm();
 		Live->Close();
 		Live.Reset();
 	}

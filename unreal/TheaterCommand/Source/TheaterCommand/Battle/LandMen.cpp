@@ -557,8 +557,10 @@ namespace LandMen
 		uint32_t Hex(const std::string& S, uint32_t Default)
 		{
 			if (S.size() < 6) return Default;
+			// (the last six digits kept while End points into them: the sanitizer's find, 22 November)
+			const std::string Digits = S.substr(S.size() - 6);
 			char* End = nullptr;
-			const unsigned long V = std::strtoul(S.substr(S.size() - 6).c_str(), &End, 16);
+			const unsigned long V = std::strtoul(Digits.c_str(), &End, 16);
 			return End && *End == 0 ? static_cast<uint32_t>(V) : Default;
 		}
 
