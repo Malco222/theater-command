@@ -6183,14 +6183,15 @@ namespace
 							[
 								MarchSlip()
 							]
-							// (Rulings 153 and 169.) The agent in hand: his card, in the army card's seat.
+							// (Rulings 153 and 169.) The agent in hand: his card, in the army card's seat. (Release 2: a piece of the
+							// frame, so the month's seals at the map's edge, and the towns' plates, keep out from under it.)
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 							[
-								SNew(SBox).WidthOverride(699.0f).HeightOverride(327.0f)
+								Piece(SNew(SBox).WidthOverride(699.0f).HeightOverride(327.0f)
 								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasAgentInHand() && Controller->GetAgentInHand() ? EVisibility::Visible : EVisibility::Collapsed; })
 								[
 									SNew(SAgentCard).Player(Controller)
-								]
+								])
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 							[
