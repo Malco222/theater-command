@@ -15397,6 +15397,15 @@ namespace
 				{
 					On = ListLastStop;
 				}
+				// ("-TheaterOpeningScroll" rests the scenarios on their last stop the same way: for the Mac's picture of the
+				// practice and Battle rules cards at the list's foot, under the 38 MORE it cannot press; a scroll to the end
+				// when the list is laid out was undone by the rows still taking their sizes, 22 November 22:25Z)
+				static const bool bScenariosFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOpeningScroll"));
+				if (bScenariosFromEnd && Controller.IsValid() && Controller->GetOpening().Tab != 2
+					&& !(Controller->GetOpening().Tab == 0 && Controller->GetOpening().Years.Num() > 0))
+				{
+					On = ListLastStop;
+				}
 				On = FMath::Min(On, ListLastStop);
 				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
 				{
