@@ -8,7 +8,7 @@ import math
 
 from mathutils import Vector
 
-from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, bm_box, inset_plan, livery, outline, rot, round_plan, sym_plan
+from motorpool import BY_GROUND_HOW, LEFT, RIGHT, SIDES, X, Y, Z, bm_box, inset_plan, livery, outline, rot, round_plan, sym_plan
 from works import Works, dirt_for
 
 
@@ -26,7 +26,22 @@ def plane_of(p0, p1, p2, toward):
 
 # The coats a German tank wore, and when (the art director's ruling: dark grey until early 1943, dark yellow after).
 GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("8E7E58", "1943 on", "dark yellow"),
-             "camo": ("8E7E58", "1943 on", "dark yellow with olive green and red-brown sprayed over it in the field")}
+             "camo": ("8E7E58", "1943 on", "dark yellow with olive green and red-brown sprayed over it in the field"),
+             # The Afrika Korps' two coats (Brian 19 Nov: the Mediterranean in 3D; the art director's call 03:35Z, osmt1z's
+             # table): the order of March 1941, brown-yellow with grey-green at two to one, and the order of March 1942,
+             # light brown with grey. Most were seen in the first colour alone. They shipped grey and were painted in the
+             # theatre, so a 1941 coat wears through to the dark grey under it.
+             "desert41": ("A2814F", "in Africa, 1941-03 to 1942-02", "brown-yellow, the desert coat of 1941"),
+             "desert42": ("B49B6C", "in Africa, 1942-03 on", "light brown, the desert coat of 1942")}
+DESERT_SECOND = {"desert41": "6B6243", "desert42": "7F7D72"}          # (the grey-green, the grey: the orders' second colours)
+DESERT_UNDER = {"desert41": "4E5459"}                                 # (what shows where the coat is worn through)
+# The desert's own dirt on a file that lays dust: the stony gravel of the art director's desert field (170,140,106) low,
+# and a bleached pale sand on what looks up (the sun-faded top of her grit call). Tank modeller's picks, for her read.
+DESERT_DUST, DESERT_HAZE = "AA8C6A", "C9BC9C"
+
+# Which coat a German vehicle wears on a desert field: the ground picks the coat, the month picks the scheme. After
+# May 1943 there was no German desert war; the month's own coat serves.
+DESERT_BY_MONTH = [{"to": "1942-02", "paint": "desert41"}, {"from": "1942-03", "to": "1943-05", "paint": "desert42"}]
 GER_GREEN = "4E5638"          # the olive green and the red-brown pastes the units thinned and sprayed over the yellow (the art director's
 GER_BROWN = "5C402C"          # starting points of 22 Nov against her dark yellow: the two within 10 of each other in lightness)
 # From February 1943 the yellow was the base and the units sprayed green (and brown) over it as they could: by the
@@ -198,22 +213,30 @@ def ambush_dots(v, step=0.17, r=0.03, hosts=("hull", "turret", "gun"), lift=0.00
 
 def coats(v, default="grey", only=None):
     """The paint swap as the file tells it: for each coat, the three colours to put in place of upper, upper2, shade.
-    `only`: the coats she ever wore (a Panther came after the grey and never wore it)."""
+    `only`: the coats she ever wore (a Panther came after the grey and never wore it). A vehicle that wore the desert
+    coats has them as choices and a `by_ground` table that picks them on a desert field."""
     out = {}
     for key, (hx, years, words) in GER_COATS.items():
         if only and key not in only:
             continue
         p = livery("GER", hx)
         names = ("upper", "upper2", "shade")
+        if key in DESERT_SECOND:
+            p["upper2"] = DESERT_SECOND[key]
         if getattr(v.m, "camo", None):                  # (she carries the blotches: the green and the brown fill them, or her own coat hides them)
-            p["upper2"], p["upper3"] = (GER_GREEN, GER_BROWN) if key == "camo" else (p["upper"], p["upper"])
+            p["upper2"], p["upper3"] = (GER_GREEN, GER_BROWN) if key == "camo" else (p["upper2"] if key in DESERT_SECOND else p["upper"], p["upper"])
             names = ("upper", "upper2", "upper3", "shade")
         elif key == "camo":
             continue
         out[key] = {"what": words, "years": years, "paints": {k: p[k] for k in names}}
-        if "dust_colour" in v.m.info.get("file", {}):   # (the dirt that shows on this coat: works.dirt_for)
-            out[key]["dust_colour"], out[key]["haze_colour"] = dirt_for(p["upper"])
-    return {"default": default, "choices": out}
+        if key in DESERT_UNDER:
+            out[key]["under"] = DESERT_UNDER[key]
+        if "dust_colour" in v.m.info.get("file", {}):   # (the dirt that shows on this coat: works.dirt_for; the desert's own on a desert coat)
+            out[key]["dust_colour"], out[key]["haze_colour"] = (DESERT_DUST, DESERT_HAZE) if key in DESERT_SECOND else dirt_for(p["upper"])
+    swap = {"default": default, "choices": out}
+    if any(k in out for k in DESERT_SECOND):
+        swap["by_ground"] = {"how": BY_GROUND_HOW, "desert": [r for r in DESERT_BY_MONTH if r["paint"] in out]}
+    return swap
 
 
 # How a file's `swaps.by_month` is read (the Panzer IV's and the StuG III's alike).

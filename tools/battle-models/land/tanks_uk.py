@@ -11,7 +11,7 @@ import math
 import bmesh
 from mathutils import Vector
 
-from motorpool import LEFT, RIGHT, X, Y, Z, sym_plan
+from motorpool import LEFT, RIGHT, X, Y, Z, desert_swap, sym_plan
 from tanks_any import turn_to
 from tanks_ger import coat
 from works import Works
@@ -239,4 +239,6 @@ def matilda(fine=True, tag="UK"):
     v.tank_clips(recoil=0.18, kick=0.45, gun_low=-12.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"],
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.4, 0.38, 166.0))
     v.name_place((0.3, 1.015), long=0.9, high=0.10, reach=(1.6, 0.12))   # her crew's name (b477): on the side skirting plates, in the band between the chutes' heads and the bolts along the top
+    # (the queen of the desert, 1940 to 1942: Light Stone on a desert field, her own coat everywhere else)
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": desert_swap(tag)}
     return v

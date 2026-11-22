@@ -68,6 +68,27 @@ def livery(tag, paint=None):
     return p
 
 
+# How a file's `swaps.paint.by_ground` is read (the German desert coats, tanks_ger.coats; the British Light Stone, desert_swap).
+BY_GROUND_HOW = ("by_ground: on a field of this ground (the field's look: desert) the rows here are read before by_month, as by_month "
+                 "is read (from and to both counted in; a row with neither holds every month), and pick the coat; a month no row holds "
+                 "falls back to by_month. `under` is the colour that shows where the coat is worn through (the pictures' chips; the game's "
+                 "own wear may use it).")
+
+# The British desert coat (the art director's call of 19 Nov: Light Stone overall, no Caunter stripes). On a desert
+# field the ground picks it, for every month a British vehicle served there; everywhere else she keeps her own coat.
+UK_DESERT = "C9B88E"
+
+
+def desert_swap(tag="UK", own=None, desert=UK_DESERT):
+    """A British vehicle's paint swap: her own coat (`own`, else her nation's) by default, Light Stone on a desert field."""
+    names = ("upper", "upper2", "shade")
+    mine, stone = livery(tag, own), livery(tag, desert)
+    return {"default": "own",
+            "choices": {"own": {"what": "her home coat", "years": "outside the desert", "paints": {k: mine[k] for k in names}},
+                        "stone": {"what": "Light Stone overall, the desert coat", "years": "in the desert", "paints": {k: stone[k] for k in names}}},
+            "by_ground": {"how": BY_GROUND_HOW, "desert": [{"paint": "stone"}]}}
+
+
 def rot(yaw=0.0, pitch=0.0, roll=0.0):
     """Turned `yaw` to the left, nose lifted `pitch`, rolled `roll` (left side up), in degrees."""
     return Matrix.Rotation(math.radians(yaw), 3, "Z") @ Matrix.Rotation(math.radians(-pitch), 3, "Y") @ Matrix.Rotation(math.radians(roll), 3, "X")

@@ -23,7 +23,7 @@ import bmesh
 from mathutils import Matrix, Quaternion, Vector
 
 import rigid
-from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, frame
+from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, desert_swap, frame
 from tanks_ger import GER_COATS, coats
 from works import Works
 
@@ -832,6 +832,8 @@ def pounder25(fine=True, tag="UK"):
     crew(v, (-0.75, 0.6, 0.0), (-1.5, -0.5, 0.0), (-2.4, 1.5, 0.0), (-2.0, -1.5, 0.0), (-1.4, -0.2, 0.0))
     stow = (Quaternion(Vector((0, -1, 0)), math.radians(5.6)), Vector((-1.2, 0.0, 0.25)))      # (hung under the trail, behind the hump)
     v.gun_clips(0.9, -2.5, lift=0.03, close=None, eye_z=0.2, platform=stow, track=T, low=-5.0, sink=plat)
+    # (from Sidi Barrani to Tunis: Light Stone on a desert field, her own coat everywhere else)
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": desert_swap(tag)}
     return v
 
 
