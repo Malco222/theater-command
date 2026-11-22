@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 95f30488 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of a9da0577 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2343,6 +2343,7 @@
       return "Motorised";
     }
     if (k === "inf" && nat === "SOV") return "Rifle";
+    if (k === "mtn" && nat === "SOV") return "Mountain Rifle";
     return KIND_WORD[k];
   }
   function regimentWord(nat, kind, n, i, ym) {
