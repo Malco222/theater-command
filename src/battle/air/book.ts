@@ -129,11 +129,12 @@ export const SKY = {
    * A model falls only for its share of the losses (AR1, Brian's ask of 22 November 04:07Z: "the bombers get destroyed
    * a lot"): its group's losses stand for round(lost / per) models, so falls x per = losses, and every aircraft lost is
    * still told in the dispatches. At one model an aircraft, every loss is a fall, as before.
-   * 'box' is the most models drawn in one box or squadron (AR2): a bomber group's box of 24, the flight core's eight
-   * vics of three, and a fighter squadron of 16, four fours. A group with more models flies more boxes, in trail
+   * 'box' is the most models drawn in one box (AR2, the production lead's boxes of 18 to 24 models): a bomber group's
+   * box of 24, the flight core's eight vics of three, and fighters in boxes of 20, five fours (a squadron of 16 and its
+   * spares, or two squadrons' worth at a coarse scale). A group with more models flies more boxes, in trail
    * ('boxes' in the view's extra), and its box is never drawn wider than one: a big raid is a stream, not a wall.
    */
-  look: { all: 150, page: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 }, box: { ftr: 16, bmr: 24 } },
+  look: { all: 150, page: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 }, box: { ftr: 20, bmr: 24 } },
   /**
    * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
    * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how

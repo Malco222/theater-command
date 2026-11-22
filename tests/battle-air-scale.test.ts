@@ -116,6 +116,8 @@ describe('the budgets, and the boxes (AR2, AR4)', () => {
   });
 
   it('a group is drawn one box wide at most; its models fly in as many boxes as they need', () => {
+    // The production lead's boxes of 18 to 24 models, for bombers and fighters alike.
+    for (const k of ['ftr', 'bmr'] as const) { expect(SKY.look.box[k]).toBeGreaterThanOrEqual(18); expect(SKY.look.box[k]).toBeLessThanOrEqual(24); }
     for (const [nat, kind, name] of CASES) {
       const tk = raid(nat, kind, name);
       const s = airBattle(tk, { show: true, look: 100_000 });
