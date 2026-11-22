@@ -207,6 +207,21 @@ namespace TheaterFx
 			NearGone = std::min(20.0, std::max(0.0, Num("game.near_eye_fade_m.0", 2.0)));
 			NearWhole = std::min(30.0, std::max(NearGone + 0.1, Num("game.near_eye_fade_m.1", 8.0)));
 		}
+		// (art director 04:17Z 22 November: an aircraft's trail the same, from farther off. Without the key, as before)
+		TrailNearGone = TrailNearWhole = 0.0;
+		if (Has("game.trail_near_eye_fade_m.0"))
+		{
+			TrailNearGone = SafeNum(Num("game.trail_near_eye_fade_m.0", 30.0), 0.0, 500.0, 30.0);
+			TrailNearWhole = SafeNum(Num("game.trail_near_eye_fade_m.1", 60.0), TrailNearGone + 0.1, 1000.0, TrailNearGone + 30.0);
+		}
+		TrailLoomsWhole = TrailLoomsGone = 0.0;
+		if (Has("game.trail_near_eye_looms.0"))
+		{
+			TrailLoomsWhole = SafeNum(Num("game.trail_near_eye_looms.0", 0.06), 0.001, 2.0, 0.06);
+			TrailLoomsGone = SafeNum(Num("game.trail_near_eye_looms.1", 0.2), TrailLoomsWhole + 0.001, 4.0, TrailLoomsWhole + 0.14);
+		}
+		TrailLeastGone = SafeNum(Num("game.trail_near_eye_least_m.0", 8.0), 0.5, 500.0, 8.0);
+		TrailLeastWhole = SafeNum(Num("game.trail_near_eye_least_m.1", 16.0), TrailLeastGone + 0.1, 1000.0, TrailLeastGone + 8.0);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		KeepBeyond = Num("oil_fires.draw_beyond_m", Beyond); // (a column on the horizon is drawn kilometres off)
 		RoundUp = Num("oil_fires.round_up", 0.35); // (the sun high: how much of an oil column it lights all round, not only on its sunward side)
@@ -768,9 +783,51 @@ namespace TheaterFx
 			const double ClodK = Ground == "water" ? 0.0 : Num(G + "clods", 1.0);
 			const double ShowerK = Ground == "water" ? 0.0 : Num(G + "shower", ClodK);
 			const double CrownH = SafeNum(Pick(D, S + "crown_m", 8.0, 12.0), 0.1, 500.0, 10.0);
+			// (art director 03:27Z 22 November, on the bigger bursts: "the throw at the flash is near black... a black
+			// comic-book splat with an orange dot. Make it dark earth brown with the faces toward the flash lit warm,
+			// floor about 15". burst.throw: lighter, the jets, spikes, body and foot up to that many times as light as the
+			// ground's heavy earth has them, so they have a lit side and a shaded one above the floor; mottle, each piece
+			// that share lighter or darker than the next, so a jet is streaked earth and never one flat fill; floor, the darkest
+			// any point of the thrown earth is drawn; flash_lit, how far the earth nearest the flash goes toward
+			// flash_colour on its side toward it, dying over flash_lit_s; half as much flash_lit_reach of the flash's own
+			// width away. Never on water, nor for a quiet size. No dice)
+			ThrowIs = ThrowRow();
+			if (!bQuiet && Ground != "water")
+			{
+				const std::string Th = "burst.throw.";
+				// (lighter is the most; with body, only as much as brings the ground's heavy earth up to that written value
+				// at its brightest: sand and rubble, light already, are left as they are)
+				const double LighterMost = SafeNum(Num(Th + "lighter", 1.0), 1.0, 8.0, 1.0);
+				ThrowIs.Lighter = LighterMost;
+				if (LighterMost > 1.0 && Has(Th + "body"))
+				{
+					const double BodyWritten = SafeNum(Num(Th + "body", 0.0), 0.0, 255.0, 0.0);
+					const double HeavyIs = std::max(P.Heavy.R, std::max(P.Heavy.G, P.Heavy.B));
+					ThrowIs.Lighter = SafeNum(Rgb::FromPicture(BodyWritten, BodyWritten, BodyWritten).R / std::max(HeavyIs, 1e-6), 1.0, LighterMost, 1.0);
+				}
+				ThrowIs.Mottle = SafeNum(Num(Th + "mottle", 0.0), 0.0, 0.9, 0.0);
+				if (Has(Th + "floor.0"))
+				{
+					ThrowIs.bFloor = true;
+					ThrowIs.Floor = Picture(Th + "floor", Rgb::FromPicture(46, 38, 30));
+				}
+				const double GlareK = SafeNum(Num(Th + "flash_lit", 0.0), 0.0, 4.0, 0.0);
+				if (GlareK > 0.0)
+				{
+					const double FlashWide = 0.5 * (SafeNum(Num("burst.flash.reach_m.0", 1.6), 0.05, 20.0, 1.6) + SafeNum(Num("burst.flash.reach_m.1", 2.5), 0.05, 20.0, 2.5))
+						* K * std::min(1.0, 1.2 / std::pow(std::max(K, 1e-3), 0.3)) * SafeNum(Num(S + "flash_k", 1.0), 0.1, 10.0, 1.0);
+					ThrowIs.bGlare = true;
+					ThrowIs.GlareK = GlareK;
+					ThrowIs.GlareS = SafeNum(Num(Th + "flash_lit_s", 0.2), 0.02, 2.0, 0.2);
+					ThrowIs.GlareReach = std::max(0.05, SafeNum(Num(Th + "flash_lit_reach", 1.0), 0.05, 20.0, 1.0) * FlashWide);
+					ThrowIs.GlareCol = Picture(Th + "flash_colour", Rgb::FromPicture(200, 128, 60));
+					ThrowIs.T0 = Now;
+					ThrowIs.At = At + ZUp * (0.3 * K);
+				}
+			}
 			if (!bQuiet)
 			{
-				Wink(Now, At, Scale, D);
+				Wink(Now, At, Scale, D, Size);
 			}
 			if (Ground == "water" && Has("grounds.water.spout.rise_s"))
 			{
@@ -796,7 +853,7 @@ namespace TheaterFx
 				}
 				if (!(Many < 0.5)) // (and under half, no skirt of dust racing out over the ground: 230 wide sheets, a few pixels long out there)
 				{
-					Skirt(Now + 0.01, At, K, P, DustK, D);
+					Skirt(Now + 0.01, At, K, P, DustK, D, Size);
 				}
 				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D);
 				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D, Many);
@@ -824,7 +881,36 @@ namespace TheaterFx
 		Knocks.push_back(J);
 	}
 
-	void Battle::Wink(double T0, const Vec& At, double Scale, Dice& D)
+	void Battle::InFlash(Bit& B, double Share, double OfLighter) const
+	{
+		// (a shell's thrown piece: as light as the throw's earth is, never darker than its floor, and lit by its burst's
+		// own flash: Shell, ThrowIs)
+		if (ThrowIs.Lighter > 1.0 && OfLighter > 0.0)
+		{
+			B.Col = B.Col * (1.0 + (ThrowIs.Lighter - 1.0) * std::min(OfLighter, 1.0));
+		}
+		if (ThrowIs.Mottle > 0.0 && OfLighter > 0.0 && B.LumpSeed != 0)
+		{
+			// (no two pieces of a jet the same shade, by the piece's own lump seed: no dice)
+			B.Col = B.Col * (1.0 + ThrowIs.Mottle * (static_cast<double>((B.LumpSeed >> 7) & 0xFFFFu) * (2.0 / 65535.0) - 1.0));
+		}
+		if (ThrowIs.bFloor)
+		{
+			B.bNeverUnder = true;
+			B.NeverUnder = ThrowIs.Floor;
+		}
+		if (ThrowIs.bGlare && Share > 0.0)
+		{
+			B.GlareK = ThrowIs.GlareK * Share;
+			B.GlareFor = ThrowIs.GlareS;
+			B.GlareEnd = ThrowIs.T0 + ThrowIs.GlareS;
+			B.GlareReach = ThrowIs.GlareReach;
+			B.GlareAt = ThrowIs.At;
+			B.GlareCol = ThrowIs.GlareCol;
+		}
+	}
+
+	void Battle::Wink(double T0, const Vec& At, double Scale, Dice& D, const std::string& Size)
 	{
 		// The flash: a small low star of ragged flame under one frame, a glow left in the crown's foot for 3 to 5
 		// frames, and a real lamp for about one frame (it lifts what is within 30 m, never a white-out).
@@ -869,11 +955,24 @@ namespace TheaterFx
 				Bits.push_back(B);
 			}
 		}
+		// (art director 19:58Z 21 November, for Brian's "bigger": a shell's flash is as wide and as long as its size's own
+		// row has it, sizes.<size>.flash_k times the flash of burst.flash and flash_s seconds; and what it leaves low in
+		// the earth is a dull orange glow no wider than burst.flash.ember.share of the flash, dying to dark over
+		// ember.life_s. No such keys: as before)
+		const double FlashGrows = Size.empty() ? 1.0 : SafeNum(Num("sizes." + Size + ".flash_k", 1.0), 0.1, 10.0, 1.0);
+		const double FlashLasts = Size.empty() ? 0.0 : SafeNum(Num("sizes." + Size + ".flash_s", 0.0), 0.0, 0.5, 0.0);
 		if (bRagged)
 		{
-			RaggedFlash(T0, At, K, Small);
+			RaggedFlash(T0, At, K, Small, FlashGrows, FlashLasts);
 		}
 		const Rgb Glow = Picture("burst.crown.foot_glow.colour", Flame);
+		const bool bEmber = Has("burst.flash.ember.life_s.0");
+		const Span EmberLife = Range("burst.flash.ember.life_s", 0.15, 0.3);
+		const double EmberR = 0.46 * SafeNum(Num("burst.flash.ember.share", 0.3), 0.02, 1.0, 0.3) * 1.3 * 0.5 * (SafeNum(Num("burst.flash.reach_m.0", 1.6), 0.05, 20.0, 1.6) + SafeNum(Num("burst.flash.reach_m.1", 2.5), 0.05, 20.0, 2.5)) * K * Small * FlashGrows;
+		const Rgb EmberCol = Picture("burst.flash.ember.colour", Glow * 0.8), EmberTo = Picture("burst.flash.ember.to", Rgb::FromPicture(40, 24, 16));
+		const double EmberNear = SafeNum(Num("burst.flash.ember.nearer", 0.0), 0.0, 20.0, 0.0);
+		const double EmberStretch = SafeNum(Num("burst.flash.ember.stretch", 1.8), 1.0, 4.0, 1.8), EmberPoint = SafeNum(Num("burst.flash.ember.point", 0.6), 0.0, 1.0, 0.6);
+		const double EmberHeart = SafeNum(Num("burst.flash.ember.heart", 0.7), 0.0, 1.0, 0.7), EmberAlpha = SafeNum(Num("burst.flash.ember.alpha", 0.85), 0.0, 1.0, 0.85);
 		for (int I = 0; I < 5; ++I)
 		{
 			const Vec Dir = (ZUp + Vec(D.U(-0.5, 0.5), D.U(-0.5, 0.5), 0.0)).Unit();
@@ -896,6 +995,23 @@ namespace TheaterFx
 			B.Hold = 0.2;
 			B.Heart = 0.7;
 			B.bLight = true;
+			if (bEmber)
+			{
+				// (the same five pieces by the same dice: bigger, lower, duller and longer)
+				const double Big = EmberR * Rr / (0.45 * K);
+				B.From = At + ZUp * (0.6 * Big) + Dir * (Big * 0.4);
+				B.Life = SafeNum(EmberLife.A + (EmberLife.B - EmberLife.A) * (B.Life - 0.1) / 0.06, 0.05, 1.0, 0.2);
+				B.R0 = Big * 0.8;
+				B.R1 = Big * 1.1;
+				B.Col = EmberCol;
+				B.Col2 = EmberTo;
+				B.Hold = 0.35;
+				B.Nearer = EmberNear * EmberR; // (glimpsed through the dirt nearest it, hidden by the dirt further out)
+				B.Stretch = EmberStretch; // (a glow, not a tongue of flame)
+				B.Point = EmberPoint;
+				B.Heart = EmberHeart;
+				B.Alpha = EmberAlpha;
+			}
 			Bits.push_back(B);
 		}
 		Flash F;
@@ -908,7 +1024,7 @@ namespace TheaterFx
 		Flashes.push_back(F);
 	}
 
-	void Battle::RaggedFlash(double T0, const Vec& At, double K, double Small)
+	void Battle::RaggedFlash(double T0, const Vec& At, double K, double Small, double GrowK, double LastsS)
 	{
 		// Art director 19:57Z on the game's own frames (build 1748): a shell's flash follows the gun flashes' rule, and is
 		// no star. Back to front: ragged tongues of unequal length thrown mostly up and out, as the dirt is, orange
@@ -931,7 +1047,7 @@ namespace TheaterFx
 		const double HeartOver = Safe(Num(F + "over", 4.0), 1.0, 4.0, 1.0);
 		const double YellowOver = Safe(Num(F + "yellow_over", 1.8), 1.0, 4.0, 1.0);
 		const double HeartShare = Safe(Num(F + "heart_share", 0.2), 0.0, 1.0, 0.2);
-		const double Size = Safe(K * Small, 0.0, 30.0, 1.0);
+		const double Size = Safe(K * Small * GrowK, 0.0, 30.0, 1.0); // (GrowK: a shell's own flash_k; 1 leaves it as it was)
 		const double Feather = Safe(Num(F + "feather_m", 0.035), 0.0, 1.0, 0.035) * Size;
 		// (art director 06:08Z 20 November, on build 1758's frames. From 18 m feather_m is about one pixel and the tongues
 		// read as cut paper: with feather_px every feathered edge fades over at least that many pixels on the screen,
@@ -955,7 +1071,8 @@ namespace TheaterFx
 		const Rgb RootCol = Orange.Mix(Yellow, 0.4);
 		const double RootOver = 1.0 + (YellowOver - 1.0) * 0.3;
 		const double L = Safe(Range(F + "reach_m", 1.2, 1.9).Pick(DF), 0.05, 20.0, 1.5) * Size; // (its longest tongue)
-		const double Life = Safe(Range(F + "life_s", 0.05, 0.06).Pick(DF), 0.02, 0.5, 0.055);
+		const double LifeOfRow = Safe(Range(F + "life_s", 0.05, 0.06).Pick(DF), 0.02, 0.5, 0.055);
+		const double Life = LastsS > 0.0 ? Safe(LastsS, 0.02, 0.5, LifeOfRow) : LifeOfRow; // (a shell's own flash_s; the dice fall as they did)
 		const int NTongues = static_cast<int>(std::lround(Safe(Range(F + "tongues", 6.0, 10.0).Pick(DF), 0.0, 16.0, 8.0)));
 		const int NLicks = static_cast<int>(std::lround(Safe(Range(F + "licks", 2.0, 4.0).Pick(DF), 0.0, 8.0, 3.0)));
 		if (L <= 0.0)
@@ -1119,13 +1236,43 @@ namespace TheaterFx
 		Bits.push_back(Core);
 	}
 
-	void Battle::Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D)
+	void Battle::Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size)
 	{
 		// The shock: one low skirt of the ground's own dust, racing out and thinning, with a soft billowing top that
 		// settles to a low haze by about frame 30. Upright cards, so that its foot never cuts into the ground.
 		const std::string R = "burst.shock_ring.";
 		const std::string Sk = R + "skirt.";
-		const double Reach = Num(R + "reach_m", 15.0) * K;
+		// (art director 19:58Z 21 November, the ground skirt of a burst with bulk: with burst.shock_ring.of_cloud and the
+		// size's own cloud_m, the skirt goes out to that many times the cloud's width across, whatever the size's scale,
+		// and its pieces are sized by that reach (the row's metres being a reach of roll_ref_m's); with skirt.hangs it
+		// stays as long as the cloud does, going as the cloud goes (Lingering, the size's own times) but never
+		// climbing, keeping hang_keep times the cloud's share of its pieces. Neither key: as before)
+		const double CloudM = Size.empty() ? 0.0 : SafeNum(Num("sizes." + Size + ".cloud_m", 0.0), 0.0, 400.0, 0.0);
+		const double OfCloud = SafeNum(Num(R + "of_cloud", 0.0), 0.0, 4.0, 0.0);
+		const bool bRolls = CloudM > 0.0 && OfCloud > 0.0;
+		const double Reach = bRolls ? 0.5 * OfCloud * CloudM : Num(R + "reach_m", 15.0) * K;
+		const double KS = bRolls ? Reach / SafeNum(Num(R + "roll_ref_m", 22.5), 1.0, 400.0, 22.5) : K; // (what its pieces are sized by)
+		const bool bHangs = bRolls && Num(Sk + "hangs", 0.0) > 0.0;
+		const LingerRow* HangsOn = bHangs ? &LingerOf("shell", Size) : nullptr;
+		LingerRow HangsAs; // (the skirt goes as its cloud does: the bulk's own smoke-left numbers)
+		if (HangsOn != nullptr)
+		{
+			HangsAs = *HangsOn;
+			HangsAs.Third = HangsAs.BulkThird;
+			HangsAs.TwoThirds = HangsAs.BulkTwoThirds;
+			HangsOn = &HangsAs;
+		}
+		// (the skirt of a burst with bulk is a rolling front: inner_alpha, how thick the dust inside the front is, as a
+		// share of the front's; high_vary, how much lower than most_high_m some of its pieces stand, so its top is uneven;
+		// rough, its pieces' lumpy outline. By dice of their own. No keys: as before)
+		const double InnerAlpha = SafeNum(Num(Sk + "inner_alpha", 1.0), 0.0, 2.0, 1.0);
+		// (inner_high: how high the dust inside the front may stand, as a share of most_high_m, a low even haze; front_stretch:
+		// how long along the ring a piece of the front is for its width, 1 a round billow)
+		const double InnerHigh = SafeNum(Num(Sk + "inner_high", 1.0), 0.05, 1.0, 1.0);
+		const double FrontStretch = Has(Sk + "front_stretch") ? SafeNum(Num(Sk + "front_stretch", 1.0), 1.0, 6.0, 1.0) : Num(Sk + "stretch_along_ring", 1.7);
+		const double HighVary = SafeNum(Num(Sk + "high_vary", 0.0), 0.0, 1.0, 0.0), SkirtRough = SafeNum(Num(Sk + "rough", 0.0), 0.0, 1.0, 0.0);
+		Dice DS(PlaceKey(At) * 0xA24BAED4963EE407ull ^ 0x5C1A7ull);
+		const double HangKeep = SafeNum(Num(Sk + "hang_keep", 0.7), 0.05, 2.0, 0.7), HangWide = SafeNum(Num(Sk + "hang_wide", 0.3), 0.0, 1.0, 0.3), HangSpread = SafeNum(Num(Sk + "hang_spread", 0.3), 0.0, 1.0, 0.3);
 		const Rgb Col = P.Ring * Num(R + "colour_from_ground", 0.85); // (the ground's own ring colour where it has one: earth's darker than its dust)
 		const double Many = std::max(0.7, std::sqrt(K));
 		const int NOut = static_cast<int>(Num(Sk + "puffs_outer", 110.0) * Many);
@@ -1165,7 +1312,7 @@ namespace TheaterFx
 			return LobeLeast + (1.0 - LobeLeast) * Most;
 		};
 		const double FeatherFrom = Clamp01(1.0 - Num(Sk + "feather", 0.0)); // (the share of the reach out to which it is full strength)
-		const double MostHigh = Num(Sk + "most_high_m", 0.0) * K;
+		const double MostHigh = Num(Sk + "most_high_m", 0.0) * KS;
 		for (int I = 0; I < NOut + NIn; ++I)
 		{
 			const bool bFront = I < NOut;
@@ -1179,28 +1326,33 @@ namespace TheaterFx
 			B.Form = Bit::Shape::Upright;
 			B.bHug = true;
 			B.Born = T0 + D.U(0.0, 0.02);
-			B.From = At + Outward * (D.U(0.4, 1.0) * K);
+			B.From = At + Outward * (D.U(0.4, 1.0) * KS);
 			const double Out_ = Speed * D.U(0.85, 1.0); // (how far out it goes, as a share of the reach that way)
 			B.Vel = Outward * (Reach * ReachAt(A) * Out_ * Drag);
 			B.Drag = Drag;
 			B.Rise = RiseOf * D.U(0.6, 1.4);
 			B.Windage = 0.6;
 			B.Life = LifeOf.Pick(D) * std::min(2.0, K);
-			B.R0 = StartR * K;
-			B.R1 = EndR * K * D.U(0.7, 1.3) * (bFront ? 1.0 : InnerK); // (fewer, broader inner ones fill the round)
+			B.R0 = StartR * KS;
+			B.R1 = EndR * KS * D.U(0.7, 1.3) * (bFront ? 1.0 : InnerK); // (fewer, broader inner ones fill the round)
 			B.Grow = GrowOf;
-			B.Stretch = StretchOf;
+			B.Stretch = bFront ? FrontStretch : StretchOf;
 			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
 			B.Flatten = FlattenOf * D.U(0.8, 1.2) * (bFront ? Billow : 1.0); // (the front edge stands tallest)
 			if (MostHigh > 0.0)
 			{
-				B.Flatten = std::min(B.Flatten, MostHigh / (1.8 * std::max(B.R1, 1e-3))); // (its top, at 1.8 times its half height, under most_high_m)
+				B.Flatten = std::min(B.Flatten, (HighVary > 0.0 ? MostHigh * (1.0 - HighVary * DS.U()) : MostHigh) * (bFront ? 1.0 : InnerHigh) / (1.8 * std::max(B.R1, 1e-3))); // (its top, at 1.8 times its half height, under most_high_m)
+			}
+			if (SkirtRough > 0.0)
+			{
+				B.Rough = SkirtRough;
+				B.LumpSeed = static_cast<uint32_t>(DS.U() * 4294967295.0);
 			}
 			B.Col = Col * D.U(0.9, 1.08);
 			B.Col2 = B.Col;
 			// (its outer part feathers away: full strength out to FeatherFrom of the reach, a sixth of it at the rim)
 			const double Feather = Out_ > FeatherFrom ? 1.0 - 0.85 * Clamp01((Out_ - FeatherFrom) / std::max(1.0 - FeatherFrom, 1e-3)) : 1.0;
-			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha) * Feather;
+			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha) * Feather * (bFront ? 1.0 : InnerAlpha);
 			B.FadeIn = 0.02;
 			B.Hold = 0.1;
 			B.HazeBy = HazeBy;
@@ -1208,6 +1360,21 @@ namespace TheaterFx
 			B.ShadeK = ShadeOf; // (a lit top and a shadowed foot, so it shows its height)
 			B.Heart = HeartOf;
 			B.Rim = 0.0;
+			if (HangsOn)
+			{
+				// (hang_keep of its pieces hang on with the cloud, each to the cloud's end; the rest settle as a skirt's
+				// dust ever did, so a barrage's skirts do not fill the room)
+				if (DS.U() < HangKeep)
+				{
+					Lingering(B, *HangsOn, T0, At, 0.6, 0.0, SpareAtBurst, 1.0 / std::max(HangsOn->Keep, 0.05));
+				}
+				if (B.bTail)
+				{
+					B.TailLift = 0.0; // (it stays on the ground)
+					B.TailWide *= HangWide;
+					B.TailSpread *= HangSpread;
+				}
+			}
 			Bits.push_back(B);
 		}
 	}
@@ -1253,6 +1420,28 @@ namespace TheaterFx
 		const double HeavyInner = Num(C + "heavy_inner", 0.72); // (and where that ring sits: the edge band is the rest)
 		const double TipInner = Num(C + "tip_inner", 0.6);
 		const double PieceMax = Num(Path("piece_max_m"), 0.0); // (0: no limit, as for the shells)
+		// (art director 19:58Z 21 November, bigger bursts: a jet twice as tall stands against the sky, and a dark piece
+		// thinning there reads as grey glass. With burst.crown.to_dust a heavy jet above its root goes that far toward
+		// the ground's own dust as it thins, and holds solid for jet_hold of its life, so it ends as a streak of dust)
+		const bool bJetDust = Has(C + "to_dust");
+		const double JetDust = SafeNum(Num(C + "to_dust", 0.0), 0.0, 1.0, 0.0), JetHold = SafeNum(Num(C + "jet_hold", 0.4), 0.05, 0.95, 0.4);
+		// (art director 03:27Z 22 November: at half a second the crown was "a few broad flat wedges with straight edges...
+		// cardboard slabs. Keep the mass, but make it more, narrower streaks with soft tips that fall back by about
+		// 1.5 s". More and thinner heavy jets are heavy_jets and heavy_thick. heavy_stretch: a heavy jet's pieces drawn
+		// that long for their width, and stepped as far apart, so a thin jet is a streak of few pieces; heavy_swell:
+		// they widen that much over their lives and no more, so a streak stays one; heavy_droop: a piece falls faster the
+		// further up its jet it is, so the tips come back down; tip_life_s: how long the piece at a jet's very tip
+		// lasts, the root's as ever; tip_heart: how thin the tip is at its heart ring, a soft end; tip_swell: at the
+		// very tip a piece ends that many times its width, under 1 drawing in, so the streak narrows away as it falls
+		// and is never a pale sheet standing in the air; heart_end: above its root a piece's heart thins to this by
+		// the end of its life. A size may have its own of each. None of them: as before, by the same dice)
+		const bool bHeavyAlong = Has(Path("heavy_stretch")), bHeavySwell = Has(Path("heavy_swell") + ".0"), bTipLife = Has(Path("tip_life_s") + ".0"), bTipHeart = Has(Path("tip_heart"));
+		const bool bTipSwell = Has(Path("tip_swell") + ".0"), bHeartEnd = Has(Path("heart_end"));
+		const double HeavyAlong = bHeavyAlong ? SafeNum(Num(Path("heavy_stretch"), Along0), 1.0, 8.0, Along0) : Along0;
+		const Span HeavySwell = Range(Path("heavy_swell"), 1.8, 2.4), TipLifeS = Range(Path("tip_life_s"), 1.2, 2.0), TipSwell = Range(Path("tip_swell"), 1.8, 2.4);
+		const double HeartEndIs = SafeNum(Num(Path("heart_end"), 0.5), 0.0, 1.0, 0.5);
+		const double HeavyDroop = SafeNum(Num(Path("heavy_droop"), 0.0), 0.0, 20.0, 0.0);
+		const double TipHeart = SafeNum(Num(Path("tip_heart"), HeavyHeart), 0.0, 1.0, 0.5);
 		const double FillRough = Num(C + "fill_rough", 0.55); // (the dust between the jets: soft, billowing, scattered; never a long clear prism)
 		const double FillScatter = Num(C + "fill_scatter", 1.6);
 		const double FillStretch = Num(C + "fill_stretch", 1.15);
@@ -1327,13 +1516,31 @@ namespace TheaterFx
 				B.Vel = Dir * Sp + Side;
 				B.Drag = KD;
 				B.Gravity = 9.8 / Slow;
+				if (bHeavy && HeavyDroop > 0.0)
+				{
+					B.Gravity = 9.8 / Slow * (1.0 + HeavyDroop * F); // (the tips come back down)
+				}
 				B.Windage = 0.35;
-				B.Life = D.U(1.2, 2.0) * Slow;
+				const double LifeOwn = D.U(1.2, 2.0);
+				B.Life = LifeOwn * Slow;
+				if (bHeavy && bTipLife)
+				{
+					// (the root lasts as ever; the tip tip_life_s, by the same throw of the dice)
+					const double LifeTip = SafeNum(TipLifeS.A + (TipLifeS.B - TipLifeS.A) * (LifeOwn - 1.2) / 0.8, 0.2, 10.0, 1.2);
+					B.Life = (LifeOwn + (LifeTip - LifeOwn) * F) * Slow;
+				}
 				B.R0 = Rr;
-				B.R1 = Rr * D.U(1.8, 2.4);
+				const double SwellOwn = D.U(1.8, 2.4);
+				B.R1 = Rr * SwellOwn;
+				if (bHeavy && (bHeavySwell || bTipSwell))
+				{
+					const double SwellRoot = bHeavySwell ? HeavySwell.A + (HeavySwell.B - HeavySwell.A) * (SwellOwn - 1.8) / 0.6 : SwellOwn;
+					const double SwellTip = bTipSwell ? TipSwell.A + (TipSwell.B - TipSwell.A) * (SwellOwn - 1.8) / 0.6 : SwellRoot;
+					B.R1 = Rr * SafeNum(SwellRoot + (SwellTip - SwellRoot) * F, 0.2, 4.0, 1.5);
+				}
 				B.Grow = 0.5;
 				B.Along = Dir;
-				B.Stretch = 1.0 + ((bTip ? Along0 + (TipStretch - Along0) * OnTip : (bHeavy ? Along0 : FillStretch)) - 1.0) * P.Grain; // (grains are not drawn out)
+				B.Stretch = 1.0 + ((bTip ? HeavyAlong + (TipStretch - HeavyAlong) * OnTip : (bHeavy ? HeavyAlong : FillStretch)) - 1.0) * P.Grain; // (grains are not drawn out)
 				B.Point = bTip ? TipPoint : (bHeavy ? 0.3 : 0.0); // (torn and pointed, never rounded; the dust between has no points)
 				B.Tail = 0.15;
 				B.Col = Col;
@@ -1342,17 +1549,31 @@ namespace TheaterFx
 				B.Alpha = (bHeavy ? (bTip ? 1.0 - (1.0 - TipAlpha) * OnTip : 1.0) : FillAlpha * (1.0 - 0.3 * F)) * (bGrained ? D.U(0.7, 1.0) : 1.0);
 				B.FadeIn = 0.01;
 				B.Hold = 0.4;
+				if (bJetDust && bHeavy && !P.bFirst && F >= RootSolid)
+				{
+					B.Col2 = B.Col2.Mix(P.Dust, JetDust);
+					B.Hold = JetHold;
+				}
 				// (heavy at the root, thinning only near the tip: the lower half of a heavy jet dense, with hard lumpy
 				// edges as the clods have, never a translucent blade)
 				const double Root = bHeavy && !bGrained ? Clamp01((RootSolid - F) / std::max(RootSolid, 1e-3)) : 0.0;
 				// (a heavy piece is solid out to most of its radius and then fades in a thin soft edge; a wide see-through
 				// band with a hard rim, on a big piece, is what read as glass)
 				B.Heart = bHeavy ? (bGrained ? 0.65 : HeavyHeart + (1.0 - HeavyHeart) * 0.5 * Root) : 0.5;
+				if (bHeavy && !bGrained && bTip && bTipHeart)
+				{
+					B.Heart = HeavyHeart + (TipHeart - HeavyHeart) * OnTip; // (a soft end)
+				}
+				if (bHeavy && !bGrained && bHeartEnd && F >= RootSolid)
+				{
+					B.HeartEnd = std::min(B.Heart, HeartEndIs);
+				}
 				B.Inner = bHeavy && !bGrained ? HeavyInner + (TipInner - HeavyInner) * OnTip : 0.5;
 				B.Rim = 0.0; // (soft edges everywhere: no jet has a clean blade's side)
 				B.Rough = bHeavy ? EdgeRough + (TipRough - EdgeRough) * OnTip : FillRough; // (lumpy outlines, most torn at the tip)
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
+				InFlash(B, 1.0, bHeavy ? 1.0 : 0.0);
 				Bits.push_back(B);
 				if (Root > 0.0 && D.U() < ClumpChance)
 				{
@@ -1368,6 +1589,10 @@ namespace TheaterFx
 					Lump.Point = D.U(0.0, 0.3);
 					Lump.Tail = 0.0;
 					Lump.Col = P.Heavy * (Shade * D.U(0.8, 1.05));
+					if (ThrowIs.Lighter > 1.0)
+					{
+						Lump.Col = Lump.Col * ThrowIs.Lighter; // (as light as the jet it bulges from: burst.throw.lighter)
+					}
 					Lump.Heart = 0.95;
 					Lump.Rim = 0.55;
 					Lump.Rough = 0.4;
@@ -1376,7 +1601,7 @@ namespace TheaterFx
 					Bits.push_back(Lump);
 				}
 				// (stepped by the length it is drawn; never less than a hundredth, so no number in the recipe can stall it)
-				F += std::max(0.01, Rl * std::max(1.0, 1.0 + (Along0 - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2));
+				F += std::max(0.01, Rl * std::max(1.0, 1.0 + ((bHeavy ? HeavyAlong : Along0) - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2));
 			}
 			if (bHeavy && ClodK > 0.05)
 			{
@@ -1462,6 +1687,7 @@ namespace TheaterFx
 				B.Rough = SpikeRough.A + (SpikeRough.B - SpikeRough.A) * F; // (broken edges, most torn at the tip)
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
+				InFlash(B, 1.0);
 				Bits.push_back(B);
 			}
 			if (ClodK > 0.05)
@@ -1517,6 +1743,7 @@ namespace TheaterFx
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
 			}
+			InFlash(B, 1.0);
 			Bits.push_back(B);
 		}
 		// the foot: a dense mass of near-black lumps at the crown's base for the first second, settling to brown-grey
@@ -1559,6 +1786,7 @@ namespace TheaterFx
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
 				B.ShadeK = FootShadeK; // (a lit top and a dark underside, so the mass has form)
+				InFlash(B, 1.0);
 				Bits.push_back(B);
 			}
 		}
@@ -1636,6 +1864,25 @@ namespace TheaterFx
 				}
 			}
 		}
+		// (art director 19:58Z 21 November: the clods fall back within 2 to 3 s, a few trailing thin dust. With
+		// sizes.<size>.clods_back_s every clod's throw is as much slower as brings the highest of them down by then, so
+		// taller jets throw no clod for longer; with burst.debris.dust_trails that many of the bigger ones leave a thin
+		// line of dust behind them, by dice of their own. Neither key: as before)
+		const double ClodsBack = SafeNum(Num("sizes." + Size + ".clods_back_s", 0.0), 0.0, 20.0, 0.0);
+		double ClodSlower = 1.0;
+		if (ClodsBack > 0.0)
+		{
+			double Highest = 0.0;
+			for (size_t I = 0; I < ShowerTo && I < Launch.size(); ++I)
+			{
+				Highest = std::max(Highest, Launch[I].Z);
+			}
+			ClodSlower = Highest > 4.9 * ClodsBack ? 4.9 * ClodsBack / Highest : 1.0;
+		}
+		const bool bDustTrails = Has("burst.debris.dust_trails.0");
+		Dice DT(PlaceKey(At) * 0xD6E8FEB86659FD93ull ^ 0x7A11ull);
+		int DustTrails = bDustTrails ? DT.Whole(static_cast<int>(SafeNum(Num("burst.debris.dust_trails.0", 3.0), 0.0, 12.0, 3.0)), static_cast<int>(SafeNum(Num("burst.debris.dust_trails.1", 5.0), 0.0, 12.0, 5.0))) : 0;
+		const double TrailFrom = SafeNum(Num("burst.debris.dust_trail_from_m", 0.08), 0.0, 5.0, 0.08) * K;
 		for (size_t I = 0; I < Launch.size(); ++I)
 		{
 			Bit B;
@@ -1643,7 +1890,7 @@ namespace TheaterFx
 			B.bThrown = true;
 			B.Born = T0 + 0.015;
 			B.From = At + ZUp * (0.15 * K);
-			B.Vel = Launch[I];
+			B.Vel = I < ShowerTo && ClodSlower < 1.0 ? Launch[I] * ClodSlower : Launch[I];
 			B.Gravity = 9.8;
 			B.R0 = B.R1 = LaunchR[I];
 			const bool bShower = I >= ShowerFrom && I < ShowerTo;
@@ -1673,6 +1920,32 @@ namespace TheaterFx
 			const Vec Landed = B.At1;
 			const double Down = B.Born + B.Land;
 			const double R = B.R0;
+			if (DustTrails > 0 && I < ShowerTo && R > TrailFrom && B.Land > 0.6)
+			{
+				// (thin dust shed along its flight, each puff where the clod was at that moment)
+				--DustTrails;
+				const int Shed = 6;
+				for (int Q = 0; Q < Shed; ++Q)
+				{
+					const double At_ = std::min(B.Land, 2.5) * (Q + DT.U(0.2, 0.8)) / Shed;
+					Bit Wisp;
+					Wisp.Born = B.Born + At_;
+					Wisp.From = B.From + B.Vel * At_ + Vec(0.0, 0.0, -0.5 * B.Gravity * At_ * At_);
+					Wisp.Vel = (B.Vel + Vec(0.0, 0.0, -B.Gravity * At_)) * 0.12;
+					Wisp.Drag = 3.0;
+					Wisp.Windage = 0.5;
+					Wisp.Life = DT.U(0.7, 1.2);
+					Wisp.R0 = R * 1.6;
+					Wisp.R1 = R * DT.U(4.0, 6.5);
+					Wisp.Col = P.Dust.Mix(P.Soil, 0.4);
+					Wisp.Col2 = P.Dust;
+					Wisp.Alpha = DT.U(0.22, 0.34) * (1.0 - 0.5 * Q / Shed);
+					Wisp.FadeIn = 0.03;
+					Wisp.Hold = 0.15;
+					Wisp.Heart = 0.5;
+					Bits.push_back(Wisp);
+				}
+			}
 			Bits.push_back(B);
 			if (R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
 			{
@@ -1732,7 +2005,11 @@ namespace TheaterFx
 		// (Many under 1, a sea battle's hit far beyond the air's distance: that share of the puffs, never under 8, each
 		// as much bigger as keeps the cloud as full. Shell says how far)
 		const bool bFew = Many < 1.0;
-		const int N = bFew ? std::min(NNear, std::max(8, static_cast<int>(NNear * std::max(Many, 0.0)))) : NNear;
+		// (a burst with bulk, where the recipe has burst.bulk and the size its cloud_m: Bulk lays the cloud, and none
+		// of the puffs below are laid. Never on water)
+		const double CloudM = Ground == "water" ? 0.0 : SafeNum(Num("sizes." + Size + ".cloud_m", 0.0), 0.0, 400.0, 0.0);
+		const bool bBulk = CloudM > 0.0 && Has("burst.bulk.column.puffs");
+		const int N = bBulk ? 0 : bFew ? std::min(NNear, std::max(8, static_cast<int>(NNear * std::max(Many, 0.0)))) : NNear;
 		const double Bigger = bFew && N > 0 ? std::min(4.0, std::sqrt(static_cast<double>(NNear) / N)) : 1.0;
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Vec Lean = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.15;
@@ -1763,6 +2040,10 @@ namespace TheaterFx
 		LingerRow StaysOn = LingerOf("shell", Ground == "water" ? std::string("water") : Size);
 		StaysOn.GoneS = std::max(StaysOn.GoneS, SafeNum(Linger, 0.0, 3600.0, 0.0));
 		const double StaysSpare = SpareAtBurst; // (one for the whole cloud)
+		if (bBulk)
+		{
+			Bulk(T0, At, CrownH, K, Size, Ground, P, CloudM, Linger, D, Many);
+		}
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -1846,6 +2127,222 @@ namespace TheaterFx
 		S.Across = std::max(0.3, Num("sizes." + Size + ".crater_m", 1.0));
 		S.Seed = Seeds * 31ull + 7ull;
 		Sources.push_back(S);
+	}
+
+	void Battle::Bulk(double T0, const Vec& At, double CrownH, double K, const std::string& Size, const std::string& Ground, const Paint& P, double CloudM, double LooksS, Dice& D, double Many)
+	{
+		// A burst with bulk. Art director 19:58Z 21 November, for Brian's "the explosions should be bigger and more
+		// realistic": more bulk, a denser core and a longer hang, never a ball of soft smoke lifting off the ground.
+		// The cloud is a column of the ground's own dark earth standing on the hit, many puffs at every height from
+		// its foot, dense enough to hide what is behind it through its first two seconds; and round it the lighter
+		// grey-brown smoke and dust, widest at the ground, sizes.<size>.cloud_m across by about two seconds. It climbs
+		// from its foot: every puff starts at the hit and goes out to its place, the higher the later; and it stays
+		// on the ground: a puff rises on by how high in the cloud it stands, the foot not at all. Going slowly
+		// (Lingering, by the size's own times) the puffs at the foot are the likelier to stay and take the smoke of
+		// the rest (linger.shell.stay_low), and a puff climbs by its height in the cloud, so the base holds on the
+		// ground while the smoke above lifts, and the base thins last.
+		const std::string Q = "burst.bulk.", C = Q + "column.", Fr = Q + "fringe.";
+		const double Slow = SafeNum(Num("grounds." + Ground + ".crown_slow", 1.0), 0.2, 5.0, 1.0);
+		// (a cloud this dense has its own smoke-left numbers, bulk_left_third and bulk_left_two_thirds, set in pictures
+		// as the row's are: many thick puffs one behind another hold their look far longer than a thin cloud's do)
+		LingerRow StaysOn = LingerOf("shell", Size);
+		StaysOn.Third = StaysOn.BulkThird;
+		StaysOn.TwoThirds = StaysOn.BulkTwoThirds;
+		StaysOn.GoneS = std::max(StaysOn.GoneS, SafeNum(LooksS, 0.0, 3600.0, 0.0)); // (gone no sooner than its smoke was before the rule: see Smoke)
+		const double StaysSpare = SpareAtBurst; // (one for the whole cloud)
+		const double StayLow = Clamp01(StaysOn.StayLow);
+		// (a bigger burst has more puffs, each a smaller share of its cloud, so its cloud is as full and no puff a great flat disc)
+		const double KSafe = SafeNum(K, 0.05, 6.0, 1.0);
+		// (sizes.<size>.cloud_many: that many times the puffs for this size alone, a bomb's tall cloud)
+		// (a smaller burst has fewer still: a mortar's or a grenade's cloud needs no more than it had, and a barrage of them fills the room)
+		const double KFull = std::clamp(std::pow(KSafe, KSafe < 1.0 ? 0.9 : 0.6), 0.4, 2.2);
+		const double KMany = KFull * SafeNum(Num("sizes." + Size + ".cloud_many", 1.0), 0.25, 3.0, 1.0), KSmall = 1.0 / std::sqrt(KFull);
+		// (Many under 1, a sea battle's hit far beyond the air's distance: that share of the puffs, never under 6, each as much bigger)
+		const bool bFew = Many < 1.0;
+		auto Counted = [&](double Asked, double& Bigger)
+		{
+			const int Near = std::max(1, static_cast<int>(SafeNum(Asked, 0.0, 400.0, 30.0) * KMany));
+			const int Laid = bFew ? std::min(Near, std::max(6, static_cast<int>(Near * std::max(Many, 0.0)))) : Near;
+			Bigger = bFew ? std::min(4.0, std::sqrt(static_cast<double>(Near) / Laid)) : 1.0;
+			return Laid;
+		};
+		const Vec Tilt = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.1; // (the whole cloud leans a little one way)
+		const double SqrtK = std::sqrt(KSafe);
+		// (a puff's size is its share of the cloud as it stands, as wide as cloud_m and as tall as its crown: a bomb's
+		// cloud is taller for its width than a shell's, and puffs sized by its width alone left it a stack of spots.
+		// puff_of: the crown's height over cloud_m that the recipe's puff_r were set by, a 105's)
+		const double PuffOf = SafeNum(Num(Q + "puff_of", 0.75), 0.1, 4.0, 0.75);
+		const double PuffM = std::clamp(std::sqrt(CloudM * std::max(CrownH, 1e-3) / PuffOf), 0.7 * CloudM, 1.6 * CloudM);
+		const Rgb Settled = P.Smoke.Mix(P.Dust, SafeNum(Num("burst.foot.settle_dust", 0.3), 0.0, 1.0, 0.3));
+		const double CloudShade = SafeNum(Num("burst.smoke.cloud_shade", 1.0), 0.0, 8.0, 1.0);
+		// (every number of the column and the fringe is held as it is read or picked: one that is no number draws the usual)
+		// the column
+		double StackBigger = 1.0;
+		const int NStack = Counted(Num(C + "puffs", 34.0), StackBigger);
+		const double CoreWide = SafeNum(Num(C + "wide", 0.36), 0.05, 1.0, 0.36) * CloudM; // (across, at the ground)
+		const double CoreTop = SafeNum(Num(C + "top_wide", 0.7), 0.2, 2.0, 0.7); // (and at its top, as a share of that)
+		const double CoreTall = SafeNum(Num(C + "tall", 0.7), 0.1, 2.0, 0.7) * CrownH;
+		const Span CoreR = Range(C + "puff_r", 0.085, 0.13), CoreAlpha = Range(C + "alpha", 0.92, 1.0), CoreLife = Range(C + "life_s", 3.0, 4.5), CoreShade = Range(C + "shade", 0.85, 1.15);
+		const double ClimbS = SafeNum(Num(C + "climb_s", 0.8), 0.1, 5.0, 0.8); // (how long its top takes to stand)
+		const double CoreRise = SafeNum(Num(C + "rise_mps", 0.8), 0.0, 10.0, 0.8);
+		const double CoreSoil = SafeNum(Num(C + "soil", 0.5), 0.0, 1.0, 0.5), CoreSettle = SafeNum(Num(C + "settle", 0.5), 0.0, 1.0, 0.5);
+		const double CoreRough = SafeNum(Num(C + "rough", 0.3), 0.0, 1.0, 0.3), CoreHeart = SafeNum(Num(C + "heart", 0.9), 0.0, 1.0, 0.9), CoreInner = SafeNum(Num(C + "inner", 0.62), 0.1, 0.95, 0.62);
+		const double CoreLit = SafeNum(Num(C + "light", 1.0), 0.0, 4.0, 1.0);
+		const double CoreHang = SafeNum(Num(C + "hang", 0.35), 0.0, 1.0, 0.35);
+		// (life_thick: a column puff that does not hang lasts that many of its size's thick times, never under life_least_s:
+		// a grenade's earth is down sooner than a bomb's. Without it, or for a size without times, life_s)
+		const bool bLifeByThick = Has(C + "life_thick.0") && StaysOn.bOn && StaysOn.ThickS > 0.0;
+		const Span CoreLifeOf = Range(C + "life_thick", 1.125, 1.625);
+		const double CoreLifeLeast = SafeNum(Num(C + "life_least_s", 2.0), 0.2, 60.0, 2.0);
+		for (int I = 0; I < NStack; ++I)
+		{
+			const double F = std::pow(D.U(), 1.25); // (0 at the foot, 1 at the top: more of them low)
+			const double Rr = PuffM * SafeNum(CoreR.Pick(D), 0.005, 0.6, 0.08) * KSmall * StackBigger;
+			const double Half = 0.5 * CoreWide * (1.0 + (CoreTop - 1.0) * F);
+			const double Az = D.U(0.0, 2.0 * Pi), Out_ = std::max(0.0, Half - 0.7 * Rr) * std::sqrt(D.U());
+			const double Up_ = std::max(CoreTall * F, 0.55 * Rr);
+			const Vec To = Vec(std::cos(Az) * Out_, std::sin(Az) * Out_, Up_) + Tilt * Up_;
+			const double KB = 3.0 / std::max(ClimbS * (0.35 + 0.65 * F), 0.05); // (the foot stands at once, the top by climb_s)
+			Bit B;
+			B.Born = T0 + 0.03 + 0.25 * ClimbS * F * D.U();
+			B.From = At + ZUp * (0.2 * K);
+			B.Vel = To * KB;
+			B.Drag = KB;
+			B.Rise = CoreRise * F * D.U(0.6, 1.2) * SqrtK;
+			B.Windage = 0.5 + 0.4 * F;
+			B.Life = (bLifeByThick ? SafeNum(CoreLifeOf.Pick(D) * StaysOn.ThickS, CoreLifeLeast, 120.0, CoreLifeLeast) : SafeNum(CoreLife.Pick(D), 0.2, 120.0, 4.0)) * Slow;
+			B.R0 = Rr * 0.4;
+			B.R1 = Rr;
+			B.Grow = 0.4;
+			B.Col = P.Heavy.Mix(P.Soil, CoreSoil * D.U()) * SafeNum(CoreShade.Pick(D), 0.0, 4.0, 0.85);
+			B.Col2 = B.Col.Mix(Settled, CoreSettle);
+			B.Cool = 1.0;
+			B.Alpha = SafeNum(CoreAlpha.Pick(D), 0.0, 1.0, 0.95);
+			B.FadeIn = 0.04;
+			B.Hold = 0.6;
+			B.Heart = CoreHeart;
+			B.Inner = CoreInner;
+			B.Rim = 0.0;
+			B.Rough = CoreRough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.ShadeK = CoreLit;
+			B.CloudShade = CloudShade;
+			B.Centre = At + (Tilt + ZUp) * (0.45 * CoreTall);
+			B.CloudR = std::max(0.5 * CoreWide, 1e-3);
+			B.CentreRise = 0.3 * CoreRise * SqrtK;
+			// (column.hang of the column's puffs hang on with the smoke, the likelier the lower, each to the cloud's end; the
+			// rest are earth and fall out of the air by their own life_s)
+			if (D.U() < CoreHang * (1.0 + StayLow * (0.44 - F) / 0.44))
+			{
+				Lingering(B, StaysOn, T0, At, 0.7, 0.0, StaysSpare, 1.0 / std::max(StaysOn.Keep, 0.05));
+			}
+			if (B.bTail)
+			{
+				B.TailLift *= F; // (the foot stays on the ground)
+			}
+			InFlash(B, 1.0, 0.0);
+			Bits.push_back(B);
+		}
+		// the lighter smoke and dust round it
+		double FringeBigger = 1.0;
+		const int NFringe = Counted(Num(Fr + "puffs", 80.0), FringeBigger);
+		const double FrTall = SafeNum(Num(Fr + "tall", 0.95), 0.1, 3.0, 0.95) * CrownH;
+		const double FrTaper = SafeNum(Num(Fr + "taper", 0.55), 0.0, 0.95, 0.55); // (how much narrower at its top than at the ground)
+		const Span FrR = Range(Fr + "puff_r", 0.07, 0.12), FrAlpha = Range(Fr + "alpha", 0.32, 0.5);
+		// (sizes.<size>.cloud_puff: this size's smoke puffs that many times as big. A bomb's cloud has so many, each so small a
+		// share of it, that its edge was a field of spots)
+		const double FrPuffK = SafeNum(Num("sizes." + Size + ".cloud_puff", 1.0), 0.3, 3.0, 1.0);
+		const double RollS = SafeNum(Num(Fr + "roll_s", 1.2), 0.1, 6.0, 1.2); // (how long it takes to roll out to its width)
+		const double FrGrow = SafeNum(Num(Fr + "grow", Num("burst.smoke.grow", 0.3)), 0.05, 2.0, 0.3);
+		const double FrTopBig = SafeNum(Num(Fr + "top_bigger", 0.3), 0.0, 2.0, 0.3);
+		const double FrSmall = SafeNum(Num(Fr + "born_r", 0.35), 0.05, 1.0, 0.35);
+		const Span FrRise = Range(Fr + "rise_mps", 0.25, 0.9);
+		const double FrOutward = SafeNum(Num(Fr + "outward", 1.0), 0.2, 4.0, 1.0); // (over 1: more of it near the column, thinning out to its width)
+		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
+		const Rgb Top = Picture("grounds." + Ground + ".smoke_top", Picture("burst.smoke.colour_top", Rgb::FromPicture(66, 64, 62)));
+		const double TopShare = SafeNum(Num(Fr + "top_share", Num("burst.smoke.top_share", 0.8)), 0.0, 1.0, 0.8);
+		const Span FrDust = Range(Fr + "dust", 0.0, 0.0); // (how much of the ground's dust is in each puff's smoke: lighter grey-brown)
+		const double FrLow = SafeNum(Num(Fr + "low", 1.3), 0.3, 4.0, 1.3); // (over 1: more of it low)
+		const Span FrHeart = Range(Fr + "heart", 0.4, 0.7);
+		const double FrCloudShade = Num(Fr + "cloud_shade", CloudShade); // (spread wide, its far side is not in the column's shadow as the column's own is)
+		const double FrFrom = SafeNum(Num(Fr + "from_column", 0.0), 0.0, 1.5, 0.0); // (it begins that share of the column's own half width out: round the column, not inside it)
+		const double FrRough = SafeNum(Num(Fr + "rough", 0.0), 0.0, 1.0, 0.0);
+		// (art director 03:27Z 22 November: the lit top of the cloud at most 90. shade: its smoke that many times as
+		// light as the ground's paints have it; light: how strongly each puff is lit on its sunward side, 1 as any puff)
+		const double FrShade = SafeNum(Num(Fr + "shade", 1.0), 0.2, 2.0, 1.0), FrLight = SafeNum(Num(Fr + "light", 1.0), 0.0, 4.0, 1.0);
+		// (keep_k: of the row's keep, the share of the fringe that stays to the end; go_by_k: how much sooner than the
+		// row's go_by its others retire. Fewer pieces in a barrage's old smoke)
+		const double FrKeep = SafeNum(Num(Fr + "keep_k", 1.0), 0.1, 2.0, 1.0);
+		LingerRow FringeOn = StaysOn;
+		FringeOn.GoBy = std::clamp(FringeOn.GoBy * SafeNum(Num(Fr + "go_by_k", 1.0), 0.1, 1.0, 1.0), 0.05, 1.0);
+		const double FrReach = SafeNum(Num(Fr + "reach", 1.0), 0.3, 3.0, 1.0) * SafeNum(Num("sizes." + Size + ".cloud_reach", 1.0), 0.3, 3.0, 1.0); // (its outermost puffs' middles as a share of half cloud_m: set so the cloud MEASURES cloud_m across at two seconds)
+		// (at the column's flank a puff is near_alpha thick, near_dark of the way to the column's own earth and its heart
+		// near_heart; out at the cloud's edge it is the fringe's own: so the cloud goes from its core to its edge by degrees)
+		const double FrNearAlpha = SafeNum(Num(Fr + "near_alpha", 0.0), 0.0, 1.0, 0.0), FrNearDark = SafeNum(Num(Fr + "near_dark", 0.0), 0.0, 1.0, 0.0), FrNearHeart = SafeNum(Num(Fr + "near_heart", 0.0), 0.0, 1.0, 0.0);
+		const Rgb ColumnIs = P.Heavy.Mix(P.Soil, 0.5 * CoreSoil) * SafeNum(0.5 * (CoreShade.A + CoreShade.B), 0.0, 4.0, 0.85);
+		const double AlphaK = Num("grounds." + Ground + ".smoke_alpha", 1.0);
+		const bool bDarkFoot = Has("burst.foot.count.0");
+		const double FootBand = Num("burst.foot.smoke_band", 0.45), FootSmokeDark = Num("burst.foot.smoke_dark", 0.45), FootSettle = std::max(0.1, Num("burst.foot.smoke_settle_s", 1.0));
+		const double LooksFor = SafeNum(LooksS, 1.0, 600.0, 20.0);
+		for (int I = 0; I < NFringe; ++I)
+		{
+			const double F = std::pow(D.U(), FrLow);
+			const double Rr = PuffM * SafeNum(FrR.Pick(D), 0.005, 0.6, 0.1) * (1.0 + FrTopBig * F) * KSmall * FringeBigger * FrPuffK;
+			const double Half = 0.5 * CloudM * FrReach * (1.0 - FrTaper * F);
+			const double Up_ = std::max(FrTall * F, 0.55 * Rr);
+			const double Within = Up_ < CoreTall ? FrFrom * 0.5 * CoreWide * (1.0 + (CoreTop - 1.0) * Up_ / std::max(CoreTall, 1e-3)) : 0.0;
+			const double Far = std::pow(D.U(), 0.5 * FrOutward); // (0 at the column's flank, 1 at the cloud's edge)
+			const double Az = D.U(0.0, 2.0 * Pi), Out_ = Within + std::max(0.0, Half - Within) * Far;
+			const Vec To = Vec(std::cos(Az) * Out_, std::sin(Az) * Out_, Up_) + Tilt * Up_;
+			const double KB = 3.0 / std::max(RollS * D.U(0.5, 1.0), 0.05);
+			const double Shade = D.U(0.8, 1.2);
+			// (warm brown near the ground, charcoal grey toward the top, as a shell's smoke ever was)
+			const Rgb Own = (D.U() > 0.25 ? P.Smoke.Mix(P.Dust, SafeNum(FrDust.Pick(D), 0.0, 1.0, 0.0)) * Shade : P.Dust * (0.6 * Shade)).Mix(Top * Shade, std::min(1.0, F * 1.1) * TopShare);
+			const Rgb Base = (Own * FrShade).Mix(ColumnIs * Shade, FrNearDark * (1.0 - Far));
+			Bit B;
+			B.Born = T0 + 0.08 + 0.3 * D.U() * (0.4 + F);
+			B.From = At + ZUp * (0.2 * K);
+			B.Vel = To * KB;
+			B.Drag = KB;
+			B.Rise = SafeNum(FrRise.Pick(D), 0.0, 10.0, 0.5) * SqrtK * F;
+			B.Windage = D.U(0.5, 0.95);
+			B.Life = LooksFor * D.U(0.45, 1.0);
+			B.R0 = Rr * FrSmall;
+			B.R1 = Rr;
+			B.Grow = FrGrow;
+			B.Col = (F < 0.25 && B.Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base;
+			B.Col2 = Base;
+			B.Cool = B.Life / 0.15;
+			if (bDarkFoot && F < FootBand)
+			{
+				B.Col = B.Col * FootSmokeDark; // (dark at the foot for its first second, settling to the cloud's own colour)
+				B.Cool = B.Life / FootSettle;
+			}
+			const double AlphaOwn = SafeNum(FrAlpha.Pick(D), 0.0, 1.0, 0.5), HeartOwn = SafeNum(FrHeart.Pick(D), 0.0, 1.0, 0.5);
+			B.Alpha = std::min(0.98, (FrNearAlpha > 0.0 ? AlphaOwn + (FrNearAlpha - AlphaOwn) * (1.0 - Far) : AlphaOwn) * AlphaK);
+			B.FadeIn = 0.08;
+			B.Hold = 0.15;
+			B.Heart = Clamp01(FrNearHeart > 0.0 ? HeartOwn + (FrNearHeart - HeartOwn) * (1.0 - Far) : HeartOwn);
+			B.Rim = 0.0;
+			if (FrRough > 0.0)
+			{
+				B.Rough = FrRough;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+			}
+			B.ShadeK = FrLight;
+			B.CloudShade = FrCloudShade;
+			B.Centre = At + (Tilt + ZUp) * (0.45 * FrTall);
+			B.CloudR = std::max(0.3 * CloudM, 1e-3);
+			B.CentreRise = 0.3 * SqrtK;
+			Lingering(B, FringeOn, T0, At, 0.7, 0.0, StaysSpare, FrKeep, 1.0 + StayLow * (1.0 / (1.0 + FrLow) - F) * (1.0 + FrLow));
+			if (B.bTail)
+			{
+				B.TailLift *= F;
+			}
+			Bits.push_back(B);
+		}
 	}
 
 	void Battle::Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D)
@@ -9807,6 +10304,9 @@ namespace TheaterFx
 			R.PaleFrom = SafeNum(Asked("pale_from", 0.33), 0.0, 0.95, 0.33);
 			R.PaleBy = SafeNum(Asked("pale_by", 0.8), R.PaleFrom + 0.01, 1.0, std::max(0.8, R.PaleFrom + 0.01));
 			R.To = Picture(Q + "to", Picture("linger.to", Rgb::FromPicture(150, 156, 164)));
+			R.StayLow = SafeNum(Asked("stay_low", 0.0), 0.0, 1.0, 0.0);
+			R.BulkThird = SafeNum(Asked("bulk_left_third", R.Third), 1.0e-4, 1.0, R.Third);
+			R.BulkTwoThirds = SafeNum(Asked("bulk_left_two_thirds", std::min(R.TwoThirds, R.BulkThird)), 1.0e-6, R.BulkThird, std::min(R.TwoThirds, R.BulkThird));
 		}
 		if (LingerKept.size() > 256)
 		{
@@ -9822,7 +10322,7 @@ namespace TheaterFx
 		return std::clamp(1.0 - (1.0 - LingerSpareLeast) * (Full - LingerSpareFrom) / std::max(LingerSpareBy - LingerSpareFrom, 0.01), LingerSpareLeast, 1.0);
 	}
 
-	void Battle::Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare)
+	void Battle::Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare, double KeepK, double StayBias)
 	{
 		if (!R.bOn || !(B.Life > 0.0) || !(B.Life < 1.0e6) || B.bLight)
 		{
@@ -9834,8 +10334,10 @@ namespace TheaterFx
 		const double One = static_cast<double>(Thrown >> 11) * (1.0 / 9007199254740992.0);
 		// (one keep and one go_by for the whole cloud, less of both when the room is short: LingerSpare)
 		const double Room = SafeNum(Spare, 0.05, 1.0, 1.0);
-		const double Kept = std::clamp(R.Keep * Room, 0.05, 1.0), GoBy = std::clamp(R.GoBy * Room, 0.05, 1.0);
-		const bool bStays = One < Kept;
+		// (KeepK: a part of a cloud that keeps more or fewer of its puffs than the row says, a skirt of dust. StayBias: a
+		// puff that much the likelier to stay than its cloud's share, one at a burst's foot. Both 1: as the row says)
+		const double Kept = std::clamp(R.Keep * Room * SafeNum(KeepK, 0.05, 4.0, 1.0), 0.05, 1.0), GoBy = std::clamp(R.GoBy * Room, 0.05, 1.0);
+		const bool bStays = One < Kept * SafeNum(StayBias, 0.0, 4.0, 1.0);
 		const double Late = std::clamp(B.Born - T0, 0.0, R.GoneS); // (born a moment after the burst, it has that much less of each time)
 		const double Tail = R.GoneS - R.ThickS;
 		const double Was = B.Life;
@@ -9972,7 +10474,17 @@ namespace TheaterFx
 			const Vec N = Round.Right * S + Round.Back * std::sqrt(1.0 - S * S);
 			return Clamp01(Round.Gain * std::max(0.0, Round.Level * N.Dot(Round.Sun) + Round.Up));
 		};
-		const float KMid = Round.bOn ? static_cast<float>(0.9 * RoundK(Middle)) : 0.75f;
+		// (bLayGlare: the Lift is a burst's flash, Bit::GlareK. A point is lit by how far round it is toward the flash on
+		// the screen, GlareSide: all of the light on that side, 0.15 of it on the side away. A piece the eye sees from the
+		// flash's side is lit all over; one standing before the flash keeps three tenths, on its edge toward it)
+		const double GlareA = bLayGlare ? AxisA.Dot(LayGlareWay) : 0.0, GlareB = bLayGlare ? AxisB.Dot(LayGlareWay) : 0.0;
+		const double GlareAcross = bLayGlare ? std::sqrt(std::max(0.0, 1.0 - Eye.Forward.Dot(LayGlareWay) * Eye.Forward.Dot(LayGlareWay))) : 1.0;
+		auto GlareSide = [this](double Lean_)
+		{
+			const double Side = 0.15 + 0.85 * Lean_;
+			return (Side + (1.0 - Side) * Clamp01(2.0 * LayGlareAll - 1.0)) * (0.3 + 0.7 * std::min(1.0, 2.0 * LayGlareAll));
+		};
+		const float KMid = Round.bOn ? static_cast<float>(0.9 * RoundK(Middle)) : bLayGlare ? static_cast<float>(GlareSide(0.5)) : 0.75f;
 		// (a spent case's body: lit as a tube, each point by the tube's own surface where it sits across it)
 		auto TubeK = [this](const Vec& Q)
 		{
@@ -10105,6 +10617,11 @@ namespace TheaterFx
 						// lumps lies on their shadow sides and never rings each one)
 						KRim = std::max(KRim, static_cast<float>(Round.Rim * RoundK(Middle + Dir * Reach) * Lobe));
 					}
+				}
+				else if (bLayGlare)
+				{
+					const double TowardFlash = Len2 > 1e-18 ? (GlareA * Cs + GlareB * Sn) / std::sqrt(Len2) : 0.0;
+					KHeart = KRim = static_cast<float>(GlareSide(Clamp01(0.5 + 0.5 * TowardFlash / std::max(GlareAcross, 0.05))));
 				}
 				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
 				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
@@ -10365,6 +10882,24 @@ namespace TheaterFx
 		return Used;
 	}
 
+	double Battle::TrailNearK(double OffEye, double HalfWide) const
+	{
+		// (how much of an aircraft's trail shows that far from the eye: all of it from TrailNearWhole on; nearer, as
+		// much as the distance leaves or as its size in the picture does, whichever leaves more)
+		if (!(OffEye >= 0.0))
+		{
+			return 0.0; // (a distance that is not a number: none of it)
+		}
+		double Shows = Clamp01((OffEye - TrailNearGone) / std::max(TrailNearWhole - TrailNearGone, 1e-3));
+		if (TrailLoomsGone > 0.0 && Shows < 1.0 && HalfWide >= 0.0)
+		{
+			const double Looms = HalfWide / std::max(OffEye, 1e-3);
+			const double Small = Clamp01((TrailLoomsGone - Looms) / std::max(TrailLoomsGone - TrailLoomsWhole, 1e-6));
+			Shows = std::max(Shows, Small * Clamp01((OffEye - TrailLeastGone) / std::max(TrailLeastWhole - TrailLeastGone, 1e-3)));
+		}
+		return Shows * Shows * (3.0 - 2.0 * Shows);
+	}
+
 	int Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room)
 	{
 		const double Age = Now - B.Born;
@@ -10611,6 +11146,11 @@ namespace TheaterFx
 				Col = Col.Mix(bSkyKnown ? SkyTail : Rgb(B.TailCol.R * Eye.SmokeLight.R, B.TailCol.G * Eye.SmokeLight.G, B.TailCol.B * Eye.SmokeLight.B), TailPaled);
 			}
 			Floor = Col * SkyFill; // (art director 22:24Z: the sky lights smoke's shadow side too, so it is never a hole)
+			if (B.bNeverUnder)
+			{
+				// (a burst's thrown earth: no point of it darker than its floor, Bit::bNeverUnder)
+				Floor = Rgb(std::max(Floor.R, B.NeverUnder.R * Eye.SmokeLight.R), std::max(Floor.G, B.NeverUnder.G * Eye.SmokeLight.G), std::max(Floor.B, B.NeverUnder.B * Eye.SmokeLight.B));
+			}
 		}
 		Vec P = Where(B, Age);
 		if (RollLiftNow != 0.0)
@@ -10676,6 +11216,40 @@ namespace TheaterFx
 				}
 			}
 		}
+		if (TrailNearWhole > 0.0 && !B.bLight && B.Form == Bit::Shape::Puff && (B.Ribbon > 0.0 || B.Smear > 0.0))
+		{
+			// (art director 04:17Z 22 November, riding with an aircraft: a trail passing the lens was a soft band across
+			// the frame, and a strip through the eye's own plane a hard-edged sheet. An aircraft's trail thins out as it
+			// comes up to the eye and is gone before it reaches it: see TrailNearGone. Its flames are lights and stay)
+			if (bReach)
+			{
+				// (a strip's far end by where the piece behind is now and how wide, as that piece fades itself)
+				const Bit::Reach& Behind = B.Back;
+				const double AgeBack = Now - Behind.Born;
+				const double GoBack = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * AgeBack)) / B.Drag : AgeBack;
+				const Vec FarAt = Behind.From + Behind.Vel * GoBack + Wind * (B.Windage * AgeBack) + Vec(0.0, 0.0, Behind.Rise * AgeBack);
+				double RadBack = Behind.GrowBy > 0.0 ? RadTwo(Behind.R0, Behind.RMid, Behind.R1, AgeBack, Behind.Life, Behind.GrowBy, Behind.GrowEarly, Behind.Grow) : Behind.R0 + (Behind.R1 - Behind.R0) * std::pow(Clamp01(AgeBack / std::max(Behind.Life, 1e-6)), Behind.Grow);
+				if (Behind.WakeBy > 0.0)
+				{
+					RadBack = std::max(RadBack, WakeWide(Behind.R0, Behind.WakeR, Behind.WakeBy, Behind.WakeOn, AgeBack));
+				}
+				const double OwnA = A * TrailNearK(Dist, Rad);
+				TailA *= TrailNearK((FarAt - Eye.Eye).Length(), RadBack);
+				if (OwnA < 0.004 && TailA < 0.004)
+				{
+					return 0;
+				}
+				A = std::max(OwnA, 1e-3);
+			}
+			else if (Dist < TrailNearWhole)
+			{
+				A *= TrailNearK(Dist, Rad);
+				if (A < 0.004)
+				{
+					return 0;
+				}
+			}
+		}
 		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)
 		Vec Outward; // (and which way on the screen is out of its cloud)
 		if (B.CloudShade > 0.0 && !B.bLight)
@@ -10707,6 +11281,7 @@ namespace TheaterFx
 			}
 		}
 		Round.bOn = false;
+		bLayGlare = false;
 		LaySquare = 0.0;
 		LayInnerAlong = 0.0;
 		LayHub = Vec();
@@ -10811,6 +11386,23 @@ namespace TheaterFx
 				const double Thick = Clamp01(A);
 				const double K = SunThrough * std::pow(Back, SunThroughPow) * 4.0 * Thick * (1.0 - Thick) * Outer * Outer;
 				Through = Rgb(SunThroughCol.R * Eye.SunLight.R, SunThroughCol.G * Eye.SunLight.G, SunThroughCol.B * Eye.SunLight.B) * K;
+			}
+		}
+		if (B.GlareK > 0.0 && Now < B.GlareEnd && !B.bLight && !Round.bOn && Dist > 1e-6)
+		{
+			// (thrown earth in its own burst's flash, Bit::GlareK: strongest as the flash goes off and gone by GlareEnd,
+			// the most on what is nearest the flash. A number that is no number lights nothing)
+			const Vec ToFlash = B.GlareAt - P;
+			const double FlashFar = ToFlash.Length();
+			const double GlareLeft = Clamp01((B.GlareEnd - Now) / std::max(B.GlareFor, 1e-3));
+			const double GlareOff = FlashFar / std::max(B.GlareReach, 1e-3);
+			const float L = static_cast<float>(Clamp01(B.GlareK * GlareLeft * GlareLeft / (1.0 + GlareOff * GlareOff)));
+			if (L > 0.004f)
+			{
+				Lift = Rgb((B.GlareCol.R - Col.R) * L, (B.GlareCol.G - Col.G) * L, (B.GlareCol.B - Col.B) * L);
+				bLayGlare = true;
+				LayGlareWay = FlashFar > 1e-6 ? ToFlash * (1.0 / FlashFar) : Eye.Forward * -1.0;
+				LayGlareAll = FlashFar > 1e-6 ? Clamp01(0.5 + 0.5 * ToFlash.Dot(Eye.Eye - P) / (FlashFar * Dist)) : 1.0;
 			}
 		}
 		const double MetresAPixel = Dist / std::max(1.0, Eye.PixelsPerRadian); // (1 first: a scale that is not a number counts as 1)

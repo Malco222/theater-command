@@ -236,6 +236,11 @@ namespace
 			}
 		}
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
+		// (FX_BACK=r,g,b: one flat colour behind everything, ground and sky, and no men: the same frame on black and on
+		// white gives every pixel's opacity and the smoke's own colour, see tools/battle-fx/own_colour.py)
+		double FlatBack[3];
+		const char* BackIs = std::getenv("FX_BACK");
+		const bool bFlatBack = BackIs && std::sscanf(BackIs, "%lf,%lf,%lf", &FlatBack[0], &FlatBack[1], &FlatBack[2]) == 3;
 		for (int Y = 0; Y < C.H; ++Y)
 		{
 			for (int X = 0; X < C.W; ++X)
@@ -289,13 +294,13 @@ namespace
 						Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
 					}
 				}
-				C.R[I] = Col[0];
-				C.G[I] = Col[1];
-				C.B[I] = Col[2];
+				C.R[I] = bFlatBack ? ToLinear(FlatBack[0]) : Col[0];
+				C.G[I] = bFlatBack ? ToLinear(FlatBack[1]) : Col[1];
+				C.B[I] = bFlatBack ? ToLinear(FlatBack[2]) : Col[2];
 			}
 		}
 		// the men, 1.75 m: a pale figure, as the white soldiers in the Blender stills
-		for (size_t Man = 0; Man < Men.size(); ++Man)
+		for (size_t Man = 0; Man < (bFlatBack ? static_cast<size_t>(0) : Men.size()); ++Man)
 		{
 			const Vec& M = Men[Man];
 			const double Paint_ = Man >= DarkFrom ? 0.2 : 1.0; // (the gun's own crew in field grey, to read against pale ground)
@@ -882,7 +887,10 @@ namespace
 		// ("quarter" and "beam": an engine's trail and no hits, seen from the rear quarter above and from off the beam;
 		// FX_ENGINE=x,y,z where the engine is on the aircraft (forward, right, up; metres), FX_TRAIL2 the kind it
 		// changes to at FX_TRAIL2_AT seconds, FX_TRAIL3 and FX_TRAIL3_AT a second change)
-		const bool bEngineShot = ShotName == "quarter" || ShotName == "beam";
+		// "pass": the same trail seen by an eye that hangs still beside the path, where the aircraft was at FX_PASS_AT
+		// seconds (0.6), FX_PASS_OFF metres off the path (4) and FX_PASS_UP above it (1), looking after the aircraft, so
+		// its trail runs past the lens; FX_PASS_RIDE=1: the eye rides FX_PASS_BACK metres behind the aircraft instead (25)
+		const bool bEngineShot = ShotName == "quarter" || ShotName == "beam" || ShotName == "pass";
 		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake" || bEngineShot;
 		// "fall": the aircraft falls from 0.5 s, FX_FALL its way (burn, spin, explode), shedding its debris row into a
 		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11), FX_LOOK the
@@ -1070,6 +1078,20 @@ namespace
 				const double Off = EnvNum("FX_DIST", 90.0);
 				Cam.Eye = F.At + LevelRight * Off - Level * EnvNum("FX_LOOK_BACK", 30.0) + ZUp * (0.06 * Off);
 				Cam.Forward = (F.At - Level * EnvNum("FX_LOOK_BACK", 30.0) - Cam.Eye).Unit();
+			}
+			else if (ShotName == "pass")
+			{
+				if (EnvNum("FX_PASS_RIDE", 0.0) > 0.0)
+				{
+					Cam.Eye = F.At - Level * EnvNum("FX_PASS_BACK", 25.0) + LevelRight * EnvNum("FX_PASS_OFF", 4.0) + ZUp * EnvNum("FX_PASS_UP", 1.0);
+					Cam.Forward = (F.At + Level * 60.0 - Cam.Eye).Unit();
+				}
+				else
+				{
+					const Frame FWas = Fly(EnvNum("FX_PASS_AT", 0.6));
+					Cam.Eye = FWas.At + Right_(FWas) * EnvNum("FX_PASS_OFF", 4.0) + ZUp * EnvNum("FX_PASS_UP", 1.0);
+					Cam.Forward = ((F.At - Cam.Eye).Length() > 5.0 ? (F.At - Cam.Eye).Unit() : Level_(FWas));
+				}
 			}
 			else if (ShotName == "trail")
 			{
