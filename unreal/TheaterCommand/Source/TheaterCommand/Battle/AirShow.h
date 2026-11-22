@@ -106,6 +106,9 @@ namespace AirShow
 		int Quarry = -1, With = -1;
 		double Skill = -1.0;
 		int Figures = 0, Per = 1, N = 0;
+		/** Its figures as the battle began (the view's figures0; its figures now where an older recording does not say):
+		 * SlotOf lays a bomber box as wide as these fill it, so that it does not draw in as it loses them. */
+		int Figures0 = 0;
 		/** The boxes its models fly in, in trail (the view's extra.boxes, AR2: a bomber box of 24 models, SlotOf's eight
 		 * vics of three; a fighter one of 20, five fours); 0 where an older recording does not say. SlotOf lays every
 		 * model's box from its slot alone, so this is a reading only. */

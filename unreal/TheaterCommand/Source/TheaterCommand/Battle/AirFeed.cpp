@@ -598,6 +598,7 @@ namespace AirFeed
 			G.Skill = X["skill"].Num(-1.0);
 			G.Run = X["run"].Num(0.0);
 			G.Figures = U["figures"].Int();
+			G.Figures0 = std::max(G.Figures, U["figures0"].Int(G.Figures));
 			G.Per = std::max(1, X["per"].Int(1));
 			G.N = X["n"].Int(G.Figures * G.Per);
 			G.Boxes = X["boxes"].Int(0);

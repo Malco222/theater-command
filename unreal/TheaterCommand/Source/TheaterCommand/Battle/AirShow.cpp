@@ -498,8 +498,20 @@ namespace AirShow
 			static const double Vic[8][3] = { { 0, 0, 0 }, { 1, 0.9, 0.5 }, { -1, 0.9, -0.5 }, { 0, 1.8, -1.0 }, { 2, 1.8, 1.0 }, { -2, 1.8, -1.5 }, { 1, 2.7, -0.5 }, { -1, 2.7, -2.0 } };
 			static const double Wing[3][3] = { { 0, 0, 0 }, { -0.42, 0.35, -0.12 }, { 0.42, 0.35, 0.12 } };
 			const int V = (Slot / 3) % 8, J = Slot % 3;
-			Lat = std::max(G.W * 0.42, S.Span * 3.6);
-			Back = std::max(G.D * 0.5, S.Long * 3.0);
+			// (the box laid in its w and d however many vics it fills: four vics, 12 figures, take 1.42 lats either side
+			// of the lead and 2.15 backs behind him, as the game's first recordings lay them, a little over w and d; a
+			// full box of eight, 24 figures, the release 2 recordings' one figure for two aircraft, 2.42 and 3.05. Laid
+			// at the four vics' lat and back, a box of 24 stood twice its w across, 1,790 m for 880, and could not turn
+			// home together: the air thread, 22 November, on Bremen fought again)
+			const int Fill = std::clamp(std::max(G.Figures0, G.Figures), 1, 24);
+			double Wide = 0.0, Deep = 0.0;
+			for (int K = 0; K < Fill; ++K)
+			{
+				Wide = std::max(Wide, std::fabs(Vic[K / 3][0] + Wing[K % 3][0]));
+				Deep = std::max(Deep, Vic[K / 3][1] + Wing[K % 3][1]);
+			}
+			Lat = std::max(G.W * 0.42 * std::min(1.0, 1.42 / std::max(Wide, 1e-6)), S.Span * 3.6);
+			Back = std::max(G.D * 0.5 * std::min(1.0, 2.15 / std::max(Deep, 1e-6)), S.Long * 3.0);
 			Step = std::max(25.0, S.Span * 1.6);
 			Rt = Vic[V][0] + Wing[J][0];
 			Bk = Vic[V][1] + Wing[J][1] + (Slot / 24) * 3.0;
