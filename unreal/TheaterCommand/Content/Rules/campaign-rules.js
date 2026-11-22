@@ -13548,7 +13548,7 @@
       orders: { on: true, ambush: 1 },
       everyone: { on: true, smaller: 0.5 },
       doubles: {
-        _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
+        _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; from the month after it is turned, the month its first quiet report is filed (so the lie never shows without the tell), the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
         on: true,
         most: 1,
         blown: 0.06,
@@ -17265,7 +17265,7 @@
   function booksLie(g2, of2, viewer) {
     if (!doublesOn(g2) || viewer === null || allied(g2, of2, viewer)) return false;
     const all = readers(g2, of2, viewer);
-    return all.length > 0 && all.every((a) => a.turned !== void 0) && doubleIn(g2, of2, viewer) === null;
+    return all.length > 0 && all.every((a) => a.turned !== void 0 && a.turned < g2.turn) && doubleIn(g2, of2, viewer) === null;
   }
   var booksArmy = (g2, of2, viewer) => fieldArmy(g2, of2) * (booksLie(g2, of2, viewer) ? 1 - DOUBLES().lie : 1);
   function armyKnown(g2, of2, viewer = g2.human) {
@@ -17324,10 +17324,12 @@
     let text;
     let done = false;
     const sham = a.turned !== void 0;
-    if (sham && ok && !isTheft(m)) {
-      const k = groupsOnField(g2, r.id, (n) => atWar(g2, a.nat, n)).length;
+    const shamK = sham && ok && m === "airfield" ? groupsOnField(g2, r.id, (n) => atWar(g2, a.nat, n)).length : -1;
+    if (shamK === 0) text = `Agent ${a.name} cannot get past the sentries on the field at ${r.name}.`;
+    else if (sham && ok && !isTheft(m)) {
+      const k = shamK;
       done = true;
-      text = m === "factory" ? `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.` : m === "rail" ? `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.` : m === "airfield" ? `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.` : `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
+      text = m === "factory" ? `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.` : m === "rail" ? `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.` : m === "airfield" ? `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : k === 2 ? `Both ${host.adj} air groups based there are` : `All ${k} ${host.adj} air groups based there are`} grounded this month.` : `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
     } else if (sham && ok) text = `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`;
     else if (ok && m === "factory" && wreckFactory(g2, r)) {
       done = true;
@@ -17338,7 +17340,7 @@
     } else if (ok && m === "airfield" && wreckField(g2, r.id, (n) => atWar(g2, a.nat, n))) {
       done = true;
       const k = groupsOnField(g2, r.id, (n) => atWar(g2, a.nat, n)).length;
-      text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
+      text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : k === 2 ? `Both ${host.adj} air groups based there are` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
     } else if (ok && m === "oil" && fireField(g2, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) {
       done = true;
       text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
@@ -17460,7 +17462,7 @@
     if (!pool.length) return null;
     return { reg: pool[Math.floor(draw(g2, g2.turn, "where", foe) * pool.length) % pool.length].id, kind: rail2 ? "rail" : "factory" };
   }
-  var foesFound = (g2, nat = g2.human) => nat && huntersOn(g2) ? (g2.intel.foes ?? []).filter((f) => f.found !== void 0 && g2.regions[f.reg].ctrl === nat) : [];
+  var foesFound = (g2, nat = g2.human) => nat && huntersOn(g2) ? (g2.intel.foes ?? []).filter((f) => f.found !== void 0 && g2.regions[f.reg].ctrl === nat && g2.nations[f.nat]?.alive && atWar(g2, nat, f.nat)) : [];
   function whyNotArrest(g2, nat, id) {
     if (!huntersOn(g2)) return "Not in this campaign.";
     const f = (g2.intel.foes ?? []).find((x) => x.id === id);
@@ -17479,7 +17481,7 @@
     headline(g2, "info", text, nat, r.id);
     return true;
   }
-  var doublesOf = (g2, nat = g2.human) => nat && doublesOn(g2) ? (g2.intel.doubles ?? []).filter((d) => d.by === nat) : [];
+  var doublesOf = (g2, nat = g2.human) => nat && doublesOn(g2) ? (g2.intel.doubles ?? []).filter((d) => d.by === nat && g2.nations[d.of]?.alive && atWar(g2, nat, d.of)) : [];
   function whyNotTurn(g2, nat, id) {
     if (!doublesOn(g2)) return "Not in this campaign.";
     const why = whyNotArrest(g2, nat, id);
@@ -17672,7 +17674,7 @@
     }
     plots(g2, nat);
   }
-  var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no mark on the map, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.";
+  var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.";
   function viewOf(g2, a) {
     const r = g2.regions[a.reg], out = abroad(g2, a), work2 = atWork(g2, a);
     const offers2 = missionsIn(g2).filter((m) => AT_HOME2.includes(m) !== out).map((m) => {
@@ -51840,7 +51842,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       for (const x of a.sees.slice(0, 5)) lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
     });
-    const notes = room2.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+    const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
     const found2 = (room2.found ?? []).map((f) => {
       const why = up ? whyNotArrestAgent(s, f.id) : "Orders are given in your own month.";
       const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? "Arrest the agent: it is ended before it can strike." }];
@@ -51857,7 +51859,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
-      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard. The chance each month, by country: ${who}.` : "No enemy service is working against you at home."}`,
+      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.${room2.threat.foes.length > 1 ? ` The chance each month, by country: ${who}.` : ""}` : "No enemy service is working against you at home."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }

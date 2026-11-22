@@ -1,7 +1,7 @@
 // Double agents (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is
 // never unfair), behind the switch secret.doubles ('sw:double'). Both ways: the player turns an enemy agent his
 // hunters uncovered, and the enemy turns one of his agents abroad, which then gives itself away by reports too good
-// to be true, sabotage that leaves no mark, books that show a small army, and losses among the agents beside it.
+// to be true, sabotage that leaves no new damage, books that show a small army, and losses among the agents beside it.
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGame, fieldArmy, setWar } from '../src/campaign/game';
 import {
@@ -146,6 +146,16 @@ describe('you turn theirs', () => {
     p.nations.UK.atWar = p.nations.UK.atWar.filter((x) => x !== 'GER');
     p.nations.GER.atWar = p.nations.GER.atWar.filter((x) => x !== 'UK');
     expect(knowsBooks(p, 'GER', 'UK')).toBe(false);
+    // From the moment of peace, before the month's end, the room no longer lists it or says it warns of anything.
+    expect(doublesOf(p)).toEqual([]);
+    expect(spyRoom(p)!.doubles).toEqual([]);
+    // Likewise when its service's country is gone.
+    const q = scene();
+    q.intel.doubles = [{ id: 1, name: 'Nightjar', of: 'GER', by: 'UK', since: q.turn }];
+    expect(doublesOf(q).length).toBe(1);
+    q.nations.GER.alive = false;
+    expect(doublesOf(q)).toEqual([]);
+    expect(spyRoom(q)!.doubles).toEqual([]);
     const quiet = p.headlines.length;
     intelTick(p, 'UK');
     expect(p.intel.doubles).toBeUndefined();
@@ -209,6 +219,65 @@ describe('they turn yours, with a tell', () => {
     plant(g, berlin, 'books');
     expect(armyKnown(g, 'GER', 'UK')).toEqual({ divs: truth, exact: true });
     expect(booksOf(g, 'GER', 'UK')!.divisions).toBe(truth);
+  });
+
+  it("the lie starts the month the tell does: in the month it is turned, its books still show the truth", () => {
+    INTEL.missions.books.caught = 1;
+    D.share = 1;
+    let found = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = scene(seed);
+      const a = plant(g, g.nations.GER.capital, 'books');
+      intelTick(g, 'UK');
+      if (a.turned === undefined) continue;
+      found++;
+      expect(a.turned).toBe(g.turn);
+      const truth = fieldArmy(g, 'GER');
+      // No tell yet, and no lie.
+      expect(g.intel.notes.some((n) => n.what === 'quiet')).toBe(false);
+      expect(armyKnown(g, 'GER', 'UK')).toEqual({ divs: truth, exact: true });
+      expect(booksOf(g, 'GER', 'UK')!.divisions).toBe(truth);
+      // The next month the tell is in the file, and the books lie.
+      g.turn++;
+      intelTick(g, 'UK');
+      expect(g.intel.notes.some((n) => n.what === 'quiet' && n.agent === a.name && n.turn === g.turn)).toBe(true);
+      const now = fieldArmy(g, 'GER');
+      expect(armyKnown(g, 'GER', 'UK').divs).toBeLessThan(now);
+      expect(booksOf(g, 'GER', 'UK')!.divisions).toBeCloseTo(now * (1 - D.lie), 9);
+    }
+    expect(found).toBeGreaterThan(3);
+  });
+
+  it("its wreck of an airfield says 'both' for two groups, and with no group on the field it claims nothing", () => {
+    INTEL.missions.airfield.success = 1;
+    const at = (g: Game, n: number): number => {
+      const bremen = g.byName.Bremen.id;
+      for (const f of g.airFleets) if (f.base === bremen) f.base = g.byName.Hanover.id;
+      g.airFleets.filter((f) => f.nat === 'GER' && f.ship === undefined && f.ftr + f.bmr > 0).slice(0, n).forEach((f) => { f.base = bremen; });
+      return bremen;
+    };
+    let both = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = scene(seed);
+      const bremen = at(g, 2);
+      const a = turned(plant(g, bremen, 'airfield'), 'GER', g);
+      intelTick(g, 'UK');
+      const said = g.headlines.find((h) => h.text.startsWith(`Agent ${a.name}'s saboteurs wreck the field at Bremen.`));
+      if (!said) continue;
+      both++;
+      expect(said.text).toBe(`Agent ${a.name}'s saboteurs wreck the field at Bremen. Both German air groups based there are grounded this month.`);
+    }
+    expect(both).toBeGreaterThan(5);
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = scene(seed);
+      const bremen = at(g, 0);
+      const a = turned(plant(g, bremen, 'airfield'), 'GER', g);
+      intelTick(g, 'UK');
+      expect(g.headlines.some((h) => /wreck the field/.test(h.text))).toBe(false);
+      // (The month's check stands it down to watching before it tries: an empty field is never claimed wrecked.)
+      expect(a.mission).toBe('watch');
+      expect(g.intel.notes.some((n) => n.agent === a.name && n.what === 'sabotage')).toBe(false);
+    }
   });
 
   it('its sabotage is reported in the usual words and wrecks nothing: the map shows no damage', () => {
@@ -284,6 +353,9 @@ describe('they turn yours, with a tell', () => {
     expect(spyRoom(g)!.turnedHelp).toBe(TURNED_HELP);
     expect(TURNED_HELP).toMatch(/can be turned/);
     expect(TURNED_HELP).toMatch(/too good to be true/);
+    // A pattern to weigh, not a certain sign: a loyal agent's wreck can be rebuilt the same month.
+    expect(TURNED_HELP).toMatch(/sabotage that leaves no new damage on the map, month after month/);
+    expect(TURNED_HELP).not.toMatch(/no mark/);
   });
 
   it('brought home, a turned agent is found out with chance "home" and arrested; meanwhile it guards nothing', () => {

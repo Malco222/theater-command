@@ -3930,7 +3930,7 @@ function spiesPage(s: Game, region: number): Page | null {
     for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
   });
-  const notes = room.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+  const notes = room.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
   // (Ruling 151(c), switched on by Brian for release 2, 22 November.) The enemy agents his hunters uncovered, each
   // with ARREST; and (ruling 135) what his agents have read of the enemy's bombing orders.
   const found: PageRow[] = (room.found ?? []).map((f) => {
@@ -3951,7 +3951,7 @@ function spiesPage(s: Game, region: number): Page | null {
   return {
     id: 'spies', title: 'THE SECRET SERVICE',
     headline: `${room.agents.length} of ${room.most} agents in the service`,
-    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard. The chance each month, by country: ${who}.` : 'No enemy service is working against you at home.'}`,
+    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.${room.threat.foes.length > 1 ? ` The chance each month, by country: ${who}.` : ''}` : 'No enemy service is working against you at home.'}`,
     top: [
       { label: `RECRUIT AN AGENT  \u00B7  ${Math.round(room.cost).toLocaleString('en-US')}`, act: 'spy:recruit', ok: up && room.whyNotRecruit === null, tip: room.whyNotRecruit ?? 'A new agent joins the service, at home, and can be sent abroad.' },
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },

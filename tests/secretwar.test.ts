@@ -125,6 +125,30 @@ describe('spies who hunt spies (ruling 151(c))', () => {
     intelTick(g, 'UK');
     expect(g.headlines.some((h) => h.text.startsWith(`Saboteurs wreck a factory at ${at.name}.`))).toBe(true);
   });
+
+  it('an uncovered agent whose country has made peace or fallen is no longer listed: it will not strike', () => {
+    for (const end of ['peace', 'fall'] as const) {
+      const g = free();
+      setWar(g, 'UK', 'GER');
+      setWar(g, 'UK', 'HUN');
+      setSecretWar(g, 'hunt', true);
+      const London = g.byName.London.id;
+      g.intel.foes = [
+        { id: 1, nat: 'HUN', reg: London, kind: 'factory', strike: g.turn + 2, found: g.turn },
+        { id: 2, nat: 'GER', reg: London, kind: 'rail', strike: g.turn + 2, found: g.turn },
+      ];
+      expect(foesFound(g).map((f) => f.id)).toEqual([1, 2]);
+      if (end === 'peace') {
+        g.nations.UK.atWar = g.nations.UK.atWar.filter((x) => x !== 'HUN');
+        g.nations.HUN.atWar = g.nations.HUN.atWar.filter((x) => x !== 'UK');
+      } else g.nations.HUN.alive = false;
+      expect(foesFound(g).map((f) => f.id)).toEqual([2]);
+      expect(spyRoom(g)!.found!.map((f) => f.id)).toEqual([2]);
+      // Only the list: the agent itself is kept as before, and listed again if the war comes back.
+      expect(g.intel.foes.map((f) => f.id)).toEqual([1, 2]);
+      if (end === 'peace') { setWar(g, 'UK', 'HUN'); expect(foesFound(g).map((f) => f.id)).toEqual([1, 2]); }
+    }
+  });
 });
 
 describe('stealing the orders (ruling 135)', () => {

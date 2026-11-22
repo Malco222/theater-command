@@ -686,12 +686,13 @@ export function doubleIn(g: Game, of: string, viewer: string | null = g.human): 
 /**
  * True where every source the viewer has on this nation's books is an agent the enemy has turned: no loyal reader, no
  * double agent. Then the books show the army 'lie' smaller than it is: too good to be true (Brian, 22 November,
- * release 2: a telltale sign, so a false report is never unfair). A loyal reader's true figures win.
+ * release 2: a telltale sign, so a false report is never unfair). A loyal reader's true figures win. The lie starts
+ * the month after the agent is turned, the month its first quiet report is filed: never a false figure without the tell.
  */
 function booksLie(g: Game, of: string, viewer: string | null): boolean {
   if (!doublesOn(g) || viewer === null || allied(g, of, viewer)) return false;
   const all = readers(g, of, viewer);
-  return all.length > 0 && all.every((a) => a.turned !== undefined) && doubleIn(g, of, viewer) === null;
+  return all.length > 0 && all.every((a) => a.turned !== undefined && a.turned < g.turn) && doubleIn(g, of, viewer) === null;
 }
 
 /** The army as the books show it: the truth, or with a turned reader alone 'lie' smaller. */
@@ -772,12 +773,15 @@ function attempt(g: Game, a: Agent): void {
   // (Double agents, Brian, 22 November, release 2.) A turned agent's attempt is reported in the usual words and
   // wrecks nothing, so the map shows no damage: that is the tell. Its masters keep their plans to themselves.
   const sham = a.turned !== undefined;
-  if (sham && ok && !isTheft(m)) {
-    const k = groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length;
+  const shamK = sham && ok && m === 'airfield' ? groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length : -1;
+  // A sham wreck of an empty field would claim what no loyal agent could: it reads as the usual failure instead.
+  if (shamK === 0) text = `Agent ${a.name} cannot get past the sentries on the field at ${r.name}.`;
+  else if (sham && ok && !isTheft(m)) {
+    const k = shamK;
     done = true;
     text = m === 'factory' ? `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`
       : m === 'rail' ? `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`
-        : m === 'airfield' ? `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`
+        : m === 'airfield' ? `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : k === 2 ? `Both ${host.adj} air groups based there are` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`
           : `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
   }
   else if (sham && ok) text = `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`;
@@ -786,7 +790,7 @@ function attempt(g: Game, a: Agent): void {
   else if (ok && m === 'airfield' && wreckField(g, r.id, (n) => atWar(g, a.nat, n))) {
     done = true;
     const k = groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length;
-    text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
+    text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : k === 2 ? `Both ${host.adj} air groups based there are` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
   }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
   else if (ok && isTheft(m) && grantPlans(g, a.nat, THEFT[m]!, r.ctrl, 'stolen')) { done = true; text = `Agent ${a.name} copies the ${host.adj} ${PLAN_WORDS[THEFT[m]!].one} plans at ${r.name} and gets them out. ${canNowWords([THEFT[m]!], host.adj)}`; }
@@ -948,9 +952,9 @@ function plotAim(g: Game, nat: string, foe: string): { reg: number; kind: FoeAge
   return { reg: pool[Math.floor(draw(g, g.turn, 'where', foe) * pool.length) % pool.length].id, kind: rail ? 'rail' : 'factory' };
 }
 
-/** The other side's agents his hunters have uncovered and that are still at large: each can be arrested. */
+/** The other side's agents his hunters have uncovered and that are still at large: each can be arrested. One whose country has made peace or fallen will not strike, so it is not listed. */
 export const foesFound = (g: Game, nat: string | null = g.human): FoeAgent[] =>
-  nat && huntersOn(g) ? (g.intel.foes ?? []).filter((f) => f.found !== undefined && g.regions[f.reg].ctrl === nat) : [];
+  nat && huntersOn(g) ? (g.intel.foes ?? []).filter((f) => f.found !== undefined && g.regions[f.reg].ctrl === nat && g.nations[f.nat]?.alive && atWar(g, nat, f.nat)) : [];
 
 /** Why an uncovered enemy agent cannot be arrested, or null. */
 export function whyNotArrest(g: Game, nat: string, id: number): string | null {
@@ -977,9 +981,9 @@ export function arrest(g: Game, nat: string, id: number): boolean {
 // ---- Double agents (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign) -------------
 // It overrides ruling 151(c)'s 'no agent is turned'. Both ways, and only ever against or for the player.
 
-/** The player's double agents, each in an enemy service. */
+/** The player's double agents, each in an enemy service still standing and at war with him (one at peace is of no use, and goes at the month's end). */
 export const doublesOf = (g: Game, nat: string | null = g.human): DoubleAgent[] =>
-  nat && doublesOn(g) ? (g.intel.doubles ?? []).filter((d) => d.by === nat) : [];
+  nat && doublesOn(g) ? (g.intel.doubles ?? []).filter((d) => d.by === nat && g.nations[d.of]?.alive && atWar(g, nat, d.of)) : [];
 
 /** Why an uncovered enemy agent cannot be turned, or null. */
 export function whyNotTurn(g: Game, nat: string, id: number): string | null {
@@ -1260,7 +1264,7 @@ export interface SpyRoom {
 }
 
 /** The room's warning, in plain words: an agent can be turned, and a turned agent's reports are too good to be true. */
-export const TURNED_HELP = 'An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent\'s reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no mark on the map, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.';
+export const TURNED_HELP = 'An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent\'s reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.';
 
 function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);

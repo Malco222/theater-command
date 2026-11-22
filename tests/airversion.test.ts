@@ -17,7 +17,8 @@ const grp = (g: Game, nat: string, name: string): AirFleet => g.airFleets.find((
 const id = (g: Game, n: string): number => g.byName[n].id;
 const keep = structuredClone(AIRV);
 const keepIntel = structuredClone(INTEL.enemy);
-afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTEL.enemy, structuredClone(keepIntel)); });
+const keepMissions = structuredClone(INTEL.missions);
+afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTEL.enemy, structuredClone(keepIntel)); Object.assign(INTEL.missions, structuredClone(keepMissions)); });
 
 describe('the switches', () => {
   it('a new campaign takes the field on and the guns off, keeps them with the save, and touches nothing outside the grand campaign', () => {
@@ -168,6 +169,28 @@ describe('wrecking an airfield (ruling 151(b))', () => {
     g.turn++;
     expect(wrecked(g, onField[0])).toBe(false);
     expect(fightersOver(g, id(g, 'Bremen'), 'UK')).toBeGreaterThanOrEqual(over);
+  });
+
+  it("names the groups grounded in plain words: 'the group', 'both groups', 'all three'", () => {
+    INTEL.missions.airfield.success = 1;
+    const said: Record<number, string> = {};
+    for (const n of [1, 2, 3]) {
+      for (let seed = 1; seed < 40 && !said[n]; seed++) {
+        const s = scene();
+        s.g.seed = seed;
+        for (const f of s.g.airFleets) if (f.base === s.bremen) f.base = id(s.g, 'Hanover');
+        s.g.airFleets.filter((f) => f.nat === 'GER' && f.ship === undefined && f.ftr + f.bmr > 0).slice(0, n).forEach((f) => { f.base = s.bremen; });
+        expect(setMission(s.g, 'UK', s.a.id, 'airfield')).toBe(true);
+        intelTick(s.g, 'UK');
+        const h = s.g.headlines.find((x) => x.text.startsWith(`Agent ${s.a.name}'s saboteurs wreck the field at Bremen.`));
+        if (h) said[n] = h.text.slice(h.text.indexOf('Bremen.') + 8);
+      }
+    }
+    expect(said).toEqual({
+      1: 'The German air group based there is grounded this month.',
+      2: 'Both German air groups based there are grounded this month.',
+      3: 'All 3 German air groups based there are grounded this month.',
+    });
   });
 
   it("the other side's services can wreck the player's field; off, the plots go as before", () => {
