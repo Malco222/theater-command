@@ -25,8 +25,10 @@
  *    by her speed, her heel in a turn and on the swell, her turrets trained on the ship she fires at; salvos on her
  *    class's cadence, their columns falling round the target after the shells' flight, a hit for each share of hull the
  *    battle took off the target. Each column keeps its own water: where the battle lays two pieces on one spot, their
- *    columns take stations abreast, and a leader keeps clear of other ships by the rule of the road. A ship sunk or out
- *    of the fight sheers out of her line.
+ *    columns take stations abreast, and every ship afloat, leader or follower, keeps clear of every other: the lighter
+ *    of the heavier, astern in a line of those ahead, between ships alike by the rule of the road; she alters course or
+ *    eases her way as she must, looking 45 s ahead, and comes back to her place once clear. A ship sunk or out of the
+ *    fight sheers out of her line.
  *
  * The ships are steamed in fixed steps (Fixed, a twentieth of a second) whatever the frame rate, so the same battle is
  * the same show on any machine and in the cloud test.
@@ -340,7 +342,8 @@ namespace SeaShow
 		double MostSlip = 0.0;      // degrees between a ship's bow and her way through the water, in the line
 		double MostTurn = 0.0;      // how fast a ship of the line turned, against her class's limit at her speed (a share: 1 at the limit)
 		double MostRudder = 0.0;    // how fast her rate of turn changed, against the rudder's limit at her speed (a share)
-		double MostLead = 0.0;      // metres between a piece's leader and where he is steering for (the battle's place, the zig-zag and his station)
+		double MostLead = 0.0;      // metres between a piece's leader and where he is steering for (the battle's place, the zig-zag and his station), two minutes after he last kept clear of another ship
+		double MostLeadClearing = 0.0; // the same at any time, keeping clear or not
 		double MostKeep = 0.0;      // metres a leader's station lay off the battle's place to keep clear of other ships
 		double MostJump = 0.0;      // metres a ship moved in a frame beyond her speed (a pop)
 		double MostGap = 0.0;       // metres a follower lay off her place in the line (once closed up)
@@ -363,11 +366,14 @@ namespace SeaShow
 		double MostStray = 0.0;     // the farthest any ship was from her place while she dodged or came back to it (metres)
 		int DodgesOpen = 0;         // dodges whose ship was not yet judged as the battle ended (still under attack)
 		int DodgesClosing = 0;      // judgings put off 30 s for a ship on her track still closing her place at her best speed
+		int DodgesClearing = 0;     // judgings put off 30 s for a ship keeping clear of another on her way back
 		int FellAstern = 0;         // ships come back from a comb astern of the next in their line, who took her place astern
 		int HandedOver = 0;         // leaders fallen back level with their next astern dodging, who handed her the lead
 		int DodgesUnturned = 0;     // dodges ended before her helm bit (another ship too near): none, so not judged
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
+		double KeptClear = 0.0;     // ship-seconds any ship held an alteration of course or way to keep clear of another
+		int ClearShips = 0;         // ships that altered so, once or more
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
 		double OwedAll = 0.0;       // hits the battle took off hulls by gunfire, in all
 		std::map<std::string, int> SinksBy; // by how
@@ -486,6 +492,11 @@ namespace SeaShow
 			std::string Dive;
 			double Keel = -1.0, KeelTo = 0.0, KeelFrom = 0.0, KeelSince = 0.0, KeelFor = 0.0;
 			bool bScope = false;
+			// Keeping clear (Brian, 22 November 05:31Z: "the ships are turning into each other and going over each other"):
+			// the alteration she holds off the course she wishes (radians, plus to starboard) and the share of her wished way
+			// she keeps, when she chose it, and when she last held one.
+			bool bClearing = false, bEverCleared = false;
+			double ClearOff = 0.0, ClearKeep = 1.0, ClearAt = -1e9, ClearLast = -1e9;
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -661,6 +672,17 @@ namespace SeaShow
 		Hull* FindHull(int Key);
 		/** A hull afloat (not Except's) that a point of the sea lies within Margin metres of. */
 		bool OnHull(const Vec& At, double Margin, int Except) const;
+		/** Keeping clear: the course and way a ship takes for those she wishes (Hdg, Spd, changed in place) to pass clear of
+		 * every other ship afloat, looking 45 s ahead along her helm and way (Acc: her way gained or lost a second). */
+		void ClearWay(Hull& H, const ClassSize& Sz, double Acc, double Dt, double& Hdg, double& Spd);
+		/** Whether H keeps clear of O (the other stands on, and acts only at the last). */
+		bool GivesWay(const Hull& H, const Hull& O) const;
+		struct NearShip
+		{
+			const Hull* O = nullptr;
+			double Half = 0.0, R = 0.0, Horizon = 0.0, Margin = 0.0;
+		};
+		std::vector<NearShip> Nears; // (ClearWay's own, kept to save making it each step)
 		/** How fast a ship of the class may turn at a speed (radians a second): her class's rate at her cruising speed,
 		 * in proportion to her speed about it (her turning circle the same at any speed). */
 		double MostRateAt(const ClassSize& Sz, double Spd) const;

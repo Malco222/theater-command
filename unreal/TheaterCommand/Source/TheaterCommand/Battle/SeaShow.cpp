@@ -36,6 +36,20 @@ namespace SeaShow
 		/** To the right of a heading, level. */
 		Vec RightOf(double Hdg) { return Vec(std::cos(Hdg), -std::sin(Hdg), 0.0); }
 		double Bearing(const Vec& From, const Vec& To) { return std::atan2(To.X - From.X, To.Y - From.Y); }
+		/** The least distance between two segments, level (0 where they cross). */
+		double SegGap(const Vec& A0, const Vec& A1, const Vec& B0, const Vec& B1)
+		{
+			auto Cross = [](const Vec& O, const Vec& A, const Vec& B) { return (A.X - O.X) * (B.Y - O.Y) - (A.Y - O.Y) * (B.X - O.X); };
+			const double D1 = Cross(B0, B1, A0), D2 = Cross(B0, B1, A1), D3 = Cross(A0, A1, B0), D4 = Cross(A0, A1, B1);
+			if (((D1 > 0.0 && D2 < 0.0) || (D1 < 0.0 && D2 > 0.0)) && ((D3 > 0.0 && D4 < 0.0) || (D3 < 0.0 && D4 > 0.0))) return 0.0;
+			auto ToSeg = [](const Vec& P, const Vec& S0, const Vec& S1)
+			{
+				const double DX = S1.X - S0.X, DY = S1.Y - S0.Y, L2 = DX * DX + DY * DY;
+				const double U = L2 > 1e-9 ? Clamp(((P.X - S0.X) * DX + (P.Y - S0.Y) * DY) / L2, 0.0, 1.0) : 0.0;
+				return std::hypot(P.X - S0.X - DX * U, P.Y - S0.Y - DY * U);
+			};
+			return std::min(std::min(ToSeg(A0, B0, B1), ToSeg(A1, B0, B1)), std::min(ToSeg(B0, A0, A1), ToSeg(B1, A0, A1)));
+		}
 		/** A number from 0 to under 1 fixed by a whole number (a hash): the look's own, never the battle's dice. */
 		double Mix(uint64_t N)
 		{
@@ -1262,17 +1276,15 @@ namespace SeaShow
 		// off over seconds; his speed a few knots over or under the battle's to close what he is astern or ahead.
 		auto Helm = [&](Hull& L, const Vec& Goal, const Vec& GoalV, double Face, double Speed)
 		{
-			// (held to the way she will have at the end of the step where one step's loss of way is near a hundredth of
-			// her rate of turn: a boat dived at a crawl, an escort stopping among survivors, ruling 241)
-			const double Slowing = Acc * Dt;
-			const double MostRate = MostRateAt(Sz, C.Class == "ss" || L.Spd < Slowing * 120.0 ? std::max(0.0, L.Spd - Slowing) : L.Spd);
 			const Vec ToWant = Goal - L.P;
 			const double Reach = std::max(Speed * 20.0, 2.5 * Sz.Long);
 			const double Hope = Flat(ToWant) > 1500.0 ? Bearing(L.P, Goal + GoalV * 6.0)
 				: Wrap(Face + Clamp(std::atan2(ToWant.Dot(RightOf(Face)), Reach), -40.0 * Deg, 40.0 * Deg));
-			// Keeping clear: a ship that would pass nearer than her clearance within the next 40 s he turns away from,
-			// astern of her where she crosses, to starboard where she comes on head on (the rule of the road), away from
-			// her where she lies alongside; the harder the nearer.
+			// Keeping clear of his own line: a ship of it that would pass nearer than most of its spacing within the next
+			// 40 s he turns away from, astern of her where she crosses, to starboard where she comes on head on, away from
+			// her where she lies alongside; the harder the nearer. (Every other ship, his and every ship's alike: ClearWay,
+			// below. Judged here by centres a ship's length apart, alongside another column he was held off far wider than
+			// she held off him, and fell 100 m off his ghost coming back from a dodge.)
 			double Way = 0.0, Urgent = 0.0;
 			{
 				// (judged on the way he is going and on the way he means to go, whichever passes nearer: a leader turning
@@ -1282,7 +1294,7 @@ namespace SeaShow
 				for (const auto& Pair : Hulls)
 				{
 					const Hull& O = Pair.second;
-					if (O.Key == L.Key || O.Doing == Fate::Gone) continue;
+					if (O.Key == L.Key || O.Doing == Fate::Gone || O.Piece != L.Piece) continue;
 					const Vec Rel(O.P.X - L.P.X, O.P.Y - L.P.Y, 0.0);
 					if (std::fabs(Rel.X) > 1200.0 || std::fabs(Rel.Y) > 1200.0) continue;
 					double Tc = 0.0;
@@ -1301,9 +1313,9 @@ namespace SeaShow
 					}
 					// (his own line, coming back past it, by most of its spacing: his followers steam where he steams, so
 					// the room he leaves his own ships is the room they will have from each other)
-					const double Clear = O.Piece == L.Piece ? std::max(Sz.Long + 30.0, 0.8 * C.Spacing) : 0.5 * (Sz.Long + SizeOf(O.Class).Long) + 30.0;
+					const double Clear = std::max(Sz.Long + 30.0, 0.8 * C.Spacing);
 					const double D = Flat(Closest);
-					if (D >= Clear || (O.Piece == L.Piece && Rel.Dot(Ahead(L.Hdg)) < 0.0)) continue;
+					if (D >= Clear || Rel.Dot(Ahead(L.Hdg)) < 0.0) continue;
 					const double Need = (1.0 - D / Clear) * (1.0 - Tc / 40.0);
 					if (Need <= Urgent) continue;
 					Urgent = Need;
@@ -1317,16 +1329,21 @@ namespace SeaShow
 					}
 				}
 			}
-			const double Steer = Wrap(Hope + Way * Urgent * 70.0 * Deg);
+			double Steer = Wrap(Hope + Way * Urgent * 70.0 * Deg);
 			const double Behind = ToWant.Dot(Ahead(L.Hdg));
+			// (a boat dived makes her best speed on her batteries, ruling 241)
+			const double Top = C.Class == "ss" && L.Keel > SurfacedKeel(C.Class) + 1.0 ? std::min(Sz.Speed * 1.45, F.DivedTop) : Sz.Speed * 1.45;
+			double WantSpd = Clamp(Speed + Clamp(Behind * 0.06, -0.4 * Speed, 4.0), 0.0, Top);
+			// (the ship herself keeps clear of every other: not his ghost, which only marks the column's course)
+			if (&L != &C.Ghost) ClearWay(L, Sz, Acc, Dt, Steer, WantSpd);
+			// (her rate of turn held to the way she will have at the end of the step, where she is losing way: a boat dived
+			// at a crawl, an escort stopping among survivors (ruling 241), a ship easing her way to keep clear)
+			const double MostRate = MostRateAt(Sz, std::min(L.Spd, L.Spd + Clamp(WantSpd - L.Spd, -Acc * Dt, Acc * Dt)));
 			const double WantRate = Clamp(Wrap(Steer - L.Hdg) * 0.6, -MostRate, MostRate);
 			const double Bite = MostRudder * std::max(1.0, std::pow(L.Spd / std::max(1.0, Sz.Speed), 2.0));
 			L.Rate += Clamp(WantRate - L.Rate, -Bite * Dt, Bite * Dt);
 			L.Rate = Clamp(L.Rate, -MostRate, MostRate);
 			L.Hdg = Wrap(L.Hdg + L.Rate * Dt);
-			// (a boat dived makes her best speed on her batteries, ruling 241)
-			const double Top = C.Class == "ss" && L.Keel > SurfacedKeel(C.Class) + 1.0 ? std::min(Sz.Speed * 1.45, F.DivedTop) : Sz.Speed * 1.45;
-			const double WantSpd = Clamp(Speed + Clamp(Behind * 0.06, -0.4 * Speed, 4.0), 0.0, Top);
 			L.Spd += Clamp(WantSpd - L.Spd, -Acc * Dt, Acc * Dt);
 			L.P += Ahead(L.Hdg) * (L.Spd * Dt);
 		};
@@ -1354,11 +1371,15 @@ namespace SeaShow
 			double Wish = 0.0;
 			if (DodgeRate(*Lead, Most, Wish))
 			{
+				// (hard over or combing, she still keeps clear of the ships about her)
+				double ClearHdg = Wrap(Lead->Hdg + 2.0 * Wish), ClearSpd = C.Ghost.Spd;
+				ClearWay(*Lead, Sz, Acc, Dt, ClearHdg, ClearSpd);
+				if (Lead->bClearing) Wish = Clamp(0.5 * Wrap(ClearHdg - Lead->Hdg), -Most, Most);
 				const double Bite = MostRudder * std::max(1.0, std::pow(Lead->Spd / std::max(1.0, Sz.Speed), 2.0));
 				Lead->Rate += Clamp(Wish - Lead->Rate, -Bite * Dt, Bite * Dt);
 				Lead->Rate = Clamp(Lead->Rate, -Most, Most);
 				Lead->Hdg = Wrap(Lead->Hdg + Lead->Rate * Dt);
-				Lead->Spd += Clamp(C.Ghost.Spd - Lead->Spd, -Acc * Dt, Acc * Dt);
+				Lead->Spd += Clamp(ClearSpd - Lead->Spd, -Acc * Dt, Acc * Dt);
 				Lead->P += Ahead(Lead->Hdg) * (Lead->Spd * Dt);
 			}
 			else
@@ -1369,6 +1390,12 @@ namespace SeaShow
 			Check.MostStray = std::max(Check.MostStray, Off);
 			Lead->OffTrack = Vec(C.Ghost.P.X - Lead->P.X, C.Ghost.P.Y - Lead->P.Y, 0.0).Dot(RightOf(C.Ghost.Hdg));
 			const bool bOn = ShownT >= Lead->DodgeUntil && Off < 20.0 && std::fabs(Wrap(Lead->Hdg - C.Ghost.Hdg)) < 4.0 * Deg;
+			if (Lead->DodgeJudge >= 0.0 && !bOn && ShownT >= Lead->DodgeJudge && ShownT - Lead->ClearLast < 30.0 && ShownT < Lead->DodgeUntil + 480.0)
+			{
+				// (keeping clear of another ship on her way back: judged once she has room, within eight minutes of the attack)
+				Lead->DodgeJudge = ShownT + 30.0;
+				++Check.DodgesClearing;
+			}
 			if (Lead->DodgeJudge >= 0.0 && (bOn || ShownT >= Lead->DodgeJudge))
 			{
 				// (judged only where her helm bit: a dodge ended before it did, another ship too near, is none)
@@ -1386,7 +1413,10 @@ namespace SeaShow
 			Lead->OffTrack = 0.0;
 		}
 		Lead->Back = 0.0;
-		if (Flat(Course.P - Want) > Check.MostLead)
+		// (held off his station keeping clear of other ships, as in a crowd of destroyers running in together: his own
+		// count, and the station's once he has had two minutes clear to come back to it)
+		Check.MostLeadClearing = std::max(Check.MostLeadClearing, Flat(Course.P - Want));
+		if (ShownT > Lead->ClearLast + 120.0 && Flat(Course.P - Want) > Check.MostLead)
 		{
 			Check.MostLead = Flat(Course.P - Want);
 			Check.LeadWorst = Worst(Course, ShownT);
@@ -1455,10 +1485,6 @@ namespace SeaShow
 			double Wish = Clamp(H->Spd * OnK + 0.5 * Wrap(WantHdg - H->Hdg), -Most, Most);
 			H->CourseHdg = OnH;
 			DodgeRate(*H, Most, Wish); // (B4: hard over against an air attack, or round to comb a drop, while she dodges)
-			const double HerBite = MostRudder * std::max(1.0, std::pow(H->Spd / std::max(1.0, Sz.Speed), 2.0)); // (her rudder bites harder at more way)
-			H->Rate += Clamp(Wish - H->Rate, -HerBite * Dt, HerBite * Dt);
-			H->Rate = Clamp(H->Rate, -Most, Most);
-			H->Hdg = Wrap(H->Hdg + H->Rate * Dt);
 			// Her speed: his, and a little more or less to hold her place astern of him.
 			const double Behind0 = STarget - H->SOn;
 			double WishSpd = Clamp(Course.Spd + Clamp(0.1 * Behind0, -0.4 * Course.Spd, 3.0), 0.0, Sz.Speed * 1.45);
@@ -1490,6 +1516,20 @@ namespace SeaShow
 				}
 			}
 			if (bGave) Check.GaveWay += Dt;
+			// Keeping clear of every other ship (her next ahead and astern by the line's own rule, above): the heading her
+			// helm is steering for, altered as she must, and her way eased.
+			double Most2 = Most;
+			{
+				double ClearHdg = Wrap(H->Hdg + 2.0 * Wish);
+				ClearWay(*H, Sz, Acc, Dt, ClearHdg, WishSpd);
+				// (her rate held to the way she will have at the end of the step, where she is losing way)
+				Most2 = MostRateAt(Sz, std::min(H->Spd, H->Spd + Clamp(WishSpd - H->Spd, -Acc * Dt, Acc * Dt)));
+				Wish = H->bClearing ? Clamp(0.5 * Wrap(ClearHdg - H->Hdg), -Most2, Most2) : Clamp(Wish, -Most2, Most2);
+			}
+			const double HerBite = MostRudder * std::max(1.0, std::pow(H->Spd / std::max(1.0, Sz.Speed), 2.0)); // (her rudder bites harder at more way)
+			H->Rate += Clamp(Wish - H->Rate, -HerBite * Dt, HerBite * Dt);
+			H->Rate = Clamp(H->Rate, -Most2, Most2);
+			H->Hdg = Wrap(H->Hdg + H->Rate * Dt);
 			H->Spd += Clamp(WishSpd - H->Spd, -Acc * Dt, Acc * Dt);
 			H->P += Ahead(H->Hdg) * (H->Spd * Dt);
 			AheadS = H->SOn;
@@ -1509,6 +1549,12 @@ namespace SeaShow
 					H->DodgeJudge = ShownT + 30.0;
 					++Check.DodgesClosing;
 				}
+				if (ShownT >= H->DodgeJudge && Off > 60.0 && ShownT - H->ClearLast < 30.0 && ShownT < H->DodgeUntil + 480.0)
+				{
+					// (keeping clear of another ship on her way back: judged once she has room, within eight minutes of the attack)
+					H->DodgeJudge = ShownT + 30.0;
+					++Check.DodgesClearing;
+				}
 				if (ShownT >= H->DodgeJudge)
 				{
 					if (!H->bDodgeTurned) ++Check.DodgesUnturned;
@@ -1519,7 +1565,7 @@ namespace SeaShow
 					H->PutOffGap = -1.0;
 				}
 			}
-			else if (std::fabs(H->Back - Want0) < 1.0 && std::fabs(Across) > Check.MostGap)
+			else if (std::fabs(H->Back - Want0) < 1.0 && ShownT > H->ClearLast + 120.0 && std::fabs(Across) > Check.MostGap)
 			{
 				Check.MostGap = std::fabs(Across);
 				Check.GapWorst = Worst(*H, ShownT);
@@ -1839,6 +1885,186 @@ namespace SeaShow
 		return true;
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// Keeping clear (Brian, 22 November 05:31Z: "the ships are turning into each other and going over each other"; 05:32Z:
+	// "make it realistic"). The battle's pieces are points, and it may lay two of one side within half a ship's length of
+	// each other (Samar: 2,429 piece-views, as near as 5 m); drawn, every ship keeps her own water. Each looks 45 s ahead
+	// along the course and way she wishes, her helm and way followed through as they would answer; where she would come
+	// within her clearance of a ship she gives way to, she takes the least alteration that keeps her clear (a turn, to
+	// starboard before port, her way eased, or both), and comes back to her place once clear. A ship that stands on holds
+	// her course and way, and acts herself only at the last (12 s ahead). A collision is the battle's to decide
+	// (sea:collision); the show never makes one.
+
+	bool Show::GivesWay(const Hull& H, const Hull& O) const
+	{
+		// (one who cannot keep clear is kept clear of: going down, or hurt and out of the line, her helm slow)
+		if (O.Doing == Fate::Sinking) return true;
+		if (H.Doing == Fate::Sinking) return false;
+		if ((O.Doing == Fate::Limping) != (H.Doing == Fate::Limping)) return O.Doing == Fate::Limping;
+		// (in one line, the ship astern keeps clear of those ahead of her: they steam the line's course)
+		if (O.Piece == H.Piece && H.Doing == Fate::Line && O.Doing == Fate::Line) return H.Back > O.Back || (H.Back == O.Back && H.Key > O.Key);
+		// (the lighter ship keeps clear of the heavier: a destroyer works round a battle line, never through it)
+		const double LH = SizeOf(H.Class).Long, LO = SizeOf(O.Class).Long;
+		if (std::fabs(LH - LO) > 20.0) return LH < LO;
+		// Between ships alike, the rule of the road: the ship overtaking keeps clear; meeting end on, both alter to
+		// starboard; crossing, the ship that has the other on her own starboard side.
+		const double Hers = Wrap(Bearing(O.P, H.P) - O.Hdg), His = Wrap(Bearing(H.P, O.P) - H.Hdg);
+		if (std::fabs(Hers) > 112.5 * Deg && H.Spd > O.Spd) return true;
+		if (std::fabs(His) > 112.5 * Deg && O.Spd > H.Spd) return false;
+		if (std::cos(O.Hdg - H.Hdg) < -0.94 && std::fabs(His) < 20.0 * Deg) return true;
+		return His > 0.0 || (His == 0.0 && H.Key > O.Key);
+	}
+
+	void Show::ClearWay(Hull& H, const ClassSize& Sz, double Acc, double Dt, double& Hdg, double& Spd)
+	{
+		// (a boat dived passes under, and is passed over: her hunters run over her to drop, ruling 241)
+		auto Under = [this](const Hull& S) { return S.Class == "ss" && S.Keel > SurfacedKeel(S.Class) + 1.0; };
+		if (H.Doing == Fate::Gone || H.Doing == Fate::Sinking || Under(H))
+		{
+			H.bClearing = false;
+			return;
+		}
+		// (in her own line, her next astern keeps clear of her, not she of her; her next ahead she keeps clear of by a
+		// little, the line's own rule holding her most of a spacing astern of her)
+		int Mine = -1;
+		const Column* Own = nullptr;
+		{
+			auto It = Lines.find(H.Piece);
+			if (It != Lines.end())
+			{
+				Own = &It->second;
+				for (size_t K = 0; K < Own->Line.size(); ++K)
+					if (Own->Line[K] == H.Key) Mine = static_cast<int>(K);
+			}
+		}
+		Nears.clear();
+		for (const auto& Pair : Hulls)
+		{
+			const Hull& O = Pair.second;
+			if (O.Key == H.Key || O.Doing == Fate::Gone || Under(O)) continue;
+			if (std::fabs(O.P.X - H.P.X) > 1800.0 || std::fabs(O.P.Y - H.P.Y) > 1800.0) continue;
+			bool bNextAhead = false;
+			if (Own && Mine >= 0 && O.Piece == H.Piece)
+			{
+				const int Last = static_cast<int>(Own->Line.size()) - 1;
+				if (Mine < Last && Own->Line[Mine + 1] == O.Key) continue;
+				bNextAhead = Mine > 0 && Own->Line[Mine - 1] == O.Key;
+			}
+			const ClassSize& OS = SizeOf(O.Class);
+			const bool bGive = bNextAhead || GivesWay(H, O);
+			NearShip N;
+			N.O = &O;
+			N.Half = std::max(0.0, 0.5 * (OS.Long - OS.Beam));
+			N.R = 0.5 * OS.Beam;
+			N.Horizon = bGive ? 45.0 : 12.0;
+			N.Margin = bNextAhead ? 15.0 : bGive ? 35.0 : 12.0;
+			// (none that could not come within reach in the time she looks ahead)
+			const double Reach = (H.Spd * 1.45 + O.Spd + 2.0) * N.Horizon + 0.5 * (Sz.Long + OS.Long) + N.Margin + Sz.Beam;
+			if (std::fabs(O.P.X - H.P.X) > Reach || std::fabs(O.P.Y - H.P.Y) > Reach) continue;
+			Nears.push_back(N);
+		}
+		if (Nears.empty())
+		{
+			H.bClearing = false;
+			return;
+		}
+		// How far inside her clearance of the others she would come on a course and way: her helm and way followed through
+		// at her class's rate of turn and way gained or lost, a look every 3 s, the others held on their own; the nearer in
+		// time, the more it counts. (Between looks two ships close by up to half a look's closing: counted in.)
+		const double MyHalf = std::max(0.0, 0.5 * (Sz.Long - Sz.Beam)), MyR = 0.5 * Sz.Beam;
+		const double Look = 3.0;
+		auto Inside = [&](double ToHdg, double ToSpd, double Cap) -> double
+		{
+			double Sum = 0.0;
+			Vec P = H.P;
+			double A = H.Hdg, V = H.Spd;
+			for (int I = 0; I <= 15; ++I)
+			{
+				const double T = I * Look;
+				if (I > 0)
+				{
+					const double Most = MostRateAt(Sz, V) * 0.8 * Look;
+					const double Turn = Clamp(Wrap(ToHdg - A), -Most, Most);
+					const double V1 = V + Clamp(ToSpd - V, -Acc * Look, Acc * Look);
+					P += Ahead(Wrap(A + 0.5 * Turn)) * (0.5 * (V + V1) * Look);
+					A = Wrap(A + Turn);
+					V = V1;
+				}
+				const Vec Fore = Ahead(A) * MyHalf, Mv = Ahead(A) * V;
+				for (const NearShip& N : Nears)
+				{
+					if (T > N.Horizon) continue;
+					const Hull& O = *N.O;
+					const Vec Ov = Ahead(O.Hdg) * O.Spd;
+					const Vec OP = O.P + Ov * T;
+					const double Need = MyR + N.R + N.Margin + 0.5 * Look * Flat(Ov - Mv);
+					if (std::fabs(OP.X - P.X) > MyHalf + N.Half + Need || std::fabs(OP.Y - P.Y) > MyHalf + N.Half + Need) continue;
+					const Vec OFore = Ahead(O.Hdg) * N.Half;
+					const double Gap = SegGap(P + Fore, P - Fore, OP + OFore, OP - OFore);
+					if (Gap < Need) Sum += (Need - Gap) * (1.0 - 0.7 * T / N.Horizon);
+				}
+				if (Sum > Cap) return Sum; // (already worse than a way in hand)
+			}
+			return Sum;
+		};
+		const double Wished = Inside(Hdg, Spd, 1e18);
+		if (Wished <= 0.0)
+		{
+			// (clear on the way she wishes: she takes it again, once she has held her alteration a few seconds)
+			if (H.bClearing && ShownT >= H.ClearAt + 4.0) H.bClearing = false;
+		}
+		else if (!H.bClearing || ShownT >= H.ClearAt + 1.0)
+		{
+			// The least alteration that keeps her clear: a degree of turn counts one, a turn to port ten more (the rule of
+			// the road alters to starboard), easing her way to half twenty; being inside her clearance ten a metre-look.
+			// (chosen again each second while she must; holding her last choice counts five less, so she does not hunt)
+			// (the alterations in order of what they cost before any nearness: once one in hand costs less than the rest
+			// would before it, they are not looked at)
+			struct Way
+			{
+				double Off, Keep, Price;
+			};
+			static const std::vector<Way> Ways = []()
+			{
+				std::vector<Way> W;
+				for (const double Off : { 0.0, 10.0, -10.0, 20.0, -20.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0, 90.0, -90.0 })
+					for (const double Keep : { 1.0, 0.7, 0.4, 0.15 })
+						W.push_back({ Off, Keep, std::fabs(Off) + (Off < 0.0 ? 10.0 : 0.0) + 40.0 * (1.0 - Keep) });
+				std::stable_sort(W.begin(), W.end(), [](const Way& A, const Way& B) { return A.Price < B.Price; });
+				return W;
+			}();
+			double Best = 1e18, BestOff = 0.0, BestKeep = 1.0;
+			for (const Way& W : Ways)
+			{
+				const bool bHeld = H.bClearing && std::fabs(W.Off * Deg - H.ClearOff) < 1e-6 && std::fabs(W.Keep - H.ClearKeep) < 1e-6;
+				const double Price = W.Price - (bHeld ? 5.0 : 0.0);
+				if (Price >= Best) continue;
+				const double In = (W.Off == 0.0 && W.Keep == 1.0) ? Wished : Inside(Wrap(Hdg + W.Off * Deg), Spd * W.Keep, (Best - Price) / 10.0);
+				const double Cost = Price + 10.0 * In;
+				if (Cost < Best)
+				{
+					Best = Cost;
+					BestOff = W.Off * Deg;
+					BestKeep = W.Keep;
+				}
+			}
+			H.ClearOff = BestOff;
+			H.ClearKeep = BestKeep;
+			H.ClearAt = ShownT;
+			H.bClearing = BestOff != 0.0 || BestKeep != 1.0;
+		}
+		if (!H.bClearing) return;
+		Hdg = Wrap(Hdg + H.ClearOff);
+		Spd *= H.ClearKeep;
+		H.ClearLast = ShownT;
+		Check.KeptClear += Dt;
+		if (!H.bEverCleared)
+		{
+			H.bEverCleared = true;
+			++Check.ClearShips;
+		}
+	}
+
 	void Show::KeepClear(double Dt, bool bSettle)
 	{
 		// Each column's leader keeps clear of every other ship afloat and of every other leader's station, stepping off
@@ -1922,6 +2148,19 @@ namespace SeaShow
 			}
 			const double Most = bSettle ? 60.0 : 3.0 * Dt;
 			C.Keep += Flat(Step) > Most ? Step * (Most / Flat(Step)) : Step;
+			// (a leader held back keeping clear of other ships, as in a crowd of destroyers running in together at their
+			// best speed, could never close his station again: it is held back with him, no more than 300 m off him, and
+			// eases back to the battle's place as above once he has room)
+			if (!bSettle && !C.Line.empty() && !C.bGhost)
+			{
+				const Hull* Lead = FindHull(C.Line.front());
+				if (Lead && ShownT - Lead->ClearLast < 1.0)
+				{
+					const Vec Lag(Lead->P.X - (St.W.X - Was.X + C.Keep.X), Lead->P.Y - (St.W.Y - Was.Y + C.Keep.Y), 0.0);
+					const double D = Flat(Lag);
+					if (D > 300.0) C.Keep += Lag * ((D - 300.0) / D);
+				}
+			}
 			if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
 			if (bSettle)
 			{
@@ -1952,10 +2191,12 @@ namespace SeaShow
 			{
 				// Out of the line and round for home, her helm still answering (more slowly, hurt as she is).
 				const double Most = MostRateAt(Own, H.Spd) * 0.7;
-				const double Rate = Clamp(Wrap(H.Away - H.Hdg) * 0.4, -Most, Most);
+				double Hd = H.Away, Sp = H.LimpSpd;
+				ClearWay(H, Own, 0.15, Dt, Hd, Sp);
+				const double Rate = Clamp(Wrap(Hd - H.Hdg) * 0.4, -Most, Most);
 				H.Rate += Clamp(Rate - H.Rate, -Rudder * Dt, Rudder * Dt);
 				H.Hdg = Wrap(H.Hdg + H.Rate * Dt);
-				H.Spd += Clamp(H.LimpSpd - H.Spd, -0.15 * Dt, 0.15 * Dt);
+				H.Spd += Clamp(Sp - H.Spd, -0.15 * Dt, 0.15 * Dt);
 				H.P += Ahead(H.Hdg) * (H.Spd * Dt);
 				// L4: she burns as she goes: a fire on her deck now and then, where she is.
 				if (ShownT >= H.NextFire)

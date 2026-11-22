@@ -323,6 +323,8 @@ namespace
 				{
 					const SeaShow::ShipOut& O = Ships[J];
 					if (std::fabs(O.At.X - S.At.X) > 300.0 || std::fabs(O.At.Y - S.At.Y) > 300.0) continue;
+					// (a boat dived passes under, and is passed over: ruling 241's hunters run over her to drop)
+					if (S.Dived > 1.0 || O.Dived > 1.0) continue;
 					const Capsule CJ = HullOf(O);
 					if (SegmentToSegment(CI.A, CI.B, CJ.A, CJ.B) < CI.R + CJ.R)
 					{
@@ -537,7 +539,7 @@ int main(int Argc, char** Argv)
 	            Flat(P.Wind), P.SeaState, P.ContactAt, P.ColumnsGiven, P.ColumnsRefused, P.ColumnsPeak);
 	std::printf("  hits owed by gunfire %.1f, left unshown %.1f; screens %d (%d at once), tracks %d (%d at once), aircraft up %d at the most, cover up %d\n", C.OwedAll, C.OwedLeft,
 	            C.Screens, C.MostScreens, C.TracksRun, C.MostTracks, C.MostPlanes, C.CoverUp);
-	std::printf("  followers giving way to their own line crossing ahead: %.1f s\n", C.GaveWay);
+	std::printf("  followers giving way to their own line crossing ahead: %.1f s; ships keeping clear of others: %d, %.1f ship-seconds altered\n", C.GaveWay, C.ClearShips, C.KeptClear);
 	std::printf("  worst turn: %s; rudder: %s; heel: %s; lead: %s; off the track: %s; stations kept up to %.0f m off the battle's place\n", C.TurnWorst.c_str(),
 	            C.RudderWorst.c_str(), C.HeelWorst.c_str(), C.LeadWorst.c_str(), C.GapWorst.c_str(), C.MostKeep);
 	if (P.MostPlanePop > 0.0) std::printf("  worst aircraft step: %s\n", P.PlanePopAt.c_str());
@@ -575,7 +577,8 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "every ship's bow on her way (slip)", C.MostSlip <= 2.0, Num(C.MostSlip, 2) + " deg", "2 deg or less" });
 	Limits.push_back({ "no ship turns tighter than her class", C.MostTurn <= 1.01, Num(C.MostTurn, 3) + " of the limit", "1 or less" });
 	Limits.push_back({ "no rudder thrown over faster than a ship answers", C.MostRudder <= 1.05, Num(C.MostRudder, 3) + " of the limit", "1.05 or less" });
-	Limits.push_back({ "each leader on his station (the battle's place, the zig-zag, keeping clear)", C.MostLead <= 500.0, Num(C.MostLead, 0) + " m", "500 m or less" });
+	Limits.push_back({ "each leader on his station (the battle's place, the zig-zag, keeping clear)", C.MostLead <= 500.0,
+	                   Num(C.MostLead, 0) + " m two minutes after keeping clear of a ship, " + Num(C.MostLeadClearing, 0) + " m at any time", "500 m or less" });
 	// (turning in succession, a ship astern cut inside or swung outside her leader's turn by a third of her length or so)
 	Limits.push_back({ "followers in their leader's wake (once closed up)", C.MostGap <= 40.0, Num(C.MostGap, 1) + " m off his track", "40 m or less" });
 	Limits.push_back({ "no ship pops (the show's own count)", C.MostJump <= 0.5, Num(C.MostJump, 2) + " m", "0.5 m or less" });
@@ -595,6 +598,10 @@ int main(int Argc, char** Argv)
 	}
 	Limits.push_back({ "no two ships of a line one through the other", P.SameLineTouching == 0,
 	                   P.SameLineTouching ? std::to_string(P.SameLineTouching) + " pair-frames (first " + P.SameLineFirst + ")" : "0", "0" });
+	// (Brian, 22 November 05:31Z: "the ships are turning into each other and going over each other": every ship keeps
+	// clear of every other, of any piece; a collision is the battle's to tell, and none is told here)
+	Limits.push_back({ "no two ships of different pieces one through the other", P.OtherTouching == 0,
+	                   P.OtherTouching ? std::to_string(P.OtherTouching) + " pair-frames, " + std::to_string(P.TouchPairs.size()) + " pairs" : "0", "0" });
 	Limits.push_back({ "the line's ships as many as the battle's", P.LineOff == 0, P.LineOff ? std::to_string(P.LineOff) + " frames off (" + P.LineOffFirst + ")" : "always",
 	                   "always between the view before and after" });
 	Limits.push_back({ "salvos only from ships in the line", (!bGunfire || C.Salvos > 0) && P.SalvosFromOut == 0,
@@ -645,7 +652,7 @@ int main(int Argc, char** Argv)
 	                   std::to_string(C.Dodges) + " dodged, " + std::to_string(C.Combs) + " combed", "some, where strikes land" });
 	Limits.push_back({ "every ship that dodged back in her place three minutes on", C.MostDodgeOff <= 60.0,
 	                   std::to_string(C.DodgesBack) + " back, the worst still " + Num(C.MostDodgeOff, 0) + " m off, " + std::to_string(C.DodgesOpen) + " still under attack at the end, " +
-	                       std::to_string(C.DodgesClosing) + " judged later as they closed at their best speed, " + std::to_string(C.FellAstern) + " fell in astern of the next, " +
+	                       std::to_string(C.DodgesClosing) + " judged later as they closed at their best speed, " + std::to_string(C.DodgesClearing) + " later as they kept clear of another ship, " + std::to_string(C.FellAstern) + " fell in astern of the next, " +
 	                       std::to_string(C.HandedOver) + " leaders handed over the lead, " + std::to_string(C.DodgesUnturned) + " ended before the helm bit (not judged)",
 	                   "60 m or less" });
 	Limits.push_back({ "no ship strays far from her place dodging", C.MostStray <= 900.0, Num(C.MostStray, 0) + " m at the most", "900 m or less" });
@@ -770,7 +777,6 @@ int main(int Argc, char** Argv)
 		std::printf("  %s %-58s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want);
 		if (!L.bOk) ++Failed;
 	}
-	std::printf("  hulls of two pieces touching: %d pair-frames, %zu pairs (shown, not held: the battle sets the pieces' places)\n", P.OtherTouching, P.TouchPairs.size());
 	std::printf("%s\n", Failed ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
 	return Failed ? 1 : 0;
 }
