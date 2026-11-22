@@ -35,8 +35,10 @@ export const FOUGHT_KINDS: RaidKind[] = ['bomb', 'superiority'];
 
 /**
  * Strikes on ships (ruling 238): a raid on a harbour and a strike on a fleet at sea, fought out with the ships under
- * attack on the field. They are ticketed only when asked for ({ ships: true }: the set pieces, the test kitchen's air
- * page) until the playtester has passed them; then they join FOUGHT_KINDS and the raid card offers them (ruling 217).
+ * attack on the field. They are ticketed only when asked for ({ ships: true }), and today only the air recorder
+ * (tools/air-record: the set pieces the 3D game replays) and the tests ask: the browser's air page and the battle
+ * bridge's airLook and airStart do not, so no played raid is fought out on ships. Once the playtester has passed them
+ * they join FOUGHT_KINDS and the raid card offers them (ruling 217).
  */
 export const SHIP_KINDS: RaidKind[] = ['harbour', 'fleet'];
 
