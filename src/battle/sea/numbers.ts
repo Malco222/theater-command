@@ -2,9 +2,10 @@
 // data/campaign/navy.json, so the field weighs a ship exactly as the campaign does.
 
 import seaData from '../../../data/battle/sea.json';
+import sailorsData from '../../../data/battle/sailors.json';
 import navyData from '../../../data/campaign/navy.json';
 import carrierData from '../../../data/campaign/carriers.json';
-import type { SeaClass, SeaStyle } from './types';
+import type { SeaClass, SeaStyle, SeaWater } from './types';
 
 interface ClassOnField { speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; beam: number; standoff?: number }
 
@@ -53,3 +54,33 @@ export const STRIKE_AIM = (carrierData as unknown as { strike: { aim: Partial<Re
  *  flak.per a ship, to at most flak.most of a strike. */
 export const CAP = (carrierData as unknown as { cap: { spoil: number } }).cap;
 export const FLAK = (carrierData as unknown as { flak: { ships: Partial<Record<SeaClass, number>>; per: number; most: number } }).flak;
+
+/** Men in the water (release 2's sailor rules; data/battle/sailors.json): the record's figures as the design director
+ *  ruled them, read only where a ticket carries SeaSailors. 'oil.r', 'oil.burn' and 'abandon.afloat' are looks-only knobs
+ *  (see their _about). */
+export const SAILORS = sailorsData as unknown as {
+  down: { sudden: number; fought: number; early: number };
+  dead: { share: number };
+  alive: Record<SeaWater, [number, number][]>;
+  found: { stop: number; leave: number };
+  pick: { wreck: number; early: number };
+  refuse: { navies: string[] };
+  oil: { r: Record<SeaClass, number>; burn: number };
+  abandon: { afloat: number };
+  water: Record<string, string>;
+};
+
+/** The share of the men who went into water of this band still alive after 'h' hours in it: straight lines between the
+ *  record's points, none past the band's last point (sailors.json alive). */
+export function aliveAfter(band: SeaWater, h: number): number {
+  const p = SAILORS.alive[band];
+  if (h <= p[0][0]) return p[0][1];
+  for (let i = 1; i < p.length; i++) if (h <= p[i][0]) return p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (h - p[i - 1][0])) / (p[i][0] - p[i - 1][0]);
+  return 0;
+}
+
+/** The band of a sea's water in a month (0 January), from the historian's table; null for a sea the table lacks. */
+export function waterOf(sea: string, month: number): SeaWater | null {
+  const b = SAILORS.water[sea]?.[month];
+  return b === 'c' ? 'cold' : b === 't' ? 'temperate' : b === 'w' ? 'warm' : null;
+}

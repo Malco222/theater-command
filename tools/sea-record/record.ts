@@ -9,12 +9,13 @@
 // the record's navies. Their counts are the field's, near enough the record's for pictures.
 //
 //   npx esbuild tools/sea-record/record.ts --bundle --platform=node --format=esm --outfile=dist/sea-record.mjs --log-level=warning
-//   node dist/sea-record.mjs <out folder> [key]    (writes two-lines.json, light-ships.json, samar.json; or the one key)
+//   node dist/sea-record.mjs <out folder> [key]    (writes two-lines.json, light-ships.json, samar.json, and with men in
+//                                                    the water two-lines-sailors.json and samar-sailors.json; or the one key)
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FieldEvent, Side, Zone } from '../../src/battle/core/types';
-import { SEA } from '../../src/battle/sea/numbers';
+import { SEA, waterOf } from '../../src/battle/sea/numbers';
 import { SeaSim } from '../../src/battle/sea/sim';
 import { plainTicket, type PlainFleet } from '../../src/battle/sea/ticket';
 import { seaLoop } from '../../src/battle/sea/cues';
@@ -39,6 +40,13 @@ interface SetPiece {
   att: PlainFleet[];
   def: PlainFleet[];
   air?: Partial<Record<Side, number>>;
+  /**
+   * Men in the water (release 2's sailor rules): on, in the water of 'sea' (the campaign's sea id) in the piece's month.
+   * 'early': a side whose fleets stand at "Abandon early"; 'rescue': a side whose last destroyer piece afloat (not the
+   * wreck's own) the recording sends, as the player would, to the first of its side's wrecks. The staff's calls
+   * otherwise, as in every other recording.
+   */
+  sailors?: { sea: string; early?: Side; rescue?: Side };
 }
 
 const practice = (name: string) => PRACTICE.find((p) => p.name === name)!;
@@ -66,6 +74,14 @@ const PIECES: SetPiece[] = [
     def: [{ name: 'Taffy 3', nat: 'USA', ships: { cv: 6, dd: 7 }, deck: 0.35, bombers: 6 * 12, admiral: 3 }],
   },
 ];
+// The same two actions with men in the water, for the scene's sailors (sea:men, sea:oil, sea:abandon, sea:rescue, and the
+// after-action counts): the North Sea in May is cold, the Philippine Sea in October warm. In 'two-lines-sailors' the
+// British stand at "Abandon early" and send destroyers to their first wreck; off Samar the Japanese men refuse an
+// American pick-up.
+PIECES.push(
+  { ...PIECES[0], key: 'two-lines-sailors', sailors: { sea: 'nsea', early: 'att', rescue: 'att' } },
+  { ...PIECES[2], key: 'samar-sailors', sailors: { sea: 'philsea' } },
+);
 
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 const r3 = (x: number): number => Math.round(x * 1000) / 1000;
@@ -87,7 +103,7 @@ function unitOut(u: SeaUnit): Record<string, unknown> {
   if (e.run !== undefined) extra.run = e.run;
   if (e.burnt) extra.burnt = e.burnt;
   // The look fields (the ship plan's B1): passed as the bridge passes extra, whole.
-  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
+  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'combFrom', 'combUntil', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
   const out: Record<string, unknown> = {
     id: u.id, side: u.side, kind: u.kind, name: u.name, nat: u.nat, x: r1(u.x), y: r1(u.y), face: r3(u.face), str: r3(u.str), mor: r3(u.mor), state: u.state,
     figures0: u.figures0, figures: u.figures, w: u.w, d: r1(u.d), act: u.act, speed: r1(u.speed), engaged: u.engaged ?? -1, loop: seaLoop(e.cls, u.act), extra,
@@ -98,7 +114,10 @@ function unitOut(u: SeaUnit): Record<string, unknown> {
 }
 
 function ticketOf(P: SetPiece, seed: number): SeaTicket {
-  const t = plainTicket({ att: P.att, def: P.def, air: P.air, seed, human: null, zoneName: P.sea, title: P.title });
+  const water = P.sailors ? waterOf(P.sailors.sea, P.when.month) : null;
+  if (P.sailors && !water) throw new Error(`no water band for ${P.sailors.sea}`);
+  const early = P.sailors?.early ? P.att.concat(P.def).map((_, i) => i + 1).filter((id) => (id <= P.att.length ? 'att' : 'def') === P.sailors!.early) : undefined;
+  const t = plainTicket({ att: P.att, def: P.def, air: P.air, seed, human: null, zoneName: P.sea, title: P.title, ...(water ? { sailors: { water, ...(early ? { early } : {}) } } : {}) });
   const a = NAVY[t.att.nat] ?? { nat: t.att.nat, adj: t.att.nat }, d = NAVY[t.def.nat] ?? { nat: t.def.nat, adj: t.def.nat };
   t.att = { ...t.att, adj: a.adj };
   t.def = { ...t.def, adj: d.adj };
@@ -125,10 +144,19 @@ function fight(P: SetPiece, seed: number, step: number): Fought {
     else still.set(u.id, key);
     return o;
   };
+  // The player's own order, scripted (SetPiece.sailors.rescue): at the side's first wreck, its last destroyer piece afloat
+  // goes to pick men up, from the next second.
+  const by = P.sailors?.rescue;
+  let sent = false;
   const take = (): void => {
     const v = s.view();
     events.push(...v.events);
     all.push(...v.events);
+    const m = by && !sent ? v.events.find((e) => e.what === 'sea:men' && e.side === by) : undefined;
+    if (m && by) {
+      const dd = s.units.filter((u) => u.side === by && u.extra.cls === 'dd' && u.state === 'steady' && u.id !== m.unit).at(-1);
+      if (dd) sent = s.command({ do: 'sea:rescue', units: [dd.id], wreck: { unit: m.unit!, ship: (m.extra as { ship: number }).ship } }, by);
+    }
     if (s.t + 1e-9 < next && !s.over) return;
     next += step;
     // Zones only where they changed since the view before (most views carry none): the scene keeps the last it was given.
@@ -183,7 +211,10 @@ function record(P: SetPiece, outDir: string, step = 2.0, tries = 60): void {
     // The look's wind (L6): the battle's own bearing it blows from and its speed (SeaSim.wind, windSpeed: hashes of the seed).
     wind: { from: s.wind, speed: s.windSpeed },
   };
-  const after = { lines: over.lines, level: over.level, winner: over.winner ?? null, seconds: r1(s.t) };
+  // With men in the water: the ships each fleet's own call abandoned, what the side holding the water picked up after the
+  // fight (for the closing shot), and each side's men saved, lost and taken prisoner, with the calls made.
+  const x = over.extra as { abandoned?: unknown; rescue?: unknown; sailors?: unknown } | undefined;
+  const after = { lines: over.lines, level: over.level, winner: over.winner ?? null, seconds: r1(s.t), ...(x?.sailors ? { abandoned: x.abandoned, rescue: x.rescue, sailors: x.sailors } : {}) };
   const out = { what: 'RECORDING: a fleet action fought by the computer on both sides for the 3D scene to replay (tools/sea-record). Not a booked result: the campaign never reads it. Each view carries the zones only where they changed since the view before, and a piece\'s still fields (kind, name, nat, figures0, w; extra.cls, ships0, fleet) only the first time it shows.', recording: true, key: P.key, seed: bestSeed, step, field, views, after };
   const file = join(outDir, `${P.key}.json`);
   const text = JSON.stringify(out);
