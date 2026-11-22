@@ -3198,8 +3198,15 @@ function defend(g: Game, nat: string, line = true): void {
   // counted a held garrison next door in full: in war 22 Thailand's garrison of Bangkok stood beside an empty Mergui,
   // and Britain's reserve rule marched Burma's whole army out of Rangoon into that strip's end. One staff does not
   // weigh a neighbour two ways. With the far side off the sum is as it was.)
+  // (Far-side ground only, the design director's ruling of 08:40Z, 22 November 2026, on Tripoli's trace: the reading
+  // applies where the province defended stands on the far side, as the front sums it follows are the far side's
+  // (staff.ts `fronts`, form (a)); the old chart's defence, and the Americas', read with the switch on as they do
+  // with it off. As built it reached every chart: in war 11 at the book's first stop France's garrison of Tunisia,
+  // held at Mareth, no longer read as a threat to an empty Tripoli, so Italy's reserve rule left the Libyan Group at
+  // Sidi Barrani where with the switch off it marched for Tripoli; Britain's counter-attack at the frontier read
+  // 1.44 for 2.12 and never went, and the war in the desert took another road from its thirteenth month.)
   const far = farOn(g);
-  const menace = (u: Corps): boolean => u.kind !== 'fort' && !(far && u.hold);
+  const menace = (u: Corps, defended: Region): boolean => u.kind !== 'fort' && !(far && u.hold && shoreOf(defended) === 2);
   // What this nation has to hold: its own country, and whatever it has taken and occupies.
   // Overseas, the allies hold one front between them and each looks to all of it.
   // A side theatre where the nation has a plan of its own is that army's business, and no concern of the main plan.
@@ -3209,7 +3216,7 @@ function defend(g: Game, nat: string, line = true): void {
     for (const j of r.nb) {
       const e = g.regions[j];
       if (!atWar(g, nat, ctl(g, e)) || masked.has(j)) continue; // a garrison the plan leaves to others threatens nobody
-      const foes = hostileUnits(g, e, nat).filter(menace).map((u) => atkPower(g, u)).sort((a, b) => b - a);
+      const foes = hostileUnits(g, e, nat).filter((u) => menace(u, r)).map((u) => atkPower(g, u)).sort((a, b) => b - a);
       for (const p of foes.slice(0, frontage(r))) threat[r.id] += p;
     }
     for (const u of friendlyUnits(g, r, nat)) held[r.id] += defPower(g, u, r);
@@ -3225,7 +3232,7 @@ function defend(g: Game, nat: string, line = true): void {
       for (const id of ring) for (const j of g.regions[id].nb) {
         if (seen.has(j)) continue;
         seen.add(j); next.push(j);
-        const foes = hostileUnits(g, g.regions[j], nat).filter(menace).map((u) => atkPower(g, u)).sort((a, b) => b - a);
+        const foes = hostileUnits(g, g.regions[j], nat).filter((u) => menace(u, cap)).map((u) => atkPower(g, u)).sort((a, b) => b - a);
         worst = Math.max(worst, foes.slice(0, frontage(cap)).reduce((sum, p) => sum + p, 0));
       }
       ring = next;

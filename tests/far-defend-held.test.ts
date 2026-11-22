@@ -6,14 +6,20 @@
 // full, as staff.ts `fronts` does not, and marched the whole of Burma's army out of Rangoon into Mergui, the end of
 // a strip; Moulmein fell behind it the same month. One staff weighing a neighbour two ways is the fault. The states
 // are set by hand; one month of Britain's own is played.
+//
+// Far-side ground only (the design director's ruling of 08:40Z, 22 November 2026, on Tripoli's trace): the reading
+// applies where the province defended stands on the far side. The old chart's defence reads with the switch on as it
+// does with it off: France's garrison of Tunisia, held at Mareth, is a threat to an empty Tripoli, and Italy's
+// reserve rule answers it.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { runAI } from '../src/campaign/ai';
-import { addCorps, createGame, hostileUnits, setWar } from '../src/campaign/game';
+import { reserveWatch, runAI } from '../src/campaign/ai';
+import { addCorps, createGame, friendlyUnits, hostileUnits, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
+import { shoreOf } from '../src/campaign/world';
 
 const BURMA = 'Burma Army (the Burma Rifles; the 1st Burma Division from July 1941)';
 
@@ -51,5 +57,23 @@ describe("a staff's defence reads a threat as its front sums do", () => {
     runAI(g, 'UK');
     expect(at(g, burma)).not.toBe('Rangoon');
     expect(['Moulmein', 'Mergui']).toContain(at(g, burma));
+  });
+
+  it("on the old chart a held enemy next door is a threat as with the switch off: Mareth's garrison draws Italy's reserve to an empty Tripoli", () => {
+    const g = startOpen(createGame(3, null));
+    g.turn = 12;
+    setWar(g, 'ITA', 'FRA');
+    const tunisia = g.corps.find((c) => c.nat === 'FRA' && c.name === 'Tunisia Command')!;
+    const tripoli = g.byName['Tripoli'], mareth = g.byName['Mareth'];
+    // The ground: Tripoli and Mareth stand on the old chart, side by side; the garrison is held; Tripoli is empty.
+    expect([shoreOf(tripoli), shoreOf(mareth), tripoli.nb.includes(mareth.id)]).toEqual([0, 0, true]);
+    expect([at(g, tunisia), !!tunisia.hold]).toEqual(['Mareth', true]);
+    expect(hostileUnits(g, mareth, 'ITA').every((u) => u.hold)).toBe(true);
+    expect(friendlyUnits(g, tripoli, 'ITA')).toEqual([]);
+    // (Told to whoever is reading the reserve rule: nothing in the game hears it.)
+    const sent: string[] = [];
+    reserveWatch.tell = (e) => { if (e.nat === 'ITA' && e.to === tripoli && !e.kept) sent.push(e.corps.name); };
+    try { runAI(g, 'ITA'); } finally { reserveWatch.tell = null; }
+    expect(sent.length).toBeGreaterThan(0);
   });
 });
