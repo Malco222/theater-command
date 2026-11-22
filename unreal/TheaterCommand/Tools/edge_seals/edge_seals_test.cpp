@@ -1457,6 +1457,15 @@ static void TestFold()
 			bAlone = bAlone && (Run.Count == 1 || !Warned.Looks[static_cast<size_t>(Run.First)].IsWarning());
 		}
 		CHECK(bAlone && Runs.size() == 7 && Runs[4].Count == 2);
+		// (a WARNING is the warning's mark too, on whatever wax: three such in a row stand as three; and a run either side
+		// of a warning in its middle is cut there, each side folded only where it is three or more on its own)
+		const FAlike Marked = AlikeOf(ESection::Lead, "WARNING", -1, "");
+		CHECK(Marked.Glyph == EGlyph::Warning && Marked.IsWarning());
+		FoldAlike({ Marked, Marked, Marked }, Runs);
+		CHECK(Runs.size() == 3);
+		const FAlike Declared = AlikeOf(ESection::Band, "WAR", -1, ""), Warning = AlikeOf(ESection::Band, "WARNING", -1, "");
+		FoldAlike({ Declared, Declared, Warning, Declared, Declared, Declared }, Runs);
+		CHECK(Runs.size() == 4 && Runs[0].Count == 1 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].First == 3 && Runs[3].Count == 3);
 	}
 
 	// 3. Order kept and counts adding up, over random cards (warnings among them) and over every real month of every
@@ -1628,6 +1637,15 @@ static void TestFold()
 			== "Scorched earth: German troops tore up the railway, and 2 more elsewhere in the war");
 		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls, and 2 more elsewhere in the war");
 		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } }) == "No. 3 Group bombs Paris by night, and 2 more elsewhere in the war");
+		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
+		// not made plural; and an item with no words of its own gives the count and its part of the card)
+		CHECK(Words({ { "", "Britain and France declare war on Germany." }, { "", "Canada and France declare war on Germany." }, { "", "India and France declare war on Germany." } })
+			== "Britain and France declare war on Germany, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "Montgomery reports for duty. He was in Egypt." }, { "", "Alexander reports for duty. He was in Egypt." }, { "", "Brooke reports for duty. He was in Egypt." } })
+			== "Montgomery reports for duty. He was in Egypt, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "U-47 torpedoes a battleship." }, { "", "U-99 torpedoes a battleship." }, { "", "U-100 torpedoes a battleship." } }) == "3 torpedo a battleship: U-47, U-99 and U-100");
+		CHECK(Words({ { "", "" }, { "", "" }, { "", "" } }) == "3 elsewhere in the war");
+		CHECK(PluralVerb("focuses") == "focus" && PluralVerb("echoes") == "echo" && PluralVerb("vetoes") == "veto" && PluralVerb("uses") == "use" && PluralVerb("causes") == "cause");
 		CHECK(PluralVerb("declares") == "declare" && PluralVerb("carries") == "carry" && PluralVerb("dies") == "die" && PluralVerb("presses") == "press" && PluralVerb("reaches") == "reach");
 		CHECK(PluralVerb("closes") == "close" && PluralVerb("seizes") == "seize" && PluralVerb("goes") == "go" && PluralVerb("tore") == "tore" && PluralVerb("WAR") == "WAR" && PluralVerb("pass") == "pass");
 		// Over every folded seal of the real months: nothing the card does not say.

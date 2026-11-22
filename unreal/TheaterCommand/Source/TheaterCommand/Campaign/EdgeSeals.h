@@ -190,8 +190,8 @@ namespace EdgeSeals
 	 * Ruling 64(g) as amended 08:55Z, the fold of alike runs: "Three or more in a row that would look the same (wax,
 	 * mark, sign, pulse) stand as one seal with their count at the first item's place, and a press opens the card at
 	 * that run's first row." FAlike is how an item's seal looks on the edge: its wax, what is pressed in it (its drawn
-	 * mark, or the order sign it names) and whether it pulses. A dated warning (the red wax) never folds, so no run
-	 * crosses one either.
+	 * mark, or the order sign it names) and whether it pulses. A WARNING (the dated warning's red wax, or the warning's
+	 * mark on any wax) never folds, so no run crosses one either.
 	 */
 	struct FAlike
 	{
@@ -200,7 +200,8 @@ namespace EdgeSeals
 		std::string Sign; // the order sign pressed in it, where Glyph is Sign; empty otherwise
 		bool bPulse = false;
 
-		bool IsWarning() const { return Wax == EWax::Red; }
+		/** A WARNING: the dated warning's red wax, or anything pressed with the warning's mark (GlyphOf: "WARNING", "LAST MONTH"). */
+		bool IsWarning() const { return Wax == EWax::Red || Glyph == EGlyph::Warning; }
 		bool operator==(const FAlike& Other) const = default;
 	};
 	/** An item's look, from its part, its word, its tone and the order sign its row names: LookOf's wax and pulse, GlyphOf's mark, the sign where MayPress. */

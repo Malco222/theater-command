@@ -276,7 +276,8 @@ namespace EdgeSeals
 		for (int First = 0; First < Count;)
 		{
 			int End = First + 1;
-			// (a dated warning stands alone: it never folds, and as it looks like nothing else, no run goes past it)
+			// (a WARNING stands alone, the red wax or the warning's mark: it never folds, and as it looks like nothing else that
+			// folds, no run goes past it)
 			if (!Looks[static_cast<size_t>(First)].IsWarning())
 			{
 				while (End < Count && Looks[static_cast<size_t>(End)] == Looks[static_cast<size_t>(First)])
@@ -375,6 +376,18 @@ namespace EdgeSeals
 			return !Word.empty() && (IsStop(Word.back()) || Word.back() == '.');
 		}
 
+		/** A word that joins names in a list ("Britain and France"): never the verb a name's words end at, nor part of one name. */
+		bool IsJoin(const std::string& Word)
+		{
+			return Word == "and" || Word == "or" || Word == "nor" || Word == "&";
+		}
+
+		/** A word that ends a sentence: the words after it are another sentence, which a folded seal's words never run on into. */
+		bool EndsSentence(const std::string& Word)
+		{
+			return !Word.empty() && (Word.back() == '.' || Word.back() == '!' || Word.back() == '?');
+		}
+
 		bool EndsWith(const std::string& Word, const char* Tail)
 		{
 			const std::string Wanted(Tail);
@@ -384,7 +397,10 @@ namespace EdgeSeals
 		/**
 		 * The sentences of a run as a name each and the same words after it (the predicate): where each sentence is one
 		 * to four words with no stop in them, none named twice, and then the same words, the first of them in small
-		 * letters (a verb, never another name). Out: the names, "The" made "the" for the list.
+		 * letters (a verb, never another name). Out: the names, "The" made "the" for the list. A list's joining word
+		 * ("and", "or") is never the verb, and a name with one in it is not listed ("Britain and France declare war"
+		 * three times over would read "3 and France declare war"); nor are words that run on past the end of a sentence
+		 * ("... for a command. He was ..."), whose second sentence the plural would not fit.
 		 */
 		bool SplitNames(const std::vector<FSaid>& Said, const FAlikeRun& Run, std::vector<std::string>& OutNames, std::string& OutSays)
 		{
@@ -392,7 +408,16 @@ namespace EdgeSeals
 			SplitWords(Said[static_cast<size_t>(Run.First)].Sentence, First);
 			for (size_t Lead = 1; Lead <= 4 && Lead < First.size(); ++Lead)
 			{
-				if (!StartsLower(First[Lead]) || EndsStopped(First[Lead - 1]))
+				if (!StartsLower(First[Lead]) || EndsStopped(First[Lead - 1]) || IsJoin(First[Lead]))
+				{
+					continue;
+				}
+				bool bOneSentence = true;
+				for (size_t Word = Lead; Word + 1 < First.size(); ++Word)
+				{
+					bOneSentence = bOneSentence && !EndsSentence(First[Word]);
+				}
+				if (!bOneSentence)
 				{
 					continue;
 				}
@@ -406,7 +431,7 @@ namespace EdgeSeals
 					bAll = Named >= 1 && Named <= 4;
 					for (size_t Word = 0; bAll && Word < Each.size(); ++Word)
 					{
-						bAll = Word < Named ? !EndsStopped(Each[Word]) : Each[Word] == First[Lead + Word - Named];
+						bAll = Word < Named ? !EndsStopped(Each[Word]) && !IsJoin(Each[Word]) : Each[Word] == First[Lead + Word - Named];
 					}
 					if (bAll)
 					{
@@ -476,7 +501,8 @@ namespace EdgeSeals
 		{
 			return "were";
 		}
-		if (Word == "does" || Word == "goes")
+		// (and a few the rules below would cut wrong: "torpedoes" "torpedo", "echoes" "echo", "vetoes" "veto", "focuses" "focus")
+		if (Word == "does" || Word == "goes" || Word == "torpedoes" || Word == "echoes" || Word == "vetoes" || Word == "focuses")
 		{
 			return Word.substr(0, Word.size() - 2);
 		}
@@ -543,6 +569,11 @@ namespace EdgeSeals
 		while (!First.empty() && (IsStop(First.back()) || First.back() == '.' || First.back() == '!' || First.back() == '?'))
 		{
 			First.pop_back(); // (its full stop: the words go on)
+		}
+		if (First.empty())
+		{
+			// (a first item with no words of its own: the count, and where on the card they are)
+			return Count + (Where[0] != '\0' ? std::string(Where) : std::string(" in the month's report"));
 		}
 		return First + ", and " + std::to_string(Run.Count - 1) + " more" + Where;
 	}
