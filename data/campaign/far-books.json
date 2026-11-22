@@ -70,7 +70,7 @@
             "hunts": {"to": "JAP", "seas": [[48, ["bengal", "andaman", "malacca", "mentawai"]]]}},
           {"name": "8th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
             "bases": [[69, "Bataan", "Subic Bay", "luzonsea"]],
-            "hunts": {"to": "JAP", "seas": [[60, ["java", "flores", "natuna"]], [69, ["siam", "schina", "natuna"]]]}},
+            "hunts": {"to": "JAP", "seas": [[61, ["java", "flores", "natuna"]], [69, ["siam", "schina", "natuna"]]]}},
           {"name": "4th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
             "hunts": {"to": "JAP", "seas": [[68, ["java", "flores", "eindian"]]]}}
         ],
