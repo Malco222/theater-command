@@ -737,6 +737,7 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		else if (Key == TEXT("space")) { Player.PressSpace(); }
 		else if (Key == TEXT("t")) { Player.ToggleDayNight(); }
 		else if (Key == TEXT("r")) { Player.OpenReports(); }
+		else if (Key == TEXT("y")) { Player.ToggleWealth(); } // (release 2: the map views on the Y key, timed for the secret map's budget)
 		else
 		{
 			bMissing = true;

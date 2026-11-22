@@ -12154,6 +12154,7 @@ void ACampaignMapActor::SetTowns(const TArray<FTownInfo>& InTowns)
 
 void ACampaignMapActor::ShowWealth(bool bOn)
 {
+	THEATER_SPEED_SCOPE(ShowWealth); // (named in the long-frame lines, as ShowSides is: the Y key's cost)
 	bWealth = bOn && Towns.Num() > 0;
 	bMiniStale = true;
 	OrdersMesh->ClearMeshSection(4);
