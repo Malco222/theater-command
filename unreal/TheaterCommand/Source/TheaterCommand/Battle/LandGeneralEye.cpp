@@ -416,12 +416,27 @@ namespace LandGeneralEye
 		// climbs a hedge gently and a high one is not held back)
 		const double Far = std::max(ArmNow, 1.0);
 		const double Fastest = std::max(1.5, Set.LiftSpeed * Far), Hardest = Set.LiftPush * Far;
+		// (the way up shut over the eye, under a crown or eaves: the lift reaches no higher than that, however fast it
+		// may climb; in Sedan's woods a turn under a crown ran on into the next tree and stopped dead in a frame)
+		double Ceiling = 1e9;
+		if (bLow && !bFirst && !bHold)
+		{
+			const Vec Column = Eye0 + Vec(PushX, PushY, 0.0);
+			for (double Up = 0.5; Up <= 2.0 + 1e-9; Up += 0.5)
+			{
+				if (!Clear(Column + Vec(0.0, 0.0, Lift + Up), Hard, false))
+				{
+					Ceiling = Lift + Up - 0.5;
+					break;
+				}
+			}
+		}
 		// (the lift it could reach in Tau seconds at the most, a little short of it)
 		auto Reachable = [&](double Tau)
 		{
 			const double V0 = std::clamp(LiftSwing, 0.0, Fastest);
 			const double T1 = std::min(Tau, (Fastest - V0) / Hardest);
-			return Lift + 0.8 * (V0 * T1 + 0.5 * Hardest * T1 * T1 + Fastest * (Tau - T1));
+			return std::min(Ceiling, Lift + 0.8 * (V0 * T1 + 0.5 * Hardest * T1 * T1 + Fastest * (Tau - T1)));
 		};
 		bool bBrakeNow = false;
 		double BrakeNeedNow = 0.0;
@@ -464,6 +479,14 @@ namespace LandGeneralEye
 						bBrakeNow = true;
 						BrakeNeedNow = std::max(BrakeNeedNow, L);
 					}
+					// (and where the eye will stand by then, stepped aside and lifted only as far as the springs are
+					// carrying it now, inside the near clearance: it would stop dead there in a frame (a turn under a
+					// crown in Sedan's woods, 3,382 deg/s/s); it brakes now instead)
+					if (Tau <= StopIn && !bBrakeNow && !Clear(Ahead + Vec(0.0, 0.0, Toward(Lift, LiftSwing, std::max(Lift, L), Tau)), Hard, false))
+					{
+						bBrakeNow = true;
+						BrakeNeedNow = std::max(BrakeNeedNow, L);
+					}
 					if (bTall) break;
 				}
 			}
@@ -480,6 +503,9 @@ namespace LandGeneralEye
 			bBrake = true;
 		}
 		if (bBrake) Need = std::max(Need, BrakeNeed);
+		// (gliding fast and low, as a drone flies: lifted with its speed, so the trees on its way are under it, not met in
+		// a frame between two looks ahead; it settles as the glide slows)
+		if (bLow && bGliding && !bFirst) Need = std::max(Need, std::min(Set.LiftMost, Set.GlideLift * std::hypot(SwingX, SwingY)));
 		if (bFirst)
 		{
 			PushX = PushWant.X;

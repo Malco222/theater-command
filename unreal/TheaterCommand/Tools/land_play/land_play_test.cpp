@@ -69,6 +69,7 @@ namespace
 		double BurstDue = -1.0;
 		int OwnFrames = 0, OwnNear = 0, OwnFilled = 0, OwnLooks = 0;
 		int Crossed = 0, Edged = 0;
+		double CutReal = 0.0;
 		double LostSince = -1.0, LostLongest = 0.0, LostAt = 0.0;
 		double Next = 0.0;
 		// (the look's way: yaw and pitch, degrees; its swing a frame ago, degrees a second)
@@ -109,7 +110,7 @@ namespace
 		{
 			++Frames;
 			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
-			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
+			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; CutReal = R; }
 			if (Frames == 1)
 			{
 				D.MassWindow(MassFrom, MassTo);
@@ -300,7 +301,13 @@ namespace
 				++OwnLooks;
 				if (D.OwnFill(P) > Set.OwnMost) ++OwnFilled;
 			}
-			if (D.MenCross(P, B, B)) ++Crossed;
+			if (D.MenCross(P, B, B))
+			{
+				++Crossed;
+				if (std::getenv("LAND_PLAY_CROSS"))
+					std::printf("  a man in the lens at battle %.2f (real %.2f): %s on %d, eye %.2f m up, fov %.0f, held %.2f s, cut for %s\n", B, R,
+						LandEye::NameOf(P.Shot), P.Subject, P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y), P.Fov, R - CutReal, LandEye::NameOf(D.LastWhy()));
+			}
 			if (D.EdgeFill(P) > Set.EdgeMost) ++Edged;
 			if (bMan && bUp && P.Shot != LandEye::Kind::Tank && P.Shot != LandEye::Kind::Track && D.Lost(B))
 			{
@@ -767,7 +774,9 @@ int main(int argc, char** argv)
 	int FollowerShots = 0, FollowerStruck = 0, FollowerOnHim = 0, FollowerBursts = 0, FollowerBurstsBeside = 0;
 	double FollowerWorst = 0.0;
 
-	while (Battle < Rec.End + 6.0)
+	// (LAND_PLAY_ONLY_GEN: the general's view alone, for working on it; the film's counts after it are of nothing)
+	const bool bOnlyGen = std::getenv("LAND_PLAY_ONLY_GEN") != nullptr;
+	while (!bOnlyGen && Battle < Rec.End + 6.0)
 	{
 		const double Speed = Battle < Contact - 10.0 ? 2.0 : 1.0 / Life;
 		const double From = Battle;
@@ -1312,6 +1321,7 @@ int main(int argc, char** argv)
 	// does, at half the battle's clock (its rules run at twice life's pace): the camera's rules are timed on the screen.
 	for (const uint32_t More : { 2u, 3u, 4u })
 	{
+		if (bOnlyGen) break;
 		LandEye::Settings MoreSet = ES;
 		MoreSet.Seed = Rec.Seed + More * 7919u;
 		LandEye::Director Other;
@@ -1448,7 +1458,10 @@ int main(int argc, char** argv)
 			Highest = std::max(Highest, P.Eye.Z - GroundAt(P.Look.X, P.Look.Y));
 			if (Gen.Zoom() < 0.02) LowestNear = std::min(LowestNear, Over);
 			if (Over < 0.5) ++Under;
-			if (!EW.Free(P.Eye) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
+			// (Free is the scene's ground-level word, a house's floor or a wall's line at any height: asked, as the view
+			// asks it, within FreeUnder of the ground; the eye 400 m over a farm's roof is not in it)
+			const bool bFreeAsked = Over < LandGeneralEye::Settings().FreeUnder;
+			if ((bFreeAsked && !EW.Free(P.Eye)) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
 			if (P.Eye.Z < G + CornAt(P.Eye.X, P.Eye.Y) + 0.1) ++InCorn;
 			if (const char* Win = std::getenv("LAND_PLAY_GEN_AT"))
 			{
@@ -1508,6 +1521,11 @@ int main(int argc, char** argv)
 		if (LowestNear > 2.5) Fault("the general's view never came down to a man's shoulder");
 		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+	}
+	if (bOnlyGen)
+	{
+		std::printf("\n(the general's view alone)\n");
+		return 0;
 	}
 	// A tank's own shot and her knock-out count as action for a lens straight off her nose or tail (her hull runs 3.2 m
 	// from her middle: the pre-check found it hid her own shot from the dead-shot rule within some 35-40 degrees of

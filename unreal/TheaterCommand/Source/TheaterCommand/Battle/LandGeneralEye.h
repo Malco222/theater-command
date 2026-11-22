@@ -74,6 +74,9 @@ namespace LandGeneralEye
 		double PanSpeed = 0.75, PanLeast = 4.0;
 		/** How fast the look-at, the zoom and the turn catch up (a critically damped spring's rate), and a glide's. */
 		double Ease = 11.0, ZoomEase = 9.0, TurnEase = 12.0, Glide = 3.2;
+		/** A glide low over the field flies higher the faster it goes, this many metres for each m/s, up to LiftMost (a
+		 * glide to a block in Sedan's woods ran 360 m/s at the treetops; it met them a frame before it braked). */
+		double GlideLift = 0.04;
 		/** How far from any thing the eye keeps (a hedge's shrubs, a house, a tree), and over the ground and the ears of
 		 * corn, metres. */
 		double ThingClear = 1.2, GroundClear = 1.0, OverCrop = 0.35;
