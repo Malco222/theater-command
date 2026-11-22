@@ -689,12 +689,16 @@
   }
  },
  "sizes": {
-  "_how": "Rough figures, already about 1.3 times real so they read at the battle camera (art director). Check in the scene against a known-size fitting: a man, 1.75 m. scale is for the puff and clod counts and sizes; shake is camera shake within shake_within_m.",
+  "_how": "Rough figures, already about 1.3 times real so they read at the battle camera (art director). Check in the scene against a known-size fitting: a man, 1.75 m. scale is for the puff and clod counts and sizes; shake is camera shake within shake_within_m. spout_m: the height of the white water column a hit in the sea throws (grounds.water.spout), where crown_m is the land burst's earth: the bigger land bursts of 22 November (crown_m raised) left the sea as it was, the pre-check 05:48Z; without it the sea takes crown_m.",
   "grenade": {
    "scale": 0.2,
    "crown_m": [
     3.0,
     4.0
+   ],
+   "spout_m": [
+    1.5,
+    2.0
    ],
    "crater_m": 0.0,
    "scuff": true,
@@ -716,6 +720,10 @@
    "crown_m": [
     5.0,
     7.0
+   ],
+   "spout_m": [
+    2.0,
+    3.0
    ],
    "crater_m": 0.5,
    "linger_s": [
@@ -743,6 +751,10 @@
     10.0,
     12.0
    ],
+   "spout_m": [
+    4.0,
+    6.0
+   ],
    "crater_m": 0.8,
    "linger_s": [
     8,
@@ -767,6 +779,10 @@
    "crown_m": [
     15.0,
     19.0
+   ],
+   "spout_m": [
+    5.0,
+    8.0
    ],
    "crater_m": 1.0,
    "linger_s": [
@@ -794,6 +810,10 @@
     20.0,
     25.0
    ],
+   "spout_m": [
+    8.0,
+    12.0
+   ],
    "crater_m": 1.7,
    "linger_s": [
     15,
@@ -817,6 +837,10 @@
    "crown_m": [
     28.0,
     35.0
+   ],
+   "spout_m": [
+    12.0,
+    20.0
    ],
    "crater_m": 3.0,
    "linger_s": [
@@ -843,6 +867,10 @@
    "crown_m": [
     45.0,
     60.0
+   ],
+   "spout_m": [
+    30.0,
+    45.0
    ],
    "crater_m": 7.0,
    "linger_s": [
@@ -917,6 +945,10 @@
    "crown_m": [
     60.0,
     80.0
+   ],
+   "spout_m": [
+    45.0,
+    60.0
    ],
    "crater_m": 10.0,
    "linger_s": [
