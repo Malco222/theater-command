@@ -304,11 +304,11 @@ namespace EdgeSeals
 	 * the frame dresses as it dresses every tip (CampaignHUD, "ToolTip.Font": the typed face at TipPt). The layer gives
 	 * it no size of its own: the engine sizes it to its words and wraps them at Slate.ToolTipWrapWidth, TipWrap units
 	 * (the engine's own 1000). The face is Courier Prime, every letter of it TipAdvance of an em wide (1228 of 2048, from
-	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them. But Slate sets each letter a whole
-	 * pixel's advance at the scale it draws the tip (the shaped glyph's advance is a whole number of pixels, the face
-	 * hinted), so on a screen of Scale pixels a unit a letter is round(7.6 * Scale) / Scale units, and one line holds
-	 * TipLettersAt(Scale) letters: 125 at a pixel a unit (1920 by 1080), 133 at two, 120 in a window 783 high, 118 in
-	 * one 640 high; 131 only were the advance not a whole pixel. The tip is drawn at the game layer's scale (the window's
+	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them. But the engine sets the face at a
+	 * whole pixel's size at the scale it draws the tip, round(12.667 * Scale) px, and each letter a whole pixel's advance
+	 * at that size (the shaped glyph's advance is a whole number of pixels, the face hinted), round(0.5996 * that) px;
+	 * so one line holds TipLettersAt(Scale) letters: 125 at a pixel a unit (1920 by 1080), 133 at two, 145 in a window
+	 * 783 high, 118 in one 640 high (and 896); 131 only were the advance not a whole pixel. The tip is drawn at the game layer's scale (the window's
 	 * height over 1080, Unreal's own curve) or, where the engine gives it a window of its own, at the desktop's (one to
 	 * three pixels a point); which is not read here, as Unreal is not installed. So the hover's own size is the least
 	 * line of either on every screen the seals are held to: TipLetters, 118 letters. A hover of more wraps to a second

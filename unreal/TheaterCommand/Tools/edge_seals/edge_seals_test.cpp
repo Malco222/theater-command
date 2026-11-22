@@ -1432,10 +1432,18 @@ namespace
 	 */
 	constexpr int HoverLine = 118;
 
-	/** The test's own whole-pixel line: 1000 units at Scale pixels a unit over the letter's advance rounded to a pixel. */
+	/**
+	 * The test's own whole-pixel line: 1000 units at Scale pixels a unit over the letter's advance, as the engine sets it:
+	 * the face's size rounded to a pixel first (9.5 points, 4/3 units a point), then the advance at that size rounded again.
+	 */
+	double LetterPx(double Scale)
+	{
+		return std::max(std::round(1228.0 / 2048.0 * std::max(std::round(9.5 * 4.0 / 3.0 * Scale), 1.0)), 1.0);
+	}
+
 	int LineAt(double Scale)
 	{
-		const double Px = std::max(std::round(1228.0 / 2048.0 * 9.5 * 4.0 / 3.0 * Scale), 1.0);
+		const double Px = LetterPx(Scale);
 		return static_cast<int>(std::floor(1000.0 * Scale / Px + 1e-9));
 	}
 
@@ -3243,16 +3251,17 @@ static void TestHover(const char* Folder)
 {
 	// 1. The hover's own size: 118 letters to its line on every screen the seals are held to (from a window 600 high to
 	// 3 px a unit, and a desktop of 1 to 3 px a point), each letter its whole pixel's advance; 119 wrap in a window 640
-	// high. 125 at 1920 by 1080, 120 at 783 high, 133 at two pixels a unit; 131 only with fractional advances.
+	// high (and 896). 125 at 1920 by 1080, 145 at 783 high, 133 at two pixels a unit; 131 only with fractional advances.
+	// Each letter as the engine sets it: the face at round(12.667 * Scale) px, the advance round(0.5996 * that) px.
 	const double Letter = TipAdvance * TipPt * 4.0 / 3.0;
-	CHECK(TipLetters() == HoverLine && TipLettersAt(640.0 / 1080.0) == HoverLine && TipLettersAt(1.0) == 125 && TipLettersAt(783.0 / 1080.0) == 120 && TipLettersAt(2.0) == 133);
+	CHECK(TipLetters() == HoverLine && TipLettersAt(640.0 / 1080.0) == HoverLine && TipLettersAt(1.0) == 125 && TipLettersAt(783.0 / 1080.0) == 145 && TipLettersAt(896.0 / 1080.0) == HoverLine && TipLettersAt(2.0) == 133);
 	CHECK(static_cast<int>(std::floor(TipWrap / Letter)) == 131 && TipLettersAt(0.0) == 125);
 	{
 		bool bEvery = true, bLeast = false;
 		for (int High = 600; High <= 3240; ++High)
 		{
 			const double Scale = High / 1080.0;
-			const double Px = std::round(Letter * Scale);
+			const double Px = LetterPx(Scale);
 			bEvery = bEvery && TipLettersAt(Scale) == LineAt(Scale) && HoverLine * Px <= TipWrap * Scale + 1e-9 && TipLettersAt(Scale) >= HoverLine;
 			bLeast = bLeast || (HoverLine + 1) * Px > TipWrap * Scale;
 		}
@@ -3390,7 +3399,7 @@ static void TestHover(const char* Folder)
 		}
 	}
 	CHECK(Months.size() == 48 && Hovers >= 500 && Over == 0 && Bad == 0);
-	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && Widest * std::round(Letter * 640.0 / 1080.0) <= TipWrap * 640.0 / 1080.0 && TodaysTallest == 2 && TodaysLongest > HoverLine);
+	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && Widest * LetterPx(640.0 / 1080.0) <= TipWrap * 640.0 / 1080.0 && TodaysTallest == 2 && TodaysLongest > HoverLine);
 	CHECK(Folded >= 40 && Whole >= 20 && More >= 10 && NamedAll >= 20);
 	// (no listed line says one the list gave already, where the card's lines for them differ)
 	CHECK(Twice == 0);

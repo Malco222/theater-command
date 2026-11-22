@@ -1015,7 +1015,10 @@ namespace EdgeSeals
 	{
 		// (a screen of no measure is taken at a pixel a unit; a letter is never set under a pixel)
 		const double At = Scale > 0.0 ? Scale : 1.0;
-		const double Advance = std::max(std::floor(TipAdvance * TipPt * 4.0 / 3.0 * At + 0.5), 1.0);
+		// (as the engine sets it: the face's size rounded to a whole pixel first, then each letter's advance at that size
+		// rounded again, not the em's 7.6 units scaled and rounded once: the pre-check's reading of 20:45Z)
+		const double FacePx = std::max(std::floor(TipPt * 4.0 / 3.0 * At + 0.5), 1.0);
+		const double Advance = std::max(std::floor(TipAdvance * FacePx + 0.5), 1.0);
 		return static_cast<int>(std::floor(TipWrap * At / Advance + 1e-9));
 	}
 
