@@ -1065,7 +1065,7 @@ int main(int argc, char** argv)
 				Least = std::min(Least, Over);
 				if (Over < 0.05) ++Among;
 			}
-			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Seen, Seen ? Least : 0.0);
+			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d, the man tried %d of %zu): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Tried, Tries.size(), Seen, Seen ? Least : 0.0);
 			if (Seen > 0) break;
 		}
 		if (Among > 0) Fault("an asked low shot is down among the corn");

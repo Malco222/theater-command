@@ -617,6 +617,241 @@ namespace LandCrater
 		}
 	}
 
+	/**
+	 * A breach's torn earth (Field::AddBreach): a grid in the bank's frame, u along it and v to its left, 0.3 m a
+	 * square, laid row by row from the far right corner (Field::OnBreach reads it so). Over the gap the bank's earth is
+	 * gone down to the field (Height less Rise), the floor churned; the bank's cut ends are faces of fresh earth falling
+	 * into the gap over a metre or so, ragged from side to side, a lip of torn turf at their tops; on the side she drove
+	 * out to the spoil lies heaped half a metre or less, turf and clods in it, a little spilled on the other side. The
+	 * ground drawn is cut over the bank's footprint across the gap and its faces (OutCut, a rectangle, counter-clockwise);
+	 * the grid runs half a metre past the cut on every side as a skin a few centimetres over the ground, its outer edge
+	 * the ground's own colour and lit as the ground, so no seam shows where it meets the bank's own mesh.
+	 */
+	static void LayBreach(const Breach& B, const Soil& Paint, uint64_t Seed, const HeightFn& Height, const RiseFn& Rise, LandField::Mesh& Out,
+		const ColourFn& Under, const UpFn& Lit, std::vector<double>& OutCut, Field::Hole& H)
+	{
+		OutCut.clear();
+		Dice D(Seed);
+		const double Step = 0.3;
+		const double Half = std::max(1.2, B.Half);
+		const double Ramp = 1.0;
+		const double CutU = Half + Ramp, MU = 0.45;
+		const double Foot = std::clamp(B.Foot, 0.8, 2.5), CutV = Foot + 0.25;
+		const double SpoilOut = CutV + 2.6, BackOut = CutV + 0.9, MV = 0.5;
+		const int Through = B.Through < 0 ? -1 : 1;
+		// (u from the far left end to the far right; v across, the spoil's side out to SpoilOut, the other to BackOut)
+		const double U0 = -(CutU + MU), U1 = CutU + MU;
+		const double VLo = Through > 0 ? -(BackOut + MV) : -(SpoilOut + MV), VHi = Through > 0 ? SpoilOut + MV : BackOut + MV;
+		// (a span a whole number of steps long is that many squares, not one more of no width)
+		const int NU = static_cast<int>(std::ceil((U1 - U0) / Step - 1e-6)) + 1, NV = static_cast<int>(std::ceil((VHi - VLo) / Step - 1e-6)) + 1;
+		const double Cy = std::cos(B.Yaw), Sy = std::sin(B.Yaw);
+		const auto World = [&](double U, double V, double& X, double& Y) { X = B.X + U * Cy - V * Sy; Y = B.Y + U * Sy + V * Cy; };
+
+		// Its shape's dice: the faces' ragged line, the churned floor, the spoil's lumps, its height.
+		const double JagP[4] = { D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi) };
+		const double ChurnP[4] = { D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi) };
+		const double LumpP[3] = { D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi), D.U(0.0, 2.0 * Pi) };
+		const double SpoilHigh = D.U(0.3, 0.48), SpoilAt = D.U(0.7, 1.1), SpoilLean = D.U(-0.4, 0.4);
+		// (where a face's foot meets the floor, by side and across the bank: ragged by a third of a metre either way)
+		const auto FaceAt = [&](int Side, double Vt)
+		{
+			const double* P = Side < 0 ? JagP : JagP + 2;
+			return Half + 0.22 * std::sin(Vt * 2.3 + P[0]) + 0.12 * std::sin(Vt * 5.1 + P[1]);
+		};
+		const auto Churn = [&](double U, double V)
+		{
+			return 0.035 * std::sin(U * 5.3 + ChurnP[0]) * std::sin(V * 4.1 + ChurnP[1]) + 0.022 * std::sin(U * 9.7 + V * 3.3 + ChurnP[2]) + 0.015 * std::sin(V * 11.0 - U * 2.0 + ChurnP[3]);
+		};
+		const auto Lumps = [&](double U, double V)
+		{
+			return 0.5 + 0.25 * std::sin(U * 3.1 + LumpP[0]) * std::sin(V * 2.7 + LumpP[1]) + 0.25 * std::sin(U * 6.3 - V * 4.9 + LumpP[2]);
+		};
+
+		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
+		H.U0 = U0;
+		H.V0 = VLo;
+		H.Step = Step;
+		H.NU = NU;
+		H.NV = NV;
+		H.CutU = CutU;
+		H.CutV = CutV;
+		H.SpoilOut = SpoilOut;
+		H.BackOut = BackOut;
+		std::vector<double> Fade(static_cast<size_t>(NU * NV), 0.0); // (how much of each point's normal is the ground's)
+		for (int J = 0; J < NV; ++J)
+		{
+			const double V = std::min(VHi, VLo + J * Step), Vt = V * Through;
+			for (int I = 0; I < NU; ++I)
+			{
+				const double U = std::min(U1, U0 + I * Step), Au = std::fabs(U);
+				double X = 0.0, Y = 0.0;
+				World(U, V, X, Y);
+				const double Gz = Height(X, Y), Rz = std::max(0.0, Rise(X, Y)), Floor = Gz - Rz;
+				const Rgb8 Ground = Under ? Under(X, Y) : Paint.Edge;
+				const bool bEdge = I == 0 || J == 0 || I == NU - 1 || J == NV - 1;
+				const bool bInCut = Au <= CutU && Vt >= -CutV && Vt <= CutV;
+				double Z = 0.0;
+				Rgb8 C;
+				double W = 0.0;
+				if (bEdge)
+				{
+					// the skin's outer edge: on the ground, its own colour, lit as it is
+					Z = Gz + 0.012;
+					C = Ground;
+					W = 1.0;
+				}
+				else if (bInCut)
+				{
+					const double FaceFoot = FaceAt(U < 0.0 ? -1 : 1, Vt);
+					// (the share of the bank left standing: none over the gap, all of it a little short of the cut's edge)
+					const double Kept = Smooth(std::clamp((Au - FaceFoot) / std::max(0.2, CutU - 0.15 - FaceFoot), 0.0, 1.0));
+					// (raised a little toward the cut's edges, so the bank's own mesh beyond never shows over the skin)
+					const double Edgeness = std::max(Smooth(std::clamp((Au - (CutU - 0.35)) / 0.35, 0.0, 1.0)), Smooth(std::clamp((std::fabs(Vt) - (CutV - 0.35)) / 0.35, 0.0, 1.0)));
+					const double Lip = Rz > 0.2 ? 0.09 * std::exp(-std::pow((Au - (FaceFoot + 0.6 * (CutU - FaceFoot))) / 0.22, 2.0)) : 0.0;
+					Z = Floor + Rz * Kept + 0.03 + 0.07 * Edgeness + Churn(U, V) * (1.0 - Kept) + Lip;
+					const double Tone = D.U(0.88, 1.1);
+					if (Kept < 0.12)
+					{
+						// the gap's floor: the bank's earth churned by her tracks, torn turf and darker clods lying in it
+						const double Patch = D.U();
+						C = Mixed(Paint.Hollow, Paint.Wall, D.U(0.3, 0.6));
+						if (Patch < 0.14) C = Mixed(C, Mixed(Paint.Turf, Ground, 0.6), D.U(0.4, 0.7));
+						else if (Patch < 0.26) C = Mixed(C, Paint.Clod, 0.6);
+					}
+					else if (Kept < 0.86)
+					{
+						// a cut end's face: fresh earth, damp and dark at its foot, drier toward the torn lip
+						C = Mixed(Paint.Wall, Paint.Crest, Smooth((Kept - 0.12) / 0.74) * 0.7);
+						if (D.U() < 0.12) C = Mixed(C, Paint.Clod, 0.5); // (roots and stones in it)
+					}
+					else
+					{
+						// the bank's top and sides left: its own colour, torn turf at the lip
+						C = Mixed(Ground, Mixed(Paint.Turf, Paint.Crest, 0.3), (1.0 - Edgeness) * Smooth((1.0 - Kept) / 0.14) * 0.6);
+					}
+					C = Toned(C, Tone);
+				}
+				else
+				{
+					// outside the cut: the skin over the ground and the bank's ends, the spoil on her side, a spill on the other
+					const double Du = std::max(0.0, Au - CutU), Dv = Vt > CutV ? Vt - CutV : Vt < -CutV ? -CutV - Vt : 0.0;
+					const double Far = std::clamp(std::max(Du / MU, Vt > CutV ? (Vt - (SpoilOut - 0.2)) / MV : Vt < -CutV ? (Dv - (BackOut - CutV - 0.2)) / MV : 0.0), 0.0, 1.0);
+					Z = Gz + 0.015 + 0.085 * (1.0 - Smooth(std::min(1.0, std::max(Du / MU, Dv / 0.6))));
+					C = Ground;
+					W = Smooth(Far);
+					if (Vt > CutV && Au < Half + 1.6)
+					{
+						// the spoil: the bank's earth pushed out, heaped highest a metre out, falling away to nothing
+						const double Out_ = Vt - CutV, Room = SpoilOut - CutV;
+						const double Across = Out_ < SpoilAt ? Smooth(Out_ / SpoilAt) : 1.0 - Smooth((Out_ - SpoilAt) / std::max(0.3, Room - SpoilAt));
+						const double Along = 1.0 - Smooth(std::clamp((Au - (Half - 0.4 + SpoilLean * (U > 0.0 ? 1.0 : -1.0))) / 1.6, 0.0, 1.0));
+						const double Heap = SpoilHigh * Across * Along * (0.65 + 0.7 * Lumps(U, V));
+						Z += Heap;
+						if (Heap > 0.02)
+						{
+							const double Patch = D.U();
+							C = Heap > 0.18 ? Mixed(Paint.Thrown, Paint.Crest, 0.35) : Mixed(Paint.Thrown, Ground, 0.35);
+							if (Patch < 0.24) C = Mixed(C, Mixed(Paint.Turf, Ground, 0.65), D.U(0.45, 0.8)); // (turf torn off the bank's top)
+							else if (Patch < 0.38) C = Mixed(C, Paint.Clod, 0.6);
+							C = Toned(C, D.U(0.88, 1.1));
+							W = std::min(W, 0.15);
+						}
+						else
+						{
+							C = Mixed(Ground, Paint.Edge, 0.3 * (1.0 - Far));
+						}
+					}
+					else if (Vt < -CutV && Au < Half + 0.8)
+					{
+						// a little spilled back on the side she came from
+						const double Out_ = -CutV - Vt, Room = BackOut - CutV;
+						const double Spill = 0.06 * (1.0 - Smooth(Out_ / Room)) * (1.0 - Smooth(std::clamp((Au - Half + 0.3) / 1.1, 0.0, 1.0)));
+						Z += Spill * (0.6 + 0.8 * Lumps(U, V));
+						C = Mixed(Ground, Paint.Thrown, std::min(1.0, Spill / 0.04) * 0.7);
+					}
+					else
+					{
+						// over the bank beyond the cut: its own colour, a little torn soil near the cut's edge
+						C = Mixed(Ground, Paint.Crest, 0.25 * (1.0 - Smooth(std::min(1.0, Du / MU))) * (Du > 0.0 ? 1.0 : 0.0));
+					}
+					C = Mixed(C, Ground, Far);
+				}
+				Put(Out, X, Y, Z, C);
+				Fade[static_cast<size_t>(J * NU + I)] = W;
+			}
+		}
+		for (int J = 0; J + 1 < NV; ++J)
+		{
+			for (int I = 0; I + 1 < NU; ++I)
+			{
+				const uint32_t A = static_cast<uint32_t>(FirstPoint) + static_cast<uint32_t>(J * NU + I), Bq = A + 1u, Cq = A + static_cast<uint32_t>(NU), Dq = Cq + 1u;
+				Tri(Out, A, Bq, Dq);
+				Tri(Out, A, Dq, Cq);
+			}
+		}
+
+		// The clods: lumps of the bank's earth and turf on the floor and the spoil, the bigger ones in the spoil.
+		const int Clods = D.Whole(12, 18);
+		H.Clods = Clods;
+		for (int K = 0; K < Clods; ++K)
+		{
+			const bool bSpoil = D.U() < 0.6;
+			const double U = D.U(-Half - 0.4, Half + 0.4), Vt = bSpoil ? D.U(CutV - 0.2, SpoilOut - 0.6) : D.U(-CutV + 0.3, CutV - 0.3);
+			double Cx = 0.0, Cyy = 0.0;
+			World(U, Vt * Through, Cx, Cyy);
+			const double Big = (bSpoil ? D.U(0.12, 0.28) : D.U(0.08, 0.18));
+			const bool bTurf = D.U() < 0.35;
+			double Gz = 0.0;
+			{
+				// (on the breach's own face there: the nearest grid point's height)
+				const int I = std::clamp(static_cast<int>(std::lround((U - U0) / Step)), 0, NU - 1);
+				const int J = std::clamp(static_cast<int>(std::lround((Vt * Through - VLo) / Step)), 0, NV - 1);
+				Gz = Out.Positions[(FirstPoint + static_cast<size_t>(J * NU + I)) * 3 + 2];
+			}
+			const Rgb8 Ground = Under ? Under(Cx, Cyy) : Paint.Turf;
+			const Rgb8 Side = Toned(Paint.Clod, D.U(0.85, 1.1));
+			const Rgb8 Top = bTurf ? Toned(Mixed(Paint.Turf, Ground, 0.7), D.U(0.85, 1.1)) : Toned(Mixed(Paint.Clod, Paint.Crest, 0.4), D.U(0.9, 1.1));
+			const uint32_t Peak = Put(Out, Cx, Cyy, Gz + Big * (bTurf ? D.U(0.25, 0.4) : D.U(0.35, 0.6)), Top);
+			constexpr int Around = ClodPoints - 1; // (TopAt reads them so)
+			uint32_t FootAt[Around];
+			const double Turned = D.U(0.0, 2.0 * Pi);
+			for (int F = 0; F < Around; ++F)
+			{
+				const double A = Turned + 2.0 * Pi * F / Around + D.U(-0.25, 0.25);
+				const double Rr = Big * D.U(0.6, 1.1) * (bTurf ? 1.3 : 1.0);
+				FootAt[F] = Put(Out, Cx + std::cos(A) * Rr, Cyy + std::sin(A) * Rr, Gz - 0.01, Side);
+			}
+			for (int F = 0; F < Around; ++F)
+			{
+				Tri(Out, Peak, FootAt[F], FootAt[(F + 1) % Around]);
+			}
+		}
+		Normals(Out, FirstPoint, FirstIndex);
+		for (int K = 0; K < NU * NV; ++K)
+		{
+			const double W = Fade[static_cast<size_t>(K)];
+			if (W > 0.0)
+			{
+				const size_t P = FirstPoint + static_cast<size_t>(K);
+				LeanTo(Out, P, GroundUp(Lit, Height, Out.Positions[P * 3], Out.Positions[P * 3 + 1]), W);
+			}
+		}
+
+		// The cut: the bank's footprint across the gap and its faces, counter-clockwise seen from above.
+		double Corners[4][2];
+		const double Cu[4] = { -CutU, CutU, CutU, -CutU }, Cv[4] = { -CutV, -CutV, CutV, CutV };
+		for (int K = 0; K < 4; ++K)
+		{
+			World(Cu[K], Cv[K], Corners[K][0], Corners[K][1]);
+		}
+		// (u then v is a turn of x then y, so these run counter-clockwise already)
+		for (int K = 0; K < 4; ++K)
+		{
+			OutCut.push_back(Corners[K][0]);
+			OutCut.push_back(Corners[K][1]);
+		}
+	}
+
 	void Field::Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder)
 	{
 		Height = std::move(InHeight);
@@ -662,6 +897,37 @@ namespace LandCrater
 			}
 		}
 		const int Number = static_cast<int>(Holes.size());
+		const Place In = PlaceFor(X, Y);
+		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
+		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
+		LandField::Mesh& Into = PatchList[static_cast<size_t>(In.Patch)].Sections[static_cast<size_t>(In.Section)];
+		Hole H;
+		H.First = static_cast<uint32_t>(Into.Colours.size());
+		const size_t FirstIndex = Into.Triangles.size();
+		// (laid on what is there now: the floor of an older hole where it is torn in one)
+		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
+		std::vector<double> CutLine;
+		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
+		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
+		H.X = X;
+		H.Y = Y;
+		H.R = 0.5 * S.Across;
+		H.Rim = S.Rim;
+		H.In = In;
+		H.Sides = std::clamp(S.Sides, 8, 48);
+		H.Clods = std::max(0, S.Clods);
+		// (how far it reaches: its farthest point, the thrown soil's ragged edge or a clod's foot)
+		for (size_t P = H.First; P < Into.Colours.size(); ++P)
+		{
+			const double Dx = Into.Positions[P * 3] - X, Dy = Into.Positions[P * 3 + 1] - Y;
+			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
+		}
+		Keep(H, std::move(CutLine), FirstIndex, std::max(1.2 * H.R, H.Out));
+		return true;
+	}
+
+	Field::Place Field::PlaceFor(double X, double Y)
+	{
 		// (its patch: the square of the field its middle is in, numbered when its first hole is laid)
 		const int PatchI = static_cast<int>(std::floor(X / PatchSize));
 		const int PatchJ = static_cast<int>(std::floor(Y / PatchSize));
@@ -689,30 +955,13 @@ namespace LandCrater
 			Own_.Sections.resize(static_cast<size_t>(In.Section) + 1);
 		}
 		++Own_.Count;
-		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
-		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
-		LandField::Mesh& Into = Own_.Sections[static_cast<size_t>(In.Section)];
-		Hole H;
-		H.First = static_cast<uint32_t>(Into.Colours.size());
-		const size_t FirstIndex = Into.Triangles.size();
-		// (laid on what is there now: the floor of an older hole where it is torn in one)
-		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
-		std::vector<double> CutLine;
-		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
-		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
-		H.X = X;
-		H.Y = Y;
-		H.R = 0.5 * S.Across;
-		H.Rim = S.Rim;
-		H.In = In;
-		H.Sides = std::clamp(S.Sides, 8, 48);
-		H.Clods = std::max(0, S.Clods);
-		// (how far it reaches: its farthest point, the thrown soil's ragged edge or a clod's foot)
-		for (size_t P = H.First; P < Into.Colours.size(); ++P)
-		{
-			const double Dx = Into.Positions[P * 3] - X, Dy = Into.Positions[P * 3 + 1] - Y;
-			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
-		}
+		return In;
+	}
+
+	void Field::Keep(Hole& H, std::vector<double>&& CutLine, size_t FirstIndex, double Reach)
+	{
+		const int Number = static_cast<int>(Holes.size());
+		const Place In = H.In;
 		if (!CutLine.empty())
 		{
 			// The older holes it is torn in: what of them lay inside its cut is cut away (their floors and rims would
@@ -748,12 +997,12 @@ namespace LandCrater
 			H.Cut = CutLine;
 			Cuts.push_back(std::move(CutLine));
 		}
+		const double HX = H.X, HY = H.Y;
 		Holes.push_back(H);
-		const double Bare_ = std::max(1.2 * H.R, H.Out);
 		constexpr double Square = 8.0;
-		for (int J = static_cast<int>(std::floor((Y - Bare_) / Square)); J <= static_cast<int>(std::floor((Y + Bare_) / Square)); ++J)
+		for (int J = static_cast<int>(std::floor((HY - Reach) / Square)); J <= static_cast<int>(std::floor((HY + Reach) / Square)); ++J)
 		{
-			for (int I = static_cast<int>(std::floor((X - Bare_) / Square)); I <= static_cast<int>(std::floor((X + Bare_) / Square)); ++I)
+			for (int I = static_cast<int>(std::floor((HX - Reach) / Square)); I <= static_cast<int>(std::floor((HX + Reach) / Square)); ++I)
 			{
 				Squares[SquareOf(I, J)].push_back(Number);
 			}
@@ -763,7 +1012,6 @@ namespace LandCrater
 		{
 			Changed.push_back(In);
 		}
-		return true;
 	}
 
 	std::vector<Field::Place> Field::TakeChanged()
@@ -833,6 +1081,17 @@ namespace LandCrater
 		for (const int K : Found->second)
 		{
 			const Hole& H = Holes[static_cast<size_t>(K)];
+			if (H.bBreach)
+			{
+				// (a breach: its torn gap and the spoil she pushed out, not the grass round them)
+				const double Dx = X - H.X, Dy = Y - H.Y, Cy = std::cos(H.Yaw), Sy = std::sin(H.Yaw);
+				const double U = Dx * Cy + Dy * Sy, V = (-Dx * Sy + Dy * Cy) * H.Through;
+				if (std::fabs(U) <= H.CutU + 0.2 && V >= -(H.CutV + 0.3) && V <= H.SpoilOut - 0.3)
+				{
+					return true;
+				}
+				continue;
+			}
 			const double Bare_ = 1.2 * H.R;
 			if ((X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y) < Bare_ * Bare_)
 			{
@@ -840,6 +1099,104 @@ namespace LandCrater
 			}
 		}
 		return false;
+	}
+
+	bool Field::OnBreach(const Hole& H, double X, double Y, double& OutZ) const
+	{
+		if (!H.bBreach || H.NU < 2 || H.NV < 2)
+		{
+			return false;
+		}
+		const double Dx = X - H.X, Dy = Y - H.Y, Cy = std::cos(H.Yaw), Sy = std::sin(H.Yaw);
+		const double U = (Dx * Cy + Dy * Sy - H.U0) / H.Step, V = (-Dx * Sy + Dy * Cy - H.V0) / H.Step;
+		if (!(U >= 0.0) || !(V >= 0.0) || U > H.NU - 1 || V > H.NV - 1)
+		{
+			return false;
+		}
+		const int I0 = std::min(H.NU - 2, static_cast<int>(U)), J0 = std::min(H.NV - 2, static_cast<int>(V));
+		const LandField::Mesh& M = Section(H.In);
+		const float* P = M.Positions.data();
+		// (its square first; a point on a square's edge, its positions rounded to floats, or in the last row or column
+		// (narrower than a step where the span is not a whole number of them) may lie in a neighbour's)
+		for (int K = 0; K < 9; ++K)
+		{
+			const int I = I0 + (K == 0 ? 0 : (K - 1) % 3 - 1), J = J0 + (K == 0 ? 0 : (K - 1) / 3 - 1);
+			if (I < 0 || J < 0 || I > H.NU - 2 || J > H.NV - 2 || (K > 0 && I == I0 && J == J0))
+			{
+				continue;
+			}
+			const uint32_t A = H.First + static_cast<uint32_t>(J * H.NU + I), B = A + 1u, C = A + static_cast<uint32_t>(H.NU), D = C + 1u;
+			// (the two triangles of its square as laid: A, B, D and A, D, C; a point on their shared edge is in both)
+			double Z = 0.0;
+			if (OnTri(P, A, B, D, X, Y, Z) || OnTri(P, A, D, C, X, Y, Z))
+			{
+				OutZ = Z;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool Field::BreachFloor(double X, double Y, double& OutZ) const
+	{
+		if (Squares.empty() || !(X == X) || !(Y == Y))
+		{
+			return false;
+		}
+		constexpr double Square = 8.0;
+		const auto Found = Squares.find(SquareOf(static_cast<int>(std::floor(X / Square)), static_cast<int>(std::floor(Y / Square))));
+		if (Found == Squares.end())
+		{
+			return false;
+		}
+		// (the newest breach whose cut holds it: a shell hole torn in the gap later has its own bowl, which the tank
+		// rides over as she rides over any other)
+		const std::vector<int>& Listed = Found->second;
+		for (auto It = Listed.rbegin(); It != Listed.rend(); ++It)
+		{
+			const Hole& H = Holes[static_cast<size_t>(*It)];
+			if (H.bBreach && !H.Cut.empty() && Inside(H.Cut, X, Y) && OnBreach(H, X, Y, OutZ))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool Field::AddBreach(const Breach& B, const RiseFn& Rise, const std::string& Ground)
+	{
+		if (!Height || !Rise || static_cast<int>(Holes.size()) >= Most || !(B.X == B.X) || !(B.Y == B.Y) || !(B.Yaw == B.Yaw)
+			|| std::fabs(B.X) > 1e6 || std::fabs(B.Y) > 1e6 || !(B.Half > 0.5))
+		{
+			return false;
+		}
+		const int Number = static_cast<int>(Holes.size());
+		const Place In = PlaceFor(B.X, B.Y);
+		const uint64_t Own = Mix(Mix(Seed ^ 0xB4EAC4ull, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(B.X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(B.Y * 100.0)));
+		LandField::Mesh& Into = PatchList[static_cast<size_t>(In.Patch)].Sections[static_cast<size_t>(In.Section)];
+		Hole H;
+		H.bBreach = true;
+		H.First = static_cast<uint32_t>(Into.Colours.size());
+		const size_t FirstIndex = Into.Triangles.size();
+		H.X = B.X;
+		H.Y = B.Y;
+		H.Yaw = B.Yaw;
+		H.Through = B.Through < 0 ? -1 : 1;
+		H.In = In;
+		std::vector<double> CutLine;
+		LayBreach(B, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Height, Rise, Into, Under, Lit, CutLine, H);
+		if (CutLine.empty() || H.NU < 2)
+		{
+			return false;
+		}
+		H.R = H.CutU;
+		for (size_t P = H.First; P < Into.Colours.size(); ++P)
+		{
+			const double Dx = Into.Positions[P * 3] - B.X, Dy = Into.Positions[P * 3 + 1] - B.Y;
+			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
+		}
+		Keep(H, std::move(CutLine), FirstIndex, H.Out);
+		return true;
 	}
 
 	bool Field::TopAt(double X, double Y, double& OutZ) const
@@ -873,6 +1230,39 @@ namespace LandCrater
 			const Hole& H = Holes[static_cast<size_t>(K)];
 			const double Dx = X - H.X, Dy = Y - H.Y;
 			const bool bLast = !H.Cut.empty() && Inside(H.Cut, X, Y);
+			if (H.bBreach)
+			{
+				double Z = 0.0;
+				if (Dx * Dx + Dy * Dy <= H.Out * H.Out)
+				{
+					if (OnBreach(H, X, Y, Z) && Z > Best)
+					{
+						Best = Z;
+						bAny = true;
+					}
+					// its clods (LayBreach's: a peak and five round its foot, after the grid's points)
+					const float* P = Section(H.In).Positions.data();
+					const uint32_t Clod0 = H.First + static_cast<uint32_t>(H.NU * H.NV);
+					for (int C = 0; C < H.Clods; ++C)
+					{
+						const uint32_t Peak = Clod0 + static_cast<uint32_t>(C * ClodPoints);
+						const float* Pk = P + static_cast<size_t>(Peak) * 3;
+						if (std::fabs(X - Pk[0]) > 0.6 || std::fabs(Y - Pk[1]) > 0.6)
+						{
+							continue;
+						}
+						for (int F = 0; F < ClodPoints - 1; ++F)
+						{
+							Take(P, Peak, Peak + 1u + static_cast<uint32_t>(F), Peak + 1u + static_cast<uint32_t>((F + 1) % (ClodPoints - 1)));
+						}
+					}
+				}
+				if (bLast)
+				{
+					break;
+				}
+				continue;
+			}
 			if (Dx * Dx + Dy * Dy > H.Out * H.Out || H.Sides < 3)
 			{
 				continue;

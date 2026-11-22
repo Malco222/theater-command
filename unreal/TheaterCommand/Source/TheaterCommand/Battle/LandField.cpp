@@ -499,7 +499,8 @@ namespace LandField
 			OcWall = 4,    // on a stone wall's line
 			OcMan = 8,      // a man's way: no tree trunk
 			OcVehicle = 16, // a vehicle's way: nothing standing
-			OcGate = 32     // a field gateway: the ground trodden
+			OcGate = 32,    // a field gateway: the ground trodden
+			OcCut = 64      // a hedge cutter's cut to come (Field::Cuts): the hedge whole, but no tree in its gap
 		};
 	}
 
@@ -540,6 +541,19 @@ namespace LandField
 		std::vector<House> Houses;
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
+		std::vector<int> WayOf;       // each way piece's way (Fd.Ways' index)
+		std::vector<uint32_t> WayK;   // and its first point there
+		std::vector<HedgeCrossing> CrossOut;
+		/** Whether a place lies within a cut's gap and Extra metres round it (Fd.Cuts). */
+		bool NearCut(double X, double Y, double Extra) const
+		{
+			for (const Field::Cut& C : Fd.Cuts)
+			{
+				const double R = 0.5 * C.Width + Extra;
+				if ((X - C.X) * (X - C.X) + (Y - C.Y) * (Y - C.Y) < R * R) return true;
+			}
+			return false;
+		}
 		SegGrid WGrid;
 		struct Spot
 		{
@@ -1303,8 +1317,9 @@ namespace LandField
 	void Ground::Impl::MakeWays()
 	{
 		WGrid.Init(-Band - 60.0, -Band - 60.0, FW + Band + 60.0, FH + Band + 60.0, 10.0);
-		for (const Field::Way& W : Fd.Ways)
+		for (size_t Wi = 0; Wi < Fd.Ways.size(); ++Wi)
 		{
+			const Field::Way& W = Fd.Ways[Wi];
 			const bool bVehicle = W.HalfWidth >= VehicleHalf;
 			// (a vehicle's: every pixel any part of which is on it, so no trunk stands in its way)
 			const double Clear = W.HalfWidth + (bVehicle ? 0.8 + 0.71 * Res : 0.6);
@@ -1312,10 +1327,28 @@ namespace LandField
 			{
 				const V2 A{ W.Points[K].first, W.Points[K].second }, B{ W.Points[K + 1].first, W.Points[K + 1].second };
 				if (Len(B - A) < 1e-6 && K + 2 < W.Points.size()) continue;
+				// (a hedge cutter's cut to come: no way through the hedge there yet, the cutter's nor the men's who use the
+				// gap after her, so the hedge is laid whole and the scene tears it open when she bursts through)
+				if (!Fd.Cuts.empty())
+				{
+					bool bAtCut = false;
+					for (const Field::Cut& C : Fd.Cuts)
+					{
+						double T;
+						if (SegDist({ C.X, C.Y }, A, B, T) < 0.5 * C.Width + 3.0)
+						{
+							bAtCut = true;
+							break;
+						}
+					}
+					if (bAtCut) continue;
+				}
 				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 2.5);
 				WayA.push_back(A);
 				WayB.push_back(B);
 				WayHalf.push_back(W.HalfWidth);
+				WayOf.push_back(static_cast<int>(Wi));
+				WayK.push_back(static_cast<uint32_t>(K));
 				const int I0 = std::max(0, static_cast<int>((std::min(A.X, B.X) - Clear - RX0) / Res));
 				const int I1 = std::min(NX - 1, static_cast<int>((std::max(A.X, B.X) + Clear - RX0) / Res));
 				const int J0 = std::max(0, static_cast<int>((std::min(A.Y, B.Y) - Clear - RY0) / Res));
@@ -1328,6 +1361,18 @@ namespace LandField
 							OccR[static_cast<size_t>(J) * NX + I] |= bVehicle ? OcVehicle : OcMan;
 					}
 			}
+		}
+		// A cut's gap and a metre and a half round it: no tree stands there (the cutter's blade takes the bank and its
+		// shrubs, never an oak).
+		// (every raster cell any of that disc lies in: its middle within the disc's reach and half a cell's diagonal)
+		for (const Field::Cut& C : Fd.Cuts)
+		{
+			const double R = 0.5 * C.Width + 1.5, Reach = R + 0.7072 * Res;
+			const int I0 = std::max(0, static_cast<int>(std::floor((C.X - Reach - RX0) / Res))), I1 = std::min(NX - 1, static_cast<int>(std::floor((C.X + Reach - RX0) / Res)));
+			const int J0 = std::max(0, static_cast<int>(std::floor((C.Y - Reach - RY0) / Res))), J1 = std::min(NY - 1, static_cast<int>(std::floor((C.Y + Reach - RY0) / Res)));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+					if (std::hypot(RX0 + (I + 0.5) * Res - C.X, RY0 + (J + 0.5) * Res - C.Y) <= Reach) OccR[static_cast<size_t>(J) * NX + I] |= OcCut;
 		}
 	}
 
@@ -2561,6 +2606,22 @@ namespace LandField
 							bNew = true;
 						}
 					if (bNew) ++Count.WayGaps;
+					{
+						// (each crossing kept, with how far along its way it was: the hedge cutters' test switch picks from them)
+						const V2 At = Lerp2(H.P[K], H.P[K + 1], T), Seg = WayB[W] - WayA[W];
+						const double L2 = Dot(Seg, Seg), Tw = L2 > 1e-12 ? Clamp01(Dot(At - WayA[W], Seg) / L2) : 0.0;
+						const V2 Head = Unit2(H.P[K + 1] - H.P[K]);
+						HedgeCrossing Cr;
+						Cr.X = At.X;
+						Cr.Y = At.Y;
+						Cr.Yaw = std::atan2(Head.Y, Head.X);
+						Cr.Width = 2.0 * Half;
+						Cr.Kind = H.Kind;
+						Cr.Way = WayOf[W];
+						Cr.Track = Fd.Ways[static_cast<size_t>(WayOf[W])].Track;
+						Cr.Along = static_cast<double>(WayK[W]) + Tw;
+						CrossOut.push_back(Cr);
+					}
 				}
 			}
 		// And where one drove along a hedge rather than across it, its bank is gone there too (nothing stands on its way).
@@ -2647,7 +2708,7 @@ namespace LandField
 			const double At = R.Next() < 0.5 ? S0 + Inset : S1 - Inset;
 			bool bClear = true;
 			for (size_t K = S.K0; K < S.K1; ++K)
-				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && !H.Keep[K]) bClear = false;
+				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && (!H.Keep[K] || NearCut(H.P[K].X, H.P[K].Y, GateHalf + 1.0))) bClear = false;
 			if (!bClear) continue;
 			bGated[P] = 1;
 			if (!S.bLane)
@@ -2748,7 +2809,14 @@ namespace LandField
 				for (size_t I = 0; I < Over.size(); ++I)
 				{
 					const double S = Over[I];
+					// (nor within 15 m of a hedge cutter's cut to come: a gap too)
 					if (S < 4.0 || S > Last - 4.0 || Gapped(S, 15.0) || InLine(S)) continue;
+					if (!Fd.Cuts.empty())
+					{
+						V2 Along;
+						const V2 Here = PointOn(H, S, Along);
+						if (NearCut(Here.X, Here.Y, 15.0)) continue;
+					}
 					int Men = 0;
 					for (const double O : Over) Men += std::fabs(O - S) <= 12.5 ? 1 : 0;
 					if (Men > Most)
@@ -3357,7 +3425,8 @@ namespace LandField
 				if (S < 3.0) continue;
 				V2 Way;
 				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
-				if (bBocage ? !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 4.0) : !Clear(P.X, P.Y, Built | OcMan)) continue;
+				if (bBocage ? !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 4.0) || !Clear(P.X, P.Y, OcCut)
+							: !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcMan | OcCut))) continue;
 				double High = 0.0;
 				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
@@ -3372,7 +3441,7 @@ namespace LandField
 			{
 				V2 Way;
 				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
-				if (!InField(P) || !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 1.5)) continue;
+				if (!InField(P) || !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 1.5) || !Clear(P.X, P.Y, OcCut)) continue;
 				const double U = R.Next();
 				const Base B = U < 0.45 ? Base::Oak : U < 0.75 ? Base::Ash : Base::Pollard;
 				const double High = R.Range(3.5, 6.0);
@@ -6359,6 +6428,41 @@ namespace LandField
 	const std::vector<Placed>& Ground::Instances(Base B) const { return In->Inst[static_cast<size_t>(B)]; }
 	const std::vector<HedgeLine>& Ground::Hedges() const { return In->HedgeOut; }
 	const std::vector<HedgeOpening>& Ground::Openings() const { return In->OpeningOut; }
+	const std::vector<HedgeCrossing>& Ground::Crossings() const { return In->CrossOut; }
+	double Ground::BankRise(double X, double Y) const { return In->BankAt(X, Y); }
+
+	bool Ground::NearestBank(double X, double Y, double Reach, BankPlace& Out) const
+	{
+		const Impl& G = *In;
+		if (G.BGrid.Cells.empty() || !(X == X) || !(Y == Y)) return false;
+		const V2 P{ X, Y };
+		const int I0 = std::max(0, static_cast<int>(std::floor((X - Reach - G.BGrid.X0) / G.BGrid.Size)));
+		const int I1 = std::min(G.BGrid.NX - 1, static_cast<int>(std::floor((X + Reach - G.BGrid.X0) / G.BGrid.Size)));
+		const int J0 = std::max(0, static_cast<int>(std::floor((Y - Reach - G.BGrid.Y0) / G.BGrid.Size)));
+		const int J1 = std::min(G.BGrid.NY - 1, static_cast<int>(std::floor((Y + Reach - G.BGrid.Y0) / G.BGrid.Size)));
+		double Best = Reach;
+		bool bFound = false;
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+				for (const uint32_t Id : G.BGrid.Cells[static_cast<size_t>(J) * G.BGrid.NX + I])
+				{
+					const BankSeg& S = G.BSegs[Id];
+					const Run& R = G.Runs[S.Run];
+					double T;
+					const double D = SegDist(P, R.P[S.K], R.P[S.K + 1], T);
+					if (D >= Best) continue;
+					Best = D;
+					bFound = true;
+					const V2 On = Lerp2(R.P[S.K], R.P[S.K + 1], T), Head = Unit2(R.P[S.K + 1] - R.P[S.K]);
+					Out.X = On.X;
+					Out.Y = On.Y;
+					Out.Yaw = std::atan2(Head.Y, Head.X);
+					Out.Height = Lerp(R.H[S.K], R.H[S.K + 1], T);
+					Out.Foot = BankEdge * 0.5 * Lerp(R.W[S.K], R.W[S.K + 1], T);
+					Out.Kind = R.Kind;
+				}
+		return bFound;
+	}
 	const std::vector<std::vector<std::pair<double, double>>>& Ground::Lanes() const { return In->LaneOut; }
 	const Tally& Ground::Laid() const { return In->Count; }
 

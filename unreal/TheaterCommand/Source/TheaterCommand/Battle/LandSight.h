@@ -56,6 +56,15 @@ namespace LandSight
 	/** The rules' recording's field as LandField takes it (the same the scene lays): the ways the men and vehicles go
 	 * open the hedges they cross. */
 	LandField::Field FieldOf(const LandFeed::Recording& Rec);
+
+	/**
+	 * The hedge cutters' test switch (the scene's -TheaterLandCutters=N, the play test's LAND_PLAY_CUTTERS=N), until
+	 * the rules' cutters come (the tactics thread's "cuts"): the first N crossings of a hedgerow or a lane's bank by
+	 * the attacker's tanks, by when she reached it, at least 80 m apart, made cuts. The bank gives way 0.3 s before she
+	 * reaches its line, after 2.5 s of pushing; the gap 4 m. G: the field laid without them (its Crossings). Sorted by
+	 * T1. Lay the field again with them (FieldOf then takes Rec.Cuts) to see it whole until she bursts through.
+	 */
+	std::vector<LandFeed::Cut> CutsFromCrossings(const LandFeed::Recording& Rec, const LandField::Ground& G, int N);
 	/** The month (1 to 12) a recording's date names; July where none. */
 	int MonthOf(const std::string& Date);
 
