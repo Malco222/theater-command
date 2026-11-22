@@ -1093,7 +1093,15 @@ int main(int Argc, char** Argv)
 			C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearCorn;
 			C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
 			C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
-			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
+			// (the corn's shadows within 25 m, GS9: its mesh's shadowed twin is one more mesh, after the kinds' own)
+			constexpr double CornShadowTo = 25.0;
+			constexpr int CornTwin = Kinds;
+			C.ShadowTo.assign(Kinds, 0.0);
+			C.ShadowTo[static_cast<size_t>(LandField::Base::Wheat)] = CornShadowTo;
+			C.Twin.assign(Kinds + 1, -1);
+			C.Twin[static_cast<size_t>(LandField::Base::Wheat)] = CornTwin;
+			long CornNearPlain = 0, CornFarShadowed = 0, CornLaid = 0, CornShadowed = 0;
+			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds + 1); // (laid, thing) a place
 			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
 			double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
 			int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
@@ -1135,8 +1143,8 @@ int main(int Argc, char** Argv)
 				const double ClearNow = bHigh ? 0.0 : ClearCorn;
 				C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearNow;
 				HighFrames += bHigh ? 1 : 0;
-				std::vector<int32_t> Before(Kinds);
-				for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
+				std::vector<int32_t> Before(Kinds + 1);
+				for (int K = 0; K <= Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
 				Out.clear();
 				const auto T0 = std::chrono::steady_clock::now();
 				const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
@@ -1172,7 +1180,7 @@ int main(int Argc, char** Argv)
 						std::fill(Before.begin(), Before.end(), 0);
 						continue;
 					}
-					if (O.Copy < 0 || O.Copy >= Kinds)
+					if (O.Copy < 0 || O.Copy > Kinds)
 					{
 						++BadOps;
 						continue;
@@ -1202,8 +1210,9 @@ int main(int Argc, char** Argv)
 					for (const auto& P : M) Laid += P.first ? 1 : 0;
 				PeakLaid = std::max(PeakLaid, Laid);
 				// (no bundle of corn laid in the clearing round the lens, any frame)
-				for (const auto& P : Mesh[static_cast<size_t>(LandField::Base::Wheat)])
-					if (P.first && std::hypot(P.second.X - EX, P.second.Y - EY) < ClearNow - 1e-3) ++InClearing;
+				for (const int Corn : { static_cast<int>(LandField::Base::Wheat), CornTwin })
+					for (const auto& P : Mesh[static_cast<size_t>(Corn)])
+						if (P.first && std::hypot(P.second.X - EX, P.second.Y - EY) < ClearNow - 1e-3) ++InClearing;
 				// The old way, for its time: the whole box made again every 12 m.
 				if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
 				{
@@ -1223,6 +1232,18 @@ int main(int Argc, char** Argv)
 				if (Frame % 60 == 30 && Tl.Waiting == 0)
 				{
 					++Settled;
+					// (the corn's shadows: every bundle within 25 m less the sway in the shadowed twin, none past 25 m, the
+					// sway and a square's diagonal)
+					for (const int Corn : { static_cast<int>(LandField::Base::Wheat), CornTwin })
+						for (const auto& P : Mesh[static_cast<size_t>(Corn)])
+						{
+							if (!P.first) continue;
+							const double Away = std::hypot(P.second.X - EX, P.second.Y - EY);
+							++CornLaid;
+							CornShadowed += Corn == CornTwin ? 1 : 0;
+							if (Corn != CornTwin && Away < CornShadowTo - LandCarpet::Squares::ReachSway) ++CornNearPlain;
+							if (Corn == CornTwin && Away > CornShadowTo + LandCarpet::Squares::ReachSway + LandCarpet::Squares::Side * 1.4143) ++CornFarShadowed;
+						}
 					std::vector<std::pair<float, float>> Have;
 					for (const auto& M : Mesh)
 						for (const auto& P : M)
@@ -1287,6 +1308,9 @@ int main(int Argc, char** Argv)
 			Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
 			      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
 			Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+			std::printf("  corn's shadows (GS9): %.0f%% of the corn laid casts one (%ld of %ld over the settled frames)\n", CornLaid ? 100.0 * CornShadowed / CornLaid : 0.0, CornShadowed, CornLaid);
+			Check(CornNearPlain == 0 && CornFarShadowed == 0 && (CornLaid == 0 || CornShadowed > 0), "the corn casts its shadow within 25 m of the eye (less the 4 m sway) and none far past it",
+			      Fmt("%.0f near without, ", static_cast<double>(CornNearPlain)) + Fmt("%.0f far with", static_cast<double>(CornFarShadowed)));
 			Check(InClearing == 0 && (HighCorn > 0 || StalksWanted == 0), "no bundle of corn laid within 3.5 m of a low lens (its stalks drawn one by one there), each laid again as the lens leaves it or rises",
 			      Fmt("%.0f laid in the clearing; ", static_cast<double>(InClearing)) + Fmt("%.0f single-stalk clumps wanted near the lens; ", static_cast<double>(StalksWanted)) +
 			      Fmt("%.0f bundles back under a risen lens", static_cast<double>(HighCorn)) + Fmt(" in %.0f frames", static_cast<double>(HighFrames)));

@@ -1671,6 +1671,7 @@ void ALandBattle::LayThings()
 	WarmEdges.Init(FVector2f(-1e9f, 1e9f), Kinds * 3);
 	ClutterReach.Init(1e9f, Kinds);
 	ClutterCopyOf.Init(-1, Kinds * Shades);
+	ClutterTwin.Reset();
 	bStalksMade = false;
 	// The clutter's shades from a sample of it (it is laid round the eye later): nine squares 120 m across, laid once
 	// in three rows of three over the field, so that a crop or a grass that is not in the field's middle has its own
@@ -1721,6 +1722,10 @@ void ALandBattle::LayThings()
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCrownFrom="), CrownFrom);
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubsTo="), ShrubsTo);
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTreesTo="), TreesTo);
+	// (and the corn's bundles cast their shadow only within CornShadowTo metres of the eye: the squares nearer than that
+	// lay them in a twin mesh that casts one, the rest in one that casts none; LandCarpet's ShadowTo. 0: everywhere)
+	float CornShadowTo = 25.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornShadowTo="), CornShadowTo);
 	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
@@ -1879,7 +1884,8 @@ void ALandBattle::LayThings()
 			}
 			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Copies->SetCanEverAffectNavigation(false);
-			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat || bStalks);
+			const bool bCornTwin = bClutter && Base == LandField::Base::Wheat && CornShadowTo > 0.0f;
+			Copies->SetCastShadow((!bClutter || Base == LandField::Base::Wheat || bStalks) && !bCornTwin);
 			// (a thing with no far level is not drawn past where the field gives it up: gates, the well, the cart, the
 			// clutter)
 			if (Shape.Far.Empty())
@@ -1894,7 +1900,34 @@ void ALandBattle::LayThings()
 			Copies->RegisterComponent();
 			if (bClutter)
 			{
-				ClutterCopyOf[Kind * Shades + Shade] = ClutterCopies.Add(Copies);
+				const int32 Index = ClutterCopies.Add(Copies);
+				ClutterCopyOf[Kind * Shades + Shade] = Index;
+				if (bCornTwin)
+				{
+					// (GS9: the same corn in a mesh that casts its shadow, for the squares near the eye)
+					UInstancedStaticMeshComponent* Shadowed = NewObject<UInstancedStaticMeshComponent>(this, FName(*(Name + TEXT("_Shadowed"))));
+					Shadowed->SetupAttachment(Root);
+					Shadowed->SetStaticMesh(Mesh);
+					Shadowed->SetMaterial(0, Paint);
+					if (LeafInk && Mesh->GetStaticMaterials().Num() > 1)
+					{
+						Shadowed->SetMaterial(1, LeafInk);
+					}
+					Shadowed->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Shadowed->SetCanEverAffectNavigation(false);
+					Shadowed->SetCastShadow(true);
+					if (Shape.Far.Empty())
+					{
+						Shadowed->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
+					}
+					Shadowed->RegisterComponent();
+					const int32 TwinIndex = ClutterCopies.Add(Shadowed);
+					while (ClutterTwin.Num() <= TwinIndex)
+					{
+						ClutterTwin.Add(-1);
+					}
+					ClutterTwin[Index] = TwinIndex;
+				}
 				if (bStalks)
 				{
 					// (hidden until the eye comes down into the corn)
@@ -1936,10 +1969,21 @@ void ALandBattle::LayThings()
 	};
 	// (the corn's clearing round the lens: none until the eye is low, LayClutter)
 	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
+	// (the corn's shadows only near the eye, GS9: its squares within CornShadowTo laid in its meshes' shadowed twins)
+	Carpet->ShadowTo.assign(static_cast<size_t>(Kinds), 0.0);
+	Carpet->Twin.assign(static_cast<size_t>(ClutterCopies.Num()), -1);
+	for (int32 K = 0; K < ClutterTwin.Num() && K < ClutterCopies.Num(); ++K)
+	{
+		Carpet->Twin[static_cast<size_t>(K)] = ClutterTwin[K];
+	}
+	if (CornShadowTo > 0.0f)
+	{
+		Carpet->ShadowTo[static_cast<size_t>(LandField::Base::Wheat)] = CornShadowTo;
+	}
 	bStalksShown = false;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
-	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m (0: that step off)"),
-		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo);
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m; the corn's shadows within %.0f m (0: that step off)"),
+		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo, CornShadowTo);
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)

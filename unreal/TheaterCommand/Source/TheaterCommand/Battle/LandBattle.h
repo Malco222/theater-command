@@ -195,6 +195,9 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
+	/** GS9: a clutter mesh's shadowed twin (by ClutterCopies' number; -1 none): the corn's bundles cast their shadow
+	 * only within -TheaterLandCornShadowTo= (25 m) of the eye, laid there in the twin (LandCarpet's ShadowTo). */
+	TArray<int32> ClutterTwin;
 	TSharedPtr<LandCarpet::Squares> Carpet;
 	/** The corn drawn stalk by stalk round the lens (the art director's cut 4, fix 4): whether the stalks' meshes were
 	 * made (StalkInk), and whether the eye is low enough for them now (they are shown, and the bundles cleared within

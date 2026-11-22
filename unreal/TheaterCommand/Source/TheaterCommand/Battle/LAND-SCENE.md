@@ -153,6 +153,11 @@ camera comes back to its shot.
   shadows off (`FStaticMeshSection::bCastShadow`). Switches, in metres (0 leaves that step out):
   `-TheaterLandShrubFarFrom=`, `-TheaterLandTreeFarFrom=` (the plan's 80 for the A/B), `-TheaterLandShrubShadowTo=250`,
   `-TheaterLandCrownFrom=400`, `-TheaterLandShrubsTo=500`, `-TheaterLandTreesTo=1200`. The log says them at load.
+  The corn's bundles cast their shadow only near the eye: each corn mesh has a shadowed twin, and the clutter's 16 m
+  squares whose nearest point is within 25 m of the eye lay their corn in the twin, the rest in the plain one, laid
+  again as the eye crosses the line by 4 m (`LandCarpet`'s `ShadowTo`, `Twin`). Every bundle within 21 m casts its
+  shadow and none past some 52 m; at Prokhorovka's wheat a quarter of the corn laid now casts one, against all of it
+  before (the land field test, an eye at a tank's pace). `-TheaterLandCornShadowTo=` (25; 0: everywhere, as before).
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

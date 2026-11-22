@@ -69,6 +69,14 @@ namespace LandCarpet
 		std::vector<double> Reach;
 		/** Which instanced mesh a thing goes in (-1: none). Asked once a thing, when its square is made. */
 		std::function<int32_t(const LandField::Placed&)> CopyOf;
+		/** Per kind (LandField::Base), how near the eye its things cast a shadow, metres (none, or 0: wherever its mesh
+		 * does): the corn's within some 25 m (the battle-scale plan's GS9). A square whose nearest point is nearer the
+		 * eye than this lays such things in their mesh's shadowed twin (Twin) instead, and is laid again once the eye
+		 * crosses the line by ReachSway, either way, as for Reach: so every such thing within ShadowTo - ReachSway of the
+		 * eye casts its shadow, and none past ShadowTo + ReachSway and a square's width. */
+		std::vector<double> ShadowTo;
+		/** Per mesh, its shadowed twin (-1: none): the same thing in a mesh that casts a shadow. */
+		std::vector<int32_t> Twin;
 		/** Whether it still stands (not in a shell hole's bare earth, not flattened under a tank). Asked each time a
 		 * square is laid. */
 		std::function<bool(const LandField::Placed&)> Stands;
@@ -189,6 +197,7 @@ namespace LandCarpet
 				G.Clutter(Sq.I * Side, Sq.J * Side, (Sq.I + 1) * Side, (Sq.J + 1) * Side, Made);
 				Sq.Things.swap(Made);
 				Sq.Copy.assign(Sq.Things.size(), -1);
+				Sq.In.assign(Sq.Things.size(), -1);
 				Sq.Slot.assign(Sq.Things.size(), -1);
 				Sq.Cleared.assign(Sq.Things.size(), 0);
 				for (size_t K = 0; K < Sq.Things.size(); ++K)
@@ -234,7 +243,7 @@ namespace LandCarpet
 			{
 				for (size_t N = 0; N < Sq.Things.size(); ++N)
 				{
-					if (Sq.Slot[N] >= 0 && Sq.Copy[N] == Copy)
+					if (Sq.Slot[N] >= 0 && Sq.In[N] == Copy)
 					{
 						Fn(Sq.Slot[N], Sq.Things[N]);
 					}
@@ -266,7 +275,8 @@ namespace LandCarpet
 			int I = 0, J = 0;
 			std::vector<LandField::Placed> Things;
 			std::vector<int32_t> Copy; // a thing's mesh (-1: none)
-			std::vector<int32_t> Slot; // its place in the mesh (-1: not laid)
+			std::vector<int32_t> In;   // the mesh it is laid in now (its own, or that mesh's shadowed twin)
+			std::vector<int32_t> Slot; // its place in that mesh (-1: not laid)
 			std::vector<uint8_t> Cleared; // 1: not laid for being in the clearing round the eye
 			double LaidNear = 0.0;     // the square's nearest point to the eye when last laid
 			double LaidAt = 0.0;
@@ -322,21 +332,39 @@ namespace LandCarpet
 			}
 		}
 
-		/** Whether the eye has come into, or gone out of, a kind's reach of a square since it was laid (by ReachSway). */
+		/** Whether the eye has come into, or gone out of, a kind's reach (or its shadows' reach) of a square since it was
+		 * laid (by ReachSway). */
 		bool Crossed(double Was, double Now) const
 		{
-			for (const double R : Reach)
+			for (const std::vector<double>* Lines : { &Reach, &ShadowTo })
 			{
-				if (R > 1e6)
+				for (const double R : *Lines)
 				{
-					continue;
-				}
-				if ((Was < R) != (Now < R) && std::fabs(Now - R) > ReachSway)
-				{
-					return true;
+					if (R <= 0.0 || R > 1e6)
+					{
+						continue;
+					}
+					if ((Was < R) != (Now < R) && std::fabs(Now - R) > ReachSway)
+					{
+						return true;
+					}
 				}
 			}
 			return false;
+		}
+
+		/** The mesh thing N of a square is laid in: its own, or its shadowed twin while the square was laid within its
+		 * kind's ShadowTo of the eye. */
+		int32_t Into(const Square& Sq, size_t N) const
+		{
+			const int32_t Copy = Sq.Copy[N];
+			const size_t Kind = static_cast<size_t>(Sq.Things[N].Kind);
+			if (Copy >= 0 && Kind < ShadowTo.size() && ShadowTo[Kind] > 0.0 && Sq.LaidNear < ShadowTo[Kind] && static_cast<size_t>(Copy) < Twin.size()
+				&& Twin[static_cast<size_t>(Copy)] >= 0)
+			{
+				return Twin[static_cast<size_t>(Copy)];
+			}
+			return Copy;
 		}
 
 		int32_t Take(int32_t Copy)
@@ -415,8 +443,8 @@ namespace LandCarpet
 						const bool bIn = InClearing(P);
 						if (bIn && Sq.Slot[N] >= 0)
 						{
-							Free[static_cast<size_t>(Sq.Copy[N])].push_back(Sq.Slot[N]);
-							Out.push_back({ Sq.Copy[N], Sq.Slot[N], true, P });
+							Free[static_cast<size_t>(Sq.In[N])].push_back(Sq.Slot[N]);
+							Out.push_back({ Sq.In[N], Sq.Slot[N], true, P });
 							Sq.Slot[N] = -1;
 							Sq.Cleared[N] = 1;
 							++T.Hidden;
@@ -428,8 +456,9 @@ namespace LandCarpet
 							{
 								continue;
 							}
-							Sq.Slot[N] = Take(Sq.Copy[N]);
-							Out.push_back({ Sq.Copy[N], Sq.Slot[N], false, P });
+							Sq.In[N] = Into(Sq, N);
+							Sq.Slot[N] = Take(Sq.In[N]);
+							Out.push_back({ Sq.In[N], Sq.Slot[N], false, P });
 							++T.Put;
 						}
 					}
@@ -462,8 +491,9 @@ namespace LandCarpet
 					Sq.Cleared[N] = 1; // (round the lens, where its stalks are drawn one by one)
 					continue;
 				}
-				Sq.Slot[N] = Take(Copy);
-				Out.push_back({ Copy, Sq.Slot[N], false, P });
+				Sq.In[N] = Into(Sq, N);
+				Sq.Slot[N] = Take(Sq.In[N]);
+				Out.push_back({ Sq.In[N], Sq.Slot[N], false, P });
 				++T.Put;
 			}
 		}
@@ -476,7 +506,7 @@ namespace LandCarpet
 				{
 					continue;
 				}
-				const int32_t Copy = Sq.Copy[N];
+				const int32_t Copy = Sq.In[N];
 				Free[static_cast<size_t>(Copy)].push_back(Sq.Slot[N]);
 				Out.push_back({ Copy, Sq.Slot[N], true, Sq.Things[N] });
 				Sq.Slot[N] = -1;
