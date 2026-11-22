@@ -34,6 +34,7 @@ import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { SHIPROWS_STAGE } from './stage';
+import { pinRebase } from './shiprows';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -150,6 +151,7 @@ export function createGame(seed: number, human: string | null): Game {
   // each lays its hulls' rows (shiprows.ts). Off, the game is release 1's.
   if (SHIPROWS_STAGE) g.flags.shipRows = 1;
   setupNavy(g);
+  pinRebase(g);
   setupAir(g);
   setupResearch(g);
   // Depots: home regions that can feed an army even when cut off from the capital.

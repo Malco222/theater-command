@@ -288,6 +288,8 @@ export interface Build {
   cost: number;
   /** A battleship from the arsenal where the campaign plays ships by class: the research step her navy held when she was ordered (shiprows.ts; plan 4.3). */
   step?: number;
+  /** Her row, fixed with her design as she is laid down (plan 4.3): the step's, by the plans her navy held then. */
+  row?: string | null;
   /** A corps raised again under the name of one that was destroyed: that formation's place on the memorial wall. */
   revive?: number;
   /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */

@@ -53,7 +53,9 @@ export interface FleetRow {
    * as every row of the dial (Force H in June 1940 at stops 1 and 2: ruling 233, the director's note of 10:06Z). Where
    * the dial reaches that stop only after the month, the fleet forms in the first month at one of them, up to its own.
    */
-  book?: { stops: number[]; from: number; ships: Partial<Ships> };
+  book?: { stops: number[]; from: number; ships: Partial<Ships>; names?: Partial<Record<ShipClass, string[]>> };
+  /** The named hulls a fleet formed by its book lays its rows from, ships by class only (shiprows.ts layRows). */
+  names?: Partial<Record<ShipClass, string[]>>;
 }
 /**
  * A single arrival's sixth entry. 'stops': the history dial's stops it is read at (the grand campaign only; for the
@@ -264,7 +266,7 @@ export function addFleet(g: Game, given: FleetRow): Fleet {
     admiral: row.admiral ? { name: row.admiral, level: 1, xp: 0 } : null, fought: 0,
   };
   // (Ships by class: its hulls' rows of the record, by their names in this month. Nothing with the switch off.)
-  layRows(g, f);
+  layRows(g, f, row.names);
   g.fleets.push(f);
   return f;
 }
@@ -1528,7 +1530,7 @@ export const lossOf = (g: Game, f: Fleet, c: ShipClass, share: number): number =
  * One draw for each class, as ever: where `saved` is given it is filled with the ships that same draw would have
  * sunk without damage control and did not.
  */
-export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES, dc = 1, saved?: Ships): Ships {
+export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES, dc = 1, saved?: Ships, rows?: Partial<Record<ShipClass, RowId[]>>): Ships {
   const out = none();
   for (const c of list) {
     const [n, plain] = rng.rollBoth(dueAt(f.ships[c], frac, c, dc), dueAt(f.ships[c], frac, c, 1));
@@ -1538,7 +1540,7 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
     f.lost[c] += k;
     out[c] = k;
     // The ships that went down take their battle stars with them (stars.ts: a fixed rotation, b487).
-    loseStars(f, c, k); loseRows(f, c, k);
+    loseStars(f, c, k); loseRows(f, c, k, rows?.[c]);
   }
   mendStars(f); mendRows(f);
   return out;
@@ -1681,7 +1683,7 @@ export function navalUpkeep(g: Game, nat: string): void {
     // and for a player's in the start month of a campaign begun later (rider b639).
     const b = given.book;
     const booked = !!b && g.flags.open === 1 && b.stops.includes(stopOf(g)) && dialRuns(g, nat);
-    const row = booked ? { ...given, from: b!.from, ships: b!.ships } : given;
+    const row = booked ? { ...given, from: b!.from, ships: b!.ships, names: b!.names } : given;
     const due = booked ? b!.from <= g.turn && g.turn <= Math.max(b!.from, given.from ?? 1) : (row.from ?? 1) === g.turn;
     if (row.nat !== nat || !due || g.turn <= 1 || g.fleets.some((f) => f.nat === nat && f.name === row.name)) continue;
     if (row.base && !g.byName[row.base]) continue; // a fleet of ground this campaign's chart does not reach
@@ -2573,15 +2575,18 @@ export const seaField: { fought?: (m: SeaMeeting) => SeaFought | undefined } = {
  * afloat there (SeaFought.kept).
  */
 function sinkFought(f: Fleet, p: SeaFought, frac: number, rng: Rng, dc = 1, kept?: Ships): Ships {
-  const out = p.toDice ? sinkShips(f, frac, rng, CLASSES, dc, kept) : sinkShips(f, frac, rng, ['ss'], dc, kept);
+  // (Ships by class: handed back to the dice, the hulls the field reports sunk are the ones that go first, plan 5.2 item 5.)
+  const named = p.rows?.[f.id];
+  const out = p.toDice ? sinkShips(f, frac, rng, CLASSES, dc, kept, named) : sinkShips(f, frac, rng, ['ss'], dc, kept);
   if (kept && !p.toDice) for (const c of SURFACE) kept[c] += p.kept?.[f.id]?.[c] ?? 0;
   const there = p.sunk[f.id] ?? {};
   for (const c of SURFACE) {
     const more = Math.min(f.ships[c], Math.max(0, (there[c] ?? 0) - (p.toDice ? out[c] : 0)));
+    const used = p.toDice ? out[c] : 0;
     f.ships[c] -= more;
     f.lost[c] += more;
     out[c] += more;
-    loseStars(f, c, more); loseRows(f, c, more, p.rows?.[f.id]?.[c]);
+    loseStars(f, c, more); loseRows(f, c, more, named?.[c]?.slice(used));
   }
   mendStars(f); mendRows(f);
   return out;

@@ -711,7 +711,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   else if (group === 'ship') {
     b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`;
     // (Ships by class: her design is chosen as she is laid down, at the step her navy holds now. Plan 4.3.)
-    if (rowRules(g) && ROW_KINDS.includes(item as ShipClass)) b.step = stepOf(g, nat);
+    if (rowRules(g) && ROW_KINDS.includes(item as ShipClass)) { b.step = stepOf(g, nat); b.row = buildRow(g, nat, item as ShipClass, b.step); }
   }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
   n.queue.push(b);
@@ -792,7 +792,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     // New ships join at the back of their class, with no battle stars (stars.ts).
     mendStars(f, hull);
     // (Ships by class: they join with the row of the design they were laid down to; route 2, Q4.)
-    if (rowRules(g) && ROW_KINDS.includes(hull as ShipClass)) addRows(f, hull as ShipClass, Array.from({ length: count }, () => buildRow(g, nat, hull as ShipClass, b.step ?? stepOf(g, nat))));
+    if (rowRules(g) && ROW_KINDS.includes(hull as ShipClass)) addRows(f, hull as ShipClass, Array.from({ length: count }, () => (b.row !== undefined ? b.row : buildRow(g, nat, hull as ShipClass, b.step ?? stepOf(g, nat)))));
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);

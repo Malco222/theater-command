@@ -46,6 +46,7 @@ import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
 import { CONVOY_STAGE } from './stage';
+import { pinRebase } from './shiprows';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -134,7 +135,7 @@ export function startOpen(g: Game, wide = true): Game {
   if (YIELD_STAGE || g.flags.yieldRule === 1) g.flags.yieldRule = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
-  if (wide) attachWorld(g);
+  if (wide) { attachWorld(g); pinRebase(g); }
   // The Mannerheim Line across the Karelian isthmus, while Finland holds it (ruling 228, 1b).
   openWinter(g);
   if (g.turn === 1) {

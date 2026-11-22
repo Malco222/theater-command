@@ -68,8 +68,9 @@ export const rowRules = (g: Game): boolean => g.flags.shipRows === 1;
 // ---- Worth ------------------------------------------------------------------------------------------------
 
 /** A row's worth before the rebase: √(F/F₀ × √(belt × deck)/√(belt₀ × deck₀)), or the worth the record's cells give. */
-export function rawWorth(r: ShipRow): number {
-  if (r.guns === undefined || r.rate === undefined || r.shell === undefined || r.belt === undefined || r.deck === undefined) return r.worth ?? 1;
+export function rawWorth(r: ShipRow): number | null {
+  // (A row whose cells are not all in and that states no worth is no row: its hulls read today's weight, Q5.)
+  if (r.guns === undefined || r.rate === undefined || r.shell === undefined || r.belt === undefined || r.deck === undefined) return r.worth ?? null;
   const Y = D.yardstick;
   const F = (r.guns * r.rate * r.shell) / Y.F;
   const P = Math.sqrt(r.belt * r.deck) / Math.sqrt(Y.belt * Y.deck);
@@ -78,7 +79,7 @@ export function rawWorth(r: ShipRow): number {
 
 /** The median of a step's rows (plan 4.2): 1.0459, 1.0943 and 1.1412 for steps 0, 1 and 2. */
 export function stepMedian(k: number): number {
-  const w = (D.steps.periods[k] ?? []).map((id) => rawWorth(BY_ID[id])).sort((a, b) => a - b);
+  const w = (D.steps.periods[k] ?? []).map((id) => rawWorth(BY_ID[id])).filter((x): x is number => x !== null).sort((a, b) => a - b);
   if (!w.length) return 1;
   const m = w.length >> 1;
   return w.length % 2 ? w[m] : (w[m - 1] + w[m]) / 2;
@@ -146,6 +147,13 @@ const REBASE = new Map<string, number>();
  * those and world.json's.
  */
 export function rebase(g: Game, c: ShipClass): number {
+  // (Fixed in the campaign's flags as its start fleets stand, so a save read by a build holding other data keeps it: pinRebase.)
+  const pin = g.flags[`rebase:${c}`];
+  return pin !== undefined ? pin : rebaseOfData(g, c);
+}
+
+/** The rebase worked from the data, for the chart the campaign is on (memoised per chart). */
+function rebaseOfData(g: Game, c: ShipClass): number {
   const wide = g.flags.world === 1;
   const key = `${c}:${wide ? 'world' : 'europe'}`;
   const had = REBASE.get(key);
@@ -162,6 +170,16 @@ export function rebase(g: Game, c: ShipClass): number {
   const m = known > 0 && sum > 0 ? known / sum : 1;
   REBASE.set(key, m);
   return m;
+}
+
+/**
+ * Fixes each kind's rebase in the campaign's flags (plan 7.4: one factor per campaign, set by the fleets at its start):
+ * called as its start fleets are complete, after setupNavy and again once the wider world is attached. Nothing with the
+ * switch off.
+ */
+export function pinRebase(g: Game): void {
+  if (!rowRules(g)) return;
+  for (const c of ROW_KINDS) g.flags[`rebase:${c}`] = rebaseOfData(g, c);
 }
 
 /** A hull's worth in the campaign in hand: her row's worth times the kind's rebase, or 1 where she has none (Q5). */
@@ -231,8 +249,8 @@ export function buildRow(g: Game, nat: string, c: ShipClass, step: number): RowI
   const path = pathOf(g, nat, c);
   if (!path) return null;
   let best: ShipRow | null = null;
-  for (const r of D.rows[c] ?? []) if (r.nat === path && r.step <= step && (!best || rawWorth(r) > rawWorth(best))) best = r;
-  if (step >= 1 && stepMedian(step) > (best ? rawWorth(best) : 0)) return `step:${step}`;
+  for (const r of D.rows[c] ?? []) if (r.nat === path && r.step <= step && rawWorth(r) !== null && (!best || rawWorth(r)! > rawWorth(best)!)) best = r;
+  if (step >= 1 && stepMedian(step) > (best ? rawWorth(best)! : 0)) return `step:${step}`;
   return best?.id ?? null;
 }
 
@@ -329,18 +347,30 @@ export function takeRows(f: Fleet, c: ShipClass, n: number, want: RowId[] = []):
   for (let j = 0; j < k; j++) {
     const w = want[j];
     let at = w !== undefined ? list.lastIndexOf(w) : -1;
+    let carry: RowId | undefined;
+    // (The words name her and the fleet shows no hull of her row: a hull with no row goes, and as her, since the record
+    // of names, not the fleet's list, says which ship sailed. Only where there is none does the last go as it stands.)
+    if (at < 0 && w != null) { at = list.lastIndexOf(null); if (at >= 0) carry = w; }
     if (at < 0) at = list.length - 1;
-    out.push(list[at]);
+    out.push(carry !== undefined ? carry : list[at]);
     list.splice(at, 1);
   }
   keep(f, c, list);
   return out;
 }
 
-/** Lays a fleet's lists as it forms (navy.ts addFleet): its named hulls by the record of names in this month, the rest with no row. */
-export function layRows(g: Game, f: Fleet): void {
+/**
+ * Lays a fleet's lists as it forms (navy.ts addFleet): its named hulls by the record of names in this month, the rest
+ * with no row. A fleet formed by its book lays the hulls the book names (Force H's Resolution in June 1940, whose
+ * posting the record of names dates a month later).
+ */
+export function layRows(g: Game, f: Fleet, named?: Partial<Record<ShipClass, string[]>>): void {
   if (!rowRules(g)) return;
-  for (const c of ROW_KINDS) if (f.ships[c] > 0) keep(f, c, startRows(f.nat, c, f.name, g.turn, f.ships[c]));
+  for (const c of ROW_KINDS) {
+    if (f.ships[c] <= 0) continue;
+    const n = Math.floor(f.ships[c]), names = named?.[c];
+    keep(f, c, names ? Array.from({ length: n }, (_, i) => (i < names.length ? rowOfName(f.nat, c, names[i]) : null)) : startRows(f.nat, c, f.name, g.turn, f.ships[c]));
+  }
 }
 
 /** Lays the lists of every fleet that has none (a campaign given the switch after its fleets formed: a test, or a probe). */

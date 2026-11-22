@@ -13,7 +13,8 @@ import { orderOffer } from '../src/campaign/arsenal';
 import { deliver } from '../src/campaign/economy';
 import { detach, merge } from '../src/campaign/fleets';
 import { createGame } from '../src/campaign/game';
-import { CLASSES, NAVY, fleetPower, navalUpkeep, sinkShips } from '../src/campaign/navy';
+import { CLASSES, NAVY, fleetPower, navalUpkeep, sail, seaBattles, seaField, sinkShips, zoneOf } from '../src/campaign/navy';
+import { setStop } from '../src/campaign/history';
 import { grantPlans } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
 import * as R from '../src/campaign/shiprows';
@@ -56,7 +57,7 @@ describe('the record table', () => {
     expect(D.rows.bb.map((r) => r.id).sort()).toEqual(Object.keys(want).sort());
     for (const r of D.rows.bb) expect(R.rawWorth(r), r.id).toBeCloseTo(want[r.id], 3);
     // Iowa a hair below South Dakota (same shell, belt and deck 3 and 2 mm thinner), Yamato clear at about 1.6.
-    expect(R.rawWorth(rowById('usa-iowa'))).toBeLessThan(R.rawWorth(rowById('usa-south-dakota')));
+    expect(R.rawWorth(rowById("usa-iowa"))!).toBeLessThan(R.rawWorth(rowById("usa-south-dakota"))!);
   });
 
   it("the step medians are the record's periods': 1.0459, 1.0943 and 1.1412 (Nagato, Bismarck, and between Bismarck and King George V)", () => {
@@ -313,5 +314,101 @@ describe('what a fleet weighs', () => {
     for (const f of g.fleets) for (const c of ['cv', 'ca', 'dd', 'ss'] as ShipClass[]) expect(R.hullSum(g, f, c)).toBe(f.ships[c]);
     // (navy.json's first fleets are the history campaigns' start: Force H, from June 1940, is not among them.)
     expect((navyData as unknown as { fleets: { name: string; from?: number }[] }).fleets.find((f) => f.name === 'Force H')!.from).toBeGreaterThan(1);
+  });
+});
+
+describe("the review's mends (22 November, 18:40Z)", () => {
+  it('Force H at stops 1 and 2: the book lays the Resolution, the Hood and the Valiant bring their own rows, and the Valiant takes hers east', () => {
+    const g = grand(true, 5);
+    setStop(g, 1, true);
+    const weight = (): number => g.fleets.filter((f) => f.nat === 'UK').reduce((s, f) => s + R.hullSum(g, f, 'bb'), 0);
+    for (const t of [10, 11, 12, 13]) {
+      g.turn = t;
+      navalUpkeep(g, 'UK');
+      inStep(g);
+      if (t === 10) {
+        // The book's Resolution (Revenge class), then the move's Hood (no row) and Valiant (Queen Elizabeth, rebuilt).
+        expect(R.listOf(fleet(g, 'UK', 'Force H'), 'bb')).toEqual(['uk-revenge', null, 'uk-qe']);
+        // The Home Fleet keeps its Nelsons and its three Revenges: the Valiant went as a hull with no row (plan 3.2).
+        expect(R.listOf(fleet(g, 'UK', 'Home Fleet'), 'bb')).toEqual(['uk-nelson', 'uk-nelson', 'uk-revenge', 'uk-revenge', 'uk-revenge']);
+      }
+    }
+    expect(R.listOf(fleet(g, 'UK', 'Mediterranean Fleet'), 'bb').at(-1)).toBe('uk-qe');
+    // The Resolution, and the Renown in from off the chart with no row.
+    expect(R.listOf(fleet(g, 'UK', 'Force H'), 'bb')).toEqual(['uk-revenge', null]);
+    // Nothing sank, and no hull lost or changed her row on the way: the Valiant is a Queen Elizabeth in the East beside the Warspite.
+    const all = g.fleets.filter((f) => f.nat === 'UK').flatMap((f) => R.listOf(f, 'bb'));
+    const n = (id: string): number => all.filter((x) => x === id).length;
+    expect([n('uk-nelson'), n('uk-revenge'), n('uk-qe')]).toEqual([2, 4, 2]);
+    expect(weight()).toBeCloseTo(all.reduce((s, id) => s + R.hullWorth(g, 'bb', id), 0), 12);
+  });
+
+  it('a move whose named row the fleet does not show takes a hull with no row as her; with none, the last goes as she stands', () => {
+    const g = history(true);
+    const home = fleet(g, 'UK', 'Home Fleet');
+    expect(R.takeRows(home, 'bb', 1, ['uk-qe'])).toEqual(['uk-qe']);
+    home.ships.bb -= 1;
+    expect(R.listOf(home, 'bb')).toEqual(['uk-nelson', 'uk-nelson', null, 'uk-revenge', 'uk-revenge', 'uk-revenge']);
+    const f = { ...home, ships: { ...home.ships, bb: 2 }, rows: { bb: ['uk-nelson', 'uk-revenge'] } } as Fleet;
+    expect(R.takeRows(f, 'bb', 1, ['uk-qe'])).toEqual(['uk-revenge']);
+  });
+
+  it('the rebase is fixed in the campaign as it opens, kept by a save, and read from there', () => {
+    const g = grand(true);
+    const m = g.flags['rebase:bb'];
+    expect(m).toBeGreaterThan(1);
+    expect(R.rebase(g, 'bb')).toBe(m);
+    const h = loadGame(saveGame(g))!;
+    expect(h.flags['rebase:bb']).toBe(m);
+    // A build holding other data reads the campaign's own factor, not its own.
+    h.flags['rebase:bb'] = 1.25;
+    expect(R.hullWorth(h, 'bb', 'uk-kgv')).toBeCloseTo(R.rawWorth(rowById('uk-kgv'))! * 1.25, 12);
+    // A history campaign is fixed as its fleets form; off, nothing is written.
+    const k = history(true);
+    R.pinRebase(k);
+    expect(k.flags['rebase:bb']).toBe(R.rebase(k, 'bb'));
+    for (const off of [history(false), grand(false)]) {
+      R.pinRebase(off);
+      expect(Object.keys(off.flags).filter((x) => x.startsWith('rebase:'))).toEqual([]);
+    }
+  });
+
+  it('an action handed back to the dice sinks the hulls the field named first (plan 5.2 item 5)', () => {
+    let checked = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = history(true, seed);
+      const home = fleet(g, 'UK', 'Home Fleet'), battle = fleet(g, 'GER', 'Battle Fleet');
+      battle.rows = { bb: ['ger-scharnhorst', 'ger-bismarck'] };
+      const norw = zoneOf(g, 'norw');
+      sail(g, home, norw, 'patrol'); sail(g, battle, norw, 'patrol');
+      seaField.fought = () => ({ R: 3, sunk: { [battle.id]: { bb: 1 }, [home.id]: {} }, toDice: true, rows: { [battle.id]: { bb: ['ger-bismarck'] } } });
+      try { seaBattles(g, 'UK'); } finally { seaField.fought = undefined; }
+      if (battle.ships.bb !== 1) continue;
+      expect(R.listOf(battle, 'bb'), `seed ${seed}`).toEqual(['ger-scharnhorst']);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(3);
+  });
+
+  it("her row is fixed as she is laid down: plans gained before she is delivered do not change her design (plan 4.3)", () => {
+    const g = grand(true, 3, 'BRA');
+    expect(grantPlans(g, 'BRA', 'bb', 'USA', 'taken')).toBe(true);
+    g.nations.BRA.pp = 50000;
+    const yard = g.regions.find((r) => r.owner === 'BRA' && r.port && r.ctrl === 'BRA')!;
+    g.flags[`wk:yard:${yard.id}`] = 3;
+    const b = orderOffer(g, 'BRA', 'ship:bb')!;
+    expect(b.row).toBe('usa-north-carolina');
+    expect(grantPlans(g, 'BRA', 'bb', 'ITA', 'taken')).toBe(true);
+    expect(R.buildRow(g, 'BRA', 'bb', 0)).toBe('ita-littorio');
+    b.eta = g.turn;
+    deliver(g, 'BRA');
+    expect(g.fleets.filter((f) => f.nat === 'BRA').flatMap((f) => R.listOf(f, 'bb'))).toContain('usa-north-carolina');
+    expect(g.fleets.filter((f) => f.nat === 'BRA').flatMap((f) => R.listOf(f, 'bb'))).not.toContain('ita-littorio');
+  });
+
+  it("a row whose cells are not all in and that states no worth is no row: its hulls read today's weight (Q5)", () => {
+    const part = { ...rowById('usa-north-carolina'), id: 'x', deck: undefined } as unknown as R.ShipRow;
+    expect(R.rawWorth(part)).toBeNull();
+    expect(R.rawWorth({ ...part, worth: 0.9 } as R.ShipRow)).toBe(0.9);
   });
 });
