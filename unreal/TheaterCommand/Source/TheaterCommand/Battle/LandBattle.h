@@ -96,6 +96,10 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> GroundInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ThingInk;
+	/** The hedges' and trees' leaves on their cards (M_LandLeaves: cut out, both faces lit; build_content.py); none
+	 * without it, and then the shrubs and trees carry their solid sprigs instead. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LeafInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()

@@ -4118,11 +4118,12 @@ namespace LandField
 		void Measure(BaseMesh& B)
 		{
 			float R = 0.0f, H = 0.0f;
-			for (size_t K = 0; K + 2 < B.Near.Positions.size(); K += 3)
-			{
-				R = std::max(R, std::hypot(B.Near.Positions[K], B.Near.Positions[K + 1]));
-				H = std::max(H, B.Near.Positions[K + 2]);
-			}
+			for (const Mesh* M : { &B.Near, &B.Cards, &B.Sprigs })
+				for (size_t K = 0; K + 2 < M->Positions.size(); K += 3)
+				{
+					R = std::max(R, std::hypot(M->Positions[K], M->Positions[K + 1]));
+					H = std::max(H, M->Positions[K + 2]);
+				}
 			B.Radius = R;
 			B.Height = H;
 		}
@@ -4174,6 +4175,44 @@ namespace LandField
 				B.Vert(P[K], Unit3(Own * (1.0 - Bend) + Soft(P[K]) * Bend, Own), Paint(P[K], S[K]));
 			}
 			for (const auto& Fc : F) B.Tri(Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2]);
+		}
+
+		/** The leaves' picture's quarters (T_LandLeaves, Tools/land_look/make_leaf_textures.py): which spray a card carries. */
+		enum LeafCell : int
+		{
+			LeafThorn = 0, // hawthorn, blackthorn: small lobed leaves, close set
+			LeafRound = 1, // hazel, field maple: round leaves
+			LeafOak = 2,   // oak: lobed leaves bunched at the twigs' ends
+			LeafOval = 3   // elm, beech, apple, holly, elder: oval leaves to a point
+		};
+
+		/**
+		 * A leaf card: a flat W by H card at C carrying one spray of the leaves' picture (its Cell), its twig's foot at the
+		 * card's foot, Up the way from foot to tip, turned to face Out (the shrub's or the spray's outward there). One face:
+		 * the leaves' material draws both, lit alike. Normals bent Bend of the way toward Soft, as Cluster's are, so the
+		 * cards light as one soft mass; painted by Paint at each corner, as a cluster is.
+		 */
+		void LeafCard(Mesh& M, V3 C, V3 Face, V3 Up, double W, double H, int Cell, V3 Out, const std::function<V3(V3)>& Soft, double Bend, const std::function<Col(V3, V3)>& Paint)
+		{
+			Face = Unit3(Face, Out);
+			if (Dot3(Face, Out) < 0.0) Face = Face * -1.0;
+			Up = Up - Face * Dot3(Up, Face);
+			Up = Unit3(Up, Unit3(Cross(Face, V3{ 1, 0, 0 }), V3{ 0, 1, 0 }));
+			const V3 Rt = Cross(Up, Face); // the viewer's right, seen from the front
+			const double U0 = 0.5 * (Cell % 2), V0 = 0.5 * (Cell / 2), E = 0.004;
+			const V3 Corner[4] = { C - Up * (0.5 * H) - Rt * (0.5 * W), C - Up * (0.5 * H) + Rt * (0.5 * W), C + Up * (0.5 * H) + Rt * (0.5 * W),
+								   C + Up * (0.5 * H) - Rt * (0.5 * W) };
+			const double Uv[4][2] = { { U0 + E, V0 + 0.5 - E }, { U0 + 0.5 - E, V0 + 0.5 - E }, { U0 + 0.5 - E, V0 + E }, { U0 + E, V0 + E } };
+			Builder B(M);
+			const uint32_t Base0 = static_cast<uint32_t>(M.Points());
+			for (int K = 0; K < 4; ++K)
+			{
+				B.Vert(Corner[K], Unit3(Face * (1.0 - Bend) + Soft(Corner[K]) * Bend, Face), Paint(Corner[K], Out));
+				M.Uvs.push_back(static_cast<float>(Uv[K][0]));
+				M.Uvs.push_back(static_cast<float>(Uv[K][1]));
+			}
+			B.Tri(Base0, Base0 + 1, Base0 + 2);
+			B.Tri(Base0, Base0 + 2, Base0 + 3);
 		}
 
 		/**
@@ -4239,6 +4278,7 @@ namespace LandField
 			double SprayR, LumpLo, LumpHi, Flat, Jag, Deep, Light;
 			Col Leaf, Bark;
 			bool bLeader, bPollard;
+			int Cell; // its leaves' spray on the cards (LeafCell)
 		};
 
 		/**
@@ -4402,6 +4442,9 @@ namespace LandField
 			{
 				const auto SoftS = Soft(S);
 				const auto PaintS = Paint(S);
+				// (the heart's clusters: in the shade of the leaves on the cards round them, a little smaller and darker,
+				// the crown's depth seen through its gaps, not smooth green lumps of their own)
+				const auto Shaded = [&PaintS](V3 P, V3 Dir) { return Mixed(PaintS(P, Dir), Rgb(30, 44, 30), 0.3); };
 				const int N = T.Heart + T.Twigs + R.Below(5) - 2;
 				for (int J = 0; J < N; ++J)
 				{
@@ -4412,7 +4455,24 @@ namespace LandField
 					const double Lr = R.Range(T.LumpLo, T.LumpHi) * (J == 0 ? 1.15 : bSprig ? 0.66 : 1.0);
 					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
 					O.Z = std::min(O.Z, T.High - Lr * T.Flat);
-					Cluster(Bm.Near, O, Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, PaintS, bSprig);
+					if (bSprig) Cluster(Bm.Sprigs, O, Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, PaintS, true);
+					else Cluster(Bm.Near, O, 0.85 * Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, Shaded, false);
+				}
+				// The leaves themselves on cards over the spray's skin, more of them than the sprigs they stand in for
+				// (a card is two triangles, a sprig eight), each turned out from the spray, its twig's foot toward it, a
+				// sprig's breadth and a half across; a few set in, the light falling through to the heart's dark.
+				Rng RC(Seed ^ (0xCA4D + 977u * static_cast<uint64_t>(&S - Sp.data())));
+				const int Cards = (T.Twigs * 8) / 5 + RC.Below(5);
+				for (int J = 0; J < Cards; ++J)
+				{
+					const V3 U = Unit3(AnyWay(RC) + S.Out * 0.5 + V3{ 0, 0, 0.3 }, S.Out);
+					const double D = S.Rad * RC.Range(0.45, 1.05);
+					const double Size = RC.Range(T.LumpLo, T.LumpHi) * RC.Range(1.2, 1.6);
+					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
+					O.Z = std::min(O.Z, T.High - 0.4 * Size);
+					const V3 Face = Unit3(U + AnyWay(RC) * 0.35, U);
+					const V3 Up = Unit3(U * 0.6 + V3{ 0, 0, 0.5 } + AnyWay(RC) * 0.7, U);
+					LeafCard(Bm.Cards, O, Face, Up, Size, Size, T.Cell, U, SoftS, 0.7, PaintS);
 				}
 			}
 
@@ -4451,6 +4511,7 @@ namespace LandField
 			double LumpLo, LumpHi, Jag, Sprigs;
 			Col Leaf, Second;
 			double Other;
+			int Cell, CellOther; // the leaves' sprays on its cards (its Leaf's, its Second's: LeafCell)
 		};
 
 		/**
@@ -4501,8 +4562,32 @@ namespace LandField
 					if (bSprig && Zf > 0.4 && R.Next() < 0.4) P.Z += R.Range(0.0, Sh.Sprigs);
 					P.Z = std::min(P.Z, Sh.Top - 0.8 * Lr);
 					const bool bOther = R.Next() < Sh.Other;
-					Cluster(Bm.Near, P, Lr, bSprig ? R.Range(0.65, 0.9) : R.Range(0.8, 1.0), Sh.Jag, R, Soft, 0.45, Paint(bOther ? Sh.Second : Sh.Leaf, R.Range(0.86, 1.14)), bSprig);
+					const auto Painted = Paint(bOther ? Sh.Second : Sh.Leaf, R.Range(0.86, 1.14));
+					// (the clusters under the cards a little smaller and in their shade: the hedge's depth, not lumps)
+					const auto Shaded = [&Painted](V3 Q, V3 Dir) { return Mixed(Painted(Q, Dir), Rgb(28, 40, 28), 0.25); };
+					if (bSprig) Cluster(Bm.Sprigs, P, Lr, R.Range(0.65, 0.9), Sh.Jag, R, Soft, 0.45, Painted, true);
+					else Cluster(Bm.Near, P, 0.9 * Lr, R.Range(0.8, 1.0), Sh.Jag, R, Soft, 0.45, Shaded, false);
 				}
+			}
+			// The leaves on cards over the body's skin, as the sprigs are spread (a spiral, its top to below the bank's
+			// face), a third more of them: each turned out from the shrub, its twig's foot toward the body, a few rising
+			// above the top as loose shoots; the Second's leaves (field maple, elder) on their own spray.
+			Rng RC(Seed ^ 0xCA4D);
+			const int Cards = (Sh.Leaves * 4) / 3;
+			for (int K = 0; K < Cards; ++K)
+			{
+				const double Zf = 1.0 - 1.85 * (K + 0.5) / Cards;
+				const double An = K * 2.39996 + 0.7 + RC.Range(-0.5, 0.5);
+				const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
+				const V3 S{ Ring * std::cos(An), Ring * std::sin(An), Zf };
+				const double Size = RC.Range(Sh.LumpLo, Sh.LumpHi) * RC.Range(1.5, 2.0);
+				V3 P = O + S * (Surface(S) * RC.Range(0.9, 1.08));
+				if (Zf > 0.4 && RC.Next() < 0.35) P.Z += RC.Range(0.0, Sh.Sprigs);
+				P.Z = std::min(P.Z, Sh.Top - 0.35 * Size);
+				const bool bOther = RC.Next() < Sh.Other;
+				const V3 Face = Unit3(S + AnyWay(RC) * 0.5, S);
+				const V3 Up = Unit3(S * 0.5 + V3{ 0, 0, 0.6 } + AnyWay(RC) * 0.8, S);
+				LeafCard(Bm.Cards, P, Face, Up, Size, Size, bOther ? Sh.CellOther : Sh.Cell, S, Soft, 0.5, Paint(bOther ? Sh.Second : Sh.Leaf, RC.Range(0.86, 1.14)));
 			}
 			// The far shrub: seven big ragged clusters, three low, three above them between, one on top.
 			Rng RF(Seed ^ 0xFA4);
@@ -4530,22 +4615,22 @@ namespace LandField
 		// The hedge shrubs, built ShrubHigh (2.8 m) tall: hawthorn and blackthorn dark, dense and upright-sided; hazel and
 		// field maple lighter and rounder; holly and elder (dark and light clusters mixed) tall and loose, their sprigs above
 		// the rest. Bramble low and sprawling, a metre high.
-		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25 }, S + 1);
-		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3 }, S + 2);
-		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4 }, S + 3);
-		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2 }, S + 4);
+		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25, LeafThorn, LeafThorn }, S + 1);
+		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3, LeafRound, LeafOak }, S + 2);
+		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
+		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
 
 		// The trees, each built at its TreeHigh: the hedgerow oak broad and ragged on spreading limbs; the elm tall, its
 		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard
 		// a thick stub, a knobbly knuckle and a bushy head of straight sprouts; the orchard apple low and wide on a short,
 		// crooked, leaning trunk.
-		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false }, S + 10);
-		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false }, S + 11);
-		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false }, S + 12);
-		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false }, S + 13);
-		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true }, S + 14);
-		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false }, S + 15);
+		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false, LeafOak }, S + 10);
+		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false, LeafOval }, S + 11);
+		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false, LeafOval }, S + 12);
+		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false, LeafOval }, S + 13);
+		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true, LeafOval }, S + 14);
+		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false, LeafOval }, S + 15);
 		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple }) At(B).FarFrom = 140.0f;
 
 		// A five-bar field gate on its hinge post, weathered silver-grey: the hinge at the origin, the gate along +x 3.6 m.

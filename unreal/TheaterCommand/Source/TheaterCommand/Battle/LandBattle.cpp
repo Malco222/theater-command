@@ -261,14 +261,17 @@ namespace LandParts
 	 * distance the field gives on (FarFrom). Points as FromField takes them (the field's x and y swapped into Unreal's
 	 * frame, which keeps each triangle facing the same way); colours as sRGB bytes, the base's paint by the shade's tint
 	 * (128 as built). */
-	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, double U)
+	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, UMaterialInterface* LeafInk, double U)
 	{
 		const LandField::Mesh* Levels[2] = { &Base.Near, Base.Far.Empty() ? nullptr : &Base.Far };
+		// The near level's leaves (a hedge shrub's, a tree's): on their cards with the leaves' material, its second
+		// section; without that material, the solid sprigs in the first, on the paint.
+		const bool bCards = LeafInk && !Base.Cards.Empty() && Base.Cards.Uvs.size() == 2 * Base.Cards.Points();
+		const LandField::Mesh* Leaves = bCards ? &Base.Cards : Base.Sprigs.Empty() ? nullptr : &Base.Sprigs;
 		TArray<FMeshDescription> Descriptions;
 		Descriptions.SetNum(Levels[1] ? 2 : 1);
 		for (int32 L = 0; L < Descriptions.Num(); ++L)
 		{
-			const LandField::Mesh& M = *Levels[L];
 			FMeshDescription& D = Descriptions[L];
 			FStaticMeshAttributes Attributes(D);
 			Attributes.Register();
@@ -279,47 +282,69 @@ namespace LandParts
 			auto Colours = Attributes.GetVertexInstanceColors();
 			auto Uvs = Attributes.GetVertexInstanceUVs();
 			Uvs.SetNumChannels(1);
-			const int32 Count = static_cast<int32>(M.Points());
-			D.ReserveNewVertices(Count);
-			D.ReserveNewVertexInstances(Count);
-			D.ReserveNewTriangles(static_cast<int32>(M.Tris()));
+			// (the near level: its body on the paint, then its leaves, on their cards in a section of their own or the
+			// sprigs in the body's)
+			const LandField::Mesh* Parts[2] = { Levels[L], L == 0 ? Leaves : nullptr };
 			const FPolygonGroupID Group = D.CreatePolygonGroup();
 			Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
-			TArray<FVertexInstanceID> Corners;
-			Corners.SetNum(Count);
-			for (int32 I = 0; I < Count; ++I)
+			FPolygonGroupID LeafGroup = Group;
+			if (L == 0 && bCards)
 			{
-				const size_t K = static_cast<size_t>(I);
-				const float* At = &M.Positions[K * 3];
-				const float* Way = &M.Normals[K * 3];
-				const FVertexID Vertex = D.CreateVertex();
-				Positions[Vertex] = FVector3f(At[1] * U, At[0] * U, At[2] * U);
-				const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
-				const FVector3f Normal = FVector3f(Way[1], Way[0], Way[2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
-				Normals[Corner] = Normal;
-				// (no normal map: any tangent across the normal will do)
-				const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
-				Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
-				Signs[Corner] = 1.0f;
-				const LandField::Rgb8& Paint = M.Colours[K];
-				const FColor Shaded(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.R * Tint.X), 0, 255)),
-					static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.G * Tint.Y), 0, 255)),
-					static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.B * Tint.Z), 0, 255)), 255);
-				// (the mesh keeps its colours as sRGB bytes, as the surface material reads them: a colour handed over
-				// linear is turned back to these same bytes)
-				Colours[Corner] = FVector4f(FLinearColor(Shaded));
-				Uvs.Set(Corner, 0, FVector2f::ZeroVector);
-				Corners[I] = Corner;
+				LeafGroup = D.CreatePolygonGroup();
+				Attributes.GetPolygonGroupMaterialSlotNames()[LeafGroup] = TEXT("Leaves");
 			}
-			for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+			for (int32 Part = 0; Part < 2; ++Part)
 			{
-				const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
-					Corners[static_cast<int32>(M.Triangles[K + 2])] };
-				D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+				if (!Parts[Part])
+				{
+					continue;
+				}
+				const LandField::Mesh& M = *Parts[Part];
+				const bool bOnCards = Part == 1 && bCards;
+				const int32 Count = static_cast<int32>(M.Points());
+				D.ReserveNewVertices(Count);
+				D.ReserveNewVertexInstances(Count);
+				D.ReserveNewTriangles(static_cast<int32>(M.Tris()));
+				TArray<FVertexInstanceID> Corners;
+				Corners.SetNum(Count);
+				for (int32 I = 0; I < Count; ++I)
+				{
+					const size_t K = static_cast<size_t>(I);
+					const float* At = &M.Positions[K * 3];
+					const float* Way = &M.Normals[K * 3];
+					const FVertexID Vertex = D.CreateVertex();
+					Positions[Vertex] = FVector3f(At[1] * U, At[0] * U, At[2] * U);
+					const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+					const FVector3f Normal = FVector3f(Way[1], Way[0], Way[2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+					Normals[Corner] = Normal;
+					// (no normal map: any tangent across the normal will do)
+					const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+					Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+					Signs[Corner] = 1.0f;
+					const LandField::Rgb8& Paint = M.Colours[K];
+					const FColor Shaded(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.R * Tint.X), 0, 255)),
+						static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.G * Tint.Y), 0, 255)),
+						static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.B * Tint.Z), 0, 255)), 255);
+					// (the mesh keeps its colours as sRGB bytes, as the surface material reads them: a colour handed over
+					// linear is turned back to these same bytes)
+					Colours[Corner] = FVector4f(FLinearColor(Shaded));
+					Uvs.Set(Corner, 0, bOnCards ? FVector2f(M.Uvs[K * 2], M.Uvs[K * 2 + 1]) : FVector2f::ZeroVector);
+					Corners[I] = Corner;
+				}
+				for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+				{
+					const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
+						Corners[static_cast<int32>(M.Triangles[K + 2])] };
+					D.CreateTriangle(bOnCards ? LeafGroup : Group, TArrayView<const FVertexInstanceID>(Three, 3));
+				}
 			}
 		}
 		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
 		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		if (bCards)
+		{
+			Made->GetStaticMaterials().Add(FStaticMaterial(LeafInk, TEXT("Leaves")));
+		}
 		TArray<const FMeshDescription*> Levelled;
 		for (const FMeshDescription& D : Descriptions)
 		{
@@ -618,6 +643,18 @@ void ALandBattle::LoadInks()
 		GroundInk = Ink(0.95f, 0.15f, 0.14f);
 	}
 	ThingInk = Ink(0.9f, 0.2f, 0.06f);
+	// The hedges' and trees' leaves on their cards (M_LandLeaves, build_content.py): without it, their solid sprigs.
+	UMaterialInterface* Leaves = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandLeaves.M_LandLeaves"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	LeafInk = Leaves ? UMaterialInstanceDynamic::Create(Leaves, this) : nullptr;
+	if (!Leaves)
+	{
+		static bool bToldNoLeaves = false;
+		if (!bToldNoLeaves)
+		{
+			bToldNoLeaves = true;
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandLeaves is missing (run Tools/build_content.sh): the hedges and trees carry their solid sprigs."));
+		}
+	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
 }
@@ -1316,7 +1353,7 @@ void ALandBattle::LayThings()
 			}
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
 			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
-			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, ThingInk, U);
+			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, ThingInk, LeafInk, U);
 			if (!Mesh)
 			{
 				continue;
@@ -1330,6 +1367,10 @@ void ALandBattle::LayThings()
 			Copies->SetupAttachment(Root);
 			Copies->SetStaticMesh(Mesh);
 			Copies->SetMaterial(0, ThingInk);
+			if (LeafInk && Mesh->GetStaticMaterials().Num() > 1)
+			{
+				Copies->SetMaterial(1, LeafInk);
+			}
 			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Copies->SetCanEverAffectNavigation(false);
 			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat);

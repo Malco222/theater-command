@@ -124,6 +124,8 @@ namespace LandField
 		std::vector<float> Positions; // x, y, z a point, metres
 		std::vector<float> Normals;   // x, y, z a point, unit
 		std::vector<Rgb8> Colours;    // a point
+		/** u, v a point, on the leaves' picture (T_LandLeaves): a leaf card mesh's only; empty on every other. */
+		std::vector<float> Uvs;
 		std::vector<uint32_t> Triangles;
 
 		size_t Points() const { return Colours.size(); }
@@ -187,6 +189,12 @@ namespace LandField
 		std::string Name;
 		/** Near the eye, and beyond FarFrom metres (where Far is empty, draw nothing beyond it). */
 		Mesh Near, Far;
+		/**
+		 * A hedge shrub's or a tree's leaves near the eye, as the game draws them over Near: Cards, flat cards that carry
+		 * the leaves' picture (cut out by its alpha, both sides lit; M_LandLeaves), or, where the game has no such
+		 * material, Sprigs, small solid clusters of leaves in their places. Empty for every other base.
+		 */
+		Mesh Cards, Sprigs;
 		float FarFrom = 100.0f;
 		/** The base's size as built (before an instance's scale): radius round its origin and height. */
 		float Radius = 1.0f, Height = 1.0f;

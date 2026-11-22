@@ -161,9 +161,59 @@ namespace LandFieldPicture
 			MatBlades
 		};
 
+		/**
+		 * The leaves' picture (Tools/land_look/T_LandLeaves.png, read once through ImageMagick), as the game's leaf cards
+		 * carry it: RGB linear numbers (0.5 as painted), A the leaves. Empty where it cannot be read: the cards are then not
+		 * drawn, and the sprigs that stand in for them where the game has no leaves' material are.
+		 */
+		struct Leaves
+		{
+			int W = 0, H = 0;
+			std::vector<uint8_t> Px; // RGBA
+			bool Ok() const { return W > 0 && H > 0; }
+			const uint8_t* At(double U, double V) const
+			{
+				const int X = std::clamp(static_cast<int>(std::floor(U * W)), 0, W - 1), Y = std::clamp(static_cast<int>(std::floor(V * H)), 0, H - 1);
+				return &Px[(static_cast<size_t>(Y) * W + X) * 4];
+			}
+		};
+
+		const Leaves& LeafPicture()
+		{
+			static const Leaves L = [] {
+				Leaves Out;
+				std::string Path;
+				if (const char* Env = std::getenv("LAND_LEAVES")) Path = Env;
+				else
+				{
+					Path = __FILE__;
+					const size_t Cut = Path.rfind("land_field/");
+					Path = Cut == std::string::npos ? std::string("Tools/land_look/T_LandLeaves.png") : Path.substr(0, Cut) + "land_look/T_LandLeaves.png";
+				}
+				const std::string Cmd = "convert '" + Path + "' -depth 8 RGBA:- 2>/dev/null";
+				FILE* P = popen(Cmd.c_str(), "r");
+				if (!P) return Out;
+				std::vector<uint8_t> Buf;
+				uint8_t Chunk[65536];
+				size_t Got;
+				while ((Got = std::fread(Chunk, 1, sizeof(Chunk), P)) > 0) Buf.insert(Buf.end(), Chunk, Chunk + Got);
+				pclose(P);
+				const size_t Side = static_cast<size_t>(std::lround(std::sqrt(static_cast<double>(Buf.size() / 4))));
+				if (Side > 0 && Side * Side * 4 == Buf.size())
+				{
+					Out.W = Out.H = static_cast<int>(Side);
+					Out.Px = std::move(Buf);
+				}
+				std::printf("  leaves' picture %s: %s\n", Path.c_str(), Out.Ok() ? (std::to_string(Out.W) + " px").c_str() : "not read (the sprigs are drawn)");
+				return Out;
+			}();
+			return L;
+		}
+
 		struct Draw
 		{
 			const LandField::Mesh* M = nullptr;
+			const Leaves* Cards = nullptr; // a leaf card mesh: cut out by the picture's alpha, both faces drawn
 			bool bPlaced = false;
 			double X = 0.0, Y = 0.0, Z = 0.0, C = 1.0, S = 0.0, Scale = 1.0, ScaleZ = 1.0;
 			float Tint[3] = { 1.0f, 1.0f, 1.0f };
@@ -196,6 +246,7 @@ namespace LandFieldPicture
 		{
 			double X, Y, Z; // view space
 			float C[3], N[3];
+			float U = 0.0f, V = 0.0f;
 		};
 
 		int Threads() { return std::max(1, static_cast<int>(std::thread::hardware_concurrency())); }
@@ -203,8 +254,9 @@ namespace LandFieldPicture
 		constexpr int Strip = 8;
 
 		/** One triangle into the rows this thread owns (strips of Strip rows dealt round the threads). */
-		void Fill(Target& T, const View& V, const Vtx& A, const Vtx& B, const Vtx& C, uint8_t Mat, bool bCull, int Me, int Of)
+		void Fill(Target& T, const View& V, const Vtx& A, const Vtx& B, const Vtx& C, uint8_t Mat, bool bCull, int Me, int Of, const Leaves* Cards = nullptr)
 		{
+			if (Cards) bCull = false; // (a card is drawn from both sides)
 			double AX, AY, BX, BY, CX, CY;
 			V.ToScreen(A.X, A.Y, A.Z, AX, AY);
 			V.ToScreen(B.X, B.Y, B.Z, BX, BY);
@@ -246,11 +298,18 @@ namespace LandFieldPicture
 					else Z = L0 * A.Z + L1 * B.Z + L2 * C.Z;
 					const size_t K = static_cast<size_t>(Y) * T.W + X;
 					if (Z >= T.Depth[K]) continue;
+					const uint8_t* Leaf = nullptr;
+					if (Cards)
+					{
+						Leaf = Cards->At(W0 * A.U + W1 * B.U + W2 * C.U, W0 * A.V + W1 * B.V + W2 * C.V);
+						if (Leaf[3] < 128) continue; // (between the leaves)
+					}
 					T.Depth[K] = static_cast<float>(Z);
 					if (T.bDepthOnly) continue;
 					for (int Q = 0; Q < 3; ++Q)
 					{
-						T.Albedo[K * 3 + Q] = static_cast<float>(W0 * A.C[Q] + W1 * B.C[Q] + W2 * C.C[Q]);
+						const double Paint = W0 * A.C[Q] + W1 * B.C[Q] + W2 * C.C[Q];
+						T.Albedo[K * 3 + Q] = static_cast<float>(Leaf ? Paint * (2.0 / 255.0) * Leaf[Q] : Paint);
 						T.Normal[K * 3 + Q] = static_cast<float>(W0 * A.N[Q] + W1 * B.N[Q] + W2 * C.N[Q]);
 					}
 					T.Mat[K] = Mat;
@@ -270,6 +329,8 @@ namespace LandFieldPicture
 				O.C[Q] = static_cast<float>(A.C[Q] + (B.C[Q] - A.C[Q]) * T);
 				O.N[Q] = static_cast<float>(A.N[Q] + (B.N[Q] - A.N[Q]) * T);
 			}
+			O.U = static_cast<float>(A.U + (B.U - A.U) * T);
+			O.V = static_cast<float>(A.V + (B.V - A.V) * T);
 			return O;
 		}
 
@@ -300,6 +361,11 @@ namespace LandFieldPicture
 						O.X = Q.X;
 						O.Y = Q.Y;
 						O.Z = Q.Z;
+						if (D.Cards && M.Uvs.size() >= 2 * N)
+						{
+							O.U = M.Uvs[K * 2];
+							O.V = M.Uvs[K * 2 + 1];
+						}
 						if (!T.bDepthOnly)
 						{
 							const LandField::Rgb8 Cl = M.Colours[K];
@@ -318,13 +384,13 @@ namespace LandFieldPicture
 						const Vtx& C = P[M.Triangles[Tr + 2]];
 						if (V.bOrtho)
 						{
-							Fill(T, V, A, B, C, D.Mat, bCull, Me, Of);
+							Fill(T, V, A, B, C, D.Mat, bCull, Me, Of, D.Cards);
 							continue;
 						}
 						const bool bA = A.Z >= V.Near, bB = B.Z >= V.Near, bC = C.Z >= V.Near;
 						if (bA && bB && bC)
 						{
-							Fill(T, V, A, B, C, D.Mat, bCull, Me, Of);
+							Fill(T, V, A, B, C, D.Mat, bCull, Me, Of, D.Cards);
 							continue;
 						}
 						if (!bA && !bB && !bC) continue;
@@ -340,7 +406,7 @@ namespace LandFieldPicture
 							if (bCur) Poly[NP++] = Cur;
 							if (bCur != bNxt) Poly[NP++] = Between(Cur, Nxt, V.Near);
 						}
-						for (int K = 1; K + 1 < NP; ++K) Fill(T, V, Poly[0], Poly[K], Poly[K + 1], D.Mat, bCull, Me, Of);
+						for (int K = 1; K + 1 < NP; ++K) Fill(T, V, Poly[0], Poly[K], Poly[K + 1], D.Mat, bCull, Me, Of, D.Cards);
 					}
 				}
 			};
@@ -410,10 +476,36 @@ namespace LandFieldPicture
 			auto Place = [&](const LandField::Placed& P) {
 				const LandField::BaseMesh& Bm = G.BaseOf(P.Kind);
 				const double Dist = bAllNear ? 1e9 : std::hypot(P.X - Eye.X, P.Y - Eye.Y, P.Z - Eye.Z);
-				const LandField::Mesh& M = Dist < Bm.FarFrom ? Bm.Near : Bm.Far;
+				const bool bNear = Dist < Bm.FarFrom;
+				const LandField::Mesh& M = bNear ? Bm.Near : Bm.Far;
 				if (M.Empty()) return;
 				const double R = std::max(static_cast<double>(Bm.Radius) * P.Scale, 0.5 * Bm.Height * P.ScaleZ) + 0.5;
 				if (!Cull.Sees({ P.X, P.Y, P.Z + 0.5 * Bm.Height * P.ScaleZ }, R)) return;
+				// (near, its leaves: on cards where the picture was read, else the sprigs, as the game draws them)
+				if (bNear && (!Bm.Cards.Empty() || !Bm.Sprigs.Empty()))
+				{
+					const bool bCards = LeafPicture().Ok() && !Bm.Cards.Empty();
+					Draw L;
+					L.M = bCards ? &Bm.Cards : &Bm.Sprigs;
+					L.Cards = bCards ? &LeafPicture() : nullptr;
+					L.bPlaced = true;
+					L.X = P.X;
+					L.Y = P.Y;
+					L.Z = P.Z;
+					L.C = std::cos(P.Yaw);
+					L.S = std::sin(P.Yaw);
+					L.Scale = P.Scale;
+					L.ScaleZ = P.ScaleZ;
+					L.Tint[0] = P.Tint.R / 128.0f;
+					L.Tint[1] = P.Tint.G / 128.0f;
+					L.Tint[2] = P.Tint.B / 128.0f;
+					L.Mat = MatLeaves;
+					if (!L.M->Empty())
+					{
+						S.Draws.push_back(L);
+						S.Tris += L.M->Tris();
+					}
+				}
 				Draw D;
 				D.M = &M;
 				D.bPlaced = true;

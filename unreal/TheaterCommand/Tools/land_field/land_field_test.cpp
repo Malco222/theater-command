@@ -623,12 +623,19 @@ int main(int Argc, char** Argv)
 	for (const LandField::Tile& Tl : G.Ring()) RingMax = std::max(RingMax, Tl.Near.Tris());
 	std::printf("  ring: %zu tiles, max %zu triangles\n", G.Ring().size(), RingMax);
 	std::printf("  instances and base meshes (near / far triangles, far from):\n");
+	std::string BadCards;
+	int Carded = 0;
 	for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
 	{
 		const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
-		std::printf("    %-9s %6zu   %5zu / %4zu tris, far from %3.0f m, %.1f m high, %.1f m round\n", BaseNames[B], G.Instances(static_cast<LandField::Base>(B)).size(), Bm.Near.Tris(), Bm.Far.Tris(), Bm.FarFrom,
-		            Bm.Height, Bm.Radius);
+		std::printf("    %-9s %6zu   %5zu / %4zu tris, far from %3.0f m, %.1f m high, %.1f m round%s\n", BaseNames[B], G.Instances(static_cast<LandField::Base>(B)).size(), Bm.Near.Tris(), Bm.Far.Tris(), Bm.FarFrom,
+		            Bm.Height, Bm.Radius, Bm.Cards.Empty() ? "" : (", leaves on " + std::to_string(Bm.Cards.Tris() / 2) + " cards (or " + std::to_string(Bm.Sprigs.Tris()) + " tris of sprigs)").c_str());
+		// (a leaf card mesh carries its picture's place at every point; no other mesh has any)
+		if (!(Bm.Cards.Uvs.size() == 2 * Bm.Cards.Points() && Bm.Near.Uvs.empty() && Bm.Far.Uvs.empty() && Bm.Sprigs.Uvs.empty())) BadCards += std::string(" ") + BaseNames[B];
+		if (!Bm.Cards.Empty()) ++Carded;
 	}
+	Check(BadCards.empty() && Carded == 10, "the hedge shrubs and the trees have their leaf cards, each point its place on the leaves' picture, and no other mesh has any",
+	      Fmt("%.0f bases with cards", Carded) + (BadCards.empty() ? std::string() : ", wrong:" + BadCards));
 
 	// The clutter: what a soldier's eye gets round it, and that boxes that overlap agree.
 	{
