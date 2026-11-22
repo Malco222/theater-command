@@ -8,7 +8,7 @@ import { startOpen } from '../src/campaign/staff';
 import { NAVY } from '../src/campaign/navy';
 import type { Game } from '../src/campaign/types';
 import {
-  CLEAR, factsOf, looksOf, pickScene, seaPlace, stagePick, stageScene, subSceneOf,
+  AHEAD_RANGE, CLEAR, KILL_NEAR, TRACK_SPARE, factsOf, looksOf, pickScene, seaPlace, stagePick, stageScene, subSceneOf,
   type MonthFacts, type SeaFact, type Staged, type StagedNote,
 } from '../unreal/TheaterCommand/Rules/sub-scene';
 import { SAMPLES } from '../unreal/TheaterCommand/Tools/sub_scene/sample-facts';
@@ -173,6 +173,40 @@ function expectKillsAsBooked(r: Staged, booked: number): void {
     killRuns.add(runs[runs.length - 1]);
   }
   const dd = field.classes.dd;
+  // The booked blow lands on her: as the sea scene takes it (SeaShow.cpp sea:depthChargeHit), that escort's charge
+  // bursting nearest the blow's moment, which must be the kill run's booked one, bursting then within KILL_NEAR of her
+  // (views to a tenth of a metre, eased between them: 3 m more); an ahead-thrower's salvo aimed on her, AHEAD_RANGE
+  // before the escort as she fires.
+  for (const h of hits) {
+    const run = [...killRuns].find((e) => e.unit === h.extra!.from && e.extra!.on === h.unit)!;
+    const q = poseAt(played, h.unit!, h.t);
+    const where = `${r.key}: the blow on ${h.unit} at ${h.t} s`;
+    if (run.extra!.kind === 'ahead') {
+      const x = run.extra!, d = poseAt(played, run.unit!, run.t);
+      expect(Math.hypot(Number(x.x) - q.x, Number(x.y) - q.y), where).toBeLessThanOrEqual(KILL_NEAR + 3);
+      expect(Math.hypot(d.x + Math.sin(d.h) * AHEAD_RANGE - Number(x.x), d.y + Math.cos(d.h) * AHEAD_RANGE - Number(x.y)), where).toBeLessThanOrEqual(KILL_NEAR + 3);
+      expect(h.t - run.t).toBeLessThanOrEqual(60);
+      continue;
+    }
+    let best: { x: number; y: number; t: number; mine: boolean } | null = null;
+    for (const e of events) {
+      if (e.what !== 'sea:depthCharge' || e.unit !== h.extra!.from || e.extra!.kind !== 'pattern') continue;
+      const x = e.extra!;
+      for (const c of chargesOf(poseAt(played, e.unit!, e.t), dd.len, dd.beam, x.n as number, x.spread as number, x.sinking as number, e.t)) {
+        if (Math.abs(c.t - h.t) <= 15 && (!best || Math.abs(c.t - h.t) < Math.abs(best.t - h.t))) best = { ...c, mine: e === run };
+      }
+    }
+    expect(best, where).not.toBeNull();
+    expect(best!.mine, where).toBe(true);
+    expect(Math.abs(best!.t - h.t), where).toBeLessThanOrEqual(0.5);
+    expect(Math.hypot(best!.x - q.x, best!.y - q.y), where).toBeLessThanOrEqual(KILL_NEAR + 3);
+  }
+  // A scuttled boat's rescuer stands by near where she went down.
+  for (const e of events.filter((x) => x.what === 'sea:rescue')) {
+    const lost = lost0(events, e.extra!.on as number), by = poseAt(played, e.extra!.by as number, e.t), grave = poseAt(played, e.extra!.on as number, lost);
+    expect(Math.hypot(by.x - grave.x, by.y - grave.y), `${r.key}: the rescue of ${e.extra!.on}`).toBeLessThanOrEqual(400);
+    expect(by.v, `${r.key}: the rescuer of ${e.extra!.on} stopped`).toBeLessThanOrEqual(1);
+  }
   for (const e of events) {
     if (e.what !== 'sea:depthCharge' || killRuns.has(e)) continue;
     const x = e.extra!;
@@ -187,6 +221,35 @@ function expectKillsAsBooked(r: Staged, booked: number): void {
       }
     }
   }
+}
+
+/** When a piece was lost (its sea:sunk). */
+const lost0 = (events: Ev[], id: number): number => events.find((e) => e.what === 'sea:sunk' && e.unit === id)!.t;
+
+/**
+ * Nothing the scene shows comes after its tracks: every event, beat and burst lies inside the views, the views end at
+ * least TRACK_SPARE before the tracks' 900 s, and no piece under way stands still from one view to the next (a track
+ * stands still at its end).
+ */
+function expectInsideTracks(r: Staged): void {
+  const views = r.views as unknown as View[], played = playOut(r), events = eventsOf(r), field = r.field as Record<string, any>;
+  const last = views[views.length - 1].t;
+  expect(last, r.key).toBeLessThanOrEqual(900 - TRACK_SPARE);
+  for (const e of events) expect(e.t, `${r.key}: ${e.what}`).toBeLessThanOrEqual(last);
+  for (const b of noteOf(r).beats) expect(b.to, `${r.key}: beat ${b.what}`).toBeLessThanOrEqual(last);
+  for (const e of events) {
+    if (e.what !== 'sea:depthCharge' || e.extra!.kind !== 'pattern') continue;
+    const x = e.extra!, d = poseAt(played, e.unit!, e.t);
+    expect(e.t + (x.spread as number) / Math.max(3, d.v) + (x.sinking as number), `${r.key}: the pattern at ${e.t} s`).toBeLessThanOrEqual(last);
+  }
+  for (let i = 1; i < played.length; i++) {
+    for (const [id, u] of played[i].units) {
+      const w = played[i - 1].units.get(id)!;
+      if (u.state === 'gone' || Number(u.speed) <= 0.5) continue;
+      expect(u.x !== w.x || u.y !== w.y, `${r.key}: piece ${id} under way at ${played[i].t} s stands still`).toBe(true);
+    }
+  }
+  expect(field.staged.seconds).toBeGreaterThan(0);
 }
 
 describe('the submarine scene stager (form D1)', () => {
@@ -204,6 +267,7 @@ describe('the submarine scene stager (form D1)', () => {
       const r = stageScene(s.facts)!;
       expect(r, s.file).not.toBeNull();
       expectReadable(r);
+      expectInsideTracks(r);
       const convoy = s.facts.facts.find((f) => f.kind === 'convoy')!;
       expect(noteOf(r).case).toBe('convoy');
       expectKillsAsBooked(r, convoy.boats ?? 0);
@@ -261,6 +325,7 @@ describe('the submarine scene stager (form D1)', () => {
       expect(noteOf(r).case).toBe(c.want);
       expectReadable(r);
       expectKillsAsBooked(r, c.booked);
+      expectInsideTracks(r);
     }
     // The heavy cases draw the class lost, up to three heavy ships; the boats' kill, both carriers torpedoed.
     expect(noteOf(stageScene(cases[0].m)!).drawn.heavy).toBeLessThanOrEqual(3);
@@ -303,7 +368,7 @@ describe('the submarine scene stager (form D1)', () => {
       const t = T(n.year, 6);
       const raid = stageScene(month(n.nat, t, [{ kind: 'convoy', sea: n.sea, turn: t, week: 2, by: '', on: n.enemy, route: 'sample:x', routeName: 'the convoys', tons: 11000, boats: 1, escortsLost: 0, boatsAt: { [n.nat]: 2 } }]))!;
       const guard = stageScene(month(n.nat, t, [{ kind: 'convoy', sea: n.sea, turn: t, week: 2, by: '', on: n.nat, route: 'sample:y', routeName: 'the convoys', tons: 11000, boats: 1, escortsLost: 0, boatsAt: { [n.enemy]: 2 } }]))!;
-      for (const r of [raid, guard]) { expectReadable(r); expectKillsAsBooked(r, 1); }
+      for (const r of [raid, guard]) { expectReadable(r); expectKillsAsBooked(r, 1); expectInsideTracks(r); }
       expect((raid.field as any).classes.ss.name).toBe(l.boat.cls);
       expect((guard.field as any).classes.dd.name).toBe(looksOf(n.nat, at, seaPlace(n.sea).basin).escort.cls);
     }
@@ -322,7 +387,50 @@ describe('the submarine scene stager (form D1)', () => {
       expect(ev.some((e) => e.what === 'sea:depthChargeHit' || e.what === 'sea:air' || e.what === 'sea:rescue')).toBe(false);
       expect(ev.filter((e) => e.what === 'sea:sunk' && (e.extra as { cls?: string }).cls === 'ss').length).toBe(0);
       expectKillsAsBooked(r, 0);
+      expectInsideTracks(r);
     }
+  });
+
+  it('keeps every run, burst and beat inside the tracks where the escorts are few, each kill on its boat', () => {
+    // The review's cases: a battleship lost with no destroyers and two or three boats sunk in the same sea; hunts by a
+    // navy of small hunting groups; British convoys with three kills; and the review's own month (seed 1).
+    const heavy = (k: number, dd: number, year: number, m1: number, sea: string, me: string, foe: string, seed: number): MonthFacts => {
+      const t = T(year, m1);
+      return month(me, t, [
+        { kind: 'torpedo', sea, turn: t, week: 3, by: '', on: me, cls: 'bb', fleet: 'the Fleet', ships: { bb: 2, ca: 2, dd }, boatsAt: { [foe]: 4 } },
+        { kind: 'hunt', sea, turn: t, week: 2, by: me, on: foe, boats: k, escortsLost: 0 }], seed);
+    };
+    const hunt = (k: number, year: number, m1: number, sea: string, by: string, on: string, me: string, seed: number): MonthFacts => {
+      const t = T(year, m1);
+      return month(me, t, [{ kind: 'hunt', sea, turn: t, week: 2, by, on, boats: k, escortsLost: 0 }], seed);
+    };
+    const convoy = (k: number, year: number, m1: number, seed: number): MonthFacts => {
+      const t = T(year, m1);
+      return month('UK', t, [{ kind: 'convoy', sea: 'natl', turn: t, week: 2, by: '', on: 'UK', route: 'atlantic', routeName: 'the Atlantic convoys', tons: 60000, boats: k, escortsLost: 0, boatsAt: { GER: 10 } }], seed);
+    };
+    const all: { m: MonthFacts; booked: number }[] = [{ m: heavy(2, 0, 1941, 11, 'emed', 'UK', 'GER', 1), booked: 2 }];
+    for (const seed of [2, 3, 4]) {
+      for (const k of [2, 3]) {
+        all.push({ m: heavy(k, seed % 2, 1941, 11, 'emed', 'UK', 'GER', seed), booked: k });
+        all.push({ m: heavy(k, 0, 1944, 6, 'philsea', 'JAP', 'USA', seed), booked: k });
+        all.push({ m: hunt(k, 1942, 6, 'central', 'ITA', 'UK', 'UK', seed), booked: k });
+        all.push({ m: hunt(k, 1944, 8, 'luzonstrait', 'JAP', 'USA', 'JAP', seed), booked: k });
+      }
+      all.push({ m: convoy(3, 1941, 6, seed), booked: 3 });
+      all.push({ m: convoy(3, 1943, 5, seed), booked: 3 });
+    }
+    for (const c of all) {
+      const r = stageScene(c.m)!;
+      expectReadable(r);
+      expectKillsAsBooked(r, c.booked);
+      expectInsideTracks(r);
+    }
+    // The review's month: both kills inside the first ten minutes, each by her own destroyer.
+    const r = stageScene(all[0].m)!, ev = eventsOf(r);
+    const blows = ev.filter((e) => e.what === 'sea:depthChargeHit');
+    expect(blows.length).toBe(2);
+    expect(new Set(blows.map((e) => e.extra!.from)).size).toBe(2);
+    expect(Math.max(...ev.map((e) => e.t))).toBeLessThan(600);
   });
 
   it('reads the month from the game and writes nothing to it', () => {
@@ -345,6 +453,8 @@ describe('the submarine scene stager (form D1)', () => {
     expect(out.pick?.case).toBe('convoy');
     const rec = JSON.parse(out.recording!) as Staged;
     expectReadable(rec);
+    expectKillsAsBooked(rec, 2);
+    expectInsideTracks(rec);
     expect(out.recording).toBe(subSceneOf(g, NAVY.convoys).recording);
     // From the mark on there is nothing new: no scene.
     expect(subSceneOf(g, NAVY.convoys, out.mark).recording).toBeNull();

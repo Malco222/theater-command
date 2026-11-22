@@ -474,6 +474,14 @@ class Track {
     }
     return best;
   }
+  /** The first moment after `from` she heads within `within` (radians) of the bearing to a point, or -1. */
+  pointing(q: Pt, from: number, within: number): number {
+    for (let i = Math.ceil(from / DT); i < this.poses.length; i++) {
+      const p = this.poses[i];
+      if (Math.abs(wrapPi(bearing(p.x, p.y, q.x, q.y) - p.h)) <= within) return i * DT;
+    }
+    return -1;
+  }
   /** The first moment after `from` she is within `r` of a moving point, or -1. */
   first(other: (t: number) => Pt, r: number, from: number, until: number): number {
     for (let i = Math.ceil(from / DT); i < this.poses.length && i * DT <= until; i++) if (dist(this.poses[i], other(i * DT)) <= r) return i * DT;
@@ -574,6 +582,16 @@ export const CLEAR = 100;
 const LETHAL = 6.4;
 /** Hedgehog's bombs sink about 7 m/s (the sea scene's own figure for an ahead-thrown salvo, SeaShow.cpp). */
 const AHEAD_SINK = 7;
+/**
+ * A booked kill's charge is steered to burst within this (m, across the water) of where the boat is as it bursts: the
+ * lethal radius, so that the scene's blow (SeaShow.cpp sea:depthChargeHit, which moves the charge bursting nearest in
+ * time onto her) moves it no more than that.
+ */
+export const KILL_NEAR = LETHAL;
+/** A boat no escort can be over within this (s) of the screen turning on her gets no missed run: she slips away. */
+const LET_GO = 240;
+/** An ahead-thrower's salvo falls about this far (m) ahead of her middle (Hedgehog: some 200-250 yards ahead [L]). */
+export const AHEAD_RANGE = 200;
 const NUMS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen'];
 const words = (n: number): string => NUMS[n] ?? String(n);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -608,8 +626,31 @@ export function stageScene(m: MonthFacts): Staged | null {
   return pick ? stagePick(m, pick) : null;
 }
 
+/**
+ * How a scene is planned: how far every track runs (s), and whether a boat whose kill is booked to an escort gets her
+ * kill as her first run (no missed run first).
+ */
+interface Plan { end: number; killFirst: boolean }
+/**
+ * The plans tried in turn, until the scene's last moment (every event, beat and burst, and the views' end) lies inside
+ * its tracks with TRACK_SPARE to spare: a track stands still at its end, so nothing the scene shows may come after it.
+ */
+const PLANS: Plan[] = [{ end: 900, killFirst: false }, { end: 900, killFirst: true }, { end: 1800, killFirst: true }];
+/** Seconds of track kept past the views' end. */
+export const TRACK_SPARE = 20;
+
 /** Stages a scene already picked (stageScene's work; the tests call it to stage each case). */
 export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
+  let out = stageWith(m, pick, PLANS[0]);
+  for (const plan of PLANS.slice(1)) {
+    if (out.last + TRACK_SPARE <= out.end) break;
+    out = stageWith(m, pick, plan);
+  }
+  return out.staged;
+}
+
+/** Stages a picked scene by a plan; `last` is the views' end and `end` the tracks'. */
+function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged; last: number; end: number } {
   const f = pick.fact;
   const sea = seaPlace(f.sea);
   const at = monthsAt(f.turn);
@@ -642,7 +683,21 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
   const nBoats = pick.case === 'hunt' ? Math.max(1, killsDrawn)
     : clamp(Math.max(killsDrawn, pick.case === 'convoy' ? Math.max(boatRow.pack, Math.ceil(hits / 2)) : 1), 1, L.most.boats);
   const fate: ('escort' | 'air' | null)[] = Array.from({ length: nBoats }, (_, i) => (i < byShips ? 'escort' : i < byShips + byAir ? 'air' : null));
-  const endHow: ('crushed' | 'scuttled' | null)[] = fate.map((x, i) => (x === null ? null : look(`how:${i}`) < (x === 'air' ? L.ends.air : L.ends.escort) ? 'crushed' : 'scuttled'));
+  // The escorts: the convoy's screen, the fleet's too few destroyers, or the hunting group; and at least one for each
+  // kill booked to ships (the hunters that made the sea's kills), so that no booked run waits on another's.
+  const nEsc = Math.min(L.most.escorts, Math.max(byShips,
+    pick.case === 'convoy' ? clamp(pickIn(escRow.n, look('escorts')), 1, L.most.escorts)
+      : pick.case === 'hunt' ? clamp(pickIn(escRow.group, look('group')), 1, L.most.escorts)
+        : clamp(f.ships?.dd ?? 1, 1, 3)));
+  // How each booked kill ends, crushed or scuttled, by the look; at most one scuttling for each escort, as one escort
+  // stands by each scuttled boat's men (the sea scene's Rescue).
+  let scuttles = 0;
+  const endHow: ('crushed' | 'scuttled' | null)[] = fate.map((x, i) => {
+    if (x === null) return null;
+    if (look(`how:${i}`) < (x === 'air' ? L.ends.air : L.ends.escort) || scuttles >= nEsc) return 'crushed';
+    scuttles++;
+    return 'scuttled';
+  });
 
   // ---- The board: laid out in the convoy's (or the fleet's, or the hunters') own frame, turned onto the board ----
   const course = wrap2Pi(TAU * look('course'));
@@ -660,8 +715,8 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
   const boatFleet = `${attAdj} submarines`;
   const fleetText = f.fleet ?? `the ${defAdj} fleet`;
   const defFleet = pick.case === 'convoy' ? upFirst(f.routeName ?? `the ${defAdj} convoy`) : pick.case === 'hunt' ? `${defAdj} hunting group` : fleetText.replace(/^the /, '');
-  /** Long enough for any scene: every track runs this far, and the views stop sooner. */
-  const END = 900;
+  /** How far every track runs: the views stop at least TRACK_SPARE sooner (stagePick re-plans a scene that would not). */
+  const END = plan.end;
 
   // The guarded: a convoy in columns, or the torpedoed fleet's heavy ships in line ahead (none in a hunt).
   const mvK: Handling = { turn: L.convoy.mv.turn, speed: convRow.speed, acc: 0.03 };
@@ -780,10 +835,7 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
   }
   for (const p of guarded) p.id = nextId++;
 
-  // The escorts: the convoy's screen round it, the fleet's too few destroyers, or the hunting group in line abreast.
-  const nEsc = pick.case === 'convoy' ? clamp(pickIn(escRow.n, look('escorts')), 1, L.most.escorts)
-    : pick.case === 'hunt' ? clamp(pickIn(escRow.group, look('group')), 1, L.most.escorts)
-    : clamp(f.ships?.dd ?? 1, 1, 3);
+  // The escorts (nEsc, above): round the convoy or the fleet, or the hunting group in line abreast.
   const esc = fleetEsc ? { cls: 'destroyer', len: L.heavy.dd.len, beam: L.heavy.dd.beam, speed: L.heavy.dd.speed, turn: L.heavy.dd.turn } : { cls: escRow.cls, len: escRow.len, beam: escRow.beam, speed: escRow.speed, turn: escRow.turn };
   const escK: Handling = { turn: esc.turn, speed: esc.speed, acc: 0.08 };
   const escWord = fleetEsc ? 'destroyer' : shipWord(escRow.cls);
@@ -867,23 +919,27 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
   });
 
   // ---- The depth-charge runs ---------------------------------------------------------------------------------
-  // Each boat is hunted by the escort nearest her that is free. Its pattern goes in where she is not, its bursts kept
-  // CLEAR of her as each charge bursts, unless her kill is booked: then a second run is made on her and its charges
-  // burst at her keel (the scene moves the booked one onto her).
+  // Each boat is hunted by the escort that can be over her soonest. A missed pattern goes in where she is not, its
+  // bursts kept CLEAR of her and of every other boat as each charge bursts. Where her kill is booked, the run is made
+  // on her: the booked charge (of a pattern, the one off the rails nearest its middle; of an ahead-thrower, its salvo)
+  // bursts within LETHAL of her keel where she is as it bursts, and the scene moves it the last metres onto her. A
+  // doomed boat is first missed, then killed, unless the escorts are few (some would make three runs or more): then
+  // her kill is her first run, and the booked kills are planned before the misses.
   const sinkRate = fleetEsc ? 3.0 : escRow.sink;
   const spreadOf = fleetEsc ? 100 : escRow.spread;
   const patternN = fleetEsc ? 6 : escRow.pattern;
   const setRange: [number, number] = fleetEsc ? [30, 60] : escRow.set;
   const lostAt = fleetEsc ? 160 : escRow.lost;
   const contactRange: [number, number] = fleetEsc ? [1300, 1800] : escRow.contact;
-  interface Run { escort: Piece; boat: Piece; kind: 'pattern' | 'ahead'; from: number; drop: number; burst: number; centre: Pt; set: number; n: number; spread: number; kill: boolean; sinking: number; nearest: number }
+  /** A run: `burst` is when the booked charge bursts (a miss: the first), `last` when the last one does. */
+  interface Run { escort: Piece; boat: Piece; kind: 'pattern' | 'ahead'; from: number; drop: number; burst: number; last: number; centre: Pt; set: number; n: number; spread: number; kill: boolean; sinking: number; nearest: number }
   const runs: Run[] = [];
   /**
    * Where each charge of a pattern bursts and when, laid as the sea scene lays them (SeaShow.cpp sea:depthCharge): in
    * from her stern over the pattern's length at her speed, every other one off the rails, the rest thrown to either side.
    */
-  const chargesOf = (e: Piece, drop: number, n: number, spread: number, sinking: number): { x: number; y: number; t: number }[] => {
-    const p = e.track.at(drop), sp = Math.max(3, p.v), run = spread / sp;
+  const chargesOf = (e: Piece, track: Track, drop: number, n: number, spread: number, sinking: number): { x: number; y: number; t: number }[] => {
+    const p = track.at(drop), sp = Math.max(3, p.v), run = spread / sp;
     const ax = Math.sin(p.h), ay = Math.cos(p.h), rx = Math.cos(p.h), ry = -Math.sin(p.h);
     const stern = { x: p.x - ax * e.len * 0.5, y: p.y - ay * e.len * 0.5 };
     const out: { x: number; y: number; t: number }[] = [];
@@ -894,99 +950,190 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
     }
     return out;
   };
-  const planRun = (e: Piece, b: Piece, from: number, kill: boolean, ahead: boolean, label: string, notBefore: number): Run => {
+  /** A kill pattern's booked charge: the one off the rails nearest its middle (the scene bursts the charge nearest in time). */
+  const kb = patternN > 1 ? 2 * Math.round((patternN - 1) / 4) : 0;
+  const kbShare = patternN > 1 ? kb / (patternN - 1) : 0;
+  /** After a run she slows and comes round over where the boat then is, to search again; she is free from then. */
+  const comeRound = (e: Piece, track: Track, b: Piece, drop: number, length: number, burst: number): void => {
+    // (once the pattern is laid: the charges lie where the run put them, whatever she does next)
+    const tBack = drop + length / Math.max(3, track.at(drop).v) + 3;
+    e.track = splice(track, tBack, [{ at: tBack, to: b.track.at(tBack + 60), v: Math.min(esc.speed, 5) }], END, e.k);
+    e.busy = Math.max(tBack, burst + 6);
+  };
+  /** A missed pattern on a boat, from a moment (never dropped before `notBefore`). */
+  const planMiss = (e: Piece, b: Piece, from: number, label: string, notBefore: number): Run => {
     const base = e.track;
-    const set0 = Math.round(setRange[0] + (setRange[1] - setRange[0]) * look(`set:${label}`));
+    const set = Math.round(setRange[0] + (setRange[1] - setRange[0]) * look(`set:${label}`));
+    const sinking = r1(set / sinkRate);
     let offA = TAU * look(`off:${label}`);
     let far = spreadOf / 2 + CLEAR + 30 + 40 * look(`far:${label}`);
     // (the pattern's middle rides ahead of her own: her stern plus half the pattern's length)
     const lead = spreadOf / 2 - e.len / 2;
     const bp0 = b.track.at(from + 60);
     let centre: Pt = { x: bp0.x, y: bp0.y };
-    let track = base, drop = from + 60, set = set0, sinking = ahead ? 12 : set0 / sinkRate, nearest = Infinity;
+    let track = base, drop = from + 60, nearest = Infinity;
     for (let pass = 0; pass < 16; pass++) {
       // (she steers for where the pattern's middle must lie, less the lead, and drops as the middle passes over it)
-      const steer = ahead ? centre : { x: centre.x - Math.sin(bearing(base.at(from).x, base.at(from).y, centre.x, centre.y)) * lead, y: centre.y - Math.cos(bearing(base.at(from).x, base.at(from).y, centre.x, centre.y)) * lead };
-      track = splice(base, from, [{ at: from, to: steer, v: esc.speed }], END, e.k);
-      if (ahead) {
-        const tf = track.first((t) => b.track.at(t), 220, from + 5, END);
-        drop = tf >= 0 ? tf : track.nearest(centre, from + 5);
-      } else drop = track.nearest(centre, from + 5, lead);
+      const p0 = base.at(from), a = bearing(p0.x, p0.y, centre.x, centre.y);
+      track = splice(base, from, [{ at: from, to: { x: centre.x - Math.sin(a) * lead, y: centre.y - Math.cos(a) * lead }, v: esc.speed }], END, e.k);
+      drop = track.nearest(centre, from + 5, lead);
       // (never before she is under: the escort holds on with the convoy a little longer and turns on her later)
       if (drop < notBefore - 0.5) { from += notBefore - drop; continue; }
-      const keelThen = keelOf(b.keels!, drop + sinking).keel;
-      set = kill ? Math.max(10, Math.round(keelThen)) : set0;
-      sinking = ahead ? r1(keelThen / AHEAD_SINK) : r1(set / sinkRate);
       const bp = b.track.at(drop + sinking);
-      centre = kill ? { x: bp.x, y: bp.y } : { x: bp.x + Math.sin(offA) * far, y: bp.y + Math.cos(offA) * far };
-      if (kill || ahead) { if (pass >= 5) break; continue; }
-      // (a missed pattern: each charge as it bursts against where she and every other boat then is, pushed further
-      // off her until all are clear, or round her when another boat is the nearest)
-      e.track = track;
+      centre = { x: bp.x + Math.sin(offA) * far, y: bp.y + Math.cos(offA) * far };
+      // (each charge as it bursts against where she and every other boat then is, pushed further off her until all
+      // are clear, or round her when another boat is the nearest)
       let near: Piece = b;
       nearest = Infinity;
-      for (const c of chargesOf(e, drop, patternN, spreadOf, sinking)) for (const o of boats) { const d = dist(c, o.track.at(c.t)); if (d < nearest) { nearest = d; near = o; } }
-      e.track = base;
-      if (pass >= 2 && nearest >= CLEAR && drop >= notBefore - 0.5) break;
+      for (const c of chargesOf(e, track, drop, patternN, spreadOf, sinking)) for (const o of boats) { const d = dist(c, o.track.at(c.t)); if (d < nearest) { nearest = d; near = o; } }
+      if (pass >= 2 && nearest >= CLEAR) break;
       if (nearest < CLEAR && near === b) far += CLEAR - nearest + 25;
       else if (nearest < CLEAR) offA += 1.1;
     }
-    if (!kill && !ahead) {
-      // (a missed pattern's middle as the charges lie, for the event's aim and the zone)
-      e.track = track;
-      const cs = chargesOf(e, drop, patternN, spreadOf, sinking);
-      e.track = base;
+    // (the pattern's middle as the charges lie, for the event's aim and the zone)
+    const cs = chargesOf(e, track, drop, patternN, spreadOf, sinking);
+    centre = { x: cs.reduce((a, c) => a + c.x, 0) / cs.length, y: cs.reduce((a, c) => a + c.y, 0) / cs.length };
+    comeRound(e, track, b, drop, spreadOf, drop + sinking);
+    return { escort: e, boat: b, kind: 'pattern', from, drop, burst: drop + sinking, last: Math.max(...cs.map((c) => c.t)), centre, set, n: patternN, spread: spreadOf, kill: false, sinking, nearest };
+  };
+  /**
+   * The run that kills a boat, from a moment (never dropped before `notBefore`): the booked charge's place as the
+   * pattern goes in (or the salvo's, AHEAD_RANGE before her) is steered over where the boat will be as it bursts, at
+   * her keel then. Straight in first; where that cannot pass over her (she is too close, or turned away), she opens
+   * out to come round onto a straight run-in, away from the mark, along her heading or to either side.
+   */
+  const planKill = (e: Piece, b: Piece, from0: number, ahead: boolean, notBefore: number): Run => {
+    const base = e.track;
+    const lead = ahead ? AHEAD_RANGE : kbShare * spreadOf - e.len / 2;
+    interface Try { track: Track; from: number; drop: number; hit: number; set: number; sinking: number; miss: number; at: Pt }
+    let best: Try | null = null;
+    const ways: { open: number; dir: number }[] = [{ open: 0, dir: 0 }];
+    for (const open of [500, 800]) for (let dir = 0; dir < 4; dir++) ways.push({ open, dir });
+    for (const way of ways) {
+      let from = from0, tried: Try | null = null, shifts = 0;
+      let target: Pt = b.track.at(from + 60);
+      let mark: Pt | null = null, out: Pt | null = null;
+      // (the way straight in always gives a try: a pass that only moves her start later does not count)
+      for (let pass = 0; pass < 10; pass++) {
+        const pf = base.at(from);
+        if (!mark) {
+          // (the run-in's direction: from her to the boat; or, opening out, that, her heading, or square to it)
+          const a = bearing(pf.x, pf.y, target.x, target.y);
+          const dirA = way.open === 0 || way.dir === 0 ? a : way.dir === 1 ? pf.h : a + (way.dir === 2 ? 1 : -1) * Math.PI / 2;
+          mark = { x: target.x - Math.sin(dirA) * lead, y: target.y - Math.cos(dirA) * lead };
+          if (way.open) out = { x: mark.x - Math.sin(dirA) * way.open, y: mark.y - Math.cos(dirA) * way.open };
+        }
+        let track: Track, tIn: number;
+        if (out) {
+          const first = splice(base, from, [{ at: from, to: out, v: esc.speed }], END, e.k);
+          const tOut = first.first(() => out!, 40, from, END);
+          if (tOut < 0) break;
+          track = splice(first, tOut, [{ at: tOut, to: mark, v: esc.speed }], END, e.k);
+          tIn = tOut + 5;
+        } else {
+          track = splice(base, from, [{ at: from, to: mark, v: esc.speed }], END, e.k);
+          tIn = from + 5;
+        }
+        const drop = track.nearest(target, tIn, lead);
+        if (drop < notBefore - 0.5 && shifts++ < 20) { from += notBefore - drop; mark = null; out = null; pass--; continue; }
+        const p = track.at(drop);
+        const run = ahead ? 0 : (kbShare * spreadOf) / Math.max(3, p.v);
+        // (set to her keel as the booked charge bursts; the event's clock is to a tenth of a second, as the scene's)
+        let hit = drop + run + keelOf(b.keels!, drop).keel / (ahead ? AHEAD_SINK : sinkRate), set = 10, sinking = 0;
+        for (let k = 0; k < 3; k++) {
+          const keel = keelOf(b.keels!, hit).keel;
+          set = Math.max(10, Math.round(keel));
+          sinking = ahead ? r1(keel / AHEAD_SINK) : r1(set / sinkRate);
+          hit = r1(r1(drop) + run + sinking);
+        }
+        const at = { x: p.x + Math.sin(p.h) * lead, y: p.y + Math.cos(p.h) * lead };
+        const q = b.track.at(hit), miss = dist(at, q);
+        if (!tried || miss < tried.miss) tried = { track, from, drop, hit, set, sinking, miss, at };
+        if (miss <= KILL_NEAR) break;
+        // (steer the mark by the miss, and aim at where she then is)
+        mark = { x: mark.x + q.x - at.x, y: mark.y + q.y - at.y };
+        target = { x: q.x, y: q.y };
+      }
+      if (tried && (!best || tried.miss < best.miss)) best = tried;
+      if (best && best.miss <= KILL_NEAR) break;
+    }
+    const k = best!;
+    const q = b.track.at(k.hit);
+    let centre: Pt = { x: q.x, y: q.y }, last = k.hit;
+    if (!ahead) {
+      const cs = chargesOf(e, k.track, k.drop, patternN, spreadOf, k.sinking);
       centre = { x: cs.reduce((a, c) => a + c.x, 0) / cs.length, y: cs.reduce((a, c) => a + c.y, 0) / cs.length };
+      last = Math.max(...cs.map((c) => c.t));
     }
-    // After the run she slows and comes round over where the boat then is, to search again.
-    // (once the pattern is laid: the charges lie where the run put them, whatever she does next)
-    const tBack = drop + (ahead ? 40 : spreadOf) / Math.max(3, track.at(drop).v) + 3;
-    e.track = splice(track, tBack, [{ at: tBack, to: b.track.at(tBack + 60), v: Math.min(esc.speed, 5) }], END, e.k);
-    e.busy = drop + sinking + 6;
-    return { escort: e, boat: b, kind: ahead ? 'ahead' : 'pattern', from, drop, burst: drop + sinking, centre, set, n: ahead ? 24 : patternN, spread: ahead ? 40 : spreadOf, kill, sinking, nearest };
+    comeRound(e, k.track, b, k.drop, ahead ? 40 : spreadOf, k.hit);
+    return { escort: e, boat: b, kind: ahead ? 'ahead' : 'pattern', from: k.from, drop: k.drop, burst: k.hit, last, centre, set: k.set, n: ahead ? 24 : patternN, spread: ahead ? 40 : spreadOf, kill: true, sinking: k.sinking, nearest: k.miss };
   };
-  /** The escort to send at a moment: the nearest one free then, else the one free soonest (and the moment it is). */
-  const sendAt = (q: Pt, t: number): { e: Piece; t: number } => {
-    const free = escorts.filter((e) => (e.busy ?? 0) <= t);
-    if (free.length) {
-      let best = free[0], bd = Infinity;
-      for (const e of free) { const d = dist(e.track.at(t), q); if (d < bd) { bd = d; best = e; } }
-      return { e: best, t };
+  /**
+   * The escort to send on a boat at a moment, and when it can be over her: the one that can be there soonest, free then
+   * or once its run is done (from where it then is, at its speed, after its turn and its gathering way). An escort
+   * kept to stand by a scuttled boat's men once its kill is made, or standing by them, is not sent; null if none is left.
+   */
+  const sendAt = (b: Piece, t: number): { e: Piece; t: number; at: number } | null => {
+    let best: { e: Piece; t: number; at: number } | null = null;
+    for (const e of escorts) {
+      const ready = Math.max(t, e.busy ?? 0);
+      if (ready >= END || keep.has(e)) continue;
+      const p = e.track.at(ready), q = b.track.at(ready);
+      const at = ready + dist(p, q) / esc.speed + Math.abs(wrapPi(bearing(p.x, p.y, q.x, q.y) - p.h)) / esc.turn + Math.max(0, esc.speed - p.v) / (2 * escK.acc);
+      if (!best || at < best.at - 1e-6) best = { e, t: ready, at };
     }
-    const e = [...escorts].sort((a, b) => (a.busy ?? 0) - (b.busy ?? 0) || a.id - b.id)[0];
-    return { e, t: e.busy ?? t };
+    return best;
   };
-  const clearOf = new Map<Piece, Run>();
+  /** The escort whose station was set for a boat, if it is free then, else the one that can be over her soonest. */
+  const sendOn = (b: Piece, i: number, t: number): { e: Piece; t: number; at: number } | null => {
+    const mine = stationFor[i] === undefined ? undefined : escorts[stationFor[i]];
+    return mine && !keep.has(mine) && (mine.busy ?? 0) <= t ? { e: mine, t, at: t } : sendAt(b, t);
+  };
+  /** Escorts kept, once their kill is made, to stand by that boat's men. */
+  const keep = new Set<Piece>();
+  const byEscort = fate.filter((x) => x === 'escort').length;
+  const killFirst = plan.killFirst || nBoats + byEscort > 2 * nEsc;
+  const clearOf = new Map<Piece, Run>(), killOf = new Map<Piece, Run>();
+  const planKillOn = (b: Piece, i: number): void => {
+    // (after her missed run, once she is steady at her depth; else as the screen turns on her, once she is under)
+    const clear = clearOf.get(b);
+    const t0 = clear ? Math.max(clear.burst + 8, steadyFrom(b.keels!) + 4) : reactAt[i];
+    // (there is always one left: at least one escort for each kill booked to ships, nEsc)
+    const s = (clear ? sendAt(b, t0) : sendOn(b, i, t0))!;
+    const ahead = !fleetEsc && !!escRow.ahead && look(`ahead:${i}`) < 0.6;
+    const run = planKill(s.e, b, s.t, ahead, clear ? t0 : dives[i].t + 25);
+    runs.push(run);
+    killOf.set(b, run);
+    if (endHow[i] === 'scuttled') keep.add(s.e);
+  };
+  if (killFirst) boats.forEach((b, i) => { if (fate[i] === 'escort') planKillOn(b, i); });
   boats.forEach((b, i) => {
-    // (the escort whose station was set for her goes, if free; else the nearest one free)
-    const tReact = reactAt[i], mine = stationFor[i] === undefined ? undefined : escorts[stationFor[i]];
-    const s = mine && (mine.busy ?? 0) <= tReact ? { e: mine, t: tReact } : sendAt(b.track.at(tReact), tReact);
-    const run = planRun(s.e, b, s.t, false, false, `clear:${i}`, dives[i].t + 25);
+    if (killFirst && fate[i] === 'escort') return;
+    // (a boat no escort can be over within LET_GO of the screen turning on her is let go: she gets no missed run)
+    const s = sendOn(b, i, reactAt[i]);
+    if (!s || s.at > reactAt[i] + LET_GO) return;
+    const run = planMiss(s.e, b, s.t, `clear:${i}`, dives[i].t + 25);
     runs.push(run);
     clearOf.set(b, run);
   });
+  if (!killFirst) boats.forEach((b, i) => { if (fate[i] === 'escort') planKillOn(b, i); });
 
-  // The kills booked: a second run by an escort when she is steady at her depth, or an aircraft that finds her surfaced.
+  // The kills booked: the run that kills her, or an aircraft that finds her surfaced.
   interface End { boat: Piece; how: 'crushed' | 'scuttled'; by: 'escort' | 'air'; t: number; sunk: number; up?: number; rescue?: number; killer?: Piece }
   const ends: End[] = [];
   boats.forEach((b, i) => {
     const by = fate[i], how = endHow[i];
     if (!by || !how) return;
-    if (by === 'escort') {
-      const t0 = Math.max(clearOf.get(b)!.burst + 8, steadyFrom(b.keels!) + 4);
-      const s = sendAt(b.track.at(t0), t0);
-      const ahead = !fleetEsc && !!escRow.ahead && look(`ahead:${i}`) < 0.6;
-      const run = planRun(s.e, b, s.t, true, ahead, `kill:${i}`, t0);
-      runs.push(run);
-      ends.push({ boat: b, how, by, t: run.burst, sunk: -1, killer: s.e });
-    } else ends.push({ boat: b, how, by, t: -1, sunk: -1 });
+    const run = killOf.get(b);
+    ends.push(run ? { boat: b, how, by, t: run.burst, sunk: -1, killer: run.escort } : { boat: b, how, by, t: -1, sunk: -1 });
   });
   for (const end of ends) {
     const b = end.boat, ks = b.keels!;
     const hold = (t: number, acc: number): void => { b.track = splice(b.track, t, [{ at: t, h: b.track.at(t).h, v: 0 }], END, { ...b.k, acc }); };
     if (end.by === 'air') {
-      // She comes up to slip away on the surface in the dark, and an aircraft finds her there.
-      const tUp = Math.max(clearOf.get(b)!.burst + 15, steadyFrom(ks) + 2), k = keelOf(ks, tUp).keel;
+      // She comes up to slip away on the surface in the dark (after the escort's run on her, if one was made), and an
+      // aircraft finds her there.
+      const tUp = Math.max((clearOf.get(b)?.burst ?? 0) + 15, steadyFrom(ks) + 2), k = keelOf(ks, tUp).keel;
       cutKeels(ks, tUp);
       const tTop = moveKeel(ks, tUp, k, up, up, 'surfaced');
       const p = b.track.at(tUp);
@@ -1025,16 +1172,24 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
     events.push({ t: end.sunk, what: 'gone', unit: b.id, side: 'att', x: q.x, y: q.y, text: '' });
     zone('sunk', q, 40, end.sunk, END, 'att', b.id);
     zone('oil', q, 120, end.sunk + 4, END, 'att', b.id);
-    if (end.how === 'scuttled') {
-      // The escort that forced her up (or the nearest one free as the aircraft attacks) comes back and stands by her
-      // men in the water (the sea scene moves them toward her: Rescue).
-      const s = end.killer ? { e: end.killer, t: end.t + 4 } : sendAt(q, end.t);
-      const e = s.e, near = e.track.at(s.t), off = bearing(q.x, q.y, near.x, near.y);
-      const by = { x: q.x + Math.sin(off) * 200, y: q.y + Math.cos(off) * 200 };
-      e.track = splice(e.track, s.t, [{ at: s.t, to: by, v: Math.min(esc.speed, 6) }], END, e.k);
-      const there = e.track.first(() => by, 60, s.t, END);
-      const tStop = there >= 0 ? there : s.t + 40, tR = Math.max(tStop, end.sunk + 3);
-      e.track = splice(e.track, tStop, [{ at: tStop, h: e.track.at(tStop).h, v: 0 }], END, { ...e.k, acc: 0.2 });
+    // The escort that forced her up (kept for it since its kill) comes back and stands by her men in the water (the sea
+    // scene moves them toward her: Rescue); where the aircraft sank her, the one that can be there soonest (there is one:
+    // at most one scuttling for each escort, endHow), if it can be there within LET_GO; else none comes, and her men
+    // are the sea scene's alone.
+    const s = end.how !== 'scuttled' ? null : end.killer ? { e: end.killer, t: Math.max(end.t + 4, end.killer.busy ?? 0), at: 0 } : sendAt(b, end.t);
+    if (s && (end.killer || s.at <= end.t + LET_GO)) {
+      // (she comes round to head for where the boat went down, steers for it at her speed and from some 600 m off at
+      // 6 m/s, and takes the way off her to stop about 200 m short of it, or at once if she came round closer than
+      // that; the event goes out once she is stopped and the boat is gone)
+      const e = s.e, near = e.track.at(s.t), stopAcc = 0.2, slow = Math.min(esc.speed, 6), short = 200 + (slow * slow) / (2 * stopAcc);
+      e.track = splice(e.track, s.t, [{ at: s.t, h: bearing(near.x, near.y, q.x, q.y), v: slow }], END, e.k);
+      const pointed = e.track.pointing(q, s.t, 0.3), tOn = pointed >= 0 ? pointed : s.t + 30;
+      e.track = splice(e.track, tOn, [{ at: tOn, to: q, v: esc.speed }], END, e.k);
+      const nearer = e.track.first(() => q, short + 300, tOn, END), tEase = nearer >= 0 ? nearer : tOn;
+      e.track = splice(e.track, tEase, [{ at: tEase, to: q, v: slow }], END, e.k);
+      const close = e.track.first(() => q, short, tEase, END), tSlow = close >= 0 ? close : tEase;
+      e.track = splice(e.track, tSlow, [{ at: tSlow, to: q, v: 0 }], END, { ...e.k, acc: stopAcc });
+      const tStop = tSlow + Math.ceil(e.track.at(tSlow).v / stopAcc) + 1, tR = Math.max(tStop, end.sunk + 3);
       e.busy = END;
       end.rescue = tR;
       events.push({ t: tR, what: 'sea:rescue', unit: e.id, side: 'def', x: q.x, y: q.y, text: `${upFirst(an(escWord))} stands by to pick up the submarine's survivors.`, extra: { by: e.id, on: b.id } });
@@ -1103,9 +1258,10 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
     win('fire', Math.min(...fans.map((x) => x.t)) - 2, Math.max(...fans.map((x) => x.t)) + 3, B.fire);
     win('hits', firstHit - 3, lastHit + 4, B.hits);
   }
-  const clear = runs.filter((r) => !r.kill);
-  const d0 = Math.min(...clear.map((r) => r.drop)), d1 = Math.max(...clear.map((r) => r.drop));
-  const b0 = Math.min(...clear.map((r) => r.burst)), b1 = Math.max(...clear.map((r) => r.burst + r.spread / Math.max(3, r.escort.track.at(r.drop).v)));
+  // (the missed runs; where every boat's first run was her kill, the kill runs)
+  const clear = runs.filter((r) => !r.kill), shown = clear.length ? clear : runs;
+  const d0 = Math.min(...shown.map((r) => r.drop)), d1 = Math.max(...shown.map((r) => r.drop));
+  const b0 = Math.min(...shown.map((r) => r.drop + r.sinking)), b1 = Math.max(...shown.map((r) => r.last));
   if (b0 - 2 <= d1 + 3) win('charges', d0 - 6, b1 + 4, B.charges);
   else { win('drop', d0 - 6, d1 + 3, B.drop); win('bursts', b0 - 2, b1 + 4, B.bursts); }
   if (ends.length) {
@@ -1132,7 +1288,8 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
       beats.splice(i--, 1);
     }
   }
-  const tEnd = Math.ceil((Math.max(...beats.map((x) => x.to), ...events.map((x) => x.t)) + 4) / STEP) * STEP;
+  // (the views run to the last beat, event or burst, and stagePick sees that the tracks run on past it)
+  const tEnd = Math.ceil((Math.max(...beats.map((x) => x.to), ...events.map((x) => x.t), ...runs.map((r) => r.last)) + 4) / STEP) * STEP;
 
   // ---- The views ---------------------------------------------------------------------------------------------
   events.sort((a, b) => a.t - b.t || (a.what === 'sea:torpedoHit' || a.what === 'sea:depthChargeHit' ? 0 : 1) - (b.what === 'sea:torpedoHit' || b.what === 'sea:depthChargeHit' ? 0 : 1));
@@ -1252,11 +1409,12 @@ export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
     light: { sun: { up: r1(night.sun.up), from: bearingDeg(night.sun.from) }, moon: { lit: r3(night.moon.lit), up: r1(night.moon.up), from: bearingDeg(night.moon.from) }, vis },
     staged,
   };
-  return {
+  const staged0: Staged = {
     what: "STAGED: the month's submarine scene (form D1, ruling 241), staged from the month's booked facts with no dice, for the 3D scene to show. Look only: no rule reads it. Each view carries a piece whole the first time it shows, then only what changed (a boat's dive, keel and scope and a lost piece's sunk in every view), and the zones only where they changed. field.staged.beats are the windows of battle time the scene shows and the screen seconds each is given.",
     recording: true, key, seed: hash32(`${m.seed}:${m.turn}:${key}`), step: STEP, field, views,
     after: { lines: caption, level: '', winner: '', seconds: tEnd },
   };
+  return { staged: staged0, last: tEnd, end: END };
 }
 
 /** The caption: the month's booked figures (for a convoy month, its tons and ships at about 5,200 GRT a ship). */
