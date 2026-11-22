@@ -762,6 +762,12 @@ namespace EdgeSeals
 			return Words;
 		}
 
+		/** Whether an item is a front's row with a title as the card prints it: its place and its head ("Ruhr HIT"). */
+		bool HasTitle(const FSaid& Said)
+		{
+			return Said.Section == ESection::Row && !Said.Name.empty() && !Said.Head.empty();
+		}
+
 		/** The list a folded seal names: the short lines given, "; " between, and "and N more" for the Rest after them. */
 		std::string ListLines(const std::vector<std::string>& Lines, size_t Named, int Rest)
 		{
@@ -818,7 +824,7 @@ namespace EdgeSeals
 
 	std::string ShortLine(const FSaid& Said)
 	{
-		if (Said.Section == ESection::Row && !Said.Name.empty() && !Said.Head.empty())
+		if (HasTitle(Said))
 		{
 			return Unstopped(Said.Name + " " + Said.Head);
 		}
@@ -875,6 +881,17 @@ namespace EdgeSeals
 				break;
 			}
 			Lines.push_back(Line);
+		}
+		// (a row whose title the list gives already, two rows of one place and head, gives its first words in its place,
+		// cut by EightWords' own rules, so the list never seems to say one line twice: "Stalino HIT; ...; Stalino HIT: The
+		// Black Sea Fleet shelled". Where those words are the title still, as a row with another side named, it stays)
+		for (size_t Index = 1; Index < Lines.size(); ++Index)
+		{
+			const FSaid& Item = Said[static_cast<size_t>(Run.First) + Index];
+			if (HasTitle(Item) && std::find(Lines.begin(), Lines.begin() + static_cast<std::ptrdiff_t>(Index), Lines[Index]) != Lines.begin() + static_cast<std::ptrdiff_t>(Index))
+			{
+				Lines[Index] = Unstopped(EightWords(Item.Line));
+			}
 		}
 		// (the most lines that fit: one fewer can be longer, for "; and 1 more" is longer than a short last line)
 		for (size_t Named = Lines.size(); Named >= 1; --Named)

@@ -309,7 +309,8 @@ namespace EdgeSeals
 	 * - Else (the design director, 64(g)(4), 13:00Z) each item's own short line (ShortLine), in card order, one after
 	 *   another, as many as the hover's one line holds, then "and N more" for the rest: "Soviet troops close round
 	 *   Helsinki; Soviet troops blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N
-	 *   more" is one more of the list, never more of the line before it. A first line too long for the hover with its
+	 *   more" is one more of the list, never more of the line before it. A row whose title the list gives already gives
+	 *   its own first words ("Stalino HIT: The Black Sea Fleet shelled"). A first line too long for the hover with its
 	 *   "and N more" is cut a word shorter until it fits; where no item has words of its own, the count and where on the
 	 *   card they are ("3 elsewhere in the war").
 	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a

@@ -1430,20 +1430,49 @@ namespace
 		return static_cast<int>(std::floor(1000.0 * Scale / Px + 1e-9));
 	}
 
-	/** The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own. */
+	/**
+	 * The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own;
+	 * a row whose title is listed already gives its own eight words (the review of the rulings' build: "Stalino HIT"
+	 * twice read as one line said twice).
+	 */
 	std::vector<std::string> ShortLines(const std::vector<FSaid>& Said, const FAlikeRun& Run)
 	{
 		std::vector<std::string> Lines;
 		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
 		{
-			const std::string Line = ShortSaid(Said[static_cast<size_t>(Index)]);
+			const FSaid& Item = Said[static_cast<size_t>(Index)];
+			std::string Line = ShortSaid(Item);
 			if (Line.empty())
 			{
 				break;
 			}
+			if (Item.Section == ESection::Row && !Item.Head.empty() && std::find(Lines.begin(), Lines.end(), Line) != Lines.end())
+			{
+				Line = EightWords(Item.Line);
+				while (!Line.empty() && (Line.back() == '.' || Line.back() == ',' || Line.back() == ':' || Line.back() == ';' || Line.back() == '!' || Line.back() == '?' || Line.back() == ' '))
+				{
+					Line.pop_back();
+				}
+			}
 			Lines.push_back(Line);
 		}
 		return Lines;
+	}
+
+	/** How many of a folded seal's listed lines (the first Named of its short lines) say a line the list gave already, where the card's lines for them differ. */
+	int ListedTwice(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Named)
+	{
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		int Twice = 0;
+		for (size_t Index = 1; Index < Lines.size() && Index < static_cast<size_t>(Named); ++Index)
+		{
+			for (size_t Before = 0; Before < Index; ++Before)
+			{
+				const bool bSame = Lines[Before] == Lines[Index] && Said[static_cast<size_t>(Run.First) + Before].Line != Said[static_cast<size_t>(Run.First) + Index].Line;
+				Twice += bSame ? 1 : 0;
+			}
+		}
+		return Twice;
 	}
 
 	/** The first Named of those lines (the first as given), "; " between, and "and N more" for the rest of the run. */
@@ -1884,6 +1913,11 @@ static void TestFold()
 		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
 			== "Scorched earth: German troops tore up the railway; Scorched earth: Soviet troops tore up the railway; and 1 more");
 		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; Paris falls; Rome falls");
+		// (two rows of one place and head, GER August 1942 as drawn: the second gives its own first words, so the list
+		// never seems to say one line twice; the first keeps its title, as the ruling has it)
+		CHECK(Words({ { "Kharkov", "Their bombers hit its factories." }, { "Stalino", "Their bombers hit its factories." }, { "Dnepropetrovsk", "Their bombers hit its factories." },
+				  { "Kiev", "Their bombers hit its factories." }, { "Stalino", "The Black Sea Fleet shelled the troops ashore." }, { "Ruhr", "Their bombers hit its factories." } })
+			== "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet shelled; Ruhr HIT");
 		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } })
 			== "No. 3 Group bombs Paris by night; No. 4 Group bombs Rome by night; No. 5 Group bombs Turin by night");
 		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
@@ -2624,7 +2658,7 @@ static void TestHover(const char* Folder)
 	const std::vector<FMonth> Months = ReadMonths();
 	std::vector<FAlike> Drawn;
 	std::vector<FAlikeRun> Pressed, Plain;
-	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, TodaysOver = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0;
+	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, TodaysOver = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0, Twice = 0;
 	int ByNamed[5] = { 0, 0, 0, 0, 0 };
 	std::string Why, First, LongestSaid;
 	for (const FMonth& Month : Months)
@@ -2680,6 +2714,7 @@ static void TestHover(const char* Folder)
 					continue;
 				}
 				const int Named = ItemsNamed(Month.Said, Run, Said);
+				Twice += NamesItsItems(Run, Said) ? 0 : ListedTwice(Month.Said, Run, Named);
 				++Folded;
 				PressedFolded += Pass == 0 ? 1 : 0;
 				PressedMore += Pass == 0 && Named < Run.Count ? 1 : 0;
@@ -2700,6 +2735,8 @@ static void TestHover(const char* Folder)
 	CHECK(Months.size() == 48 && Hovers >= 500 && Over == 0 && Bad == 0);
 	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && Widest * std::round(Letter * 640.0 / 1080.0) <= TipWrap * 640.0 / 1080.0 && TodaysTallest == 2 && TodaysLongest > HoverLine);
 	CHECK(Folded >= 40 && Whole >= 20 && More >= 10 && NamedAll >= 20);
+	// (no listed line says one the list gave already, where the card's lines for them differ)
+	CHECK(Twice == 0);
 	if (Bad > 0)
 	{
 		std::printf("  first: %s\n", First.c_str());
