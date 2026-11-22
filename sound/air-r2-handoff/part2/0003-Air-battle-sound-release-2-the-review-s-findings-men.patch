@@ -1,0 +1,869 @@
+From 8f302dabdbd0707f2ad52de1c81a91f626f0ad72 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 21 Nov 2026 19:23:25 +0000
+Subject: [PATCH 3/3] Air battle sound, release 2: the review's findings mended
+
+An independent review of both air sound patches (21 November) found these;
+each was upheld by two readers or checked here.
+
+Voices:
+- AudioMaxChannels only lowers the count: the audio quality level's 32 still
+  held. DefaultEngine.ini now sets the one quality level to 128 as well, and
+  the scene logs how many voices the engine has when it opens.
+- Voice priorities were set after the sound had begun, so they did nothing.
+  Every take is now made, given its priority, then begun (AAirBattle::Lay).
+
+Guns:
+- A fighter's fixed guns of one kind are one take at the square root of how
+  many fire (one take per barrel on the same frame added +12 to +18 dB in
+  step, into the limiter). The take stops with the wing's last barrel.
+- Rounds passing crack by the firing aircraft, not each barrel, the same take
+  never again inside air.sameTakeGap, and past the guns' convergence out to
+  air.roundsPassing.reach.
+- The tally separates takes out of earshot from takes that could not play.
+
+Levels:
+- The battle's level eases by the clock (about 1 s), not per frame.
+- Formation engine loops use the mix's air.loopsFamily (14 km), and a
+  formation that begins out of earshot is begun when it comes nearer.
+- Dead engines are counted on the flight core's own engine count per shape.
+- A flak burst close to the eye is always heard.
+- The master limiter's knee is hard.
+
+The battle's music:
+- Zero Hour resolves into The Advance, whatever turn the pieces stood at.
+- The theme never comes back at the opening screen's level under a battle
+  scene; it comes up when the scene closes.
+- Level changes no longer cut a piece's fade-in short (contact's crossfade).
+- Without the score's battle pieces the music goes on as it was.
+- A battle begun during the last one's stinger gets its score.
+- A stinger begun again by the music switch is heard out.
+
+mix.json notes the new air.roundsPassing.reach (1000 m) and the wing rule.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../TheaterCommand/Config/DefaultEngine.ini   |   7 +
+ .../Content/Data/Sound/mix.json               |  15 +-
+ .../TheaterCommand/Battle/AirBattle.cpp       | 252 ++++++++++++------
+ .../Source/TheaterCommand/Battle/AirBattle.h  |  18 +-
+ .../Campaign/CampaignGameMode.cpp             |  87 +++++-
+ .../Campaign/CampaignGameMode.h               |   7 +-
+ 6 files changed, 288 insertions(+), 98 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Config/DefaultEngine.ini b/unreal/TheaterCommand/Config/DefaultEngine.ini
+index 3f3b739f..ea7b3b5a 100644
+--- a/unreal/TheaterCommand/Config/DefaultEngine.ini
++++ b/unreal/TheaterCommand/Config/DefaultEngine.ini
+@@ -32,6 +32,13 @@ DefaultGraphicsRHI=DefaultGraphicsRHI_DX12
+ +D3D12TargetedShaderFormats=PCD3D_SM6
+ AudioMaxChannels=128
+ 
++; The platforms' AudioMaxChannels only lowers the count: the engine plays the smaller of it and the audio quality
++; level's MaxChannels, 32 unless set here. So the one quality level is set to 128 too (the review of the air sound,
++; 21 Nov 2026). The air battle logs "the engine plays up to N voices at once" when it opens.
++[/Script/Engine.AudioSettings]
++!QualityLevels=ClearArray
+++QualityLevels=(DisplayName=NSLOCTEXT("AudioSettings","DefaultQualityName","Default"),MaxChannels=128)
++
+ [/Script/Engine.Engine]
+ +ActiveGameNameRedirects=(OldGameName="TP_Blank",NewGameName="/Script/TheaterCommand")
+ +ActiveGameNameRedirects=(OldGameName="/Script/TP_Blank",NewGameName="/Script/TheaterCommand")
+diff --git a/unreal/TheaterCommand/Content/Data/Sound/mix.json b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+index fe84760b..ed8f13b7 100644
+--- a/unreal/TheaterCommand/Content/Data/Sound/mix.json
++++ b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+@@ -1,7 +1,7 @@
+ {
+   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
+   "version": 5,
+-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file.",
++  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee).",
+   "made": "2026-11-21",
+   "files": "/mnt/project-files/sound/battle-pack/wav/",
+   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
+@@ -29,7 +29,8 @@
+     "master": {
+       "limiterCeilingDb": -1.5,
+       "limiterReleaseMs": 120,
+-      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead"
++      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead",
++      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling"
+     }
+   },
+   "distance": {
+@@ -660,7 +661,8 @@
+         "takes": ["mg42_burst_01", "mg42_burst_02"],
+         "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
+       },
+-      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)"
++      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)",
++      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. Turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
+     },
+     "engineLost": {
+       "take": null,
+@@ -675,7 +677,9 @@
+       "within": 40,
+       "takes": ["bullet_crack"],
+       "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
+-      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires"
++      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires. After the review: by the firing aircraft, not each barrel (its converging guns crack as one), and the same take never again inside sameTakeGap, whoever fires it",
++      "reach": 1000,
++      "_reach": "metres past the muzzle the rounds still crack past the camera: the guns' line is aimed at their convergence (about 300 m), but the rounds fly on; without it, fire from farther than the convergence never cracked"
+     },
+     "roundsHit": {
+       "within": 60,
+@@ -725,7 +729,8 @@
+         "within": 100,
+         "take": "grenade_blast",
+         "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground.",
+-        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera"
++        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera",
++        "_always": "a burst within `within` is always heard: flak.soundEvery keeps only the farther bursts from crowding"
+       },
+       "bus": {
+         "compressor": {
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+index c0e79de7..d4e73caf 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -53,6 +53,7 @@
+ #include "ProceduralMeshComponent.h"
+ #include "Serialization/JsonReader.h"
+ #include "Serialization/JsonSerializer.h"
++#include "AudioDevice.h"
+ #include "Sound/SoundAttenuation.h"
+ #include "Sound/SoundBase.h"
+ #include "Sound/SoundWave.h"
+@@ -320,19 +321,24 @@ namespace AirParts
+ 	}
+ 
+ 	/** How many engines an aircraft of this model has (mix.json air.engineLost: its drone drops as they die). */
+-	static int32 EnginesOf(const std::string& Model)
++	static int32 EnginesOf(const std::string& Model, bool bFighter)
+ 	{
+-		if (Model == "B17" || Model == "B24" || Model == "Lancaster" || Model == "Halifax")
++		// (as many as the flight core gives the aircraft's shape, AirShow::ShapeOf, so that its dead engines, numbered on
++		// that shape, are counted out of the same: a B-24 or an unnamed twin flies on what the shape gives it)
++		static std::map<std::pair<std::string, bool>, int32> Known;
++		const std::pair<std::string, bool> Which(Model, bFighter);
++		auto Found = Known.find(Which);
++		if (Found == Known.end())
+ 		{
+-			return 4;
++			Found = Known.emplace(Which, FMath::Max(1, static_cast<int32>(AirShow::ShapeOf(Model, bFighter).Engines.size()))).first;
+ 		}
+-		return Model == "He111" || Model == "Betty" || Model == "G4M" || Model == "Bomber" ? 2 : 1;
++		return Found->second;
+ 	}
+ 
+ 	/** An aircraft's engines still turning, as a share of its drone's energy: 10 log10(left / engines) dB, as a gain. */
+-	static float LiveEngines(const std::string& Model, const std::vector<int>& Dead, int32& OutLeft, int32& OutAll)
++	static float LiveEngines(const std::string& Model, bool bFighter, const std::vector<int>& Dead, int32& OutLeft, int32& OutAll)
+ 	{
+-		OutAll = EnginesOf(Model);
++		OutAll = EnginesOf(Model, bFighter);
+ 		OutLeft = FMath::Max(0, OutAll - static_cast<int32>(Dead.size()));
+ 		return FMath::Sqrt(static_cast<float>(OutLeft) / static_cast<float>(FMath::Max(1, OutAll)));
+ 	}
+@@ -555,10 +561,21 @@ bool AAirBattle::Open(const FString& Why)
+ 			Settings.ReleaseTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
+ 			Settings.InputGainDb = 0.0f;
+ 			Settings.OutputGainDb = 0.0f;
++			Settings.KneeBandwidthDb = 0.0f; // (a hard ceiling: the default 10 dB knee began pressing 5 dB under it)
+ 			Made->SetSettings(Settings);
+ 			Limiter = Made;
+ 			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
+ 		}
++		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
++		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
++		if (UWorld* Here = GetWorld())
++		{
++			FAudioDeviceHandle Device = Here->GetAudioDevice();
++			if (Device.IsValid())
++			{
++				UE_LOG(LogTheater, Display, TEXT("Air battle sound: the engine plays up to %d voices at once."), Device->GetMaxChannels());
++			}
++		}
+ 	}
+ 	// The paint: the campaign's own surface, coloured by each point's colour, as the stage's ships are.
+ 	{
+@@ -3722,6 +3739,22 @@ void AAirBattle::PlayEffects()
+ 	const double Now = S.Show.AirNow();
+ 	const double U = UnitsPerMetre;
+ 	const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
++	// A fighter's fixed guns of one kind fire together, and are heard as one take: one recording laid once a barrel on
++	// the same frame adds up in step (four barrels +12 dB, eight +18, and locked together, into the limiter), where real
++	// guns firing out of step add up as their power, 10 log10 N. So each aircraft's fixed guns of a kind share one key
++	// (below every real gun's key), and its take plays at the square root of how many of them fire this frame.
++	auto WingKey = [](int32 Key, const std::string& What)
++	{
++		return -1 - ((Key / 64) * 4 + (What == "cannon20" ? 0 : What == "hmg" ? 1 : 2));
++	};
++	TMap<int32, int32> WingBarrels;
++	for (const AirShow::Fx& E : S.Show.Effects)
++	{
++		if (E.Kind == AirShow::FxKind::Gun && E.Text == "fixed" && !ShipGuns::IsStream(E.Key))
++		{
++			++WingBarrels.FindOrAdd(WingKey(E.Key, E.What));
++		}
++	}
+ 	for (const AirShow::Fx& E : S.Show.Effects)
+ 	{
+ 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
+@@ -3753,7 +3786,13 @@ void AAirBattle::PlayEffects()
+ 			// (a ship's light guns of one kind are heard as one battery, under one key: ShipGuns::HeardKey; laid where
+ 			// its mount fires, and left there, as the ship hardly moves while a take plays)
+ 			const bool bShip = ShipGuns::IsStream(E.Key);
+-			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : E.Key;
++			const bool bWing = !bShip && E.Text == "fixed";
++			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What) : E.Key;
++			if (bWing && !WingOf.Contains(E.Key))
++			{
++				WingOf.Add(E.Key, SoundKey);
++				++WingLive.FindOrAdd(SoundKey);
++			}
+ 			const double* Due = GunHeardAt.Find(SoundKey);
+ 			if (!Due)
+ 			{
+@@ -3793,24 +3832,26 @@ void AAirBattle::PlayEffects()
+ 				// The next take is due as this one's part ends (a hair early, so the bursts run on without a hole), or
+ 				// at its end where the mix plays it whole; never sooner than the mix's gap after itself.
+ 				double Again = 0.9;
+-				if (USoundBase* Wave = Take.IsEmpty() ? nullptr : SoundOf(*Take))
++				USoundBase* const Recording = Take.IsEmpty() ? nullptr : SoundOf(*Take);
++				if (Recording)
+ 				{
+-					const double Whole = Wave->GetDuration();
++					const double Whole = Recording->GetDuration();
+ 					Again = Cut > 0.0f ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
+ 				}
+ 				Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
+ 				GunHeardAt.Add(SoundKey, RealT + Again);
++				// (a wing's barrels as their power: the square root of how many fire now. The engine's voices: guns near
++				// the eye before the far ones, so a near gun is never the one dropped; given before the take begins)
++				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey)))) : 1.0f;
++				const float Voice = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
+ 				UAudioComponent* Played = nullptr;
+-				if (!Take.IsEmpty())
++				if (Recording)
+ 				{
+-					Played = bOwnGuns ? SoundAtEye(*Take, 1.0f, Cut) : Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, Cut);
++					Played = bOwnGuns ? SoundAtEye(*Take, Together, Cut, false, Voice) : Sound(*Take, At, TEXT("air_guns"), Together, 0.0f, Cut, 0.0f, Voice);
+ 				}
+ 				if (Played)
+ 				{
+ 					++GunTakesLaid;
+-					// (the engine's voices: guns near the eye before the far ones, so a near gun is never the one dropped)
+-					Played->bOverridePriority = true;
+-					Played->Priority = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
+ 					// (its takes still playing kept, the finished ones let go)
+ 					TArray<TWeakObjectPtr<UAudioComponent>> Had;
+ 					GunTakes.MultiFind(SoundKey, Had);
+@@ -3824,6 +3865,10 @@ void AAirBattle::PlayEffects()
+ 					}
+ 					GunTakes.Add(SoundKey, Played);
+ 				}
++				else if (Recording)
++				{
++					++GunTakesFar; // (past its family's silent distance: nothing to hear)
++				}
+ 				else
+ 				{
+ 					++GunTakesLost;
+@@ -3833,7 +3878,7 @@ void AAirBattle::PlayEffects()
+ 			{
+ 				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one)
+ 				TArray<TWeakObjectPtr<UAudioComponent>> Playing;
+-				GunTakes.MultiFind(E.Key, Playing);
++				GunTakes.MultiFind(SoundKey, Playing);
+ 				for (const TWeakObjectPtr<UAudioComponent>& Take_ : Playing)
+ 				{
+ 					if (Take_.IsValid() && Take_->IsPlaying() && Take_->GetAttachParent() == nullptr)
+@@ -3851,19 +3896,28 @@ void AAirBattle::PlayEffects()
+ 				const double Long = Line.Size();
+ 				if (Long > 1.0)
+ 				{
+-					const double Along = FMath::Clamp(FVector::DotProduct(Listener - At, Line / Long), 0.0, Long);
++					// (the rounds fly on past the guns' convergence, where the line is aimed, to air.roundsPassing.reach)
++					const double Flies = FMath::Max(Long, AirParts::MixNumber(Mix, TEXT("air.roundsPassing.reach"), 1000.0) * U);
++					const double Along = FMath::Clamp(FVector::DotProduct(Listener - At, Line / Long), 0.0, Flies);
+ 					const FVector Nearest = At + Line / Long * Along;
+ 					const double Within = AirParts::MixNumber(Mix, TEXT("air.roundsPassing.within"), 40.0) * U;
+-					const double* Cracked = CrackHeardAt.Find(E.Key);
++					// (by the aircraft, not the barrel: its converging guns' lines pass together, and crack as one)
++					const int32 Shooter = E.Key / 64;
++					const double* Cracked = CrackHeardAt.Find(Shooter);
+ 					if (Along > 30.0 * U && FVector::Dist(Nearest, Listener) < Within && (!Cracked || RealT >= *Cracked))
+ 					{
+-						CrackHeardAt.Add(E.Key, RealT + FMath::FRandRange(0.12, 0.3));
++						CrackHeardAt.Add(Shooter, RealT + FMath::FRandRange(0.12, 0.3));
+ 						const FString Crack = AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.roundsPassing")), TEXT("takes"), FMath::RandRange(0, 9));
+-						if (UAudioComponent* Heard = Sound(Crack.IsEmpty() ? TEXT("bullet_crack") : *Crack, Nearest, TEXT("air_guns"), 1.0f))
++						const FName CrackTake(Crack.IsEmpty() ? TEXT("bullet_crack") : *Crack);
++						// (the same take never again inside air.sameTakeGap, whoever fires it: closer, two of them comb)
++						const double* Began = TakeStartedAt.Find(CrackTake);
++						if (!Began || RealT - *Began >= AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15))
+ 						{
+-							Heard->bOverridePriority = true;
+-							Heard->Priority = 3.0f;
+-							++CracksHeard;
++							if (Sound(*CrackTake.ToString(), Nearest, TEXT("air_guns"), 1.0f, 0.0f, 0.0f, 0.0f, 3.0f))
++							{
++								TakeStartedAt.Add(CrackTake, RealT);
++								++CracksHeard;
++							}
+ 						}
+ 					}
+ 				}
+@@ -3878,11 +3932,25 @@ void AAirBattle::PlayEffects()
+ 				Kit->AirGunStop(E.Key);
+ 			}
+ 			GunHeardAt.Remove(E.Key);
+-			CrackHeardAt.Remove(E.Key);
++			// (a barrel of a wing: the wing's take goes on while any of its barrels still fires, and stops with the last)
++			int32 StopKey = E.Key;
++			int32 Wing = 0;
++			if (WingOf.RemoveAndCopyValue(E.Key, Wing))
++			{
++				int32& Live = WingLive.FindOrAdd(Wing);
++				Live = FMath::Max(0, Live - 1);
++				if (Live > 0)
++				{
++					break;
++				}
++				WingLive.Remove(Wing);
++				GunHeardAt.Remove(Wing);
++				StopKey = Wing;
++			}
+ 			// The burst heard stops with the gun (Brian 11-20 14:20Z: "after the bomber crew bails out, they can't keep
+ 			// shooting"): a take still playing is faded out at once, not left to run to its end after the trigger is up.
+ 			TArray<TWeakObjectPtr<UAudioComponent>> Playing;
+-			GunTakes.MultiFind(E.Key, Playing);
++			GunTakes.MultiFind(StopKey, Playing);
+ 			for (const TWeakObjectPtr<UAudioComponent>& Take : Playing)
+ 			{
+ 				if (Take.IsValid())
+@@ -3890,7 +3958,7 @@ void AAirBattle::PlayEffects()
+ 					Take->FadeOut(0.08f, 0.0f);
+ 				}
+ 			}
+-			GunTakes.Remove(E.Key);
++			GunTakes.Remove(StopKey);
+ 			break;
+ 		}
+ 		case AirShow::FxKind::Hit:
+@@ -3922,10 +3990,13 @@ void AAirBattle::PlayEffects()
+ 							}
+ 						}
+ 					}
+-					if (UAudioComponent* Heard = bOwn ? SoundAtEye(*Take, 1.0f) : Sound(*Take, At, TEXT("air_guns"), 1.0f))
++					if (bOwn)
+ 					{
+-						Heard->bOverridePriority = true;
+-						Heard->Priority = bOwn ? 4.0f : 3.0f;
++						SoundAtEye(*Take, 1.0f, 0.0f, false, 4.0f);
++					}
++					else
++					{
++						Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, 0.0f, 0.0f, 3.0f);
+ 					}
+ 				}
+ 			}
+@@ -4050,20 +4121,19 @@ void AAirBattle::PlayEffects()
+ 			// Flak heard when it is seen (handoff 10, gap 6): the burst at its point, after the flash by the distance
+ 			// over the speed of sound (none within 150 m, at most 3 s), no closer together than the mix's soundEvery.
+ 			const double Every = AirParts::MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6);
+-			if (RealT - FlakHeardAt >= Every)
++			const double Metres = FVector::Dist(At, Listener) / U;
++			// (a burst close to the eye, mix.json air.closeView.closeFlak: a real close blast in place of the far burst,
++			// whatever the view; within 20 m a big moment by big.alsoWhenCloserThan. It is always heard: soundEvery keeps
++			// only the bursts farther off from crowding, never the one beside the eye)
++			const TSharedPtr<FJsonObject> Close = AirParts::MixObject(Mix, TEXT("air.closeView.closeFlak"));
++			FString CloseTake;
++			const bool bCloseBurst = Close.IsValid() && Metres < AirParts::MixNumber(Mix, TEXT("air.closeView.closeFlak.within"), 100.0)
++				&& Close->TryGetStringField(TEXT("take"), CloseTake) && SoundOf(*CloseTake);
++			if (bCloseBurst || RealT - FlakHeardAt >= Every)
+ 			{
+ 				FlakHeardAt = RealT;
+-				const double Metres = FVector::Dist(At, Listener) / U;
+ 				const float After = Metres < 150.0 ? 0.0f : static_cast<float>(FMath::Min(3.0, Metres / 343.0));
+-				FString Burst = AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.flak")), TEXT("burst"), static_cast<int32>(RealT * 7.0));
+-				// (a burst close to the eye, mix.json air.closeView.closeFlak: a real close blast in place of the far burst,
+-				// whatever the view; within 20 m a big moment by big.alsoWhenCloserThan)
+-				const TSharedPtr<FJsonObject> Close = AirParts::MixObject(Mix, TEXT("air.closeView.closeFlak"));
+-				FString CloseTake;
+-				if (Close.IsValid() && Metres < AirParts::MixNumber(Mix, TEXT("air.closeView.closeFlak.within"), 100.0) && Close->TryGetStringField(TEXT("take"), CloseTake) && SoundOf(*CloseTake))
+-				{
+-					Burst = CloseTake;
+-				}
++				const FString Burst = bCloseBurst ? CloseTake : AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.flak")), TEXT("burst"), static_cast<int32>(RealT * 7.0));
+ 				Sound(Burst.IsEmpty() ? TEXT("flak_burst_01") : *Burst, At, TEXT("explosions"), 1.0f, After);
+ 			}
+ 			break;
+@@ -5174,7 +5244,41 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
+ 	return Made;
+ }
+ 
+-UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From)
++UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch, bool bAutoDestroy)
++{
++	// (made, given its voice priority, and only then begun: UAudioComponent::Play hands the priority to the sound the
++	// engine runs, so a priority set after the spawn, as the release 2 air patch first did, reached nothing)
++	if (Where && Family && Eye)
++	{
++		// (past its family's silent distance from the eye, the listener: not made at all, as the engine's own spawn did not)
++		const double Reach = Family->Attenuation.AttenuationShapeExtents.X + Family->Attenuation.FalloffDistance;
++		if (FVector::DistSquared(*Where, Eye->GetActorLocation()) > Reach * Reach)
++		{
++			return nullptr;
++		}
++	}
++	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, Pitch, 0.0f, nullptr, false, bAutoDestroy);
++	if (!Player)
++	{
++		return nullptr;
++	}
++	Player->bIsUISound = false; // (CreateSound2D makes an interface sound, which would play on through a pause)
++	if (Where)
++	{
++		Player->bAllowSpatialization = true;
++		Player->AttenuationSettings = Family;
++		Player->SetWorldLocation(*Where);
++	}
++	if (Priority > 0.0f)
++	{
++		Player->bOverridePriority = true;
++		Player->Priority = Priority;
++	}
++	Player->Play(From);
++	return Player;
++}
++
++UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From, float Priority)
+ {
+ 	if (After > 0.0f)
+ 	{
+@@ -5189,12 +5293,7 @@ UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, cons
+ 	// (laid on at the battle's level now: louder riding an aircraft, and as the strategy camera draws back. A big moment
+ 	// plays at its full level and dips the rest; anything else laid on while one is dipping is laid on dipped)
+ 	const bool bBig = BigMoment(Name, Where);
+-	UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume * MasterGain * (bBig ? 1.0f : DuckCloseGain), 1.0f, From, FamilyOf(Family));
+-	if (Player && bBig)
+-	{
+-		Player->bOverridePriority = true;
+-		Player->Priority = 3.5f;
+-	}
++	UAudioComponent* Player = Lay(Played, &Where, FamilyOf(Family), Volume * MasterGain * (bBig ? 1.0f : DuckCloseGain), From, bBig ? FMath::Max(Priority, 3.5f) : Priority);
+ 	if (Player && Cut > 0.0f)
+ 	{
+ 		// (only the first part of the take: the rest is the ground's echo, which the sky does not have)
+@@ -5249,20 +5348,17 @@ bool AAirBattle::BigMoment(const TCHAR* Name, const FVector& Where)
+ 	return bBig;
+ }
+ 
+-UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float Cut, bool bLoop)
++UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float Cut, bool bLoop, float Priority)
+ {
+ 	USoundBase* Played = SoundOf(Name, bLoop);
+ 	if (!Played || !Eye)
+ 	{
+ 		return nullptr;
+ 	}
+-	// (unplaced: attached to the eye with no distance rule, so it is heard as the mix sets it wherever the eye goes)
+-	UAudioComponent* Player = UGameplayStatics::SpawnSoundAttached(Played, Eye->GetRootComponent(), NAME_None, FVector::ZeroVector,
+-		EAttachLocation::KeepRelativeOffset, false, Volume * MasterGain, 1.0f, 0.0f, nullptr, nullptr, true);
++	// (unplaced, with no distance rule: heard as the mix sets it wherever the eye goes)
++	UAudioComponent* Player = Lay(Played, nullptr, nullptr, Volume * MasterGain, 0.0f, Priority);
+ 	if (Player)
+ 	{
+-		Player->bOverridePriority = true;
+-		Player->Priority = 4.0f;
+ 		if (Cut > 0.0f)
+ 		{
+ 			TWeakObjectPtr<UAudioComponent> Weak(Player);
+@@ -5358,19 +5454,15 @@ void AAirBattle::Play(double Real)
+ 		{
+ 			Pass = TEXT("fighter_pass");
+ 		}
+-		if (UAudioComponent* PassSound = Sound(*Pass, At, TEXT("aircraft"), 1.19f))
+-		{
+-			PassSound->bOverridePriority = true;
+-			PassSound->Priority = 2.0f;
+-		}
++		Sound(*Pass, At, TEXT("aircraft"), 1.19f, 0.0f, 0.0f, 0.0f, 2.0f);
+ 	}
+ 	AirLevels(Real);
+ 	// The guns' tally (the Mac run's log: every gun seen firing heard).
+ 	if (RealT >= GunTallyAt)
+ 	{
+ 		GunTallyAt = RealT + 20.0;
+-		UE_LOG(LogTheater, Display, TEXT("Air battle sound: %d bursts begun, %d takes laid on, %d takes that could not play, %d rounds heard passing; level %+.1f dB%s; air intensity %.2f, music %+.0f dB."),
+-			GunBursts, GunTakesLaid, GunTakesLost, CracksHeard, 20.0 * FMath::LogX(10.0, FMath::Max(1e-4, static_cast<double>(MasterGain))), S.bClose ? TEXT(" (riding)") : TEXT(""),
++		UE_LOG(LogTheater, Display, TEXT("Air battle sound: %d bursts begun, %d takes laid on, %d takes that could not play, %d out of earshot, %d rounds heard passing; level %+.1f dB%s; air intensity %.2f, music %+.0f dB."),
++			GunBursts, GunTakesLaid, GunTakesLost, GunTakesFar, CracksHeard, 20.0 * FMath::LogX(10.0, FMath::Max(1e-4, static_cast<double>(MasterGain))), S.bClose ? TEXT(" (riding)") : TEXT(""),
+ 			AirIntensity, ScoreShownDb);
+ 	}
+ }
+@@ -5451,9 +5543,10 @@ void AAirBattle::AirLevels(double Real)
+ 			}
+ 		}
+ 	}
+-	// (eased over about half a second, so a cut does not jump the whole battle's level)
++	// (eased by the clock, about a second to settle as the mix has it, so a cut does not jump the whole battle's level,
++	// whatever the frame rate)
+ 	const float Want = static_cast<float>(FMath::Pow(10.0, Db / 20.0)) * EndGain;
+-	MasterGain += (Want - MasterGain) * 0.1f;
++	MasterGain += (Want - MasterGain) * static_cast<float>(1.0 - FMath::Exp(-FMath::Clamp(Real, 0.0, 0.25) / 0.33));
+ 
+ 	// The ridden aircraft's own engines (air.closeView.bed): its air.loops take, unplaced at the eye, gainDb over
+ 	// the rest. A bomber's heard through its airframe (lpfHz); a fighter's, ridden from behind it, open.
+@@ -5472,7 +5565,7 @@ void AAirBattle::AirLevels(double Real)
+ 				OwnLoop = EngineLoop(AirParts::Wide(P.Model));
+ 				// (its dead engines: the drone down by 10 log10(left / engines), air.engineLost; none left, a whisper)
+ 				int32 Left = 0, All = 1;
+-				OwnLive = FMath::Max(0.3f, AirParts::LiveEngines(P.Model, P.DeadEngines, Left, All));
++				OwnLive = FMath::Max(0.3f, AirParts::LiveEngines(P.Model, P.bFighter, P.DeadEngines, Left, All));
+ 				break;
+ 			}
+ 		}
+@@ -5488,10 +5581,9 @@ void AAirBattle::AirLevels(double Real)
+ 		OwnEngineFor = Ridden;
+ 		if (Ridden >= 0 && !OwnLoop.IsEmpty())
+ 		{
+-			OwnEngine = SoundAtEye(*OwnLoop, BedGain, 0.0f, true);
++			OwnEngine = SoundAtEye(*OwnLoop, BedGain, 0.0f, true, 4.0f);
+ 			if (OwnEngine)
+ 			{
+-				OwnEngine->Priority = 4.0f;
+ 				if (bOwnBomber)
+ 				{
+ 					OwnEngine->SetLowPassFilterEnabled(true);
+@@ -5544,11 +5636,7 @@ void AAirBattle::AirLevels(double Real)
+ 	if (!AirBed && BedLevel > 0.001f)
+ 	{
+ 		// (begun at its level, never at nothing: a sound begun silent can be set aside by the engine and not come back)
+-		AirBed = SoundAtEye(*BedTake, BedLevel, 0.0f, true);
+-		if (AirBed)
+-		{
+-			AirBed->Priority = 2.0f;
+-		}
++		AirBed = SoundAtEye(*BedTake, BedLevel, 0.0f, true, 2.0f);
+ 	}
+ 	if (AirBed)
+ 	{
+@@ -5681,7 +5769,7 @@ void AAirBattle::EngineSounds()
+ 		if (P.bShown && !P.bFalling)
+ 		{
+ 			int32 Left = 0, All = 1;
+-			AirParts::LiveEngines(P.Model, P.DeadEngines, Left, All);
++			AirParts::LiveEngines(P.Model, P.bFighter, P.DeadEngines, Left, All);
+ 			Turning.FindOrAdd(P.Group) += Left;
+ 		}
+ 	}
+@@ -5720,17 +5808,31 @@ void AAirBattle::EngineSounds()
+ 		}
+ 		if (!Have)
+ 		{
+-			EngineKind.Add(G.Id, FName(*Loop));
+ 			USoundBase* Played = Loop.IsEmpty() ? nullptr : SoundOf(*Loop, true);
+ 			if (!Played)
+ 			{
++				EngineKind.Add(G.Id, FName(*Loop));
+ 				Engines.Add(G.Id, nullptr);
+ 				continue;
+ 			}
+-			const float Loud = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.groupLoopDb"), 0.0) / 20.0));
+-			UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, World(Middle.X, Middle.Y, Middle.Z), FRotator::ZeroRotator, Loud,
+-				G.bFighter ? 1.0f : 0.97f + 0.06f * static_cast<float>(G.Id % 3) / 2.0f, 0.0f, FamilyOf(TEXT("aircraft")), nullptr, false);
+-			Engines.Add(G.Id, Player);
++			// (in the mix's family for formation loops, air.loopsFamily: heard out to 14 km, where the aircraft family is
++			// silent at 6. Past it, not begun, and tried again as the formation comes nearer: before, a formation that
++			// began out of earshot stayed silent all battle)
++			FString LoopsFamily = TEXT("air_far");
++			if (const TSharedPtr<FJsonObject> Air = AirParts::MixObject(Mix, TEXT("air")))
++			{
++				Air->TryGetStringField(TEXT("loopsFamily"), LoopsFamily);
++			}
++			USoundAttenuation* Family = FamilyOf(*LoopsFamily);
++			const FVector Where = World(Middle.X, Middle.Y, Middle.Z);
++			const float Loud = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.groupLoopDb"), 0.0) / 20.0)) * MasterGain * DuckLoopsGain;
++			UAudioComponent* Player = Lay(Played, &Where, Family ? Family : FamilyOf(TEXT("aircraft")), Loud, 0.0f, 2.0f,
++				G.bFighter ? 1.0f : 0.97f + 0.06f * static_cast<float>(G.Id % 3) / 2.0f, false);
++			if (Player)
++			{
++				EngineKind.Add(G.Id, FName(*Loop));
++				Engines.Add(G.Id, Player);
++			}
+ 			continue;
+ 		}
+ 		if (*Have)
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+index 831480bd..a167bad4 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+@@ -306,18 +306,28 @@ private:
+ 	UPROPERTY()
+ 	TObjectPtr<UAudioComponent> AirBed;
+ 	double AirIntensity = 0.0;
+-	/** Rounds passing the eye (air.roundsPassing): each firing gun's last crack, real seconds. */
++	/** Rounds passing the eye (air.roundsPassing): each firing aircraft's next crack due, real seconds (one aircraft's
++	 * converging guns crack as one), and when each crack take last began (never again inside air.sameTakeGap). */
+ 	TMap<int32, double> CrackHeardAt;
++	TMap<FName, double> TakeStartedAt;
++	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key): each barrel's wing, and how many
++	 * of a wing's barrels still fire, so its take is cut only when the last of them stops. */
++	TMap<int32, int32> WingOf;
++	TMap<int32, int32> WingLive;
+ 	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
+ 	UPROPERTY()
+ 	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
+ 	/** The guns' tally, logged every 20 s: bursts begun, takes laid on, takes that could not play. The Mac run's log
+ 	 * shows every gun seen firing was heard. */
+-	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, CracksHeard = 0;
++	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, GunTakesFar = 0, CracksHeard = 0;
+ 	double GunTallyAt = 20.0;
+ 	/** A take unplaced at the eye (the ridden aircraft's own guns and engines): heard at Volume whatever the
+ 	 * distance rules, and never the one the engine's voice limit drops. */
+-	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false);
++	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false, float Priority = 4.0f);
++	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
++	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
++	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
++	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch = 1.0f, bool bAutoDestroy = true);
+ 	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
+ 	void AirLevels(double Real);
+ 	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of
+@@ -497,7 +507,7 @@ private:
+ 	void PlaceTags();
+ 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
+ 	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take. */
+-	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f);
++	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f, float Priority = 0.0f);
+ 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
+ 	USoundAttenuation* FamilyOf(const TCHAR* Name);
+ 	void EngineSounds();
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.cpp
+index d7a3cccc..c02064a3 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.cpp
+@@ -393,6 +393,10 @@ void ACampaignGameMode::BeginPlay()
+ 					Wave->bLooping = true;
+ 				}
+ 			}
++			else if (FCString::Strcmp(Piece.Value, TEXT("advance")) == 0)
++			{
++				AdvancePiece = Index;
++			}
+ 			else if (FCString::Strcmp(Piece.Value, TEXT("battle_won")) == 0)
+ 			{
+ 				WonPiece = Index;
+@@ -439,6 +443,19 @@ void ACampaignGameMode::StartPiece(float FadeSeconds)
+ 	// to hear, as "-TheaterQuiet" plays it, a piece is put out at once by the engine, and the turn would spin.)
+ 	const float Long = Music->Sound ? Music->Sound->GetDuration() : 0.0f;
+ 	PieceEndsAt = FPlatformTime::Seconds() + (Long > 1.0f && Long < 3600.0f ? Long + 1.5 : 1.0e9);
++	FadeInUntil = FPlatformTime::Seconds() + FadeSeconds;
++	if (bBattleScore && bBattleEnding && bStingerUp)
++	{
++		// (a stinger begun again, as when the music is turned back on during it: heard out, and the moods a second after)
++		BattleScoreEndsAt = FPlatformTime::Seconds() + (Long > 0.5f && Long < 600.0f ? Long + 1.0 : 2.0);
++	}
++}
++
++float ACampaignGameMode::FadeLeft(float FadeSeconds) const
++{
++	// (a level change made while a piece still fades in carries on to the end of that fade-in, never jumping it: the
++	// air battle sets its score's level every frame, and contact's three-second crossfade must still take three seconds)
++	return FMath::Max(FadeSeconds, static_cast<float>(FadeInUntil - FPlatformTime::Seconds()));
+ }
+ 
+ float ACampaignGameMode::NowVolume() const
+@@ -447,7 +464,9 @@ float ACampaignGameMode::NowVolume() const
+ 	// On the opening screen nothing else sounds, and the score's theme is to be clearly heard. Measured: The Final
+ 	// Salute's recording stands 18.5 dB under full scale, where the synthesised theme it replaces stood 12.8 under
+ 	// and played at 0.55; to be heard as loud as that was, it plays at its master's own level on the usual setting.)
+-	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying ? 6.7f : 1.0f;
++	// (never while a battle scene is up: the theme that comes back after a battle's stinger plays at the in-play level
++	// under the scene and its after card, and comes up when the scene closes, StopBattleScore)
++	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying && !bBattleSceneUp ? 6.7f : 1.0f;
+ 	// (a battle scene's score at the level it asks for: under the fight's thick, back up in a lull)
+ 	const float Battle = bBattleScore ? FMath::Pow(10.0f, BattleScoreDb / 20.0f) : 1.0f;
+ 	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked ? 0.3f : 1.0f) * Battle;
+@@ -464,6 +483,7 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
+ 		{
+ 			bBattleScore = false;
+ 			bBattleEnding = false;
++			bStingerUp = false;
+ 			BattleScoreDb = 0.0f;
+ 			MusicMood.Reset(); // (so the mood asked for now begins its piece)
+ 		}
+@@ -535,27 +555,41 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
+ 
+ void ACampaignGameMode::BeginBattleScore()
+ {
+-	if (bBattleScore)
++	bBattleSceneUp = true;
++	// (a battle begun while the last one's stinger still plays takes over from it: the stinger fades below)
++	if (bBattleScore && !bBattleEnding)
+ 	{
+ 		return;
+ 	}
+ 	UAudioComponent* Wait = ScorePlayers.IsValidIndex(ZeroHourPiece) ? ScorePlayers[ZeroHourPiece].Get() : nullptr;
+ 	if (!Wait && !ScoreOf.Contains(TEXT("battle")))
+ 	{
+-		// (without the score: the battle mood, as it was)
+-		SetMusicMood(TEXT("battle"));
++		// (without the score's battle pieces: the music goes on as it was, at the in-play level while the scene is up.
++		// Asking for the battle mood here would be overruled by the map's own mood on the next frame.)
++		if (Music && bMusicOn)
++		{
++			Music->AdjustVolume(FadeLeft(1.0f), NowVolume());
++		}
+ 		return;
+ 	}
+ 	bBattleScore = true;
+ 	bBattleContact = false;
+ 	bBattleEnding = false;
++	bStingerUp = false;
+ 	bHomePlaying = false;
+ 	BattleScoreDb = 0.0f;
+ 	MusicMood = TEXT("battle");
+ 	if (!Wait)
+ 	{
+-		// (no Zero Hour: the battle's piece from the start)
+-		++ScoreTurn.FindOrAdd(TEXT("battle"));
++		// (no Zero Hour: the battle's piece from the start, its first one the first time; SetMusicMood's rule)
++		if (int32* Turn = ScoreTurn.Find(TEXT("battle")))
++		{
++			++*Turn;
++		}
++		else
++		{
++			ScoreTurn.Add(TEXT("battle"), 0);
++		}
+ 		Wait = PieceFor(TEXT("battle"));
+ 		bBattleContact = true;
+ 	}
+@@ -587,7 +621,7 @@ void ACampaignGameMode::BattleScoreContact(float Db, float CrossfadeSeconds)
+ 		// (no Zero Hour was playing: the battle's piece only comes down to its level)
+ 		if (Music && bMusicOn)
+ 		{
+-			Music->AdjustVolume(FMath::Max(0.05f, CrossfadeSeconds), NowVolume());
++			Music->AdjustVolume(FadeLeft(FMath::Max(0.05f, CrossfadeSeconds)), NowVolume());
+ 		}
+ 		return;
+ 	}
+@@ -597,11 +631,25 @@ void ACampaignGameMode::BattleScoreContact(float Db, float CrossfadeSeconds)
+ 		// (Zero Hour without the battle's pieces: it plays on, at the battle's level)
+ 		if (Music && bMusicOn)
+ 		{
+-			Music->AdjustVolume(FMath::Max(0.05f, CrossfadeSeconds), NowVolume());
++			Music->AdjustVolume(FadeLeft(FMath::Max(0.05f, CrossfadeSeconds)), NowVolume());
+ 		}
+ 		return;
+ 	}
+-	++ScoreTurn.FindOrAdd(TEXT("battle"));
++	// (Zero Hour waits on A, the dominant of The Advance's D minor: it resolves into The Advance, whatever turn the battle
++	// mood's pieces stood at, and Trench Line At Twilight takes its turn after it. mix.json music.beforeContact._piece)
++	const int32 AdvanceTurn = ScoreOf.FindChecked(TEXT("battle")).IndexOfByKey(AdvancePiece);
++	if (AdvanceTurn != INDEX_NONE)
++	{
++		ScoreTurn.Add(TEXT("battle"), AdvanceTurn);
++	}
++	else if (int32* Turn = ScoreTurn.Find(TEXT("battle")))
++	{
++		++*Turn;
++	}
++	else
++	{
++		ScoreTurn.Add(TEXT("battle"), 0);
++	}
+ 	UAudioComponent* Next = PieceFor(TEXT("battle"));
+ 	UE_LOG(LogTheater, Display, TEXT("Music: first contact: %s comes in over %.1f s at %+.0f dB"), Next && Next->Sound ? *Next->Sound->GetName() : TEXT("nothing"), CrossfadeSeconds, Db);
+ 	if (Music && Music != Next && bMusicOn)
+@@ -624,7 +672,7 @@ void ACampaignGameMode::SetBattleScoreLevel(float Db, float FadeSeconds)
+ 	BattleScoreDb = Db;
+ 	if (Music && bMusicOn)
+ 	{
+-		Music->AdjustVolume(FMath::Max(0.02f, FadeSeconds), NowVolume());
++		Music->AdjustVolume(FadeLeft(FMath::Max(0.02f, FadeSeconds)), NowVolume());
+ 	}
+ }
+ 
+@@ -650,6 +698,7 @@ void ACampaignGameMode::EndBattleScore(int32 Outcome)
+ 		return;
+ 	}
+ 	Music = Stinger;
++	bStingerUp = true;
+ 	const float Long = Stinger->Sound ? Stinger->Sound->GetDuration() : 0.0f;
+ 	if (bMusicOn)
+ 	{
+@@ -661,6 +710,13 @@ void ACampaignGameMode::EndBattleScore(int32 Outcome)
+ 
+ void ACampaignGameMode::StopBattleScore()
+ {
++	// (the scene has closed: the theme, if it is what plays, comes back up to the opening screen's level)
++	const bool bWasUp = bBattleSceneUp;
++	bBattleSceneUp = false;
++	if (bWasUp && !bBattleScore && Music && bMusicOn)
++	{
++		Music->AdjustVolume(FadeLeft(1.5f), NowVolume());
++	}
+ 	if (!bBattleScore || bBattleEnding)
+ 	{
+ 		return;
+@@ -703,7 +759,7 @@ void ACampaignGameMode::DuckMusic(bool bDown)
+ 	bMusicDucked = bDown;
+ 	if (Music && bMusicOn)
+ 	{
+-		Music->AdjustVolume(0.8f, NowVolume());
++		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());
+ 	}
+ }
+ 
+@@ -714,7 +770,7 @@ void ACampaignGameMode::SetMusicLevel(int32 Level)
+ 	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : Loud[MusicLevel];
+ 	if (Music && bMusicOn)
+ 	{
+-		Music->AdjustVolume(0.4f, NowVolume());
++		Music->AdjustVolume(FadeLeft(0.4f), NowVolume());
+ 	}
+ }
+ 
+@@ -725,7 +781,12 @@ bool ACampaignGameMode::ToggleMusic()
+ 		return false;
+ 	}
+ 	bMusicOn = !bMusicOn;
+-	if (bMusicOn)
++	if (bMusicOn && bBattleScore && bBattleEnding && !bStingerUp)
++	{
++		// (a battle's music that ended with no stinger is not begun again: the map's mood takes up on the next frame)
++		BattleScoreEndsAt = 0.0;
++	}
++	else if (bMusicOn)
+ 	{
+ 		StartPiece(1.5f);
+ 	}
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.h b/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.h
+index 9fe6c0a8..191d6e55 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignGameMode.h
+@@ -119,8 +119,13 @@ private:
+ 	float MusicVolume = 0.55f;
+ 	int32 MusicLevel = 1;
+ 	// A battle scene's score (BeginBattleScore): its three pieces of the score, where it stands, and its level.
+-	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE;
++	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE, AdvancePiece = INDEX_NONE;
+ 	bool bBattleScore = false, bBattleContact = false, bBattleEnding = false;
++	bool bBattleSceneUp = false; // a battle scene is on the screen (from BeginBattleScore to StopBattleScore), score or none
++	bool bStingerUp = false;     // the battle's ending is its stinger (not a fade with none)
+ 	float BattleScoreDb = 0.0f;
+ 	double BattleScoreEndsAt = 0.0; // the stinger's end, and a moment after: the moods take over then
++	double FadeInUntil = 0.0;       // when the piece last begun has faded all the way in
++	/** How long a change of level should take: at least FadeSeconds, and never cutting short a piece's fade-in. */
++	float FadeLeft(float FadeSeconds) const;
+ };
+-- 
+2.43.0
+

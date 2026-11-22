@@ -1,0 +1,61 @@
+From c6e6c829a7f0790f0ce7c31c36eb2102fb7ed70f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 21 Nov 2026 20:51:20 +0000
+Subject: [PATCH] Air battle sound: the limiter's log line reads back the
+ settings the effect runs on, not the numbers asked for
+
+GetSettings returns the copy the effects read. If the master still ran the
+engine's default dynamics, the line now says compressor, -6 dBFS and a 10 dB
+knee instead of repeating the ceiling asked for (the pre-check's point).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../Source/TheaterCommand/Battle/AirBattle.cpp   | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+index fb2ede34..b5c2865e 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -549,8 +549,7 @@ bool AAirBattle::Open(const FString& Why)
+ 		}
+ 		// The master limiter (mix.json buses.master): stacked guns, flak and passes never past the ceiling. On the
+ 		// master while the battle runs, so whatever records the game's sound records it limited; taken off at EndPlay.
+-		bool bLimiterMade = false;
+-		float CeilingDb = 0.0f;
++		USubmixEffectDynamicsProcessorPreset* MadeLimiter = nullptr;
+ 		if (Mix.IsValid() && !Limiter)
+ 		{
+ 			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
+@@ -578,8 +577,7 @@ bool AAirBattle::Open(const FString& Why)
+ 			Limiter = Made;
+ 			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
+ 			Made->SetSettings(Settings);
+-			bLimiterMade = true;
+-			CeilingDb = Settings.ThresholdDb;
++			MadeLimiter = Made;
+ 		}
+ 		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
+ 		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
+@@ -589,9 +587,15 @@ bool AAirBattle::Open(const FString& Why)
+ 			if (Device.IsValid())
+ 			{
+ 				UE_LOG(LogTheater, Display, TEXT("Air battle sound: the engine plays up to %d voices at once."), Device->GetMaxChannels());
+-				if (bLimiterMade)
++				if (MadeLimiter)
+ 				{
+-					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master limiter on, ceiling %.1f dBFS (hard knee, digital, 5 ms look-ahead, channels linked)."), CeilingDb);
++					// (read back from the copy the effects read, GetSettings, not from the numbers asked for: if the master
++					// still ran the engine's default dynamics, this line says compressor, -6 dBFS, a 10 dB knee)
++					const FSubmixEffectDynamicsProcessorSettings Running = MadeLimiter->GetSettings();
++					const bool bIsLimiter = Running.DynamicsProcessorType == ESubmixEffectDynamicsProcessorType::Limiter;
++					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master %s on, read back from the effect's settings: ceiling %.1f dBFS, knee %.1f dB, look-ahead %.1f ms, %s detector."),
++						bIsLimiter ? TEXT("limiter") : TEXT("COMPRESSOR (not the limiter asked for)"), Running.ThresholdDb, Running.KneeBandwidthDb, Running.LookAheadMsec,
++						Running.bAnalogMode ? TEXT("analog") : TEXT("digital"));
+ 				}
+ 			}
+ 			else
+-- 
+2.43.0
+

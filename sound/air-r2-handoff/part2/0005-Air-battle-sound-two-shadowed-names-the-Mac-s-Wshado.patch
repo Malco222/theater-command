@@ -1,0 +1,63 @@
+From 565f1fe3fdbc8156f9f9fe8bf0c38aed9cb14dcf Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 21 Nov 2026 19:32:33 +0000
+Subject: [PATCH] Air battle sound: two shadowed names the Mac's -Wshadow stops
+ on (pre-check on part two)
+
+Open's voices line reuses the function's own Here; Lay's pitch parameter is
+PitchBy, as AAirBattle::Pitch is the camera's.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../Source/TheaterCommand/Battle/AirBattle.cpp              | 6 +++---
+ .../TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+index d4e73caf..d5d97b7f 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -568,7 +568,7 @@ bool AAirBattle::Open(const FString& Why)
+ 		}
+ 		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
+ 		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
+-		if (UWorld* Here = GetWorld())
++		if (Here)
+ 		{
+ 			FAudioDeviceHandle Device = Here->GetAudioDevice();
+ 			if (Device.IsValid())
+@@ -5244,7 +5244,7 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
+ 	return Made;
+ }
+ 
+-UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch, bool bAutoDestroy)
++UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy, bool bAutoDestroy)
+ {
+ 	// (made, given its voice priority, and only then begun: UAudioComponent::Play hands the priority to the sound the
+ 	// engine runs, so a priority set after the spawn, as the release 2 air patch first did, reached nothing)
+@@ -5257,7 +5257,7 @@ UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoun
+ 			return nullptr;
+ 		}
+ 	}
+-	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, Pitch, 0.0f, nullptr, false, bAutoDestroy);
++	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, PitchBy, 0.0f, nullptr, false, bAutoDestroy);
+ 	if (!Player)
+ 	{
+ 		return nullptr;
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+index a167bad4..4a968f09 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+@@ -327,7 +327,7 @@ private:
+ 	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
+ 	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
+ 	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
+-	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch = 1.0f, bool bAutoDestroy = true);
++	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy = 1.0f, bool bAutoDestroy = true);
+ 	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
+ 	void AirLevels(double Real);
+ 	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of
+-- 
+2.43.0
+

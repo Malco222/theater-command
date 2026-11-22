@@ -1,0 +1,222 @@
+From e7f7e6fe8dfcaa244f2c15b628083a740d23fe51 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 08:32:38 +0000
+Subject: [PATCH] Air battle sound: the close view's guns stand out of the
+ ridden engine; a twin mount is one take
+
+From the Bremen r2d film (22 Nov, 0001-0018), measured and re-checked:
+- The chase view came out louder (-13.7 LUFS, was -16.4) but not more intense:
+  the quiet between attacks rose 4.4 dB and the bursts did not, so the bursts
+  stood 5.1 LU over the bed instead of 9.4. Every burst already reaches the
+  limiter's ceiling; the ridden engine is 70% of the sound between attacks.
+  mix.json: air.closeView.masterDb 7.5 -> 9.5 and bed.gainDb 6 -> 1 (the
+  engine 3 dB under the film, everything else 2 dB over). Re-mixed from the
+  film through the game's limiter: chase -14.1 LUFS, bursts 7.2 LU over the
+  bed, limiter more than 0.5 dB down 3.5% of the time.
+- A 10 s wall at 116-127 s was a B-17 box's gunners firing at the ridden
+  Fw 190. A twin mount laid two identical takes on the same frame (+6 dB,
+  in step). AirBattle.cpp: a gunner's mount (guns of one aircraft, kind and
+  mount within a metre this frame) is now heard as one take at the square
+  root of its guns, as a fighter's wing already is; its take stops with the
+  last of its guns (WingOf/WingLive).
+- Notes corrected where the code differs: no +12 dB per-sound limit bites
+  (_masterDb), masterDbByCameraDistance measures to the nearest group, and
+  closeView._notBuilt lists the keys no code reads.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../Content/Data/Sound/mix.json               | 16 ++--
+ .../TheaterCommand/Battle/AirBattle.cpp       | 83 ++++++++++++++++++-
+ .../Source/TheaterCommand/Battle/AirBattle.h  |  5 +-
+ 3 files changed, 91 insertions(+), 13 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Content/Data/Sound/mix.json b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+index ac609f3b..a65dacc4 100644
+--- a/unreal/TheaterCommand/Content/Data/Sound/mix.json
++++ b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+@@ -1,7 +1,7 @@
+ {
+   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
+   "version": 5,
+-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded). Land block updated 21 Nov 19:39Z by the ground sound thread: land.smgCue.leaderRoles (officer, leader), and the Garand reload and the leader's Thompson switch on by themselves at the first clip cue (notes only; the code default matches). The master limiter's detector (21 Nov 19:50Z): digital, 5 ms look-ahead (buses.master._detector); no number changed. 21 Nov 19:50Z: limits.worldTotal 64 (was 40; limits._worldTotal says why), and the ground sound thread's land block of 19:46Z: land.bodyCues.field_gun_breech null (no recording; the gun's case clangs anyway). Land block updated 21 Nov 20:12Z by the ground sound thread: land.bodyCues.medic_tend null (the medic's cue, silent until a real take passes) and land.armourStrikes (rounds on a tank's armour; its list is empty, so nothing changes until round eight's steel hits pass). 21 Nov 20:50Z: air.closeView.masterDb 7.5 (was 3.1): the game's chase view measured 4.4 dB under the -12 LUFS the close view was set for (air.closeView._masterDb says how). Land block updated 21 Nov 20:54Z by the ground sound thread: five silent land.bodyCues for the GI's bazooka team and the loader's carbine (bazooka_fire, rocket_loaded, wire_contact, helmet_tap, rifle_shot), each with a note, so no clip cue asks for a missing take; no sound changes. 21 Nov 21:50Z: the master limiter's attack near instant (buses.master.limiterAttackMs 0.02, limiterLookAheadMs 1, limiterAnalogDetector false, limiterReleaseMs 500 (was 120)): with a 1 ms attack the Mac's runs still reached 0.00 dBFS (buses.master._detector says why). Land block updated 21 Nov 21:51Z by the ground sound thread (round eight, Brian's stamps of 21:41Z): crack_woods_01 joins land.cracks.single; ricochet_whine_01..03 join land.groundStrikes.whines; land.armourStrikes.smallArms = steel_hit_01..03; new land.landings (mortar_impact_01/02 middle, mortar_impact_far_01/02 far) and land.engines (Panzer IV and Tiger driving on panzer_engine_loop); incoming_shell and ricochet Cut, so land.incoming stays empty (land.incoming._round8). 21 Nov 22:05Z: round seven stamped by Brian (21:40Z): b17_interior_loop Good, so riding a B-17 plays it open at +2 dB in place of its drone through the filter (air.closeView.bed.interior, interiorGainDb); plane_hit and hmg_burst_long Cut (air.roundsHit stays silent). Land block updated 21 Nov 23:40Z by the ground sound thread: five silent land.bodyCues for the GI thread's new clips (radio_squelch, radio_talk; thompson_mag_out, thompson_mag_in, thompson_cock), each null with a note, so no clip cue asks for a missing take; no sound changes. 22 Nov 04:20Z: round nine stamped by Brian (03:40Z): real B-17s replace the studio library's. Riding a B-17 plays one of two recordings from inside one (air.closeView.bed.interior B-17, a list now, one per ridden bomber), and a B-17 formation's engines are three B-17s filmed flying over (air.loops B-17); levels unchanged (-20.0 LUFS). Land block updated 22 Nov 05:40Z by the ground sound thread: land.tankMg (a tank's machine guns by army, and the Sherman's roof .50 on gunner_burst), and land.mgClose.parts gains gunner_burst and maxim_burst (_parts says why); no take from outside the approved pack.",
++  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded). Land block updated 21 Nov 19:39Z by the ground sound thread: land.smgCue.leaderRoles (officer, leader), and the Garand reload and the leader's Thompson switch on by themselves at the first clip cue (notes only; the code default matches). The master limiter's detector (21 Nov 19:50Z): digital, 5 ms look-ahead (buses.master._detector); no number changed. 21 Nov 19:50Z: limits.worldTotal 64 (was 40; limits._worldTotal says why), and the ground sound thread's land block of 19:46Z: land.bodyCues.field_gun_breech null (no recording; the gun's case clangs anyway). Land block updated 21 Nov 20:12Z by the ground sound thread: land.bodyCues.medic_tend null (the medic's cue, silent until a real take passes) and land.armourStrikes (rounds on a tank's armour; its list is empty, so nothing changes until round eight's steel hits pass). 21 Nov 20:50Z: air.closeView.masterDb 7.5 (was 3.1): the game's chase view measured 4.4 dB under the -12 LUFS the close view was set for (air.closeView._masterDb says how). Land block updated 21 Nov 20:54Z by the ground sound thread: five silent land.bodyCues for the GI's bazooka team and the loader's carbine (bazooka_fire, rocket_loaded, wire_contact, helmet_tap, rifle_shot), each with a note, so no clip cue asks for a missing take; no sound changes. 21 Nov 21:50Z: the master limiter's attack near instant (buses.master.limiterAttackMs 0.02, limiterLookAheadMs 1, limiterAnalogDetector false, limiterReleaseMs 500 (was 120)): with a 1 ms attack the Mac's runs still reached 0.00 dBFS (buses.master._detector says why). Land block updated 21 Nov 21:51Z by the ground sound thread (round eight, Brian's stamps of 21:41Z): crack_woods_01 joins land.cracks.single; ricochet_whine_01..03 join land.groundStrikes.whines; land.armourStrikes.smallArms = steel_hit_01..03; new land.landings (mortar_impact_01/02 middle, mortar_impact_far_01/02 far) and land.engines (Panzer IV and Tiger driving on panzer_engine_loop); incoming_shell and ricochet Cut, so land.incoming stays empty (land.incoming._round8). 21 Nov 22:05Z: round seven stamped by Brian (21:40Z): b17_interior_loop Good, so riding a B-17 plays it open at +2 dB in place of its drone through the filter (air.closeView.bed.interior, interiorGainDb); plane_hit and hmg_burst_long Cut (air.roundsHit stays silent). Land block updated 21 Nov 23:40Z by the ground sound thread: five silent land.bodyCues for the GI thread's new clips (radio_squelch, radio_talk; thompson_mag_out, thompson_mag_in, thompson_cock), each null with a note, so no clip cue asks for a missing take; no sound changes. 22 Nov 04:20Z: round nine stamped by Brian (03:40Z): real B-17s replace the studio library's. Riding a B-17 plays one of two recordings from inside one (air.closeView.bed.interior B-17, a list now, one per ridden bomber), and a B-17 formation's engines are three B-17s filmed flying over (air.loops B-17); levels unchanged (-20.0 LUFS). Land block updated 22 Nov 05:40Z by the ground sound thread: land.tankMg (a tank's machine guns by army, and the Sherman's roof .50 on gunner_burst), and land.mgClose.parts gains gunner_burst and maxim_burst (_parts says why); no take from outside the approved pack. 22 Nov (patch 0021, the Bremen r2d film): the close view's guns stand out of the ridden engine: air.closeView.masterDb 7.5 -> 9.5 and bed.gainDb 6 -> 1 (the notes say why); a gunner's twin mount is heard as one take (gunsByCalibre._wing); notes corrected where the code differs (masterDbByCameraDistance, closeView._notBuilt).",
+   "made": "2026-11-21",
+   "files": "/mnt/project-files/sound/battle-pack/wav/",
+   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
+@@ -667,7 +667,7 @@
+         "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
+       },
+       "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)",
+-      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. Turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
++      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. A gunner's twin mount (two guns side by side in one turret or window, fired together) is one take too, at the square root of how many fire (22 Nov, patch 0021: a B-17's twin turrets laid two takes in step, +6 dB; the Bremen r2d film's 10 s wall at 116-127 s). Other turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
+     },
+     "engineLost": {
+       "take": null,
+@@ -711,14 +711,15 @@
+     "passesPerGroup": 3,
+     "_passesPerGroup": "How many pass takes one fighter group may play at once. The sound thread took 3 in its review (19 Nov 07:10Z): 40 m behind it catches 5 of 7 passes, against 4 at 2 and 3 at 1.",
+     "masterDbByCameraDistance": [[300, 0], [1500, 8], [2600, 12]],
+-    "_masterDbByCameraDistance": "While an air battle plays, added to the world buses (bed, loops, close, big; not music) on top of the battle's own master gain and before the master limiter, by the camera's distance from the point it looks at (metres, straight line, linear between rows, held at the ends), slewed over about 1 s. Nothing up to 300 m, then evenly to +8 dB at 1,500 m and +12 dB at 2,600 m, where the air battle's camera starts (it zooms from 120 m to 20 km), and held beyond. So the camera's first view is as loud as the 1,500 m view, and pulling back to 20 km loses about 3 LU. The close view uses closeView.masterDb instead.",
++    "_masterDbByCameraDistance": "While an air battle plays, added to the world buses (bed, loops, close, big; not music) on top of the battle's own master gain and before the master limiter, by the camera's distance from the middle of the nearest flying group (as built: the code measures that, not the point the camera looks at) (metres, straight line, linear between rows, held at the ends), slewed with a 0.33 s time constant. Nothing up to 300 m, then evenly to +8 dB at 1,500 m and +12 dB at 2,600 m, where the air battle's camera starts (it zooms from 120 m to 20 km), and held beyond. So the camera's first view is as loud as the 1,500 m view, and pulling back to 20 km loses about 3 LU. The close view uses closeView.masterDb instead.",
+     "closeView": {
+       "status": "BUILT for release 2 (21 Nov, the sound director's air sound patch to the 3D game): masterDb over the whole battle; the ridden plane's own engines as the bed at the eye; its own guns at the eye, never dropped; rounds cracking past; the master limiter. Waits for the Mac build and Brian's ear",
+       "listener": "at the camera, facing where it looks (in place of the ground point raised by heightFactor)",
+       "bed": {
+         "take": "the ridden plane's own air.loops entry",
+         "placed": false,
+-        "gainDb": 6,
++        "gainDb": 1,
++        "_gainDb": "the ridden plane's engines over the battle's master, unplaced. 1 from 22 Nov (patch 0021; was 6): the engine under the guns, 3 dB under the Bremen r2d film's level once masterDb's +2 is counted (see _masterDb). It reaches every ridden fighter, and every ridden bomber with no interior take (through lpfHz), which go 3 dB down too; a B-17 with its interior takes uses interiorGainDb and rises 2 dB with the master.",
+         "lpfHz": 200,
+         "_why": "the ridden plane's engines as the bed under everything; unplaced, low-passed as heard through the airframe, ducked as a bed by a big moment (big.duckDb.bed)",
+         "_lpfHz": "a bomber's engines only, heard through its airframe. A fighter's chase view is behind it in the open air: its engine is heard unfiltered",
+@@ -756,10 +757,11 @@
+         },
+         "_how": "one compressor on the world buses (bed, loops, close, big; not music), after their gains and the big moments' duck, before closeView.masterDb and the master limiter (buses.master.limiterCeilingDb, -1.5 dBFS). kneeDb is the knee's whole width (the renders used ffmpeg's acompressor with knee=2.82, a factor, which is 9 dB)."
+       },
+-      "masterDb": 7.5,
+-      "_masterDb": "a fixed gain over the battle's master in the close view, in place of masterDbByCameraDistance. A game sets a gain; it does not measure a mix twice. 7.5 from 21 Nov 20:50Z (was 3.1, chosen from the renders, where a B-17's close view measured -11.7 LUFS). The game's first chase-view film (Bremen, behind a Fw 190, patch one only) measured -16.4 LUFS before the builder's -1 dB, -19 LUFS between attacks, against -12.9 LUFS for the ride Brian asked to be louder and -11.9 for his waist-gunner clip: +4.4 dB puts it at about -12. It goes with part two, whose one-take-per-wing guns lower a Fw 190's own bursts about 6 dB, and needs the master limiter acting in what the film records (that film's peaks passed the ceiling 28 times, for up to 96 ms). With the bed's +6 dB the ridden plane's engine asks +13.5 dB, and Unreal holds any one sound at +12 dB at most.",
++      "masterDb": 9.5,
++      "_masterDb": "a fixed gain over the battle's master in the close view, in place of masterDbByCameraDistance. A game sets a gain; it does not measure a mix twice. 9.5 from 22 Nov (patch 0021; was 7.5 from 21 Nov 20:50Z, 3.1 before). The Bremen r2d film (22 Nov, 0001-0018) measured the chase view (behind a Fw 190) at -13.7 LUFS, 2.7 LU over the first chase film's -16.4, but the bursts had not risen: between attacks +4.4 dB, bursts (P95 of 400 ms loudness) +0.1, so they stood 5.1 LU over the bed against 9.4. In the chase the ridden engine is 70% of the sound between attacks and 29% of a burst, and every burst already reaches the limiter's ceiling. So the master goes up 2 dB and the bed down 5 (bed.gainDb 6 -> 1): the engine 3 dB under the film, everything else 2 dB over. Re-mixed from the film through the game's limiter: chase -14.1 LUFS, bursts 7.2 LU over the bed, the limiter more than 0.5 dB down 3.5% of the time. Louder bursts are not to be had: the master's extra 2 dB brings the bursts about 0.5 dB. What the film showed of the gain chain (22 Nov): no +12 dB per-sound limit bites (a big-moment duck takes the ridden engine down the full 6 dB from an ask of +13.5); every unplaced sound comes out about 6 dB under what the code asks (an engine-wide headroom stage, not identified), and a mono take at the eye is split 0.5 a channel, so it sits about 6 dB under the one stereo take (air_battle_far_loop) for the same ask. The ridden engine plays at about -15.6 LUFS at +13.5.",
+       "width": 1.0,
+-      "_width": "every sound panned at this share of its true angle. The close view's camera is outside the plane, so nothing smears where a sound is, as a fuselage would for an ear inside: the full angle. Measured left/right correlation: 0.99 at the inside sketch's 0.4 (v2), 0.96 at 0.6, 0.93 at 0.8, 0.89 at 1.0 (clip 2: 0.90)"
++      "_width": "every sound panned at this share of its true angle. The close view's camera is outside the plane, so nothing smears where a sound is, as a fuselage would for an ear inside: the full angle. Measured left/right correlation: 0.99 at the inside sketch's 0.4 (v2), 0.96 at 0.6, 0.93 at 0.8, 0.89 at 1.0 (clip 2: 0.90)",
++      "_notBuilt": "read by no code (22 Nov audit), so changing them changes nothing: ownGuns.gainDb, ownGuns.dry, ownGuns.exemptFrom, ownGuns.level (the ridden plane's own guns play at the eye at the square root of their barrels times the master, re-laid no sooner than 0.3 s or sameTakeGap); bus.compressor (no compressor is built: the only dynamics is the master limiter); width; bed.placed and bed.take (as their text says, built in code)."
+     },
+     "loopsFamily": "air_far",
+     "_loopsFamily": "Every formation engine loop (air.loops: bomber drones, stragglers, fighter groups) uses this distance family at every distance, with no switch (the sound thread's item 4).",
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+index f2af91e9..16f42cb5 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -3805,6 +3805,74 @@ void AAirBattle::PlayEffects()
+ 			++WingBarrels.FindOrAdd(WingKey(E.Key, E.What));
+ 		}
+ 	}
++	// A gunner's twin mount (a turret's two guns side by side in one opening, laid and fired together) is one take too,
++	// by the same rule: two takes laid on the same frame added in step, +6 dB and locked (the Bremen r2d film, 22 Nov:
++	// a B-17 box's gunners at the ridden Fw 190 held the limiter down for 10 s, twin lays 1-3 dB over what one take can
++	// reach). The mount is found by where its guns are, not by how the show numbers them: guns of one aircraft, of one
++	// kind and mount, within a metre of each other this frame. It is heard under its lowest gun's key, moved out of the
++	// guns' own range (MountKey), or under the key it is already heard under, at the square root of how many of the guns
++	// heard under that key fire this frame.
++	auto MountKey = [](int32 Key) { return -(1 << 30) - Key; };
++	TMap<int32, int32> MountOf;
++	TMap<int32, int32> MountGuns;
++	{
++		TArray<const AirShow::Fx*> Loose;
++		for (const AirShow::Fx& E : S.Show.Effects)
++		{
++			if (E.Kind == AirShow::FxKind::Gun && E.Text != "fixed" && !ShipGuns::IsStream(E.Key))
++			{
++				Loose.Add(&E);
++			}
++		}
++		TArray<int32> Lowest;
++		Lowest.SetNum(Loose.Num());
++		for (int32 I = 0; I < Loose.Num(); ++I)
++		{
++			Lowest[I] = I;
++			const AirShow::Fx& A = *Loose[I];
++			for (int32 J = 0; J < I; ++J)
++			{
++				const AirShow::Fx& B = *Loose[J];
++				const double Dx = A.At.X - B.At.X, Dy = A.At.Y - B.At.Y, Dz = A.At.Z - B.At.Z;
++				if (A.Key / 64 == B.Key / 64 && A.What == B.What && A.Text == B.Text && Dx * Dx + Dy * Dy + Dz * Dz < 1.0)
++				{
++					Lowest[I] = Lowest[J];
++					break;
++				}
++			}
++		}
++		TMap<int32, int32> LowestKey;
++		for (int32 I = 0; I < Loose.Num(); ++I)
++		{
++			if (int32* Low = LowestKey.Find(Lowest[I]))
++			{
++				*Low = FMath::Min(*Low, Loose[I]->Key);
++			}
++			else
++			{
++				LowestKey.Add(Lowest[I], Loose[I]->Key);
++			}
++		}
++		// (a mount one of whose guns is already heard keeps that gun's key, so guns that come in on different frames,
++		// as when the show's nearest-guns cut drops one for a frame, still make one take)
++		TMap<int32, int32> HeardUnder;
++		for (int32 I = 0; I < Loose.Num(); ++I)
++		{
++			if (const int32* Was = WingOf.Find(Loose[I]->Key))
++			{
++				if (!HeardUnder.Contains(Lowest[I]))
++				{
++					HeardUnder.Add(Lowest[I], *Was);
++				}
++			}
++		}
++		for (int32 I = 0; I < Loose.Num(); ++I)
++		{
++			const int32 Shared = HeardUnder.Contains(Lowest[I]) ? HeardUnder.FindRef(Lowest[I]) : MountKey(LowestKey.FindRef(Lowest[I]));
++			MountOf.Add(Loose[I]->Key, Shared);
++			++MountGuns.FindOrAdd(Shared);
++		}
++	}
+ 	for (const AirShow::Fx& E : S.Show.Effects)
+ 	{
+ 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
+@@ -3837,8 +3905,13 @@ void AAirBattle::PlayEffects()
+ 			// its mount fires, and left there, as the ship hardly moves while a take plays)
+ 			const bool bShip = ShipGuns::IsStream(E.Key);
+ 			const bool bWing = !bShip && E.Text == "fixed";
+-			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What) : E.Key;
+-			if (bWing && !WingOf.Contains(E.Key))
++			// (a gunner's mount: under the key it was first heard under while it fires, so its take is cut only with
++			// the last of its guns, as a wing's)
++			const bool bMount = !bShip && !bWing;
++			const int32* HeardAs = bMount ? WingOf.Find(E.Key) : nullptr;
++			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What)
++				: HeardAs ? *HeardAs : MountOf.Contains(E.Key) ? MountOf.FindRef(E.Key) : E.Key;
++			if ((bWing || bMount) && !WingOf.Contains(E.Key))
+ 			{
+ 				WingOf.Add(E.Key, SoundKey);
+ 				++WingLive.FindOrAdd(SoundKey);
+@@ -3892,7 +3965,8 @@ void AAirBattle::PlayEffects()
+ 				GunHeardAt.Add(SoundKey, RealT + Again);
+ 				// (a wing's barrels as their power: the square root of how many fire now. The engine's voices: guns near
+ 				// the eye before the far ones, so a near gun is never the one dropped; given before the take begins)
+-				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey)))) : 1.0f;
++				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey))))
++					: bMount ? FMath::Sqrt(static_cast<float>(FMath::Max(1, MountGuns.FindRef(SoundKey)))) : 1.0f;
+ 				const float Voice = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
+ 				UAudioComponent* Played = nullptr;
+ 				if (Recording)
+@@ -3982,7 +4056,8 @@ void AAirBattle::PlayEffects()
+ 				Kit->AirGunStop(E.Key);
+ 			}
+ 			GunHeardAt.Remove(E.Key);
+-			// (a barrel of a wing: the wing's take goes on while any of its barrels still fires, and stops with the last)
++			// (a barrel of a wing, or a gun of a gunner's mount: the take goes on while any of its guns still fires, and
++			// stops with the last)
+ 			int32 StopKey = E.Key;
+ 			int32 Wing = 0;
+ 			if (WingOf.RemoveAndCopyValue(E.Key, Wing))
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+index 4a968f09..91528e45 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+@@ -310,8 +310,9 @@ private:
+ 	 * converging guns crack as one), and when each crack take last began (never again inside air.sameTakeGap). */
+ 	TMap<int32, double> CrackHeardAt;
+ 	TMap<FName, double> TakeStartedAt;
+-	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key): each barrel's wing, and how many
+-	 * of a wing's barrels still fire, so its take is cut only when the last of them stops. */
++	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key), and so are a gunner's mount's
++	 * guns (its mount key): each gun's wing or mount, and how many of its guns still fire, so its take is cut only when
++	 * the last of them stops. */
+ 	TMap<int32, int32> WingOf;
+ 	TMap<int32, int32> WingLive;
+ 	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
+-- 
+2.43.0
+

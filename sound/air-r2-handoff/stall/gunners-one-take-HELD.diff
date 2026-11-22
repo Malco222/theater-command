@@ -1,0 +1,53 @@
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -4258,13 +4258,16 @@
+ 	// A gunner's twin mount (a turret's two guns side by side in one opening, laid and fired together) is one take too,
+ 	// by the same rule: two takes laid on the same frame added in step, +6 dB and locked (the Bremen r2d film, 22 Nov:
+ 	// a B-17 box's gunners at the ridden Fw 190 held the limiter down for 10 s, twin lays 1-3 dB over what one take can
+-	// reach). The mount is found by where its guns are, not by how the show numbers them: guns of one aircraft, of one
+-	// kind and mount, within a metre of each other this frame. It is heard under its lowest gun's key, moved out of the
+-	// guns' own range (MountKey), or under the key it is already heard under, at the square root of how many of the guns
+-	// heard under that key fire this frame.
++	// reach). And so are all of one aircraft's gunners' guns of one kind (turret and hand-held alike): each mount's take
++	// laid on its own was one more voice begun every part (0.83 s) for every mount firing. It is heard under its lowest
++	// gun's key, moved out of the guns' own range (MountKey), or under the key it is already heard under, at the square
++	// root of how many of the guns heard under that key fire this frame.
+ 	auto MountKey = [](int32 Key) { return -(1 << 30) - Key; };
+ 	TMap<int32, int32> MountOf;
+ 	TMap<int32, int32> MountGuns;
++	// (a playing take is carried by the first of its guns the show sends each frame, the nearest the eye or the gunner
++	// whose burst strikes, not by each in turn to the last: one aircraft's gunners stand up to 22 m apart on a B-17)
++	TSet<int32> TakeMoved;
+ 	{
+ 		TArray<const AirShow::Fx*> Loose;
+ 		for (const AirShow::Fx& E : S.Show.Effects)
+@@ -4283,8 +4286,7 @@
+ 			for (int32 J = 0; J < I; ++J)
+ 			{
+ 				const AirShow::Fx& B = *Loose[J];
+-				const double Dx = A.At.X - B.At.X, Dy = A.At.Y - B.At.Y, Dz = A.At.Z - B.At.Z;
+-				if (A.Key / 64 == B.Key / 64 && A.What == B.What && A.Text == B.Text && Dx * Dx + Dy * Dy + Dz * Dz < 1.0)
++				if (A.Key / 64 == B.Key / 64 && A.What == B.What)
+ 				{
+ 					Lowest[I] = Lowest[J];
+ 					break;
+@@ -4443,6 +4445,7 @@
+ 				}
+ 				Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
+ 				GunHeardAt.Add(SoundKey, RealT + Again);
++				TakeMoved.Add(SoundKey);
+ 				// (a wing's barrels as their power: the square root of how many fire now. The engine's voices: guns near
+ 				// the eye before the far ones, so a near gun is never the one dropped; given before the take begins)
+ 				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey))))
+@@ -4478,9 +4481,10 @@
+ 					++GunTakesLost;
+ 				}
+ 			}
+-			else if (!bOwnGuns && !bShip)
++			else if (!bOwnGuns && !bShip && !TakeMoved.Contains(SoundKey))
+ 			{
+ 				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one)
++				TakeMoved.Add(SoundKey);
+ 				TArray<TWeakObjectPtr<UAudioComponent>> Playing;
+ 				GunTakes.MultiFind(SoundKey, Playing);
+ 				for (const TWeakObjectPtr<UAudioComponent>& Take_ : Playing)

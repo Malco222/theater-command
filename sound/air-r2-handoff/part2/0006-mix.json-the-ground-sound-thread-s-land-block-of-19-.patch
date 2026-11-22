@@ -1,0 +1,63 @@
+From 5c7daec6c68534c18b93160058341274370825d9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 21 Nov 2026 19:38:38 +0000
+Subject: [PATCH] mix.json: the ground sound thread's land block of 19:36Z
+ (Garand reload from clips, the squad leader's Thompson cue)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../TheaterCommand/Content/Data/Sound/mix.json  | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Content/Data/Sound/mix.json b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+index e75124bf..be4c67ef 100644
+--- a/unreal/TheaterCommand/Content/Data/Sound/mix.json
++++ b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+@@ -1,7 +1,7 @@
+ {
+   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
+   "version": 5,
+-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level).",
++  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded).",
+   "made": "2026-11-21",
+   "files": "/mnt/project-files/sound/battle-pack/wav/",
+   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
+@@ -841,14 +841,16 @@
+       "endFade": 0.04
+     },
+     "garand": {
+-      "_how": "An American rifleman's M1 Garand: after every clipEvery-th round, within `within` metres of the ear, the empty clip pings out pingAfter s after the shot, and reloadAfterPing s later the new clip is pressed in and the bolt slams home. He keeps aiming through it (the soldier file has no reload clip yet).",
++      "_how": "An American rifleman's M1 Garand: after every clipEvery-th round, within `within` metres of the ear, the empty clip pings out pingAfter s after the shot. The reload is heard from the GI's reload clip (reloadFromClips): its \"garand_reload\" cue (0.95 s into the clip, as the new clip goes in) plays reloadPieces of the reload take, each [from, cut, delay after the cue]: the clip pressed in at once, and the operating rod slamming home 0.33 s after the cue (the recording has the two 2.5 s apart; the slam's onset is 2.744 s into it). With reloadFromClips false the old way returns: the reload reloadAfterPing s after the ping.",
+       "clipEvery": 8,
+       "ping": "garand_clip_ping",
+       "pingAfter": 0.12,
+       "reload": "garand_reload",
+       "reloadAfterPing": 0.45,
+       "within": 60,
+-      "_why": "the recording's riflemen fire 3.4 s apart or more nine times in ten (p10 3.4 s, median 5.4 s), so the 3.2 s reload sits in the gap"
++      "_why": "the recording's riflemen fire 3.4 s apart or more nine times in ten (p10 3.4 s, median 5.4 s), so the 3.2 s reload sits in the gap",
++      "reloadFromClips": true,
++      "reloadPieces": [[0.14, 0.3, 0.0], [2.66, 0.45, 0.246]]
+     },
+     "shouts": {
+       "_how": "In the thick of it (the meter at meterFrom or more) a man of a side firing within `within` metres of the ear calls out, one of his army's byNation.orders less `exclude`, from where he fired: every gapAtLow seconds (a random time in the range) as the meter reaches meterFrom, down to gapAtFull at 1. An army with fewer than fewLines lines waits at least fewLinesGap (two German lines heard every 5 s would be heard as a loop). A man down within onFallWithin of the ear: onFallChance that a comrade calls out 0.6 to 1.2 s later. One voice a side at a time, never cut off (limits.voicesPerSide). An army with no real voices stays silent.",
+@@ -879,6 +881,15 @@
+       "_how": "A soldier clip's cue and the take it plays; null plays nothing.",
+       "rifle_drop": null,
+       "_rifle_drop": "german_drop_weapon is a German voice calling 'Drop the gun!' (Freesound 443444), for a surrender: a dying man's rifle falling is not a voice. Silent until a real take of a rifle falling is found."
++    },
++    "smgCue": {
++      "_how": "The squad leader's Thompson (soldier_USA_nco): his fire clip calls `cue` on its first round of a burst of `rounds` (the soldier file: 4 at about 700 a minute). Heard as one take from byNation.smg for his army (the MP 38 takes stand in until a real Thompson is recorded, about 620 a minute), cut at the measured start of round rounds+1 (onsets, seconds into each take) less a fade of half a round's gap, so every round he fires is heard and no more. A take with no more rounds than that plays whole.",
++      "cue": "thompson_burst",
++      "rounds": 4,
++      "onsets": {
++        "mp40_burst_01": [0.006, 0.09, 0.193, 0.292, 0.382, 0.464],
++        "mp40_burst_02": [0.006, 0.104, 0.196, 0.315]
++      }
+     }
+   }
+ }
+-- 
+2.43.0
+
