@@ -1023,14 +1023,14 @@ namespace
 			CHECK(Near(Figures[K]->At.Right(), OX + 161.0 * Px) && Near(Figures[K]->At.Centre().Y, Mid));
 		}
 		CHECK(Flags.size() == 3 && Flags[0]->Key == "UK" && Flags[1]->Key == "GER_PLAIN" && Flags[2]->Kind == EDraw::Box);
-		// "Others ?": a flag-shaped grey silhouette (call 3), the art director's desk-500 at 50%, filled, no white, no outline.
+		// "Others ?": a flag-shaped grey silhouette (call 3), the kit's --line at 50% (Kit::Line), filled, no white, no outline.
 		if (Flags.size() == 3)
 		{
 			const FDraw& Blank = *Flags[2];
-			CHECK(Blank.Fill.Srgb == Kit::Desk500 && Near(Blank.Fill.A, 0.5, 1e-6) && Near(Blank.EdgeW, 0.0) && Near(Blank.Edge.A, 0.0) && Near(Blank.Radius, 0.0));
+			CHECK(Blank.Fill.Srgb == Kit::Line && Near(Blank.Fill.A, 0.5, 1e-6) && Near(Blank.EdgeW, 0.0) && Near(Blank.Edge.A, 0.0) && Near(Blank.Radius, 0.0));
 			CHECK(Blank.Fill.Srgb != 0xFFFFFF && Blank.Fill.Srgb != Kit::Paper100 && Blank.Fill.A > Kit::Hollow);
 			// (and the kit's dark ramp it stands on: past desk-600 3D3125, darker than paper, grey-brown)
-			CHECK((Kit::Desk500 >> 16) > 0x3D && (Kit::Desk500 >> 16) < 0x80 && Kit::Desk500 == 0x4B3D2D);
+			CHECK((Kit::Line >> 16) > 0x3D && (Kit::Line >> 16) < 0x80 && Kit::Line == 0x4B3D2D);
 		}
 		CHECK(Figures.size() == 3 && Figures[0]->Text == "150" && Figures[1]->Text == "200" && Figures[2]->Text == "?"); // (money as the game shows it: points x 100)
 		CHECK(Figures.size() == 3 && Figures[0]->Fill.Srgb == Kit::Ink900 && Figures[2]->Fill.Srgb == 0x7A6A52);

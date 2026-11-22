@@ -1067,7 +1067,7 @@ namespace Bargains
 			{
 				// (no flag: whose bids they are is part of the sealed bid. A flag-shaped grey silhouette keeps the column, call
 				// 3: filled, with no white and no outline, so that it never reads as a box to tick)
-				D.push_back(BoxDraw(Box(0.0, Mid - Card::FlagH * 0.5, Card::FlagW, Card::FlagH), FInk{ Kit::Desk500, Kit::OthersFlagA }, FInk{ Kit::Desk500, 0.0f }, 0.0, 0.0));
+				D.push_back(BoxDraw(Box(0.0, Mid - Card::FlagH * 0.5, Card::FlagW, Card::FlagH), FInk{ Kit::Line, Kit::OthersFlagA }, FInk{ Kit::Line, 0.0f }, 0.0, 0.0));
 			}
 			else
 			{

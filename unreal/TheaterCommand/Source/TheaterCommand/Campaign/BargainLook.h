@@ -74,12 +74,12 @@ namespace Bargains
 		inline constexpr uint32_t Keyline = 0x3F3527;
 		inline constexpr float KeylineA = 0.9f;
 		/**
-		 * The "Others ?" row's blank flag (call 3): a flag-shaped grey silhouette, no white fill and no outline, so that
-		 * it never reads as a box to tick. The art director named "desk-500 at about 50%"; the kit (tokens.json) has no
-		 * desk-500: its dark ramp runs desk-950 to desk-600 (3D3125) and goes on with line (4B3D2D) and track (5D4C37).
-		 * This is the ramp's next step after desk-600, line's 4B3D2D, at 50%.
+		 * The kit's --line brown, 4B3D2D: the "Others ?" row's blank flag (call 3) at 50%, a flag-shaped grey silhouette,
+		 * no white fill and no outline, so that it never reads as a box to tick. The kit's desk ramp runs desk-950 to
+		 * desk-600 (3D3125) and goes on with line and track (5D4C37); it has no desk-500, so the constant is named for the
+		 * token it is (the UI director's mend 1).
 		 */
-		inline constexpr uint32_t Desk500 = 0x4B3D2D;
+		inline constexpr uint32_t Line = 0x4B3D2D;
 		inline constexpr float OthersFlagA = 0.5f;
 	}
 
