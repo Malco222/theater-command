@@ -44,6 +44,11 @@ class USceneComponent;
  * for the tow 1.9 m). A body the scene may hide while she stands (LandKit::MayHide: a manned roof gun's cradle) is never
  * merged and keeps its own meshes, far and near, as before.
  *
+ * Her commander's lid: a tank whose commander's lid stands half open or more (Vehicle::HatchOpen; she is unbuttoned, or
+ * a wreck whose crew has bailed out) is drawn with the lid-up copy of the piece that holds it (LandKit::FarSplit::Open:
+ * her open_up clip played to its end) in that piece's stead, so past the hand-over her lid stands up and her commander
+ * stands clear of it, not through a shut lid. A third instanced mesh a model, no more instances a vehicle shown.
+ *
  * "-TheaterLandNoCrowd" turns TK1 off (every body drawn by its own meshes, as before: the A/B). "-TheaterLandLinksAlways"
  * turns TK3 off (every near moving tank's links posed every frame, as before).
  */
@@ -94,17 +99,21 @@ public:
 	bool LinksDue(int32 Vehicle, bool bRendered);
 
 private:
+	/** The pieces drawn: the hull's, the turret's, and the lid-up copy of whichever of them holds the commander's lid. */
+	static constexpr int32 PieceCount = 3;
+	static constexpr int32 LidUp = 2;
+
 	/** One model's pieces: their instanced meshes, the instances given back, how many are shown. */
 	struct FKind
 	{
 		const LandKit::Model* Model = nullptr;
 		FString Name, Nation;
 		LandKit::FarSplit Split;
-		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies[2];
-		TArray<int32> Free[2];
-		int32 Live[2] = { 0, 0 };
-		bool bShownNow[2] = { false, false };
-		bool bDirty[2] = { false, false };
+		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies[PieceCount];
+		TArray<int32> Free[PieceCount];
+		int32 Live[PieceCount] = { 0, 0, 0 };
+		bool bShownNow[PieceCount] = { false, false, false };
+		bool bDirty[PieceCount] = { false, false, false };
 		bool bKeepsFar = false;
 		bool bMade = false;
 	};
@@ -112,16 +121,21 @@ private:
 	struct FOne
 	{
 		int32 Kind = -1;
-		int32 Slot[2] = { -1, -1 };
-		bool bOn[2] = { false, false };
-		FVector At[2] = { FVector::ZeroVector, FVector::ZeroVector };
-		FQuat Q[2] = { FQuat::Identity, FQuat::Identity };
+		int32 Slot[PieceCount] = { -1, -1, -1 };
+		bool bOn[PieceCount] = { false, false, false };
+		FVector At[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat Q[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
 		float Soot = -1.0f;
 		bool bHeld = false;
 		bool bSeen = true;
 	};
 
 	int32 KindFor(const LandKit::Model& Model);
+	/** Piece Piece of a model's split: the hull's, the turret's, or the lid-up copy. */
+	static const LandKit::FarPiece& SplitPiece(const LandKit::FarSplit& Split, int32 Piece)
+	{
+		return Piece == LidUp ? Split.Open : Split.Pieces[Piece];
+	}
 	UMaterialInterface* InkFor(const LandKit::Model& Model);
 	void Park(FOne& One, int32 Piece, const FVector& Where);
 	void Release(FOne& One);

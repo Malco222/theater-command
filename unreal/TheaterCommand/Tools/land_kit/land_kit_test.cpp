@@ -153,8 +153,9 @@ namespace
 	}
 
 	/** The pieces of M checked against her bodies at a pinned pose: the same triangles exactly once each, FarOff nothing
-	 * there; and every far triangle of hers in a piece, or in a body kept out. Why: the first fault. */
-	bool CheckPieces(const Model& M, const FarSplit& S, const Vehicle::Pin& Pin, const GroundFn& Ground, std::string& Why)
+	 * there; and every far triangle of hers in a piece, or in a body kept out. bLidUp: the lid-up piece (FarSplit::Open)
+	 * drawn in its piece's stead, as the scene draws it while her commander's lid is open. Why: the first fault. */
+	bool CheckPieces(const Model& M, const FarSplit& S, const Vehicle::Pin& Pin, const GroundFn& Ground, std::string& Why, bool bLidUp = false)
 	{
 		Vehicle V;
 		V.PinPose(M, Pin, Ground);
@@ -182,8 +183,9 @@ namespace
 			Why = std::to_string(FarAll) + " far triangles, " + std::to_string(FarIn) + " in the pieces and " + std::to_string(FarKept) + " kept out";
 			return false;
 		}
-		for (const FarPiece& Piece : S.Pieces)
+		for (int Which = 0; Which < 2; ++Which)
 		{
+			const FarPiece& Piece = bLidUp && Which == S.OpenOf ? S.Open : S.Pieces[Which];
 			if (Piece.Empty())
 			{
 				continue;
@@ -346,6 +348,32 @@ int main(int argc, char** argv)
 					}
 				}
 			}
+			// TK1 (the commander's lid): the lid-up piece against her bodies with her open_up clip played to its end, on
+			// the slope with her turret trained; and her lid carried well clear of where the shut piece has it.
+			double LidMoved = 0.0;
+			if (bPieces && Split.OpenOf >= 0)
+			{
+				Vehicle::Pin Unbuttoned = Trained;
+				Unbuttoned.bOpenUp = true;
+				bPieces = CheckPieces(M, Split, Unbuttoned, Slope, Why, true);
+				const Mesh& ShutMesh = Split.Pieces[Split.OpenOf].Merged;
+				const Mesh& OpenMesh = Split.Open.Merged;
+				if (bPieces && (OpenMesh.Points.size() != ShutMesh.Points.size() || OpenMesh.Triangles != ShutMesh.Triangles || OpenMesh.Colours != ShutMesh.Colours))
+				{
+					bPieces = false;
+					Why = "the lid-up piece is not its piece's points and triangles";
+				}
+				for (size_t PK = 0; bPieces && PK + 2 < OpenMesh.Points.size(); PK += 3)
+				{
+					const V3 Gap(OpenMesh.Points[PK] - ShutMesh.Points[PK], OpenMesh.Points[PK + 1] - ShutMesh.Points[PK + 1], OpenMesh.Points[PK + 2] - ShutMesh.Points[PK + 2]);
+					LidMoved = std::max(LidMoved, std::sqrt(Gap.Dot(Gap)));
+				}
+				if (bPieces && LidMoved < 0.1)
+				{
+					bPieces = false;
+					Why = "the lid-up piece's lid moved only " + std::to_string(LidMoved) + " m";
+				}
+			}
 			size_t Stand = 0, Out = 0;
 			for (size_t B = 0; B < M.Bodies.size(); ++B)
 			{
@@ -357,6 +385,11 @@ int main(int argc, char** argv)
 			std::printf("    far pieces (TK1): hull %5zu triangles from %2zu bodies, turret %4zu from %2zu; %zu standing in at their near level, %zu kept out; cut in %.1f ms: %s\n",
 				Split.Pieces[0].Merged.Triangles.size() / 3, Split.Pieces[0].Bodies.size(), Split.Pieces[1].Merged.Triangles.size() / 3,
 				Split.Pieces[1].Bodies.size(), Stand, Out, Ms(S0, S1), bPieces ? Checked.c_str() : ("FAIL " + Why).c_str());
+			if (bPieces && Split.OpenOf >= 0)
+			{
+				std::printf("    lid up (TK1): the %s piece again with open_up played to its end, its lid carried up to %.2f m: as her bodies unbuttoned\n",
+					Split.OpenOf == FarSplit::TurretPiece ? "turret" : "hull", LidMoved);
+			}
 			if (!bPieces)
 			{
 				++Failures;

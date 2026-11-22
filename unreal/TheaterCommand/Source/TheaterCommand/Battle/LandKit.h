@@ -529,6 +529,7 @@ namespace LandKit
 			double X = 0.0, Y = 0.0, Heading = 0.0;
 			double Turret = 0.0, Gun = 0.0, Traverse = 0.0, Steer = 0.0, Trail = 0.0;
 			double Hatches = 0.0;       // 0 shut to 1 every hatch open
+			bool bOpenUp = false;       // her open_up clip played to its end (her commander's lid as she stands unbuttoned)
 			double FireAge = -1.0;      // seconds since a shot (the barrel's recoil), -1 none
 			double DeathAge = -1.0;     // seconds since knocked out (-1 alive)
 			bool bBrewUp = false;
@@ -783,6 +784,18 @@ namespace LandKit
 		/** By body: what FarOff passes by, near-only motions shown at rest from afar: 1 its turn (a wheel's spin), 2 all
 		 * of it (a hatch and what hangs on it, the barrel's recoil and the breech on it). */
 		std::vector<uint8_t> Loose;
+		/**
+		 * TK1 (the commander's lid): the piece that holds her commander's hatch (OpenOf: the turret, or the hull where she
+		 * has none, as a StuG) once more, with her open_up clip played to its end (the lid up, lifted up its post first
+		 * where it lifts, as the Tiger's and the Panther's): drawn in that piece's stead while her lid stands open
+		 * OpenFrom or more (Vehicle::HatchOpen), so an unbuttoned tank shows her lid up past the hand-over and her
+		 * commander standing clear of it, not through it. The same bodies as that piece, in the same order. Empty
+		 * (OpenOf -1) where she has no open_up clip, her commander's lid is in no piece, or the clip moves a body of
+		 * another piece.
+		 */
+		FarPiece Open;
+		int OpenOf = -1;
+		static constexpr double OpenFrom = 0.5;
 		bool Empty() const { return Pieces[0].Empty() && Pieces[1].Empty(); }
 		/** The pieces drawn: 1, or 2 with a turret piece. */
 		int Count() const { return Pieces[1].Empty() ? (Pieces[0].Empty() ? 0 : 1) : 2; }
@@ -807,7 +820,7 @@ namespace LandKit
 	 * Cuts M's far level into its pieces (once a model, at load). KeepOut (by body, may be null or short): bodies the
 	 * caller keeps out of the pieces as well as those MayHide names. Every triangle of a merged body's level (FarSplit::
 	 * Level) is in its piece exactly once, its points carried from the body's pivot to the anchor's as they stand at
-	 * rest, with its normals, colours and soot weights.
+	 * rest, with its normals, colours and soot weights. Also cuts the lid-up copy (FarSplit::Open) where she has one.
 	 */
 	void SplitFar(const Model& M, FarSplit& Out, const std::vector<uint8_t>* KeepOut = nullptr);
 

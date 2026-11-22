@@ -230,14 +230,20 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 	{
 		return -1;
 	}
-	for (int32 Piece = 0; Piece < 2; ++Piece)
+	for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 	{
-		const LandKit::FarPiece& Of = Kind.Split.Pieces[Piece];
+		const LandKit::FarPiece& Of = SplitPiece(Kind.Split, Piece);
 		if (Of.Empty())
 		{
 			continue;
 		}
 		UStaticMesh* Mesh = Of.Anchor >= 0 ? LandCrowdParts::PieceMesh(Scene, Of.Merged, Ink, U) : nullptr;
+		if (!Mesh && Piece == LidUp)
+		{
+			// (the lid-up copy only shows the lid up: without it she shows it shut, as before)
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: the lid-up far piece of %s (%s) could not be made: her lid shows shut past the hand-over."), *Name, *Nation);
+			continue;
+		}
 		if (!Mesh)
 		{
 			// (all or nothing: a piece missing would leave her bodies in it undrawn past the hand-over)
@@ -261,8 +267,9 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 		Kind.Copies[Piece] = Copies;
 	}
 	Kind.bMade = true;
-	UE_LOG(LogTheater, Display, TEXT("Land battle: %s (%s) far as %d instanced pieces (hull %d triangles, turret %d), made in %.1f ms (TK1)."), *Name, *Nation,
+	UE_LOG(LogTheater, Display, TEXT("Land battle: %s (%s) far as %d instanced pieces (hull %d triangles, turret %d)%s, made in %.1f ms (TK1)."), *Name, *Nation,
 		Kind.Split.Count(), static_cast<int32>(Kind.Split.Pieces[0].Merged.Triangles.size() / 3), static_cast<int32>(Kind.Split.Pieces[1].Merged.Triangles.size() / 3),
+		Kind.Copies[LidUp].IsValid() ? (Kind.Split.OpenOf == LandKit::FarSplit::HullPiece ? TEXT(" and her hull with the commander's lid up") : TEXT(" and her turret with the commander's lid up")) : TEXT(""),
 		(FPlatformTime::Seconds() - Took) * 1000.0);
 	return Index;
 }
@@ -287,7 +294,7 @@ void FLandCrowd::Release(FOne& One)
 	if (One.Kind >= 0 && static_cast<size_t>(One.Kind) < Kinds.size())
 	{
 		FKind& Kind = Kinds[static_cast<size_t>(One.Kind)];
-		for (int32 Piece = 0; Piece < 2; ++Piece)
+		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			Park(One, Piece, One.At[Piece]);
 			if (One.Slot[Piece] >= 0)
@@ -323,7 +330,7 @@ bool FLandCrowd::Enlist(int32 Vehicle, const LandKit::Model& Model)
 	FOne& One = Ones[static_cast<size_t>(Vehicle)];
 	One.Kind = Index;
 	const FTransform Parked(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
-	for (int32 Piece = 0; Piece < 2; ++Piece)
+	for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 	{
 		if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
 		{
@@ -433,15 +440,18 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 			++OwnFarFrames;
 		}
 		const FVector Here = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
-		for (int32 Piece = 0; Piece < 2; ++Piece)
+		// (her commander's lid half open or more: the lid-up copy drawn in the stead of the piece that holds it)
+		const bool bLidUp = Kind.Copies[LidUp].IsValid() && Kind.Split.OpenOf >= 0 && V.HatchOpen >= LandKit::FarSplit::OpenFrom;
+		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
-			const int32 Anchor = Kind.Split.Pieces[Piece].Anchor;
+			const int32 Anchor = SplitPiece(Kind.Split, Piece).Anchor;
 			if (!Copies || One.Slot[Piece] < 0 || Anchor < 0)
 			{
 				continue;
 			}
-			if (!bHold)
+			const bool bThisOne = Piece == LidUp ? bLidUp : !(bLidUp && Piece == Kind.Split.OpenOf);
+			if (!bHold || !bThisOne)
 			{
 				Park(One, Piece, Here);
 				continue;
@@ -467,7 +477,7 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 		if (bHold && FMath::Abs(Soot - One.Soot) > 0.002f)
 		{
 			One.Soot = Soot;
-			for (int32 Piece = 0; Piece < 2; ++Piece)
+			for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 			{
 				if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
 				{
@@ -483,7 +493,7 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 	// Each piece's mesh shown while it holds a vehicle, and sent once for all its changes.
 	for (FKind& Kind : Kinds)
 	{
-		for (int32 Piece = 0; Piece < 2; ++Piece)
+		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
 			if (!Copies)
@@ -522,7 +532,7 @@ void FLandCrowd::Tell(int32 Shown)
 	int32 Instances = 0, Meshes = 0;
 	for (const FKind& Kind : Kinds)
 	{
-		for (int32 Piece = 0; Piece < 2; ++Piece)
+		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			Instances += Kind.Live[Piece];
 			Meshes += Kind.bShownNow[Piece] ? 1 : 0;

@@ -3897,6 +3897,13 @@ namespace LandKit
 			const Part& H = M.Parts[static_cast<size_t>(I)];
 			S[static_cast<size_t>(I)].Turn = Clamp(P.Hatches, 0.0, 1.0) * (H.bLimits && H.Hi > 0.0 ? H.Hi : 90.0);
 		}
+		if (P.bOpenUp)
+		{
+			if (const Clip* C = M.FindClip("open_up"))
+			{
+				M.Play(*C, C->Long, 1.0, S);
+			}
+		}
 		if (P.FireAge >= 0.0)
 		{
 			if (const Clip* C = M.FindClip("fire"))
@@ -5435,6 +5442,71 @@ namespace LandKit
 			}
 			Piece.FirstPoint.push_back(static_cast<uint32_t>(To.Count()));
 			Piece.FirstTriangle.push_back(static_cast<uint32_t>(To.Triangles.size() / 3));
+		}
+
+		// The commander's lid up: the piece that holds it once more, every body of it as it stands at the end of her
+		// open_up clip (each part's turn and slide from the clip, the rest at rest), carried into the anchor's frame as
+		// the anchor stands then (it does not move: the clip moves the lid and what hangs on it).
+		const Clip* OpenUp = M.FindClip("open_up");
+		if (M.CommanderHatch < 0 || !OpenUp)
+		{
+			return;
+		}
+		for (size_t B = 0; B < N && Out.OpenOf < 0; ++B)
+		{
+			if (Out.PieceOf[B] >= 0 && Under(M.Bodies[B].Part, M.CommanderHatch))
+			{
+				Out.OpenOf = Out.PieceOf[B];
+			}
+		}
+		if (Out.OpenOf < 0)
+		{
+			return;
+		}
+		for (const ClipTrack& T : OpenUp->Tracks)
+		{
+			for (size_t B = 0; B < N; ++B)
+			{
+				if (Out.PieceOf[B] >= 0 && Out.PieceOf[B] != Out.OpenOf && Under(M.Bodies[B].Part, T.Part))
+				{
+					Out.OpenOf = -1; // (the clip moves a body of the other piece too: no lid piece, she shows it shut)
+					return;
+				}
+			}
+		}
+		std::vector<PartState> S(M.Parts.size());
+		M.Play(*OpenUp, OpenUp->Long, 1.0, S);
+		std::vector<Xf> Posed;
+		M.Solve(Xf(), S, Posed);
+		const FarPiece& Shut = Out.Pieces[Out.OpenOf];
+		FarPiece& Up = Out.Open;
+		Up.Anchor = Shut.Anchor;
+		Up.Bodies = Shut.Bodies;
+		Up.FirstPoint = Shut.FirstPoint;
+		Up.FirstTriangle = Shut.FirstTriangle;
+		Up.Merged = Shut.Merged;
+		const Body& AnchorBody = M.Bodies[static_cast<size_t>(Up.Anchor)];
+		const Xf& A = Posed[static_cast<size_t>(AnchorBody.Part)];
+		const Quat Back = A.Q.Unit().Conj();
+		for (size_t K = 0; K < Up.Bodies.size(); ++K)
+		{
+			const Body& Bo = M.Bodies[static_cast<size_t>(Up.Bodies[K])];
+			const Xf& X = Posed[static_cast<size_t>(Bo.Part)];
+			const Mesh& From = Out.Level(M, Up.Bodies[K]);
+			const size_t Base = Up.FirstPoint[K];
+			for (size_t P = 0; P < From.Count(); ++P)
+			{
+				const V3 Local(From.Points[P * 3], From.Points[P * 3 + 1], From.Points[P * 3 + 2]);
+				const V3 At = Back.Rotate(X.Apply(Bo.Pivot + Local) - A.T) - AnchorBody.Pivot;
+				const V3 Way = Back.Rotate(X.Q.Rotate(V3(From.Normals[P * 3], From.Normals[P * 3 + 1], From.Normals[P * 3 + 2])));
+				const size_t I = (Base + P) * 3;
+				Up.Merged.Points[I] = static_cast<float>(At.X);
+				Up.Merged.Points[I + 1] = static_cast<float>(At.Y);
+				Up.Merged.Points[I + 2] = static_cast<float>(At.Z);
+				Up.Merged.Normals[I] = static_cast<float>(Way.X);
+				Up.Merged.Normals[I + 1] = static_cast<float>(Way.Y);
+				Up.Merged.Normals[I + 2] = static_cast<float>(Way.Z);
+			}
 		}
 	}
 
