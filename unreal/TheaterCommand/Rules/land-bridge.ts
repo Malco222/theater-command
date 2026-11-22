@@ -10,7 +10,7 @@
 // The game calls these by name through the global object TC (this engine's own; the campaign's TC is another):
 //
 //   TC.landPieces()                        -> [{ key, title, date, att, def, seeds }]: the set pieces that can be fought
-//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider, cutters, smoke, bocage }) -> the recording's header: the field, the blocks,
+//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider, cutters, smoke, bocage, phones, bearers, patrol }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
 //   TC.landStartTicket(look, opts)         -> the same header for a campaign battle (release 2, switched): the campaign's
@@ -72,11 +72,12 @@ function need(): LiveBattle {
     }));
   },
 
-  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean } | null) {
+  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean } | null) {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
       hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
       cutters: opts?.cutters !== false, smoke: opts?.smoke !== false, bocage: !!opts?.bocage,
+      phones: opts?.phones !== false, bearers: opts?.bearers !== false, patrol: opts?.patrol !== false,
     });
     return live.header();
   },
@@ -88,7 +89,7 @@ function need(): LiveBattle {
    */
   landStartTicket(
     ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
@@ -98,6 +99,7 @@ function need(): LiveBattle {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
+      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false,
       fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
     });
     return live.header();
@@ -120,6 +122,9 @@ function need(): LiveBattle {
     const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };
     if (!ok && o.do === 'land:cut' && o.units?.length) return { ok, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? '' };
     if (!ok && o.do === 'land:smoke' && o.units?.length) return { ok, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? '' };
+    // (and a night patrol refused)
+    const n = c as { unit?: number };
+    if (!ok && o.do === 'land:patrol') return { ok, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? '' };
     return { ok };
   },
 

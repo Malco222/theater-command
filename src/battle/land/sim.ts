@@ -15,11 +15,13 @@ import { STYLE, styleFor, type Style } from './styles';
 import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
-import { LAND, MOTION, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
+import { LAND, MOTION, bearerShare, gunsOf, killedShare, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
+import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
+import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -35,10 +37,42 @@ export interface Gate { x: number; y: number; yaw?: number; width?: number; kind
  */
 export interface Cut { t0: number; t1: number; unit: number; side: Side; x: number; y: number; yaw: number; width: number; known: boolean; open: boolean }
 /**
+ * The night's patrol (night patrol, release 2; LAND.patrol), as settled when the clock started: sent by block 'unit' of
+ * 'side' with 'men' men, out from t0 to t1 (battle seconds, the night before), from its block's front ('from') to 'to'
+ * (the post it found, else the enemy block nearest it: caught, it was caught there). 'found': the hidden post it found
+ * (its block, where it stood, its kind or team), null where none; 'alerted': it was caught; 'post': the defence's block
+ * that took one more hidden post then, null where none could; 'lost': the strength its block lost with its men;
+ * 'flares': [t, x, y] each, the flares put up over it (looks only).
+ */
+export interface NightPatrol {
+  side: Side; unit: number; men: number; t0: number; t1: number; from: [number, number]; to: [number, number];
+  route: [number, number, number][]; found: { unit: number; x: number; y: number; kind: string } | null; alerted: boolean; post: number | null; lost: number; flares: [number, number, number][];
+}
+/**
  * A smoke screen (smoke on call, release 2; ruling 242): laid by block 'unit' of 'side' at battle second t along x0, y0
  * to x1, y1, standing while t < until. Numbered from 1 in the order laid.
  */
 export interface Screen { id: number; side: Side; unit: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }
+/**
+ * A field telephone wire (field telephone lines, release 2; LAND.phones): wire 'id', laid as the clock starts from the
+ * defence's headquarters 'hq' to block 'unit' of 'side', following it as it moves; 'lines' lines in it (Germany's two),
+ * 'cut' of them cut now (down once cut >= lines); 'out', the lineman's mend while one is out on it.
+ */
+export interface Wire { id: number; side: Side; unit: number; hq: [number, number]; lines: number; cut: number; out: WireMend | null }
+/** A line of wire 'wire' cut at battle second t, at x, y on it, by block 'by' (a gun block, a mortar team or a tank). */
+export interface WireCut { t: number; wire: number; x: number; y: number; by: number }
+/** Lineman 'man' sent out on wire 'wire': he leaves the headquarters at t0, reaches the cut at x, y at t1, and it is mended at t. */
+export interface WireMend { t: number; wire: number; man: number; t0: number; t1: number; x: number; y: number }
+/** An order for block 'unit' that waited for its down wire: given at t, due at 'due'; 'went', when it reached the block. */
+export interface WireHeld { t: number; unit: number; due: number; went?: number }
+/**
+ * A block's stretcher bearers and its wounded (stretcher bearers, release 2; LAND.bearers), in strength as its str counts
+ * it: its bearers in all ('all') and out carrying now ('out', the bearers of every trip still out: 'trips', each with the
+ * battle second its bearers are back and how many); the litter cases lying where they fell ('waiting'); the light cases
+ * at their dressing ('light', each lot with the battle second it is back in the line and how many); its aid post
+ * ('aid'); whether its side has been told its bearers are out ('told'). Made at its first loss.
+ */
+export interface Litter { all: number; out: number; trips: { back: number; by: number }[]; waiting: number; light: { at: number; n: number }[]; aid: [number, number]; told: boolean }
 /** The squares the hedge lines are mapped by, for hiding (metres). */
 const HEDGE_CELL = 10;
 /** Ground with nothing to hide men on the move: caught there by an ambush, they are shaken worst (LAND.hide.surprise.open). */
@@ -248,6 +282,18 @@ export class LandBattle implements BattleSim<LandUnit> {
   hide = false;
   /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
   private hidStarted = false;
+  /**
+   * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LAND.patrol; "Night patrol" below): the night
+   * before, the attack sends a patrol that may find the defence's most forward hidden post, or be caught and alert the
+   * defence. Off unless whoever opens the field turns it on (the 2D page's ?patrol, the bridge's { patrol: true }), and
+   * it needs hiding on: with hiding off no patrol goes out and nothing is drawn. Off, nothing below is read.
+   */
+  patrol = false;
+  /** The night's patrol, as it was settled when the clock started (night patrol): null until then, and where none went out. */
+  nightPatrol: NightPatrol | null = null;
+  /** The block the player sends out on patrol, by his order while he places his army (night patrol): null where none. */
+  private patrolBy: number | null = null;
   /** The field's hedges and their gates, as the 3D game handed them over (hedgesOn): empty where it has none. */
   hedges: Hedge[] = [];
   gates: Gate[] = [];
@@ -275,9 +321,10 @@ export class LandBattle implements BattleSim<LandUnit> {
   private models = new Map<number, string | null>();
   /**
    * The player's orders on the air (radio): each block's, with the battle time it lands; 'smoke' (smoke on call, release
-   * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it.
+   * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it. An
+   * order waiting for a down wire (field telephone lines) also carries the order it is (key) and its stamp (held).
    */
-  private pending: { at: number; id: number; go: () => void; smoke?: true }[] = [];
+  private pending: { at: number; id: number; go: () => void; smoke?: true; key?: string; held?: WireHeld }[] = [];
   /**
    * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
    * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
@@ -327,6 +374,39 @@ export class LandBattle implements BattleSim<LandUnit> {
   private barsLaid = 0;
   /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
   readonly screens: Screen[] = [];
+  /**
+   * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off
+   * if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LAND.phones; "Field telephone
+   * lines" below): the defence's blocks are on the telephone from its headquarters; guns, mortars and tanks cut the wires,
+   * and an order to a block whose wire is down waits its army's runner or wireless, the player's and every staff's alike.
+   * Off unless whoever opens the field turns it on (the 2D page's ?phones, the bridge's { phones: true }); off, nothing
+   * below is read.
+   */
+  phones = false;
+  /** The defence's wires (field telephone lines), laid as the clock starts, numbered from 1. Empty while the switch is off. */
+  readonly wires: Wire[] = [];
+  /** Every line cut, every lineman sent, and every order that waited for a down wire, in order. Empty while the switch is off. */
+  readonly wireCuts: WireCut[] = [];
+  readonly wireMends: WireMend[] = [];
+  readonly wireHeld: WireHeld[] = [];
+  /** Each block's wire, by its id; and the wires' own dice (never the battle's), from when they are laid. */
+  private wireBy = new Map<number, Wire>();
+  private phoneRng: Rng | null = null;
+  /**
+   * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director's rulings Q4 and Q5, 18:36Z; LAND.bearers; "Stretcher bearers" below):
+   * a block's wounded lie for its bearers, who carry them back to its aid post, its own blows the weaker by the men away;
+   * its light cases are back in the line after their dressing. Off unless whoever opens the field turns it on (the 2D
+   * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
+   */
+  bearers = false;
+  /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
+  private readonly litters = new Map<number, Litter>();
+  /**
+   * The light cases back in the line (stretcher bearers): when, the block and how much strength, a block's returns in one
+   * battle second taken together (at the first one's time). Empty while the switch is off.
+   */
+  readonly returns: { t: number; unit: number; n: number }[] = [];
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -1192,6 +1272,186 @@ export class LandBattle implements BattleSim<LandUnit> {
     };
   }
 
+  // ---- Field telephone lines (release 2) ----------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off"); the design director's
+  // rulings of 18:36Z, PHONES Q1 to Q3 (LAND.phones). As the clock starts, every block of the defence on the field has a
+  // wire from its headquarters (the middle of the defence zone's back edge); a corps that comes up from next door later
+  // has none, and its orders go as ever. The wire runs straight to its block's middle and follows it: moving never cuts
+  // it. Each blow on the block from an enemy gun block or mortar team cuts a line at LAND.phones.cut, drawn from the
+  // wires' own stream ('phones:' and the seed), only for such blows and only while the wire has a line up; the cut lies
+  // where the wire comes nearest the block's front. An enemy tank block whose step, its middle from where it stood to
+  // where it stands, crosses the wire cuts a line outright, where it crosses. A wire is down once all its lines are cut
+  // (Germany's double lines need two cuts). While it is down, every order to its block, the player's (radio switch on or
+  // off) or a staff's, waits its army's fallback from when it was given: the wireless, LAND.radio's wait (longer for a
+  // block whose headquarters is hit, as the radio switch reckons it), or a runner, the metres from the headquarters over
+  // LAND.phones.runner. A later order takes its place and waits afresh, but a staff giving the same order again (it
+  // thinks every second) leaves the one on its way be. At a wire's first cut with no lineman out on it, one leaves the
+  // headquarters, walks the wire to the cut at foot pace and splices it in LAND.phones.splice seconds: the mend clears
+  // every cut on the wire, and whatever was waiting for it goes at once. He is looks only: never struck, no harm. The
+  // rules' own moves (the joiners walking on, a block giving ground at the brink) are no orders and never wait. Nothing
+  // here draws on the battle's dice.
+
+  /** The defence's headquarters, where every wire runs from: the middle of its zone's back edge (field.ts zonesOf). */
+  phonesHq(): [number, number] {
+    const z = this.field.zones.def, r1 = (v: number): number => Math.round(v * 10) / 10;
+    return [r1((z[0] + z[2]) / 2), r1(z[3])];
+  }
+
+  /** This block's wire, where it has one (the switch on, a block of the defence on the field as the clock started). */
+  wireOf(u: LandUnit): Wire | null { return this.phones ? this.wireBy.get(u.id) ?? null : null; }
+
+  /** This block's wire is down: every line of it cut, and no lineman has mended it yet. */
+  wireDown(u: LandUnit): boolean { const w = this.wireOf(u); return !!w && w.cut >= w.lines; }
+
+  /** How orders go to this block while its wire is down: its army's fallback in the battle's year (LAND.phones.fallback). */
+  fallbackOf(u: LandUnit): PhoneFallback { return phoneFallback(u.nat, turnToDate(this.ticket.turn).year); }
+
+  /**
+   * How long an order to this block waits while its wire is down, battle seconds: the wireless, LAND.radio's wait as the
+   * radio switch reckons it (its headquarters hit: wavering or under hqAt of its strength); or a runner from the
+   * headquarters to where it stands.
+   */
+  fallbackWait(u: LandUnit): number {
+    if (this.fallbackOf(u) === 'radio') {
+      const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
+      return R.delay * (hit ? R.cut : 1) * this.radioOf(u);
+    }
+    const [hx, hy] = this.phonesHq();
+    return Math.hypot(u.x - hx, u.y - hy) / LAND.phones.runner;
+  }
+
+  /** Each tick, before the orders land and the staffs think: the wires laid as the clock starts, and the mends whose time has come. */
+  private phonesOn(): void {
+    if (!this.phoneRng) this.layWires();
+    for (const w of this.wires) if (w.out && this.t >= w.out.t - 1e-9) this.mend(w);
+  }
+
+  /** The clock starts: a wire to every block of the defence on the field, its own dice made (the day's luck's way). */
+  private layWires(): void {
+    this.phoneRng = new Rng(hashString(this.ticket.attempt ? `phones:${this.ticket.seed}:${this.ticket.attempt}` : `phones:${this.ticket.seed}`));
+    const hq = this.phonesHq();
+    for (const u of this.units) {
+      if (u.side !== 'def' || !live(u)) continue;
+      const w: Wire = { id: this.wires.length + 1, side: u.side, unit: u.id, hq, lines: phoneLines(u.nat), cut: 0, out: null };
+      this.wires.push(w);
+      this.wireBy.set(u.id, w);
+    }
+  }
+
+  /**
+   * A blow struck on a block at its wire's end: from an enemy gun block or mortar team, while the wire has a line up, it
+   * cuts one at LAND.phones.cut, where the wire comes nearest the block's front. Machine guns, foot and tanks never.
+   */
+  private wireBlow(u: LandUnit, t: LandUnit): void {
+    const w = this.wireBy.get(t.id);
+    if (!w || w.cut >= w.lines || u.side === w.side || !(u.team === 'mor' || (u.kind === 'art' && !u.team))) return;
+    if (this.phoneRng!.next() >= LAND.phones.cut) return;
+    const [fx, fy] = ahead(t.face), px = t.x + (fx * t.d) / 2, py = t.y + (fy * t.d) / 2;
+    const dx = t.x - w.hq[0], dy = t.y - w.hq[1], l = dx * dx + dy * dy;
+    const k = l > 0 ? Math.max(0, Math.min(1, ((px - w.hq[0]) * dx + (py - w.hq[1]) * dy) / l)) : 1;
+    this.wireCut(w, w.hq[0] + k * dx, w.hq[1] + k * dy, u);
+  }
+
+  /** Each tick, once the blocks have moved: an enemy tank block whose step crossed a wire with a line up cuts one there. */
+  private wireTanks(was: [LandUnit, number, number][]): void {
+    for (const [u, x0, y0] of was) {
+      if (u.x === x0 && u.y === y0) continue;
+      for (const w of this.wires) {
+        const e = w.cut < w.lines && w.side !== u.side ? this.unit(w.unit) : undefined;
+        if (!e || !live(e)) continue;
+        const k = segHit(x0, y0, u.x, u.y, w.hq[0], w.hq[1], e.x, e.y);
+        if (k !== null) this.wireCut(w, x0 + (u.x - x0) * k, y0 + (u.y - y0) * k, u);
+      }
+    }
+  }
+
+  /**
+   * A line of the wire is cut: kept, and told to the defence (land:wire). At the wire's first cut with no lineman out, one
+   * leaves the headquarters now; he reaches the cut at foot pace and the wire is mended LAND.phones.splice seconds later.
+   */
+  private wireCut(w: Wire, x: number, y: number, by: LandUnit): void {
+    const r1 = (v: number): number => Math.round(v * 10) / 10, r3 = (v: number): number => Math.round(v * 1000) / 1000;
+    w.cut++;
+    const c: WireCut = { t: r3(this.t), wire: w.id, x: r1(x), y: r1(y), by: by.id };
+    this.wireCuts.push(c);
+    if (!w.out) {
+      const t1 = r3(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND.speed.inf);
+      w.out = { t: r3(t1 + LAND.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+      this.wireMends.push(w.out);
+    }
+    const u = this.unit(w.unit);
+    if (!u || !this.phoneWords()) return;
+    const down = w.cut >= w.lines, how = this.fallbackOf(u) === 'radio' ? 'by radio' : 'by runner';
+    this.say({
+      what: 'land:wire', unit: u.id, side: u.side, x: c.x, y: c.y, extra: { wire: w.id, down: down ? 1 : 0, by: this.fallbackOf(u), mend: w.out.t },
+      text: down ? `The telephone line to ${this.named(u)} is cut. Orders go ${how} until it is mended.`
+        : `One of the ${w.lines === 2 ? 'two telephone lines' : 'telephone lines'} to ${this.named(u)} is cut. Orders still go by the ${w.lines - w.cut === 1 ? 'other' : 'others'}.`,
+    });
+  }
+
+  /** A lineman's splice is done: every cut on the wire is mended, and whatever was waiting for it goes at once. */
+  private mend(w: Wire): void {
+    const m = w.out!, r3 = (v: number): number => Math.round(v * 1000) / 1000;
+    w.out = null; w.cut = 0;
+    const u = this.unit(w.unit);
+    const now = this.pending.filter((p) => p.id === w.unit && p.held);
+    if (now.length) {
+      this.pending = this.pending.filter((p) => !(p.id === w.unit && p.held));
+      if (u && now.some((p) => !p.smoke)) delete u.orderAt;
+      if (u && fighting(u)) for (const p of now) { p.go(); p.held!.went = r3(this.t); }
+    }
+    if (u && this.phoneWords()) this.say({ what: 'land:mend', unit: u.id, side: u.side, x: m.x, y: m.y, extra: { wire: w.id, man: m.man }, text: `The line to ${this.named(u)} is mended.` });
+  }
+
+  /** The wires' events go to the defence alone: told where it is the player's, or nobody's (a recording), never to a player attacking. */
+  private phoneWords(): boolean { return this.ticket.def.human || !this.ticket.att.human; }
+
+  /**
+   * An order for a block whose wire is down: it waits its army's fallback from when it was given (from). A staff giving
+   * the very same order again leaves the one on its way be; any other order takes its place and waits afresh. Stamped
+   * (wireHeld) as it is given, and as it goes.
+   */
+  private byFallback(u: LandUnit, go: () => void, from: number, c?: Command, smoke = false): void {
+    const r3 = (v: number): number => Math.round(v * 1000) / 1000, key = c ? JSON.stringify(c) : undefined;
+    // A smoke order keeps its own place on the air here too (order): it replaces only a smoke order still on its way.
+    const slot = (p: (typeof this.pending)[number]): boolean => p.id === u.id && !p.smoke === !smoke;
+    const was = this.pending.find(slot);
+    if (this.staffing && was?.held && key !== undefined && was.key === key) return;
+    const held: WireHeld = { t: r3(from), unit: u.id, due: r3(from + this.fallbackWait(u)) };
+    this.wireHeld.push(held);
+    this.pending = this.pending.filter((p) => !slot(p));
+    if (held.due <= this.t + 1e-9) { if (!smoke) delete u.orderAt; go(); held.went = r3(this.t); return; }
+    this.pending.push(smoke ? { at: held.due, id: u.id, go, smoke, key, held } : { at: held.due, id: u.id, go, key, held });
+    if (!smoke) u.orderAt = held.due;
+  }
+
+  /**
+   * The wires as a side sees them: the defence its own, and everyone everything where the view is unfogged (no side, or
+   * the card knew the defence). A cut's striker is named only where the side has met it.
+   */
+  phonesView(as?: Side): Pick<BattleView, 'phones'> {
+    if (!this.phonesSeen(as)) return {};
+    const hq = this.phonesHq(), r1 = (v: number): number => Math.round(v * 10) / 10;
+    return {
+      phones: {
+        hq: [...hq] as [number, number],
+        wires: this.wires.map((w) => {
+          const u = this.unit(w.unit)!;
+          return { id: w.id, side: w.side, pts: [[...w.hq], [r1(u.x), r1(u.y)]] as [number, number][], hq: [...w.hq] as [number, number], unit: w.unit, lines: w.lines, cut: w.cut };
+        }),
+        cuts: this.wireCuts.map((c) => { const by = this.unit(c.by); return { t: c.t, wire: c.wire, x: c.x, y: c.y, ...(as === undefined || !by || by.side === as || this.known(by) ? { by: c.by } : {}) }; }),
+        mends: this.wireMends.map((m) => ({ ...m })),
+        held: this.wireHeld.map((h) => ({ ...h })),
+      },
+    };
+  }
+
+  /** Whether a side sees the wires (phonesView): once they are laid, the defence, and everyone where the view is unfogged. */
+  phonesSeen(as?: Side): boolean {
+    return this.phones && this.phoneRng !== null && (as === undefined || as === 'def' || !this.fog);
+  }
+
   /**
    * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
    * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
@@ -1226,7 +1486,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The battle time he gave it, as the 3D game shows it (it runs the rules a little ahead of the picture): the radio's
     // wait counts from there, never from before it. Absent: now.
     const said = (c as { at?: unknown }).at, from = typeof said === 'number' && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-    const give = (u: LandUnit, go: () => void, smoke = false): void => this.order(u, go, air, from, smoke);
+    const give = (u: LandUnit, go: () => void, smoke = false): void => this.order(u, go, air, from, c, smoke);
     switch (c.do) {
       case 'move': {
         const us = mine(c.units);
@@ -1341,6 +1601,14 @@ export class LandBattle implements BattleSim<LandUnit> {
           this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
           return true;
         }
+        // Night patrol (release 2): { do: 'land:patrol', unit } while he places his army, his attack sends that block's
+        // patrol out the night before (patrolWhy). Settled as the clock starts (hideStart); none unless he orders one.
+        if (c.do === 'land:patrol') {
+          const u = this.unit(Number(c.unit ?? (c.units as number[] | undefined)?.[0]));
+          if (!this.patrol || !u || u.side !== by || by !== this.setup || this.patrolWhy(u) !== null) return false;
+          this.patrolBy = u.id;
+          return true;
+        }
         // Hold until relieved (release 2): { do: 'land:wait', units } tells blocks on foot to dig in and wait for a corps
         // coming up from next door (waitWhy). Gated again as it lands: where one may no longer wait, it holds.
         if (c.do === 'land:wait') {
@@ -1436,7 +1704,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * the way, never its move or attack, nor is replaced by one, so "move, then smoke to cover it" lands both; and it
    * leaves the block's orderAt (its move's or attack's) alone.
    */
-  private order(u: LandUnit, go: () => void, air: boolean, from = this.t, smoke = false): void {
+  private order(u: LandUnit, go: () => void, air: boolean, from = this.t, c?: Command, smoke = false): void {
+    // Field telephone lines (release 2): to a block whose wire is down, whoever gives it, by its army's fallback.
+    if (this.phones && this.t > 0 && this.wireDown(u)) { this.byFallback(u, go, from, c, smoke); return; }
     if (!air) { go(); return; }
     const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
     const at = Math.round((from + R.delay * (hit ? R.cut : 1) * this.radioOf(u)) * 1000) / 1000;
@@ -1457,7 +1727,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const u = this.unit(p.id);
       if (!u) continue;
       if (!p.smoke) delete u.orderAt;
-      if (fighting(u)) p.go();
+      if (fighting(u)) { p.go(); if (p.held) p.held.went = Math.round(this.t * 1000) / 1000; }
     }
   }
 
@@ -1959,15 +2229,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Only the computer's: the player's own staff never moves the blocks he drew up.
     if (this.ai.def && !this.ticket.def.human) this.layAmbush('def');
     for (const u of this.units) this.markHid(u);
+    // Night patrol (release 2): settled now, with the posts laid and hidden, before either staff first thinks.
+    if (this.patrol) this.patrolOut();
   }
 
   /**
    * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
    * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
    * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
-   * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+   * player's setup step allows his, clear of every other block. Where no woods lie near, none goes. 'most' blocks at
+   * most, of those 'may' allows (a caught patrol's one more post: night patrol); the blocks it put there.
    */
-  private layAmbush(side: Side): void {
+  private layAmbush(side: Side, most: number = LAND.hide.staff.blocks, may: (u: LandUnit) => boolean = () => true): LandUnit[] {
     const H = LAND.hide.staff, dir = side === 'att' ? 1 : -1;
     const z = this.field.zones[side];
     const own = this.units.filter((u) => u.side === side && live(u));
@@ -1975,7 +2248,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       Math.min(z[0], ...own.map((u) => u.x - u.w / 2)), Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
       Math.max(z[2], ...own.map((u) => u.x + u.w / 2)), Math.max(z[3], ...own.map((u) => u.y + u.d / 2)),
     ];
-    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inCover(u));
+    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inCover(u) && may(u));
     const picks: { u: LandUnit; x: number; y: number; ahead: number }[] = [];
     // Hedge lines are narrow: looked for a hedge square at a time.
     const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
@@ -1993,21 +2266,23 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // The furthest forward first, one to a stretch of the line.
     picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
-    let laid = 0;
+    const laid: LandUnit[] = [];
     for (const p of picks) {
-      if (laid >= H.blocks) break;
+      if (laid.length >= most) break;
       if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
       this.place(p.u, p.x, p.y);
-      laid++;
+      laid.push(p.u);
     }
+    return laid;
   }
 
   /**
    * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
    * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
-   * from the air. Told to the player as his blocks would report it.
+   * from the air; 'patrol': the night before, by the patrol 'by' sent out (night patrol, release 2), before any shot.
+   * Told to the player as his blocks would report it.
    */
-  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'heard' | 'out' | 'struck' | 'searched', by?: LandUnit): void {
+  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'heard' | 'out' | 'struck' | 'searched' | 'patrol', by?: LandUnit): void {
     if (!u.hid) return;
     delete u.hid;
     // Found by its own fire, it is not yet located: the fire back strikes softer for a while (LAND.hide.locate).
@@ -2016,9 +2291,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (theirs) u.found = true;
     const where = this.inWoods(u) ? 'the woods' : 'the hedges';
     const text = mineFound
-      ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
+      ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : how === 'patrol' ? `An enemy patrol found ${this.named(u)} in ${where} in the night.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
       : theirs
-        ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
+        ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'patrol' ? 'Our night patrol found a hidden post.' : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
         : '';
     this.say({ what: 'land:found', unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...(by ? { by: by.id } : {}) } });
   }
@@ -2043,12 +2318,125 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
   }
 
+  // ---- Night patrol (release 2) -----------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it");
+  // the design director, 18:36Z, Q6 to Q8 (LAND.patrol). The night before, the attack sends one patrol out from a
+  // block of its line on foot: the computer's always, from its most forward (doctrine: Q8); the player's only by his
+  // order while he places his army (land:patrol). The defence never patrols. It needs hiding on (only hidden posts can
+  // be found): it is settled once in hideStart, after the computer's ambushes are laid and every block in cover is
+  // hidden and before either staff first thinks, so the attack's first plan counts what it found. Two draws on its own
+  // stream ('patrol:' and the seed, and the attempt), always both and found first, never on the battle's dice: found,
+  // the defence's most forward hidden post is found before any shot (it never springs its ambush); caught, the defence
+  // is alerted, ready but not stronger (Q7, b418): one more of its blocks takes a hidden post by the computer's own
+  // ambush rule (the player's defence too, laid for him and named in his warning), a computer defence's reserve starts
+  // toward the attack at once as a bold one does (ai.ts defend; a player's moves his own), and the patrol's block loses
+  // the patrol's men from its strength (counted as lost; its nerve untouched). The flares over it are looks only.
+
+  /** Why this block may not go out on patrol tonight, in the player's words (129(d)); null where it may. */
+  patrolWhy(u: LandUnit): string | null {
+    if (!this.patrol) return 'There are no night patrols in this battle.';
+    if (!this.hide) return 'Nothing hides in this battle, so there is nothing for a patrol to find.';
+    if (u.side !== 'att') return 'Only the attacker sends out a patrol.';
+    if (this.t > 0 || this.over || this.hidStarted) return 'The battle has begun: a patrol goes out the night before.';
+    if (this.setup !== u.side) return 'A patrol is sent while you place your army, before the battle begins.';
+    if (this.patrolBy !== null) return 'One patrol a night: one is already going out.';
+    if (!fighting(u)) return 'It is out of the fight.';
+    if (u.team || MOTION[u.kind] !== 'foot') return 'Only men on foot go out on patrol.';
+    return null;
+  }
+
+  /** A side's computer defence alerted by the patrol it caught (night patrol): its reserve starts toward the attack at once (ai.ts). */
+  alertedStaff(side: Side): boolean {
+    return this.patrol && side === 'def' && !this.ticket.def.human && this.nightPatrol?.alerted === true;
+  }
+
+  /** The night's patrol goes out, and what it found and whether it was caught are settled (hideStart). */
+  private patrolOut(): void {
+    const P = LAND.patrol, side: Side = 'att', foe: Side = 'def';
+    const foot = (u: LandUnit | undefined): u is LandUnit => !!u && u.side === side && fighting(u) && !u.team && MOTION[u.kind] === 'foot';
+    // The computer's from its most forward block of the line on foot (ties by id); the player's only where he sent one.
+    const by = this.ticket[side].human
+      ? (this.patrolBy === null ? undefined : this.unit(this.patrolBy))
+      : this.units.filter((u) => foot(u) && u.reserve !== 'held').sort((a, b) => b.y - a.y || a.id - b.id)[0];
+    if (!foot(by)) return;
+    const rng = new Rng(hashString(this.ticket.attempt ? `patrol:${this.ticket.seed}:${this.ticket.attempt}` : `patrol:${this.ticket.seed}`));
+    const found = rng.next() < P.found, caught = rng.next() < P.caught;
+    // The defence's most forward hidden post: the one nearest the attack's start, ties by id.
+    const post = this.units.filter((u) => u.side === foe && live(u) && u.hid).sort((a, b) => a.y - b.y || a.id - b.id)[0];
+    const men = patrolSize(by.nat);
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    // Where it went: to the post it found, else to the enemy block nearest it; caught, it was caught there.
+    // Never toward a post still hidden: the drawn walk and its flares would show where it lies (only blocks the attack can see).
+    const near = found && post ? post : this.units.filter((u) => u.side === foe && live(u) && !u.hid).sort((a, b) => dist(a.x, a.y, by.x, by.y) - dist(b.x, b.y, by.x, by.y) || a.id - b.id)[0];
+    const to: [number, number] = near ? [r1(near.x), r1(Math.max(0, near.y - near.d / 2 - 40))] : [r1(by.x), r1(by.y + by.d / 2 + 200)];
+    // Its way in the night (looks only, for the 3D game's prelude): out from its block to 'to' by the middle of the night and
+    // back by t1, through two points a little to one side (fixed by the seed, never a rule's stream).
+    const from: [number, number] = [r1(by.x), r1(by.y + by.d / 2)];
+    const w = (j: number): number => (mix(Math.imul(this.ticket.seed >>> 0, 0x85ebca6b) + j) - 0.5) * 60;
+    const tm = Math.round((P.night.t0 + P.night.t1) / 2), at = (f: number, j: number): [number, number] => [r1(from[0] + (to[0] - from[0]) * f + w(j)), r1(from[1] + (to[1] - from[1]) * f)];
+    const route: [number, number, number][] = [
+      [P.night.t0, from[0], from[1]], [Math.round((P.night.t0 + tm) / 2), ...at(0.5, 1)], [tm, to[0], to[1]], [Math.round((tm + P.night.t1) / 2), ...at(0.5, 2)], [P.night.t1, from[0], from[1]],
+    ];
+    const night: NightPatrol = {
+      side, unit: by.id, men, t0: P.night.t0, t1: P.night.t1, from, to, route,
+      found: null, alerted: caught, post: null, lost: 0, flares: [],
+    };
+    this.nightPatrol = night;
+    if (found && post) {
+      night.found = { unit: post.id, x: r1(post.x), y: r1(post.y), kind: post.team ?? post.kind };
+      // Found before any shot: it never springs its ambush.
+      this.reveal(post, 'patrol', by);
+    }
+    if (caught) {
+      // (a) One more hidden post, by the computer's own ambush rule: a block the player has ordered stays where he put it.
+      const laid = this.layAmbush(foe, 1, (u) => !u.order);
+      for (const u of laid) this.markHid(u);
+      const extra = laid.find((u) => u.hid);
+      if (extra) night.post = extra.id;
+      // (c) The patrol's men are lost to its block: its strength, never its nerve.
+      const lost = Math.min(by.str, (men * by.str0) / Math.max(1, by.men0));
+      by.str -= lost;
+      by.figures = by.str <= 0 ? 0 : Math.max(1, Math.ceil(by.tray * by.str));
+      night.lost = lost;
+      // The flares the defence put up over it: three, between t0 and t1, near where it was caught (looks only).
+      const k = (i: number, j: number): number => mix(Math.imul(this.ticket.seed >>> 0, 0x9e3779b1) + i * 8 + j);
+      for (let i = 0; i < 3; i++) {
+        const t = Math.round(P.night.t0 + (P.night.t1 - P.night.t0) * ((i + k(i, 1)) / 3));
+        night.flares.push([t, r1(Math.min(this.field.w, Math.max(0, to[0] + (k(i, 2) - 0.5) * 240))), r1(Math.min(this.field.h, Math.max(0, to[1] + (k(i, 3) - 0.5) * 120)))]);
+      }
+      // (b) is the computer's staff's (alertedStaff). The defence is told, the player's own with where his new post went.
+      if (this.ticket[foe].human) {
+        const where = extra ? ` ${extra.name} has taken a hidden post in ${this.inWoods(extra) ? 'the woods' : 'the hedges'}.` : '';
+        this.say({ what: 'land:patrol', side: foe, ...(extra ? { unit: extra.id } : {}), text: `We caught an enemy patrol in the night. An attack is coming.${where}`, x: extra ? r1(extra.x) : to[0], y: extra ? r1(extra.y) : to[1], extra: { caught: true, ...(extra ? { post: extra.id } : {}) } });
+      }
+    }
+    // The attack is told what came of it (found: the post's own land:found, above).
+    if (this.ticket[side].human && (caught || !found || !post)) {
+      const text = caught ? 'Our patrol was caught in the night. They know we\'re coming.' : 'Our patrol came back with nothing to report.';
+      this.say({ what: 'land:patrol', side, unit: by.id, text, x: to[0], y: to[1], extra: { caught, found: !!night.found } });
+    }
+  }
+
+  /** The night's patrol as a side sees it: the attack all of it; the defence only once alerted, where it caught it and the flares. */
+  patrolView(as?: Side): Pick<BattleView, 'patrol'> {
+    const p = this.nightPatrol;
+    if (!this.patrol || !p) return {};
+    const flares = p.flares.map((f): [number, number, number] => [f[0], f[1], f[2]]);
+    if (as === undefined || as === p.side) {
+      return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], route: p.route.map((r): [number, number, number] => [r[0], r[1], r[2]]), found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
+    }
+    return p.alerted ? { patrol: { side: p.side, t0: p.t0, t1: p.t1, men: p.men, to: [p.to[0], p.to[1]], found: null, alerted: true, flares } } : {};
+  }
+
   step(): void {
     if (this.setup) return;
     if (this.over) { this.drill?.step(); return; }
     // Hidden in the woods (release 2): as the clock starts, the computer's defence lays its ambushes and every block
     // then standing in woods is hidden from the other side.
     if (this.hide && !this.hidStarted) this.hideStart();
+    // Field telephone lines (release 2): the wires laid as the clock starts, before any joiner comes on; mends due.
+    if (this.phones) this.phonesOn();
     // Corps from next door whose time has come walk on (release 2): seen by both staffs this same tick.
     if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
     // The player's orders on the air that have reached their blocks (direct command, release 2).
@@ -2087,6 +2475,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; if (!blind) t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
+      // Field telephone lines (release 2): a gun's or a mortar team's blow may cut the wire to the block it falls on.
+      if (this.phones && this.wires.length) this.wireBlow(u, t);
       if (blind) {
         const F = LAND.hide.search;
         blow.dmg *= F.blow;
@@ -2121,15 +2511,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
+    // Stretcher bearers (release 2): bearers home and light cases back in the line, then bearers out to the wounded.
+    if (this.bearers) this.carry();
     for (const u of this.units) if (live(u)) this.nerve(u);
     // Hedge cutters (release 2): where each block stood before it moved, to find where its way crossed a hedge.
     const at = (): Map<number, [number, number]> => new Map(this.units.map((u): [number, [number, number]] => [u.id, [u.x, u.y]]));
     const before = this.cutters && this.hedges.length ? at() : null;
+    // Field telephone lines (release 2): where each enemy tank block stood before it moved, to find a wire its way crossed.
+    const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === 'att' && u.kind === 'arm' && live(u)).map((u): [LandUnit, number, number] => [u, u.x, u.y]) : null;
     for (const u of this.units) if (live(u)) this.move(u);
     // And where its own move took it, before the blocks are eased apart: a shove is no way of its own.
     const moved = before ? at() : null;
     this.spread();
     if (before) this.cutOn(before, moved!);
+    if (tanks) this.wireTanks(tanks);
     if (this.hide) this.spotHidden();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     // Cuts whose time is up stand open as gaps, before the drill's men walk this tick (hedge cutters, release 2).
@@ -2333,6 +2728,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number } {
     const gu = coverAt(this.field, u.x, u.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
+    // Stretcher bearers (release 2): the men out carrying the wounded back strike nothing.
+    if (this.bearers) p *= this.atHand(u);
     if (u.state === 'wavering') p *= LAND.wavering;
     // A block giving ground at the brink (giveGround) leaves a rearguard facing the enemy: a blow on it lands at the
     // weight of one struck by an enemy on the move (LAND.moving), as the enemy must come on after it, and on its front,
@@ -2412,6 +2809,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+    // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost
+    // stays lost (its wreck laid once): the light cases come back as strength, never as a model stood up again.
+    if (this.bearers) { this.wounded(t, before - t.str); t.figures = Math.min(had, t.figures); }
     const owed = (t.owed ??= {}), model = t.power0 / Math.max(1e-9, t.tray * t.str0);
     for (const [u, d] of from) owed[u.id] = (owed[u.id] ?? 0) + d;
     for (let k = t.figures; k < had; k++) {
@@ -2815,6 +3215,120 @@ export class LandBattle implements BattleSim<LandUnit> {
     const r = LAND.turn[u.kind] * DT;
     const d = turn(u.face, want);
     u.face = Math.abs(d) <= r ? want : u.face + Math.sign(d) * r;
+  }
+
+  // ---- Stretcher bearers (release 2) --------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it"); the
+  // design director's rulings Q4 and Q5 (18:36Z), and the light cases (18:38Z); LAND.bearers. Of each loss of strength a
+  // block suffers (suffer: the blows, the air, kept harm landing), LAND.bearers.killed are dead and the rest wounded. Of
+  // the wounded, light.share are dressed at the block and back in the line light.dress seconds later (with no walk while
+  // light.at is 0), if the block is still fighting then: running, fled or gone, it takes none back. They come back as
+  // strength, up to what it started with, never raising its nerve: the only upward write to strength in the fight. The
+  // rest are litter cases: while they lie waiting and its bearers (share of its strength at the start, by army) are home,
+  // a block still fighting sends a trip, litter bearers a case, out to its aid post (LAND.bearers.aid behind where it
+  // started, toward its own edge) and back at LAND.bearers.pace: 2 x aid / pace, 330 s. Bearers out are still counted in
+  // its strength, its nerve, the day's count and its size: they only weaken its own blows, by the share of its strength
+  // away (atHand). One land:bearers event a block, to the player's own side, as its bearers first go out. Nothing here
+  // draws on the dice. The drill draws the men (drill.ts): the wounded, the bearers and the carries, looks only.
+
+  /** Where a block's aid post stands: LAND.bearers.aid metres behind its start place, toward its own back edge, on the field. */
+  aidOf(u: LandUnit): [number, number] {
+    const back = u.side === 'att' ? -1 : 1;
+    return [clamp(u.home[0], 0, this.field.w), clamp(u.home[1] + back * LAND.bearers.aid, 0, this.field.h)];
+  }
+
+  /** A block's bearers and wounded, as the rules count them (strength): none before its first loss, or with the switch off. */
+  litter(u: LandUnit): Readonly<Litter> | undefined { return this.bearers ? this.litters.get(u.id) : undefined; }
+
+  /** A loss of strength d on a block: its share of wounded, the light cases to their dressing, the rest lying for the bearers. */
+  private wounded(u: LandUnit, d: number): void {
+    if (!(d > 0)) return;
+    const B = LAND.bearers, L = B.light;
+    let l = this.litters.get(u.id);
+    if (!l) { l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false }; this.litters.set(u.id, l); }
+    const hurt = d * (1 - killedShare(u.nat)), light = hurt * L.share, foot = LAND.speed.inf;
+    const at = Math.round((this.t + (L.at > 0 ? L.at / (foot * L.out) : 0) + L.dress + (L.at > 0 ? L.at / (foot * L.back) : 0)) * 1000) / 1000;
+    const last = l.light[l.light.length - 1];
+    if (last && last.at === at) last.n += light; else if (light > 0) l.light.push({ at, n: light });
+    l.waiting += hurt - light;
+  }
+
+  /**
+   * Each tick, after the harm: the bearers whose trip is done are home; the light cases whose dressing is done are back
+   * in the line, where their block still fights (up to its strength at the start); then, while litter cases wait and
+   * bearers are home, a block still fighting sends them out: min(waiting, home / litter) cases, litter bearers each.
+   */
+  private carry(): void {
+    const B = LAND.bearers, trip = (2 * B.aid) / B.pace, t = this.t;
+    for (const u of this.units) {
+      const l = this.litters.get(u.id);
+      if (!l) continue;
+      if (l.trips.length && l.trips[0].back <= t + 1e-9) {
+        while (l.trips.length && l.trips[0].back <= t + 1e-9) l.trips.shift();
+        l.out = l.trips.reduce((a, x) => a + x.by, 0);
+      }
+      while (l.light.length && l.light[0].at <= t + 1e-9) {
+        const n = l.light.shift()!.n, was = u.str;
+        if (!fighting(u)) continue;
+        u.str = Math.min(u.str0, u.str + n);
+        if (u.str <= was) continue;
+        let r: (typeof this.returns)[number] | undefined;
+        for (let i = this.returns.length - 1; i >= 0 && !r; i--) if (this.returns[i].unit === u.id) r = this.returns[i];
+        if (r && Math.floor(r.t + 1e-9) === Math.floor(t + 1e-9)) r.n += u.str - was;
+        else this.returns.push({ t: Math.round(t * 1000) / 1000, unit: u.id, n: u.str - was });
+      }
+      if (!fighting(u) || l.waiting <= 1e-12) continue;
+      const home = l.all - l.out;
+      if (home <= 1e-12) continue;
+      const cases = Math.min(l.waiting, home / B.litter), by = cases * B.litter;
+      l.waiting -= cases; l.out += by;
+      l.trips.push({ back: Math.round((t + trip) * 1000) / 1000, by });
+      if (!l.told) {
+        l.told = true;
+        if (this.ticket[u.side].human) this.say({ what: 'land:bearers', unit: u.id, side: u.side, text: `${this.named(u)}'s stretcher bearers are carrying the wounded back.`, x: u.x, y: u.y });
+      }
+    }
+  }
+
+  /** The share of a block's strength at hand to strike with: all of it, less its bearers out carrying (none below nothing). */
+  private atHand(u: LandUnit): number {
+    const l = this.litters.get(u.id);
+    if (!l || l.out <= 0 || u.str <= 0) return 1;
+    return Math.max(0, u.str - l.out) / u.str;
+  }
+
+  /**
+   * The bearers' part of the view, a side's own blocks (every side's with no side given, as a recording is): each block's
+   * bearers out and litter cases waiting, in men (strength times its men at full strength), and the battle second the
+   * next of its bearers are back (null with none out); the aid post of each block that has had wounded; and the light
+   * cases back in the line in the two battle seconds before this one (when, the block, how many men), each told once by
+   * its t and block: a battle second is shown only once it is over, so an entry never changes after it is shown (a
+   * block's returns in one second are summed), and one of no whole man is left out. Every side's where the view is
+   * unfogged (the card knew the defence), as the telephone lines are. Left out with the switch off, and before anyone
+   * is hurt.
+   */
+  bearerView(as?: Side): Pick<BattleView, 'bearers' | 'aid' | 'returns'> {
+    if (!this.bearers || !this.litters.size) return {};
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    const ours = (u: LandUnit | undefined): u is LandUnit => !!u && (as === undefined || u.side === as || !this.fog);
+    const men = (u: LandUnit, s: number): number => Math.round((s * u.men0) / Math.max(1e-9, u.str0));
+    const bearers: NonNullable<BattleView['bearers']> = [], aid: NonNullable<BattleView['aid']> = [], returns: NonNullable<BattleView['returns']> = [];
+    for (const [id, l] of [...this.litters].sort((a, c) => a[0] - c[0])) {
+      const u = this.unit(id);
+      if (!ours(u)) continue;
+      aid.push({ side: u.side, unit: id, x: r1(l.aid[0]), y: r1(l.aid[1]) });
+      const out = men(u, l.out), waiting = men(u, l.waiting);
+      if (out > 0 || waiting > 0) bearers.push({ unit: id, out, waiting, back: l.trips.length ? l.trips[0].back : null });
+    }
+    const now = Math.floor(this.t + 1e-9);
+    for (const r of this.returns) {
+      const u = this.unit(r.unit), sec = Math.floor(r.t + 1e-9);
+      if (sec >= now || sec < now - 2 || !ours(u)) continue;
+      const n = men(u, r.n);
+      if (n > 0) returns.push({ t: r.t, unit: r.unit, n });
+    }
+    return { ...(bearers.length ? { bearers } : {}), ...(aid.length ? { aid } : {}), ...(returns.length ? { returns } : {}) };
   }
 
   // ---- The end --------------------------------------------------------------------------------------------------
@@ -3550,8 +4064,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
-    // and screens a side sees (hedge cutters, smoke on call; release 2).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
+    // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol).
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

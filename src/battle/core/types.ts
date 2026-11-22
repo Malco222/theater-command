@@ -544,6 +544,17 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    */
   riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
   /**
+   * Land, night patrol (release 2; Brian, 22 November 17:33Z; the design director, 18:36Z; LandBattle.patrol on, with
+   * hiding on): the attack's patrol the night before, settled as the clock starts. The side that sent it, its block
+   * ('unit'), when it was out (t0 to t1, battle seconds, negative: the night before), its men, where it set out from
+   * ('from') and where it went to ('to': where it was caught, when it was), the hidden post it found (found: where and
+   * what, null where none), whether the defence is alerted (it was caught), and the flares the defence fired over it
+   * ([t, x, y] each; none unless caught). The attack sees all of it; the defence only once alerted, and then only the
+   * patrol's men where it was caught and the flares (no 'unit', 'from' or what was found). Looks and words only beyond
+   * what the rules settled at the start. Left out where no patrol went out.
+   */
+  patrol?: { side: Side; unit?: number; t0: number; t1: number; men: number; from?: [number, number]; to: [number, number]; route?: [number, number, number][]; found: { x: number; y: number; kind: string } | null; alerted: boolean; flares: [number, number, number][] };
+  /**
    * Land, hedge cutters (release 2; ruling 242; LandBattle.cutters on): the gaps tank blocks have cut through hedges, the
    * side's own and those cut by enemy blocks it knew as the cut began (all of them with no side given, as a recording
    * is). Each: the battle second the cut began (t0: the block's front at the hedge, the lead tank pushing through) and
@@ -558,6 +569,36 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * second it is gone (until). A direct blow across it strikes at half. Left out where none stands.
    */
   screens?: { id: number; side: Side; unit?: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }[];
+  /**
+   * Land, field telephone lines (release 2; the design director, 18:36Z; LandBattle.phones on): the defence's wires, from
+   * the first step. Seen by the defence, and by everyone where the view is unfogged (no side given, or the card knew the
+   * defence). hq: the headquarters every wire runs from. wires: each { id, side, pts: [hq, its block's middle now], hq,
+   * unit, lines (2 for Germany's double lines), cut (lines cut now: down once cut >= lines) }. cuts: each line cut, { t,
+   * wire, x, y, by? } (by: the gun, mortar team or tank that cut it, left out where the side has not met it). mends: each
+   * lineman sent, { t, wire, man, t0, t1, x, y }: he leaves hq at t0, reaches the cut at x, y at t1, and the wire is mended
+   * at t (listed from t0, so a mend's t may lie ahead). held: each order that waited for a down wire, { t, unit, due,
+   * went? }: given at t, due at due; went, when it reached the block (absent while on its way, and for good where a later
+   * order took its place). Left out with the switch off.
+   */
+  phones?: {
+    hq: [number, number];
+    wires: { id: number; side: Side; pts: [number, number][]; hq: [number, number]; unit: number; lines: number; cut: number }[];
+    cuts: { t: number; wire: number; x: number; y: number; by?: number }[];
+    mends: { t: number; wire: number; man: number; t0: number; t1: number; x: number; y: number }[];
+    held: { t: number; unit: number; due: number; went?: number }[];
+  };
+  /**
+   * Land, stretcher bearers (release 2; Brian, 22 November 17:33Z; the design director's Q4 and Q5, 18:36Z;
+   * LandBattle.bearers on), a side's own blocks (every side's with no side given, as a recording is). bearers: each block
+   * with bearers out carrying ('out') or litter cases lying for them ('waiting'), in men, and the battle second the next
+   * of its bearers are back ('back', null with none out). aid: the aid post of each block that has had wounded, where its
+   * bearers carry them. returns: the light cases back in the line in the last two battle seconds, each the battle second,
+   * the block and how many men (a block's in one battle second together): tell each once, by its t and block. Left out
+   * where none.
+   */
+  bearers?: { unit: number; out: number; waiting: number; back: number | null }[];
+  aid?: { side: Side; unit: number; x: number; y: number }[];
+  returns?: { t: number; unit: number; n: number }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

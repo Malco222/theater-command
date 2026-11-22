@@ -144,6 +144,38 @@ export const LAND = {
     hedge: { near: HEDGE_NEAR, gap: 3 },
     staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
   },
+  /**
+   * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+   * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+   * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+   * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+   * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+   * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+   * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+   * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+   * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+   * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+   * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+   * 1937, sec. 35).
+   *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+   *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+   *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+   *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+   *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+   *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+   *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+   *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+   *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+   *     Its pictures, and the men its block loses when it is caught.
+   *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+   */
+  patrol: {
+    found: 0.4,
+    caught: 0.3,
+    size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 } as Record<string, number>,
+    night: { t0: -2400, t1: -600 },
+  },
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
     mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
@@ -502,11 +534,123 @@ export const LAND = {
     } as Record<string, SmokeMeans>,
     kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA', FFR: 'FRA' } as Record<string, string>,
   },
+  /**
+   * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+   * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+   * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+   * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+   * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+   * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+   * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+   * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+   * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+   * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+   * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+   * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+   * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+   *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+   *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+   *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+   *     Division, 1945).
+   *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+   *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+   *     battle seconds a real minute. Finding the break is not counted (no source).
+   *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+   *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+   *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+   *     Every other army 1 ('_').
+   *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+   *     nations): how orders go once the wire is down.
+   *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+   *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+   *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+   *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+   *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+   *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+   *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+   *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+   *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+   */
+  phones: {
+    cut: 0.12,
+    splice: 30,
+    runner: 6,
+    lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 } as Record<string, number>,
+    fallback: {
+      USA: [[1942, 'runner'], [9999, 'radio']], UK: [[9999, 'radio']], CAN: [[9999, 'radio']], AUS: [[9999, 'radio']], NZL: [[9999, 'radio']], SAF: [[9999, 'radio']], IND: [[9999, 'radio']],
+      GER: [[1942, 'runner'], [9999, 'radio']], SOV: [[9999, 'runner']], JAP: [[9999, 'runner']], ITA: [[9999, 'runner']], FRA: [[9999, 'runner']], VIC: [[9999, 'runner']], _: [[9999, 'runner']],
+    } as Record<string, [number, PhoneFallback][]>,
+  },
+  /**
+   * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+   * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+   * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+   * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+   * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+   * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+   * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+   * nerve, its count or its size). Nothing here draws on the dice.
+   *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+   *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+   *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+   *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+   *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+   *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+   *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+   *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+   *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+   *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+   *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+   *       battleorder.org): 4 of a company of 142.
+   *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+   *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+   *       squad (med-dept.com, The WW2 Aid Station).
+   *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+   *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+   *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+   *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+   *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+   *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+   *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+   *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+   *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+   *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+   *       Carded for Record in WWII): knob (DD 18:36Z).
+   *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+   *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+   *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+   *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+   *       knobs (DD 18:36Z).
+   *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+   */
+  bearers: {
+    killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 } as Record<string, number>,
+    share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 } as Record<string, number>,
+    litter: 4,
+    aid: 503,
+    pace: 3.048,
+    light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 },
+  },
 };
+/** How orders go to a block whose telephone wire is down (LAND.phones.fallback): by the wireless or by a runner. */
+export type PhoneFallback = 'radio' | 'runner';
+/** Field telephone lines: the lines to each block of this army (LAND.phones.lines; '_' for an army not listed). */
+export const phoneLines = (nat: string): number => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+/** Field telephone lines: how this army's orders go in this year once a wire is down (LAND.phones.fallback). */
+export const phoneFallback = (nat: string, year: number): PhoneFallback => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? 'runner';
 
 /** How far a block's fire carries: its team's reach, or its kind's. */
 export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);
+/** Night patrol: the men in an army's reconnaissance patrol (LAND.patrol.size; every army not listed, '_'). */
+export const patrolSize = (nat: string): number => LAND.patrol.size[nat] ?? LAND.patrol.size._;
 /** Its gun numbers: its team's, or the guns' (only for a gun block). */
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
 /** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */
 export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+/** An army's stretcher bearers, as a share of a block's men (LAND.bearers.share): its own, or every other army's. */
+export const bearerShare = (nat: string): number => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+/** An army's share of each loss killed, the rest wounded (LAND.bearers.killed): its own, or every other army's. */
+export const killedShare = (nat: string): number => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;

@@ -534,7 +534,10 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   // Bold, while the line is not yet struck: the held block walks along its own row toward the stretch the attack is
   // coming at (the design director, ruling 239's rider, 03:20Z). It strikes nothing on the way and is sent, as every
   // reserve is, once the line is struck. A methodical or mass defence's stands in the middle until then.
-  const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
+  // Night patrol (release 2): alerted by the patrol it caught, the computer's defence of any style walks it so at once,
+  // toward the attack wherever it comes on (the design director, 18:36Z, Q7(b)); the player's moves his own.
+  const shift = b.alertedStaff(side) ? Infinity : style?.defShift;
+  const near = !struck.length && shift ? coming(b, mine, foes, shift) : null;
   for (const u of mine) {
     if (u.kind === 'art' || u.order?.kind === 'withdraw' || skip?.has(u.id)) continue;
     // Hidden in the woods (release 2): its line keeps there, holding its fire, until the enemy finds it.
