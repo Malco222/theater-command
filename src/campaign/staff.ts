@@ -21,7 +21,7 @@ import { DOMINATION, dominating } from './domination';
 import { HISTORY, bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { AIMS, aimHolders, aimMarched, type Aim } from './aims';
 import { lineShut } from './line';
-import { STRATEGY, campaignLog, plansAhead, sectorTerms } from './strategy';
+import { STRATEGY, campaignLog, mounts, plansAhead, sectorTerms } from './strategy';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -1662,7 +1662,8 @@ export function lodgment(g: Game, nat: string, slot = 0): { at: Region; ports: R
   // (A force put ashore for an enemy on the staff's own side of the ocean is the force its forecast asks for and no
   // more: it is short only against the enemy army next to its ground, never against the fifteen divisions a
   // lodgment across the water is built up to. Version 81, ruling 80.)
-  const hold = keepsDoor(g, nat) && beyondEurope(at.id) ? 0 : D.hold ?? 15;
+  // (Nor is the lodgment of a planning staff's operation, a side-show: the war plan, `opLodged`.)
+  const hold = (keepsDoor(g, nat) && beyondEurope(at.id)) || (!slot && !!flag(g, `st:lodgedOp:${nat}`) && !!STRATEGY.ops?.front && mounts(g, nat)) ? 0 : D.hold ?? 15;
   return { at, ports: q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl)), short: mine < Math.max(hold, (D.feed ?? 2) * foes) };
 }
 
@@ -2039,6 +2040,12 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const foe = ids[flag(g, kf) - 1], quay = g.regions[flag(g, kq) - 1];
   // A quay must have room for the force among whatever corps of its allies stand there: three Americans can never stand in a harbour five British corps fill.
   const room = (p: Region): boolean => STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= D.force;
+  // (The landing as ruled, strategy.json 'ops.landing.quay': the quay follows the beach the desk has named.)
+  const named = landingRules(g, nat)?.quay && foe && g.nations[foe].alive && !lodgment(g, nat, 1)?.short ? aimQuay(g, nat, 1, foe) : null;
+  if (named && room(named)) {
+    if (named !== quay) { g.flags[kq] = named.id + 1; g.flags[at] = g.turn; }
+    return { foe, quay: named };
+  }
   if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && room(quay) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
   if (flag(g, none) === g.turn) return null;
   const drop = (): null => { delete g.flags[kf]; delete g.flags[kq]; g.flags[none] = g.turn; return null; };
@@ -2051,6 +2058,8 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   // Each far shore in turn: a piece of friendly ground away from home. One with the enemy on it or next to it has work of its own.
   const seen = new Uint8Array(g.regions.length);
   const idle: Region[] = [];
+  // (The war plan: ground beside a country the staff means to go to war with has work of its own too. `meansToFight`.)
+  const meant = meansToFight(g, nat);
   for (const r0 of g.regions) {
     if (seen[r0.id] || home[r0.id] || !allied(g, nat, r0.ctrl)) continue;
     const q = [r0.id];
@@ -2062,7 +2071,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
       for (const u of r.units) if (u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng') mine++;
       for (const j of r.nb) {
         const c = g.regions[j].ctrl;
-        if (atWar(g, nat, c)) front = true;
+        if (atWar(g, nat, c) || meant.has(c)) front = true;
         else if (!seen[j] && !home[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
       }
     }
@@ -2149,6 +2158,12 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const target = D.afresh ? 1 + (hashString(`${you}:${[...new Set(listed.map((r) => r.owner))].sort().join(',')}`) % 1000000) : 0;
   const room = (p: Region): boolean => !D.room || STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
   const kept = g.regions[flag(g, key) - 1];
+  // (The landing as ruled, strategy.json 'ops.landing.quay': the quay follows the beach the desk has named.)
+  const named = sea.second && !lod?.short ? aimQuay(g, nat, 0, you) : null;
+  if (named && room(named)) {
+    if (named !== kept) { g.flags[key] = named.id + 1; g.flags[at] = g.turn; if (target) g.flags[tk] = target; }
+    return named;
+  }
   const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6 && (!target || flag(g, tk) === target);
   if (fresh && room(kept) && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
   let best: Region | null = null, bw = 0, bs = Infinity;
@@ -2316,6 +2331,320 @@ export function quayNamed(g: Game, nat: string, slot = 0): Region | null {
   if (!flag(g, `st:foe:${nat}${s}`)) return null;
   const quay = g.regions[flag(g, `st:quay:${nat}${s}`) - 1];
   return quay && allied(g, nat, quay.ctrl) ? quay : null;
+}
+
+/**
+ * The operations a staff means to launch (the war plan; strategy.json 'ops'): the great choices on its menu it has
+ * not carried out, in their months (from 'lead' months before the first to the last), which the history dial does
+ * not rule out, which still have somebody to declare war on, and whose own conditions hold this month, so that only
+ * the decision is wanting. And one launched this month or last, while its landings are going ashore.
+ * (A choice that waits on somebody else's war is not yet meant: Italy follows Germany into Yugoslavia when Germany
+ * goes, and until then Yugoslavia is a neutral neighbour like any other. Counted as meant from the first day, it
+ * held Albania's garrison for the whole war and Italy's army abroad never sailed: 9 landings in 24 wars became 1.)
+ */
+function opsMeant(g: Game, nat: string): Op[] {
+  const lead = STRATEGY.ops?.lead ?? 3;
+  return ops(nat).filter((op) => {
+    const done = flag(g, `st:done:${nat}:${op.id}`);
+    if (done > 0) return !!op.landings && g.turn - done <= 1;
+    return !done && g.turn >= (op.from ?? 1) - lead && g.turn <= (op.to ?? 999) && leash(g, nat, op.id).kind !== 'never' && targets(g, nat, op).length > 0
+      && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, []));
+  });
+}
+
+/**
+ * The force a planning staff keeps for an operation it means to launch (the war plan; strategy.json 'ops.keep'):
+ * the corps its landings name. They stand held at their ports until the operation goes, whatever offensive opens
+ * beside them. (Before, the western offensive's release took three of the four groups meant for Norway from Bremen,
+ * and when the operation went one corps sailed: seed 1 at stop 3, the playtester's trace of 22 November 2026.)
+ */
+export function keptForOps(g: Game, nat: string): Set<string> {
+  const out = new Set<string>();
+  if (!STRATEGY.ops?.keep || !mounts(g, nat)) return out;
+  for (const op of opsMeant(g, nat)) for (const L of op.landings ?? []) { out.add(L.corps); for (const nm of L.with ?? []) out.add(nm); }
+  return out;
+}
+
+/**
+ * The countries a planning staff means to go to war with (the war plan; strategy.json 'ops.keep'): those an
+ * operation it still means to launch would declare on. Ground of its own beside one of them is no idle ground: the
+ * army abroad's desk leaves its garrison where it stands. (Before, Italy's desk took the whole garrison of Albania,
+ * nine divisions, for a landing on Cyprus in October 1940; Italy then declared war on Greece with nobody in Albania,
+ * and the Greek army walked in: seed 2 at stop 3.)
+ */
+function meansToFight(g: Game, nat: string): Set<string> {
+  const out = new Set<string>();
+  if (!STRATEGY.ops?.keep || !mounts(g, nat)) return out;
+  for (const op of opsMeant(g, nat)) if (!flag(g, `st:done:${nat}:${op.id}`)) for (const e of targets(g, nat, op)) out.add(e);
+  return out;
+}
+
+/**
+ * The harbours of a foothold that a planning staff does not leave empty (the war plan; strategy.json 'ops.port'): a
+ * harbour its side holds, with its quays on an open coast, on a piece of friendly ground away from the staff's
+ * homeland of 'size' provinces or fewer, with an enemy field corps within 'within' marches of it. A foothold lives
+ * through its harbour: the corps that marches out of it and leaves it empty is cut off the month an enemy walks in.
+ */
+export function footholdPorts(g: Game, nat: string): Region[] {
+  const P = STRATEGY.ops?.port;
+  if (!P || !mounts(g, nat)) return [];
+  const home = homeGround(g, nat).on;
+  const seen = new Uint8Array(g.regions.length);
+  const out: Region[] = [];
+  const ours = (r: Region): boolean => allied(g, nat, fieldCtrl(g, r));
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.kind === 'fort' || seen[c.reg] || home[c.reg]) continue;
+    const r0 = g.regions[c.reg];
+    if (!ours(r0) || r0.owner === nat) { seen[c.reg] = 1; continue; }
+    const q = [r0.id];
+    seen[r0.id] = 1;
+    let joined = false;
+    for (let i = 0; i < q.length && q.length <= P.size; i++) for (const j of g.regions[q[i]].nb) {
+      if (seen[j] || !ours(g.regions[j])) continue;
+      if (home[j]) { joined = true; continue; }
+      seen[j] = 1; q.push(j);
+    }
+    if (joined || q.length > P.size) continue;
+    for (const id of q) {
+      const p = g.regions[id];
+      if (!p.port || !p.seas.length || !allied(g, nat, p.ctrl)) continue;
+      // An enemy field corps within the marches of the quay, over any ground.
+      const d = new Map<number, number>([[p.id, 0]]);
+      const ring = [p.id];
+      let near = false;
+      for (let i = 0; i < ring.length && !near; i++) {
+        const k = d.get(ring[i])!;
+        if (k >= P.within) continue;
+        for (const j of g.regions[ring[i]].nb) {
+          if (d.has(j)) continue;
+          d.set(j, k + 1); ring.push(j);
+          if (hostileUnits(g, g.regions[j], nat).some((u) => u.kind !== 'fort' && u.town === undefined)) { near = true; break; }
+        }
+      }
+      if (near) out.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * An operation's landing is its staff's second front from the day (the war plan; strategy.json 'ops.front'). The
+ * landing desk names an enemy across the water only after a year of quiet war with him (open.json 'descent.after'),
+ * so the corps an operation put ashore were fed by nobody, and a landing that failed was tried again a year on. A
+ * planning staff's home desk takes the operation's enemy for its own the month the operation goes (`opFoe`), unless
+ * it has men of its own ashore elsewhere; and the first harbour the operation takes is that desk's lodgment
+ * (`opLodged`): fed through its harbour while the men there are fewer than 'feed' times the enemy next to their
+ * ground (not built up to the fifteen divisions of a second front), widened where it is full, and where the
+ * operation was beaten off the desk lands again under its own tests.
+ */
+export function opFoe(g: Game, nat: string, at: Region): void {
+  if (!STRATEGY.ops?.front || !mounts(g, nat) || !OPEN.descent || !isOpen(g) || g.nations[nat].sealift <= 0) return;
+  // (Only the enemy the operation itself went to war with: an expedition sent to an ally's shore names nobody.)
+  const op = ops(nat)[flag(g, `st:goOp:${nat}`) - 1], e = at.owner;
+  if (!op?.landings || !(op.declare ?? []).includes(e) || !atWar(g, nat, e) || !g.nations[e]?.alive || g.nations[e].capital < 0 || lodgment(g, nat)) return;
+  const ids = Object.keys(g.nations);
+  if (flag(g, `st:foe:${nat}`) === ids.indexOf(e) + 1) return;
+  g.flags[`st:foe:${nat}`] = ids.indexOf(e) + 1;
+  g.flags[`st:foeAt:${nat}`] = g.turn;
+  delete g.flags[`st:quay:${nat}`];
+  delete g.flags[`st:lodged:${nat}`];
+  delete g.flags[`st:lodgedOp:${nat}`];
+  campaignLog.say?.(g, nat, 'opFoe', at.name);
+}
+export function opLodged(g: Game, nat: string, at: Region): void {
+  if (!STRATEGY.ops?.front || !mounts(g, nat) || !OPEN.descent || !isOpen(g) || !at.port || !at.seas.length) return;
+  const ids = Object.keys(g.nations);
+  const foe = ids[flag(g, `st:foe:${nat}`) - 1];
+  if (!foe || (at.owner !== foe && at.prev !== foe) || lodgment(g, nat)) return;
+  g.flags[`st:lodged:${nat}`] = at.id + 1;
+  g.flags[`st:lodgedOp:${nat}`] = 1;
+  campaignLog.say?.(g, nat, 'opLodged', at.name);
+}
+
+/**
+ * The army of an operation that is won goes home (the war plan; strategy.json 'ops.home'). The corps the desk fed
+ * through the operation's harbour stayed on its ground when the country fell: nobody had orders for them. (Seed 30
+ * at stop 3: eight German corps, 24 divisions of 151, took Norway by November 1940 and stood there when the attack
+ * on the Soviet Union opened seven months later. Over 24 wars Germany had three to five corps fewer on its eastern
+ * front with the operations mounted, and fell 3.3 months sooner, se 2.0.) Once the country the operation landed on
+ * has fallen, the staff keeps on that ground the corps its orders hold there and, of the rest, the weakest, until
+ * those kept come to 'guard' divisions or to 'descent.feed' times the enemy on that ground and next to it,
+ * whichever is more. The others take ship for home as the ships lift them, over no crossing riskier than 'risk'
+ * (ai.ts, `recall`). Nothing while that ground is in one piece with the homeland: the main army has them.
+ */
+export function opArmies(g: Game, nat: string): IdleArmy[] {
+  const H = STRATEGY.ops?.home, n = g.nations[nat];
+  if (!H || !mounts(g, nat) || !n?.alive || n.capital < 0 || n.sealift <= 0 || !flag(g, `st:lodgedOp:${nat}`)) return [];
+  const at = g.regions[flag(g, `st:lodged:${nat}`) - 1];
+  if (!at || !allied(g, nat, at.ctrl)) return [];
+  if (![at.owner, at.prev].some((e) => !!e && e !== nat && !!g.nations[e] && !g.nations[e].alive)) return [];
+  const home = homeGround(g, nat).on;
+  if (home[at.id]) return [];
+  const seen = new Uint8Array(g.regions.length);
+  const q = [at.id];
+  seen[at.id] = 1;
+  let foes = 0;
+  const count = (r: Region): void => { for (const u of r.units) if (!u.dead && u.kind !== 'fort' && atWar(g, nat, u.nat)) foes += u.divs * u.str; };
+  for (let i = 0; i < q.length; i++) {
+    const r = g.regions[q[i]];
+    count(r);
+    for (const j of r.nb) {
+      if (seen[j]) continue;
+      const x = g.regions[j];
+      if (home[j]) return [];
+      if (allied(g, nat, x.ctrl)) { seen[j] = 1; q.push(j); continue; }
+      seen[j] = 2;
+      if (atWar(g, nat, x.ctrl)) count(x);
+    }
+  }
+  const mine = q.flatMap((id) => g.regions[id].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort'));
+  const free = mine.filter((u) => !u.hold && !u.town && u.kind !== 'eng' && !u.airborne && u.joint === undefined && u.leave === undefined);
+  const size = (c: Corps): number => c.divs * c.str;
+  let kept = mine.filter((u) => !free.includes(u)).reduce((s, u) => s + size(u), 0);
+  const need = Math.max(H.guard, (OPEN.descent?.feed ?? 2) * foes);
+  const go: Corps[] = [];
+  for (const c of [...free].sort((a, b) => size(a) - size(b) || a.id - b.id)) {
+    if (kept < need) kept += size(c);
+    else go.push(c);
+  }
+  if (!go.length) return [];
+  const ports = q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl));
+  return ports.length ? [{ ports, go: go.reverse() }] : [];
+}
+
+// ---- The landing, mounted as a whole (strategy.json 'ops.landing') ---------------------------------------
+//
+// The design director's ruling of 22 November 2026, in a general form for every nation and theatre. Before it a
+// desk chose its quay first (the harbour with the most lightly held enemy harbours over seas open that month) and
+// its beach from what that quay could reach: Britain's home army named Sardinia from Cornwall, three seas off, while
+// its army in Africa stood one sea from Sicily; an army that had hopped to Rhodes named Rhodes its quay and could
+// reach nothing. Now the beach is chosen first, among the harbours within a landing's range of any quay the desk's
+// army could sail from, whatever bars the way that month; the quay is the one nearest to it; a desk leaves a beach
+// to the staff's other army where that one is working on the same enemy from nearer; and a beach that only the sky
+// or a closed sea bars is waited for, while the fighters and the fleets open the way, for its season.
+
+/** The landing's rules as ruled, for a staff that mounts its operations as wholes; null where the switch is off. */
+export const landingRules = (g: Game, nat: string): NonNullable<NonNullable<typeof STRATEGY.ops>['landing']> | null => (mounts(g, nat) ? STRATEGY.ops!.landing ?? null : null);
+
+/**
+ * The harbours a desk's army could mount a landing from (slot 0 the army at home, 1 the army abroad): for the home
+ * army the home ports of its own country in one piece with the capital; for the army abroad the ports of friendly
+ * ground away from home with no enemy on it or next to it, where a landing force of its own could stand within the
+ * season and its allies leave it room (as `abroad` reckons them). Reads only.
+ */
+export function deskQuays(g: Game, nat: string, slot: number): Region[] {
+  const D = OPEN.descent;
+  if (!D) return [];
+  const home = homeGround(g, nat);
+  if (!slot) return home.list.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
+  const own = (r: Region): Corps[] => r.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng');
+  const meant = meansToFight(g, nat);
+  const seen = new Uint8Array(g.regions.length);
+  const out: Region[] = [];
+  for (const r0 of g.regions) {
+    if (seen[r0.id] || home.on[r0.id] || !allied(g, nat, r0.ctrl)) continue;
+    const q = [r0.id];
+    seen[r0.id] = 1;
+    let front = false, mine = 0;
+    for (let i = 0; i < q.length; i++) {
+      const r = g.regions[q[i]];
+      if (hostileUnits(g, r, nat).length) front = true;
+      mine += own(r).length;
+      for (const j of r.nb) {
+        const c = g.regions[j].ctrl;
+        if (atWar(g, nat, c) || meant.has(c)) front = true;
+        else if (!seen[j] && !home.on[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
+      }
+    }
+    if (front || mine < D.force) continue;
+    for (const id of q) {
+      const p = g.regions[id];
+      if (!p.port || !p.seas.length || STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length < D.force) continue;
+      // (The corps that could be on this quay within the season: those there, and those within three marches that would not leave a place empty.)
+      const d = new Int16Array(g.regions.length).fill(-1);
+      const w = [p.id];
+      d[p.id] = 0;
+      let spare = 0;
+      for (let i = 0; i < w.length; i++) {
+        const r = g.regions[w[i]], us = own(r);
+        spare += r.id === p.id ? us.length : Math.min(us.filter((u) => !KIND[u.kind].mobile).length, Math.max(0, us.length - 1));
+        if (d[r.id] >= 3) continue;
+        for (const j of r.nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[r.id] + 1; w.push(j); }
+      }
+      if (spare >= D.force) out.push(p);
+    }
+  }
+  return out;
+}
+
+/** The seas a nation's troopships reach from a quay within a landing's range, whoever holds them: the seas crossed to each, -1 beyond. */
+export function seasFrom(g: Game, nat: string, from: Region): Int16Array {
+  return lanes(g, nat, from, []);
+}
+/** The seas crossed from a quay's reckoning (`seasFrom`) to a coast: Infinity beyond a landing's range. */
+export function seasTo(d: Int16Array, to: Region): number {
+  let k = Infinity;
+  for (const z of to.seas) if (d[z] > 0 && d[z] < k) k = d[z];
+  return k;
+}
+
+/**
+ * What lies beyond a beach by land (strategy.json 'ops.landing.beyond'): the towns, the works and the capital of
+ * the enemy's within 'marches' of it over ground he holds, each divided by one more than its marches from the
+ * beach, and 'share' of the sum. A beach is worth the campaign it opens: Sicily leads over the strait to Naples and
+ * Rome and Sardinia leads nowhere; a harbour on the Seine is worth more than one in Brittany. Nothing for an island
+ * taken whole.
+ */
+export function beyondBeach(g: Game, nat: string, r: Region): number {
+  const B = STRATEGY.ops?.landing?.beyond;
+  if (!B || !r.nb.length) return 0;
+  const d = new Int16Array(g.regions.length).fill(-1);
+  const q = [r.id];
+  d[r.id] = 0;
+  let sum = 0;
+  for (let i = 0; i < q.length; i++) {
+    const x = g.regions[q[i]];
+    if (d[x.id] > 0) sum += (x.vp + x.fac + (x.cap ? 6 : 0)) / (1 + d[x.id]);
+    if (d[x.id] >= B.marches) continue;
+    for (const j of x.nb) if (d[j] < 0 && atWar(g, nat, g.regions[j].ctrl)) { d[j] = d[x.id] + 1; q.push(j); }
+  }
+  return B.share * sum;
+}
+
+/**
+ * The quay a desk's named beach is to be reached from (ai.ts `takeAim` names both and keeps them in the flags): the
+ * desk moves its landing force there. Null where no beach is named, the beach is no longer that enemy's, or the quay
+ * is lost.
+ */
+function aimQuay(g: Game, nat: string, slot: number, you: string): Region | null {
+  if (!landingRules(g, nat)?.quay) return null;
+  const aim = g.regions[flag(g, `st:aim:${nat}${SLOT[slot]}`) - 1], q = g.regions[flag(g, `st:aimQuay:${nat}${SLOT[slot]}`) - 1];
+  if (!aim || !q || aim.ctrl !== you || !atWar(g, nat, you) || !q.port || !(slot ? allied(g, nat, q.ctrl) : q.ctrl === nat)) return null;
+  return q;
+}
+
+/**
+ * True where a desk leaves a beach to a nearer army (strategy.json 'ops.landing.defer'): the staff's other army, or
+ * with 'allies' an army of an ally's, has named a beach of the same enemy's, and its quay is fewer seas from this
+ * one than the `seas` this desk would cross. The nearest army of the side mounts the landing; the others do not
+ * spend their force on the same enemy's shores from further off. (Before: America's army in Cornwall landed on
+ * Sardinia, three seas away, in June 1943 while Britain's army stood at Tripoli, two seas from it and one from
+ * Sicily. Seed 23 at stop 3.) A beach is named for six months at most (ai.ts `takeAim`), so nobody waits longer on
+ * an army that cannot go.
+ */
+export function nearerDesk(g: Game, nat: string, slot: number, r: Region, seas: number): boolean {
+  const nearer = (id: string, o: string): boolean => {
+    const aim = g.regions[flag(g, `st:aim:${id}${o}`) - 1], quay = g.regions[flag(g, `st:quay:${id}${o}`) - 1];
+    if (!aim || !quay || aim.ctrl !== r.ctrl || !atWar(g, id, aim.ctrl) || !allied(g, id, quay.ctrl)) return false;
+    return seasTo(seasFrom(g, id, quay), r) < seas;
+  };
+  if (nearer(nat, SLOT[slot ? 0 : 1])) return true;
+  if (!STRATEGY.ops?.landing?.allies) return false;
+  for (const id of Object.keys(g.nations)) {
+    if (id === nat || id === g.human || !g.nations[id].alive || !allied(g, nat, id) || !atWar(g, id, r.ctrl)) continue;
+    if (SLOT.some((o) => nearer(id, o))) return true;
+  }
+  return false;
 }
 
 /**

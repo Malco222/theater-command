@@ -19,6 +19,7 @@ import { clamp } from '../core/math';
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
+import { STRATEGY, mounts } from './strategy';
 import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
@@ -2328,6 +2329,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   const n = g.nations[nat];
   let cross: { off: Set<number>; way: Set<number> } | null = null;
   let theirs: { off: Set<number>; way: Set<number> } | null = null;
+  let gathers: boolean | null = null;
+  const massed = new Map<number, number>();
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
     if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(); continue; }
@@ -2343,6 +2346,24 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
     cross ??= crossings(g, nat);
+    // (The landing as ruled, strategy.json 'ops.landing.fleet': for a sea of a named crossing the admirals reckon
+    // what all their free fleets within reach could bring there together, not each fleet by itself. Before, each
+    // weighed the sea alone: two British fleets of 44 and 53 stood either side of an Italian 93 on the lane to
+    // Libya, each the weaker, and the sea stayed shut to a landing force for the rest of the war. Seed 23.)
+    if (gathers === null) gathers = mounts(g, nat) && !!STRATEGY.ops?.landing?.fleet;
+    const together = (z: number): number => {
+      let v = massed.get(z);
+      if (v === undefined) {
+        v = seaSide(g, z, nat, false).total;
+        for (const x of fleetsOf(g, nat)) {
+          if (x.duty !== 'patrol' || !shipCount(x.ships) || x.ready < 0.5 || (!atSea(x) && x.ready < NAVY.ready.sortieAt) || (x.zone === z && atSea(x))) continue;
+          if (orders?.some((o) => o.fleet === x.name) || tiedNow(g, x) || !fleetReach(g, x).includes(z)) continue;
+          v += fleetPower(g, x);
+        }
+        massed.set(z, v);
+      }
+      return v;
+    };
     // (His own staff's crossing first: an ally's is covered in a month when his own staff has named none.)
     theirs ??= cross.off.size || cross.way.size ? { off: new Set<number>(), way: new Set<number>() } : alliesCrossings(g, nat);
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
@@ -2363,9 +2384,11 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
       // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
-      if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
+      const named = cross.off.has(z) || cross.way.has(z), allys = theirs.off.has(z) || theirs.way.has(z);
+      const all = gathers && f.duty === 'patrol' && (named || allys) && own < e.total ? Math.max(own, together(z)) : own;
+      if (f.duty === 'patrol' && all >= e.total && named) v += cross.off.has(z) ? 40 : 25;
       // An ally's second front, in a month when its own staff has named none (ruling 233(v)).
-      if (f.duty === 'patrol' && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) v += theirs.off.has(z) ? 40 : 25;
+      if (f.duty === 'patrol' && all >= e.total && allys) v += theirs.off.has(z) ? 40 : 25;
       if (invaded) v += 60;
       // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
       if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
