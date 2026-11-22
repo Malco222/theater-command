@@ -52,3 +52,14 @@ Cut from the Mac fetch (sound/incoming/ground-2026-11-22/); details in sound/rou
 - `b17_drone_loop` and the far bed's G07-18 part: the Memphis Belle fly-over DVIDS 600861 (three B-17s with five
   P-51s; approach looped with a gain ramp), and a B-17 flying away from DVIDS 852294.
 - Still open, not searched: Stuka/Jumo 211, torpedo, underwater, depth charge thrower, bomb release, metal crash.
+
+## Round two of leads, 22 Nov 18:00Z
+
+Searched with a skeptic per sound: `studio-library-leads-2.md` (kept leads with licence, what, fit, concerns, and what
+was set aside); fetch list `studio-library-urls-2.txt` (29 URLs, sound name then URL); raw results
+`studio-library-search-2026-11-22.json`. Nothing heard yet. Strongest by licence: Australian War Memorial
+"operational sounds" tapes (HMAS Oxley submarine: torpedo launch and cavitation; a mortar), US National Park Service
+Glacier Bay hydrophone clips (propeller whine, outboard at 20 knots), a NOAA small-vessel hydrophone clip, US Navy
+SINKEX and the USS Gerald R. Ford shock trial, US military mortar B-roll, NASA crash tests (the 1984 Boeing 720 impact,
+Langley fuselage drops). The cloud can't download any of them (nps.gov and noaa.gov are refused too), so they ride
+the next Mac fetch. Still nothing free and real for a Jumo 211; Bf 109 (DB 601) stand-ins only.
