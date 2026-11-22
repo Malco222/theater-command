@@ -339,6 +339,16 @@ namespace TheaterFx
 		AirWhiteBeyond = SafeNum(Num("air_guns.tracers.white_beyond_m", 0.0), 0.0, 1e5, 0.0);
 		AirTracerMost = static_cast<int>(SafeNum(Num("air_guns.tracers.most", 1500.0), 0.0, 6000.0, 1500.0));
 		AirOneFanBeyond = SafeNum(Num("air_guns.tracers.one_fan_beyond_m", 0.0), 0.0, 1.0e6, 0.0);
+		// (the air scene's far forms, 11-22, for its trail room going from 24 to 60 at 150 aircraft: off by default, and
+		// then nothing moves. game.air_far.trails_on: a trail past trails_from_m laid as about trails_puffs puffs, over
+		// the last trails_band of that range by degrees. guns_on: a gun past guns_from_m fires no rounds, one dash in its
+		// tracer's colour along the aim every guns_dash_s, guns_dash_flight_s of a round's flight long)
+		FarTrailFromM = Num("game.air_far.trails_on", 0.0) >= 0.5 ? SafeNum(Num("game.air_far.trails_from_m", 1200.0), 1.0, 1.0e6, 1200.0) : 0.0;
+		FarTrailBand = SafeNum(Num("game.air_far.trails_band", 0.15), 0.0, 0.9, 0.15);
+		FarTrailPuffs = SafeNum(Num("game.air_far.trails_puffs", 40.0), 4.0, 1000.0, 40.0);
+		FarGunFromM = Num("game.air_far.guns_on", 0.0) >= 0.5 ? SafeNum(Num("game.air_far.guns_from_m", 1500.0), 1.0, 1.0e6, 1500.0) : 0.0;
+		FarGunDashS = SafeNum(Num("game.air_far.guns_dash_s", 0.2), 0.03, 2.0, 0.2);
+		FarGunFlightS = SafeNum(Num("game.air_far.guns_dash_flight_s", 0.12), 0.01, 2.0, 0.12);
 		AirGlowSoft = SafeNum(Num("air_guns.tracers.glow_soft", 0.0), 0.0, 1.0, 0.0);
 		AirFarPx = SafeNum(Num("air_guns.tracers.one_fan_px", 0.0), 0.0, 64.0, 0.0);
 		TracerHues.clear();
@@ -360,6 +370,9 @@ namespace TheaterFx
 		ShareDustMostThin = SafeNum(Num("game.room_shares.dust_most_thin", 8.0), 1.0, 32.0, 8.0);
 		ShareDustThinS = SafeNum(Num("game.room_shares.dust_thin_s", 2.0), 0.1, 30.0, 2.0);
 		ShareDustLeastAlive = SafeNum(Num("game.room_shares.dust_least_alive", 2.0), 1.0, 20.0, 2.0);
+		ShareDropHoldS = SafeNum(Num("game.room_shares.drop_hold_s", 2.0), 0.0, 30.0, 2.0);
+		ShareDropFrom = SafeNum(Num("game.room_shares.drop_from", 1.0), 0.3, 2.0, 1.0);
+		ShareDropBack = SafeNum(Num("game.room_shares.drop_back", 0.9), 0.1, ShareDropFrom, 0.9);
 		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
 		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
 		CaseShadow = Clamp01(Num("ground_cases.contact_shadow", 0.5));
@@ -546,6 +559,7 @@ namespace TheaterFx
 		SharePeak = 0.0; // (FX5: nor of its barrage's peak, nor its trails' thinning)
 		ShareThin = 1.0;
 		ShareThinAt = -1.0e9;
+		ShareDrop = 0.0;
 		std::fill(SharePeaks, SharePeaks + 8, 0.0);
 		SharePeakSlot = std::numeric_limits<int64_t>::min();
 		ThinAt = -1.0e9;
@@ -4527,6 +4541,25 @@ namespace TheaterFx
 			const double Away = bEyeKnown ? (LastEye - At).Length() : 0.0;
 			const double Over = Clamp01((Away - ShareDustFullM) / std::max(1.5 * ShareDustFullM, 1.0));
 			ShareK = 1.0 + (ShareThin - 1.0) * Over * Over * (3.0 - 2.0 * Over);
+			// (the art director's ruling of 18:31Z, the heaviest barrage: when thinning is not enough, far trails past
+			// dust_full_m are let go before any far burst loses a piece, the farthest first. A trail let go lays nothing
+			// for at least drop_hold_s, so it never flickers; what it laid fades over its own life, never cut; then it
+			// comes back from its next puff, which fades in)
+			if (Now < Du->DropUntil && Now > Du->DropUntil - 60.0)
+			{
+				Du->Owed = 0.0;
+				return;
+			}
+			if (ShareDrop > 0.0 && Away > ShareDustFullM)
+			{
+				const double Lot = static_cast<double>(Mix64(static_cast<uint64_t>(Id) * 0xD1B54A32D192ED03ull + 0x3C6EF372FE94F82Bull) >> 11) * (1.0 / 9007199254740992.0);
+				if (0.5 * (Lot + 1.0 - Over) < ShareDrop) // (the farthest first: past 2.5 dust_full_m, half of them by 0.25)
+				{
+					Du->DropUntil = Now + ShareDropHoldS;
+					Du->Owed = 0.0;
+					return;
+				}
+			}
 		}
 		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Speed < 1e-6 || (ShareDustFloor < 0.0 && Busy > 0.85))
 		{
@@ -5171,6 +5204,23 @@ namespace TheaterFx
 			F->Next = Now + D.U(0.0, Gap * 0.5);
 			F->bHose = false; // (fx-air r2: a new burst starts its own hose)
 		}
+		if (FarGunFromM > 0.0 && Hue && bEyeKnown && !((LastEye - Muzzle).Length() <= FarGunFromM))
+		{
+			// (the far form, game.air_far: no rounds flown past guns_from_m, one dash along the aim every guns_dash_s in
+			// the tracer's colour; the gun takes up its rounds again where the dashes leave off)
+			for (int Dashed = 0; F->Next <= Now && Dashed < 8; ++Dashed)
+			{
+				const double K = Now - F->Last > 1e-9 ? Clamp01((F->Next - F->Last) / (Now - F->Last)) : 1.0;
+				FarGunDash(F->Next, F->Muzzle + (Muzzle - F->Muzzle) * K, (F->Dir + (Dir - F->Dir) * K).Unit(Dir), F->Carry + (Carry - F->Carry) * K, Row, Mps, *Hue);
+				F->Next += FarGunDashS;
+			}
+			F->Next = std::max(F->Next, Now);
+			F->Last = Now;
+			F->Muzzle = Muzzle;
+			F->Dir = Dir;
+			F->Carry = Carry;
+			return;
+		}
 		const double Between = Now - F->Last;
 		for (int Fired = 0; F->Next <= Now && Fired < 64; ++Fired)
 		{
@@ -5191,6 +5241,39 @@ namespace TheaterFx
 		F->Muzzle = Muzzle;
 		F->Dir = Dir;
 		F->Carry = Carry;
+	}
+
+	void Battle::FarGunDash(double T, const Vec& At, const Vec& Way, const Vec& Carry, const AirRow& Row, double Mps, const TracerHue& Hue)
+	{
+		// (a far gun's burst, game.air_far: a solid dash in the tracer core's colour, guns_dash_flight_s of a round's
+		// flight long, from just off the muzzle along the aim, carried with the aircraft; as wide as the far tracer's
+		// dash, one_fan_px, or the glow's own width)
+		const double Half = SafeNum(0.5 * FarGunFlightS * std::max(Mps, 1.0), 1.0, 2000.0, 50.0);
+		const double OwnPx = (AirFarPx > 0.0 ? AirFarPx : (AirBodyPx > 0.0 ? AirBodyPx : TracerLeast)) * Row.TracerWide;
+		Bit B;
+		B.Form = Bit::Shape::Streak;
+		B.Born = T;
+		B.From = At + Way * (Half * 1.2);
+		B.Vel = Carry;
+		B.Life = FarGunDashS * 1.25;
+		B.HalfLength = Half;
+		B.Along = Way;
+		B.R0 = B.R1 = 0.045 * Row.TracerWide;
+		B.LeastPx = 0.75 * OwnPx;
+		B.MostPx = B.DayPx = OwnPx;
+		B.Col = B.Col2 = Hue.Core;
+		B.Over = Hue.CoreOver;
+		B.bOwnDay = true;
+		B.Alpha = 1.0;
+		B.FadeIn = 0.01;
+		B.Hold = 0.8;
+		B.Heart = 0.9;
+		B.Rim = 0.5;
+		B.Point = 0.3;
+		B.Tail = 0.7;
+		B.bLight = true;
+		B.Glow = 2;
+		Bits.push_back(B);
 	}
 
 	void Battle::AirGunStop(int Gun)
@@ -7112,6 +7195,30 @@ namespace TheaterFx
 			Squeezed.KnotS.B *= K;
 			Use = &Squeezed;
 		}
+		double FarK = 1.0;
+		if (FarTrailFromM > 0.0 && bEyeKnown)
+		{
+			// (the far form, game.air_far: past trails_from_m a trail is about trails_puffs puffs over its length, each
+			// laid that much farther apart and drawn as much longer back to the last; its bars that hang on are still one
+			// in thin_keep_one_in, so each reaches back to the last as ever, over as many more metres. Over the last
+			// trails_band of the range it goes over by degrees, so no length of a trail is laid in one form and the next
+			// in the other; nothing laid changes form as the eye closes in)
+			const double Band = FarTrailBand * FarTrailFromM;
+			const double Over = Clamp01(((LastEye - At).Length() - (FarTrailFromM - Band)) / std::max(Band, 1.0));
+			const double Far = Over * Over * (3.0 - 2.0 * Over);
+			const double Each = Use->Life * std::max(Flies, 1.0) / FarTrailPuffs;
+			const double K = 1.0 + (std::max(Each / std::max(Use->Spacing, 0.1), 1.0) - 1.0) * Far;
+			if (K > 1.0 + 1.0e-6)
+			{
+				if (Use != &Squeezed)
+				{
+					Squeezed = AsRow;
+					Use = &Squeezed;
+				}
+				Squeezed.Spacing *= K;
+				FarK = K;
+			}
+		}
 		const TrailRow& Row = *Use;
 		Dice D(++Seeds * 49979693ull ^ PlaceKey(At));
 		if (Now < Tr->Last || Now - Tr->Last > 0.5)
@@ -7168,7 +7275,7 @@ namespace TheaterFx
 		}
 		const Vec TipBack = -Carry.Unit(Vec(1.0, 0.0, 0.0)) * Tr->Tip;
 		// puffs every spacing_m along the path (and at least ten a second, should the point hang nearly still)
-		double Done = Row.Spacing - Tr->Owed;
+		double Done = Row.Spacing - std::min(Tr->Owed, Row.Spacing); // (the far form's spacing changes with the eye: never a puff laid behind the last)
 		int Laid = 0;
 		for (; Done <= Long && Laid < 64; Done += Row.Spacing, ++Laid)
 		{
@@ -7179,7 +7286,7 @@ namespace TheaterFx
 			Tr->LastPuff = T;
 		}
 		Tr->Owed = std::fmod(Tr->Owed + Long, Row.Spacing);
-		if (Laid == 0 && Now - Tr->LastPuff > 0.1)
+		if (Laid == 0 && Now - Tr->LastPuff > 0.1 * FarK) // (the far form: as many times longer between)
 		{
 			Tr->LastPuffAt = At + TipBack;
 			TrailPuff(Now, Tr->LastPuffAt, Carry, *Tr, Row, D);
@@ -15336,7 +15443,15 @@ namespace TheaterFx
 			if (Since > 0.0 && Since < 1.0)
 			{
 				const double Over = std::clamp(static_cast<double>(DustInSight) / std::max(Allowed, 1.0), 0.25, 4.0);
-				ShareThin = std::clamp(ShareThin * std::pow(Over, Since / ShareDustThinS), 1.0, ShareDustMostThin);
+				// (the trails are taken back in the order they were let go: none thickened while any is let go)
+				const double Thinner = ShareThin * std::pow(Over, Since / ShareDustThinS);
+				ShareThin = std::clamp(ShareDrop > 0.0 ? std::max(Thinner, ShareThin) : Thinner, 1.0, ShareDustMostThin);
+				// (thinned all it may, and the rest's peak of late with the dust past drop_from of the room, so the farthest
+				// bursts would be left out at the next salvo: let more far trails go, over dust_thin_s; the dust lives
+				// seconds, so it is let go ahead of the peak, not at it. Under drop_back, take them back half as fast)
+				const double Full = (SharePeak + static_cast<double>(DustInSight)) / Most;
+				const bool bShort = ShareThin >= ShareDustMostThin - 1.0e-6 && Full > ShareDropFrom && DustInSight > 0;
+				ShareDrop = Clamp01(ShareDrop + (bShort ? 1.0 : Full < ShareDropBack ? -0.5 : 0.0) * Since / ShareDustThinS);
 			}
 			ShareThinAt = Now;
 		}

@@ -1349,6 +1349,9 @@ namespace TheaterFx
 		int AirTracerMost = 1500; double AirOneFanBeyond = 0.0;
 		double AirGlowSoft = 0.0; // (over 0: by day its glow is that strong beside the core and fades smoothly to nothing at its edge, never a solid bar; 0: solid across, as it was)
 		double AirFarPx = 0.0; // (over 0: a one-fan tracer is a solid dash that wide in the core's colour; 0: the glow alone, as it was)
+		// (game.air_far, the air scene's far forms; 0: off. See Setup)
+		double FarTrailFromM = 0.0, FarTrailBand = 0.15, FarTrailPuffs = 40.0, FarGunFromM = 0.0, FarGunDashS = 0.2, FarGunFlightS = 0.12;
+		void FarGunDash(double T, const Vec& At, const Vec& Way, const Vec& Carry, const AirRow& Row, double Mps, const TracerHue& Hue);
 		std::vector<double> AirTracerEnds; // (when each air tracer now alight goes out)
 		int HoseMost = 0; std::vector<double> HoseEnds; // (fx-air r2: no more than HoseMost ship guns' hose lines at once, and when each goes)
 		std::vector<Firing> Firings; // the air guns
@@ -1358,6 +1361,7 @@ namespace TheaterFx
 		{
 			int Id = 0;
 			double Last = -1e9, Owed = 0.0;
+			double DropUntil = -1e18; // (FX5: a far trail let go in the heaviest barrage lays nothing until then)
 			Vec At;
 		};
 		std::vector<Dusting> Dusts; // (the vehicles' dust sockets being laid)
@@ -1445,6 +1449,7 @@ namespace TheaterFx
 		}
 		double ShareDustFloor = -1.0, ShareDustTop = 0.92, ShareDustMemory = 4.0, SharePeak = 0.0;
 		double ShareDustFullM = 300.0, ShareDustMostThin = 8.0, ShareDustThinS = 2.0, ShareDustLeastAlive = 2.0, ShareThin = 1.0, ShareThinAt = -1.0e9;
+		double ShareDrop = 0.0, ShareDropHoldS = 2.0, ShareDropFrom = 1.0, ShareDropBack = 0.9; // (FX5: how many far trails are let go when thinning is not enough; and for how long at least)
 		double SharePeaks[8] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
 		int64_t SharePeakSlot = std::numeric_limits<int64_t>::min();
 		/** The room asked for on the screen alone: what the last frame laid, and what has been made since. The close

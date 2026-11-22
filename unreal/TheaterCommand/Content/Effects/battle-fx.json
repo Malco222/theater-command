@@ -4818,7 +4818,7 @@
    "under_px": 8.0
   },
   "room_shares": {
-   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The art director's ruling of 18:12Z: the dust trails give way first, by distance, in fewer, longer, softer pieces, never gaps or beads, and never stopped. The far trails are laid one puff in ShareThin of their own, each reaching back over the gap and as much denser, a little softer and wider; ShareThin rises while the dust holds more than the rest leaves it (dust_top of the room less the highest the rest asked over dust_memory_s, never under dust_floor of it) and falls when it holds less, over dust_thin_s, up to dust_most_thin. A vehicle within dust_full_m of the eye keeps its whole trail; thinning reaches full 2.5 times that far. No trail is thinned below dust_least_alive puffs alive along it. Far off, a vehicle's two dust sockets (Id 2K and 2K+1, as the land battle calls them) become one wider trail. Cloud rig (sand, 120 tanks, 1.5 km front, battle camera 810 m back): at 2 to 3.5 shells a second every trail is a continuous thin line, the slow fade is whole and far bursts lose at most about 1%; at 6 a second keeping every tank's line costs about 10% of far bursts (the 3,000 room cannot do all three; FX8's 6,000 can).",
+   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The art director's ruling of 18:12Z: the dust trails give way first, by distance, in fewer, longer, softer pieces, never gaps or beads, and never stopped. The far trails are laid one puff in ShareThin of their own, each reaching back over the gap and as much denser, a little softer and wider; ShareThin rises while the dust holds more than the rest leaves it (dust_top of the room less the highest the rest asked over dust_memory_s, never under dust_floor of it) and falls when it holds less, over dust_thin_s, up to dust_most_thin. A vehicle within dust_full_m of the eye keeps its whole trail; thinning reaches full 2.5 times that far. No trail is thinned below dust_least_alive puffs alive along it. Far off, a vehicle's two dust sockets (Id 2K and 2K+1, as the land battle calls them) become one wider trail. Art director 18:31Z, PASS, and for the heaviest barrage until FX8: when thinning is not enough, far trails past dust_full_m are let go before any far burst loses a piece, the farthest first: once the rest's peak over dust_memory_s with the dust passes drop_from of the room, more go over dust_thin_s; under drop_back they come back. A trail let go lays nothing for at least drop_hold_s and what it laid fades over its own life, never cut; it comes back from its next puff, fading in. Cloud rig (sand, 120 tanks, 1.5 km front, battle camera 810 m back): the slow fade is whole at every rate; far bursts lose at most about 1% at 2 to 3.5 shells a second, and at 6 the far trails are let go and far bursts are as today (what they lose there is the bursts' own overflow, FX8's).",
    "on": 0,
    "dust_floor": 0.05,
    "dust_top": 0.92,
@@ -4826,7 +4826,21 @@
    "dust_full_m": 300,
    "dust_most_thin": 8,
    "dust_thin_s": 2,
-   "dust_least_alive": 2
+   "dust_least_alive": 2,
+   "drop_hold_s": 2,
+   "drop_from": 1.0,
+   "drop_back": 0.9
+  },
+  "air_far": {
+   "_how": "The air scene's far forms (its 11-22 ask, so its trail room can go from 24 to 60 at 150 aircraft); OFF until the air scene and the art director take them. trails_on: a trail past trails_from_m is laid as about trails_puffs puffs over its length (a lit trail held about 240), each that much farther apart and reaching back to the last as much farther, its hanging bars still one in thin_keep_one_in, so it is the same line in fewer, longer pieces; it goes over by degrees across the last trails_band of the range, so no length of a trail switches form, and nothing laid changes as the eye closes in. guns_on: a gun past guns_from_m flies no rounds; every guns_dash_s it lays one solid dash in its tracer core's colour along the aim, guns_dash_flight_s of a round's flight long, as wide as the far tracer's dash, carried with the aircraft; it takes up its rounds again where the dashes leave off. Cloud rig (five burning aircraft, 0.8 to 2.2 km, guns in bursts): a far trail holds about 25 to 33 puffs against about 130 at 30 s; a far gun lays a quarter of the pieces.",
+   "trails_on": 0,
+   "trails_from_m": 1200,
+   "trails_band": 0.15,
+   "trails_puffs": 40,
+   "guns_on": 0,
+   "guns_from_m": 1500,
+   "guns_dash_s": 0.2,
+   "guns_dash_flight_s": 0.12
   }
  },
  "air_flak": {
