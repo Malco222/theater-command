@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of efa05ae2 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2afcb139 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17552,7 +17552,7 @@
       const to = pickPlace(g2, P, taken2, g2.turn, "watchmove", f.id);
       if (to === null) {
         foes.splice(foes.indexOf(f), 1);
-        if (seen2 && was.ctrl === nat) note2(g2, { name: "", nat }, was.id, "gone", `The ${F.adj} agent uncovered at ${was.name} has left. Nothing more is seen of it.`, false);
+        if (seen2 && was.ctrl === nat) note2(g2, { name: "", nat }, was.id, "gone", `The ${F.adj} agent uncovered at ${was.name} has left. Nothing more is seen of the agent.`, false);
         continue;
       }
       f.reg = to;
@@ -17612,7 +17612,7 @@
     const why = whyNotArrest(g2, nat, id);
     if (why) return why;
     const f = g2.intel.foes.find((x) => x.id === id), F = g2.nations[f.nat];
-    if (!F?.alive || !atWar(g2, nat, f.nat)) return "Its service is no longer at war with you.";
+    if (!F?.alive || !atWar(g2, nat, f.nat)) return "The agent's service is no longer at war with you.";
     const most = DOUBLES().most;
     if (doublesOf(g2, nat).filter((d) => d.of === f.nat).length >= most) return `You already run ${most === 1 ? "a double agent" : `${most} double agents`} in the ${F.adj} service. Arrest this one.`;
     return null;
@@ -17644,7 +17644,7 @@
       }
       if (draw(g2, g2.turn, "blown", d.id) >= DOUBLES().blown) continue;
       list4.splice(list4.indexOf(d), 1);
-      const text = `${F.adj} intelligence has stopped trusting double agent ${d.name}. It is of no more use.`;
+      const text = `${F.adj} intelligence has stopped trusting double agent ${d.name}. The agent is of no more use.`;
       note2(g2, { name: d.name, nat }, F.capital >= 0 ? F.capital : 0, "blown", text, false);
       headline(g2, "event", text, nat, F.capital >= 0 ? F.capital : void 0);
     }
@@ -52044,25 +52044,46 @@ ${next.text}` : ""}` : next ? next.also : "";
     return out;
   }
   var pct10 = (x) => `${Math.round(x * 100)}%`;
-  var WORK_NEEDS = { books: "a capital", factory: "a working factory", rail: "a railway", oil: "an oilfield", airfield: "enemy aircraft on the field", orders: "enemy aircraft on the field" };
+  var WORK_NEEDS = [
+    [/keeps its books in its capital/, "a capital"],
+    [/^There is no industry at /, "a factory"],
+    [/^No factory at .* is left to wreck/, "a working factory"],
+    [/^No railway runs through /, "a railway"],
+    [/^There is no oilfield at /, "an oilfield"],
+    [/^No enemy bomber group flies from /, "enemy bombers on the field"],
+    [/^No enemy air group flies from /, "enemy aircraft on the field"],
+    [/are kept by the great powers|keeps its plans at home|keeps its (.+ )?plans at /, "a great power's plans"]
+  ];
+  var WORK_NEVER = /^Not in this campaign\.$|only on friendly ground\.$|on its own designs\.$|develops its own |^Every country here |already \S+ .* on \S+ designs\.$| designs once |^Only the great powers develop /;
   var orList = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
-  function barredLine(missions) {
-    const barred3 = missions.filter((m) => !m.ok && !m.now);
+  function barredLine(missions, o) {
+    const atPeace = (m) => /^You are at peace with /.test(m.why);
+    const peace = `You are at peace with ${o.host}: sabotage is an act of war${missions.some((m) => m.id === "orders" && atPeace(m)) ? ", and its air staff has no orders against you" : ""}.`;
+    const barred3 = missions.filter((m) => !m.ok && !m.now && !WORK_NEVER.test(m.why) && !(o.restSaid && /lying low/.test(m.why))).map((m) => atPeace(m) ? { ...m, why: peace } : m);
     if (!barred3.length) return "";
     const whys = [...new Set(barred3.map((m) => m.why))];
     if (whys.length === 1) return whys[0];
     const told = [], needs = [];
-    let n = 0;
+    let n = 0, yet = 0;
     for (const m of barred3) {
-      if (/at peace|lying low/.test(m.why)) {
-        if (!told.includes(m.why)) told.push(m.why);
+      const need = WORK_NEEDS.find(([re]) => re.test(m.why))?.[1];
+      if (need) {
+        n++;
+        if (!needs.includes(need)) needs.push(need);
         continue;
       }
-      n++;
-      const need = WORK_NEEDS[m.id] ?? "plans to steal";
-      if (!needs.includes(need)) needs.push(need);
+      if (/ yet: there are no plans to steal\.$/.test(m.why)) {
+        yet++;
+        continue;
+      }
+      if (!told.includes(m.why)) told.push(m.why);
     }
-    return [n ? `${n === 1 ? "One more needs" : `${n} more need`} ${orList(needs)} here.` : "", ...told].filter(Boolean).join(" ");
+    const say = needs.includes("enemy aircraft on the field") ? needs.filter((x) => x !== "enemy bombers on the field") : needs;
+    return [
+      n ? `${n === 1 ? "One more needs" : `${n} more need`} ${orList(say)} here.` : "",
+      yet ? `${yet === 1 ? "One more has" : `${yet} more have`} no plans to steal here yet.` : "",
+      ...told
+    ].filter(Boolean).join(" ");
   }
   function spiesPage(s, region) {
     const room2 = secretService(s);
@@ -52082,7 +52103,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       const lines2 = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
       if (a.wait > 0) lines2.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
       if (a.atWork) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
-      const rest = a.training ? "" : barredLine(a.missions);
+      const rest = a.training ? "" : barredLine(a.missions, { host: theName2(s, a.host), restSaid: a.atWork && a.rest > 0 });
       if (rest) lines2.push(rest);
       for (const x of a.sees.slice(0, 5)) lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
@@ -52105,7 +52126,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
       // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
-      note: `Agents abroad see through the fog of war, read governments' books${room2.orders ? ", steal bombing orders" : ""} and sabotage the enemy's war effort. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct10(room2.threat.chance)}${room2.threat.foes.length > 1 ? ` (${who})` : ""}, with ${room2.threat.guards} ${room2.threat.guards === 1 ? "agent" : "agents"} on guard.` : "No enemy service is working against you at home this month."}`,
+      note: `Agents abroad see through the fog of war, read books${room2.orders ? ", steal orders" : ""} and sabotage. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct10(room2.threat.chance)}, with ${room2.threat.guards} ${room2.threat.guards === 1 ? "agent" : "agents"} on guard.` : "No enemy service is working against you at home this month."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
@@ -52113,11 +52134,12 @@ ${next.text}` : ""}` : next ? next.also : "";
       sections: [
         // (The UI director, 22 November, release 2: one sentence here; how the enemy spies on him has its own last section.)
         { heading: "YOUR AGENTS", text: rows.length ? here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${here.name} from here.` : "Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there." : "The service has no agents yet: recruit one above, and the new agent stands on the map at home.", rows },
-        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first." : "Each strikes when their time comes unless they are arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside its own service." : ""}`, rows: found2 }] : [],
-        ...doubles.length ? [{ heading: "DOUBLE AGENTS", text: "Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.", rows: doubles }] : [],
+        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first." : "Each strikes when their time comes unless they are arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside their own service." : ""}`, rows: found2 }] : [],
+        ...doubles.length ? [{ heading: "DOUBLE AGENTS", text: "Enemy agents you have turned. Each works for you inside their own service until that service stops trusting them.", rows: doubles }] : [],
         ...orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join("\n"), rows: [] }] : [],
         { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] },
-        ...room2.watchHelp || room2.turnedHelp ? [{ heading: "HOW THE ENEMY SPIES ON YOU", text: [room2.watchHelp, room2.turnedHelp].filter(Boolean).join(" "), rows: [] }] : []
+        // (the chance by country, Brian's, kept here so the head note stays at about 30 words)
+        ...room2.threat.foes.length > 1 || room2.watchHelp || room2.turnedHelp ? [{ heading: "HOW THE ENEMY SPIES ON YOU", text: [room2.threat.foes.length > 1 ? `The chance of a strike at home each month, by country: ${who}.` : "", room2.watchHelp, room2.turnedHelp].filter(Boolean).join(" "), rows: [] }] : []
       ]
     };
   }
