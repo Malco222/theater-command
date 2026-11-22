@@ -14439,6 +14439,7 @@ namespace
 			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
 			static const FSlateRoundedBoxBrush SwitchTrack(FLinearColor::White, 8.0f, FLinearColor(FColor::FromHex(TEXT("8A6E44"))), 1.0f);
 			static const FSlateRoundedBoxBrush SwitchKnob(FLinearColor::White, 6.0f);
+			FLandLive::FlipFromCommandLine();
 			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
 			{
 				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
@@ -14448,7 +14449,7 @@ namespace
 					.ToolTipText(FText::FromString(Rule.Tip))
 					.OnClicked_Lambda([Index]()
 					{
-						FLandLive::SetRule(Index, !FLandLive::RuleOn(Index));
+						FLandLive::FlipRule(Index);
 						return FReply::Handled();
 					})
 					[

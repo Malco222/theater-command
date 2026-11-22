@@ -125,6 +125,49 @@ void FLandLive::SetRule(int32 Index, bool bOn)
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
+void FLandLive::FlipRule(int32 Index)
+{
+	if (Index < 0 || Index >= RuleCount())
+	{
+		return;
+	}
+	const bool bWas = RuleOn(Index);
+	SetRule(Index, !bWas);
+	const bool bNow = RuleOn(Index);
+	UE_LOG(LogTheater, Display, TEXT("Battle rules card: %s switched %s -> %s (saved; it reads %s)%s"), RuleAt(Index).Label, bWas ? TEXT("ON") : TEXT("OFF"),
+		bNow ? TEXT("ON") : TEXT("OFF"), bNow ? TEXT("ON") : TEXT("OFF"), bNow == bWas ? TEXT(": THE SWITCH DID NOT TURN") : TEXT(""));
+}
+
+void FLandLive::FlipFromCommandLine()
+{
+	static bool bDone = false;
+	FString Keys;
+	if (bDone || !FParse::Value(FCommandLine::Get(), TEXT("TheaterRulesFlip="), Keys, false))
+	{
+		return;
+	}
+	bDone = true;
+	TArray<FString> Named;
+	Keys.ParseIntoArray(Named, TEXT(","), true);
+	for (const FString& Key : Named)
+	{
+		int32 Found = INDEX_NONE;
+		for (int32 R = 0; R < RuleCount(); ++R)
+		{
+			if (Key.Equals(RuleAt(R).Key, ESearchCase::IgnoreCase))
+			{
+				Found = R;
+			}
+		}
+		if (Found == INDEX_NONE)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Battle rules card: no switch called \"%s\" to click"), *Key);
+			continue;
+		}
+		FlipRule(Found);
+	}
+}
+
 bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, bool bInSetup)
 {
 	if (Thread)
