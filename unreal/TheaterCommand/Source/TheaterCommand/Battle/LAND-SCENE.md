@@ -94,6 +94,10 @@ camera comes back to its shot.
   his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
+- **Fuel going up (release 2).** As a tank brews up (her ammunition's blast), and as a lorry is knocked out (its fire
+  starting), the effects kit's `FuelBall` rolls a ball of burning fuel off her engine deck: about 8 m across for a tank
+  (the art director's ruling), 6 for a lorry, once a vehicle, carried on as she was moving, a second or so, black smoke
+  boiling off its top. Her own fire burns on after it as before. Tanks only knocked out (no brew-up) get none.
 - **Tank commanders up in their hatches (release 2).** Each American Sherman and German Panzer IV and Tiger has her
   commander drawn: the soldiers thread's `soldier_USA_tanker` and `soldier_GER_panzer` (Content/Models/Soldiers), a
   man of the crowd with no track of his own (`Crowd::AddRider`), seated each frame on her `commander` socket, moved by

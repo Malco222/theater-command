@@ -4619,6 +4619,18 @@ void ALandBattle::PlayArmourEvents()
 		{
 			Fx.Reset();
 		}
+		// Her fuel going up: a rolling ball of burning fuel over her engine deck, once a vehicle, as a tank brews up (her
+		// ammunition's blast) or a lorry is knocked out (its fire starting). Some 8 m across for a tank (the art
+		// director's ruling), 6 for a lorry; it rolls on as she was moving. Her own fire burns on after it as before.
+		if (Effects && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
+			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier")))
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
+			LandKit::V3 Deck, DeckWay;
+			const FVector BallAt = V.SocketNow("engine", Deck, DeckWay) ? World(Deck.X, Deck.Y, Deck.Z) : At;
+			const FVector Rolling = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * (UnitsPerMetre / S.Life);
+			Effects->FuelBall(BallAt, V.Look().Kind == "carrier" ? 6.0f : 8.0f, Rolling);
+		}
 		if (Effects && !Fx.IsEmpty())
 		{
 			if (Fx.Contains(TEXT("brew")) || Fx.Contains(TEXT("cook")) || Fx.Contains(TEXT("magazine")) || Fx.Contains(TEXT("flame_jet")))
