@@ -505,6 +505,7 @@ design director gave her.
 | `CarrierFighter` | carrier fighter for any other nation (`nation_paint`) | | 1 | |
 | `Kate` | Japan's carrier torpedo bomber, pale grey | 1937 | 3 | a torpedo, or one heavy bomb for bombing from high up |
 | `Avenger` | US Navy torpedo bomber, blue-grey over light grey | 1942 | 3 | a torpedo or bombs, in her bay |
+| `Devastator` | US Navy torpedo bomber of Midway: a long greenhouse over three men, corrugated outer wings | 1937 | 3 | a torpedo half sunk in her belly, or one 1,000 lb bomb |
 | `TorpedoBomber` | carrier torpedo bomber for any other nation | | 3 | a torpedo or bombs, in her bay |
 | `Val` | Japan's carrier dive bomber, fixed undercarriage | 1940 | 2 | a bomb on its crutch |
 | `Dauntless` | US Navy dive bomber, holed dive flaps | 1941 | 2 | a bomb on its crutch |
@@ -540,6 +541,13 @@ What they add to the form:
   plane in other paint. The Hellcat is deep and portly with a chin intake (`scoops`), a short hood with metal
   behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
   fin; the Val has the rounded, elliptical wing. The plain three stay plain and borrow none of these.
+- **The Devastator's own keys** (`carrier_devastator.py`; no other machine has them, and none changes another):
+  `squares` (how square her section is, station by station: a round cowling, slab sides under her greenhouse;
+  `fitout.squared_hull`); `corrugated` (ridges in the skin of her outer wings and tailplane, on the fine model only,
+  bent at the rings of the surface's chord, none under a star on her upper wing, and no rivet or joint under them:
+  `fitout.corrugation`); `cowl_gun` (one fixed gun in the ring of her cowling, and socket `gun.nose` at its muzzle);
+  `exhaust_side` (her one exhaust pipe, to starboard). An extra rod with `"one"` among its last values is laid on its
+  own side only, not mirrored (her pitot, on her starboard wing).
 - **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
   the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
   in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`
@@ -548,7 +556,7 @@ What they add to the form:
   | file | to begin with | later |
   | --- | --- | --- |
   | `Hellcat` | three blues over white | overall sea blue from 1944-07 |
-  | `Dauntless`, `Avenger` | blue-grey over light grey | three blues over white from 1943-02, overall sea blue from 1944-07 |
+  | `Dauntless`, `Avenger`, `Devastator` | blue-grey over light grey | three blues over white from 1943-02, overall sea blue from 1944-07 |
   | `Zero`, `Kate`, `Val` | pale grey | dark green over grey from 1942-07 |
 
   The Dauntless and the Avenger are one colour on top to begin with, but their skins are laid out for the three

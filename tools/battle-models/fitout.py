@@ -129,6 +129,8 @@ def hull_body(Body, s, fine=True):
     the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
     if s.get("cab"):
         return cab_hull(Body, s, fine)
+    if s.get("squares"):
+        return squared_hull(Body, s)
     if not s.get("taper"):
         return Body(s["hull"], s.get("square", 2.0))
     top, low, along = s["taper"]
@@ -187,6 +189,32 @@ def hull_body(Body, s, fine=True):
                     hi = mid
             return self.at(x, 0.5 * (lo + hi)).z
     return Tapered(s["hull"], s.get("square", 2.0))
+
+
+def squared_hull(Body, s):
+    """Her fuselage's body where its section is not one shape from nose to tail (`squares` in her numbers: (x, how
+    square her section is there), in proportion between them; her `square` beyond the first and last): a round cowling
+    in front, and slab sides under a long greenhouse whose rails stand on them, as the Devastator's do. Round her, a
+    point is still named by the angle her `square` gives its height by, so that whatever finds a height on her by her
+    `power` finds the same height; only how far out her side stands at that height follows the square there."""
+    rows = sorted(s["squares"], key=lambda r: -r[0])
+
+    class Squared(Body):
+        def square_at(self, x):
+            if x >= rows[0][0]:
+                return rows[0][1]
+            for (xa, ea), (xb, eb) in zip(rows, rows[1:]):
+                if x >= xb:
+                    return ea + (eb - ea) * (xa - x) / (xa - xb)
+            return rows[-1][1]
+
+        def at(self, x, a, proud=0.0):
+            c, sn = math.cos(a), math.sin(a)
+            t = math.copysign(abs(sn) ** self.power, sn)
+            e = self.square_at(x)
+            y = math.copysign((1.0 - min(abs(t), 1.0) ** e) ** (1.0 / e), c)
+            return Vector((x, self.side + y * (self.w(-x) + proud), self.z(-x) + t * (self.h(-x) + proud)))
+    return Squared(s["hull"], s.get("square", 2.0))
 
 
 def cab_hull(Body, s, fine=True):
@@ -432,7 +460,7 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True, lean=0.0):
 # are his seat's: the same every time she is built). `fit` sets it.
 CREW = {"nation": "*", "plane": "", "n": 0}
 # Machines that flew low, where a man wore his mask less often.
-LOW = {"DiveBomber", "TorpedoBomber", "Stuka", "Sturmovik", "Val", "Kate", "Avenger", "Dauntless", "WhatIf_TankBuster", "WhatIf_AssaultGlider"}
+LOW = {"DiveBomber", "TorpedoBomber", "Stuka", "Sturmovik", "Val", "Kate", "Avenger", "Devastator", "Dauntless", "WhatIf_TankBuster", "WhatIf_AssaultGlider"}
 
 
 def look_of(nation, plane, seat, mask=True):
@@ -1214,8 +1242,10 @@ def exhausts(m, f, s, G, hull):
                 stub(body.at(x, a), body.out(x, a), part)
             f.stains.append((body, min(x0, x1) - 0.05, 2.6, a))
 
-    def pipes(body, x, part, long=0.4, angle=-28.0, out=0.075, r=0.05, down=None, turn=0.0):
+    def pipes(body, x, part, long=0.4, angle=-28.0, out=0.075, r=0.05, down=None, turn=0.0, only=None):
         for a in (math.radians(angle), math.radians(180.0 - angle)):
+            if only is not None and (math.cos(a) > 0.0) != (only > 0.0):
+                continue                                   # (a pipe on one side of her only: `exhaust_side`)
             mouth = stub(body.at(x, a), body.out(x, a), part, long, r, out, down, turn)
             if down is not None or turn:
                 a = round_to(body, x - long, a, mouth.z)       # (a pipe run down or turned out: its stain from its mouth's height)
@@ -1228,7 +1258,8 @@ def exhausts(m, f, s, G, hull):
             # (`exhaust`: her own pipe each side, (where along her its root is, degrees round her from her beam, how long,
             #  how far its mouth stands off her skin, its radius, degrees it runs down, degrees its mouth is turned out))
             x, angle, long, out, r, down, turn = tuple(s["exhaust"]) + (-28.0, 0.4, 0.075, 0.05, None, 0.0)[len(s["exhaust"]) - 1:]
-            pipes(hull, x, "plane", long, angle, out, r, down, turn)
+            # (`exhaust_side`: her one pipe on one side only, +1 her starboard, -1 her port: the Devastator's, to starboard)
+            pipes(hull, x, "plane", long, angle, out, r, down, turn, s.get("exhaust_side"))
         elif s.get("engine") == "radial" and s.get("nose_back") is not None:
             pipes(hull, s["nose_back"] - 0.02, "plane")
     for (out, lead, z, is_radial, back) in s.get("engines", []):
@@ -1276,6 +1307,13 @@ def guns(m, f, s, G, hull):
             pts, fac = [port(hull.at(x, a)) for x in xs], [port(hull.out(x, a)) for x in xs]
             m.strip(pts, fac, 0.04, "engine", lift=0.006)
             m.rod(pts[-1] + fac[-1] * lift, pts[1] + fac[1] * lift, 0.02, "gunmetal", sides=6)
+    if s.get("cowl_gun"):
+        # (`cowl_gun`: one fixed gun firing through the ring of her cowling, (x, y, z) of its port in the game's axes, the
+        #  Devastator's on her starboard side: the short blast tube standing out of the ring, and its dark bore)
+        p = Vector(s["cowl_gun"])
+        m.use("plane")
+        m.rod(port(p - X * 0.07), port(p + X * 0.006), 0.03, "gunmetal", sides=10 if m.fine else 6)
+        m.disc(port(p + X * 0.008), X, 0.017, "engine", 10 if m.fine else 6)
 
 
 def fasteners(m, f, s, G, hull):
@@ -1628,6 +1666,16 @@ def rivets(m, f, s, G, hull):
                 dot(part, "rivet_under" if nn.z < under_from else "rivet", p, nn, pod.at(x, a + 0.02) - pod.at(x, a - 0.02))
 
     # -- her flying surfaces
+    def ridged(kind, u, c):
+        """Whether a place on the upper face of a flying surface is under her corrugated skin's ridges (`corrugated`:
+        see corrugation): no rivet or joint is laid there, where the ridges would bury it."""
+        for k, a, b, (ca0, cb0), (ca1, cb1), pitch in s.get("corrugated", ()):
+            if k == kind and a - 0.02 <= u <= b + 0.02:
+                t = min(max((u - a) / max(b - a, 1e-9), 0.0), 1.0)
+                if ca0 + (ca1 - ca0) * t - 0.02 <= c <= cb0 + (cb1 - cb0) * t + 0.01:
+                    return True
+        return False
+
     def rows(sections, kind, c_max, spars, rib_gap, upright=False, side=0.0, joints=(), own=None):
         """Her rows on a flying surface. `own`: (from, to along its span, and the rows' c_max, spars and joints there),
         where a surface of her own numbers is cut from it (see own_of); outside that span the rows are as given."""
@@ -1656,6 +1704,8 @@ def rivets(m, f, s, G, hull):
 
             def put(u, c, t_of):
                 for upper in (True, False):
+                    if upper and ridged(kind, u, c):
+                        continue                           # (under the ridges of her corrugated skin: see ridged)
                     p, n = W.at(u, c, upper, 0.003), W.out(u, c, upper)
                     dot(part_of(u), "rivet" if (upper or upright) and not (upright and bare_under and s.get("fins_under")) else "rivet_under", p, n, t_of(u, c, upper))
             chordwise = lambda u, c, up: W.at(u, min(c + 0.02, 1.0), up) - W.at(u, max(c - 0.02, 0.0), up)
@@ -1672,7 +1722,7 @@ def rivets(m, f, s, G, hull):
                     c_rib = own[2] if on(us) else c_max
                     cs = [0.03 + (c_rib - 0.03) * i / 10.0 for i in range(11)]
                     for upper in (True, False):
-                        joint(part_of(us), [(W.at(us, c, upper, 0.003), W.out(us, c, upper), not (upper or upright)) for c in cs])
+                        joint(part_of(us), [None if upper and ridged(kind, us, c) else (W.at(us, c, upper, 0.003), W.out(us, c, upper), not (upper or upright)) for c in cs])
             n = max(2, int((u1 - u0) / gap))
             for c in spars:
                 for i in range(n):
@@ -1691,7 +1741,7 @@ def rivets(m, f, s, G, hull):
                         n = max(2, int((q - p) / 0.3))
                         us = [p + (q - p) * i / n for i in range(n + 1)]
                         for upper in (True, False):
-                            joint(part_of(0.5 * (p + q)), [(W.at(u, c + 0.006, upper, 0.003), W.out(u, c + 0.006, upper), not (upper or upright)) for u in us])
+                            joint(part_of(0.5 * (p + q)), [None if upper and ridged(kind, u, c + 0.006) else (W.at(u, c + 0.006, upper, 0.003), W.out(u, c + 0.006, upper), not (upper or upright)) for u in us])
 
     def own_of(key, c_max, spars, joints):
         """Her rows on a tailplane or fin where her numbers give her own elevator or rudder (`elevator`, `rudder`): over
@@ -1728,6 +1778,73 @@ def rivets(m, f, s, G, hull):
         m.add(verts, faces, paint, False)
     m.use("plane")
     f.rivets = sum(len(v) for v in dots.values())
+
+
+def corrugation(m, f, s, G, hull):
+    """Her corrugated skin (`corrugated` in her numbers: the Devastator's), on the fine model only: fine ridges in the
+    skin of her upper surfaces, running with the air, one every `pitch` along the span where her drawing hatches it.
+    Each is a low ridge in her skin's own paint, its two faces leaning a little apart, so that light and shade give it
+    as the corrugation it is and never as a stripe of paint. Each region is (`wing` or `tail`, from, to along its span,
+    (from, to) along its chord at the first, (from, to) at the second, as shares of the chord, the pitch): her numbers
+    keep each region ahead of the hinge of any flap, aileron or elevator over it, so that no ridge stands on a moving part.
+    A ridge bends where her skin does, at the rings of her surface's chord (and nowhere else): so it lies on her skin
+    all along, a hair under it at its feet, and never sinks into it where her skin is faceted. None stands under a
+    star on her upper wing (`wing_marks`): the star is laid on her skin there, flat and whole, and a ridge under it
+    would crumple it."""
+    if not m.fine or not s.get("corrugated"):
+        return
+    sink, crest = 0.0015, 0.0045
+    rings = G["BATTLE_CHORDS"][True]
+    for kind, u0, u1, (a0, b0), (a1, b1), pitch in s["corrugated"]:
+        sections = s["wing"] if kind == "wing" else s["tail"]
+        half = 0.47 * pitch
+        n = max(1, int(round((u1 - u0) / pitch)))
+        for hand in (1.0, -1.0):
+            W = G["Wing"](sections, hand)
+            stars = [(out, x, radius) for (out, x, radius, upper, lower, both_upper, both_lower) in s.get("wing_marks", [])
+                     if kind == "wing" and upper and (both_upper or hand < 0.0)]
+            for k in range(n):
+                u = u0 + (u1 - u0) * (k + 0.5) / n
+                t = (u - u0) / max(u1 - u0, 1e-9)
+                spans = [(a0 + (a1 - a0) * t, b0 + (b1 - b0) * t)]
+                for out, x, radius in stars:
+                    if abs(u - out) < radius:
+                        dx = math.sqrt(radius * radius - (u - out) ** 2)
+                        lo, hi = sorted((x + sgn * dx - W.lead(u)) / (W.trail(u) - W.lead(u)) for sgn in (1.0, -1.0))
+                        spans = [(p_, q_) for a_, b_ in spans for p_, q_ in ((a_, min(b_, lo)), (max(a_, hi), b_))]
+                for ca, cb in spans:
+                    if cb - ca < 0.03:
+                        continue
+                    ridge(m, f, W, kind, hand, u, ca, cb, rings, half, sink, crest)
+    m.use("plane")
+
+
+def ridge(m, f, W, kind, hand, u, ca, cb, rings, half, sink, crest):
+    """One ridge of her corrugated skin (see corrugation): at `u` along the span, from `ca` to `cb` along the chord."""
+    cs = [ca]
+    for r in rings:
+        if cs[-1] + 0.025 < r < cb - 0.015:
+            cs.append(r)                                    # (a ring this close behind the last is a hinge's pair: her skin hardly bends there)
+    cs.append(cb)
+    steps = len(cs) - 1
+    verts, facing = [], []
+    for c in cs:
+        p, nrm = W.at(u, c, True), W.out(u, c, True)
+        sp = W.at(min(u + 0.01, W.tip), c, True) - W.at(max(u - 0.01, W.root), c, True)
+        sp = sp - nrm * sp.dot(nrm)
+        if sp.length < 1e-9:
+            sp = Vector((0.0, 1.0, 0.0))
+        sp.normalize()
+        verts += [port(p - sp * half - nrm * sink), port(p + nrm * crest), port(p + sp * half - nrm * sink)]
+        facing.append(port(nrm))
+    faces = []
+    for j in range(steps):
+        a, b = 3 * j, 3 * (j + 1)
+        faces += [(a, a + 1, b + 1, b), (a + 1, a + 2, b + 2, b + 1)]
+    faces += [(0, 1, 2), (3 * steps, 3 * steps + 1, 3 * steps + 2)]
+    m.use(("wing.starboard" if hand > 0.0 else "wing.port") if kind == "wing" and u > f.y_cut else "plane" if kind == "wing" else "tail")
+    pts = [verts[3 * j + 1] for j in range(len(cs))]
+    m.add(verts, faces, "upper", True, lambda q, pts=pts, facing=facing: facing[min(range(len(pts)), key=lambda i: (pts[i] - q).length_squared)])
 
 
 BOOTS = {"B17"}
@@ -2276,6 +2393,7 @@ def fit(m, f, s, G, hull):
     jets(m, f, s, G, hull)
     fasteners(m, f, s, G, hull)
     rivets(m, f, s, G, hull)
+    corrugation(m, f, s, G, hull)
     holed_flaps(m, f, s, G, hull)
     dive_brakes(m, f, s, G, hull)
     boots(m, f, s, G, hull)

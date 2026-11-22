@@ -37,6 +37,7 @@ from mathutils import Quaternion, Vector, noise
 
 import carrier_avenger
 import carrier_dauntless
+import carrier_devastator
 import carrier_hellcat
 import fighters
 import fitout
@@ -220,6 +221,10 @@ OWN = [
     #  brace that the map's model, seen from far off, does not need.)
     ("            a, b, ra, rb, paint = values\n",
      "            a, b, ra, rb, paint = values[:5]\n            if 'fine' in values[5:] and not fine:\n                continue\n"),
+    # (An extra rod with "one" among its last values is laid where its numbers put it, on that side only, and not
+    #  mirrored: the Devastator's pitot, on her starboard wing alone.)
+    ("            for hand in ((1.0, -1.0) if a[1] != 0.0 or b[1] != 0.0 else (1.0,)):\n",
+     "            for hand in ((1.0, -1.0) if (a[1] != 0.0 or b[1] != 0.0) and 'one' not in values[5:] else (1.0,)):\n"),
     ("            at, radii, paint = values\n",
      "            at, radii, paint = values[:3]\n            if 'fine' in values[3:] and not fine:\n                continue\n"),
     ("            stations, side, square, paint = values\n",
@@ -756,6 +761,7 @@ def one_coat(p):
 _BLUE_GREY = {"upper": "566A78", "upper2": "566A78", "under": "A8AEAD", "nose": "566A78", "boss": "2A2B2D"}
 carrier(carrier_dauntless)                                  # (her own dive bomber and torpedo bomber, in the game's order)
 carrier(carrier_avenger)
+carrier(carrier_devastator)
 # ---- carrier planes for the nations with none of their own: our own shapes, painted by the game for whoever flies them ----
 _NAVY = {"upper": "5A5F68", "upper2": "5B6259", "under": "B9C7A9", "nose": "5A5F68", "boss": "2A2B2D"}     # (shown in the Fleet Air Arm's greys over Sky)
 EXTRA_PLANES["CarrierFighter"] = {
@@ -1723,9 +1729,9 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
-ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -1739,6 +1745,7 @@ SCHEMES = {
     "Hellcat": [("1944-07", "overall sea blue", _SEA_BLUE)],
     "Dauntless": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
     "Avenger": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
+    "Devastator": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
     "Zero": [("1942-07", "dark green over grey", _DARK_GREEN)],
     "Kate": [("1942-07", "dark green over grey", _DARK_GREEN)],
     "Val": [("1942-07", "dark green over grey", _DARK_GREEN)],
@@ -2524,6 +2531,8 @@ def convert(name, fine=True):
         x = hubs[0].x - 0.5
         top = hull.at(x, math.radians(90.0))
         m.socket("gun.nose", (top.x, 0.0, top.z + 0.03), X, part="plane", note="the guns over the engine")
+    elif s.get("cowl_gun"):                                 # (one gun firing through the ring of her cowling: see fitout.guns)
+        m.socket("gun.nose", port(s["cowl_gun"]) + X * 0.01, X, part="plane", note="the gun in her cowling")
     for n, (a_, b_) in enumerate(rods):
         m.socket(f"turret.{n + 1}", port(b_), port(b_ - a_), part=gun_part[n], note="a gunner's muzzle")
     belly = hull.at(root_mid if not bay else 0.5 * (bay[0] + bay[1]), -math.pi / 2.0)
@@ -2999,5 +3008,5 @@ def torpedo(fine=True):
 
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Fighter", "CarrierFighter",
-                                                                  "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
+                                                                  "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
                                                                   "Amerikabomber", "B29", "Bomber")}
