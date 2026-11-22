@@ -3,7 +3,7 @@
 // her class's row of the record for life, a fleet weighs the sum of its hulls' worths, the start fleets keep their
 // total weight in each kind, and new battleships are built by route 2 at the step held when they are ordered.
 // Switched by stage.json 'shipRows' (TC_SHIPROWS): off, the game is release 1's.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import hullData from '../data/campaign/hulls.json';
 import navyData from '../data/campaign/navy.json';
 import rowsData from '../data/campaign/shiprows.json';
@@ -343,14 +343,50 @@ describe("the review's mends (22 November, 18:40Z)", () => {
     expect(weight()).toBeCloseTo(all.reduce((s, id) => s + R.hullWorth(g, 'bb', id), 0), 12);
   });
 
-  it('a move whose named row the fleet does not show takes a hull with no row as her; with none, the last goes as she stands', () => {
+  it('a move whose named row the fleet does not show takes a hull with no row as her, while the record has her in being and her navy does not show her already', () => {
     const g = history(true);
     const home = fleet(g, 'UK', 'Home Fleet');
-    expect(R.takeRows(home, 'bb', 1, ['uk-qe'])).toEqual(['uk-qe']);
+    // September 1939: the Valiant is not yet in being (hulls.json, from 4), so the last goes as she stands.
+    expect(R.takeRows({ ...home, rows: { bb: [...R.listOf(home, 'bb')] } } as Fleet, 'bb', 1, ['uk-qe'], g)).toEqual(['uk-revenge']);
+    // June 1940: the Warspite and the Valiant in being, the Warspite alone shown (the Mediterranean Fleet): she goes as the Valiant.
+    g.turn = 10;
+    expect(R.takeRows(home, 'bb', 1, ['uk-qe'], g)).toEqual(['uk-qe']);
     home.ships.bb -= 1;
     expect(R.listOf(home, 'bb')).toEqual(['uk-nelson', 'uk-nelson', null, 'uk-revenge', 'uk-revenge', 'uk-revenge']);
+    // With no hull with no row, or with no game to read the record against, the last goes as she stands.
     const f = { ...home, ships: { ...home.ships, bb: 2 }, rows: { bb: ['uk-nelson', 'uk-revenge'] } } as Fleet;
-    expect(R.takeRows(f, 'bb', 1, ['uk-qe'])).toEqual(['uk-revenge']);
+    expect(R.takeRows(f, 'bb', 1, ['uk-qe'], g)).toEqual(['uk-revenge']);
+    expect(R.takeRows({ ...home, rows: { bb: [...R.listOf(home, 'bb')] } } as Fleet, 'bb', 1, ['uk-qe'])).toEqual(['uk-revenge']);
+  });
+
+  it('no row is laid twice: the dial turned to stop 1 after Force H formed with the Valiant brings no second Queen Elizabeth', () => {
+    const g = grand(true, 5);
+    for (let t = 2; t <= 13; t++) {
+      g.turn = t;
+      if (t === 12) setStop(g, 1);
+      navalUpkeep(g, 'UK');
+      inStep(g);
+      const qe = g.fleets.filter((f) => f.nat === 'UK').flatMap((f) => R.listOf(f, 'bb')).filter((x) => x === 'uk-qe').length;
+      expect(qe, `turn ${t}`).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('none comes back from the bottom: the Valiant sunk in Force H, the row that sends her east brings no Queen Elizabeth', () => {
+    const g = grand(true, 5);
+    setStop(g, 1, true);
+    for (let t = 2; t <= 12; t++) { g.turn = t; navalUpkeep(g, 'UK'); }
+    const h = fleet(g, 'UK', 'Force H');
+    expect(R.listOf(h, 'bb')).toContain('uk-qe');
+    h.ships.bb -= 1; h.lost.bb += 1; R.loseRows(h, 'bb', 1, ['uk-qe']); R.mendRows(h);
+    expect(h.rowsLost?.bb).toEqual(['uk-qe']);
+    const med = fleet(g, 'UK', 'Mediterranean Fleet'), had = R.listOf(med, 'bb').filter((x) => x === 'uk-qe').length;
+    g.turn = 13; navalUpkeep(g, 'UK');
+    expect(R.listOf(med, 'bb').filter((x) => x === 'uk-qe').length).toBe(had);
+    // The tally follows a fleet that joins another.
+    const a = fleet(g, 'UK', 'Force H'), b = fleet(g, 'UK', 'Home Fleet');
+    R.joinRows(a, b);
+    expect(b.rowsLost?.bb).toEqual(['uk-qe']);
+    expect(a.rowsLost).toBeUndefined();
   });
 
   it('the rebase is fixed in the campaign as it opens, kept by a save, and read from there', () => {
@@ -388,6 +424,27 @@ describe("the review's mends (22 November, 18:40Z)", () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(3);
+  });
+
+  it('handed back to the dice, the extra losses take the named hulls the dice left, not the rotation (plan 5.2 item 5)', () => {
+    let fought = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = history(true, seed);
+      const home = fleet(g, 'UK', 'Home Fleet'), battle = fleet(g, 'GER', 'Battle Fleet');
+      battle.ships.bb = 3;
+      battle.rows = { bb: ['ger-bismarck', 'ger-scharnhorst'] }; // and a third hull with no row
+      const norw = zoneOf(g, 'norw');
+      sail(g, home, norw, 'patrol'); sail(g, battle, norw, 'patrol');
+      seaField.fought = () => ({ R: 3, sunk: { [battle.id]: { bb: 2 }, [home.id]: {} }, toDice: true, rows: { [battle.id]: { bb: ['ger-scharnhorst', 'ger-bismarck'] } } });
+      // (The dice sink exactly one of each kind, so the field's second named hull goes by the extra losses.)
+      const dice = vi.spyOn(Rng.prototype, 'rollBoth').mockImplementation((a: number, b: number) => [a > 0 ? 1 : 0, b > 0 ? 1 : 0]);
+      try { seaBattles(g, 'UK'); } finally { seaField.fought = undefined; dice.mockRestore(); }
+      if (battle.lost.bb === 0) continue;
+      expect(battle.ships.bb, `seed ${seed}`).toBe(1);
+      expect(R.listOf(battle, 'bb'), `seed ${seed}`).toEqual([null]);
+      fought++;
+    }
+    expect(fought).toBeGreaterThan(0);
   });
 
   it("her row is fixed as she is laid down: plans gained before she is delivered do not change her design (plan 4.3)", () => {

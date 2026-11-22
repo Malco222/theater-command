@@ -295,6 +295,7 @@ export function loseRows(f: Fleet, c: ShipClass, k: number, rows?: RowId[]): voi
   const list = Array.from({ length: there }, (_, i) => have[i] ?? null);
   const from = Math.max(0, f.lost[c] - k);
   const named = [...(rows ?? [])];
+  const went: RowId[] = [];
   for (let j = 0; j < k && list.length; j++) {
     const at = (from + j) % list.length;
     // (The field's rows: the first hull of that row from the rotation's place on, round the list.)
@@ -303,9 +304,17 @@ export function loseRows(f: Fleet, c: ShipClass, k: number, rows?: RowId[]): voi
     if (want !== undefined) {
       for (let s = 0; s < list.length; s++) if (list[(at + s) % list.length] === want) { pick = (at + s) % list.length; break; }
     }
-    list.splice(pick, 1);
+    went.push(...list.splice(pick, 1));
   }
   keep(f, c, list);
+  noteLost(f, c, went);
+}
+
+/** Notes the named hulls a fleet has lost (loseRows; the record's sinkings in navy.ts's arrivals), for takeRows' guard. */
+export function noteLost(f: Fleet, c: ShipClass, went: RowId[]): void {
+  const ids = went.filter((x): x is string => x !== null);
+  if (!ids.length) return;
+  (f.rowsLost ??= {})[c] = [...(f.rowsLost[c] ?? []), ...ids];
 }
 
 /** Hulls about to be split off a fleet (fleets.ts detach), called before they leave: the last of each kind go. The new fleet's rows, or undefined. */
@@ -323,6 +332,10 @@ export function splitRows(f: Fleet, s: Ships): ShipRows | undefined {
 
 /** One fleet joined to another (fleets.ts merge), called before the hulls move: a's hulls come in at the back of b's lists. */
 export function joinRows(a: Fleet, b: Fleet): void {
+  if (a.rowsLost) {
+    for (const c of ROW_KINDS) if (a.rowsLost[c]?.length) noteLost(b, c, a.rowsLost[c]!);
+    delete a.rowsLost;
+  }
   if (!a.rows && !b.rows) return;
   for (const c of ROW_KINDS) if (a.rows?.[c] || b.rows?.[c]) keep(b, c, [...listOf(b, c), ...listOf(a, c)]);
   delete a.rows;
@@ -340,7 +353,7 @@ export function addRows(f: Fleet, c: ShipClass, rows: RowId[]): void {
  * Hulls of a kind leaving a fleet (to another, or by the record's sinking), called before its count is lowered: the
  * named hulls' rows where it has them, then the last. Returns the rows that went, to join the fleet they go to.
  */
-export function takeRows(f: Fleet, c: ShipClass, n: number, want: RowId[] = []): RowId[] {
+export function takeRows(f: Fleet, c: ShipClass, n: number, want: RowId[] = [], g?: Game): RowId[] {
   const k = Math.max(0, Math.min(Math.floor(n), Math.floor(f.ships[c])));
   if (!hasRows(c) || k <= 0) return [];
   const list = listOf(f, c), out: RowId[] = [];
@@ -349,14 +362,28 @@ export function takeRows(f: Fleet, c: ShipClass, n: number, want: RowId[] = []):
     let at = w !== undefined ? list.lastIndexOf(w) : -1;
     let carry: RowId | undefined;
     // (The words name her and the fleet shows no hull of her row: a hull with no row goes, and as her, since the record
-    // of names, not the fleet's list, says which ship sailed. Only where there is none does the last go as it stands.)
-    if (at < 0 && w != null) { at = list.lastIndexOf(null); if (at >= 0) carry = w; }
+    // of names, not the fleet's list, says which ship sailed; but only while her navy shows fewer hulls of that row,
+    // afloat on the chart or lost, than the record has in being, so that no row is laid twice and none comes back from
+    // the bottom. Otherwise, or where there is no hull with none, the last goes as it stands.)
+    if (at < 0 && w != null && g && rowRoom(g, f.nat, c, w, out)) { at = list.lastIndexOf(null); if (at >= 0) carry = w; }
     if (at < 0) at = list.length - 1;
     out.push(carry !== undefined ? carry : list[at]);
     list.splice(at, 1);
   }
   keep(f, c, list);
   return out;
+}
+
+/** True while a navy shows fewer hulls of a row (in its fleets' lists, lost, or on their way in `moving`) than the record of names has in being this month. */
+function rowRoom(g: Game, nat: string, c: ShipClass, w: string, moving: RowId[]): boolean {
+  let shown = moving.filter((x) => x === w).length;
+  for (const f of g.fleets) {
+    if (f.nat !== nat) continue;
+    shown += listOf(f, c).filter((x) => x === w).length + (f.rowsLost?.[c]?.filter((x) => x === w).length ?? 0);
+  }
+  let being = 0;
+  for (const r of HULLS[nat]?.[c as 'bb' | 'cv'] ?? []) if ((r.from ?? 1) <= g.turn && rowOfName(nat, c, r.name) === w) being++;
+  return shown < being;
 }
 
 /**

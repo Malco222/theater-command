@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => { (globalThis as { TC_SHIPROWS?: unknown }).TC_SHIPROWS = 1; });
 import { createGame } from '../src/campaign/game';
 import { fleetPower } from '../src/campaign/navy';
-import { listOf } from '../src/campaign/shiprows';
+import { listOf, rebase } from '../src/campaign/shiprows';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { SHIPROWS_STAGE } from '../src/campaign/stage';
 
@@ -22,5 +23,16 @@ describe('the switch on', () => {
     expect(usa.ships.bb).toBeGreaterThan(0);
     expect(listOf(usa, 'bb').every((x) => x === null)).toBe(true);
     for (const f of h.fleets) expect(Number.isFinite(fleetPower(h, f))).toBe(true);
+  });
+
+  it('a campaign opened is fixed from its first day (createGame), again on the wider world, and a save keeps it', () => {
+    const g = createGame(1, null);
+    const europe = g.flags['rebase:bb'];
+    expect(europe).toBeGreaterThan(1);
+    expect(rebase(g, 'bb')).toBe(europe);
+    expect(loadGame(saveGame(g))!.flags['rebase:bb']).toBe(europe);
+    const h = startOpen(createGame(2, null));
+    expect(h.flags['rebase:bb']).toBe(rebase(h, 'bb'));
+    expect(loadGame(saveGame(h))!.flags['rebase:bb']).toBe(h.flags['rebase:bb']);
   });
 });

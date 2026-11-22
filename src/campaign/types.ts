@@ -636,6 +636,8 @@ export interface Fleet extends Storied {
    * with no row are left off, and a fleet with none has no record. Never written with the switch off.
    */
   rows?: Partial<Record<ShipClass, (string | null)[]>>;
+  /** Ships by class: the rows of the named hulls this fleet has lost (to play or to the record's sinkings), so that a move never brings one back. Never written with the switch off. */
+  rowsLost?: Partial<Record<ShipClass, string[]>>;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

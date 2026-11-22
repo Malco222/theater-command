@@ -26,7 +26,7 @@ import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { bookSeaAction, loseStars, mendStars } from './stars';
-import { addRows, hullSum, layRows, loseRows, mendRows, rowRules, rowsNamed, takeRows, type RowId } from './shiprows';
+import { addRows, hullSum, layRows, loseRows, mendRows, noteLost, rowRules, rowsNamed, takeRows, type RowId } from './shiprows';
 import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { techMul, techNotes } from './research';
 import { dcOf } from './tech';
@@ -1742,8 +1742,8 @@ export function navalUpkeep(g: Game, nat: string): void {
       let come: RowId[] | null = null;
       if (rowRules(g) && n !== 0) {
         const named = rowsNamed(nat, c, what, Math.abs(n));
-        if (n > 0) come = src ? takeRows(src, c, Math.min(n, src.ships[c]), named) : named;
-        else takeRows(f, c, Math.min(-n, was), named);
+        if (n > 0) come = src ? takeRows(src, c, Math.min(n, src.ships[c]), named, g) : named;
+        else { const went = takeRows(f, c, Math.min(-n, was), named, g); if (dial?.sunk) noteLost(f, c, went); }
       }
       if (src && n > 0) { n = Math.min(n, src.ships[c]); src.ships[c] -= n; }
       if (come && n > 0) addRows(f, c, come.slice(0, n));
