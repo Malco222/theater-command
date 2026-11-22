@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of beb998ed 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4b4115c0 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10201,7 +10201,7 @@
     start: "theatre",
     cap: { steps: [25, 50, 75, 100], start: 50 },
     diplomacy: { keep: 2 },
-    spies: { guards: 1, peace: false },
+    spies: { guards: 1, hunters: 1, peace: false },
     build: {
       _machines: "Money without men (Version 68). When the armies in the field are waiting for the men a new corps would take, a building staff at war puts the treasury into aircraft, which need pilots and not divisions: 'each' wings of fighters and of bombers on order at a time, until the aircraft it has bought stand at 'share' of the air force's own establishment. Fighters come first while the enemy is bombing the factories.",
       machines: { each: 1, share: 0.5 }
@@ -10235,7 +10235,7 @@
         name: "The secret service",
         tab: "spies",
         lead: "Your secret service",
-        runs: "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. It tries no sabotage.",
+        runs: "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. Where the campaign has spy hunters it also keeps a hunter on your front, and arrests every enemy agent it uncovers. It tries no sabotage.",
         hand: "You recruit, post and brief every agent."
       },
       {
@@ -13547,6 +13547,14 @@
       hunters: { on: true, lead: 2, here: 0.5, near: 0.25, skill: 0.1 },
       orders: { on: true, ambush: 1 },
       everyone: { on: true, smaller: 0.5 },
+      watchers: {
+        _about: "WATCHERS (Brian, 22 November 2026, release 2: 'Busier, mostly watchers'; flag 'sw:watch', set for new grand campaigns with 'on'; it needs HUNTERS on too, since a watcher is one of the hidden agents they search for). Each month, beside the plots above (which go on at their own rate), every service at war with the player has 'chance' (times the campaign's level, as enemy.chance is; a smaller nation's at secret.everyone.smaller times it) of putting a WATCHER on his front: a province he holds beside ground its own side holds, or, with none, beside any enemy's ground, or, with no front at all, a province of his home coast on a sea the enemy's coast is on (any home coast if none is). The more of the enemy's divisions stand beside a province, the likelier it is picked; never one where a watcher already is. It never strikes. From the month after it lands ('ready'), every attack its own side makes on that province goes in 'attack' harder: it has mapped the defences. Hunters find watchers as they find saboteurs, and an uncovered one can be arrested, or turned. A watcher stays until it is arrested or turned, or its country makes peace or falls. When its province is no longer on its front (the front has moved, or the province is lost), it moves to a new place on the front the month after, needing 'ready' months again, and the hunters lose it unless a double agent in its service tells where it went; with no new place to go it is recalled. A service lands a watcher only while it keeps 'reserve' places free for its saboteurs (agents.most, with its Intelligence branch), so the plots strike as often as before. With the switch off there are no watchers. 'chance' 0.28 with the plots' 0.05 is about one agent a season from each great power, most of them watchers, as the card said.",
+        on: true,
+        chance: 0.28,
+        attack: 0.08,
+        ready: 1,
+        reserve: 1
+      },
       doubles: {
         _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; from the month after it is turned, the month its first quiet report is filed (so the lie never shows without the tell), the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
         on: true,
@@ -16737,6 +16745,8 @@
   var ordersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:orders"] === 1;
   var everyoneOn = (g2) => g2.flags.open === 1 && g2.flags["sw:all"] === 1;
   var doublesOn = (g2) => g2.flags.open === 1 && g2.flags["sw:double"] === 1;
+  var watchersOn = (g2) => huntersOn(g2) && g2.flags["sw:watch"] === 1;
+  var WATCHERS = () => S.watchers;
   var DOUBLES = () => S.doubles;
   var SMALLER = () => S.everyone.smaller;
   function openSecretWar(g2) {
@@ -16744,6 +16754,7 @@
     if (S.orders.on) g2.flags["sw:orders"] = 1;
     if (S.everyone.on) g2.flags["sw:all"] = 1;
     if (S.doubles.on) g2.flags["sw:double"] = 1;
+    if (S.watchers.on) g2.flags["sw:watch"] = 1;
   }
   var ordersDue = (g2, nat) => ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.nat === nat && o.turn === g2.turn && !o.done) : [];
   var ordersKnown = (g2, viewer = g2.human) => viewer && ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.by === viewer && o.turn >= g2.turn) : [];
@@ -17300,9 +17311,13 @@
     };
   }
   function intelAttack(g2, nat, target) {
-    if (!intelRules(g2) || !g2.intel.agents.length) return null;
-    const a = g2.intel.agents.find((x) => x.reg === target.id && atWork(g2, x) && allied(g2, x.nat, nat) && abroad(g2, x));
-    return a ? { mul: 1 + INTEL.battle.attack, agent: a.name } : null;
+    if (!intelRules(g2)) return null;
+    const a = g2.intel.agents.length ? g2.intel.agents.find((x) => x.reg === target.id && atWork(g2, x) && allied(g2, x.nat, nat) && abroad(g2, x)) : void 0;
+    if (a) return { mul: 1 + INTEL.battle.attack, agent: a.name };
+    const me = g2.human;
+    if (!me || !g2.intel.foes?.length || target.ctrl !== me || !atWar(g2, me, nat) || !watchersOn(g2)) return null;
+    const f = g2.intel.foes.find((x) => x.kind === "watch" && x.reg === target.id && x.strike <= g2.turn && (x.nat === nat || allied(g2, nat, x.nat)));
+    return f ? { mul: 1 + WATCHERS().attack, agent: "", foe: f.nat, found: f.found !== void 0 } : null;
   }
   function lose2(g2, a, text, what) {
     g2.intel.agents.splice(g2.intel.agents.indexOf(a), 1);
@@ -17369,14 +17384,27 @@
   }
   function threat(g2, nat) {
     const E = INTEL.enemy;
-    const quiet2 = g2.flags.spyfrom !== void 0 && g2.turn < g2.flags.spyfrom + E.quiet;
-    const each3 = intelRules(g2) && !quiet2 ? E.chance * (E.level[levelIndex(g2)] ?? 1) : 0;
+    const each3 = E.chance * servicesAtWork(g2);
     const all = everyoneOn(g2);
     const foes = each3 > 0 ? g2.order.filter((f) => f !== nat && (all || E.services.includes(f)) && g2.nations[f]?.alive && atWar(g2, nat, f)) : [];
     const rate2 = {};
     for (const f of foes) rate2[f] = E.services.includes(f) ? each3 : each3 * SMALLER();
     const chance = all ? 1 - foes.reduce((p, f) => p * (1 - rate2[f]), 1) : 1 - Math.pow(1 - each3, foes.length);
     return { chance, each: each3, foes, rate: rate2 };
+  }
+  function servicesAtWork(g2) {
+    const E = INTEL.enemy;
+    const quiet2 = g2.flags.spyfrom !== void 0 && g2.turn < g2.flags.spyfrom + E.quiet;
+    return intelRules(g2) && !quiet2 ? E.level[levelIndex(g2)] ?? 1 : 0;
+  }
+  function watchRate(g2, nat) {
+    const out = {};
+    if (!watchersOn(g2)) return out;
+    const E = INTEL.enemy, each3 = WATCHERS().chance * servicesAtWork(g2);
+    if (each3 <= 0) return out;
+    const all = everyoneOn(g2);
+    for (const f of g2.order) if (f !== nat && (all || E.services.includes(f)) && g2.nations[f]?.alive && atWar(g2, nat, f)) out[f] = E.services.includes(f) ? each3 : each3 * SMALLER();
+    return out;
   }
   var roomFor = (g2, foe) => !everyoneOn(g2) || (g2.intel.foes ?? []).filter((f) => f.nat === foe).length < mostAgents(foe, g2);
   function guardChance(g2, nat, reg) {
@@ -17392,6 +17420,7 @@
   function foesMonth(g2, nat) {
     var _a;
     const foes = (_a = g2.intel).foes ?? (_a.foes = []);
+    if (watchersOn(g2)) watchersMonth(g2, nat);
     for (const a of agentsOf(g2, nat).filter((x) => x.mission === "hunt" && atWork(g2, x) && !abroad(g2, x) && x.turned === void 0).sort((x, y) => x.id - y.id)) {
       const r = g2.regions[a.reg];
       for (const f of foes) {
@@ -17400,13 +17429,13 @@
         if (base <= 0 || draw(g2, g2.turn, "hunt", a.id, f.id) >= clamp2(base + SECRET.hunters.skill * (skillOf(a) - 1), 0, 0.95)) continue;
         f.found = g2.turn;
         const F = g2.nations[f.nat], at = g2.regions[f.reg];
-        const text = `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? "") ? "an" : "a"} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest it before it strikes.`;
+        const text = f.kind === "watch" ? `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? "") ? "an" : "a"} ${F?.adj ?? "enemy"} agent watching your defences at ${at.name}. Arrest it: until you do, their attacks there go in harder.` : `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? "") ? "an" : "a"} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest it before it strikes.`;
         note2(g2, a, f.reg, "uncovered", text, true);
         headline(g2, "event", text, nat, f.reg);
         learn(g2, a, 1);
       }
     }
-    for (const f of foes.filter((x) => x.strike <= g2.turn).sort((x, y) => x.id - y.id)) {
+    for (const f of foes.filter((x) => x.kind !== "watch" && x.strike <= g2.turn).sort((x, y) => x.id - y.id)) {
       foes.splice(foes.indexOf(f), 1);
       const r = g2.regions[f.reg], F = g2.nations[f.nat];
       if (!F?.alive || r.ctrl !== nat || r.owner !== nat || !atWar(g2, nat, f.nat)) continue;
@@ -17433,14 +17462,92 @@
       if (!aim) continue;
       const id = g2.intel.foeNext ?? 1;
       g2.intel.foeNext = id + 1;
-      const f = { id, nat: foe, reg: aim.reg, kind: aim.kind, strike: g2.turn + SECRET.hunters.lead };
-      foes.push(f);
-      const d = doubleIn(g2, foe, nat);
+      landed(g2, nat, { id, nat: foe, reg: aim.reg, kind: aim.kind, strike: g2.turn + SECRET.hunters.lead });
+    }
+    if (!watchersOn(g2)) return;
+    const W2 = WATCHERS(), rate2 = watchRate(g2, nat);
+    for (const foe of Object.keys(rate2)) {
+      if (draw(g2, g2.turn, "watch", foe) >= rate2[foe]) continue;
+      if (foes.filter((x) => x.nat === foe).length >= mostAgents(foe, g2) - W2.reserve) continue;
+      const reg = pickPlace(g2, watchPlaces(g2, nat, foe), watched(g2), g2.turn, "watchwhere", foe);
+      if (reg === null) continue;
+      const id = g2.intel.foeNext ?? 1;
+      g2.intel.foeNext = id + 1;
+      landed(g2, nat, { id, nat: foe, reg, kind: "watch", strike: g2.turn + W2.ready });
+    }
+  }
+  function landed(g2, nat, f) {
+    var _a;
+    ((_a = g2.intel).foes ?? (_a.foes = [])).push(f);
+    const d = doubleIn(g2, f.nat, nat);
+    if (!d) return;
+    f.found = g2.turn;
+    const text = `Double agent ${d.name} warns of a new ${g2.nations[f.nat].adj} agent ${f.kind === "watch" ? "watching your defences " : ""}at ${g2.regions[f.reg].name}.`;
+    note2(g2, { name: d.name, nat }, f.reg, "warned", text, true);
+    headline(g2, "event", text, nat, f.reg);
+  }
+  var watched = (g2) => new Set((g2.intel.foes ?? []).filter((x) => x.kind === "watch").map((x) => x.reg));
+  function watchPlaces(g2, nat, foe) {
+    const side3 = (x) => !!x && (x === foe || allied(g2, x, foe) && atWar(g2, nat, x));
+    const enemy = (x) => !!x && atWar(g2, nat, x);
+    const mine4 = g2.regions.filter((r) => r.ctrl === nat);
+    for (const ok of [side3, enemy]) {
+      const front = mine4.filter((r) => r.nb.some((j) => ok(g2.regions[j].ctrl)));
+      if (!front.length) continue;
+      const divs = /* @__PURE__ */ new Map();
+      for (const c of g2.corps) if (!c.dead && c.kind !== "fort" && c.reg >= 0 && ok(c.nat) && ok(g2.regions[c.reg].ctrl)) divs.set(c.reg, (divs.get(c.reg) ?? 0) + c.divs);
+      return front.map((r) => ({ reg: r.id, w: 1 + r.nb.reduce((t, j) => t + (divs.get(j) ?? 0), 0) }));
+    }
+    const coast = mine4.filter((r) => r.owner === nat && !r.overseas && r.seas.length > 0);
+    const seas = /* @__PURE__ */ new Set();
+    for (const r of g2.regions) if (side3(r.ctrl)) for (const z of r.seas) seas.add(z);
+    const facing2 = coast.filter((r) => r.seas.some((z) => seas.has(z)));
+    return (facing2.length ? facing2 : coast).map((r) => ({ reg: r.id, w: 1 }));
+  }
+  function pickPlace(g2, places, taken2, ...key6) {
+    const free2 = places.filter((p) => !taken2.has(p.reg));
+    if (!free2.length) return null;
+    let x = draw(g2, ...key6) * free2.reduce((t, p) => t + p.w, 0);
+    for (const p of free2) {
+      x -= p.w;
+      if (x < 0) return p.reg;
+    }
+    return free2[free2.length - 1].reg;
+  }
+  function watchersMonth(g2, nat) {
+    const foes = g2.intel.foes ?? [];
+    const list4 = foes.filter((x) => x.kind === "watch").sort((x, y) => x.id - y.id);
+    if (!list4.length) return;
+    const places = /* @__PURE__ */ new Map();
+    for (const f of list4) {
+      const F = g2.nations[f.nat];
+      if (!F?.alive || !atWar(g2, nat, f.nat)) {
+        foes.splice(foes.indexOf(f), 1);
+        continue;
+      }
+      if (!places.has(f.nat)) places.set(f.nat, watchPlaces(g2, nat, f.nat));
+      const P = places.get(f.nat);
+      if (P.some((p) => p.reg === f.reg)) continue;
+      const was = g2.regions[f.reg], seen2 = f.found !== void 0;
+      const taken2 = watched(g2);
+      taken2.delete(f.reg);
+      const to = pickPlace(g2, P, taken2, g2.turn, "watchmove", f.id);
+      if (to === null) {
+        foes.splice(foes.indexOf(f), 1);
+        if (seen2 && was.ctrl === nat) note2(g2, { name: "", nat }, was.id, "gone", `The ${F.adj} agent your hunters uncovered at ${was.name} has left. Nothing more is seen of it.`, false);
+        continue;
+      }
+      f.reg = to;
+      f.strike = g2.turn + WATCHERS().ready;
+      const d = doubleIn(g2, f.nat, nat), at = g2.regions[to];
       if (d) {
         f.found = g2.turn;
-        const text = `Double agent ${d.name} warns of a new ${g2.nations[foe].adj} agent at ${g2.regions[f.reg].name}.`;
-        note2(g2, { name: d.name, nat }, f.reg, "warned", text, true);
-        headline(g2, "event", text, nat, f.reg);
+        const text = `Double agent ${d.name} warns that the ${F.adj} agent ${seen2 ? "uncovered " : ""}at ${was.name} now watches your defences at ${at.name}.`;
+        note2(g2, { name: d.name, nat }, to, "warned", text, true);
+        headline(g2, "event", text, nat, to);
+      } else if (seen2) {
+        delete f.found;
+        if (was.ctrl === nat) note2(g2, { name: "", nat }, was.id, "gone", `The ${F.adj} agent your hunters uncovered at ${was.name} has slipped away to watch another part of your front.`, false);
       }
     }
   }
@@ -17674,6 +17781,11 @@
     }
     plots(g2, nat);
   }
+  function watchHelp(g2) {
+    const lv = INTEL.enemy.level[levelIndex(g2)] ?? 1, each3 = (INTEL.enemy.chance + WATCHERS().chance) * lv;
+    const often = each3 <= 0 ? "none at this level of the campaign" : `about one every ${Math.max(1, Math.round(1 / each3))} months from each great power at war with you, fewer from a smaller country, most of them watchers`;
+    return `The enemy's services send agents to watch your front as well as saboteurs: ${often}. A watcher maps the defences of the province it sits in, and its side's attacks there go in ${Math.round(WATCHERS().attack * 100)}% harder until it is arrested. Guards do not stop watchers. Put an agent at home on HUNT ENEMY AGENTS on your front to find them; a battle report that says the enemy knew your defences tells you where one is.`;
+  }
   var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.";
   function viewOf(g2, a) {
     const r = g2.regions[a.reg], out = abroad(g2, a), work2 = atWork(g2, a);
@@ -17733,7 +17845,18 @@
       fog: fogOn(g2, nat),
       books: Object.values(g2.nations).filter((n) => n.alive && !allied(g2, n.id, nat) && knowsBooks(g2, n.id, nat)).map((n) => n.id),
       threat: { chance: T.chance, foes: T.foes, guards: mine4.filter((a) => a.mission === "guard" && atWork(g2, a) && !abroad(g2, a)).length, rate: T.rate },
-      ...huntersOn(g2) ? { found: foesFound(g2, nat).map((f) => ({ id: f.id, nat: f.nat, reg: f.reg, where: g2.regions[f.reg].name, text: `${/^[AEIOU]/.test(g2.nations[f.nat]?.adj ?? "") ? "An" : "A"} ${g2.nations[f.nat]?.adj ?? "enemy"} agent at ${g2.regions[f.reg].name}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}` })) } : {},
+      ...huntersOn(g2) ? {
+        found: foesFound(g2, nat).map((f) => ({
+          id: f.id,
+          nat: f.nat,
+          reg: f.reg,
+          where: g2.regions[f.reg].name,
+          watch: f.kind === "watch",
+          text: `${/^[AEIOU]/.test(g2.nations[f.nat]?.adj ?? "") ? "An" : "A"} ${g2.nations[f.nat]?.adj ?? "enemy"} agent ${f.kind === "watch" ? "watching your defences " : ""}at ${g2.regions[f.reg].name}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}`,
+          then: f.kind === "watch" ? `Until it is arrested, ${g2.nations[f.nat]?.adj ?? "enemy"} attacks there go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "It strikes unless it is arrested."
+        }))
+      } : {},
+      ...watchersOn(g2) ? { watchHelp: watchHelp(g2) } : {},
       ...ordersOn(g2) ? { orders: enemyOrders(g2, nat) } : {},
       ...doublesOn(g2) ? {
         doubles: doublesOf(g2, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g2.nations[d.of]?.adj ?? "enemy"} service since ${monthOf(d.since)}: it warns of every new ${g2.nations[d.of]?.adj ?? "enemy"} agent sent against you, and opens ${g2.nations[d.of]?.name ?? "that country"}'s books.` })),
@@ -23456,13 +23579,13 @@
       }
       const own = us.total + (here ? 0 : mine4);
       const huntNow = huntShareSunk(huntersIn(g2, f.nat, z).weight, subs);
-      let hunt = huntNow;
+      let hunt2 = huntNow;
       if (subs > 0 && seaWar(g2)) {
         const keep = { zone: f.zone, stance: f.stance, lane: f.lane };
         f.zone = z;
         f.stance = "hunt";
         delete f.lane;
-        hunt = huntShareSunk(huntersIn(g2, f.nat, z).weight, subs);
+        hunt2 = huntShareSunk(huntersIn(g2, f.nat, z).weight, subs);
         f.zone = keep.zone;
         f.stance = keep.stance;
         if (keep.lane !== void 0) f.lane = keep.lane;
@@ -23478,7 +23601,7 @@
         reported,
         search: pic?.word ?? "",
         meet: surface <= 0 ? "clear" : own >= NAVY.battle.seek * Math.max(1, them.total) ? "battle" : "shy",
-        hunt,
+        hunt: hunt2,
         huntNow,
         torpedo: seaWar(g2) ? torpedoRisk(g2, f, z) : 0
       };
@@ -33603,9 +33726,9 @@
       if (raid2 > 0) {
         if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
         else {
-          const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G3 / (raid2 + G3 + NAVY.convoy.ocean));
+          const hunt2 = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G3 / (raid2 + G3 + NAVY.convoy.ocean));
           for (const f of raiders) {
-            const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
+            const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt2));
             f.ships.ss -= k;
             f.lost.ss += k;
             subsLost += k;
@@ -37174,6 +37297,7 @@
     const land2 = opts.sea === void 0;
     const armsA = wide3 ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide3 && !town ? combinedArms(g2, defenders, target, true) : null;
     let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = "", streets = false;
+    let watched2 = null;
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
     const sap = wide3 ? sappers(attackers2.filter((c) => !land2 || !blocked(g2, c, target))) : 0;
@@ -37273,7 +37397,8 @@
         const spy = intelAttack(g2, c.nat, target);
         if (spy) {
           p *= spy.mul;
-          spied = spy.agent;
+          if (spy.foe) watched2 = { nat: spy.foe, found: !!spy.found, mul: spy.mul };
+          else spied = spy.agent;
         }
       }
       p *= heart(c);
@@ -37664,6 +37789,10 @@
       lines2.push({ label: "Morale", value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : void 0 });
     }
     if (spied) lines2.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
+    if (watched2) {
+      const adj = g2.nations[watched2.nat]?.adj ?? "enemy";
+      lines2.push({ label: "Enemy intelligence", value: watched2.found ? `The ${adj} agent your hunters uncovered at ${target.name} has mapped its defences` : `The ${adj} army knew the defences of ${target.name}: one of its agents is at work there`, effect: `Attack up ${Math.round((watched2.mul - 1) * 100)}%` });
+    }
     if (sneaked) lines2.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
     if (armorShock) lines2.push(at ? { label: "Armor", value: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines2.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
@@ -43692,6 +43821,10 @@
         did.push(`recruited agent ${a.name}`);
       }
     }
+    if (huntersOn(g2)) {
+      const caught = foesFound(g2, nat).map((f) => f.id).filter((id) => arrest(g2, nat, id));
+      if (caught.length) did.push(`arrested ${plural7(caught.length, "enemy agent")}`);
+    }
     if (!war.length && !S2.peace) return did.length ? `${listAnd3(did)}.` : null;
     const mine4 = agentsOf(g2, nat).filter((a) => atWork(g2, a)).sort((x, y) => x.id - y.id);
     const strength3 = (e) => g2.corps.reduce((s, c) => s + (c.nat === e && !c.dead ? c.divs * c.str : 0), 0);
@@ -43704,14 +43837,16 @@
     const free2 = [];
     for (const a of agentsOf(g2, nat)) if (posts.includes(a.reg) && abroad(g2, a)) taken2.add(a.reg);
     const guards = agentsOf(g2, nat).length > 1 && threat(g2, nat).foes.length ? S2.guards : 0;
+    const hunters = huntersOn(g2) && guards && agentsOf(g2, nat).length > guards + 1 ? S2.hunters ?? 0 : 0;
     const home = mine4.filter((a) => !abroad(g2, a));
     for (const a of mine4) {
       if (abroad(g2, a)) {
         if (!posts.includes(a.reg)) free2.push(a);
         continue;
       }
-      if (home.indexOf(a) >= guards) free2.push(a);
+      if (home.indexOf(a) >= guards + hunters) free2.push(a);
     }
+    for (const a of home.slice(guards, guards + hunters)) did.push(...hunt(g2, nat, a));
     for (const a of free2) {
       const to = posts.find((p) => !taken2.has(p) && whyNotSend(g2, nat, a.id, p) === null);
       if (to === void 0) continue;
@@ -43726,6 +43861,25 @@
       if (a.mission !== m) setMission(g2, nat, a.id, m);
     }
     return did.length ? `${listAnd3(did)}.` : null;
+  }
+  function hunt(g2, nat, a) {
+    const foe = /* @__PURE__ */ new Map();
+    for (const c of g2.corps) if (!c.dead && c.reg >= 0 && atWar(g2, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
+    const edge3 = (r) => r.ctrl === nat && r.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl));
+    if (!edge3(g2.regions[a.reg])) {
+      let to = -1, most = -1;
+      for (const r of g2.regions) {
+        if (!edge3(r)) continue;
+        const n = r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0);
+        if (n > most) {
+          most = n;
+          to = r.id;
+        }
+      }
+      if (to >= 0 && whyNotSend(g2, nat, a.id, to) === null && sendAgent(g2, nat, a.id, to)) return [`sent ${a.name} to hunt enemy agents at ${g2.regions[to].name}`];
+    }
+    if (a.mission !== "hunt" && whyNotMission(g2, nat, a.id, "hunt") === null) setMission(g2, nat, a.id, "hunt");
+    return [];
   }
   function raidWords(g2, r) {
     const at = r.region >= 0 ? g2.regions[r.region] : null;
@@ -51846,12 +52000,12 @@ ${next.text}` : ""}` : next ? next.also : "";
     const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
     const found2 = (room2.found ?? []).map((f) => {
       const why = up ? whyNotArrestAgent(s, f.id) : "Orders are given in your own month.";
-      const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? "Arrest the agent: it is ended before it can strike." }];
+      const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? "Arrest the agent: it maps your defences no more." : "Arrest the agent: it is ended before it can strike.") }];
       if (room2.doubles) {
         const whyTurn = up ? whyNotTurnAgent(s, f.id) : "Orders are given in your own month.";
         buttons.push({ label: "TURN", act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? "Turn the agent: it goes back to its service and works for you, warning of every new agent it sends and opening its books, until it is found out." });
       }
-      return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? "Enemy"} agent at ${f.where}`, lines: [`${f.text}. It strikes unless it is arrested.`], buttons };
+      return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? "Enemy"} ${f.watch ? "watcher" : "agent"} at ${f.where}`, lines: [`${f.text}. ${f.then}`], buttons };
     });
     const doubles = (room2.doubles ?? []).map((d) => ({ nat: d.of, title: `Double agent ${d.name}`, lines: [d.text], buttons: [] }));
     const orders = room2.orders ?? [];
@@ -51866,8 +52020,8 @@ ${next.text}` : ""}` : next ? next.also : "";
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
       ],
       sections: [
-        { heading: "YOUR AGENTS", text: `${rows.length ? here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : "Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there." : "The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there."}${room2.turnedHelp ? ` ${room2.turnedHelp}` : ""}`, rows },
-        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. Each strikes when its time comes unless it is arrested first.${room2.doubles ? " One can be turned instead, to work for you inside its own service." : ""}`, rows: found2 }] : [],
+        { heading: "YOUR AGENTS", text: `${rows.length ? here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : "Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there." : "The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there."}${room2.watchHelp ? ` ${room2.watchHelp}` : ""}${room2.turnedHelp ? ` ${room2.turnedHelp}` : ""}`, rows },
+        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when its time comes, and a watcher helps its army attack, unless it is arrested first." : "Each strikes when its time comes unless it is arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside its own service." : ""}`, rows: found2 }] : [],
         ...doubles.length ? [{ heading: "DOUBLE AGENTS", text: "Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.", rows: doubles }] : [],
         ...orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join("\n"), rows: [] }] : [],
         { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] }
@@ -52207,13 +52361,13 @@ ${next.text}` : ""}` : next ? next.also : "";
     const seas = (o?.seas ?? []).map((z) => {
       const meet = z.meet === "clear" ? "A patrol would meet no enemy fleet." : z.meet === "battle" ? "A patrol would bring the enemy fleet to battle." : "The enemy there is too strong: a patrol would not face him.";
       const enemy = z.surface || z.subs ? `Enemy there: ${[z.surface ? `${z.surface} surface warship${z.surface === 1 ? "" : "s"}` : "", z.subs ? `${z.subs} submarine${z.subs === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ")}.` : "No enemy ships are known there.";
-      const hunt = z.subs ? `Hunting would sink about ${share(z.hunt)} of the submarines in a month${z.huntNow > 0 ? ` (${share(z.huntNow)} as things stand)` : ""}.` : "";
+      const hunt2 = z.subs ? `Hunting would sink about ${share(z.hunt)} of the submarines in a month${z.huntNow > 0 ? ` (${share(z.huntNow)} as things stand)` : ""}.` : "";
       const risk = z.torpedo >= 5e-3 ? `Chance of losing a heavy ship to a torpedo: ${share(z.torpedo)}.` : "";
       const at = (st) => z.here && card.stance === st;
       return {
         nat: "",
         title: `${z.name}${z.here ? "  ·  it is here" : ""}`,
-        lines: [`${enemy} ${meet}`, [hunt, risk].filter(Boolean).join(" ")].filter(Boolean),
+        lines: [`${enemy} ${meet}`, [hunt2, risk].filter(Boolean).join(" ")].filter(Boolean),
         buttons: [
           { label: "PATROL", act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at("patrol"), tip: "Seeks out the enemy's warships there and guards the convoys that cross it." },
           { label: "RAID SHIPPING", act: `fleet:${id}:${z.zone}:raid`, ok: up && !at("raid"), tip: "Goes for merchant ships and keeps clear of a fight with the enemy fleet." },
