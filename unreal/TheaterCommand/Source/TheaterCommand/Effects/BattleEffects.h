@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Effects/TheaterFxCore.h"
+#include "Tasks/Task.h"
 #include "Templates/Function.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
@@ -291,8 +292,30 @@ public:
 	 * covers any window wider than it is tall. Returns the camera's jolt. */
 	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
 
+	/** Tick in two halves (the production lead's FX2), so the kit's own frame runs on a worker while the scene draws its
+	 * men and tanks. TickBegin takes what Tick takes and does on this thread what must be done here (the test barrage,
+	 * the camera's jolt, the view), starts the kit's Draw on a worker and returns the jolt at once. TickEnd waits for
+	 * the worker, sends the mesh and lights the lamps, then does what was asked of the kit in between, in the order
+	 * asked. Between the two:
+	 * - every call on the kit is held, its arguments copied, and done at TickEnd, stamped with this frame's time as a
+	 *   call after a Tick is: so it is first seen at the next frame. Call TickBegin after the frame's shells and fires
+	 *   where you can, so only what comes after (a vehicle's dust) waits;
+	 * - GroundUnder and GroundColour are called from the worker: nothing may change what they read (the field's
+	 *   heights, a crater, a rut) until TickEnd;
+	 * - PuffsDrawn and PuffsAsked give the last frame's; Clear and End wait for the worker first.
+	 * Tick is both halves at once, all on this thread, as before. A TickBegin left without its TickEnd is ended by the
+	 * next TickBegin or Tick. */
+	FBattleJolt TickBegin(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
+	void TickEnd();
+
 	/** Camera shake on or off (Options: "Camera shake", default on). */
 	bool bShake = true;
+
+	/** For a scene's log line: the puffs the kit drew at the last Tick (or TickEnd), and the room asked for then (what was
+	 * on the screen and what had been made since; over the room, 3,000, when it is short). Both by the kit's clock.
+	 * -TheaterFxRoomLog on the command line also writes a line of its own every 10 s of that clock. */
+	int32 PuffsDrawn() const;
+	int32 PuffsAsked() const;
 
 	/** -TheaterBlastTest on the command line: lay a test barrage round a place (RunTest) for test frames. */
 	static bool WantsTest();
@@ -317,12 +340,27 @@ private:
 	double UnitsPerMetre = 100.0;
 	double Clock = 0.0;
 	FVector Sun = FVector(-0.45, -0.35, 0.82);
-	int32 Room = 0; // puffs the mesh has room for (in steps of 300, as the map's smoke)
-	int32 RoomSpare = 0; // frames running that less room would have done
-	int32 LastSent = 0;
+	// (the mesh, the production lead's FX1 of 22 November: Sections sections of PuffsASection puffs each, made once at
+	// the first frame with something to draw and never rebuilt; a section is sent only while it holds puffs, and the
+	// rest are folded flat and hidden)
+	static constexpr int32 PuffsASection = 300;
+	int32 Sections = 0;
+	int32 SectionsUsed = 0; // sections holding puffs at the last Tick (shown)
+	FVector FoldedAt = FVector::ZeroVector; // where the sections holding no puffs were last folded (the pre-check on FX1: their boxes count in the mesh's bounds)
 	bool bShown = false;
-	TArray<FVector> Points;
+	TArray<FVector> Points; // one section's points and colours, filled for each section in turn
 	TArray<FColor> Colours;
+	// (-TheaterFxRoomLog: the most drawn in the 10 s of the kit's clock, when, and the room asked then)
+	int32 LogMost = -1, LogAsked = 0;
+	double LogMostAt = 0.0, LogFrom = -1.0;
+	int32 LastDrawn = 0, LastAsked = 0; // (PuffsDrawn, PuffsAsked)
+	// (the production lead's FX2: the kit's Draw on a worker from TickBegin to TickEnd, the frame it draws, and what is
+	// asked of the kit meanwhile, held in order for TickEnd)
+	UE::Tasks::TTask<int32> Drawing;
+	bool bDrawing = false;
+	double DrawNow = 0.0, DrawDay = 1.0;
+	FVector DrawEye = FVector::ZeroVector;
+	TArray<TUniqueFunction<void()>> Held;
 
 	struct FTestShot
 	{
@@ -343,7 +381,15 @@ private:
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;
-	void MakeSection(int32 NewRoom, const FVector& Fill);
+	void MakeSections(const FVector& Fill);
+	void RoomLog(double Now, int32 Laid);
+	/** Before the kit's Draw, on this thread: the test barrage, the jolt, the view and the day. False: nothing to draw. */
+	bool Ahead(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight, FBattleJolt& Jolt, TheaterFx::Battle::View& Sight, double& Day);
+	/** After it, on this thread: the puffs it laid into the mesh, the room log and the lamps. */
+	void Lay(double Now, const FVector& Eye, int32 Drawn, double Day);
+	/** A call on the kit: done now, or held while the kit draws on its worker. bWhenReady: only once Begin has made it. */
+	template <typename FWork>
+	void Do(FWork&& Work, bool bWhenReady = true);
 	void Hide();
 	void PlayTest(double Now);
 };

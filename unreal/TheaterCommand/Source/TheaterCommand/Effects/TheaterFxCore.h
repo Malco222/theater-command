@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -203,6 +204,7 @@ namespace TheaterFx
 			Rgb Col, Col2; double Cool = 0.0; // (and its own colour, young and old: a piece with bSoft runs to it along its length)
 			double PaleTo = -1.0; // (0 and over: how far that piece pales with age, its own PaleTo, 1 not at all; under 0: as the piece reaching back to it does)
 			double Lean = 0.0; // (and how much thinner its one side is: see Bit::Lean)
+			double CutAt = 1.0e18; // (and that piece's own cut: see Bit::CutAt)
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
@@ -327,6 +329,17 @@ namespace TheaterFx
 		// PaleUpM to the power PaleUpPow, it goes PaleUpMost of that share of the way to PaleUpCol, its sunlit side to
 		// PaleUpLit, and thins by ThinUp of that share: black and dense low, browner grey and thinner high)
 		double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0, PaleUpZ = 0.0;
+		// (the production lead's FX2: its number in the order the battle made its pieces, given at the first Draw after
+		// it was made. Prune fills each gap with the last piece, so Bits keeps no order; two pieces equally deep are
+		// drawn in this order, the older first, as they were when Bits kept the order they were made in)
+		uint64_t Serial = 0;
+		// (an aircraft trail's piece: the trail's run, Trailing::Run, and the moment by which it is gone however long its
+		// life, CutAt. The pre-check on 13388a4f: an aircraft that speeds up lays pieces of a shorter life, longest_m, and
+		// those went before the slow pieces laid before them: a hole in the trail with an old length hanging alone
+		// behind it. So no piece of a run outlives a piece laid after it: it is cut to that one's end, fading over the
+		// last game.trail_cut_fade_s before it, and the trail goes from its old end)
+		uint32_t TrailRun = 0;
+		double CutAt = 1.0e18;
 		Rgb PaleUpCol, PaleUpLit;
 		// (the far form, Battle::FarLay: 0, anything else, drawn as ever. 1, a piece of a near burst that has a far form
 		// too (a bomb of a stick), drawn while FarAt, where it struck, is within the draw range; 2, a piece of that far
@@ -609,6 +622,11 @@ namespace TheaterFx
 		double PictureGain() const { return LitGain; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
+		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
+		 *  been made since (RoomAsked; over Room() when the room is short). For a scene's log, the production lead's ask
+		 *  of 22 November. */
+		int PuffsDrawn() const { return LastDrawn; }
+		int PuffsAsked() const { return static_cast<int>(std::min<size_t>(RoomAsked(), 1000000000u)); }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -736,6 +754,7 @@ namespace TheaterFx
 		{
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			double Longest = 0.0; // (longest_m over 0: the most sky a trail is laid over in its life; a faster aircraft's is squeezed, see TrailMove)
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
 			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
@@ -847,6 +866,11 @@ namespace TheaterFx
 			// and that power a few seconds late, for a sharp rise is her ringing up; the black surge that follows; and the
 			// slow wander of its puffs' climb and drift, each taking most of the last one's)
 			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
+			double Squeeze = 1.0; // (longest_m: the share of its row's time the trail was last laid by, 1 when not squeezed; TrailKind's closing bar takes it)
+			// (Bit::CutAt: this kind's run of the trail, a new one at each TrailKind, and when the row's life ends for the
+			// last piece TrailMove laid; a later call whose first piece would end sooner cuts the pieces before it)
+			uint32_t Run = 0;
+			double RunEnd = -1.0e18;
 			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
@@ -1205,7 +1229,22 @@ namespace TheaterFx
 		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
-		std::vector<Bit> Bits; // alive or still to be born
+		std::vector<Bit> Bits; // alive or still to be born (in no order: Prune puts the last into each gap)
+		// (Bit::Serial: the last number given, and how many of Bits have theirs. Pieces made since the last Draw are at
+		// the end, in the order made, and are numbered in that order before Prune moves any)
+		uint64_t Serials = 0;
+		size_t Numbered = 0;
+		// (Bit::CutAt: the trail runs given out, and the cuts asked since the last Draw, each for the pieces of its run
+		// born by LaidBy, done at the next Draw in one pass; and the fade before a cut)
+		struct TrailCut
+		{
+			uint32_t Run = 0;
+			double LaidBy = 0.0, End = 0.0;
+		};
+		uint32_t TrailRuns = 0;
+		std::vector<TrailCut> TrailCuts;
+		double TrailCutFade = 3.0;
+		void CutTrails();
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
 		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
@@ -1286,6 +1325,7 @@ namespace TheaterFx
 			double Deep;
 			bool bKeep; // (counted first when the room is short: a kept oil column, or a light)
 			double Far = 0.0; // (a puff that may carry lumps, Bit::Lumps: how far it is from the eye; else 0)
+			uint64_t Serial = 0; // (Bit::Serial: two as deep are laid in the order they were made, wherever they lie in Bits)
 		};
 		std::vector<Order> Sorted;
 		struct ColumnSpan

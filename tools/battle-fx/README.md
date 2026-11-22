@@ -1422,6 +1422,95 @@ most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 
 numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
 float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
 
+## Trails that thin, pale and go: the Bremen mend (after head f7bf0b2)
+
+Art director, 22 November, mend 2 on the air scene's Mac frames (a1acb552): at Bremen the trails were ropes, a core of
+78 against a sky of 226, one width all along, crossing the whole frame. Wanted: 1-2 m at the source, 6-12 m by 10 s;
+opacity 0.9, 0.3 by 15 s and gone by 30 s; colour lifting from about 45 to 100-120 with age; edges breaking into
+puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning fuel black and only near the aircraft.
+
+- **The rows** `air_trails.smoke`, `fire`, `fuel` and `oil` (the kinds the flight core passes are unchanged). Each
+  widens to `r1_m` by `widen_by_s` 10 and on by `thin_grow` after; pales to `pale_to` 0.35 from 2 to 15 s; fades from
+  `thin_hold` 0.5 of `life_s` 30; cools to a light grey `colour_old` (smoke: grey-brown from the start, never black);
+  draws into lumps only from `lumps_from` 0.8 of its life, so its old end never breaks into a row of beads; and its
+  edges are torn (`soft`, `edge_torn`, `wisps`). Fire and fuel heavier, below. The streak stays as it was, with the length rule below.
+- **`longest_m`** (2400): the most sky a trail is laid over in its life. A faster aircraft's puffs live that much
+  shorter, and its whole age curve (widening, paling, thinning, lumps and knots) is squeezed by the same share, so it
+  is the same trail, only shorter: at 80 m/s as above, at 150 m/s gone by 16 s. Without the key, as before.
+- **Measured** side-on at 80 m/s over flat black and white (`FX_FLAT_BACK`, `FX_WAKE_UP=0`, the wake shot at 31 s):
+
+  | Age | Engine hit (smoke): opacity, colour, width at half | Fire: opacity, colour, width at half |
+  |---|---|---|
+  | 0.5 s | 0.94, 79, 1.3 m | 0.95, 39, 4.7 m |
+  | 5 s | 0.88, 93, 5.4 m | 0.96, 63, 11.4 m |
+  | 10 s | 0.51, 109, 8.7 m | 0.74, 87, 13.4 m |
+  | 15 s | 0.33, 112, 12.7 m | 0.41, 101, 15.4 m |
+  | 20 s | 0.18, 127 | 0.23, 109 |
+  | 25 s | 0.06, 135 | 0.08, 125 |
+  | 30 s | none | none |
+
+- **Fire out-reads a hit** (art director 08:54Z: the engine hit passed; a burning aircraft must out-read a damaged
+  one). Fire and fuel are one step heavier: `r1_m` 7 and 7.5, `thin_grow` 1.5, `pale_to` 0.56 from 5 to 15 s,
+  `thin_hold` 0.4, and the wake past the tail kept at 5 to 6 m (`tail_wide_m`, her ruling of 20 November; 4.0 to
+  5.4 m measured at 0.2 s). "1-2 m at the source" is the engine hit's.
+
+## The kit at scale: the mesh in sections, and its Draw on a worker (FX1, FX2, after head 13388a4)
+
+The production lead's battle-scale plan (/mnt/project-files/production/battle-scale-1122/plan.md), items FX1 and FX2.
+
+- **FX1, the mesh made once.** The kit's room (3,000 puffs) is made at the first frame with something to draw as
+  sections of 300 puffs, and never rebuilt. Each frame sends only the sections that hold puffs, points and colours
+  only; a section that empties is folded flat once and hidden (`SetMeshSectionVisible`). The kit lays its puffs far
+  to near and section k holds puffs k x 300 on, so the far-to-near order holds across sections.
+- **Readouts.** `FBattleEffects::PuffsDrawn()` and `PuffsAsked()`: the last frame's puffs drawn and room asked.
+  `-TheaterFxRoomLog`: a line every 10 s of the kit's clock (Tick's Now): the most drawn, when, the room asked then,
+  the room and the sections in use.
+- **FX2, old pieces go cheaply.** A piece (`Bit`) is about 1.8 kB. Prune used to close each gap by moving every piece
+  after it; now the last piece fills each gap. Two pieces equally deep are drawn in the order they were made
+  (`Bit::Serial`, numbered at the Draw after they are made), so the picture does not depend on where they lie: the
+  96 old frames byte for byte, and 23 of 24 heavy frames (6 pixels one level apart in the raid shot, an exact tie).
+  A barrage of 6 shells a second seen from a hill (16,500 asked of the room): Draw 6.8 ms against 7.3 (median of 5).
+- **FX2, Draw on a worker.** `TickBegin(...)` takes what `Tick` takes, does on the game thread what must be done there
+  (the test barrage, the camera's jolt, the view), starts the kit's Draw on a worker (`UE::Tasks`) and returns the
+  jolt. `TickEnd()` waits for it, sends the mesh and lights the lamps, then does what was asked of the kit in
+  between, in order. Between the two:
+  - every call on the kit is held, its arguments copied, and done at `TickEnd` with this frame's time, as a call
+    made after a `Tick`: first seen at the next frame. So call `TickBegin` after the frame's shells and fires where
+    you can, and only what comes after (a vehicle's dust) waits;
+  - `GroundUnder` and `GroundColour` are called from the worker: nothing may change what they read (the field's
+    heights, craters, ruts) until `TickEnd`;
+  - `PuffsDrawn`/`PuffsAsked` give the last frame's; `Clear` and `End` wait for the worker first; a `TickBegin`
+    with no `TickEnd` is ended by the next `TickBegin` or `Tick`.
+  `Tick` is both at once on the game thread, as before (the air and sea scenes). The kit keeps no shared state: two
+  kits drawing at once on two threads ran clean under the thread sanitiser and drew what each drew alone.
+- **The box of a moving battle** (the pre-check on FX1). A hidden section's box still counts in the mesh's bounds,
+  and the translucent sort goes by the bounds' middle, so sections folded where the battle was stretched the box as
+  the battle moved on (a bomber stream most). When the farthest puff is more than 500 m from where the idle sections
+  were folded, they are sent once more, folded onto it and still hidden: one send of the idle sections each 500 m.
+
+## A trail that speeds up keeps no hole (after head 9cc20a7)
+
+The pre-check on 13388a4f: an aircraft that speeds up from 80 to 220 m/s squeezes its row's life (`longest_m`), so
+the first piece laid fast ended before the slow pieces laid just behind it: a hole in the trail, kilometres wide,
+for over 10 s. Now each piece of a trail (and of its kind: a kind change keeps its own rows) laid before the squeeze
+rose is cut to end with that first fast piece, never later than its own end, and fades out over the last
+`game.trail_cut_fade_s` (3 s) before it. The trail dies from its old end, and lives no longer than it did.
+
+Measured with a probe on the kit (80 m/s for 10 s, up to 220 over 8 s or 2 s, held to 30 s, back down), the widest
+stretch with no living piece:
+
+| Trail | Before (8 s / 2 s) | Now (8 s / 2 s) | Longest now |
+|---|---|---|---|
+| smoke | 3,644 m / 4,032 m | 73 m / 72 m | 4,369 m / 3,484 m |
+| fire, fuel | 3,600 m / 4,008 m | 65 m / 65 m | 4,375 m / 3,489 m |
+| oil | 3,616 m / 4,000 m | 72 m / 73 m | 4,370 m / 3,485 m |
+| streak, doused | 2,080 m / 2,352 m | 72 m / 72 m | 3,818 m / 3,421 m |
+| glycol, mist | no hole | unchanged | |
+
+About 70 m is the spacing of the pieces themselves. Longest: the slow stretch laid before the speed-up lives on
+until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
+cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
