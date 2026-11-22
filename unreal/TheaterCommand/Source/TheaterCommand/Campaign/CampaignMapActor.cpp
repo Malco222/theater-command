@@ -12335,7 +12335,7 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 				SidesPointRegion.Add(Id);
 			}
 		}
-		if (!Buffers.Commit(SidesMesh, 0, SidesInk ? static_cast<UMaterialInterface*>(SidesInk) : HighlightMaterial))
+		if (!Buffers.Commit(SidesMesh, 0, SidesInk ? static_cast<UMaterialInterface*>(SidesInk) : HighlightMaterial.Get()))
 		{
 			// (nothing laid: an old wash left on the mesh is not shown for the new sides)
 			SidesPointRegion.Reset();
