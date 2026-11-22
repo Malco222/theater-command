@@ -532,13 +532,15 @@ def split_lod(M, rig, lod, bank):
     info = {"n": n, "m": m, "band_points": int(band.sum()), "hardened": hardened, "seam_copies": len(src),
             "unrelated_neighbours": int(unrelated), "rigid_pieces_moved_whole": rigid_moved,
             "treg": treg, "cut_report": cut_report, "T2": T2, "V": V, "VP": VP, "TV": TV, "comp": comp, "rigid": rigid}
-    info["loops"] = seam_loops(TV, treg, rig)
+    info["loops"] = seam_loops(TV, treg, rig, VP)
     return arr, info
 
 
-def seam_loops(TV, treg, rig):
+def seam_loops(TV, treg, rig, VP=None):
     """For each cut: the loops (welded vertex lists) where its region meets its parent region, in the order the limb
-    side's boundary runs (u -> v along a triangle of the limb)."""
+    side's boundary runs (u -> v along a triangle of the limb). An edge counts where a triangle of the parent region
+    lies across it and none of the limb's (so the doubled or flipped triangles of a thinned level do not break a loop);
+    pieces of a broken loop are joined end to start, and a piece whose ends lie within 6 cm is closed."""
     dtri = {}
     for t, (a, b, c) in enumerate(TV):
         for u, v in ((a, b), (b, c), (c, a)):
@@ -551,8 +553,10 @@ def seam_loops(TV, treg, rig):
         for t in np.flatnonzero(treg == c):
             a, b, cc = TV[t]
             for u, v in ((a, b), (b, cc), (cc, a)):
-                tw = [x for x in dtri.get((v, u), []) if x != t]
-                if len(tw) == 1 and treg[tw[0]] == pr:
+                across = [x for x in dtri.get((v, u), []) + dtri.get((u, v), []) if x != t]
+                if any(treg[x] == c for x in across):
+                    continue
+                if any(treg[x] == pr for x in across):
                     half.setdefault(u, []).append((v, t))
         used, loops = set(), []
         for u0 in sorted(half):
@@ -586,7 +590,53 @@ def seam_loops(TV, treg, rig):
                             tt = tw[0]
                     u, v, t = v, pick[0], pick[1]
                 loops.append({"verts": loop, "closed": closed and len(loop) >= 3})
-        res[cut] = loops
+        # join open pieces end to start (a piece walked from its middle leaves its head behind)
+        opened = [lp["verts"] for lp in loops if not lp["closed"]]
+        done = [lp for lp in loops if lp["closed"]]
+        changed = True
+        while changed and len(opened) > 1:
+            changed = False
+            for i in range(len(opened)):
+                for j in range(len(opened)):
+                    if i != j and opened[i][-1] == opened[j][0]:
+                        opened[i] = opened[i] + opened[j][1:]
+                        opened.pop(j)
+                        changed = True
+                        break
+                if changed:
+                    break
+        if len(opened) > 1 or (opened and not done):
+            # (pieces whose triangles run both ways round a thinned level: join them as an undirected ring if they are one)
+            und = {}
+            for vs in opened:
+                for x, y in zip(vs[:-1], vs[1:]):
+                    und.setdefault(x, set()).add(y)
+                    und.setdefault(y, set()).add(x)
+            if und and all(len(n) == 2 for n in und.values()):
+                start = min(und)
+                ring, prev = [start], None
+                cur = start
+                while True:
+                    nxt = [n for n in sorted(und[cur]) if n != prev]
+                    if not nxt or nxt[0] == start:
+                        break
+                    prev, cur = cur, nxt[0]
+                    ring.append(cur)
+                if len(ring) == len(und) and len(ring) >= 3:
+                    fwd = sum(1 for vs in opened for x, y in zip(vs[:-1], vs[1:])
+                              if (ring.index(y) - ring.index(x)) % len(ring) == 1)
+                    if fwd * 2 < sum(len(vs) - 1 for vs in opened):
+                        ring = ring[::-1]
+                    opened = []
+                    done.append({"verts": ring, "closed": True, "joined": True, "unordered": True})
+        for vs in opened:
+            if len(vs) >= 4 and vs[-1] == vs[0]:
+                done.append({"verts": vs[:-1], "closed": True, "joined": True})
+            elif len(vs) >= 3 and VP is not None and np.linalg.norm(VP[vs[-1]] - VP[vs[0]]) < 0.06:
+                done.append({"verts": vs, "closed": True, "joined": True, "bridged": True})
+            else:
+                done.append({"verts": vs, "closed": False})
+        res[cut] = done
     return res
 
 
@@ -946,11 +996,23 @@ def make_twin(D, per_clip=6, log=print):
             pbone = rig.parent[rig.index[cut]]
             loops = [lp for lp in info["loops"][cut] if lp["closed"]]
             bad = [lp for lp in info["loops"][cut] if not lp["closed"]]
-            if bad:
+            stray = [b for b in bad if len(b["verts"]) <= 3]
+            if bad and (len(stray) < len(bad) or (not loops and lod == "near")):
                 raise RuntimeError(f"{lod} {cut}: open seam {[len(b['verts']) for b in bad]}")
+            if stray:
+                log(f"    {lod} {cut}: {len(stray)} stray seam edge(s) beside the loop left uncapped")
             if not loops:
-                raise RuntimeError(f"{lod} {cut}: no seam")
+                if lod == "near":
+                    raise RuntimeError(f"{lod} {cut}: no seam")
+                # (a thinned level whose limb is a shell of its own, touching nothing of its parent: it comes away whole)
+                log(f"    {lod} {cut}: no seam (the limb meets its parent at {len(stray)} edge(s) at most at this "
+                    f"level): no caps")
+                st["cuts"][cut] = {"loops": [], "stump": {"cap_points": [len(B.P), 0], "cap_triangles": [len(B.T), 0]},
+                                   "limb": {"cap_points": [len(B.P), 0], "cap_triangles": [len(B.T), 0]}}
+                continue
             rec = {"loops": [len(lp["verts"]) for lp in loops]}
+            if stray:
+                rec["stray_edges"] = len(stray)
             for side, reg, other, bone_main, nm in ((1, p_reg, c_reg, pbone, "stump"), (-1, c_reg, p_reg, rig.index[cut], "limb")):
                 caps = []
                 for li, lp in enumerate(loops):
@@ -1009,7 +1071,7 @@ def make_twin(D, per_clip=6, log=print):
                 "part": [int(v) for v in B.part], "part2": [int(v) for v in B.part2],
                 "w2": [round(float(v), 3) for v in B.w2]}
         if B.shade is not None:
-            mesh["shade"] = [round(float(v), 2) for v in B.shade]
+            mesh["shade"] = [round(float(v), 3) for v in B.shade]
         # the originals exactly as they were (their values, not re-rounded)
         n = info["n"]
         mesh["points"][:3 * n] = M["points"]

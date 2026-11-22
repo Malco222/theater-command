@@ -57,6 +57,20 @@ REACH = 0.22
 POSES = [("idle", 0.3), ("walk", 0.25), ("walk", 0.8), ("run", 0.3), ("advance", 0.4), ("fire_stand", 0.05),
          ("fire_kneel", 0.05), ("fire_prone", 0.05), ("crawl", 0.6), ("cower", 1.0), ("kneel_down", 0.5),
          ("creep", 0.6)]
+# WEAR AND WEATHER (Brian, 22 November 2026: uniforms dirtier the longer a unit is at the front, fresh replacements
+# clean; rain darkens the cloth and splashes the mud higher; snow white on the shoulders and helmets)
+DIRT_K = 0.6          # full dirt darkens by up to 60 %
+DIRT0 = 0.6           # the baked `shade` is a man at wear 0.6 (some weeks in the line), dry
+DUST_TINT = (1.18, 1.10, 0.96)   # the baked tint: a dusty, earthy lift where the dirt is (shade does the darkening)
+DUST = (0.60, 0.54, 0.43)        # dry dust and dried mud (sRGB), and wet mud, that the battle mixes toward
+MUD = (0.27, 0.21, 0.15)
+SNOW_RGB = (0.92, 0.94, 0.97)
+WET_K = {0: 1.0, 1: 1.0, 3: 0.9, 4: 0.8, 6: 0.9, 10: 1.0, 11: 1.0, 13: 1.0, 2: 0.6, 12: 0.6, 14: 0.5, 5: 0.3, 7: 0.15,
+         8: 0.45, 9: 0.2}
+SNOW_K = {7: 0.1, 9: 0.5, 8: 0.7, 2: 0.8, 12: 0.8, 4: 0.85, 5: 1.0, 6: 1.0}
+GORE_VALUE = {"shade": 1.0, "shade_clean": 1.0, "dirt": 0.0, "dirt_wet": 0.0, "wet": 0.0, "snow": 0.0,
+              "tint": np.ones(3)}
+ROUND = {"shade": 3, "shade_clean": 3, "dirt": 2, "dirt_wet": 2, "wet": 2, "snow": 2, "tint": 3}
 LOD_K = {"near": 1.0, "mid": 0.9, "far": 0.75}  # (farther off, a little less of it: its points stand for wider patches,
                                                #  part of them hidden, and the eye no longer sees a fold at 100 m)
 LO, HI = 0.40, 1.0                            # (the file says 0 to 1)
@@ -242,6 +256,8 @@ def shadow(D, log=print):
 
 
 def near_shade(D, log=print, occ=None):
+    """The near level's arrays: shade (as baked: the clean shade with dust and mud of a man some weeks in, DIRT0),
+    shade_clean, dirt, dirt_wet, wet, snow, tint. See ABOUT_WEAR for what each means and how the battle mixes them."""
     rig = gore.Rig(D["bones"])
     M = D["near"]
     P, N, T, pa, a, b, w = arrays(M)
@@ -251,7 +267,8 @@ def near_shade(D, log=print, occ=None):
     kinds = np.array([kind_of(p) for p in pa])
     k_ao = np.array([AO_K[k] for k in kinds])
     # (a little shadow from a strap's own edge or a neighbouring fold is no shadow: open cloth stays its own colour)
-    s = 1.0 - k_ao * smooth(OCC0, OCC1, np.clip(occ, 0, 1))
+    occ_n = smooth(OCC0, OCC1, np.clip(occ, 0, 1))
+    s = 1.0 - k_ao * occ_n
 
     # creases and worn edges (rest pose: the cloth's own folds)
     kc = curvature(P, N, T)
@@ -261,51 +278,110 @@ def near_shade(D, log=print, occ=None):
     s *= np.where(kn > 0, 1.0 - 0.12 * np.clip(kn, 0, 1) * np.where(cloth, 1.0, 0.6), 1.0)
     edge = np.isin(pa, [2, 4, 5, 9, 12])
     s *= np.where((kn < 0) & edge, 1.0 + 0.05 * np.clip(-kn, 0, 1), 1.0)
+    fade = fbm(P, 0.22, seed=11)                 # the cloth's uneven fade (up to 6 % darker here and there)
+    s *= np.where(cloth, 0.94 + 0.06 * fade, 1.0)
+    clean = np.clip(s, LO, HI)
 
-    # grime, in the rest pose's places (z up from the soles)
+    # grime, in the rest pose's places (z up from the soles): g_dry is how much darker a man some weeks in is there
     H = rig.head
     z = P[:, 2]
     knee_z = 0.5 * (H[rig.index["calf_l"], 2] + H[rig.index["calf_r"], 2])
-    blot = fbm(P, 0.09, seed=3)                  # splashes
-    fade = fbm(P, 0.22, seed=11)                 # the cloth's uneven fade
-    legs = np.isin(pa, list(LEGS))
-    # mud: from the soles to a little over the knee, in splashes, the front of the shins more
-    mud_h = 1.0 - smooth(0.06, knee_z + 0.08, z + 0.10 * (blot - 0.5))
-    front = np.clip(N[:, 0], 0, 1)
-    mud = mud_h * (0.55 + 0.45 * blot) * (0.85 + 0.15 * front)
-    s *= np.where(legs, 1.0 - 0.30 * mud, 1.0)
-    # the knees (he kneels in the dirt), the seat of the trousers, the elbows
-    for side in ("l", "r"):
-        kj = H[rig.index["calf_" + side]]
-        d = np.linalg.norm(P - kj - np.array((0.05, 0.0, 0.0)), axis=1)
-        s *= np.where(legs & (d < 0.11), 1.0 - 0.16 * (1 - d / 0.11) * (0.6 + 0.4 * blot), 1.0)
-        ej = H[rig.index["lowerarm_" + side]]
-        d = np.linalg.norm(P - ej, axis=1)
-        s *= np.where(cloth & (d < 0.08), 1.0 - 0.10 * (1 - d / 0.08), 1.0)
-        hj = H[rig.index["hand_" + side]]
-        d = np.linalg.norm(P - hj, axis=1)
-        s *= np.where((pa == 7) & (d < 0.16), 1.0 - 0.13 * (0.5 + 0.5 * blot), 1.0)     # dirty hands
-        s *= np.where((pa == 0) & (d < 0.20), 1.0 - 0.10 * (1 - d / 0.20), 1.0)          # cuffs
     pel = H[rig.index["pelvis"]]
-    seat = (pa == 1) & (P[:, 0] < pel[0] - 0.04) & (np.abs(z - (pel[2] - 0.12)) < 0.14)
-    s *= np.where(seat, 0.93, 1.0)
-    # the face: a little grime and sweat in the creases, never a mask
     head = H[rig.index["head"]]
-    face = (pa == 7) & (np.linalg.norm(P - head, axis=1) < 0.16)
-    s *= np.where(face, 1.0 - 0.07 * blot, 1.0)
-    # the blotchy fade over all the cloth (up to 6 % darker here and there)
-    s *= np.where(cloth, 0.94 + 0.06 * fade, 1.0)
-    return np.clip(s, LO, HI), occ
+    blot = fbm(P, 0.09, seed=3)                  # splashes
+    blot2 = fbm(P, 0.06, seed=29)                # (snow's patches)
+    legs = np.isin(pa, list(LEGS))
+    front = np.clip(N[:, 0], 0, 1)
+
+    blot3 = fbm(P, 0.16, seed=47)                # (the wear's broad stains)
+    kit_ = np.isin(pa, list(CLOTH))
+    neck = H[rig.index["neck"]]
+
+    def grime(wet_, general=True):
+        """Dry: dust and mud to a little over the knee. Wet: mud splashed up the thighs, heavier knees and seat, the
+        forearms and the front of the body from going down in it. General: weeks of wear over all the cloth and kit in
+        broad stains, the collar's sweat and the fronts of the thighs where hands are wiped."""
+        g = np.ones(len(P))
+        if general:
+            g *= np.where(kit_, 1.0 - 0.14 * (0.4 + 0.6 * blot3), 1.0)
+            g *= np.where((pa == 0) & (np.linalg.norm(P - neck, axis=1) < 0.13), 0.92, 1.0)
+            thigh_front = (pa == 1) & (N[:, 0] > 0.4) & (z > knee_z + 0.05) & (z < pel[2] - 0.05)
+            g *= np.where(thigh_front, 1.0 - 0.08 * blot, 1.0)
+        top = knee_z + (0.30 if wet_ else 0.08)
+        mud_h = 1.0 - smooth(0.06, top, z + (0.16 if wet_ else 0.10) * (blot - 0.5))
+        mud = mud_h * (0.55 + 0.45 * blot) * (0.85 + 0.15 * front)
+        g *= np.where(legs, 1.0 - (0.38 if wet_ else 0.30) * mud, 1.0)
+        if wet_:
+            g *= np.where(pa == 2, 1.0 - 0.15 * (0.6 + 0.4 * blot), 1.0)               # boots caked
+        for side in ("l", "r"):
+            kj = H[rig.index["calf_" + side]]
+            d = np.linalg.norm(P - kj - np.array((0.05, 0.0, 0.0)), axis=1)
+            r = 0.14 if wet_ else 0.11
+            g *= np.where(legs & (d < r), 1.0 - (0.24 if wet_ else 0.16) * (1 - d / r) * (0.6 + 0.4 * blot), 1.0)
+            ej = H[rig.index["lowerarm_" + side]]
+            d = np.linalg.norm(P - ej, axis=1)
+            r = 0.14 if wet_ else 0.08
+            g *= np.where(cloth & (d < r), 1.0 - (0.18 if wet_ else 0.10) * (1 - d / r), 1.0)
+            hj = H[rig.index["hand_" + side]]
+            d = np.linalg.norm(P - hj, axis=1)
+            g *= np.where((pa == 7) & (d < 0.16), 1.0 - (0.20 if wet_ else 0.13) * (0.5 + 0.5 * blot), 1.0)
+            g *= np.where((pa == 0) & (d < 0.20), 1.0 - 0.10 * (1 - d / 0.20), 1.0)
+        seat = (pa == 1) & (P[:, 0] < pel[0] - 0.04) & (np.abs(z - (pel[2] - 0.12)) < 0.14)
+        g *= np.where(seat, 0.86 if wet_ else 0.93, 1.0)
+        face = (pa == 7) & (np.linalg.norm(P - head, axis=1) < 0.16)
+        g *= np.where(face, 1.0 - (0.10 if wet_ else 0.07) * blot, 1.0)
+        if wet_:   # down in the mud: the front of the tunic low and the belly, in smears
+            belly = cloth & (N[:, 0] > 0.3) & (z < pel[2] + 0.25) & ~legs
+            g *= np.where(belly, 1.0 - 0.14 * blot, 1.0)
+        return 1.0 - g
+
+    g_dry, g_wet = grime(False), grime(True)
+    dirt = np.clip(g_dry / (DIRT_K * DIRT0), 0, 1)
+    dirt_wet = np.clip(g_wet / (DIRT_K * DIRT0), 0, 1)
+    # (the baked look keeps the grime Brian saw on 22 November: the legs, knees, seat, elbows, cuffs, hands and face)
+    baked = np.clip(clean * (1.0 - grime(False, general=False)), LO, HI)
+
+    # soaked: how much darker a surface goes in rain (the wool drinks it; under the pack and the arms stays drier)
+    wet = np.array([WET_K.get(int(p), 0.5) for p in pa]) * (0.85 + 0.15 * fade) * (1.0 - 0.4 * occ_n)
+    # snow: where it settles on a man standing (facing up and open to the sky), in patches; little on skin or steel
+    snow = smooth(0.2, 0.75, N[:, 2]) * (1.0 - sky_shut(P, N, T)) * (0.65 + 0.35 * blot2)
+    snow *= np.array([SNOW_K.get(int(p), 0.8) for p in pa])
+    # the baked tint: a warm, earthy cast where the dust and mud are (shade does the darkening)
+    tint = 1.0 + np.outer(DIRT0 * np.clip(grime(False, general=False) / (DIRT_K * DIRT0), 0, 1),
+                          np.array(DUST_TINT) - 1.0)
+    return {"shade": baked, "shade_clean": clean, "dirt": dirt, "dirt_wet": dirt_wet, "wet": np.clip(wet, 0, 1),
+            "snow": np.clip(snow, 0, 1), "tint": tint}, occ
 
 
-def carry(Pn, Nn, sn, pn, P, N, p, k=6):
-    """Shade for points P (facing N, paint p) from the near's (Pn, Nn, sn, pn): the k nearest of the same paint (or any)
-    that face the same way, weighted by distance."""
+def sky_shut(P, N, T, rays=16, reach=0.6):
+    """Per point (facing up at all), the share of a 35-degree cone about straight up that the man's own body shuts."""
+    import bpy  # noqa: F401
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromPolygons([tuple(map(float, p)) for p in P], [tuple(map(int, t)) for t in T], epsilon=0.0)
+    D = ray_dirs(rays)
+    D = D * np.array((math.tan(math.radians(35)), math.tan(math.radians(35)), 1.0))
+    D /= np.linalg.norm(D, axis=1, keepdims=True)
     out = np.ones(len(P))
+    for i in np.flatnonzero(N[:, 2] > 0.15):
+        o = Vector(P[i] + N[i] * 0.003)
+        hit = 0
+        for d in D:
+            loc, _, _, _ = tree.ray_cast(o, Vector(d), reach)
+            hit += loc is not None
+        out[i] = hit / len(D)
+    return out
+
+
+def carry_map(Pn, Nn, pn, P, N, p, k=6):
+    """For points P (facing N, paint p): the k nearest near points of the same paint (or any) that face the same way,
+    and their weights by distance. Gore paints get none (-1)."""
+    idx = np.zeros((len(P), k), int)
+    wt = np.zeros((len(P), k))
     by_paint = {q: np.where(pn == q)[0] for q in set(pn.tolist())}
     for i in range(len(P)):
         if p[i] in GORE:
-            out[i] = 1.0
+            idx[i] = -1
             continue
         cand = by_paint.get(p[i])
         if cand is None or len(cand) == 0:
@@ -313,37 +389,72 @@ def carry(Pn, Nn, sn, pn, P, N, p, k=6):
         d = np.linalg.norm(Pn[cand] - P[i], axis=1)
         d = d + 0.03 * (1.0 - np.clip(Nn[cand] @ N[i], -1, 1))
         o = np.argsort(d)[:k]
-        wt = 1.0 / (d[o] + 0.004)
-        out[i] = float((sn[cand][o] * wt).sum() / wt.sum())
+        if len(o) < k:
+            o = np.concatenate([o, np.repeat(o[:1], k - len(o))])
+        idx[i] = cand[o]
+        wt[i] = 1.0 / (d[o] + 0.004)
+    return idx, wt
+
+
+def apply_map(mp, arr, lod):
+    """Carry each near array to another mesh by a carry_map; shade eased off at mid and far (LOD_K)."""
+    idx, wt = mp
+    gore_pt = idx[:, 0] < 0
+    out = {}
+    for key, v in arr.items():
+        v = np.asarray(v)
+        ii = np.where(idx < 0, 0, idx)
+        if v.ndim == 1:
+            x = (v[ii] * wt).sum(1) / np.maximum(wt.sum(1), 1e-12)
+            x[gore_pt] = GORE_VALUE[key]
+            if key in ("shade", "shade_clean"):
+                x = 1.0 - LOD_K[lod] * (1.0 - x)
+        else:
+            x = (v[ii] * wt[..., None]).sum(1) / np.maximum(wt.sum(1), 1e-12)[:, None]
+            x[gore_pt] = GORE_VALUE[key]
+        out[key] = x
     return out
 
 
 def shade_file(D, log=print):
-    sn, occ = near_shade(D, log)
+    near, occ = near_shade(D, log)
     Pn, Nn, _, pn, *_ = arrays(D["near"])
-    res = {"near": sn}
+    res = {"near": near}
     for lod in ("mid", "far"):
         if lod in D:
             P, N, _, p, *_ = arrays(D[lod])
-            res[lod] = 1.0 - LOD_K[lod] * (1.0 - carry(Pn, Nn, sn, pn, P, N, p))
+            res[lod] = apply_map(carry_map(Pn, Nn, pn, P, N, p), near, lod)
     # each helmet finish (drawn instead of his own helmet, in the same place): the nearest of his own, by paint
     for i, h in enumerate(D.get("helmets") or []):
         for lod in ("near", "mid", "far"):
             if lod in h and h[lod].get("points"):
                 P, N, _, p, *_ = arrays(h[lod])
-                res[f"h{i}_{lod}"] = 1.0 - LOD_K[lod] * (1.0 - carry(Pn, Nn, sn, pn, P, N, p))
+                res[f"h{i}_{lod}"] = apply_map(carry_map(Pn, Nn, pn, P, N, p), near, lod)
     return res
 
 
-def shade_twin(Y, X_shade, X, log=print):
-    """A gore twin: his own points keep his shade, the appended ones take the nearest."""
+def shade_twin(Y, X_res, X, log=print):
+    """A gore twin: his own points keep his arrays, the appended ones take the nearest (gore paints: GORE_VALUE)."""
     res = {}
-    for lod, s in X_shade.items():
+    for lod, arrs in X_res.items():
+        if lod not in ("near", "mid", "far"):
+            continue
         P, N, _, p, *_ = arrays(Y[lod])
         Px, Nx, _, px, *_ = arrays(X[lod])
-        n0 = len(s)
-        extra = carry(Px, Nx, np.asarray(s), px, P[n0:], N[n0:], p[n0:])
-        res[lod] = np.concatenate([np.asarray(s), extra])
+        n0 = len(next(iter(arrs.values())))
+        mp = carry_map(Px, Nx, px, P[n0:], N[n0:], p[n0:])
+        idx, wt = mp
+        extra = {}
+        for key, v in arrs.items():
+            v = np.asarray(v)
+            ii = np.where(idx < 0, 0, idx)
+            if v.ndim == 1:
+                x = (v[ii] * wt).sum(1) / np.maximum(wt.sum(1), 1e-12)
+            else:
+                x = (v[ii] * wt[..., None]).sum(1) / np.maximum(wt.sum(1), 1e-12)[:, None]
+            x[idx[:, 0] < 0] = GORE_VALUE[key]
+            extra[key] = x
+        res[lod] = {key: np.concatenate([np.asarray(arrs[key]), extra[key]]) for key in arrs}
     return res
 
 
@@ -355,20 +466,66 @@ def mesh_of(D, key):
     return D[key]
 
 
+ABOUT_WEAR = (
+    "Wear and weather (Tools/battle_units/shade.py; Brian, 22 November 2026: uniforms dirtier the longer a unit is at "
+    "the front, fresh replacements clean; rain darkens the cloth and splashes the mud higher; snow white on the "
+    "shoulders and helmets). Per point, at near, mid and far and on each helmet finish's own mesh: `shade` (0.4 to 1) "
+    "and `tint` (3 a point: red, green, blue) are the look as baked, a man some weeks in the line (wear W 0.6) in dry "
+    "weather, for drawing paint x shade x tint as ever. `shade_clean`: the same shadow with no dirt (folds, under the "
+    "straps, pack, belt and helmet brim, worn edges, the cloth's uneven fade). `dirt` (0 to 1): where dust and mud "
+    "collect in dry weather (boots, leggings and trousers to a little over the knee in splashes, the knees, the seat, "
+    "elbows, cuffs and hands, a little in the face's creases); `dirt_wet`: the same in rain (mud splashed up the thighs, "
+    "caked boots, heavier knees and seat, the forearms and the front of the belly from going down in it). `wet` (0 to "
+    "1): how much the surface darkens when soaked (wool 1, webbing 0.8, leather 0.6, wood 0.45, helmet paint 0.3, steel "
+    "0.2, skin 0.15; less under the pack and the arms). `snow` (0 to 1): how much snow settles there on a man standing "
+    "(open to the sky and facing up: the helmet's crown, shoulders, pack, the tops of the arms and boots; little on skin "
+    "and steel). MIXING, per man: W = wear, from how long his unit has been at the front (0.1 a fresh replacement or a "
+    "new unit, 1 six weeks or more in the line; replacements in a veteran unit stay low until they have been in it a "
+    "while), R = rain (0 dry ground to 1 soaked) and S = snow (0 to 1), both from the battle's weather draw. In sRGB "
+    "0 to 1: base = paint x shade_clean x (1 - 0.35 x wet x R) (x the face's tone and tint); d = (dirt + (dirt_wet - "
+    "dirt) x R) x W; soil = (DUST + (MUD - DUST) x R) x shade_clean, DUST (0.60, 0.54, 0.43) dry dust and dried mud, "
+    "MUD (0.27, 0.21, 0.15) wet mud (or the field's own soil, lighter dry); colour = base + (soil - base) x 0.85 x d; "
+    "then toward snow (0.92, 0.94, 0.97) x (0.6 + 0.4 x shade_clean) by 0.9 x snow x S. The gore paints (wound, bone, "
+    "blood): shade 1, no dirt, wet or snow. Mid and far carry the near's, their shade eased off (90 % and 75 % of the "
+    "darkening).")
+
+
+def flat(res):
+    """{mesh: {array: values}} -> {"mesh|array": values} for the stage file."""
+    return {f"{m}|{k}": np.asarray(v) for m, arrs in res.items() for k, v in arrs.items()}
+
+
+def unflat(z):
+    res = {}
+    for key in z.files:
+        m, k = key.split("|")
+        res.setdefault(m, {})[k] = z[key]
+    return res
+
+
 def put(D, res):
-    for key, s in res.items():
-        mesh_of(D, key)["shade"] = [round(float(x), 3) for x in s]
+    for m, arrs in res.items():
+        mesh = mesh_of(D, m)
+        for k, v in arrs.items():
+            v = np.asarray(v)
+            if v.ndim == 1:
+                mesh[k] = [round(float(x), ROUND[k]) for x in v]
+            else:
+                mesh[k] = [round(float(x), ROUND[k]) for x in v.ravel()]
+    D["about_wear"] = ABOUT_WEAR
 
 
 def report(D, res, log=print):
-    for lod, s in res.items():
+    for lod, arrs in res.items():
         if lod not in ("near", "mid", "far"):
             continue
-        s = np.asarray(s)
         p = np.array(D[lod]["paints"])
+        s = np.asarray(arrs["shade"])
         by = {nm: s[p == i].mean() for nm, i in PAINT.items() if (p == i).any()}
         log(f"    {lod}: {len(s)} points, shade {s.min():.2f}-{s.max():.2f} (mean {s.mean():.3f}); "
             + ", ".join(f"{k} {v:.2f}" for k, v in by.items()))
+        log("        " + ", ".join(f"{k} mean {np.asarray(v).mean():.2f} max {np.asarray(v).max():.2f}"
+                                    for k, v in arrs.items() if k != "shade"))
 
 
 # ================================================================================================ files
@@ -383,30 +540,32 @@ def stage(name, log=print):
     res = shade_file(D, log)
     report(D, res, log)
     os.makedirs(STAGE, exist_ok=True)
-    np.savez(os.path.join(STAGE, name + "_shade.npz"), **{k: np.asarray(v) for k, v in res.items()})
+    np.savez(os.path.join(STAGE, name + "_wear.npz"), **flat(res))
     return res
 
 
 def deliver(name, log=print):
-    """Merge the staged shade into the shared X.json as it is NOW (only near/mid/far `shade` added or replaced; the
-    point arrays must be the ones the shade was made on), after a backup; write to a temp file and swap it in; read back."""
-    z = np.load(os.path.join(STAGE, name + "_shade.npz"))
+    """Merge the staged arrays into the shared X.json as it is NOW (only the meshes' shade, shade_clean, tint, dirt,
+    dirt_wet, wet and snow and the file's about_wear added or replaced; the meshes must have the point counts they were
+    made on), after a backup; write to a temp file and swap it in; read back."""
+    res = unflat(np.load(os.path.join(STAGE, name + "_wear.npz")))
     dest = os.path.join(SHARED, name + ".json")
     for attempt in range(3):
         h0 = sha(dest)
         raw = open(dest).read()
         D = json.loads(raw)
-        for key in z.files:
+        for m, arrs in res.items():
             try:
-                n_now = len(mesh_of(D, key)["paints"])
+                n_now = len(mesh_of(D, m)["paints"])
             except (KeyError, IndexError):
                 n_now = -1
-            if n_now != len(z[key]):
-                raise SystemExit(f"{name} {key}: {n_now} points now, shade made for {len(z[key])}: re-stage")
+            n_made = len(arrs["shade"])
+            if n_now != n_made:
+                raise SystemExit(f"{name} {m}: {n_now} points now, arrays made for {n_made}: re-stage")
         os.makedirs(BACKUP, exist_ok=True)
         bk = os.path.join(BACKUP, f"{name}.{time.strftime('%H%M%S')}.json")
         open(bk, "w").write(raw)
-        put(D, {k: z[k] for k in z.files})
+        put(D, res)
         out = json.dumps(D, separators=(",", ":"))
         if sha(dest) != h0:
             log(f"{name}: changed under us, again")
@@ -417,23 +576,24 @@ def deliver(name, log=print):
         time.sleep(10)
         back = open(dest).read()
         ok = back == out
-        log(f"{name}: shade written ({len(out):,} bytes, was {len(raw):,}); read back {'ok' if ok else 'MISMATCH'}; backup {bk}")
+        log(f"{name}: wear arrays written ({len(out):,} bytes, was {len(raw):,}); read back {'ok' if ok else 'MISMATCH'}; "
+            f"backup {bk}")
         return ok
     raise SystemExit(f"{name}: kept changing; not written")
 
 
 def stage_twin(name, log=print):
-    """X_gore.json from X's staged shade (stage X first): his points keep theirs, the appended ones take the nearest;
-    the helmet finishes are his own, so they take his finishes' shade as they are."""
+    """X_gore.json from X's staged arrays (stage X first): his points keep theirs, the appended ones take the nearest;
+    the helmet finishes are his own, so they take his finishes' arrays as they are."""
     X = json.load(open(os.path.join(SHARED, name + ".json")))
     Y = json.load(open(os.path.join(SHARED, name + "_gore.json")))
-    z = np.load(os.path.join(STAGE, name + "_shade.npz"))
-    res = shade_twin(Y, {k: z[k] for k in ("near", "mid", "far") if k in z.files}, X, log)
-    for k in z.files:
-        if k.startswith("h") and len(mesh_of(Y, k)["paints"]) == len(z[k]):
-            res[k] = z[k]
+    xr = unflat(np.load(os.path.join(STAGE, name + "_wear.npz")))
+    res = shade_twin(Y, xr, X, log)
+    for m, arrs in xr.items():
+        if m.startswith("h") and len(mesh_of(Y, m)["paints"]) == len(arrs["shade"]):
+            res[m] = arrs
     report(Y, res, log)
-    np.savez(os.path.join(STAGE, name + "_gore_shade.npz"), **{k: np.asarray(v) for k, v in res.items()})
+    np.savez(os.path.join(STAGE, name + "_gore_wear.npz"), **flat(res))
     return res
 
 
