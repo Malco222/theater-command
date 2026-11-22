@@ -1279,6 +1279,96 @@ The preview: `FX_SKY=r,g,b` tells the kit the sky as the game's screen shows it.
 carries the eye with the wind so an old burst stays in the picture, and `FX_FAR=2` and so on stands it that many
 times 160 m off. `FX_FLOAT=1` and `game_curve.py show` give the frame as the game shows it.
 
+## Bigger bursts: a column of earth, a flash by its size, a skirt that hangs (after head 2a20087)
+
+Brian, 21 November: "the explosions should be bigger and more more realistic as well as the fire". The art director's
+ruling (`art-director/explosions/smoke-burst-fire-ruling-r2.md`, section 2): more bulk, a denser core and a longer
+hang, never a ball of soft smoke lifting off the ground and never a film fireball. Measured at the head before, a
+105's dense cloud was 8 m wide at two seconds and had left the ground.
+
+A shell or bomb on land now has (`burst.bulk`, `Battle::Bulk`; a hit in the sea is as it was):
+
+- **A column of the ground's own dark earth** standing on the hit (`burst.bulk.column`): many puffs at every height
+  from its foot, opaque through its first two seconds. A share of them (`hang`) hang on with the smoke, the likelier
+  the lower (`linger.shell.stay_low`), so the base holds the ground and thins last; the rest are earth and are down
+  by `life_thick` of the size's thick time (never under `life_least_s`).
+- **Lighter grey-brown smoke and dust round it** (`burst.bulk.fringe`), beginning at the column's flank
+  (`from_column`) and going from the column's dark and thick to light and thin by degrees (`near_alpha`, `near_dark`,
+  `near_heart`), widest at the ground. `reach` is set so the cloud MEASURES `sizes.<size>.cloud_m` across at two
+  seconds: where a quarter of what is behind it is hidden, above the skirt. A size may have its own `cloud_reach`,
+  `cloud_many` (that many times the puffs) and `cloud_puff` (its smoke puffs that many times as big: a bomb's cloud
+  has so many, each so small a share of it, that its edge was a field of spots).
+- **A flash by its size** (`sizes.<size>.flash_k`, `flash_s`) and what it leaves low in the earth: a dull orange glow
+  no wider than a third of the flash, dark within 0.15 to 0.3 s (`burst.flash.ember`).
+- **A ground skirt of dust** rolling out to 1.5 times the cloud's width (`burst.shock_ring.of_cloud`) that stays low
+  and hangs with the cloud (`skirt.hangs`; `hang_keep` of its pieces stay).
+- **Jets of earth that end as dust** (`burst.crown.to_dust`, `jet_hold`), clods back on the ground within
+  `sizes.<size>.clods_back_s`, a few trailing a thin line of dust (`burst.debris.dust_trails`).
+- **A throw that is earth, not a black shape** (`burst.throw`; the art director's mends of 22 November, below).
+
+| Size | Flash, m and s | Jets, m | Cloud at 2 s, m (`cloud_m`) | Measured at 2 s |
+|---|---|---|---|---|
+| grenade | 1.5, 0.05 | 3 to 4 | 5 | 5.0 to 5.3 (core 1.0 at half a second, 0.70 to 0.85 at 2 s, past its thick time) |
+| light | 2.2, 0.05 | 5 to 7 | 8 | 8.2, core 0.76 to 0.90 |
+| mortar | 3.0, 0.06 | 10 to 12 | 12 | 11.8 to 13.8, core 0.96 to 0.97 |
+| 75 mm | 4.5, 0.08 | 15 to 19 | 20 | 16.4 to 19.7, core 0.86 to 0.99 |
+| 105 mm | 5.9, 0.10 | 20 to 25 | 30 | 25.8 to 31.5, core 0.89 to 0.98, skirt 37 to 41 |
+| 150 mm | 8.0, 0.12 | 28 to 35 | 38 | 33.3 to 43.9, core 0.97 to 0.98 |
+| 250 lb | 10.9, 0.13 | 45 to 60 | 48 | 43.9 to 50.5, core 0.99 |
+| 500 lb | 13.9, 0.15 | 60 to 80 | 60 | 58.8 to 63.1, core 0.98 to 0.99 |
+
+(Measured over three throws of the dice each, `FX_SEED` 1 to 3, on the head as committed. A cloud's width moves by
+a fifth from throw to throw: measure over several, never one.)
+
+A 105 on other grounds at two seconds: sand 29 m and core 0.93, town 27 and 0.99, snow 29 and 0.98, mud 27 and
+0.97, woods 29 and 0.96; the skirt 40 to 43 m on all.
+
+**The art director's three mends** (22 November, on the first sheets: "a black comic-book splat with an orange
+dot", "cardboard slabs", and a column lit to 105 against the ruling's 70 to 90):
+
+- `burst.throw`: what is thrown at the flash is dark earth brown, lit by the flash. `body` is the WRITTEN value a
+  ground's heavy earth is raised to in the jets, never by more than `lighter` times (sand and rubble, lighter
+  already, are left alone); `mottle` makes one piece that much lighter or darker than the next, by its own shape's
+  number and no dice; `floor` is a colour no thrown piece is drawn darker than (written 69,62,55 lands about
+  40,33,26: "floor about 15" of 100); `flash_lit` lights the faces toward the flash with `flash_colour` for
+  `flash_lit_s`, falling off over `flash_lit_reach` flash widths. A recipe's colours are WRITTEN values and the
+  game's curve darkens the darks: `python3 game_curve.py write R G B` says what to write for a colour to land.
+- `burst.crown`: more heavy jets, each thinner (`heavy_jets`, `heavy_thick`), their pieces drawn long and stepped
+  as far apart (`heavy_stretch`), widening little (`heavy_swell`) and less toward the tip (`tip_swell`), the tip's
+  pieces soft and short-lived (`tip_heart`, `tip_alpha`, `tip_inner`, `tip_life_s`, `heart_end`) and falling faster
+  than the root's (`heavy_droop`), so the tips are back down by about a second and a half. All on the dice the jets
+  threw before. The thin jets are paid for in pieces: fewer clumps on a jet's side, fewer clods, spikes, fill jets
+  and foot lumps.
+- `burst.bulk.fringe.shade` and `light`, `burst.bulk.column.light`: the cloud's own colour and how far its sunlit
+  side is lifted, so the column's lit top sits inside 70 to 90.
+
+Measured (a 105 on earth, six throws, in the game's curve, 0 to 255): the lit top 75 to 85 at two seconds (its
+brightest 3%: 79 to 88) and 80 to 88 at four; the shade 42 to 47; the throw's darkest quarter 66 to 71 at 0.03 s,
+53 to 63 at 0.07 s, 46 to 51 at 0.13 s, 42 to 48 at 0.27 s (it was 13 to 18). `own_colour.py` measures them: draw
+the same frame on black and on white (`FX_BACK=0,0,0` and `FX_BACK=255,255,255` with `FX_FLOAT=1`), and it finds
+what the cloud hides and its own colour where it hides nine tenths: `python3 own_colour.py on_black.f32
+on_white.f32 W H [own.png]`.
+
+The slow fade (the section above) has its own smoke-left numbers for these clouds, `linger.shell.by.<size>.
+bulk_left_third` and `bulk_left_two_thirds`, set in pictures as the row's were: many thick puffs one behind another
+hold their look far longer than a thin cloud's. Read in the picture at a third, two thirds and four fifths of the
+tail, the mean of four throws: grenade 0.46 / 0.12 / 0.03, light 0.53 / 0.05 / 0.02, mortar 0.53 / 0.11 / 0.03,
+75 mm 0.55 / 0.10 / 0.03, 105 mm 0.49 / 0.10 / 0.03, 150 mm 0.48 / 0.10 / 0.03, 250 lb 0.51 / 0.11 / 0.03, 500 lb
+0.53 / 0.11 / 0.03 (the bombs over their true tails, to the later of `gone_s` and the burst's own `linger_s`). One
+throw reads a tenth either side of its size's mean, so set these on several. The two-thirds number is never taken
+above the third's, which is why the light shell's reads low.
+
+Pieces (1,600 px wide, held at most; head 2a20087 in brackets): one 105 1,104 (1,034); 105s every 3 s 2,374
+(2,497); 105s one a second 4,059 (4,118); 75s one a second 3,456 (3,270); mortars two a second 4,339 (4,046); a
+stick of twelve 500 lb 15,053 (18,401). Guns, flak and aircraft are untouched: eight tank guns 639, flak six a
+second 1,601, aircraft explosions one every 4 s 1,871.
+
+Remove `burst.bulk.column.puffs` and every burst is the one before; each other part falls back alone the same way
+(`sizes.<size>.cloud_m`, `flash_k`, `burst.flash.ember.life_s`, `burst.shock_ring.of_cloud`, `skirt.hangs`,
+`burst.crown.to_dust`, `burst.debris.dust_trails`, the `burst.throw` row, each `burst.crown` key of the mends).
+With head 2a20087's recipe this head draws every shell size on every ground, and the eight same-picture sets,
+exactly as that head did.
+
 ## Oil fires at sea
 
 ```cpp

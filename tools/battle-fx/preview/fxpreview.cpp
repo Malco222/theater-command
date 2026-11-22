@@ -236,6 +236,11 @@ namespace
 			}
 		}
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
+		// (FX_BACK=r,g,b: one flat colour behind everything, ground and sky, and no men: the same frame on black and on
+		// white gives every pixel's opacity and the smoke's own colour, see tools/battle-fx/own_colour.py)
+		double FlatBack[3];
+		const char* BackIs = std::getenv("FX_BACK");
+		const bool bFlatBack = BackIs && std::sscanf(BackIs, "%lf,%lf,%lf", &FlatBack[0], &FlatBack[1], &FlatBack[2]) == 3;
 		for (int Y = 0; Y < C.H; ++Y)
 		{
 			for (int X = 0; X < C.W; ++X)
@@ -289,13 +294,13 @@ namespace
 						Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
 					}
 				}
-				C.R[I] = Col[0];
-				C.G[I] = Col[1];
-				C.B[I] = Col[2];
+				C.R[I] = bFlatBack ? ToLinear(FlatBack[0]) : Col[0];
+				C.G[I] = bFlatBack ? ToLinear(FlatBack[1]) : Col[1];
+				C.B[I] = bFlatBack ? ToLinear(FlatBack[2]) : Col[2];
 			}
 		}
 		// the men, 1.75 m: a pale figure, as the white soldiers in the Blender stills
-		for (size_t Man = 0; Man < Men.size(); ++Man)
+		for (size_t Man = 0; Man < (bFlatBack ? static_cast<size_t>(0) : Men.size()); ++Man)
 		{
 			const Vec& M = Men[Man];
 			const double Paint_ = Man >= DarkFrom ? 0.2 : 1.0; // (the gun's own crew in field grey, to read against pale ground)
