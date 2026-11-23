@@ -4263,18 +4263,25 @@ void ALandBattle::BailOut()
 		{
 			continue;
 		}
-		// (tankers only, the art director's note of 23 November: "riflemen climbing out of a Tiger would break it at
-		// once". An army with no tankers' file keeps its crew inside, said once, until the soldiers' thread makes one)
-		const std::string File = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
-		if (File.empty() || !S.Men->SoldierFile(File))
+		// (tankers where the army has them, the art director's notes of 23 November: "riflemen climbing out of a Tiger
+		// would break it at once". Her second note: an army with no tankers' file still bails out, in its own infantry
+		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; said once,
+		// until the soldiers' thread makes its tankers' file)
+		const std::string Tankers = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
+		const bool bTankers = !Tankers.empty() && S.Men->SoldierFile(Tankers);
+		const std::string File = bTankers ? Tankers : Veh.Nation;
+		if (!bTankers)
 		{
 			static TSet<FString> Told;
 			const FString Nation = LandParts::Wide(Veh.Nation);
 			if (!Told.Contains(Nation))
 			{
 				Told.Add(Nation);
-				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their knocked-out crews stay inside (bail-out)"), *Nation);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden (bail-out)"), *Nation);
 			}
+		}
+		if (!S.Men->SoldierFile(File))
+		{
 			continue;
 		}
 		LandBail::Wreck W;
@@ -4429,7 +4436,7 @@ void ALandBattle::BailOut()
 		Ride.bShown = true;
 		Ride.Clip = Clip;
 		Ride.Time = static_cast<float>(P.Time);
-		Ride.bUnarmed = true; // (a crewman out of his tank: his tankers' infantry clips carry a rifle he has not got)
+		Ride.bUnarmed = true; // (a crewman out of his tank: his file's infantry clips carry a rifle he has not got)
 		S.Men->SetRide(H.Man, Ride);
 	}
 }

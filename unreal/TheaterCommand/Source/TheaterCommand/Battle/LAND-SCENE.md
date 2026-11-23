@@ -518,10 +518,13 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   hit. In at most about one burning wreck in eight, the first man out is on fire, his clothes alight in patches with
   smoke trailing from him. He runs a few weaving steps and falls; his flames die to a smoulder over 10 to 15 s. About
   one in three rolls them out in a few seconds and lives, lying wounded and smoking.
-- **The men.** Tankers only (the art director: "riflemen climbing out of a Tiger would break it at once"). They are the
-  crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`: those files'
-  infantry clips carry one). An army without a tankers' file keeps its crew inside, and the log says so once, until
-  the soldiers' thread makes its file. They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+- **The men.** Tankers where the army has them (the art director: "riflemen climbing out of a Tiger would break it at
+  once"). They are the crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`:
+  those files' infantry clips carry one). An army without a tankers' file (UK, SOV, ITA, JAP, FRA for now) bails out
+  in its own infantry figure, rifle hidden, pack still on (no file carries the pack on a bone of its own): her second
+  note, "a man with a pack is a far smaller fault than no one getting out". The log says so once per army, until the
+  soldiers' thread makes its tankers' file (own uniform, no pack; the Soviets' padded tank helmet, the British beret
+  or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
   asked of the soldiers' thread; until they come these stand in.
 

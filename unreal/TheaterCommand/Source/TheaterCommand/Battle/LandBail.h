@@ -25,8 +25,8 @@ namespace Fates
  * her ammunition goes is thrown down dead beside her; a man in the open may be cut down, or hit and left crawling; and
  * now and then the first man out of a burning tank is on fire himself, runs a few steps and falls, burning on.
  *
- * The art director's notes of 23 November: only tankers get out (the scene draws them in their tankers' files, no
- * rifle; an army with no tanker file keeps its crew inside); a man first runs or crawls straight back in her lee, 8 to
+ * The art director's notes of 23 November: tankers get out (the scene draws them in their tankers' files, no
+ * rifle; an army with no tankers' file, for now, in its infantry figure, no rifle); a man first runs or crawls straight back in her lee, 8 to
  * 12 m (a crawler 3 to 5), keeping her hull between him and the enemy, then breaks for his cover; her ammunition
  * going throws a man on her deck 2 to 5 m, and anyone on the ground within 15 m of her flinches flat for a second or
  * two, then goes on; his odds in the open are by the enemy who can see him (Wreck::Threat: 1 in 6 running with the
