@@ -143,6 +143,9 @@ import { seaWhere } from '../../../src/campaign/sea-words';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
+import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
+import { railheads } from '../../../src/campaign/rails';
+import { fuelMet } from '../../../src/campaign/resources';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -849,7 +852,12 @@ function drawView() {
     // map points (x, y, ...), whose they are ('ours', 'friend', 'theirs'), the lorries sent and lost, the share that got
     // through, and where they were caught (x, y, 1 aircraft or 2 partisans, lorries lost; four numbers a place). Empty
     // while the columns are off.
-    columns: (() => { try { return columnsView(s).map((v) => ({ nat: v.nat, side: v.side, path: v.points.flat(), lorries: v.lorries, lost: v.lost, share: Math.round(v.share * 100) / 100, hits: v.hits.flatMap((h) => [h.x, h.y, h.by === 'air' ? 1 : 2, h.lost]) })); } catch { return []; } })(),
+    // (Release 2, logistics.ts) Also, where those switches are on: the loads that went by horse-drawn wagon ('horse'),
+    // whether the column was stocking a forward dump ('fill') or set out from one ('fromDump').
+    columns: (() => { try { return columnsView(s).map((v) => ({ nat: v.nat, side: v.side, path: v.points.flat(), lorries: v.lorries, lost: v.lost, share: Math.round(v.share * 100) / 100, hits: v.hits.flatMap((h) => [h.x, h.y, h.by === 'air' ? 1 : 2, h.lost]), horse: v.horse, fill: v.fill, fromDump: v.fromDump })); } catch { return []; } })(),
+    // (Release 2, logistics.ts) The forward dumps the player can see: where, whose, the division-months in them, and
+    // whether they are still being brought up. Empty while the dumps are off.
+    dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
@@ -857,6 +865,10 @@ function drawView() {
     r2Switches: s.flags.open === 1,
     columnsOn: columnsAreOn(s),
     columnsCan: columnsSettable(s),
+    // (Release 2, logistics.ts) The three supply orders' switches as thrown (each does something only with the columns on).
+    lorryShiftSet: logisticsSet(s, 'lorryShift'),
+    wagonsSet: logisticsSet(s, 'wagons'),
+    dumpsSet: logisticsSet(s, 'dumps'),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -4208,6 +4220,8 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (pictureTrade(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
   if (damagedOfMine(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
+  // (Release 2, columns.ts and logistics.ts) The supply columns, where they run.
+  if (columnsAreOn(s) && s.nations[s.human]?.alive) out.push({ id: 'lorries', label: 'SUPPLY COLUMNS' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
   return out;
@@ -5118,6 +5132,110 @@ function repairsPage(s: Game): Page | null {
   };
 }
 
+/**
+ * (Release 2, columns.ts and logistics.ts) The supply columns: what last month's columns brought the corps beyond the
+ * railhead and what caught them, the front the lorries go to first, and the forward dumps.
+ */
+function lorriesPage(s: Game): Page | null {
+  const nat = s.human;
+  const me = nat ? s.nations[nat] : null;
+  if (!nat || !me?.alive || !columnsAreOn(s)) return null;
+  const up = humanUp(s) && !onEve(s);
+  const name = (p: number): string => s.regions[p]?.name ?? '?';
+  const plural = (n: number, one: string, many = `${one}s`): string => `${Math.round(n).toLocaleString('en-US')} ${n === 1 ? one : many}`;
+  const runs = s.columns?.[nat] ?? [];
+  const feed = runs.filter((r) => !r.fill);
+  const divs = feed.reduce((t, r) => t + r.divs, 0);
+  const got = divs ? Math.round((feed.reduce((t, r) => t + r.share * r.divs, 0) / divs) * 100) : 100;
+  const shift = lorryShiftOn(s), horses = wagonsAreOn(s), dumps = dumpsAreOn(s);
+  const sections: Page['sections'] = [];
+  const top: PageButton[] = [];
+  // The lorries: how many the nation has, and where they go first.
+  if (lorryPoolOn(s)) {
+    const pool = lorryPool(s, nat), need = feed.reduce((t, r) => t + (r.need ?? r.lorries), 0);
+    const carried = feed.reduce((t, r) => t + r.lorries, 0), wagons = feed.reduce((t, r) => t + (r.horse ?? 0), 0), left = feed.reduce((t, r) => t + (r.short ?? 0), 0);
+    const fuel = Math.round(fuelMet(s, nat) * 100);
+    const lines = [
+      `Your industry keeps ${plural(pool, 'lorry', 'lorries')} on the roads this month${fuel < 100 ? `: only ${fuel}% of the fuel they need comes in, and the rest stand idle` : ''}.`,
+      need ? `Last month your columns needed ${plural(need, 'load')}: lorries carried ${Math.round(carried).toLocaleString('en-US')}${wagons ? `, horse-drawn wagons ${Math.round(wagons).toLocaleString('en-US')}` : ''}${left ? `, and ${Math.round(left).toLocaleString('en-US')} were left at the railhead for want of lorries` : ''}.` : 'Last month no column of yours had to leave the railhead.',
+    ];
+    const rows: PageRow[] = [];
+    if (shift) {
+      const first = firstFront(s, nat);
+      const fronts = new Map<string, number>();
+      for (const r of feed) for (const foe of frontsAt(s, nat, r.path[r.path.length - 1])) fronts.set(foe, (fronts.get(foe) ?? 0) + r.divs);
+      if (first && !fronts.has(first)) fronts.set(first, 0);
+      for (const [foe, d] of [...fronts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+        rows.push({
+          nat: foe, title: `THE ${(s.nations[foe]?.name ?? foe).toUpperCase()} FRONT${foe === first ? '  \u00B7  FIRST' : ''}`,
+          lines: [d ? `${plural(d, 'division')} of yours stand beyond the railhead facing them.` : 'None of your corps stands beyond the railhead facing them now.'],
+          buttons: [{ label: foe === first ? 'FIRST NOW' : 'SEND THE LORRIES HERE FIRST', act: `lorries:first:${foe}`, ok: up && foe !== first, tip: !up ? 'It is not your month.' : foe === first ? 'Your lorries go to this front first already.' : 'From next month the columns facing them get their lorries first, the biggest concentrations first; the other fronts share what is left.' }],
+        });
+      }
+      if (!rows.length) lines.push('None of your corps beyond the railhead faces an enemy now: the lorries go where they are needed.');
+      top.push({ label: 'SHARE THE LORRIES EVENLY', act: 'lorries:even', ok: up && first !== null, tip: !up ? 'It is not your month.' : first ? 'Every front gets the same share of what it needs.' : 'Your lorries are shared out evenly already.' });
+    }
+    sections.push({ heading: shift ? 'YOUR LORRIES, AND THE FRONT THEY GO TO FIRST' : 'YOUR LORRIES', text: lines.join(' '), rows });
+  }
+  // Last month's columns, the biggest first.
+  const sorted = [...feed].sort((a, b) => b.divs - a.divs || a.path[a.path.length - 1] - b.path[b.path.length - 1]).slice(0, 12);
+  sections.push({
+    heading: "LAST MONTH'S COLUMNS, THE BIGGEST FIRST",
+    text: feed.length ? '' : 'No corps of yours stood beyond the railhead: the trains brought everything.',
+    rows: sorted.map((r) => {
+      const to = r.path[r.path.length - 1];
+      const air = r.hits.filter((h) => h[1] === 'air').reduce((t, h) => t + h[2], 0), bands = r.hits.filter((h) => h[1] === 'partisans').reduce((t, h) => t + h[2], 0);
+      const by = [air ? `${Math.round(air)} by aircraft` : '', bands ? `${Math.round(bands)} by partisans` : ''].filter(Boolean).join(', ');
+      return {
+        nat: '', title: `${name(to).toUpperCase()}  \u00B7  ${plural(r.divs, 'DIVISION', 'DIVISIONS')}  \u00B7  ${Math.round(r.share * 100)}% GOT THROUGH${r.first ? '  \u00B7  FIRST' : ''}`,
+        meter: r.share,
+        lines: [
+          `${plural(r.path.length - 1, 'province')} of road from ${r.dump !== undefined ? `the forward dump at ${name(r.dump)}` : `the railhead at ${name(r.path[0])}`}.  \u00B7  ${plural(r.lorries, 'lorry', 'lorries')}${r.horse ? `, ${plural(r.horse, 'wagon')}` : ''}${r.short ? `; ${plural(r.short, 'load')} left behind for want of lorries` : ''}.`,
+          r.lost || r.worn ? `${r.lost ? `${Math.round(r.lost)} lost on the road${by ? ` (${by})` : ''}` : 'None lost'}${r.worn ? `; ${Math.round(r.worn)} held up by the ground or the wagons' pace` : ''}.` : 'Nothing caught it on the road.',
+        ],
+        buttons: [{ label: 'GO THERE', act: `goto:region:${to}`, ok: true, tip: 'Looks at the place on the map.' }],
+      };
+    }),
+  });
+  // Forward dumps: those of the nation's, and the best places for another.
+  if (dumps) {
+    const mine = dumpsOf(s, nat);
+    const rows: PageRow[] = mine.map((d) => ({
+      nat: '', title: `DUMP AT ${name(d.region).toUpperCase()}  \u00B7  ${d.fill > 0 ? 'BEING BROUGHT UP' : `${Math.round(d.stock)} DIVISION-MONTHS`}`,
+      lines: [d.fill > 0 ? (d.turn === s.turn ? 'Ordered this month: a column brings it up from the railhead next month.' : 'A column is bringing it up from the railhead.') : 'Feeds your corps nearer to it than to the railhead, a division-month for each division a month. Enemy aircraft over it burn part of it; if its ground is lost it is burned.'],
+      buttons: [
+        ...(d.turn === s.turn && d.stock === 0 ? [{ label: 'TAKE IT BACK', act: `dump:cancel:${d.region}`, ok: up, tip: up ? 'The order is cancelled and the money paid back.' : 'It is not your month.', danger: true }] : []),
+        { label: 'GO THERE', act: `goto:region:${d.region}`, ok: true, tip: 'Looks at the place on the map.' },
+      ],
+    }));
+    const road = railheads(s, nat);
+    for (const c of dumpPlaces(s, nat).slice(0, Math.max(0, 5 - rows.length))) {
+      const why = whyNoDump(s, nat, c.region);
+      rows.push({
+        nat: '', title: `${name(c.region).toUpperCase()}  \u00B7  WOULD SAVE ${plural(c.saving, 'DIVISION-PROVINCE', 'DIVISION-PROVINCES')} OF ROAD`,
+        lines: [`${road ? plural(road[c.region], 'province') : 'Some provinces'} beyond the railhead, on the road to your corps.`],
+        buttons: [
+          { label: `STOCK A DUMP \u00B7 ${moneyWords(dumpPrice())}`, act: `dump:${c.region}`, ok: up && why === null, tip: !up ? 'It is not your month.' : why ?? `A column brings ${LOGI.dumps.size} division-months of supply up from the railhead next month; from then on the corps nearer to it than to the railhead are fed from it.` },
+          { label: 'GO THERE', act: `goto:region:${c.region}`, ok: true, tip: 'Looks at the place on the map.' },
+        ],
+      });
+    }
+    sections.push({ heading: 'FORWARD DUMPS', text: rows.length ? `You keep ${LOGI.dumps.most} at most.` : 'No place on your columns\' roads is far enough beyond the railhead for a dump to pay.', rows });
+  }
+  return {
+    id: 'lorries', title: 'SUPPLY COLUMNS',
+    headline: feed.length ? `${got}% of what your ${plural(divs, 'division')} beyond the railhead needed got through last month` : 'No corps of yours stands beyond the railhead',
+    note: [
+      'Beyond the railhead your armies live on what columns bring them up the roads. Enemy aircraft hunting over the roads and partisans in occupied country catch them; what does not get through means fewer drafts and worse rest at the front.',
+      shift ? 'You have as many lorries as your industry and fuel allow: name the front they go to first.' : '',
+      horses ? 'Horse-drawn wagons carry what the lorries cannot, slower: mud bogs lorries down, snow and the desert are hard on horses.' : '',
+      dumps ? 'A forward dump beyond the railhead feeds the corps near it by a shorter road.' : '',
+    ].filter(Boolean).join(' '),
+    top,
+    sections,
+  };
+}
+
 function townsPage(s: Game): Page | null {
   const me = s.human ? s.nations[s.human] : null;
   if (!me || !townBuildings(s, me.capital)) return null;
@@ -5551,7 +5669,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'repairs' ? repairsPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -5857,6 +5975,37 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : columnsAreOn(s)
         ? 'Supply columns are on: each month lorries carry the supplies from the railhead to the armies beyond it, and enemy aircraft and partisans can catch them on the road.'
         : 'Supply columns are off: the armies beyond the railhead are fed as before.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'logistics') {
+    // (Release 2, logistics.ts) The three supply orders, each its own switch, set in the campaign's opening month only.
+    const which = part[1] as LogisticsSwitch;
+    const label = which === 'lorryShift' ? 'Moving the lorries' : which === 'wagons' ? 'Horse-drawn wagons' : 'Forward dumps';
+    ok = (which === 'lorryShift' || which === 'wagons' || which === 'dumps') && setLogistics(s, which, part[2] === 'on');
+    note = !ok
+      ? `${label} can be switched only in the campaign's first month.`
+      : `${label} ${logisticsSet(s, which) ? `${which === 'dumps' ? 'are' : which === 'wagons' ? 'are' : 'is'} on${columnsAreOn(s) ? '' : ' (they work only with the supply columns on)'}.` : `${which === 'lorryShift' ? 'is' : 'are'} off.`}`;
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'lorries') {
+    // (Release 2, logistics.ts) The front the player's lorries go to first, or none.
+    const nat = s.human;
+    if (!nat || !humanUp(s) || onEve(s)) { ok = false; note = 'It is not your month.'; }
+    else if (part[1] === 'first') { ok = setLorryFirst(s, nat, part[2] ?? ''); note = ok ? `From next month your lorries go first to the columns facing ${s.nations[part[2]]?.name ?? part[2]}, the biggest concentrations first.` : 'The lorries cannot be sent there.'; }
+    else { ok = setLorryFirst(s, nat, ''); note = ok ? 'From next month every front gets the same share of what it needs.' : ''; }
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'dump') {
+    // (Release 2, logistics.ts) A forward dump ordered, or taken back in the month it was ordered.
+    const nat = s.human;
+    if (!nat || !humanUp(s) || onEve(s)) { ok = false; note = 'It is not your month.'; }
+    else if (part[1] === 'cancel') { ok = cancelDump(s, nat, Number(part[2])); note = ok ? 'The dump is cancelled and the money paid back.' : ''; }
+    else {
+      const at = Number(part[1]);
+      const why = whyNoDump(s, nat, at);
+      ok = why === null && orderDump(s, nat, at);
+      note = ok ? `A dump at ${s.regions[at].name} is ordered: a column brings it up from the railhead next month.` : why ?? '';
+    }
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'cabinet') {
@@ -6871,3 +7020,5 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 // and so on) instead, which answers with the view.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
+// (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };

@@ -1054,6 +1054,11 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
 #columns .column.theirs .lorry rect { fill: #6b4a44; }
 #columns .lorry .cab { fill: #87724d; }
 #columns .colhit path { fill: #e8622c; stroke: #15120f; stroke-width: .6; }
+#columns .wagon rect { fill: #7a6143; stroke: #15120f; stroke-width: .5; }
+#columns .wagon .horse { fill: #4a3726; stroke: #15120f; stroke-width: .4; }
+#columns .dump rect { fill: #8a7448; stroke: #15120f; stroke-width: .5; }
+#columns .dump.theirs rect { fill: #7a5048; }
+#columns .dump.filling rect { fill-opacity: .45; stroke-dasharray: 1 .6; }
 #columns .colhit.partisans path { fill: #c9a23a; }
 #lanes .lane:hover .laneline { stroke-width: 3; opacity: 1; }
 @media (max-width: 760px) {

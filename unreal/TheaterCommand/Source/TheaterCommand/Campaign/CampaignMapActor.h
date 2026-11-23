@@ -322,9 +322,10 @@ public:
 	/**
 	 * (Release 2, columns.ts) The month's supply columns: the road each took from the railhead to the armies beyond it,
 	 * a few convoys of lorries crawling along it, and a burnt-out lorry with its fire wherever enemy aircraft or
-	 * partisans caught it. Nothing while the columns are off. (CampaignColumns.cpp)
+	 * partisans caught it. Nothing while the columns are off. (CampaignColumns.cpp) (Release 2, logistics.ts) Where
+	 * the wagons are on, horse-drawn wagons among the convoys; where the dumps are, their stacks of crates.
 	 */
-	void ShowColumns(const TArray<FViewColumn>& Columns);
+	void ShowColumns(const TArray<FViewColumn>& Columns, const TArray<FViewDump>& Dumps);
 
 	/**
 	 * A picture of one of the game's own models, for a unit's card: taken once for each model and kept. The name is
@@ -1007,6 +1008,7 @@ private:
 		TArray<double> Run; // the distance along the road to each point of the curve
 		double Length = 0.0;
 		int32 Convoys = 1; // how many convoys are seen on it: one for every hundred and fifty lorries or so, four at most
+		int32 Wagons = 0; // how many of those are horse-drawn wagons (release 2, logistics.ts), at the back
 		bool bManned = false; // its convoys are on the table (only near the eye)
 	};
 	/** A convoy on a column's road: three lorries nose to tail, built once and driven as one. */
@@ -1014,6 +1016,7 @@ private:
 	{
 		int32 Road = INDEX_NONE;
 		int32 Place = 0; // which of the road's convoys it is
+		bool bWagon = false; // horse-drawn, and slower
 		TObjectPtr<UProceduralMeshComponent> Mesh;
 	};
 	UPROPERTY(Transient)

@@ -25,6 +25,12 @@
  *
  * The roads and the wrecks are one still model, made again only when the month's columns change. With the columns off
  * the rules send none, and nothing here is drawn.
+ *
+ * (Release 2, logistics.ts; Brian's yes of 23 November 2026 13:06Z, "Do all 3".) Where the horse-drawn wagons are on,
+ * the share of a column carried by wagon is drawn as wagon convoys at the back, a horse in the shafts of each covered
+ * cart, crawling slower than the lorries. Where the forward dumps are on, each dump in sight is a stack of crates and
+ * fuel drums beside its province's middle, as high as it is full, and a bare pallet while it is still being brought up;
+ * it is part of the still model.
  */
 
 namespace
@@ -110,7 +116,7 @@ void ACampaignMapActor::ParkColumnConvoys(int32 Road)
 	}
 }
 
-void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
+void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns, const TArray<FViewDump>& Dumps)
 {
 	THEATER_SPEED_SCOPE(ShowColumns);
 	if (!Data.IsLoaded())
@@ -124,8 +130,12 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 		{
 			continue;
 		}
-		Key += FString::Printf(TEXT("%s%s%d:%.0f,%.0f>%.0f,%.0f:%d/%d:%d;"), *Column.Nation, *Column.Side, Column.Path.Num(), Column.Path[0].X, Column.Path[0].Y,
-			Column.Path.Last().X, Column.Path.Last().Y, Column.Lost, Column.Lorries, Column.Hits.Num());
+		Key += FString::Printf(TEXT("%s%s%d:%.0f,%.0f>%.0f,%.0f:%d/%d+%d:%d;"), *Column.Nation, *Column.Side, Column.Path.Num(), Column.Path[0].X, Column.Path[0].Y,
+			Column.Path.Last().X, Column.Path.Last().Y, Column.Lost, Column.Lorries, Column.Horse, Column.Hits.Num());
+	}
+	for (const FViewDump& Store : Dumps)
+	{
+		Key += FString::Printf(TEXT("D%s%s%.0f,%.0f:%d%s;"), *Store.Nation, *Store.Side, Store.At.X, Store.At.Y, Store.Stock / 10, Store.bFilling ? TEXT("f") : TEXT(""));
 	}
 	if (Key == ShownColumns)
 	{
@@ -135,7 +145,7 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 	ParkColumnConvoys(INDEX_NONE);
 	ColumnRoads.Reset();
 	ColumnFires.Reset();
-	if (Columns.Num() == 0 && !ColumnsMesh)
+	if (Columns.Num() == 0 && Dumps.Num() == 0 && !ColumnsMesh)
 	{
 		return; // (the columns are off: nothing is made at all)
 	}
@@ -169,7 +179,10 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 			Road.Run.Add(Road.Run.Last() + FVector2D::Distance(Road.Curve[K - 1], Road.Curve[K]));
 		}
 		Road.Length = Road.Run.Last();
-		Road.Convoys = FMath::Clamp(FMath::RoundToInt32(Column.Lorries / 150.0f), 1, 4);
+		const int32 Loads = Column.Lorries + FMath::Max(Column.Horse, 0);
+		Road.Convoys = FMath::Clamp(FMath::RoundToInt32(Loads / 150.0f), 1, 4);
+		// (release 2, logistics.ts) the wagons' share of the convoys, at least one where any went by wagon
+		Road.Wagons = Column.Horse > 0 && Loads > 0 ? FMath::Clamp(FMath::RoundToInt32(Road.Convoys * static_cast<float>(Column.Horse) / Loads), 1, Road.Convoys) : 0;
 
 		// The road: a dark bed under a pale track, laid over the relief a step at a time.
 		const FColor Track = (Column.Share < 0.85f ? ColumnHex(TEXT("E9B548"), 0.85f)
@@ -238,6 +251,16 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 			ColumnFires.Add(FVector4(Fire.X, Fire.Y, Fire.Z, Size));
 		}
 	}
+	// (Release 2, logistics.ts) The forward dumps in sight: crates and drums a little off the province's middle, where
+	// its armies stand, as high as the dump is full.
+	for (const FViewDump& Store : Dumps)
+	{
+		const FCampaignNation* Keeper = Data.FindNation(Store.Nation);
+		const FLinearColor Stencil = Keeper ? FLinearColor(Keeper->Color) : ColumnHex(TEXT("6D5A3A"));
+		const FVector2D Beside = Store.At + FVector2D(3.2, 2.4);
+		const int32 Full = FMath::Clamp(FMath::CeilToInt32(Store.Stock / 10.0f), 1, 3);
+		Wrecks.SupplyDump(SurfacePoint(Beside.X, Beside.Y, 0.02), 0.85 * U, Stencil, Full, Store.bFilling, 20.0);
+	}
 	if (Roads.Triangles.Num() > 0)
 	{
 		if (!LanesInk && HighlightMaterial)
@@ -261,7 +284,7 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 		{
 			Caught += Column.Hits.Num();
 		}
-		UE_LOG(LogTheater, Log, TEXT("Supply columns: %d roads drawn, caught in %d places"), ColumnRoads.Num(), Caught);
+		UE_LOG(LogTheater, Log, TEXT("Supply columns: %d roads drawn, caught in %d places, %d forward dumps"), ColumnRoads.Num(), Caught, Dumps.Num());
 	}
 	SetNight(NightNow, bLamplightNow);
 }
@@ -306,12 +329,20 @@ void ACampaignMapActor::UpdateColumns(const FVector& CameraFocus, float CameraDi
 		{
 			const FCampaignNation* Whose = Data.FindNation(Road.Nation);
 			const FLinearColor Livery = Whose ? FLinearColor(Whose->Color) : ColumnHex(TEXT("6D5A3A"));
-			// Three lorries nose to tail, the first at the middle of the model, facing +X (a figure not turned faces -X).
-			FMiniatureMesh Model;
+			// Three lorries nose to tail, the first at the middle of the model, facing +X (a figure not turned faces -X);
+			// and where wagons carry part of it (release 2, logistics.ts), three wagons, longer with their horses.
+			FMiniatureMesh Model, Carts;
 			const double Scale = 0.85 * U;
 			for (int32 Lorry = 0; Lorry < 3; ++Lorry)
 			{
 				Model.Lorry(FVector(-Lorry * 2.9 * Scale, 0.0, 0.0), Scale, Livery, 180.0);
+			}
+			if (Road.Wagons > 0)
+			{
+				for (int32 Cart = 0; Cart < 3; ++Cart)
+				{
+					Carts.Wagon(FVector(-Cart * 3.6 * Scale, 0.0, 0.0), Scale, Livery, 180.0);
+				}
 			}
 			if (Model.Vertices.Num() == 0)
 			{
@@ -319,24 +350,27 @@ void ACampaignMapActor::UpdateColumns(const FVector& CameraFocus, float CameraDi
 			}
 			for (int32 Place = 0; Place < Road.Convoys; ++Place)
 			{
+				const bool bCart = Place >= Road.Convoys - Road.Wagons && Carts.Vertices.Num() > 0;
+				const FMiniatureMesh& Pattern = bCart ? Carts : Model;
 				FColumnConvoy& Convoy = ColumnConvoys.AddDefaulted_GetRef();
 				Convoy.Road = Index;
 				Convoy.Place = Place;
+				Convoy.bWagon = bCart;
 				Convoy.Mesh = NewObject<UProceduralMeshComponent>(this);
 				Convoy.Mesh->SetupAttachment(Root);
 				Convoy.Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Convoy.Mesh->SetCastShadow(false); // (a thing that moves and throws a shadow has every shadow near it drawn again each frame)
 				Convoy.Mesh->RegisterComponent();
-				Convoy.Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+				Convoy.Mesh->CreateMeshSection(0, Pattern.Vertices, Pattern.Triangles, Pattern.Normals, TArray<FVector2D>(), Pattern.Colors, TArray<FProcMeshTangent>(), false);
 				Convoy.Mesh->SetMaterial(0, PieceMaterial);
 			}
 			Road.bManned = true;
 		}
 	}
 
-	// Each convoy crawls from the railhead to the front, about two map units a second, and sets out again from the
-	// railhead when it is there; it grows out of the road as it sets out and sinks into it as it arrives.
-	const double Speed = 2.0;
+	// Each convoy crawls from the railhead to the front, about two map units a second (the wagons a little over one),
+	// and sets out again from the railhead when it is there; it grows out of the road as it sets out and sinks into it
+	// as it arrives.
 	for (FColumnConvoy& Convoy : ColumnConvoys)
 	{
 		if (!Convoy.Mesh || !ColumnRoads.IsValidIndex(Convoy.Road))
@@ -344,6 +378,7 @@ void ACampaignMapActor::UpdateColumns(const FVector& CameraFocus, float CameraDi
 			continue;
 		}
 		const FColumnRoad& Road = ColumnRoads[Convoy.Road];
+		const double Speed = Convoy.bWagon ? 1.2 : 2.0;
 		const double Trip = FMath::Max(Road.Length / Speed, 4.0);
 		const double Share = FMath::Frac(Now / Trip + static_cast<double>(Convoy.Place) / Road.Convoys + Convoy.Road * 0.173);
 		const double Along = Share * Road.Length;

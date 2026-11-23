@@ -1,5 +1,6 @@
 import type { Rng } from '../core/rng';
 import type { ColumnRun } from './columns';
+import type { Dump } from './logistics';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
 /** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
@@ -1450,6 +1451,10 @@ export interface Game {
   convoys: Record<string, ConvoyMonth>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
+  /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */
+  dumps?: Dump[];
+  /** Release 2 (logistics.ts), moving the lorries on: the front each player nation sends its lorries to first, by nation. Absent otherwise. */
+  lorryFirst?: Record<string, string>;
   /** Release 2 (ruling 241 D1), record only, written only while the submarine scene's viewing setting is on: this month's and last month's hunts, torpedoings and convoy months, for the scene to stage. Absent otherwise. */
   subLook?: SubLook[];
   airFleets: AirFleet[];

@@ -338,6 +338,15 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
 				Now.bColumnsOn ? TEXT("ON") : TEXT("OFF"), Now.bColumnsOn);
+			// (Release 2, logistics.ts) The three supply orders on top of the columns, each its own switch.
+			const TCHAR* const Needs = Now.bColumnsOn ? TEXT("") : TEXT(" It works only with the supply columns on.");
+			const TCHAR* const When = Now.bColumnsCan ? TEXT(" It can be switched in the campaign's first month only.") : TEXT(" It was set as this campaign opened, and stays as it was set.");
+			Add(TEXT("logistics:lorryShift"), TEXT("Move the lorries"), *FString::Printf(TEXT("A country has as many lorries as its industry builds and its fuel keeps running. Name the front they go to first, on the SUPPLY COLUMNS page; the other fronts share what is left.%s%s"), Needs, When),
+				Now.bLorryShiftSet ? TEXT("ON") : TEXT("OFF"), Now.bLorryShiftSet);
+			Add(TEXT("logistics:wagons"), TEXT("Horse-drawn wagons"), *FString::Printf(TEXT("What the lorries cannot carry goes by horse and wagon, slower. Mud bogs lorries down worse than horses; snow and the desert are harder on horses. Off, what the lorries cannot carry is left at the railhead.%s%s"), Needs, When),
+				Now.bWagonsSet ? TEXT("ON") : TEXT("OFF"), Now.bWagonsSet);
+			Add(TEXT("logistics:dumps"), TEXT("Forward dumps"), *FString::Printf(TEXT("Stock a dump of supplies beyond the railhead, on the SUPPLY COLUMNS page: the armies near it are fed by a shorter road. Enemy bombers burn part of it, and if its ground is lost it is burned.%s%s"), Needs, When),
+				Now.bDumpsSet ? TEXT("ON") : TEXT("OFF"), Now.bDumpsSet);
 		}
 	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
@@ -505,6 +514,26 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		{
 			FString Note;
 			const bool bOn = Id == TEXT("nicknames") ? Session->GetView().bNickFlags : Session->GetView().bColumnsOn;
+			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
+			{
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			}
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
+	}
+	else if (Id.StartsWith(TEXT("logistics:")))
+	{
+		// (Release 2, logistics.ts) The three supply orders, in the campaign's first month only (the rules say so if not).
+		if (FCampaignSession* Session = GetSession())
+		{
+			const FCampaignView& Was = Session->GetView();
+			const bool bOn = Id == TEXT("logistics:lorryShift") ? Was.bLorryShiftSet : Id == TEXT("logistics:wagons") ? Was.bWagonsSet : Was.bDumpsSet;
+			FString Note;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -9756,7 +9785,7 @@ void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowAirfieldSigns(View.Airfields);
 		Map->ShowLanes(View.Lanes);
-		Map->ShowColumns(View.Columns); // (release 2, columns.ts: none while the columns are off)
+		Map->ShowColumns(View.Columns, View.Dumps); // (release 2, columns.ts and logistics.ts: none while the columns are off)
 		BargainLayer::ShowOnMap(this); // R2 bargains hook: a neutral's bargains and the legions, read once for each new picture (nothing while both rules are off)
 		Map->ShowFreeCapitals(View.FreeCapitals);
 		Map->ShowShroud(View.Unseen, View.Glimpsed);

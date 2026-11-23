@@ -71,6 +71,7 @@ import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
 import { unitsDecide } from '../units';
 import { columnsView } from '../columns';
+import { dumpsView } from '../logistics';
 import { nicknamesOn } from '../nicknames';
 import { UNITS_STAGE } from '../stage';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
@@ -8194,12 +8195,14 @@ function columnMarks(): string {
     if (p.length < 2) continue;
     const d = `M${p.map((q) => `${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L')}`;
     const got = Math.round(v.share * 100);
-    const tip = `${upFirst(g.nations[v.nat].adj)} supply column: ${v.lorries.toLocaleString('en-US')} lorries from the railhead at ${g.regions[v.path[0]].name} to ${g.regions[v.path[v.path.length - 1]].name}. ${v.lost ? `${v.lost.toLocaleString('en-US')} lost on the road; ${got}% of what was sent got through.` : 'All of it got through.'}`;
+    const tip = `${upFirst(g.nations[v.nat].adj)} supply column${v.fill ? ' stocking a forward dump' : ''}: ${v.lorries.toLocaleString('en-US')} lorries${v.horse ? ` and ${v.horse.toLocaleString('en-US')} horse-drawn wagons` : ''} from ${v.fromDump ? 'the forward dump at' : 'the railhead at'} ${g.regions[v.path[0]].name} to ${g.regions[v.path[v.path.length - 1]].name}. ${v.lost ? `${v.lost.toLocaleString('en-US')} lost on the road; ${got}% of what was needed got through.` : `${got}% of what was needed got through.`}`;
     // The lorries, spaced along the road.
     let len = 0;
     const seg: number[] = [];
     for (let i = 0; i + 1 < p.length; i++) { const l = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); seg.push(l); len += l; }
-    const n = Math.max(1, Math.min(4, Math.round(v.lorries / 150)));
+    const n = Math.max(1, Math.min(4, Math.round((v.lorries + (v.horse ?? 0)) / 150)));
+    // (Release 2, logistics.ts) Where wagons carry part of it, that share of the marks are horse-drawn wagons, at the back.
+    const carts = v.horse ? Math.min(n, Math.round((n * v.horse) / (v.lorries + v.horse))) : 0;
     let trucks = '';
     for (let k = 0; k < n; k++) {
       let at = (len * (k + 1)) / (n + 1);
@@ -8208,13 +8211,24 @@ function columnMarks(): string {
       const t = seg[i] > 0 ? Math.min(1, at / seg[i]) : 0;
       const x = p[i][0] + (p[i + 1][0] - p[i][0]) * t, y = p[i][1] + (p[i + 1][1] - p[i][1]) * t;
       const ang = (Math.atan2(p[i + 1][1] - p[i][1], p[i + 1][0] - p[i][0]) * 180) / Math.PI;
-      trucks += `<g class="lorry" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(0)}) scale(1.35)"><rect x="-3.2" y="-1.6" width="4.6" height="3.2" rx=".5"/><rect class="cab" x="1.5" y="-1.4" width="1.8" height="2.8" rx=".4"/></g>`;
+      trucks += k < carts
+        ? `<g class="wagon" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(0)}) scale(1.35)"><rect x="-3.4" y="-1.5" width="3.4" height="3" rx=".3"/><ellipse class="horse" cx="1.6" cy="0" rx="1.5" ry=".8"/></g>`
+        : `<g class="lorry" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(0)}) scale(1.35)"><rect x="-3.2" y="-1.6" width="4.6" height="3.2" rx=".5"/><rect class="cab" x="1.5" y="-1.4" width="1.8" height="2.8" rx=".4"/></g>`;
     }
     const fires = v.hits.map((h) => {
       const q = unwrapPts([[h.x, h.y]])[0];
       return `<g class="colhit ${h.by}" transform="translate(${q[0].toFixed(1)} ${(q[1] - 3).toFixed(1)}) scale(1.7)"><title>${esc(`${h.by === 'air' ? 'Caught by enemy aircraft' : 'Ambushed by partisans'} near ${g.regions[h.at].name}: ${h.lost.toLocaleString('en-US')} lorries lost.`)}</title><path d="M0 3.2C-2.4 3.2-3.4 1.8-3.1 .2-2.9-1-1.9-1.6-1.7-3-.8-2.4-.5-1.7-.3-.9.4-1.9.5-3.1-.1-4.2 1.9-3.4 3.3-1.6 3.1.6 3 2.2 1.8 3.2 0 3.2Z"/></g>`;
     }).join('');
     out += `<g class="column ${v.side}${v.share < 0.85 ? ' bled' : ''}"><title>${esc(tip)}</title><path class="colbed" d="${d}"/><path class="colroad" d="${d}"/>${trucks}${fires}</g>`;
+  }
+  // (Release 2, logistics.ts) The forward dumps in sight: a stack of crates, smaller as it is drawn down.
+  for (const d of dumpsView(g)) {
+    const q = unwrapPts([[d.x, d.y]])[0];
+    const tip = `${upFirst(g.nations[d.nat].adj)} forward dump at ${g.regions[d.region].name}: ${d.filling ? 'being brought up from the railhead' : `${d.stock} division-months of supply`}.`;
+    const tall = d.filling ? 1 : Math.max(1, Math.min(3, Math.ceil(d.stock / 10)));
+    let crates = '';
+    for (let k = 0; k < tall; k++) crates += `<rect x="${(-3 + (k % 2) * 1.2).toFixed(1)}" y="${(-2.4 * (k + 1)).toFixed(1)}" width="4.8" height="2.3" rx=".3"/>`;
+    out += `<g class="dump ${d.side}${d.filling ? ' filling' : ''}" transform="translate(${(q[0] + 6).toFixed(1)} ${(q[1] + 4).toFixed(1)}) scale(1.4)"><title>${esc(tip)}</title>${crates}</g>`;
   }
   return out;
 }

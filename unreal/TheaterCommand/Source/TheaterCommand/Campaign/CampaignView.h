@@ -784,6 +784,22 @@ struct FViewColumn
 	int32 Lost = 0;
 	float Share = 1.0f;
 	TArray<FViewColumnHit> Hits;
+	// (Release 2, logistics.ts, each 0 or false where its switch is off) Loads carried by horse-drawn wagon; whether it
+	// was stocking a forward dump; whether it set out from one.
+	int32 Horse = 0;
+	bool bFill = false;
+	bool bFromDump = false;
+};
+
+/** (Release 2, logistics.ts) A forward dump the player can see: where, whose, the division-months in it, and whether it is still being brought up. */
+struct FViewDump
+{
+	FString Nation;
+	FString Side;
+	FVector2D At = FVector2D::ZeroVector;
+	int32 Region = INDEX_NONE;
+	int32 Stock = 0;
+	bool bFilling = false;
 };
 
 /** An air fleet on its airfields. */
@@ -1116,6 +1132,10 @@ struct FCampaignView
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
+	// (Release 2, logistics.ts) The forward dumps in sight, and the three supply orders' switches as thrown (each set in
+	// the opening month only, as the columns are, and each working only with the columns on).
+	TArray<FViewDump> Dumps;
+	bool bLorryShiftSet = false, bWagonsSet = false, bDumpsSet = false;
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain

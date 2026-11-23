@@ -152,6 +152,11 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// -TheaterR2Supply opens them with the columns and all three supply orders: the lorries moved, wagons, dumps
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Supply")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1; globalThis.TC_LORRYSHIFT = 1; globalThis.TC_WAGONS = 1; globalThis.TC_DUMPS = 1;"), TEXT("release 2 supply"), OutError))
+	{
+		return false;
+	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
@@ -1158,8 +1163,38 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 					Hit.Lost = FMath::RoundToInt32((*Hits)[K + 3]->AsNumber());
 				}
 			}
+			// (Release 2, logistics.ts) Absent where those switches are off.
+			Entry->TryGetNumberField(TEXT("horse"), Column.Horse);
+			Entry->TryGetBoolField(TEXT("fill"), Column.bFill);
+			Entry->TryGetBoolField(TEXT("fromDump"), Column.bFromDump);
 		}
 	}
+	// (Release 2, logistics.ts) The forward dumps in sight.
+	const TArray<TSharedPtr<FJsonValue>>* Dumps = nullptr;
+	if (Object->TryGetArrayField(TEXT("dumps"), Dumps))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Dumps)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FViewDump& Dump = Out.Dumps.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Dump.Nation);
+			Entry->TryGetStringField(TEXT("side"), Dump.Side);
+			double X = 0.0, Y = 0.0;
+			Entry->TryGetNumberField(TEXT("x"), X);
+			Entry->TryGetNumberField(TEXT("y"), Y);
+			Dump.At = FVector2D(X, Y);
+			Entry->TryGetNumberField(TEXT("region"), Dump.Region);
+			Entry->TryGetNumberField(TEXT("stock"), Dump.Stock);
+			Entry->TryGetBoolField(TEXT("filling"), Dump.bFilling);
+		}
+	}
+	Object->TryGetBoolField(TEXT("lorryShiftSet"), Out.bLorryShiftSet);
+	Object->TryGetBoolField(TEXT("wagonsSet"), Out.bWagonsSet);
+	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);

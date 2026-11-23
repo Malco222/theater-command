@@ -19,6 +19,7 @@ import { airRange, cover, crowding, kmTo, skyOver } from './air';
 import { wrecked } from './airversion';
 import { grounded, skyAt, weatherOn } from './weather';
 import { SIGHT, sightOf } from './intel';
+import { LOGI, aiDumps, clearDumps, dumpsOn, roadWear, shareOutLorries, tendDumps, wagonsOn } from './logistics';
 import type { Corps, Game } from './types';
 
 export const COLUMNS = data as unknown as {
@@ -47,6 +48,21 @@ export interface ColumnRun {
   share: number;
   /** Where it was caught, by whom, and how many lorries were lost there. */
   hits: [number, Ambusher, number][];
+  // The three supply orders (logistics.ts), each absent where its switch is off:
+  /** With the nation's lorries counted: the lorries the run needed ('lorries' is then those it got). */
+  need?: number;
+  /** Carried by horse-drawn wagon, for want of lorries. */
+  horse?: number;
+  /** Not carried at all, for want of lorries (the wagons off). */
+  short?: number;
+  /** Held up on the road by mud, snow, sand or the wagons' slower pace: arrives too late for the month. */
+  worn?: number;
+  /** On the front the nation sends its lorries to first. */
+  first?: boolean;
+  /** Fed from this forward dump, not from the railhead (the road starts at the dump). */
+  dump?: number;
+  /** Stocking a forward dump (the road ends at the dump): 'divs' is then the division-months it carries. */
+  fill?: boolean;
 }
 
 /** True where this campaign runs supply columns. */
@@ -91,7 +107,7 @@ interface Stretch {
  * The enemy aircraft hunting over a province, against the side's own fighters there (columns.json '_air'): the share
  * of an unguarded road's worst that they bring to bear, 0 to 1, and the player's share of the hunters.
  */
-function airOver(g: Game, nat: string, p: number): { air: number; mine: number } {
+export function airOver(g: Game, nat: string, p: number): { air: number; mine: number } {
   const A = COLUMNS.air;
   if (weatherOn(g) && skyAt(g, p) === 'closed') return { air: 0, mine: 0 };
   let hunt = 0, mine = 0, guard = 0;
@@ -169,13 +185,21 @@ export function columnsMonth(g: Game, nat: string): void {
   if (!N?.alive || !N.atWar.length) return;
   const road = railheads(g, nat);
   if (!road) return;
+  // Forward dumps (logistics.ts): one whose ground is lost is burned, one under enemy aircraft loses part of its
+  // stock; those stocked and ready feed the corps nearer to them than to the railhead. None where the switch is off.
+  const ready = tendDumps(g, nat);
   // Where its corps stand beyond the railhead, and the divisions there.
   const fed = new Map<number, number>();
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead || c.kind === 'fort' || !c.supplied || !(road[c.reg] >= 1)) continue;
     fed.set(c.reg, (fed.get(c.reg) ?? 0) + c.divs);
   }
-  if (!fed.size) return;
+  // The dumps ordered last month or before and not yet stocked: from the railhead by a column, or straight off the
+  // train where the railway has since come up to them.
+  const filling = dumpsOn(g) ? (g.dumps ?? []).filter((d) => d.nat === nat && d.fill > 0 && d.turn < g.turn && road[d.region] >= 0) : [];
+  for (const d of filling) if (road[d.region] === 0) { d.stock += d.fill; d.fill = 0; }
+  filling.splice(0, filling.length, ...filling.filter((d) => d.fill > 0));
+  if (!fed.size && !filling.length) return;
   const C = COLUMNS;
   const seen = new Map<number, Stretch>();
   const stretch = (p: number): Stretch => {
@@ -189,46 +213,95 @@ export function columnsMonth(g: Game, nat: string): void {
   };
   const danger = (p: number): number => { const s = stretch(p); return C.air.most * s.air * (1 - s.flak) + C.partisans.most * s.partisans; };
   const runs: ColumnRun[] = [];
-  let sent = 0, lostAll = 0, byAir = 0, byBands = 0, mineLost = 0;
-  let worst = { p: -1, n: 0 };
   for (const [to, divs] of [...fed].sort((a, b) => a[0] - b[0])) {
-    const path = roadFrom(g, road, to, danger);
+    // The nearest ready dump with stock for these divisions, where it is nearer than the railhead. A corps standing
+    // on its dump takes its supply there and sends no column.
+    let from: { dump: (typeof ready)[number]['dump']; road: Int16Array } | null = null;
+    for (const r of ready) {
+      const d = r.road[to];
+      if (d < 0 || d >= road[to] || r.dump.stock < divs) continue;
+      if (!from || d < from.road[to] || (d === from.road[to] && r.dump.region < from.dump.region)) from = r;
+    }
+    if (from) {
+      from.dump.stock -= divs;
+      if (from.road[to] === 0) continue;
+    }
+    const path = roadFrom(g, from ? from.road : road, to, danger);
     if (path.length < 2) continue;
     const lorries = Math.max(1, Math.round(divs * C.lorries.perDiv * (path.length - 1)));
     const run: ColumnRun = { path, divs, lorries, lost: 0, share: 1, hits: [] };
-    let left = lorries;
-    for (let k = 1; k < path.length; k++) {
-      const p = path[k], s = stretch(p);
-      if (s.air <= 0 && s.partisans <= 0) continue;
-      const rng = new Rng(hashString(`col:${g.seed}:${g.turn}:${nat}:${to}:${p}`));
-      const roll = (): number => C.roll[0] + (C.roll[1] - C.roll[0]) * rng.next();
-      const air = Math.min(0.95, C.air.most * s.air * (1 - s.flak) * roll());
-      const bands = Math.min(0.95, C.partisans.most * s.partisans * roll());
-      const fromAir = left * air, fromBands = (left - fromAir) * bands;
-      if (air >= C.hitAt) run.hits.push([p, 'air', Math.round(fromAir)]);
-      if (bands >= C.hitAt) run.hits.push([p, 'partisans', Math.round(fromBands)]);
-      byAir += fromAir; byBands += fromBands; mineLost += fromAir * s.mine;
-      if (fromAir + fromBands > worst.n) worst = { p, n: fromAir + fromBands };
-      left -= fromAir + fromBands;
-    }
-    run.lost = Math.round(lorries - left);
-    run.share = Math.max(0, Math.min(1, left / lorries));
-    sent += lorries; lostAll += lorries - left;
+    if (from) run.dump = from.dump.region;
     runs.push(run);
   }
+  // The columns stocking a dump ordered last month, from the railhead: paid for when it was ordered, outside the pool.
+  for (const d of filling) {
+    const path = roadFrom(g, road, d.region, danger);
+    if (path.length < 2) continue;
+    runs.push({ path, divs: d.fill, lorries: Math.max(1, Math.round(d.fill * C.lorries.perDiv * (path.length - 1))), lost: 0, share: 1, hits: [], fill: true });
+  }
+  // The nation's lorries shared out among its columns (logistics.ts): the front it names first. Where the switches
+  // are off every column has all the lorries it needs.
+  shareOutLorries(g, nat, runs);
+  let sent = 0, lostAll = 0, horseLost = 0, byAir = 0, byBands = 0, mineLost = 0;
+  let worst = { p: -1, n: 0 };
+  for (const run of runs) {
+    const path = run.path, to = path[path.length - 1];
+    const lorries = run.lorries;
+    // Lorries ('m') and wagons ('h') still on the road, and those held up by the ground.
+    let m = lorries, h = run.horse ?? 0, mWorn = 0, hWorn = 0;
+    for (let k = 1; k < path.length; k++) {
+      const p = path[k], s = stretch(p), wear = roadWear(g, p);
+      if (s.air <= 0 && s.partisans <= 0 && wear.lorry <= 0 && wear.horse <= 0) continue;
+      if (s.air > 0 || s.partisans > 0) {
+        const rng = new Rng(hashString(`${run.fill ? 'dump' : 'col'}:${g.seed}:${g.turn}:${nat}:${to}:${p}${run.dump !== undefined ? `:${run.dump}` : ''}`));
+        const roll = (): number => C.roll[0] + (C.roll[1] - C.roll[0]) * rng.next();
+        const air = Math.min(0.95, C.air.most * s.air * (1 - s.flak) * roll());
+        const bands = Math.min(0.95, C.partisans.most * s.partisans * roll());
+        const mAir = m * air, mBands = (m - mAir) * bands;
+        const hAir = h * air, hBands = (h - hAir) * bands;
+        const fromAir = mAir + hAir, fromBands = mBands + hBands;
+        if (air >= C.hitAt) run.hits.push([p, 'air', Math.round(fromAir)]);
+        if (bands >= C.hitAt) run.hits.push([p, 'partisans', Math.round(fromBands)]);
+        byAir += fromAir; byBands += fromBands; mineLost += fromAir * s.mine;
+        if (fromAir + fromBands > worst.n) worst = { p, n: fromAir + fromBands };
+        m -= mAir + mBands;
+        h -= hAir + hBands;
+      }
+      // The ground and the pace (the wagons on): what is held up does not reach the front this month.
+      if (wear.lorry > 0) { const w = m * Math.min(0.95, wear.lorry); mWorn += w; m -= w; }
+      if (wear.horse > 0 && h > 0) { const w = h * Math.min(0.95, wear.horse); hWorn += w; h -= w; }
+    }
+    const lostM = lorries - m - mWorn, lostH = (run.horse ?? 0) - h - hWorn;
+    run.lost = Math.round(lostM + lostH);
+    if (mWorn + hWorn > 0) run.worn = Math.round(mWorn + hWorn);
+    const need = run.need ?? lorries;
+    run.share = Math.max(0, Math.min(1, (m + h) / need));
+    // A dump's column puts what got through into the dump.
+    if (run.fill) {
+      const d = g.dumps?.find((x) => x.nat === nat && x.region === to);
+      if (d) { d.stock += d.fill * run.share; d.fill = 0; }
+    }
+    sent += lorries + (run.horse ?? 0); lostAll += lostM; horseLost += lostH;
+  }
+  // Used-up dumps are taken off the map, and a computer nation stocks a new one where it would save most road.
+  clearDumps(g, nat);
+  aiDumps(g, nat, runs);
   if (!runs.length) return;
   book[nat] = runs;
-  // The lorries lost are made good out of the treasury.
+  // The lorries lost are made good out of the treasury, and the wagons (cheaper) too.
   N.pp -= lostAll * C.lorries.pp;
+  if (horseLost > 0) N.pp -= horseLost * LOGI.wagons.pp;
   // The player hears of it when his own columns bleed, and when his aircraft burn the enemy's.
   const me = g.human;
   if (!me) return;
-  if (nat === me && sent > 0 && lostAll / sent >= C.newsAt) {
+  const lostSent = lostAll + horseLost;
+  if (nat === me && sent > 0 && lostSent / sent >= C.newsAt) {
     const who = byAir >= 2 * byBands ? 'Enemy aircraft caught' : byBands >= 2 * byAir ? 'Partisans ambushed' : 'Enemy aircraft and partisans caught';
-    const got = Math.round((1 - lostAll / sent) * 100);
-    headline(g, 'info', `${who} our supply columns on the roads to the front: ${word(lostAll)} of ${word(sent)} lorries lost${worst.p >= 0 ? `, the worst of it near ${g.regions[worst.p].name}` : ''}. The corps beyond the railhead got ${got}% of what was sent, and take in fewer drafts and less rest for it.`, me, worst.p >= 0 ? worst.p : undefined, { arm: 'land', lost: me });
+    const got = Math.round((1 - lostSent / sent) * 100);
+    const what = horseLost > 0 ? 'lorries and wagons' : 'lorries';
+    headline(g, 'info', `${who} our supply columns on the roads to the front: ${word(lostSent)} of ${word(sent)} ${what} lost${worst.p >= 0 ? `, the worst of it near ${g.regions[worst.p].name}` : ''}. The corps beyond the railhead got ${got}% of what was sent, and take in fewer drafts and less rest for it.`, me, worst.p >= 0 ? worst.p : undefined, { arm: 'land', lost: me });
   } else if (atWar(g, me, nat) && mineLost >= 20) {
-    headline(g, 'info', `Our aircraft caught ${g.nations[nat].adj} lorry columns on the roads behind their front: about ${word(mineLost)} lorries burned${worst.p >= 0 ? `, the most near ${g.regions[worst.p].name}` : ''}. What they carried never reached the front.`, me, worst.p >= 0 ? worst.p : undefined, { arm: 'air' });
+    headline(g, 'info', `Our aircraft caught ${g.nations[nat].adj} ${wagonsOn(g) ? 'supply' : 'lorry'} columns on the roads behind their front: about ${word(mineLost)} ${wagonsOn(g) ? 'lorries and wagons' : 'lorries'} burned${worst.p >= 0 ? `, the most near ${g.regions[worst.p].name}` : ''}. What they carried never reached the front.`, me, worst.p >= 0 ? worst.p : undefined, { arm: 'air' });
   }
 }
 
@@ -239,7 +312,7 @@ export function columnsMonth(g: Game, nat: string): void {
  */
 export function columnShare(g: Game, c: Corps): number {
   if (!columnsOn(g)) return 1;
-  const run = g.columns?.[c.nat]?.find((r) => r.path[r.path.length - 1] === c.reg);
+  const run = g.columns?.[c.nat]?.find((r) => !r.fill && r.path[r.path.length - 1] === c.reg);
   return run ? COLUMNS.floor + (1 - COLUMNS.floor) * run.share : 1;
 }
 
@@ -256,6 +329,10 @@ export interface ColumnView {
   side: 'ours' | 'friend' | 'theirs';
   /** Where it was caught: the province, a point on the road into it (most of the way from the last province), by whom, lorries lost. */
   hits: { at: number; x: number; y: number; by: Ambusher; lost: number }[];
+  /** (logistics.ts, each absent where its switch is off) Loads carried by horse-drawn wagon; a column stocking a dump; one setting out from a dump. */
+  horse?: number;
+  fill?: boolean;
+  fromDump?: boolean;
 }
 
 /**
@@ -288,6 +365,9 @@ export function columnsView(g: Game, viewer: string | null = g.human): ColumnVie
           const t = i > 0 ? 0.6 : 1;
           return { at: p, x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, by, lost };
         }),
+        ...(run.horse ? { horse: Math.round(run.horse) } : {}),
+        ...(run.fill ? { fill: true } : {}),
+        ...(run.dump !== undefined ? { fromDump: true } : {}),
       });
     }
   }

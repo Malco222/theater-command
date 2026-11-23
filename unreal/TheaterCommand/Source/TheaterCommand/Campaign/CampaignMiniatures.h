@@ -261,6 +261,10 @@ struct FMiniatureMesh
 	void Tank(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Lorry(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Horseman(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
+	/** (Release 2, logistics.ts) A horse-drawn supply wagon: a horse in the shafts, a covered cart and its driver. Faces +X as the lorry does. */
+	void Wagon(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
+	/** (Release 2, logistics.ts) A forward supply dump: stacks of crates (one to three high, as full as it is) and fuel drums under a tarpaulin; a bare pallet and one stack while it is still being brought up. */
+	void SupplyDump(const FVector& Where, double Scale, const FLinearColor& Nation, int32 Full, bool bFilling, double Turn = 0.0);
 	void Bunker(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void FieldGun(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);
 	void Crag(const FVector& Where, double Scale);

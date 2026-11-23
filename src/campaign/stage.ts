@@ -86,3 +86,18 @@ export const NICKNAMES_STAGE: boolean = nicks !== undefined ? !!nicks && nicks !
 const cols = (globalThis as { TC_COLUMNS?: unknown }).TC_COLUMNS ?? G.process?.env?.TC_COLUMNS;
 /** True where new grand campaigns open with supply columns (data/campaign/stage.json 'columns'). */
 export const COLUMNS_STAGE: boolean = cols !== undefined ? !!cols && cols !== '0' : (stage as { columns?: boolean }).columns === true;
+
+// The three supply orders on top of the columns (release 2; Brian's yes of 23 November 2026 13:06Z, logistics.ts): the
+// grand campaigns opened while these are true carry the flags 'lorryShift', 'wagons' and 'dumps'. Each does nothing
+// unless the columns run too. Forced by TC_LORRYSHIFT, TC_WAGONS and TC_DUMPS.
+const forcedBy = (name: string): unknown => (globalThis as Record<string, unknown>)[name] ?? G.process?.env?.[name];
+const staged = (env: string, key: string): boolean => {
+  const v = forcedBy(env);
+  return v !== undefined ? !!v && v !== '0' : (stage as Record<string, unknown>)[key] === true;
+};
+/** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
+export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
+/** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */
+export const WAGONS_STAGE: boolean = staged('TC_WAGONS', 'wagons');
+/** True where new grand campaigns open with forward dumps (stage.json 'dumps'). */
+export const DUMPS_STAGE: boolean = staged('TC_DUMPS', 'dumps');
