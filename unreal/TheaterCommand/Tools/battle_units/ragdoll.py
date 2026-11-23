@@ -570,6 +570,7 @@ HOLD = {"spine_01": 900.0, "spine_02": 900.0, "chest": 900.0, "neck": 120.0, "he
 DAMP_TONE, DAMP_DEAD = 25.0, 6.0
 SETTLE_DAMP = 10.0                  # (per second, on every part once he is all but still and down)
 SETTLE_LOW = 0.32                   # (m: his chest's centre under this is down)
+STUMP_FREE = 0.2                    # s: a severed limb passes its stump this long after the cut
 DAMP_DEAD_OF = {"hand": 18.0, "neck": 18.0, "head": 18.0, "foot": 10.0, "lowerarm": 9.0}
 
 
@@ -586,6 +587,7 @@ class Fall:
         self.mu_limb = (0.9, 0.7)          # (a severed limb's own grip on the ground: it rolls a little and stops, where
                                             # a body thrown by a blast slides on its cloth)
         self.limb_parts = set()
+        self.stump_free = []               # ((until, limb, stump)): a severed limb not yet kept off its stump
         B = len(rd.parts)
         self.joints = [dict(j) for j in rd.joints]
         Ra, Xa = self._pose(local)
@@ -694,6 +696,16 @@ class Fall:
         self.touch_at_cut[k] = self.touch & limb
         if self.held and rd.pix["hand_r"] in limb:
             self.release_at = min(self.release_at, self.t)   # (the rifle goes with the hand that held it)
+        # (the stump it came from is out of its way for a moment: torn from it, the limb leaves past it, where the
+        # stump's far end would catch a limb flung up or across and stop it dead)
+        stump = rd.parent[k]
+        self._keep_apart(limb, lambda p: p in limb or p == stump)
+        self.stump_free.append((self.t + STUMP_FREE, limb, stump))
+
+    def _keep_apart(self, limb, skip):
+        """Pairs between the limb's core spheres and the rest of him (but `skip` parts and the rifle) that are apart
+        now, kept apart from here on."""
+        rd = self.rd
         P = self._spheres()
         core = np.nonzero(rd.sp_core)[0]
         have = {(int(a), int(b)) for a, b in self.pairs} | {(int(b), int(a)) for a, b in self.pairs}
@@ -703,7 +715,7 @@ class Fall:
             if rd.sp_part[i] not in limb:
                 continue
             for j in core:
-                if rd.sp_part[j] in limb or rd.sp_part[j] == wk or (int(i), int(j)) in have:
+                if skip(rd.sp_part[j]) or rd.sp_part[j] == wk or (int(i), int(j)) in have:
                     continue
                 if np.linalg.norm(P[i] - P[j]) > (rd.sp_r[i] + rd.sp_r[j]) * 1.05:
                     add.append((i, j))
@@ -876,6 +888,9 @@ class Fall:
         for k in now:
             if k in self.fling:
                 self._fling(k, *self.fling[k])
+        for (tu, limb, stump) in [x for x in self.stump_free if x[0] <= self.t]:
+            self._keep_apart(limb, lambda p: p != stump)
+        self.stump_free = [x for x in self.stump_free if x[0] > self.t]
         if self.held and self.t >= self.release_at and not rd.unarmed:   # (an unarmed man has nothing to let go)
             self.held = False
             wk = rd.pix["weapon"]
