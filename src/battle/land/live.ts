@@ -653,6 +653,17 @@ export class LiveBattle {
     return this.sim.smokeWhy(u, x0, y0, x1, y1);
   }
 
+  /** All fall back (release 1.5): whether his army has been ordered back (it takes no new orders). */
+  fallingBack(): boolean {
+    return !!this.me && this.sim.fallingBack(this.me);
+  }
+
+  /** All fall back (release 1.5): why his army may not fall back now, or null where it may. */
+  fallBackWhy(): string | null {
+    if (!this.me) return 'Only your own troops take your orders.';
+    return this.sim.fallBackWhy(this.me);
+  }
+
   /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
   patrolWhy(id: number): string | null {
     const u = this.sim.unit(id);

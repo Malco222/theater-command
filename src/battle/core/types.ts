@@ -489,6 +489,8 @@ export interface FieldResult {
   forces: { corps: number; side: Side; lost: number; arrived?: number | null }[];
   /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
   broke?: Side;
+  /** The side that fell back on its general's order (land, all fall back, release 1.5): it withdrew, with 'pulled' after contact. */
+  fellBack?: Side;
   /**
    * Why it broke (land, b496(2)): its bar and what drove it, as it stood at the break, where 'broke' is set. Driven from
    * the field ('destroyed'), none of its blocks was left in the fight, and its bar may stand short of 1 ('none').

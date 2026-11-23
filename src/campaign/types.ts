@@ -491,6 +491,11 @@ export interface BattleReport {
   prisoners: number;
   /** No battle was fought: the defenders were under orders to give ground and fell back before the attack. */
   yielded?: boolean;
+  /**
+   * Fought on the field, that side's general ordered ALL FALL BACK (release 1.5; Brian, 23 November 14:47Z): its army
+   * withdrew behind the ground it started from to fight another day. The result is that side's defeat, as booked.
+   */
+  fellBack?: 'att' | 'def';
   /** The share of the defence that was dug in and in supply, where any was (the grand campaign): luck ran against the attack by that much. */
   prepared?: number;
   /** An attack thrown back from dug-in troops (the grand campaign): the months it took off their works, and the months of works they have left. */
