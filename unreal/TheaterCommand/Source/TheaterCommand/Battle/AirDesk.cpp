@@ -668,21 +668,40 @@ namespace AirDesk
 			if (Three.empty())
 			{
 				// (the plane furthest ahead, or furthest back, and the two nearest it: its own element, a vic of three,
-				// not three planes strung across the formation's front)
+				// not three planes strung across the formation's front. One whose element is not with it, its second
+				// nearest more than twice as far as the group's own spacing (the middle of every plane's second nearest),
+				// is passed over for the next: a fighter group's last flight may be a pair strung out a kilometre behind
+				// the rest, and three planes taken across two flights put the eye among them, looking at empty sky; the
+				// shakeout of the campaign's fight for the sky, 23 November. The set pieces' first plane always passes.)
 				const double Sense = bTrail ? -1.0 : 1.0;
-				const AirShow::PlaneOut* First = nullptr;
+				std::vector<const AirShow::PlaneOut*> Mine;
 				for (const AirShow::PlaneOut& P : Planes)
 				{
-					if (P.Group == G.Id && P.bShown && !P.bFalling && (!First || Sense * Ahead.Dot(P.At) > Sense * Ahead.Dot(First->At))) First = &P;
+					if (P.Group == G.Id && P.bShown && !P.bFalling) Mine.push_back(&P);
 				}
-				if (First)
+				// (furthest ahead first, or furthest back; the first seen first among equals, as before)
+				std::stable_sort(Mine.begin(), Mine.end(), [&](const AirShow::PlaneOut* A, const AirShow::PlaneOut* B) { return Sense * Ahead.Dot(A->At) > Sense * Ahead.Dot(B->At); });
+				auto Nearest = [&Mine](const AirShow::PlaneOut* Of)
 				{
 					std::vector<std::pair<double, int>> Order;
-					for (const AirShow::PlaneOut& P : Planes)
-					{
-						if (P.Group == G.Id && P.bShown && !P.bFalling) Order.push_back({ (P.At - First->At).Length(), P.Key });
-					}
+					for (const AirShow::PlaneOut* P : Mine) Order.push_back({ (P->At - Of->At).Length(), P->Key });
 					std::sort(Order.begin(), Order.end());
+					return Order;
+				};
+				size_t Pick = 0;
+				if (Mine.size() >= 3)
+				{
+					std::vector<double> Seconds;
+					for (const AirShow::PlaneOut* P : Mine) Seconds.push_back(Nearest(P)[2].first);
+					std::vector<double> Sorted = Seconds;
+					std::nth_element(Sorted.begin(), Sorted.begin() + Sorted.size() / 2, Sorted.end());
+					const double Spacing = Sorted[Sorted.size() / 2];
+					while (Pick < Mine.size() && Seconds[Pick] > 2.0 * Spacing) ++Pick;
+					if (Pick == Mine.size()) Pick = 0;
+				}
+				if (!Mine.empty())
+				{
+					const std::vector<std::pair<double, int>> Order = Nearest(Mine[Pick]);
 					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
 				}
 				if (bTrail)
@@ -767,7 +786,25 @@ namespace AirDesk
 				Lead = (AirShow::SlotOf(G, 0) + AirShow::SlotOf(G, 1) + AirShow::SlotOf(G, 2)) * (1.0 / 3.0);
 				Span = AirShow::ShapeOf(G.Model, G.bFighter).Span;
 			}
-			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * Share);
+			double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * Share);
+			// (the raid's three wider than the picture holds at that size, a fighter sweep's loose flights some 400 m
+			// across against a bomber vic's 100: the eye stands back until each is within RaidAside of the look, so the
+			// raid is framed smaller rather than lost; the shakeout of the campaign's fight for the sky, 23 November.
+			// A bomber raid's three always fit, and its shot is as it was)
+			if (bTrail)
+			{
+				const auto Spread = Trios.find(G.Id);
+				if (Spread != Trios.end())
+				{
+					double Aside = 0.0, Deep = 0.0;
+					for (const AirShow::Vec& Each : Spread->second)
+					{
+						Aside = std::max(Aside, std::fabs(Each.Y));
+						Deep = std::max(Deep, std::fabs(Each.X));
+					}
+					Near = std::max(Near, Aside * 1.15 / std::tan(RaidAside * Pi / 180.0) + Deep);
+				}
+			}
 			const double Pull = Near * (1.2 - 0.3 * S), Down = DownDegrees * Pi / 180.0;
 			Out.Eye = Lead - Ahead * (Pull * std::cos(Down)) + Up * (Pull * std::sin(Down)) + Right * (Side * Near * 0.3 * (1.0 - S));
 			Out.Look = Lead;

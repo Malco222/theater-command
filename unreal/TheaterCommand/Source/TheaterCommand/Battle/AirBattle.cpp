@@ -7101,6 +7101,14 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 		Eye->Destroy();
 		Eye = nullptr;
 	}
+	if (Reason == EEndPlayReason::Destroyed && HandBack)
+	{
+		// (release 1.6: his raid taken down without CONTINUE is handed back all the same, with what the rules booked at
+		// its end where it reached one, or nothing: the map is never left waiting; the pre-check on 0c0f1aee)
+		TFunction<void(const FString&)> Hand = MoveTemp(HandBack);
+		HandBack = nullptr;
+		Hand(EndReply);
+	}
 	Super::EndPlay(Reason);
 }
 
