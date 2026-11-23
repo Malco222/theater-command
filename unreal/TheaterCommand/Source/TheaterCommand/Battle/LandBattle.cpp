@@ -4015,6 +4015,10 @@ void ALandBattle::MakeArmour()
 		Armour->BrewWaitMost = 10.0;
 	}
 	UE_LOG(LogTheater, Log, TEXT("Land battle: crews %s"), S.Bails.bOn ? TEXT("get out of their knocked-out vehicles (-TheaterLandBailOut, release 2)") : TEXT("stay inside as before"));
+	// (and smoke to cover them, -TheaterLandBailSmoke, release 2, off until the art director and a 45 fps reading pass;
+	// Brian, 23 November 20:09Z: with her enemy close, her commander may throw a smoke grenade toward it from his hatch)
+	S.Bails.bSmoke = S.Bails.bOn && FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBailSmoke"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: bail-out smoke %s"), S.Bails.bSmoke ? TEXT("on (-TheaterLandBailSmoke, release 2)") : TEXT("off"));
 	// Captured kit (release 2, on trial: "-TheaterLandTrial=captured"): a block the recording marks captured (the
 	// campaign's, blocks[].captured) in her captor's coat over her maker's; "-TheaterLandNoCaptured" off whatever the
 	// trial (the player's switch on the Battle rules card); "-TheaterLandCapturedTest" every other attacker tank block drawn
@@ -4347,6 +4351,7 @@ void ALandBattle::BailOut()
 	{
 		S.Bails.Made.resize(All.size(), 0);
 		S.Bails.Crews.resize(All.size());
+		S.Bails.Smoked.resize(All.size(), 0);
 	}
 	const LandField::Ground* FieldPtr = S.Field.get();
 	const std::function<double(double, double)> Ground = [FieldPtr](double X, double Y) { return FieldPtr ? FieldPtr->HeightAt(X, Y) : 0.0; };
@@ -4499,6 +4504,7 @@ void ALandBattle::BailOut()
 		}
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
+		W.bSmoke = S.Bails.bSmoke;
 		S.Bails.Crews[V] = LandBail::Make(W);
 		for (size_t K = 0; K < S.Bails.Crews[V].Men.size(); ++K)
 		{
@@ -4517,6 +4523,27 @@ void ALandBattle::BailOut()
 	if (S.Men->Count() != MenBefore)
 	{
 		MenDrawn.SetNum(S.Men->Count());
+	}
+	// (smoke: her commander's grenade gushing white where it landed, from the moment it lands, the kit's canister)
+	if (Effects && S.Bails.bSmoke)
+	{
+		for (size_t V = 0; V < S.Bails.Crews.size() && V < All.size(); ++V)
+		{
+			const LandBail::Crew& C = S.Bails.Crews[V];
+			const double Since = (S.Battle - All[V].Died) * S.Life;
+			if (C.SmokeAt < 0.0 || S.Bails.Smoked[V] || All[V].Died < 0.0 || Since < C.SmokeAt)
+			{
+				continue;
+			}
+			S.Bails.Smoked[V] = 1;
+			if (Since < C.SmokeAt + C.SmokeS)
+			{
+				Effects->SmokeScreen(World(C.SmokeTo.X, C.SmokeTo.Y, C.SmokeTo.Z), static_cast<float>(C.SmokeAcross),
+					static_cast<float>(C.SmokeAt + C.SmokeS - Since), TEXT("canister"), -1);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: %s's commander's smoke is up, %.0f m across for %.0f s"),
+					*LandParts::Wide(All[V].Look().Name), C.SmokeAcross, C.SmokeS);
+			}
+		}
 	}
 	// Each man where he is now.
 	for (size_t I = 0; I < S.Bails.Men.size(); ++I)

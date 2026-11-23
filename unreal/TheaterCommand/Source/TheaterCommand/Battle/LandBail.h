@@ -87,6 +87,8 @@ namespace LandBail
 		double RoofS = 0.0;       // with the clips: his scramble over her roof to its edge, seconds (none without the step)
 		double DeckS = 0.0;       // with the clips: his scramble on her deck to her hull's edge, seconds
 		double ClipsS = 0.0;      // with the clips: from his start out of the hatch to his feet on the ground, seconds
+		double ThrowAt = -1.0;    // smoke: life's seconds he stands in his hatch and throws it (throw_grenade), -1 never
+		double ThrowFace = 0.0;   // and the way he throws it, toward her enemy (radians)
 	};
 
 	/** Life's seconds from his start out of the hatch to his feet on the ground (2.05 s; with the bail clips about 4 to
@@ -122,6 +124,10 @@ namespace LandBail
 		/** Her right, left, back and bow blocked (a vehicle, living or dead, close beside her there): her men drop off
 		 * the side away from her enemy, and only where it is blocked off another way (Make). */
 		bool Blocked[4] = { false, false, false, false };
+		/** -TheaterLandBailSmoke (release 2, off by default until the art director and a 45 fps reading pass; Brian, 23
+		 * November): with her enemy close and in sight and her ammunition not about to go, her commander may throw a
+		 * smoke grenade toward her enemy from his hatch before he climbs out (Crew::SmokeAt). */
+		bool bSmoke = false;
 		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
 		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
 		double Threat = 1.0;
@@ -134,6 +140,11 @@ namespace LandBail
 	{
 		std::vector<Man> Men;
 		std::string Story; // for the log
+		/** Smoke (Wreck::bSmoke): life's seconds after her kill her commander's smoke grenade lands and starts to
+		 * gush (-1 none), where, how long it gushes (life's seconds) and how wide its screen grows (metres). */
+		double SmokeAt = -1.0;
+		V3 SmokeTo;
+		double SmokeS = 0.0, SmokeAcross = 0.0;
 	};
 
 	/** Her crew's getting out. The same Wreck gives the same crew. */
@@ -178,6 +189,9 @@ namespace LandBail
 		};
 		std::vector<Crew> Crews;    // by vehicle (empty: nobody, or not made yet)
 		std::vector<uint8_t> Made;  // by vehicle
+		/** -TheaterLandBailSmoke: commanders throw smoke to cover their crews (Wreck::bSmoke). */
+		bool bSmoke = false;
+		std::vector<uint8_t> Smoked; // by vehicle: her smoke laid
 		std::vector<Him> Men;
 		/** The kit's number for a burning man's flames: above the film fire's (1 << 26), below the kit's columns'. */
 		static int FireIdOf(size_t Him) { return (1 << 27) + static_cast<int>(Him % 1000000); }

@@ -49,6 +49,8 @@ namespace LandBail
 			}
 			return Table[N - 1][1];
 		}
+		// (smoke: throw_grenade, 1.6 s, the grenade leaving his hand at 0.95 s, then about 0.9 s in the air)
+		constexpr double ThrowS = 1.6, ThrowRelease = 0.95, ThrowFlight = 0.9;
 		constexpr double BurnStride = 7.35, BurnLoop = 2.1, RollStill = 3.3, RollFwd = 0.95, RollRight = 1.20;
 
 		/** Its own dice (splitmix64): the same wreck, the same crew. */
@@ -308,6 +310,13 @@ namespace LandBail
 			return Out;
 		}
 		Dice D(W.Seed);
+		// Smoke to cover them (release 2, -TheaterLandBailSmoke; Brian, 23 November): with her enemy close and in sight
+		// and her ammunition not about to go, six crews in ten have the first man out, her commander, stand in his hatch
+		// and throw a smoke grenade toward her enemy before he climbs out; its white smoke gushes up between her and the
+		// enemy a couple of seconds later and hangs a minute or more, and men who reach the ground once it is up are hit
+		// half as often. Its own dice, so that with the switch off every crew goes to the last number as before.
+		Dice Sd(W.Seed ^ 0x5A0CE5EEDull);
+		const bool bSmoke = W.bSmoke && W.Blast < 0.0 && W.bUnderFire && W.Threat >= 0.5 && Sd.P(0.6);
 		Draws Dr{ W.Way->Dials, D, {}, {} };
 		auto Ground = [&](double X, double Y) { return W.Ground ? W.Ground(X, Y) : W.Middle.Z; };
 		const V3 Fwd{ std::sin(W.Heading), std::cos(W.Heading), 0.0 };
@@ -490,6 +499,19 @@ namespace LandBail
 				{
 					M.Out = std::max(0.3, M.Out - (M.ClipsS - OnGroundS));
 				}
+				if (bSmoke && K == 0)
+				{
+					// (from his hatch toward her enemy, landing 9 to 14 m off, past her hull as the enemy sees her)
+					M.ThrowAt = std::max(0.3, M.Out - ThrowS);
+					M.Out = M.ThrowAt + ThrowS;
+					M.ThrowFace = W.Away + Pi;
+					const double Far_ = Sd.U(9.0, 14.0);
+					Out.SmokeTo = V3{ M.Hatch.X - std::sin(W.Away) * Far_, M.Hatch.Y - std::cos(W.Away) * Far_, 0.0 };
+					Out.SmokeTo.Z = Ground(Out.SmokeTo.X, Out.SmokeTo.Y);
+					Out.SmokeAt = M.ThrowAt + ThrowRelease + ThrowFlight;
+					Out.SmokeS = Sd.U(60.0, 90.0);
+					Out.SmokeAcross = Sd.U(10.0, 15.0); // (a grenade's cloud: less than a light mortar's bomb's 18 m)
+				}
 				if (W.Blast >= 0.0 && M.Out + OnGroundOf(M) > W.Blast)
 				{
 					M.How = End::Caught;
@@ -517,7 +539,8 @@ namespace LandBail
 				{
 					// (by the enemy who can see him: 1 in 6 running with the enemy close, a crawler half that; a little
 					// over half of those killed, the rest hit and left crawling)
-					const double Hit = (M.Go == "crawl" ? 1.0 / 12.0 : 1.0 / 6.0) * std::clamp(W.Threat, 0.0, 1.0);
+					const bool bScreened = Out.SmokeAt >= 0.0 && M.Out + OnGroundOf(M) >= Out.SmokeAt + 2.5; // (smoke up)
+					const double Hit = (M.Go == "crawl" ? 1.0 / 12.0 : 1.0 / 6.0) * std::clamp(W.Threat, 0.0, 1.0) * (bScreened ? 0.5 : 1.0);
 					const double Shot = 0.55 * Hit;
 					const double Roll = D.U();
 					if (Roll < Hit)
@@ -592,6 +615,20 @@ namespace LandBail
 	static Pose PoseOn(const Man& M, double Since, const std::function<double(double, double)>& Ground)
 	{
 		Pose P;
+		// (smoke, with the bail clips: stood in his hatch as bail_climb_out starts, he throws it toward her enemy, and
+		// turns as it leaves his hand to the way he climbs; without the clips it comes out of her unseen)
+		if (M.bClips && M.ThrowAt >= 0.0 && Since >= M.ThrowAt && Since < M.Out)
+		{
+			const double Tt = Since - M.ThrowAt;
+			P.bShown = true;
+			P.Clip = "throw_grenade";
+			P.Time = Tt;
+			P.At = V3{ M.Hatch.X, M.Hatch.Y, M.Hatch.Z - BootsUnder };
+			const double Turn = std::remainder(M.Face - M.ThrowFace, 2.0 * Pi);
+			P.Facing = M.ThrowFace + Turn * Ease(std::clamp((Tt - (ThrowS - 0.4)) / 0.4, 0.0, 1.0));
+			P.Root = P.At;
+			return P;
+		}
 		const double T = Since - M.Out;
 		if (!(T >= 0.0))
 		{
