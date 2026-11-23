@@ -651,6 +651,8 @@ export interface Fleet extends Storied {
   ships: Ships;
   /** Ships lost since the war began. */
   lost: Ships;
+  /** Units decide (the convoy war by cause), written only under that switch: the boats it had when it first lost any this month and those lost since, for the hunt's monthly cap. Saved, so a month reloaded part-way plays on as the live one. */
+  capBook?: { turn: number; had: number; lost: number };
   /** Region of the home port, or -1 when the base is off the map. */
   base: number;
   /** What the base is called: Scapa Flow, Wilhelmshaven. */

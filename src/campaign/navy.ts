@@ -21,7 +21,7 @@ const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { skyAtSea, skySupport, weatherOn } from './weather';
-import { capOver, deckWorth, syncWings } from './carriers';
+import { capOver, deckWorth, syncWings, wingShare } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
@@ -2072,7 +2072,8 @@ export function seaCover(g: Game, nat: string, z: number, lane?: string): SeaCov
   if (wx === 0) return best;
   const take = (kind: SeaCover['kind'], share: number): void => { if (share > best.share) best = { kind, share: Math.min(1, share) }; };
   if (lane !== undefined) {
-    for (const f of g.fleets) if (f.stance === 'escort' && f.lane === lane && f.zone === z && f.ships.cv > 0 && allied(g, f.nat, nat) && airKit(aswKit(g, f.nat))) take('carrier', wx * Math.min(1, deckWorth(g, f)));
+    // (By the aircraft she has aboard: an empty deck covers nothing.)
+    for (const f of g.fleets) if (f.stance === 'escort' && f.lane === lane && f.zone === z && f.ships.cv > 0 && allied(g, f.nat, nat) && airKit(aswKit(g, f.nat))) take('carrier', wx * Math.min(1, wingShare(g, f)));
   }
   // A coast its side holds, flying aircraft with kit, under a sky no enemy has won.
   const flies = (id: number): AswKit | null => {
@@ -2124,23 +2125,18 @@ function incidentChance(g: Game, nat: string, route: string, z: number): number 
 }
 
 // A month's boats lost by fleet, so that the hunt and the convoys together keep inside the hunt's cap (a sea loses at
-// most 'most' of its boats a month). Kept beside the game, never in the save; a new month starts it afresh.
-const monthLost = new WeakMap<Game, { turn: number; had: Map<number, number>; lost: Map<number, number> }>();
-function lostBook(g: Game): { turn: number; had: Map<number, number>; lost: Map<number, number> } {
-  let b = monthLost.get(g);
-  if (!b || b.turn !== g.turn) monthLost.set(g, (b = { turn: g.turn, had: new Map(), lost: new Map() }));
-  return b;
-}
+// most 'most' of its boats a month), whichever nations' months they fall in. Kept on the fleet (Fleet.capBook), so a
+// save made part-way through the month, and every copy the look-ahead makes, plays on as the live month does. Written
+// only here, and these are reached only with Units decide on.
 /** Notes boats about to be lost from a fleet this month (called before they are taken off). */
 function noteLost(g: Game, f: Fleet, k: number): void {
-  const b = lostBook(g);
-  if (!b.had.has(f.id)) b.had.set(f.id, f.ships.ss);
-  b.lost.set(f.id, (b.lost.get(f.id) ?? 0) + k);
+  if (f.capBook?.turn !== g.turn) f.capBook = { turn: g.turn, had: f.ships.ss, lost: 0 };
+  f.capBook.lost += k;
 }
 /** How many more of its boats a fleet can lose this month, as an expected count, inside the hunt's cap. */
 function roomLeft(g: Game, f: Fleet): number {
-  const b = lostBook(g);
-  return Math.max(0, FLEETS.hunt.most * (b.had.get(f.id) ?? f.ships.ss) - (b.lost.get(f.id) ?? 0));
+  const b = f.capBook?.turn === g.turn ? f.capBook : undefined;
+  return Math.max(0, FLEETS.hunt.most * (b?.had ?? f.ships.ss) - (b?.lost ?? 0));
 }
 
 /** The convoy war's flat cut to what reaches a nation: with Units decide, only the tree's convoy system (convoycause.json 'seaLoss'). */
@@ -2269,6 +2265,38 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
     if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
   }
   return out;
+}
+
+/**
+ * The boats a nation's hunt would sink this month among these enemy fleets in one sea, on average, as huntSubs counts
+ * them; with Units decide, also those the convoys' escorts there would sink in their attacks (convoyWar). For the fleet
+ * orders' look-ahead. Off, it is the boats times the hunt's share, as before.
+ */
+export function huntExpected(g: Game, nat: string, z: number, quarry: Fleet[]): number {
+  const h = huntersIn(g, nat, z);
+  const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
+  const share = huntShareSunk(h.weight, subs);
+  if (h.kit === undefined) return subs * share;
+  let n = 0;
+  for (const f of quarry) {
+    const raiding = onRouteOf(g, nat, f) ? raidShare(f) : 0;
+    let x = h.weight > 0 ? (share * (h.air! + h.kit * (1 - raiding))) / h.weight : 0;
+    if (raiding > 0) {
+      for (const r of NAVY.convoys) {
+        const to = g.nations[r.to];
+        if (to?.alive && to.atWar.length && allied(g, r.to, nat) && atWar(g, f.nat, r.to) && r.zones.some((k) => zoneOf(g, k) === z)) x += raiding * CAUSE.find * incidentChance(g, r.to, r.id, z);
+      }
+    }
+    n += Math.min(f.ships.ss * Math.min(FLEETS.hunt.most, x), roomLeft(g, f));
+  }
+  return n;
+}
+
+/** The share of these enemy boats a nation's hunt would sink this month: the hunt's share, exactly as before, unless Units decide is on (then huntExpected's, per boat). */
+export function huntShareOf(g: Game, nat: string, z: number, quarry: Fleet[]): number {
+  const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
+  if (!unitsDecide(g)) return huntShareSunk(huntersIn(g, nat, z).weight, subs);
+  return subs > 0 ? huntExpected(g, nat, z, quarry) / subs : 0;
 }
 
 /** The share of the destroyer screen a fleet's heavy ships are missing: 0 when there are destroyers enough, 1 when there are none. */
@@ -2467,7 +2495,7 @@ export interface ConvoyFought { swing: number; ss: Record<number, number>; dd: R
 export const convoyField: { fought?: (m: ConvoyMeeting) => ConvoyFought | undefined } = {};
 
 /** The nights booked into one nation's month, by route: what the field gave, which fleets it covers, and whether any of it had to be held into the dice's run. */
-export type ConvoyNights = Map<string, { fought: ConvoyFought; ss: Set<number>; dd: Set<number>; clamped: boolean }>;
+export type ConvoyNights = Map<string, { fought: ConvoyFought; ss: Set<number>; dd: Set<number>; clamped: boolean; expect?: Map<number, number> }>;
 
 /** The month's meeting on a convoy route, as the fleets stand now. Throws no dice. */
 export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyMeeting {
@@ -2509,7 +2537,8 @@ function convoyNights(g: Game, nat: string): ConvoyNights | undefined {
     const m = convoyMeeting(g, nat, route);
     const fought = ask(m);
     if (!fought) continue;
-    (out ??= new Map()).set(route.id, { fought, ss: new Set(m.raiders.map((r) => r.id)), dd: new Set(m.escorts.map((e) => e.id)), clamped: false });
+    // (Units decide: the night stands for the convoy's incidents, booked against the expectation its card showed.)
+    (out ??= new Map()).set(route.id, { fought, ss: new Set(m.raiders.map((r) => r.id)), dd: new Set(m.escorts.map((e) => e.id)), clamped: false, ...(unitsDecide(g) ? { expect: new Map(m.raiders.map((r) => [r.id, r.expect])) } : {}) });
   }
   return out;
 }
@@ -2667,7 +2696,8 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
           for (const f of raiders) {
             if (f.zone !== z || f.ships.ss <= 0) continue;
             const x = Math.min(f.ships.ss * raidShare(f) * CAUSE.find * p, roomLeft(g, f));
-            const k = Math.min(f.ships.ss, booked(nights, 'ss', f.id, irng.roll(x), x, route.id));
+            // (A fought night is held inside the run of the expectation its card showed, before the hunt; the dice roll on this month's.)
+            const k = Math.min(f.ships.ss, booked(nights, 'ss', f.id, irng.roll(x), night?.expect?.get(f.id) ?? x, route.id));
             noteLost(g, f, k);
             f.ships.ss -= k; f.lost.ss += k; subsLost += k; lost += k;
             loseStars(f, 'ss', k);

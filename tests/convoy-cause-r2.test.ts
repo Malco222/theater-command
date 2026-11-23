@@ -2,10 +2,11 @@
 // 2026 07:26Z on naval-battles/convoy-r2/form.md, under Brian's core theme of 07:11Z and 07:13Z). What a convoy loses
 // and what its escorts sink come from the kit, the aircraft and the work of the ships on the table, the same for every
 // navy; OEG Report 51 only sizes each (data/campaign/convoycause.json). Off, nothing of it is read.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import { createGame, declareWar } from '../src/campaign/game';
-import { CAUSE, FLEETS, NAVY, aswKit, fit, convoyMeeting, convoyWar, huntSubs, huntersIn, incidentRate, laneLoss, navalUpkeep, seaCover, seaLossMul, subScene, zoneOf } from '../src/campaign/navy';
+import { CAUSE, FLEETS, NAVY, aswKit, convoyField, fit, convoyMeeting, convoyWar, huntExpected, huntShareSunk, huntSubs, huntersIn, incidentRate, laneLoss, navalUpkeep, seaCover, seaLossMul, subScene, zoneOf } from '../src/campaign/navy';
+import { carrierRules } from '../src/campaign/air';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { UNITS_STAGE } from '../src/campaign/stage';
@@ -40,6 +41,9 @@ function sea(g: Game, nat: string, zone: string, ships: Partial<Ships>, stance: 
 }
 const give = (g: Game, nat: string, ids: string[]): void => { for (const id of ids) grantTech(g, nat, id); };
 const twin = (g: Game): Game => loadGame(saveGame(g))!;
+const run = (x: number): [number, number] => [Math.floor(x), Math.floor(x) + 1];
+
+afterEach(() => { convoyField.fought = undefined; });
 
 describe('the switch', () => {
   it('is off as shipped, and never reaches a history campaign', () => {
@@ -311,6 +315,105 @@ describe('no nation and no month', () => {
     expect(irish.cover).toBe('shore');
     expect(typeof irish.lost).toBe('number');
     expect(look.seas.reduce((s, x) => s + (x.lost ?? 0), 0)).toBe(g.convoys.atlantic.byEscorts);
+  });
+});
+
+describe('found in review (23 Nov)', () => {
+  it('a month saved part-way plays on as the live one: the hunt cap\'s book is in the save', () => {
+    const g = open(true);
+    give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
+    const boats = sea(g, 'GER', 'natl', { ss: 40 }, 'hunt');
+    sea(g, 'UK', 'natl', { dd: 80 }, 'hunt');
+    sea(g, 'FRA', 'natl', { dd: 80 }, 'hunt');
+    navalUpkeep(g, 'UK');
+    expect(boats.capBook?.turn).toBe(g.turn);
+    const t = twin(g);
+    navalUpkeep(g, 'FRA');
+    navalUpkeep(t, 'FRA');
+    expect(saveGame(t)).toBe(saveGame(g));
+    // (Inside the cap for the whole month, both nations' hunts together.)
+    expect(boats.lost.ss).toBeLessThanOrEqual(Math.ceil(40 * FLEETS.hunt.most) + 1);
+    // Off, nothing is written to a fleet.
+    const off = open(false);
+    const b2 = sea(off, 'GER', 'natl', { ss: 40 }, 'hunt');
+    sea(off, 'UK', 'natl', { dd: 80 }, 'hunt');
+    navalUpkeep(off, 'UK');
+    expect(b2.capBook).toBeUndefined();
+  });
+
+  it('a fought night books against the expectation its card showed, even where the hunt strikes first', () => {
+    const g = open(true);
+    g.flags.convoyBattle = 1;
+    give(g, 'UK', ['sonar', 'asvradar', 'hedgehog', 'escortgroups']);
+    // (Boats on patrol raid with half their time: the hunt's ships take the other half first, before the convoys.)
+    const boats = sea(g, 'GER', 'irish', { ss: 60 }, 'patrol');
+    const esc = sea(g, 'UK', 'wapp', { dd: 30 }, 'escort', 'atlantic');
+    sea(g, 'UK', 'irish', { dd: 80 }, 'hunt', undefined, [esc]);
+    let shown = -1;
+    convoyField.fought = (m) => { const r = m.raiders.find((x) => x.id === boats.id)!; shown = r.expect; return { swing: 1, ss: { [r.id]: run(r.expect)[1] }, dd: {} }; };
+    navalUpkeep(g, 'UK');
+    expect(shown).toBeGreaterThan(0);
+    // (The hunt took boats first, so this month's own expectation is lower than the card's.)
+    expect(boats.lost.ss - (g.convoys.atlantic.byEscorts ?? 0)).toBeGreaterThan(0);
+    expect(g.convoys.atlantic.fought).toBe('field');
+    expect(g.convoys.atlantic.byEscorts).toBe(run(shown)[1]);
+  });
+
+  it('a carrier with no aircraft aboard covers nothing', () => {
+    const g = open(true);
+    give(g, 'UK', ['sonar', 'asvradar']);
+    const cv = sea(g, 'UK', 'natl', { cv: 1, dd: 4 }, 'escort', 'atlantic');
+    // (Her wing ordered ashore: decks whose wing has gone count as the empty decks they are, carriers.ts wingShare.)
+    g.airFleets = g.airFleets.filter((w) => w.ship !== cv.id);
+    cv.bare = { ftr: 12, bmr: 12 };
+    const c = seaCover(g, 'UK', zoneOf(g, 'natl'), 'atlantic');
+    // (Without the carrier rules every deck counts as full, as it does everywhere else.)
+    expect(c.kind).toBe(carrierRules(g) ? 'shore' : 'carrier');
+  });
+
+  it('the research cards say what radar does with the switch: fighters only, not the convoys\' escorts', () => {
+    const eg = techById('earlywarning')!;
+    expect(techRule(eg, open(false), 'UK')).toMatch(/convoy/);
+    expect(techRule(eg, open(true), 'UK')).not.toMatch(/convoy/);
+    expect(techRule(eg, open(true), 'UK')).toMatch(/Fighters over their own sky/);
+  });
+
+  it('the fleet orders\' hunt look-ahead reads the hunt as it is played, and is release 2\'s off', () => {
+    const off = open(false);
+    const q = sea(off, 'GER', 'natl', { ss: 20 }, 'raid');
+    sea(off, 'UK', 'natl', { dd: 40 }, 'hunt');
+    const z = zoneOf(off, 'natl');
+    expect(huntExpected(off, 'UK', z, [q])).toBeCloseTo(20 * huntShareSunk(huntersIn(off, 'UK', z).weight, 20), 12);
+    // On, a raiding boat meets the convoy's escort, not the hunt's ships: the look-ahead counts that, and no more.
+    const g = open(true);
+    const r = sea(g, 'GER', 'natl', { ss: 20 }, 'raid');
+    const e = sea(g, 'UK', 'wapp', { dd: 30 }, 'escort', 'atlantic');
+    sea(g, 'UK', 'natl', { dd: 40 }, 'hunt', undefined, [e]);
+    const h = huntersIn(g, 'UK', z);
+    const air = 20 * huntShareSunk(h.weight, 20) * (h.air! / h.weight);
+    expect(huntExpected(g, 'UK', z, [r])).toBeCloseTo(air + convoyMeeting(g, 'UK', atlantic).raiders.find((x) => x.id === r.id)!.expect, 9);
+  });
+
+  it('the incidents roll on their own key: the escorts\' losses and the hunt are the same with none found', () => {
+    const month = (find: number): Game => {
+      const keep = CAUSE.find;
+      CAUSE.find = find;
+      try {
+        const g = open(true);
+        give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
+        sea(g, 'GER', 'natl', { ss: 300 }, 'raid');
+        const e = sea(g, 'UK', 'wapp', { dd: 200 }, 'escort', 'atlantic');
+        sea(g, 'UK', 'natl', { dd: 60 }, 'hunt', undefined, [e]);
+        navalUpkeep(g, 'UK');
+        return g;
+      } finally { CAUSE.find = keep; }
+    };
+    const a = month(CAUSE.find), b = month(0);
+    expect(a.convoys.atlantic.byEscorts).toBeGreaterThan(0);
+    expect(b.convoys.atlantic.byEscorts).toBe(0);
+    expect(a.convoys.atlantic.escortsLost).toBeGreaterThan(0);
+    expect(a.convoys.atlantic.escortsLost).toBe(b.convoys.atlantic.escortsLost);
+    expect(a.convoys.atlantic.subsLost - a.convoys.atlantic.byEscorts!).toBe(b.convoys.atlantic.subsLost);
   });
 });
 

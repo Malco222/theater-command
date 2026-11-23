@@ -68,7 +68,9 @@ import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type P
 import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
-import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } from '../traits';
+import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
+import { unitsDecide } from '../units';
+import { UNITS_STAGE } from '../stage';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
 import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked, worksName } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
@@ -7081,7 +7083,10 @@ function traitList(nat: string, full = false): string {
   // A dominion (ruling 222, the UI director's words): war on it may bring its mother country in, as far as her own war in Europe allows.
   const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
   const dom = patron && g.nations[patron] ? row('Dominion', '', `War on it may bring ${newsName(g.nations[patron])} in, as far as its war in Europe allows.`) : '';
-  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, traitRule(t, BUDGET.scale))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
+  // (Units decide: no nation's own trait cuts the convoy war; the escorts, aircraft and their kit decide it, navy.ts.)
+  const causes = isOpen(g) ? unitsDecide(g) : UNITS_STAGE;
+  const rule = (t: Trait): string => (causes && t.seaLoss !== undefined ? traitRule({ ...t, seaLoss: undefined }, BUDGET.scale) || 'Not in force: with Units decide, convoys are kept safe by escorts, aircraft and their equipment.' : traitRule(t, BUDGET.scale));
+  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, rule(t))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
 }
 
 /** What a country does best, with every other country's abilities a click away. */

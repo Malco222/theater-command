@@ -134,6 +134,9 @@ export function startOpen(g: Game, wide = true): Game {
   // The yield form (stage.ts YIELD_STAGE): the switch is set as the campaign opens. (A test may set the flag on the
   // game it opens.)
   if (YIELD_STAGE || g.flags.yieldRule === 1) g.flags.yieldRule = 1;
+  // Units decide (release 2, src/campaign/units.ts): set at a campaign's start only, where stage.json switches it on,
+  // and before the opening research, so a later start's staffs take its research rows in their catch-up months.
+  if (UNITS_STAGE) g.flags.unitsDecide = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -166,8 +169,6 @@ export function startOpen(g: Game, wide = true): Game {
   if (CONVOY_STAGE) g.flags.convoyBattle = 1;
   // The honest win chance on land (release 2, auto-resolve fix 1): set at a campaign's start only, where stage.json switches it on.
   if (WINCHANCE_STAGE) g.flags.winChance = 1;
-  // Units decide (release 2, src/campaign/units.ts): set at a campaign's start only, where stage.json switches it on.
-  if (UNITS_STAGE) g.flags.unitsDecide = 1;
   // A neutral's bargains (release 2): only where stage.json switches them on.
   openBargains(g);
   openGovernment(g);

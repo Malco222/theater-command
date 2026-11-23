@@ -566,7 +566,7 @@ const in100 = (x: number): number => Math.round(x * 100);
 function causeWords(id: string): string | null {
   const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
   const kills = `a hunting group sinks the submarine in ${in100(I.groupKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.loneKit)}, against ${in100(I.group)} and ${in100(I.lone)} with depth charges alone`;
-  const air = `submarines in the waters its aircraft reach sink only ${third} of the ships they would`;
+  const air = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
   if (id === 'sonar') return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? 'sea-search radar'} as well, ${air}.`;
   if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air}. Its escorts carry the sets too.`;
   if (id === 'patrolaircraft') return 'Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.';
@@ -578,7 +578,9 @@ function causeWords(id: string): string | null {
 export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
   for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
-  if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
+  // (Units decide: radar no longer adds to the convoys' escorts; the escorts' own sets do, convoy war by cause.)
+  const cause = !!g && unitsDecide(g);
+  if (t.field) out.push(cause && t.field === 'radar' ? `Fighters over their own sky are worth ${pct(RESEARCH.fields.radar.per)} more.` : FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
   // (The two radar steps, with the air campaigns on: what the warning chain and fighter control do, rider b553.)
   const radar = g && nat ? radarWords(g, nat, t.id) : null;
   if (radar) out.push(radar);
@@ -587,7 +589,6 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   const ships = shipWords(t);
   if (ships) out.push(ships);
   // (Units decide: only the convoy system's flat cut stays; the rows of the convoy war by cause say what they do there.)
-  const cause = g && unitsDecide(g);
   const seaLoss = cause && !CAUSE.seaLoss.includes(t.id) ? undefined : t.seaLoss;
   const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss });
   if (rest) out.push(rest);

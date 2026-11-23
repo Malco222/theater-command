@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareOf, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -254,21 +254,24 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
     const pic = fog ? seaPicture(g, z, viewer) : null;
     if (pic) them.total = pic.theirs;
     let surface = 0, subs = 0, reported = 0;
+    const quarry: Fleet[] = [];
     for (const x of g.fleets) {
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
       const k = fog ? fleetKnown(g, x, viewer) : 'exact';
       if (k !== 'exact') { if (k === 'report') reported++; continue; }
       subs += x.ships.ss;
+      if (x.ships.ss > 0) quarry.push(x);
       surface += CLASSES.reduce((n, c) => n + (c === 'ss' ? 0 : x.ships[c]), 0);
     }
     const own = us.total + (here ? 0 : mine);
-    const huntNow = huntShareSunk(huntersIn(g, f.nat, z).weight, subs);
+    // (Read as the hunt reads it: with Units decide, its kit and the boats left to the convoys' escorts, huntExpected.)
+    const huntNow = huntShareOf(g, f.nat, z, quarry);
     // What its own destroyers and carriers would add if it hunted there, counted as the hunt counts them.
     let hunt = huntNow;
     if (subs > 0 && seaWar(g)) {
       const keep = { zone: f.zone, stance: f.stance, lane: f.lane };
       f.zone = z; f.stance = 'hunt'; delete f.lane;
-      hunt = huntShareSunk(huntersIn(g, f.nat, z).weight, subs);
+      hunt = huntShareOf(g, f.nat, z, quarry);
       f.zone = keep.zone; f.stance = keep.stance;
       if (keep.lane !== undefined) f.lane = keep.lane;
     }
