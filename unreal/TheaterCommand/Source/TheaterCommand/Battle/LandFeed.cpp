@@ -890,7 +890,11 @@ namespace LandFeed
 			const bool bHurt = ReadHurt(M, T);
 			if (ReadCarries(M, T, R) || bHurt) Note(Out.Hurt, N);
 		}
-		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point.
+		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point. (Each man noted as moved once, by
+		// a mark a track: a search of the moved so far for each tail, thousands of tails against thousands of moved men,
+		// was 12 ms of a big battle's 31 a piece in the cloud. Release 1.5's Orel stall note, 23 November.)
+		std::vector<uint8_t> MovedNow(R.Tracks.size(), 0);
+		for (const int N : Out.Moved) MovedNow[static_cast<size_t>(N)] = 1;
 		const Json& Tails = Root["tails"];
 		for (size_t K = 0; K + 3 < Tails.Count(); K += 4)
 		{
@@ -909,7 +913,11 @@ namespace LandFeed
 			P.F = Tails.At(K + 3).Num(0.0);
 			T.At.push_back(P);
 			T.bTail = true;
-			if (Out.Moved.empty() || std::find(Out.Moved.begin(), Out.Moved.end(), N) == Out.Moved.end()) Out.Moved.push_back(N);
+			if (!MovedNow[static_cast<size_t>(N)])
+			{
+				MovedNow[static_cast<size_t>(N)] = 1;
+				Out.Moved.push_back(N);
+			}
 		}
 		std::sort(Out.Moved.begin(), Out.Moved.end());
 		// A wreck stays where it was hit; and the spotter pair drawn once (as ReadRecording, on what is fought so far).
