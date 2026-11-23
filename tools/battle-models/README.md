@@ -723,6 +723,7 @@ names its drawing, its licence and its scales.
 | file | what she is | year | crew | she carries |
 | --- | --- | --- | --- | --- |
 | `D520` | the Armée de l'Air's Dewoitine D.520 fighter, from June 1940: khaki and dark earth over light blue-grey, French roundels, the tricolour on her rudder | 1940 | 1 | a 20 mm cannon through her airscrew's hub, four 7.5 mm guns in her wings |
+| `LeO451` | the Liore et Olivier LeO 451 medium bomber of 1939-40: two Gnome-Rhone 14N radials, a glass nose, twin fins; the same coat and roundels, the tricolour on both rudders | 1939 | 4 | a 20 mm cannon at the back of her cabin (`turret.1`), a 7.5 mm gun in her retractable ventral turret (`turret.2`), bombs in her bay |
 
 - **France's marking** (`marks.py`): `FRA`, the roundel (red outside, white, blue in the middle, rings of one width),
   in France's own brighter blue (`FR_BLUE`; `KILL-FRA` is as it was). `FRA-FIN`, the tricolour on her rudder, blue
@@ -736,6 +737,15 @@ names its drawing, its licence and its scales.
 - Her parts are a single-seat fighter's (`plane`, `wing.port`/`starboard`, `tail`, `prop.1`, `prop.1.blur`, `aileron.*`,
   `flap.*`, `elevator.*`, `rudder`); sockets `engine.1`, `gun.1` to `gun.4` (her wing guns), `gun.nose` (the cannon) and
   the usual others; clips a fighter's.
+- **The LeO 451** (`france_leo451.py`) needs no key of her own: a glass nose (`glazed`, `glazed_sill`, `nose_frames`),
+  her pilot's canopy (`hoods`, with `opening` under it), her section drawn in toward her spine (`taper`), twin fins
+  (`fins`), a turret on her back and one let down under her (`dome`, `ball`). `rudder_stripes` on twin fins lays the
+  stripes on both faces of each rudder, each mark on its own rudder (`rudder.port`, `rudder.starboard`; `both` false).
+  Her parts are a twin-engined bomber's (`bombs`, `bay.*`, `prop.1`/`prop.2` and their blurs, `rudder.port`,
+  `rudder.starboard`, `turret.1` and `turret.2` with their `.guns`); sockets `engine.1`, `engine.2`, `turret.1`,
+  `turret.2`, `bombs` and the usual others; clips a bomber's (`fire.turrets`, `bombs_away`, `doors.close`, ...). She has
+  `LeO451Damage`, `LeO451EngineOut` (`damage.MANY_ENGINED`) and `LeO451Codes` (the `number` style: France is among
+  "everyone else" in codes.py).
 
 ### Battle damage: bullet holes and flak holes
 

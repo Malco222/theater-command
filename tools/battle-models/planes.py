@@ -42,6 +42,7 @@ import carrier_hellcat
 import carrier_wildcat
 import fighters
 import france_d520
+import france_leo451
 import fitout
 import rigid
 from rigid import Model, smooth
@@ -536,6 +537,8 @@ def land(module):
 
 # (the D.520, the Armee de l'Air's best fighter of June 1940: her numbers are in france_d520.py)
 land(france_d520)
+# (the LeO 451, her medium bomber of 1939-40: france_leo451.py)
+land(france_leo451)
 
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
@@ -1834,9 +1837,9 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "D520": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "D520": 1, "LeO451": 4, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
-ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "LeO451": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -2107,14 +2110,15 @@ class Facts:
     """What the clips and the films need to know about a machine."""
 
 
-def rudder_flag(m):
+def rudder_flag(m, part="rudder"):
     """Where her owner's flag goes on a plain machine's rudder, both sides of it. The art director, 2026-11-18, for
     Brian's "have the country logo show on the tanks and planes just like the major nations": the game paints the
     stripes the unit table gives the country (`fin`: dir h, bands from top to bottom; dir v, from the leading edge
     back). `quad` is the flag's four corners on the rudder's side in x and z (leading-bottom, trailing-bottom,
     trailing-top, leading-top): most of the rudder, clear of its edges and of its tip. `at` and `radius` are its
-    middle and half its height, for a game that only draws a square there. It rides the part `rudder`."""
-    pi = m.part_at["rudder"]
+    middle and half its height, for a game that only draws a square there. It rides the part `rudder` (or the one
+    named: a twin-finned machine's rudder.port and rudder.starboard)."""
+    pi = m.part_at[part]
     edges = [(Vector(m.verts[f[i]]), Vector(m.verts[f[(i + 1) % len(f)]])) for f, fp in zip(m.faces, m.fpart) if fp == pi for i in range(len(f))]
     z0, z1 = min(min(a.z, b.z) for a, b in edges), max(max(a.z, b.z) for a, b in edges)
 
@@ -2126,7 +2130,7 @@ def rudder_flag(m):
     (lead_b, trail_b), (lead_t, trail_t) = across(zb), across(zt)
     edge = 0.03
     quad = [[lead_b - edge, zb], [trail_b + edge, zb], [trail_t + edge, zt], [lead_t - edge, zt]]
-    return {"tag": "*FIN", "place": "fin", "part": "rudder", "at": [round(sum(q[0] for q in quad) / 4.0, 3), 0.05, round(0.5 * (zb + zt), 3)],
+    return {"tag": "*FIN", "place": "fin", "part": part, "at": [round(sum(q[0] for q in quad) / 4.0, 3), 0.05, round(0.5 * (zb + zt), 3)],
             "radius": round(0.5 * (zt - zb), 3), "quad": [[round(q[0], 3), round(q[1], 3)] for q in quad], "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True}
 
 
@@ -2738,6 +2742,21 @@ def convert(name, fine=True):
         #  back), laid where a plain machine's flag goes; the mark carries its bands, as the unit table's `fin` gives them)
         stripe_tag, stripes = s["rudder_stripes"]
         m.marks.insert(len(m.marks) - n_code, dict(rudder_flag(m), tag=stripe_tag, bands={"dir": "v", "bands": list(stripes)}))
+    elif s.get("rudder_stripes") and s.get("fins"):
+        # (twin fins: the stripes on both faces of each rudder, each mark riding its own rudder; the file's y is to the
+        #  right, so her port rudder stands at -y in it)
+        stripe_tag, stripes = s["rudder_stripes"]
+        for rudder_part in ("rudder.port", "rudder.starboard"):
+            if rudder_part not in m.part_at:
+                continue
+            flag_ = rudder_flag(m, rudder_part)
+            pi_ = m.part_at[rudder_part]
+            ys_ = [m.verts[i][1] for f, fp in zip(m.faces, m.fpart) if fp == pi_ for i in f]
+            side_ = -0.5 * (min(ys_) + max(ys_))
+            hand_ = 1.0 if side_ > 0.0 else -1.0
+            for face_ in (hand_, -hand_):
+                m.marks.insert(len(m.marks) - n_code, dict(flag_, tag=stripe_tag, bands={"dir": "v", "bands": list(stripes)}, both=False,
+                                                           at=[flag_["at"][0], round(side_ + 0.05 * face_, 3), flag_["at"][2]], facing=[0.0, face_, 0.0]))
     m.tally = tally_of(name, s, hull, role, G, fins, fine, m)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
@@ -3129,4 +3148,4 @@ def torpedo(fine=True):
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
-                                                                  "Amerikabomber", "B29", "Bomber", "D520")}
+                                                                  "Amerikabomber", "B29", "Bomber", "D520", "LeO451")}
