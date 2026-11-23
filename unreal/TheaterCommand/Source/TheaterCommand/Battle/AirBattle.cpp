@@ -3725,8 +3725,10 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 		{ TEXT("P40"), TEXT("Warhawk") }, { TEXT("B-17"), TEXT("B17") }, { TEXT("P-40"), TEXT("Warhawk") },
 		// (the three fighters the modeller had made that the battle could not find by the names a record gives them)
 		{ TEXT("F6F"), TEXT("Hellcat") }, { TEXT("Me 262"), TEXT("Me262") }, { TEXT("C.202"), TEXT("C202") }, { TEXT("MC.202"), TEXT("C202") },
-		// (the land bombers: Japan's two, and Italy's, which stands in as the plain bomber until her file is in)
+		// (the land bombers: Japan's two, and Italy's, her rebuilt file in since 23 November)
 		{ TEXT("G3M"), TEXT("Nell") }, { TEXT("SM.79"), TEXT("SM79") },
+		// (the modeller's four of 23 November, by the marks the rules give them: the rules' own names are the files')
+		{ TEXT("Pe-2"), TEXT("Pe2") }, { TEXT("LeO 451"), TEXT("LeO451") }, { TEXT("D.520"), TEXT("D520") },
 	};
 	static TMap<FString, FString> Found;
 	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b"));
@@ -4483,7 +4485,15 @@ namespace AirParts
 				}
 				const double Began = FPlatformTime::Seconds();
 				const AirLight::Made Made = AirLight::Lighten(In, Most);
-				const int32 Count = static_cast<int32>(Made.Tones.size());
+				// (one it could not take down to what was asked is one whose far shape it cannot read, and it comes out
+				// torn (the rebuilt SM.79's of 23 November, 1,524 of 1,500, her fuselage gone to spikes): none is made,
+				// and her copies past LightFromM keep her far shape)
+				const int32 Count = Made.Kept > Most ? 0 : static_cast<int32>(Made.Tones.size());
+				if (Count == 0)
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: %s's light shape left unmade (%d triangles kept of %d asked): its copies past %.0f m keep its far shape."),
+						*ShapeKey, Made.Kept, Most, AirLight::LightFromM);
+				}
 				Light.Points.Reserve(Count);
 				Light.Normals.Reserve(Count);
 				Light.Colors.Reserve(Count);
@@ -4494,9 +4504,12 @@ namespace AirParts
 					Light.Normals.Add(FVector(Made.Normals[I], Made.Normals[I + 1], Made.Normals[I + 2]));
 					Light.Colors.Add(ColourOf(Made.Tones[static_cast<size_t>(K)]));
 				}
-				Light.Triangles.Append(Made.Triangles.data(), static_cast<int32>(Made.Triangles.size()));
-				UE_LOG(LogTheater, Display, TEXT("Air battle: %s's light shape for its copies past %.0f m, %d triangles from its far shape's %d (%d asked), in %.1f ms."),
-					*ShapeKey, AirLight::LightFromM, Made.Kept, Far->Triangles.Num() / 3, Most, (FPlatformTime::Seconds() - Began) * 1000.0);
+				if (Count > 0)
+				{
+					Light.Triangles.Append(Made.Triangles.data(), static_cast<int32>(Made.Triangles.size()));
+					UE_LOG(LogTheater, Display, TEXT("Air battle: %s's light shape for its copies past %.0f m, %d triangles from its far shape's %d (%d asked), in %.1f ms."),
+						*ShapeKey, AirLight::LightFromM, Made.Kept, Far->Triangles.Num() / 3, Most, (FPlatformTime::Seconds() - Began) * 1000.0);
+				}
 			}
 		}
 		// (kept empty where there is none, so that it is not looked for again)

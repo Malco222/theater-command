@@ -1146,3 +1146,40 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    also stands the plain machine for the C.202, Nell and Betty, so that the map's timing runs differ only by the new.
    Look for: a level Kate at Pearl with her bomb and no torpedo, a torpedo Kate with her torpedo and no bomb; a Nell
    with her bombs under her and no torpedo; fire from a Betty's nacelle, not from her wing root.
+
+49. **The modeller's planes of 23 November in the game: the Wellington, the Pe-2, the LeO 451, the D.520, the rebuilt
+   SM.79 and the rebuilt Betty** (Brian's yes, 06:14Z 23 November: every nation's own aircraft; item 48 is FLY IT
+   YOURSELF, on release 1.6's line). Their files are in Content/Models byte for byte from battle-models/air, each passed
+   by the art director. On the campaign map, as the rules' fighterOf and bomberOf (doctrine.ts; the air rules thread's
+   4e164552 and 78e334bf): the Commonwealth's bombers are the Wellington until the Lancaster of 1942; the Soviet
+   bombers the Pe-2 from 1941 (a light bomber: it waits on no heavy bomber research; the SB, the plain bomber, before);
+   France's fighters the D.520 and her bombers the LeO 451 from 1940 (the MS.406 and the Amiot and Bloch, the plain
+   machines, before); Italy's bombers the SM.79 from the first. Each has a row in the map's aircraft table (far shape
+   aloft, its framing, its title). In the battle the rules name them by their files; the record's marks Pe-2, LeO 451
+   and D.520 find them too (ModelFor). Their engines (AirShow ShapeOf) are where their files' sockets say fire and
+   smoke start, about the box's middle the scene draws them by (the SM.79's three moved to her new file's: the wings'
+   1.3 m inboard). The twins' drone already took them (item 47).
+   - **Airscrews:** the finder (AirScrew::Find) now also takes a piece painted blade that is no blade to read on its
+     own, made apart from the blade it wraps, with the screw whose disc holds all of it (a quarter of the radius either
+     side of the disc): the Wellington's painted tip bands, 300 of her 876 blade triangles, were left standing still in
+     the turning disc. Every other model's screws are as before.
+   - **The Betty's torpedo run:** her rebuilt file hangs her torpedo half out of her belly with her bay's doors off.
+     The loader (FMiniatureMesh::Sculpted) now also leaves out whatever her file's own load clip hides (load.torpedo
+     or load.bombs, each track's part scaled to nothing): on a torpedo run her bombs and both doors, on a bombing run
+     her torpedo. The Kate, the Devastator and the Nell leave out exactly what they did (their clips hide only the
+     other load).
+   - **The SM.79's light shape:** her far shape's glazing (384 of its 669 open seams, about her cockpit and window
+     band) leaves the light-shape maker (item 42) short of its 1,500 triangles (1,524) and the shape it makes torn. The
+     maker now makes none for a shape it cannot take down to what was asked: her copies past 1.5 km keep her far shape,
+     and the log says so ("Air battle: SM79:ITA's light shape left unmade ..."). The modeller is asked for a far shape
+     whose glazing is cut into its skin; the game takes the new file as it comes. Until then the air test's light-shape
+     check fails for her alone (31 of 32 pass).
+   - `-TheaterOldVehicles` stands the plain machine for all of them on the map, as for the C.202, Nell and Betty.
+   - The Wellington's near shape is the heaviest in the game (113k triangles: her fabric's ridges are real shape; the
+     B-17's is 23k, the Betty's 85k); it is drawn only within 300 m of the eye, as every near shape is.
+   Look for: an RAF raid of 1940 or 1941 in Wellingtons, not the plain twin, her airscrews' yellow tips turning with
+   them; fire from a nacelle, not a wing root; her bay doors opening and her stick falling from the bay; a French
+   escort of D.520s over LeO 451s; Soviet Pe-2s with the Yak; Italy's SM.79s with three turning airscrews; a Betty on a
+   torpedo run with no doors and her torpedo half out; the frame rate with a box of Wellingtons close to the eye.
+   Not yet: a torpedo aircraft keeps her torpedo drawn after she drops it (the Kate, Devastator, Nell and Betty, as
+   before this item); the racked bombs are taken away when they fall, the slung torpedo is not.

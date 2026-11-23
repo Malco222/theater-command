@@ -783,6 +783,37 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 							Unflown.Add(K);
 						}
 					}
+					// (and whatever her file's own load clip hides, load.torpedo or load.bombs, each track's part scaled to
+					// nothing: the rebuilt Betty's (the aircraft modeller, 23 November 08:53Z) hides her bay's doors with
+					// her bombs, her torpedo hanging half out of her belly where they were)
+					const TSharedPtr<FJsonObject>* Clips = nullptr;
+					const TSharedPtr<FJsonObject>* Load = nullptr;
+					const TArray<TSharedPtr<FJsonValue>>* Tracks = nullptr;
+					if (File->TryGetObjectField(TEXT("clips"), Clips) && (*Clips)->TryGetObjectField(bTorpedoLoad ? TEXT("load.torpedo") : TEXT("load.bombs"), Load)
+						&& (*Load)->TryGetArrayField(TEXT("tracks"), Tracks))
+					{
+						for (const TSharedPtr<FJsonValue>& Track : *Tracks)
+						{
+							if (!Track.IsValid() || Track->Type != EJson::Object)
+							{
+								continue;
+							}
+							const TSharedPtr<FJsonObject> Each = Track->AsObject();
+							const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+							double PartAt = -1.0;
+							if (!Each.IsValid() || !Each->TryGetNumberField(TEXT("part"), PartAt) || !Each->TryGetArrayField(TEXT("scale"), Keys) || Keys->Num() == 0)
+							{
+								continue;
+							}
+							// (its last key's scale: the clip holds where it ends)
+							const TArray<TSharedPtr<FJsonValue>>* Last = nullptr;
+							if ((*Keys).Last()->TryGetArray(Last) && Last->Num() >= 2 && (*Last)[1]->AsNumber() <= 0.01
+								&& PartAt >= 0.0 && static_cast<int32>(PartAt) < PartNames->Num())
+							{
+								Unflown.Add(static_cast<int32>(PartAt));
+							}
+						}
+					}
 				}
 				for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
 				{

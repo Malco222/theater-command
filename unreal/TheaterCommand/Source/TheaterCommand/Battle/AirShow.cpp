@@ -69,7 +69,11 @@ namespace AirShow
 		// middle of her box as the scene draws her: the Betty, the Nell, and the SM.79's three, the nose her second)
 		else if (Model == "G4M" || Model == "Betty") { S.Span = 25.0; S.Long = 20.0; Engines({ -3.3, 3.3 }, 5.2, -1.2); Bomber(20.0, 1.8); }
 		else if (Model == "G3M" || Model == "Nell") { S.Span = 25.0; S.Long = 16.5; Engines({ -3.0, 3.0 }, 4.4, -0.3); Bomber(16.5, 1.6); }
-		else if (Model == "SM79" || Model == "SM.79") { S.Span = 21.2; S.Long = 16.2; S.Engines = { Vec(4.0, -3.9, -0.6), Vec(7.6, 0.0, -0.2), Vec(4.0, 3.9, -0.6) }; Bomber(16.2, 1.8); }
+		// (the modeller's twins of 23 November, the same way: the Wellington, the Pe-2 and the LeO 451)
+		else if (Model == "Wellington") { S.Span = 26.3; S.Long = 19.7; Engines({ -2.9, 2.9 }, 5.9, -0.7); Bomber(19.7, 1.9); }
+		else if (Model == "Pe2" || Model == "Pe-2") { S.Span = 17.2; S.Long = 12.7; Engines({ -2.3, 2.3 }, 4.3, -0.3); Bomber(12.7, 1.4); }
+		else if (Model == "LeO451" || Model == "LeO 451") { S.Span = 22.5; S.Long = 17.2; Engines({ -2.75, 2.75 }, 6.0, -0.7); Bomber(17.2, 1.6); }
+		else if (Model == "SM79" || Model == "SM.79") { S.Span = 21.2; S.Long = 16.2; S.Engines = { Vec(5.5, -2.6, -0.7), Vec(7.1, 0.0, -0.15), Vec(5.5, 2.6, -0.7) }; Bomber(16.2, 1.8); }
 		else if (Model == "B5N" || Model == "B6N") { S.Span = 15.5; S.Long = 10.3; Engines({ 0.0 }, 4.4, 0.0); Bomber(10.3, 1.2); }
 		else if (Model == "D3A" || Model == "D4Y") { S.Span = 14.4; S.Long = 10.2; Engines({ 0.0 }, 4.4, 0.0); Bomber(10.2, 1.2); S.bDive = true; }
 		else if (Model == "SBD" || Model == "SB2C" || Model == "Skua") { S.Span = 12.7; S.Long = 10.1; Engines({ 0.0 }, 4.3, 0.0); Bomber(10.1, 1.2); S.bDive = true; }
@@ -82,8 +86,9 @@ namespace AirShow
 		else
 		{
 			// Fighters: one engine in the nose.
-			S.Span = Model == "Zero" ? 12.0 : Model == "Warhawk" ? 11.4 : Model == "Spitfire" ? 11.2 : Model == "Hurricane" ? 12.2 : Model == "Mustang" ? 11.3 : Model == "Wildcat" ? 11.6 : Model == "Bf109" ? 9.9 : 10.6;
-			S.Long = Model == "Bf109" ? 8.6 : Model == "Zero" ? 9.1 : 9.4;
+			const bool bD520 = Model == "D520" || Model == "D.520";
+			S.Span = Model == "Zero" ? 12.0 : Model == "Warhawk" ? 11.4 : Model == "Spitfire" ? 11.2 : Model == "Hurricane" ? 12.2 : Model == "Mustang" ? 11.3 : Model == "Wildcat" ? 11.6 : Model == "Bf109" ? 9.9 : bD520 ? 10.2 : 10.6;
+			S.Long = Model == "Bf109" ? 8.6 : Model == "Zero" ? 9.1 : bD520 ? 8.8 : 9.4;
 			Engines({ 0.0 }, S.Long * 0.42, 0.0);
 		}
 		if (!S.Stations.count("cockpit")) S.Stations["cockpit"] = Vec(bFighter ? -0.5 : S.Long * 0.35, 0.0, 1.0);
