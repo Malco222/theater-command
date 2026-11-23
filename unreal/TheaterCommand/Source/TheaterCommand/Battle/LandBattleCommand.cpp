@@ -1511,6 +1511,24 @@ void ALandBattle::TickScript()
 		{
 			return;
 		}
+		// (the night patrol's button stands only while men on foot are in his hand: one picked up, as his click on its
+		// card would, where none is; the Mac's walk of 23 November 00:39Z had placed them all and put them down)
+		if (FLandLive::RuleNow(TEXT("patrol")) && FLandLive::RuleNow(TEXT("hide")) && Clip.Waiters().empty())
+		{
+			const int32 OnFoot = LandScript::Mine(Clip, "inf", {});
+			if (OnFoot >= 0)
+			{
+				Clip.Pick(OnFoot, false);
+				Say(FString::Printf(TEXT("%s taken in hand for the night patrol"), *NameOf(OnFoot)));
+			}
+		}
+		ScriptNext(8);
+		return;
+	case 8:
+		if (Since < 1.0)
+		{
+			return;
+		}
 		// (the night patrol's button, pressed as his click would press it, while he places his army: the Mac's
 		// click-through of the Battle rules card's night patrol, 22 November)
 		if (!FLandLive::RuleNow(TEXT("patrol")) || !FLandLive::RuleNow(TEXT("hide")))
