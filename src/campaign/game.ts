@@ -38,6 +38,7 @@ import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
+import winData from '../../data/campaign/winchance.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
@@ -1072,6 +1073,21 @@ export const chanceOn = (odds: number, dice: [number, number]): number => Math.m
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** The odds at which an attack is an even chance. */
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
+/** The honest win chance on land (release 2, auto-resolve fix 1; data/campaign/winchance.json): the record's luck in the field. */
+const WIN = winData as unknown as { field: [number, number]; prepared: number };
+/** True in a grand campaign opened with the honest win chance on land (stage.json 'winChance'). */
+export const winChanceOn = (g: Game): boolean => g.flags.winChance === 1;
+/**
+ * The run of the day's luck an attack in the field is decided by, with the honest win chance on: the record's, fitted
+ * over combat power, so that the card's odds (which count training, doctrine, supply and tech) carry the ground as often
+ * as like odds did in the record. A line dug in and fed shrinks the whole run by the prepared share.
+ */
+/** What the luck's low end says of sure odds, in words: with the record's luck no odds make an attack sure. */
+export const sureWords = (dice: [number, number]): string => (dice[0] > 0 ? `nothing is sure under ${(1.2 / dice[0]).toFixed(1)} to 1` : 'no odds make it sure');
+export const luckOf = (prepared: number): [number, number] => {
+  const f = 1 - WIN.prepared * Math.max(0, Math.min(1, prepared));
+  return [WIN.field[0] * f, WIN.field[1] * f];
+};
 /** True on open desert with no fort (ruling 165): rock under a thin layer of sand, so fieldworks there come a month late. */
 export const digsLate = (r: Region): boolean => r.terrain === DESERT.terrain && !r.fort;
 /** Months of works a dug-in corps has to its name, up to the months they take to finish (the grand campaign). Attacks wear them down. */
@@ -1134,6 +1150,8 @@ export interface Assessment {
   defenders: Corps[];
   /** The run of the day's luck: 0.8 to 1.2 in the open, wider and against the attacker in the streets of a town or on a prepared defence. */
   dice: [number, number];
+  /** With the honest win chance (release 2): today's run of luck, read at the same share of the way as the day's throw, for what the day costs. Absent, the dice are today's. */
+  luck?: [number, number];
   /** The share of the defence that is dug in and in supply, less what the attacker's guns have broken up (the grand campaign): 0 to 1. */
   prepared: number;
   /** How old the works of the dug-in defenders are, in months, up to the months they take to finish (the grand campaign; 0 where nobody is dug in). */
@@ -1491,8 +1509,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // And tanks break into a line that has no armour of its own to meet them.
   const pierced = armorShock ? DEFENCE.prepared.armour * (at ? 1 - at.strength : 1) : 0;
   const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - mortar) * (1 - caught) * (1 - pierced) : 0;
-  const dice: [number, number] = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]]
+  const today: [number, number] = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]]
     : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
+  // With the honest win chance (release 2), an attack in the field is decided by the record's wider luck; today's run
+  // still sets what the day costs (resolveBattle). Towns keep today's luck, and so do guns caught alone (below).
+  let dice: [number, number] = winChanceOn(g) && !town ? luckOf(prepared) : today;
   // The town's own guard stands with whoever is inside. Where nobody is inside, it fights beside the army in the field,
   // behind its walls, and the town falls with the field (ruling 232): the fortress works, where they already stand
   // against every attacker, are not counted for it twice.
@@ -1682,7 +1703,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const lost = [(soften || mortar) && prepared < 1 ? `${worked} worked LINE over` : '', caught ? 'the new offensive has caught LINE off balance' : '', pierced ? broke : ''].filter(Boolean).map((t, i) => t.replace('LINE', i ? 'it' : 'the line'));
     const cover = dugD > 0 ? Math.round((DUG_IN - 1) * Math.min(1, works) * 100) : 0;
     const luck = prepared > 0.005
-      ? `The day runs against the attack: an even chance takes about ${evenOdds(dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`
+      ? `The day runs against the attack: an even chance takes about ${evenOdds(dice).toFixed(1)} to 1, and ${sureWords(dice)}. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`
       : defenders.some((d) => d.dug && !d.supplied && !fortRow(g, d)) && !defenders.some((d) => d.dug && (d.supplied || fortRow(g, d))) ? 'Cut off from supply, the line is no better than open ground on the day' : 'On the day the line is no better than open ground';
     const after = wear >= 0.05 ? `. Won or lost, this attack takes ${wear >= 0.95 && wear < 1.05 ? 'a month' : `${Math.round(wear * 10) / 10} months`} off the works${wear < works - 0.05 ? '' : ', which leaves nothing of them'}` : '';
     lines.push({
@@ -1824,7 +1845,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // are overrun as guns are.)
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art' || isTeam(c)) && defenders.every((c) => c.kind === 'art' || c.kind === 'eng' || isTeam(c));
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
+  if (overrun) dice = today;
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -2083,6 +2105,13 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
     for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight;
     return { ours: Math.round(ours), theirs: Math.round(theirs), share: all > 0 ? theirs / all : 0 };
   };
+  if (a.luck) {
+    // The honest win chance (release 2): the day is won on the wide run's share past the bar, and billed at the same share of today's run.
+    const [d0, d1] = a.dice, [l0, l1] = a.luck;
+    const bar = Math.max(0, Math.min(1, (1.2 / Math.max(1e-6, odds) - d0) / (d1 - d0)));
+    const billAt = (s: number): number => Math.max(1e-6, odds * (l0 + (l1 - l0) * s));
+    return { chance: chanceOn(odds, a.dice), won: bar < 1 ? at(billAt((bar + 1) / 2), true) : null, lost: bar > 0 ? at(billAt(bar / 2), false) : null };
+  }
   const lo = Math.max(1e-6, odds * a.dice[0]), hi = Math.max(lo, odds * a.dice[1]);
   return {
     chance: chanceOn(odds, a.dice),
@@ -2155,16 +2184,24 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const overrun = !!a.overrun;
   // The staff's roll is thrown on the field too: it sets the odds an army beaten on the field is billed at (b476(2)), and
   // the luck of the battles after it is what it would have been had the staff settled this one.
-  const rolled = a.odds * dice.range(a.dice[0], a.dice[1]);
+  // With the honest win chance (release 2) the throw is a share of the way between the wide run's ends, and the same
+  // share of today's run sets what the day costs (losses, order, morale, the level of the result): the bill at given
+  // odds is what it was, and only who carries the ground follows the record.
+  const throwAt = a.luck ? dice.range(0, 1) : 0;
+  const rolled = a.luck ? a.odds * (a.dice[0] + (a.dice[1] - a.dice[0]) * throwAt) : a.odds * dice.range(a.dice[0], a.dice[1]);
+  const billed = a.luck ? a.odds * (a.luck[0] + (a.luck[1] - a.luck[0]) * throwAt) : rolled;
   const R = opts.fought ?? rolled;
+  // (A field fought out is billed at its own result's share of the way, read in today's run.)
+  const RL = opts.fought === undefined ? billed
+    : a.luck ? a.odds * (a.luck[0] + (a.luck[1] - a.luck[0]) * clamp((opts.fought / Math.max(1e-6, a.odds) - a.dice[0]) / (a.dice[1] - a.dice[0]), 0, 1)) : opts.fought;
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
-  const defFrac = defenceLoss(R);
+  const defFrac = defenceLoss(RL);
   // Fighting from house to house costs the attackers more.
   // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
   const ready = town ? 0 : a.prepared;
-  const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+  const attFrac = attackLoss(RL) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
@@ -2176,7 +2213,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const attPart = (c: Corps, i: number, w = attW[i]): number => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
   // The bill an army beaten on the field pays is the rules' own at the staff's roll, the odds SEND THEM IN uses, never
   // the field's: the dice set the odds and the player's hand the result (the design director, b476(2)).
-  const attPlain = (c: Corps): number => attackLoss(rolled) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  const attPlain = (c: Corps): number => attackLoss(billed) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
   // An army that pulled out after contact and lost the day pays that bill times its bar squared, or its field loss (b474).
   const pulled = (s: 'att' | 'def'): number | null => (opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null);
   const attOut = pulled('att');
@@ -2187,7 +2224,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   attackers.forEach((c, i) => {
     const before = men(c);
     c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
-    c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
+    c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
     attU[i].lost = before - men(c);
@@ -2198,11 +2235,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
-  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
   const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   // The same result at the staff's roll (b476(2)).
-  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[rolled >= 2 ? 1 : 0] : 1;
-  const defPlain = (c: Corps): number => defenceLoss(rolled) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
+  const defPlain = (c: Corps): number => defenceLoss(billed) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   const defOut = pulled('def');
   const defK = !opts.field ? 1
     : opts.field.broke === 'def' && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def)
@@ -2212,7 +2249,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
     c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
-    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
+    c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
     defU[i].lost = before - men(c);
@@ -2229,12 +2266,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (a.weight > 0) c.blows = Math.min(DEFENCE.tired.most, (c.blows ?? 0) + a.weight);
     }
   }
-  moraleBattle(g, attackers, defenders, R, win, bled, enemyCapital);
+  moraleBattle(g, attackers, defenders, RL, win, bled, enemyCapital);
   // Whoever fights an army learns what it is made of: each side has identified the other's corps.
   identify(g, defenders, attNat);
   for (const nat of new Set(defenders.map((c) => c.nat))) identify(g, attackers, nat);
 
-  const level: VictoryLevel = R >= 3 ? 'Heroic victory' : R >= 2 ? 'Decisive victory' : R >= 1.2 ? (attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : R >= 0.8 ? 'Close defeat' : 'Decisive defeat';
+  // (Who carried the ground is the throw's; how far, today's run's. Off, they are one and the same.)
+  const level: VictoryLevel = win ? (RL >= 3 ? 'Heroic victory' : RL >= 2 ? 'Decisive victory' : attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : RL >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
@@ -2321,7 +2359,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       // as a block of its own (the coordinator's ruling, 22 November): it pays the share its side lost there, as the corps
       // beside it are held to (ruling 226(6)), so the after card's headline and its field line agree (b464).)
       const onField = inField && opts.field ? (opts.field.corps[guardForce(target)] !== undefined ? opts.field.def : null) : null;
-      const share = onField !== null ? clamp(onField, 0, 1) : clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
+      const share = onField !== null ? clamp(onField, 0, 1) : clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, RL), 0.05, 0.6);
       const lost = Math.round(watchMen * share);
       guardAfter(g, target, share);
       defLost += lost;

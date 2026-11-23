@@ -1,0 +1,10 @@
+{
+  "_about": "The honest win chance on land (release 2, auto-resolve fix 1; stage.json 'winChance'). An attack in the field throws one luck, a share of the way between 'field' low and high, times the card's odds, and carries the ground at 1.2 or better: the chance is (high - 1.2/odds) / (high - low). The same share of the way between today's luck (0.8 to 1.2, wider against a prepared line) sets the losses, the order, the morale and the level of the victory, so what an attack costs at given odds is what it cost before. Towns and guns caught alone keep today's luck.",
+  "_field": "Fitted to the record over combat power (the design director, 23 November 2026 07:27Z; the historian's attack-success-by-force-ratio.md, section 5): the record's men ratio times the Germans' measured edge for each matchup, at the middles of the recalled ranges (over the Western Allies, ETO 1944 and the Americans in Italy, 1.35; over the Soviets, 1943, 2.5), 17 cells, 457 engagements, least squares weighted by cases (rules-builder/release2/win-chance/fit_cp.py; re-run when the historian has read Dupuy's edges, and the pair moves with them). On the card: 1 to 1 wins 56%, 1.5 to 1 71%, 2 to 1 78%, 3 to 1 85%, 5 to 1 91%, 10 to 1 96%; no odds make it sure, and nothing under 0.44 to 1 wins. The card already counts quality (training, doctrine, supply, tech), so the luck is the record's luck once quality is counted: units decide, never the date or the flag.",
+  "field": [
+    0.0,
+    2.74
+  ],
+  "_prepared": "Against a line that is dug in and fed the whole range shrinks by this share of the prepared part of the defence: today's prepared luck moves the even chance by the same 15% (0.5-1.2 against 0.8-1.2).",
+  "prepared": 0.15
+}
