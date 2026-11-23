@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of da2ce066 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 456273ba 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -63551,6 +63551,7 @@
     if (COMMONWEALTH2.has(nat)) return design >= 1940 ? "Spitfire" : "Hurricane";
     if (nat === "USA") return design >= 1944 ? "Mustang" : "Warhawk";
     if (nat === "SOV") return design >= 1942 ? "Yak" : `Fighter:${nat}`;
+    if (nat === "ITA") return design >= 1942 ? "C202" : `Fighter:${nat}`;
     if (nat === "JAP" || nat === "JPN") return "Zero";
     return `Fighter:${nat}`;
   }
@@ -67763,7 +67764,7 @@
     return dated2?.crew ?? F.crews[model] ?? F.crews[model.split(":")[0]] ?? F.crews.Bomber;
   }
   function coolOf(model) {
-    if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|Il2|Pe2|Whitley)/.test(model)) return "liquid";
+    if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|Il2|Pe2|Whitley)/.test(model)) return "liquid";
     if (/^(Fighter:FRA|Bomber:SOV)$/.test(model)) return "liquid";
     return "radial";
   }
