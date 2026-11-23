@@ -403,6 +403,8 @@ private:
 		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
 		int32 BankCopy = -1, BankSlot = -1;
 		float BankFrame[12] = {};
+		/** Effects (R2): his crowd mesh's number when his triangles were made (LandMen::Crowd::MeshNo: a gore fall swaps it). */
+		uint32 MeshNo = 0;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()

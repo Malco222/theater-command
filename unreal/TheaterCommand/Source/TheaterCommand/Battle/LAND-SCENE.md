@@ -626,6 +626,38 @@ for byte, with the switch off).
 - **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
   `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
 
+## Shell and tank hits take limbs off (release 2, off until passed)
+
+Brian, 22 November: "make more graphic animations if a guy gets shot or blown up", "with limbs coming off"; and the
+effects brief of 23 November: shell and tank hits throw men and take limbs off. Behind `-TheaterLandGore`. Off: no twin
+is read and every man falls as before (the cloud test plays its battle with the twins added and the switch off, fall
+for fall and skin for skin the same as with none).
+
+- **The twins.** The soldiers thread's gore twins, `soldier_<ARMY>_gore.json` beside each file in
+  `Content/Models/Soldiers`: the same bones, the skin split at the eight cuts (shoulder, elbow, hip, knee, left and
+  right) with the stump and limb caps hidden inside the body till a limb goes, the paints wound, bone and blood, and the
+  deaths thread's gore falls (`deaths_gore[stance][kind]`: `die_blast_a` to `d`, thrown with a limb gone;
+  `die_arm_off_a`, `b`; `die_leg_off_a`, `b`), whose cut bone flies and lands on its own move track. `ALandBattle` reads
+  the twin of each file it read, when the switch is on, and gives it to the crowd (`LandMen::Crowd::AddGore`), which keeps
+  the twin's mesh, faces and helmets with the file's own clips and sockets, the gore falls after them, so a man swapped
+  to it mid-battle keeps every clip number he had. A twin with no gore falls is passed over, and said in the log.
+- **Who.** A man killed by a field gun's or a howitzer's shell, a tank's gun, a mortar's bomb or a grenade
+  (`KillWeapon`), by how far he stood from its burst (the round's x, y, as the drill writes a shell's): 0.55, 0.5, 0.45
+  and 0.3 of them at the burst, falling away to none at 12, 10, 8 and 4 m; a man lying or in cover half that. His own
+  dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to his file's twin
+  (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore falls by the same
+  weights as any fall (a shell's: thrown, mostly). A replay from the start gives him his own file back.
+- **The scene.** His mesh's number changes at the swap (`Crowd::MeshNo`); `DrawMen` then makes his triangles and
+  colours again, as for a new level (`FManDrawn::MeshNo`). His fall's `limb_off` events come with the rest of the men's
+  (`Crowd::Events`, at the stump's socket); no blood is drawn from them yet (Brian has not ruled on blood).
+- **Cost.** A gored man is posed and skinned as any falling man; at rest he is frozen as any body. The twins are read
+  only with the switch on (about 6 MB of json each).
+- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above, and
+  `gore_falls.ppm`, six gored men from the hit to rest. Pictures: `/mnt/project-files/battle-fx/gore/`.
+- **Owed.** Twins made from the soldier files as they are now (the ones made on 22 November predate the faces' and
+  eyes' rebuild, so a man would change face as he is struck), and twins with gore falls for every army (today only the
+  German and the Americans'; the British, French, Polish and Soviet twins have no gore falls yet).
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as
