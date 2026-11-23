@@ -738,7 +738,10 @@ namespace LandFieldPicture
 							const uint8_t Mat = T.Mat[K];
 							const V3 Ray = Unit(P - V.Eye);
 							// A face seen from behind (a blade's back, a leaf turned away) is lit as its front.
-							if (Mat != MatGround && Dot(N, Ray) > 0.0 && !V.bOrtho) N = N * -1.0;
+							// (Not a blade or a crop's leaf lit from above, its normal leaning up on both faces: the game draws
+							// whichever face looks at the eye with that normal, so a tall crop's leaf over the eye is lit, not
+							// black; the art director's black squares on the near gaoliang, 23 November.)
+							if (Mat != MatGround && Dot(N, Ray) > 0.0 && !V.bOrtho && !(Mat == MatBlades && N.Z > 0.5)) N = N * -1.0;
 							double Lit = 1.0;
 							for (const Shadow* S : Shadows)
 							{
