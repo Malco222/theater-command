@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f47e95d0 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8221d73e 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -15672,6 +15672,7 @@
     const d = guardOf(g2, r);
     return d > 0 ? d * KIND.inf.def * g2.nations[r.owner].quality * Math.sqrt(0.15 + 0.85 * SIEGE.guardOrg) : 0;
   };
+  var guardForce = (r) => -1 - r.id;
   var guardMen = (g2, r) => Math.round(guardOf(g2, r) * MEN_PER_DIV);
   function hitGuard(g2, r, pct11) {
     const now = Math.min(100, (g2.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct11));
@@ -17354,13 +17355,13 @@
       foes.splice(foes.indexOf(f), 1);
       const r = g2.regions[f.reg], F = g2.nations[f.nat];
       if (!F?.alive || r.ctrl !== nat || r.owner !== nat || !atWar(g2, nat, f.nat)) continue;
-      const G3 = guardChance(g2, nat, r.id);
-      const who = { name: G3.by?.name ?? "", nat };
-      if (G3.by && draw(g2, g2.turn, "fguard", f.id) < G3.chance) {
-        const text2 = `Agent ${G3.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring${f.kind === "airfield" ? " on the field" : ""} at ${r.name} before it can strike.`;
+      const G4 = guardChance(g2, nat, r.id);
+      const who = { name: G4.by?.name ?? "", nat };
+      if (G4.by && draw(g2, g2.turn, "fguard", f.id) < G4.chance) {
+        const text2 = `Agent ${G4.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring${f.kind === "airfield" ? " on the field" : ""} at ${r.name} before it can strike.`;
         note2(g2, who, r.id, "foiled", text2, true);
         headline(g2, "info", text2, nat, r.id);
-        learn(g2, G3.by, 1);
+        learn(g2, G4.by, 1);
         continue;
       }
       const mine4 = (n) => n === nat;
@@ -17467,13 +17468,13 @@
     if (!pool.length) return false;
     const F = g2.nations[foe];
     const r = pool[Math.floor(draw(g2, g2.turn, "fieldwhere", foe) * pool.length) % pool.length];
-    const G3 = guardChance(g2, nat, r.id);
-    const who = { name: G3.by?.name ?? "", nat };
-    if (G3.by && draw(g2, g2.turn, "guard", foe) < G3.chance) {
-      const text2 = `Agent ${G3.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring on the field at ${r.name} before it can strike.`;
+    const G4 = guardChance(g2, nat, r.id);
+    const who = { name: G4.by?.name ?? "", nat };
+    if (G4.by && draw(g2, g2.turn, "guard", foe) < G4.chance) {
+      const text2 = `Agent ${G4.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring on the field at ${r.name} before it can strike.`;
       note2(g2, who, r.id, "foiled", text2, true);
       headline(g2, "info", text2, nat, r.id);
-      learn(g2, G3.by, 1);
+      learn(g2, G4.by, 1);
       return true;
     }
     if (!wreckField(g2, r.id, mine4)) return false;
@@ -17502,13 +17503,13 @@
       }
       if (!pool.length) continue;
       const r = pool[Math.floor(draw(g2, g2.turn, "where", foe) * pool.length) % pool.length];
-      const G3 = guardChance(g2, nat, r.id);
-      const who = { name: G3.by?.name ?? "", nat };
-      if (G3.by && draw(g2, g2.turn, "guard", foe) < G3.chance) {
-        const text2 = `Agent ${G3.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring at ${r.name} before it can strike.`;
+      const G4 = guardChance(g2, nat, r.id);
+      const who = { name: G4.by?.name ?? "", nat };
+      if (G4.by && draw(g2, g2.turn, "guard", foe) < G4.chance) {
+        const text2 = `Agent ${G4.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring at ${r.name} before it can strike.`;
         note2(g2, who, r.id, "foiled", text2, true);
         headline(g2, "info", text2, nat, r.id);
-        learn(g2, G3.by, 1);
+        learn(g2, G4.by, 1);
         continue;
       }
       const struck = rail2 ? cutRail(g2, r.id, "saboteurs") : wreckFactory(g2, r);
@@ -20586,15 +20587,15 @@
     return { nat, from: g2.turn, name: `the ${n?.adj ?? nat} radar chain`, by: n?.name ?? nat, ground: AC.radar.ground };
   }
   function gunnerRatio(g2, nat, m, target, night, escorted2) {
-    const G3 = AC.gunners;
-    if (night) return G3.night;
-    if (m === "ground" || m === "line") return G3.ground;
-    if (G3.box.nats.includes(nat)) {
+    const G4 = AC.gunners;
+    if (night) return G4.night;
+    if (m === "ground" || m === "line") return G4.ground;
+    if (G4.box.nats.includes(nat)) {
       const r = m === "strike" || m === "fleet" ? void 0 : g2.regions[target];
-      if (r && nat === G3.b29.nat && g2.turn >= G3.b29.from && G3.b29.vs.includes(r.ctrl) && G3.b29.regions.includes(r.name)) return G3.b29.ratio;
-      return escorted2 ? G3.box.escorted : G3.box.alone;
+      if (r && nat === G4.b29.nat && g2.turn >= G4.b29.from && G4.b29.vs.includes(r.ctrl) && G4.b29.regions.includes(r.name)) return G4.b29.ratio;
+      return escorted2 ? G4.box.escorted : G4.box.alone;
     }
-    return rowAt(G3.day[nat] ?? G3.day._default, g2.turn);
+    return rowAt(G4.day[nat] ?? G4.day._default, g2.turn);
   }
   function controlFirst(g2, nat) {
     if (!acOn(g2) || stopDef(g2).book) return null;
@@ -25702,12 +25703,12 @@
     const hb = bloc(H);
     if (hb !== "axis" && hb !== "allies") return;
     for (const id of majorsOf(g2)) {
-      const G3 = g2.nations[id];
-      if (!G3?.alive || G3.dormant || id === g2.human || id === a.on || bloc(G3) !== hb || atWar(g2, id, a.nat) || allied(g2, id, a.nat)) continue;
+      const G4 = g2.nations[id];
+      if (!G4?.alive || G4.dormant || id === g2.human || id === a.on || bloc(G4) !== hb || atWar(g2, id, a.nat) || allied(g2, id, a.nat)) continue;
       const borders2 = g2.regions.some((r) => r.ctrl === id && r.nb.some((j) => g2.regions[j].ctrl === a.nat));
       if (!borders2 || dialDraw(g2, "aid", a.id, id, g2.turn) >= C.aid) continue;
       declareWar(g2, id, a.nat);
-      if (atWar(g2, id, a.nat)) headline(g2, "war", `${G3.name} stands by ${H.name}: ${n.name} went to war for ${a.name}, and now has ${theName(G3)} to reckon with.`, id);
+      if (atWar(g2, id, a.nat)) headline(g2, "war", `${G4.name} stands by ${H.name}: ${n.name} went to war for ${a.name}, and now has ${theName(G4)} to reckon with.`, id);
     }
   }
   function treaty(g2, a) {
@@ -29170,6 +29171,16 @@
     for (const k of t.unlock ?? []) GATE[k] = t;
   }
   var techRules = (g2) => g2.flags.open === 1;
+  function armourYear(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n?.alive) return null;
+    if (techRules(g2)) {
+      const done = n.tech?.done ?? TECH.start[nat] ?? [];
+      return !done.includes("mediums") ? 1939 : !done.includes("heavies") ? 1942 : Math.max(1939 + Math.floor((Math.max(1, g2.turn) + 7) / 12), 1943);
+    }
+    if (!n.lab) return null;
+    return 1939 + Math.floor((Math.max(1, g2.turn + Math.round(n.lab.clock.armour - n.lab.months)) + 7) / 12);
+  }
   var techById = (id) => BY_ID[id];
   var yearOf = (turn) => turnToDate(Math.max(1, turn)).year;
   var fresh2 = (nat) => ({ done: (TECH.start[nat] ?? []).filter((id) => id in BY_ID), work: [] });
@@ -31034,9 +31045,9 @@
   };
   var troopWeight = (g2, nat) => airWeight(g2, nat) ?? 1;
   function troopCut(r, foes, weight4) {
-    const G3 = AIRWAR.ground;
+    const G4 = AIRWAR.ground;
     const divs = foes.reduce((s, c) => s + c.divs, 0);
-    return divs > 0 ? Math.min(G3.max, weight4 / (G3.scale + G3.perDiv * divs)) * (G3.cover[r.terrain] ?? 1) : 0;
+    return divs > 0 ? Math.min(G4.max, weight4 / (G4.scale + G4.perDiv * divs)) * (G4.cover[r.terrain] ?? 1) : 0;
   }
   function tradeHurt(g2, nat, target, through) {
     const S2 = AIR.damage.shipping;
@@ -31199,20 +31210,20 @@
       const took = Math.min(months3, held3), left = Math.max(0, held3 - months3);
       result = took >= 0.05 ? `The bombing took ${monthsWord4(took)} off the fieldworks at ${r.name}, which leaves ${left < 0.05 ? "nothing of them" : `${monthsWord4(left)} of work in them`}. The troops there dig them back a month at a time: attack while it lasts.` : "Too few bombers got through to break up the works.";
     } else if (m === "ground") {
-      const G3 = AIRWAR.ground;
+      const G4 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G3.fire * luck(), false));
+      a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G4.fire * luck(), false));
       const low2 = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
-      const cut = troopCut(r, foes, (through + low2 * G3.fighters) * troopWeight(g2, nat));
+      const cut = troopCut(r, foes, (through + low2 * G4.fighters) * troopWeight(g2, nat));
       let divs = 0;
       for (const c of foes) {
-        const k = cut * (c.dug ? G3.dug : 1);
-        c.org = Math.max(Math.min(c.org, G3.floor), c.org - k);
-        c.str = Math.max(0.05, c.str * (1 - k * G3.str));
+        const k = cut * (c.dug ? G4.dug : 1);
+        c.org = Math.max(Math.min(c.org, G4.floor), c.org - k);
+        c.str = Math.max(0.05, c.str * (1 - k * G4.str));
         divs += c.divs;
       }
-      value += cut * divs * G3.value;
+      value += cut * divs * G4.value;
       result = cut > 0 ? `The raids cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug) ? ", less where they are dug in" : ""}. They fight the weaker for it until they have rested.` : "The aircraft found little to hit.";
     } else {
       const S2 = AIR.damage.shipping;
@@ -31938,13 +31949,13 @@
       cut = lineWear(through);
       value = cut * g2.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g2, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
     } else if (m === "ground") {
-      const G3 = AIRWAR.ground;
+      const G4 = AIRWAR.ground;
       const r = g2.regions[target];
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      const fire2 = a.E * G3.fire;
+      const fire2 = a.E * G4.fire;
       ftrLoss += fire2;
-      cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G3.fighters) * troopWeight(g2, nat));
-      value = cut * foes.reduce((s, c) => s + c.divs, 0) * G3.value;
+      cut = troopCut(r, foes, (through + Math.max(0, a.E - ftrLoss) * G4.fighters) * troopWeight(g2, nat));
+      value = cut * foes.reduce((s, c) => s + c.divs, 0) * G4.value;
     }
     const k = AIRWAR.success.k;
     const cost = ftrLoss + bmrLoss + 10;
@@ -33150,9 +33161,9 @@
     }
     return false;
   }
-  function datedStation(g2, G3, row2) {
+  function datedStation(g2, G4, row2) {
     let key6 = row2.zone;
-    for (const [turn, sea] of G3.stations ?? []) if (g2.turn >= turn) key6 = sea;
+    for (const [turn, sea] of G4.stations ?? []) if (g2.turn >= turn) key6 = sea;
     return zoneOf(g2, key6);
   }
   function lanesTo2(g2, to, z) {
@@ -33194,9 +33205,9 @@
     }
     return best;
   }
-  function datedAdmiral(g2, G3, row2) {
+  function datedAdmiral(g2, G4, row2) {
     let name = row2.admiral;
-    for (const [turn, who] of G3.admirals ?? []) if (g2.turn >= turn) name = who;
+    for (const [turn, who] of G4.admirals ?? []) if (g2.turn >= turn) name = who;
     return name;
   }
   function foeBasedOn(g2, nat, seas) {
@@ -33211,15 +33222,15 @@
     for (const r of B2.rows) if (r[0] <= g2.turn) row2 = r;
     if (!row2 && !B2.from && stop >= 4 && g2.nations[nat].atWar.length) row2 = B2.rows[0];
     if (!row2) return;
-    const rows = B2.groups.map((G3) => G3.base !== void 0 ? { ...G3, nat } : NAVY.fleets.find((r) => r.nat === nat && r.name === G3.name));
-    const fleets = B2.groups.map((G3) => g2.fleets.find((f) => f.nat === nat && f.name === G3.name));
+    const rows = B2.groups.map((G4) => G4.base !== void 0 ? { ...G4, nat } : NAVY.fleets.find((r) => r.nat === nat && r.name === G4.name));
+    const fleets = B2.groups.map((G4) => g2.fleets.find((f) => f.nat === nat && f.name === G4.name));
     const ours = (place2) => !!place2 && !!g2.byName[place2] && allied(g2, nat, g2.byName[place2].ctrl);
-    const can2 = B2.groups.map((G3, i) => !!rows[i] && (!G3.held || ours(G3.held)) && (!!fleets[i] && !B2.from || ours(fleets[i] ? g2.regions[fleets[i].base]?.name : rows[i].base)));
-    const beat = B2.groups.map((G3, i) => can2[i] ? datedStation(g2, G3, rows[i]) : -1);
+    const can2 = B2.groups.map((G4, i) => !!rows[i] && (!G4.held || ours(G4.held)) && (!!fleets[i] && !B2.from || ours(fleets[i] ? g2.regions[fleets[i].base]?.name : rows[i].base)));
+    const beat = B2.groups.map((G4, i) => can2[i] ? datedStation(g2, G4, rows[i]) : -1);
     const from = (i) => fleets[i] ?? { nat, base: g2.byName[rows[i].base].id, home: zoneOf(g2, rows[i].home) };
-    if (stop <= 3) B2.groups.forEach((G3, i) => {
-      if (can2[i] && G3.hunts) {
-        const z = huntBeat(g2, from(i), G3.hunts);
+    if (stop <= 3) B2.groups.forEach((G4, i) => {
+      if (can2[i] && G4.hunts) {
+        const z = huntBeat(g2, from(i), G4.hunts);
         if (z >= 0) beat[i] = z;
       }
     });
@@ -33244,7 +33255,7 @@
         const need = beat.map((z) => z >= 0 ? shippingIn(g2, nat, z) : 0);
         const goal = need.some((x) => x > 0) ? need : opening;
         const sum2 = goal.reduce((a, b) => a + b, 0);
-        const now = B2.groups.some((G3, i) => G3.base !== void 0 && fleets[i]) ? fleets.map((f, i) => can2[i] ? f?.ships.ss ?? 0 : 0) : wholeShares(total, opening);
+        const now = B2.groups.some((G4, i) => G4.base !== void 0 && fleets[i]) ? fleets.map((f, i) => can2[i] ? f?.ships.ss ?? 0 : 0) : wholeShares(total, opening);
         want = now.map((x, i) => sum2 > 0 ? x + (total * goal[i] / sum2 - x) / 60 : x);
       }
       if (!want.some((x) => x > 0)) return;
@@ -33267,9 +33278,9 @@
         });
       }
     }
-    B2.groups.forEach((G3, i) => {
+    B2.groups.forEach((G4, i) => {
       let f = fleets[i];
-      const admiral = G3.admirals ? datedAdmiral(g2, G3, rows[i]) : void 0;
+      const admiral = G4.admirals ? datedAdmiral(g2, G4, rows[i]) : void 0;
       if (!f && parts2[i] > 0) {
         f = addFleet(g2, admiral ? { ...rows[i], admiral } : rows[i]);
         headline(g2, "info", `${cap8(fleetName(f))} forms at ${f.port}.`, nat);
@@ -33282,7 +33293,7 @@
       if (pool) pool.ships.ss -= parts2[i] - f.ships.ss;
       f.ships.ss = parts2[i];
       if (beat[i] >= 0) f.station = beat[i];
-      if (G3.base !== void 0 && shipCount(f.ships) === 0) g2.fleets.splice(g2.fleets.indexOf(f), 1);
+      if (G4.base !== void 0 && shipCount(f.ships) === 0) g2.fleets.splice(g2.fleets.indexOf(f), 1);
     });
   }
   function huntShare(g2, f, z) {
@@ -33477,14 +33488,14 @@
         if (b && atWar(g2, b.ctrl, nat)) raid2 += route.base.raid * quality(g2, b.ctrl) * (g2.supply[b.ctrl] && !g2.supply[b.ctrl][b.id] ? route.base.starved : 1);
       }
       for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
-      const G3 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
-      const L = raid2 > 0 ? raid2 / (raid2 + G3 + NAVY.convoy.ocean) : 0;
+      const G4 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
+      const L = raid2 > 0 ? raid2 / (raid2 + G4 + NAVY.convoy.ocean) : 0;
       const tons = Math.round(route.tons * L / 1e3) * 1e3;
       let subsLost = 0, escortsLost = 0;
       if (raid2 > 0) {
         if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
         else {
-          const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G3 / (raid2 + G3 + NAVY.convoy.ocean));
+          const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G4 / (raid2 + G4 + NAVY.convoy.ocean));
           for (const f of raiders) {
             const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
             f.ships.ss -= k;
@@ -33525,8 +33536,8 @@
       }
     }
     for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
-    const G3 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
-    const loss = raid2 > 0 ? raid2 / (raid2 + G3 + NAVY.convoy.ocean) * traitSeaLoss(g2, nat) : 0;
+    const G4 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
+    const loss = raid2 > 0 ? raid2 / (raid2 + G4 + NAVY.convoy.ocean) * traitSeaLoss(g2, nat) : 0;
     return { raid: raid2, guard, loss: Math.min(0.95, loss) };
   }
   function oreRoute(g2) {
@@ -34203,9 +34214,9 @@
     if (g2.flags.open !== 1 || g2.flags.dom) return [];
     return GUARANTEES.rows.filter((row2) => {
       if (row2.for !== on || row2.by === by || g2.turn < row2.from || row2.to !== void 0 && g2.turn > row2.to) return false;
-      const G3 = g2.nations[row2.by];
-      if (!G3?.alive || G3.dormant || G3.fellOn) return false;
-      return !was || was === "league" || was === bloc(G3);
+      const G4 = g2.nations[row2.by];
+      if (!G4?.alive || G4.dormant || G4.fellOn) return false;
+      return !was || was === "league" || was === bloc(G4);
     });
   }
   function guarantorsOf(g2, by, on, was = g2.nations[on] ? bloc(g2.nations[on]) : null) {
@@ -34256,7 +34267,7 @@
   }
   function guaranteeDeters(g2, nat, targets2) {
     if (g2.flags.open !== 1) return 1;
-    return targets2.some((on) => guarantorsOf(g2, nat, on).some((G3) => G3.comes)) ? GUARANTEES.deter : 1;
+    return targets2.some((on) => guarantorsOf(g2, nat, on).some((G4) => G4.comes)) ? GUARANTEES.deter : 1;
   }
 
   // ../../src/campaign/league.ts
@@ -35692,18 +35703,18 @@
   function gunsWanted(g2, nat) {
     const n = g2.nations[nat];
     if (g2.flags.open !== 1 || !n?.alive || !n.atWar.length) return false;
-    const G3 = arsenal_default.ai.guns;
+    const G4 = arsenal_default.ai.guns;
     if (armyWorn(g2, nat)) return false;
     let guns2 = n.queue.filter((b) => b.what === "corps" && b.kind === "art").length, rest = 0;
     for (const c of g2.corps) if (c.nat === nat && !c.dead) {
       if (c.kind === "art") guns2++;
       else if (c.kind !== "fort" && c.kind !== "eng") rest++;
     }
-    if (guns2 >= G3.most || guns2 * G3.per >= rest) return false;
+    if (guns2 >= G4.most || guns2 * G4.per >= rest) return false;
     let dug = 0;
     for (const c of g2.corps) {
       if (c.dead || !c.dug || !n.atWar.includes(c.nat) || !g2.regions[c.reg].nb.some((j) => g2.regions[j].ctrl === nat)) continue;
-      if (++dug >= G3.facing) return true;
+      if (++dug >= G4.facing) return true;
     }
     return false;
   }
@@ -35939,10 +35950,10 @@
     if (f.snipers && f.toll.why.snipers > 0) out.push({ sign: "sniper", text: `Snipers in the ${f.snipers}: more of your losses will be infantry.` });
     return out.slice(0, 4);
   }
-  function whoPaid(f, lost, mine4) {
+  function whoPaid(f, lost, mine4, most, quiet2 = false) {
     const all = lost.foot + lost.tanks + lost.guns;
     const who = mine4 ? "Your" : "Their", whose = mine4 ? "their" : "your";
-    let first2 = `The cost fell evenly on ${mine4 ? "your" : "their"} corps.`;
+    let first2 = most ? `${most} paid most of it.` : quiet2 ? "" : `The cost fell evenly on ${mine4 ? "your" : "their"} corps.`;
     let sign = null;
     if (all > 0) {
       const w = f.toll.why;
@@ -35960,7 +35971,7 @@
         }
       }
     }
-    return { text: f.shock === null ? first2 : `${first2} ${mine4 ? "The" : "Their"} tanks' shock counted ${shareWords3(f.shock)}.`, sign };
+    return { text: f.shock === null ? first2 : `${first2} ${mine4 ? "The" : "Their"} tanks' shock counted ${shareWords3(f.shock)}.`.trim(), sign };
   }
   function carried(g2, c) {
     if (!supportRules(g2) || !carries(c)) return null;
@@ -37029,6 +37040,41 @@
     }
     return s;
   }
+  var attackLoss = (R) => clamp(0.14 / R, 0.02, 0.2);
+  var defenceLoss = (R) => clamp(0.07 + 0.1 * R, 0.06, 0.45);
+  var FIELD_HOLD = 1.15;
+  function fieldScale(cs, planned2, share, whole2) {
+    if (share === void 0) return 1;
+    const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+    const now = tot > 0 ? cs.reduce((a, _c, i) => a + m[i] * planned2[i], 0) / tot : 0;
+    if (now <= 1e-9) return 1;
+    const want = Math.max(share / FIELD_HOLD, whole2 ? Math.min(now, share * FIELD_HOLD) : now);
+    return want / now;
+  }
+  function pursuitScale(cs, part, plain, cap11, mul, share, of2 = 1) {
+    const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+    if (tot <= 0 || mul <= 0) return 1;
+    const want = Math.max(share / mul, of2 * (cs.reduce((a, _c, i) => a + m[i] * Math.min(cap11, plain[i]), 0) / tot)) * tot;
+    let k = 1;
+    for (let n = 0; n <= cs.length + 1; n++) {
+      let held2 = 0, free2 = 0;
+      cs.forEach((_c, i) => {
+        if (k * part[i] >= cap11) held2 += m[i] * cap11;
+        else free2 += m[i] * part[i];
+      });
+      if (free2 <= 1e-12) break;
+      const next = Math.max(0, (want - held2) / free2);
+      if (Math.abs(next - k) < 1e-9) break;
+      k = next;
+    }
+    return k;
+  }
+  function splitWeights(cs, split) {
+    if (!split) return cs.map(() => 1);
+    const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+    const mean = tot > 0 ? cs.reduce((a, c, i) => a + m[i] * (split[c.id] ?? 0), 0) / tot : 0;
+    return cs.map((c) => mean > 1e-6 && split[c.id] !== void 0 ? Math.min(3, split[c.id] / mean) : 1);
+  }
   function assess(g2, attackers2, target, opts = {}) {
     ensureSupply(g2);
     const attNat = armyOf(attackers2[0]);
@@ -37475,8 +37521,8 @@
     lines2.push({ label: "Supply", value: `${aUns ? `${aUns} attacking corps cut off` : "Attackers in supply"}; ${dUns ? `${dUns} defending corps cut off` : "defenders in supply"}`, effect: aUns || dUns ? "Corps that are cut off fight at half strength" : void 0 });
     const wxLine = wxSky !== "clear" ? skyBattleLine(g2, zoneOfRegion(g2, target.id), target.name) : null;
     if (wxLine) lines2.push({ label: "The sky", value: wxLine });
-    const onCall = (n, who) => n ? `; ${n === 1 ? "an air strike" : `${n} air strikes`} on call for the ${who}` : "";
-    const closeWords = close3 ? onCall(close3.att.strikes, "attack") + onCall(close3.def.strikes, "defence") : "";
+    const onCall2 = (n, who) => n ? `; ${n === 1 ? "an air strike" : `${n} air strikes`} on call for the ${who}` : "";
+    const closeWords = close3 ? onCall2(close3.att.strikes, "attack") + onCall2(close3.def.strikes, "defence") : "";
     if (wxSky !== "closed") lines2.push({ label: "Air", value: (byNumbers ? `The ${byNumbers === "att" ? "attacker" : "defender"}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g2.nations[sky].adj} air force has won the sky here` : skyEdge > 0.15 ? "Attacker holds the sky" : skyEdge < -0.15 ? "Defender holds the sky" : "Contested") + closeWords, effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? "Attack" : "Defence"} strengthened by about ${Math.round(Math.abs(airEdge) * S2.attack * 100)}%` : void 0 });
     const gens = commandersIn(g2, attackers2), dgens = commandersIn(g2, defenders);
     if (gens || dgens) {
@@ -37874,19 +37920,26 @@
     const count4 = late ? `t${target.theatre}:${g2.flags[`fought:${target.theatre}`] ?? 0}` : `${(g2.flags.battles ?? 0) - (g2.flags.lateBattles ?? 0)}`;
     const dice2 = aside2 ? new Rng(hashString(`land:${g2.seed}:${g2.turn}:${target.id}:${attNat}:${count4}`)) : g2.rng;
     const overrun2 = !!a.overrun;
-    const R = a.odds * dice2.range(a.dice[0], a.dice[1]);
+    const rolled = a.odds * dice2.range(a.dice[0], a.dice[1]);
+    const R = opts.fought ?? rolled;
     const attU = attackers2.map(reportUnit), defU = defenders.map(reportUnit);
     const attGens = attackers2.map((c) => generalOf(g2, c)), defGens = defenders.map((c) => generalOf(g2, c));
     const mobile = attackers2.some((c) => KIND[c.kind].mobile);
-    const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
+    const defFrac = defenceLoss(R);
     const ready = town ? 0 : a.prepared;
-    const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+    const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     let attLost = 0, defLost = 0, prisoners = 0;
     let held2 = false, gates = false;
     const bled = /* @__PURE__ */ new Map();
+    const attW = splitWeights(attackers2, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
+    const attPart = (c, i, w = attW[i]) => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
+    const attPlain = (c) => attackLoss(rolled) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
+    const pulled = (s) => opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null;
+    const attOut = pulled("att");
+    const attK = !opts.field ? 1 : opts.field.broke === "att" && R < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att) : attOut !== null && R < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut) : fieldScale(attackers2, attackers2.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g2, c))), opts.field.att, opts.field.whole);
     attackers2.forEach((c, i) => {
       const before = men(c);
-      c.str *= 1 - Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g2, c));
+      c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g2, c));
       c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.05);
       c.fought = true;
@@ -37897,9 +37950,14 @@
     const win = R >= 1.2;
     const stood = win ? 1 : HELD_LOSS;
     const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+    const defPart = (c, i, w = defW[i]) => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+    const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[rolled >= 2 ? 1 : 0] : 1;
+    const defPlain = (c) => defenceLoss(rolled) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+    const defOut = pulled("def");
+    const defK = !opts.field ? 1 : opts.field.broke === "def" && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def) : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut) : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
     defenders.forEach((c, i) => {
       const before = men(c);
-      c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+      c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
       c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c) * a.weight, 0, 1);
       c.xp = Math.min(1, c.xp + 0.04);
       c.fought = true;
@@ -37979,7 +38037,8 @@
       for (const c of attackers2) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
       if (town) tallySiege(g2, "repulsed");
       if ((town || inField) && watch > 0) {
-        const share = clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, R), 0.05, 0.6);
+        const onField = inField && opts.field ? opts.field.corps[guardForce(target)] !== void 0 ? opts.field.def : null : null;
+        const share = onField !== null ? clamp(onField, 0, 1) : clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, R), 0.05, 0.6);
         const lost = Math.round(watchMen * share);
         guardAfter(g2, target, share);
         defLost += lost;
@@ -38021,8 +38080,17 @@
     if (a.faced) {
       const lost = { foot: 0, tanks: 0, guns: 0 };
       for (const u of attU) lost[u.kind === "arm" ? "tanks" : u.kind === "art" ? "guns" : "foot"] += u.lost;
-      const said = whoPaid(a.faced, lost, true);
-      rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false).text, ...said.sign ? { sign: said.sign } : {} };
+      const fell = ((us) => {
+        if (!opts.field) return { quiet: false };
+        if (us.length < 2) return { quiet: true };
+        const of2 = (u) => u.men > 0 ? u.lost / u.men : 0;
+        const by = [...us].sort((x, y) => of2(y) - of2(x)), top = by[0];
+        if (of2(top) <= 0) return { quiet: true };
+        if (of2(top) <= 1.25 * of2(by[by.length - 1])) return { quiet: false };
+        return of2(top) >= 1.25 * of2(by[1]) && us.every((u) => u === top || u.lost < top.lost) ? { most: top.name, quiet: false } : { quiet: true };
+      })(attU);
+      const said = whoPaid(a.faced, lost, true, fell.most, fell.quiet);
+      rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, fell.most, fell.quiet).text, ...said.sign ? { sign: said.sign } : {} };
       if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g2.human || defNat === g2.human) && !g2.flags["tip:antitank"]) {
         g2.flags["tip:antitank"] = g2.turn;
         headline(g2, "info", "Your staff on the fighting at " + target.name + ": anti-tank guns, mines, ditches and artillery stop tanks as well as tanks do. The battle card shows how much of the tanks' shock is left.", g2.human, target.id, { arm: "land" });
@@ -40376,12 +40444,12 @@
     };
     const day = way("bomb"), night = way("night");
     if (!day.why && !night.why) {
-      const ORDER3 = ["output, for a month", "chance the railway is cut", "chance a factory is wrecked"];
+      const ORDER4 = ["output, for a month", "chance the railway is cut", "chance a factory is wrecked"];
       for (const [w, o] of [[day, night], [night, day]]) {
-        const lacks = ORDER3.filter((words) => o.hits.some((h) => h.words === words && !h.dim) && !w.hits.some((h) => h.words === words));
+        const lacks = ORDER4.filter((words) => o.hits.some((h) => h.words === words && !h.dim) && !w.hits.some((h) => h.words === words));
         if (!lacks.length) continue;
-        const mine4 = [...w.hits.filter((h) => ORDER3.includes(h.words)), ...lacks.map((words) => ({ n: "0%", words, dim: true }))];
-        w.hits = mine4.sort((a, b) => ORDER3.indexOf(a.words) - ORDER3.indexOf(b.words));
+        const mine4 = [...w.hits.filter((h) => ORDER4.includes(h.words)), ...lacks.map((words) => ({ n: "0%", words, dim: true }))];
+        w.hits = mine4.sort((a, b) => ORDER4.indexOf(a.words) - ORDER4.indexOf(b.words));
       }
     }
     const lead2 = !plans.bomb.why ? plans.bomb : plans.night;
@@ -43809,8 +43877,8 @@
     return b === "allies" || b === "axis" ? b : null;
   };
   function owesWar(g2, who, on) {
-    const G3 = g2.nations[who], E = g2.nations[on];
-    if (!G3?.alive || !E?.alive || G3.dormant || E.dormant || who === on || !sideOf5(g2, who) || allied(g2, who, on) || atWar(g2, who, on)) return false;
+    const G4 = g2.nations[who], E = g2.nations[on];
+    if (!G4?.alive || !E?.alive || G4.dormant || E.dormant || who === on || !sideOf5(g2, who) || allied(g2, who, on) || atWar(g2, who, on)) return false;
     return Object.values(g2.nations).some((A) => A.alive && A.id !== who && allied(g2, A.id, who) && A.atWar.includes(on));
   }
   function warNotices(g2) {
@@ -43842,8 +43910,8 @@
         else headline(g2, "event", said(list4), N.id);
       }
       for (const who of warsAtFall(g2, x)) {
-        const G3 = g2.nations[who], side3 = sideOf5(g2, who);
-        if (!majors.includes(who) || who === g2.human || !G3?.alive || G3.dormant || !side3) continue;
+        const G4 = g2.nations[who], side3 = sideOf5(g2, who);
+        if (!majors.includes(who) || who === g2.human || !G4?.alive || G4.dormant || !side3) continue;
         const left = majors.filter((e) => g2.nations[e]?.alive && atWar(g2, who, e));
         const chief = DIPLOMACY.leaders[side3 === "allies" ? "axis" : "allies"] === x;
         if (!chief && left.length) continue;
@@ -43852,7 +43920,7 @@
           if (!owesWar(g2, who, on) || g2.flags[noticeKey(who, on)]) continue;
           g2.flags[noticeKey(who, on)] = g2.turn;
           const when = turnToDate(g2.turn + LIB.finish.notice).label;
-          const said = `With ${theName(X)} beaten, ${theName(G3)} stands by its allies`;
+          const said = `With ${theName(X)} beaten, ${theName(G4)} stands by its allies`;
           if (on === g2.human) warning(g2, "War is coming", `${said}, who are still at war with you: it gives notice that it will declare war on you in ${when}, unless you are at peace with them by then.`, on, void 0, who);
           else headline(g2, "event", `${said}: it gives ${theName(g2.nations[on])} notice that it will be at war with it in ${when}.`, who);
         }
@@ -43899,8 +43967,8 @@
     V.atWar = [];
     handBack(g2, F);
     g2.supplyDirty = true;
-    const G3 = g2.nations.GER;
-    headline(g2, "event", `The government at Vichy is no more. ${G3 && !G3.alive ? `With ${theName(G3)} beaten, its` : "France is free again in Paris, and its"} ground at home and overseas is France's again, and its troops answer to France.`, "FRA", F.capital, { arm: "land", won: "FRA" });
+    const G4 = g2.nations.GER;
+    headline(g2, "event", `The government at Vichy is no more. ${G4 && !G4.alive ? `With ${theName(G4)} beaten, its` : "France is free again in Paris, and its"} ground at home and overseas is France's again, and its troops answer to France.`, "FRA", F.capital, { arm: "land", won: "FRA" });
   }
 
   // ../../src/campaign/facing.ts
@@ -44255,11 +44323,11 @@
       face
     };
   }
-  function orderAttack(g2, corps, target) {
+  function orderAttack(g2, corps, target, fought, field4) {
     if (onEve(g2)) return null;
     const ok = jointForce(g2, limitAttackers(g2, jointForce(g2, corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id)), target), target), target);
     if (!ok.length || !hostileUnits(g2, target, ok[0].nat).length || whyNotAttack(g2, target, ok[0].nat)) return null;
-    return resolveBattle(g2, ok, target);
+    return resolveBattle(g2, ok, target, fought === void 0 ? {} : { fought, ...field4 ? { field: field4 } : {} });
   }
   function orderProbe(g2, c, target) {
     if (onEve(g2) || !canOrder(g2, c) || whyNotAttack(g2, target, c.nat)) return null;
@@ -44882,14 +44950,14 @@
     const rows = list4.map((r) => ({ nat: r.nat, name: g2.nations[r.nat].name, own: r.nat === me, what: what(r, r.nat === me), loss: shown2(r.loss) })).sort((x, y) => Number(y.own) - Number(x.own));
     if (!rows.length || !rows[0].own) rows.unshift({ nat: me, name: g2.nations[me].name, own: true, what: "None of your own trade runs through it.", loss: 0 });
     const others = rows.filter((r) => !r.own);
-    const G3 = RELATIONS.gate, side3 = sideName(g2, me);
+    const G4 = RELATIONS.gate, side3 = sideName(g2, me);
     const sore = isShut ? soreList(g2, gate) : others.filter((r) => wouldResent(g2, me, r.nat)).map((r) => ({ nat: r.nat, so: 0 }));
     const resent2 = sore.map((x) => ({
       nat: x.nat,
       name: g2.nations[x.nat].name,
       so: x.so,
-      most: G3.most,
-      line: isShut ? `${x.so} of ${G3.most} points so far` : `${G3.month} point of opinion a month, ${G3.most} at most`
+      most: G4.most,
+      line: isShut ? `${x.so} of ${G4.most} points so far` : `${G4.month} point of opinion a month, ${G4.most} at most`
     })).sort((x, y) => x.name.localeCompare(y.name));
     return {
       gate: v,
@@ -46115,6 +46183,1201 @@
       out.push({ key: key6, goal, won });
     }
     return out;
+  }
+
+  // ../../src/battle/land/rules.ts
+  var ARMS = ground_default.arms;
+  var SUPPORT_COVER = support_default.antiTank.alone.cover;
+  var HEDGE_NEAR = 12;
+  var LOCATE = { secs: 25, fire: 0.5 };
+  var LAND2 = {
+    /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
+    speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 },
+    /** Radians a second a block can turn. */
+    turn: { inf: 1.1, mtn: 1.1, cav: 1.4, eng: 1.1, mot: 0.9, arm: 0.8, art: 0.5, fort: 0 },
+    /**
+     * How far a block's blows carry, metres between edges. Guns fire over the line from well back. Tanks reach no further
+     * than lorried infantry: at 380 they stood off out of the infantry's reach and struck without reply, pricing armour
+     * again on top of the card, which counts it already (b418, b420: the desert villages ran 38 points over their card).
+     */
+    reach: { inf: 200, mtn: 200, cav: 140, eng: 140, mot: 220, arm: 220, art: 1500, fort: 300 },
+    /** Frontage and depth in metres. */
+    size: { inf: [150, 40], mtn: [140, 40], cav: [150, 50], eng: [120, 40], mot: [140, 60], arm: [130, 60], art: [110, 50], fort: [140, 50] },
+    /** Models on a full-strength tray (the art director, 17 November): one fades off for each share lost. */
+    figures: { inf: 12, mtn: 12, cav: 12, eng: 12, fort: 12, mot: 6, arm: 4, art: 3 },
+    /**
+     * The share of a block's own power it takes off its target each second, at full strength and in the open. Slow
+     * enough that a close fight runs two or three minutes from the first contact, time for three or four choices
+     * (ruling 226(2); tests/battle-land.test.ts). A sixth slower since tanks close to their reach (b418), which had cut
+     * the quickest fights under a minute and a half.
+     */
+    rate: 125e-5,
+    /** Blows struck on the march, or on a block giving ground at the brink (b496(1)), and by a block that is wavering. */
+    moving: 0.4,
+    wavering: 0.7,
+    /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
+    guns: { punch: 0.35, nerve: 1.5, close: 0.3, closeAt: 160 },
+    /**
+     * Support teams (release 2; Brian, 21 Nov 03:49Z: "units you can place at the begining of a battle on your side and
+     * they can then attack from the back of the battle"; 03:57Z: built in the campaign apart from the infantry). A team
+     * is a gun block ('art', so it stays back, fires on and is brought up into reach as guns are) with its own numbers:
+     *   reach: metres between edges its fire carries. A machine-gun team's tripod guns reach over the heads of its own
+     *     line; a mortar team's tubes lob further, short of the guns'.
+     *   punch, nerve: as the guns' (above): its share against what it hits, and the extra it takes off nerve. Machine
+     *     guns harm little and pin hard; mortars fall between.
+     *   close, closeAt: its share when the enemy is within closeAt (a mortar cannot drop its bombs on a man beside it;
+     *     a machine gun fights best close).
+     *   armour: its share against tanks (bullets and light bombs do little to armour).
+     *   speed (m/s, battle time, as LAND.speed), size (frontage and depth, m), figures (models on a full tray).
+     * First guesses; the campaign's card prices the teams (stage 2), and the field only shares that out (b418).
+     */
+    /** The setup step (release 2): metres a placed gun or team keeps clear of every other block. */
+    placeClear: 12,
+    /**
+     * Direct command (release 2; Brian, 22 November: "I want to be able to click a unit and point where I want them to
+     * go"). At the double: a 'move' with run goes LAND.double.pace faster by its motion (foot run; lorries and tanks at
+     * their best; guns are towed as fast as they go), is struck 'exposed' harder while on the run (upright men in the
+     * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
+     * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
+     * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
+     * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
+     * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
+     * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
+     * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
+     * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
+     * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
+     * tank; two T-34s in five to 1943) and the rest as its army's foot.
+     */
+    double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 }, exposed: 1.25, blows: 0.75, winded: 20 },
+    radio: {
+      delay: 5,
+      cut: 3.5,
+      hqAt: 0.5,
+      nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] }
+    },
+    /**
+     * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
+     * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
+     * model's gun gets through the face it strikes at that range against the field's par for that face, held within
+     * [lo, hi] (a Sherman's 75 on a Tiger's front all but nothing, a Tiger's 88 on a Sherman twice par and more). The
+     * computer's tank blocks go round to the flank or rear of a tank block whose front they weigh under 'flankBelow' at
+     * 'flankAt' metres, where her side or rear weighs 'flankBetter' times her front or more ('flankFor': the most battle
+     * seconds they spend getting there before they go in anyway).
+     */
+    armour: { lo: 0.15, hi: 3, flankBelow: 0.35, flankBetter: 2, flankAt: 200, flankFor: 150 },
+    /**
+     * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
+     * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
+     * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:
+     * its blocks never strike it nor are sent at it, and its staff never plans against it. It is found when an enemy
+     * block's edge comes within 'sight' metres of its own (by its motion: men lying still under the trees are seen last,
+     * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
+     * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
+     * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
+     * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+     * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
+     * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
+     * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
+     * 'staff.blocks' foot blocks of its line into woods on the enemy's way in before the clock starts (up to 'staff.ahead'
+     * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
+     * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
+     * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+     *
+     * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
+     * Germans could see them"):
+     * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
+     *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
+     *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
+     *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
+     * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
+     *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
+     * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
+     * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
+     *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
+     * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
+     *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
+     *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
+     */
+    hide: {
+      sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 },
+      heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 },
+      ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
+      forest: 100,
+      surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
+      locate: LOCATE,
+      search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
+      hedge: { near: HEDGE_NEAR, gap: 3 },
+      staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
+    },
+    /**
+     * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+     * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+     * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+     * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+     * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+     * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+     * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+     * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+     * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+     * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+     * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+     * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+     * 1937, sec. 35).
+     *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+     *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+     *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+     *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+     *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+     *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+     *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+     *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+     *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+     *     Its pictures, and the men its block loses when it is caught.
+     *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+     */
+    patrol: {
+      found: 0.4,
+      caught: 0.3,
+      size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 },
+      night: { t0: -2400, t1: -600 }
+    },
+    teams: {
+      mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
+      mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 }
+    },
+    /** Damage and nerve by where a blow lands: [damage, nerve]. */
+    aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] },
+    /**
+     * The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. Fieldworks
+     * ('works', dug where a block stood dug in) give no cover of their own: a blow on them takes the cover of the ground
+     * they were dug into (field.dugInto; 'works' here is only for works with no record). The card counts them in the
+     * defence's strength already, and the field shares out the card's own strength (ruling 217; b418: what the card
+     * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
+     * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
+     */
+    cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25, suburb: 0.75, industry: 0.6, park: 0.9 },
+    pace: {
+      foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15, suburb: 0.85, industry: 0.75, park: 1 },
+      wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0, suburb: 0.7, industry: 0.55, park: 0.85 },
+      tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0, suburb: 0.75, industry: 0.55, park: 0.95 },
+      guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0, suburb: 0.75, industry: 0.6, park: 0.95 },
+      fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0, suburb: 0, industry: 0, park: 0 }
+    },
+    /**
+     * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
+     * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
+     * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
+     */
+    tanksClose: { punch: 0.6, take: 1.3, ground: ["buildings", "industry"] },
+    /**
+     * Tanks that leave their infantry on close ground (the tactics panel, item 7; the design director, ruling 239(5)):
+     * tanks see little in woods and streets, and hidden guns and close-assault teams kill those that come on alone. A
+     * tank block in contact with enemy foot (the card's foot: 'foot'), with no friendly foot block within 'near' metres
+     * (edge to edge), standing in woods or streets or fighting foot in fieldworks, takes that foot's blows times 'take',
+     * the card's own figure for tanks alone there (1 over ground.json's arms.alone: forest for woods and fieldworks,
+     * urban for streets; a defending tank the card's defence figures), on top of tanksClose. Not where that foot is
+     * already in contact with friendly foot: the enemy is fixed, and a tank on its flank is the hook.
+     * Never twice (b418): only the tank divisions the card counted as covered by their foot, and paid the attack for
+     * fighting together, can be bitten: the card's foot divisions times 'cover' (1 on forest and urban cards, where
+     * ground.ts covers a tank division with one of foot; support.json's 2 elsewhere; a defence 1), a regiment a third,
+     * the first blocks first. A side with no foot has none covered: the card charged it already. On (b647): the plain
+     * order lands within 0.1 point of 8df23b3 on every ground; the computer's tanks are bitten for 0.6% of their contact.
+     */
+    alone: {
+      on: true,
+      near: 200,
+      foot: ARMS.foot,
+      woods: ["woods"],
+      streets: ["buildings", "industry", "suburb"],
+      works: ["works", "bunker"],
+      take: {
+        att: { woods: 1 / ARMS.alone.forest, streets: 1 / ARMS.alone.urban, works: 1 / ARMS.alone.forest },
+        def: { woods: 1 / ARMS.defence.alone.forest, streets: 1 / ARMS.defence.alone.urban, works: 1 / ARMS.defence.alone.forest }
+      },
+      cover: { close: 1, open: SUPPORT_COVER, def: 1, cards: ["forest", "urban"] }
+    },
+    /**
+     * Going in together (item 1; 7b): whether the player's group attack carries 'together', holding its tanks and lorries
+     * to its foot's pace. Off (the design director, ruling 239's rider, 23:13Z, amending 239(5)): held to the slowest foot
+     * of the whole order, the plain order lost 6 points on its card (15 on mountains), as LAND.hold was fitted with its
+     * tanks reaching the line first. The player keeps his tanks with his foot by his own orders; the computer's groups
+     * keep together by its drill (ai.ts).
+     */
+    together: { player: false },
+    /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
+    spread: 4,
+    apart: 10,
+    /**
+     * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
+     * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
+     * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
+     */
+    queue: { hard: 0.2, near: 75 },
+    /** Metres between two friends' boxes where an attack's block takes its own stretch beside a friend standing there (b439). */
+    room: 10,
+    /** Metres off either end of a bridge kept clear: no attack has a block stand there, so those coming over can (b439). */
+    mouth: 50,
+    /** Mountain troops on rough ground and rock keep this much more of their pace. */
+    mountainFoot: 1.6,
+    /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
+    height: { over: 8, up: 1.15, down: 0.9 },
+    /**
+     * Holding its own ground: a defending block within 'within' metres of where it was drawn up takes this share of the
+     * damage. Set by the fairness table, ground by ground, so that the plain attack (select all, right-click the nearest,
+     * Space) carries the ground about as often as the card says at the telling odds, 1.1 to 1.4 (ruling 226, mark 4), and
+     * two computer generals stay fair to it too (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock)
+     * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
+     * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
+     * Level 2 sits between the telling-odds works (an infantry line that keeps a reserve back out of its bunkers) and the
+     * practice works (motorized, no reserve): each lands within a tenth of its card (b407). Re-set for b418 (tanks no
+     * longer out-reach infantry nor pay twice in woods, works give their own ground's cover, regiments hold a division's
+     * frontage, blows a sixth slower, and tanks and lorries find their way round rivers, rock and marsh: mountains held
+     * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
+     * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
+     * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
+     * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
+     * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
+     * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds). 1.3 to 1.2, and
+     * counted only as far as the attack's tanks and lorries cross, for b494: a river is only ever a cost, so every river
+     * attack lands at or below the same attack with no river. Men on foot cross the field's rivers at no cost the field
+     * needs to make up (the campaign's river attacks on foot, with no hold, land level with their no-river twins), while
+     * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
+     * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
+     */
+    hold: {
+      take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 },
+      within: 300,
+      river: 1.2,
+      works: [1, 1.02, 1.06, 1.07],
+      // A capital's and a city's streets (field.ts streetsOf): the card prices the place's ground, not the cover of its
+      // houses, so the field takes that cover back off the held defence (b418; b511). With none, cities fell 4 points
+      // under the card and capitals 17, most to the clock. A kind of ground may have its own, else the size's (b515(f)):
+      // capital 1.1 is the plains capital's fit (48 attacks, captured and hand-made), and the hills' and forest's; an
+      // urban capital's core is deepest; a mountain capital, a desert city and a marsh city hold on their own ground.
+      // Fitted 18 November, 10 fights each, on 555 capital and city attacks captured from the campaign and hand-made on
+      // every kind of ground: capitals -1.0 against the card, cities +0.2, every kind within a tenth (furthest: plains
+      // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
+      // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
+      streets: { city: 1.05, capital: 1.1, "urban capital": 1.5, "mountain capital": 1, "desert city": 1, "marsh city": 1 },
+      // A city's own river up the field beside the heart (b526): where the whole defence stands on one bank its line ends
+      // on the river, a flank the attack cannot turn, and the card never priced the river, so the field takes that back
+      // off the held defence too. An army broad enough to stand on both banks has no such flank. Fitted 19 November, 10
+      // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
+      // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
+      // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
+      // Re-measured with bridges by the record (b596, three): +0.25, every kind within a tenth, 58 fights to the clock
+      // against 75 (1.045 would leave -0.4 but more capitals to the clock, 0 to 5 of 2,420).
+      stream: 1.06,
+      // A second river along the defence's flank, meeting one across the field behind it (b596(2), the Sava at Belgrade):
+      // the defence drawn up beside it has its line's end on the water as up the field. Fitted 19 November on the same 555
+      // attacks with the river across and a second one from the west edge on every field the card left dry, bridges 3
+      // and 2: 1 left the attack where it was (+0.05) but 18 more fights of 5,550 ran to the clock (75 to 93); 1.06 (as up
+      // the field) took the clock back (76) but gave the attack +2.3, two kinds at close odds over a tenth (forest capitals
+      // +11.4, hills cities +13.4); 1.045 leaves +1.7, every kind within a tenth (furthest: hills cities at close odds +10.0), 81 fights to the clock.
+      join: 1.045
+    },
+    /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
+    dug: { keep: 30 },
+    nerve: {
+      /** Below 'waver' it fights worse; below 'rout' it runs; a runner rallies at 'rally' when clear of the enemy for 'quiet' seconds. */
+      waver: 0.4,
+      rout: 0.2,
+      rally: 0.35,
+      quiet: 15,
+      clear: 450,
+      /**
+       * Nerve lost for each share of strength lost, before where the blow landed. Divisions break on their nerve long
+       * before they are worn away, so a battle fought to its end costs about what the campaign bills for its result
+       * (the design director, b356); an attack's nerve goes faster than a defence's on its own ground.
+       */
+      perLoss: { att: 0.5, def: 0.5 },
+      /** A friend breaking within 'near' metres. */
+      friendRuns: 0.03,
+      near: 400,
+      /** Coming back while not being hit for 'still' seconds, a second; faster for a runner who is clear. */
+      recover: 0.01,
+      still: 5,
+      runnerRecover: 0.02,
+      /** Shattered: below this much strength a block runs whatever its nerve. */
+      shattered: 0.12,
+      /** Experience and a general: experience takes this share off every loss of nerve at full; each level of the general 0.03. */
+      xp: 0.35,
+      general: 0.03
+    },
+    /**
+     * Blocks a side: one a division. A side with fewer than 'least' has divisions split into their three regiments until
+     * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
+     */
+    blocks: { least: 6, regiments: 3 },
+    /**
+     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+     */
+    scale: { budget: 8500, step: 5, page: 24e3 },
+    /** The army breaks when this share of its power is running or gone. */
+    breaks: 0.5,
+    /**
+     * Or when this share of its power is worn away: what an attack will pay before it is called off, and a defence
+     * before it gives up the ground. Set so that a battle fought to its end costs each side about what the campaign's
+     * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
+     */
+    spent: { att: 0.13, def: 0.18 },
+    /**
+     * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
+     * army with it (ruling 226(2), b476(1)).
+     */
+    fought: 0.5,
+    /**
+     * A block at this share of its strength or more, and steady, is fresh, in contact or not; in an army of this many
+     * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
+     * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
+     * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
+     * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
+     * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
+     * Held there, such an army's blocks no longer fresh give ground rather than stand to be ground down (the design
+     * director, b496(1): fought out, the Libyan Group at Mechili booked 1.27 of the staff's bill; now 1.06).
+     */
+    fresh: { str: 0.9, upTo: 5 },
+    /**
+     * Burning wrecks stay (b477, Brian's pick): every tank a block loses leaves a wreck where it stood, to the end of the
+     * fight. Men on foot beside one take light cover, either army's, at the field's own figure for broken ground: a block
+     * takes it for the share of its tray that wrecks within its frontage, or 'beside' metres of it, can shelter (one wreck,
+     * one model's worth), never better than its ground gives already. 'r' is how far a wreck's shelter reaches, for the 3D
+     * game's mark.
+     */
+    wreck: { cover: "rough", beside: 10, r: 12 },
+    /**
+     * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
+     * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that
+     * falls back to the lines it came from: the campaign's own bill has the same shape (resolveBattle in game.ts).
+     */
+    count: { routing: { att: 0.05, def: 0.05 }, gone: { att: 0.1, def: 0.15 } },
+    /** Randomness of each blow, so near-even fights do not always go the same way: +- this share. */
+    jitter: 0.1,
+    /**
+     * How much of the card's own run of luck the day carries (ruling 226(4)): 1 draws the day's luck across the whole run,
+     * as the card's chance does, so a plain attack at the card's odds wins about as often as the card says.
+     */
+    fortune: 1,
+    /**
+     * A stretch of the defence's line is quiet when no enemy stands within this many metres of a block's own lane, left or
+     * right, anywhere on the field: that block closes on the fight once the line is struck elsewhere (b407).
+     */
+    quiet: 350,
+    /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
+    press: 600,
+    /** Seconds of battle time before the defender is counted as having held. */
+    limit: 360,
+    /**
+     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+     * clear dry ground to come on at, in field cells in from the edge and along it either way.
+     */
+    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
+    /**
+     * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
+     * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
+     * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
+     * the march in through the streets and the fight in them do not end on the clock. Measured with the line inside the
+     * edge over 555 city and capital fields x 10 seeds (b529's bars: every kind within a tenth of its card, close odds
+     * too, and none on the clock more than 1 fight in 10): 0.15 holds both, the widest forest cities at close odds +8.9
+     * and marsh cities at close odds 8.7% on the clock; 0.25 and 0.5 put the forest and marsh cities' close odds over
+     * a tenth, 0 put marsh and mountain cities on the clock 1 fight in 8.
+     */
+    city: { inside: 100, clock: 0.15 },
+    /** The computer general thinks once a second. */
+    think: 1,
+    /**
+     * Air support (Brian, 2026-11-18 18:58Z; the design director, b533): a side's fighters on call strike when called,
+     * the card having counted them already. While a side has strikes left, its blows hold back the card's share for them
+     * (SideTicket.air.share), owed to the block each fell on; a strike pays what is owed where its run lands (sim.ts,
+     * "Air support"). Seconds are battle time, metres field metres.
+     *   first, every: the first strike is ready this long after the armies meet, each next this long after the last call.
+     *   wait: a strike left ready this long, the staff call it themselves, for either side (b533(c): the enemy's too,
+     *     never aimed sharper).
+     *   eta: from the call to the run; speed: metres a second the flight flies, so the run takes its length over it;
+     *     out: seconds it is seen pulling away after the run.
+     *   len, minRun, wide: the run's longest and shortest, and the strip its guns rake, each side of its line half of it.
+     *   near: pointed at a place, the run takes the frontage of the enemy block nearest it within this.
+     *   close: no gun fires within this of the caller's own men; a run with less than 'least' of its line clear is refused.
+     *   armour: tanks take this much of a strafing run (guns made for men in the open).
+     *   nerve: the run's weight on nerve, as a blow from the front.
+     *   alt, low: the flight's height coming in and on the run, metres (pictures only). models: planes in a flight;
+     *     legs: the staff's strike splits into pairs, a pair down the frontage of each of the blocks owed most.
+     *   toss: seconds from a bomb let go to its burst ('land:bomb-drop' then the 'shell'), pictures only.
+     *   bombs: how many fall on the run's far third, pictures only (b533(f)): from the nation's first year of
+     *     fighter-bombers, before it the run strafes alone. bombsFrom: that year by nation, '_' for every other, from the
+     *     historian's list (/mnt/project-files/historian/fighter-bombers.md, 19:35Z): Germany from the Balkans and Russia,
+     *     1941; Britain and America 1942; the Soviets from June 1941 (the certain date); Italy 1941; Japan 1943; France
+     *     only with the Free French, 1943; Poland never in 1939; the generic fighter 1942.
+     */
+    air: {
+      first: 40,
+      every: 40,
+      wait: 20,
+      eta: 12,
+      speed: 120,
+      out: 6,
+      len: 400,
+      minRun: 100,
+      wide: 60,
+      near: 300,
+      close: 60,
+      least: 0.3,
+      armour: 0.6,
+      nerve: 1,
+      alt: 150,
+      low: 60,
+      models: 4,
+      legs: 2,
+      bombs: 2,
+      toss: 1.5,
+      bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 }
+    },
+    /**
+     * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+     * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+     * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+     * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+     * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+     * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+     * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+     * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+     * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+     * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+     * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+     * where cutters (and a cut's gap) change the fight, and only with that switch on.
+     *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+     *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+     *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+     *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
+     *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+     *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+     *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+     *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+     *     ruling 242 C3).
+     *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+     */
+    cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+    /**
+     * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+     * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+     * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+     * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+     * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+     * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+     * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+     * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+     * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+     * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+     * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
+     * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+     *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+     *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+     *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+     *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+     *     back for its air strikes is held back whole (the air is not touched).
+     *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+     *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+     *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+     *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+     *     1.52 m/s (FM 22-5).
+     *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+     *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+     *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+     *     fits").
+     *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+     *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+     *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+     *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+     *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+     *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+     *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+     *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+     *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+     *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+     *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+     *       (the historian, H5): 22 s is the design director's knob.
+     *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+     *       front (ruling 242 as amended).
+     *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+     *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+     *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+     *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+     *     France's (none today; theirs too once H5 finds France a means).
+     */
+    smoke: {
+      share: LOCATE.fire,
+      count: 2,
+      perMin: 15,
+      front: 30,
+      means: {
+        USA: { reach: 195, hang: 30 },
+        UK: { reach: 457, hang: 30, count: 3 },
+        GER: { reach: 30, hang: 22 },
+        SOV: { reach: 30, hang: 22 },
+        JAP: { reach: 188, hang: 22 },
+        ITA: { reach: 0, hang: 19 }
+      },
+      kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
+    },
+    /**
+     * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+     * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+     * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+     * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+     * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+     * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+     * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+     * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+     * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+     * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+     * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+     * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+     * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+     *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+     *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+     *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+     *     Division, 1945).
+     *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+     *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+     *     battle seconds a real minute. Finding the break is not counted (no source).
+     *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+     *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+     *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+     *     Every other army 1 ('_').
+     *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+     *     nations): how orders go once the wire is down.
+     *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+     *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+     *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+     *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+     *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+     *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+     *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+     *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+     *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+     */
+    phones: {
+      cut: 0.12,
+      splice: 30,
+      runner: 6,
+      lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 },
+      fallback: {
+        USA: [[1942, "runner"], [9999, "radio"]],
+        UK: [[9999, "radio"]],
+        CAN: [[9999, "radio"]],
+        AUS: [[9999, "radio"]],
+        NZL: [[9999, "radio"]],
+        SAF: [[9999, "radio"]],
+        IND: [[9999, "radio"]],
+        GER: [[1942, "runner"], [9999, "radio"]],
+        SOV: [[9999, "runner"]],
+        JAP: [[9999, "runner"]],
+        ITA: [[9999, "runner"]],
+        FRA: [[9999, "runner"]],
+        VIC: [[9999, "runner"]],
+        _: [[9999, "runner"]]
+      }
+    },
+    /**
+     * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+     * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+     * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+     * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+     * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+     * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+     * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+     * nerve, its count or its size). Nothing here draws on the dice.
+     *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+     *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+     *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+     *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+     *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+     *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+     *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+     *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+     *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+     *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+     *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+     *       battleorder.org): 4 of a company of 142.
+     *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+     *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+     *       squad (med-dept.com, The WW2 Aid Station).
+     *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+     *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+     *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+     *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+     *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+     *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+     *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+     *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+     *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+     *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+     *       Carded for Record in WWII): knob (DD 18:36Z).
+     *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+     *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+     *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+     *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+     *       knobs (DD 18:36Z).
+     *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+     */
+    bearers: {
+      killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 },
+      share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 },
+      litter: 4,
+      aid: 503,
+      pace: 3.048,
+      light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 }
+    }
+  };
+
+  // ../../data/battle/city-plans.json
+  var city_plans_default = {
+    _doc: [
+      "Each real capital's and city's kept street plan (the design director, b618 and b625). A city's plan is laid from its own name: plan 1 from 'streets:<town>', plan n from 'streets:<town>#n'. Each city keeps the first plan of its own sequence that, fought as it will be fought (its own river or shore in the lie of each of its real attacks, on its kind's 24 equal tickets), sits within 7 points of its kind and runs no more than one fight in ten to the clock. Picked by that rule, never by eye. A city not listed keeps plan 1.",
+      "Two real cities share a town's name (Birmingham in the Midlands and in Alabama): 'shared' gives each its own key by its province's name, so no two cities share a plan. A plan is listed by that key.",
+      "Stalingrad (b625(2)): its strip on, tested by the bars (within a tenth of its kind, no more than one fight in ten to the clock); its plan 2 is the first to meet them.",
+      "Checked again on fresh fights against the kind's own cities on the same fights; a city that read past 7 there walked its sequence again on that test and keeps the first plan that passes.",
+      "Where a city's own river or shore moves every one of its first ten plans the same way past 7, that is the place's water, not chance: the city takes the bars, the first plan within a tenth of its kind and no more than one fight in ten to the clock (the design director, b638). Belgrade (the Danube across with the Sava on the flank) keeps plan 1 so.",
+      "Every attack on a city as the open game fights it: 115 of 683 cross a river on the map, where the card's river is the field's and the city's own water is not drawn. Each city with such an attack was fought on its kind's crossing tickets too, against the kind on the same fights; 13 past 7 there walked their sequence on with every lie, crossings included (b638). Lyon's only miss on plan 1 was a lie the open game fights as a crossing, so it keeps plan 1."
+    ],
+    plans: {
+      Amsterdam: 2,
+      Asuncion: 4,
+      Athens: 2,
+      Atlanta: 3,
+      Balboa: 6,
+      Birmingham: 5,
+      "Birmingham, Alabama": 2,
+      Bogota: 2,
+      Bordeaux: 2,
+      Bratislava: 4,
+      Budapest: 2,
+      "Buenos Aires": 2,
+      Buffalo: 3,
+      Cairo: 3,
+      Chicago: 2,
+      Cincinnati: 2,
+      Cologne: 5,
+      Columbus: 2,
+      Denver: 2,
+      Detroit: 4,
+      Dnepropetrovsk: 5,
+      Dublin: 6,
+      Essen: 2,
+      Glasgow: 4,
+      Gorky: 2,
+      "Guatemala City": 5,
+      Halifax: 3,
+      Hamburg: 6,
+      Hartford: 4,
+      Havana: 4,
+      Houston: 2,
+      Indianapolis: 2,
+      Istanbul: 2,
+      Katowice: 3,
+      Kaunas: 5,
+      Kharkov: 2,
+      Kiev: 3,
+      Leeds: 8,
+      Leipzig: 3,
+      Lille: 6,
+      Lisbon: 4,
+      Liverpool: 6,
+      London: 2,
+      Luxembourg: 3,
+      Madrid: 2,
+      Marseille: 2,
+      "Mexico City": 2,
+      Milan: 2,
+      Milwaukee: 2,
+      Minneapolis: 3,
+      Montevideo: 4,
+      Montreal: 2,
+      Moscow: 2,
+      Munich: 4,
+      "New York": 2,
+      Ottawa: 2,
+      "Panama City": 2,
+      Paris: 2,
+      Philadelphia: 2,
+      Pittsburgh: 2,
+      Ploiesti: 3,
+      Prague: 8,
+      Rome: 3,
+      Rostov: 3,
+      Rotterdam: 5,
+      "San Antonio": 2,
+      Santiago: 2,
+      "Sao Paulo": 2,
+      Saratov: 3,
+      Seattle: 2,
+      Smolensk: 3,
+      "St Louis": 5,
+      Stalingrad: 2,
+      Stockholm: 2,
+      Tbilisi: 4,
+      Tegucigalpa: 2,
+      Tehran: 5,
+      Toledo: 4,
+      Toronto: 4,
+      Vienna: 3,
+      Voronezh: 3,
+      Voroshilovgrad: 2
+    },
+    shared: {
+      Birmingham: {
+        Midlands: "Birmingham",
+        Birmingham: "Birmingham, Alabama"
+      }
+    }
+  };
+
+  // ../../src/battle/land/field.ts
+  var GROUNDS = ["open", "field", "woods", "rough", "marsh", "water", "road", "bridge", "buildings", "rock", "bunker", "works", "blown", "suburb", "industry", "park"];
+  var G3 = Object.fromEntries(GROUNDS.map((k, i) => [k, i]));
+  var CITY_PLANS = { ...city_plans_default.plans };
+  function streetsOf(place2) {
+    if (place2.townSize === "capital") return "capital";
+    return place2.terrain === "urban" || place2.townSize === "city" ? "city" : null;
+  }
+
+  // ../../data/battle/city-rivers.json
+  var city_rivers_default = {
+    _doc: [
+      "A capital's or a city's own river through its streets on the land field (Brian, 18 November: the battle's ground matches the map; the design director, b526).",
+      "Keyed by the town's name as the game names it (townName). The hand list follows the real city in 1939 to 1945, not the campaign map's generalized courses; the historian checked it in one pass (18 November, historian-pass.md).",
+      "form: 'through' (the river runs through the city), 'meet' (two rivers meet at the city: join is the second, joinFrom the compass bearing from the meeting toward where it comes from), 'shore' (the river runs along one edge of the city, not through it: water is the compass bearing from the city's heart to it).",
+      "flows: the compass bearing, in degrees, the river flows toward as it passes the city's heart. great: wider than about 250 metres there (drawn wider).",
+      "Only rivers a street fight would meet: no covered or small streams, and no sea coasts (a bay, a harbour, a strait). Where the card prices a crossing (the province's river between the armies), that river is the field's and this list adds nothing.",
+      "bridges, joinBridges: the city's road bridges over its river and the second river in 1939 to 1945, as the historian counted them for the design director's b596 (bridges.md); 6 stands for six or more, 0 for none (ferries only). The field lays that many, those nearest the heart, and every other avenue ends at a quay; at six or more every avenue has its bridge.",
+      "strip: a shore city that runs along its water, long and shallow (the art director, 19 November): where its water lies behind the defence, its streets run the field's whole width along the bank and reach about 800 m inland. Marked by the design director (b617, b619) where the historian finds the city about 4 to 1 or more along its water with one heart on the bank: Stalingrad, Molotov, Tbilisi, Khabarovsk, Krasnoyarsk. A river through the city (Tbilisi, Krasnoyarsk) lies up or across, never behind as a shore, so there the mark is carried but not drawn."
+    ],
+    cities: {
+      Warsaw: { river: "Vistula", form: "through", flows: 340, great: true, bridges: 3, note: "Praga on the east bank" },
+      Krakow: { river: "Vistula", form: "through", flows: 85, great: false, bridges: 2, note: "Wawel and the old town on the north bank, Podgorze south" },
+      Berlin: { river: "Spree", form: "through", flows: 280, great: false, bridges: 6, note: "through Mitte; the Moltke bridge, April 1945" },
+      Hamburg: { river: "Elbe", form: "through", flows: 300, great: true, bridges: 2, note: "the old town on the north bank, the port islands and Harburg south" },
+      Cologne: { river: "Rhine", form: "through", flows: 345, great: true, bridges: 4, note: "the old town on the west bank, Deutz east" },
+      Frankfurt: { river: "Main", form: "through", flows: 270, great: false, bridges: 5, note: "Sachsenhausen on the south bank" },
+      Munich: { river: "Isar", form: "through", flows: 20, great: false, bridges: 6, note: "east of the old town" },
+      Stuttgart: { river: "Neckar", form: "shore", flows: 0, water: 90, great: false, note: "the city's east edge; Bad Cannstatt across" },
+      Vienna: { river: "Danube", form: "through", flows: 125, great: true, bridges: 6, note: "the inner city south-west of it, Floridsdorf across. The water at the inner city's north-east edge is the Danube Canal (about 50 m); the main stream runs about 2 km beyond it. The April 1945 fighting ran along the canal" },
+      Prague: { river: "Vltava", form: "through", flows: 0, great: false, bridges: 6, note: "the Old Town east, Mala Strana and the castle west" },
+      Paris: { river: "Seine", form: "through", flows: 295, great: false, bridges: 6, note: "the islands at the heart" },
+      Lyon: { river: "Rhone", form: "meet", flows: 180, join: "Saone", joinFrom: 0, great: false, bridges: 6, joinBridges: 6, note: "the Presqu'ile between them, meeting at its southern tip" },
+      Bordeaux: { river: "Garonne", form: "through", flows: 10, great: true, bridges: 1, note: "the crescent; La Bastide on the right bank" },
+      Amsterdam: { river: "IJ", form: "shore", flows: 270, water: 0, great: true, note: "the IJ along the old centre's north edge, the station on its islands; the Amstel (70 to 100 m) came in from the south-east and stopped at the old centre. In a street fight the canal ring matters more" },
+      Rotterdam: { river: "Nieuwe Maas", form: "through", flows: 270, great: true, bridges: 1, note: "the Willems bridge, May 1940; Feijenoord south" },
+      London: { river: "Thames", form: "through", flows: 90, great: true, bridges: 6, note: "the City north, Southwark south" },
+      Liverpool: { river: "Mersey", form: "shore", flows: 330, water: 270, great: true, note: "the estuary along the west; Birkenhead across" },
+      Glasgow: { river: "Clyde", form: "through", flows: 290, great: false, bridges: 6 },
+      Dublin: { river: "Liffey", form: "through", flows: 90, great: false, bridges: 6 },
+      Riga: { river: "Daugava", form: "through", flows: 320, great: true, bridges: 2, note: "the old town on the east bank" },
+      Kaunas: { river: "Nemunas", form: "meet", flows: 280, join: "Neris", joinFrom: 60, great: false, bridges: 1, joinBridges: 1, note: "the old town on the point where the Neris comes in" },
+      Rome: { river: "Tiber", form: "through", flows: 190, great: false, bridges: 6, note: "Trastevere and the Vatican west" },
+      Turin: { river: "Po", form: "through", flows: 10, great: false, bridges: 6, note: "the centre west of it, the hill east" },
+      Bern: { river: "Aare", form: "shore", flows: 0, water: 90, great: false, note: "a horseshoe: the Aare wraps the old town on the north, east and south in a gorge 30 to 40 m down, open to the west; one edge, east, is the best single choice" },
+      Lisbon: { river: "Tagus", form: "shore", flows: 250, water: 170, great: true, note: "the estuary along the city's south edge (b526: a shore, not through it)" },
+      Bratislava: { river: "Danube", form: "through", flows: 100, great: true, bridges: 1, note: "the old town north, Petrzalka south" },
+      Budapest: { river: "Danube", form: "through", flows: 180, great: true, bridges: 5, note: "Buda west, Pest east" },
+      Belgrade: { river: "Danube", form: "meet", flows: 100, join: "Sava", joinFrom: 245, great: true, bridges: 1, joinBridges: 1, note: "the old town and Kalemegdan on the point (b526)" },
+      Leningrad: { river: "Neva", form: "through", flows: 270, great: true, bridges: 6 },
+      Smolensk: { river: "Dnieper", form: "through", flows: 270, great: false, bridges: 2, note: "the kremlin walls on the south bank" },
+      Kiev: { river: "Dnieper", form: "through", flows: 175, great: true, bridges: 1, note: "the city on the high west bank, Darnitsa across (b526)" },
+      Moscow: { river: "Moskva", form: "through", flows: 130, great: false, bridges: 6, note: "the Kremlin on the north bank" },
+      Yaroslavl: { river: "Volga", form: "meet", flows: 135, join: "Kotorosl", joinFrom: 225, great: true, bridges: 0, joinBridges: 2, note: "the old town on the point (the Strelka)" },
+      Gorky: { river: "Volga", form: "meet", flows: 80, join: "Oka", joinFrom: 235, great: true, bridges: 0, joinBridges: 1, note: "the upper town and kremlin over the point" },
+      Voronezh: { river: "Voronezh", form: "through", flows: 175, great: false, bridges: 2, note: "the city on the west bank, the Left Bank across (July 1942)" },
+      Saratov: { river: "Volga", form: "shore", flows: 200, water: 100, great: true, note: "the city along the west bank, Engels across" },
+      Dnepropetrovsk: { river: "Dnieper", form: "through", flows: 100, great: true, bridges: 2, note: "mostly on the south (right) bank" },
+      Zaporozhye: { river: "Dnieper", form: "through", flows: 190, great: true, bridges: 2, note: "Khortitsa island and the dam" },
+      Rostov: { river: "Don", form: "shore", flows: 260, water: 180, great: true, note: "the city on the north bank, the flood plain south" },
+      Stalingrad: { river: "Volga", form: "shore", flows: 195, water: 100, great: true, strip: true, note: "the city along the west bank, more than 20 km long and 2 to 5 km deep; no bridge in 1942" },
+      Tbilisi: { river: "Kura", form: "through", flows: 140, great: false, bridges: 5, strip: true, note: "15 to 20 km along the Kura in its gorge, 3 to 5 deep, the old town and Metekhi on the banks (b619)" },
+      Cairo: { river: "Nile", form: "through", flows: 0, great: true, bridges: 6, note: "the city on the east bank, Giza west, the islands between" },
+      Washington: { river: "Potomac", form: "shore", flows: 160, water: 225, great: true, note: "along the city's south-west, Arlington across" },
+      Philadelphia: { river: "Delaware", form: "shore", flows: 200, water: 100, great: true, note: "the Schuylkill through the west is smaller" },
+      "New York": { river: "Hudson", form: "shore", flows: 200, water: 290, great: true, note: "along Manhattan's west, flowing south; the East River is a tidal strait, left out" },
+      Buffalo: { river: "Niagara", form: "shore", flows: 0, water: 270, great: true },
+      Hartford: { river: "Connecticut", form: "shore", flows: 180, water: 90, great: true },
+      Boston: { river: "Charles", form: "shore", flows: 80, water: 330, great: true, note: "the basin between Boston and Cambridge" },
+      Pittsburgh: { river: "Monongahela", form: "meet", flows: 300, join: "Allegheny", joinFrom: 55, great: true, bridges: 5, joinBridges: 6, note: "they meet at the Point to make the Ohio" },
+      Detroit: { river: "Detroit River", form: "shore", flows: 210, water: 160, great: true, note: "Windsor across" },
+      Chicago: { river: "Chicago River", form: "through", flows: 270, great: false, bridges: 6 },
+      Ottawa: { river: "Ottawa River", form: "shore", flows: 80, water: 350, great: true, note: "Parliament Hill over it, Hull across" },
+      Montreal: { river: "St Lawrence", form: "shore", flows: 45, water: 135, great: true },
+      "Ciudad Trujillo": { river: "Ozama", form: "shore", flows: 180, water: 90, great: false, note: "the old city on its west bank" },
+      Asuncion: { river: "Paraguay", form: "shore", flows: 210, water: 330, great: true },
+      "Buenos Aires": { river: "Plata", form: "shore", flows: 135, water: 80, great: true, note: "the estuary along the east" },
+      Rochester: { river: "Genesee", form: "through", flows: 0, great: false, bridges: 6 },
+      Cincinnati: { river: "Ohio", form: "shore", flows: 260, water: 180, great: true, note: "Covington across" },
+      Toledo: { river: "Maumee", form: "through", flows: 45, great: true, bridges: 3 },
+      Louisville: { river: "Ohio", form: "shore", flows: 270, water: 0, great: true },
+      Minneapolis: { river: "Mississippi", form: "through", flows: 135, great: false, bridges: 6, note: "St Anthony Falls" },
+      "St Louis": { river: "Mississippi", form: "shore", flows: 180, water: 90, great: true },
+      "Kansas City": { river: "Missouri", form: "shore", flows: 80, water: 0, great: true },
+      Memphis: { river: "Mississippi", form: "shore", flows: 190, water: 270, great: true },
+      "New Orleans": { river: "Mississippi", form: "through", flows: 90, great: true, bridges: 0, note: "the crescent; Algiers across" },
+      Portland: { river: "Willamette", form: "through", flows: 0, great: true, bridges: 6 },
+      Columbus: { river: "Scioto", form: "through", flows: 180, great: false, bridges: 5 },
+      Tokyo: { river: "Sumida", form: "through", flows: 180, great: false, bridges: 6 },
+      Osaka: { river: "Okawa", form: "through", flows: 270, great: false, bridges: 6, note: "the old course of the Yodo, round Nakanoshima" },
+      Hiroshima: { river: "Ota", form: "through", flows: 180, great: false, bridges: 6, note: "the delta's channels; the Aioi bridge" },
+      Seoul: { river: "Han", form: "shore", flows: 270, water: 180, great: true, note: "Keijo under Japan; south of the old city, by Yongsan" },
+      Harbin: { river: "Sungari", form: "shore", flows: 70, water: 0, great: true },
+      Mukden: { river: "Hun", form: "shore", flows: 225, water: 180, great: false },
+      Tientsin: { river: "Hai", form: "through", flows: 120, great: false, bridges: 3, note: "the concessions along it" },
+      Nanking: { river: "Yangtze", form: "shore", flows: 45, water: 310, great: true, note: "the walls' north-west side by the river, Pukou across" },
+      Shanghai: { river: "Huangpu", form: "through", flows: 10, great: true, bridges: 0, note: "the Bund on the west bank, Pudong across" },
+      Hankow: { river: "Yangtze", form: "meet", flows: 45, join: "Han", joinFrom: 290, great: true, bridges: 0, joinBridges: 0, note: "Hankow, Hanyang and Wuchang about the meeting" },
+      Canton: { river: "Pearl", form: "through", flows: 90, great: true, bridges: 1, note: "Honam across" },
+      Chungking: { river: "Yangtze", form: "meet", flows: 60, join: "Jialing", joinFrom: 315, great: true, bridges: 0, joinBridges: 0, note: "the old city on the point" },
+      Khabarovsk: { river: "Amur", form: "shore", flows: 0, water: 270, great: true, strip: true, note: "12 to 15 km along the Amur's right bank, 3 to 4 deep, on the cliff with three ridges running down to the river (b619)" },
+      Hanoi: { river: "Red River", form: "shore", flows: 135, water: 70, great: true, note: "the Doumer bridge" },
+      Saigon: { river: "Saigon River", form: "shore", flows: 170, water: 80, great: true },
+      Bangkok: { river: "Chao Phraya", form: "through", flows: 180, great: true, bridges: 2, note: "Thonburi across" },
+      Rangoon: { river: "Rangoon River", form: "shore", flows: 120, water: 180, great: true },
+      Manila: { river: "Pasig", form: "through", flows: 270, great: false, bridges: 4, note: "crossed under fire, February 1945" },
+      Perth: { river: "Swan", form: "shore", flows: 250, water: 180, great: true },
+      Brisbane: { river: "Brisbane River", form: "through", flows: 45, great: true, bridges: 4 },
+      Melbourne: { river: "Yarra", form: "through", flows: 270, great: false, bridges: 6 },
+      Ufa: { river: "Belaya", form: "shore", flows: 340, water: 270, great: true, note: "the Ufa River comes into the Belaya at the city's northern edge" },
+      Irkutsk: { river: "Angara", form: "through", flows: 340, great: true, bridges: 1 },
+      Molotov: { river: "Kama", form: "shore", flows: 245, water: 330, great: true, strip: true, note: "Perm until 1940, Molotov from 1940 to 1957; the centre on the Kama's south-east bank; 20 to 25 km along it with Motovilikha, 3 to 4 deep (b619)" },
+      Kuibyshev: { river: "Volga", form: "shore", flows: 190, water: 250, great: true, note: "the Samara River comes into the Volga at the city's southern edge" },
+      Kazan: { river: "Kazanka", form: "shore", flows: 270, water: 0, great: false, note: "along the kremlin's north side, west into the Volga; the heart south of it, only suburbs across. The Volga ran 5 to 6 km off before its reservoir (1955-57)" },
+      Omsk: { river: "Irtysh", form: "meet", flows: 0, join: "Om", joinFrom: 90, great: true, bridges: 0, joinBridges: 2 },
+      Novosibirsk: { river: "Ob", form: "through", flows: 340, great: true, bridges: 0 },
+      Krasnoyarsk: { river: "Yenisei", form: "through", flows: 60, great: true, bridges: 0, strip: true, note: "10 to 12 km along the Yenisei, 2 to 3 deep, between the river and the hills (b619)" },
+      Stalinsk: { river: "Tom", form: "through", flows: 340, great: false, bridges: 1 },
+      Abadan: { river: "Shatt al-Arab", form: "shore", flows: 135, water: 60, great: true },
+      Lahore: { river: "Ravi", form: "shore", flows: 225, water: 315, great: true },
+      Delhi: { river: "Yamuna", form: "shore", flows: 170, water: 80, great: true },
+      Calcutta: { river: "Hooghly", form: "through", flows: 190, great: true, bridges: 1, note: "Howrah across" },
+      Khartoum: { river: "White Nile", form: "meet", flows: 0, join: "Blue Nile", joinFrom: 90, great: true, bridges: 1, joinBridges: 1, note: "the White Nile from the south, the Blue Nile from the east; the Nile runs north from the meeting. Khartoum on the Blue Nile's south bank at the point, Omdurman across the White Nile" }
+    }
+  };
+
+  // ../../src/battle/land/stream.ts
+  var CITY_RIVERS = city_rivers_default.cities;
+  var rel = (a, b) => ((a - b) % 360 + 540) % 360 - 180;
+  function streamOf(r, heading) {
+    const side3 = (b) => rel(b, heading) < 0 ? "west" : "east";
+    const f = rel(r.flows, heading), along = Math.abs(f) <= 45 || Math.abs(f) >= 135;
+    if (r.form === "shore") {
+      const water = r.water ?? r.flows + 90;
+      if (Math.abs(rel(water, heading)) <= 45) return { name: r.river, lie: "shore", flows: f > 0 ? "east" : "west", side: "back", great: r.great, ...r.strip ? { strip: true } : {} };
+      return { name: r.river, lie: "shore", flows: Math.abs(f) < 90 ? "north" : "south", side: side3(water), great: r.great };
+    }
+    return {
+      name: r.river,
+      lie: along ? "up" : "across",
+      flows: along ? Math.abs(f) < 90 ? "north" : "south" : f > 0 ? "east" : "west",
+      great: r.great,
+      // The record's count, where it is one: 6 stands for six or more (a great city's every avenue has its bridge).
+      ...r.bridges !== void 0 && r.bridges < 6 ? { bridges: r.bridges } : {},
+      ...r.form === "meet" && r.join ? { join: { name: r.join, side: side3(r.joinFrom ?? r.flows + 180), ...r.joinBridges !== void 0 && r.joinBridges < 6 ? { bridges: r.joinBridges } : {} } } : {}
+    };
+  }
+  function streamFor(town, heading) {
+    const r = town ? CITY_RIVERS[town] : void 0;
+    return r ? streamOf(r, heading) : void 0;
+  }
+  function bearingOf(x0, y0, x1, y1) {
+    const lat = 71.4 - (y0 + y1) / 80, k = Math.cos(lat * Math.PI / 180) / Math.cos(50 * Math.PI / 180);
+    return (Math.atan2((x1 - x0) * k, -(y1 - y0)) * 180 / Math.PI + 360) % 360;
+  }
+
+  // ../../src/battle/land/ticket.ts
+  function goingIn(g2, corps, target) {
+    return jointForce(g2, limitAttackers(g2, jointForce(g2, corps, target), target), target);
+  }
+  var DOCTRINES = ["combined", "deep"];
+  function sideOf6(g2, nat, cs, weigh3, crosses2) {
+    const N = g2.nations[nat];
+    const w = cs.map(weigh3), tot = w.reduce((a, b) => a + b, 0) || 1;
+    const forces = cs.map((c, i) => ({
+      corps: c.id,
+      name: c.name,
+      nat: c.nat,
+      kind: c.kind,
+      divs: c.divs,
+      men: men(c),
+      str: c.str,
+      org: c.org,
+      xp: c.xp,
+      ...c.mor !== void 0 ? { mor: c.mor } : {},
+      ...c.dug ? { dug: true } : {},
+      ...c.dn !== void 0 ? { first: c.dn } : {},
+      // Each block is one of these divisions, named as the army tray names it (the UI and design directors, b358).
+      divisions: divisionsOf(g2, c).map((d) => ({ name: d.name, short: d.short, str: d.str, xp: d.xp, men: d.men })),
+      share: w[i] / tot,
+      battles: c.rec?.battles ?? 0,
+      // A corps the card has come on with no river before it does not cross on the field either (b464(5)).
+      ...crosses2 && !crosses2(c) ? { cross: false } : {}
+    }));
+    const lead2 = cs.map((c) => generalOf(g2, c)).filter((x) => !!x).sort((a, b) => b.level - a.level)[0] ?? null;
+    const doctrine = techRules(g2) ? DOCTRINES.filter((id) => !!N?.tech?.done.includes(id)) : [];
+    return {
+      nat,
+      adj: N?.adj ?? nat,
+      color: N?.color ?? "#888888",
+      human: nat === g2.human,
+      forces,
+      general: lead2 ? { name: lead2.name, level: lead2.level } : null,
+      ...doctrine.length ? { doctrine } : {}
+    };
+  }
+  var CROSSINGS2 = {
+    Sedan: { river: "Meuse", at: [0.12, 0.85] }
+  };
+  function dryEnd(g2, going, target) {
+    const dry = going.filter((c) => !riverBetween(g2, c.reg, target.id)), wet = going.filter((c) => !dry.includes(c));
+    if (!dry.length || !wet.length) return null;
+    const mid = (cs) => [cs.reduce((a, c) => a + g2.regions[c.reg].x, 0) / cs.length, cs.reduce((a, c) => a + g2.regions[c.reg].y, 0) / cs.length];
+    const [mx, my] = mid(going), dx = target.x - mx, dy = target.y - my;
+    const left = (cs) => {
+      const [x, y] = mid(cs);
+      return (x - mx) * dy - (y - my) * dx;
+    };
+    return left(dry) >= left(wet) ? "west" : "east";
+  }
+  function onCall(s) {
+    if (!s || !(Number(s.share) > 0) || !(Number(s.strikes) > 0) || !s.groups?.length) return {};
+    return { air: { share: s.share, strikes: Math.floor(s.strikes), groups: s.groups.map((x) => ({ id: x.id, name: x.name, nat: x.nat, planes: x.planes, lose: x.lose })) } };
+  }
+  function landTicket(g2, chosen, target) {
+    const corps = chosen.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id));
+    const a = previewAttack(g2, corps, target);
+    if (!a || !a.defenders.length) return null;
+    const going = goingIn(g2, corps, target);
+    if (!going.length) return null;
+    const attNat = armyOf(going[0]);
+    const defNat = a.defenders[0].nat;
+    const crossing2 = going.map((c) => riverBetween(g2, c.reg, target.id)).find((x) => !!x) ?? null;
+    const from = g2.regions[going[0].reg];
+    const dry = crossing2 ? dryEnd(g2, going, target) : null;
+    const place2 = {
+      region: target.id,
+      name: target.name,
+      terrain: target.terrain,
+      river: crossing2 ? riverName(crossing2) : null,
+      bridgeDown: crossing2 ? bridgeDown(g2, crossing2) : false,
+      town: townName(target),
+      townSize: townSize(g2, target),
+      fort: target.fort && target.fort.vs.includes(from.owner) ? target.fort.lv : 0,
+      mines: minesAt(g2, target),
+      ...crossing2 && CROSSINGS2[target.name]?.river === riverName(crossing2) ? { crossings: CROSSINGS2[target.name].at } : {},
+      ...dry ? { dryEnd: dry } : {}
+    };
+    if (!crossing2 && streetsOf(place2)) {
+      const mx = going.reduce((s, c) => s + g2.regions[c.reg].x, 0) / going.length, my = going.reduce((s, c) => s + g2.regions[c.reg].y, 0) / going.length;
+      const stream = streamFor(place2.town, bearingOf(mx, my, target.x, target.y));
+      if (stream) place2.stream = stream;
+    }
+    const date2 = turnToDate(g2.turn);
+    const band = oddsBand(g2, a.defenders, a.odds, target.id, g2.human);
+    const cardAir = a.air;
+    const weighDef = (c) => corpsBase(g2, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)));
+    return {
+      domain: "land",
+      kind: "field",
+      seed: hashString(`field:${g2.seed}:${g2.turn}:${target.id}:${attNat}`) >>> 0,
+      turn: g2.turn,
+      date: date2.label,
+      title: `The Battle of ${target.name}`,
+      place: place2,
+      // The card's river line counts the corps that cross as those with the river between them and the place (assess in
+      // game.ts): the field lays the river before those, and no others.
+      att: { ...sideOf6(g2, attNat, going, (c) => corpsBase(g2, c) * KIND[c.kind].atk, crossing2 ? (c) => !!riverBetween(g2, c.reg, target.id) : void 0), ...onCall(cardAir?.att) },
+      def: { ...withGuard(g2, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf6(g2, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
+      reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...band.exact ? {} : { seen: band.mid } },
+      lines: a.lines,
+      limit: LAND2.limit,
+      // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
+      attempt: g2.reports.filter((x) => x.turn === g2.turn && x.region === target.id && x.attNat === attNat).length,
+      // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
+      hist: stopOf(g2)
+    };
+  }
+  function withGuard(g2, target, guard, tot, side3) {
+    const d = guard > 0 ? guardOf(g2, target) : 0;
+    if (d <= 0) return side3;
+    const w = guardPower(g2, target) * 1.25, all = tot + w;
+    if (!(all > 0)) return side3;
+    const men2 = guardMen(g2, target), n = Math.max(1, Math.round(d)), str = Math.min(1, d / n);
+    const name = `Town guard of ${townName(target)}`, short = `${townName(target)} guard`;
+    const force2 = {
+      corps: guardForce(target),
+      name,
+      nat: target.ctrl,
+      kind: "inf",
+      divs: d,
+      men: men2,
+      str,
+      org: SIEGE.guardOrg,
+      xp: 0.1,
+      mor: 0.5,
+      dug: true,
+      divisions: Array.from({ length: n }, (_, i) => ({ name: n > 1 ? `${name} (${i + 1})` : name, short, str, xp: 0.1, men: Math.round(men2 / n) })),
+      share: w / all,
+      battles: 0
+    };
+    return { ...side3, forces: [...side3.forces.map((f) => ({ ...f, share: f.share * tot / all })), force2] };
+  }
+  function fieldBill(result) {
+    const corps = {};
+    for (const f of result.forces ?? []) corps[f.corps] = f.lost;
+    const sorties2 = {};
+    for (const s of ["att", "def"]) for (const f of result.air?.[s] ?? []) sorties2[f.group] = (sorties2[f.group] ?? 0) + f.sorties;
+    return {
+      corps,
+      att: result.lost.att,
+      def: result.lost.def,
+      whole: result.how !== "objective",
+      ...result.broke ? { broke: result.broke } : {},
+      ...result.pulled ? { pulled: { ...result.pulled } } : {},
+      ...result.air ? { air: sorties2 } : {}
+    };
+  }
+  function pursuitLine(t, result, rep) {
+    const s = result.broke ?? result.pulled?.side;
+    if (!s || s === "def" !== result.R >= 1.2) return null;
+    const us = s === "att" ? rep.attackers : rep.defenders;
+    const lost = Math.max(s === "att" ? rep.attLost : rep.defLost, us.reduce((a, u) => a + u.lost, 0));
+    const onField = Math.round(result.lost[s] * t[s].forces.reduce((a, f) => a + f.men, 0));
+    const more = lost - onField;
+    if (more <= Math.max(10, onField * 0.01)) return null;
+    const army = t[s].human ? "your army" : `the ${t[s].adj} army`;
+    if (!result.broke) return `As ${army} withdrew under fire, it lost ${more.toLocaleString("en-GB")} more men in the rearguard and as stragglers.`;
+    return `After ${army} broke, it lost ${more.toLocaleString("en-GB")} more men in the pursuit and as prisoners.`;
+  }
+  function cardKnows(g2, t) {
+    const them = t.att.human ? t.def : t.att;
+    const out = /* @__PURE__ */ new Set();
+    for (const f of them.forces) {
+      if (f.corps < 0) {
+        out.add(f.corps);
+        continue;
+      }
+      const c = g2.corps.find((x) => x.id === f.corps);
+      if (c && corpsKnown(g2, c, g2.human).level !== "none") out.add(f.corps);
+    }
+    return out;
+  }
+
+  // ../../src/battle/land/offered.ts
+  var CLOSE_CARD = 1.7;
+  var STAFF_SETTLES = [
+    // Release 1 (b492(1), b494): some corps cross a river and the rest come on over dry ground, at close odds.
+    { kind: "river-split-close", measured: "60 captured campaign attacks, 10 fights each, 18 November, with the river hold of b494: 15 points under the card" },
+    // The design director (b494): close whole crossings stay open unless past a tenth. The field fights them 6.9 points
+    // under the card with no river at all (the field-wide shortfall, the next pass's first item) and 6.2 more for the
+    // river, which the card has already priced.
+    { kind: "river-whole-close", measured: "32 captured campaign attacks, 10 fights each, 18 November, with the river hold of b494: 13 points under the card" }
+  ];
+  function kindsOf(t) {
+    const divs = t.def.forces.reduce((a, f) => a + f.divs, 0);
+    const size = divs <= 2 ? "smallest" : divs >= 11 ? "largest" : "middle";
+    const att = t.att.forces;
+    const split = !!t.place.river && att.some((f) => f.cross === false) && att.some((f) => f.cross !== false);
+    const whole2 = !!t.place.river && att.every((f) => f.cross !== false);
+    const close3 = Number((t.reckoning.seen ?? t.reckoning.odds).toFixed(2)) <= CLOSE_CARD;
+    return [
+      size,
+      t.place.terrain,
+      ...t.place.river ? ["river"] : [],
+      ...split && close3 ? ["river-split-close"] : [],
+      ...whole2 && close3 ? ["river-whole-close"] : [],
+      ...t.place.fort > 0 ? ["works"] : []
+    ];
+  }
+  var SAID = {
+    river: "across a river",
+    works: "against fortress works",
+    plains: "in open country",
+    forest: "in the forests",
+    hills: "in hill country",
+    mountain: "in the mountains",
+    marsh: "in the marshes",
+    urban: "in city streets",
+    desert: "in the open desert",
+    smallest: "where two divisions or fewer defend",
+    middle: "where three to ten divisions defend",
+    largest: "where eleven or more divisions defend",
+    // One sentence for both close river kinds (the UI director, 16:47Z); a battle is only ever one of them. The cut is
+    // the staff's best guess of the odds, so the line names it and gives this card's figure (17:05Z): {odds} below.
+    "river-split-close": "across a river where its best guess of the odds is 1.7 to 1 or less, as here ({odds} to 1)",
+    "river-whole-close": "across a river where its best guess of the odds is 1.7 to 1 or less, as here ({odds} to 1)"
+  };
+  var ORDER3 = ["river", "works", "plains", "forest", "hills", "mountain", "marsh", "urban", "desert", "smallest", "middle", "largest", "river-split-close", "river-whole-close"];
+  function staffOnly(t, list4 = STAFF_SETTLES) {
+    const off = kindsOf(t).filter((k) => list4.some((s) => s.kind === k));
+    if (!off.length) return null;
+    const odds = String(Number((t.reckoning.seen ?? t.reckoning.odds).toFixed(2)));
+    const said = ORDER3.filter((k) => off.includes(k)).map((k) => SAID[k].replace("{odds}", odds)).join(" ");
+    return `The staff settles every battle ${said}: the field cannot fight one at the card's odds.`;
+  }
+
+  // Rules/battle-bridge.ts
+  function liveOf(g2, t, look) {
+    const fog = !!look && !look.exact;
+    const designYears = {};
+    for (const nat of /* @__PURE__ */ new Set([t.att.nat, t.def.nat, ...t.att.forces.map((f) => f.nat), ...t.def.forces.map((f) => f.nat)])) {
+      const y = armourYear(g2, nat);
+      if (y) designYears[nat] = y;
+    }
+    return { fog, seen: fog ? [...cardKnows(g2, t)] : [], designYears };
+  }
+  function battleCalls(h) {
+    const landSettle = (ids2, to, t) => (r) => {
+      const out = h.attack(ids2, to, r.R, fieldBill(r));
+      const rep = out?.report;
+      const pursuit = rep ? pursuitLine(t, r, rep) : null;
+      const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
+      return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
+    };
+    const landSettled = /* @__PURE__ */ new WeakMap();
+    const WRONG_BATTLE = "The attack the campaign would make now is not the battle that was fought.";
+    return {
+      battleLook(ids2, to) {
+        const g2 = h.game();
+        const corps = ids2.map((i) => g2.corps.find((c) => c.id === i)).filter((c) => !!c);
+        const t = landTicket(g2, corps, g2.regions[to]);
+        if (!t) return null;
+        const why = staffOnly(t);
+        if (why) return { ticket: null, why };
+        return { ticket: t, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
+      },
+      battleSettleLand(ids2, to, result, seed) {
+        const r = result && "over" in result ? result.over : result;
+        if (!r || typeof r.R !== "number" || !Array.isArray(r.lines)) return null;
+        const g2 = h.game();
+        const given2 = seed !== void 0 && seed !== null ? Number(seed) : null;
+        const done = landSettled.get(g2) ?? /* @__PURE__ */ new Map();
+        const key6 = JSON.stringify([g2.turn, ids2, to, r]);
+        const was = done.get(key6);
+        if (was) return given2 !== null && given2 !== was.seed ? { why: WRONG_BATTLE } : was.out;
+        const corps = ids2.map((i) => g2.corps.find((c) => c.id === i)).filter((c) => !!c);
+        const t = landTicket(g2, corps, g2.regions[to]);
+        if (!t || staffOnly(t)) return null;
+        if (given2 !== null && given2 !== t.seed) return { why: WRONG_BATTLE };
+        const out = landSettle(ids2, to, t)(r) ?? null;
+        done.set(key6, { seed: t.seed, out });
+        landSettled.set(g2, done);
+        return out;
+      }
+    };
   }
 
   // ../../src/campaign/guard.ts
@@ -47995,7 +49258,7 @@
     const out = [];
     try {
       const grand2 = groundRules(s), alone = gunsRule(s);
-      const GROUNDS = [["plains", "open country"], ["desert", "desert"], ["forest", "forest"], ["hills", "hills"], ["mountain", "mountains"], ["marsh", "marsh"], ["urban", "cities"]];
+      const GROUNDS2 = [["plains", "open country"], ["desert", "desert"], ["forest", "forest"], ["hills", "hills"], ["mountain", "mountains"], ["marsh", "marsh"], ["urban", "cities"]];
       const by = (m) => `${m > 1 ? "+" : "−"}${Math.round(Math.abs(m - 1) * 100)}%`;
       const upTo = (x) => `${Math.round(x * 100)}%`;
       const A = GROUND.arms;
@@ -48013,7 +49276,7 @@
       for (const kind of Object.keys(KIND)) {
         const k = KIND[kind];
         const good = [], poor = [];
-        for (const [t, word2] of GROUNDS) {
+        for (const [t, word2] of GROUNDS2) {
           let a = grand2 ? GROUND.attack[kind]?.[t] ?? 1 : 1;
           const d = grand2 ? GROUND.defence[kind]?.[t] ?? 1 : 1;
           const m = grand2 ? GROUND.march[kind]?.[t] ?? 0 : 0;
@@ -50435,11 +51698,11 @@
     }
     return { ok, note: note4, view: view2() };
   }
-  function attack(ids2, to) {
+  function attack(ids2, to, fought, field4) {
     const s = game();
     const before = new Map(s.corps.map((c) => [c.id, c.reg]));
     const sent = attackers(s, ids2, to);
-    const report = orderAttack(s, sent, s.regions[to]);
+    const report = orderAttack(s, sent, s.regions[to], fought, field4);
     if (report) forgetMarch(s, sent.map((c) => c.id));
     const moved = report ? s.corps.filter((c) => !c.dead && (c.nat === s.human || !!s.human && c.joint === s.human) && c.reg === to && before.get(c.id) !== to).map((c) => ({ id: c.id, path: [to] })) : [];
     const siege = !!report?.siege;
@@ -54322,6 +55585,8 @@ ${standing5}`,
     lessonAct,
     notebook: lessonNotebook,
     guide: lessonGuide,
-    openingCard
+    openingCard,
+    // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
+    ...battleCalls({ game, attack: playerOrder(attack) })
   };
 })();
