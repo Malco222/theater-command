@@ -2214,7 +2214,7 @@ namespace LandCrater
 	}
 
 	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
-		const std::vector<std::pair<double, double>>& Gates, double Heading)
+		const std::vector<std::pair<double, double>>& Gates, double Heading, const std::function<bool(double X, double Y)>& Open)
 	{
 		std::vector<std::vector<std::pair<double, double>>> Ways;
 		if (Battles <= 0)
@@ -2245,30 +2245,43 @@ namespace LandCrater
 		const auto InBox = [&](double X, double Y) { return X >= X0 && X <= X1 && Y >= Y0 && Y <= Y1; };
 		const int Wanted = std::min(10, 3 + 2 * Battles);
 		Dice D(Mix(Seed, 0x3A7Dull));
-		// (a leg from A to B, bowed a little to one side, a point every 6 m)
-		const auto Leg = [&D](std::vector<std::pair<double, double>>& Way, double AX, double AY, double BX, double BY)
+		// (a leg from A to B, bowed a little to one side, a point every 6 m; false, and nothing added, where it would cross
+		// what a column cannot drive over, but within 6 m of its ends, the gateways, whose floor reads as the bank's)
+		const auto Leg = [&D, &Open](std::vector<std::pair<double, double>>& Way, double AX, double AY, double BX, double BY)
 		{
 			const double Long = std::hypot(BX - AX, BY - AY);
 			const double Bow = D.U(-0.12, 0.12) * Long;
 			const double Cx = 0.5 * (AX + BX) - (BY - AY) / std::max(1e-6, Long) * Bow, Cy = 0.5 * (AY + BY) + (BX - AX) / std::max(1e-6, Long) * Bow;
+			const auto On = [&](double T) { const double U = 1.0 - T; return std::pair<double, double>(U * U * AX + 2.0 * U * T * Cx + T * T * BX, U * U * AY + 2.0 * U * T * Cy + T * T * BY); };
+			if (Open)
+			{
+				const int Looks = std::max(2, static_cast<int>(Long / 1.2));
+				for (int I = 0; I <= Looks; ++I)
+				{
+					const double T = static_cast<double>(I) / Looks;
+					if (T * Long < 6.0 || (1.0 - T) * Long < 6.0) continue;
+					const std::pair<double, double> P = On(T);
+					if (!Open(P.first, P.second)) return false;
+				}
+			}
 			const int Steps = std::max(2, static_cast<int>(Long / 6.0));
 			for (int I = Way.empty() ? 0 : 1; I <= Steps; ++I)
 			{
-				const double T = static_cast<double>(I) / Steps, U = 1.0 - T;
-				Way.emplace_back(U * U * AX + 2.0 * U * T * Cx + T * T * BX, U * U * AY + 2.0 * U * T * Cy + T * T * BY);
+				Way.push_back(On(static_cast<double>(I) / Steps));
 			}
+			return true;
 		};
-		std::vector<std::pair<double, double>> Open;
+		std::vector<std::pair<double, double>> Gate;
 		for (const auto& G : Gates)
 		{
-			if (InBox(G.first, G.second)) Open.push_back(G);
+			if (InBox(G.first, G.second)) Gate.push_back(G);
 		}
-		if (Open.size() >= 4)
+		if (Gate.size() >= 4)
 		{
 			// Through the gateways: from one to another, on and on, never back the way it came.
 			for (int W = 0; W < Wanted * 3 && static_cast<int>(Ways.size()) < Wanted; ++W)
 			{
-				size_t Here = std::min(Open.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Open.size())));
+				size_t Here = std::min(Gate.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Gate.size())));
 				std::vector<size_t> Been{ Here };
 				std::vector<std::pair<double, double>> Way;
 				double Was = 0.0;
@@ -2276,10 +2289,10 @@ namespace LandCrater
 				for (int L = 0; L < Legs; ++L)
 				{
 					std::vector<size_t> Next;
-					for (size_t K = 0; K < Open.size(); ++K)
+					for (size_t K = 0; K < Gate.size(); ++K)
 					{
 						if (std::find(Been.begin(), Been.end(), K) != Been.end()) continue;
-						const double Dx = Open[K].first - Open[Here].first, Dy = Open[K].second - Open[Here].second;
+						const double Dx = Gate[K].first - Gate[Here].first, Dy = Gate[K].second - Gate[Here].second;
 						const double Long = std::hypot(Dx, Dy);
 						if (Long < 30.0 || Long > 220.0) continue;
 						if (L > 0 && std::cos(std::atan2(Dy, Dx) - Was) < std::cos(75.0 * Pi / 180.0)) continue;
@@ -2289,11 +2302,25 @@ namespace LandCrater
 					{
 						break;
 					}
-					const size_t To = Next[std::min(Next.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Next.size())))];
-					Was = std::atan2(Open[To].second - Open[Here].second, Open[To].first - Open[Here].first);
-					Leg(Way, Open[Here].first, Open[Here].second, Open[To].first, Open[To].second);
-					Been.push_back(To);
-					Here = To;
+					// (a gateway that way a column could reach without crossing a hedge: tried in a seeded order)
+					bool bTook = false;
+					while (!Next.empty() && !bTook)
+					{
+						const size_t Pick = std::min(Next.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Next.size())));
+						const size_t To = Next[Pick];
+						Next.erase(Next.begin() + static_cast<std::ptrdiff_t>(Pick));
+						if (Leg(Way, Gate[Here].first, Gate[Here].second, Gate[To].first, Gate[To].second))
+						{
+							Was = std::atan2(Gate[To].second - Gate[Here].second, Gate[To].first - Gate[Here].first);
+							Been.push_back(To);
+							Here = To;
+							bTook = true;
+						}
+					}
+					if (!bTook)
+					{
+						break;
+					}
 				}
 				if (Way.size() >= 2)
 				{
@@ -2332,15 +2359,32 @@ namespace LandCrater
 			double X = Cx - Hx * Back - Hy * Aside, Y = Cy - Hy * Back + Hx * Aside;
 			double A = Head + D.U(-0.3, 0.3);
 			const double Long = D.U(150.0, 450.0);
+			if (Open && !Open(X, Y))
+			{
+				continue;
+			}
 			std::vector<std::pair<double, double>> Way{ { X, Y } };
 			for (double Gone = 0.0; Gone < Long; Gone += 6.0)
 			{
 				A += D.U(-0.07, 0.07) + 0.1 * std::remainder(Head - A, 2.0 * Pi);
+				// (ended where it meets what a column cannot drive over: checked every 1.2 m of the step)
+				bool bBlocked = false;
+				for (int K = 1; K <= 5 && Open && !bBlocked; ++K)
+				{
+					bBlocked = !Open(X + std::cos(A) * 1.2 * K, Y + std::sin(A) * 1.2 * K);
+				}
+				if (bBlocked)
+				{
+					break;
+				}
 				X += std::cos(A) * 6.0;
 				Y += std::sin(A) * 6.0;
 				Way.emplace_back(X, Y);
 			}
-			Ways.push_back(std::move(Way));
+			if (Way.size() >= 11) // (60 m at least, or no way to read)
+			{
+				Ways.push_back(std::move(Way));
+			}
 		}
 		return Ways;
 	}

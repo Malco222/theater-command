@@ -7136,6 +7136,8 @@ void ALandBattle::LayOldRuts()
 	{
 		return;
 	}
+	// (the campaign writes it only while the player's Battle rules row "Old ruts" is on, and that row starts off until
+	// the art director passes the look and the Mac holds 45 fps: the production lead's call, 23 November 01:40Z)
 	int32 Battles = S.Rec.OldRutCount;
 	double Months = S.Rec.OldRutMonths;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldRuts="), Battles);
@@ -7181,7 +7183,16 @@ void ALandBattle::LayOldRuts()
 	const bool bWet = Word.TrimStartAndEnd().ToLower() == TEXT("mud");
 	const double Took = LandParts::Seconds();
 	const uint64_t Seed = S.Rec.Seed ? S.Rec.Seed : 1;
-	const std::vector<std::vector<std::pair<double, double>>> Ways = LandCrater::OldWays(Fought, Battles, Seed, Gates, Heading);
+	// (where a column may drive: a field, a pasture, rough ground, the trodden field works; not through a hedge's bank, a lane, a wall, a yard, a
+	// wood or water, pre-check's 01:36Z: seven ways had crossed a bank away from any gateway twelve times)
+	const LandField::Ground* FieldPtr = S.Field.get();
+	const auto Open = [FieldPtr](double X, double Y)
+	{
+		LandField::Drawn What = LandField::Drawn::Pasture;
+		FieldPtr->HeightAt(X, Y, &What);
+		return What == LandField::Drawn::Pasture || What == LandField::Drawn::Crop || What == LandField::Drawn::Rough || What == LandField::Drawn::Works || What == LandField::Drawn::Beyond;
+	};
+	const std::vector<std::vector<std::pair<double, double>>> Ways = LandCrater::OldWays(Fought, Battles, Seed, Gates, Heading, Open);
 	const int Laid = S.Ruts.LayOld(Ways, Months, bWet, Seed);
 	// (the grass laid again without what stands in a bare rut: dried mud or puddled; grassed over, it stands)
 	if (Carpet.IsValid() && (bWet || Months < 3.0))

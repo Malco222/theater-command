@@ -478,10 +478,12 @@ namespace LandCrater
 	 * each way from one gateway to another 30 to 220 m on, turning less than 75 degrees, two to four legs, each gently
 	 * bowed; on open ground across it along Heading (radians from east, the way the battle's machines went; not a
 	 * number: the line its ground is spread along most), wandering a little, 150 to 450 m. Three, and two more for
-	 * each battle before, ten at most. Seeded: the same field, the same ways.
+	 * each battle before, ten at most. Open: where a column may drive (a field, a pasture, rough ground, field works; not a bank, a
+	 * lane, a wall, a yard, a wood, water): a leg between gateways crossing anything else but at its ends is not
+	 * taken, and a way on open ground ends where it meets one (none: anywhere). Seeded: the same field, the same ways.
 	 */
 	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
-		const std::vector<std::pair<double, double>>& Gates, double Heading);
+		const std::vector<std::pair<double, double>>& Gates, double Heading, const std::function<bool(double X, double Y)>& Open = nullptr);
 
 	/**
 	 * Where an earlier battle's fight lay along (LayScars): the hedgerows', walls' and lanes' middle lines (each a line of

@@ -1175,7 +1175,32 @@ int main(int argc, char** argv)
 		for (const LandField::HedgeOpening& O : Field.Openings()) Gates.emplace_back(O.X, O.Y);
 		const double Heading = Sx * Sx + Sy * Sy > 0.0 ? 0.5 * std::atan2(Sy, Sx) : std::nan("");
 		const auto RutT0 = std::chrono::steady_clock::now();
-		const auto Ways = LandCrater::OldWays(Fought, 2, Rec.Seed ? Rec.Seed : 1, Gates, Heading);
+		// (where a column may drive, as LandBattle's LayOldRuts says)
+		const auto Open = [&Field](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Field.HeightAt(X, Y, &What);
+			return What == LandField::Drawn::Pasture || What == LandField::Drawn::Crop || What == LandField::Drawn::Rough || What == LandField::Drawn::Works || What == LandField::Drawn::Beyond;
+		};
+		const auto Ways = LandCrater::OldWays(Fought, 2, Rec.Seed ? Rec.Seed : 1, Gates, Heading, Open);
+		// (none across a hedge's bank, a lane, a wall, a yard, a wood or water, but within 6 m of a gateway: pre-check's
+		// 01:36Z, the ways had crossed banks away from any gateway; read every 1.2 m along them)
+		int Crossed = 0, Read = 0;
+		for (const auto& W : Ways)
+			for (size_t K = 0; K + 1 < W.size(); ++K)
+			{
+				const double L = std::hypot(W[K + 1].first - W[K].first, W[K + 1].second - W[K].second);
+				for (int I = 0; I < std::max(1, static_cast<int>(L / 1.2)); ++I)
+				{
+					const double T = I * 1.2 / std::max(1e-6, L), Px = W[K].first + (W[K + 1].first - W[K].first) * T, Py = W[K].second + (W[K + 1].second - W[K].second) * T;
+					bool bNearGate = false;
+					for (const auto& G : Gates)
+						if (std::hypot(Px - G.first, Py - G.second) < 6.5) { bNearGate = true; break; }
+					if (bNearGate) continue;
+					++Read;
+					if (!Open(Px, Py)) ++Crossed;
+				}
+			}
 		int Laid[2] = { 0, 0 }, FlatOn[2] = { 0, 0 }, Asked = 0;
 		double RutMs = 0.0;
 		for (int Age = 0; Age < 2; ++Age)
@@ -1196,6 +1221,8 @@ int main(int argc, char** argv)
 					}
 				}
 		}
+		std::printf("mud memory: %d of %d places along the ways where no column drives (but at a gateway)\n", Crossed, Read);
+		if (Crossed > 0) Fault("mud memory: an old way crosses a hedge's bank, a lane, a wall, a yard, a wood or water");
 		std::printf("mud memory: %zu ways (%zu gateways), %d pieces of old ruts at a month and %d at six (at most %d) laid in %.1f ms; grass kept off at %d of %d places on them at a month, %d at six\n",
 			Ways.size(), Gates.size(), Laid[0], Laid[1], LandCrater::Ruts::MostOld, RutMs, FlatOn[0], Asked, FlatOn[1]);
 		if (!Fought.empty() && Ways.empty()) Fault("mud memory: no way laid over the fought-over ground");
