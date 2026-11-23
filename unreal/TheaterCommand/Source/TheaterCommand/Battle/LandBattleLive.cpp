@@ -310,6 +310,11 @@ void ALandBattle::PumpLive()
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
 				A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
 		}
+		// (ALL FALL BACK refused by the rules: the button comes back, and the note says why)
+		if (!A.bOk && A.Kind == TEXT("order") && A.Asked.Contains(TEXT("land:fallBack")))
+		{
+			S.General.bAllBack = false;
+		}
 		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));

@@ -239,6 +239,11 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Tops.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 		}
 		Tops.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+		// (ALL FALL BACK, release 1.5: his whole army back behind the ground it started from, once the battle has begun)
+		if (!bDeploying && !S.General.bAllBack)
+		{
+			Tops.Add({ TEXT("ALL FALL BACK"), TEXT("L"), TEXT("general:allback"), S.General.bAllBackAsk });
+		}
 	}
 	auto TopWidth = [&](const FTop& P) { return WideOf(P.Label, TopFace) + 18.0 + WideOf(P.Key, TopCapFace) + 16.0; };
 	double TopsW = 0.0;
@@ -411,6 +416,30 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 				|| (K == 5 && Scene->IsShotHeld());
 			X = Button(Labels[K], Actions[K], X, Y, bLit, 8);
 		}
+	}
+
+	// ---- ALL FALL BACK's question (release 1.5; Brian, 23 November 14:47Z): asked once, in the middle of the screen;
+	// ALL FALL BACK gives the order, KEEP FIGHTING (or Esc) takes the question away. ----
+	if (bGeneral && S.General.bAllBackAsk && !S.General.bAllBack && !S.bCard)
+	{
+		const FSlateFontInfo HeadFace = Serif(TEXT("Bold"), 17.0f), LineFace = Typed(10.0f);
+		const double QW = FMath::Min(520.0, FMath::Max(300.0, Size.X - 40.0)), Inner = QW - 44.0;
+		const TArray<FString> Lines = Wrap(TEXT("Every unit of yours falls back behind the ground it started from, under fire as it goes. When the last is out, the battle ends as your retreat, and your army lives to fight another day. It takes no new orders after this."), LineFace, Inner);
+		const double QH = 22.0 + 30.0 + 18.0 * Lines.Num() + 16.0 + 26.0 + 22.0;
+		const double QX = (Size.X - QW) * 0.5, QY = FMath::Max(BarH + 20.0, (Size.Y - QH) * 0.5);
+		Fill(QX - 1.0, QY - 1.0, QW + 2.0, QH + 2.0, Brass, 14);
+		Fill(QX, QY, QW, QH, Paper, 15);
+		double QLine = QY + 18.0;
+		Write(TEXT("Fall back with the whole army?"), QX + 22.0, QLine, HeadFace, DeskInk, 16);
+		QLine += 34.0;
+		for (const FString& Each : Lines)
+		{
+			Write(Each, QX + 22.0, QLine, LineFace, DeskInk, 16);
+			QLine += 18.0;
+		}
+		QLine += 16.0;
+		const double Next = Button(TEXT("ALL FALL BACK"), TEXT("general:allback:yes"), QX + 22.0, QLine, true, 16);
+		Button(TEXT("KEEP FIGHTING  ESC"), TEXT("general:allback:no"), Next, QLine, false, 16);
 	}
 
 	// ---- The after card: the result's stamp, the battle's name, its lines, CONTINUE. ----
@@ -1267,6 +1296,10 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Ends.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
 			}
 			Ends.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
+			if (!Clip.Deploying() && !G.bAllBack)
+			{
+				Ends.Add({ TEXT("ALL FALL BACK"), TEXT("L"), TEXT("general:allback"), G.bAllBackAsk });
+			}
 		}
 		double Whole = 0.0;
 		for (const FPart& P : Ends)
@@ -1440,7 +1473,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 
 	// ---- The orders of the unit in hand, just above the cards, only while one is in hand and only those it can give
 	// (the UI director, 18:26Z: none dimmed, CUT A GAP, LAY SMOKE and HOLD TILL RELIEVED only where they can be used). ----
-	if (bHand && !Clip.Deploying())
+	if (bHand && !Clip.Deploying() && !G.bAllBack)
 	{
 		struct FPart { const TCHAR* Label; const TCHAR* Key; const TCHAR* Action; bool bLit; };
 		TArray<FPart> Parts;
@@ -1921,6 +1954,12 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		};
 		const uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
 			: Key == EKeys::S || Key == EKeys::Down ? 8u : Key == EKeys::Q ? 16u : Key == EKeys::E ? 32u : 0u;
+		if (S->General.bAllBackAsk && Key == EKeys::Escape)
+		{
+			// (ALL FALL BACK's question up: Esc keeps fighting)
+			Scene->GeneralDo(TEXT("allback:no"));
+			return FReply::Handled();
+		}
 		if (S->General.bFilm)
 		{
 			if (Key == EKeys::Escape || Key == EKeys::C) { Scene->GeneralDo(TEXT("map")); return FReply::Handled(); }
@@ -1954,6 +1993,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Three) { Pace(4.0); return FReply::Handled(); }
 		else if (Key == EKeys::H) { Scene->GeneralDo(TEXT("hold")); return FReply::Handled(); }
 		else if (Key == EKeys::R) { Scene->GeneralDo(TEXT("fallback")); return FReply::Handled(); }
+		else if (Key == EKeys::L && !bSetup) { Scene->GeneralDo(TEXT("allback")); return FReply::Handled(); }
 		else if (const TCHAR* BarOrder = Key == EKeys::G ? TEXT("general:double") : Key == EKeys::F ? TEXT("general:fire") : Key == EKeys::X ? TEXT("general:gap")
 			: Key == EKeys::K ? TEXT("general:smoke") : Key == EKeys::T ? TEXT("general:wait") : Key == EKeys::B ? TEXT("general:staff") : nullptr; BarOrder && !bSetup)
 		{
