@@ -80,13 +80,14 @@ namespace
 		{ TEXT("patrol"), TEXT("Night patrol"), TEXT("While you place your army, send a unit on foot out the night before to find hidden posts; it may be caught. Needs Forest ambushes. Off: no patrols."), TEXT("TheaterLandNoPatrol"), true, nullptr },
 		// (looks only, release 2: Brian, 23 November 01:11Z, "Do all of these"; the 3D game draws them once its own trial
 		// passes, and nothing in the fight reads them)
-		// (Captured tanks and Old ruts start off, the lead 23 Nov 01:40Z and 01:45Z: a drawn look waits for the art director's
-		// stills and 45 fps on the Mac, then its row flips to on in one line; -TheaterLandRuleCaptured and -TheaterLandRuleOldRuts
-		// turn one on for a run. Worn uniforms stay on: nothing draws them until the 3D's own trial word. The 3D's
+		// (Captured tanks, Old ruts and Scarred ground start off, the lead 23 Nov 01:40Z and 01:45Z: a drawn look waits for the art director's
+		// stills and 45 fps on the Mac, then its row flips to on in one line; -TheaterLandRuleCaptured, -TheaterLandRuleOldRuts and
+		// -TheaterLandRuleScars turn one on for a run. Worn uniforms stay on: nothing draws them until the 3D's own trial word. The 3D's
 		// -TheaterLandWorn=N and -TheaterLandOldRuts=N stand-ins are other flags.)
 		{ TEXT("captured"), TEXT("Captured tanks"), TEXT("An army that lately beat one with tanks fields a few of them in its own paint. Off: every tank is its own side's."), TEXT("TheaterLandNoCaptured"), false, TEXT("TheaterLandRuleCaptured") },
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), true, nullptr },
 		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), false, TEXT("TheaterLandRuleOldRuts") },
+		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
