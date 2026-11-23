@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ddbfdebb 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a9517fda 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -37101,6 +37101,23 @@
       const next = Math.max(0, (want - held2) / free2);
       if (Math.abs(next - k) < 1e-9) break;
       k = next;
+    }
+    const billAt = (s) => cs.reduce((a, _c, i) => a + m[i] * Math.min(cap11, s * part[i]), 0);
+    const most = cs.reduce((a, _c, i) => a + (part[i] > 0 ? m[i] * cap11 : 0), 0), near2 = 1e-9 * Math.max(1, want);
+    if (want < most - near2 && Math.abs(billAt(k) - want) > near2) {
+      const order2 = cs.map((_c, i) => i).filter((i) => part[i] > 0).sort((x, y) => cap11 / part[x] - cap11 / part[y]);
+      let held2 = 0, free2 = order2.reduce((a, i) => a + m[i] * part[i], 0);
+      for (const i of order2) {
+        const at = cap11 / part[i];
+        const s = free2 > 1e-12 ? Math.max(0, (want - held2) / free2) : at;
+        if (s <= at) {
+          k = s;
+          break;
+        }
+        held2 += m[i] * cap11;
+        free2 -= m[i] * part[i];
+        k = at;
+      }
     }
     return k;
   }
