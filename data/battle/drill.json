@@ -195,5 +195,30 @@
     },
     "kit": {"models": {"USA": "M16", "GER": "FlakHalftrack"}, "axisStand": "FlakHalftrack", "stand": "FlakTruck"},
     "back": 40, "battery": 40
+  },
+  "light": {
+    "_about": "Jeeps, field cars and motorcycles (release 2; Brian, 23 November 07:01Z, yes to armoured cars, jeeps, motorcycles and AA; LandBattle.light, off unless turned on; looks only; a campaign battle's only; as the armoured cars, the design director's 07:47Z ruling). A block's light vehicles are a view of it: those 'ahead' ride out on its flanks ('ahead' metres before its front, 'side' beyond each flank) while it has not met the enemy (the armoured cars' 'contact'), then keep behind it; those behind park at its rear corners ('back'), and a motorcycle there rides despatch, back 'run' metres and up again each 'every' seconds. They see nothing the block does not, fire never, and are lost as the block's strength goes; never more than 'most' to a block, cars first. 'cars' and 'bikes' rows: the historian's (23 November 08:18Z, historian/light-cars-motorcycles-1123.md; H for where, M for most counts): by army ('_' every army not named), [from, until, models (taken in turn), {kind: per block}, {kind: 'ahead'} (else behind)]; 'per' below one is 1 in so many of the side's blocks of that army and kind, in the order of their blocks. 'kit': each army's own model where the campaign says what the corps has (ForceKit.jeeps, ForceKit.bikes); 'stand' the rest's, in their own coat. 'sw': the swaps a model is drawn with by army ('sidecar' on for the Poles, French, Hungarians and Romanians); a car riding ahead keeps her machine gun, one behind is a staff car without it.",
+    "cars": {
+      "USA": [[1939, 1942, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 1, "art": 1}, {"arm": "ahead"}], [1942, 9999, ["Jeep"], {"arm": 1, "mot": 1, "inf": 1, "art": 1}, {"arm": "ahead"}]],
+      "UK": [[1939, 1942, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}], [1942, 9999, ["Jeep"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}]],
+      "GER": [[1939, 1940.5, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}], [1940.5, 9999, ["Kubelwagen"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}]],
+      "SOV": [[1941, 1943, ["GAZ67"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}], [1943, 9999, ["GAZ67", "Jeep"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]],
+      "ITA": [[1939, 9999, ["Fiat508"], {"arm": 0.5, "mot": 0.5, "inf": 0.3334, "art": 0.3334}, {}]],
+      "JAP": [[1936, 9999, ["Kurogane"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]],
+      "_": [[1939, 9999, ["FieldCar"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]]
+    },
+    "bikes": {
+      "GER": [[1939, 1943, ["R75"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.3334}, {"arm": "ahead", "mot": "ahead"}], [1943, 9999, ["R75"], {"arm": 0.5, "mot": 0.5, "inf": 0.5, "art": 0.3334}, {}]],
+      "SOV": [[1939, 1941, ["Motorcycle"], {"arm": 0.5, "mot": 0.5, "inf": 0.25}, {"arm": "ahead", "mot": "ahead", "inf": "ahead"}], [1941, 9999, ["M72"], {"arm": 0.5, "mot": 0.5, "inf": 0.25}, {"arm": "ahead", "mot": "ahead", "inf": "ahead"}]],
+      "USA": [[1941, 9999, ["WLA"], {"arm": 0.3334, "mot": 0.3334, "inf": 0.3334, "art": 0.25}, {}]],
+      "UK": [[1939, 9999, ["M20"], {"arm": 0.5, "mot": 0.5, "inf": 0.5, "art": 0.3334}, {}]],
+      "ITA": [[1939, 9999, ["Alce"], {"arm": 1, "mot": 1, "inf": 0.3334, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]],
+      "JAP": [[1937, 9999, ["Rikuo"], {"arm": 0.5, "mot": 0.5, "inf": 0.3334, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]],
+      "_": [[1939, 9999, ["Motorcycle"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]]
+    },
+    "kit": {"cars": {"models": {"USA": "Jeep", "UK": "Jeep", "GER": "Kubelwagen", "SOV": "GAZ67", "ITA": "Fiat508", "JAP": "Kurogane"}, "axisStand": "FieldCar", "stand": "FieldCar"},
+      "bikes": {"models": {"GER": "R75", "SOV": "M72", "USA": "WLA", "UK": "M20", "ITA": "Alce", "JAP": "Rikuo"}, "axisStand": "Motorcycle", "stand": "Motorcycle"}},
+    "sw": {"Motorcycle": {"sidecar": {"POL": "on", "FRA": "on", "HUN": "on", "ROM": "on", "_": "off"}}},
+    "most": 2, "ahead": 110, "side": 45, "back": 25, "run": 220, "every": 60
   }
 }

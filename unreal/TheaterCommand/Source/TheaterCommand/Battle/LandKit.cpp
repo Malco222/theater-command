@@ -1474,7 +1474,9 @@ namespace LandKit
 			{
 				continue;
 			}
-			std::string Pick = ChoiceIn(Row, Group);
+			// (release 2: a choice the rules picked for her, where her model has it: a motorcycle's sidecar, a staff jeep's gun)
+			const auto Chosen = D.Choose.find(Group);
+			std::string Pick = Chosen != D.Choose.end() && S["choices"][Chosen->second].IsObject() ? Chosen->second : ChoiceIn(Row, Group);
 			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
 			// Sherman without the American's .50 on her roof)
 			if (Pick.empty() && S["by_nation"].IsObject())
@@ -4534,6 +4536,16 @@ namespace LandKit
 	{
 		bool IsVehicle(const std::string& Role) { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 
+		/** A track's swaps the rules picked (release 2, "sw": {swap: choice}); none where it says none. */
+		void ReadSwaps(const Json::Value& Sw, std::map<std::string, std::string>& Out)
+		{
+			Out.clear();
+			for (size_t I = 0; Sw.IsObject() && I < Sw.Count(); ++I)
+			{
+				Out[Sw.Name(I)] = Sw.At(I).Str("");
+			}
+		}
+
 		/** A change of a track: [t, pose, cover, aimX | null, aimY | null, hidden, buttoned]. */
 		Change ReadChange(const Json::Value& C)
 		{
@@ -4947,6 +4959,7 @@ namespace LandKit
 			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
 			W.Model = Man["ml"].Str("");
+			ReadSwaps(Man["sw"], W.Swaps);
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
 			{
@@ -4995,7 +5008,8 @@ namespace LandKit
 		return FindBlock(BlockList, Id);
 	}
 
-	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier)
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier,
+		const std::map<std::string, std::string>& Choose)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
 		// she wears her owner's coat. Release 2: where the recording names a vehicle's own model (ml), she is drawn as
@@ -5010,6 +5024,10 @@ namespace LandKit
 		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
 		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
 		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
+		for (const auto& Sw : Choose)
+		{
+			OutKey += "|" + Sw.first + "=" + Sw.second; // (her swaps the rules picked: a look of her own)
+		}
 		if (Looks.count(OutKey))
 		{
 			return true;
@@ -5059,6 +5077,7 @@ namespace LandKit
 		D.Month = Month;
 		D.Terrain = Terrain;
 		D.Captured = Captured;
+		D.Choose = Choose;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -5247,7 +5266,7 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model))
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model, Tracks[I].Swaps))
 			{
 				return false;
 			}
@@ -5264,9 +5283,22 @@ namespace LandKit
 				{
 					return false;
 				}
-				for (const std::string& Ml : B.Extra)
+				for (const std::string& Look : B.Extra)
 				{
-					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml))
+					// ("Jeep|mg=off": the model and the swaps the rules pick for her)
+					std::map<std::string, std::string> Choose;
+					size_t Bar = Look.find('|');
+					const std::string Ml = Look.substr(0, Bar);
+					while (Bar != std::string::npos)
+					{
+						const size_t Next = Look.find('|', Bar + 1), Eq = Look.find('=', Bar + 1);
+						if (Eq != std::string::npos && Eq < Next)
+						{
+							Choose[Look.substr(Bar + 1, Eq - Bar - 1)] = Look.substr(Eq + 1, Next == std::string::npos ? std::string::npos : Next - Eq - 1);
+						}
+						Bar = Next;
+					}
+					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml, Choose))
 					{
 						return false;
 					}
@@ -5378,6 +5410,8 @@ namespace LandKit
 					W.J = std::max(0, Man["j"].Int(0));
 					W.Role = Role;
 					W.Model = Man["ml"].Str("");
+					ReadSwaps(Man["sw"], W.Swaps);
+			ReadSwaps(Man["sw"], W.Swaps);
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
@@ -5385,7 +5419,7 @@ namespace LandKit
 						return false;
 					}
 					std::string Key;
-					if (!LoadLook(*B, Role, Key, OutError, W.Model))
+					if (!LoadLook(*B, Role, Key, OutError, W.Model, W.Swaps))
 					{
 						return false;
 					}

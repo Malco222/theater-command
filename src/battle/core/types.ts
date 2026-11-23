@@ -72,6 +72,10 @@ export interface ForceKit {
   cars?: number;
   /** Its AA vehicles to each of its blocks (1 in so many below one; looks only: Drill.escortOf). */
   aa?: number;
+  /** Its jeeps or field cars to each of its blocks (1 in so many below one; looks only: Drill.lightOf). */
+  jeeps?: number;
+  /** Its motorcycles to each of its blocks (1 in so many below one; looks only: Drill.lightOf). */
+  bikes?: number;
 }
 
 export interface ForceTicket {

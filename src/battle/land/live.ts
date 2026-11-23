@@ -48,12 +48,14 @@ export interface TrackOut {
   b: number; k: number; j?: number; r: string; at: Pt[]; ch: Ch[]; s: number[]; d?: number; mk?: unknown[]; out?: number; fo?: 1;
   /** The model the 3D game draws her with where it is not her block's (release 2, looks only): a carrier of armoured infantry (absent: the lorry), a self-propelled gun, a tank destroyer. */
   ml?: string;
+  /** Her model's swaps the rules pick (release 2, looks only): a motorcycle's sidecar, a staff jeep's gun. */
+  sw?: Record<string, string>;
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
 export interface TrackDelta {
   n: number;
-  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string;
+  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string; sw?: Record<string, string>;
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
@@ -94,7 +96,7 @@ const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' :
 
 interface Kept {
   n: number;
-  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string };
+  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string; sw?: Record<string, string> };
   /** The last kept point (the line test's start), and the points seen since. */
   last: Pt;
   pend: Pt[];
@@ -122,7 +124,7 @@ export class LiveKeeper {
     let k = this.men.get(key);
     if (!k) {
       k = {
-        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}) },
+        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}), ...(m.sw ? { sw: m.sw } : {}) },
         last: p, pend: [], ch, shot: undefined, newAt: [p], newCh: [ch], newS: [], sentWho: false, sentD: false, sentMk: false, sentOut: undefined, sentTail: null,
       };
       this.men.set(key, k);
@@ -208,7 +210,7 @@ export class LiveKeeper {
       if (dl.reset) tracks.length = 0;
       for (const d of dl.men) {
         let tr = tracks[d.n];
-        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}) }; }
+        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}), ...(d.sw ? { sw: d.sw } : {}) }; }
         if (d.at) tr.at.push(...d.at);
         if (d.ch) tr.ch.push(...d.ch);
         if (d.s) tr.s.push(...d.s);
@@ -355,6 +357,8 @@ export interface LiveOpts {
   cars?: boolean;
   /** AA vehicles (release 2, looks only; sim.aa): behind a block, moving with it. A campaign battle's only; off unless true. */
   aa?: boolean;
+  /** Jeeps and motorcycles (release 2, looks only; sim.light): out ahead with a block's screen or behind it. A campaign battle's only; off unless true. */
+  light?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -463,6 +467,7 @@ export class LiveBattle {
     if (opts.td === true && !piece) sim.td = true;
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
+    if (opts.light === true && !piece) sim.light = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);

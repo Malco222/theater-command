@@ -115,9 +115,13 @@ export interface Man {
   /**
    * The model the 3D game draws her with where it is not her block's (release 2, looks only): a carrier of armoured
    * infantry (LandBattle.mech; absent: the lorry), a battery's self-propelled gun (LandBattle.spg: no crew, no tractor),
-   * an armoured block's tank destroyer (LandBattle.td).
+   * an armoured block's tank destroyer (LandBattle.td), a block's armoured car, AA vehicle, jeep or motorcycle.
    */
   ml?: string;
+  /** Her model's swaps as the drill picks them, where not the model's own choice (a motorcycle's sidecar, a staff jeep's gun). */
+  sw?: Record<string, string>;
+  /** A jeep's or motorcycle's work (LandBattle.light): riding out ahead with the screen, parked behind, or despatch. */
+  duty?: 'ahead' | 'behind' | 'despatch';
   /** A tank's firing post (0 her own place, then one side and the other), the shots she has fired from it, and where she is
    * in her move to the next: backing out of sight, crossing behind the line, coming up to it. */
   post?: number;
@@ -303,9 +307,11 @@ export interface MenOut {
   wd?: number; cy?: [number, number, number, number][]; gone?: number; back?: number; br?: 1;
   /**
    * The model the 3D game draws her with where it is not her block's (Man.ml): a carrier's (absent: the lorry), a
-   * self-propelled gun's (drawn as a tank: r 'tank', her poses a tank's), a tank destroyer's.
+   * self-propelled gun's (drawn as a tank: r 'tank', her poses a tank's), a tank destroyer's, an escort's.
    */
   ml?: string;
+  /** Her model's swaps the drill picks (Man.sw): {swap: choice}. */
+  sw?: Record<string, string>;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -342,6 +348,13 @@ const DR = data as unknown as {
   td: { rows: Record<string, [number, number, string[], number][]>; kit: { models: Record<string, string>; axisStand: string; stand: string } };
   cars: { rows: Record<string, [number, number, string, Record<string, number>][]>; kit: { models: Record<string, string>; axisStand: string; stand: string }; ahead: number; side: number; back: number; contact: number };
   aa: { rows: Record<string, [number, number, string, Record<string, number>][]>; kit: { models: Record<string, string>; axisStand: string; stand: string }; back: number; battery: number };
+  light: {
+    cars: Record<string, [number, number, string[], Record<string, number>, Record<string, 'ahead'>][]>;
+    bikes: Record<string, [number, number, string[], Record<string, number>, Record<string, 'ahead'>][]>;
+    kit: Record<'cars' | 'bikes', { models: Record<string, string>; axisStand: string; stand: string }>;
+    sw: Record<string, Record<string, Record<string, string>>>;
+    most: number; ahead: number; side: number; back: number; run: number; every: number;
+  };
 };
 export const DRILL = DR;
 
@@ -352,6 +365,8 @@ const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? 
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
 const FOOT_KINDS: Kind[] = ['inf', 'mtn', 'eng', 'fort', 'cav'];
+/** A vehicle's look as the header names it for the 3D game to read ahead (Drill.modelsFor): her model, and the swaps the rules pick for her ("Jeep|mg=off"). */
+export const lookOf = (ml: string, sw?: Record<string, string>): string => ml + Object.keys(sw ?? {}).sort().map((k) => `|${k}=${sw![k]}`).join('');
 const isFoot = (u: LandUnit): boolean => MOTION[u.kind] === 'foot' || u.kind === 'mot';
 const CLOSE: Ground[] = ['woods', 'buildings', 'industry', 'suburb'];
 const BUILT: Ground[] = ['buildings', 'industry', 'suburb'];
@@ -457,8 +472,8 @@ interface Squad {
   veh: Man[];
   /** Armoured infantry (release 2, LandBattle.mech): the armoured block whose riflemen these are (Drill.mechOf); a block's armoured cars' or AA vehicles' (esc). */
   of?: number;
-  /** A block's armoured cars or its AA vehicles (release 2, LandBattle.cars and aa; Drill.addEscorts): vehicles only, drawn with it. */
-  esc?: 'cars' | 'aa';
+  /** A block's armoured cars, its AA vehicles or its jeeps and motorcycles (release 2, LandBattle.cars, aa, light; Drill.addEscorts): vehicles only, drawn with it. */
+  esc?: 'cars' | 'aa' | 'light';
   fo: Man[] | null;
   foWith?: number;
   foOn?: number;
@@ -702,7 +717,8 @@ export class Drill {
 
   /**
    * The models a block's vehicles are drawn with besides its own (release 2, looks only): its armoured infantry's
-   * carriers, its self-propelled guns, its tank destroyers, as the switches stand. For the 3D game to read them before the
+   * carriers, its self-propelled guns, its tank destroyers, its armoured cars, AA vehicles, jeeps and motorcycles (with
+   * the swaps the rules pick for them: lookOf), as the switches stand. For the 3D game to read them before the
    * battle opens (the header's "mls"); worked out from the block alone, so a block still coming up from next door has its
    * own too.
    */
@@ -711,7 +727,7 @@ export class Drill {
     if (this.b.mech && u.kind === 'arm') for (const m of this.mechOf(u)) out.add(m);
     for (const m of this.spgOf(u, n)) if (m) out.add(m);
     for (const m of this.tdOf(u, n)) if (m) out.add(m);
-    for (const m of [...this.escortOf(u, 'cars'), ...this.escortOf(u, 'aa')]) out.add(m);
+    for (const m of [...this.escortOf(u, 'cars'), ...this.escortOf(u, 'aa'), ...this.lightOf(u).map((x) => lookOf(x.ml, x.sw))]) out.add(m);
     return [...out];
   }
 
@@ -801,21 +817,64 @@ export class Drill {
   }
 
   /**
-   * A block's armoured cars and its AA vehicles (escortOf), each a squad of vehicles only, drawn as tanks of their own
+   * Jeeps, field cars and motorcycles (release 2, LandBattle.light; looks only; the historian's rows, 23 November
+   * 08:18Z, historian/light-cars-motorcycles-1123.md): a block's light vehicles, cars first, never more than
+   * DR.light.most. Where the campaign says what the corps has (ForceKit.jeeps, ForceKit.bikes: so many to each of its
+   * blocks, 1 in so many below one), its army's own models; else its army's rows in the battle's month (every other
+   * army's, '_', where its army has none) that name its kind, 1 in so many as the armoured cars, a row's models taken in
+   * turn. Each with her work: out ahead where the month's rows say so for the block's kind, else parked behind it (a
+   * motorcycle there riding despatch); and her swaps: a car behind is a staff car without her gun, a motorcycle's
+   * sidecar by nation (DR.light.sw).
+   */
+  lightOf(u: LandUnit): { ml: string; duty: 'ahead' | 'behind' | 'despatch'; sw?: Record<string, string> }[] {
+    if (!this.b.light || u.team || u.kind === 'fort') return [];
+    const L = DR.light, army = this.armyOf(u.nat), when = this.when();
+    const many = (per: number, i: number): number => Math.max(0, Math.floor((i + 1) * per + 1e-9) - Math.floor(i * per + 1e-9));
+    const before = (same: (x: LandUnit) => boolean): number => this.b.allBlocks().filter((x) => x.side === u.side && x.kind === u.kind && !x.team && x.id < u.id && same(x)).length;
+    const out: { ml: string; duty: 'ahead' | 'behind' | 'despatch'; sw?: Record<string, string> }[] = [];
+    for (const what of ['cars', 'bikes'] as const) {
+      const rows = (L[what][army] ?? L[what]._ ?? []).filter(([from, to]) => when >= from && when < to);
+      const ahead = rows.some((r) => r[4][u.kind] === 'ahead');
+      const add = (ml: string): void => {
+        const sw: Record<string, string> = {};
+        for (const [swap, by] of Object.entries(L.sw[ml] ?? {})) { const c = by[u.nat] ?? by._; if (c) sw[swap] = c; }
+        if (what === 'cars' && !ahead) sw.mg = 'off';
+        out.push({ ml, duty: ahead ? 'ahead' : what === 'bikes' ? 'despatch' : 'behind', ...(Object.keys(sw).length ? { sw } : {}) });
+      };
+      const kit = u.kit?.[what === 'cars' ? 'jeeps' : 'bikes'];
+      if (kit !== undefined) {
+        for (let c = many(kit, before((x) => x.corps === u.corps)); c > 0; c--) add(this.kitModel(L.kit[what], army));
+        continue;
+      }
+      const i = before((x) => this.armyOf(x.nat) === army);
+      for (const [, , models, per] of rows) {
+        if (per[u.kind] === undefined) continue;
+        // (a row's models in turn through its army's vehicles of it, block by block of every kind: the SOV's GAZ-67s and
+        // lend-lease jeeps, half and half)
+        const n0 = Object.entries(per).reduce((n, [K, p]) => n + Math.floor(this.b.allBlocks().filter((x) => x.side === u.side && x.kind === K && !x.team && x.id < u.id && this.armyOf(x.nat) === army).length * p + 1e-9), 0);
+        for (let c = many(per[u.kind], i), j = 0; j < c; j++) add(models[(n0 + j) % models.length]);
+      }
+    }
+    return out.slice(0, L.most);
+  }
+
+  /**
+   * A block's armoured cars, its AA vehicles and its jeeps and motorcycles (escortOf, lightOf), each a squad of vehicles only, drawn as tanks of their own
    * models (ml) with the block's men (view). Like armoured infantry they are a view of the block: its place, facing,
    * order, state and strength are its own, read live, and its box is grown to hold where they keep (outriders), so the
-   * rules' counts and places are untouched. Kept under the block's id less one, less a million for the cars and two for
-   * the AA, numbered k from DR.mech.base and 100 or 200 on; they fall as the block's figures go, in that share (the last
+   * rules' counts and places are untouched. Kept under the block's id less one, less a million for the cars, two for
+   * the AA and three for the light vehicles, numbered k from DR.mech.base and 100, 200 or 300 on; they fall as the block's figures go, in that share (the last
    * at half its figures), each to a round from the enemy owed most for its harm.
    */
   private addEscorts(u: LandUnit): void {
-    for (const what of ['cars', 'aa'] as const) {
-      const key = -(u.id + 1) - (what === 'cars' ? 1e6 : 2e6);
+    for (const what of ['cars', 'aa', 'light'] as const) {
+      const key = -(u.id + 1) - (what === 'cars' ? 1e6 : what === 'aa' ? 2e6 : 3e6);
       this.squads.delete(key);
-      const models = this.escortOf(u, what);
+      const light = what === 'light' ? this.lightOf(u) : [];
+      const models = what === 'light' ? light.map((x) => x.ml) : this.escortOf(u, what);
       if (!models.length) continue;
-      const c = models.length, base = DR.mech.base + (what === 'cars' ? 100 : 200);
-      const reach = what === 'cars' ? DR.cars.ahead + DR.cars.side + 40 : DR.aa.back + DR.aa.battery + 40;
+      const c = models.length, base = DR.mech.base + (what === 'cars' ? 100 : what === 'aa' ? 200 : 300), L = DR.light;
+      const reach = what === 'cars' ? DR.cars.ahead + DR.cars.side + 40 : what === 'aa' ? DR.aa.back + DR.aa.battery + 40 : Math.max(L.ahead + L.side, L.back + L.run) + 40;
       const v = Object.create(u) as LandUnit;
       Object.defineProperties(v, {
         // (no foot's drill nor a tank block's reads them: a battery's kind, with no guns)
@@ -829,6 +888,7 @@ export class Drill {
       });
       const men: Man[] = models.map((ml, i) => ({
         k: base + i, n: (base + i) * 100, role: 'tank', team: 0, x: u.x, y: u.y, face: u.face, pose: 'halt', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0, ml,
+        ...(light[i] ? { duty: light[i].duty, ...(light[i].sw ? { sw: light[i].sw } : {}) } : {}),
       }));
       const sq: Squad = {
         u: v, tier: 0, men, veh: [], fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 5, base) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
@@ -836,7 +896,7 @@ export class Drill {
         m0: c, lost: 0, of: u.id, esc: what,
       };
       // Drawn up where the battle opens: in their places already.
-      const ahead = what === 'cars' && this.screening(sq, u);
+      const ahead = what !== 'aa' && this.screening(sq, u);
       men.forEach((m, i) => { const s = this.escortSpot(sq, i, u, ahead); m.x = s[0]; m.y = s[1]; m.spot = s; m.slotAt = s; });
       this.squads.set(key, sq);
     }
@@ -850,6 +910,14 @@ export class Drill {
 
   /** Where a block's i-th car or AA vehicle keeps: cars on its flanks, out ahead or back behind; AA in a row behind it (a battery's behind its tractors). */
   private escortSpot(sq: Squad, i: number, own: LandUnit, ahead: boolean): [number, number] {
+    if (sq.esc === 'light') {
+      // Jeeps and motorcycles: out on the flanks ahead with the screen; else at its rear corners, a despatch rider riding
+      // back DR.light.run metres and up again each DR.light.every seconds (her own time in it).
+      const L = DR.light, m = sq.men[i], s = i % 2 ? 1 : -1;
+      if (m.duty === 'ahead' && ahead) return toWorld(own, own.face, s * (own.w / 2 + L.side), own.d / 2 + L.ahead);
+      const p = m.duty === 'despatch' ? ((this.b.t + roll(this.seed, own.id, m.k, 7) * L.every) % L.every) / L.every : 0;
+      return toWorld(own, own.face, s * (own.w / 2 + 8), -own.d / 2 - L.back - (p >= 0.35 && p < 0.7 ? L.run : 0));
+    }
     if (sq.esc === 'cars') {
       const C = DR.cars, s = i % 2 ? 1 : -1, row = Math.floor(i / 2);
       return toWorld(own, own.face, s * (own.w / 2 + C.side + row * 20), ahead ? own.d / 2 + C.ahead + row * 25 : -own.d / 2 - C.back - row * 20);
@@ -868,7 +936,7 @@ export class Drill {
     sq.phase = this.squads.get(own.id)?.phase ?? 'rest';
     if (sq.phase === 'gone') return;
     const e = this.threat(own), near = e ? this.b.gap(own, e) : Infinity;
-    const ahead = sq.esc === 'cars' && this.screening(sq, own);
+    const ahead = sq.esc !== 'aa' && this.screening(sq, own);
     sq.men.forEach((m, i) => {
       if (!this.stands(sq, m)) return;
       const s = this.escortSpot(sq, i, own, ahead), d = Math.hypot(s[0] - m.x, s[1] - m.y);
@@ -3869,6 +3937,7 @@ export class Drill {
       if (m.back !== undefined) o.back = r1(m.back);
       if (m.br) o.br = 1;
       if (m.call !== undefined && m.callAt) o.cs = [r1(m.callAt[0]), r1(m.callAt[1])];
+      if (m.sw) o.sw = { ...m.sw };
       if (m.ml) {
         o.ml = m.ml;
         // (a self-propelled gun is drawn as a tank: driving where the battery's guns are towed, halted where they stand)

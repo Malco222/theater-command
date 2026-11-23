@@ -17,7 +17,7 @@ const me: Side | null = meArg === 'none' ? null : (meArg as Side);
 // stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
 // run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
 const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
-const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}) };
+const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}) };
 // (LAND_LIVE_CAMPAIGN=1: the set piece's ticket fought as a campaign battle, no set piece: its stand-in models, and the
 // self-propelled guns and tank destroyers the spg and td switches draw only there)
 const piece = PIECES.find((p) => p.key === key);

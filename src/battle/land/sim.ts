@@ -442,6 +442,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   cars = false;
   aa = false;
+  /**
+   * Jeeps, field cars and motorcycles (release 2; Brian, 23 November 07:01Z, item 3; the historian's rows, 08:18Z): a
+   * block's light vehicles out ahead with its screen or parked behind it, a motorcycle there riding despatch
+   * (Drill.lightOf; DRILL.light). Looks only. Off unless turned on (the bridge's { light: true }, the Battle rules card's
+   * Jeeps and motorcycles row); a campaign battle's only.
+   */
+  light = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
