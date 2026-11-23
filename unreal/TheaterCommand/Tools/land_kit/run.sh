@@ -12,10 +12,12 @@ SRC="$ROOT/Source/TheaterCommand"
 OUT="${LAND_KIT_OUT:-${TMPDIR:-/tmp}/land_kit}"
 mkdir -p "$OUT"
 FLAGS="-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC"
+# LandCrater's scars read the field's hedges and lanes (OldLinesOf), so the field's own code links in too.
+FIELD="$SRC/Battle/LandField.cpp $SRC/Battle/LandSteppe.cpp $SRC/Battle/LandScape.cpp $SRC/Battle/LandDesert.cpp $SRC/Battle/LandMed.cpp $SRC/Battle/LandTropic.cpp $SRC/Battle/LandFarm.cpp $SRC/Battle/LandSnow.cpp $SRC/Battle/LandDry.cpp $SRC/Battle/LandJson.cpp"
 if command -v clang++ >/dev/null 2>&1; then
-  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" \
+  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" $FIELD \
     -o "$OUT/land_kit_test_clang"
 fi
 CXX="${CXX:-g++}"
-$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" -o "$OUT/land_kit_test"
+$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" $FIELD -o "$OUT/land_kit_test"
 "$OUT/land_kit_test" "$ROOT/Content" "$@"
