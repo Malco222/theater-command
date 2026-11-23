@@ -6250,6 +6250,23 @@
       });
       return best;
     }
+    /**
+     * The holder leading a trooper's horse now (his bus, a holder's number): that number's own man where he still stands
+     * and is no one's prisoner, else a holder of his section (drawn as sections) still standing with it, as the holders
+     * themselves go to every man of their number (board). None: his bus is gone with all its holders.
+     * (A section's key holder down while his section's holders stood left the trooper with no man to run to: the release 2
+     * drill threw at Poznan in 1939, a Polish cavalry block remounting in its rout; the design director's find, 23 Nov.)
+     */
+    busOf(sq, m) {
+      if (m.bus === void 0) return void 0;
+      let other2;
+      for (const h of sq.men) {
+        if (h.k !== m.bus || h.role !== "holder" || h.pr || !this.stands(sq, h)) continue;
+        if (h.j === void 0) return h;
+        other2 ?? (other2 = h);
+      }
+      return other2;
+    }
     /** A trooper's horse holder: the one at the end of his four, else the nearest still standing. */
     holderOf(sq, m) {
       const held = sq.men.filter((h) => h.role === "holder" && !h.pr && this.stands(sq, h));
@@ -6280,7 +6297,7 @@
     mountAt(sq, m) {
       const u = sq.u;
       if (u.kind === "mot") return this.seat(sq, m);
-      const h = m.bus === void 0 ? void 0 : sq.men.find((x) => x.k === m.bus && x.j === void 0 && this.stands(sq, x));
+      const h = this.busOf(sq, m);
       if (!h) return null;
       const led = sq.men.filter((x) => x.bus === h.k && x.role !== "holder" && this.stands(sq, x)).sort((a, c) => a.k - c.k || a.n - c.n);
       const j = Math.max(0, led.indexOf(m)), side = j % 2 ? 1 : -1, [rx, ry] = right(h.face);
@@ -6351,8 +6368,9 @@
             m.until = t + 1;
             continue;
           }
-          if (m.bus === void 0 || !men.some((h) => h.k === m.bus && h.j === void 0 && h.role === "holder")) m.bus = this.holderOf(sq, m)?.k;
-          if (m.bus === void 0) {
+          if (!this.busOf(sq, m)) m.bus = this.holderOf(sq, m)?.k;
+          const h = this.busOf(sq, m);
+          if (!h) {
             m.pose = "ride";
             m.v = 0;
             m.spot = [m.x, m.y];
@@ -6361,7 +6379,7 @@
             continue;
           }
           all = false;
-          afoot(m, men.find((h) => h.k === m.bus && h.j === void 0));
+          afoot(m, h);
         }
         for (const h of men) {
           if (h.role !== "holder" || h.pr) continue;
@@ -6401,7 +6419,7 @@
     mayMount(sq, m) {
       if (sq.slow >= MOUNT.downAfter) return false;
       if (sq.u.kind === "mot") return this.lorryOf(sq, m).pose === "parked";
-      const h = sq.men.find((x) => x.k === m.bus && x.j === void 0 && x.fell === void 0);
+      const h = this.busOf(sq, m);
       return !!h && h.v === 0;
     }
     /**

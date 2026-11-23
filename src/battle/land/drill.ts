@@ -2970,6 +2970,24 @@ export class Drill {
     return best;
   }
 
+  /**
+   * The holder leading a trooper's horse now (his bus, a holder's number): that number's own man where he still stands
+   * and is no one's prisoner, else a holder of his section (drawn as sections) still standing with it, as the holders
+   * themselves go to every man of their number (board). None: his bus is gone with all its holders.
+   * (A section's key holder down while his section's holders stood left the trooper with no man to run to: the release 2
+   * drill threw at Poznan in 1939, a Polish cavalry block remounting in its rout; the design director's find, 23 Nov.)
+   */
+  private busOf(sq: Squad, m: Man): Man | undefined {
+    if (m.bus === undefined) return undefined;
+    let other: Man | undefined;
+    for (const h of sq.men) {
+      if (h.k !== m.bus || h.role !== 'holder' || h.pr || !this.stands(sq, h)) continue;
+      if (h.j === undefined) return h;
+      other ??= h;
+    }
+    return other;
+  }
+
   /** A trooper's horse holder: the one at the end of his four, else the nearest still standing. */
   private holderOf(sq: Squad, m: Man): Man | undefined {
     const held = sq.men.filter((h) => h.role === 'holder' && !h.pr && this.stands(sq, h));
@@ -2996,7 +3014,7 @@ export class Drill {
   private mountAt(sq: Squad, m: Man): [number, number] | null {
     const u = sq.u;
     if (u.kind === 'mot') return this.seat(sq, m);
-    const h = m.bus === undefined ? undefined : sq.men.find((x) => x.k === m.bus && x.j === undefined && this.stands(sq, x));
+    const h = this.busOf(sq, m);
     if (!h) return null;
     const led = sq.men.filter((x) => x.bus === h.k && x.role !== 'holder' && this.stands(sq, x)).sort((a, c) => a.k - c.k || a.n - c.n);
     const j = Math.max(0, led.indexOf(m)), side = j % 2 ? 1 : -1, [rx, ry] = right(h.face);
@@ -3049,10 +3067,11 @@ export class Drill {
         if (m.role === 'holder') continue; // (a holder's two keep by him: pairs)
         if (m.pose === 'ride') { this.follow(sq, m, slotOf(m), 'ride'); if (m.v === 0) m.pose = 'ride'; m.until = t + 1; continue; }
         // His holder fell: the nearest one left takes his horse; with none, his horse is by him.
-        if (m.bus === undefined || !men.some((h) => h.k === m.bus && h.j === undefined && h.role === 'holder')) m.bus = this.holderOf(sq, m)?.k;
-        if (m.bus === undefined) { m.pose = 'ride'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none'; continue; }
+        if (!this.busOf(sq, m)) m.bus = this.holderOf(sq, m)?.k;
+        const h = this.busOf(sq, m);
+        if (!h) { m.pose = 'ride'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none'; continue; }
         all = false;
-        afoot(m, men.find((h) => h.k === m.bus && h.j === undefined)!);
+        afoot(m, h);
       }
       for (const h of men) {
         if (h.role !== 'holder' || h.pr) continue;
@@ -3075,7 +3094,7 @@ export class Drill {
   private mayMount(sq: Squad, m: Man): boolean {
     if (sq.slow >= MOUNT.downAfter) return false;
     if (sq.u.kind === 'mot') return this.lorryOf(sq, m).pose === 'parked';
-    const h = sq.men.find((x) => x.k === m.bus && x.j === undefined && x.fell === undefined);
+    const h = this.busOf(sq, m);
     return !!h && h.v === 0;
   }
 
