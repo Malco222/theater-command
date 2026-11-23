@@ -1749,7 +1749,9 @@ namespace LandField
 	 */
 	int Ground::Impl::CropOf(int SeedIndex, int Kind) const
 	{
-		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(Kind)));
+		// (a surveyed field one crop whatever the rules' ground under it: its open and its field parts drawn alike)
+		const int KindKey = bSurvey && Kind == RgOpen ? static_cast<int>(RgField) : Kind;
+		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(KindKey)));
 		if (Rg && (Kind == RgField || Kind == RgOpen || Kind == RgRough)) return CpRegion + std::clamp(Rg->CropOf(Kind, U), 0, 63);
 		if (Sp && SeedIndex >= 0 && (Kind == RgField || Kind == RgOpen))
 		{
