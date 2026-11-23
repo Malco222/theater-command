@@ -4830,19 +4830,22 @@ namespace TheaterFx
 			{
 				// (the art director's round 1, 17:06Z: a short straight spike tapering to its tip, yellow-white, never a
 				// curved petal: no lumps, no hub, drawn straight out from the muzzle)
+				// (and its round 2, 17:19Z: at dusk not stark white needles in front of the flash but white at the root running
+				// out to yellow tips, so they sit with it: the root's colour drawn from the muzzle end, the tip's at its point)
 				B.Point = 0.85;
 				B.Tail = 0.0;
-				B.Col = H ? H->Root2.Mix(H->Yellow, 0.35) : Flame.Mix(Rgb::FromPicture(250, 226, 150), 0.6);
+				B.Col = H ? H->Hot.Mix(H->Yellow, 0.25) : Rgb::FromPicture(252, 242, 214);
 				B.Col2 = B.Col;
+				B.Hub = 0.9;
 				B.Heart = 1.0;
 				B.Rim = 0.5;
 				B.Inner = 0.7;
+				B.Edge = H ? H->Yellow.Mix(H->Orange, 0.3) : Flame.Mix(Rgb::FromPicture(250, 214, 120), 0.6);
+				B.EdgeK = 1.0;
+				B.EdgeIn = 0.6;
 				if (H)
 				{
-					B.Edge = H->Yellow;
-					B.EdgeK = 0.6;
-					B.EdgeIn = 0.3;
-					B.Over = 1.0 + (H->Over - 1.0) * 0.5;
+					B.Over = 1.0 + (H->Over - 1.0) * 0.35;
 				}
 			}
 			else if (H)

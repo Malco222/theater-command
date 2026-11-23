@@ -3091,7 +3091,7 @@ int main(int Argc, char** Argv)
 		const char* MgGunIs = std::getenv("FX_MG_GUN");
 		const std::string MgRow = MgGunIs ? MgGunIs : "mg";
 		const int MgRounds = static_cast<int>(EnvNum("FX_MG_ROUNDS", 25.0));
-		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), MgRow.c_str());
+		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), MgRow.c_str(), Ground.c_str()); // (on its ground, as the game's: a prone kick off snow is snow)
 		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), MgRow.c_str(), MgRounds, EnvNum("FX_MG_RATE", 15.0), Ground.c_str());
 	}
 	// (FX_BARRAGE=n: n shells in a row across the view, FX_BARRAGE_STEP m apart (5) and FX_BARRAGE_GAP s apart (1.5), the

@@ -618,7 +618,9 @@ for byte, with the switch off).
   of its size and `day_pale` toward pale yellow-white (`View.SmokeLight`); the rifle's haze is a thin puff gone in 1 to
   2 s; the prone kick is tan on dry ground (half to full by the ground's dust share), white on snow, none on mud, water
   or marsh; rifles and sub-machine guns draw no tracer (`tracer 0`); machine-gun tracer is a short travelling streak even
-  close in (`streak 1`); the face lamp is 2 to 3 m and lit on the flash's own frame alone (`Flash::bOneFrame`).
+  close in (`streak 1`); the face lamp is 2 to 3 m and lit on the flash's own frame alone (`Flash::bOneFrame`). Round 2
+  (17:19Z) PASSED, with two carries made: the kick off snow a bright bluish-white (`snow_kick`), and each spike white at
+  its root running out to a yellow tip (`Bit::Hub`), so the star sits with the flash at dusk.
 - **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 6 spikes or 4 jets, 10 brake dust puffs and one lamp; a
   burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
 - **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
