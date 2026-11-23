@@ -45,8 +45,10 @@ namespace Fates { class Table; class Director; }
  * that take a body's own points (model axes) into the axes x north, y east, z up: the axes World() lays the field in
  * Unreal (FVector(north, east, up)), so FQuat(Q.X, Q.Y, Q.Z, Q.W) is a proper rotation there and needs no mirroring:
  *     Mesh->SetWorldLocationAndRotation(World(P.At.X, P.At.Y, P.At.Z), FQuat(P.Q.X, P.Q.Y, P.Q.Z, P.Q.W));
- * with the body's vertices FVector(x, y, z) * UnitsPerMetre as they stand. Headings are radians, 0 north, clockwise,
- * as the recording's facing f.
+ * with the body's vertices FVector(x, y, z) * UnitsPerMetre as they stand, and each triangle's last two corners
+ * swapped: the files wind a face counter-clockwise seen from its front, the engine draws the side it sees clockwise
+ * (LandBattle.cpp's LandParts::KitFront; handed over unturned, every vehicle was drawn inside out, 23 November).
+ * Headings are radians, 0 north, clockwise, as the recording's facing f.
  */
 namespace LandKit
 {

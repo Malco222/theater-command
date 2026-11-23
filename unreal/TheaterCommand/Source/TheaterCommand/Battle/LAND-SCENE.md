@@ -390,6 +390,9 @@ Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers
 
 1. **Facing.** The ground, the men and the vehicles face up and out (no inside-out hedges, no men seen through). The
    field's x is east and y north; `World()` swaps them into Unreal's frame, which keeps the triangles' winding right.
+   The vehicles' and props' meshes (LandKit's, model axes straight into Unreal's) are turned as they are handed over
+   (`LandParts::KitFront`, FromBody, PropMesh, LandCrowd's PieceMesh): the files wind them the other way round, and
+   unturned every tank was drawn inside out (Brian, 23 November: the Tiger's commander seen whole through her turret).
 2. **A tank's turret.** If a turret aims away from what it fires at, the sign of `TurretDeg` is wrong in
    `DrawArmour`.
 3. **The falls.** A man hit should fall the way he was facing or struck, and lie still from then on, flat on the slope.

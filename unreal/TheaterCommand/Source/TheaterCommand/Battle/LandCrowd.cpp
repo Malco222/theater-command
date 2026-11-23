@@ -28,7 +28,9 @@ namespace LandCrowdParts
 	 * A far piece (LandKit::FarPiece::Merged: model axes, metres from its anchor's pivot; x forward, y right, z up, as
 	 * Unreal's own) as a mesh of its own on Ink, for instancing: points and normals as LandBattle's FromBody gives the
 	 * near meshes theirs, colours as the same sRGB bytes (see LandParts::ThingMesh: handed over linear, kept as these
-	 * bytes), and each point's soot weight in the first texture coordinate's U (M_LandSteel reads it). A triangle that
+	 * bytes), and each point's soot weight in the first texture coordinate's U (M_LandSteel reads it). Each triangle's
+	 * last two corners swapped, as FromBody's: the model files wind their faces the other way round to the engine's
+	 * front (LandBattle.cpp, LandParts::KitFront; drawn as they stood, every far vehicle was inside out). A triangle that
 	 * repeats a corner is left out (it draws nothing). Null where there is nothing to draw.
 	 */
 	static UStaticMesh* PieceMesh(UObject* Owner, const LandKit::Mesh& M, UMaterialInterface* Ink, double U)
@@ -85,7 +87,7 @@ namespace LandCrowdParts
 			{
 				continue;
 			}
-			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(A)], Corners[static_cast<int32>(B)], Corners[static_cast<int32>(C)] };
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(A)], Corners[static_cast<int32>(C)], Corners[static_cast<int32>(B)] };
 			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
 			++Made;
 		}
