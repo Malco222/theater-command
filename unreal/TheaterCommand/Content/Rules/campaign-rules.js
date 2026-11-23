@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1a4fe1c 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a1363f74 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -49213,10 +49213,14 @@
   // src/campaign/columns.ts
   var COLUMNS = columns_default;
   var columnsOn = (g2) => g2.flags.open === 1 && g2.flags.columns === 1;
+  var columnsSettable = (g2) => g2.flags.open === 1 && g2.turn === (g2.flags.openFrom ?? 1);
   function setColumns(g2, on) {
-    if (g2.turn !== 1 || g2.phase !== 0 || g2.airReports.length || g2.reports.length) return false;
+    if (!columnsSettable(g2)) return false;
     if (on) g2.flags.columns = 1;
-    else delete g2.flags.columns;
+    else {
+      delete g2.flags.columns;
+      delete g2.columns;
+    }
     return true;
   }
   var friendOf = (g2, a, b) => a === b || allied(g2, a, b);
@@ -86989,6 +86993,11 @@
       })(),
       // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
       nickFlags: nicknamesOn(s),
+      // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
+      // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
+      r2Switches: s.flags.open === 1,
+      columnsOn: columnsOn(s),
+      columnsCan: columnsSettable(s),
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
       idle: s.human ? idleTeams(s, s.human) : 0,
       // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -91966,6 +91975,17 @@ ${standing5}`,
         ok2 = orderStaffCap(s, Number(part[1]));
         note4 = ok2 ? `Your staff may spend up to ${Number(part[1])}% of the treasury in a month.` : "";
       }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "nicknames") {
+      setNicknames(s, part[1] === "on");
+      ok2 = true;
+      note4 = nicknamesOn(s) ? "Earned names are on: a corps that wins three hard fights is given a name by its own army, and the name goes on its flag." : "Earned names are off: no corps is given a new one, and none is shown on the flags. The names already earned are kept.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "columns") {
+      ok2 = setColumns(s, part[1] === "on");
+      note4 = !ok2 ? "Supply columns can be switched only in the campaign's first month." : columnsOn(s) ? "Supply columns are on: each month lorries carry the supplies from the railhead to the armies beyond it, and enemy aircraft and partisans can catch them on the road." : "Supply columns are off: the armies beyond the railhead are fed as before.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
     if (part[0] === "cabinet") {
