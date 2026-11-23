@@ -107,6 +107,21 @@ namespace
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
 	}
+
+	/**
+	 * ALL FALL BACK's question is up (release 1.5): until it is answered it holds the screen. Only its two buttons and Esc
+	 * answer it; the view's own keys, the wheel and the pause still move and stop the clock; no click, drag or order key
+	 * reaches the field (the 1.5 pre-check, 23 November 17:34Z: it lit its buttons and caught Esc, and nothing more).
+	 */
+	bool AllBackAsking(const FLandBattleState* S)
+	{
+		return S && S->General.bOn && !S->General.bFilm && !S->bCard && S->General.bAllBackAsk && !S->General.bAllBack;
+	}
+
+	bool AllBackAnswer(const FString& Action)
+	{
+		return Action == TEXT("general:allback:yes") || Action == TEXT("general:allback:no");
+	}
 }
 
 void SLandBattleScreen::Construct(const FArguments& Args)
@@ -1696,6 +1711,20 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 		}
 	}
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+	if (AllBackAsking(Battle.IsValid() ? Battle->GetState() : nullptr))
+	{
+		// (ALL FALL BACK's question up: only its two buttons answer, even where another button lies under the box; a
+		// click anywhere else reaches nothing)
+		for (int32 K = Buttons.Num() - 1; K >= 0; --K)
+		{
+			if (AllBackAnswer(Buttons[K].Action) && Buttons[K].Rect.ContainsPoint(Local))
+			{
+				Do(Buttons[K].Action);
+				break;
+			}
+		}
+		return FReply::Handled();
+	}
 	if (const FButton* Hit = ButtonAt(Local))
 	{
 		Do(Hit->Action);
@@ -1746,7 +1775,12 @@ FReply SLandBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPoin
 			return FReply::Handled();
 		}
 		GeneralHeld = -1;
-		if (Battle.IsValid())
+		if (Battle.IsValid() && AllBackAsking(Battle->GetState()))
+		{
+			// (a drag begun before ALL FALL BACK's question came up is let go where it was, nothing given)
+			Battle->GeneralDo(TEXT("letgo"));
+		}
+		else if (Battle.IsValid())
 		{
 			const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 			Battle->GeneralRelease(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
@@ -1779,7 +1813,7 @@ FReply SLandBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, co
 	// The second press of a double click is a press like any other (his clicks count their own seconds: a second click
 	// where an order went sends them at the double, one on open ground glides the view there); a unit's card clicked
 	// twice is also followed by the view.
-	if (IsGeneral() && Event.GetEffectingButton() == EKeys::LeftMouseButton)
+	if (IsGeneral() && Event.GetEffectingButton() == EKeys::LeftMouseButton && !AllBackAsking(Battle.IsValid() ? Battle->GetState() : nullptr))
 	{
 		const FButton* Hit = ButtonAt(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
 		if (Hit && Hit->Action.StartsWith(TEXT("pick:")) && Battle.IsValid())
@@ -1908,8 +1942,13 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 		{
 			HoverBlock = Over->Action.StartsWith(TEXT("pick:")) ? FCString::Atoi(*Over->Action.Mid(5)) : -1;
 		}
-		// (over his bar or a card, no word by the pointer)
-		Battle->GeneralMove(GeneralHeld < 0 && ButtonAt(Local) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), TagUnder(Local));
+		// (over his bar or a card, or while ALL FALL BACK's question is up, no word by the pointer and no plate)
+		const bool bAsking = AllBackAsking(Battle->GetState());
+		if (bAsking)
+		{
+			HoverBlock = -1;
+		}
+		Battle->GeneralMove(GeneralHeld < 0 && (bAsking || ButtonAt(Local)) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), bAsking ? -1 : TagUnder(Local));
 		return FReply::Handled();
 	}
 	if (!bDragging)
@@ -1958,6 +1997,11 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		{
 			// (ALL FALL BACK's question up: Esc keeps fighting)
 			Scene->GeneralDo(TEXT("allback:no"));
+			return FReply::Handled();
+		}
+		if (AllBackAsking(S) && Bit == 0u && Key != EKeys::SpaceBar)
+		{
+			// (the question up: no order key reaches the field; the view's keys and the pause still work)
 			return FReply::Handled();
 		}
 		if (S->General.bFilm)
