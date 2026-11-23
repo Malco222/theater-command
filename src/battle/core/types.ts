@@ -46,6 +46,12 @@ export interface Reckoning {
   dice: [number, number];
   even: number;
   /**
+   * With the honest win chance (release 2, the campaign's switch 'winChance'): today's run of luck. The card's throw
+   * lands a share of the way along 'dice' and is billed at the same share of this run (resolveBattle in game.ts); the
+   * field's own fortune is drawn from this run, so a fought field costs what it cost before. Absent, 'dice' is today's.
+   */
+  luck?: [number, number];
+  /**
    * Where the attack card did not know the defence (b453): the odds as the card put them to the player, the middle of
    * the staff's band, where its bar stands. Absent, the card printed 'odds' itself.
    */
