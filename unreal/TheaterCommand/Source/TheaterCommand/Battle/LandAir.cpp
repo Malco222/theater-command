@@ -55,12 +55,12 @@ namespace LandAir
 	{
 		// The ground-attack machine each air force flew, of the models the kit has (the art director's unit table; the
 		// Thunderbolt and the Typhoon are not sculpted, so the Americans fly the Mustang from 1944 and the British the
-		// Spitfire from 1943, both of which strafed in Normandy). The Germans the Stuka till the Fw 190's fighter-bomber
-		// took its place (1943); the Russians always the Il-2, low and shallow; a nation with none of its own a plain
-		// fighter in its paint.
+		// Spitfire from 1943, both of which strafed in Normandy). The Germans the Stuka through 1943 (still their main dive
+		// bomber in the East at Kursk) till the Fw 190's fighter-bomber took its place (1944); the Russians always the
+		// Il-2, low and shallow; a nation with none of its own a plain fighter in its paint.
 		Machine M;
 		const bool bEmpire = Nat == "UK" || Nat == "CAN" || Nat == "AUS" || Nat == "NZL" || Nat == "SAF" || Nat == "IND";
-		if (Nat == "GER" && Year < 1943)
+		if (Nat == "GER" && Year < 1944)
 		{
 			// (from high, rolled over into a 75 degree dive, its two guns a short burst on the way down, out at about 300 m;
 			// once the bombs are drawn, the bomb leaving it at about 600 m is the shot)
