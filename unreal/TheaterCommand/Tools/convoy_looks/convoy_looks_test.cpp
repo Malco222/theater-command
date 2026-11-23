@@ -232,11 +232,26 @@ namespace
 
 	void TestBoats()
 	{
+		// (the code-built boats, which the stage fits to AirFeed::HullOf("ss"), 95 by 8.3 m; and the battle modeller's, which
+		// it draws as made)
+		struct Boat
+		{
+			BoatModel M;
+			Drawn D;
+		};
+		std::vector<Boat> All;
 		for (const char* Nation : { "GER", "USA", "UK" })
 		{
-			const BoatModel M = ModelOf(Nation);
-			// (the stage fits every boat to AirFeed::HullOf("ss"): 95 by 8.3 m)
-			const Drawn D = DrawnOf(M, 95.0, 8.3);
+			All.push_back({ ModelOf(Nation), DrawnOf(ModelOf(Nation), 95.0, 8.3) });
+		}
+		for (const char* File : { "Submarine_GER", "Submarine_USA", "Submarine" })
+		{
+			All.push_back({ SculptedOf(File), Drawn() });
+		}
+		for (const Boat& Each : All)
+		{
+			const BoatModel& M = Each.M;
+			const Drawn& D = Each.D;
 			const std::string N = M.Name + ": ";
 			const Run R = Steam(M, D, false, 0.0);
 			Check(R.MostVisibleStep <= 2.5 * Frame + 1e-9, N + F("no pop: the most her heave moved in a frame while any of her could be seen, %.3f m", R.MostVisibleStep));
@@ -523,6 +538,40 @@ namespace
 		Check(!std::ifstream(Content + "Submarine.json").good() && !std::ifstream(Content + "Old/Submarine.json").good(),
 		      "no sculpted Submarine among the game's models (the stage would draw it instead of the code-built one)");
 		Check(std::ifstream(Content + "Bf109.json").good(), "(the game's models are where this test looks for them)");
+		// The battle modeller's boats the stage draws now wherever the game has them (AirStage's ShipFileOf, "Ships/" and the
+		// class's model name): SculptedOf's rows against each file's own sockets and size, as Tools/battle_ships_in.py
+		// writes them (the attack periscope raised).
+		const std::string Stage = TextOf(Root + "/Battle/AirStage.cpp");
+		Check(Stage.find("Kind = TEXT(\"Submarine\");") != std::string::npos && Stage.find("TEXT(\"Ships/\") + Asked") != std::string::npos,
+		      "the stage draws a boat as the battle modeller's Ships/Submarine_<navy>, else Ships/Submarine");
+		for (const char* File : { "Submarine_GER", "Submarine_USA", "Submarine" })
+		{
+			const BoatModel M = SculptedOf(File);
+			const std::string N = std::string("[") + File + "] ";
+			const std::string Sockets = TextOf(Content + "Ships/" + File + ".sockets.json");
+			const std::string Model = TextOf(Content + "Ships/" + File + ".json");
+			Check(!Sockets.empty() && !Model.empty(), N + "the model and its sockets are in the game");
+			auto SocketAt = [&Sockets](const std::string& Name, double& X, double& Z)
+			{
+				const size_t At = Sockets.find("\"name\":\"" + Name + "\"");
+				const size_t Where = At == std::string::npos ? std::string::npos : Sockets.find("\"at\":[", At);
+				double Y = 0.0;
+				return Where != std::string::npos && std::sscanf(Sockets.c_str() + Where + 6, "%lf,%lf,%lf", &X, &Y, &Z) == 3;
+			};
+			double X = 0.0, Z = 0.0;
+			Check(SocketAt("periscope.1", X, Z) && std::fabs(X - M.ScopeAlong) < 0.05 && M.ScopeTop > Z && M.ScopeTop - Z < 0.5 && Z > M.TowerTop + 3.0,
+			      N + F("her attack periscope raised: its head %.2f m up at %.2f along, the rod's top %.2f", Z, X, M.ScopeTop));
+			Check(SocketAt("periscope.2", X, Z) && std::fabs(X - M.LowAlong) < 0.05 && M.LowTop > Z && M.LowTop - Z < 0.5,
+			      N + F("her other periscope housed: its head %.2f m up at %.2f along, the rod's top %.2f", Z, X, M.LowTop));
+			Check(SocketAt("aa.1", X, Z) && std::fabs(X - M.GunAlong) < 0.05 && std::fabs(M.GunTop - Z - 0.1) < 0.02,
+			      N + F("her light gun's muzzle %.2f m up at %.2f along", Z, X));
+			Check(SocketAt("wake.bow", X, Z) && std::fabs(X - M.BowAlong) < 0.05, N + F("her stem at the waterline %.1f m forward", X));
+			double Long = 0.0;
+			const size_t L = Model.find("\"long\":");
+			Check(L != std::string::npos && std::sscanf(Model.c_str() + L + 7, "%lf", &Long) == 1 && std::fabs(Long - M.Long) < 0.05, N + F("her bounds %.1f m long", Long));
+			Check(M.WireTop > M.TowerTop && M.TowerFore > M.TowerAft && M.Deck < M.TowerTop && M.Top == M.ScopeTop, N + "her standard (or shears) over her bridge's rim, her casing under it");
+		}
+		Check(SculptedOf("Submarine_ITA").Name.empty(), "no row for a file the game does not have");
 	}
 
 	void TestBursts()
@@ -956,6 +1005,13 @@ namespace
 			const Drawn D = DrawnOf(M, 95.0, 8.3);
 			Check(std::fabs(FreeOf("ss") - M.Deck * D.Up) <= 0.35, std::string("[") + Nation + "] " + F("a boat riding high: her deck %.2f m out, the scene's men go over it from %.2f m", M.Deck * D.Up, FreeOf("ss")));
 		}
+		// (and the battle modeller's boats, which the stage draws now: the scene takes her casing by her navy)
+		for (const char* Nation : { "GER", "", "USA", "UK", "JAP" })
+		{
+			const std::string Nat(Nation);
+			const BoatModel M = SculptedOf(Nat == "USA" ? "Submarine_USA" : Nat.empty() || Nat == "GER" ? "Submarine_GER" : "Submarine");
+			Check(std::fabs(BoatFreeOf(Nat) - M.Deck) <= 0.1, "[" + Nat + "] " + F("the battle modeller's boat riding high: her casing %.2f m out, the scene's men go over it from %.2f m", M.Deck, BoatFreeOf(Nat)));
+		}
 		if (Root.empty())
 		{
 			std::printf("(no source folder given: the rescue not read against the sea scene's code)\n");
@@ -981,12 +1037,14 @@ namespace
 		Check(Show.find("return { 300, 6, 1, 30, 5.0, 1.0 }; // a destroyer") != std::string::npos && FreeOf("dd") == 5.0, "and any other (a destroyer's): 5.0 m");
 		for (const char* Said : {
 			     "double FreeOf(const std::string& Class) { return CompanyOf(Class).Free; }",
+			     "double BoatFreeOf(const std::string& Nation) { return Nation == \"USA\" ? 2.6 : Nation.empty() || Nation == \"GER\" ? 1.8 : 2.0; }",
+			     "W.Free = H.Class == \"ss\" ? BoatFreeOf(H.Nation) : C.Free;",
 			     "if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;",
 			     "const double Along = Clamp(Rel.Dot(Ahead(By->Hdg)), -0.35 * Sz.Long, 0.35 * Sz.Long);",
 			     "M.Off = Vec(Along, Side * (0.5 * Sz.Beam + 1.0), 0.0);",
 			     "M.Off = Vec(M.Off.X, M.Off.Y > 0.0 ? 0.5 * SizeOf(By->Class).Beam + 0.3 : -(0.5 * SizeOf(By->Class).Beam + 0.3), Up);",
 			     "M.O.At.Z = FreeOf(By->Class) * Clamp(",
-			     "M.O.Drop = std::max(0.6, W.Free * (1.0 - 0.8 * Down));",
+			     "M.O.Drop = W.bLeft && Mix(S + 37) < 0.6 ? 0.8 : std::max(0.6, W.Free * (1.0 - 0.8 * Down));",
 			     "if (Class == \"ss\") return { 55, 1, 0, 10, 2.5, 0.8 };",
 		     })
 		{

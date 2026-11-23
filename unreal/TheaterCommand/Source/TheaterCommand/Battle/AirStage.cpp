@@ -597,6 +597,18 @@ bool AAirStage::ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHa
 	return !OutBow.IsNearlyZero();
 }
 
+bool AAirStage::ShipModel(int32 Id, FString& OutFile, FVector& OutStretch) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship || !Ship->Hull)
+	{
+		return false;
+	}
+	OutFile = Ship->File;
+	OutStretch = Ship->Stretch;
+	return true;
+}
+
 bool AAirStage::DeckUnder(const FVector& WorldAt, FVector& OutDeck) const
 {
 	const FTransform Frame = GetActorTransform();

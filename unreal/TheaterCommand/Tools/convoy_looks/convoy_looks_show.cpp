@@ -62,16 +62,21 @@ namespace
 	};
 
 	/**
-	 * The boat as the stage draws her, typed from Campaign/CampaignShips.cpp's Submarine() (built by her navy: 67 m by 6.2
-	 * for "GER" or none, 95 by 8.3 for "USA", 80 by 6.2 for any other; the stem's rake 2 m forward of the hull) and
-	 * stretched by AirStage's FitHull to AirFeed::HullOf's size, steered with the looks' heave and the show's trim
-	 * (plus bow up, about her waterline amidships). Heights over the still sea: the bridge's top (6.25 m: deck 1.65 + 4.6)
-	 * at both ends of its plan (5.4 forward, 4.6 aft) and the jumping wire's head on it (5.0 forward, 6.5); the fixed
-	 * periscopes' heads (1.5 forward, 10.65; amidships, 9.15).
+	 * The boat as the stage draws her, steered with the looks' heave and the show's trim (plus bow up, about her waterline
+	 * amidships). Heights over the still sea: her casing amidships, the bridge's top at both ends of its plan and the
+	 * jumping wire's head on it, the periscopes' heads. Two models:
+	 * - the code-built one, typed from Campaign/CampaignShips.cpp's Submarine() (built by her navy: 67 m by 6.2 for "GER"
+	 *   or none, 95 by 8.3 for "USA", 80 by 6.2 for any other; the stem's rake 2 m forward of the hull), stretched by
+	 *   AirStage's FitHull to AirFeed::HullOf's size: deck 1.65, the bridge's top 6.25 from 5.4 forward to 4.6 aft, the
+	 *   wire's head 5.0 forward at 6.5, fixed periscopes' heads 1.5 forward at 10.65 and amidships at 9.15;
+	 * - the battle modeller's (Content/Models/Ships/Submarine_GER, _USA, or Submarine for any other navy), drawn as made,
+	 *   typed from the files (as Tools/battle_ships_in.py leaves them, the attack periscope raised), which the stage draws
+	 *   wherever the game has them: Sculpted().
 	 */
 	struct StageBoat
 	{
 		double Up = 1.0, Along = 1.0;
+		double Deck = 1.65, Top = 6.25, Fore = 5.4, Aft = -4.6, WireAlong = 5.0, WireTop = 6.5, ScopeAlong = 1.5, ScopeTop = 10.65, LowAlong = 0.0, LowTop = 9.15;
 
 		StageBoat(const std::string& Nation, double FitLong, double FitBeam)
 		{
@@ -79,14 +84,36 @@ namespace
 			Up = FitBeam / Beam;
 			Along = FitLong / (Hull + 2.0);
 		}
-		double At(double Heave, double Pitch, double Fore, double High) const
+		static StageBoat Sculpted(const std::string& Nation)
+		{
+			StageBoat B(std::string(), 69.0, 6.2);
+			B.Up = 1.0;
+			B.Along = 1.0;
+			if (Nation.empty() || Nation == "GER")
+			{
+				B.Deck = 1.77; B.Top = 5.3; B.Fore = 3.5; B.Aft = -6.5; B.WireAlong = 0.0; B.WireTop = 5.94;
+				B.ScopeAlong = -0.2; B.ScopeTop = 10.49; B.LowAlong = -1.2; B.LowTop = 5.79;
+			}
+			else if (Nation == "USA")
+			{
+				B.Deck = 2.6; B.Top = 6.5; B.Fore = 6.5; B.Aft = -5.0; B.WireAlong = 2.4; B.WireTop = 9.04;
+				B.ScopeAlong = 2.4; B.ScopeTop = 11.79; B.LowAlong = 1.4; B.LowTop = 7.09;
+			}
+			else
+			{
+				B.Deck = 2.0; B.Top = 5.6; B.Fore = 4.5; B.Aft = -7.5; B.WireAlong = 0.4; B.WireTop = 6.44;
+				B.ScopeAlong = 0.4; B.ScopeTop = 10.99; B.LowAlong = -0.6; B.LowTop = 6.29;
+			}
+			return B;
+		}
+		double At(double Heave, double Pitch, double Off, double High) const
 		{
 			const double R = Pitch * 3.14159265358979323846 / 180.0;
-			return Heave + High * Up * std::cos(R) + Fore * Along * std::sin(R);
+			return Heave + High * Up * std::cos(R) + Off * Along * std::sin(R);
 		}
-		double Bridge(double Heave, double Pitch) const { return std::max({ At(Heave, Pitch, 5.4, 6.25), At(Heave, Pitch, -4.6, 6.25), At(Heave, Pitch, 5.0, 6.5) }); }
-		double Scope(double Heave, double Pitch) const { return At(Heave, Pitch, 1.5, 10.65); }
-		double Low(double Heave, double Pitch) const { return At(Heave, Pitch, 0.0, 9.15); }
+		double Bridge(double Heave, double Pitch) const { return std::max({ At(Heave, Pitch, Fore, Top), At(Heave, Pitch, Aft, Top), At(Heave, Pitch, WireAlong, WireTop) }); }
+		double Scope(double Heave, double Pitch) const { return At(Heave, Pitch, ScopeAlong, ScopeTop); }
+		double Low(double Heave, double Pitch) const { return At(Heave, Pitch, LowAlong, LowTop); }
 	};
 
 	struct BoatSeen
@@ -169,10 +196,11 @@ namespace
 				BoatSeen& B = Boats[Ship.Key];
 				if (!B.bSeen)
 				{
-					B.Model = ModelOf(Ship.Nation);
-					const AirFeed::HullSize Hull = AirFeed::HullOf("ss", std::string(), Ship.Nation);
-					B.Size = DrawnOf(B.Model, Hull.Long, Hull.Beam);
-					B.Stage = StageBoat(Ship.Nation, Hull.Long, Hull.Beam);
+					// (the stage draws the battle modeller's boat for her navy, as made: AirStage's ShipFileOf)
+					const std::string Made = Ship.Nation == "GER" || Ship.Nation.empty() ? "Submarine_GER" : Ship.Nation == "USA" ? "Submarine_USA" : "Submarine";
+					B.Model = SculptedOf(Made);
+					B.Size = Drawn();
+					B.Stage = StageBoat::Sculpted(Ship.Nation);
 				}
 				BoatIn In;
 				In.T = T;
@@ -200,7 +228,7 @@ namespace
 				// (surfaced, she rides where the show has her, less her trim awash: the deck of the stage's model 0.5 m out; her
 				// tanks blown, forced up or scuttled, none of it: riding high, her model's own waterline at the sea)
 				const double ShowHeave = Ship.Heave - Ship.Dived;
-				const double Awash = (1.65 * B.Stage.Up - 0.5) * (1.0 - Smooth(0.0, 1.0, B.State.Blown));
+				const double Awash = (B.Stage.Deck * B.Stage.Up - 0.5) * (1.0 - Smooth(0.0, 1.0, B.State.Blown));
 				if (Ship.Dive == "surfaced" && Ship.Dived < 0.05 && std::fabs(Out.Heave - (ShowHeave - Awash)) > B.WorstOff)
 				{
 					B.WorstOff = std::fabs(Out.Heave - (ShowHeave - Awash));

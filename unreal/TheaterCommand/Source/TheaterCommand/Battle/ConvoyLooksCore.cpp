@@ -124,6 +124,55 @@ namespace ConvoyLook
 		return M;
 	}
 
+	BoatModel SculptedOf(const std::string& File)
+	{
+		// (Metres in the file's frame: along her forward from her origin amidships, up from her waterline. Tools/convoy_looks
+		// reads the files' sockets and fails if these no longer agree with them.)
+		BoatModel M;
+		if (File == "Submarine_GER")
+		{
+			// A Type VIIC: casing 1.77 m amidships; the bridge's rim 5.3 m, from 3.5 forward to the after gun platform's 6.5
+			// aft; the periscope standard's top (and the jumping wire's head) 5.94 m at amidships; the 20 mm gun's muzzle
+			// (aa.1) 5.95 aft at 4.64 m; the attack periscope raised to 10.49 m, 0.2 aft, the sky periscope housed at 5.79 m,
+			// 1.2 aft; the stem's waterline (wake.bow) 31.3 m forward; bounds 67.0 by 6.79 (her bow planes).
+			M.Long = 67.0; M.Wide = 6.79; M.Deck = 1.77;
+			M.TowerTop = 5.3; M.TowerFore = 3.5; M.TowerAft = -6.5;
+			M.WireAlong = 0.0; M.WireTop = 5.94; M.GunAlong = -5.95; M.GunTop = 4.74;
+			M.ScopeAlong = -0.2; M.ScopeTop = 10.49; M.LowAlong = -1.2; M.LowTop = 5.79;
+			M.BowAlong = 31.3;
+		}
+		else if (File == "Submarine_USA")
+		{
+			// A fleet boat: casing 2.6 m; the bridge's rim 6.5 m, from 6.5 forward to 5.0 aft; her periscope shears' top
+			// (the jumping wire's head on it) 9.04 m, 2.4 forward; the forward 20 mm (aa.1) 8.65 forward at 5.71 m; the
+			// attack periscope raised to 11.79 m, 2.4 forward, the other housed in the shears at 7.09 m, 1.4 forward; the
+			// stem 44.5 m forward; bounds 95.0 by 7.97.
+			M.Long = 95.0; M.Wide = 7.97; M.Deck = 2.6;
+			M.TowerTop = 6.5; M.TowerFore = 6.5; M.TowerAft = -5.0;
+			M.WireAlong = 2.4; M.WireTop = 9.04; M.GunAlong = 8.65; M.GunTop = 5.81;
+			M.ScopeAlong = 2.4; M.ScopeTop = 11.79; M.LowAlong = 1.4; M.LowTop = 7.09;
+			M.BowAlong = 44.5;
+		}
+		else if (File == "Submarine")
+		{
+			// Any other navy's: casing 2.0 m; the bridge's rim 5.6 m, from 4.5 forward to 7.5 aft; the standard's top 6.44 m,
+			// 0.4 forward; aa.1 7.25 aft at 5.02 m; the attack periscope raised to 10.99 m, 0.4 forward, the other housed at
+			// 6.29 m, 0.6 aft; the stem 37.5 m forward; bounds 80.0 by 7.08.
+			M.Long = 80.0; M.Wide = 7.08; M.Deck = 2.0;
+			M.TowerTop = 5.6; M.TowerFore = 4.5; M.TowerAft = -7.5;
+			M.WireAlong = 0.4; M.WireTop = 6.44; M.GunAlong = -7.25; M.GunTop = 5.12;
+			M.ScopeAlong = 0.4; M.ScopeTop = 10.99; M.LowAlong = -0.6; M.LowTop = 6.29;
+			M.BowAlong = 37.5;
+		}
+		else
+		{
+			return M;
+		}
+		M.Name = "Ships/" + File;
+		M.Top = M.ScopeTop;
+		return M;
+	}
+
 	Drawn DrawnOf(const BoatModel& M, double HullLong, double HullBeam)
 	{
 		Drawn D;
@@ -626,6 +675,11 @@ namespace ConvoyLook
 			Out.push_back({ CrushDelay + 2.0 + 24.0 * std::pow(K / 5.0, 1.6), R * std::sin(A), R * std::cos(A) });
 		}
 		return Out;
+	}
+
+	double BoatFreeOf(const std::string& Nation)
+	{
+		return Nation == "USA" ? 2.6 : Nation.empty() || Nation == "GER" ? 1.8 : 2.0;
 	}
 
 	double FreeOf(const std::string& Class)

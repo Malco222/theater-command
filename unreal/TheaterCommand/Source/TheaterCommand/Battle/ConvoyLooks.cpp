@@ -465,28 +465,41 @@ void FConvoyLooks::StepBoats()
 		{
 			continue;
 		}
+		// (the stage draws her with the battle modeller's boat where the game has one (AirStage's ShipFileOf: Submarine_GER,
+		// Submarine_USA, Submarine), fitted only if she is a named boat; else as "Submarine:<her navy>" (its KindOf), built
+		// in code by her navy (Campaign/CampaignShips.cpp) and fitted to AirFeed::HullOf's size. The looks' rows are that
+		// model's, SculptedOf's or ModelOf's: so a boat the scene has not yet laid on the stage this frame waits for it.)
+		FString File;
+		FVector Stretch = FVector::OneVector;
+		const bool bLaid = Stage && Stage->ShipModel(Ship.Key, File, Stretch);
+		const FBoatKept* Kept = Boats.Find(Ship.Key);
+		if (Stage && !bLaid && (!Kept || Kept->SeenAt < 0.0))
+		{
+			continue;
+		}
 		FBoatKept& B = Boats.FindOrAdd(Ship.Key);
 		if (B.SeenAt < 0.0)
 		{
-			// (the stage lays a boat as "Submarine:<her navy>" (AirStage's KindOf) and, there being no sculpted Submarine among
-			// the game's models, the kit builds her in code by her navy (Campaign/CampaignShips.cpp), fitted to AirFeed::HullOf's
-			// size: ModelOf's rows are that model's. A sculpted one put in would be drawn instead, and the rows no longer fit.)
-			static bool bSculptedTold = false;
-			if (!bSculptedTold && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Submarine.json")))
+			B.Model = BoatModel();
+			if (bLaid && !File.IsEmpty())
 			{
-				bSculptedTold = true;
-				UE_LOG(LogTheater, Warning, TEXT("Convoy looks: Models/Submarine.json is in, so the stage draws that model: the looks' boat rows (ConvoyLooksCore ModelOf) are the code-built one's and need its numbers."));
+				B.Model = SculptedOf(std::string(TCHAR_TO_UTF8(*FPaths::GetBaseFilename(File))));
+				B.Drawn.Along = Stretch.X;
+				B.Drawn.Up = Stretch.Z;
 			}
-			B.Model = ModelOf(Ship.Nation);
-			const AirFeed::HullSize Hull = AirFeed::HullOf("ss", std::string(), Ship.Nation);
-			double DrawnLong = Hull.Long;
-			FVector Bow = FVector::ZeroVector;
-			bool bHarbour = false;
-			if (!Stage || !Stage->ShipLie(Ship.Key, DrawnLong, Bow, bHarbour) || DrawnLong <= 1.0)
+			if (B.Model.Name.empty())
 			{
-				DrawnLong = Hull.Long;
+				B.Model = ModelOf(Ship.Nation);
+				const AirFeed::HullSize Hull = AirFeed::HullOf("ss", std::string(), Ship.Nation);
+				double DrawnLong = Hull.Long;
+				FVector Bow = FVector::ZeroVector;
+				bool bHarbour = false;
+				if (!Stage || !Stage->ShipLie(Ship.Key, DrawnLong, Bow, bHarbour) || DrawnLong <= 1.0)
+				{
+					DrawnLong = Hull.Long;
+				}
+				B.Drawn = DrawnOf(B.Model, DrawnLong, Hull.Beam);
 			}
-			B.Drawn = DrawnOf(B.Model, DrawnLong, Hull.Beam);
 		}
 		BoatIn In;
 		In.T = Now;

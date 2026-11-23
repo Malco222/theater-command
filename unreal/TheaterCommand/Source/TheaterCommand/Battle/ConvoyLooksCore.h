@@ -77,6 +77,15 @@ namespace ConvoyLook
 	};
 	/** The row of the stage's model for a navy (the stage's own nation tag): "GER" or none, "USA", any other. */
 	BoatModel ModelOf(const std::string& Nation);
+	/**
+	 * The row of the battle modeller's boat the stage now draws where the game has her (Content/Models/Ships, by
+	 * AirStage's ShipFileOf; Brian, 23 November 2026: every navy's ships to the B-17's bar): "Submarine_GER" (a Type VIIC,
+	 * 67 m), "Submarine_USA" (a fleet boat, 95 m) or "Submarine" (any other navy, 80 m), by the file's name. Measured off
+	 * the files (their bounds, the bridge's rim, the casing amidships, the sockets): her attack periscope stands raised as
+	 * Tools/battle_ships_in.py leaves it, her other one housed; the jumping wire's head is the top of her periscope
+	 * standard (a fleet boat's, of her shears), the highest of her bridge but her periscopes. Empty Name: no such row.
+	 */
+	BoatModel SculptedOf(const std::string& File);
 
 	/** How the stage draws her model: stretched along to the length it fits her to, and across and up by the beam's
 	 * share (AirStage's FitHull, to AirFeed::HullOf's size). */
@@ -310,6 +319,9 @@ namespace ConvoyLook
 	 */
 	/** The scene's height of a ship's deck over the sea by her class (its men climb a rescuer's side to it) [SHOW]. */
 	double FreeOf(const std::string& Class);
+	/** [SHOW] SeaShow.cpp BoatFreeOf: a boat's casing as the scene has her men go over it, by her navy (the battle
+	 * modeller's boats: SculptedOf's Deck). */
+	double BoatFreeOf(const std::string& Nation);
 	/** Whether a rescuer at this speed (metres a second) stands by, as the scene has it [SHOW]. */
 	bool StandsBy(double Speed);
 	/** A rescuer as the show gives her (ShipOut): her waterline amidships, heading (degrees), length, beam, speed. */

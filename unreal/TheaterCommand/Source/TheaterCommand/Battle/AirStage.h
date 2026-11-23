@@ -118,6 +118,9 @@ public:
 	/** Ship Id's length (metres), the level way her bow points (world), and whether she lies in harbour (land within
 	 * two kilometres); false if there is no such ship. */
 	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
+	/** The model ship Id is drawn with: the battle modeller's file ("Ships/Submarine_GER"; empty: the kit's code-built
+	 * miniature) and the stretch fitting it took (along, across, up). False for a ship not laid. */
+	bool ShipModel(int32 Id, FString& OutFile, FVector& OutStretch) const;
 	/** The deck under a world point where it lies over a ship of the stage (her waterline where she lies now, settled,
 	 * and her deck's height above it, as her looks lay a burst): the effects kit's ground there, so a hit not on armour
 	 * bursts on her deck, not at the sea inside her hull. False off every ship, and over a ship going down. */
