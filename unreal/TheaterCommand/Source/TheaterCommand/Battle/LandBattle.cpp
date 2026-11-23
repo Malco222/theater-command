@@ -1876,6 +1876,11 @@ bool ALandBattle::Open()
 	S.Holes.Drawn = [FieldPtr](double X, double Y) { return FieldPtr->DrawnZ(X, Y); };
 	// (-TheaterLandCraterOldEdge: the crater's edge as before the art director's 23 November seam, for the A/B)
 	S.Holes.bOldEdge = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCraterOldEdge"));
+	// Effects (R2): crater variety (-TheaterLandCraterVariety; Brian, 23 November: "make the explosion craters different
+	// varations so its not always the same"): each hole its own size, fuze, slant along the way its round came, soot
+	// star and subsoil (LandCrater::Field::bVariety). Off: every hole as before.
+	S.Holes.bVariety = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCraterVariety"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: shell holes %s"), S.Holes.bVariety ? TEXT("each their own (-TheaterLandCraterVariety, release 2)") : TEXT("as before"));
 	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
 	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
@@ -7968,7 +7973,7 @@ void ALandBattle::MakeCraters()
 		{
 			continue;
 		}
-		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx)))
+		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx), E.Way.X, E.Way.Y)) // (Effects (R2): its way, read by crater variety only)
 		{
 			continue;
 		}

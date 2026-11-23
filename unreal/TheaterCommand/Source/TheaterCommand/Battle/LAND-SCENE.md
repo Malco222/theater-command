@@ -527,6 +527,41 @@ The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew
 crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
 `-TheaterLandFilmFire` as well. Also the frame rate in a battle with eight kills or more, against the 45 fps gate.
 
+## Shell holes each their own (release 2, off until passed)
+
+Brian, 23 November: "make the explosion craters different varations so its not always the same". Before this, every
+round of a kind left the same hole: every 105's 2.8 m across and 0.7 m deep, round, its soil thrown evenly all round,
+only its ragged outline its own. `-TheaterLandCraterVariety` (`LandCrater::Field::bVariety`) gives each round its own:
+
+- **Its size:** a quarter bigger or smaller, and one in ten a big one (up to half as big again); its depth, rim and
+  clods with it.
+- **Its fuze:** most burst at once on the ground. One in eight is a delay that bursts under the ground: deeper,
+  narrower, a high rim, big clods, little soot. One in ten grazes: a shallow, wide, sooty scoop, longer.
+- **Its slant, along the way its round came** (the scene passes `LandPlay::Effect::Way`). A tank's or anti-tank gun's
+  high explosive comes in nearly flat and leaves a long hole (1.35 to 1.8 times as long as wide), most of its soil
+  thrown forward and out in two wings to either side, little behind. A field gun's or howitzer's shell leaves a
+  slightly oval hole with some wings. A mortar bomb falls nearly straight down and leaves a round one. A round of no
+  known way (a blast in the record with no round) is turned by its own dice.
+- **The burst's soot:** a star of dark spikes out over the thrown soil. On snow it reaches out onto the white (as in
+  the winter photographs), on sand a little, elsewhere the thin edge stays the ground's own colour.
+- **The subsoil:** a deep hole throws lighter soil from under the topsoil onto its crest in patches. Normandy's
+  yellow-brown clay, the steppe's loess, paler sand, a town's plaster dust.
+- **The ground:** mud slumps wide and low with its soot smothered, sand sprays wide and shallow, and on snow the dark
+  earth reaches further.
+- **Overlapping holes:** a new hole's thrown soil stops at an older hole's rim and steps down into it, rather than
+  lying across the older bowl as a sheet.
+
+It is all drawn from each hole's own dice, so the same battle lays the same holes. It applies to scarred ground's old
+holes too. With the switch off every hole is laid as before to the byte: checked on 500 holes of every name and
+ground, including old ones, against the code before it. `Tools/land_crater/run.sh` checks it (each hole its own
+size, the long ones along their rounds' way, a body still lies on every hole's face, no hole through the world) and
+paints a barrage's holes on earth, sand, snow, mud and black earth, switch off and on, from a man's height and from
+above.
+
+The art director's Mac shots, with `-TheaterLandCraterVariety` against without: a barrage's field from 40 m up and
+from a man's height, on the bocage and on snow or sand. A field after tanks have shot high explosive at a hedge line
+should show the long holes pointing back at the guns.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

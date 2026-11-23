@@ -57,6 +57,23 @@ namespace LandCrater
 		/** 1: the thrown soil feathered into the ground past its reach, its thin edge flush on it (the art director, 23
 		 * November); 0: the old edge, ended at its reach a little over the ground (Field::bOldEdge, for the A/B). */
 		double Feather = 1.0;
+		/**
+		 * Crater variety (release 2, Field::bVariety; Brian, 23 November: "make the explosion craters different
+		 * varations so its not always the same"). Each neutral as given here, and Lay reads none of them while Vary is
+		 * 0, so a hole without them is laid as before to the byte. Long: how much longer it is along the way the round
+		 * came than across (1 round; a slanting round stretches its hole, a mortar bomb falling steeply hardly at all).
+		 * Heading: the way the round was going, radians from east (its long axis, and the soil it threw, lie along it).
+		 * Throw: 0 to 1, how much of the thrown soil goes forward and out in two wings to either side of it, the
+		 * butterfly a slanting burst throws, with little behind. Scorch: 0 to 1, the burst's star of blackened soil
+		 * round it. Subsoil: 0 to 1, the lighter soil from under the topsoil (clay, chalk, loess) a deep hole throws up
+		 * on its crest. Vary: the variety's own dice (0: none of it).
+		 */
+		double Long = 1.0;
+		double Heading = 0.0;
+		double Throw = 0.0;
+		double Scorch = 0.0;
+		double Subsoil = 0.0;
+		uint64_t Vary = 0;
 	};
 
 	/**
@@ -77,6 +94,11 @@ namespace LandCrater
 		Rgb8 Bare;
 		/** How much each point's tone wanders: 1 for torn soil, less for grass grown over it. */
 		double Mottle = 1.0;
+		/** Crater variety (Size::Subsoil, Size::Scorch): the soil from under the topsoil a deep hole throws up, and how
+		 * far the burst's soot reaches onto the thrown soil's thin edge (0 none: the edge the ground's own colour; snow
+		 * shows the burst's dark star far out on the white, sand a little). */
+		Rgb8 Sub;
+		double EdgeSoot = 0.0;
 	};
 	/** By the effects kit's ground word: "earth" (the bocage's brown loam), "woods" (darker, with leaf mould), "mud",
 	 * "town" (grey with stone and plaster), "sand", "snow" (brown-black earth thrown on the white). Any other: earth. */
@@ -101,10 +123,12 @@ namespace LandCrater
 	 * normal toward its edge (by the slope of Height across the drawn ground's spacing where none is given), so it is
 	 * lit as the ground round it. The thrown soil runs a metre and a half or so past its reach, feathered into the
 	 * ground with a broken edge, laid on Thin where given (the ground as drawn, its flat triangles), on Height where not,
-	 * its thin edge 2 mm over it.
+	 * its thin edge 2 mm over it. Avoid (read only with Size::Vary): where an older hole's bowl is (Field::InCut); the
+	 * thrown soil is drawn back to stop at its rim, never laid across it.
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn(), const HeightFn& Thin = HeightFn());
+		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn(), const HeightFn& Thin = HeightFn(),
+		const std::function<bool(double X, double Y)>& Avoid = std::function<bool(double X, double Y)>());
 
 	/**
 	 * Cuts out of a mesh what lies inside a convex outline seen from above (x, y pairs, counter-clockwise): every
@@ -168,8 +192,9 @@ namespace LandCrater
 		void SetEarth(const std::string& Word) { Earth = Word; }
 		/** A round landed at X, Y on Ground (the effects kit's word): its hole laid, by its name and calibre (SizeOf).
 		 * False when it leaves none (a name of no size, water, the guard reached). Dug only where Dig says it may be
-		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. */
-		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
+		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. WayX, WayY: the
+		 * way the round was going (LandPlay::Effect::Way), read only with bVariety (none: a way of its own dice). */
+		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double WayX = 0.0, double WayY = 0.0);
 		/**
 		 * An old hole from a battle fought here before (scarred ground, release 2: looks only), Months ago: laid as Add
 		 * lays a round's, then weathered as the months go, to about a year's: its soot washed out and its clods broken
@@ -195,6 +220,17 @@ namespace LandCrater
 		/** The crater's edge as it was before 23 November: no feather, its lip 0.6 of the floor's lift over the ground,
 		 * a fresh hole's grass cleared to a round 1.2 of its radius (-TheaterLandCraterOldEdge, for the A/B). */
 		bool bOldEdge = false;
+		/**
+		 * Crater variety (release 2, -TheaterLandCraterVariety, off until the art director and the Mac pass it): no two
+		 * holes alike. Each round's hole its own size (a fifth either way, now and then a big one), depth and rim; its
+		 * fuze (most burst at once; one in eight a delay that digs deep and narrow with a high rim and big clods, one in
+		 * ten a graze that scoops a shallow, wide, sooty scar); its slant by the weapon (a tank's or anti-tank gun's
+		 * round comes in flat and leaves a long hole with its soil thrown forward and out in two wings, a howitzer's
+		 * less, a mortar bomb's falls steeply and leaves a round one), turned along the way the round came; a star of
+		 * soot round a fresh burst; a deep hole's lighter subsoil on its crest; and the ground's own ways (mud slumps
+		 * wide and low, sand sprays wide and shallow, on snow the thrown earth and soot reach far over the white).
+		 */
+		bool bVariety = false;
 		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
 		 * grass, the country beyond), not a lane, a bank, a yard, a garden or orchard, the woods (a tree or a hedge would
 		 * hang over a bowl dug under it), a floor, a wall's line, water or marsh. G must outlive the function. */
@@ -255,6 +291,8 @@ namespace LandCrater
 			double Deep = 0.0;
 			/** How far round it the grass and corn are kept off (Bare), metres; 0: 1.2 of R, a fresh hole's. */
 			double BareR = 0.0;
+			/** Crater variety: its stretch along Heading (Size::Long; 1: round, R its radius every way). */
+			double Long = 1.0, Heading = 0.0;
 			std::vector<double> Cut;
 			/** A hedge cutter's breach (AddBreach), not a shell's hole: its points a grid in the bank's frame (u along
 			 * Yaw, v to its left), NU by NV from First, Step apart from U0, V0; the gap's cut CutU along and CutV across,
@@ -267,7 +305,8 @@ namespace LandCrater
 
 	private:
 		/** Add and AddOld: Months under 0 a fresh round's hole. */
-		bool AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months);
+		bool AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months, double WayX = 0.0,
+			double WayY = 0.0);
 		HeightFn Height;
 		ColourFn Under;
 		uint64_t Seed = 1;

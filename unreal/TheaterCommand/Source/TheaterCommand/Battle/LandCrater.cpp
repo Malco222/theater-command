@@ -1,6 +1,7 @@
 #include "Battle/LandCrater.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -346,11 +347,23 @@ namespace LandCrater
 			P.Clod = Rgb(74, 57, 40);
 			P.Turf = Rgb(72, 86, 42);
 		}
+		// Crater variety (Size::Subsoil, Size::Scorch): the soil from under the topsoil, lighter than it (Normandy's
+		// yellow-brown clay under the loam, the steppe's loess under its black earth, paler sand under the sun-dark
+		// crust, plaster and brick dust in a town), and how far the burst's soot shows on the thin edge (snow's white
+		// shows it far; sand a little; elsewhere the edge stays the ground's own colour)
+		P.Sub = Ground == "town" ? Rgb(168, 160, 148)
+			: Ground == "mud" ? Rgb(104, 88, 64)
+			: Ground == "woods" ? Rgb(128, 104, 72)
+			: Ground == "sand" ? Rgb(196, 176, 140)
+			: Ground == "blackearth" ? Rgb(132, 112, 80)
+			: Ground == "snow" ? Rgb(120, 98, 70)
+			: Rgb(150, 124, 84);
+		P.EdgeSoot = Ground == "snow" ? 1.0 : Ground == "sand" ? 0.35 : 0.0;
 		return P;
 	}
 
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit, const HeightFn& Thin)
+		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit, const HeightFn& Thin, const std::function<bool(double X, double Y)>& Avoid)
 	{
 		if (OutCut)
 		{
@@ -379,6 +392,82 @@ namespace LandCrater
 			Ray = { D.U(0.0, 2.0 * Pi), D.U(0.35, 0.9) * (ReachOf - 1.0) };
 		}
 		const double Lean = D.U(0.0, 2.0 * Pi), LeanBy = D.U(0.0, 0.18); // (thrown more to one side: the shell came in at a slant)
+		// Crater variety (Size::Vary): drawn from its own dice, so the hole's own draws are the same with it or without
+		// it; none of it is read while Vary is 0.
+		const bool bVary = S.Vary != 0;
+		Dice V(bVary ? S.Vary : 1u);
+		const double LongK = bVary ? std::clamp(S.Long, 1.0, 2.2) : 1.0;
+		const double AxisA = std::pow(LongK, 0.6), AxisB = std::pow(LongK, -0.4);
+		const double Throw = bVary ? std::clamp(S.Throw, 0.0, 1.0) : 0.0;
+		const double Heading = S.Heading;
+		// (its radius by the way from its middle: an ellipse along Heading, each point kept on its own side of the hole,
+		// so Field::TopAt finds it by its angle as before)
+		const auto Stretch = [&](double A)
+		{
+			const double C = std::cos(A - Heading) / AxisA, Sn = std::sin(A - Heading) / AxisB;
+			return 1.0 / std::sqrt(C * C + Sn * Sn);
+		};
+		// (its thrown soil's reach by its way from the round's: two wings some 60 degrees either side of straight on, a
+		// fan straight on, little behind, where the burst's cone threw nothing)
+		const auto Wings = [&](double A)
+		{
+			const double Dd = std::fabs(Turn(Heading, A));
+			const double Wq = (Dd - 1.05) / 0.42, Oq = Dd / 0.4, Bq = (Pi - Dd) / 0.75;
+			return 1.0 + Throw * (0.7 * std::exp(-Wq * Wq) + 0.45 * std::exp(-Oq * Oq) - 0.55 * std::exp(-Bq * Bq));
+		};
+		const auto IntoWings = [&]()
+		{
+			const double Pick = V.U();
+			return Heading + (Pick < 0.4 ? 1.05 : Pick < 0.8 ? -1.05 : 0.0) + V.U(-0.32, 0.32);
+		};
+		if (bVary && Throw > 0.0)
+		{
+			for (std::pair<double, double>& Ray : RayOf)
+			{
+				if (V.U() < Throw)
+				{
+					Ray.first = IntoWings();
+				}
+				Ray.second *= 1.0 + 0.25 * Throw;
+			}
+		}
+		// (the burst's soot: a star of dark spikes out over the thrown soil, each its own way, width and reach, as the
+		// blast drove the burnt soil out along the ground)
+		std::vector<std::array<double, 3>> Spikes;
+		if (bVary && S.Scorch > 0.0)
+		{
+			const int Many = V.Whole(6, 10);
+			for (int K = 0; K < Many; ++K)
+			{
+				const double Way = Throw > 0.0 && V.U() < 0.6 * Throw ? IntoWings() : V.U(0.0, 2.0 * Pi);
+				Spikes.push_back({ Way, V.U(0.07, 0.17), V.U(0.4, 1.05) });
+			}
+		}
+		const auto Star = [&Spikes](double A, double T)
+		{
+			double Most = T < 0.2 ? 0.4 : 0.0; // (soot all round close in, the spikes further)
+			for (const std::array<double, 3>& Sp : Spikes)
+			{
+				const double Q = Turn(Sp[0], A) / Sp[1];
+				Most = std::max(Most, std::exp(-Q * Q) * std::clamp((Sp[2] - T) / 0.25 + 0.5, 0.0, 1.0));
+			}
+			return Most;
+		};
+		// (a deep hole's subsoil: lighter soil in patches round its crest, each side's share with its neighbours')
+		std::vector<double> SubK;
+		if (bVary && S.Subsoil > 0.0)
+		{
+			std::vector<double> Raw(static_cast<size_t>(N));
+			for (double& Rw : Raw)
+			{
+				Rw = V.U() < 1.5 * S.Subsoil ? V.U(0.45, 0.9) : 0.0;
+			}
+			SubK.resize(static_cast<size_t>(N));
+			for (int K = 0; K < N; ++K)
+			{
+				SubK[static_cast<size_t>(K)] = 0.5 * Raw[static_cast<size_t>(K)] + 0.25 * (Raw[static_cast<size_t>((K + 1) % N)] + Raw[static_cast<size_t>((K + N - 1) % N)]);
+			}
+		}
 		std::vector<double> Crest(static_cast<size_t>(N)), Reach(static_cast<size_t>(N)), RimK(static_cast<size_t>(N)), Tone(static_cast<size_t>(N));
 		for (int K = 0; K < N; ++K)
 		{
@@ -394,6 +483,14 @@ namespace LandCrater
 			Reach[Kk] = std::max(1.25, Out_);
 			RimK[Kk] = D.U(0.65, 1.3) * (1.0 + 0.5 * LeanBy * std::cos(A - Lean));
 			Tone[Kk] = D.U(0.86, 1.12);
+			if (bVary)
+			{
+				// (stretched along the round's way; its soil thrown into the wings and forward; its crest higher
+				// where the soil piled forward, lower behind)
+				Crest[Kk] *= Stretch(A);
+				Reach[Kk] = std::clamp(1.0 + (Out_ - 1.0) * Wings(A), 1.25, 1.45 * ReachOf); // (never flung past half as far again)
+				RimK[Kk] *= 1.0 + 0.6 * Throw * std::cos(A - Heading);
+			}
 		}
 		{
 			// (the crest's height ragged, but never a spike: each side with a share of its neighbours')
@@ -426,6 +523,8 @@ namespace LandCrater
 			? Put(Out, X, Y, Ground0 + Base - Deep * D.U(0.96, 1.04), Mixed(Toned(Paint.Hollow, D.U(0.82, 0.92)), Soot, D.U(0.3, 0.45) * Fresh))
 			: Put(Out, X, Y, Ground0 + Base, Toned(Paint.Hollow, D.U(0.82, 0.92)));
 		std::vector<uint32_t> Index(static_cast<size_t>(NRings * N));
+		std::vector<double> RingR(bVary ? static_cast<size_t>(N) : 0u, 0.0); // (crater variety: each side's last ring's radius)
+		std::vector<char> Stopped(bVary ? static_cast<size_t>(N) : 0u, 0); // (and whether its thrown soil stopped at an older bowl)
 		for (int Ring = 0; Ring < NRings; ++Ring)
 		{
 			const RingOf& Rg = Rings[Ring];
@@ -497,7 +596,45 @@ namespace LandCrater
 					else if (Patch < 0.42) Colour = Toned(Mixed(Colour, Paint.Clod, 0.6), D.U(0.8, 0.95));
 					else if (Deep > 0.0 && Rg.T < 0.4 && Patch < 0.62) Colour = Mixed(Colour, Soot, D.U(0.15, 0.35) * Fresh); // (blast-blackened soil thrown with it)
 				}
-				const double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
+				double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
+				if (bVary && Avoid && Rg.bOut)
+				{
+					// (crater variety: its thrown soil stops at an older hole's rim. Laid on the older bowl's floor, or
+					// reaching over it to the far side, its triangles drew a sheet across the bowl. A side stopped at the
+					// older bowl's edge goes on in steps of a few centimetres, falling into the bowl as its wall does)
+					const double Inner = RingR[Kk], Least = Inner + 0.03;
+					const auto Crosses = [&](double Rr)
+					{
+						for (const double T : { 0.25, 0.5, 0.75, 1.0 })
+						{
+							const double Rt = Inner + T * (Rr - Inner);
+							if (Avoid(X + std::cos(A) * Rt, Y + std::sin(A) * Rt))
+							{
+								return true;
+							}
+						}
+						return false;
+					};
+					if (Stopped[Kk])
+					{
+						Radius = Least;
+					}
+					for (int Try = 0; Try < 12 && Radius > Least && Crosses(Radius); ++Try)
+					{
+						Radius = std::max(Least, Radius - std::max(0.08, 0.12 * (Radius - Inner)));
+					}
+					if (Radius > Least && Crosses(Radius))
+					{
+						Radius = Least;
+					}
+					Stopped[Kk] = Stopped[Kk] || (Radius <= Least && Crosses(Radius));
+					Px = X + std::cos(A) * Radius;
+					Py = Y + std::sin(A) * Radius;
+				}
+				if (bVary)
+				{
+					RingR[Kk] = Radius;
+				}
 				// (the thin edge lies on the grass: 2 mm over what is there, no step. At 0.6 of Base, 1.8 cm, its lip cast a thin
 				// dark line on the grass round every hole in the Mac's stills, 23 November, a seam where none should be)
 				const bool bLip = Rg.bOut && Rg.T >= 1.0;
@@ -513,6 +650,26 @@ namespace LandCrater
 					// outline, whatever was torn), the ring inside it leans that way.
 					const Rgb8 Ground = Under(Px, Py);
 					Painted = bRim ? Ground : Rg.T >= 0.6 ? Mixed(Painted, Ground, 0.4) : Painted;
+				}
+				if (bVary)
+				{
+					// (crater variety: the subsoil in patches on its crest and the soil thrown nearest it; the burst's
+					// soot star over the thrown soil, onto its thin edge only where the ground shows it: snow, sand)
+					const double SubW = !Rg.bOut ? (Rg.T >= 1.0 ? 1.0 : Rg.T >= 0.86 ? 0.55 : 0.0) : (Rg.T < 0.2 ? 0.8 : Rg.T < 0.4 ? 0.45 : 0.0);
+					if (!SubK.empty() && SubW > 0.0)
+					{
+						Painted = Mixed(Painted, Toned(Paint.Sub, Tone[Kk]), SubK[Kk] * SubW);
+					}
+					if (Rg.bOut && !bRim && Rg.T >= 0.6)
+					{
+						// (the wings' soil lying thicker: less of the ground through it)
+						Painted = Mixed(Painted, Toned(Paint.Thrown, Tone[Kk]), std::clamp(0.6 * (Wings(A) - 1.0), 0.0, 0.4));
+					}
+					const double SootW = Rg.bOut ? (bRim ? Paint.EdgeSoot : 1.0) : (Rg.T >= 0.86 ? 0.45 : 0.0);
+					if (!Spikes.empty() && SootW > 0.0)
+					{
+						Painted = Mixed(Painted, Soot, 0.75 * S.Scorch * Fresh * SootW * Star(A, Rg.bOut ? Rg.T : 0.0));
+					}
 				}
 				// (the thrown soil on the ground as drawn: on HeightAt's smooth height its thin edge sank under the drawn
 				// triangles at a quarter of its points on a slope's bend, pre-check's probe, 23 November)
@@ -596,7 +753,13 @@ namespace LandCrater
 				const double Ray = RayOf[static_cast<size_t>(D.Whole(0, Rays - 1))].first;
 				A = Ray + D.U(-0.2, 0.2);
 			}
-			const double Far = R * (1.08 + std::pow(D.U(), 1.4) * (ReachOf - 1.0) * 1.35);
+			if (bVary && Throw > 0.0 && V.U() < 0.6 * Throw)
+			{
+				A = IntoWings(); // (crater variety: the clods thrown into the wings and forward)
+			}
+			const double Far0 = R * (1.08 + std::pow(D.U(), 1.4) * (ReachOf - 1.0) * 1.35);
+			// (never in toward the bowl behind it, where the wings threw less: a clod lies out past the crest)
+			const double Far = bVary ? Stretch(A) * std::max(1.2 * R, Far0 * (1.0 + 0.6 * (Wings(A) - 1.0))) : Far0;
 			const double Cx = X + std::cos(A) * Far, Cy = Y + std::sin(A) * Far;
 			const double Big = S.Clod * D.U(0.35, 1.0) * (Far < 1.5 * R ? 1.0 : 0.75);
 			const bool bTurf = D.U() < 0.3;
@@ -879,6 +1042,118 @@ namespace LandCrater
 		}
 	}
 
+	namespace
+	{
+		/**
+		 * Crater variety (Field::bVariety): this round's own hole, from the size SizeOf gives every round of its kind,
+		 * by its weapon's slant, its fuze, the ground and its own dice (Own: the hole's seed).
+		 */
+		void Varied(Size& S, const std::string& Name, double CalibreMm, const std::string& Ground, uint64_t Own, double WayX, double WayY)
+		{
+			Dice V(Mix(Own, 0x5EEDC4A7E4ull));
+			S.Vary = Mix(Own, 0xC4A7E4F00Dull) | 1u;
+			const double Mm = CalibreMm == CalibreMm && CalibreMm > 0.0 ? CalibreMm : 75.0;
+			// Its slant, by the weapon (how long against how wide; how much soil it threw forward and into the wings): a
+			// tank's or an anti-tank gun's high explosive comes in nearly flat; a field gun's at a middling slant; a
+			// howitzer's falls more steeply; a mortar bomb nearly straight down; a grenade rolls and bursts on the ground.
+			struct Slant
+			{
+				double L0, L1, T0, T1;
+			};
+			const bool bFlat = Name == "gun75" || Name == "light" || (Name != "field" && Name != "mortar" && Name != "grenade" && Name != "howitzer"
+				&& Name != "how105" && Name != "heavy" && Name != "how150" && Mm < 70.0);
+			const Slant Sl = Name == "grenade" ? Slant { 1.0, 1.08, 0.0, 0.1 }
+				: Name == "mortar" ? Slant { 1.0, 1.1, 0.05, 0.2 }
+				: bFlat ? Slant { 1.35, 1.8, 0.55, 0.85 }
+				: Name == "howitzer" || Name == "how105" || Name == "heavy" || Name == "how150" ? Slant { 1.08, 1.4, 0.25, 0.5 }
+				: Slant { 1.15, 1.45, 0.3, 0.55 }; // (a field gun's, and any other by its calibre)
+			const bool bShell = Name != "grenade";
+			S.Long = V.U(Sl.L0, Sl.L1);
+			S.Throw = V.U(Sl.T0, Sl.T1);
+			// (turned along the way the round came; a round of no known way its own)
+			if (std::hypot(WayX, WayY) > 0.2)
+			{
+				S.Heading = std::atan2(WayY, WayX) + V.U(-0.12, 0.12);
+			}
+			else
+			{
+				S.Heading = V.U(0.0, 2.0 * Pi);
+			}
+			// Its own size: a quarter either way, one in ten a big one (a soft patch, a round heavier with its charge).
+			double Big = V.U(0.78, 1.25);
+			if (V.U() < 0.1)
+			{
+				Big = V.U(1.25, 1.5);
+			}
+			S.Across *= Big;
+			S.Deep *= V.U(0.75, 1.25) * std::sqrt(Big);
+			S.Rim *= V.U(0.75, 1.35);
+			S.Reach *= V.U(0.92, 1.12);
+			S.Clods = static_cast<int>(std::lround(S.Clods * V.U(0.7, 1.4)));
+			S.Scorch = V.U(0.3, 0.85);
+			// Its fuze: most burst at once on the ground; one in eight a delay, bursting under it, deep and narrow, a high
+			// rim, big clods, little soot on top; one in ten a graze, glancing on before it burst: a shallow, wide,
+			// sooty scoop, longer.
+			if (bShell)
+			{
+				const double Fuze = V.U();
+				if (Fuze < 0.12)
+				{
+					S.Deep *= 1.45;
+					S.Across *= 0.85;
+					S.Rim *= 1.35;
+					S.Throw *= 0.5;
+					S.Long = 1.0 + 0.5 * (S.Long - 1.0);
+					S.Scorch *= 0.35;
+					S.Clods = static_cast<int>(std::lround(S.Clods * 1.4));
+					S.Clod *= 1.25;
+				}
+				else if (Fuze < 0.22)
+				{
+					S.Deep *= 0.45;
+					S.Across *= 1.15;
+					S.Rim *= 0.6;
+					S.Scorch = std::min(1.0, S.Scorch * 1.4);
+					S.Long *= 1.15;
+				}
+			}
+			// The subsoil a deep hole throws up on its crest.
+			S.Subsoil = S.Deep >= 0.6 ? V.U(0.2, 0.55) * std::min(1.0, S.Deep) : S.Deep >= 0.35 ? V.U(0.0, 0.25) : 0.0;
+			// The ground's own ways: mud slumps wide and low, its soot smothered; sand sprays wide and shallow; on snow the
+			// thrown earth and the soot reach far over the white.
+			if (Ground == "mud")
+			{
+				S.Across *= 1.1;
+				S.Rim *= 0.75;
+				S.Deep *= 0.85;
+				S.Scorch *= 0.6;
+			}
+			else if (Ground == "sand")
+			{
+				S.Across *= 1.12;
+				S.Rim *= 0.7;
+				S.Deep *= 0.8;
+				S.Reach *= 1.1;
+				S.Scorch *= 0.7;
+			}
+			else if (Ground == "snow")
+			{
+				S.Reach *= 1.12;
+				S.Scorch = std::min(1.0, S.Scorch * 1.5);
+			}
+			S.Rim = std::min(S.Rim, 0.4);
+			S.Deep = std::min(S.Deep, 1.6);
+			S.Clod = std::min(S.Clod, 0.32);
+			S.Reach = std::min(S.Reach, 2.5);
+			S.Long = std::clamp(S.Long, 1.0, 2.2);
+			S.Clods = std::clamp(S.Clods, 0, 40);
+			if (S.Long > 1.4)
+			{
+				S.Sides += 4; // (a long hole's ends rounded as its middle)
+			}
+		}
+	}
+
 	void Field::Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder)
 	{
 		Height = std::move(InHeight);
@@ -898,9 +1173,9 @@ namespace LandCrater
 		return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J));
 	}
 
-	bool Field::Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground)
+	bool Field::Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double WayX, double WayY)
 	{
-		return AddAged(X, Y, Name, CalibreMm, Ground, -1.0);
+		return AddAged(X, Y, Name, CalibreMm, Ground, -1.0, WayX, WayY);
 	}
 
 	bool Field::AddOld(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months)
@@ -908,7 +1183,8 @@ namespace LandCrater
 		return AddAged(X, Y, Name, CalibreMm, Ground, std::max(0.0, Months));
 	}
 
-	bool Field::AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months)
+	bool Field::AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months, double WayX,
+		double WayY)
 	{
 		if (!Height || Ground == "water" || static_cast<int>(Holes.size()) >= Most || !(X == X) || !(Y == Y) || std::fabs(X) > 1e6 || std::fabs(Y) > 1e6)
 		{
@@ -925,6 +1201,14 @@ namespace LandCrater
 		{
 			S.Deep *= 0.35;
 		}
+		const int Number = static_cast<int>(Holes.size());
+		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
+		if (bVariety)
+		{
+			Varied(S, Name, CalibreMm, Ground, Own, WayX, WayY);
+		}
+		// (how far its crest reaches along its long axis: its radius every way when round)
+		const double LongAxis = S.Vary ? std::pow(S.Long, 0.6) : 1.0;
 		// (an old hole, by the art director's marks, 23 November: at six months its bowl 80% as deep and its crest 70% as
 		// high, the soot, the clods and the splinters gone; at a year 65% and 50%; older, half as deep. Between them in
 		// a straight line; a month or two old, nearly as fresh but for the soot the first rains wash out)
@@ -954,16 +1238,14 @@ namespace LandCrater
 			for (int K = 0; K < 8 && bOpen; ++K)
 			{
 				const double A = Pi * K / 4.0;
-				bOpen = Dig(X + std::cos(A) * 0.55 * S.Across, Y + std::sin(A) * 0.55 * S.Across);
+				bOpen = Dig(X + std::cos(A) * 0.55 * S.Across * LongAxis, Y + std::sin(A) * 0.55 * S.Across * LongAxis);
 			}
 			if (!bOpen)
 			{
 				S.Deep = 0.0;
 			}
 		}
-		const int Number = static_cast<int>(Holes.size());
 		const Place In = PlaceFor(X, Y);
-		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
 		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
 		LandField::Mesh& Into = PatchList[static_cast<size_t>(In.Patch)].Sections[static_cast<size_t>(In.Section)];
 		Hole H;
@@ -1017,7 +1299,8 @@ namespace LandCrater
 				return std::max(Height(Px, Py), Drawn(Px, Py));
 			};
 		}
-		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit, Thin);
+		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit, Thin,
+			S.Vary ? std::function<bool(double, double)>([this](double Px, double Py) { return InCut(Px, Py); }) : std::function<bool(double, double)>());
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		// (an old hole's grass and corn stand round it but over its bowl: on its worn rim they have grown back)
 		H.BareR = bOld ? (H.Deep > 0.0 ? 0.92 : 0.55) * 0.5 * S.Across : 0.0;
@@ -1025,6 +1308,11 @@ namespace LandCrater
 		H.Y = Y;
 		H.R = 0.5 * S.Across;
 		H.Rim = S.Rim;
+		if (S.Vary)
+		{
+			H.Long = S.Long;
+			H.Heading = S.Heading;
+		}
 		H.In = In;
 		H.Sides = std::clamp(S.Sides, 8, 48);
 		H.Clods = std::max(0, S.Clods);
@@ -1204,7 +1492,14 @@ namespace LandCrater
 				}
 				continue;
 			}
-			const double D2 = (X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y);
+			double D2 = (X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y);
+			if (H.Long != 1.0)
+			{
+				// (crater variety: a long hole's clearing long with it)
+				const double Ca = std::cos(H.Heading), Sa = std::sin(H.Heading);
+				const double U = ((X - H.X) * Ca + (Y - H.Y) * Sa) / std::pow(H.Long, 0.6), V = (-(X - H.X) * Sa + (Y - H.Y) * Ca) / std::pow(H.Long, -0.4);
+				D2 = U * U + V * V;
+			}
 			if (H.BareR > 0.0)
 			{
 				if (D2 < H.BareR * H.BareR)
