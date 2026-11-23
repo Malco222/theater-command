@@ -78,6 +78,7 @@ namespace LandBail
 		 * a man on fire in burning_run and burning_fall_roll; his way out the clips' length (OnGroundOf). */
 		bool bClips = false;
 		double Face = 0.0;        // with the clips: his facing as he climbs out (his right toward the side he drops from)
+		double RoofUp = 0.95;     // with the clips: her roof over his boots in the hatch (Wreck::RoofUp)
 	};
 
 	/** Life's seconds from his start out of the hatch to his feet on the ground (2.05 s; 3.53 s with the bail clips). */
@@ -100,6 +101,9 @@ namespace LandBail
 		 * burning_fall_roll; labtrr 42bb946f): played in place of the infantry's stand_up, run and falls. False: as
 		 * before, the same crew to the last number. */
 		bool bClips = false;
+		/** With the bail clips: her turret's roof over a commander's boots stood in his hatch (the soldiers' numbers:
+		 * a Panzer IV 0.82 m, a Tiger 0.97, a Sherman 1.07; the clip is made for 0.95), made up from 0.8 s of his climb. */
+		double RoofUp = 0.95;
 		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
 		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
 		double Threat = 1.0;
