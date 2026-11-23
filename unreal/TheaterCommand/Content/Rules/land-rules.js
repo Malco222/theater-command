@@ -11406,8 +11406,8 @@
       __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
-      /** The player's looks switches the header reads (worn uniforms, mud remembered). */
-      __publicField(this, "looks", { worn: true, mud: true });
+      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
+      __publicField(this, "looks", { worn: true, mud: true, scars: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -11449,7 +11449,7 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
-      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false };
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
       const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
       const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
@@ -11506,7 +11506,7 @@
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
         // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
         ...t.weather ? { weather: t.weather } : {},
-        ...t.scars && t.scars.count > 0 ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
+        ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
         ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
@@ -11778,7 +11778,8 @@
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
-        mud: opts?.mud !== false
+        mud: opts?.mud !== false,
+        scars: opts?.scars !== false
       });
       return live3.header();
     },
@@ -11811,6 +11812,7 @@
         captured: o.captured !== false,
         worn: o.worn !== false,
         mud: o.mud !== false,
+        scars: o.scars !== false,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
