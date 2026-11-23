@@ -16,13 +16,16 @@ namespace LandBail
 		constexpr double ProneS = 0.9; // (a crawler going down flat before he crawls; a wounded man as he falls)
 		// The soldiers' bail clips (labtrr 42bb946f, each file's bail_clips; the step and the mended jump ea211cc5, 23
 		// November 18:52Z): bail_climb_out, 1.5 s, his boots 0.92 m under the hatch's point, up 0.95 m onto her roof,
-		// 0.47 m to his right and 0.10 m forward; a walk over her roof to its edge (the ground battle's walk, 1.26 m a
-		// second); bail_step_down, 0.73 s, from her turret's edge facing out (its edge 0.14 m ahead of his boots), off at
-		// 0.10 s, down 0.95 m at 0.55 s, 0.42 m out at its end; a walk on her deck to her hull's edge; bail_jump_down,
+		// 0.47 m to his right and 0.10 m forward; a quick crouched scramble over her roof to its edge (the art director,
+		// 19:33Z: not an upright walk on a burning tank; the ground battle's crouched advance, its stride 3.05 m a
+		// second, played at 2.25); bail_step_down, 0.73 s, from her turret's edge facing out (its edge 0.14 m ahead of his
+		// boots), off at 0.10 s, down 0.95 m at 0.55 s, 0.42 m out at its end; a scramble on her deck to her hull's edge;
+		// bail_jump_down,
 		// 1.60 s, from her hull's edge facing out, off at 0.44 s, down 1.5 m at 1.09 s, into his first stride, 1.71 m out
 		// at its end, where the run takes him on; burning_run, in place, 7.35 m a 2.1 s loop; burning_fall_roll, 3.8 s,
 		// still from 3.3 s, his pelvis 0.95 m forward and 1.20 m to his right at the end.
-		constexpr double ClipClimbS = 1.5, ClipStepS = 0.7333, ClipJumpS = 1.60, WalkMps = 1.423 / 1.1333;
+		constexpr double ClipClimbS = 1.5, ClipStepS = 0.7333, ClipJumpS = 1.60;
+		constexpr double ScrambleMps = 2.25, AdvanceMps = 2.444 / 0.8, TurnS = 0.25;
 		constexpr double BootsUnder = 0.92, ClimbUp = 0.95, ClimbRight = 0.47, ClimbFwd = 0.10;
 		constexpr double StepOff = 0.10, StepDown = 0.55, StepDrop = 0.95, StepOut = 0.42, StepEdge = 0.14;
 		constexpr double JumpOff = 0.44, JumpDown = 1.09, JumpDrop = 1.5, JumpOut = 1.71;
@@ -238,51 +241,61 @@ namespace LandBail
 		auto Ground = [&](double X, double Y) { return W.Ground ? W.Ground(X, Y) : W.Middle.Z; };
 		const V3 Fwd{ std::sin(W.Heading), std::cos(W.Heading), 0.0 };
 		const V3 Right{ std::cos(W.Heading), -std::sin(W.Heading), 0.0 };
-		const double Along = std::clamp((M.Hatch.X - W.Middle.X) * Fwd.X + (M.Hatch.Y - W.Middle.Y) * Fwd.Y, -3.5, 3.5);
-		const double Half = std::max(0.8, W.Wide * 0.5);
+		// (the way he goes off her, Out: from her side, or off her bow or back where his side is blocked; Across, the
+		// way along that edge: a point on her is her middle, Along across and Aside out)
+		const V3 Out = M.OffEnd != 0 ? V3{ Fwd.X * M.OffEnd, Fwd.Y * M.OffEnd, 0.0 } : V3{ Right.X * M.Side, Right.Y * M.Side, 0.0 };
+		const V3 Across = M.OffEnd != 0 ? Right : Fwd;
+		const double HatchAlong = (M.Hatch.X - W.Middle.X) * Fwd.X + (M.Hatch.Y - W.Middle.Y) * Fwd.Y;
+		const double HalfWide = std::max(0.8, W.Wide * 0.5);
+		const double Along = M.OffEnd != 0 ? std::clamp((M.Hatch.X - W.Middle.X) * Right.X + (M.Hatch.Y - W.Middle.Y) * Right.Y, 0.4 - HalfWide, HalfWide - 0.4)
+			: std::clamp(HatchAlong, -3.5, 3.5);
+		const double Half = M.OffEnd != 0 ? std::max(1.5, W.Long * 0.5) : HalfWide;
+		const auto On = [&](double Aside, double Z) { return V3{ W.Middle.X + Across.X * Along + Out.X * Aside, W.Middle.Y + Across.Y * Along + Out.Y * Aside, Z }; };
 		// (her deck's edge he jumps from; with the bail clips his root 0.2 m in from it, his toes at it, as
 		// bail_jump_down stands)
 		const double Edge = W.bClips ? Half - 0.2 : Half + 0.05;
-		M.Deck = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Edge, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Edge, 0.0 };
+		M.Deck = On(Edge, 0.0);
 		const double DeckGround = Ground(M.Deck.X, M.Deck.Y);
 		M.Deck.Z = std::max(DeckGround + 0.8, std::min(M.Hatch.Z, DeckGround + 1.9));
-		// (with the bail clips: he climbs out facing her way or back from it, so that his right, the clip's way, is
-		// the side he drops from)
+		// (with the bail clips: he climbs out facing so that his right, the clip's way, is the way he goes off her: her
+		// way or back from it for a side, across her for her bow or back)
 		M.bClips = W.bClips;
-		M.Face = M.Side > 0 ? W.Heading : W.Heading + Pi;
+		M.Face = M.OffEnd != 0 ? std::atan2(Out.X, Out.Y) - 0.5 * Pi : M.Side > 0 ? W.Heading : W.Heading + Pi;
 		M.RoofUp = W.RoofUp;
 		double JumpFrom = Edge;
 		if (M.bClips)
 		{
-			// His way over her, walked (the soldiers: walk him between the clips): where her turret's roof stands
-			// over her deck (0.45 m and more), over her roof to its edge, stepped down onto her deck, and across it
-			// to her hull's edge; else from her roof straight to her hull's edge. Where the step lands him at or
-			// past where he would jump from, he jumps from there, at most 0.05 m out past where the jump stands (where
-			// her deck beside her turret is narrower than the step's 0.42 m, he steps from nearer her middle).
+			// His way over her (the soldiers: walk him between the clips; the art director: a quick crouched
+			// scramble, as short as her roof allows): where her turret's roof stands over her deck (0.45 m and more),
+			// over her roof to its edge, stepped down onto her deck, and across it to her hull's edge; else from her
+			// roof straight to her hull's edge. Where the step lands him at or past where he would jump from, he
+			// jumps from there, at most 0.05 m out past where the jump stands (where her deck beside her turret is
+			// narrower than the step's 0.42 m, he steps from nearer her middle).
 			const V3 Up = RoofOf(M);
-			const auto On = [&](double Aside, double Z) { return V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Aside, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Aside, Z }; };
 			M.bStep = W.bStep && Up.Z - M.Deck.Z >= 0.45;
 			V3 From = Up;
 			if (M.bStep)
 			{
-				const double UpAside = ((Up.X - W.Middle.X) * Right.X + (Up.Y - W.Middle.Y) * Right.Y) * M.Side;
-				const double TurretHalf = W.TurretHalf > 0.0 ? W.TurretHalf : std::clamp(W.Wide / 3.0, 0.75, 1.25);
+				const double UpAside = (Up.X - W.Middle.X) * Out.X + (Up.Y - W.Middle.Y) * Out.Y;
+				// (her turret's edge that way: its side, a third of her width; its back or front, 0.5 m past his hatch,
+				// the commander's cupola standing near her turret's back)
+				const double TurretHalf = M.OffEnd != 0 ? std::clamp(HatchAlong * M.OffEnd + 0.5, 0.4, Half - 0.9)
+					: W.TurretHalf > 0.0 ? W.TurretHalf : std::clamp(W.Wide / 3.0, 0.75, 1.25);
 				const double BrinkAside = std::min(std::max(UpAside, TurretHalf - StepEdge), Edge + 0.05 - StepOut);
 				M.Brink = On(BrinkAside, Up.Z);
 				M.Step = On(BrinkAside + StepOut, M.Deck.Z);
-				M.RoofS = 0.3 + std::hypot(M.Brink.X - Up.X, M.Brink.Y - Up.Y) / WalkMps; // (0.3 s: his turn to face out)
+				M.RoofS = TurnS + std::hypot(M.Brink.X - Up.X, M.Brink.Y - Up.Y) / ScrambleMps; // (TurnS: his turn to face out)
 				JumpFrom = std::max(Edge, BrinkAside + StepOut);
 				JumpFrom = JumpFrom - (BrinkAside + StepOut) < 0.05 ? BrinkAside + StepOut : JumpFrom;
 				From = M.Step;
 			}
 			M.Deck = On(JumpFrom, M.Deck.Z);
-			const double Across = std::hypot(M.Deck.X - From.X, M.Deck.Y - From.Y);
-			M.DeckS = M.bStep ? (Across < 0.05 ? 0.0 : 0.15 + Across / WalkMps) : 0.3 + Across / WalkMps;
+			const double Over = std::hypot(M.Deck.X - From.X, M.Deck.Y - From.Y);
+			M.DeckS = M.bStep ? (Over < 0.05 ? 0.0 : 0.15 + Over / ScrambleMps) : TurnS + Over / ScrambleMps;
 			M.ClipsS = ClipClimbS + M.RoofS + (M.bStep ? ClipStepS : 0.0) + M.DeckS + ClipJumpS;
 		}
 		// (with the bail clips: where bail_jump_down lands him, 1.71 m out from where he jumps)
-		const double Off = M.bClips ? JumpFrom + JumpOut : Half + 1.1;
-		M.Down = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Off, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Off, 0.0 };
+		M.Down = On(M.bClips ? JumpFrom + JumpOut : Half + 1.1, 0.0);
 		M.Down.Z = Ground(M.Down.X, M.Down.Y);
 	}
 
@@ -367,10 +380,35 @@ namespace LandBail
 					Far = D.U(5.0, 13.0);
 				}
 				const V3 Dir{ std::sin(Way), std::cos(Way), 0.0 };
-				// (he drops from the side of her hull that faces where he goes)
-				const double Lean = Dir.X * Right.X + Dir.Y * Right.Y;
-				M.Side = std::abs(Lean) < 0.15 ? (D.P(0.5) ? 1 : -1) : Lean > 0.0 ? 1 : -1;
+				// He drops from the side of her hull away from her enemy (the art director, 19:33Z); with her enemy about
+				// dead ahead or behind, from the side that faces where he goes. Where that side is blocked (a vehicle
+				// beside her), the other side if her enemy is ahead or behind; else off the end of her nearest his
+				// hatch, so long as it does not face her enemy and she is not burning (never over her engine deck's
+				// grilles); else the other side; and with every way blocked, squeezed off his own side.
 				M.Hatch = W.Exits[static_cast<size_t>(M.Exit)];
+				const double Lean = Dir.X * Right.X + Dir.Y * Right.Y;
+				const double AwayLean = std::sin(W.Away) * Right.X + std::cos(W.Away) * Right.Y;
+				M.Side = std::abs(AwayLean) >= 0.26 ? (AwayLean > 0.0 ? 1 : -1) : std::abs(Lean) < 0.15 ? (D.P(0.5) ? 1 : -1) : Lean > 0.0 ? 1 : -1;
+				const auto SideBlocked = [&](int S) { return W.Blocked[S > 0 ? 0 : 1]; };
+				if (SideBlocked(M.Side))
+				{
+					const int Nearest = (M.Hatch.X - W.Middle.X) * Fwd.X + (M.Hatch.Y - W.Middle.Y) * Fwd.Y > 0.3 ? 1 : -1;
+					const bool bEndClear = !W.bBurns && !W.Blocked[Nearest > 0 ? 3 : 2]
+						&& (std::sin(W.Away) * Fwd.X + std::cos(W.Away) * Fwd.Y) * Nearest >= -0.26;
+					if (std::abs(AwayLean) < 0.26 && !SideBlocked(-M.Side))
+					{
+						M.Side = -M.Side;
+					}
+					else if (bEndClear)
+					{
+						M.OffEnd = Nearest;
+					}
+					else if (!SideBlocked(-M.Side))
+					{
+						M.Side = -M.Side;
+					}
+				}
+
 				LayWayOff(W, M);
 				M.Lee = M.Down;
 				if (M.To == "beside")
@@ -424,6 +462,15 @@ namespace LandBail
 						}
 					}
 					M.Lee = LeeAt(Aside);
+					if (!Clear(M.Lee))
+					{
+						// (down on the side her enemy sees, where his own was blocked: straight along her flank to past
+						// her end away from her enemy, then he breaks for his cover)
+						const double EndWay = Ld.X * Fwd.X + Ld.Y * Fwd.Y >= 0.0 ? 1.0 : -1.0;
+						const double DownAlong = ((M.Down.X - W.Middle.X) * Fwd.X + (M.Down.Y - W.Middle.Y) * Fwd.Y) * EndWay;
+						const double Run_ = std::max(0.5, 0.5 * HullL + PastRear - DownAlong);
+						M.Lee = V3{ M.Down.X + Fwd.X * EndWay * Run_, M.Down.Y + Fwd.Y * EndWay * Run_, 0.0 };
+					}
 					M.Lee.Z = Ground(M.Lee.X, M.Lee.Y);
 					M.Goal = V3{ M.Lee.X + Dir.X * Far, M.Lee.Y + Dir.Y * Far, 0.0 };
 				}
@@ -457,7 +504,9 @@ namespace LandBail
 					M.How = End::Burning;
 					M.Go = "run";
 					M.Speed = D.U(3.4, 4.4);
-					M.FallAt = M.Out + OnGroundOf(M) + D.U(2.0, 5.0);
+					// (he falls before the end of his way: a crawler's way, run, is short)
+					const double Burns = D.U(2.0, 5.0);
+					M.FallAt = M.Out + OnGroundOf(M) + std::min(Burns, std::max(1.0, Legs(M).Long() / M.Speed - 0.2));
 					M.bLives = D.P(1.0 / 3.0);
 					M.FireOut = M.FallAt + (M.bLives ? D.U(2.5, 4.0) : D.U(10.0, 15.0));
 					M.Crawl = M.bLives ? D.U(0.4, 1.0) : 0.0;
@@ -594,12 +643,12 @@ namespace LandBail
 				}
 				else if (Tc < OffRoof && Tc < OnRoof)
 				{
-					// (over her roof, turning out over his first 0.3 s)
+					// (over her roof, crouched, turning out over his first quarter second)
 					const double Tw = Tc - ClipClimbS;
 					Q.At = Lerp(Up, M.Brink, Tw / M.RoofS);
-					Q.Facing = M.Face + 0.5 * Pi * Ease(std::min(1.0, Tw / 0.3));
-					Q.Clip = "walk";
-					Q.Time = Tw;
+					Q.Facing = M.Face + 0.5 * Pi * Ease(std::min(1.0, Tw / TurnS));
+					Q.Clip = "advance";
+					Q.Time = Tw * ScrambleMps / AdvanceMps;
 					Q.bMoving = true;
 					Q.Root = Q.At;
 				}
@@ -623,9 +672,9 @@ namespace LandBail
 					const V3 From = M.bStep ? M.Step : Up;
 					const double Tw = Tc - OffRoof;
 					Q.At = Lerp(From, M.Deck, Tw / M.DeckS);
-					Q.Facing = M.bStep ? Face : M.Face + 0.5 * Pi * Ease(std::min(1.0, Tw / 0.3));
-					Q.Clip = "walk";
-					Q.Time = Tw;
+					Q.Facing = M.bStep ? Face : M.Face + 0.5 * Pi * Ease(std::min(1.0, Tw / TurnS));
+					Q.Clip = "advance";
+					Q.Time = Tw * ScrambleMps / AdvanceMps;
 					Q.bMoving = true;
 					Q.Root = Q.At;
 				}

@@ -55,7 +55,7 @@ int main(int Argc, char** Argv)
 	W.Heading = 0.0;
 	W.Wide = 3.0;
 	W.Long = 5.9;
-	W.Exits.push_back(LandBail::V3{ 0.5, -0.3, 2.85 });
+	W.Exits.push_back(LandBail::V3{ 0.5, -0.95, 2.85 }); // (his cupola near her turret's back)
 	W.Away = 3.14159265358979;
 	W.bClips = true;
 	W.bStep = true;
@@ -70,6 +70,20 @@ int main(int Argc, char** Argv)
 	std::printf("  his way: walks %.2f s over her roof to (%.2f, %.2f), steps down to (%.2f, %.2f, %.2f), walks %.2f s, jumps from (%.2f, %.2f, %.2f) to (%.2f, %.2f); %.2f s to the ground\n",
 		M.RoofS, M.Brink.X, M.Brink.Y, M.Step.X, M.Step.Y, M.Step.Z, M.DeckS, M.Deck.X, M.Deck.Y, M.Deck.Z, M.Down.X, M.Down.Y, LandBail::OnGroundOf(M));
 	if (!M.bStep) { std::printf("FAIL: he does not step down off her turret\n"); return 1; }
+	// (and off her back, his side blocked by a vehicle close beside her: over her turret's back onto her engine deck)
+	LandBail::Man B;
+	B.Side = 1;
+	B.OffEnd = -1;
+	B.Out = 0.0;
+	B.Hatch = W.Exits[0];
+	LandBail::LayWayOff(W, B);
+	std::printf("  off her back: %.2f s over her roof to (%.2f, %.2f), steps down to (%.2f, %.2f, %.2f), %.2f s on, jumps from (%.2f, %.2f) to (%.2f, %.2f)\n",
+		B.RoofS, B.Brink.X, B.Brink.Y, B.Step.X, B.Step.Y, B.Step.Z, B.DeckS, B.Deck.X, B.Deck.Y, B.Down.X, B.Down.Y);
+	if (!B.bStep) { std::printf("FAIL: he does not step down off her turret's back\n"); return 1; }
+	B.Lee = LandBail::V3{ B.Down.X, B.Down.Y - 6.0, 0.0 };
+	B.Goal = LandBail::V3{ B.Down.X + 2.0, B.Down.Y - 20.0, 0.0 };
+	B.Speed = 3.8;
+	const double BRoof = 1.5 + B.RoofS, BJump = BRoof + 0.7333 + B.DeckS, BGround = LandBail::OnGroundOf(B);
 	M.Lee = LandBail::V3{ 3.6, -9.0, 0.0 };
 	M.Goal = LandBail::V3{ 6.0, -22.0, 0.0 };
 	M.Speed = 3.8;
@@ -84,6 +98,7 @@ int main(int Argc, char** Argv)
 	const std::vector<std::pair<const LandBail::Man*, std::vector<double>>> Rows = {
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
+		{ &B, { 0.7, 1.1, 1.5 + 0.5 * B.RoofS, BRoof + 0.1, BRoof + 0.35, BRoof + 0.6, BJump - 0.5 * B.DeckS, BJump + 0.3, BJump + 0.75, BJump + 1.1, BGround + 0.4 } },
 		{ &F, { OnGround + 0.6, OnGround + 1.0, OnGround + 1.4, OnGround + 1.8, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
 	};
 	const int Cols = 11, CellH = 240, SheetW = 2640;
@@ -138,9 +153,10 @@ int main(int Argc, char** Argv)
 			const int OX = (SheetW * Col) / Cols, OX1 = (SheetW * (Col + 1)) / Cols;
 			const int CW = OX1 - OX - 4, CH = CellH - 4;
 			// (from the side he drops from, three-quarters on; then from her front, her turret, deck and hull's edge
-			// as steps; the man on fire followed off along his way, her hull behind him)
+			// as steps; off her back seen side-on; the man on fire followed off along his way, her hull behind him)
 			const Camera Cam = Row == 0 ? Camera({ 9.5, 7.5, 3.6 }, { 1.6, -0.3, 1.7 }, 26.0, CW * 2, CH * 2)
 				: Row == 1 ? Camera({ 1.9, 11.0, 2.2 }, { 1.9, -0.3, 1.7 }, 24.0, CW * 2, CH * 2)
+				: Row == 2 ? Camera({ 12.5, -3.4, 2.4 }, { 0.5, -3.4, 1.7 }, 26.0, CW * 2, CH * 2)
 				: Camera({ 13.0, -5.0, 2.2 }, { 2.6, -6.5, 0.7 }, 34.0, CW * 2, CH * 2);
 			ShadowMap Sh;
 			Sh.Build(Sc, Lt.ToSun, { -4.0, -9.0, -0.1 }, { 8.0, 4.0, 4.0 }, 1536);

@@ -45,7 +45,7 @@ int main(int Argc, char** Argv)
 	int Bad = 0, Wrecks = 0, Men = 0;
 	int BurnWrecks = 0, OnFire = 0, Lives = 0, Flinched = 0;
 	int RunNear = 0, HitNear = 0, RunFar = 0, HitFar = 0;
-	int Steps = 0, Walks = 0;
+	int Steps = 0, Walks = 0, Ends = 0, Sides[4] = { 0, 0, 0, 0 }, Flanks = 0;
 	double WayMost = 0.0, ClipsLong[2] = { 1e9, 0.0 };
 	std::map<std::string, std::map<std::string, int>> Tally;
 	for (const Fates::Way& Way : Table.Ways())
@@ -82,7 +82,12 @@ int main(int Argc, char** Argv)
 				const double Z = H.first < 0.0 ? 2.9 : 1.8;
 				W.Exits.push_back(LandBail::V3{ W.Middle.X + S * H.first + C * H.second, W.Middle.Y + C * H.first - S * H.second, W.Middle.Z + Z });
 			}
-			W.Away = W.Heading + 3.14159;
+			// (her enemy ahead, or ahead and off to one side or the other; one seed in five a vehicle close on her right,
+			// one in seven on her left, one in nine behind her)
+			W.Away = W.Heading + 3.14159 + (Seed % 3 == 0 ? 0.0 : Seed % 3 == 1 ? 0.8 : -0.8);
+			W.Blocked[0] = Seed % 5 == 0;
+			W.Blocked[1] = Seed % 7 == 0;
+			W.Blocked[2] = Seed % 9 == 0;
 			W.Blast = bBrew ? 5.5 + 4.5 * static_cast<double>(Seed % 10) / 9.0 : -1.0;
 			W.bBurns = bBrew || Way.Key == "tank.engine_fire" || Way.Key == "tank.knocked_out_later_burns" || Way.Key == "soft.burns";
 			W.MostMen = Way.Key.rfind("tank.", 0) == 0 ? 5 : 3;
@@ -107,6 +112,25 @@ int main(int Argc, char** Argv)
 			}
 			for (const LandBail::Man& M : Cr.Men)
 			{
+				// (off the side away from her enemy; another way only where that side is blocked; never off an end that
+				// faces her enemy, nor off a burning tank's end)
+				{
+					const double AwayLean = std::sin(W.Away) * std::cos(W.Heading) - std::cos(W.Away) * std::sin(W.Heading);
+					const int AwaySide = std::abs(AwayLean) >= 0.26 ? (AwayLean > 0.0 ? 1 : -1) : 0;
+					const bool bBlockedHis = W.Blocked[M.Side > 0 ? 0 : 1];
+					const double EndAway = (std::sin(W.Away) * std::sin(W.Heading) + std::cos(W.Away) * std::cos(W.Heading)) * M.OffEnd;
+					const char* Wrong = M.OffEnd != 0 && (W.bBurns || EndAway < -0.26 || W.Blocked[M.OffEnd > 0 ? 3 : 2]) ? "off a burning, blocked or enemy-facing end"
+						: M.OffEnd == 0 && AwaySide != 0 && M.Side != AwaySide && !W.Blocked[AwaySide > 0 ? 0 : 1] ? "off the side toward her enemy, the other clear"
+						: M.OffEnd == 0 && bBlockedHis && !W.Blocked[M.Side > 0 ? 1 : 0] ? "off a blocked side, the other clear"
+						: M.OffEnd != 0 && !W.Blocked[0] && !W.Blocked[1] ? "off an end, both sides clear" : nullptr;
+					if (Wrong)
+					{
+						std::printf("FAIL %s: a man drops %s\n", Way.Key.c_str(), Wrong);
+						++Bad;
+					}
+					Ends += M.OffEnd != 0;
+					Sides[M.OffEnd != 0 ? 2 : AwaySide == 0 ? 3 : M.Side == AwaySide ? 0 : 1]++;
+				}
 				++Men;
 				const char* Hows[] = { "clear", "cut down", "wounded", "on fire", "caught" };
 				Tally[Way.Key][Hows[static_cast<int>(M.How)]]++;
@@ -151,9 +175,16 @@ int main(int Argc, char** Argv)
 						const double Px = M.Down.X + (M.Lee.X - M.Down.X) * U - W.Middle.X, Py = M.Down.Y + (M.Lee.Y - M.Down.Y) * U - W.Middle.Y;
 						bThrough = bThrough || (std::abs(Px * S + Py * C) < 0.5 * W.Long && std::abs(Px * C - Py * S) < 0.5 * W.Wide);
 					}
-					if (Back < Rear + 0.75 || std::abs(Aside) > std::max(std::max(0.6, 0.75 * ShadowHalf), std::abs(DownAside)) + 1e-6 || Leg < 2.5 || Leg > 18.0 || bThrough)
+					// (or, down on the side her enemy sees where his own was blocked, straight along her flank to past her
+					// end away from her enemy)
+					const double EndWay = Lx * S + Ly * C >= 0.0 ? 1.0 : -1.0;
+					const double LeeEnd = ((M.Lee.X - W.Middle.X) * S + (M.Lee.Y - W.Middle.Y) * C) * EndWay;
+					const bool bFlank = !bThrough && LeeEnd >= 0.5 * W.Long + 0.75 && Leg <= 0.5 * W.Long + 3.5 + 3.5 + 1e-6
+						&& std::abs(((M.Lee.X - M.Down.X) * C - (M.Lee.Y - M.Down.Y) * S)) < 1e-6;
+					Flanks += bFlank;
+					if (!bFlank && (Back < Rear + 0.75 || std::abs(Aside) > std::max(std::max(0.6, 0.75 * ShadowHalf), std::abs(DownAside)) + 1e-6 || Leg < 2.5 || Leg > 18.0 || bThrough))
 					{
-						std::printf("FAIL %s: his first leg is not back in her lee (%.1f m behind her, %.1f aside from %.2f, %.1f long%s, rear %.2f)\n", Way.Key.c_str(), Back, Aside, DownAside, Leg, bThrough ? ", through her" : "", Rear);
+						std::printf("FAIL %s: his first leg is not back in her lee (end %d, side %d; %.1f m behind her, %.1f aside from %.2f, %.1f long%s, rear %.2f)\n", Way.Key.c_str(), M.OffEnd, M.Side, Back, Aside, DownAside, Leg, bThrough ? ", through her" : "", Rear);
 						++Bad;
 					}
 				}
@@ -185,7 +216,7 @@ int main(int Argc, char** Argv)
 				// way on begins; on fire, burning_run and the roll)
 				if (bClips && M.How != LandBail::End::Caught)
 				{
-					// (climb, walk over her roof, step down, walk on her deck, jump; or climb, walk to her edge, jump: each
+					// (climb, scramble over her roof, step down, scramble on her deck, jump; or climb, scramble to her edge, jump: each
 					// clip where it should be, and his body never jumping between them, nor at the ground where his run
 					// takes him on)
 					const double OnRoof = M.Out + 1.5 + M.RoofS, OffRoof = OnRoof + (M.bStep ? 0.7333 : 0.0), Jump = OffRoof + M.DeckS;
@@ -199,8 +230,9 @@ int main(int Argc, char** Argv)
 						Most = std::max(Most, std::sqrt((A.Root.X - B.Root.X) * (A.Root.X - B.Root.X) + (A.Root.Y - B.Root.Y) * (A.Root.Y - B.Root.Y) + (A.Root.Z - B.Root.Z) * (A.Root.Z - B.Root.Z)));
 					}
 					const LandBail::Pose On = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) + 1e-6, Ground);
-					const bool bWay = Up.Clip == "bail_climb_out" && Walk.Clip == "walk" && (!M.bStep || Stepping.Clip == "bail_step_down")
-						&& Off.Clip == "bail_jump_down" && (M.bStep || M.DeckS >= 0.3);
+					// (crouched between the clips: the art director, 19:33Z)
+					const bool bWay = Up.Clip == "bail_climb_out" && Walk.Clip == "advance" && (!M.bStep || Stepping.Clip == "bail_step_down")
+						&& Off.Clip == "bail_jump_down" && (M.bStep || M.DeckS >= 0.25);
 					// (a body at a run moves 6 m a second at most: 0.05 m a frame at 120)
 					if (!bWay || Most > 0.06 || std::abs(On.At.Z - Ground(On.At.X, On.At.Y)) > 0.01)
 					{
@@ -218,7 +250,7 @@ int main(int Argc, char** Argv)
 						const double Rolled = std::hypot(Fell.Root.X - Fell.At.X, Fell.Root.Y - Fell.At.Y);
 						if (Run.Clip != "burning_run" || Fell.Clip != "burning_fall_roll" || Rolled < 1.4 || Rolled > 1.65)
 						{
-							std::printf("FAIL %s: on fire in %s, then %s (rolled %.2f m)\n", Way.Key.c_str(), Run.Clip.c_str(), Fell.Clip.c_str(), Rolled);
+							std::printf("FAIL %s: on fire in %s, then %s (rolled %.2f m; to %s, end %d side %d, run %.2f s, lee %.1f m, goal %.1f m from down)\n", Way.Key.c_str(), Run.Clip.c_str(), Fell.Clip.c_str(), Rolled, M.To.c_str(), M.OffEnd, M.Side, M.FallAt - M.Out - LandBail::OnGroundOf(M), std::hypot(M.Lee.X - M.Down.X, M.Lee.Y - M.Down.Y), std::hypot(M.Goal.X - M.Down.X, M.Goal.Y - M.Down.Y));
 							++Bad;
 						}
 					}
@@ -289,12 +321,19 @@ int main(int Argc, char** Argv)
 	std::printf("  runners hit: %.3f with the enemy close (%d), %.3f with none in sight (%d)\n", NearShare, RunNear, FarShare, RunFar);
 	if (bClips)
 	{
-		std::printf("  the clips' way out: %d stepped down off her turret, %d walked from her roof (the driver's hatch); %.1f to %.1f s to the ground; his body's biggest jump %.3f m in a 120th of a second\n", Steps, Walks, ClipsLong[0], ClipsLong[1], WayMost);
+		std::printf("  the clips' way out: %d stepped down off her turret, %d scrambled from her roof (the driver's hatch); %.1f to %.1f s to the ground; his body's biggest jump %.3f m in a 120th of a second\n", Steps, Walks, ClipsLong[0], ClipsLong[1], WayMost);
 		if (Steps == 0 || Walks == 0)
 		{
 			std::printf("FAIL: no man stepped down off a turret, or none walked off a hull's roof\n");
 			++Bad;
 		}
+	}
+	std::printf("  which way off her: %d off the side away from her enemy, %d toward it (that side blocked), %d off her back or bow, %d with her enemy dead ahead (either side)\n", Sides[0], Sides[1], Sides[2], Sides[3]);
+	std::printf("  %d ran along her flank to past her end first (down on the side her enemy sees)\n", Flanks);
+	if (Ends == 0 || Sides[1] == 0)
+	{
+		std::printf("FAIL: no man went off her end, or none off the side toward her enemy where his was blocked\n");
+		++Bad;
 	}
 	if (FireShare > 0.135 || (OnFire > 30 && (LiveShare < 0.2 || LiveShare > 0.47)))
 	{
