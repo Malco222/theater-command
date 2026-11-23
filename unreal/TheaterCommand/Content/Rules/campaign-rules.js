@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c13fd661 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d1c977d2 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -24322,7 +24322,7 @@
     if (nat === "GER") return "He111";
     if (COMMONWEALTH.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
     if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
-    if (nat === "SOV") return design >= 1942 ? "Pe2" : `Bomber:${nat}`;
+    if (nat === "SOV") return design >= 1941 ? "Pe2" : `Bomber:${nat}`;
     if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
     return `Bomber:${nat}`;
   }
@@ -76181,8 +76181,11 @@
         return { mark: d < 1942 + 6 / 12 ? "A6M2" : d < 1944 ? "A6M3" : "A6M5", conv: 250, silent: [], guns: [fixed(G4.type97, ["gun.nose"], 500, { n: 2, rate: Math.round(G4.type97.rate * SYNC) }), fixed(G4.type99, ["gun.1", "gun.2"], c, c < 125 ? { drum: c } : {})] };
       }
       // France's D.520 model (23 Nov) flies the D.520's guns from the first: the MS.406 before it is the plain fighter.
-      case "D520":
-        return plainFighter("FRA", Math.max(d, 1940 + 5 / 12));
+      // The model has a muzzle for each of the four MAC 1934s: gun.1 and gun.3 port, gun.2 and gun.4 starboard.
+      case "D520": {
+        const L2 = plainFighter("FRA", Math.max(d, 1940 + 5 / 12));
+        return { ...L2, guns: L2.guns.map((x) => x.gun === G4.mac34.gun ? { ...x, at: wings(4), n: 4 } : x) };
+      }
     }
     return plainFighter(nat, d);
   }
@@ -76207,7 +76210,7 @@
   var hand = (spec2, where, rounds, arc, more = {}) => gun(spec2, "hand", where, rounds, { arc, ...more });
   var turret = (spec2, where, rounds, arc = null) => gun(spec2, "turret", where, rounds, { arc });
   var REACH2 = { rifle: 370, hmg: 550, cannon20: 550 };
-  var MARKS2 = { SM79: "SM.79", Nell: "G3M", Betty: "G4M", Wellington: "Wellington", Pe2: "Pe-2", LeO451: "LeO 451" };
+  var MARKS2 = { SM79: "SM.79", Nell: "G3M", Betty: "G4M" };
   function bomberGuns(model, nat, w) {
     const d = at3(w);
     const box = (mark, guns2, silent = []) => ({ mark, conv: null, silent, guns: guns2, reach: REACH2 });
@@ -76233,6 +76236,22 @@
       }
       case "Lancaster":
         return box("Lancaster I", [turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about(0, 95, -45, 60)), turret(G4.browning303, ["turret.3", "turret.4"], 1e3, from(0, 360, 0, 70)), turret(G4.browning303, ["turret.5", "turret.6", "turret.7", "turret.8"], 2500, about(180, 95, -60, 60))]);
+      // The four models of 23 Nov, laid on their own sockets (the 3D thread's reading of the files, 08:41Z). Guns from the
+      // standard references (medium, for the historian's check); rounds unchecked. Arcs as the same turret or position on
+      // the Lancaster, the B-17 and the He 111.
+      case "Wellington": {
+        const nose = turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about(0, 95, -45, 60));
+        const beams = [hand(G4.browning303, ["turret.5"], 500, from(30, 150, -40, 50)), hand(G4.browning303, ["turret.6"], 500, from(210, 330, -40, 50))];
+        const tail = (n) => ({ ...turret(G4.browning303, ["turret.3", "turret.4"], n === 4 ? 2500 : 1e3, about(180, 95, -60, 60)), n });
+        return d < 1941 + 5 / 12 ? box("Wellington IC", [nose, tail(2), ...beams]) : box("Wellington III", [nose, tail(4), ...beams]);
+      }
+      case "Pe2": {
+        const above = about(180, 70, 0, 70), below = about(180, 40, -60, 0);
+        if (d < 1942 + 6 / 12) return box("Pe-2", [fixed(G4.shkas, ["gun.1", "gun.2"], 750), hand(G4.shkas, ["turret.1"], 750, above), hand(G4.shkas, ["turret.2"], 750, below)]);
+        return box("Pe-2 (1942)", [fixed(G4.ubs, ["gun.1"], 150), fixed(G4.shkas, ["gun.2"], 450), hand(G4.ubs, ["turret.1"], 200, above), hand(G4.ubs, ["turret.2"], 200, below)]);
+      }
+      case "LeO451":
+        return box("LeO 451", [hand(G4.hs404, ["turret.1"], 120, about(180, 70, 0, 70), { drum: 60 }), hand(G4.mac34, ["turret.2"], 500, about(180, 40, -60, 0)), fixed(G4.mac34, [], 300)]);
     }
     const named3 = MARKS2[model];
     return named3 ? { ...plainBomber(nat, d), mark: named3 } : plainBomber(nat, d);
