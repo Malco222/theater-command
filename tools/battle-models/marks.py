@@ -275,6 +275,10 @@ def shapes(tag):
         return [star(1.0, DISC)]
     if tag == "FRA":                                                             # (France: red outside, white, blue in the middle, rings of one width)
         return [ring(0.0, 1.0, RED), ring(0.0, 0.667, WHITE), ring(0.0, 0.333, FR_BLUE)]
+    if tag == "ITA-CROSS":                                                       # (Italy's rudder: a white cross over it, a small plain shield at the middle; the art director, 19 Nov)
+        return [rect(-0.13, 0.13, -1.0, 1.0, WHITE) + rect(-0.46, 0.46, -0.13, 0.13, WHITE),
+                rect(-0.13, 0.13, -0.2, 0.13, BLUE, 0.1), rect(-0.1, 0.1, -0.17, 0.1, RED, 0.1),
+                rect(-0.022, 0.022, -0.17, 0.1, WHITE, 0.05) + rect(-0.1, 0.1, -0.055, -0.012, WHITE, 0.05)]
     # ---- a machine's record: a victim's mark is that nation's own plain marking in small ----
     if tag == "KILL-GER":
         return shapes("GER")
