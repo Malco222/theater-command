@@ -214,6 +214,15 @@ function ticketOf(p: SetPiece, seed: number): FieldTicket<LandPlace> {
   return withTeams(t);
 }
 
+/** Effects (R2), a look test only (the art director, 19:16Z: never kept as that battle's shot): LAND_RECORD_AIR_YEAR=1942
+ * writes the defender's strikes as flown that year (a 1942 German's Stuka over Normandy), nothing else changed. */
+function airYear<T>(e: T): T {
+  const y = Number(process.env.LAND_RECORD_AIR_YEAR ?? '');
+  const ev = e as unknown as { what?: string; side?: string; extra?: Record<string, unknown> };
+  if (!y || ev.what !== 'land:air-in' || ev.side !== 'def' || !ev.extra) return e;
+  return { ...ev, extra: { ...ev.extra, year: y } } as unknown as T;
+}
+
 /** Rounded to tenths (metres) or thousandths (radians), as the bridge rounds. */
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 const r2 = (x: number): number => Math.round(x * 100) / 100;
@@ -563,7 +572,7 @@ function fight(p: SetPiece, seed: number): Fought {
     keeper.gone(t, seen);
     for (const r of drill.rounds()) if (!rounds.has(r.n)) rounds.set(r.n, r);
     const v = sim.view();
-    for (const e of v.events) events.push(e);
+    for (const e of v.events) events.push(airYear(e));
     // The blocks every battle second (and the last view), for the screen's words, bars and the camera's choice.
     if (Math.floor(t) !== lastView || v.over) {
       lastView = Math.floor(t);
