@@ -18,6 +18,7 @@ from mathutils.geometry import tessellate_polygon
 BLUE, RED, WHITE, YELLOW, BLACK = "1C2C55", "A82A26", "E6E4DA", "D9B03A", "141414"
 US_BLUE, DISC = "1B2A4A", "B0261E"
 GREEN, BOMB_YELLOW, BAR_WHITE = "2F6B3A", "D2A82E", "DAD8CE"
+FR_BLUE = "203A78"                                                               # (France's own roundel and rudder: a brighter blue than Britain's)
 
 
 def poly(points, col):
@@ -272,6 +273,8 @@ def shapes(tag):
                 ring(0.0, 1.0, US_BLUE), rect(-1.95, -0.95, -0.24, 0.24, WHITE) + rect(0.95, 1.95, -0.24, 0.24, WHITE), star(0.98, WHITE)]
     if tag == "SOV":
         return [star(1.0, DISC)]
+    if tag == "FRA":                                                             # (France: red outside, white, blue in the middle, rings of one width)
+        return [ring(0.0, 1.0, RED), ring(0.0, 0.667, WHITE), ring(0.0, 0.333, FR_BLUE)]
     # ---- a machine's record: a victim's mark is that nation's own plain marking in small ----
     if tag == "KILL-GER":
         return shapes("GER")
@@ -403,10 +406,13 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
                 if not fin or not mk.get("quad"):
                     continue
                 flip = 1.0 if u.x > 0 else -1.0
+            elif mk.get("bands") and mk.get("quad"):                             # (her own nation's stripes on her rudder: FRA-FIN, its bands in the mark)
+                flip = 1.0 if u.x > 0 else -1.0
             if "finish" in mk:                                                   # (a bomber's panel: the marks for the finish under it)
                 drawn = bomb_mark(mk["finish"]) if tag == "BOMB" else kill_mark(tag, mk["finish"])
             else:
-                drawn = flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else shapes(tag)
+                drawn = (flag(mk, fin) if tag == "*FIN" else flag(mk, mk["bands"]) if mk.get("bands") and mk.get("quad")
+                         else layers(tag) if isinstance(tag, list) else shapes(tag))
             for layer, polys in enumerate(drawn):
                 for col, poly in polys:
                     # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,

@@ -41,6 +41,7 @@ import carrier_devastator
 import carrier_hellcat
 import carrier_wildcat
 import fighters
+import france_d520
 import fitout
 import rigid
 from rigid import Model, smooth
@@ -513,6 +514,28 @@ def carrier(module):
 carrier(carrier_hellcat)
 # (the Wildcat, the fleet's fighter before her, at Midway in June 1942: her numbers are in carrier_wildcat.py)
 carrier(carrier_wildcat)
+
+
+# ---- France's own machines of 1940, release 2: each in a module of her own (france_d520.py). ----
+def land(module):
+    """Takes in a land machine from her module, as carrier() takes in a carrier plane: her NAME, her NUMBERS, who sits
+    under her glass (SEATS), her coat (module.coat(), her camouflage field, as NUMBERS["graded"]) and any table of her
+    own the module gives (SEAT_DROP, BAY, TAIL_CUT, TURRET, and NOSE_CREW for the men in a glass nose)."""
+    numbers = module.NUMBERS
+    if hasattr(module, "coat"):
+        numbers["graded"] = module.coat()
+    EXTRA_PLANES[module.NAME] = numbers
+    fitout.SEATS[module.NAME] = module.SEATS
+    for table, into in (("SEAT_DROP", fitout.SEAT_DROP), ("BAY", BAYS), ("TAIL_CUT", TAIL_CUT), ("TURRET", TURRET_LIMITS),
+                        ("NOSE_CREW", fitout.NOSE_CREW)):
+        if hasattr(module, table):
+            into[module.NAME] = getattr(module, table)
+    if _G is not None:
+        _G["PLANES"][module.NAME] = numbers
+
+
+# (the D.520, the Armee de l'Air's best fighter of June 1940: her numbers are in france_d520.py)
+land(france_d520)
 
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
@@ -1811,7 +1834,7 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "D520": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
 ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
@@ -2623,6 +2646,8 @@ def convert(name, fine=True):
         m.socket("gun.nose", (top.x, 0.0, top.z + 0.03), X, part="plane", note="the guns over the engine")
     elif s.get("cowl_gun"):                                 # (one gun firing through the ring of her cowling: see fitout.guns)
         m.socket("gun.nose", port(s["cowl_gun"]) + X * 0.01, X, part="plane", note="the gun in her cowling")
+    elif s.get("hub_gun"):                                  # (a cannon firing through her airscrew's hub: see fitout.guns)
+        m.socket("gun.nose", (hull.front + s["hub_gun"] + 0.01, 0.0, hull.z(-hull.front)), X, part="plane", note="the cannon through her airscrew's hub")
     for n, (a_, b_) in enumerate(rods):
         m.socket(f"turret.{n + 1}", port(b_), port(b_ - a_), part=gun_part[n], note="a gunner's muzzle")
     belly = hull.at(root_mid if not bay else 0.5 * (bay[0] + bay[1]), -math.pi / 2.0)
@@ -2708,6 +2733,11 @@ def convert(name, fine=True):
                        else "fin" if i >= len(m.marks) - n_code - n_fin else "wing")
     if s.get("nation_paint") and "rudder" in m.part_at and any(mk["tag"] == "*" for mk in m.marks):
         m.marks.insert(len(m.marks) - n_code, rudder_flag(m))        # (a plain machine wears her owner's flag on her rudder)
+    if s.get("rudder_stripes") and "rudder" in m.part_at:
+        # (`rudder_stripes`: her own nation's stripes over her rudder, (tag, colours from her rudder's leading edge
+        #  back), laid where a plain machine's flag goes; the mark carries its bands, as the unit table's `fin` gives them)
+        stripe_tag, stripes = s["rudder_stripes"]
+        m.marks.insert(len(m.marks) - n_code, dict(rudder_flag(m), tag=stripe_tag, bands={"dir": "v", "bands": list(stripes)}))
     m.tally = tally_of(name, s, hull, role, G, fins, fine, m)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
@@ -3099,4 +3129,4 @@ def torpedo(fine=True):
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
-                                                                  "Amerikabomber", "B29", "Bomber")}
+                                                                  "Amerikabomber", "B29", "Bomber", "D520")}

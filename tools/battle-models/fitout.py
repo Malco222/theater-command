@@ -1341,6 +1341,14 @@ def guns(m, f, s, G, hull):
         m.use("plane")
         m.rod(port(p - X * 0.07), port(p + X * 0.006), 0.03, "gunmetal", sides=10 if m.fine else 6)
         m.disc(port(p + X * 0.008), X, 0.017, "engine", 10 if m.fine else 6)
+    if s.get("hub_gun"):
+        # (`hub_gun`: a cannon firing through her airscrew's hub, the D.520's moteur-canon: its barrel along her
+        #  airscrew's axis, standing this far out of her spinner's tip, and its dark bore; it does not turn with her
+        #  airscrew)
+        p = Vector((hull.front, 0.0, hull.z(-hull.front)))
+        m.use("plane")
+        m.rod(port(p - X * 0.12), port(p + X * s["hub_gun"]), 0.022, "gunmetal", sides=10 if m.fine else 6)
+        m.disc(port(p + X * (s["hub_gun"] + 0.002)), X, 0.012, "engine", 10 if m.fine else 6)
 
 
 def fasteners(m, f, s, G, hull):

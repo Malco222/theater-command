@@ -713,6 +713,30 @@ fuselage's own turning, so it flutters away rightly if the tracks are simply pla
 `Parachute`: parts `chute` (root, the harness point), `canopy` (scaled from a streamer to full), `airman`
 (swings). Clips `open`, `drift` (loop), `collapse`. `Bomb`: clip `fall`. `Torpedo`: clips `drop`, `run`.
 
+### France's own machines of 1940 (release 2)
+
+Each is in a module of her own and taken in by `planes.land` (as `planes.carrier` takes in a carrier plane): her NAME,
+NUMBERS, SEATS, her coat (`coat()`, her camouflage field) and any table of her own. France's other machines stay the
+plain ones (the `Fighter` is drawn as an MS.406). Measured from public three-view drawings, not traced; each module
+names its drawing, its licence and its scales.
+
+| file | what she is | year | crew | she carries |
+| --- | --- | --- | --- | --- |
+| `D520` | the Armée de l'Air's Dewoitine D.520 fighter, from June 1940: khaki and dark earth over light blue-grey, French roundels, the tricolour on her rudder | 1940 | 1 | a 20 mm cannon through her airscrew's hub, four 7.5 mm guns in her wings |
+
+- **France's marking** (`marks.py`): `FRA`, the roundel (red outside, white, blue in the middle, rings of one width),
+  in France's own brighter blue (`FR_BLUE`; `KILL-FRA` is as it was). `FRA-FIN`, the tricolour on her rudder, blue
+  forward: a mark of place `fin` on part `rudder` with a `quad` (as a plain machine's `*FIN`) and its own `bands`
+  (`{dir: "v", bands: [blue, white, red]}`), so the game needs no table to paint it.
+- **The D.520's own keys** (`france_d520.py`; without them a machine is built as before). `hub_gun`: a cannon firing
+  through her airscrew's hub, its barrel standing this far out of her spinner's tip (it does not turn); socket
+  `gun.nose` at its muzzle. `rudder_stripes`: (tag, colours from the rudder's leading edge back), her nation's stripes
+  laid where a plain machine's flag goes. Her coat is two of the three colours of 1939-40 (the game's coat has two
+  upper colours; the dark blue-grey is left out), in soft patches over her cowling as over the rest of her.
+- Her parts are a single-seat fighter's (`plane`, `wing.port`/`starboard`, `tail`, `prop.1`, `prop.1.blur`, `aileron.*`,
+  `flap.*`, `elevator.*`, `rudder`); sockets `engine.1`, `gun.1` to `gun.4` (her wing guns), `gun.nose` (the cannon) and
+  the usual others; clips a fighter's.
+
 ### Battle damage: bullet holes and flak holes
 
 Brian, 2026-11-18: "if a plane gets hit show the bullet holes or flak holes". Every aircraft has a damage model of
