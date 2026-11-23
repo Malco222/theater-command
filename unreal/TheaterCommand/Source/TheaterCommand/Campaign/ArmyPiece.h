@@ -112,6 +112,8 @@ public:
 	/** Shows or hides the flock on every base (the map does it as the eye rises and comes down). New pieces take it as they are made. */
 	void SetFlockShown(bool bShown);
 	static bool bFlockNear;
+	/** (Release 2, nicknames.ts) Whether the names corps earn are lettered over their army's flag: the map sets it from the picture before it lays the armies. */
+	static bool bNamesShown;
 	/** A fleet lying in harbour is drawn small, at anchor by its port, with no standard over it: a small badge on the port says how many ships are in (the map is the clearer for it). */
 	void SetAtAnchor(bool bInHarbour);
 	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
@@ -232,6 +234,10 @@ private:
 	/** The months on the spade tag beside the strength plate. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextRenderComponent> WorksLabel;
+	/** (Release 2, nicknames.ts) The name the army's corps have earned, lettered on a dark scroll over its flag. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> NameLabel;
+	FString EarnedName; // the name lettered there; empty for none
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
 	bool bSelected = false;

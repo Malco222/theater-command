@@ -141,7 +141,7 @@ import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 import { seaWhere } from '../../../src/campaign/sea-words';
 import { bargainCalls } from './bargains-look';
-import { columnsOn as columnsAreOn, columnsView, setColumns } from '../../../src/campaign/columns';
+import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
 
 let g: Game | null = null;
@@ -852,6 +852,11 @@ function drawView() {
     columns: (() => { try { return columnsView(s).map((v) => ({ nat: v.nat, side: v.side, path: v.points.flat(), lorries: v.lorries, lost: v.lost, share: Math.round(v.share * 100) / 100, hits: v.hits.flatMap((h) => [h.x, h.y, h.by === 'air' ? 1 : 2, h.lost]) })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
+    // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
+    // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
+    r2Switches: s.flags.open === 1,
+    columnsOn: columnsAreOn(s),
+    columnsCan: columnsSettable(s),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -5835,6 +5840,25 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'nicknames') {
+    // (Release 2, nicknames.ts) Earned nicknames on the flags, switched by the player in any month: a name is only a name.
+    setNicknames(s, part[1] === 'on');
+    ok = true;
+    note = nicknamesOn(s)
+      ? 'Earned names are on: a corps that wins three hard fights is given a name by its own army, and the name goes on its flag.'
+      : 'Earned names are off: no corps is given a new one, and none is shown on the flags. The names already earned are kept.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'columns') {
+    // (Release 2, columns.ts) Supply columns, switched in the campaign's opening month only.
+    ok = setColumns(s, part[1] === 'on');
+    note = !ok
+      ? 'Supply columns can be switched only in the campaign\'s first month.'
+      : columnsAreOn(s)
+        ? 'Supply columns are on: each month lorries carry the supplies from the railhead to the armies beyond it, and enemy aircraft and partisans can catch them on the road.'
+        : 'Supply columns are off: the armies beyond the railhead are fed as before.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'cabinet') {
     // The government (Version 57): a minister appointed, a decree, or the directive set aside.
     const v = governmentOf(s);
@@ -6843,6 +6867,7 @@ function find(name: string) {
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
 // (Release 2) Earned nicknames and supply columns, each its own switch: TC.nicknames(on) at any time (a name is only a
-// name), TC.columns(on) only at a campaign's start, before the first month is played ('set' false otherwise).
+// name), TC.columns(on) only in a campaign's opening month ('set' false otherwise). The options page uses act('nicknames:on'
+// and so on) instead, which answers with the view.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };

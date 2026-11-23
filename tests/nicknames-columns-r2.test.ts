@@ -6,7 +6,7 @@ import nations from '../data/campaign/nations.json';
 import worldData from '../data/campaign/world.json';
 import farWorld from '../data/campaign/far-world.json';
 import { NICKNAMES, earnedName, hardWin, isBlocked, nicknamesOn, roomForName, setNicknames, styleKey } from '../src/campaign/nicknames';
-import { COLUMNS, columnShare, columnsOn, columnsView, partisansAt, setColumns } from '../src/campaign/columns';
+import { COLUMNS, columnShare, columnsOn, columnsSettable, columnsView, partisansAt, setColumns } from '../src/campaign/columns';
 import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { COLUMNS_STAGE, NICKNAMES_STAGE } from '../src/campaign/stage';
@@ -41,9 +41,11 @@ describe('the switches', () => {
     expect(g.flags.nicknames).toBeUndefined();
     expect(g.flags.columns).toBeUndefined();
   });
-  it('columns are set at a campaign start only; nicknames whenever the player likes', () => {
+  it("columns are set in a campaign's opening month only; nicknames whenever the player likes", () => {
     const g = war({});
+    expect(columnsSettable(g)).toBe(true);
     months(g, 1);
+    expect(columnsSettable(g)).toBe(false);
     expect(setColumns(g, true)).toBe(false);
     expect(columnsOn(g)).toBe(false);
     setNicknames(g, true);

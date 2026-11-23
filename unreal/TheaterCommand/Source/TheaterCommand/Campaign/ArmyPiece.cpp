@@ -188,6 +188,25 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		HonourCount += Unit.Honours.Num();
 	}
 	NewSignature += FString::Printf(TEXT("|%dh"), HonourCount);
+	// (Release 2, nicknames.ts) The name lettered over the flag, where the names are shown: of the corps that carry one,
+	// the one with the most honours. (What is not known of an enemy's corps carries no name.)
+	EarnedName.Reset();
+	if (bNamesShown && What == 0 && !bGlimpsed)
+	{
+		int32 Most = -1;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.Nickname.IsEmpty() && !Unit.bDim && Unit.Honours.Num() > Most)
+			{
+				Most = Unit.Honours.Num();
+				EarnedName = Unit.Nickname;
+			}
+		}
+	}
+	if (!EarnedName.IsEmpty())
+	{
+		NewSignature += TEXT("|n:") + EarnedName;
+	}
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
@@ -220,6 +239,7 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 }
 
 bool AArmyPiece::bFlockNear = true;
+bool AArmyPiece::bNamesShown = false;
 bool AArmyPiece::bCampsNear = true;
 int32 AArmyPiece::FullWorks = 3;
 
@@ -389,6 +409,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	{
 		WorksLabel->DestroyComponent();
 		WorksLabel = nullptr;
+	}
+	if (NameLabel)
+	{
+		NameLabel->DestroyComponent();
+		NameLabel = nullptr;
 	}
 	if (Mast)
 	{
@@ -1005,6 +1030,42 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		WorksLabel->SetRelativeLocation(TagFigureAt - StandardFoot);
 		WorksLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 		WorksLabel->RegisterComponent();
+	}
+	// (Release 2, nicknames.ts) The name its corps have earned, in quotes, on a dark scroll with brass edges over the top
+	// of the flag, clear of the finial: lettered in old gold, so that it is never read as the strength. A long name is
+	// lettered smaller rather than run wider than the flag and a half, which would lie over the next army's flag.
+	if (!EarnedName.IsEmpty() && What == 0)
+	{
+		const FString Shown = FString::Printf(TEXT("\u201C%s\u201D"), *EarnedName);
+		const double Letter = PlateHeight * 0.6;
+		const double Wanted = Letter * (0.9 + 0.56 * Shown.Len());
+		const double Widest = FlagWidth * 1.5;
+		const double Scroll = FMath::Min(Wanted, Widest);
+		const double Size = Letter * Scroll / Wanted;
+		const double High = FMath::Max(Size * 1.45, Letter * 0.95);
+		const FVector ScrollAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight + 1.9 * U + High * 0.5);
+		AddPart(Cube, ScrollAt - StandardFoot, FVector(0.16 * U, Scroll + 0.3 * U, High), Map->GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("15130F"))), 0.7f, 0.0f, 0.6f), Standard)->SetCastShadow(false);
+		for (const double Edge : { -1.0, 1.0 })
+		{
+			AddPart(Cube, ScrollAt - StandardFoot + FVector(0.0, 0.0, Edge * High * 0.5), FVector(0.22 * U, Scroll + 0.4 * U, 0.12 * U),
+				Map->GetSolidMaterial(BrassPaint, 0.4f, 0.8f, 0.5f), Standard)->SetCastShadow(false);
+		}
+		NameLabel = NewObject<UTextRenderComponent>(this);
+		NameLabel->SetupAttachment(Standard);
+		NameLabel->SetText(FText::FromString(Shown));
+		NameLabel->SetWorldSize(static_cast<float>(Size));
+		NameLabel->SetTextRenderColor(FColor::FromHex(TEXT("E9C77B")));
+		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+		{
+			NameLabel->SetTextMaterial(Unlit);
+		}
+		NameLabel->SetHorizontalAlignment(EHTA_Center);
+		NameLabel->SetVerticalAlignment(EVRTA_TextCenter);
+		NameLabel->SetCastShadow(false);
+		NameLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		NameLabel->SetRelativeLocation(ScrollAt - StandardFoot - FVector(0.12 * U, 0.0, 0.0));
+		NameLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+		NameLabel->RegisterComponent();
 	}
 	ApplyStandard(); // (a piece rebuilt stands as its neighbours stand)
 }

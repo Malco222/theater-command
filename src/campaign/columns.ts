@@ -52,11 +52,17 @@ export interface ColumnRun {
 /** True where this campaign runs supply columns. */
 export const columnsOn = (g: Game): boolean => g.flags.open === 1 && g.flags.columns === 1;
 
-/** Sets the switch. Only at setup, before the first month has been played; returns whether it was set. */
+/**
+ * Whether the switch can still be thrown: in the campaign's opening month only (turn 1, or the month a later start
+ * opens in). A nation that has already moved that month sends its first columns the month after.
+ */
+export const columnsSettable = (g: Game): boolean => g.flags.open === 1 && g.turn === (g.flags.openFrom ?? 1);
+
+/** Sets the switch. Only in the campaign's opening month; returns whether it was set. */
 export function setColumns(g: Game, on: boolean): boolean {
-  if (g.turn !== 1 || g.phase !== 0 || g.airReports.length || g.reports.length) return false;
+  if (!columnsSettable(g)) return false;
   if (on) g.flags.columns = 1;
-  else delete g.flags.columns;
+  else { delete g.flags.columns; delete g.columns; }
   return true;
 }
 

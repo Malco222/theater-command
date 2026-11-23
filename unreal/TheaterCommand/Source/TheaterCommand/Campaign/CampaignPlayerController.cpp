@@ -326,6 +326,20 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
+	// (Release 2) Earned nicknames and supply columns, each its own switch, kept by the campaign (nicknames.ts, columns.ts).
+	if (const FCampaignSession* Session = GetSession())
+	{
+		const FCampaignView& Now = Session->GetView();
+		if (Session->IsRunning() && Now.bR2Switches)
+		{
+			Add(TEXT("nicknames"), TEXT("Earned names"), TEXT("A corps that wins three hard fights (an attack carried at poor odds, a line held against the odds, or a win bought dear) is given a name by its own army, in its country's own way, and the name is lettered over its flag. Every country's corps can earn one. A name changes nothing in the war. It can be switched in any month."),
+				Now.bNickFlags ? TEXT("ON") : TEXT("OFF"), Now.bNickFlags);
+			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
+					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
+					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
+				Now.bColumnsOn ? TEXT("ON") : TEXT("OFF"), Now.bColumnsOn);
+		}
+	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
 	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
@@ -476,6 +490,25 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		{
 			FString Note;
 			Session->Act(Session->GetView().bOfficeSecure ? TEXT("cabinet:office:fall") : TEXT("cabinet:office:secure"), INDEX_NONE, Note);
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
+	}
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns"))
+	{
+		// (Release 2) Earned names, in any month; supply columns, in the campaign's first month only (the rules say so if not).
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			const bool bOn = Id == TEXT("nicknames") ? Session->GetView().bNickFlags : Session->GetView().bColumnsOn;
+			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
+			{
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			}
 			if (!Note.IsEmpty())
 			{
 				Notify(Note, 6.0);
@@ -9723,6 +9756,7 @@ void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowAirfieldSigns(View.Airfields);
 		Map->ShowLanes(View.Lanes);
+		Map->ShowColumns(View.Columns); // (release 2, columns.ts: none while the columns are off)
 		BargainLayer::ShowOnMap(this); // R2 bargains hook: a neutral's bargains and the legions, read once for each new picture (nothing while both rules are off)
 		Map->ShowFreeCapitals(View.FreeCapitals);
 		Map->ShowShroud(View.Unseen, View.Glimpsed);

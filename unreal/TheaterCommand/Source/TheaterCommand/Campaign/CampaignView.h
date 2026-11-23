@@ -762,6 +762,30 @@ struct FViewLane
 	float Flow = 1.0f; // the share of its cargoes getting through
 };
 
+/** (Release 2, columns.ts) Where a supply column was caught on the road: on the map, by whom, and how many lorries burned. */
+struct FViewColumnHit
+{
+	FVector2D At = FVector2D::ZeroVector;
+	bool bByAir = true; // enemy aircraft; otherwise partisans
+	int32 Lost = 0;
+};
+
+/**
+ * (Release 2, columns.ts) A month's supply column the player can see: the road from the railhead to the corps beyond
+ * it, whose it is ("ours", "friend" or "theirs"), the lorries sent and lost, the share that got through, and where it
+ * was caught. None while the columns are off.
+ */
+struct FViewColumn
+{
+	FString Nation;
+	FString Side;
+	TArray<FVector2D> Path; // on the map, railhead first
+	int32 Lorries = 0;
+	int32 Lost = 0;
+	float Share = 1.0f;
+	TArray<FViewColumnHit> Hits;
+};
+
 /** An air fleet on its airfields. */
 /**
  * (Ruling 86.) A sea gate: the Panama Canal or one of the straits. Where its mark stands, who holds it, whether the
@@ -1087,6 +1111,11 @@ struct FCampaignView
 	FViewStock Oil;
 	FViewStock Supplies;
 	TArray<FViewLane> Lanes;
+	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
+	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
+	// opening month only.
+	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain

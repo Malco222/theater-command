@@ -142,6 +142,16 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2) -TheaterR2Names and -TheaterR2Columns open new grand campaigns with earned nicknames and with supply
+	// columns, for a picture of each (development only; a player switches them under OPTIONS)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Names")) && !Host->Evaluate(TEXT("globalThis.TC_NICKNAMES = 1;"), TEXT("release 2 names"), OutError))
+	{
+		return false;
+	}
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Columns")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1;"), TEXT("release 2 columns"), OutError))
+	{
+		return false;
+	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
@@ -1109,6 +1119,52 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	// (Release 2, columns.ts) The month's supply columns: their roads as map points, and where each was caught (four
+	// numbers a place: x, y, 1 aircraft or 2 partisans, lorries lost).
+	const TArray<TSharedPtr<FJsonValue>>* Columns = nullptr;
+	if (Object->TryGetArrayField(TEXT("columns"), Columns))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Columns)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FViewColumn& Column = Out.Columns.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Column.Nation);
+			Entry->TryGetStringField(TEXT("side"), Column.Side);
+			Entry->TryGetNumberField(TEXT("lorries"), Column.Lorries);
+			Entry->TryGetNumberField(TEXT("lost"), Column.Lost);
+			double Share = 1.0;
+			Entry->TryGetNumberField(TEXT("share"), Share);
+			Column.Share = static_cast<float>(Share);
+			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+			if (Entry->TryGetArrayField(TEXT("path"), Points))
+			{
+				for (int32 K = 0; K + 1 < Points->Num(); K += 2)
+				{
+					Column.Path.Add(FVector2D((*Points)[K]->AsNumber(), (*Points)[K + 1]->AsNumber()));
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Hits = nullptr;
+			if (Entry->TryGetArrayField(TEXT("hits"), Hits))
+			{
+				for (int32 K = 0; K + 3 < Hits->Num(); K += 4)
+				{
+					FViewColumnHit& Hit = Column.Hits.AddDefaulted_GetRef();
+					Hit.At = FVector2D((*Hits)[K]->AsNumber(), (*Hits)[K + 1]->AsNumber());
+					Hit.bByAir = FMath::RoundToInt32((*Hits)[K + 2]->AsNumber()) != 2;
+					Hit.Lost = FMath::RoundToInt32((*Hits)[K + 3]->AsNumber());
+				}
+			}
+		}
+	}
+	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
+	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
+	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
+	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{

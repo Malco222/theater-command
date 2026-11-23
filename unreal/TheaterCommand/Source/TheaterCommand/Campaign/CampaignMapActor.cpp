@@ -10175,6 +10175,8 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		int32 Held = 0;
 		::UnitTable::SetTurn(FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held) ? Held : View.Turn);
 	}
+	// (Release 2, nicknames.ts) Whether earned names are lettered over the flags, told to the pieces before any is set.
+	AArmyPiece::bNamesShown = View.bNickFlags;
 	UWorld* World = GetWorld();
 	if (!World || !Data.IsLoaded() || HasParade())
 	{
@@ -14642,6 +14644,26 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 					Draw(PrizeFires[K] + FVector((Tongue - 1.0) * 0.7 * Unit, 0.0, Big * (0.8 + 0.45 * Tongue)), Big, Flame, Lick);
 				}
 			}
+			// (Release 2, columns.ts) Where a supply column was caught on the road this month, its lorries burn: a low red
+			// glow, two tongues of flame and a thin black plume, smaller than a burning depot's and sized to the lorries lost.
+			for (int32 K = 0; K < ColumnFires.Num(); ++K)
+			{
+				const FVector At(ColumnFires[K].X, ColumnFires[K].Y, ColumnFires[K].Z);
+				if (FVector::DistSquared2D(At, CameraFocus) > Reach * Reach)
+				{
+					continue;
+				}
+				const double Big = static_cast<double>(ColumnFires[K].W);
+				const FLinearColor Burning(0.06f, 0.055f, 0.05f);
+				Plume(At + FVector(0.0, 0.0, 0.8 * Unit), K * 13 + 1100, 1.1 * Big, &Burning, 1.6f);
+				Draw(At + FVector(0.0, 0.0, 0.5 * Unit * Seen), 1.2 * Unit * Seen * Big, FLinearColor(1.0f, 0.28f, 0.06f), 0.5f + 0.1f * FMath::Sin(static_cast<float>(Now) * 3.3f + K));
+				for (int32 Tongue = 0; Tongue < 2; ++Tongue)
+				{
+					const float Lick = 0.7f + 0.28f * FMath::Sin(static_cast<float>(Now) * (8.5f + Tongue * 2.7f) + K * 1.9f + Tongue);
+					const double Tall = (0.8 - 0.2 * Tongue) * Unit * Seen * Big;
+					Draw(At + FVector((Tongue - 0.5) * 0.6 * Unit, 0.0, Tall * (0.8 + 0.45 * Tongue)), Tall, Flame, Lick);
+				}
+			}
 		}
 	}
 	// The fires of armies in camp: a thin thread of smoke from each.
@@ -15879,6 +15901,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateCutLamps(CameraDistance);
 	UpdateRailLight(CameraDistance);
 	UpdateTrains(CameraFocus, CameraDistance);
+	UpdateColumns(CameraFocus, CameraDistance); // (release 2: supply columns' convoys on the roads, CampaignColumns.cpp)
 	UpdateClouds();
 	UpdateFlashes();
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)

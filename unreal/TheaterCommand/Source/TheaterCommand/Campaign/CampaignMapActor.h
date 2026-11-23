@@ -320,6 +320,13 @@ public:
 	void ShowLanes(const TArray<FViewLane>& Lanes);
 
 	/**
+	 * (Release 2, columns.ts) The month's supply columns: the road each took from the railhead to the armies beyond it,
+	 * a few convoys of lorries crawling along it, and a burnt-out lorry with its fire wherever enemy aircraft or
+	 * partisans caught it. Nothing while the columns are off. (CampaignColumns.cpp)
+	 */
+	void ShowColumns(const TArray<FViewColumn>& Columns);
+
+	/**
 	 * A picture of one of the game's own models, for a unit's card: taken once for each model and kept. The name is
 	 * a vehicle's, an aircraft's or a ship's ("PanzerIV", "B17", "Battleship:UK"), or a figure's ("Soldier:GER",
 	 * "Rider:POL", "Pioneer:GER").
@@ -992,6 +999,31 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed
+	/** (Release 2, columns.ts) A supply column's road as drawn: a smooth curve on the map, how far along it each point lies, and its convoys. */
+	struct FColumnRoad
+	{
+		FString Nation;
+		TArray<FVector2D> Curve;
+		TArray<double> Run; // the distance along the road to each point of the curve
+		double Length = 0.0;
+		int32 Convoys = 1; // how many convoys are seen on it: one for every hundred and fifty lorries or so, four at most
+		bool bManned = false; // its convoys are on the table (only near the eye)
+	};
+	/** A convoy on a column's road: three lorries nose to tail, built once and driven as one. */
+	struct FColumnConvoy
+	{
+		int32 Road = INDEX_NONE;
+		int32 Place = 0; // which of the road's convoys it is
+		TObjectPtr<UProceduralMeshComponent> Mesh;
+	};
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> ColumnsMesh; // the roads (section 0, in ink) and the burnt-out lorries (section 1)
+	FString ShownColumns; // what is drawn now, to tell when it has changed
+	TArray<FColumnRoad> ColumnRoads;
+	TArray<FColumnConvoy> ColumnConvoys;
+	TArray<FVector4> ColumnFires; // where columns were caught: the place in the world, and how big the fire is (w)
+	void UpdateColumns(const FVector& CameraFocus, float CameraDistance);
+	void ParkColumnConvoys(int32 Road); // takes a road's convoys off the table
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> RoomMesh;
 	UPROPERTY()
