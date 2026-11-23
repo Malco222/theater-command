@@ -20,6 +20,13 @@ export const TEAMS: readonly Team[] = ['mg', 'mor'];
 
 export const MOTION: Record<Kind, Motion> = { inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns', fort: 'fixed' };
 
+/** How near a hedge line counts as on it, metres: a block hiding there (LAND.hide.hedge), a hedge point picked for a cut (LAND.cutters). */
+const HEDGE_NEAR = 12;
+/** Fire at a block found by its own fire but not yet located: its share, and for how long (LAND.hide.locate); smoke's share too (LAND.smoke). */
+const LOCATE = { secs: 25, fire: 0.5 };
+/** An army's section smoke (LAND.smoke.means): how far beyond its front it lays the line, how long the screen stands, and how many it lays a battle. */
+export interface SmokeMeans { reach: number; hang: number; count?: number }
+
 export const LAND = {
   /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
   speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 } as Record<Kind, number>,
@@ -70,10 +77,19 @@ export const LAND = {
    * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
    * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
    * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
-   * player orders a run, or the battle is opened with radio on.
+   * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
+   * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
+   * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
+   * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
+   * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
+   * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
+   * tank; two T-34s in five to 1943) and the rest as its army's foot.
    */
   double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 } as Record<Motion, number>, exposed: 1.25, blows: 0.75, winded: 20 },
-  radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
+  radio: {
+    delay: 5, cut: 3.5, hqAt: 0.5,
+    nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] } as Record<string, [number, number][]>,
+  },
   /**
    * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
    * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
@@ -93,8 +109,7 @@ export const LAND = {
    * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
    * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
    * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
-   * itself away) unless it is ordered to attack
-   * or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+   * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
    * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
    * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
    * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
@@ -102,12 +117,64 @@ export const LAND = {
    * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
    * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
    * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+   *
+   * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
+   * Germans could see them"):
+   * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
+   *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
+   *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
+   *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
+   * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
+   *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
+   * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
+   * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
+   *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
+   * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
+   *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
+   *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
    */
   hide: {
     sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 } as Record<Motion, number>,
+    heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 } as Record<Motion, number>,
     ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 } as Record<Motion | 'mg', number>,
-    surprise: { secs: 20, punch: 1.5, nerve: 2 },
+    forest: 100,
+    surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
+    locate: LOCATE,
+    search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
+    hedge: { near: HEDGE_NEAR, gap: 3 },
     staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
+  },
+  /**
+   * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+   * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+   * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+   * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+   * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+   * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+   * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+   * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+   * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+   * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+   * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+   * 1937, sec. 35).
+   *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+   *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+   *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+   *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+   *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+   *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+   *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+   *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+   *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+   *     Its pictures, and the men its block loses when it is caught.
+   *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+   */
+  patrol: {
+    found: 0.4,
+    caught: 0.3,
+    size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 } as Record<string, number>,
+    night: { t0: -2400, t1: -600 },
   },
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
@@ -266,6 +333,16 @@ export const LAND = {
    * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
    */
   blocks: { least: 6, regiments: 3 },
+  /**
+   * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+   * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+   * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+   * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+   * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+   * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+   * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+   */
+  scale: { budget: 8500, step: 5, page: 24000 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
   /**
@@ -321,6 +398,12 @@ export const LAND = {
   /** Seconds of battle time before the defender is counted as having held. */
   limit: 360,
   /**
+   * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+   * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+   * clear dry ground to come on at, in field cells in from the edge and along it either way.
+   */
+  join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
+  /**
    * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
    * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
    * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
@@ -364,9 +447,210 @@ export const LAND = {
     bombs: 2, toss: 1.5,
     bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 } as Record<string, number>,
   },
+  /**
+   * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+   * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+   * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+   * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+   * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+   * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+   * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+   * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+   * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+   * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+   * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+   * where cutters (and a cut's gap) change the fight, and only with that switch on.
+   *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+   *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+   *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+   *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
+   *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+   *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+   *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+   *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+   *     ruling 242 C3).
+   *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+   */
+  cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+  /**
+   * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+   * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+   * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+   * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+   * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+   * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+   * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+   * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+   * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+   * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+   * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
+   * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+   *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+   *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+   *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+   *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+   *     back for its air strikes is held back whole (the air is not touched).
+   *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+   *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+   *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+   *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+   *     1.52 m/s (FM 22-5).
+   *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+   *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+   *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+   *     fits").
+   *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+   *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+   *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+   *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+   *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+   *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+   *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+   *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+   *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+   *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+   *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+   *       (the historian, H5): 22 s is the design director's knob.
+   *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+   *       front (ruling 242 as amended).
+   *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+   *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+   *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+   *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+   *     France's (none today; theirs too once H5 finds France a means).
+   */
+  smoke: {
+    share: LOCATE.fire,
+    count: 2,
+    perMin: 15,
+    front: 30,
+    means: {
+      USA: { reach: 195, hang: 30 },
+      UK: { reach: 457, hang: 30, count: 3 },
+      GER: { reach: 30, hang: 22 },
+      SOV: { reach: 30, hang: 22 },
+      JAP: { reach: 188, hang: 22 },
+      ITA: { reach: 0, hang: 19 },
+    } as Record<string, SmokeMeans>,
+    kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA', FFR: 'FRA' } as Record<string, string>,
+  },
+  /**
+   * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+   * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+   * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+   * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+   * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+   * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+   * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+   * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+   * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+   * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+   * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+   * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+   * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+   *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+   *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+   *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+   *     Division, 1945).
+   *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+   *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+   *     battle seconds a real minute. Finding the break is not counted (no source).
+   *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+   *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+   *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+   *     Every other army 1 ('_').
+   *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+   *     nations): how orders go once the wire is down.
+   *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+   *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+   *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+   *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+   *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+   *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+   *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+   *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+   *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+   */
+  phones: {
+    cut: 0.12,
+    splice: 30,
+    runner: 6,
+    lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 } as Record<string, number>,
+    fallback: {
+      USA: [[1942, 'runner'], [9999, 'radio']], UK: [[9999, 'radio']], CAN: [[9999, 'radio']], AUS: [[9999, 'radio']], NZL: [[9999, 'radio']], SAF: [[9999, 'radio']], IND: [[9999, 'radio']],
+      GER: [[1942, 'runner'], [9999, 'radio']], SOV: [[9999, 'runner']], JAP: [[9999, 'runner']], ITA: [[9999, 'runner']], FRA: [[9999, 'runner']], VIC: [[9999, 'runner']], _: [[9999, 'runner']],
+    } as Record<string, [number, PhoneFallback][]>,
+  },
+  /**
+   * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+   * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+   * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+   * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+   * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+   * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+   * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+   * nerve, its count or its size). Nothing here draws on the dice.
+   *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+   *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+   *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+   *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+   *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+   *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+   *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+   *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+   *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+   *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+   *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+   *       battleorder.org): 4 of a company of 142.
+   *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+   *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+   *       squad (med-dept.com, The WW2 Aid Station).
+   *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+   *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+   *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+   *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+   *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+   *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+   *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+   *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+   *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+   *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+   *       Carded for Record in WWII): knob (DD 18:36Z).
+   *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+   *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+   *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+   *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+   *       knobs (DD 18:36Z).
+   *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+   */
+  bearers: {
+    killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 } as Record<string, number>,
+    share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 } as Record<string, number>,
+    litter: 4,
+    aid: 503,
+    pace: 3.048,
+    light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 },
+  },
 };
+/** How orders go to a block whose telephone wire is down (LAND.phones.fallback): by the wireless or by a runner. */
+export type PhoneFallback = 'radio' | 'runner';
+/** Field telephone lines: the lines to each block of this army (LAND.phones.lines; '_' for an army not listed). */
+export const phoneLines = (nat: string): number => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+/** Field telephone lines: how this army's orders go in this year once a wire is down (LAND.phones.fallback). */
+export const phoneFallback = (nat: string, year: number): PhoneFallback => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? 'runner';
 
 /** How far a block's fire carries: its team's reach, or its kind's. */
 export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);
+/** Night patrol: the men in an army's reconnaissance patrol (LAND.patrol.size; every army not listed, '_'). */
+export const patrolSize = (nat: string): number => LAND.patrol.size[nat] ?? LAND.patrol.size._;
 /** Its gun numbers: its team's, or the guns' (only for a gun block). */
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
+/** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */
+export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+/** An army's stretcher bearers, as a share of a block's men (LAND.bearers.share): its own, or every other army's. */
+export const bearerShare = (nat: string): number => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+/** An army's share of each loss killed, the rest wounded (LAND.bearers.killed): its own, or every other army's. */
+export const killedShare = (nat: string): number => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;

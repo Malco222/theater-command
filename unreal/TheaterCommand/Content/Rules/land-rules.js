@@ -1,14 +1,14 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 3aed485f 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b46a99b5 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // src/battle/core/types.ts
+  // ../../src/battle/core/types.ts
   var DT = 0.1;
 
-  // src/battle/core/cues.ts
+  // ../../src/battle/core/cues.ts
   var LOOPS = {
     // Men in a fight carry no loop of their own: their rifles and machine guns, by nation, and the shared beds are the fight.
     foot: { march: "marching_loop", run: "marching_loop" },
@@ -28,7 +28,7 @@
     contact: "whistle_long"
   };
 
-  // src/core/rng.ts
+  // ../../src/core/rng.ts
   var Rng = class _Rng {
     constructor(seed) {
       __publicField(this, "s");
@@ -79,7 +79,7 @@
     return h >>> 0;
   }
 
-  // data/campaign/ground.json
+  // ../../data/campaign/ground.json
   var ground_default = {
     _note: "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
     attack: {
@@ -128,7 +128,7 @@
     }
   };
 
-  // data/campaign/support.json
+  // ../../data/campaign/support.json
   var support_default = {
     _about: "What you bring and what you face (the design director's rulings 146, 150 and 152; the Historian's anti-tank-and-support-weapons.md). The grand campaign only: a historical scenario is worked out as it always was. Every defence has an anti-tank strength from 0 to 1, and the tanks' edge (the +25% against a defence with no armour, and the break-in into a dug-in line) shrinks by it. Machine guns, mortars, assault rifles and snipers each have a job in place of 6% on everything. And a battle's losses fall on what the defence can kill.",
     antiTank: {
@@ -167,11 +167,13 @@
     tech: { antiTank: "antitank", tankDestroyers: "tankdestroyers", handHeld: "assaultrifles", support: "smg", armour: ["mediums", "heavies", "latetanks"] }
   };
 
-  // src/battle/land/rules.ts
+  // ../../src/battle/land/rules.ts
   var ARMS = ground_default.arms;
   var SUPPORT_COVER = support_default.antiTank.alone.cover;
   var TEAMS = ["mg", "mor"];
   var MOTION = { inf: "foot", mtn: "foot", cav: "foot", eng: "foot", mot: "wheels", arm: "tracks", art: "guns", fort: "fixed" };
+  var HEDGE_NEAR = 12;
+  var LOCATE = { secs: 25, fire: 0.5 };
   var LAND = {
     /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
     speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 },
@@ -222,10 +224,21 @@
      * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
      * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
      * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
-     * player orders a run, or the battle is opened with radio on.
+     * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
+     * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
+     * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
+     * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
+     * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
+     * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
+     * tank; two T-34s in five to 1943) and the rest as its army's foot.
      */
     double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 }, exposed: 1.25, blows: 0.75, winded: 20 },
-    radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
+    radio: {
+      delay: 5,
+      cut: 3.5,
+      hqAt: 0.5,
+      nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] }
+    },
     /**
      * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
      * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
@@ -245,8 +258,7 @@
      * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
      * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
      * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
-     * itself away) unless it is ordered to attack
-     * or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+     * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
      * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
      * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
      * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
@@ -254,12 +266,64 @@
      * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
      * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
      * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+     *
+     * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
+     * Germans could see them"):
+     * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
+     *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
+     *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
+     *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
+     * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
+     *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
+     * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
+     * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
+     *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
+     * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
+     *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
+     *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
      */
     hide: {
       sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 },
+      heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 },
       ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
-      surprise: { secs: 20, punch: 1.5, nerve: 2 },
+      forest: 100,
+      surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
+      locate: LOCATE,
+      search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
+      hedge: { near: HEDGE_NEAR, gap: 3 },
       staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
+    },
+    /**
+     * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+     * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+     * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+     * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+     * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+     * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+     * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+     * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+     * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+     * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+     * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+     * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+     * 1937, sec. 35).
+     *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+     *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+     *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+     *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+     *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+     *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+     *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+     *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+     *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+     *     Its pictures, and the men its block loses when it is caught.
+     *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+     */
+    patrol: {
+      found: 0.4,
+      caught: 0.3,
+      size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 },
+      night: { t0: -2400, t1: -600 }
     },
     teams: {
       mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
@@ -429,6 +493,16 @@
      * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
      */
     blocks: { least: 6, regiments: 3 },
+    /**
+     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+     */
+    scale: { budget: 8500, step: 5, page: 24e3 },
     /** The army breaks when this share of its power is running or gone. */
     breaks: 0.5,
     /**
@@ -483,6 +557,12 @@
     press: 600,
     /** Seconds of battle time before the defender is counted as having held. */
     limit: 360,
+    /**
+     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+     * clear dry ground to come on at, in field cells in from the edge and along it either way.
+     */
+    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
     /**
      * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
      * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
@@ -542,12 +622,217 @@
       bombs: 2,
       toss: 1.5,
       bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 }
+    },
+    /**
+     * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+     * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+     * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+     * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+     * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+     * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+     * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+     * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+     * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+     * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+     * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+     * where cutters (and a cut's gap) change the fight, and only with that switch on.
+     *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+     *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+     *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+     *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
+     *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+     *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+     *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+     *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+     *     ruling 242 C3).
+     *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+     */
+    cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+    /**
+     * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+     * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+     * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+     * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+     * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+     * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+     * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+     * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+     * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+     * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+     * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
+     * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+     *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+     *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+     *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+     *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+     *     back for its air strikes is held back whole (the air is not touched).
+     *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+     *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+     *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+     *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+     *     1.52 m/s (FM 22-5).
+     *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+     *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+     *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+     *     fits").
+     *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+     *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+     *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+     *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+     *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+     *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+     *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+     *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+     *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+     *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+     *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+     *       (the historian, H5): 22 s is the design director's knob.
+     *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+     *       front (ruling 242 as amended).
+     *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+     *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+     *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+     *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+     *     France's (none today; theirs too once H5 finds France a means).
+     */
+    smoke: {
+      share: LOCATE.fire,
+      count: 2,
+      perMin: 15,
+      front: 30,
+      means: {
+        USA: { reach: 195, hang: 30 },
+        UK: { reach: 457, hang: 30, count: 3 },
+        GER: { reach: 30, hang: 22 },
+        SOV: { reach: 30, hang: 22 },
+        JAP: { reach: 188, hang: 22 },
+        ITA: { reach: 0, hang: 19 }
+      },
+      kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
+    },
+    /**
+     * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+     * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+     * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+     * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+     * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+     * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+     * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+     * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+     * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+     * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+     * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+     * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+     * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+     *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+     *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+     *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+     *     Division, 1945).
+     *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+     *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+     *     battle seconds a real minute. Finding the break is not counted (no source).
+     *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+     *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+     *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+     *     Every other army 1 ('_').
+     *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+     *     nations): how orders go once the wire is down.
+     *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+     *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+     *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+     *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+     *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+     *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+     *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+     *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+     *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+     */
+    phones: {
+      cut: 0.12,
+      splice: 30,
+      runner: 6,
+      lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 },
+      fallback: {
+        USA: [[1942, "runner"], [9999, "radio"]],
+        UK: [[9999, "radio"]],
+        CAN: [[9999, "radio"]],
+        AUS: [[9999, "radio"]],
+        NZL: [[9999, "radio"]],
+        SAF: [[9999, "radio"]],
+        IND: [[9999, "radio"]],
+        GER: [[1942, "runner"], [9999, "radio"]],
+        SOV: [[9999, "runner"]],
+        JAP: [[9999, "runner"]],
+        ITA: [[9999, "runner"]],
+        FRA: [[9999, "runner"]],
+        VIC: [[9999, "runner"]],
+        _: [[9999, "runner"]]
+      }
+    },
+    /**
+     * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+     * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+     * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+     * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+     * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+     * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+     * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+     * nerve, its count or its size). Nothing here draws on the dice.
+     *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+     *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+     *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+     *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+     *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+     *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+     *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+     *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+     *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+     *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+     *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+     *       battleorder.org): 4 of a company of 142.
+     *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+     *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+     *       squad (med-dept.com, The WW2 Aid Station).
+     *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+     *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+     *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+     *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+     *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+     *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+     *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+     *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+     *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+     *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+     *       Carded for Record in WWII): knob (DD 18:36Z).
+     *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+     *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+     *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+     *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+     *       knobs (DD 18:36Z).
+     *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+     */
+    bearers: {
+      killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 },
+      share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 },
+      litter: 4,
+      aid: 503,
+      pace: 3.048,
+      light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 }
     }
   };
+  var phoneLines = (nat) => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+  var phoneFallback = (nat, year) => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? "runner";
   var reachOf = (u) => u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind];
+  var patrolSize = (nat) => LAND.patrol.size[nat] ?? LAND.patrol.size._;
   var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
+  var smokeMeans = (nat) => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+  var bearerShare = (nat) => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+  var killedShare = (nat) => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;
 
-  // data/battle/city-plans.json
+  // ../../data/battle/city-plans.json
   var city_plans_default = {
     _doc: [
       "Each real capital's and city's kept street plan (the design director, b618 and b625). A city's plan is laid from its own name: plan 1 from 'streets:<town>', plan n from 'streets:<town>#n'. Each city keeps the first plan of its own sequence that, fought as it will be fought (its own river or shore in the lie of each of its real attacks, on its kind's 24 equal tickets), sits within 7 points of its kind and runs no more than one fight in ten to the clock. Picked by that rule, never by eye. A city not listed keeps plan 1.",
@@ -649,7 +934,7 @@
     }
   };
 
-  // src/battle/land/field.ts
+  // ../../src/battle/land/field.ts
   var GROUNDS = ["open", "field", "woods", "rough", "marsh", "water", "road", "bridge", "buildings", "rock", "bunker", "works", "blown", "suburb", "industry", "park"];
   var G = Object.fromEntries(GROUNDS.map((k, i) => [k, i]));
   var FIELD = { w: 3e3, h: 2e3, cell: 25 };
@@ -1432,12 +1717,14 @@
     }
     return { storeys, landmark, streetEdge };
   }
+  var UNDUG = ["water", "bridge", "blown", "buildings", "industry", "bunker", "works"];
+  var diggable = (g) => !UNDUG.includes(g);
   function digWorks(f, x, y, w, d) {
     for (let yy = y - d / 2 - 15; yy <= y + d / 2 + 15; yy += f.cell / 2) for (let xx = x - w / 2; xx <= x + w / 2; xx += f.cell / 2) {
       const c = Math.floor(xx / f.cell), r = Math.floor(yy / f.cell);
       if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
       const i = r * f.cols + c, k = GROUNDS[f.ground[i]];
-      if (k !== "water" && k !== "bridge" && k !== "blown" && k !== "buildings" && k !== "industry" && k !== "bunker" && k !== "works") {
+      if (diggable(k)) {
         (f.dugInto ?? (f.dugInto = {}))[i] = f.ground[i];
         f.ground[i] = G.works;
       }
@@ -1457,7 +1744,7 @@
     return f.height[r * f.cols + c];
   }
 
-  // src/battle/core/geometry.ts
+  // ../../src/battle/core/geometry.ts
   var TAU = Math.PI * 2;
   var bearing = (x0, y0, x1, y1) => Math.atan2(x1 - x0, y1 - y0);
   var turn = (a, b) => {
@@ -1477,7 +1764,7 @@
   var ahead = (face) => [Math.sin(face), Math.cos(face)];
   var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
-  // src/battle/core/result.ts
+  // ../../src/battle/core/result.ts
   var RATIO = {
     /** The campaign's line between taking the ground and being thrown back. */
     carry: 1.2,
@@ -1513,7 +1800,7 @@
     return Math.min(odds * dice[1], Math.max(odds * dice[0], R));
   }
 
-  // src/battle/core/select.ts
+  // ../../src/battle/core/select.ts
   function lineUp(units, side, x0, y0, x1, y1, gap = 120) {
     if (!units.length) return [];
     let len = dist(x0, y0, x1, y1);
@@ -1536,7 +1823,7 @@
     });
   }
 
-  // data/battle/land-styles.json
+  // ../../data/battle/land-styles.json
   var land_styles_default = {
     _doc: [
       "How the computer general fights on the land field (the tactics panel, item 1; Brian, 19 Nov: 'more general themes', 'loosely to history or not at all', 'a sandbox to play and make your own history').",
@@ -1561,7 +1848,7 @@
     dial: { absent: 3, pickFrom: 4 }
   };
 
-  // data/battle/lean.json
+  // ../../data/battle/lean.json
   var lean_default = {
     _doc: [
       "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
@@ -1582,7 +1869,7 @@
     standIn: { night: "bold", "last-stand": "bold" }
   };
 
-  // src/battle/land/styles.ts
+  // ../../src/battle/land/styles.ts
   var D = land_styles_default;
   var STYLES = Object.fromEntries(
     Object.keys(D.styles).map((id) => [id, { id, ...D.styles[id] }])
@@ -1644,7 +1931,7 @@
     return STYLES[stopOfTicket(t) >= D.dial.pickFrom ? pickFor(t, side) : leanFor(s, side)];
   }
 
-  // src/battle/land/ai.ts
+  // ../../src/battle/land/ai.ts
   var ok = (u) => u.state !== "gone" && u.state !== "withdrawn" && u.state !== "routing";
   var isFoot = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
@@ -1656,17 +1943,67 @@
     const foes = b.units.filter((u) => u.side !== side && ok(u) && !u.hid);
     if (!foes.length) {
       if (side === "att" && b.units.some((u) => u.side !== side && ok(u))) probe(b, side, mine);
+      if (side === "att" && b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
       return;
     }
     const style = b.style[side];
+    const stand = b.relief && b.hasJoiners(side) ? relieve(b, side, mine, foes) : null;
     if (side === "att") {
-      if (style) planned(b, side, style, mine, foes);
-      else plain(b, side, mine, foes);
+      sendOn(b, side, mine, foes, stand);
+      const line = mine.some((u) => u.reserve === "sent" || stand?.has(u.id)) ? mine.filter((u) => u.reserve !== "sent" && !stand?.has(u.id)) : mine;
+      if (style) planned(b, side, style, line, foes);
+      else plain(b, side, line, foes);
       if (b.measured) seekFlanks(b, side, mine);
+      if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
+      if (b.smoke) smokeIn(b, side, mine, foes);
       return;
     }
-    defend(b, side, style, mine, foes);
+    defend(b, side, style, mine, foes, stand);
     if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === "sent"));
+    if (b.smoke) smokeIn(b, side, mine, foes);
+  }
+  function smokeIn(b, side, mine, foes) {
+    const P = b.plan[side];
+    if (side === "att" && P && P.went === null) return;
+    for (const u of mine) {
+      if (!hasTarget(u, foes) || u.waits && !u.waits.free) continue;
+      if (side === "def" && u.reserve !== "sent" && dist(u.x, u.y, u.home[0], u.home[1]) < LAND.hold.within) continue;
+      if (b.smokeWhy(u) !== null) continue;
+      const t = foes.find((f) => f.id === u.order.target), gap = b.gap(u, t);
+      if (gap > reachOf(u)) continue;
+      const m = b.smokeOf(u), k = Math.hypot(t.x - u.x, t.y - u.y);
+      if (k < 1e-6) continue;
+      const dx = (t.x - u.x) / k, dy = (t.y - u.y) / k, [fx, fy] = [Math.sin(u.face), Math.cos(u.face)];
+      const on = Math.min(m.reach, gap / 2), mx = u.x + fx * u.d / 2 + dx * on, my = u.y + fy * u.d / 2 + dy * on, h = u.w / 2;
+      b.command({ do: "land:smoke", units: [u.id], x0: mx - dy * h, y0: my + dx * h, x1: mx + dy * h, y1: my - dx * h }, side);
+    }
+  }
+  function searchCover(b, side, mine) {
+    const F = LAND.hide.search, dir = side === "att" ? 1 : -1, step = b.hedges.length ? 10 : b.field.cell;
+    for (const u of mine) {
+      if (u.waits && !u.waits.free) continue;
+      if (u.kind === "art" && !u.team || u.engaged !== void 0 || u.order?.kind === "withdraw") {
+        if (u.engaged === void 0) {
+          delete u.search;
+          delete u.searchR;
+        }
+        continue;
+      }
+      const ahead2 = Math.min(F.ahead, reachOf(u)), r = ahead2 / 2;
+      const x = u.x, y = u.y + dir * (u.d / 2 + r);
+      let cover = false;
+      for (let dy = -r; dy <= r + F.reach && !cover; dy += step) for (let dx = -F.lane; dx <= F.lane && !cover; dx += step) {
+        const px = x + dx, py = y + dy;
+        if (px >= 0 && py >= 0 && px < b.field.w && py < b.field.h && (coverAt(b.field, px, py) === "woods" || b.onHedge(px, py))) cover = true;
+      }
+      if (cover) {
+        u.search = [x, y];
+        u.searchR = Math.max(r, F.lane);
+      } else {
+        delete u.search;
+        delete u.searchR;
+      }
+    }
   }
   function seekFlanks(b, side, mine) {
     const A = LAND.armour, dir = side === "att" ? 1 : -1;
@@ -1744,10 +2081,36 @@
       by(b, side, u, t);
     }
   }
+  var struckOf = (mine, foes) => mine.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  function sendOn(b, side, mine, foes, skip = null) {
+    const sent = mine.filter((u) => u.reserve === "sent" && u.kind !== "art" && u.order?.kind !== "withdraw" && !hasTarget(u, foes) && !skip?.has(u.id));
+    if (!sent.length) return;
+    const struck = struckOf(mine, foes);
+    if (!struck.length) return;
+    sent.forEach((u, i) => by(b, side, u, foes.find((f) => f.id === struck[i % struck.length].engaged)));
+  }
+  function relieve(b, side, mine, foes) {
+    const skip = /* @__PURE__ */ new Set();
+    for (const u of struckOf(mine, foes)) if (b.waitWhy(u) === null) b.command({ do: "land:wait", units: [u.id] }, side);
+    const waiting = b.units.filter((u) => u.side === side && ok(u) && u.waits && !u.waits.free).sort((a, c) => a.str / a.str0 - c.str / c.str0 || a.id - c.id);
+    for (const w of waiting) {
+      skip.add(w.id);
+      const near = (r4) => dist(r4.x, r4.y, w.x, w.y);
+      const rs = mine.filter((r4) => r4.corps === w.waits.corps && r4.joined !== void 0 && r4.kind !== "art" && r4.order?.kind !== "withdraw" && !(r4.waits && !r4.waits.free) && !skip.has(r4.id));
+      if (!rs.length) continue;
+      const r = rs.reduce((m, x) => near(x) < near(m) - 1e-9 || Math.abs(near(x) - near(m)) <= 1e-9 && x.id < m.id ? x : m);
+      skip.add(r.id);
+      const foe = w.engaged !== void 0 ? foes.find((f) => f.id === w.engaged) : void 0;
+      if (foe) {
+        if (!(r.order?.kind === "attack" && r.order.target === foe.id)) by(b, side, r, foe);
+      } else if (!(r.order?.kind === "move" && dist(r.order.x, r.order.y, w.x, w.y) <= LAND.alone.near)) b.command({ do: "move", units: [r.id], x: w.x, y: w.y }, side);
+    }
+    return skip;
+  }
   var weight = (u) => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
   function makePlan(b, side, s, mine, foes) {
     const P = { phase: s.plan ? "guns" : "assault", main: [], startY: null, role: {}, group: {}, spot: {}, arrived: null, went: null, hook: {} };
-    const rest = mine.filter((u) => u.kind !== "art");
+    const rest = mine.filter((u) => u.kind !== "art" && u.reserve !== "sent");
     if (!s.plan || !rest.length) {
       for (const u of rest) P.role[u.id] = "pin";
       P.went = 0;
@@ -1951,7 +2314,7 @@
     b.command({ do: "move", units: [u.id], x: want, y: u.home[1], face: Math.PI }, side);
     b.reserveSeen(side, near.foe);
   }
-  function defend(b, side, style, mine, foes) {
+  function defend(b, side, style, mine, foes, skip = null) {
     const leash = style?.defLeash ?? 300, finish = style?.defFinish ?? 150;
     const edge = b.field.streetEdge, cell = b.field.cell;
     const outside = (f) => {
@@ -1959,16 +2322,17 @@
       const y = edge[Math.min(edge.length - 1, Math.max(0, Math.floor(f.x / cell)))];
       return y < 0 || f.y < y;
     };
-    const struck = mine.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+    const struck = struckOf(mine, foes);
     let next = 0;
     const sendTo = (u) => {
       const at = struck[next++ % struck.length];
       u.reserve = "sent";
       by(b, side, u, foes.find((f) => f.id === at.engaged));
     };
-    const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
+    const shift = b.alertedStaff(side) ? Infinity : style?.defShift;
+    const near = !struck.length && shift ? coming(b, mine, foes, shift) : null;
     for (const u of mine) {
-      if (u.kind === "art" || u.order?.kind === "withdraw") continue;
+      if (u.kind === "art" || u.order?.kind === "withdraw" || skip?.has(u.id)) continue;
       if (u.hid && u.reserve !== "held") continue;
       if (u.reserve === "held") {
         if (struck.length) sendTo(u);
@@ -2004,7 +2368,7 @@
     }
   }
 
-  // src/battle/land/crew-names.ts
+  // ../../src/battle/land/crew-names.ts
   var same = (xs) => xs.map((name) => ({ name, en: name }));
   var pairs = (xs) => xs.map(([name, en]) => ({ name, en }));
   var CREW_NAMES = {
@@ -2018,7 +2382,7 @@
     POL: pairs([["Ryś", "Lynx"], ["Kania", "Kite"], ["Dzik", "Boar"], ["Smok", "Dragon"], ["Wisła", "Vistula"], ["Warta", "Warta"], ["Mazur", "The Masurian"], ["Kurpie", "Kurpie"], ["Wawel", "Wawel"], ["Jadzia", "Jadzia"], ["Halinka", "Halinka"], ["Kasia", "Kasia"], ["Śmiały", "Bold"], ["Wierny", "Faithful"], ["Bystry", "Swift"], ["Sokół", "Falcon"], ["Góral", "Highlander"]])
   };
 
-  // src/battle/land/crews.ts
+  // ../../src/battle/land/crews.ts
   var CREWS = {
     /** A unit that has come through this many battles is a veteran: its crews have named their tanks. */
     veteran: 3,
@@ -2069,7 +2433,7 @@
     return crewMarks(u.nat, u.kind, battles, u.figures0, `${u.corps}:${u.name}`);
   }
 
-  // src/core/ticket.ts
+  // ../../src/core/ticket.ts
   function turnToDate(turn3) {
     const idx = 8 + (turn3 - 1);
     const year = 1939 + Math.floor(idx / 12);
@@ -2078,7 +2442,7 @@
     return { year, month, label: `${names[month]} ${year}` };
   }
 
-  // src/battle/land/shells.ts
+  // ../../src/battle/land/shells.ts
   var REACH = { light: 4, mortar: 9, field: 11, howitzer: 15, heavy: 23, bomb: 45 };
   var CRATER = { light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3, bomb: 7 };
   var SHELLS_FROM = ["art", "arm"];
@@ -2148,10 +2512,10 @@
     return MODEL_CAL[m] ?? MODEL_CAL[modelOf(kind, "", year)];
   }
 
-  // data/battle/armour.json
-  var armour_default = { _about: ["Measured armour and guns (release 2; Brian, 22 November 04:03Z to 04:16Z: 'the named tanks have real advantages from their measured performance against their peers; German tanks are far weaker at the back, so hits there pay'). Built by tools/build-armour.mjs from the land vehicle modeller's sheet (performance-land.json); the historian checks the figures (sure: high, medium, low, or design for our own inventions). Do not edit by hand: rebuild.", "ranges: metres. duels[shooter][target][face]: the chance a hit on that face comes through at each range (before: the same before the shooter had its hollow-charge round, from the month models[shooter].heat). models[name]: kills, the share of the hits that come through that put her out of the fight (the shooter's gun); fire, how often one that comes through sets her burning, by face; explodes, how often a fire reaches her ammunition."], source: "performance-land.json", ranges: [100, 500, 1e3, 1500, 2e3], models: { Tiger: { kills: 0.85, fire: { front: 0.45, side: 0.65, rear: 0.75 }, explodes: 0.25, sure: "high" }, Panther: { kills: 0.75, fire: { front: 0.45, side: 0.65, rear: 0.8 }, explodes: 0.3, sure: "high" }, PanzerIV: { kills: 0.75, fire: { front: 0.5, side: 0.7, rear: 0.75 }, explodes: 0.3, sure: "high" }, "PanzerIV:short": { kills: 0.75, fire: { front: 0.5, side: 0.7, rear: 0.75 }, explodes: 0.3, heat: "1942-03", sure: "high" }, StuG3: { kills: 0.75, fire: { front: 0.5, side: 0.65, rear: 0.75 }, explodes: 0.3, sure: "high" }, Hummel: { kills: 0.95, fire: { front: 0.6, side: 0.7, rear: 0.75 }, explodes: 0.45, sure: "medium" }, Hanomag: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "high" }, SdKfz222: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "medium" }, FlakHalftrack: { kills: 0.28, fire: { front: 0.6, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "medium" }, Pak40: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, sure: "high" }, leFH18: { kills: 0.95, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, heat: "1942-01", sure: "high" }, T34: { kills: 0.75, fire: { front: 0.3, side: 0.5, rear: 0.45 }, explodes: 0.45, sure: "high" }, "T34-85": { kills: 0.85, fire: { front: 0.3, side: 0.5, rear: 0.45 }, explodes: 0.45, sure: "high" }, KV1: { kills: 0.75, fire: { front: 0.25, side: 0.4, rear: 0.45 }, explodes: 0.35, sure: "medium" }, SU85: { kills: 0.85, fire: { front: 0.3, side: 0.5, rear: 0.45 }, explodes: 0.45, sure: "medium" }, SU76: { kills: 0.75, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, sure: "medium" }, ZiS3: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, sure: "high" }, Sherman: { kills: 0.75, fire: { front: 0.6, side: 0.8, rear: 0.7 }, explodes: 0.25, sure: "high" }, M10: { kills: 0.75, fire: { front: 0.35, side: 0.5, rear: 0.45 }, explodes: 0.25, sure: "high" }, M7: { kills: 0.95, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, heat: "1942-06", sure: "high" }, M3Halftrack: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "high" }, M16: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "high" }, M8: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.2, sure: "high" }, Howitzer105: { kills: 0.95, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, heat: "1942-06", sure: "high" }, Matilda: { kills: 0.38, fire: { front: 0.2, side: 0.3, rear: 0.4 }, explodes: 0.2, sure: "medium" }, Sexton: { kills: 0.73, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, sure: "medium" }, "25pdr": { kills: 0.73, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, sure: "high" }, CharB1: { kills: 0.6, fire: { front: 0.4, side: 0.55, rear: 0.6 }, explodes: 0.25, sure: "medium" }, Gun75: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, sure: "medium" }, M13: { kills: 0.6, fire: { front: 0.35, side: 0.45, rear: 0.5 }, explodes: 0.25, sure: "medium" }, Semovente: { kills: 0.75, fire: { front: 0.35, side: 0.45, rear: 0.5 }, explodes: 0.25, heat: "1942-04", sure: "medium" }, L3: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, sure: "medium" }, Type97: { kills: 0.6, fire: { front: 0.3, side: 0.4, rear: 0.45 }, explodes: 0.25, sure: "medium" }, "7TP": { kills: 0.38, fire: { front: 0.3, side: 0.4, rear: 0.45 }, explodes: 0.2, sure: "medium" }, LightTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, sure: "design" }, MediumTank: { kills: 0.6, fire: { front: 0.45, side: 0.6, rear: 0.7 }, explodes: 0.25, sure: "design" }, AssaultGun: { kills: 0.75, fire: { front: 0.45, side: 0.6, rear: 0.7 }, explodes: 0.25, sure: "design" }, SelfPropelledGun: { kills: 0.75, fire: { front: 0.55, side: 0.65, rear: 0.7 }, explodes: 0.35, sure: "design" }, ArmouredCar: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.15, sure: "design" }, AntiTankGun: { kills: 0.48, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, sure: "medium" }, Truck: { kills: 0, fire: { front: 0.4, side: 0.4, rear: 0.4 }, explodes: 0.05, sure: "design" }, FlakTruck: { kills: 0.28, fire: { front: 0.5, side: 0.5, rear: 0.5 }, explodes: 0.1, sure: "design" }, WhatIf_BreakthroughTank: { kills: 0.75, fire: { front: 0.4, side: 0.55, rear: 0.7 }, explodes: 0.25, sure: "design" }, WhatIf_TankHunterCar: { kills: 0.75, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.25, sure: "design" }, WhatIf_FlameTank: { kills: 0.28, fire: { front: 0.55, side: 0.75, rear: 0.85 }, explodes: 0.35, sure: "design" }, WhatIf_AmphibiousTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, sure: "design" }, WhatIf_SnowTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, sure: "design" }, WhatIf_GliderTank: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.65 }, explodes: 0.2, sure: "design" } }, duels: { Tiger: { Tiger: { front: [0.95, 0.95, 0.85, 0.53, 0.21], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Panther: { front: [0.53, 0.5, 0.46, 0.3, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 1, 1, 0.87], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [1, 0.92, 0.56, 0.17, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Panther: { Tiger: { front: [0.95, 0.95, 0.95, 0.81, 0.42], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Panther: { front: [0.72, 0.52, 0.5, 0.42, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 1, 1, 0.97], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 1, 1, 0.97], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 1, 1, 0.94], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [1, 1, 0.91, 0.47, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, PanzerIV: { Tiger: { front: [0.93, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.48, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.97] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 0.97] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.77, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { Tiger: { front: [0, 0, 0, 0, 0], side: [0.4, 0.4, 0, 0, 0], rear: [0.17, 0.17, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.26, 0.16, 0.03], rear: [1, 1, 0.05, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.47, 0.41, 0.26, 0.16, 0.03], rear: [0.64, 0.4, 0.05, 0, 0] } }, PanzerIV: { front: [0.42, 0.42, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [0.1, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [0.3, 0.12, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, StuG3: { front: [0.07, 0.07, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.3, 0.3, 0.3], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [0.54, 0.4, 0.3, 0.3, 0.3] } }, Hummel: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.35, 0.35, 0, 0, 0], side: [1, 1, 0.07, 0.01, 0], rear: [0.93, 0.93, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.33, 0.24, 0.07, 0.01, 0], rear: [0.01, 0, 0, 0, 0] } }, "T34-85": { front: [0.05, 0.05, 0, 0, 0], side: [0.7, 0.7, 0.07, 0.01, 0], rear: [0.93, 0.93, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.32, 0.24, 0.07, 0.01, 0], rear: [0.06, 0.01, 0, 0, 0] } }, KV1: { front: [0.01, 0.01, 0, 0, 0], side: [0.43, 0.43, 0, 0, 0], rear: [0.51, 0.51, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [0.7, 0.7, 0, 0, 0], side: [1, 1, 0.1, 0.01, 0], rear: [0.9, 0.9, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.76, 0.53, 0.1, 0.01, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 0.58, 0.53, 0.46], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.8, 0.72, 0.58, 0.53, 0.46], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.22, 0.22, 0, 0, 0], side: [1, 1, 0.66, 0.49, 0.17], rear: [1, 1, 0.62, 0.44, 0.13], before: { front: [0, 0, 0, 0, 0], side: [0.79, 0.73, 0.66, 0.49, 0.17], rear: [0.8, 0.74, 0.62, 0.44, 0.13] } }, M10: { front: [0.64, 0.64, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [0.3, 0.3, 0, 0, 0], side: [0.71, 0.71, 0, 0, 0], rear: [0.83, 0.83, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.04, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.85, 0.62], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.85, 0.62] } }, CharB1: { front: [1, 1, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0.01, 0, 0, 0, 0], side: [0.15, 0.05, 0, 0, 0], rear: [0.15, 0.05, 0, 0, 0] } }, M13: { front: [1, 1, 0.97, 0.88, 0.72], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 0.97, 0.88, 0.72], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 0.5, 0.41, 0.4], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.93, 0.8, 0.5, 0.41, 0.4], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.11, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.59, 0.59, 0, 0, 0], rear: [0.91, 0.91, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.22, 0.09, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [0.84, 0.84, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 0.64, 0.45, 0.18], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.96, 0.64, 0.45, 0.18], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, StuG3: { Tiger: { front: [0.93, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.48, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.97] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 0.97] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.77, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.6, 0.41, 0, 0], rear: [1, 0.5, 0.4, 0, 0] }, Hanomag: { front: [1, 0.4, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.13, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.33, 0, 0], rear: [1, 0.98, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.2, 0, 0, 0, 0], rear: [0.26, 0, 0, 0, 0] }, M7: { front: [0.5, 0.46, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0, 0, 0, 0], side: [1, 0.65, 0.48, 0, 0], rear: [1, 0.66, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.48, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0.38, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.4, 0, 0, 0], side: [1, 0.98, 0, 0, 0], rear: [1, 0.98, 0.6, 0, 0] }, LightTank: { front: [0.15, 0, 0, 0, 0], side: [1, 0.96, 0, 0, 0], rear: [1, 0.98, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.34, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 0.97, 0.05, 0, 0], rear: [1, 0.97, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [1, 0.63, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.59, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, FlakHalftrack: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.6, 0.41, 0, 0], rear: [1, 0.5, 0.4, 0, 0] }, Hanomag: { front: [1, 0.4, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.13, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.33, 0, 0], rear: [1, 0.98, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.2, 0, 0, 0, 0], rear: [0.26, 0, 0, 0, 0] }, M7: { front: [0.5, 0.46, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0, 0, 0, 0], side: [1, 0.65, 0.48, 0, 0], rear: [1, 0.66, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.48, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0.38, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.4, 0, 0, 0], side: [1, 0.98, 0, 0, 0], rear: [1, 0.98, 0.6, 0, 0] }, LightTank: { front: [0.15, 0, 0, 0, 0], side: [1, 0.96, 0, 0, 0], rear: [1, 0.98, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.34, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 0.97, 0.05, 0, 0], rear: [1, 0.97, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [1, 0.63, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.59, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, Pak40: { Tiger: { front: [0.94, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.49, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.97] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 0.97] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.83, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, leFH18: { Tiger: { front: [0.19, 0.19, 0.19, 0, 0], side: [1, 1, 1, 0.03, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.24, 0.17, 0.1, 0.03, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.13, 0.13, 0.13, 0, 0], side: [1, 1, 1, 0.73, 0.57], rear: [1, 1, 1, 0.98, 0.87], before: { front: [0, 0, 0, 0, 0], side: [1, 0.95, 0.85, 0.73, 0.57], rear: [1, 1, 1, 0.98, 0.87] } }, PanzerIV: { front: [1, 1, 1, 0.27, 0.17], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.33, 0.32, 0.3, 0.27, 0.17], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { front: [1, 1, 1, 0.83, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.98, 0.97, 0.95, 0.83, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.7], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.7] } }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0.56, 0.41], rear: [1, 1, 1, 0.17, 0.06], before: { front: [0.23, 0.11, 0.04, 0, 0], side: [1, 0.92, 0.75, 0.56, 0.41], rear: [0.72, 0.5, 0.31, 0.17, 0.06] } }, "T34-85": { front: [0.9, 0.9, 0.9, 0, 0], side: [1, 1, 1, 0.41, 0.36], rear: [1, 1, 1, 0.25, 0.13], before: { front: [0.01, 0, 0, 0, 0], side: [0.65, 0.58, 0.5, 0.41, 0.36], rear: [0.72, 0.5, 0.37, 0.25, 0.13] } }, KV1: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.04, 0, 0, 0, 0], rear: [0.1, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0.03, 0], side: [1, 1, 1, 1, 0.92], rear: [1, 1, 1, 0, 0], before: { front: [0.42, 0.17, 0.08, 0.03, 0], side: [1, 1, 1, 1, 0.92], rear: [0.58, 0.24, 0.06, 0, 0] } }, SU76: { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.87, 0.87, 0.87, 0.04, 0], side: [1, 1, 1, 0.96, 0.86], rear: [1, 1, 1, 0.96, 0.87], before: { front: [0.22, 0.17, 0.1, 0.04, 0], side: [1, 1, 1, 0.96, 0.86], rear: [1, 1, 1, 0.96, 0.87] } }, M10: { front: [1, 1, 1, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.48, 0.27, 0.12, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 1, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.88, 0.73, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0.34, 0.14], before: { front: [0.02, 0, 0, 0, 0], side: [0.22, 0.03, 0, 0, 0], rear: [0.67, 0.65, 0.53, 0.34, 0.14] } }, Sexton: { front: [1, 1, 1, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.88, 0.73, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, CharB1: { front: [1, 1, 1, 0.11, 0.04], side: [1, 1, 1, 0.63, 0.33], rear: [1, 1, 1, 0.63, 0.33], before: { front: [0.8, 0.51, 0.28, 0.11, 0.04], side: [1, 0.99, 0.87, 0.63, 0.33], rear: [1, 0.99, 0.87, 0.63, 0.33] } }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 1, 0.47, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.9, 0.72, 0.47, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { front: [1, 1, 1, 0.11, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.84, 0.55, 0.3, 0.11, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { front: [1, 1, 1, 0.63, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.92, 0.78, 0.63, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0.02, 0.02, 0.02, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0.58, 0.38], before: { front: [0, 0, 0, 0, 0], side: [0.2, 0.03, 0, 0, 0], rear: [0.73, 0.66, 0.65, 0.58, 0.38] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.51, 0.23, 0.1, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, T34: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.59, 0.28, 0.13, 0, 0], rear: [0.4, 0.02, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.86, 0.55, 0.34], rear: [1, 1, 1, 0.84, 0.19] }, PanzerIV: { front: [0.56, 0.35, 0.31, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.96, 0.52, 0.01], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.23, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.31] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.41, 0.29, 0.05, 0, 0], side: [1, 1, 0.77, 0.4, 0.15], rear: [1, 0.79, 0.32, 0.05, 0] }, "T34-85": { front: [0.11, 0.02, 0, 0, 0], side: [0.78, 0.65, 0.49, 0.35, 0.15], rear: [1, 0.79, 0.38, 0.13, 0] }, KV1: { front: [0.05, 0, 0, 0, 0], side: [0.69, 0.18, 0, 0, 0], rear: [0.76, 0.25, 0, 0, 0] }, SU85: { front: [0.9, 0.48, 0.1, 0, 0], side: [1, 1, 1, 0.91, 0.29], rear: [0.99, 0.68, 0.05, 0, 0] }, SU76: { front: [1, 1, 1, 0.88, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.22, 0.11, 0, 0], side: [1, 1, 1, 0.86, 0.7], rear: [1, 1, 1, 0.87, 0.7] }, M10: { front: [0.72, 0.53, 0.12, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.54, 0.12, 0, 0, 0], side: [0.91, 0.44, 0, 0, 0], rear: [0.92, 0.73, 0.58, 0.14, 0] }, Sexton: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 0.93, 0.33, 0.04, 0], side: [1, 1, 0.92, 0.32, 0.01], rear: [1, 1, 0.92, 0.32, 0.01] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.74, 0.2, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.95, 0.34, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.8, 0.51, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.77, 0.37, 0, 0, 0], rear: [0.98, 0.81, 0.65, 0.37, 0.01] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.97, 0.65, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.82], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "T34-85": { Tiger: { front: [0.77, 0.52, 0.17, 0.01, 0], side: [1, 1, 1, 0.99, 0.75], rear: [1, 1, 1, 0.96, 0.62] }, Panther: { front: [0.42, 0.29, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.94, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.81, 0.43], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.64, 0.48], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.82, 0.43, 0.19], side: [1, 1, 1, 0.98, 0.86], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.9, 0.5, 0.17], side: [1, 1, 1, 1, 0.88], rear: [1, 1, 1, 1, 0.92] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.78, 0.41, 0.24], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.94, 0.8], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.96, 0.74], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.41, 0.16, 0.01, 0, 0], side: [1, 1, 1, 0.98, 0.85], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, KV1: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.59, 0.28, 0.13, 0, 0], rear: [0.4, 0.02, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.86, 0.55, 0.34], rear: [1, 1, 1, 0.84, 0.19] }, PanzerIV: { front: [0.56, 0.35, 0.31, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.96, 0.52, 0.01], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.23, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.31] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.41, 0.29, 0.05, 0, 0], side: [1, 1, 0.77, 0.4, 0.15], rear: [1, 0.79, 0.32, 0.05, 0] }, "T34-85": { front: [0.11, 0.02, 0, 0, 0], side: [0.78, 0.65, 0.49, 0.35, 0.15], rear: [1, 0.79, 0.38, 0.13, 0] }, KV1: { front: [0.05, 0, 0, 0, 0], side: [0.69, 0.18, 0, 0, 0], rear: [0.76, 0.25, 0, 0, 0] }, SU85: { front: [0.9, 0.48, 0.1, 0, 0], side: [1, 1, 1, 0.91, 0.29], rear: [0.99, 0.68, 0.05, 0, 0] }, SU76: { front: [1, 1, 1, 0.88, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.22, 0.11, 0, 0], side: [1, 1, 1, 0.86, 0.7], rear: [1, 1, 1, 0.87, 0.7] }, M10: { front: [0.72, 0.53, 0.12, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.54, 0.12, 0, 0, 0], side: [0.91, 0.44, 0, 0, 0], rear: [0.92, 0.73, 0.58, 0.14, 0] }, Sexton: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 0.93, 0.33, 0.04, 0], side: [1, 1, 0.92, 0.32, 0.01], rear: [1, 1, 0.92, 0.32, 0.01] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.74, 0.2, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.95, 0.34, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.8, 0.51, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.77, 0.37, 0, 0, 0], rear: [0.98, 0.81, 0.65, 0.37, 0.01] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.97, 0.65, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.82], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SU85: { Tiger: { front: [0.77, 0.52, 0.17, 0.01, 0], side: [1, 1, 1, 0.99, 0.75], rear: [1, 1, 1, 0.96, 0.62] }, Panther: { front: [0.42, 0.29, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.94, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.81, 0.43], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.64, 0.48], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.82, 0.43, 0.19], side: [1, 1, 1, 0.98, 0.86], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.9, 0.5, 0.17], side: [1, 1, 1, 1, 0.88], rear: [1, 1, 1, 1, 0.92] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.78, 0.41, 0.24], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.94, 0.8], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.96, 0.74], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.41, 0.16, 0.01, 0, 0], side: [1, 1, 1, 0.98, 0.85], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SU76: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.7, 0.34, 0.17, 0.02, 0], rear: [0.55, 0.09, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0.65, 0.38], rear: [1, 1, 1, 0.95, 0.29] }, PanzerIV: { front: [0.65, 0.38, 0.32, 0.24, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.97, 0.73, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.35, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.85, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.44, 0.33, 0.1, 0, 0], side: [1, 1, 0.88, 0.47, 0.2], rear: [1, 0.88, 0.42, 0.12, 0] }, "T34-85": { front: [0.14, 0.04, 0, 0, 0], side: [0.83, 0.68, 0.55, 0.37, 0.2], rear: [1, 0.88, 0.44, 0.21, 0] }, KV1: { front: [0.11, 0, 0, 0, 0], side: [0.82, 0.31, 0, 0, 0], rear: [0.87, 0.39, 0, 0, 0] }, SU85: { front: [0.97, 0.61, 0.14, 0.01, 0], side: [1, 1, 1, 0.99, 0.41], rear: [1, 0.82, 0.13, 0, 0] }, SU76: { front: [1, 1, 1, 0.95, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.23, 0.22, 0.15, 0.02, 0], side: [1, 1, 1, 0.93, 0.71], rear: [1, 1, 1, 0.93, 0.72] }, M10: { front: [0.76, 0.6, 0.21, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.67, 0.21, 0, 0, 0], side: [0.96, 0.6, 0.03, 0, 0], rear: [0.96, 0.78, 0.65, 0.27, 0] }, Sexton: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 0.99, 0.49, 0.08, 0], side: [1, 1, 0.99, 0.52, 0.03], rear: [1, 1, 0.99, 0.52, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.86, 0.35, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.99, 0.51, 0.05, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.89, 0.57, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.82, 0.49, 0.03, 0, 0], rear: [1, 0.87, 0.66, 0.51, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.76, 0.21, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ZiS3: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.7, 0.34, 0.17, 0.02, 0], rear: [0.55, 0.09, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0.65, 0.38], rear: [1, 1, 1, 0.95, 0.29] }, PanzerIV: { front: [0.65, 0.38, 0.32, 0.24, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.97, 0.73, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.35, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.85, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.44, 0.33, 0.1, 0, 0], side: [1, 1, 0.88, 0.47, 0.2], rear: [1, 0.88, 0.42, 0.12, 0] }, "T34-85": { front: [0.14, 0.04, 0, 0, 0], side: [0.83, 0.68, 0.55, 0.37, 0.2], rear: [1, 0.88, 0.44, 0.21, 0] }, KV1: { front: [0.11, 0, 0, 0, 0], side: [0.82, 0.31, 0, 0, 0], rear: [0.87, 0.39, 0, 0, 0] }, SU85: { front: [0.97, 0.61, 0.14, 0.01, 0], side: [1, 1, 1, 0.99, 0.41], rear: [1, 0.82, 0.13, 0, 0] }, SU76: { front: [1, 1, 1, 0.95, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.23, 0.22, 0.15, 0.02, 0], side: [1, 1, 1, 0.93, 0.71], rear: [1, 1, 1, 0.93, 0.72] }, M10: { front: [0.76, 0.6, 0.21, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.67, 0.21, 0, 0, 0], side: [0.96, 0.6, 0.03, 0, 0], rear: [0.96, 0.78, 0.65, 0.27, 0] }, Sexton: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 0.99, 0.49, 0.08, 0], side: [1, 1, 0.99, 0.52, 0.03], rear: [1, 1, 0.99, 0.52, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.86, 0.35, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.99, 0.51, 0.05, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.89, 0.57, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.82, 0.49, 0.03, 0, 0], rear: [1, 0.87, 0.66, 0.51, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.76, 0.21, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.53, 0.28, 0.22, 0.1], rear: [0.82, 0.33, 0.02, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.98, 0.82], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [0.83, 0.51, 0.35, 0.33, 0.3], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.62, 0.18, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.52, 0.39, 0.29, 0.15, 0.03], side: [1, 1, 1, 0.94, 0.71], rear: [1, 0.98, 0.78, 0.52, 0.28] }, "T34-85": { front: [0.25, 0.09, 0.01, 0, 0], side: [0.93, 0.76, 0.65, 0.6, 0.46], rear: [1, 0.98, 0.78, 0.52, 0.35] }, KV1: { front: [0.3, 0.03, 0, 0, 0], side: [0.98, 0.62, 0.18, 0, 0], rear: [0.98, 0.69, 0.25, 0.03, 0] }, SU85: { front: [1, 0.85, 0.47, 0.2, 0.08], side: [1, 1, 1, 1, 1], rear: [1, 0.98, 0.67, 0.26, 0.02] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.28, 0.22, 0.22, 0.19, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [0.85, 0.7, 0.53, 0.3, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.93, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.87, 0.47, 0.12, 0, 0], side: [1, 0.87, 0.44, 0.11, 0], rear: [1, 0.89, 0.73, 0.65, 0.53] }, Sexton: { front: [1, 1, 1, 0.93, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.93, 0.63, 0.26], side: [1, 1, 1, 1, 0.87], rear: [1, 1, 1, 1, 0.87] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.95, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.95, 0.68, 0.26], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.96, 0.75], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.72, 0.37, 0.1, 0], rear: [1, 0.97, 0.81, 0.68, 0.65] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.94, 0.65, 0.33, 0.1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M10: { Tiger: { front: [0.79, 0.56, 0.33, 0.11, 0.01], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 0.92] }, Panther: { front: [0.41, 0.3, 0.18, 0.07, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 0.91], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.98, 0.74], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.94, 0.78, 0.57], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.93, 0.68, 0.34], side: [1, 1, 1, 1, 0.97], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.98, 0.81, 0.42], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.89, 0.64, 0.34], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.43, 0.18, 0.06, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { Tiger: { front: [0.26, 0.26, 0.26, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.17, 0.17, 0.17, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, PanzerIV: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "PanzerIV:short": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hummel: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hanomag: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SdKfz222: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, T34: { front: [0.99, 0.99, 0.99, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "T34-85": { front: [0.95, 0.95, 0.95, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, KV1: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sherman: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M10: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M7: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M8: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, CharB1: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M13: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Semovente: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, L3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Type97: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "7TP": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, LightTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, MediumTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, AssaultGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SelfPropelledGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, ArmouredCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_BreakthroughTank: { front: [0.03, 0.03, 0.03, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_SnowTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_GliderTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } } }, M3Halftrack: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.07, 0, 0], rear: [1, 0.51, 0.11, 0, 0] }, Hanomag: { front: [1, 0.6, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.61, 0, 0] }, SdKfz222: { front: [1, 0.23, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.31, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.12, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.14, 0, 0, 0, 0], rear: [0.21, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0.03, 0, 0, 0], side: [1, 0.68, 0.1, 0, 0], rear: [1, 0.74, 0.36, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.45, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.59, 0, 0, 0, 0], rear: [0.36, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.56, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.81, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.57, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.21, 0, 0] }, LightTank: { front: [0.14, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.14, 0, 0], rear: [0.5, 0.5, 0.15, 0, 0] }, ArmouredCar: { front: [1, 0.56, 0, 0, 0], side: [1, 1, 0.15, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.82, 0, 0, 0], side: [1, 1, 0.21, 0, 0], rear: [1, 1, 0.65, 0, 0] } }, M16: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.07, 0, 0], rear: [1, 0.51, 0.11, 0, 0] }, Hanomag: { front: [1, 0.6, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.61, 0, 0] }, SdKfz222: { front: [1, 0.23, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.31, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.12, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.14, 0, 0, 0, 0], rear: [0.21, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0.03, 0, 0, 0], side: [1, 0.68, 0.1, 0, 0], rear: [1, 0.74, 0.36, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.45, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.59, 0, 0, 0, 0], rear: [0.36, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.56, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.81, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.57, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.21, 0, 0] }, LightTank: { front: [0.14, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.14, 0, 0], rear: [0.5, 0.5, 0.15, 0, 0] }, ArmouredCar: { front: [1, 0.56, 0, 0, 0], side: [1, 1, 0.15, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.82, 0, 0, 0], side: [1, 1, 0.21, 0, 0], rear: [1, 1, 0.65, 0, 0] } }, M8: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.84, 0.57, 0.38, 0.21], rear: [1, 1, 0.87, 0.24, 0] }, PanzerIV: { front: [0.34, 0.3, 0.23, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [0.98, 0.95, 0.7, 0.1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.84, 0.38, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.27, 0.07, 0, 0, 0], side: [0.97, 0.72, 0.42, 0.24, 0.03], rear: [0.49, 0.32, 0.08, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.63, 0.43, 0.35, 0.24, 0.03], rear: [0.49, 0.35, 0.2, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.29, 0, 0, 0, 0] }, SU85: { front: [0.2, 0.14, 0.01, 0, 0], side: [1, 1, 0.96, 0.48, 0.05], rear: [0.22, 0, 0, 0, 0] }, SU76: { front: [1, 1, 0.79, 0.64, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.1, 0, 0, 0], side: [1, 1, 0.93, 0.73, 0.59], rear: [1, 1, 0.93, 0.74, 0.53] }, M10: { front: [0.27, 0.1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.72, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.72, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.92] }, CharB1: { front: [0.93, 0.43, 0.08, 0, 0], side: [1, 0.99, 0.5, 0.03, 0], rear: [1, 0.99, 0.5, 0.03, 0] }, M13: { front: [1, 1, 1, 1, 0.92], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.71, 0.26, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.94, 0.37, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.77, 0.51, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.83, 0.65, 0.5, 0.08, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.57, 0.19, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.76, 0.39], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Howitzer105: { Tiger: { front: [0.26, 0.26, 0.26, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.17, 0.17, 0.17, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, PanzerIV: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "PanzerIV:short": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hummel: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hanomag: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SdKfz222: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, T34: { front: [0.99, 0.99, 0.99, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "T34-85": { front: [0.95, 0.95, 0.95, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, KV1: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sherman: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M10: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M7: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M8: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, CharB1: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M13: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Semovente: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, L3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Type97: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "7TP": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, LightTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, MediumTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, AssaultGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SelfPropelledGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, ArmouredCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_BreakthroughTank: { front: [0.03, 0.03, 0.03, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_SnowTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_GliderTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } } }, Matilda: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.25, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.99, 0.85, 0.41, 0.03, 0], rear: [1, 1, 0.38, 0, 0] }, PanzerIV: { front: [0.32, 0.31, 0.06, 0, 0], side: [1, 1, 1, 0.93, 0.02], rear: [1, 1, 1, 1, 0.65] }, "PanzerIV:short": { front: [0.97, 0.96, 0.18, 0, 0], side: [1, 1, 1, 0.93, 0.02], rear: [1, 1, 1, 1, 0.65] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.02], rear: [1, 1, 0.45, 0.3, 0.01] }, Hummel: { front: [1, 1, 1, 0.98, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.21, 0.07, 0, 0, 0], side: [0.92, 0.74, 0.28, 0, 0], rear: [0.42, 0.32, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.58, 0.45, 0.28, 0, 0], rear: [0.42, 0.35, 0.03, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.07, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SU85: { front: [0.2, 0.14, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [0.12, 0, 0, 0, 0] }, SU76: { front: [1, 1, 0.67, 0.45, 0.08], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.2, 0.1, 0, 0, 0], side: [1, 1, 0.76, 0.17, 0], rear: [1, 1, 0.77, 0.12, 0] }, M10: { front: [0.22, 0.1, 0, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 0.81] }, M7: { front: [0.95, 0.74, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 0.99, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.05, 0, 0, 0, 0], side: [0.29, 0.03, 0, 0, 0], rear: [0.69, 0.65, 0.01, 0, 0] }, Sexton: { front: [0.95, 0.74, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.62, 0.5] }, CharB1: { front: [0.77, 0.43, 0, 0, 0], side: [1, 0.99, 0.07, 0, 0], rear: [1, 0.99, 0.07, 0, 0] }, M13: { front: [1, 1, 1, 0.71, 0.12], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 0.91] }, Semovente: { front: [1, 1, 0.87, 0.4, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.99] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 0.52], side: [1, 1, 1, 1, 0.6], rear: [1, 1, 1, 1, 0.89] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 0.62], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.97, 0.73, 0.06, 0, 0], side: [1, 1, 1, 1, 0.02], rear: [1, 1, 1, 1, 0] }, AssaultGun: { front: [0.8, 0.38, 0, 0, 0], side: [1, 1, 1, 1, 0.02], rear: [1, 1, 1, 1, 0.27] }, SelfPropelledGun: { front: [0.98, 0.79, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.61], rear: [1, 1, 1, 1, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.25, 0.03, 0, 0, 0], rear: [0.75, 0.65, 0.14, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.87, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.41, 0.19, 0, 0, 0], side: [1, 1, 1, 1, 0.02], rear: [1, 1, 1, 1, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 0.08], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 0.87, 0.18, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sexton: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.59, 0.23, 0.03, 0], rear: [0.82, 0.4, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.71, 0.38], rear: [1, 1, 1, 0.98, 0.31] }, PanzerIV: { front: [0.84, 0.56, 0.33, 0.26, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.98, 0.82, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.63, 0.24, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.57, 0.43, 0.19, 0, 0], side: [1, 1, 0.98, 0.54, 0.2], rear: [1, 1, 0.62, 0.16, 0] }, "T34-85": { front: [0.31, 0.13, 0, 0, 0], side: [0.93, 0.79, 0.63, 0.4, 0.2], rear: [1, 1, 0.62, 0.25, 0] }, KV1: { front: [0.33, 0.06, 0, 0, 0], side: [0.98, 0.69, 0.02, 0, 0], rear: [0.98, 0.77, 0.06, 0, 0] }, SU85: { front: [1, 0.95, 0.29, 0.03, 0], side: [1, 1, 1, 1, 0.41], rear: [1, 1, 0.41, 0, 0] }, SU76: { front: [1, 1, 1, 0.98, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.31, 0.22, 0.21, 0.03, 0], side: [1, 1, 1, 0.96, 0.71], rear: [1, 1, 1, 0.96, 0.72] }, M10: { front: [0.88, 0.74, 0.4, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.89, 0.55, 0.01, 0, 0], side: [1, 0.91, 0.16, 0, 0], rear: [1, 0.92, 0.66, 0.34, 0] }, Sexton: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.72, 0.11, 0], side: [1, 1, 1, 0.62, 0.03], rear: [1, 1, 1, 0.62, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.99, 0.45, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.77, 0.09, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.99, 0.62, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.77, 0.15, 0, 0], rear: [1, 0.98, 0.71, 0.57, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.98, 0.41, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "25pdr": { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.59, 0.23, 0.03, 0], rear: [0.82, 0.4, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.71, 0.38], rear: [1, 1, 1, 0.98, 0.31] }, PanzerIV: { front: [0.84, 0.56, 0.33, 0.26, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.98, 0.82, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.63, 0.24, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.57, 0.43, 0.19, 0, 0], side: [1, 1, 0.98, 0.54, 0.2], rear: [1, 1, 0.62, 0.16, 0] }, "T34-85": { front: [0.31, 0.13, 0, 0, 0], side: [0.93, 0.79, 0.63, 0.4, 0.2], rear: [1, 1, 0.62, 0.25, 0] }, KV1: { front: [0.33, 0.06, 0, 0, 0], side: [0.98, 0.69, 0.02, 0, 0], rear: [0.98, 0.77, 0.06, 0, 0] }, SU85: { front: [1, 0.95, 0.29, 0.03, 0], side: [1, 1, 1, 1, 0.41], rear: [1, 1, 0.41, 0, 0] }, SU76: { front: [1, 1, 1, 0.98, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.31, 0.22, 0.21, 0.03, 0], side: [1, 1, 1, 0.96, 0.71], rear: [1, 1, 1, 0.96, 0.72] }, M10: { front: [0.88, 0.74, 0.4, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.89, 0.55, 0.01, 0, 0], side: [1, 0.91, 0.16, 0, 0], rear: [1, 0.92, 0.66, 0.34, 0] }, Sexton: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.72, 0.11, 0], side: [1, 1, 1, 0.62, 0.03], rear: [1, 1, 1, 0.62, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.99, 0.45, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.77, 0.09, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.99, 0.62, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.77, 0.15, 0, 0], rear: [1, 0.98, 0.71, 0.57, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.98, 0.41, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, CharB1: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.6, 0.44, 0.26, 0, 0], rear: [0.91, 0.52, 0.05, 0, 0] }, PanzerIV: { front: [0.23, 0.07, 0, 0, 0], side: [1, 1, 1, 0.1, 0], rear: [1, 1, 1, 0.66, 0.52] }, "PanzerIV:short": { front: [0.71, 0.2, 0, 0, 0], side: [1, 1, 1, 0.1, 0], rear: [1, 1, 1, 0.66, 0.52] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [0.84, 0.46, 0.3, 0.04, 0] }, Hummel: { front: [1, 1, 1, 0.5, 0.5], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.9] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.43, 0.28, 0.07, 0, 0], rear: [0.1, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.28, 0.07, 0, 0], rear: [0.2, 0.03, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.97, 0.65, 0.1, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.88, 0.76, 0.58, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.93, 0.76, 0.66, 0, 0], rear: [0.93, 0.77, 0.62, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.92, 0.03], rear: [1, 1, 1, 0.96, 0.03] }, M7: { front: [0.51, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 0.51, 0.32], side: [1, 1, 1, 1, 0.97], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.27, 0.01, 0, 0, 0] }, Sexton: { front: [0.51, 0.5, 0.5, 0.5, 0.32], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.5, 0.5] }, CharB1: { front: [0.08, 0, 0, 0, 0], side: [0.51, 0.09, 0, 0, 0], rear: [0.51, 0.09, 0, 0, 0] }, M13: { front: [1, 1, 0.97, 0.21, 0], side: [1, 1, 1, 1, 0.19], rear: [1, 1, 1, 1, 0.07] }, Semovente: { front: [1, 0.88, 0.5, 0.11, 0], side: [1, 1, 1, 1, 0.26], rear: [1, 1, 1, 1, 0.16] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.74, 0], side: [1, 1, 1, 0.75, 0.26], rear: [1, 1, 1, 0.96, 0.5] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.83, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.29, 0.07, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.07, 0] }, AssaultGun: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.38, 0] }, SelfPropelledGun: { front: [0.53, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.66, 0.6], rear: [1, 1, 1, 0.54, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.5, 0.15, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.07, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0.26, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.99, 0.64, 0, 0], side: [1, 1, 1, 1, 0.83], rear: [1, 1, 1, 1, 0.93] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Gun75: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.92, 0.65, 0.41, 0.16], rear: [1, 1, 0.95, 0.4, 0] }, PanzerIV: { front: [0.36, 0.32, 0.24, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 0.97, 0.73, 0.12, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.4, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.31, 0.1, 0, 0, 0], side: [1, 0.87, 0.47, 0.24, 0.01], rear: [0.83, 0.42, 0.12, 0, 0] }, "T34-85": { front: [0.02, 0, 0, 0, 0], side: [0.66, 0.55, 0.37, 0.24, 0.01], rear: [0.83, 0.43, 0.21, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.32, 0, 0, 0, 0] }, SU85: { front: [0.54, 0.14, 0.01, 0, 0], side: [1, 1, 0.99, 0.53, 0.01], rear: [0.75, 0.13, 0, 0, 0] }, SU76: { front: [1, 1, 0.95, 0.72, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.15, 0.02, 0, 0], side: [1, 1, 0.93, 0.73, 0.49], rear: [1, 1, 0.93, 0.74, 0.44] }, M10: { front: [0.56, 0.2, 0.02, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.85] }, CharB1: { front: [0.97, 0.49, 0.08, 0, 0], side: [1, 0.99, 0.52, 0.05, 0], rear: [1, 0.99, 0.52, 0.05, 0] }, M13: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.86, 0.35, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.98, 0.51, 0.05, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.89, 0.56, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.84, 0.66, 0.51, 0.09, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.71, 0.21, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.96, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M13: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.03, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.65, 0.34, 0, 0, 0], rear: [0.95, 0.12, 0, 0, 0] }, PanzerIV: { front: [0.26, 0, 0, 0, 0], side: [1, 1, 0.82, 0, 0], rear: [1, 1, 0.95, 0.65, 0.15] }, "PanzerIV:short": { front: [0.8, 0.01, 0, 0, 0], side: [1, 1, 0.82, 0, 0], rear: [1, 1, 0.95, 0.65, 0.15] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.91, 0.31, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.86, 0.5, 0.5], side: [1, 1, 1, 1, 0.72], rear: [1, 1, 1, 1, 0.62] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.47, 0.15, 0, 0, 0], rear: [0.13, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.15, 0, 0, 0], rear: [0.24, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.03, 0, 0, 0, 0], side: [1, 0.27, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.92, 0.62, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.01, 0, 0, 0, 0], side: [0.96, 0.7, 0.03, 0, 0], rear: [0.96, 0.7, 0.01, 0, 0] }, M10: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 0.56, 0], rear: [1, 1, 1, 0.6, 0] }, M7: { front: [0.53, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.9, 0.4, 0.13], side: [1, 1, 1, 1, 0.78], rear: [1, 1, 1, 1, 0.84] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.34, 0, 0, 0, 0] }, Sexton: { front: [0.53, 0.5, 0.5, 0.5, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.11, 0, 0, 0, 0], side: [0.61, 0.01, 0, 0, 0], rear: [0.61, 0.01, 0, 0, 0] }, M13: { front: [1, 1, 0.6, 0.05, 0], side: [1, 1, 1, 0.86, 0], rear: [1, 1, 1, 0.73, 0] }, Semovente: { front: [1, 0.65, 0.4, 0.01, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.86, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.31, 0], side: [1, 1, 1, 0.47, 0.09], rear: [1, 1, 1, 0.83, 0.11] }, "7TP": { front: [1, 1, 1, 1, 0.86], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.39, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.36, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0.04, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.55, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.56, 0.01, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.97, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.69, 0.07, 0, 0], side: [1, 1, 1, 1, 0.28], rear: [1, 1, 1, 1, 0.73] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.26, 0.26, 0, 0, 0], rear: [0.01, 0.01, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.16, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.51, 0.38, 0.16, 0, 0], rear: [0.75, 0.29, 0, 0, 0] } }, PanzerIV: { front: [0.34, 0.34, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77], before: { front: [0.14, 0.02, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77] } }, "PanzerIV:short": { front: [0.99, 0.99, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77], before: { front: [0.41, 0.05, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77] } }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.45], rear: [1, 1, 0.3, 0.3, 0.15], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.45], rear: [0.62, 0.34, 0.3, 0.3, 0.15] } }, Hummel: { front: [1, 1, 1, 0.95, 0.61], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.95, 0.61], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.27, 0.27, 0, 0, 0], side: [1, 1, 0.01, 0, 0], rear: [0.75, 0.75, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.36, 0.2, 0.01, 0, 0], rear: [0.03, 0, 0, 0, 0] } }, "T34-85": { front: [0.01, 0.01, 0, 0, 0], side: [0.65, 0.65, 0.01, 0, 0], rear: [0.75, 0.75, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.34, 0.2, 0.01, 0, 0], rear: [0.09, 0, 0, 0, 0] } }, KV1: { front: [0, 0, 0, 0, 0], side: [0.14, 0.14, 0, 0, 0], rear: [0.21, 0.21, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [0.43, 0.43, 0, 0, 0], side: [1, 1, 0.01, 0, 0], rear: [0.62, 0.62, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.85, 0.4, 0.01, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 0.53, 0.45, 0.37], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.84, 0.68, 0.53, 0.45, 0.37], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.22, 0.22, 0, 0, 0], side: [1, 1, 0.49, 0.09, 0], rear: [1, 1, 0.44, 0.05, 0], before: { front: [0, 0, 0, 0, 0], side: [0.83, 0.71, 0.49, 0.09, 0], rear: [0.83, 0.72, 0.44, 0.05, 0] } }, M10: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 0.96, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.96, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [0.09, 0.09, 0, 0, 0], side: [0.39, 0.39, 0, 0, 0], rear: [0.72, 0.72, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.08, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.56, 0.5], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.56, 0.5] } }, CharB1: { front: [0.9, 0.9, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0.02, 0, 0, 0, 0], side: [0.23, 0.03, 0, 0, 0], rear: [0.23, 0.03, 0, 0, 0] } }, M13: { front: [1, 1, 0.88, 0.67, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 0.88, 0.67, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 0.41, 0.4, 0.29], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.98, 0.73, 0.41, 0.4, 0.29], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39], before: { front: [0.15, 0.02, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39] } }, AssaultGun: { front: [0.92, 0.92, 0, 0, 0], side: [1, 1, 1, 1, 0.46], rear: [1, 1, 1, 1, 0.63], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.46], rear: [1, 1, 1, 1, 0.63] } }, SelfPropelledGun: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.71], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.71] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.33, 0.33, 0, 0, 0], rear: [0.79, 0.79, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.29, 0.04, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.84, 0.16], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.84, 0.16], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [0.61, 0.61, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 0.45, 0.13, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.9, 0.45, 0.13, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, Type97: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0.37, 0, 0, 0, 0], rear: [0.76, 0.65, 0.03, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0.37, 0, 0, 0, 0], rear: [0.76, 0.65, 0.03, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.15, 0, 0, 0, 0] }, Hummel: { front: [0.6, 0.5, 0.5, 0.5, 0], side: [1, 1, 0.63, 0.6, 0], rear: [1, 1, 0.52, 0.5, 0] }, Hanomag: { front: [1, 1, 0.84, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, SdKfz222: { front: [1, 1, 0.58, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.37, 0, 0, 0, 0], side: [1, 1, 1, 0.65, 0], rear: [1, 1, 1, 0.58, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 0.33, 0, 0, 0], rear: [1, 0.37, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.15, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.95, 0] }, M8: { front: [0.67, 0.36, 0.04, 0, 0], side: [1, 1, 0.69, 0.65, 0], rear: [1, 1, 0.74, 0.65, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [0.5, 0.5, 0.5, 0.47, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.43, 0.01, 0, 0, 0], side: [1, 0.66, 0, 0, 0], rear: [1, 0.51, 0, 0, 0] }, Semovente: { front: [0.28, 0, 0, 0, 0], side: [1, 0.77, 0, 0, 0], rear: [1, 0.65, 0, 0, 0] }, L3: { front: [1, 1, 1, 0.47, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, Type97: { front: [0.99, 0.13, 0, 0, 0], side: [0.95, 0.37, 0.02, 0, 0], rear: [1, 0.76, 0.01, 0, 0] }, "7TP": { front: [1, 1, 0.66, 0.08, 0], side: [1, 1, 1, 0.73, 0], rear: [1, 1, 1, 0.77, 0] }, LightTank: { front: [1, 0.19, 0, 0, 0], side: [1, 1, 1, 0.29, 0], rear: [1, 1, 1, 0.73, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0.46, 0, 0, 0, 0], rear: [0.62, 0.11, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.44, 0], side: [0.8, 0.6, 0.6, 0.6, 0], rear: [0.71, 0.5, 0.5, 0.5, 0] }, ArmouredCar: { front: [1, 1, 0.69, 0.01, 0], side: [1, 1, 1, 0.94, 0], rear: [1, 1, 1, 0.96, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0.15, 0, 0, 0, 0], side: [1, 1, 1, 0.76, 0], rear: [1, 1, 1, 1, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0.65, 0, 0, 0, 0], side: [1, 1, 1, 0.76, 0], rear: [1, 1, 1, 0.73, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.06, 0, 0], rear: [1, 1, 0.66, 0.2, 0] }, WhatIf_GliderTank: { front: [1, 1, 0.95, 0.04, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] } }, "7TP": { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.4, 0.03, 0, 0, 0], rear: [0.35, 0, 0, 0, 0] }, PanzerIV: { front: [0.06, 0, 0, 0, 0], side: [1, 0.93, 0.02, 0, 0], rear: [1, 1, 0.65, 0.02, 0] }, "PanzerIV:short": { front: [0.18, 0, 0, 0, 0], side: [1, 0.93, 0.02, 0, 0], rear: [1, 1, 0.65, 0.02, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.45, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.98, 0.5, 0.5, 0.15], side: [1, 1, 1, 0.63, 0.6], rear: [1, 1, 1, 0.52, 0.5] }, Hanomag: { front: [1, 1, 1, 0.84, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.58, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.28, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.28, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.66, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.5], rear: [1, 1, 1, 1, 0.4] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.76, 0.17, 0, 0, 0], rear: [0.77, 0.12, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 0.15], rear: [1, 1, 1, 1, 0.15] }, M8: { front: [1, 0.98, 0.43, 0.04, 0], side: [1, 1, 1, 0.69, 0.65], rear: [1, 1, 1, 0.74, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.01, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0, 0], side: [1, 1, 1, 1, 0.15], rear: [1, 0.62, 0.5, 0.5, 0.07] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0.06, 0, 0, 0, 0], rear: [0.06, 0, 0, 0, 0] }, M13: { front: [1, 0.71, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.87, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.02, 0], rear: [1, 1, 0.89, 0.01, 0] }, "7TP": { front: [1, 1, 1, 0.65, 0], side: [1, 1, 1, 1, 0.1], rear: [1, 1, 1, 1, 0.7] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0.1] }, MediumTank: { front: [0.06, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.05], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.69, 0], side: [1, 1, 1, 1, 0.67], rear: [1, 1, 1, 1, 0.69] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.14, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.85, 0, 0, 0], side: [1, 1, 1, 1, 0.14], rear: [1, 1, 1, 1, 0.8] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.35], rear: [1, 1, 1, 1, 0.65] }, WhatIf_SnowTank: { front: [0.84, 0.18, 0, 0, 0], side: [1, 1, 1, 0.06, 0], rear: [1, 1, 1, 0.66, 0] }, WhatIf_GliderTank: { front: [1, 1, 1, 0.95, 0], side: [1, 1, 1, 1, 0.82], rear: [1, 1, 1, 1, 0.8] } }, LightTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.3, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.3, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.92, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.72, 0.6], rear: [1, 1, 1, 0.62, 0.5] }, Hanomag: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.88, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.17, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.58, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.65], rear: [1, 1, 1, 1, 0.58] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.7, 0.09, 0, 0, 0], rear: [0.67, 0.05, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.15], side: [1, 1, 1, 1, 0.95], rear: [1, 1, 1, 1, 0.95] }, M8: { front: [1, 0.94, 0.43, 0.13, 0], side: [1, 1, 1, 0.78, 0.65], rear: [1, 1, 1, 0.84, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.05, 0], side: [1, 1, 1, 1, 0.95], rear: [1, 0.56, 0.5, 0.5, 0.47] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.99, 0.65, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.57, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "7TP": { front: [1, 1, 1, 0.86, 0.08], side: [1, 1, 1, 1, 0.73], rear: [1, 1, 1, 1, 0.77] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0.29], rear: [1, 1, 1, 1, 0.73] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.44], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.87, 0.01], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.96] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.71, 0, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 0.73] }, WhatIf_SnowTank: { front: [0.51, 0.12, 0, 0, 0], side: [1, 1, 1, 0.28, 0], rear: [1, 1, 1, 0.73, 0.2] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.22, 0.03, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.95, 0.66, 0.3, 0, 0], rear: [1, 0.96, 0.07, 0, 0] }, PanzerIV: { front: [0.33, 0.26, 0, 0, 0], side: [1, 1, 1, 0.82, 0.02], rear: [1, 1, 1, 0.95, 0.65] }, "PanzerIV:short": { front: [0.98, 0.81, 0, 0, 0], side: [1, 1, 1, 0.82, 0.02], rear: [1, 1, 1, 0.95, 0.65] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.95, 0.02], rear: [1, 0.91, 0.3, 0.29, 0.01] }, Hummel: { front: [1, 1, 1, 0.86, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.13, 0, 0, 0, 0], side: [0.88, 0.48, 0.11, 0, 0], rear: [0.4, 0.14, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.55, 0.36, 0.11, 0, 0], rear: [0.4, 0.24, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.02, 0, 0, 0, 0] }, SU85: { front: [0.17, 0.03, 0, 0, 0], side: [1, 1, 0.17, 0, 0], rear: [0.08, 0, 0, 0, 0] }, SU76: { front: [1, 0.93, 0.59, 0.45, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.17, 0.01, 0, 0, 0], side: [1, 0.96, 0.7, 0.03, 0], rear: [1, 0.96, 0.68, 0.01, 0] }, M10: { front: [0.18, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 0.77], rear: [1, 1, 1, 1, 0.82] }, M7: { front: [0.88, 0.53, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 0.9, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0.65, 0.34, 0, 0, 0] }, Sexton: { front: [0.88, 0.53, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.52, 0.5] }, CharB1: { front: [0.59, 0.11, 0, 0, 0], side: [1, 0.61, 0, 0, 0], rear: [1, 0.61, 0, 0, 0] }, M13: { front: [1, 1, 0.99, 0.6, 0.12], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 0.92] }, Semovente: { front: [1, 1, 0.57, 0.4, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.99] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 0.53], side: [1, 1, 1, 1, 0.61], rear: [1, 1, 1, 1, 0.9] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.9, 0.37, 0, 0, 0], side: [1, 1, 1, 0.94, 0.02], rear: [1, 1, 1, 0.9, 0] }, AssaultGun: { front: [0.61, 0.05, 0, 0, 0], side: [1, 1, 1, 0.95, 0.02], rear: [1, 1, 1, 0.95, 0.27] }, SelfPropelledGun: { front: [0.92, 0.56, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.99, 0.61], rear: [1, 1, 1, 0.96, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.1, 0, 0, 0, 0], rear: [0.68, 0.57, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.63, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.28, 0.02, 0, 0, 0], side: [1, 1, 1, 0.94, 0.02], rear: [1, 1, 1, 0.9, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0.97, 0.12], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 0.62, 0.07, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { Tiger: { front: [0.05, 0, 0, 0, 0], side: [1, 0.81, 0.38, 0.23, 0.08], rear: [1, 0.69, 0.14, 0, 0] }, Panther: { front: [0.03, 0, 0, 0, 0], side: [1, 1, 1, 0.99, 0.79], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [0.99, 0.74, 0.41, 0.33, 0.3], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.94], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.92, 0.49, 0.06, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.99] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.68, 0.47, 0.35, 0.18, 0.02], side: [1, 1, 1, 0.97, 0.64], rear: [1, 1, 0.91, 0.57, 0.23] }, "T34-85": { front: [0.52, 0.19, 0.05, 0, 0], side: [1, 0.88, 0.69, 0.62, 0.43], rear: [1, 1, 0.91, 0.57, 0.32] }, KV1: { front: [0.66, 0.19, 0, 0, 0], side: [1, 0.92, 0.39, 0.02, 0], rear: [1, 0.94, 0.47, 0.05, 0] }, SU85: { front: [1, 1, 0.67, 0.25, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.87, 0.34, 0.01] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.5, 0.24, 0.22, 0.2, 0.07], side: [1, 1, 1, 1, 0.99], rear: [1, 1, 1, 1, 1] }, M10: { front: [0.97, 0.8, 0.63, 0.35, 0.07], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.96, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.99, 0.79, 0.27, 0.01, 0], side: [1, 0.99, 0.68, 0.16, 0], rear: [1, 0.99, 0.81, 0.66, 0.47] }, Sexton: { front: [1, 1, 1, 0.96, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 0.7, 0.2], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.8] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.98, 0.6], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 0.75, 0.19], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.99, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [1, 0.87, 0.56, 0.15, 0], rear: [1, 1, 0.9, 0.7, 0.64] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 0.81, 0.39, 0.07], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.92, 0.65, 0.41, 0.16], rear: [1, 1, 0.95, 0.4, 0] }, PanzerIV: { front: [0.36, 0.32, 0.24, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 0.97, 0.73, 0.12, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.4, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.31, 0.1, 0, 0, 0], side: [1, 0.87, 0.47, 0.24, 0.01], rear: [0.83, 0.42, 0.12, 0, 0] }, "T34-85": { front: [0.02, 0, 0, 0, 0], side: [0.66, 0.55, 0.37, 0.24, 0.01], rear: [0.83, 0.43, 0.21, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.32, 0, 0, 0, 0] }, SU85: { front: [0.54, 0.14, 0.01, 0, 0], side: [1, 1, 0.99, 0.53, 0.01], rear: [0.75, 0.13, 0, 0, 0] }, SU76: { front: [1, 1, 0.95, 0.72, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.15, 0.02, 0, 0], side: [1, 1, 0.93, 0.73, 0.49], rear: [1, 1, 0.93, 0.74, 0.44] }, M10: { front: [0.56, 0.2, 0.02, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.85] }, CharB1: { front: [0.97, 0.49, 0.08, 0, 0], side: [1, 0.99, 0.52, 0.05, 0], rear: [1, 0.99, 0.52, 0.05, 0] }, M13: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.86, 0.35, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.98, 0.51, 0.05, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.89, 0.56, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.84, 0.66, 0.51, 0.09, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.71, 0.21, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.96, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.3, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.3, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.92, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.72, 0.6], rear: [1, 1, 1, 0.62, 0.5] }, Hanomag: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.88, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.17, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.58, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.65], rear: [1, 1, 1, 1, 0.58] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.7, 0.09, 0, 0, 0], rear: [0.67, 0.05, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.15], side: [1, 1, 1, 1, 0.95], rear: [1, 1, 1, 1, 0.95] }, M8: { front: [1, 0.94, 0.43, 0.13, 0], side: [1, 1, 1, 0.78, 0.65], rear: [1, 1, 1, 0.84, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.05, 0], side: [1, 1, 1, 1, 0.95], rear: [1, 0.56, 0.5, 0.5, 0.47] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.99, 0.65, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.57, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "7TP": { front: [1, 1, 1, 0.86, 0.08], side: [1, 1, 1, 1, 0.73], rear: [1, 1, 1, 1, 0.77] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0.29], rear: [1, 1, 1, 1, 0.73] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.44], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.87, 0.01], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.96] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.71, 0, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 0.73] }, WhatIf_SnowTank: { front: [0.51, 0.12, 0, 0, 0], side: [1, 1, 1, 0.28, 0], rear: [1, 1, 1, 0.73, 0.2] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AntiTankGun: { Tiger: { front: [0.28, 0.05, 0, 0, 0], side: [1, 1, 0.59, 0.24, 0.05], rear: [1, 1, 0.39, 0, 0] }, Panther: { front: [0.15, 0.03, 0, 0, 0], side: [1, 1, 1, 0.99, 0.72], rear: [1, 1, 1, 1, 0.99] }, PanzerIV: { front: [1, 0.99, 0.55, 0.33, 0.28], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 0.89, 0.21, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.96] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.75, 0.55, 0.36, 0.2, 0], side: [1, 1, 1, 0.96, 0.54], rear: [1, 1, 0.96, 0.52, 0.18] }, "T34-85": { front: [0.74, 0.4, 0.06, 0, 0], side: [1, 1, 0.76, 0.61, 0.38], rear: [1, 1, 0.96, 0.52, 0.28] }, KV1: { front: [0.95, 0.59, 0.03, 0, 0], side: [1, 1, 0.68, 0.04, 0], rear: [1, 1, 0.74, 0.08, 0] }, SU85: { front: [1, 1, 0.75, 0.22, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.94, 0.27, 0] }, SU76: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.71, 0.4, 0.22, 0.2, 0.03], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, M10: { front: [1, 0.91, 0.66, 0.31, 0.03], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.96, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 0.97, 0.52, 0.02, 0], side: [1, 1, 0.91, 0.22, 0], rear: [1, 1, 0.92, 0.67, 0.41] }, Sexton: { front: [1, 1, 1, 0.96, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 0.74, 0.14], side: [1, 1, 1, 1, 0.71], rear: [1, 1, 1, 1, 0.71] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.99, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 0.78, 0.1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.99, 0.62], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.04, 0, 0, 0, 0], side: [1, 1, 0.76, 0.2, 0], rear: [1, 1, 0.98, 0.72, 0.61] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 0.93, 0.41, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, FlakTruck: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0.01, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.41, 0, 0], rear: [1, 0.52, 0.4, 0, 0] }, Hanomag: { front: [1, 0.74, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.42, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.03, 0, 0, 0, 0], side: [1, 1, 0.33, 0, 0], rear: [1, 1, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.64, 0, 0, 0, 0], rear: [0.72, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.36, 0.03, 0, 0, 0], side: [1, 0.68, 0.48, 0, 0], rear: [1, 0.74, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.11, 0, 0, 0, 0], side: [0.93, 0, 0, 0, 0], rear: [0.84, 0, 0, 0, 0] }, Semovente: { front: [0.02, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [0.97, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.45, 0, 0, 0, 0], side: [0.54, 0.02, 0, 0, 0], rear: [0.88, 0, 0, 0, 0] }, "7TP": { front: [1, 0.61, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.6, 0, 0] }, LightTank: { front: [0.57, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.27, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.61, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.64, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.9, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, WhatIf_BreakthroughTank: { Tiger: { front: [0.91, 0.65, 0.17, 0, 0], side: [1, 1, 1, 0.9, 0.38], rear: [1, 1, 1, 0.82, 0.14] }, Panther: { front: [0.46, 0.34, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.83, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.62, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.83, 0.52, 0.35], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.91] }, "T34-85": { front: [1, 1, 0.76, 0.25, 0.05], side: [1, 1, 1, 0.93, 0.69], rear: [1, 1, 1, 1, 0.91] }, KV1: { front: [1, 1, 0.89, 0.3, 0], side: [1, 1, 1, 0.98, 0.39], rear: [1, 1, 1, 0.98, 0.47] }, SU85: { front: [1, 1, 1, 1, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.87] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.73, 0.28, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.85, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.87, 0.27], side: [1, 1, 1, 1, 0.68], rear: [1, 1, 1, 1, 0.81] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.69, 0.25, 0.01, 0, 0], side: [1, 1, 1, 0.92, 0.56], rear: [1, 1, 1, 1, 0.9] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.81], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_TankHunterCar: { Tiger: { front: [0.91, 0.65, 0.17, 0, 0], side: [1, 1, 1, 0.9, 0.38], rear: [1, 1, 1, 0.82, 0.14] }, Panther: { front: [0.46, 0.34, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.83, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.62, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.83, 0.52, 0.35], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.91] }, "T34-85": { front: [1, 1, 0.76, 0.25, 0.05], side: [1, 1, 1, 0.93, 0.69], rear: [1, 1, 1, 1, 0.91] }, KV1: { front: [1, 1, 0.89, 0.3, 0], side: [1, 1, 1, 0.98, 0.39], rear: [1, 1, 1, 0.98, 0.47] }, SU85: { front: [1, 1, 1, 1, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.87] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.73, 0.28, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.85, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.87, 0.27], side: [1, 1, 1, 1, 0.68], rear: [1, 1, 1, 1, 0.81] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.69, 0.25, 0.01, 0, 0], side: [1, 1, 1, 0.92, 0.56], rear: [1, 1, 1, 1, 0.9] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.81], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.4, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.39, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.4, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.39, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.4, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.39, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } } };
+  // ../../data/battle/armour.json
+  var armour_default = { _about: ["Measured armour and guns (release 2; Brian, 22 November 04:03Z to 04:16Z: 'the named tanks have real advantages from their measured performance against their peers; German tanks are far weaker at the back, so hits there pay'). Built by tools/build-armour.mjs from the land vehicle modeller's sheet (performance-land.json); the historian checks the figures (sure: high, medium, low, or design for our own inventions). Do not edit by hand: rebuild.", "ranges: metres. duels[shooter][target][face]: the chance a hit on that face comes through at each range (before: the same before the shooter had its hollow-charge round, from the month models[shooter].heat). models[name]: kills, the share of the hits that come through that put her out of the fight (the shooter's gun); fire, how often one that comes through sets her burning, by face; explodes, how often a fire reaches her ammunition; radio, the share of her kind with a set that talks (orders reach her the sooner)."], source: "performance-land.json", ranges: [100, 500, 1e3, 1500, 2e3], models: { Tiger: { kills: 0.85, fire: { front: 0.45, side: 0.65, rear: 0.75 }, explodes: 0.25, radio: 1, sure: "high" }, Panther: { kills: 0.75, fire: { front: 0.45, side: 0.65, rear: 0.8 }, explodes: 0.3, radio: 1, sure: "high" }, PanzerIV: { kills: 0.75, fire: { front: 0.5, side: 0.7, rear: 0.75 }, explodes: 0.3, radio: 1, sure: "high" }, "PanzerIV:short": { kills: 0.75, fire: { front: 0.5, side: 0.7, rear: 0.75 }, explodes: 0.3, heat: "1942-03", radio: 1, sure: "high" }, StuG3: { kills: 0.75, fire: { front: 0.5, side: 0.65, rear: 0.75 }, explodes: 0.3, radio: 1, sure: "high" }, Hummel: { kills: 0.95, fire: { front: 0.6, side: 0.7, rear: 0.75 }, explodes: 0.45, radio: 1, sure: "medium" }, Hanomag: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 0.8, sure: "high" }, SdKfz222: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 1, sure: "medium" }, FlakHalftrack: { kills: 0.28, fire: { front: 0.6, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 0.5, sure: "medium" }, Pak40: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, radio: 0, sure: "high" }, leFH18: { kills: 0.95, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, heat: "1942-01", radio: 0, sure: "high" }, T34: { kills: 0.75, fire: { front: 0.45, side: 0.65, rear: 0.55 }, explodes: 0.35, radio: 0.4, sure: "high" }, "T34-85": { kills: 0.85, fire: { front: 0.45, side: 0.65, rear: 0.55 }, explodes: 0.35, radio: 1, sure: "high" }, KV1: { kills: 0.75, fire: { front: 0.25, side: 0.4, rear: 0.45 }, explodes: 0.35, radio: 0.4, sure: "medium" }, SU85: { kills: 0.85, fire: { front: 0.3, side: 0.5, rear: 0.45 }, explodes: 0.45, radio: 1, sure: "medium" }, SU76: { kills: 0.75, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, radio: 0.6, sure: "medium" }, ZiS3: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, radio: 0, sure: "high" }, Sherman: { kills: 0.75, fire: { front: 0.6, side: 0.8, rear: 0.7 }, explodes: 0.25, radio: 1, sure: "high" }, M10: { kills: 0.75, fire: { front: 0.35, side: 0.5, rear: 0.45 }, explodes: 0.25, radio: 1, sure: "high" }, M7: { kills: 0.95, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, heat: "1942-06", radio: 1, sure: "high" }, M3Halftrack: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 1, sure: "high" }, M16: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 1, sure: "high" }, M8: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.2, radio: 1, sure: "high" }, Howitzer105: { kills: 0.95, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, heat: "1942-06", radio: 0, sure: "high" }, Matilda: { kills: 0.38, fire: { front: 0.2, side: 0.3, rear: 0.4 }, explodes: 0.2, radio: 1, sure: "medium" }, Sexton: { kills: 0.73, fire: { front: 0.55, side: 0.65, rear: 0.65 }, explodes: 0.35, radio: 1, sure: "medium" }, "25pdr": { kills: 0.73, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, radio: 0, sure: "high" }, CharB1: { kills: 0.6, fire: { front: 0.4, side: 0.55, rear: 0.6 }, explodes: 0.25, radio: 0.7, sure: "medium" }, Gun75: { kills: 0.75, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, radio: 0, sure: "medium" }, M13: { kills: 0.6, fire: { front: 0.35, side: 0.45, rear: 0.5 }, explodes: 0.25, radio: 0.5, sure: "medium" }, Semovente: { kills: 0.75, fire: { front: 0.35, side: 0.45, rear: 0.5 }, explodes: 0.25, heat: "1942-04", radio: 0.7, sure: "medium" }, L3: { kills: 0.28, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.1, radio: 0.1, sure: "medium" }, Type97: { kills: 0.6, fire: { front: 0.3, side: 0.4, rear: 0.45 }, explodes: 0.25, radio: 0.3, sure: "medium" }, "Type97:47": { kills: 0.6, fire: { front: 0.3, side: 0.4, rear: 0.45 }, explodes: 0.25, radio: 0.3, sure: "low" }, "7TP": { kills: 0.38, fire: { front: 0.3, side: 0.4, rear: 0.45 }, explodes: 0.2, radio: 0.3, sure: "medium" }, LightTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, radio: 0.4, sure: "design" }, MediumTank: { kills: 0.6, fire: { front: 0.45, side: 0.6, rear: 0.7 }, explodes: 0.25, radio: 0.8, sure: "design" }, AssaultGun: { kills: 0.75, fire: { front: 0.45, side: 0.6, rear: 0.7 }, explodes: 0.25, radio: 0.8, sure: "design" }, SelfPropelledGun: { kills: 0.75, fire: { front: 0.55, side: 0.65, rear: 0.7 }, explodes: 0.35, radio: 0.6, sure: "design" }, ArmouredCar: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.15, radio: 0.6, sure: "design" }, AntiTankGun: { kills: 0.48, fire: { front: 0, side: 0, rear: 0 }, explodes: 0, radio: 0, sure: "medium" }, Truck: { kills: 0, fire: { front: 0.4, side: 0.4, rear: 0.4 }, explodes: 0.05, radio: 0, sure: "design" }, FlakTruck: { kills: 0.28, fire: { front: 0.5, side: 0.5, rear: 0.5 }, explodes: 0.1, radio: 0.3, sure: "design" }, WhatIf_BreakthroughTank: { kills: 0.75, fire: { front: 0.4, side: 0.55, rear: 0.7 }, explodes: 0.25, radio: 1, sure: "design" }, WhatIf_TankHunterCar: { kills: 0.75, fire: { front: 0.5, side: 0.6, rear: 0.6 }, explodes: 0.25, radio: 1, sure: "design" }, WhatIf_FlameTank: { kills: 0.28, fire: { front: 0.55, side: 0.75, rear: 0.85 }, explodes: 0.35, radio: 0.8, sure: "design" }, WhatIf_AmphibiousTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, radio: 0.8, sure: "design" }, WhatIf_SnowTank: { kills: 0.38, fire: { front: 0.45, side: 0.55, rear: 0.65 }, explodes: 0.2, radio: 0.8, sure: "design" }, WhatIf_GliderTank: { kills: 0.38, fire: { front: 0.5, side: 0.6, rear: 0.65 }, explodes: 0.2, radio: 0.8, sure: "design" } }, duels: { Tiger: { Tiger: { front: [0.95, 0.95, 0.85, 0.53, 0.21], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Panther: { front: [0.53, 0.5, 0.46, 0.3, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 1, 1, 0.87], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [1, 0.92, 0.56, 0.17, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Panther: { Tiger: { front: [0.95, 0.95, 0.95, 0.81, 0.42], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Panther: { front: [0.72, 0.52, 0.5, 0.42, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 1, 1, 0.97], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 1, 1, 0.97], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 1, 1, 0.94], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [1, 1, 0.91, 0.47, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, PanzerIV: { Tiger: { front: [0.93, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.48, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.99, 0.78, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.77, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { Tiger: { front: [0, 0, 0, 0, 0], side: [0.4, 0.4, 0, 0, 0], rear: [0.17, 0.17, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.26, 0.16, 0.03], rear: [1, 1, 0.05, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.47, 0.41, 0.26, 0.16, 0.03], rear: [0.64, 0.4, 0.05, 0, 0] } }, PanzerIV: { front: [0.42, 0.42, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [0.1, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [0.3, 0.12, 0, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, StuG3: { front: [0.07, 0.07, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.3, 0.3, 0.3], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [0.54, 0.4, 0.3, 0.3, 0.3] } }, Hummel: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.35, 0.35, 0, 0, 0], side: [1, 1, 0.07, 0.01, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.36, 0.25, 0.07, 0.01, 0], rear: [0.01, 0, 0, 0, 0] } }, "T34-85": { front: [0.05, 0.05, 0, 0, 0], side: [0.7, 0.7, 0.07, 0.01, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.32, 0.24, 0.07, 0.01, 0], rear: [0.06, 0.01, 0, 0, 0] } }, KV1: { front: [0.01, 0.01, 0, 0, 0], side: [0.43, 0.43, 0, 0, 0], rear: [0.51, 0.51, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [0.7, 0.7, 0, 0, 0], side: [1, 1, 0.1, 0.01, 0], rear: [0.9, 0.9, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.76, 0.53, 0.1, 0.01, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 0.58, 0.53, 0.46], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.8, 0.72, 0.58, 0.53, 0.46], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.22, 0.22, 0, 0, 0], side: [1, 1, 0.66, 0.49, 0.17], rear: [1, 1, 0.62, 0.44, 0.13], before: { front: [0, 0, 0, 0, 0], side: [0.79, 0.73, 0.66, 0.49, 0.17], rear: [0.8, 0.74, 0.62, 0.44, 0.13] } }, M10: { front: [0.64, 0.64, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [0.3, 0.3, 0, 0, 0], side: [0.71, 0.71, 0, 0, 0], rear: [0.83, 0.83, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.04, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.85, 0.62], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.85, 0.62] } }, CharB1: { front: [0.55, 0.55, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0.01, 0, 0, 0, 0], side: [0.04, 0, 0, 0, 0], rear: [0.32, 0.15, 0, 0, 0] } }, M13: { front: [1, 1, 0.97, 0.88, 0.72], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 0.97, 0.88, 0.72], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 0.5, 0.41, 0.4], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.93, 0.8, 0.5, 0.41, 0.4], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.11, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.59, 0.59, 0, 0, 0], rear: [0.91, 0.91, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.22, 0.09, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [0.84, 0.84, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 0.64, 0.45, 0.18], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.96, 0.64, 0.45, 0.18], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, StuG3: { Tiger: { front: [0.93, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.48, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.99, 0.78, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.77, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.6, 0.41, 0, 0], rear: [1, 0.5, 0.4, 0, 0] }, Hanomag: { front: [1, 0.4, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.13, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.33, 0, 0], rear: [1, 0.98, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.2, 0, 0, 0, 0], rear: [0.26, 0, 0, 0, 0] }, M7: { front: [0.5, 0.46, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0, 0, 0, 0], side: [1, 0.65, 0.48, 0, 0], rear: [1, 0.66, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.48, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0.38, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "Type97:47": { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.4, 0, 0, 0], side: [1, 0.98, 0, 0, 0], rear: [1, 0.98, 0.6, 0, 0] }, LightTank: { front: [0.15, 0, 0, 0, 0], side: [1, 0.96, 0, 0, 0], rear: [1, 0.98, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.34, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 0.97, 0.05, 0, 0], rear: [1, 0.97, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [1, 0.63, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.59, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, FlakHalftrack: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.6, 0.41, 0, 0], rear: [1, 0.5, 0.4, 0, 0] }, Hanomag: { front: [1, 0.4, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.13, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.33, 0, 0], rear: [1, 0.98, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.2, 0, 0, 0, 0], rear: [0.26, 0, 0, 0, 0] }, M7: { front: [0.5, 0.46, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0, 0, 0, 0], side: [1, 0.65, 0.48, 0, 0], rear: [1, 0.66, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.48, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0.38, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "Type97:47": { front: [0.09, 0, 0, 0, 0], side: [0.36, 0, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.4, 0, 0, 0], side: [1, 0.98, 0, 0, 0], rear: [1, 0.98, 0.6, 0, 0] }, LightTank: { front: [0.15, 0, 0, 0, 0], side: [1, 0.96, 0, 0, 0], rear: [1, 0.98, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.34, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 0.97, 0.05, 0, 0], rear: [1, 0.97, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [1, 0.63, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.59, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, Pak40: { Tiger: { front: [0.94, 0.72, 0.24, 0.01, 0], side: [1, 1, 1, 0.96, 0.48], rear: [1, 1, 1, 0.92, 0.26] }, Panther: { front: [0.49, 0.37, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.91, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.74, 0.13], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.57, 0.38], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.85, 0.34, 0.08], side: [1, 1, 1, 0.97, 0.73], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.95, 0.42, 0.02], side: [1, 1, 1, 1, 0.54], rear: [1, 1, 1, 1, 0.62] }, SU85: { front: [1, 1, 1, 1, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.95] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.81, 0.34, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.89, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.93, 0.4], side: [1, 1, 1, 1, 0.81], rear: [1, 1, 1, 1, 0.87] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.99, 0.78, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.83, 0.34, 0.03, 0, 0], side: [1, 1, 1, 0.96, 0.67], rear: [1, 1, 1, 1, 0.95] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, leFH18: { Tiger: { front: [0.19, 0.19, 0.19, 0, 0], side: [1, 1, 1, 0.03, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.24, 0.17, 0.1, 0.03, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.13, 0.13, 0.13, 0, 0], side: [1, 1, 1, 0.73, 0.57], rear: [1, 1, 1, 0.98, 0.87], before: { front: [0, 0, 0, 0, 0], side: [1, 0.95, 0.85, 0.73, 0.57], rear: [1, 1, 1, 0.98, 0.87] } }, PanzerIV: { front: [1, 1, 1, 0.27, 0.17], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.33, 0.32, 0.3, 0.27, 0.17], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "PanzerIV:short": { front: [1, 1, 1, 0.83, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.98, 0.97, 0.95, 0.83, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.7], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.7] } }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0.74, 0.53], rear: [1, 1, 1, 0.32, 0.09], before: { front: [0.23, 0.11, 0.04, 0, 0], side: [1, 0.99, 0.92, 0.74, 0.53], rear: [0.99, 0.86, 0.61, 0.32, 0.09] } }, "T34-85": { front: [0.9, 0.9, 0.9, 0, 0], side: [1, 1, 1, 0.41, 0.36], rear: [1, 1, 1, 0.41, 0.16], before: { front: [0.01, 0, 0, 0, 0], side: [0.65, 0.58, 0.5, 0.41, 0.36], rear: [0.99, 0.87, 0.68, 0.41, 0.16] } }, KV1: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.04, 0, 0, 0, 0], rear: [0.1, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0.03, 0], side: [1, 1, 1, 1, 0.92], rear: [1, 1, 1, 0, 0], before: { front: [0.42, 0.17, 0.08, 0.03, 0], side: [1, 1, 1, 1, 0.92], rear: [0.58, 0.24, 0.06, 0, 0] } }, SU76: { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.87, 0.87, 0.87, 0.04, 0], side: [1, 1, 1, 0.96, 0.86], rear: [1, 1, 1, 0.96, 0.87], before: { front: [0.22, 0.17, 0.1, 0.04, 0], side: [1, 1, 1, 0.96, 0.86], rear: [1, 1, 1, 0.96, 0.87] } }, M10: { front: [1, 1, 1, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.48, 0.27, 0.12, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 1, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.88, 0.73, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0.34, 0.14], before: { front: [0.02, 0, 0, 0, 0], side: [0.22, 0.03, 0, 0, 0], rear: [0.67, 0.65, 0.53, 0.34, 0.14] } }, Sexton: { front: [1, 1, 1, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.88, 0.73, 0.59, 0.51], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, CharB1: { front: [1, 1, 1, 0.11, 0.04], side: [1, 1, 1, 0.41, 0.16], rear: [1, 1, 1, 0.73, 0.49], before: { front: [0.37, 0.26, 0.19, 0.11, 0.04], side: [0.99, 0.9, 0.7, 0.41, 0.16], rear: [0.99, 0.91, 0.84, 0.73, 0.49] } }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 1, 0.47, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.9, 0.72, 0.47, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { front: [1, 1, 1, 0.11, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.84, 0.55, 0.3, 0.11, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { front: [1, 1, 1, 0.63, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.92, 0.78, 0.63, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0.02, 0.02, 0.02, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0.58, 0.38], before: { front: [0, 0, 0, 0, 0], side: [0.2, 0.03, 0, 0, 0], rear: [0.73, 0.66, 0.65, 0.58, 0.38] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.51, 0.23, 0.1, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, T34: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.59, 0.28, 0.13, 0, 0], rear: [0.4, 0.02, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.86, 0.55, 0.34], rear: [1, 1, 1, 0.84, 0.19] }, PanzerIV: { front: [0.56, 0.35, 0.31, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.96, 0.52, 0.01], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.23, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.31] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.41, 0.29, 0.05, 0, 0], side: [1, 1, 0.94, 0.5, 0.15], rear: [1, 1, 0.62, 0.07, 0] }, "T34-85": { front: [0.11, 0.02, 0, 0, 0], side: [0.78, 0.65, 0.49, 0.35, 0.15], rear: [1, 1, 0.68, 0.15, 0] }, KV1: { front: [0.05, 0, 0, 0, 0], side: [0.69, 0.18, 0, 0, 0], rear: [0.76, 0.25, 0, 0, 0] }, SU85: { front: [0.9, 0.48, 0.1, 0, 0], side: [1, 1, 1, 0.91, 0.29], rear: [0.99, 0.68, 0.05, 0, 0] }, SU76: { front: [1, 1, 1, 0.88, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.22, 0.11, 0, 0], side: [1, 1, 1, 0.86, 0.7], rear: [1, 1, 1, 0.87, 0.7] }, M10: { front: [0.72, 0.53, 0.12, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.54, 0.12, 0, 0, 0], side: [0.91, 0.44, 0, 0, 0], rear: [0.92, 0.73, 0.58, 0.14, 0] }, Sexton: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.64, 0.44, 0.21, 0.04, 0], side: [1, 1, 0.78, 0.16, 0], rear: [1, 1, 0.85, 0.49, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.74, 0.2, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.95, 0.34, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.8, 0.51, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.77, 0.37, 0, 0, 0], rear: [0.98, 0.81, 0.65, 0.37, 0.01] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.97, 0.65, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.82], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "T34-85": { Tiger: { front: [0.77, 0.52, 0.17, 0.01, 0], side: [1, 1, 1, 0.99, 0.75], rear: [1, 1, 1, 0.96, 0.62] }, Panther: { front: [0.42, 0.29, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.94, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.81, 0.43], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.64, 0.48], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.82, 0.43, 0.19], side: [1, 1, 1, 0.98, 0.86], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.9, 0.5, 0.17], side: [1, 1, 1, 1, 0.88], rear: [1, 1, 1, 1, 0.92] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.78, 0.41, 0.24], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.94, 0.8], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.96, 0.74], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.99, 0.84, 0.71], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.41, 0.16, 0.01, 0, 0], side: [1, 1, 1, 0.98, 0.85], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, KV1: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.59, 0.28, 0.13, 0, 0], rear: [0.4, 0.02, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.86, 0.55, 0.34], rear: [1, 1, 1, 0.84, 0.19] }, PanzerIV: { front: [0.56, 0.35, 0.31, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.96, 0.52, 0.01], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.23, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.31] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.41, 0.29, 0.05, 0, 0], side: [1, 1, 0.94, 0.5, 0.15], rear: [1, 1, 0.62, 0.07, 0] }, "T34-85": { front: [0.11, 0.02, 0, 0, 0], side: [0.78, 0.65, 0.49, 0.35, 0.15], rear: [1, 1, 0.68, 0.15, 0] }, KV1: { front: [0.05, 0, 0, 0, 0], side: [0.69, 0.18, 0, 0, 0], rear: [0.76, 0.25, 0, 0, 0] }, SU85: { front: [0.9, 0.48, 0.1, 0, 0], side: [1, 1, 1, 0.91, 0.29], rear: [0.99, 0.68, 0.05, 0, 0] }, SU76: { front: [1, 1, 1, 0.88, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.22, 0.11, 0, 0], side: [1, 1, 1, 0.86, 0.7], rear: [1, 1, 1, 0.87, 0.7] }, M10: { front: [0.72, 0.53, 0.12, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.54, 0.12, 0, 0, 0], side: [0.91, 0.44, 0, 0, 0], rear: [0.92, 0.73, 0.58, 0.14, 0] }, Sexton: { front: [1, 1, 0.75, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.64, 0.44, 0.21, 0.04, 0], side: [1, 1, 0.78, 0.16, 0], rear: [1, 1, 0.85, 0.49, 0.03] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.74, 0.2, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.95, 0.34, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.8, 0.51, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.77, 0.37, 0, 0, 0], rear: [0.98, 0.81, 0.65, 0.37, 0.01] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.97, 0.65, 0.13, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.82], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SU85: { Tiger: { front: [0.77, 0.52, 0.17, 0.01, 0], side: [1, 1, 1, 0.99, 0.75], rear: [1, 1, 1, 0.96, 0.62] }, Panther: { front: [0.42, 0.29, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.94, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.81, 0.43], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.89, 0.64, 0.48], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.82, 0.43, 0.19], side: [1, 1, 1, 0.98, 0.86], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.9, 0.5, 0.17], side: [1, 1, 1, 1, 0.88], rear: [1, 1, 1, 1, 0.92] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.78, 0.41, 0.24], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.94, 0.8], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.96, 0.74], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.99, 0.84, 0.71], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.41, 0.16, 0.01, 0, 0], side: [1, 1, 1, 0.98, 0.85], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SU76: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.7, 0.34, 0.17, 0.02, 0], rear: [0.55, 0.09, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0.65, 0.38], rear: [1, 1, 1, 0.95, 0.29] }, PanzerIV: { front: [0.65, 0.38, 0.32, 0.24, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.97, 0.73, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.35, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.85, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.44, 0.33, 0.1, 0, 0], side: [1, 1, 0.99, 0.63, 0.2], rear: [1, 1, 0.79, 0.18, 0] }, "T34-85": { front: [0.14, 0.04, 0, 0, 0], side: [0.83, 0.68, 0.55, 0.37, 0.2], rear: [1, 1, 0.8, 0.27, 0] }, KV1: { front: [0.11, 0, 0, 0, 0], side: [0.82, 0.31, 0, 0, 0], rear: [0.87, 0.39, 0, 0, 0] }, SU85: { front: [0.97, 0.61, 0.14, 0.01, 0], side: [1, 1, 1, 0.99, 0.41], rear: [1, 0.82, 0.13, 0, 0] }, SU76: { front: [1, 1, 1, 0.95, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.23, 0.22, 0.15, 0.02, 0], side: [1, 1, 1, 0.93, 0.71], rear: [1, 1, 1, 0.93, 0.72] }, M10: { front: [0.76, 0.6, 0.21, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.67, 0.21, 0, 0, 0], side: [0.96, 0.6, 0.03, 0, 0], rear: [0.96, 0.78, 0.65, 0.27, 0] }, Sexton: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.67, 0.5, 0.25, 0.08, 0], side: [1, 1, 0.89, 0.32, 0], rear: [1, 1, 0.9, 0.65, 0.08] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.86, 0.35, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.99, 0.51, 0.05, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.89, 0.57, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.82, 0.49, 0.03, 0, 0], rear: [1, 0.87, 0.66, 0.51, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.76, 0.21, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ZiS3: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.7, 0.34, 0.17, 0.02, 0], rear: [0.55, 0.09, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0.65, 0.38], rear: [1, 1, 1, 0.95, 0.29] }, PanzerIV: { front: [0.65, 0.38, 0.32, 0.24, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.97, 0.73, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.35, 0.04, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.85, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.44, 0.33, 0.1, 0, 0], side: [1, 1, 0.99, 0.63, 0.2], rear: [1, 1, 0.79, 0.18, 0] }, "T34-85": { front: [0.14, 0.04, 0, 0, 0], side: [0.83, 0.68, 0.55, 0.37, 0.2], rear: [1, 1, 0.8, 0.27, 0] }, KV1: { front: [0.11, 0, 0, 0, 0], side: [0.82, 0.31, 0, 0, 0], rear: [0.87, 0.39, 0, 0, 0] }, SU85: { front: [0.97, 0.61, 0.14, 0.01, 0], side: [1, 1, 1, 0.99, 0.41], rear: [1, 0.82, 0.13, 0, 0] }, SU76: { front: [1, 1, 1, 0.95, 0.68], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.23, 0.22, 0.15, 0.02, 0], side: [1, 1, 1, 0.93, 0.71], rear: [1, 1, 1, 0.93, 0.72] }, M10: { front: [0.76, 0.6, 0.21, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.67, 0.21, 0, 0, 0], side: [0.96, 0.6, 0.03, 0, 0], rear: [0.96, 0.78, 0.65, 0.27, 0] }, Sexton: { front: [1, 1, 0.85, 0.54, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.67, 0.5, 0.25, 0.08, 0], side: [1, 1, 0.89, 0.32, 0], rear: [1, 1, 0.9, 0.65, 0.08] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.86, 0.35, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 0.99, 0.51, 0.05, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.89, 0.57, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.82, 0.49, 0.03, 0, 0], rear: [1, 0.87, 0.66, 0.51, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.76, 0.21, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.53, 0.28, 0.22, 0.1], rear: [0.82, 0.33, 0.02, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.98, 0.82], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [0.83, 0.51, 0.35, 0.33, 0.3], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.62, 0.18, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.52, 0.39, 0.29, 0.15, 0.03], side: [1, 1, 1, 1, 0.89], rear: [1, 1, 1, 0.9, 0.53] }, "T34-85": { front: [0.25, 0.09, 0.01, 0, 0], side: [0.93, 0.76, 0.65, 0.6, 0.46], rear: [1, 1, 1, 0.9, 0.6] }, KV1: { front: [0.3, 0.03, 0, 0, 0], side: [0.98, 0.62, 0.18, 0, 0], rear: [0.98, 0.69, 0.25, 0.03, 0] }, SU85: { front: [1, 0.85, 0.47, 0.2, 0.08], side: [1, 1, 1, 1, 1], rear: [1, 0.98, 0.67, 0.26, 0.02] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.28, 0.22, 0.22, 0.19, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [0.85, 0.7, 0.53, 0.3, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.93, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.87, 0.47, 0.12, 0, 0], side: [1, 0.87, 0.44, 0.11, 0], rear: [1, 0.89, 0.73, 0.65, 0.53] }, Sexton: { front: [1, 1, 1, 0.93, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.74, 0.61, 0.44, 0.29, 0.19], side: [1, 1, 1, 0.94, 0.69], rear: [1, 1, 1, 0.94, 0.83] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.95, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.95, 0.68, 0.26], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.96, 0.75], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.72, 0.37, 0.1, 0], rear: [1, 0.97, 0.81, 0.68, 0.65] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.94, 0.65, 0.33, 0.1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M10: { Tiger: { front: [0.79, 0.56, 0.33, 0.11, 0.01], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 0.92] }, Panther: { front: [0.41, 0.3, 0.18, 0.07, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 1, 0.91], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.98, 0.74], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.94, 0.78, 0.57], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.93, 0.68, 0.34], side: [1, 1, 1, 1, 0.97], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.98, 0.81, 0.42], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU85: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 0.99, 0.89, 0.64, 0.34], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 1, 0.93], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 1, 0.94, 0.79], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.43, 0.18, 0.06, 0, 0], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { Tiger: { front: [0.26, 0.26, 0.26, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.17, 0.17, 0.17, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, PanzerIV: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "PanzerIV:short": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hummel: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hanomag: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SdKfz222: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, T34: { front: [0.99, 0.99, 0.99, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "T34-85": { front: [0.95, 0.95, 0.95, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, KV1: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sherman: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M10: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M7: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M8: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, CharB1: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M13: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Semovente: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, L3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Type97: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "Type97:47": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "7TP": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, LightTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, MediumTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, AssaultGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SelfPropelledGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, ArmouredCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_BreakthroughTank: { front: [0.03, 0.03, 0.03, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_SnowTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_GliderTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } } }, M3Halftrack: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.07, 0, 0], rear: [1, 0.51, 0.11, 0, 0] }, Hanomag: { front: [1, 0.6, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.61, 0, 0] }, SdKfz222: { front: [1, 0.23, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.31, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.12, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.14, 0, 0, 0, 0], rear: [0.21, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0.03, 0, 0, 0], side: [1, 0.68, 0.1, 0, 0], rear: [1, 0.74, 0.36, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.45, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.59, 0, 0, 0, 0], rear: [0.36, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.56, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.81, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "Type97:47": { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.57, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.21, 0, 0] }, LightTank: { front: [0.14, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.14, 0, 0], rear: [0.5, 0.5, 0.15, 0, 0] }, ArmouredCar: { front: [1, 0.56, 0, 0, 0], side: [1, 1, 0.15, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.82, 0, 0, 0], side: [1, 1, 0.21, 0, 0], rear: [1, 1, 0.65, 0, 0] } }, M16: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.07, 0, 0], rear: [1, 0.51, 0.11, 0, 0] }, Hanomag: { front: [1, 0.6, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.61, 0, 0] }, SdKfz222: { front: [1, 0.23, 0, 0, 0], side: [1, 1, 0.31, 0, 0], rear: [1, 1, 0.31, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.12, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.14, 0, 0, 0, 0], rear: [0.21, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.35, 0.03, 0, 0, 0], side: [1, 0.68, 0.1, 0, 0], rear: [1, 0.74, 0.36, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.45, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0, 0, 0, 0, 0], side: [0.59, 0, 0, 0, 0], rear: [0.36, 0, 0, 0, 0] }, Semovente: { front: [0, 0, 0, 0, 0], side: [0.75, 0, 0, 0, 0], rear: [0.56, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.81, 0, 0] }, Type97: { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "Type97:47": { front: [0.09, 0, 0, 0, 0], side: [0.36, 0.02, 0, 0, 0], rear: [0.75, 0, 0, 0, 0] }, "7TP": { front: [1, 0.57, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.21, 0, 0] }, LightTank: { front: [0.14, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.11, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.6, 0.6, 0.14, 0, 0], rear: [0.5, 0.5, 0.15, 0, 0] }, ArmouredCar: { front: [1, 0.56, 0, 0, 0], side: [1, 1, 0.15, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.2, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.82, 0, 0, 0], side: [1, 1, 0.21, 0, 0], rear: [1, 1, 0.65, 0, 0] } }, M8: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.84, 0.57, 0.38, 0.21], rear: [1, 1, 0.87, 0.24, 0] }, PanzerIV: { front: [0.34, 0.3, 0.23, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [0.98, 0.95, 0.7, 0.1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.84, 0.38, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.27, 0.07, 0, 0, 0], side: [1, 0.91, 0.48, 0.24, 0.03], rear: [0.89, 0.46, 0.08, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.63, 0.43, 0.35, 0.24, 0.03], rear: [0.89, 0.49, 0.2, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.29, 0, 0, 0, 0] }, SU85: { front: [0.2, 0.14, 0.01, 0, 0], side: [1, 1, 0.96, 0.48, 0.05], rear: [0.22, 0, 0, 0, 0] }, SU76: { front: [1, 1, 0.79, 0.64, 0.52], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.1, 0, 0, 0], side: [1, 1, 0.93, 0.73, 0.59], rear: [1, 1, 0.93, 0.74, 0.53] }, M10: { front: [0.27, 0.1, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.72, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.72, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.92] }, CharB1: { front: [0.39, 0.24, 0.08, 0, 0], side: [1, 0.86, 0.31, 0, 0], rear: [1, 0.87, 0.65, 0.15, 0] }, M13: { front: [1, 1, 1, 1, 0.92], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.71, 0.26, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.94, 0.37, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.77, 0.51, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.83, 0.65, 0.5, 0.08, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.57, 0.19, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.76, 0.39], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Howitzer105: { Tiger: { front: [0.26, 0.26, 0.26, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0.17, 0.17, 0.17, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, PanzerIV: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "PanzerIV:short": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, StuG3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hummel: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Hanomag: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SdKfz222: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, T34: { front: [0.99, 0.99, 0.99, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "T34-85": { front: [0.95, 0.95, 0.95, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, KV1: { front: [0.96, 0.96, 0.96, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sherman: { front: [0.93, 0.93, 0.93, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M10: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M7: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M8: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Matilda: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, CharB1: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, M13: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Semovente: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, L3: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Type97: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "Type97:47": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, "7TP": { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, LightTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, MediumTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, AssaultGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SelfPropelledGun: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, ArmouredCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_BreakthroughTank: { front: [0.03, 0.03, 0.03, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_FlameTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_SnowTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, WhatIf_GliderTank: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } } }, Matilda: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.2, 0.03, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.89, 0.63, 0.36, 0.06, 0], rear: [1, 0.94, 0.17, 0, 0] }, PanzerIV: { front: [0.31, 0.26, 0.02, 0, 0], side: [1, 1, 1, 0.97, 0.36], rear: [1, 1, 1, 1, 0.76] }, "PanzerIV:short": { front: [0.96, 0.8, 0.04, 0, 0], side: [1, 1, 1, 0.97, 0.36], rear: [1, 1, 1, 1, 0.76] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.45], rear: [1, 0.9, 0.34, 0.3, 0.15] }, Hummel: { front: [1, 1, 1, 1, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.1, 0, 0, 0, 0], side: [0.97, 0.56, 0.2, 0, 0], rear: [0.57, 0.13, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.47, 0.35, 0.2, 0, 0], rear: [0.58, 0.25, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.16, 0.03, 0, 0, 0], side: [1, 0.99, 0.37, 0, 0], rear: [0.01, 0, 0, 0, 0] }, SU76: { front: [1, 0.86, 0.63, 0.46, 0.34], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.13, 0.01, 0, 0, 0], side: [1, 0.95, 0.71, 0.28, 0], rear: [1, 0.96, 0.72, 0.21, 0] }, M10: { front: [0.13, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [0.79, 0.51, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0.06, 0, 0, 0, 0], rear: [0.65, 0.34, 0, 0, 0] }, Sexton: { front: [0.79, 0.51, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.5] }, CharB1: { front: [0.25, 0.11, 0, 0, 0], side: [0.89, 0.4, 0, 0, 0], rear: [0.89, 0.71, 0.08, 0, 0] }, M13: { front: [1, 1, 1, 0.76, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 0.72, 0.4, 0.26], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 0.98], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 0.98], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.79, 0.34, 0.01, 0, 0], side: [1, 1, 1, 1, 0.44], rear: [1, 1, 1, 1, 0.37] }, AssaultGun: { front: [0.47, 0.03, 0, 0, 0], side: [1, 1, 1, 1, 0.46], rear: [1, 1, 1, 1, 0.62] }, SelfPropelledGun: { front: [0.84, 0.54, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.71] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.06, 0, 0, 0, 0], rear: [0.67, 0.56, 0.04, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.96, 0.1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.22, 0.02, 0, 0, 0], side: [1, 1, 1, 1, 0.44], rear: [1, 1, 1, 1, 0.37] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 0.71, 0.23, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sexton: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.59, 0.23, 0.03, 0], rear: [0.82, 0.4, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.71, 0.38], rear: [1, 1, 1, 0.98, 0.31] }, PanzerIV: { front: [0.84, 0.56, 0.33, 0.26, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.98, 0.82, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.63, 0.24, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.57, 0.43, 0.19, 0, 0], side: [1, 1, 1, 0.72, 0.2], rear: [1, 1, 0.96, 0.29, 0] }, "T34-85": { front: [0.31, 0.13, 0, 0, 0], side: [0.93, 0.79, 0.63, 0.4, 0.2], rear: [1, 1, 0.96, 0.38, 0] }, KV1: { front: [0.33, 0.06, 0, 0, 0], side: [0.98, 0.69, 0.02, 0, 0], rear: [0.98, 0.77, 0.06, 0, 0] }, SU85: { front: [1, 0.95, 0.29, 0.03, 0], side: [1, 1, 1, 1, 0.41], rear: [1, 1, 0.41, 0, 0] }, SU76: { front: [1, 1, 1, 0.98, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.31, 0.22, 0.21, 0.03, 0], side: [1, 1, 1, 0.96, 0.71], rear: [1, 1, 1, 0.96, 0.72] }, M10: { front: [0.88, 0.74, 0.4, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.89, 0.55, 0.01, 0, 0], side: [1, 0.91, 0.16, 0, 0], rear: [1, 0.92, 0.66, 0.34, 0] }, Sexton: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.77, 0.65, 0.33, 0.11, 0], side: [1, 1, 0.97, 0.41, 0], rear: [1, 1, 0.97, 0.73, 0.08] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.99, 0.45, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.77, 0.09, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.99, 0.62, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.77, 0.15, 0, 0], rear: [1, 0.98, 0.71, 0.57, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.98, 0.41, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "25pdr": { Tiger: { front: [0, 0, 0, 0, 0], side: [0.9, 0.59, 0.23, 0.03, 0], rear: [0.82, 0.4, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.71, 0.38], rear: [1, 1, 1, 0.98, 0.31] }, PanzerIV: { front: [0.84, 0.56, 0.33, 0.26, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 0.98, 0.82, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.63, 0.24, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.92, 0.35] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.57, 0.43, 0.19, 0, 0], side: [1, 1, 1, 0.72, 0.2], rear: [1, 1, 0.96, 0.29, 0] }, "T34-85": { front: [0.31, 0.13, 0, 0, 0], side: [0.93, 0.79, 0.63, 0.4, 0.2], rear: [1, 1, 0.96, 0.38, 0] }, KV1: { front: [0.33, 0.06, 0, 0, 0], side: [0.98, 0.69, 0.02, 0, 0], rear: [0.98, 0.77, 0.06, 0, 0] }, SU85: { front: [1, 0.95, 0.29, 0.03, 0], side: [1, 1, 1, 1, 0.41], rear: [1, 1, 0.41, 0, 0] }, SU76: { front: [1, 1, 1, 0.98, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.31, 0.22, 0.21, 0.03, 0], side: [1, 1, 1, 0.96, 0.71], rear: [1, 1, 1, 0.96, 0.72] }, M10: { front: [0.88, 0.74, 0.4, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.89, 0.55, 0.01, 0, 0], side: [1, 0.91, 0.16, 0, 0], rear: [1, 0.92, 0.66, 0.34, 0] }, Sexton: { front: [1, 1, 0.97, 0.58, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.77, 0.65, 0.33, 0.11, 0], side: [1, 1, 0.97, 0.41, 0], rear: [1, 1, 0.97, 0.73, 0.08] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 0.73], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 0.99, 0.45, 0.02], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 0.77, 0.09, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 0.99, 0.62, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.92, 0.77, 0.15, 0, 0], rear: [1, 0.98, 0.71, 0.57, 0.04] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 0.98, 0.41, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, CharB1: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.6, 0.44, 0.26, 0, 0], rear: [0.91, 0.52, 0.05, 0, 0] }, PanzerIV: { front: [0.23, 0.07, 0, 0, 0], side: [1, 1, 1, 0.1, 0], rear: [1, 1, 1, 0.66, 0.52] }, "PanzerIV:short": { front: [0.71, 0.2, 0, 0, 0], side: [1, 1, 1, 0.1, 0], rear: [1, 1, 1, 0.66, 0.52] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [0.84, 0.46, 0.3, 0.04, 0] }, Hummel: { front: [1, 1, 1, 0.5, 0.5], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.9] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0.07, 0, 0], rear: [0.11, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.28, 0.07, 0, 0], rear: [0.21, 0.03, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.97, 0.65, 0.1, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.88, 0.76, 0.58, 0.17, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.93, 0.76, 0.66, 0, 0], rear: [0.93, 0.77, 0.62, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.92, 0.03], rear: [1, 1, 1, 0.96, 0.03] }, M7: { front: [0.51, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 0.51, 0.32], side: [1, 1, 1, 1, 0.97], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.27, 0.01, 0, 0, 0] }, Sexton: { front: [0.51, 0.5, 0.5, 0.5, 0.32], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.97, 0.5, 0.5] }, CharB1: { front: [0.08, 0, 0, 0, 0], side: [0.31, 0.01, 0, 0, 0], rear: [0.65, 0.23, 0, 0, 0] }, M13: { front: [1, 1, 0.97, 0.21, 0], side: [1, 1, 1, 1, 0.19], rear: [1, 1, 1, 1, 0.07] }, Semovente: { front: [1, 0.88, 0.5, 0.11, 0], side: [1, 1, 1, 1, 0.26], rear: [1, 1, 1, 1, 0.16] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.74, 0], side: [1, 1, 1, 0.75, 0.26], rear: [1, 1, 1, 0.96, 0.5] }, "Type97:47": { front: [1, 1, 1, 0.74, 0], side: [1, 1, 1, 0.75, 0.26], rear: [1, 1, 1, 0.96, 0.5] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.83, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.29, 0.07, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.07, 0] }, AssaultGun: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.38, 0] }, SelfPropelledGun: { front: [0.53, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.66, 0.6], rear: [1, 1, 1, 0.54, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.5, 0.15, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 0.11, 0], rear: [1, 1, 1, 0.07, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0.26, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.99, 0.64, 0, 0], side: [1, 1, 1, 1, 0.83], rear: [1, 1, 1, 1, 0.93] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Gun75: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.92, 0.65, 0.41, 0.16], rear: [1, 1, 0.95, 0.4, 0] }, PanzerIV: { front: [0.36, 0.32, 0.24, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 0.97, 0.73, 0.12, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.4, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.31, 0.1, 0, 0, 0], side: [1, 0.99, 0.63, 0.25, 0.01], rear: [1, 0.78, 0.18, 0, 0] }, "T34-85": { front: [0.02, 0, 0, 0, 0], side: [0.66, 0.55, 0.37, 0.24, 0.01], rear: [1, 0.8, 0.27, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.32, 0, 0, 0, 0] }, SU85: { front: [0.54, 0.14, 0.01, 0, 0], side: [1, 1, 0.99, 0.53, 0.01], rear: [0.75, 0.13, 0, 0, 0] }, SU76: { front: [1, 1, 0.95, 0.72, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.15, 0.02, 0, 0], side: [1, 1, 0.93, 0.73, 0.49], rear: [1, 1, 0.93, 0.74, 0.44] }, M10: { front: [0.56, 0.2, 0.02, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.85] }, CharB1: { front: [0.47, 0.25, 0.08, 0, 0], side: [1, 0.89, 0.32, 0, 0], rear: [1, 0.9, 0.65, 0.15, 0] }, M13: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.86, 0.35, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.98, 0.51, 0.05, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.89, 0.56, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.84, 0.66, 0.51, 0.09, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.71, 0.21, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.96, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M13: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.03, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.65, 0.34, 0, 0, 0], rear: [0.95, 0.12, 0, 0, 0] }, PanzerIV: { front: [0.26, 0, 0, 0, 0], side: [1, 1, 0.82, 0, 0], rear: [1, 1, 0.95, 0.65, 0.15] }, "PanzerIV:short": { front: [0.8, 0.01, 0, 0, 0], side: [1, 1, 0.82, 0, 0], rear: [1, 1, 0.95, 0.65, 0.15] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.91, 0.31, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.86, 0.5, 0.5], side: [1, 1, 1, 1, 0.72], rear: [1, 1, 1, 1, 0.62] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.6, 0.15, 0, 0, 0], rear: [0.15, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.15, 0, 0, 0], rear: [0.26, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.03, 0, 0, 0, 0], side: [1, 0.27, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.92, 0.62, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.01, 0, 0, 0, 0], side: [0.96, 0.7, 0.03, 0, 0], rear: [0.96, 0.7, 0.01, 0, 0] }, M10: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 0.56, 0], rear: [1, 1, 1, 0.6, 0] }, M7: { front: [0.53, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.9, 0.4, 0.13], side: [1, 1, 1, 1, 0.78], rear: [1, 1, 1, 1, 0.84] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.34, 0, 0, 0, 0] }, Sexton: { front: [0.53, 0.5, 0.5, 0.5, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.11, 0, 0, 0, 0], side: [0.4, 0, 0, 0, 0], rear: [0.71, 0.03, 0, 0, 0] }, M13: { front: [1, 1, 0.6, 0.05, 0], side: [1, 1, 1, 0.86, 0], rear: [1, 1, 1, 0.73, 0] }, Semovente: { front: [1, 0.65, 0.4, 0.01, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.86, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.31, 0], side: [1, 1, 1, 0.47, 0.09], rear: [1, 1, 1, 0.83, 0.11] }, "Type97:47": { front: [1, 1, 1, 0.31, 0], side: [1, 1, 1, 0.47, 0.09], rear: [1, 1, 1, 0.83, 0.11] }, "7TP": { front: [1, 1, 1, 1, 0.86], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.39, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.36, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0.04, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.55, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.56, 0.01, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.97, 0.03, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.69, 0.07, 0, 0], side: [1, 1, 1, 1, 0.28], rear: [1, 1, 1, 1, 0.73] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.26, 0.26, 0, 0, 0], rear: [0.01, 0.01, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.16, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.51, 0.38, 0.16, 0, 0], rear: [0.75, 0.29, 0, 0, 0] } }, PanzerIV: { front: [0.34, 0.34, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77], before: { front: [0.14, 0.02, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77] } }, "PanzerIV:short": { front: [0.99, 0.99, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77], before: { front: [0.41, 0.05, 0, 0, 0], side: [1, 1, 1, 0.91, 0.37], rear: [1, 1, 1, 0.99, 0.77] } }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.45], rear: [1, 1, 0.3, 0.3, 0.15], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.45], rear: [0.62, 0.34, 0.3, 0.3, 0.15] } }, Hummel: { front: [1, 1, 1, 0.95, 0.61], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.95, 0.61], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, T34: { front: [0.27, 0.27, 0, 0, 0], side: [1, 1, 0.01, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.43, 0.2, 0.01, 0, 0], rear: [0.03, 0, 0, 0, 0] } }, "T34-85": { front: [0.01, 0.01, 0, 0, 0], side: [0.65, 0.65, 0.01, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.34, 0.2, 0.01, 0, 0], rear: [0.1, 0, 0, 0, 0] } }, KV1: { front: [0, 0, 0, 0, 0], side: [0.14, 0.14, 0, 0, 0], rear: [0.21, 0.21, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU85: { front: [0.43, 0.43, 0, 0, 0], side: [1, 1, 0.01, 0, 0], rear: [0.62, 0.62, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0.85, 0.4, 0.01, 0, 0], rear: [0, 0, 0, 0, 0] } }, SU76: { front: [1, 1, 0.53, 0.45, 0.37], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.84, 0.68, 0.53, 0.45, 0.37], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Sherman: { front: [0.22, 0.22, 0, 0, 0], side: [1, 1, 0.49, 0.09, 0], rear: [1, 1, 0.44, 0.05, 0], before: { front: [0, 0, 0, 0, 0], side: [0.83, 0.71, 0.49, 0.09, 0], rear: [0.83, 0.72, 0.44, 0.05, 0] } }, M10: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M7: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, M8: { front: [1, 1, 1, 0.96, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.96, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Matilda: { front: [0.09, 0.09, 0, 0, 0], side: [0.39, 0.39, 0, 0, 0], rear: [0.72, 0.72, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.08, 0, 0, 0, 0] } }, Sexton: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.56, 0.5], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.56, 0.5] } }, CharB1: { front: [0.41, 0.41, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0], before: { front: [0.02, 0, 0, 0, 0], side: [0.09, 0, 0, 0, 0], rear: [0.4, 0.08, 0, 0, 0] } }, M13: { front: [1, 1, 0.88, 0.67, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 0.88, 0.67, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Semovente: { front: [1, 1, 0.41, 0.4, 0.29], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [0.98, 0.73, 0.41, 0.4, 0.29], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, Type97: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, "Type97:47": { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 1] } }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39], before: { front: [0.15, 0.02, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39] } }, AssaultGun: { front: [0.92, 0.92, 0, 0, 0], side: [1, 1, 1, 1, 0.46], rear: [1, 1, 1, 1, 0.63], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.46], rear: [1, 1, 1, 1, 0.63] } }, SelfPropelledGun: { front: [1, 1, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.71], before: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.8], rear: [1, 1, 1, 1, 0.71] } }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.33, 0.33, 0, 0, 0], rear: [0.79, 0.79, 0, 0, 0], before: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.29, 0.04, 0, 0, 0] } }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.84, 0.16], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 0.84, 0.16], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_FlameTank: { front: [0.61, 0.61, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39], before: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.99, 0.45], rear: [1, 1, 1, 0.99, 0.39] } }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { front: [1, 1, 0.45, 0.13, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 0.9, 0.45, 0.13, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1], before: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } }, Type97: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0.37, 0, 0, 0, 0], rear: [0.76, 0.65, 0.03, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0.37, 0, 0, 0, 0], rear: [0.76, 0.65, 0.03, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.15, 0, 0, 0, 0] }, Hummel: { front: [0.6, 0.5, 0.5, 0.5, 0], side: [1, 1, 0.63, 0.6, 0], rear: [1, 1, 0.52, 0.5, 0] }, Hanomag: { front: [1, 1, 0.84, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, SdKfz222: { front: [1, 1, 0.58, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.37, 0, 0, 0, 0], side: [1, 1, 1, 0.65, 0], rear: [1, 1, 1, 0.58, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 0.33, 0, 0, 0], rear: [1, 0.37, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.15, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.95, 0] }, M8: { front: [0.67, 0.36, 0.04, 0, 0], side: [1, 1, 0.69, 0.65, 0], rear: [1, 1, 0.74, 0.65, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [0.5, 0.5, 0.5, 0.47, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.43, 0.01, 0, 0, 0], side: [1, 0.66, 0, 0, 0], rear: [1, 0.51, 0, 0, 0] }, Semovente: { front: [0.28, 0, 0, 0, 0], side: [1, 0.77, 0, 0, 0], rear: [1, 0.65, 0, 0, 0] }, L3: { front: [1, 1, 1, 0.47, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] }, Type97: { front: [0.99, 0.13, 0, 0, 0], side: [0.95, 0.37, 0.02, 0, 0], rear: [1, 0.76, 0.01, 0, 0] }, "Type97:47": { front: [0.99, 0.13, 0, 0, 0], side: [0.95, 0.37, 0.02, 0, 0], rear: [1, 0.76, 0.01, 0, 0] }, "7TP": { front: [1, 1, 0.66, 0.08, 0], side: [1, 1, 1, 0.73, 0], rear: [1, 1, 1, 0.77, 0] }, LightTank: { front: [1, 0.19, 0, 0, 0], side: [1, 1, 1, 0.29, 0], rear: [1, 1, 1, 0.73, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0.46, 0, 0, 0, 0], rear: [0.62, 0.11, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.44, 0], side: [0.8, 0.6, 0.6, 0.6, 0], rear: [0.71, 0.5, 0.5, 0.5, 0] }, ArmouredCar: { front: [1, 1, 0.69, 0.01, 0], side: [1, 1, 1, 0.94, 0], rear: [1, 1, 1, 0.96, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0.15, 0, 0, 0, 0], side: [1, 1, 1, 0.76, 0], rear: [1, 1, 1, 1, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0.45, 0, 0, 0, 0], rear: [0.39, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0.65, 0, 0, 0, 0], side: [1, 1, 1, 0.76, 0], rear: [1, 1, 1, 0.73, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.06, 0, 0], rear: [1, 1, 0.66, 0.2, 0] }, WhatIf_GliderTank: { front: [1, 1, 0.95, 0.04, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0] } }, "Type97:47": { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.42, 0.06, 0], rear: [1, 1, 0.42, 0, 0] }, PanzerIV: { front: [0.36, 0.31, 0.07, 0, 0], side: [1, 1, 1, 0.98, 0.21], rear: [1, 1, 1, 1, 0.7] }, "PanzerIV:short": { front: [1, 0.96, 0.19, 0, 0], side: [1, 1, 1, 0.98, 0.21], rear: [1, 1, 1, 1, 0.7] }, StuG3: { front: [0.01, 0, 0, 0, 0], side: [1, 1, 1, 1, 0.26], rear: [1, 1, 0.45, 0.3, 0.09] }, Hummel: { front: [1, 1, 1, 1, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.28, 0.08, 0, 0, 0], side: [1, 0.96, 0.28, 0, 0], rear: [0.97, 0.59, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.66, 0.48, 0.28, 0, 0], rear: [0.97, 0.61, 0.03, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.29, 0, 0, 0, 0] }, SU85: { front: [0.28, 0.14, 0, 0, 0], side: [1, 1, 0.62, 0, 0], rear: [0.43, 0.02, 0, 0, 0] }, SU76: { front: [1, 1, 0.69, 0.46, 0.27], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.12, 0, 0, 0], side: [1, 1, 0.76, 0.28, 0], rear: [1, 1, 0.77, 0.22, 0] }, M10: { front: [0.38, 0.12, 0, 0, 0], side: [1, 1, 1, 1, 0.99], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.77, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 0.59], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.01, 0, 0] }, Sexton: { front: [1, 0.77, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.7, 0.5] }, CharB1: { front: [0.4, 0.24, 0, 0, 0], side: [1, 0.87, 0.01, 0, 0], rear: [1, 0.88, 0.23, 0, 0] }, M13: { front: [1, 1, 1, 0.77, 0.31], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 0.87, 0.4, 0.19], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 0.87], rear: [1, 1, 1, 1, 0.99] }, "Type97:47": { front: [1, 1, 1, 1, 0.9], side: [1, 1, 1, 1, 0.87], rear: [1, 1, 1, 1, 0.99] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 0.97], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.77, 0.06, 0, 0], side: [1, 1, 1, 1, 0.26], rear: [1, 1, 1, 1, 0.2] }, AssaultGun: { front: [0.95, 0.42, 0, 0, 0], side: [1, 1, 1, 1, 0.27], rear: [1, 1, 1, 1, 0.5] }, SelfPropelledGun: { front: [1, 0.82, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 0.72], rear: [1, 1, 1, 1, 0.62] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.83, 0.65, 0.14, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.98, 0.03], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.6, 0.19, 0, 0, 0], side: [1, 1, 1, 1, 0.26], rear: [1, 1, 1, 1, 0.2] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 0.44], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 0.92, 0.24, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, "7TP": { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.4, 0.03, 0, 0, 0], rear: [0.35, 0, 0, 0, 0] }, PanzerIV: { front: [0.06, 0, 0, 0, 0], side: [1, 0.93, 0.02, 0, 0], rear: [1, 1, 0.65, 0.02, 0] }, "PanzerIV:short": { front: [0.18, 0, 0, 0, 0], side: [1, 0.93, 0.02, 0, 0], rear: [1, 1, 0.65, 0.02, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.45, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.98, 0.5, 0.5, 0.15], side: [1, 1, 1, 0.63, 0.6], rear: [1, 1, 1, 0.52, 0.5] }, Hanomag: { front: [1, 1, 1, 0.84, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.58, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.28, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.28, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.6, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.66, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.5], rear: [1, 1, 1, 1, 0.4] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.76, 0.17, 0, 0, 0], rear: [0.77, 0.12, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 0.15], rear: [1, 1, 1, 1, 0.15] }, M8: { front: [1, 0.98, 0.43, 0.04, 0], side: [1, 1, 1, 0.69, 0.65], rear: [1, 1, 1, 0.74, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.01, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0, 0], side: [1, 1, 1, 1, 0.15], rear: [1, 0.62, 0.5, 0.5, 0.07] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0.23, 0, 0, 0, 0] }, M13: { front: [1, 0.71, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.87, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.02, 0], rear: [1, 1, 0.89, 0.01, 0] }, "Type97:47": { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.02, 0], rear: [1, 1, 0.89, 0.01, 0] }, "7TP": { front: [1, 1, 1, 0.65, 0], side: [1, 1, 1, 1, 0.1], rear: [1, 1, 1, 1, 0.7] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0], rear: [1, 1, 1, 1, 0.1] }, MediumTank: { front: [0.06, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.05], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.69, 0], side: [1, 1, 1, 1, 0.67], rear: [1, 1, 1, 1, 0.69] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.14, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.85, 0, 0, 0], side: [1, 1, 1, 1, 0.14], rear: [1, 1, 1, 1, 0.8] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.35], rear: [1, 1, 1, 1, 0.65] }, WhatIf_SnowTank: { front: [0.84, 0.18, 0, 0, 0], side: [1, 1, 1, 0.06, 0], rear: [1, 1, 1, 0.66, 0] }, WhatIf_GliderTank: { front: [1, 1, 1, 0.95, 0], side: [1, 1, 1, 1, 0.82], rear: [1, 1, 1, 1, 0.8] } }, LightTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.3, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.3, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.92, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.72, 0.6], rear: [1, 1, 1, 0.62, 0.5] }, Hanomag: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.88, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.17, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.58, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.65], rear: [1, 1, 1, 1, 0.58] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.7, 0.09, 0, 0, 0], rear: [0.67, 0.05, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.15], side: [1, 1, 1, 1, 0.95], rear: [1, 1, 1, 1, 0.95] }, M8: { front: [1, 0.94, 0.43, 0.13, 0], side: [1, 1, 1, 0.78, 0.65], rear: [1, 1, 1, 0.84, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.05, 0], side: [1, 1, 1, 1, 0.95], rear: [1, 0.56, 0.5, 0.5, 0.47] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.99, 0.65, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.57, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "Type97:47": { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "7TP": { front: [1, 1, 1, 0.86, 0.08], side: [1, 1, 1, 1, 0.73], rear: [1, 1, 1, 1, 0.77] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0.29], rear: [1, 1, 1, 1, 0.73] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.44], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.87, 0.01], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.96] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.71, 0, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 0.73] }, WhatIf_SnowTank: { front: [0.51, 0.12, 0, 0, 0], side: [1, 1, 1, 0.28, 0], rear: [1, 1, 1, 0.73, 0.2] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, MediumTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.22, 0.03, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.95, 0.66, 0.3, 0, 0], rear: [1, 0.96, 0.07, 0, 0] }, PanzerIV: { front: [0.33, 0.26, 0, 0, 0], side: [1, 1, 1, 0.82, 0.02], rear: [1, 1, 1, 0.95, 0.65] }, "PanzerIV:short": { front: [0.98, 0.81, 0, 0, 0], side: [1, 1, 1, 0.82, 0.02], rear: [1, 1, 1, 0.95, 0.65] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.95, 0.02], rear: [1, 0.91, 0.3, 0.29, 0.01] }, Hummel: { front: [1, 1, 1, 0.86, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.13, 0, 0, 0, 0], side: [1, 0.62, 0.11, 0, 0], rear: [0.76, 0.16, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.55, 0.36, 0.11, 0, 0], rear: [0.76, 0.27, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.02, 0, 0, 0, 0] }, SU85: { front: [0.17, 0.03, 0, 0, 0], side: [1, 1, 0.17, 0, 0], rear: [0.08, 0, 0, 0, 0] }, SU76: { front: [1, 0.93, 0.59, 0.45, 0.09], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.17, 0.01, 0, 0, 0], side: [1, 0.96, 0.7, 0.03, 0], rear: [1, 0.96, 0.68, 0.01, 0] }, M10: { front: [0.18, 0.01, 0, 0, 0], side: [1, 1, 1, 1, 0.77], rear: [1, 1, 1, 1, 0.82] }, M7: { front: [0.88, 0.53, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 0.9, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0.65, 0.34, 0, 0, 0] }, Sexton: { front: [0.88, 0.53, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 0.52, 0.5] }, CharB1: { front: [0.26, 0.11, 0, 0, 0], side: [0.93, 0.4, 0, 0, 0], rear: [0.93, 0.71, 0, 0, 0] }, M13: { front: [1, 1, 0.99, 0.6, 0.12], side: [1, 1, 1, 1, 0.96], rear: [1, 1, 1, 1, 0.92] }, Semovente: { front: [1, 1, 0.57, 0.4, 0.05], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.99] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 0.53], side: [1, 1, 1, 1, 0.61], rear: [1, 1, 1, 1, 0.9] }, "Type97:47": { front: [1, 1, 1, 1, 0.53], side: [1, 1, 1, 1, 0.61], rear: [1, 1, 1, 1, 0.9] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.9, 0.37, 0, 0, 0], side: [1, 1, 1, 0.94, 0.02], rear: [1, 1, 1, 0.9, 0] }, AssaultGun: { front: [0.61, 0.05, 0, 0, 0], side: [1, 1, 1, 0.95, 0.02], rear: [1, 1, 1, 0.95, 0.27] }, SelfPropelledGun: { front: [0.92, 0.56, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.99, 0.61], rear: [1, 1, 1, 0.96, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.1, 0, 0, 0, 0], rear: [0.68, 0.57, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 0.63, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.28, 0.02, 0, 0, 0], side: [1, 1, 1, 0.94, 0.02], rear: [1, 1, 1, 0.9, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 0.97, 0.12], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 0.62, 0.07, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AssaultGun: { Tiger: { front: [0.05, 0, 0, 0, 0], side: [1, 0.81, 0.38, 0.23, 0.08], rear: [1, 0.69, 0.14, 0, 0] }, Panther: { front: [0.03, 0, 0, 0, 0], side: [1, 1, 1, 0.99, 0.79], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [0.99, 0.74, 0.41, 0.33, 0.3], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.94], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.92, 0.49, 0.06, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.99] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.68, 0.47, 0.35, 0.18, 0.02], side: [1, 1, 1, 1, 0.83], rear: [1, 1, 1, 0.94, 0.43] }, "T34-85": { front: [0.52, 0.19, 0.05, 0, 0], side: [1, 0.88, 0.69, 0.62, 0.43], rear: [1, 1, 1, 0.94, 0.51] }, KV1: { front: [0.66, 0.19, 0, 0, 0], side: [1, 0.92, 0.39, 0.02, 0], rear: [1, 0.94, 0.47, 0.05, 0] }, SU85: { front: [1, 1, 0.67, 0.25, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.87, 0.34, 0.01] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.5, 0.24, 0.22, 0.2, 0.07], side: [1, 1, 1, 1, 0.99], rear: [1, 1, 1, 1, 1] }, M10: { front: [0.97, 0.8, 0.63, 0.35, 0.07], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.96, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.99, 0.79, 0.27, 0.01, 0], side: [1, 0.99, 0.68, 0.16, 0], rear: [1, 0.99, 0.81, 0.66, 0.47] }, Sexton: { front: [1, 1, 1, 0.96, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.88, 0.7, 0.53, 0.31, 0.16], side: [1, 1, 1, 0.96, 0.6], rear: [1, 1, 1, 0.96, 0.81] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.98, 0.6], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 0.75, 0.19], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.99, 0.7], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [1, 0.87, 0.56, 0.15, 0], rear: [1, 1, 0.9, 0.7, 0.64] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 0.81, 0.39, 0.07], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, SelfPropelledGun: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.31, 0.17, 0.02, 0, 0], rear: [0.05, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [1, 0.92, 0.65, 0.41, 0.16], rear: [1, 1, 0.95, 0.4, 0] }, PanzerIV: { front: [0.36, 0.32, 0.24, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 0.97, 0.73, 0.12, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [0.02, 0, 0, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.85, 0.4, 0.3] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.31, 0.1, 0, 0, 0], side: [1, 0.99, 0.63, 0.25, 0.01], rear: [1, 0.78, 0.18, 0, 0] }, "T34-85": { front: [0.02, 0, 0, 0, 0], side: [0.66, 0.55, 0.37, 0.24, 0.01], rear: [1, 0.8, 0.27, 0.01, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0.24, 0, 0, 0, 0], rear: [0.32, 0, 0, 0, 0] }, SU85: { front: [0.54, 0.14, 0.01, 0, 0], side: [1, 1, 0.99, 0.53, 0.01], rear: [0.75, 0.13, 0, 0, 0] }, SU76: { front: [1, 1, 0.95, 0.72, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.22, 0.15, 0.02, 0, 0], side: [1, 1, 0.93, 0.73, 0.49], rear: [1, 1, 0.93, 0.74, 0.44] }, M10: { front: [0.56, 0.2, 0.02, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [0.16, 0, 0, 0, 0], side: [0.52, 0.03, 0, 0, 0], rear: [0.76, 0.65, 0.27, 0, 0] }, Sexton: { front: [1, 0.84, 0.54, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.85] }, CharB1: { front: [0.47, 0.25, 0.08, 0, 0], side: [1, 0.89, 0.32, 0, 0], rear: [1, 0.9, 0.65, 0.15, 0] }, M13: { front: [1, 1, 1, 1, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 0.8, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 0.86, 0.35, 0.04, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [0.98, 0.51, 0.05, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 0.89, 0.56, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0.43, 0.03, 0, 0, 0], rear: [0.84, 0.66, 0.51, 0.09, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0.71, 0.21, 0.01, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 0.96, 0.45], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, ArmouredCar: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.3, 0, 0, 0, 0], rear: [0.03, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [1, 0.88, 0.02, 0, 0], rear: [1, 0.98, 0.65, 0.15, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [0.3, 0.3, 0.01, 0, 0] }, Hummel: { front: [1, 0.92, 0.5, 0.5, 0.5], side: [1, 1, 1, 0.72, 0.6], rear: [1, 1, 1, 0.62, 0.5] }, Hanomag: { front: [1, 1, 1, 1, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 0.88, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.11, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0.17, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.58, 0.45, 0.07, 0, 0], side: [1, 1, 1, 1, 0.65], rear: [1, 1, 1, 1, 0.58] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.7, 0.09, 0, 0, 0], rear: [0.67, 0.05, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.75, 0, 0], rear: [1, 1, 0.8, 0, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.15], side: [1, 1, 1, 1, 0.95], rear: [1, 1, 1, 1, 0.95] }, M8: { front: [1, 0.94, 0.43, 0.13, 0], side: [1, 1, 1, 0.78, 0.65], rear: [1, 1, 1, 0.84, 0.65] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.05, 0], side: [1, 1, 1, 1, 0.95], rear: [1, 0.56, 0.5, 0.5, 0.47] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.99, 0.65, 0.11, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.91, 0, 0] }, Semovente: { front: [0.57, 0.4, 0.04, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 0.98, 0, 0] }, L3: { front: [1, 1, 1, 1, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "Type97:47": { front: [1, 1, 0.51, 0, 0], side: [1, 1, 0.59, 0.09, 0], rear: [1, 1, 0.89, 0.11, 0] }, "7TP": { front: [1, 1, 1, 0.86, 0.08], side: [1, 1, 1, 1, 0.73], rear: [1, 1, 1, 1, 0.77] }, LightTank: { front: [1, 1, 0.61, 0, 0], side: [1, 1, 1, 1, 0.29], rear: [1, 1, 1, 1, 0.73] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.02, 0, 0], rear: [1, 1, 0.27, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.44], side: [1, 1, 0.61, 0.6, 0.6], rear: [1, 1, 0.5, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 0.87, 0.01], side: [1, 1, 1, 1, 0.94], rear: [1, 1, 1, 1, 0.96] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 0.71, 0, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 0.99, 0.02, 0, 0], rear: [1, 0.98, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.07, 0, 0], side: [1, 1, 1, 1, 0.76], rear: [1, 1, 1, 1, 0.73] }, WhatIf_SnowTank: { front: [0.51, 0.12, 0, 0, 0], side: [1, 1, 1, 0.28, 0], rear: [1, 1, 1, 0.73, 0.2] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, AntiTankGun: { Tiger: { front: [0.28, 0.05, 0, 0, 0], side: [1, 1, 0.59, 0.24, 0.05], rear: [1, 1, 0.39, 0, 0] }, Panther: { front: [0.15, 0.03, 0, 0, 0], side: [1, 1, 1, 0.99, 0.72], rear: [1, 1, 1, 1, 0.99] }, PanzerIV: { front: [1, 0.99, 0.55, 0.33, 0.28], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 0.98, 0.88], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 0.89, 0.21, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.96] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0.75, 0.55, 0.36, 0.2, 0], side: [1, 1, 1, 1, 0.71], rear: [1, 1, 1, 0.91, 0.26] }, "T34-85": { front: [0.74, 0.4, 0.06, 0, 0], side: [1, 1, 0.76, 0.61, 0.38], rear: [1, 1, 1, 0.91, 0.36] }, KV1: { front: [0.95, 0.59, 0.03, 0, 0], side: [1, 1, 0.68, 0.04, 0], rear: [1, 1, 0.74, 0.08, 0] }, SU85: { front: [1, 1, 0.75, 0.22, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.94, 0.27, 0] }, SU76: { front: [1, 1, 1, 1, 0.99], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0.71, 0.4, 0.22, 0.2, 0.03], side: [1, 1, 1, 1, 0.98], rear: [1, 1, 1, 1, 0.98] }, M10: { front: [1, 0.91, 0.66, 0.31, 0.03], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 0.96, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 0.97, 0.52, 0.02, 0], side: [1, 1, 0.91, 0.22, 0], rear: [1, 1, 0.92, 0.67, 0.41] }, Sexton: { front: [1, 1, 1, 0.96, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [0.96, 0.8, 0.61, 0.31, 0.13], side: [1, 1, 1, 0.97, 0.5], rear: [1, 1, 1, 0.97, 0.77] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 0.99, 0.47], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 0.78, 0.1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 0.99, 0.62], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.04, 0, 0, 0, 0], side: [1, 1, 0.76, 0.2, 0], rear: [1, 1, 0.98, 0.72, 0.61] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 0.93, 0.41, 0.04], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, FlakTruck: { Tiger: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, PanzerIV: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, "PanzerIV:short": { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.65, 0.02, 0, 0, 0] }, StuG3: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0.01, 0, 0, 0, 0] }, Hummel: { front: [0.5, 0.5, 0, 0, 0], side: [1, 0.63, 0.41, 0, 0], rear: [1, 0.52, 0.4, 0, 0] }, Hanomag: { front: [1, 0.74, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 1, 0, 0] }, SdKfz222: { front: [1, 0.42, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [1, 1, 0.94, 0, 0] }, T34: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.03, 0, 0, 0, 0], side: [1, 1, 0.33, 0, 0], rear: [1, 1, 0.34, 0, 0] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [0.64, 0, 0, 0, 0], rear: [0.72, 0, 0, 0, 0] }, M7: { front: [0.5, 0.5, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, M8: { front: [0.36, 0.03, 0, 0, 0], side: [1, 0.68, 0.48, 0, 0], rear: [1, 0.74, 0.65, 0, 0] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [0.5, 0.5, 0, 0, 0] }, CharB1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, M13: { front: [0.11, 0, 0, 0, 0], side: [0.93, 0, 0, 0, 0], rear: [0.84, 0, 0, 0, 0] }, Semovente: { front: [0.02, 0, 0, 0, 0], side: [1, 0, 0, 0, 0], rear: [0.97, 0, 0, 0, 0] }, L3: { front: [1, 1, 0, 0, 0], side: [1, 1, 1, 0, 0], rear: [1, 1, 1, 0, 0] }, Type97: { front: [0.45, 0, 0, 0, 0], side: [0.54, 0.02, 0, 0, 0], rear: [0.88, 0, 0, 0, 0] }, "Type97:47": { front: [0.45, 0, 0, 0, 0], side: [0.54, 0.02, 0, 0, 0], rear: [0.88, 0, 0, 0, 0] }, "7TP": { front: [1, 0.61, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.6, 0, 0] }, LightTank: { front: [0.57, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0, 0, 0] }, MediumTank: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0.27, 0, 0, 0, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0, 0, 0], side: [0.61, 0.6, 0.48, 0, 0], rear: [0.5, 0.5, 0.43, 0, 0] }, ArmouredCar: { front: [1, 0.64, 0, 0, 0], side: [1, 1, 0.52, 0, 0], rear: [1, 1, 0.65, 0, 0] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [0, 0, 0, 0, 0], side: [1, 1, 0, 0, 0], rear: [1, 1, 0.57, 0, 0] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [0.02, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, WhatIf_AmphibiousTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.05, 0, 0], rear: [1, 1, 0.56, 0, 0] }, WhatIf_SnowTank: { front: [0, 0, 0, 0, 0], side: [1, 0.06, 0, 0, 0], rear: [1, 0.66, 0, 0, 0] }, WhatIf_GliderTank: { front: [1, 0.9, 0, 0, 0], side: [1, 1, 0.61, 0, 0], rear: [1, 1, 0.66, 0, 0] } }, WhatIf_BreakthroughTank: { Tiger: { front: [0.91, 0.65, 0.17, 0, 0], side: [1, 1, 1, 0.9, 0.38], rear: [1, 1, 1, 0.82, 0.14] }, Panther: { front: [0.46, 0.34, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.83, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.62, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.83, 0.52, 0.35], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.76, 0.25, 0.05], side: [1, 1, 1, 0.93, 0.69], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.89, 0.3, 0], side: [1, 1, 1, 0.98, 0.39], rear: [1, 1, 1, 0.98, 0.47] }, SU85: { front: [1, 1, 1, 1, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.87] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.73, 0.28, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.85, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.87, 0.27], side: [1, 1, 1, 1, 0.68], rear: [1, 1, 1, 1, 0.81] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.97, 0.74, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.69, 0.25, 0.01, 0, 0], side: [1, 1, 1, 0.92, 0.56], rear: [1, 1, 1, 1, 0.9] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.81], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_TankHunterCar: { Tiger: { front: [0.91, 0.65, 0.17, 0, 0], side: [1, 1, 1, 0.9, 0.38], rear: [1, 1, 1, 0.82, 0.14] }, Panther: { front: [0.46, 0.34, 0.1, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, PanzerIV: { front: [1, 1, 1, 0.83, 0.41], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "PanzerIV:short": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, StuG3: { front: [1, 1, 1, 0.62, 0.06], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hummel: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Hanomag: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [1, 1, 0.83, 0.52, 0.35], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "T34-85": { front: [1, 1, 0.76, 0.25, 0.05], side: [1, 1, 1, 0.93, 0.69], rear: [1, 1, 1, 1, 1] }, KV1: { front: [1, 1, 0.89, 0.3, 0], side: [1, 1, 1, 0.98, 0.39], rear: [1, 1, 1, 0.98, 0.47] }, SU85: { front: [1, 1, 1, 1, 0.67], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 0.87] }, SU76: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [1, 1, 0.73, 0.28, 0.22], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M10: { front: [1, 1, 1, 0.85, 0.63], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M7: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Matilda: { front: [1, 1, 1, 0.87, 0.27], side: [1, 1, 1, 1, 0.68], rear: [1, 1, 1, 1, 0.81] }, Sexton: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, CharB1: { front: [1, 1, 0.97, 0.74, 0.53], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M13: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Semovente: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "Type97:47": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, "7TP": { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, AssaultGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SelfPropelledGun: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, ArmouredCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0.69, 0.25, 0.01, 0, 0], side: [1, 1, 1, 0.92, 0.56], rear: [1, 1, 1, 1, 0.9] }, WhatIf_TankHunterCar: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [1, 1, 1, 1, 0.81], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_AmphibiousTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_AmphibiousTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.43, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.23, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "Type97:47": { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_SnowTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.43, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.23, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "Type97:47": { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } }, WhatIf_GliderTank: { Tiger: { front: [0, 0, 0, 0, 0], side: [0.01, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, Panther: { front: [0, 0, 0, 0, 0], side: [0.53, 0.3, 0, 0, 0], rear: [0.79, 0.03, 0, 0, 0] }, PanzerIV: { front: [0.2, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, "PanzerIV:short": { front: [0.6, 0, 0, 0, 0], side: [1, 1, 0.81, 0, 0], rear: [1, 1, 0.94, 0.65, 0.02] }, StuG3: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.94, 0, 0], rear: [0.76, 0.3, 0.29, 0, 0] }, Hummel: { front: [1, 1, 0.85, 0.5, 0.5], side: [1, 1, 1, 1, 0.63], rear: [1, 1, 1, 1, 0.52] }, Hanomag: { front: [1, 1, 1, 1, 0.84], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, SdKfz222: { front: [1, 1, 1, 1, 0.58], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, T34: { front: [0, 0, 0, 0, 0], side: [0.43, 0.11, 0, 0, 0], rear: [0.05, 0, 0, 0, 0] }, "T34-85": { front: [0, 0, 0, 0, 0], side: [0.35, 0.11, 0, 0, 0], rear: [0.16, 0, 0, 0, 0] }, KV1: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU85: { front: [0.01, 0, 0, 0, 0], side: [0.92, 0.17, 0, 0, 0], rear: [0, 0, 0, 0, 0] }, SU76: { front: [0.76, 0.58, 0.45, 0.02, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Sherman: { front: [0, 0, 0, 0, 0], side: [0.89, 0.7, 0.03, 0, 0], rear: [0.9, 0.67, 0.01, 0, 0] }, M10: { front: [0, 0, 0, 0, 0], side: [1, 1, 1, 0.53, 0], rear: [1, 1, 1, 0.58, 0] }, M7: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, M8: { front: [1, 1, 0.87, 0.38, 0.04], side: [1, 1, 1, 1, 0.69], rear: [1, 1, 1, 1, 0.74] }, Matilda: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.2, 0, 0, 0, 0] }, Sexton: { front: [0.5, 0.5, 0.5, 0.5, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 0.52, 0.5, 0.5] }, CharB1: { front: [0.06, 0, 0, 0, 0], side: [0.23, 0, 0, 0, 0], rear: [0.58, 0, 0, 0, 0] }, M13: { front: [1, 0.99, 0.59, 0.05, 0], side: [1, 1, 1, 0.85, 0], rear: [1, 1, 1, 0.71, 0] }, Semovente: { front: [1, 0.57, 0.4, 0, 0], side: [1, 1, 1, 0.95, 0], rear: [1, 1, 1, 0.85, 0] }, L3: { front: [1, 1, 1, 1, 1], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, Type97: { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "Type97:47": { front: [1, 1, 1, 0.3, 0], side: [1, 1, 1, 0.46, 0.02], rear: [1, 1, 1, 0.82, 0.01] }, "7TP": { front: [1, 1, 1, 1, 0.65], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, LightTank: { front: [1, 1, 1, 0.38, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, MediumTank: { front: [0.21, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, AssaultGun: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.95, 0, 0], rear: [1, 1, 0.95, 0.19, 0] }, SelfPropelledGun: { front: [0.5, 0.5, 0.5, 0.5, 0.5], side: [1, 1, 0.99, 0.6, 0.6], rear: [1, 1, 0.96, 0.5, 0.5] }, ArmouredCar: { front: [1, 1, 1, 1, 0.69], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_BreakthroughTank: { front: [0, 0, 0, 0, 0], side: [0, 0, 0, 0, 0], rear: [0.43, 0, 0, 0, 0] }, WhatIf_TankHunterCar: { front: [1, 1, 0.54, 0, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_FlameTank: { front: [0, 0, 0, 0, 0], side: [1, 1, 0.93, 0, 0], rear: [1, 1, 0.9, 0, 0] }, WhatIf_AmphibiousTank: { front: [1, 1, 0.96, 0.01, 0], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] }, WhatIf_SnowTank: { front: [1, 0.51, 0.07, 0, 0], side: [1, 1, 1, 1, 0.06], rear: [1, 1, 1, 1, 0.66] }, WhatIf_GliderTank: { front: [1, 1, 1, 1, 0.95], side: [1, 1, 1, 1, 1], rear: [1, 1, 1, 1, 1] } } } };
 
-  // src/battle/land/armour.ts
+  // ../../src/battle/land/armour.ts
   var ARMOUR = armour_default;
   var faceOfAspect = (a) => a === "flank" ? "side" : a;
   var DRAWN_TANKS = ["PanzerIV:short", "PanzerIV", "Panther", "Matilda", "Sherman", "LightTank", "T34", "T34-85", "CharB1", "M13", "Type97", "7TP", "MediumTank"];
@@ -2174,6 +2538,7 @@
     const d = turnToDate(turn3);
     let m = modelOf(kind, nat, d.year);
     if (m === "PanzerIV" && d.year * 12 + d.month + 1 < 1942 * 12 + 3) m = "PanzerIV:short";
+    if (m === "Type97" && d.year * 12 + d.month + 1 >= 1942 * 12 + 4 && ARMOUR.models["Type97:47"]) m = "Type97:47";
     return m && ARMOUR.models[m] && (kind !== "arm" || ARMOUR.duels[m]) ? m : null;
   }
   function through(shooter, target, face, range, turn3) {
@@ -2199,7 +2564,7 @@
     return r22 < (m?.explodes ?? 0.2) ? "blow" : "burn";
   }
 
-  // src/battle/land/units.ts
+  // ../../src/battle/land/units.ts
   var ORD = (n) => {
     const s = ["th", "st", "nd", "rd"], v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -2207,11 +2572,10 @@
   var KIND_WORD = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
   var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion" };
   var teamOf = (f) => TEAMS.includes(f.kind) ? f.kind : void 0;
-  function partsFor(forces) {
-    const B = LAND.blocks;
+  function partsFor(forces, least = LAND.blocks.least) {
     const parts = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
     const total = () => parts.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
-    while (total() < B.least) {
+    while (total() < least) {
       let best = -1, size = 0;
       parts.forEach((p2, i) => {
         if (teamOf(forces[i]) || !p2.some((x) => x.regiment === void 0 && x.divs.length === 1)) return;
@@ -2223,13 +2587,67 @@
       });
       if (best < 0) break;
       const p = parts[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
-      p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+      p.splice(j, 1, ...Array.from({ length: LAND.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
     }
     return parts;
   }
-  function makeBlocks(side, t, power, firstId) {
-    const out = [];
+  var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
+  function kindWord(nat, k, ym = 0) {
+    if (k === "arm") return nat === "USA" ? "Armored" : nat === "GER" ? "Panzer" : nat === "SOV" || nat === "JAP" ? "Tank" : "Armoured";
+    if (k === "mot") {
+      if (nat === "USA" || nat === "SOV") return "Motorized";
+      if (BRIGADES.includes(nat)) return "Motor";
+      if (nat === "GER") return ym >= 1943 * 12 + 6 ? "Panzergrenadier" : "Motorized";
+      return "Motorised";
+    }
+    if (k === "inf" && nat === "SOV") return "Rifle";
+    if (k === "mtn" && nat === "SOV") return "Mountain Rifle";
+    return KIND_WORD[k];
+  }
+  function regimentWord(nat, kind, n, i, ym) {
+    const o = ORD(n);
+    if (kind === "arm") {
+      if (nat === "USA") return `Combat Command ${"ABR"[i] ?? "R"}`;
+      if (nat === "GER") return `Panzer-Regiment ${n}`;
+      if (nat === "SOV") return ym >= 1942 * 12 + 1 ? `${o} Tank Brigade` : `${o} Tank Regiment`;
+      if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
+      return `${o} Tank Regiment`;
+    }
+    const arm = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot", ym) : kind === "eng" ? "Engineer" : "Infantry";
+    if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
+    if (nat === "GER") {
+      const late = ym >= 1942 * 12 + 10;
+      const word = kind === "mtn" ? "Gebirgsjäger" : kind === "cav" ? "Reiter" : kind === "mot" ? late ? "Panzergrenadier" : "Infanterie" : kind === "eng" ? "Pionier" : late ? "Grenadier" : "Infanterie";
+      return `${word}-Regiment ${n}${kind === "mot" && !late ? " (mot.)" : ""}`;
+    }
+    if (nat === "SOV") return `${o} ${kind === "mtn" ? "Mountain Rifle" : kind === "cav" ? "Cavalry" : kind === "mot" ? "Motor Rifle" : kind === "eng" ? "Engineer" : "Rifle"} Regiment`;
+    if (nat === "ITA" && i === 2 && (kind === "inf" || kind === "mtn")) return `${o} Blackshirt Legion`;
+    return `${o} ${arm} Regiment`;
+  }
+  function armyNames(t, units, turn3) {
+    const d = turnToDate(turn3), ym = d.year * 12 + d.month + 1;
     const cut2 = partsFor(t.forces);
+    let j = 0;
+    t.forces.forEach((f, i) => {
+      const team = teamOf(f);
+      const k = team ? "art" : Object.keys(LAND.speed).includes(f.kind) ? f.kind : "inf";
+      for (const p of cut2[i]) {
+        const u = units[j++];
+        if (!u || p.regiment === void 0 || team) continue;
+        const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
+        const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k, ym)}`;
+        const lead = /^(\d+)/.exec(full)?.[1];
+        const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
+        u.short = regimentWord(u.nat, k, n, p.regiment, ym);
+        u.parent = full;
+        u.name = `${u.short}, ${short}`;
+      }
+    });
+  }
+  function makeBlocks(side, t, power, firstId, least = LAND.blocks.least, turn3) {
+    const out = [];
+    const ym = turn3 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn3));
+    const cut2 = partsFor(t.forces, least);
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
       const k = team ? "art" : Object.keys(LAND.speed).includes(f.kind) ? f.kind : "inf";
@@ -2238,15 +2656,15 @@
         const own = f.divisions?.[d];
         const no = (f.first ?? 1) + d;
         return {
-          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${KIND_WORD[k]} Division`),
-          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${KIND_WORD[k]}`),
+          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`),
+          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)}`),
           str: own?.str ?? f.str,
           xp: own?.xp ?? f.xp,
           men: own?.men ?? f.men / n
         };
       });
-      const weightOf = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1);
-      const all = cut2[i].reduce((s, p) => s + weightOf(p), 0);
+      const weightOf2 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1);
+      const all = cut2[i].reduce((s, p) => s + weightOf2(p), 0);
       for (const p of cut2[i]) {
         const ds = p.divs.map((d2) => divs[d2]);
         const name = p.regiment !== void 0 ? `${ORD(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
@@ -2257,7 +2675,7 @@
         const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
         const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
         const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
-        const share = weightOf(p) / all;
+        const share = weightOf2(p) / all;
         out.push({
           id: firstId + out.length,
           side,
@@ -2286,7 +2704,7 @@
           act: "idle",
           speed: 0,
           power0: power * f.share * share,
-          worth: weightOf(p),
+          worth: weightOf2(p),
           order: null,
           path: [],
           dug: !!f.dug,
@@ -2303,6 +2721,22 @@
         });
       }
     });
+    return out;
+  }
+  function joinBlocks(t, power, firstId) {
+    const out = [];
+    for (const side of ["att", "def"]) {
+      const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
+      if (!js.length) continue;
+      for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0, t.turn)) {
+        const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
+        u.joined = j;
+        u.priced = u.power0;
+        u.power0 = u.priced / j;
+        u.dug = false;
+        out.push(u);
+      }
+    }
     return out;
   }
   var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
@@ -2481,7 +2915,7 @@
     rows.forEach((r, i) => place(r.us, ys[i], r.wings));
   }
 
-  // data/battle/drill.json
+  // ../../data/battle/drill.json
   var drill_default = {
     _doc: [
       "The squad brain (src/battle/land/drill.ts; Brian, 20 Nov 20:43Z: 'super realistic and meaningful and everyone has high AI iq'): what each man, tank and gun inside a block does, second by second. Looks only (ruling 217: the card decides, the field acts it out): the fight never reads any of it, so no number here can move a result.",
@@ -2583,7 +3017,7 @@
         "rush: seconds a man is up in a rush [raw, regular, veteran] (the general: up 3 to 5 s, 10 to 20 m); gap: seconds between one turn's rush and the next's; stagger: the most seconds a pair rises after the first of its turn (by twos and threes; the leaders first). aside: after a rush, the share of men who crawl [least, most] metres aside before they fire (the enemy is aiming where they dropped).",
         "suppress: a round landing near a group of men (a squad, a section, a crew) adds to its suppression [metres it reaches, how much it adds] by weapon; it halves every 'half' seconds [raw, regular, veteran]; above 'down' the group's men keep their heads down and its rushes wait, but for its gunner and a share 'keep' who go on firing; above 'heavy' those in the open crawl for cover. rapid: the time between shots of men covering their mates' rushes, as a share of their usual (rapid fire).",
         "lift: metres from friendly foot within which the guns' and the mortars' rounds lift off a target into its depth ('deep' metres beyond its far side), and the support teams' machine guns shift to its far half. mission: a battery's or a mortar team's shoot at a new target, its spotter's signaller calling it on his radio: the call [least, most] seconds, one ranging round over the target ('range' metres off), a call, a second short of it, a call, then fire for effect, 'salvos' [least, most] every 'every' [least, most] seconds, then quiet [least, most] seconds and again (a call of 'again' seconds, no ranging); a mortar team's calls and quiet as a share 'mortar'. Fire over open sights is no mission.",
-        "tank: battle seconds between a tank's own aimed rounds in a fight [least, most] (the general: a round every 15 to 30 s at a weapon). tankMg (Brian, 22 November 04:10Z: 'make sure the machine gun from the gunner inside the tank also shoots some times at infantry', and 'the top machine gun cant be used unless the tank commander mans the gun'): of the men a tank block takes off the enemy's foot, the share that fall to her machine guns rather than her main gun's shells, in the open and in cover (woods, streets, works: there high explosive does more of it); each machine-gun round names its gun (g): the commander's 'roof' gun (only in the armies named, only with him up in the hatch, 'roofShare' of his tank's bursts), the hull gunner's when the target is within 'hullArc' degrees of her bow, else the 'coax' beside the main gun. A commander up in his hatch is exposed: a small-arms round that strikes his tank strikes him 'commander' of the time, a shell bursting on her 'splinter' of the time (the round carries cm: 1); she fights buttoned up from then, and her roof gun is silent. hold: metres to which a defence holds its fire: its machine guns, its riflemen [raw, regular, veteran] (the general: machine guns 300 to 400 m, rifles 200, veterans 100, raw troops open at 600 to 800 and give themselves away). counter: a defence counter-attacks once the enemy is within 'at' metres of its line, its rear platoons going 'ahead' metres forward of their places; xp: its pause times this [raw, regular, veteran]. flank: metres [least, most] the assault's men swing out toward the flank on a rush ('rush'), and the most they swing out from their places in the line ('out': the general, inside a platoon 40 to 60 m). smoke: as an assault goes out its platoons lay the school's 'smoke' rounds (a British platoon's 2-inch mortar 3; none for the Soviets) side by side 'spread' metres apart on the enemy's front corner on its flank, again every 'every' seconds while it is out; no harm (the 3D draws a screen drifting with the battle's wind); off ('on' false) until the 3D scene draws smoke rounds."
+        "tank: battle seconds between a tank's own aimed rounds in a fight [least, most] (the general: a round every 15 to 30 s at a weapon). tankMg (Brian, 22 November 04:10Z: 'make sure the machine gun from the gunner inside the tank also shoots some times at infantry', and 'the top machine gun cant be used unless the tank commander mans the gun'): of the men a tank block takes off the enemy's foot, the share that fall to her machine guns rather than her main gun's shells, in the open and in cover (woods, streets, works: there high explosive does more of it); each machine-gun round names its gun (g): the commander's 'roof' gun (only in the armies named, only with him up in the hatch, 'roofShare' of his tank's bursts), the hull gunner's when the target is within 'hullArc' degrees of her bow, else the 'coax' beside the main gun. A commander up in his hatch is exposed: a small-arms round that strikes his tank strikes him 'commander' of the time, a shell bursting on her 'splinter' of the time (the round carries cm: 1); she fights buttoned up from then, and her roof gun is silent. hold: metres to which a defence holds its fire: its machine guns, its riflemen [raw, regular, veteran] (the general: machine guns 300 to 400 m, rifles 200, veterans 100, raw troops open at 600 to 800 and give themselves away). counter: a defence counter-attacks once the enemy is within 'at' metres of its line, its rear platoons going 'ahead' metres forward of their places; xp: its pause times this [raw, regular, veteran]. flank: metres [least, most] the assault's men swing out toward the flank on a rush ('rush'), and the most they swing out from their places in the line ('out': the general, inside a platoon 40 to 60 m). smoke: as an assault goes out its platoons lay the school's 'smoke' rounds (a British platoon's 2-inch mortar 3; none for the Soviets) side by side 'spread' metres apart on the enemy's front corner on its flank, again every 'every' seconds while it is out; no harm (the 3D draws a screen drifting with the battle's wind); off ('on' false) until the 3D scene draws smoke rounds. With smoke on call (the battle's smoke switch, release 2, ruling 242 S6) the platoons lay none of these: each screen the rules lay (LandBattle.screens) is drawn as rounds from the block's base of fire, one each 'per' metres of its line, at most 'most' (the design director's looks-only knobs), each hanging ('hang') till the screen's end."
       ],
       schools: {
         GER: { bound: "body", crawl: 0.1, final: "grenade", gunStays: false, counter: 10, smoke: 2 },
@@ -2647,11 +3081,11 @@
       hold: { mg: 350, rifle: [700, 200, 100] },
       counter: { at: 45, ahead: 12, xp: [2, 1, 0.6] },
       flank: { rush: [14, 26], out: 45 },
-      smoke: { on: true, every: 60, spread: 10 }
+      smoke: { on: true, every: 60, spread: 10, per: 15, most: 12 }
     }
   };
 
-  // src/battle/land/tactics.ts
+  // ../../src/battle/land/tactics.ts
   var BOOK = drill_default.book;
   function schoolOf(nat) {
     return BOOK.nations[nat] ?? "_";
@@ -2747,7 +3181,7 @@
     }
   }
 
-  // src/battle/land/drill.ts
+  // ../../src/battle/land/drill.ts
   var DR = drill_default;
   var mix = (n) => {
     let h = n >>> 0;
@@ -2770,7 +3204,7 @@
   var isFoot2 = (u) => MOTION[u.kind] === "foot" || u.kind === "mot";
   var CLOSE2 = ["woods", "buildings", "industry", "suburb"];
   var BUILT = ["buildings", "industry", "suburb"];
-  var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed"]);
+  var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed", "stretcher_front", "stretcher_rear"]);
   var CARRIED = /* @__PURE__ */ new Set(["ride", "mounted", "horses"]);
   var SMALL_ARMS = /* @__PURE__ */ new Set(["fire_stand", "fire_kneel", "fire_prone", "lmg_burst"]);
   var VEHICLE = /* @__PURE__ */ new Set(["tank", "gun", "lorry"]);
@@ -2858,6 +3292,13 @@
        * together. On with platoons unless asked off.
        */
       __publicField(this, "byBook");
+      /**
+       * The battle's scale (the true-scale plan, GR1 and GR3; Brian's standing rule of 22 November 04:14Z: the numbers on
+       * screen reflect the units each side brings): one drawn man stands for this many. No block draws more men than its
+       * men0 over it: drawn as platoons where they fit, else as sections, else its key men only. Null: the battle's setting
+       * for every block, as before.
+       */
+      __publicField(this, "scale");
       __publicField(this, "sup", new Suppression());
       /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
       __publicField(this, "tankMemo", { t: -1, at: {} });
@@ -2867,6 +3308,7 @@
       this.sections = !!opts.sections || !!opts.platoons;
       this.platoons = !!opts.platoons;
       this.byBook = opts.book ?? this.platoons;
+      this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) this.squads.set(u.id, this.make(u));
     }
     /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
@@ -2874,25 +3316,30 @@
       if (this.b.t > 0 || !this.squads.has(u.id)) return;
       this.squads.set(u.id, this.make(u));
     }
+    /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
+    join(u) {
+      if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+    }
     // ---- Who is in a block ------------------------------------------------------------------------------------------
     make(u) {
       const men = [], veh = [];
       const n = Math.max(0, u.figures0);
       const roles = rolesFor(u.kind, u.tray, n, u.team);
+      const fill = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = fill.tier;
       const man = (k, nn, role, team) => {
         const jx = (roll(this.seed, u.id, nn, 1) - 0.5) * 6, jy = (roll(this.seed, u.id, nn, 2) - 0.5) * 5;
         return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: "idle", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx, jy };
       };
       for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
       let lor = 0;
-      if (this.sections) for (let k = 0; k < n; k++) {
-        const key = men[k], mot = u.kind === "mot" && this.platoons;
+      if (tier >= 1) for (let k = 0; k < n; k++) {
+        const key = men[k], mot = u.kind === "mot" && tier === 2;
         if (mot) {
           key.lor = lor;
           key.seat = 0;
         }
         const sec = sectionOf(u.nat, key.role);
-        sec.forEach(([role, pr, scout], i) => {
+        sec.slice(0, fill.sec[k]).forEach(([role, pr, scout], i) => {
           const m = man(k, 1e3 + k * 32 + i + 1, role, key.team);
           m.j = i + 1;
           m.sec = k;
@@ -2904,11 +3351,14 @@
           }
           men.push(m);
         });
+        if (fill.sec[k] > 0) key.hasSec = true;
         lor++;
-        if (!this.platoons || key.role !== "rifle") continue;
-        const P = platoonOf(u.nat);
+        if (tier < 2 || key.role !== "rifle" || fill.plat[k] <= 0) continue;
+        key.plat = true;
+        const P = platoonOf(u.nat), most = fill.plat[k];
         let j = sec.length, x = 0;
         const add = (sub, role, seat, opts = {}) => {
+          if (x >= most) return false;
           const m = man(k, 2e4 + k * 128 + x++, role, key.team);
           m.j = ++j;
           m.sec = k;
@@ -2920,19 +3370,23 @@
             m.seat = seat;
           }
           men.push(m);
+          return true;
         };
-        for (let s = 1; s < P.squads; s++, lor++) {
+        for (let s = 1; s < P.squads && x < most; s++, lor++) {
           add(s, "rifle", 0, { lead: true });
           sec.forEach(([role, pr], i) => add(s, role, i + 1, { pr }));
         }
-        add(P.squads, "rifle", 0, { lead: true });
-        for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
-        lor++;
+        if (x < most) {
+          add(P.squads, "rifle", 0, { lead: true });
+          for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
+          lor++;
+        }
       }
-      const lorries = u.kind === "mot" ? this.sections ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? this.sections ? n : 1 : 0;
+      const lorries = u.kind === "mot" ? tier >= 1 ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? tier >= 1 ? n : 1 : 0;
       for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: "lorry", team: 0, x: u.x, y: u.y, face: u.face, pose: "parked", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
       const sq = {
         u,
+        tier,
         men,
         veh,
         fo: null,
@@ -2965,6 +3419,28 @@
       };
       this.layStart(sq);
       return sq;
+    }
+    /**
+     * How many of each key man's section (sec) and platoon (plat: its other squads and headquarters, in order) a block
+     * draws (GR3; the production lead, 22 November 07:23Z). Unscaled, all the battle's setting draws. Under the scale its
+     * key men always (the rules' models), then their sections in squad order, then the rifle models' platoons squad by
+     * squad, as many men as fit its men0 over N, counted as the 3D game shows them (menOnScreen): the last group drawn
+     * short, so every block draws within a man of its cap where its whole draw would be more. tier: the most any key draws.
+     */
+    fillFor(u, keys) {
+      const top = this.platoons ? 2 : this.sections ? 1 : 0;
+      const secs = keys.map((r) => top >= 1 ? sectionOf(u.nat, r).length : 0);
+      const P = platoonOf(u.nat);
+      const plats = keys.map((r, i) => top === 2 && r === "rifle" ? (P.squads - 1) * (1 + secs[i]) + P.hq : 0);
+      if (this.scale === null || top === 0) return { tier: top, sec: secs, plat: plats };
+      let room = Math.floor(u.men0 / this.scale) - keys.reduce((c, r) => c + menOnScreen(r), 0);
+      const take = (most) => {
+        const n = Math.max(0, Math.min(room, most));
+        room -= n;
+        return n;
+      };
+      const sec = secs.map(take), plat = plats.map(take);
+      return { tier: plat.some((x) => x > 0) ? 2 : sec.some((x) => x > 0) ? 1 : 0, sec, plat };
     }
     layStart(sq) {
       const u = sq.u;
@@ -3001,7 +3477,7 @@
           m.cover = "none";
         }
       }
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const room = /* @__PURE__ */ new Map(), order = [...sq.men].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
         for (const m of order) {
           if (VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
@@ -3045,11 +3521,13 @@
         sq.slow = sq.speed < MOUNT.down || sq.net < MOUNT.down ? sq.slow + DT : 0;
         sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
         this.falls(sq);
+        if (b.bearers) this.litters(sq);
         if (t >= sq.nextThink) {
           sq.nextThink = t + 0.5;
           if (this.byBook) this.feel(sq);
           this.think(sq);
           this.pairs(sq, this.space(sq));
+          if (sq.screenQ) this.screenRound(sq);
         }
         this.walk(sq);
         this.fire(sq);
@@ -3113,6 +3591,7 @@
       const won = this.b.over?.winner;
       for (const sq of this.squads.values()) {
         const u = sq.u;
+        for (const c of sq.carries ?? []) if (c.stage === "carry") c.man.pose = "wounded";
         for (const m of [...sq.men, ...sq.veh, ...sq.fo ?? []]) {
           if (m.fell !== void 0) continue;
           m.v = 0;
@@ -3179,10 +3658,11 @@
         if (!shell && by2 !== void 0) this.killRound(this.b.unit(by2), sq, m);
         m.pose = "down";
         m.spot = [m.x, m.y];
+        if (this.b.bearers) this.hurt(sq, m);
         this.aid(sq, m);
-        if (this.sections) this.regroup(sq, m);
+        if (sq.tier >= 1) this.regroup(sq, m);
       }
-      if (this.sections) this.thin(sq);
+      if (sq.tier >= 1) this.thin(sq);
     }
     /** A comrade goes to a man who fell, where one is near and the block is not running (nor riding, nor mounting again). */
     aid(sq, m) {
@@ -3236,8 +3716,12 @@
       let up = 0;
       for (const m of sq.men) if (this.stands(sq, m) || m.j !== void 0 && m.fell === void 0) up++;
       let n = up - want;
+      if (n < 0 && this.b.bearers) {
+        this.rise(sq, -n);
+        return;
+      }
       if (n <= 0) return;
-      const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0);
+      const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0 && !m.job);
       if (!cand.length) return;
       let by2;
       const owed = u.owed ?? {};
@@ -3272,9 +3756,184 @@
         if (by2) this.killRound(by2, sq, m, shell ? burst : void 0);
         m.pose = "down";
         m.spot = [m.x, m.y];
+        if (b.bearers) this.hurt(sq, m);
         this.aid(sq, m);
       }
       sq.memo = void 0;
+    }
+    // ---- Stretcher bearers (release 2) ------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z; the design director's rulings Q4 and Q5 (18:36Z); LandBattle.bearers and LAND.bearers.
+    // The rules count the bearers and the wounded (LandBattle.litter); the drill draws them, looks only. Of the men who
+    // fall, the rules' share (1 - killed) lie wounded: a man of a section a light case at the rules' share, lying for his
+    // dressing and up again once it is done and his block's strength has them back (thin, rise); the rest lie for the
+    // bearers. The bearers are riflemen of the block (br), two to a stretcher, as many stretchers as the rules' bearers
+    // carry cases at once (its army's share of its men over LAND.bearers.litter). A pair fetches the litter case fallen
+    // earliest, lifts him and carries him head first to its aid post (LandBattle.aidOf) at LAND.bearers.pace, his place the
+    // stretcher's middle, the front bearer 1.12 m ahead of him and the rear 1.35 m behind; he stays there (gone), and they
+    // walk home. A block running, fled or gone sends no stretcher out; one on its way goes on. Every choice is the drill's
+    // own dice: the men drawn and the fight are the same as without them.
+    /** A man who falls, with the bearers on: wounded at the rules' share (else killed), a man of a section a light case at theirs. */
+    hurt(sq, m) {
+      if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== void 0) return;
+      const B = LAND.bearers, u = sq.u;
+      if (roll(this.seed, u.id, m.n, 71) >= 1 - killedShare(u.nat)) return;
+      m.wd = this.b.t;
+      m.pose = "wounded";
+      if (m.j !== void 0 && roll(this.seed, u.id, m.n, 72) < B.light.share) {
+        m.light = true;
+        (sq.dressing ?? (sq.dressing = [])).push(m);
+      } else (sq.lying ?? (sq.lying = [])).push(m);
+    }
+    /** Its light cases whose dressing is done get up, up to n of them, the earliest hurt first, while its block fights. */
+    rise(sq, n) {
+      const u = sq.u, t = this.b.t, L2 = LAND.bearers.light, foot = LAND.speed.inf;
+      if (!fighting(u) || !sq.dressing?.length) return;
+      const walk2 = L2.at > 0 ? L2.at / (foot * L2.out) + L2.at / (foot * L2.back) : 0;
+      while (n > 0 && sq.dressing.length && sq.dressing[0].wd + walk2 + L2.dress <= t + 1e-9) {
+        const m = sq.dressing.shift();
+        m.light = void 0;
+        m.fell = void 0;
+        m.back = t;
+        m.pose = "wait";
+        m.v = 0;
+        m.spot = [m.x, m.y];
+        m.slotAt = [m.x, m.y];
+        m.until = t + 1;
+        if (!this.memo(sq).keyOf.has(m.sec ?? m.k)) {
+          const to = this.nearest(this.memo(sq).keys.filter((x) => !VEHICLE.has(x.role) && !CREWED.has(x.role)), m)?.[0];
+          if (to) {
+            m.sec = to.k;
+            m.sub = void 0;
+            m.lead = void 0;
+          }
+        }
+        sq.memo = void 0;
+        n--;
+      }
+    }
+    /** A bearer named in a carry: his model and his place in it. */
+    byId(m) {
+      return m.k * 1e3 + (m.j ?? 0);
+    }
+    /**
+     * Each step with the bearers on: its bearers picked (the first time), each pair free of a carry and on its feet sent
+     * for the next litter case (its block fighting, its men down), and every carry moved on a step.
+     */
+    litters(sq) {
+      const u = sq.u, b = this.b, t = b.t, B = LAND.bearers, f = b.field;
+      if (!sq.brs) {
+        const cand = sq.men.filter((m) => m.j !== void 0 && m.role === "rifle" && !m.pr && !m.scout && !m.lead && m.fell === void 0).sort((a, c) => roll(this.seed, u.id, a.n, 73) - roll(this.seed, u.id, c.n, 73) || a.n - c.n);
+        const pairs2 = Math.min(Math.floor(cand.length / 2), Math.max(1, Math.round(bearerShare(u.nat) * sq.m0 / B.litter)));
+        sq.brs = cand.slice(0, 2 * pairs2);
+        for (const m of sq.brs) m.br = true;
+      }
+      const carries = sq.carries ?? (sq.carries = []);
+      if (sq.lying?.length && fighting(u) && sq.down && sq.boarding === void 0) {
+        const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose));
+        for (let i = 0; i + 1 < free.length && sq.lying.length; i += 2) {
+          const man = sq.lying.shift(), [ax, ay] = b.aidOf(u);
+          const to = [clamp2(ax, 3, f.w - 3), clamp2(ay, 3, f.h - 3)], way = bearing2(man.x, man.y, to[0], to[1]);
+          const c = { man, front: free[i], rear: free[i + 1], stage: "fetch", from: [man.x, man.y], to, way, t0: t, t1: t };
+          for (const m of [c.front, c.rear]) {
+            m.job = c;
+            m.aim = void 0;
+            m.hidden = void 0;
+            m.pose = "walk";
+            m.v = B.pace;
+          }
+          carries.push(c);
+          sq.memo = void 0;
+        }
+      }
+      for (const c of carries) this.carryStep(sq, c);
+      if (carries.some((c) => c.front.job !== c && c.rear.job !== c)) sq.carries = carries.filter((c) => c.front.job === c || c.rear.job === c);
+    }
+    /** A carry's step: the bearers walk to the man, lift him, carry him to the aid post and walk home. */
+    carryStep(sq, c) {
+      var _a;
+      const u = sq.u, t = this.b.t, B = LAND.bearers, rate = TURN.foot * DT, [wx, wy] = fwd(c.way);
+      const FRONT2 = 1.12, REAR = 1.35;
+      const stride = (m, p, v) => {
+        const ddx = p[0] - m.x, ddy = p[1] - m.y, d = Math.hypot(ddx, ddy);
+        if (d < 0.05) {
+          m.went = 0;
+          return true;
+        }
+        const want = Math.atan2(ddx, ddy);
+        m.face = turnTo(m.face, want, rate);
+        const s = Math.min(d, v * DT) * Math.max(0, Math.cos(wrap(want - m.face)));
+        m.x += ddx / d * s;
+        m.y += ddy / d * s;
+        m.went = s / DT;
+        return s >= d - 1e-9;
+      };
+      const bearers = [c.front, c.rear];
+      if (c.stage === "fetch") {
+        const at = (m) => m === c.front ? [c.man.x + wx * FRONT2, c.man.y + wy * FRONT2] : [c.man.x - wx * REAR, c.man.y - wy * REAR];
+        let there = 0;
+        for (const m of bearers) if (stride(m, at(m), B.pace)) there++;
+        if (there === 2) {
+          c.stage = "lift";
+          for (const m of bearers) {
+            m.pose = "wait";
+            m.v = 0;
+            m.went = 0;
+          }
+        }
+        return;
+      }
+      if (c.stage === "lift") {
+        for (const m of [...bearers, c.man]) m.face = turnTo(m.face, c.way, rate);
+        if (![...bearers, c.man].every((m) => Math.abs(wrap(m.face - c.way)) < 1e-6)) return;
+        c.stage = "carry";
+        c.t0 = t;
+        c.t1 = Math.round((t + Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y) / B.pace) * 1e3) / 1e3;
+        c.from = [c.man.x, c.man.y];
+        ((_a = c.man).cy ?? (_a.cy = [])).push([c.t0, c.t1, this.byId(c.front), this.byId(c.rear)]);
+        c.man.pose = "carried";
+        c.front.pose = "stretcher_front";
+        c.rear.pose = "stretcher_rear";
+        for (const m of bearers) m.v = B.pace;
+        return;
+      }
+      if (c.stage === "carry") {
+        const left = Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y), s = Math.min(left, B.pace * DT);
+        c.man.x += wx * s;
+        c.man.y += wy * s;
+        c.man.spot = [c.man.x, c.man.y];
+        c.front.x = c.man.x + wx * FRONT2;
+        c.front.y = c.man.y + wy * FRONT2;
+        c.rear.x = c.man.x - wx * REAR;
+        c.rear.y = c.man.y - wy * REAR;
+        for (const m of bearers) {
+          m.face = c.way;
+          m.went = s / DT;
+        }
+        if (s < left - 1e-9) return;
+        c.man.gone = t;
+        c.man.pose = "wounded";
+        c.stage = "home";
+        for (const m of bearers) {
+          m.pose = "walk";
+          m.v = B.pace;
+        }
+        return;
+      }
+      for (const m of bearers) {
+        if (m.job !== c) continue;
+        const p = this.leash(sq, [m.x, m.y], -4);
+        if (!live(u) || stride(m, p, B.pace)) {
+          m.job = void 0;
+          m.pose = "wait";
+          m.v = 0;
+          m.went = 0;
+          m.spot = [m.x, m.y];
+          m.slotAt = [m.x, m.y];
+          m.until = t + 1;
+          sq.memo = void 0;
+        }
+      }
     }
     // ---- What the block is doing ------------------------------------------------------------------------------------
     phaseOf(sq) {
@@ -3394,7 +4053,7 @@
      */
     turnFor(sq, m, bound) {
       const key = this.memo(sq).keyOf.get(m.sec ?? m.k);
-      const plat = this.platoons && (key ? key.role === "rifle" : m.role === "rifle");
+      const plat = key ? !!key.plat : sq.tier === 2 && m.role === "rifle";
       const squads = plat ? platoonOf(sq.u.nat).squads : 0, s = plat ? m.sub ?? 0 : m.sec ?? m.k;
       return turnOf(bound, m.role === "mg", s, plat && s >= squads);
     }
@@ -3594,7 +4253,7 @@
       }
       this.ambush(sq);
       this.officer(sq);
-      for (const m of sq.men) if (m.fell === void 0 && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+      for (const m of sq.men) if (m.fell === void 0 && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
     }
     /**
      * He has reached his place: off his feet into the pose for it (no man runs on the spot). A rifleman with a target
@@ -3648,7 +4307,7 @@
      * on the field and he has not fallen (falls).
      */
     stands(sq, m) {
-      return m.fell === void 0 && (m.j === void 0 ? m.k < sq.u.figures : live(sq.u));
+      return m.fell === void 0 && !m.job && (m.j === void 0 ? m.k < sq.u.figures : live(sq.u));
     }
     /**
      * The block's men on their feet, worked out again only when that changes: a man falls or joins another section (falls,
@@ -3674,7 +4333,7 @@
           l.push(m);
         }
       }
-      const all = this.sections ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
+      const all = sq.tier >= 1 ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
       return sq.memo = { fig: u.figures, on, stand, struck: on ? [...stand, ...sq.veh] : stand, up, keys, keyOf: keyOf2, all, bySec };
     }
     /** Whom a man who keeps by another keeps by in his section now: a loader his weapon, a gun's crew its gun, a runner his officer. */
@@ -3737,7 +4396,7 @@
      * rifle section's gunner fallen, his number two takes the gun up; with none to keep by, he fights as a rifleman.
      */
     pairs(sq, room) {
-      if (!this.sections) return;
+      if (sq.tier < 1) return;
       const u = sq.u, t = this.b.t;
       const count = /* @__PURE__ */ new Map(), booked = /* @__PURE__ */ new Set();
       for (const m of sq.men) {
@@ -3816,7 +4475,7 @@
      * there. Returns the places booked, for pairs.
      */
     space(sq) {
-      if (!this.sections) return void 0;
+      if (sq.tier < 1) return void 0;
       const M = this.memo(sq), t = this.b.t, room = /* @__PURE__ */ new Map();
       const order = [...M.up].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
       for (const m of order) {
@@ -3886,7 +4545,7 @@
      * whole block goes in files (as many as its men need), section after section.
      */
     slot(sq, m, tpl) {
-      const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = this.sections;
+      const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = sq.tier >= 1;
       if (m.pr) {
         const L2 = this.leadOf(sq, m);
         if (L2) return this.slot(sq, L2, tpl);
@@ -3922,7 +4581,7 @@
       const half = u.w / 2 - 6 + (sec ? 25 : 0), span2 = Math.min(half - 4, sp * Math.max(0, n - 1));
       const outer = side * Math.min(half, u.w / 4 + span2 / 2);
       const a = outer - side * (n > 1 ? span2 * i / (n - 1) : 0);
-      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(this.platoons ? S.platoon.rows : S.rows) : -3 : 0) + m.jy * 0.5;
+      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(sq.tier === 2 ? S.platoon.rows : S.rows) : -3 : 0) + m.jy * 0.5;
       return [a + m.jx * 0.4, l];
     }
     /**
@@ -4010,6 +4669,53 @@
      * A point pulled inside the block's leash: its box, as the rules hold it, and a margin round it (more for men running).
      * The block is the truth: no man strays from it further than this.
      */
+    /**
+     * Where a man on foot makes for next, on a field with hedges: the gate on his way, found again when his spot has moved
+     * more than 2 m (or he more than 5 m) since, and on through it and beyond. Only a gate inside his block's ring (he
+     * never leaves his block for one). He goes through square, a stride either side of the gap, at his own place across it
+     * by his number: a section goes through abreast and not in one file on one point.
+     */
+    via(sq, m) {
+      const sp = m.spot;
+      if (!m.viaFor || Math.hypot(sp[0] - m.viaFor[0], sp[1] - m.viaFor[1]) > 2 || !m.via?.length && (!m.viaAt || Math.hypot(m.x - m.viaAt[0], m.y - m.viaAt[1]) > 5)) {
+        m.viaFor = [sp[0], sp[1]];
+        m.viaAt = [m.x, m.y];
+        m.via = this.gateFor(sq, m);
+      }
+      while (m.via?.length && Math.hypot(m.via[0][0] - m.x, m.via[0][1] - m.y) < 0.4) {
+        m.via.shift();
+        if (!m.via.length) {
+          m.viaAt = [m.x, m.y];
+          m.via = this.gateFor(sq, m);
+          break;
+        }
+      }
+      return m.via?.[0] ?? null;
+    }
+    gateFor(sq, m) {
+      const g = this.b.gateOn(m.x, m.y, m.spot[0], m.spot[1]);
+      if (!g) return void 0;
+      const [lx, ly] = this.leash(sq, [g.x, g.y]);
+      if (Math.hypot(lx - g.x, ly - g.y) > 0.5) return void 0;
+      let [hx, hy] = this.b.hedgeDir(g.x, g.y) ?? [0, 0];
+      if (!hx && !hy) {
+        const wx = g.x - m.x, wy = g.y - m.y, wl = Math.hypot(wx, wy) || 1;
+        hx = -wy / wl;
+        hy = wx / wl;
+      }
+      let nx = -hy, ny = hx;
+      if ((m.spot[0] - g.x) * nx + (m.spot[1] - g.y) * ny < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      const half = Math.max(0, (g.width ?? 3) / 2 - 0.5), o = (roll(this.seed, sq.u.id, m.n, 61) * 2 - 1) * half, S = 1.5;
+      const cx = g.x + hx * o, cy = g.y + hy * o, at = (m.x - g.x) * nx + (m.y - g.y) * ny;
+      const inGap = Math.abs((m.x - cx) * hx + (m.y - cy) * hy) <= half + 0.5;
+      const way = [];
+      if (!inGap || at < -S + 0.3) way.push([cx - nx * S, cy - ny * S]);
+      if (!inGap || at < S - 0.3) way.push([cx + nx * S, cy + ny * S]);
+      return way.length ? way : void 0;
+    }
     leash(sq, p, extra = 0) {
       const u = sq.u, m = (sq.phase === "flee" ? 70 : 45) + extra;
       if (!sq.ax || sq.ax[0] !== u.face) {
@@ -4081,7 +4787,7 @@
           best = o;
         }
       }
-      if (best && this.sections) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) {
+      if (best && sq.tier >= 1) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) {
         const dd = Math.hypot(o.x - m.x, o.y - m.y);
         if (dd < d) {
           d = dd;
@@ -4361,11 +5067,11 @@
       if (e && !home) for (const m of assault) near = Math.min(near, this.toBox(m, e));
       const away = e && near < BOOK.lift.mg + 15 ? [e.x + fx * e.d / 2, e.y + fy * e.d / 2] : void 0;
       const out = assault.size > 0;
-      if (BOOK.smoke.on && !home && e && out && S.smoke > 0 && (sq.smokeAt === void 0 || t - sq.smokeAt >= BOOK.smoke.every)) {
+      if (BOOK.smoke.on && !b.smoke && !home && e && out && S.smoke > 0 && (sq.smokeAt === void 0 || t - sq.smokeAt >= BOOK.smoke.every)) {
         sq.smokeAt = t;
         sq.smokeLeft = S.smoke;
       }
-      if (sq.smokeLeft && e && !home) {
+      if (sq.smokeLeft && e && !home && !b.smoke) {
         sq.smokeLeft--;
         this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke);
       }
@@ -4474,6 +5180,53 @@
       by2.pose = "wait";
       by2.aim = [ax, ay];
       by2.until = t + 1.5;
+    }
+    /**
+     * Smoke on call (release 2, ruling 242 S6): a screen the rules just laid (LandBattle.lay), drawn as the rounds that lay
+     * it, one round for each BOOK.smoke.per metres of its line (at most BOOK.smoke.most; looks only), one a think from the
+     * block's base of fire, as the book's own smoke is fired (smoke). A screen laid while one is still being drawn takes its
+     * place.
+     */
+    screen(s) {
+      const sq = this.squads.get(s.unit);
+      if (!sq) return;
+      const n = clamp2(Math.ceil(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / BOOK.smoke.per), 1, BOOK.smoke.most);
+      sq.screenQ = { s, i: 0, n };
+    }
+    /**
+     * The next round of the screen being drawn: from the platoon's headquarters (its light mortar) or a rifleman standing,
+     * else from the block's front, onto its place along the line ((i + 1/2) of n), scattered a little as a mortar's round;
+     * it hangs from its landing to the screen's end (hang). No harm, at no block (on -1). The shooter's stamp is the round's
+     * only change to his drill: he stands and fires it.
+     */
+    screenRound(sq) {
+      const q = sq.screenQ, u = sq.u, b = this.b, t = b.t, R = DR.rounds, s = q.s;
+      if (q.i >= q.n || !live(u) || t >= s.until) {
+        delete sq.screenQ;
+        return;
+      }
+      const men = this.up(sq), squads = platoonOf(u.nat).squads;
+      const by2 = men.find((m) => (m.sub ?? 0) >= squads && m.role === "rifle") ?? men.find((m) => m.role === "rifle");
+      const k = (q.i + 0.5) / q.n, ax = s.x0 + (s.x1 - s.x0) * k, ay = s.y0 + (s.y1 - s.y0) * k, z = Math.round(t * 10);
+      const [fx, fy] = fwd(u.face), ox = by2 ? by2.x : u.x + fx * u.d / 2, oy = by2 ? by2.y : u.y + fy * u.d / 2, n = by2 ? by2.n : 0;
+      const range = Math.hypot(ax - ox, ay - oy), [i0, i1] = R.indirect.mortar, sg = i0 + i1 * range;
+      const x = clamp2(ax + gauss(roll(this.seed, u.id, n, z, 81), roll(this.seed, u.id, n, z, 82)) * sg * 0.35, 1, b.field.w - 1);
+      const y = clamp2(ay + gauss(roll(this.seed, u.id, n, z, 83), roll(this.seed, u.id, n, z, 84)) * sg * 0.35, 1, b.field.h - 1);
+      const l = Math.round((t + range / R.speed.mortar) * 10) / 10;
+      const r = { t: Math.round(t * 10) / 10, l, by: u.id, w: "smoke", on: -1, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: "miss", hang: Math.max(0, Math.round((s.until - l) * 10) / 10) };
+      if (by2) {
+        r.k = by2.k;
+        if (by2.j !== void 0) r.j = by2.j;
+      }
+      this.book(r);
+      if (by2) {
+        by2.v = 0;
+        by2.spot = [by2.x, by2.y];
+        by2.pose = "wait";
+        by2.aim = [ax, ay];
+        by2.until = t + 1.5;
+      }
+      if (++q.i >= q.n) delete sq.screenQ;
     }
     /** Whether a mate lies within arm's length of him, down. */
     crowded(sq, m) {
@@ -4721,7 +5474,7 @@
       lead.aim = void 0;
       men.forEach((m, i) => {
         if (m === lead) return;
-        const ang = i / men.length * Math.PI * 2, r = this.sections ? 7 + 0.25 * men.length : 7;
+        const ang = i / men.length * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men.length : 7;
         const p = [lead.x + Math.sin(ang) * r + dir[0] * 4, lead.y + Math.cos(ang) * r + dir[1] * 4];
         if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, "run", 4, t + 2, dir, 4);
         else if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) {
@@ -4807,12 +5560,12 @@
     }
     /** Which of the block's lorries is his: by his place on the tray, or (drawn as sections) his section's own. */
     lorryIx(sq, m) {
-      return (m.lor ?? (this.sections ? m.sec ?? m.k : m.k)) % sq.veh.length;
+      return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length;
     }
     /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
     seat(sq, m) {
       const v = this.lorryOf(sq, m);
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const j2 = m.seat ?? m.j ?? 0;
         return toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2));
       }
@@ -5245,7 +5998,7 @@
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading;
       const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
       const guns = this.up(sq).filter((m) => m.role === "gun"), tractor = sq.veh[0];
-      const own = this.sections && sq.veh.length > 1;
+      const own = sq.tier >= 1 && sq.veh.length > 1;
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
         guns.forEach((g, i) => {
           g.aim = void 0;
@@ -5460,7 +6213,10 @@
         sq.foOn = e.id;
         sq.foAt = [base.x, base.y];
       }
-      if (this.byBook && sq.ms && sq.ms.on === e.id) sq.fo[1].call = sq.ms.call;
+      if (this.byBook && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) {
+        sq.fo[1].call = sq.ms.call;
+        sq.fo[1].callAt = [e.x, e.y];
+      }
       for (const m of sq.fo) {
         const d = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]);
         if (d < 1 && m.v === 0) {
@@ -5481,9 +6237,9 @@
     walk(sq) {
       const u = sq.u, f = this.b.field, t = this.b.t;
       let e;
-      const crowd = this.sections ? /* @__PURE__ */ new Map() : null;
+      const crowd = sq.tier >= 1 ? /* @__PURE__ */ new Map() : null;
       if (crowd) for (const m of sq.men) {
-        if (m.fell !== void 0 || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
+        if (m.fell !== void 0 || m.job || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
         const key = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
         let l = crowd.get(key);
         if (!l) crowd.set(key, l = []);
@@ -5507,7 +6263,8 @@
         if (m.role === "tank") m.v = Math.min(m.v, tankTop(sq));
         const veh = m.role === "tank" || m.role === "lorry" || m.role === "gun";
         const rate = (m.role === "tank" ? TURN.tank : veh ? TURN.wheels : m.pose === "ride" ? TURN.ride : TURN.foot) * DT;
-        const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
+        const via = !veh && MOVING.has(m.pose) && this.b.gates.length ? this.via(sq, m) : null;
+        const dx = (via ? via[0] : m.spot[0]) - m.x, dy = (via ? via[1] : m.spot[1]) - m.y, d = Math.hypot(dx, dy);
         if (m.v > 0 && (d > 0.05 || MOVING.has(m.pose))) {
           let s = Math.min(d, m.v * DT);
           if (d > 0.3) {
@@ -5568,7 +6325,7 @@
               this.arrive(sq, m);
             }
           }
-          if (s >= d - 1e-9 && MOVING.has(m.pose) && m.role !== "lorry" && sq.phase !== "column" && sq.phase !== "limbered" && sq.boarding === void 0) this.arrive(sq, m);
+          if (s >= d - 1e-9 && !via && MOVING.has(m.pose) && m.role !== "lorry" && sq.phase !== "column" && sq.phase !== "limbered" && sq.boarding === void 0) this.arrive(sq, m);
         } else {
           let want;
           if (m.aim) want = bearing2(m.x, m.y, m.aim[0], m.aim[1]);
@@ -5607,6 +6364,7 @@
           m.went = 0;
           continue;
         }
+        if (m.job) continue;
         if (m.pose === "mounted" && (u.kind === "mot" || m.role === "crew") && sq.veh.length) {
           const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
           m.x = p[0];
@@ -5964,7 +6722,7 @@
       const b = this.b, out = [];
       const r13 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
       const one = (m) => {
-        const o = { k: m.k, r: this.sections && m.j === void 0 && m.role === "rifle" || m.lead ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r13(m.aim[0]), r13(m.aim[1])];
         if (m.shot !== void 0) o.s = r13(m.shot);
@@ -5974,6 +6732,12 @@
         if (m.marks?.length) o.mk = m.marks.map((x) => [...x]);
         if (m.el && this.byBook) o.e = m.el;
         if (m.call !== void 0) o.cl = r13(m.call);
+        if (m.wd !== void 0) o.wd = r13(m.wd);
+        if (m.cy) o.cy = m.cy.map((c) => [r13(c[0]), r13(c[1]), c[2], c[3]]);
+        if (m.gone !== void 0) o.gone = r13(m.gone);
+        if (m.back !== void 0) o.back = r13(m.back);
+        if (m.br) o.br = 1;
+        if (m.call !== void 0 && m.callAt) o.cs = [r13(m.callAt[0]), r13(m.callAt[1])];
         return o;
       };
       for (const sq of this.squads.values()) {
@@ -5981,7 +6745,7 @@
         const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : void 0;
         if (as !== void 0 && u.side !== as && !b.known(u)) continue;
         if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
-        const men = sq.men.filter((m) => m.fell !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
+        const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
           const o = one(m);
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
@@ -5993,7 +6757,33 @@
           blk.foWith = sq.foWith;
           blk.foOn = sq.foOn;
         }
+        if (b.phones && b.phonesSeen(as)) {
+          const ln = this.linemen(u.id);
+          if (ln.length) blk.ln = ln;
+        }
         out.push(blk);
+      }
+      return out;
+    }
+    /**
+     * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire now, one for each mend.
+     * He leaves the headquarters at the mend's t0 with the cable reel ('reel'), walking the wire at foot pace to the cut,
+     * kneels there splicing ('splice') from t1, as he gets there, until the mend's t, then walks back along it ('walk') and
+     * is gone once he is home. Worked out from the mend alone, as the clock stands: looks only, and nothing here draws.
+     * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
+     */
+    linemen(id) {
+      const b = this.b, t = b.t, out = [], pace = LAND.speed.inf;
+      const r13 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
+      for (const m of b.wireMends) {
+        const w = b.wires[m.wire - 1];
+        if (!w || w.unit !== id || t < m.t0) continue;
+        const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace;
+        if (t >= home) continue;
+        const out1 = bearing2(hx, hy, m.x, m.y);
+        const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace / d) : 0;
+        const p = t < m.t1 ? "reel" : t < m.t ? "splice" : "walk";
+        out.push({ k: 300 + m.man, r: "rifle", x: r13(hx + (m.x - hx) * k), y: r13(hy + (m.y - hy) * k), f: r22(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace, c: "none", ln: 1 });
       }
       return out;
     }
@@ -6034,6 +6824,7 @@
     const P = DR.sections.platoon, p = P[nat] ?? P.default;
     return { squads: Math.max(1, Math.min(7, p.squads)), hq: Math.max(1, p.hq) };
   }
+  var menOnScreen = (r) => r === "hmg" || r === "mortar" ? 3 : VEHICLE.has(r) ? 0 : 1;
   function sectionOf(nat, key) {
     const S = DR.sections, out = [];
     const add = (r, c, pr = false, scout = false) => {
@@ -6083,8 +6874,25 @@
     return [(mix(id * 977 + n * 131 + 7) - 0.5) * w * 0.9, (mix(id * 613 + n * 389 + 3) - 0.5) * d * 0.8];
   }
 
-  // src/battle/land/sim.ts
+  // ../../src/battle/land/sim.ts
   var other = (s) => s === "att" ? "def" : "att";
+  var HEDGE_CELL = 10;
+  var OPEN_GROUND = ["open", "field", "road", "bridge", "marsh"];
+  var GATE_CELL = 25;
+  var GATE_REACH = 120;
+  var HEDGE_BAR = 0.75;
+  var HEDGE_GAP = 1.25;
+  function segHit(ax, ay, bx, by2, cx, cy, dx, dy) {
+    const rx = bx - ax, ry = by2 - ay, sx = dx - cx, sy = dy - cy, den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-12) return null;
+    const t = ((cx - ax) * sy - (cy - ay) * sx) / den, u = ((cx - ax) * ry - (cy - ay) * rx) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+  }
+  function segGap(px, py, ax, ay, bx, by2) {
+    const dx = bx - ax, dy = by2 - ay, l = dx * dx + dy * dy;
+    const k = l > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0;
+    return Math.hypot(px - (ax + k * dx), py - (ay + k * dy));
+  }
   function coveredTanks(t, units) {
     const A = LAND.alone, out = /* @__PURE__ */ new Set();
     for (const s of ["att", "def"]) {
@@ -6107,6 +6915,16 @@
   var inRiver = (g) => g === "water" || g === "blown";
   var live2 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live2(u) && u.state !== "routing";
+  var weightOf = (u) => u.priced ?? u.power0;
+  var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
+  function joinEdge(side, toward, own) {
+    if (toward === void 0 || !Number.isFinite(toward)) return side === "att" ? "south" : "north";
+    const sn = Math.sin(toward), cs = Math.cos(toward);
+    let e = Math.abs(cs) >= Math.abs(sn) ? cs > 0 ? "north" : "south" : sn > 0 ? "east" : "west";
+    if (e === (side === "att" ? "north" : "south")) e = sn > 1e-9 ? "east" : "west";
+    if (own && (e === "west" || e === "east") && e !== own) e = "south";
+    return e;
+  }
   var mix2 = (n) => {
     let h = n >>> 0;
     h ^= h >>> 16;
@@ -6209,17 +7027,130 @@
       /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
       __publicField(this, "hidStarted", false);
       /**
+       * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+       * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LAND.patrol; "Night patrol" below): the night
+       * before, the attack sends a patrol that may find the defence's most forward hidden post, or be caught and alert the
+       * defence. Off unless whoever opens the field turns it on (the 2D page's ?patrol, the bridge's { patrol: true }), and
+       * it needs hiding on: with hiding off no patrol goes out and nothing is drawn. Off, nothing below is read.
+       */
+      __publicField(this, "patrol", false);
+      /** The night's patrol, as it was settled when the clock started (night patrol): null until then, and where none went out. */
+      __publicField(this, "nightPatrol", null);
+      /** The block the player sends out on patrol, by his order while he places his army (night patrol): null where none. */
+      __publicField(this, "patrolBy", null);
+      /** The field's hedges and their gates, as the 3D game handed them over (hedgesOn): empty where it has none. */
+      __publicField(this, "hedges", []);
+      __publicField(this, "gates", []);
+      /** Which 10 m squares lie on a hedge line (LAND.hide.hedge.near), for hiding: null with no hedges. */
+      __publicField(this, "hedgeMap", null);
+      /** The hedge lines' segments, [ax, ay, bx, by], by the GATE_CELL square they pass through: for the men's way through the gates. */
+      __publicField(this, "hedgeSegs", /* @__PURE__ */ new Map());
+      /** The sides that have been ambushed: their attack fires on the cover ahead from then (LAND.hide.search). */
+      __publicField(this, "ambushed", /* @__PURE__ */ new Set());
+      /**
        * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts, LAND.armour): a tank's or a gun's blow on
        * a tank weighs what its gun gets through the face it strikes at that range. Off unless whoever opens the field turns
        * it on; off, nothing here is read.
        */
       __publicField(this, "measured", false);
+      /**
+       * Hold until relieved (release 2; Brian, 22 November 12:48Z; "Hold until relieved" below): a block on foot may be told
+       * to dig in and wait for a corps coming up from next door. Off unless whoever opens the field turns it on (the 2D
+       * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
+       */
+      __publicField(this, "relief", false);
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
       __publicField(this, "flanking", /* @__PURE__ */ new Map());
       /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
       __publicField(this, "models", /* @__PURE__ */ new Map());
-      /** The player's orders on the air (radio): each block's, with the battle time it lands. */
+      /**
+       * The player's orders on the air (radio): each block's, with the battle time it lands; 'smoke' (smoke on call, release
+       * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it. An
+       * order waiting for a down wire (field telephone lines) also carries the order it is (key) and its stamp (held).
+       */
       __publicField(this, "pending", []);
+      /**
+       * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
+       * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
+       * comes, and then nothing below reads it.
+       */
+      __publicField(this, "coming", []);
+      /** The battle second each joining corps came on. */
+      __publicField(this, "joinedAt", /* @__PURE__ */ new Map());
+      /** The corps that come up from next door. */
+      __publicField(this, "joinCorps", /* @__PURE__ */ new Set());
+      /**
+       * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+       * strength and arrival time"; the design director, 13:43Z): off unless whoever opens the field turns it on (the 2D
+       * page's ?rider, the bridge's { rider: true }); off, nothing reads him. Looks and words only: the fight never does.
+       */
+      __publicField(this, "rider", false);
+      /** Each joining corps' rider, worked out with its time (comeOn): where he sets out and stands, and when. */
+      __publicField(this, "riders", []);
+      /** The joining corps a block has waited for this battle (hold until relieved): each relieves one block a battle. */
+      __publicField(this, "waitedFor", /* @__PURE__ */ new Set());
+      /**
+       * Hedge cutters (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.cutters; "Hedge cutters" below): a tank block
+       * carries cutters, may be told to cut a gap through a hedge where the player picks, and the staffs' cut where their
+       * way crosses one. Off unless whoever opens the field turns it on (the 2D page's ?cutters, the bridge's { cutters:
+       * true }); off, nothing below is read.
+       */
+      __publicField(this, "cutters", false);
+      /** Every cut begun this battle (hedge cutters), in the order begun. Empty while the switch is off. */
+      __publicField(this, "cuts", []);
+      /**
+       * Smoke on call (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.smoke; "Smoke on call" below): a block on foot
+       * whose army has the means may lay a smoke screen before it, and both staffs lay one as they go in. Off unless whoever
+       * opens the field turns it on (the 2D page's ?smoke, the bridge's { smoke: true }); off, nothing below is read.
+       */
+      __publicField(this, "smoke", false);
+      /**
+       * The bocage (release 2; ruling 242 C1-B, as amended 17:45Z: "unfitted tanks cross only at gaps"; "The bocage" below):
+       * on a field with hedges, a tank block without hedge cutters crosses a hedge line only at a gap in it, a gateway or a
+       * gap cut and open, and finds its way round to one. Its own switch, so cutters alone stays the fight it was (C1-B:
+       * "under its own switch, measured against the card"). Off unless whoever opens the field turns it on (the 2D page's
+       * ?bocage, the bridge's { bocage: true }); off, nothing below is read.
+       */
+      __publicField(this, "bocage", false);
+      /** The bocage: the field's cells a hedge line bars to a tank block without cutters (barrier()); null until asked, and again whenever a gap opens. */
+      __publicField(this, "bars", null);
+      /** How many times the barred cells have been laid afresh (a gap opened): a way found before is looked for again. */
+      __publicField(this, "barsLaid", 0);
+      /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
+      __publicField(this, "screens", []);
+      /**
+       * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off
+       * if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LAND.phones; "Field telephone
+       * lines" below): the defence's blocks are on the telephone from its headquarters; guns, mortars and tanks cut the wires,
+       * and an order to a block whose wire is down waits its army's runner or wireless, the player's and every staff's alike.
+       * Off unless whoever opens the field turns it on (the 2D page's ?phones, the bridge's { phones: true }); off, nothing
+       * below is read.
+       */
+      __publicField(this, "phones", false);
+      /** The defence's wires (field telephone lines), laid as the clock starts, numbered from 1. Empty while the switch is off. */
+      __publicField(this, "wires", []);
+      /** Every line cut, every lineman sent, and every order that waited for a down wire, in order. Empty while the switch is off. */
+      __publicField(this, "wireCuts", []);
+      __publicField(this, "wireMends", []);
+      __publicField(this, "wireHeld", []);
+      /** Each block's wire, by its id; and the wires' own dice (never the battle's), from when they are laid. */
+      __publicField(this, "wireBy", /* @__PURE__ */ new Map());
+      __publicField(this, "phoneRng", null);
+      /**
+       * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+       * someone doesnt want it"; the design director's rulings Q4 and Q5, 18:36Z; LAND.bearers; "Stretcher bearers" below):
+       * a block's wounded lie for its bearers, who carry them back to its aid post, its own blows the weaker by the men away;
+       * its light cases are back in the line after their dressing. Off unless whoever opens the field turns it on (the 2D
+       * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
+       */
+      __publicField(this, "bearers", false);
+      /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
+      __publicField(this, "litters", /* @__PURE__ */ new Map());
+      /**
+       * The light cases back in the line (stretcher bearers): when, the block and how much strength, a block's returns in one
+       * battle second taken together (at the first one's time). Empty while the switch is off.
+       */
+      __publicField(this, "returns", []);
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
       /** Each side's fighters on call, where it has any. */
       __publicField(this, "airOn", { att: null, def: null });
@@ -6253,6 +7184,11 @@
       /** What the held defence's take is multiplied by for that flank: LAND.hold.stream up the field, LAND.hold.join beside a second river. */
       __publicField(this, "flankHold", 1);
       /**
+       * What waits' cover spared, being paid out: each held block's, at the pace it was spared, shared by men with the blocks
+       * that relieved it (the design director, 13:43Z). Empty with no waits, and then nothing reads it.
+       */
+      __publicField(this, "repay", []);
+      /**
        * The way there: straight, unless ground it cannot enter lies across it (a river away from its bridges, rock, marsh
        * for a lorry, a bunker). Then round it, the quickest way over the ground (a road is quicker than a field), cut to as
        * few turns as can be walked straight between: over a bridge, round a bend of the river, round an outcrop. Where it
@@ -6282,9 +7218,10 @@
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
-      const att = makeBlocks("att", ticket.att, A, 1);
-      const def = makeBlocks("def", ticket.def, D2, att.length + 1);
+      const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
+      const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
+      const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
       this.covered = coveredTanks(ticket, this.units);
       const works = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
       this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo };
@@ -6296,15 +7233,23 @@
         const c = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
         if (c) u.cal = c;
       }
+      for (const u of joining) {
+        const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
+        if (c) u.crew = c;
+        const k = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
+        if (k) u.cal = k;
+      }
       const dry = ticket.place.dryEnd ?? "west";
       const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : void 0;
       if (!bend) for (const u of att) delete u.dry;
+      for (const u of joining) if (u.side === "def" || !ticket.place.river) delete u.dry;
       const armour = att.filter((u) => MOTION[u.kind] === "tracks" || MOTION[u.kind] === "wheels"), all = armour.reduce((a, u) => a + u.power0, 0);
       this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
       this.field = buildField(ticket.place, ticket.seed, bend);
       if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
       deploy(this.units, "att", this.field);
       deploy(this.units, "def", this.field);
+      if (joining.length) this.comeOn(joining);
       const St = this.field.stream, held = this.units.filter((u) => u.side === "def");
       if (St?.lie === "up") {
         const xAt = (y) => St.course.reduce((m, p) => Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m)[0];
@@ -6336,10 +7281,10 @@
      * And only as far as the attack's tanks and lorries had to cross with it (armourWet): an attack on foot crosses at no
      * cost the field must make up, so a river never makes an attack better than none (b494).
      */
-    holdTake(u) {
+    holdTake(u, t) {
       const p = this.ticket.place, H = LAND.hold;
       const streets = streetsOf(p);
-      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
     }
     say(e) {
       const ev = { t: Math.round(this.t * 10) / 10, ...e };
@@ -6358,6 +7303,920 @@
     }
     unit(id) {
       return this.units.find((u) => u.id === id);
+    }
+    /** Every block of the battle: those on the field, then those of corps still coming up from next door (release 2). */
+    allBlocks() {
+      return this.coming.length ? [...this.units, ...this.coming.map((c) => c.u)] : this.units;
+    }
+    // ---- Neighbours join the fight (release 2) ----------------------------------------------------------------------
+    //
+    // The design director's ruling of 22 November 03:15Z: a corps next door that joins a battle is priced on the
+    // campaign card, and the field only draws it coming up. It reaches its side's line at (1 - joined) of the battle's
+    // own clock, worked out from its march weeks, never a fixed minute or a draw: it stands off the field until its own
+    // march from the edge facing the province it comes from would bring it there then, and walks on from that edge as a
+    // b407 reserve already sent, to where its side's line is struck hardest. Until then nothing on the field sees it,
+    // strikes it or is sent at it; the bar and the break count it at the card's figure.
+    /**
+     * Holds each joiner off the field: its time, its edge and each block's place there, side by side along the edge.
+     * Nothing here draws on the dice.
+     */
+    comeOn(joining) {
+      const B = this.field.bend, F = this.field, J = LAND.join;
+      for (const corps of [...new Set(joining.map((u) => u.corps))]) {
+        const us = joining.filter((u) => u.corps === corps), u0 = us[0], side = u0.side;
+        const f = this.ticket[side].joiners.find((x2) => x2.corps === corps);
+        const own = side === "att" && B ? u0.dry ? B.dry : B.dry === "west" ? "east" : "west" : void 0;
+        const edge = joinEdge(side, f.toward, own);
+        const lanes = own && B && edge === "south" ? own === "west" ? [10, B.x - BEND.clear] : [B.x + BEND.clear, F.w - 10] : null;
+        const [x, y] = this.edgeAt(side, edge, f.toward, u0.w, lanes);
+        const along = edge === "south" || edge === "north", [lo, hi] = lanes ?? [10, F.w - 10];
+        const own0 = this.units.filter((v) => v.side === side);
+        const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
+        const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
+        const at = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
+        if (at > 0) {
+          this.riders.push({ corps, side, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at, edge });
+          this.riderTo(this.riders[this.riders.length - 1]);
+        }
+        us.forEach((u, i) => {
+          const off = (i - (us.length - 1) / 2) * (u.w + J.gap);
+          const px = along ? clamp(x + off, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp(y + off, 40, F.h - 40);
+          this.coming.push({ u, f, edge, x: px, y: py, lanes, at });
+        });
+        this.joinCorps.add(corps);
+      }
+      this.coming.sort((a, c) => a.at - c.at || a.u.id - c.u.id);
+    }
+    /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
+    edgeAt(side, edge, toward, w, lanes) {
+      const F = this.field, z = F.zones[side], J = LAND.join;
+      if (edge === "west" || edge === "east") return [edge === "west" ? w / 2 + 10 : F.w - w / 2 - 10, (z[1] + z[3]) / 2];
+      const [lo, hi] = lanes ?? [z[0], z[2]];
+      const q = toward !== void 0 && Number.isFinite(toward) ? toward : 0;
+      return [clamp(F.w / 2 + F.w / 2 * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge === "south" ? J.edge : F.h - J.edge];
+    }
+    /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
+    arrive() {
+      const due = [];
+      while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift());
+      for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
+        const g = due.filter((c) => c.u.corps === corps);
+        for (const c of g) this.walkOn(c);
+        this.joinedAt.set(corps, Math.round(this.t * 10) / 10);
+        const u = g[0].u, f = g[0].f, side = u.side;
+        this.say({
+          what: "land:joined",
+          unit: u.id,
+          side,
+          x: u.x,
+          y: u.y,
+          text: `${this.ticket[side].human ? f.name : `The ${this.ticket[side].adj} ${f.name}`} comes up from next door${f.arrive ? `, ${f.arrive === "early" ? "early" : f.arrive === "midway" ? "midway through the fight" : "late in the day"}` : ""}.`
+        });
+      }
+    }
+    /**
+     * Sets one joining block on its edge, clear of the river and of every block, and starts it in: a reserve already
+     * sent (b407; its guns stand as guns), walking its LAND.join.walk metres onto the field, its ground where it stops.
+     */
+    walkOn(c) {
+      const u = c.u, J = LAND.join, [nx, ny, face] = INWARD[c.edge];
+      [u.x, u.y] = this.clearSpot(u, c.x, c.y, nx, ny, c.lanes);
+      u.face = face;
+      u.cover = groundAt(this.field, u.x, u.y);
+      if (u.kind !== "art") u.reserve = "sent";
+      this.units.push(u);
+      this.drill?.join(u);
+      const o = { kind: "move", x: u.x + nx * J.walk, y: u.y + ny * J.walk, face: u.side === "att" ? 0 : Math.PI };
+      this.send(u, o);
+      u.home = [o.x, o.y];
+    }
+    /**
+     * The first spot at or in from (x, y) where a block can stand: on ground it can stand on, out of the water, and clear
+     * of every block on the field. Tried in a fixed order (in from the edge a cell at a time, and along it either way), so
+     * the same battle always finds the same spot; where none is clear it keeps (x, y) and the march sorts it out.
+     */
+    clearSpot(u, x, y, nx, ny, lanes) {
+      const F = this.field, J = LAND.join, m = Math.max(u.w, u.d), cell = F.cell;
+      const [lo, hi] = lanes ?? [10, F.w - 10];
+      const fit = (px, py) => [clamp(px, lo + m / 2, Math.max(lo + m / 2, hi - m / 2)), clamp(py, 40, F.h - 40)];
+      const clear = (px, py) => {
+        if (this.wet(u, px, py, false) || wetUnder(F, { x: px, y: py, w: m, d: m })) return false;
+        for (const o of this.units) if (live2(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND.placeClear) return false;
+        return true;
+      };
+      for (let k = 0; k <= J.inward; k++) for (let j = 0; j <= 2 * J.across; j++) {
+        const a = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);
+        const [px, py] = fit(x + nx * k * cell + ny * a * cell, y + ny * k * cell + nx * a * cell);
+        if (clear(px, py)) return [px, py];
+      }
+      return fit(x, y);
+    }
+    /** Where a rider rides to and stands, and when he is there: worked out as the clock is set, and again once the setup step has placed the guns. */
+    riderTo(r) {
+      r.to = this.riderSpot(r.mid[0], r.mid[1]);
+      r.there = Math.round(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND.speed)) * 1e3) / 1e3;
+    }
+    /** Where a rider stands: the nearest point to (x, y), outward a half cell at a time, out of the water and off a bridge, clear of every block. */
+    riderSpot(x, y) {
+      const F = this.field, c = LAND.placeClear;
+      const ok2 = (px, py) => {
+        if (px < 10 || py < 10 || px > F.w - 10 || py > F.h - 10) return false;
+        const g = groundAt(F, px, py);
+        return !inRiver(g) && g !== "bridge" && !this.units.some((o) => live2(o) && Math.abs(o.x - px) < o.w / 2 + c && Math.abs(o.y - py) < o.d / 2 + c);
+      };
+      const r13 = (v) => Math.round(v * 10) / 10;
+      if (ok2(r13(x), r13(y))) return [r13(x), r13(y)];
+      for (let r = F.cell / 2; r <= 1e3; r += F.cell / 2) for (let a = 0; a < 16; a++) {
+        const px = r13(x + Math.sin(a * Math.PI / 8) * r), py = r13(y + Math.cos(a * Math.PI / 8) * r);
+        if (ok2(px, py)) return [px, py];
+      }
+      return [r13(x), r13(y)];
+    }
+    /**
+     * The riders the player sees: his own side's only (a courier's news is his own army's), from the first step until his
+     * corps comes up; none whose corps would beat him there (he comes on with it), none once the day is over.
+     */
+    riderView() {
+      if (!this.rider || !this.riders.length || this.over || this.t <= 0) return {};
+      const still = new Set(this.coming.map((c) => c.u.corps));
+      const on = this.riders.filter((r) => this.ticket[r.side].human && still.has(r.corps) && r.there <= r.comes);
+      if (!on.length) return {};
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, r13 = (v) => Math.round(v * 10) / 10;
+      const KIND = { inf: "infantry", mtn: "mountain", cav: "cavalry", eng: "engineer", mot: "motorized", arm: "armoured", art: "artillery", fort: "fortress" };
+      const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+      return {
+        riders: on.map((r) => {
+          const k = r.there > 0 ? Math.min(1, this.t / r.there) : 1;
+          const us = this.coming.filter((c) => c.u.corps === r.corps).map((c) => c.u).sort((a, b) => a.id - b.id);
+          const men = us.reduce((a, u) => a + u.men0, 0), str = men > 0 ? us.reduce((a, u) => a + u.str0 * u.men0, 0) / men : r.f.str;
+          const divs = us.map((u) => u.short), kind = KIND[r.f.kind] ?? r.f.kind;
+          const staff = this.ai[r.side], line = (1 - (us[0]?.joined ?? 1)) * this.ticket.limit;
+          const back = r.edge === (r.side === "att" ? "south" : "north"), by2 = back ? "from behind your line" : `on your ${r.edge} flank`;
+          const list = divs.length > 1 ? `${divs.slice(0, -1).join(", ")} and ${divs[divs.length - 1]}` : divs[0] ?? "";
+          const says = `${r.f.name}: ${divs.length} ${kind} division${divs.length === 1 ? "" : "s"} (${list}), ${Math.round(men).toLocaleString("en-GB")} men, strength ${Math.round(str * 100)}. It comes up ${by2} at ${mmss(r.comes)}${staff ? ` and reaches your line at about ${mmss(line)}` : ", and waits there for your orders"}.`;
+          return {
+            corps: r.corps,
+            side: r.side,
+            x: r13(r.from[0] + (r.to[0] - r.from[0]) * k),
+            y: r13(r.from[1] + (r.to[1] - r.from[1]) * k),
+            face: r33(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
+            speed: k < 1 ? Math.max(...Object.values(LAND.speed)) : 0,
+            there: r33(r.there),
+            comes: r33(r.comes),
+            edge: r.edge,
+            ...staff ? { line: r33(line) } : {},
+            name: r.f.name,
+            kind: r.f.kind,
+            divs,
+            men: Math.round(men),
+            str: r33(str),
+            says
+          };
+        })
+      };
+    }
+    /** The joiners still coming, as the view shows them: those of the player's side and those the player's staff knows. */
+    comingView() {
+      if (!this.coming.length || this.over) return {};
+      const shown = this.coming.filter((c) => this.known(c.u));
+      return shown.length ? { coming: shown.map((c) => ({ id: c.u.id, side: c.u.side, corps: c.u.corps, kind: c.u.kind, at: c.at, edge: c.edge, x: c.x, y: c.y, ...c.f.arrive ? { arrive: c.f.arrive } : {} })) } : {};
+    }
+    // ---- Hold until relieved (release 2) -----------------------------------------------------------------------------
+    //
+    // Brian, 22 November 12:48Z ("Do 2 and 3"): "a unit ordered to wait for help digs in harder, but breaks faster if help
+    // never comes"; the design director's rulings of 13:43Z. A block on foot told to wait for a corps coming up from next
+    // door stands where it is, fires on what comes into its reach and never advances; its staff never orders it. While it
+    // keeps to its spot it takes the field's light cover (LAND.cover[LAND.wreck.cover], the wrecks' own figure, within
+    // LAND.dug.keep, never better than its ground gives), and what that cover spares it is kept: the field moves when harm
+    // lands, never how much (b415, b418). It lands with the block if it breaks; else, once the cover ends, it is paid out at
+    // the pace it was spared, shared by men with the blocks that relieved it, never as one blow on men whose friends have
+    // just come; whatever is left lands at the end of the fight. Help is due when the corps' nearest block could reach it
+    // at its own pace, the joiners' own reckoning (comeOn), never a draw; it is relieved once a block of a joining corps
+    // stands beside it (LAND.alone.near). Past due unrelieved, or its corps out of the fight, help never came: the men are
+    // let down, and break where a block starts to waver (LAND.nerve.waver), not at the rout's mark, until relieved. The
+    // player's own order to move, attack, line up or withdraw ends the wait without that mark: men re-ordered are not let
+    // down. Each joining corps relieves one block a battle, the player's and every staff's alike (ai.ts relieve). Nothing
+    // here draws on the dice.
+    /**
+     * Whether this battle has corps coming up from next door, on the field yet or not; with a side, whether that side has
+     * (a side's own help: the player is never told by it of an enemy's that his staff has not identified).
+     */
+    hasJoiners(side) {
+      if (side === void 0) return this.joinCorps.size > 0;
+      return this.coming.some((c) => c.u.side === side) || this.units.some((u) => u.side === side && u.joined !== void 0);
+    }
+    /** A block of a joining corps that helps this one: its side's, of another corps, in the fight, not guns or a team. */
+    helps(r, u) {
+      return r.side === u.side && r.joined !== void 0 && r.corps !== u.corps && fighting2(r) && r.kind !== "art";
+    }
+    /** Help stands beside this block: a block of a joining corps within LAND.alone.near of it, edge to edge. */
+    relieved(u) {
+      return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near);
+    }
+    /** This corps still has a block that is not guns coming up or in the fight: its help may yet come. */
+    canHelp(corps) {
+      return this.coming.some((c) => c.u.corps === corps && c.u.kind !== "art") || this.units.some((r) => r.corps === corps && r.joined !== void 0 && fighting2(r) && r.kind !== "art");
+    }
+    /**
+     * When help could reach this block, and whose: of its side's joining corps not yet waited for, the one whose nearest
+     * block (not guns) could be there soonest, from where it stands, or from its place on its edge at its time while it is
+     * still coming, at its own pace over open ground (comeOn's own reckoning). Null where none can come.
+     */
+    dueAt(u, skip) {
+      let corps = -1, due = Infinity;
+      const take = (c, d) => {
+        if (d < due - 1e-9 || Math.abs(d - due) <= 1e-9 && c < corps) {
+          corps = c;
+          due = d;
+        }
+      };
+      for (const c of this.coming) {
+        if (c.u.side !== u.side || c.u.corps === u.corps || c.u.kind === "art" || this.waitedFor.has(c.u.corps) || skip?.has(c.u.corps)) continue;
+        take(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND.speed[c.u.kind]));
+      }
+      for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND.speed[r.kind]));
+      return corps < 0 ? null : { corps, due: Math.round(due * 1e3) / 1e3 };
+    }
+    /**
+     * Why this block may not wait for help now, in the player's words; null where it may (words for the UI director).
+     * 'skip': corps already spoken for by blocks before it in the same order (waitWhyAll).
+     */
+    waitWhy(u, skip) {
+      if (!this.relief || !this.hasJoiners(u.side)) return "No help is coming up from next door.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (MOTION[u.kind] !== "foot") return "Only men on foot dig in to wait for help.";
+      if (u.waited) return u.waits && !u.waits.free ? "It is waiting for help already." : "It has waited for help once today.";
+      if (!diggable(coverAt(this.field, u.x, u.y))) return "There is no digging in here.";
+      if (this.relieved(u)) return "Help is beside it already.";
+      const d = this.dueAt(u, skip);
+      if (!d) {
+        const any = this.coming.some((c) => c.u.side === u.side && c.u.corps !== u.corps && c.u.kind !== "art") || this.units.some((r) => this.helps(r, u));
+        return any ? "Each corps coming up relieves one block, and each is spoken for." : "No help is coming up from next door.";
+      }
+      if (d.due > this.ticket.limit) return "Help could not reach it before the day is out.";
+      return null;
+    }
+    /**
+     * Why each of these blocks, told together and in this order, may not wait: each one that may speaks for its corps
+     * before the next is asked, as their orders will land (one block a joining corps).
+     */
+    waitWhyAll(us) {
+      const claimed = /* @__PURE__ */ new Set();
+      return us.map((u) => {
+        const why = this.waitWhy(u, claimed);
+        if (why === null) claimed.add(this.dueAt(u, claimed).corps);
+        return why;
+      });
+    }
+    /** The joining corps' name as the dispatches give it. */
+    corpsName(side, corps) {
+      const f = this.ticket[side].joiners?.find((x) => x.corps === corps);
+      return f ? this.ticket[side].human ? f.name : `the ${this.ticket[side].adj} ${f.name}` : "help";
+    }
+    /** The wait order landing (by radio, the player's): where it may no longer wait, it holds as the core's hold does. */
+    wait(u) {
+      u.order = null;
+      u.path = [];
+      u.keepFace = null;
+      delete u.aim;
+      delete u.search;
+      delete u.searchR;
+      delete u.cut;
+      if (this.waitWhy(u) !== null) return;
+      const d = this.dueAt(u);
+      u.waits = { corps: d.corps, due: d.due, at: [u.x, u.y], since: this.t };
+      u.waited = true;
+      this.waitedFor.add(d.corps);
+      if (this.ticket[u.side].human) this.say({ what: "land:waits", unit: u.id, side: u.side, text: `${this.named(u)} digs in to wait for ${this.corpsName(u.side, d.corps)}.`, x: u.x, y: u.y });
+    }
+    /**
+     * Each tick, before the staffs think: a waiting block with help beside it is relieved; one whose help is overdue, or
+     * whose corps can no longer come, has waited in vain.
+     */
+    waitOn() {
+      for (const u of this.units) {
+        if (!u.waits || !fighting2(u)) continue;
+        if (this.relieved(u)) this.endWait(u, "relieved");
+        else if (!u.waits.late && (this.t >= u.waits.due - 1e-9 || !this.canHelp(u.waits.corps))) this.endWait(u, "late");
+      }
+    }
+    /**
+     * A wait ends, or help is late. Late, the block is still waiting: it keeps its spot, its cover and what that cover has
+     * spared it, and now carries the mark of help that never came. Relieved, its wait is over and the mark lifts. The
+     * player's own order, or giving ground at the brink (b496(1)), ends it, keeping the mark only where help was late
+     * already (men let down stay let down until relieved or broken: the design director, 13:43Z). What its cover spared
+     * lands at once if it broke, else, once the wait is over, is paid out from then at the pace it was spared (repay),
+     * shared with the blocks that relieved it.
+     */
+    endWait(u, how) {
+      const w = u.waits;
+      if (!w) return;
+      if (how === "late") w.late = true;
+      else if ((how === "off" || how === "gives") && w.late) w.free = true;
+      else delete u.waits;
+      if (how === "broke") this.landNow(u);
+      else if (how !== "late" && u.debt !== void 0) {
+        const by2 = how === "relieved" ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near).map((r) => r.id) : [];
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.repay.push({ held: u.id, by: by2, left: d, nerve: n / d, rate: d / Math.max(DT, this.t - w.since) });
+      }
+      if (!this.ticket[u.side].human) return;
+      if (how === "relieved") this.say({ what: "land:relieved", unit: u.id, side: u.side, text: `${this.corpsName(u.side, w.corps)} has reached ${this.named(u)}.`, x: u.x, y: u.y });
+      if (how === "late") this.say({ what: "land:late", unit: u.id, side: u.side, text: `No help has reached ${this.named(u)}; its men are losing heart.`, x: u.x, y: u.y });
+    }
+    /** Each tick, after the blows: a tick's worth of each repayment lands. */
+    repayNow() {
+      for (const p of this.repay) {
+        const d = Math.min(p.left, p.rate * DT);
+        p.left -= d;
+        this.repayOn(p, d);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * The blocks a repayment lands on, each with its share by the men it has now: the held block and its relievers, on the
+     * field or not (one that has left still pays its share, off its strength, as the air's dues are paid: leaving never
+     * escapes it, nor hands it to the others).
+     */
+    repayShares(p) {
+      const on = [p.held, ...p.by].map((id) => this.unit(id)).filter((x) => !!x);
+      const men = on.map((x) => x.men0 * (Math.max(0, x.str) / Math.max(1e-9, x.str0))), all = men.reduce((a, m) => a + m, 0);
+      return on.map((x, i) => [x, all > 0 ? men[i] / all : 1 / on.length]);
+    }
+    /** Lands d of a repayment on its blocks: on the field as a blow, off it off their strength (harm). */
+    repayOn(p, d) {
+      if (d <= 0) return;
+      for (const [x, k] of this.repayShares(p)) this.harm(x, d * k, p.nerve);
+    }
+    /** What a wait's cover spared a block, kept or still being paid out, lands on it at once (it broke). */
+    landNow(u) {
+      const d = u.debt, n = u.debtN ?? 0;
+      delete u.debt;
+      delete u.debtN;
+      if (d !== void 0 && d > 0) this.harm(u, d, n / d);
+      for (const p of this.repay) if (p.held === u.id && p.left > 0) {
+        const left = p.left;
+        p.left = 0;
+        this.harm(u, left, p.nerve);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * Kept harm landing on a block: where it still stands, as a blow from whoever had struck it most (whose shells its lost
+     * men go to: looks only); off the field, off its strength alone.
+     */
+    harm(u, d, nerve) {
+      if (d <= 0) return;
+      if (!live2(u)) {
+        this.offStrength(u, d);
+        return;
+      }
+      const owed = u.owed ?? {};
+      let by2;
+      for (const id of Object.keys(owed)) {
+        const s = this.unit(Number(id));
+        if (s && live2(s) && (!by2 || owed[s.id] > owed[by2.id])) by2 = s;
+      }
+      this.suffer(u, d, nerve, by2 ? [[by2, d]] : [], false, true);
+    }
+    /** Harm off a block's strength alone, as the air's dues are paid off the field (offField). */
+    offStrength(u, d) {
+      u.str = Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
+      u.figures = u.str <= 0 ? 0 : Math.max(1, Math.ceil(u.tray * u.str));
+    }
+    /** The day is done: what waits' cover spared, kept or still being paid out, lands before the count. */
+    payWaits() {
+      if (!this.relief) return;
+      for (const p of this.repay) {
+        const left = p.left;
+        p.left = 0;
+        this.repayOn(p, left);
+      }
+      this.repay = [];
+      for (const u of this.units) if (u.debt !== void 0) {
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.harm(u, d, n / d);
+      }
+    }
+    /** What blocks on the field are owed, were the day settled now: the fighters on call's, and every wait's (the staff's chance). */
+    dueNow() {
+      let due = this.airDue();
+      if (!this.relief) return due;
+      const add = (id, d) => {
+        due ?? (due = /* @__PURE__ */ new Map());
+        due.set(id, (due.get(id) ?? 0) + d);
+      };
+      for (const u of this.units) if (u.debt && live2(u)) add(u.id, u.debt);
+      for (const p of this.repay) for (const [x, k] of this.repayShares(p)) if (live2(x)) add(x.id, p.left * k);
+      return due;
+    }
+    // ---- Hedge cutters (release 2) ----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 14:19Z ("Let's do 1 and 2": "bladed Shermans punch a gap through a hedgerow where the player
+    // picks"); the design director's ruling 242, C1-A to C4-A (LAND.cutters). A tank block carries cutters from July 1944
+    // on a field with hedges, whatever its army. Told to cut at a point on a hedge line, it drives for that point and on
+    // through it till its rear stands LAND.cutters.near metres beyond, an order like any other (by radio, the player's,
+    // and gated again as it lands). As its front reaches the hedge the cut begins (t0, a land:cut event), and LAND.cutters.secs later
+    // a gap stands open there (t1): a Gate of kind 'cut' the drawn men of every block on either side walk through from
+    // then. A block its staff runs cuts wherever its own way crosses a hedge line with no gap near, with no order at all
+    // (C4-A); the player's own blocks only where he orders it. Looks only (C1-A): the gates are read by the drill alone
+    // (drill.ts via and gateOn: no number of the fight reads this.gates, and gateOn's only caller is the drill), the
+    // block's way is its move's own, and nothing here draws on the dice; so the fight is the same, cut or not. With the
+    // bocage switch on as well (C1-B, "The bocage" below), the gates are read by the way a tank block without cutters
+    // finds (barrier()): there a gap open is a way through for any tank, and the fight changes, measured.
+    /** Whether this block carries hedge cutters: the switch on, a tank block, from LAND.cutters.from, on a field with hedges. */
+    cutterOf(u) {
+      return this.cutters && u.kind === "arm" && this.ticket.turn >= LAND.cutters.from && this.hedges.length > 0;
+    }
+    /**
+     * Why this block may not cut through the hedge at (x, y) now, in the player's words (129(d)); null where it may. With
+     * no point, whether it may cut anywhere. Whose block it is, is the caller's to ask (the bridge's words).
+     */
+    cutWhy(u, x, y) {
+      if (!this.cutters) return "Your tanks carry no hedge cutters.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (u.kind !== "arm") return "Only tanks carry hedge cutters.";
+      if (this.ticket.turn < LAND.cutters.from) return "Hedge cutters come in July 1944.";
+      if (!this.hedges.length) return "There are no hedges on this field.";
+      if (x === void 0 && y === void 0) return null;
+      const px = Number(x), py = Number(y);
+      if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || py < 0 || px > this.field.w || py > this.field.h) return "Off the field.";
+      if (!this.hedgeNear(px, py, LAND.cutters.near)) return "There is no hedge there.";
+      return null;
+    }
+    /**
+     * The nearest point of a hedge line to (x, y) within r metres, and the way the line runs there (radians from east, as
+     * a Gate's yaw); null where none passes that near.
+     */
+    hedgeNear(x, y, r) {
+      let best = null, bd = r;
+      const seen = /* @__PURE__ */ new Set();
+      for (let c = Math.floor((x - r) / GATE_CELL); c <= Math.floor((x + r) / GATE_CELL); c++)
+        for (let q = Math.floor((y - r) / GATE_CELL); q <= Math.floor((y + r) / GATE_CELL); q++)
+          for (const s of this.hedgeSegs.get(c * 4096 + q) ?? []) {
+            if (seen.has(s)) continue;
+            seen.add(s);
+            const dx = s[2] - s[0], dy = s[3] - s[1], l = dx * dx + dy * dy;
+            if (l <= 0) continue;
+            const k = Math.max(0, Math.min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / l)), px = s[0] + k * dx, py = s[1] + k * dy, d = Math.hypot(x - px, y - py);
+            if (d <= bd) {
+              bd = d;
+              best = { x: px, y: py, yaw: Math.atan2(dy, dx) };
+            }
+          }
+      return best;
+    }
+    /**
+     * The cut order landing (by radio, the player's): where it may no longer cut there, it holds, as the core's hold does
+     * (as wait does). Else it drives for the nearest point of the hedge line and on through it, the cut its order's.
+     */
+    cutGo(u, x, y) {
+      if (this.cutWhy(u, x, y) !== null) {
+        u.order = null;
+        u.path = [];
+        u.keepFace = null;
+        delete u.aim;
+        delete u.search;
+        delete u.searchR;
+        delete u.cut;
+        return;
+      }
+      const p = this.hedgeNear(x, y, LAND.cutters.near);
+      const k = Math.hypot(p.x - u.x, p.y - u.y), [ux, uy] = k > 1e-6 ? [(p.x - u.x) / k, (p.y - u.y) / k] : ahead(u.face);
+      const on = u.d / 2 + LAND.cutters.near;
+      this.send(u, { kind: "move", x: p.x + ux * on, y: p.y + uy * on });
+      u.cut = { x: p.x, y: p.y, yaw: p.yaw };
+    }
+    /** The point lies on this block's front or inside its ground: its front has reached it. */
+    fronted(u, x, y) {
+      const [fx, fy] = ahead(u.face), dx = x - u.x, dy = y - u.y;
+      const along = dx * fx + dy * fy, across = Math.abs(dx * fy - dy * fx);
+      return along <= u.d / 2 + 0.5 && along >= -u.d / 2 && across <= u.w / 2;
+    }
+    /** A block its staff runs: the computer's, or one of the player's his staff fights (one he has not taken in hand). */
+    staffRuns(u) {
+      return this.ai[u.side] && !u.taken;
+    }
+    /** A gap within LAND.cutters.width of (x, y): a gate, or a cut under way. */
+    gapNear(x, y) {
+      const W = LAND.cutters.width;
+      return this.gates.some((g) => Math.hypot(g.x - x, g.y - y) <= W) || this.cuts.some((c) => !c.open && Math.hypot(c.x - x, c.y - y) <= W);
+    }
+    /**
+     * Each tick, once the blocks have moved ('before': where each stood; 'moved': where its own move took it, before the
+     * blocks were eased apart): a block whose front has reached the hedge it was sent to cut begins its cut, unless a gap
+     * stands there already (another block's cut, or a gateway: it goes through that); one whose way there has ended short
+     * of it drops it. A block its staff runs that carries cutters, whose own way this tick (its move, never a shove from a
+     * neighbour) crossed a hedge line with no gap near the crossing, cuts there. Geometry only.
+     */
+    cutOn(before, moved) {
+      for (const u of this.units) {
+        if (u.cut) {
+          const c = u.cut;
+          if (!fighting2(u)) delete u.cut;
+          else if (this.fronted(u, c.x, c.y)) {
+            delete u.cut;
+            if (!this.gapNear(c.x, c.y)) this.cutBegin(u, c.x, c.y, c.yaw);
+          } else if (u.order?.kind !== "move") delete u.cut;
+          continue;
+        }
+        if (!live2(u) || !this.staffRuns(u) || !this.cutterOf(u)) continue;
+        const b0 = before.get(u.id), b1 = moved.get(u.id);
+        if (!b0 || !b1 || b0[0] === b1[0] && b0[1] === b1[1]) continue;
+        const p = this.hedgeCross(b0[0], b0[1], b1[0], b1[1]);
+        if (!p || this.gapNear(p[0], p[1])) continue;
+        const d = this.hedgeDir(p[0], p[1]);
+        this.cutBegin(u, p[0], p[1], d ? Math.atan2(d[1], d[0]) : 0);
+      }
+    }
+    /**
+     * A cut begins: kept, and told (a land:cut event, with when the gap opens, the hedge's yaw and the gap's width). Its
+     * words go to the player for his own blocks; an enemy's is told with no words, for the 3D game alone (as every event
+     * of a block he has not met is kept from him).
+     */
+    cutBegin(u, x, y, yaw) {
+      const C = LAND.cutters, r13 = (v) => Math.round(v * 10) / 10, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      const c = { t0: r33(this.t), t1: r33(this.t + C.secs), unit: u.id, side: u.side, x: r13(x), y: r13(y), yaw: r33(yaw), width: C.width, known: this.known(u), open: false };
+      this.cuts.push(c);
+      const words = this.ticket[u.side].human || !this.ticket[other(u.side)].human;
+      this.say({ what: "land:cut", unit: u.id, side: u.side, text: words ? `${this.named(u)} cuts a gap through the hedge.` : "", x: c.x, y: c.y, extra: { t1: c.t1, yaw: c.yaw, width: c.width } });
+    }
+    /** Each tick, as the clock moves on: a cut whose time is up stands open as a gate, for the drawn men from now. */
+    openCuts() {
+      for (const c of this.cuts) {
+        if (c.open || this.t < c.t1 - 1e-9) continue;
+        c.open = true;
+        this.gates.push({ x: c.x, y: c.y, yaw: c.yaw, width: c.width, kind: "cut" });
+        if (this.bocage) {
+          this.bars = null;
+          this.barsLaid++;
+        }
+      }
+    }
+    /** The cuts a side sees: its own, and those of enemy blocks it knew as they cut; every one with no side (a recording). */
+    cutView(as) {
+      if (!this.cutters || !this.cuts.length) return {};
+      const l = this.cuts.filter((c) => as === void 0 || c.side === as || c.known);
+      return l.length ? { cuts: l.map((c) => ({ t0: c.t0, t1: c.t1, unit: c.unit, x: c.x, y: c.y, yaw: c.yaw, width: c.width })) } : {};
+    }
+    // ---- The bocage (release 2) ---------------------------------------------------------------------------------------
+    //
+    // The design director's ruling 242 C1-B, built as amended 17:45Z from the historian ("unfitted tanks cross only at
+    // gaps"): the device's real point (the readings, C1-B: tanks without cutters "diving into the ditches nose first, to
+    // be stuck there and become easy targets"; the historian's K21). On a field with hedges, with the bocage switch on, a
+    // tank block that carries no cutters (before July 1944, or with the cutters switch off) crosses a hedge line only at a
+    // gap in it: a gateway the 3D game laid, or a gap a cutter tank has cut and that stands open ("Once a gap is open, any
+    // vehicle uses it"). It finds its way round to one, as round a river to its bridge (going 'hedged': the hedge lines
+    // bar the cells about them, barrier()), and is never eased over one. A tank block carrying cutters goes on as before:
+    // its cut is drawn (C1-A), and takes none of its time (the cut's LAND.cutters.secs stays the drawing's: the historian's
+    // bound of 3 real minutes or less, a breach and the drive to the next bank, holds it). Lorries, guns and foot are not
+    // held: the ruling holds tanks. Only the way changes: nothing here draws on the dice, and a block's way is found the
+    // same each time. It changes the fight (slower tanks in the bocage): measured against off (the cutters and smoke
+    // tests' (10b), LONG=1).
+    /** Whether a straight way from (x0, y0) to (x1, y1) crosses a hedge line where it is barred (barrier()): not at a gap. */
+    barredCross(x0, y0, x1, y1) {
+      const bar = this.barrier(), len = Math.hypot(x1 - x0, y1 - y0);
+      for (let skip = 0, p = this.hedgeCross(x0, y0, x1, y1); p; p = this.hedgeCross(x0, y0, x1, y1, skip)) {
+        if (bar[this.cellAt(p[0], p[1])]) return true;
+        skip = Math.hypot(p[0] - x0, p[1] - y0) + 0.01;
+        if (skip >= len) break;
+      }
+      return false;
+    }
+    /** Held back by hedges (the bocage on): a tank block without cutters, on a field with hedges. */
+    heldBack(u) {
+      return this.bocage && u.kind === "arm" && this.hedges.length > 0 && !this.cutterOf(u);
+    }
+    /**
+     * The field's cells a hedge line bars to a tank block without cutters: each cell whose middle lies within HEDGE_BAR
+     * cells of a hedge line, but for those within HEDGE_GAP cells of a gap in it (this.gates: a gateway, or a cut open).
+     * Laid when first asked and again once a gap opens.
+     */
+    barrier() {
+      if (this.bars) return this.bars;
+      const f = this.field, C = f.cols, R = f.rows, cs = f.cell, bar = new Uint8Array(C * R), r = HEDGE_BAR * cs;
+      const mid = (i) => [i % C * cs + cs / 2, Math.floor(i / C) * cs + cs / 2];
+      for (const h of this.hedges) for (let k = 1; k < h.points.length; k++) {
+        const [ax, ay] = h.points[k - 1], [bx, by2] = h.points[k];
+        const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - r) / cs)), c1 = Math.min(C - 1, Math.floor((Math.max(ax, bx) + r) / cs));
+        const r0 = Math.max(0, Math.floor((Math.min(ay, by2) - r) / cs)), r13 = Math.min(R - 1, Math.floor((Math.max(ay, by2) + r) / cs));
+        for (let q = r0; q <= r13; q++) for (let c = c0; c <= c1; c++) if (segGap(c * cs + cs / 2, q * cs + cs / 2, ax, ay, bx, by2) <= r) bar[q * C + c] = 1;
+      }
+      const gr = HEDGE_GAP * cs;
+      for (const g of this.gates) {
+        const c0 = Math.max(0, Math.floor((g.x - gr) / cs)), c1 = Math.min(C - 1, Math.floor((g.x + gr) / cs));
+        const r0 = Math.max(0, Math.floor((g.y - gr) / cs)), r13 = Math.min(R - 1, Math.floor((g.y + gr) / cs));
+        for (let q = r0; q <= r13; q++) for (let c = c0; c <= c1; c++) {
+          const [mx, my] = mid(q * C + c);
+          if (Math.hypot(mx - g.x, my - g.y) <= gr) bar[q * C + c] = 0;
+        }
+      }
+      return this.bars = bar;
+    }
+    // ---- Smoke on call (release 2) ----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 14:19Z ("a section lays a smoke line to cover a crossing, when and where the player orders it");
+    // the design director's ruling 242, S1-A to S6, as amended 17:45Z (LAND.smoke). A block on foot, or lorried infantry,
+    // whose army has the means lays a screen along a line he draws: clipped to its own front about the line's middle,
+    // which must lie within its army's reach of its front (an army whose means is set down at its own front lays it there,
+    // for a line drawn on its ground or within LAND.smoke.front of its front), at once as the order lands (by radio, the
+    // player's, on its own place on the air beside his other order, gated again then); one at a time, its army's count a
+    // battle. While it stands (t < until), a direct blow whose line from the shooter's middle to the target's middle
+    // crosses it, either side's screen, strikes at LAND.smoke.share, never on top of the vague share nor of fire on cover
+    // at a block still hidden (blow); and, with hiding on, no hidden block is seen through it (spotHidden). Fire from far
+    // back is not touched: guns beyond LAND.guns.closeAt, mortar teams, and the air (the share a side holds back for its
+    // air strikes is held back from the blow whole, as if no screen stood). It gives no cover, does no harm and shakes no
+    // one. Both staffs lay one as a foot block of theirs goes in (ai.ts smokeIn). The drill draws each screen as the rounds
+    // that lay it, in place of its own salvoes (S6).
+    // The dice: where a screen acts it draws nothing and spares no draw. A screened blow draws its luck as it would; the
+    // veil (spotHidden) draws nothing. What follows from it changes the fight, and so the draws that come after, as every
+    // rule that changes the fight does: a weaker blow breaks a block later, and a block kept hidden by the veil (S1-A as the
+    // build spec reads it: nobody seen through a screen) is not fired on until it is found, so the blows it would have
+    // drawn are not drawn. That is the screen's effect, measured with the rest (S5-A), not a draw of its own.
+    /** This block's section smoke: the switch on, a block on foot or lorried infantry (not a support team) of an army with the means. */
+    smokeOf(u) {
+      if (!this.smoke || u.team || MOTION[u.kind] !== "foot" && u.kind !== "mot") return null;
+      return smokeMeans(u.nat);
+    }
+    /** The screen this block laid that still stands, if any. */
+    screenOf(u) {
+      return this.screens.find((s) => s.unit === u.id && this.t < s.until);
+    }
+    /** Metres from (x, y) to this block's front edge. */
+    frontGap(u, x, y) {
+      const [fx, fy] = ahead(u.face), cx = u.x + fx * u.d / 2, cy = u.y + fy * u.d / 2, hw = u.w / 2;
+      return segGap(x, y, cx - fy * hw, cy + fx * hw, cx + fy * hw, cy - fx * hw);
+    }
+    /**
+     * Why this block may not lay smoke now, in the player's words (129(d)); null where it may. With a line (x0, y0 to x1,
+     * y1, or only its middle x0, y0), whether it may lay it there; with none, whether it may lay one at all. Whose block it
+     * is, is the caller's to ask (the bridge's words).
+     */
+    smokeWhy(u, x0, y0, x1, y1) {
+      if (!this.smoke) return "There is no smoke to lay in this battle.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (u.team || MOTION[u.kind] !== "foot" && u.kind !== "mot") return "Only troops on foot lay smoke.";
+      const m = smokeMeans(u.nat);
+      if (!m) return "Your army has no smoke to lay.";
+      if ((u.smokeLeft ?? m.count ?? LAND.smoke.count) <= 0) return "They have no smoke left.";
+      if (this.screenOf(u)) return "Their last screen still stands.";
+      if (x0 === void 0 && y0 === void 0) return null;
+      const a = Number(x0), b = Number(y0), c = x1 === void 0 ? a : Number(x1), d = y1 === void 0 ? b : Number(y1);
+      if (![a, b, c, d].every(Number.isFinite)) return "Off the field.";
+      const mx = (a + c) / 2, my = (b + d) / 2;
+      if (m.reach > 0 && this.frontGap(u, mx, my) > m.reach + 1e-9) return `They can lay smoke up to ${m.reach} m ahead.`;
+      if (m.reach <= 0 && !this.fronted(u, mx, my) && this.frontGap(u, mx, my) > LAND.smoke.front + 1e-9) return "They set their smoke down along their own front.";
+      return null;
+    }
+    /**
+     * Where this block lays its screen for the line drawn: along it, at most its own front long, about the line's middle
+     * (a point: its front long, square to its face); set down along its own front where its army's means is (reach 0).
+     */
+    smokeLine(u, l, m) {
+      const [fx, fy] = ahead(u.face), r13 = (v) => Math.round(v * 10) / 10;
+      let mx, my, dx = fy, dy = -fx, half = u.w / 2;
+      if (m.reach <= 0) {
+        mx = u.x + fx * u.d / 2;
+        my = u.y + fy * u.d / 2;
+      } else {
+        const [x0, y0, x1, y1] = l, len = Math.hypot(x1 - x0, y1 - y0);
+        mx = (x0 + x1) / 2;
+        my = (y0 + y1) / 2;
+        if (len > 1e-6) {
+          dx = (x1 - x0) / len;
+          dy = (y1 - y0) / len;
+          half = Math.min(len / 2, u.w / 2);
+        }
+      }
+      return [r13(mx - dx * half), r13(my - dy * half), r13(mx + dx * half), r13(my + dy * half)];
+    }
+    /**
+     * The smoke order landing (by radio, the player's): where it may no longer lay it there, nothing is laid and it goes
+     * on as it was. Else the screen is laid at once, its count goes down, and it is told (land:smoke); the drill draws its
+     * rounds. Its order is not touched: a block lays smoke as it goes.
+     */
+    lay(u, l) {
+      if (this.smokeWhy(u, l[0], l[1], l[2], l[3]) !== null) return;
+      const m = this.smokeOf(u), [x0, y0, x1, y1] = this.smokeLine(u, l, m);
+      const s = { id: this.screens.length + 1, side: u.side, unit: u.id, x0, y0, x1, y1, t: Math.round(this.t * 1e3) / 1e3, until: Math.round((this.t + m.hang) * 1e3) / 1e3 };
+      this.screens.push(s);
+      u.smokeLeft = (u.smokeLeft ?? m.count ?? LAND.smoke.count) - 1;
+      this.say({ what: "land:smoke", unit: u.id, side: u.side, text: `${this.named(u)} lays a smoke screen.`, x: Math.round((x0 + x1) / 2 * 10) / 10, y: Math.round((y0 + y1) / 2 * 10) / 10, extra: { screen: s.id, until: s.until } });
+      this.drill?.screen(s);
+    }
+    /** A live screen lies across the line from (ax, ay) to (bx, by). */
+    screened(ax, ay, bx, by2) {
+      for (const s of this.screens) if (this.t < s.until && segHit(ax, ay, bx, by2, s.x0, s.y0, s.x1, s.y1) !== null) return true;
+      return false;
+    }
+    /** A blow struck straight at what it sees (foot, tanks, a machine-gun team, a gun over open sights), not from far back (guns beyond their close range, a mortar team). */
+    direct(u, t) {
+      if (u.team === "mor") return false;
+      return !(u.kind === "art" && !u.team && this.gap(u, t) >= gunsOf(u).closeAt);
+    }
+    /** The screens standing now, as a side sees them: every one, the laying block named where the side has met it. */
+    screenView(as) {
+      if (!this.smoke || !this.screens.length) return {};
+      const on = this.screens.filter((s) => this.t < s.until);
+      if (!on.length) return {};
+      return {
+        screens: on.map((s) => {
+          const u = this.unit(s.unit), named = as === void 0 || s.side === as || !u || this.known(u);
+          return { id: s.id, side: s.side, ...named ? { unit: s.unit } : {}, x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1, t: s.t, until: s.until };
+        })
+      };
+    }
+    // ---- Field telephone lines (release 2) ----------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off"); the design director's
+    // rulings of 18:36Z, PHONES Q1 to Q3 (LAND.phones). As the clock starts, every block of the defence on the field has a
+    // wire from its headquarters (the middle of the defence zone's back edge); a corps that comes up from next door later
+    // has none, and its orders go as ever. The wire runs straight to its block's middle and follows it: moving never cuts
+    // it. Each blow on the block from an enemy gun block or mortar team cuts a line at LAND.phones.cut, drawn from the
+    // wires' own stream ('phones:' and the seed), only for such blows and only while the wire has a line up; the cut lies
+    // where the wire comes nearest the block's front. An enemy tank block whose step, its middle from where it stood to
+    // where it stands, crosses the wire cuts a line outright, where it crosses. A wire is down once all its lines are cut
+    // (Germany's double lines need two cuts). While it is down, every order to its block, the player's (radio switch on or
+    // off) or a staff's, waits its army's fallback from when it was given: the wireless, LAND.radio's wait (longer for a
+    // block whose headquarters is hit, as the radio switch reckons it), or a runner, the metres from the headquarters over
+    // LAND.phones.runner. A later order takes its place and waits afresh, but a staff giving the same order again (it
+    // thinks every second) leaves the one on its way be. At a wire's first cut with no lineman out on it, one leaves the
+    // headquarters, walks the wire to the cut at foot pace and splices it in LAND.phones.splice seconds: the mend clears
+    // every cut on the wire, and whatever was waiting for it goes at once. He is looks only: never struck, no harm. The
+    // rules' own moves (the joiners walking on, a block giving ground at the brink) are no orders and never wait. Nothing
+    // here draws on the battle's dice.
+    /** The defence's headquarters, where every wire runs from: the middle of its zone's back edge (field.ts zonesOf). */
+    phonesHq() {
+      const z = this.field.zones.def, r13 = (v) => Math.round(v * 10) / 10;
+      return [r13((z[0] + z[2]) / 2), r13(z[3])];
+    }
+    /** This block's wire, where it has one (the switch on, a block of the defence on the field as the clock started). */
+    wireOf(u) {
+      return this.phones ? this.wireBy.get(u.id) ?? null : null;
+    }
+    /** This block's wire is down: every line of it cut, and no lineman has mended it yet. */
+    wireDown(u) {
+      const w = this.wireOf(u);
+      return !!w && w.cut >= w.lines;
+    }
+    /** How orders go to this block while its wire is down: its army's fallback in the battle's year (LAND.phones.fallback). */
+    fallbackOf(u) {
+      return phoneFallback(u.nat, turnToDate(this.ticket.turn).year);
+    }
+    /**
+     * How long an order to this block waits while its wire is down, battle seconds: the wireless, LAND.radio's wait as the
+     * radio switch reckons it (its headquarters hit: wavering or under hqAt of its strength); or a runner from the
+     * headquarters to where it stands.
+     */
+    fallbackWait(u) {
+      if (this.fallbackOf(u) === "radio") {
+        const R = LAND.radio, hit = u.state === "wavering" || u.str < R.hqAt * u.str0;
+        return R.delay * (hit ? R.cut : 1) * this.radioOf(u);
+      }
+      const [hx, hy] = this.phonesHq();
+      return Math.hypot(u.x - hx, u.y - hy) / LAND.phones.runner;
+    }
+    /** Each tick, before the orders land and the staffs think: the wires laid as the clock starts, and the mends whose time has come. */
+    phonesOn() {
+      if (!this.phoneRng) this.layWires();
+      for (const w of this.wires) if (w.out && this.t >= w.out.t - 1e-9) this.mend(w);
+    }
+    /** The clock starts: a wire to every block of the defence on the field, its own dice made (the day's luck's way). */
+    layWires() {
+      this.phoneRng = new Rng(hashString(this.ticket.attempt ? `phones:${this.ticket.seed}:${this.ticket.attempt}` : `phones:${this.ticket.seed}`));
+      const hq = this.phonesHq();
+      for (const u of this.units) {
+        if (u.side !== "def" || !live2(u)) continue;
+        const w = { id: this.wires.length + 1, side: u.side, unit: u.id, hq, lines: phoneLines(u.nat), cut: 0, out: null };
+        this.wires.push(w);
+        this.wireBy.set(u.id, w);
+      }
+    }
+    /**
+     * A blow struck on a block at its wire's end: from an enemy gun block or mortar team, while the wire has a line up, it
+     * cuts one at LAND.phones.cut, where the wire comes nearest the block's front. Machine guns, foot and tanks never.
+     */
+    wireBlow(u, t) {
+      const w = this.wireBy.get(t.id);
+      if (!w || w.cut >= w.lines || u.side === w.side || !(u.team === "mor" || u.kind === "art" && !u.team)) return;
+      if (this.phoneRng.next() >= LAND.phones.cut) return;
+      const [fx, fy] = ahead(t.face), px = t.x + fx * t.d / 2, py = t.y + fy * t.d / 2;
+      const dx = t.x - w.hq[0], dy = t.y - w.hq[1], l = dx * dx + dy * dy;
+      const k = l > 0 ? Math.max(0, Math.min(1, ((px - w.hq[0]) * dx + (py - w.hq[1]) * dy) / l)) : 1;
+      this.wireCut(w, w.hq[0] + k * dx, w.hq[1] + k * dy, u);
+    }
+    /** Each tick, once the blocks have moved: an enemy tank block whose step crossed a wire with a line up cuts one there. */
+    wireTanks(was) {
+      for (const [u, x0, y0] of was) {
+        if (u.x === x0 && u.y === y0) continue;
+        for (const w of this.wires) {
+          const e = w.cut < w.lines && w.side !== u.side ? this.unit(w.unit) : void 0;
+          if (!e || !live2(e)) continue;
+          const k = segHit(x0, y0, u.x, u.y, w.hq[0], w.hq[1], e.x, e.y);
+          if (k !== null) this.wireCut(w, x0 + (u.x - x0) * k, y0 + (u.y - y0) * k, u);
+        }
+      }
+    }
+    /**
+     * A line of the wire is cut: kept, and told to the defence (land:wire). At the wire's first cut with no lineman out, one
+     * leaves the headquarters now; he reaches the cut at foot pace and the wire is mended LAND.phones.splice seconds later.
+     */
+    wireCut(w, x, y, by2) {
+      const r13 = (v) => Math.round(v * 10) / 10, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      w.cut++;
+      const c = { t: r33(this.t), wire: w.id, x: r13(x), y: r13(y), by: by2.id };
+      this.wireCuts.push(c);
+      if (!w.out) {
+        const t1 = r33(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND.speed.inf);
+        w.out = { t: r33(t1 + LAND.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+        this.wireMends.push(w.out);
+      }
+      const u = this.unit(w.unit);
+      if (!u || !this.phoneWords()) return;
+      const down = w.cut >= w.lines, how = this.fallbackOf(u) === "radio" ? "by radio" : "by runner";
+      this.say({
+        what: "land:wire",
+        unit: u.id,
+        side: u.side,
+        x: c.x,
+        y: c.y,
+        extra: { wire: w.id, down: down ? 1 : 0, by: this.fallbackOf(u), mend: w.out.t },
+        text: down ? `The telephone line to ${this.named(u)} is cut. Orders go ${how} until it is mended.` : `One of the ${w.lines === 2 ? "two telephone lines" : "telephone lines"} to ${this.named(u)} is cut. Orders still go by the ${w.lines - w.cut === 1 ? "other" : "others"}.`
+      });
+    }
+    /** A lineman's splice is done: every cut on the wire is mended, and whatever was waiting for it goes at once. */
+    mend(w) {
+      const m = w.out, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      w.out = null;
+      w.cut = 0;
+      const u = this.unit(w.unit);
+      const now = this.pending.filter((p) => p.id === w.unit && p.held);
+      if (now.length) {
+        this.pending = this.pending.filter((p) => !(p.id === w.unit && p.held));
+        if (u && now.some((p) => !p.smoke)) delete u.orderAt;
+        if (u && fighting2(u)) for (const p of now) {
+          p.go();
+          p.held.went = r33(this.t);
+        }
+      }
+      if (u && this.phoneWords()) this.say({ what: "land:mend", unit: u.id, side: u.side, x: m.x, y: m.y, extra: { wire: w.id, man: m.man }, text: `The line to ${this.named(u)} is mended.` });
+    }
+    /** The wires' events go to the defence alone: told where it is the player's, or nobody's (a recording), never to a player attacking. */
+    phoneWords() {
+      return this.ticket.def.human || !this.ticket.att.human;
+    }
+    /**
+     * An order for a block whose wire is down: it waits its army's fallback from when it was given (from). A staff giving
+     * the very same order again leaves the one on its way be; any other order takes its place and waits afresh. Stamped
+     * (wireHeld) as it is given, and as it goes.
+     */
+    byFallback(u, go, from, c, smoke = false) {
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, key = c ? JSON.stringify(c) : void 0;
+      const slot = (p) => p.id === u.id && !p.smoke === !smoke;
+      const was = this.pending.find(slot);
+      if (this.staffing && was?.held && key !== void 0 && was.key === key) return;
+      const held = { t: r33(from), unit: u.id, due: r33(from + this.fallbackWait(u)) };
+      this.wireHeld.push(held);
+      this.pending = this.pending.filter((p) => !slot(p));
+      if (held.due <= this.t + 1e-9) {
+        if (!smoke) delete u.orderAt;
+        go();
+        held.went = r33(this.t);
+        return;
+      }
+      this.pending.push(smoke ? { at: held.due, id: u.id, go, smoke, key, held } : { at: held.due, id: u.id, go, key, held });
+      if (!smoke) u.orderAt = held.due;
+    }
+    /**
+     * The wires as a side sees them: the defence its own, and everyone everything where the view is unfogged (no side, or
+     * the card knew the defence). A cut's striker is named only where the side has met it.
+     */
+    phonesView(as) {
+      if (!this.phonesSeen(as)) return {};
+      const hq = this.phonesHq(), r13 = (v) => Math.round(v * 10) / 10;
+      return {
+        phones: {
+          hq: [...hq],
+          wires: this.wires.map((w) => {
+            const u = this.unit(w.unit);
+            return { id: w.id, side: w.side, pts: [[...w.hq], [r13(u.x), r13(u.y)]], hq: [...w.hq], unit: w.unit, lines: w.lines, cut: w.cut };
+          }),
+          cuts: this.wireCuts.map((c) => {
+            const by2 = this.unit(c.by);
+            return { t: c.t, wire: c.wire, x: c.x, y: c.y, ...as === void 0 || !by2 || by2.side === as || this.known(by2) ? { by: c.by } : {} };
+          }),
+          mends: this.wireMends.map((m) => ({ ...m })),
+          held: this.wireHeld.map((h) => ({ ...h }))
+        }
+      };
+    }
+    /** Whether a side sees the wires (phonesView): once they are laid, the defence, and everyone where the view is unfogged. */
+    phonesSeen(as) {
+      return this.phones && this.phoneRng !== null && (as === void 0 || as === "def" || !this.fog);
     }
     /**
      * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
@@ -6390,14 +8249,14 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
-      const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort");
+      const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
         if (this.perUnit && player) for (const u of us) this.take(u);
       };
       const air = this.radio && player && this.t > 0;
       const said = c.at, from = typeof said === "number" && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-      const give = (u, go) => this.order(u, go, air, from);
+      const give = (u, go, smoke = false) => this.order(u, go, air, from, c, smoke);
       switch (c.do) {
         case "move": {
           const us = mine(c.units);
@@ -6459,6 +8318,9 @@
             u.path = [];
             u.keepFace = null;
             delete u.aim;
+            delete u.search;
+            delete u.searchR;
+            delete u.cut;
           });
           return us.length > 0;
         }
@@ -6471,6 +8333,7 @@
         case "withdrawAll": {
           if (c.side !== by2) return false;
           this.payAir();
+          this.payWaits();
           this.bar[by2] = this.breaking(by2);
           for (const u of this.units) if (u.side === by2 && fighting2(u)) {
             u.state = "withdrawn";
@@ -6483,7 +8346,10 @@
           if (c.side !== by2 && !this.ai[c.side]) return false;
           this.ai[c.side] = c.on;
           if (c.on) {
-            for (const u of this.units) if (u.side === c.side) delete u.taken;
+            for (const u of this.units) if (u.side === c.side) {
+              delete u.taken;
+              delete u.cut;
+            }
           }
           return true;
         }
@@ -6503,15 +8369,75 @@
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
             return true;
           }
+          if (c.do === "land:patrol") {
+            const u = this.unit(Number(c.unit ?? c.units?.[0]));
+            if (!this.patrol || !u || u.side !== by2 || by2 !== this.setup || this.patrolWhy(u) !== null) return false;
+            this.patrolBy = u.id;
+            return true;
+          }
+          if (c.do === "land:wait") {
+            if (!this.relief) return false;
+            const all = mine(c.units ?? []), whys = this.waitWhyAll(all);
+            const us = all.filter((_, i) => whys[i] === null);
+            if (!us.length) return false;
+            hands(us);
+            for (const u of us) give(u, () => this.wait(u));
+            return true;
+          }
+          if (c.do === "land:cut") {
+            if (!this.cutters) return false;
+            const x = Number(c.x), y = Number(c.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+            const us = mine(c.units ?? []).filter((u) => this.cutWhy(u, x, y) === null);
+            if (!us.length) return false;
+            hands(us);
+            const p = this.hedgeNear(x, y, LAND.cutters.near), ax = Math.cos(p.yaw), ay = Math.sin(p.yaw);
+            const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+            for (const u of us) {
+              const k = (u.x - cx) * ax + (u.y - cy) * ay, q = us.length > 1 ? this.hedgeNear(p.x + ax * k, p.y + ay * k, LAND.cutters.near) : null;
+              const [px, py] = q ? [q.x, q.y] : [x, y];
+              give(u, () => this.cutGo(u, px, py));
+            }
+            return true;
+          }
+          if (c.do === "land:smoke") {
+            if (!this.smoke) return false;
+            const l = [c.x0, c.y0, c.x1 ?? c.x0, c.y1 ?? c.y0].map(Number);
+            if (!l.every(Number.isFinite)) return false;
+            const us = mine(c.units ?? []).filter((u) => this.smokeWhy(u, l[0], l[1], l[2], l[3]) === null);
+            if (!us.length) return false;
+            for (const u of us) give(u, () => this.lay(u, l), true);
+            return true;
+          }
           if (c.do === "land:staff") {
             const us = mine(c.units ?? []).filter((u) => u.taken);
-            for (const u of us) delete u.taken;
+            for (const u of us) {
+              delete u.taken;
+              delete u.cut;
+            }
             return us.length > 0;
           }
           if (c.do === "land:begin") {
             if (by2 !== this.setup) return false;
             this.setup = null;
             this.room = null;
+            for (const r of this.riders) this.riderTo(r);
+            return true;
+          }
+          if (c.do === "land:fire" && c.target === void 0) {
+            const x = Number(c.x), y = Number(c.y);
+            const us = mine(c.units ?? []).filter((u) => u.kind !== "fort");
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !us.length) return false;
+            hands(us);
+            for (const u of us) give(u, () => {
+              u.order = null;
+              u.path = [];
+              u.keepFace = null;
+              delete u.aim;
+              u.search = [x, y];
+              delete u.searchR;
+              delete u.cut;
+            });
             return true;
           }
           if (c.do === "land:fire") {
@@ -6524,6 +8450,7 @@
               u.path = [];
               u.keepFace = null;
               u.aim = t.id;
+              delete u.cut;
             });
             return true;
           }
@@ -6538,23 +8465,30 @@
     }
     /**
      * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
-     * when its headquarters is hit. A later order on the air replaces the one still on the way.
+     * when its headquarters is hit. A later order on the air replaces the one still on the way. A smoke order (smoke on
+     * call, release 2: 'smoke') has a place of its own on the air: it replaces only a smoke order of that block's still on
+     * the way, never its move or attack, nor is replaced by one, so "move, then smoke to cover it" lands both; and it
+     * leaves the block's orderAt (its move's or attack's) alone.
      */
-    order(u, go, air, from = this.t) {
+    order(u, go, air, from = this.t, c, smoke = false) {
+      if (this.phones && this.t > 0 && this.wireDown(u)) {
+        this.byFallback(u, go, from, c, smoke);
+        return;
+      }
       if (!air) {
         go();
         return;
       }
       const R = LAND.radio, hit = u.state === "wavering" || u.str < R.hqAt * u.str0;
-      const at = Math.round((from + R.delay * (hit ? R.cut : 1)) * 1e3) / 1e3;
-      this.pending = this.pending.filter((p) => p.id !== u.id);
+      const at = Math.round((from + R.delay * (hit ? R.cut : 1) * this.radioOf(u)) * 1e3) / 1e3;
+      this.pending = this.pending.filter((p) => p.id !== u.id || !p.smoke !== !smoke);
       if (at <= this.t + 1e-9) {
-        delete u.orderAt;
+        if (!smoke) delete u.orderAt;
         go();
         return;
       }
-      this.pending.push({ at, id: u.id, go });
-      u.orderAt = at;
+      this.pending.push(smoke ? { at, id: u.id, go, smoke } : { at, id: u.id, go });
+      if (!smoke) u.orderAt = at;
     }
     /** The player's orders on the air that have reached their blocks (radio): carried out, if the block still fights. */
     landOrders() {
@@ -6565,11 +8499,15 @@
       for (const p of due) {
         const u = this.unit(p.id);
         if (!u) continue;
-        delete u.orderAt;
-        if (fighting2(u)) p.go();
+        if (!p.smoke) delete u.orderAt;
+        if (fighting2(u)) {
+          p.go();
+          if (p.held) p.held.went = Math.round(this.t * 1e3) / 1e3;
+        }
       }
     }
     send(u, o) {
+      if (u.waits && !u.waits.free) this.endWait(u, "off");
       o.x = clamp(o.x, u.w / 2, this.field.w - u.w / 2);
       if (o.kind !== "withdraw") o.y = clamp(o.y, 10, this.field.h - 10);
       if (o.kind === "move" && this.wet(u, o.x, o.y, false) && groundAt(this.field, o.x, o.y) !== "bridge") {
@@ -6585,6 +8523,9 @@
       u.order = o;
       u.keepFace = o.face ?? null;
       delete u.aim;
+      delete u.search;
+      delete u.searchR;
+      delete u.cut;
       const t = o.kind === "attack" && o.target !== void 0 ? this.unit(o.target) : void 0;
       const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
       u.path = at ? this.route(u, at[0], at[1]) : [];
@@ -6593,11 +8534,13 @@
     closeTo(u) {
       return reachOf(u) * (u.kind === "art" ? 0.85 : 0.6);
     }
+    // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
     going(u) {
-      return u.dry && MOTION[u.kind] === "foot" ? "ashore" : MOTION[u.kind];
+      if (this.bocage && this.heldBack(u)) return "hedged";
+      return u.dry && MOTION[u.kind] === "foot" && (u.joined === void 0 || this.field.bend) ? "ashore" : MOTION[u.kind];
     }
     paceOf(m) {
-      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND.pace.foot, water: 0, blown: 0 }) : LAND.pace[m];
+      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND.pace.foot, water: 0, blown: 0 }) : m === "hedged" ? LAND.pace.tracks : LAND.pace[m];
     }
     route(u, x, y) {
       const m = this.going(u), f = this.field;
@@ -6612,8 +8555,8 @@
       const near = (a, b) => Math.abs(a % f.cols - b % f.cols) <= 2 && Math.abs(Math.floor(a / f.cols) - Math.floor(b / f.cols)) <= 2;
       let w = this.ways.get(u.id), fresh = false;
       for (; ; ) {
-        if (!w || w.m !== m || !near(w.goal, goal)) {
-          w = { m, goal, ...this.findWay(m, u.x, u.y, x, y) };
+        if (!w || w.m !== m || !near(w.goal, goal) || m === "hedged" && w.bars !== this.barsLaid) {
+          w = { m, goal, ...this.findWay(m, u.x, u.y, x, y), ...m === "hedged" ? { bars: this.barsLaid } : {} };
           this.ways.set(u.id, w);
           fresh = true;
         }
@@ -6641,8 +8584,9 @@
      * Nothing where it stands on ground it can enter.
      */
     exit(m, x, y) {
-      const f = this.field, C = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y);
-      const go = (i) => pace[GROUNDS[f.ground[i]]] > 0;
+      const f = this.field, C = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y), bar = m === "hedged" ? this.barrier() : null;
+      const go = (i) => pace[GROUNDS[f.ground[i]]] > 0 && !(bar && bar[i]);
+      const mine = (i) => !bar || !this.barredCross(x, y, i % C * f.cell + f.cell / 2, Math.floor(i / C) * f.cell + f.cell / 2);
       if (go(s)) return null;
       const wet = (i) => GROUNDS[f.ground[i]] === "water" || GROUNDS[f.ground[i]] === "blown";
       const inWet = wet(s), back = /* @__PURE__ */ new Map([[s, -1]]);
@@ -6655,7 +8599,7 @@
           const c = i % C + dc, r = Math.floor(i / C) + dr, j = r * C + c;
           if (c < 0 || c >= C || r < 0 || r >= f.rows || back.has(j)) continue;
           back.set(j, i);
-          if (go(j)) {
+          if (go(j) && mine(j)) {
             const d = dist(x, y, ...mid(j));
             if (d < bd || d === bd && j < best) {
               bd = d;
@@ -6678,9 +8622,9 @@
      * walk straight between. Where the place cannot be reached, the way ends at the nearest cell that can, and says so.
      */
     findWay(m, sx, sy, x, y) {
-      const f = this.field, C = f.cols, n = f.ground.length, pace = this.paceOf(m);
+      const f = this.field, C = f.cols, n = f.ground.length, pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
       const top = Math.max(...Object.values(pace)), s = this.cellAt(sx, sy), g = this.cellAt(x, y), gc = g % C, gr = Math.floor(g / C);
-      const go = (i) => pace[GROUNDS[f.ground[i]]];
+      const go = (i) => bar && bar[i] ? 0 : pace[GROUNDS[f.ground[i]]];
       const h = (i) => {
         const dc = Math.abs(i % C - gc), dr = Math.abs(Math.floor(i / C) - gr);
         return (Math.max(dc, dr) + (Math.SQRT2 - 1) * Math.min(dc, dr)) / top;
@@ -6774,7 +8718,7 @@
       const stepX = dx ? cs / Math.abs(dx) : Infinity, stepY = dy ? cs / Math.abs(dy) : Infinity;
       let tx = dx ? (sx > 0 ? (c + 1) * cs - x0 : x0 - c * cs) / Math.abs(dx) : Infinity;
       let ty = dy ? (sy > 0 ? (r + 1) * cs - y0 : y0 - r * cs) / Math.abs(dy) : Infinity;
-      const pace = this.paceOf(m);
+      const pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
       for (let n = Math.abs(c1 - c) + Math.abs(r13 - r); n > 0 && (c !== c1 || r !== r13); n--) {
         if (Math.abs(tx - ty) < 1e-9) {
           tx += stepX;
@@ -6791,13 +8735,32 @@
         }
         if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) return true;
         if (pace[GROUNDS[f.ground[r * f.cols + c]]] <= 0) return false;
+        if (bar && bar[r * f.cols + c]) return false;
       }
       return true;
     }
     // ---- The tick -----------------------------------------------------------------------------------------------------
     /** The squad brain, made the first time it is asked for (drill.ts). */
     drillOn(opts) {
-      return this.drill ?? (this.drill = new Drill(this, opts));
+      if (this.drill) return this.drill;
+      const { scale, ...rest } = opts ?? {};
+      const n = scale === true ? this.scale() : typeof scale === "number" ? scale : void 0;
+      return this.drill = new Drill(this, n !== void 0 ? { ...rest, scale: n } : rest);
+    }
+    /**
+     * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
+     * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
+     * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
+     * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
+     * for (the 2D page's dots: LAND.scale.page). The blocks of corps still coming up from next door count too.
+     */
+    scale(menOf = (u) => u.men0, budget = LAND.scale.budget) {
+      const S = LAND.scale, men = this.allBlocks().reduce((s, u) => {
+        const m = menOf(u);
+        return s + (Number.isFinite(m) ? Math.max(0, m) : 0);
+      }, 0);
+      const raw = men / budget;
+      return raw <= 1 ? 1 : Math.ceil(raw / S.step) * S.step;
     }
     /**
      * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be
@@ -6827,7 +8790,7 @@
     placeWhy(u, x, y) {
       if (!this.setup || u.side !== this.setup) return "The battle has begun.";
       if (this.placeAll ? u.kind === "fort" || !fighting2(u) : u.kind !== "art" || !fighting2(u)) return this.placeAll ? "Fortifications stay where they are built." : "Only guns and support teams are placed.";
-      if (u.dug) return "It is dug in where it stands.";
+      if (u.dug || u.waits) return "It is dug in where it stands.";
       return this.standWhy(u, x, y, this.room);
     }
     /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
@@ -6858,10 +8821,13 @@
       u.path = [];
       u.keepFace = face ?? null;
       delete u.aim;
+      delete u.search;
+      delete u.searchR;
       delete u.stand;
       delete u.standFor;
       delete u.standFace;
       delete u.closing;
+      delete u.cut;
       this.ways.delete(u.id);
       u.home = [x, y];
       u.cover = groundAt(this.field, x, y);
@@ -6873,6 +8839,32 @@
     vehicle(u) {
       if (!this.models.has(u.id)) this.models.set(u.id, u.team ? null : vehicleOf(u.kind, u.nat, this.ticket.turn));
       return this.models.get(u.id);
+    }
+    /**
+     * Names the regiment blocks as their armies did (release 2; the historian's ruling, 22 November: units.ts
+     * regimentWord): "Infanterie-Regiment 33" of the "11th Infantry Division", a British brigade, an American Combat
+     * Command. Before the clock starts only; false once it has begun. Looks only: no number in the fight reads a name.
+     */
+    namesOn() {
+      if (this.t > 0 || this.over) return false;
+      for (const side of ["att", "def"]) armyNames(this.ticket[side], this.units.filter((u) => u.side === side), this.ticket.turn);
+      return true;
+    }
+    /**
+     * The model a block is drawn with, where the 3D set piece picks its own (Normandy's first German tank block is a
+     * Tiger): the rules weigh it as that model from then. False where the block or the model is unknown to the sheet (a
+     * tank block needs a model the sheet has duels for); null hands it back to vehicleOf.
+     */
+    vehicleIs(id, model) {
+      const u = this.unit(id) ?? this.coming.find((c) => c.u.id === id)?.u;
+      if (!u) return false;
+      if (model === null) {
+        this.models.delete(id);
+        return true;
+      }
+      if (!ARMOUR.models[model] || u.kind === "arm" && !ARMOUR.duels[model]) return false;
+      this.models.set(id, model);
+      return true;
     }
     /** What a blow from u on tank block t weighs for t's armour on that face at that range (1 at par); null where unknown. */
     armourAt(u, t, face, range) {
@@ -6894,33 +8886,148 @@
     sees(side, e) {
       return e.side === side || !e.hid;
     }
+    /**
+     * The field's hedges (the historian's check, 22 November: the Normandy bocage): the hedge lines and their gates as the
+     * 3D game lays them on this field, metres from its south-west corner. Before the clock starts only; a block on a hedge
+     * line then hides as in woods (LAND.hide). False once it has begun.
+     */
+    hedgesOn(hedges, gates = []) {
+      if (this.t > 0 || this.over) return false;
+      const W = this.field.w, H = this.field.h, C = HEDGE_CELL, near = LAND.hide.hedge.near;
+      const cols = Math.ceil(W / C), rows = Math.ceil(H / C), map = new Uint8Array(cols * rows);
+      const keep = [];
+      for (const h of hedges) {
+        const pts = (h.points ?? []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+        if (pts.length < 2 || !pts.some(([x, y]) => x >= 0 && x <= W && y >= 0 && y <= H)) continue;
+        keep.push({ kind: h.kind, points: pts });
+        for (let i = 1; i < pts.length; i++) {
+          const [ax, ay] = pts[i - 1], [bx, by2] = pts[i];
+          const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - near) / C)), c1 = Math.min(cols - 1, Math.floor((Math.max(ax, bx) + near) / C));
+          const r0 = Math.max(0, Math.floor((Math.min(ay, by2) - near) / C)), r13 = Math.min(rows - 1, Math.floor((Math.max(ay, by2) + near) / C));
+          for (let r = r0; r <= r13; r++) for (let c = c0; c <= c1; c++) if (segGap((c + 0.5) * C, (r + 0.5) * C, ax, ay, bx, by2) <= near) map[r * cols + c] = 1;
+        }
+      }
+      this.hedges = keep;
+      this.gates = gates.filter((g) => Number.isFinite(g.x) && Number.isFinite(g.y) && g.x >= 0 && g.x <= W && g.y >= 0 && g.y <= H);
+      this.hedgeMap = keep.length ? map : null;
+      this.bars = null;
+      this.hedgeSegs.clear();
+      for (const h of keep) for (let i = 1; i < h.points.length; i++) {
+        const [ax, ay] = h.points[i - 1], [bx, by2] = h.points[i], seg = [ax, ay, bx, by2];
+        for (let c = Math.floor(Math.min(ax, bx) / GATE_CELL); c <= Math.floor(Math.max(ax, bx) / GATE_CELL); c++)
+          for (let r = Math.floor(Math.min(ay, by2) / GATE_CELL); r <= Math.floor(Math.max(ay, by2) / GATE_CELL); r++) {
+            const k = c * 4096 + r, l = this.hedgeSegs.get(k);
+            if (l) l.push(seg);
+            else this.hedgeSegs.set(k, [seg]);
+          }
+      }
+      if (this.hide) for (const u of this.units) this.markHid(u);
+      return true;
+    }
+    /**
+     * Where a straight way from (x0, y0) to (x1, y1) first meets a hedge line, more than 'skip' metres out: null where it
+     * meets none (the 3D game's men go through the gates: drill.ts).
+     */
+    hedgeCross(x0, y0, x1, y1, skip = 0) {
+      if (!this.hedgeSegs.size) return null;
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      if (len <= skip) return null;
+      let best = null, bestK = Infinity;
+      const seen = /* @__PURE__ */ new Set();
+      for (let c = Math.floor(Math.min(x0, x1) / GATE_CELL); c <= Math.floor(Math.max(x0, x1) / GATE_CELL); c++)
+        for (let r = Math.floor(Math.min(y0, y1) / GATE_CELL); r <= Math.floor(Math.max(y0, y1) / GATE_CELL); r++)
+          for (const s of this.hedgeSegs.get(c * 4096 + r) ?? []) {
+            if (seen.has(s)) continue;
+            seen.add(s);
+            const k = segHit(x0, y0, x1, y1, s[0], s[1], s[2], s[3]);
+            if (k !== null && k * len > skip && k < bestK) {
+              bestK = k;
+              best = [x0 + (x1 - x0) * k, y0 + (y1 - y0) * k];
+            }
+          }
+      return best;
+    }
+    /**
+     * The gate a man going from (x0, y0) to (x1, y1) goes through, where his straight way meets a hedge (more than 'skip'
+     * metres out): the gate nearest where it meets it, within GATE_REACH, that he can walk to straight. Null where his way
+     * meets no hedge, or no gate serves: he climbs the bank there.
+     */
+    gateOn(x0, y0, x1, y1, skip = 0) {
+      const at = this.hedgeCross(x0, y0, x1, y1, skip);
+      if (!at || Math.hypot(at[0] - x1, at[1] - y1) < 0.75) return null;
+      const near = this.gates.map((g) => ({ g, d: Math.hypot(g.x - at[0], g.y - at[1]) })).filter((x) => x.d <= GATE_REACH).sort((a, b) => a.d - b.d);
+      for (const { g } of near) {
+        const to = this.hedgeCross(x0, y0, g.x, g.y, skip);
+        if (!to || Math.hypot(to[0] - g.x, to[1] - g.y) <= LAND.hide.hedge.gap) return g;
+      }
+      return null;
+    }
+    /** The way the hedge line nearest (x, y) runs there, a unit vector: null where none passes within LAND.hide.hedge.near. */
+    hedgeDir(x, y) {
+      let best = Infinity, dir = null;
+      const c = Math.floor(x / GATE_CELL), r = Math.floor(y / GATE_CELL);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of this.hedgeSegs.get((c + i) * 4096 + r + j) ?? []) {
+        const l = Math.hypot(s[2] - s[0], s[3] - s[1]), d = segGap(x, y, s[0], s[1], s[2], s[3]);
+        if (l > 0 && d < best) {
+          best = d;
+          dir = [(s[2] - s[0]) / l, (s[3] - s[1]) / l];
+        }
+      }
+      return best <= LAND.hide.hedge.near ? dir : null;
+    }
+    /** On a hedge line (within LAND.hide.hedge.near of one), where the field has hedges. */
+    onHedge(x, y) {
+      if (!this.hedgeMap || x < 0 || y < 0 || x >= this.field.w || y >= this.field.h) return false;
+      return this.hedgeMap[Math.floor(y / HEDGE_CELL) * Math.ceil(this.field.w / HEDGE_CELL) + Math.floor(x / HEDGE_CELL)] === 1;
+    }
     /** Standing in woods (fieldworks dug into woods too): where a block can hide. */
     inWoods(u) {
       return coverAt(this.field, u.x, u.y) === "woods";
     }
-    /** Hidden if it stands in woods, before the clock starts. Fieldworks are known where they are built. */
+    /** Cover a block can hide in: woods, or a hedge line. */
+    inCover(u) {
+      return this.inWoods(u) || this.onHedge(u.x, u.y);
+    }
+    /** Hidden if it stands in woods or on a hedge line, before the clock starts. Fieldworks are known where they are built. */
     markHid(u) {
-      if (live2(u) && u.kind !== "fort" && this.inWoods(u)) u.hid = true;
+      if (live2(u) && u.kind !== "fort" && this.inCover(u)) u.hid = true;
       else delete u.hid;
     }
-    /** How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). */
+    /**
+     * How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). In
+     * true forest, foot and machine guns hold to LAND.hide.forest: they could see no further.
+     */
     ambushAt(u) {
-      const a = u.team === "mg" ? LAND.hide.ambush.mg : LAND.hide.ambush[MOTION[u.kind]];
-      return a > 0 ? a : Infinity;
+      const H = LAND.hide, a = u.team === "mg" ? H.ambush.mg : H.ambush[MOTION[u.kind]];
+      if (a <= 0) return Infinity;
+      return !this.onHedge(u.x, u.y) && this.inWoods(u) ? Math.min(a, H.forest) : a;
+    }
+    /**
+     * An army's wait for an order by radio, as a multiple of LAND.radio.delay (the historian's, 22 November): its foot's by
+     * nation and year; a tank block's as its model's share with a set, the rest as its foot.
+     */
+    radioOf(u) {
+      const year = turnToDate(this.ticket.turn).year;
+      const foot = (LAND.radio.nations[u.nat] ?? []).find(([to]) => year <= to)?.[1] ?? 1;
+      if (u.kind !== "arm") return foot;
+      const m = this.vehicle(u), r = m ? ARMOUR.models[m]?.radio : void 0;
+      return r === void 0 ? foot : r + (1 - r) * foot;
     }
     /** The clock starts: the computer's defence lays its ambushes, then every block in woods is hidden. */
     hideStart() {
       this.hidStarted = true;
       if (this.ai.def && !this.ticket.def.human) this.layAmbush("def");
       for (const u of this.units) this.markHid(u);
+      if (this.patrol) this.patrolOut();
     }
     /**
      * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
      * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
      * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
-     * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+     * player's setup step allows his, clear of every other block. Where no woods lie near, none goes. 'most' blocks at
+     * most, of those 'may' allows (a caught patrol's one more post: night patrol); the blocks it put there.
      */
-    layAmbush(side) {
+    layAmbush(side, most = LAND.hide.staff.blocks, may = () => true) {
       const H = LAND.hide.staff, dir = side === "att" ? 1 : -1;
       const z = this.field.zones[side];
       const own = this.units.filter((u) => u.side === side && live2(u));
@@ -6930,14 +9037,14 @@
         Math.max(z[2], ...own.map((u) => u.x + u.w / 2)),
         Math.max(z[3], ...own.map((u) => u.y + u.d / 2))
       ];
-      const foot = own.filter((u) => MOTION[u.kind] === "foot" && !u.team && !u.dug && u.reserve !== "held" && !u.taken && !this.inWoods(u));
+      const foot = own.filter((u) => MOTION[u.kind] === "foot" && !u.team && !u.dug && u.reserve !== "held" && !u.taken && !this.inCover(u) && may(u));
       const picks = [];
-      const cell = this.field.cell;
+      const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
       for (const u of foot) {
         let best = null;
         for (let dy = -H.back; dy <= H.ahead; dy += cell) for (let dx = -H.across; dx <= H.across; dx += cell) {
           const x = u.x + dx, y = u.y + dir * dy;
-          if (coverAt(this.field, x, y) !== "woods") continue;
+          if (coverAt(this.field, x, y) !== "woods" && !this.onHedge(x, y)) continue;
           if (best && (dy < best.ahead || dy === best.ahead && Math.abs(dx) >= Math.abs(best.x - u.x))) continue;
           if (this.standWhy(u, x, y, room) !== null) continue;
           best = { x, y, ahead: dy };
@@ -6945,43 +9052,161 @@
         if (best) picks.push({ u, ...best });
       }
       picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
-      let laid = 0;
+      const laid = [];
       for (const p of picks) {
-        if (laid >= H.blocks) break;
+        if (laid.length >= most) break;
         if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
         this.place(p.u, p.x, p.y);
-        laid++;
+        laid.push(p.u);
       }
+      return laid;
     }
     /**
      * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
      * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
-     * from the air. Told to the player as his blocks would report it.
+     * from the air; 'patrol': the night before, by the patrol 'by' sent out (night patrol, release 2), before any shot.
+     * Told to the player as his blocks would report it.
      */
     reveal(u, how, by2) {
       if (!u.hid) return;
       delete u.hid;
+      if (how === "fired") u.unloc = Math.round((this.t + LAND.hide.locate.secs) * 1e3) / 1e3;
       const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
       if (theirs) u.found = true;
-      const text = mineFound ? how === "fired" ? `${this.named(u)} springs its ambush from the woods.` : how === "seen" ? `${this.named(u)} has been seen in the woods.` : how === "out" ? `${this.named(u)} has left the woods and can be seen.` : `${this.named(u)} is struck in the woods: the enemy knows it is there.` : theirs ? how === "fired" && by2 ? `Enemy troops hidden in the woods open fire on your ${by2.name}.` : how === "seen" && by2 ? `Your ${by2.name} has found enemy troops in the woods.` : how === "out" ? "Enemy troops come out of the woods." : "Enemy troops found in the woods." : "";
+      const where = this.inWoods(u) ? "the woods" : "the hedges";
+      const text = mineFound ? how === "fired" ? `${this.named(u)} springs its ambush from ${where}.` : how === "seen" ? `${this.named(u)} has been seen in ${where}.` : how === "heard" ? `${this.named(u)} has been heard moving in ${where}.` : how === "out" ? `${this.named(u)} has left cover and can be seen.` : how === "searched" ? `${this.named(u)} is flushed out of ${where} by fire.` : how === "patrol" ? `An enemy patrol found ${this.named(u)} in ${where} in the night.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.` : theirs ? how === "fired" && by2 ? `Enemy troops hidden in ${where} open fire on your ${by2.name}.` : (how === "seen" || how === "heard") && by2 ? `Your ${by2.name} has found enemy troops in ${where}.` : how === "searched" && by2 ? `Your ${by2.name} has flushed enemy troops out of ${where}.` : how === "patrol" ? "Our night patrol found a hidden post." : how === "out" ? "Enemy troops come out of cover." : `Enemy troops found in ${where}.` : "";
       this.say({ what: "land:found", unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...by2 ? { by: by2.id } : {} } });
     }
-    /** Each tick: a hidden block that has left the woods, or that an enemy has come close enough to see, is found. */
+    /**
+     * Each tick: a hidden block that has left cover, or that an enemy has come close enough to see (or to hear: a tank or
+     * lorry on the move), is found; one found by its fire is located once that long has passed or an enemy is that close.
+     */
     spotHidden() {
+      const H = LAND.hide;
       for (const u of this.units) {
+        const sight = H.sight[MOTION[u.kind]];
+        if (u.unloc !== void 0 && (this.t >= u.unloc || !live2(u) || this.units.some((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= sight))) delete u.unloc;
         if (!u.hid) continue;
         if (!live2(u)) {
           delete u.hid;
           continue;
         }
-        if (!this.inWoods(u)) {
+        if (!this.inCover(u)) {
           this.reveal(u, "out");
           continue;
         }
-        const sight = LAND.hide.sight[MOTION[u.kind]];
-        const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= sight);
-        if (by2) this.reveal(u, "seen", by2);
+        const heard = u.speed > 0.5 ? H.heard[MOTION[u.kind]] : 0;
+        const veiled = (e) => this.smoke && this.screens.length > 0 && this.screened(e.x, e.y, u.x, u.y);
+        const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e)));
+        if (by2) this.reveal(u, this.gap(u, by2) <= sight && !veiled(by2) ? "seen" : "heard", by2);
       }
+    }
+    // ---- Night patrol (release 2) -----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it");
+    // the design director, 18:36Z, Q6 to Q8 (LAND.patrol). The night before, the attack sends one patrol out from a
+    // block of its line on foot: the computer's always, from its most forward (doctrine: Q8); the player's only by his
+    // order while he places his army (land:patrol). The defence never patrols. It needs hiding on (only hidden posts can
+    // be found): it is settled once in hideStart, after the computer's ambushes are laid and every block in cover is
+    // hidden and before either staff first thinks, so the attack's first plan counts what it found. Two draws on its own
+    // stream ('patrol:' and the seed, and the attempt), always both and found first, never on the battle's dice: found,
+    // the defence's most forward hidden post is found before any shot (it never springs its ambush); caught, the defence
+    // is alerted, ready but not stronger (Q7, b418): one more of its blocks takes a hidden post by the computer's own
+    // ambush rule (the player's defence too, laid for him and named in his warning), a computer defence's reserve starts
+    // toward the attack at once as a bold one does (ai.ts defend; a player's moves his own), and the patrol's block loses
+    // the patrol's men from its strength (counted as lost; its nerve untouched). The flares over it are looks only.
+    /** Why this block may not go out on patrol tonight, in the player's words (129(d)); null where it may. */
+    patrolWhy(u) {
+      if (!this.patrol) return "There are no night patrols in this battle.";
+      if (!this.hide) return "Nothing hides in this battle, so there is nothing for a patrol to find.";
+      if (u.side !== "att") return "Only the attacker sends out a patrol.";
+      if (this.t > 0 || this.over || this.hidStarted) return "The battle has begun: a patrol goes out the night before.";
+      if (this.setup !== u.side) return "A patrol is sent while you place your army, before the battle begins.";
+      if (this.patrolBy !== null) return "One patrol a night: one is already going out.";
+      if (!fighting2(u)) return "It is out of the fight.";
+      if (u.team || MOTION[u.kind] !== "foot") return "Only men on foot go out on patrol.";
+      return null;
+    }
+    /** A side's computer defence alerted by the patrol it caught (night patrol): its reserve starts toward the attack at once (ai.ts). */
+    alertedStaff(side) {
+      return this.patrol && side === "def" && !this.ticket.def.human && this.nightPatrol?.alerted === true;
+    }
+    /** The night's patrol goes out, and what it found and whether it was caught are settled (hideStart). */
+    patrolOut() {
+      const P = LAND.patrol, side = "att", foe = "def";
+      const foot = (u) => !!u && u.side === side && fighting2(u) && !u.team && MOTION[u.kind] === "foot";
+      const by2 = this.ticket[side].human ? this.patrolBy === null ? void 0 : this.unit(this.patrolBy) : this.units.filter((u) => foot(u) && u.reserve !== "held").sort((a, b) => b.y - a.y || a.id - b.id)[0];
+      if (!foot(by2)) return;
+      const rng = new Rng(hashString(this.ticket.attempt ? `patrol:${this.ticket.seed}:${this.ticket.attempt}` : `patrol:${this.ticket.seed}`));
+      const found = rng.next() < P.found, caught = rng.next() < P.caught;
+      const post = this.units.filter((u) => u.side === foe && live2(u) && u.hid).sort((a, b) => a.y - b.y || a.id - b.id)[0];
+      const men = patrolSize(by2.nat);
+      const r13 = (v) => Math.round(v * 10) / 10;
+      const near = found && post ? post : this.units.filter((u) => u.side === foe && live2(u) && !u.hid).sort((a, b) => dist(a.x, a.y, by2.x, by2.y) - dist(b.x, b.y, by2.x, by2.y) || a.id - b.id)[0];
+      const to = near ? [r13(near.x), r13(Math.max(0, near.y - near.d / 2 - 40))] : [r13(by2.x), r13(by2.y + by2.d / 2 + 200)];
+      const from = [r13(by2.x), r13(by2.y + by2.d / 2)];
+      const w = (j) => (mix2(Math.imul(this.ticket.seed >>> 0, 2246822507) + j) - 0.5) * 60;
+      const tm = Math.round((P.night.t0 + P.night.t1) / 2), at = (f, j) => [r13(from[0] + (to[0] - from[0]) * f + w(j)), r13(from[1] + (to[1] - from[1]) * f)];
+      const route = [
+        [P.night.t0, from[0], from[1]],
+        [Math.round((P.night.t0 + tm) / 2), ...at(0.5, 1)],
+        [tm, to[0], to[1]],
+        [Math.round((tm + P.night.t1) / 2), ...at(0.5, 2)],
+        [P.night.t1, from[0], from[1]]
+      ];
+      const night = {
+        side,
+        unit: by2.id,
+        men,
+        t0: P.night.t0,
+        t1: P.night.t1,
+        from,
+        to,
+        route,
+        found: null,
+        alerted: caught,
+        post: null,
+        lost: 0,
+        flares: []
+      };
+      this.nightPatrol = night;
+      if (found && post) {
+        night.found = { unit: post.id, x: r13(post.x), y: r13(post.y), kind: post.team ?? post.kind };
+        this.reveal(post, "patrol", by2);
+      }
+      if (caught) {
+        const laid = this.layAmbush(foe, 1, (u) => !u.order);
+        for (const u of laid) this.markHid(u);
+        const extra = laid.find((u) => u.hid);
+        if (extra) night.post = extra.id;
+        const lost = Math.min(by2.str, men * by2.str0 / Math.max(1, by2.men0));
+        by2.str -= lost;
+        by2.figures = by2.str <= 0 ? 0 : Math.max(1, Math.ceil(by2.tray * by2.str));
+        night.lost = lost;
+        const k = (i, j) => mix2(Math.imul(this.ticket.seed >>> 0, 2654435761) + i * 8 + j);
+        for (let i = 0; i < 3; i++) {
+          const t = Math.round(P.night.t0 + (P.night.t1 - P.night.t0) * ((i + k(i, 1)) / 3));
+          night.flares.push([t, r13(Math.min(this.field.w, Math.max(0, to[0] + (k(i, 2) - 0.5) * 240))), r13(Math.min(this.field.h, Math.max(0, to[1] + (k(i, 3) - 0.5) * 120)))]);
+        }
+        if (this.ticket[foe].human) {
+          const where = extra ? ` ${extra.name} has taken a hidden post in ${this.inWoods(extra) ? "the woods" : "the hedges"}.` : "";
+          this.say({ what: "land:patrol", side: foe, ...extra ? { unit: extra.id } : {}, text: `We caught an enemy patrol in the night. An attack is coming.${where}`, x: extra ? r13(extra.x) : to[0], y: extra ? r13(extra.y) : to[1], extra: { caught: true, ...extra ? { post: extra.id } : {} } });
+        }
+      }
+      if (this.ticket[side].human && (caught || !found || !post)) {
+        const text = caught ? "Our patrol was caught in the night. They know we're coming." : "Our patrol came back with nothing to report.";
+        this.say({ what: "land:patrol", side, unit: by2.id, text, x: to[0], y: to[1], extra: { caught, found: !!night.found } });
+      }
+    }
+    /** The night's patrol as a side sees it: the attack all of it; the defence only once alerted, where it caught it and the flares. */
+    patrolView(as) {
+      const p = this.nightPatrol;
+      if (!this.patrol || !p) return {};
+      const flares = p.flares.map((f) => [f[0], f[1], f[2]]);
+      if (as === void 0 || as === p.side) {
+        return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], route: p.route.map((r) => [r[0], r[1], r[2]]), found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
+      }
+      return p.alerted ? { patrol: { side: p.side, t0: p.t0, t1: p.t1, men: p.men, to: [p.to[0], p.to[1]], found: null, alerted: true, flares } } : {};
     }
     step() {
       if (this.setup) return;
@@ -6990,7 +9215,10 @@
         return;
       }
       if (this.hide && !this.hidStarted) this.hideStart();
+      if (this.phones) this.phonesOn();
+      if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
       this.landOrders();
+      if (this.relief && this.joinCorps.size) this.waitOn();
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND.think;
         this.staffing = true;
@@ -7010,31 +9238,43 @@
         if (!fighting2(u)) continue;
         const t = this.targetOf(u);
         u.engaged = t?.id;
-        if (!t) continue;
+        if (!t) {
+          if (u.hid && u.search && this.hide) this.reveal(u, "fired");
+          continue;
+        }
+        const blind = !!t.hid;
         if (this.contactAt === null && u.kind !== "art") this.contactAt = this.t;
         if (u.hid) {
           u.sprung = this.t;
           this.reveal(u, "fired", t);
         }
+        if (u.sprung === this.t) this.ambushed.add(t.side);
         if (this.ticket[u.side].human || u.kind !== "art" || this.gap(u, t) < LAND.guns.closeAt) {
           u.found = true;
-          t.found = true;
+          if (!blind) t.found = true;
         }
         if (!u.met) {
           u.met = true;
           if (u.side === "att" || !t.met) this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
         }
         const blow = this.blow(u, t);
+        if (this.phones && this.wires.length) this.wireBlow(u, t);
+        if (blind) {
+          const F = LAND.hide.search;
+          blow.dmg *= F.blow;
+          if (this.rng.next() < 1 - (1 - F.odds) ** (DT / F.every)) this.reveal(t, "searched", u);
+        }
         if (this.airLeft[u.side] > 0) {
-          const held = blow.dmg * this.airOn[u.side].share, raw = held / blow.ground;
-          blow.dmg -= held;
+          const full = blow.dmg / blow.screen, held = full * this.airOn[u.side].share, raw = held / blow.ground;
+          blow.dmg = (full - held) * blow.screen;
           this.airBank[u.side].set(t.id, (this.airBank[u.side].get(t.id) ?? 0) + raw);
           this.airLedger[u.side].withheld += raw;
           kept.set(t.id, (kept.get(t.id) ?? 0) + raw);
         }
-        const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [] };
+        const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
         h.dmg += blow.dmg;
         h.nerve += blow.nerve;
+        if (!blind) h.blind = false;
         h.from.push([u, blow.dmg]);
         hurt.set(t.id, h);
         if (blow.front) t.pinned = true;
@@ -7047,13 +9287,22 @@
         const h = hurt.get(id), side = other(this.unit(id).side);
         this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve);
       }
-      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from);
+      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
+      if (this.bearers) this.carry();
       for (const u of this.units) if (live2(u)) this.nerve(u);
+      const at = () => new Map(this.units.map((u) => [u.id, [u.x, u.y]]));
+      const before = this.cutters && this.hedges.length ? at() : null;
+      const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === "att" && u.kind === "arm" && live2(u)).map((u) => [u, u.x, u.y]) : null;
       for (const u of this.units) if (live2(u)) this.move(u);
+      const moved = before ? at() : null;
       this.spread();
+      if (before) this.cutOn(before, moved);
+      if (tanks) this.wireTanks(tanks);
       if (this.hide) this.spotHidden();
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
+      if (this.cuts.length) this.openCuts();
       this.judge();
       this.drill?.step();
     }
@@ -7070,6 +9319,7 @@
         const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
         if (inRiver(there) && !inRiver(here)) return false;
         const to = pace[there];
+        if (this.bocage && this.going(u) === "hedged" && this.barredCross(u.x, u.y, x, y)) return false;
         return to > LAND.queue.hard || to > 0 && to >= pace[here];
       };
       const go = (u, ux, uy, push) => {
@@ -7159,6 +9409,17 @@
           best = e;
         }
       }
+      if (!best && u.search && this.hide) {
+        const [sx, sy] = u.search, R = u.searchR ?? LAND.hide.search.reach;
+        for (const e of this.units) {
+          if (e.side === u.side || !live2(e) || !e.hid || dist(e.x, e.y, sx, sy) > R + Math.max(e.w, e.d) / 2) continue;
+          const d = this.gap(u, e);
+          if (d <= reach && d < score) {
+            score = d;
+            best = e;
+          }
+        }
+      }
       return best;
     }
     /**
@@ -7220,18 +9481,30 @@
       if (t.kind === "arm" && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
       return take;
     }
+    /**
+     * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and
+     * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
+     * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
+     */
     blow(u, t) {
       const gu = coverAt(this.field, u.x, u.y);
       let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
+      if (this.bearers) p *= this.atHand(u);
       if (u.state === "wavering") p *= LAND.wavering;
       const rearguard = this.givingGround(t);
       if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND.moving;
       if (u.winded !== void 0 && this.t < u.winded) p *= LAND.double.blows;
       let nerveMul = 1;
-      if (u.sprung !== void 0 && this.t - u.sprung < LAND.hide.surprise.secs) {
-        p *= LAND.hide.surprise.punch;
-        nerveMul *= LAND.hide.surprise.nerve;
+      const SP = LAND.hide.surprise;
+      if (u.sprung !== void 0 && this.t - u.sprung < SP.secs) {
+        p *= SP.punch;
+        nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
       }
+      if (u.team === "mor" && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== void 0 && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
+      const vague = t.unloc !== void 0 && this.t < t.unloc;
+      if (vague) p *= LAND.hide.locate.fire;
+      const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND.smoke.share : 1;
+      p *= screen;
       if (u.kind === "art") {
         const G2 = gunsOf(u), close = this.gap(u, t) < G2.closeAt;
         p *= close ? G2.close : G2.punch;
@@ -7249,11 +9522,11 @@
       const ground = this.groundTake(t);
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
-      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
+      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
       if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
       const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
       const dmg = p * am * amx * take * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground };
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -7261,8 +9534,17 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
-    suffer(t, dmg, nerveMul, from = []) {
-      if (t.hid && dmg > 0) this.reveal(t, "struck");
+    suffer(t, dmg, nerveMul, from = [], blind = false, bare = false) {
+      if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
+      if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
+        const take = this.groundTake(t), f = Math.min(take, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take);
+        if (f < 1) {
+          const spared = dmg * (1 - f);
+          t.debt = (t.debt ?? 0) + spared;
+          t.debtN = (t.debtN ?? 0) + spared * nerveMul;
+          dmg *= f;
+        }
+      }
       const share = dmg / Math.max(1e-9, t.power0);
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
@@ -7271,6 +9553,10 @@
       t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady2));
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+      if (this.bearers) {
+        this.wounded(t, before - t.str);
+        t.figures = Math.min(had, t.figures);
+      }
       const owed = t.owed ?? (t.owed = {}), model = t.power0 / Math.max(1e-9, t.tray * t.str0);
       for (const [u, d] of from) owed[u.id] = (owed[u.id] ?? 0) + d;
       for (let k = t.figures; k < had; k++) {
@@ -7362,7 +9648,7 @@
         return;
       }
       if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
-      if (u.str <= N.shattered * u.str0 || u.mor < N.rout) {
+      if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) {
         this.rout(u);
         return;
       }
@@ -7379,6 +9665,8 @@
       u.engaged = void 0;
       this.say({ what: "routing", unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
       for (const f of this.units) if (f !== u && f.side === u.side && fighting2(f) && dist(f.x, f.y, u.x, u.y) < LAND.nerve.near) f.mor = Math.max(0, f.mor - LAND.nerve.friendRuns);
+      if (u.waits) this.endWait(u, "broke");
+      else if (this.repay.length) this.landNow(u);
     }
     move(u) {
       const k = u.kind;
@@ -7703,6 +9991,120 @@
       const d = turn(u.face, want);
       u.face = Math.abs(d) <= r ? want : u.face + Math.sign(d) * r;
     }
+    // ---- Stretcher bearers (release 2) --------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it"); the
+    // design director's rulings Q4 and Q5 (18:36Z), and the light cases (18:38Z); LAND.bearers. Of each loss of strength a
+    // block suffers (suffer: the blows, the air, kept harm landing), LAND.bearers.killed are dead and the rest wounded. Of
+    // the wounded, light.share are dressed at the block and back in the line light.dress seconds later (with no walk while
+    // light.at is 0), if the block is still fighting then: running, fled or gone, it takes none back. They come back as
+    // strength, up to what it started with, never raising its nerve: the only upward write to strength in the fight. The
+    // rest are litter cases: while they lie waiting and its bearers (share of its strength at the start, by army) are home,
+    // a block still fighting sends a trip, litter bearers a case, out to its aid post (LAND.bearers.aid behind where it
+    // started, toward its own edge) and back at LAND.bearers.pace: 2 x aid / pace, 330 s. Bearers out are still counted in
+    // its strength, its nerve, the day's count and its size: they only weaken its own blows, by the share of its strength
+    // away (atHand). One land:bearers event a block, to the player's own side, as its bearers first go out. Nothing here
+    // draws on the dice. The drill draws the men (drill.ts): the wounded, the bearers and the carries, looks only.
+    /** Where a block's aid post stands: LAND.bearers.aid metres behind its start place, toward its own back edge, on the field. */
+    aidOf(u) {
+      const back = u.side === "att" ? -1 : 1;
+      return [clamp(u.home[0], 0, this.field.w), clamp(u.home[1] + back * LAND.bearers.aid, 0, this.field.h)];
+    }
+    /** A block's bearers and wounded, as the rules count them (strength): none before its first loss, or with the switch off. */
+    litter(u) {
+      return this.bearers ? this.litters.get(u.id) : void 0;
+    }
+    /** A loss of strength d on a block: its share of wounded, the light cases to their dressing, the rest lying for the bearers. */
+    wounded(u, d) {
+      if (!(d > 0)) return;
+      const B = LAND.bearers, L2 = B.light;
+      let l = this.litters.get(u.id);
+      if (!l) {
+        l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false };
+        this.litters.set(u.id, l);
+      }
+      const hurt = d * (1 - killedShare(u.nat)), light = hurt * L2.share, foot = LAND.speed.inf;
+      const at = Math.round((this.t + (L2.at > 0 ? L2.at / (foot * L2.out) : 0) + L2.dress + (L2.at > 0 ? L2.at / (foot * L2.back) : 0)) * 1e3) / 1e3;
+      const last = l.light[l.light.length - 1];
+      if (last && last.at === at) last.n += light;
+      else if (light > 0) l.light.push({ at, n: light });
+      l.waiting += hurt - light;
+    }
+    /**
+     * Each tick, after the harm: the bearers whose trip is done are home; the light cases whose dressing is done are back
+     * in the line, where their block still fights (up to its strength at the start); then, while litter cases wait and
+     * bearers are home, a block still fighting sends them out: min(waiting, home / litter) cases, litter bearers each.
+     */
+    carry() {
+      const B = LAND.bearers, trip = 2 * B.aid / B.pace, t = this.t;
+      for (const u of this.units) {
+        const l = this.litters.get(u.id);
+        if (!l) continue;
+        if (l.trips.length && l.trips[0].back <= t + 1e-9) {
+          while (l.trips.length && l.trips[0].back <= t + 1e-9) l.trips.shift();
+          l.out = l.trips.reduce((a, x) => a + x.by, 0);
+        }
+        while (l.light.length && l.light[0].at <= t + 1e-9) {
+          const n = l.light.shift().n, was = u.str;
+          if (!fighting2(u)) continue;
+          u.str = Math.min(u.str0, u.str + n);
+          if (u.str <= was) continue;
+          let r;
+          for (let i = this.returns.length - 1; i >= 0 && !r; i--) if (this.returns[i].unit === u.id) r = this.returns[i];
+          if (r && Math.floor(r.t + 1e-9) === Math.floor(t + 1e-9)) r.n += u.str - was;
+          else this.returns.push({ t: Math.round(t * 1e3) / 1e3, unit: u.id, n: u.str - was });
+        }
+        if (!fighting2(u) || l.waiting <= 1e-12) continue;
+        const home = l.all - l.out;
+        if (home <= 1e-12) continue;
+        const cases = Math.min(l.waiting, home / B.litter), by2 = cases * B.litter;
+        l.waiting -= cases;
+        l.out += by2;
+        l.trips.push({ back: Math.round((t + trip) * 1e3) / 1e3, by: by2 });
+        if (!l.told) {
+          l.told = true;
+          if (this.ticket[u.side].human) this.say({ what: "land:bearers", unit: u.id, side: u.side, text: `${this.named(u)}'s stretcher bearers are carrying the wounded back.`, x: u.x, y: u.y });
+        }
+      }
+    }
+    /** The share of a block's strength at hand to strike with: all of it, less its bearers out carrying (none below nothing). */
+    atHand(u) {
+      const l = this.litters.get(u.id);
+      if (!l || l.out <= 0 || u.str <= 0) return 1;
+      return Math.max(0, u.str - l.out) / u.str;
+    }
+    /**
+     * The bearers' part of the view, a side's own blocks (every side's with no side given, as a recording is): each block's
+     * bearers out and litter cases waiting, in men (strength times its men at full strength), and the battle second the
+     * next of its bearers are back (null with none out); the aid post of each block that has had wounded; and the light
+     * cases back in the line in the two battle seconds before this one (when, the block, how many men), each told once by
+     * its t and block: a battle second is shown only once it is over, so an entry never changes after it is shown (a
+     * block's returns in one second are summed), and one of no whole man is left out. Every side's where the view is
+     * unfogged (the card knew the defence), as the telephone lines are. Left out with the switch off, and before anyone
+     * is hurt.
+     */
+    bearerView(as) {
+      if (!this.bearers || !this.litters.size) return {};
+      const r13 = (v) => Math.round(v * 10) / 10;
+      const ours = (u) => !!u && (as === void 0 || u.side === as || !this.fog);
+      const men = (u, s) => Math.round(s * u.men0 / Math.max(1e-9, u.str0));
+      const bearers = [], aid = [], returns = [];
+      for (const [id, l] of [...this.litters].sort((a, c) => a[0] - c[0])) {
+        const u = this.unit(id);
+        if (!ours(u)) continue;
+        aid.push({ side: u.side, unit: id, x: r13(l.aid[0]), y: r13(l.aid[1]) });
+        const out = men(u, l.out), waiting = men(u, l.waiting);
+        if (out > 0 || waiting > 0) bearers.push({ unit: id, out, waiting, back: l.trips.length ? l.trips[0].back : null });
+      }
+      const now = Math.floor(this.t + 1e-9);
+      for (const r of this.returns) {
+        const u = this.unit(r.unit), sec = Math.floor(r.t + 1e-9);
+        if (sec >= now || sec < now - 2 || !ours(u)) continue;
+        const n = men(u, r.n);
+        if (n > 0) returns.push({ t: r.t, unit: r.unit, n });
+      }
+      return { ...bearers.length ? { bearers } : {}, ...aid.length ? { aid } : {}, ...returns.length ? { returns } : {} };
+    }
     // ---- The end --------------------------------------------------------------------------------------------------
     /** Each side's standing power as a share of both sides' at the start: the balance bar. */
     standing(due) {
@@ -7712,13 +10114,14 @@
         if (!live2(u)) continue;
         const k = u.state === "routing" ? 0.3 : 1;
         const d = due?.get(u.id), str = d === void 0 ? u.str : Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
-        s[u.side] += u.power0 * (str / u.str0) * k / tot;
+        s[u.side] += u.priced === void 0 ? u.power0 * (str / u.str0) * k / tot : Math.max(0, u.priced - u.power0 * (1 - str / u.str0)) * k / tot;
       }
+      for (const c of this.coming) s[c.u.side] += c.u.priced / tot;
       return s;
     }
     brokenShare(s) {
       let gone = 0;
-      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += u.power0;
+      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += weightOf(u);
       return gone / this.power[s];
     }
     /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
@@ -7752,8 +10155,8 @@
       const r33 = (x) => Math.round(x * 1e3) / 1e3;
       const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
       const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
-      const on = mine.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + u.power0, 0);
-      const steady2 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + u.power0, 0) / p0 : 0;
+      const on = mine.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
+      const steady2 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
       return {
         side: s,
         bar: r33(b.bar),
@@ -7787,7 +10190,8 @@
      */
     freshShare(s) {
       let n = 0;
-      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += u.power0;
+      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += weightOf(u);
+      for (const c of this.coming) if (c.u.side === s) n += c.u.priced;
       return n / this.power[s];
     }
     /** A block that holds its army at the brink (freshShare): fresh, in a small army, or not yet in the fight. */
@@ -7807,6 +10211,7 @@
         if (u.gives || this.fresh(u)) continue;
         u.gives = true;
         if (u.order?.kind === "withdraw") continue;
+        if (u.waits) this.endWait(u, "gives");
         this.send(u, { kind: "withdraw", x: u.x, y: s === "att" ? 0 : this.field.h });
         u.engaged = void 0;
         this.say({ what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
@@ -7872,6 +10277,7 @@
     finish(winner, how, R, why) {
       if (this.over) return;
       this.payAir();
+      this.payWaits();
       const lost = this.lostShares();
       const men = { att: 0, def: 0 };
       for (const u of this.units) {
@@ -7888,16 +10294,16 @@
         f.p += u.power0;
         forces.set(u.corps, f);
       }
+      for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
       const loser = other(winner);
       const pct = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
       const cap = (t) => t[0].toUpperCase() + t.slice(1);
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
-      const lines = [
-        how === "rout" ? this.brokeAfter(loser) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
-      ];
       const told = how === "rout" && why && why.by !== "none";
-      if (told) lines.push(breakLine(why, this.whose(loser), true));
-      if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : `${told ? `In all, ${this.sideOf("att", "attack")}` : cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
+      const lines = [
+        how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
+      ];
+      if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct(lost.def)}.` : `${cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       for (const u of this.units) if (live2(u) && u.state !== "routing") {
         u.act = "idle";
@@ -7917,7 +10323,7 @@
         R: Math.round(r * 1e3) / 1e3,
         level: levelOf(r, men.att > men.def),
         lines,
-        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0 })),
+        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0, ...this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {} })),
         ...how === "rout" || how === "destroyed" ? { broke: loser, ...why ? { brokeBy: why } : {} } : {},
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
         ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
@@ -7946,13 +10352,16 @@
      * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
      * routs at odds the card calls sure or hopeless fall in.
      */
-    brokeAfter(s) {
+    brokeAfter(s, why) {
       const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
       const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
-      if (halves === 0) return `${who} broke within half a minute of fighting.`;
       const n = ["", "a", "two", "three", "four", "five", "six"][m] ?? `${m}`;
-      const span2 = m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`;
-      return `${who} broke after ${span2} of fighting.`;
+      const span2 = halves === 0 ? "within half a minute" : `after ${m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`}`;
+      const when = `${who} broke ${span2} of fighting`;
+      if (!why) return `${when}.`;
+      const said = breakLine(why, who, true);
+      const after = said.startsWith(`${who} broke`) ? said.slice(`${who} broke`.length) : `: ${said}`;
+      return `${when}${after.startsWith(":") ? after : `,${after}`}`;
     }
     /** Each side's standing power against what it brought, as the staff reckons the day now. */
     standingShares(due) {
@@ -7965,7 +10374,7 @@
      * STAFF's question (ruling 226(5)).
      */
     chanceNow() {
-      const k = this.ticket.reckoning, sh = this.standingShares(this.airDue());
+      const k = this.ticket.reckoning, sh = this.standingShares(this.dueNow());
       if (k.odds * k.dice[0] >= RATIO.carry) return 1;
       if (k.odds * k.dice[1] < RATIO.carry) return 0;
       const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
@@ -7976,7 +10385,7 @@
      * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
      */
     chanceAt(card) {
-      const k = this.ticket.reckoning, bal = this.standing(this.airDue()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+      const k = this.ticket.reckoning, bal = this.standing(this.dueNow()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
       if (card * k.dice[0] >= RATIO.carry) return 1;
       if (card * k.dice[1] < RATIO.carry) return 0;
       const now = card * r;
@@ -7988,6 +10397,7 @@
       const k = this.ticket.reckoning;
       for (const s of ["att", "def"]) if (this.airOn[s]) this.airSettled[s] = this.airLeft[s];
       this.payAir();
+      this.payWaits();
       const R = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
       this.finish(R >= RATIO.carry ? "att" : "def", "objective", R);
     }
@@ -8430,8 +10840,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      void as;
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView() };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -8446,7 +10855,7 @@
     }
   };
 
-  // src/battle/land/pieces.ts
+  // ../../src/battle/land/pieces.ts
   var NORMANDY = {
     key: "normandy-1944",
     title: "The hedgerows before Le Mesnil",
@@ -8715,7 +11124,7 @@
     return { crops: CROPS, crop: crop.join(""), fields: { turn: r3(turn3), cx: w / 2, cy: h / 2, xs: xs.map(r1), ys: ys.map(r1), shift: shift.map(r1), patch: patchOut }, balka: { line: line.map(([x, y]) => [r1(x), r1(y)]), deep }, rail: { line: rail.map(([x, y]) => [r1(x), r1(y)]), bank }, hill: { ...hill, x: r1(hill.x), y: r1(hill.y) } };
   }
 
-  // src/battle/land/live.ts
+  // ../../src/battle/land/live.ts
   var KEEP_M = 0.1;
   var KEEP_F = 0.05;
   var r12 = (x) => Math.round(x * 10) / 10;
@@ -8890,7 +11299,7 @@
       return tracks;
     }
   };
-  function landUnitOut(u, t, known = true) {
+  function landUnitOut(u, t, known = true, mine = false, sim) {
     const motion = MOTION[u.kind];
     const loops = motion && motion !== "fixed" ? LOOPS[motion] : void 0;
     const town = u.act === "fight" && (u.cover === "buildings" || u.cover === "suburb" || u.cover === "industry") && !!loops && motion !== "guns";
@@ -8935,8 +11344,42 @@
       // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
       ...u.hid ? { hid: 1 } : {},
       ...u.orderAt !== void 0 ? { orderIn: Math.max(0, r12(u.orderAt - t)) } : {},
+      // Hold until relieved (release 2, sim.relief), his own blocks only: waiting for a corps coming up from next door, dug in
+      // where it stands while not free; late, help never came and its men break sooner.
+      ...mine && u.waits ? { waits: { due: r12(u.waits.due), ...u.waits.late ? { late: true } : {}, ...u.waits.free ? { free: true } : {} } } : {},
+      // Hedge cutters (release 2, sim.cutters): a tank block that carries them, with the share of its tanks fitted (the
+      // 3D game draws the cutters on that many). Smoke on call (sim.smoke): his own blocks that may lay it, with the
+      // screens they have left.
+      ...sim?.cutters && sim.cutterOf(u) ? { cutter: LAND.cutters.share } : {},
+      ...mine && sim?.smoke ? smokeOut(sim, u) : {},
       order: u.order ? { kind: u.order.kind, x: r12(u.order.x), y: r12(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r12(x), r12(y)]) } : null
     };
+  }
+  function smokeOut(sim, u) {
+    const m = sim.smokeOf(u);
+    return m ? { smoke: u.smokeLeft ?? m.count ?? LAND.smoke.count } : {};
+  }
+  function yearOf(t) {
+    const m = /(19[34]\d)/.exec(t.date ?? "");
+    return m ? Number(m[1]) : 1942;
+  }
+  function standInModel(kind, nat, year, n) {
+    const axis = ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"].includes(nat);
+    if (kind === "art") return nat === "SOV" ? "ZiS3" : axis ? "leFH18" : "Howitzer105";
+    if (nat === "GER") return year >= 1943 ? ["PanzerIV", "PanzerIV", "Tiger", "StuG3"][n % 4] : year >= 1941 ? ["PanzerIV", "StuG3", "LightTank"][n % 3] : ["LightTank", "PanzerIV"][n % 2];
+    if (nat === "SOV") return year >= 1941 ? ["T34", "T34", "LightTank"][n % 3] : "LightTank";
+    if (axis) return year >= 1943 && nat !== "JAP" ? ["StuG3", "LightTank"][n % 2] : "LightTank";
+    return year >= 1942 ? ["Sherman", "Sherman", "LightTank"][n % 3] : "LightTank";
+  }
+  function ticketSky(t) {
+    const w = (t.weather ?? "").toLowerCase();
+    const lean = (t.seed % 21 - 10) / 100;
+    const c = (x) => Math.round(Math.min(1, Math.max(0, x + lean)) * 100) / 100;
+    if (w === "rain") return { cover: c(0.85), base: 600, kind: "deck", hour: 11 };
+    if (w === "snow") return { cover: c(0.9), base: 500, kind: "deck", hour: 11 };
+    if (w === "mud") return { cover: c(0.7), base: 800, kind: "deck", hour: 11 };
+    if (w === "clear") return { cover: c(0.2), base: 1400, kind: "cumulus", hour: 10 };
+    return { cover: c(0.45), base: 1e3, kind: "cumulus", hour: 10 };
   }
   var LiveBattle = class {
     constructor(ticket, piece, opts = {}) {
@@ -8946,24 +11389,35 @@
       __publicField(this, "drill");
       __publicField(this, "me");
       __publicField(this, "keeper", new LiveKeeper());
+      /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
+      __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
+      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
+      __publicField(this, "looks", { worn: true, mud: true, scars: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
       __publicField(this, "phaseNew", /* @__PURE__ */ new Map());
       __publicField(this, "events", []);
       __publicField(this, "views", []);
+      /** The hedge cutters' gaps already sent (the rules' cuts, in the order begun). */
+      __publicField(this, "cutsSent", 0);
       __publicField(this, "lastView", -1);
       __publicField(this, "placed", false);
       __publicField(this, "sentOver", false);
       this.me = opts.me ?? null;
+      this.skyOf = opts.sky ?? ticketSky(ticket);
       const sim = this.sim = new LandBattle(ticket);
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
-      for (const u of sim.units) if (u.kind === "arm") {
-        const c = calFor("arm", u.nat, ticket.turn);
+      for (const u of sim.allBlocks()) if (u.kind === "arm") {
+        const c = calFor("arm", u.nat, ticket.turn, opts.designYears?.[u.nat]);
         if (c) u.cal = c;
+      }
+      if (opts.fog) {
+        sim.fog = true;
+        sim.seen = new Set(opts.seen ?? []);
       }
       for (const s of ["att", "def"]) sim.command({ do: "auto", side: s, on: true }, s);
       if (this.me && opts.staff !== false) sim.perUnit = true;
@@ -8972,14 +11426,31 @@
       if (opts.setup && this.me) sim.setupOn(this.me, true);
       if (opts.hide !== false) sim.hideOn();
       if (opts.armour !== false) sim.measured = true;
-      const models = sim.models;
+      if (opts.names !== false) sim.namesOn();
+      if (this.me && opts.relief !== false) sim.relief = true;
+      if (this.me && opts.rider !== false) sim.rider = true;
+      if (opts.cutters !== false) sim.cutters = true;
+      if (opts.smoke !== false) sim.smoke = true;
+      if (opts.bocage) sim.bocage = true;
+      if (opts.phones !== false) sim.phones = true;
+      if (opts.bearers !== false) sim.bearers = true;
+      if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
-      this.blocks = sim.units.map((u) => {
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+      const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
+      const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
+      this.blocks = sim.allBlocks().map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
         let model = null;
         if (a && u.kind === "arm") model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
         else if (a && u.kind === "art" && !u.team) model = a.gun;
-        if (model && sim.measured && ARMOUR.models[model] && (u.kind !== "arm" || ARMOUR.duels[model])) models.set(u.id, model);
+        if (model) sim.vehicleIs(u.id, model);
+        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+        const took = caught && u.kind === "arm" && caughtLeft[u.side] > 0 ? caught[u.side] : void 0;
+        if (took) {
+          caughtLeft[u.side]--;
+          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+        }
         return {
           id: u.id,
           side: u.side,
@@ -8998,7 +11469,9 @@
           ...u.team ? { team: u.team } : {},
           ...u.crew ? { crew: u.crew } : {},
           model,
-          ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {}
+          ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
+          ...u.joined !== void 0 ? { joins: true } : {},
+          ...took ? { captured: took.from } : {}
         };
       });
       this.look();
@@ -9017,10 +11490,15 @@
         title: t.title,
         date: t.date,
         turn: t.turn,
-        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : {},
+        // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
+        // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
+        ...t.weather ? { weather: t.weather } : {},
+        ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
+        ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
+        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
-          att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {} },
-          def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {} }
+          att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
+          def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {}, ...t.def.worn !== void 0 && this.looks.worn ? { worn: t.def.worn } : {} }
         },
         field: {
           w: f.w,
@@ -9087,13 +11565,25 @@
         this.lastView = Math.floor(t);
         this.views.push({
           t: r2(t),
-          units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u))),
+          units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u), !!this.me && u.side === this.me, this.sim)),
           balance: v.balance,
           zones: v.zones,
           ...v.breaking ? { breaking: { att: r32(v.breaking.att), def: r32(v.breaking.def) } } : {},
           ...v.contact !== void 0 ? { contact: v.contact } : {},
           ...v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null }])) } : {},
           ...v.setup ? { setup: v.setup } : {},
+          // (the corps still coming up from next door that the player may know of: where on its edge and when)
+          ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
+          // (the rider ahead: his own corps' despatch riders, riding in before it)
+          ...v.riders?.length ? { riders: v.riders } : {},
+          // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
+          // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
+          ...this.sim.screenView(this.me ?? void 0),
+          // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+          // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+          ...this.sim.phonesView(this.me ?? void 0),
+          ...this.sim.bearerView(this.me ?? void 0),
+          ...this.sim.patrolView(this.me ?? void 0),
           ...v.over ? { over: v.over } : {}
         });
       }
@@ -9129,6 +11619,9 @@
         phases: [...this.phaseNew.entries()].map(([b, ph]) => ({ b, ph })),
         contact: this.sim.contactAt
       };
+      const cuts = this.sim.cuts.slice(this.cutsSent).filter((c) => !this.me || c.side === this.me || c.known);
+      this.cutsSent = this.sim.cuts.length;
+      if (cuts.length) d.cuts = cuts.map((c) => ({ t0: r2(c.t0), t1: r2(c.t1), unit: c.unit, x: r12(c.x), y: r12(c.y), yaw: r32(c.yaw), width: r2(c.width) }));
       if (last) {
         d.over = over;
         this.sentOver = true;
@@ -9145,6 +11638,44 @@
       if (!this.me) return false;
       return this.sim.command(c, this.me);
     }
+    /**
+     * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
+     * could reach it there (null where it may not wait).
+     */
+    waitWhy(id) {
+      const u = this.sim.unit(id);
+      if (!u) return { why: "No such block.", due: null };
+      if (!this.me || u.side !== this.me) return { why: "Only your own troops take your orders.", due: null };
+      const why = this.sim.waitWhy(u);
+      return { why, due: why === null ? this.sim.dueAt(u)?.due ?? null : null };
+    }
+    /**
+     * Hedge cutters: why one of his tank blocks may not cut a gap through the hedge at (x, y) (null where it may); with no
+     * point, whether it may cut at all.
+     */
+    cutWhy(id, x, y) {
+      const u = this.sim.unit(id);
+      if (!u) return "Nothing to order.";
+      if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
+      return this.sim.cutWhy(u, x, y);
+    }
+    /**
+     * Smoke on call: why one of his blocks may not lay a screen along that line (x0, y0 to x1, y1, or only its middle; null
+     * where it may); with no line, whether it may lay one at all.
+     */
+    smokeWhy(id, x0, y0, x1, y1) {
+      const u = this.sim.unit(id);
+      if (!u) return "Nothing to order.";
+      if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
+      return this.sim.smokeWhy(u, x0, y0, x1, y1);
+    }
+    /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
+    patrolWhy(id) {
+      const u = this.sim.unit(id);
+      if (!u) return "Nothing to order.";
+      if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
+      return this.sim.patrolWhy(u);
+    }
     /** Why a block may not stand there in the setup step, or null where it may. */
     canPlace(id, x, y) {
       const u = this.sim.units.find((v) => v.id === id);
@@ -9155,6 +11686,16 @@
     place(id, x, y, face) {
       if (!this.me || !this.sim.setup) return false;
       const ok2 = this.sim.command({ do: "land:place", units: [id], x, y, ...face !== void 0 ? { face } : {} }, this.me);
+      if (ok2) this.replace();
+      return ok2;
+    }
+    /**
+     * The 3D field's hedges and their gates, before the clock runs (the rules' sim.hedgesOn; the historian's check, 22
+     * November: a block on a hedge line hides as in woods, and the men on foot go through the gates). False once the clock
+     * has run. The men stand again (a reset piece), as their hiding may have changed.
+     */
+    hedges(hedges, gates) {
+      const ok2 = this.sim.hedgesOn(hedges, gates);
       if (ok2) this.replace();
       return ok2;
     }
@@ -9175,6 +11716,10 @@
       this.look();
     }
   };
+  function liveTicket(ticket, opts = {}, pieceKey) {
+    const p = pieceKey ? PIECES.find((x) => x.key === pieceKey) ?? null : null;
+    return new LiveBattle(ticket, p, opts);
+  }
   function livePiece(key, seed, opts = {}) {
     const p = PIECES.find((x) => x.key === key);
     if (!p) throw new Error(`no set piece ${key}`);
@@ -9182,7 +11727,7 @@
     return new LiveBattle(ticketOf(p, s, opts.me ?? null), p, opts);
   }
 
-  // unreal/TheaterCommand/Rules/land-bridge.ts
+  // Rules/land-bridge.ts
   var live3 = null;
   var none = { t: 0, men: [], tails: [], rounds: [], events: [], views: [], phases: [], contact: null };
   function need() {
@@ -9206,7 +11751,59 @@
         setup: !!opts?.setup,
         platoons: opts?.platoons !== false,
         staff: opts?.staff !== false,
-        radio: opts?.radio !== false
+        radio: opts?.radio !== false,
+        hide: opts?.hide !== false,
+        armour: opts?.armour !== false,
+        names: opts?.names !== false,
+        relief: opts?.relief !== false,
+        rider: opts?.rider !== false,
+        cutters: opts?.cutters !== false,
+        smoke: opts?.smoke !== false,
+        bocage: !!opts?.bocage,
+        phones: opts?.phones !== false,
+        bearers: opts?.bearers !== false,
+        patrol: opts?.patrol !== false,
+        captured: opts?.captured !== false,
+        worn: opts?.worn !== false,
+        mud: opts?.mud !== false,
+        scars: opts?.scars !== false
+      });
+      return live3.header();
+    },
+    /**
+     * A campaign battle live (release 2, behind the game's switch): its ticket as the campaign's TC.battleLook gives it,
+     * the card's fog (fog, seen: the corps it identified) and each nation's armour design year, with the same switches as
+     * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
+     */
+    landStartTicket(ticketOrLook, opts) {
+      const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
+      const ticket = look ? look.ticket : ticketOrLook;
+      const o = { ...look?.live ?? {}, ...opts ?? {} };
+      live3 = liveTicket(ticket, {
+        me: o.me ?? null,
+        setup: !!o.setup,
+        platoons: o.platoons !== false,
+        staff: o.staff !== false,
+        radio: o.radio !== false,
+        hide: o.hide !== false,
+        armour: o.armour !== false,
+        names: o.names !== false,
+        relief: o.relief !== false,
+        rider: o.rider !== false,
+        cutters: o.cutters !== false,
+        smoke: o.smoke !== false,
+        bocage: !!o.bocage,
+        phones: o.phones !== false,
+        bearers: o.bearers !== false,
+        patrol: o.patrol !== false,
+        captured: o.captured !== false,
+        worn: o.worn !== false,
+        mud: o.mud !== false,
+        scars: o.scars !== false,
+        fog: !!o.fog,
+        seen: o.seen ?? [],
+        designYears: o.designYears ?? {},
+        ...o.sky ? { sky: o.sky } : {}
       });
       return live3.header();
     },
@@ -9217,7 +11814,24 @@
       return live3 ? live3.to(t, maxSteps ?? 50) : none;
     },
     landOrder(c) {
-      return { ok: need().order(c) };
+      const ok2 = need().order(c);
+      const o = c;
+      if (!ok2 && o.do === "land:wait" && o.units?.length) return { ok: ok2, why: need().waitWhy(Number(o.units[0])).why ?? "" };
+      const p = c;
+      if (!ok2 && o.do === "land:cut" && o.units?.length) return { ok: ok2, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? "" };
+      if (!ok2 && o.do === "land:smoke" && o.units?.length) return { ok: ok2, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? "" };
+      const n = c;
+      if (!ok2 && o.do === "land:patrol") return { ok: ok2, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? "" };
+      return { ok: ok2 };
+    },
+    landWaitWhy(id) {
+      return need().waitWhy(Number(id));
+    },
+    landCutWhy(id, x, y) {
+      return { why: need().cutWhy(Number(id), x ?? void 0, y ?? void 0) };
+    },
+    landSmokeWhy(id, x0, y0, x1, y1) {
+      return { why: need().smokeWhy(Number(id), x0 ?? void 0, y0 ?? void 0, x1 ?? void 0, y1 ?? void 0) };
     },
     landCanPlace(id, x, y) {
       const why = need().canPlace(id, x, y);
@@ -9230,6 +11844,14 @@
     },
     landBegin() {
       return { ok: need().begin() };
+    },
+    landHedges(hedges, gates) {
+      const l = need();
+      const ok2 = Array.isArray(hedges) && l.hedges(hedges, Array.isArray(gates) ? gates : []);
+      return { ok: ok2, hedges: l.sim.hedges.length, gates: l.sim.gates.length };
+    },
+    landResult() {
+      return { over: live3?.sim.over ?? null };
     },
     landEnd() {
       const over = live3?.sim.over ?? null;

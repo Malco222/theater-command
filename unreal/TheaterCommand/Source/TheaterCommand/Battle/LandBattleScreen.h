@@ -53,6 +53,9 @@ public:
 	/** The share of the screen's height the top bar takes (its brass line too), as last drawn: the dark read leaves those
 	 * rows out, so it reads the picture under the words (the art director's 30% is read on the picture alone). */
 	double TopShare() const { return LastTopShare; }
+	/** The walk's click on a button by what it does: true when that button was on his screen as last painted (and it is
+	 * then pressed just as his click would press it), false when it was not drawn. */
+	bool PressDrawn(const FString& Action);
 
 private:
 	TWeakObjectPtr<ALandBattle> Battle;
@@ -84,6 +87,12 @@ private:
 	/** The two flags' brushes, made once their pictures are there. */
 	mutable FSlateBrush FlagBrush[2];
 	mutable bool bFlagMade[2] = { false, false };
+	/** His cards' row, scrolled (the first card shown) where more units than fit: the row never wraps (the UI director,
+	 * 22 November 18:26Z); kept in range by the painting. */
+	mutable int32 CardFirst = 0;
+	/** The clock's and the camera's buttons (PAUSE, x1, x2, x4, FILM) stand in the top bar beside the clock where it has
+	 * the room, else at the foot's right end: worked out each frame before his screen is painted. */
+	mutable bool bControlsOnTop = false;
 	bool bDragging = false;
 	double SpeedBefore = 1.0;
 

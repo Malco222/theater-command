@@ -83,7 +83,9 @@ public:
 	 * "-TheaterLandLive=<key>" on the command line (normandy-1944): the set piece fought live, the player its general
 	 * (release 2; Brian, 22 November: "im the general who controls their deployment and who to attack and move on a map
 	 * with tactics"). "-TheaterLandSide=" says his side: att (the attack, the default), def, or none (a film, the staffs
-	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step.
+	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step;
+	 * "-TheaterLandPlatoons" draws every platoon (about 2,000 men at Normandy) where sections are the default;
+	 * "-TheaterLandScript=<folder>" presses his steps in code for a builder with no hand on the mouse, a still of each.
 	 */
 	static bool WantsLive(FString& OutKey);
 	/** Opens a live battle two seconds in, as ReplayWhenReady does, its side and seed from the command line. */
@@ -94,6 +96,28 @@ public:
 	/** Starts the rules on their own thread (LandLive) on the set piece Key, the player on side Me ("att", "def", or ""
 	 * for a film), deploying first when bDeploy; the scene opens when the rules have opened the battle. False if not. */
 	bool BeginLive(const FString& Key, int32 Seed, const FString& Me, bool bDeploy);
+	/**
+	 * A campaign battle fought live from its ticket (release 2, the production lead's (a); off unless CampaignLiveOn):
+	 * LookJson is the campaign's TC.battleLook answer as it stands ({ "ticket": .., "live": { fog, seen, designYears,
+	 * sky } }) or a bare FieldTicket, opened in the land rules (TC.landStartTicket), the player on side Me, deploying
+	 * first when bDeploy. Its result, once over, is LiveResult, for the campaign's TC.battleSettleLand.
+	 */
+	bool BeginLiveTicket(const FString& LookJson, const FString& Me, bool bDeploy);
+	void LiveTicketWhenReady(const FString& LookJson, const FString& Me, bool bDeploy);
+	/** "-TheaterLandTicket=<file>": a campaign battle's look (or ticket) from a JSON file, fought live as the set piece
+	 * is by -TheaterLandLive (its side and setup by the same switches): the test path for a campaign battle. */
+	static bool WantsLiveTicket(FString& OutLookJson);
+	void LiveTicketWhenReady(const FString& LookJson);
+	/** The switch for the campaign's own battles fought live in the land rules: on, unless "-TheaterLandNoCampaignLive"
+	 * or the console variable TheaterLandCampaignLive 0. Off: the attack card offers SEND THEM IN only. */
+	static bool CampaignLiveOn();
+	/** The live battle's result once it is over, as the campaign's TC.battleSettleLand takes it ({ "over": .. }). */
+	bool LiveResult(FString& OutJson) const;
+	/**
+	 * (release 2) Where the campaign opened this battle for the player to fight (FIGHT IT YOURSELF): run once when he
+	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
+	 */
+	TFunction<void(const FString&)> HandBack;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
@@ -375,6 +399,9 @@ private:
 	 * about his feet ("-TheaterLandMassMinPx=", 2; 0 none). For the 10 s log: men placed as instances (mid, far), men
 	 * grown and the most grown, and the card's own frame time (ms, summed). */
 	double MassMinPx = 2.0;
+	/** In the general's own view, high over the field, a far man is drawn no smaller than GeneralMinPx of the picture's
+	 * lines ("-TheaterLandGeneralMinPx=", 4; 0 none): his men are always on the screen (the art director, 22 November). */
+	double GeneralMinPx = 4.0;
 	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
 	double MostGrow = 1.0, GpuMs = 0.0;
 	/** For the 10 s log (FX2): the most smoke puffs the effects kit drew in a frame, and the room it was asked for then. */
@@ -424,8 +451,12 @@ private:
 		bool bShown = false;
 		FVector At = FVector::ZeroVector;
 		FQuat Q = FQuat::Identity;
+		/** Her shade's size as laid (1: her own; the general's view grows it with her and lays it as her cast shadow). */
+		double Size = 1.0;
 	};
 	TArray<FShadeDrawn> ShadesDrawn;
+	/** The vehicles' shades laid for the general's view (grown, cast away from the sun, seen to 3 km) this frame. */
+	bool bShadesHigh = false;
 	/** Each shade mesh's instances given back (shrunk to nothing), to be used again before a new one is added. */
 	TArray<TArray<int32>> ShadeFree;
 	/** The men's: a round blob under a standing man, his body's shape under a prone one, a wider blob under a body at
@@ -573,6 +604,9 @@ private:
 	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
 	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
 	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
+	/** A live battle's own parts, ms over the log's 10 s: the general's view (his camera) and his screen (tags, routes,
+	 * chips, the pointer); with the rules' step, said on the log's live line. */
+	double GeneralViewMs = 0.0, GeneralScreenMs = 0.0;
 	int32 LogFrames = 0, MenInPicture = 0, MenRebuilt = 0, RebuildsPut = 0, MostInPicture = 0;
 
 	// ---- The picture run (-TheaterLandBattleShots) ----
@@ -641,6 +675,8 @@ private:
 	/** The rules on their own thread, fighting the battle a little ahead of the screen (none for a recording). */
 	TSharedPtr<FLandLive> Live;
 	FString PendingLive, LiveMe;
+	/** A campaign battle's look waiting to open (LiveTicketWhenReady). */
+	FString PendingTicket;
 	int32 LiveSeed = 0;
 	bool bLiveDeploy = false;
 	/** Started, and waiting on the rules to open the battle (its header): for how long, real seconds. */
@@ -660,6 +696,8 @@ private:
 	/** The battle's clock this frame never past what the rules have fought (less a margin); and the rules kept ahead. */
 	double LiveClock(double From, double To, double Real);
 	void CloseLive();
+	/** BeginLive's and BeginLiveTicket's own: a set piece by Key, or a campaign battle's look where LookJson is given. */
+	bool BeginLiveFrom(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy, const FString& LookJson);
 
 	// ---- The general's controls (LandBattleCommand.cpp) ----
 	/** His pointer pressed: where, which button, and whether it has moved past a click since. */
@@ -685,7 +723,37 @@ private:
 	/** How far a click reaches on the ground at a pixel, metres (some 24 pixels' worth there). */
 	double ReachAt(const FVector2D& Pixel) const;
 	/** The order in hand given (TC.landOrder's command): sent, shown at once, and the click answered on the screen. */
-	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY);
+	/** Only: the blocks it goes to, where not all those in hand (the cutter alone, those with smoke). */
+	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY, const TArray<int32>& Only = TArray<int32>());
+	/** Hedge cutters: the point on a hedge (a hedgerow, a lane's bank, a garden's) within Reach of (X, Y) where a gap would
+	 * be cut; false none so near. */
+	bool HedgeNear(double X, double Y, double Reach, double& OutX, double& OutY) const;
+	/** Smoke on call: those in hand with smoke lay it from (X0, Y0) to (X1, Y1). */
+	void GiveSmoke(double X0, double Y0, double X1, double Y1);
+
+	// ---- The general's walk pressed in code (LandBattleCommand.cpp, its choices LandScript.h) ----
+	/** "-TheaterLandScript=<folder>": for a builder with no hand on the mouse, his steps pressed through his own pointer
+	 * (two units carried into the woods, the battle begun, one sent forward, one at an enemy, one firing into a hedge or
+	 * a wood, a unit's plate held up), a still of each into the folder and each said in the log; then three minutes at
+	 * the battle's own pace, the rest at four times, the after card's still, and the game quits. Empty: none. */
+	FString ScriptFolder;
+	int32 ScriptStep = 0;
+	/** When the step began (real seconds), and the battle time an order went. */
+	double ScriptAt = 0.0, ScriptGiven = 0.0;
+	/** The unit the step works with, the enemy it attacks, where it goes (field metres) and that place on the screen. */
+	int32 ScriptUnit = -1, ScriptFoe = -1;
+	double ScriptX = 0.0, ScriptY = 0.0;
+	FVector2D ScriptPixel = FVector2D::ZeroVector;
+	/** Pressed through his pointer (the place on the screen), else given directly (off the screen). */
+	bool bScriptByHand = false;
+	int32 ScriptStills = 0;
+	/** His units the walk has used, and where it set those it carried into the woods. */
+	TArray<int32> ScriptUsed;
+	TArray<FVector2D> ScriptTaken;
+	/** Each frame after his tags are on the screen: the walk's next step when its time comes. */
+	void TickScript();
+	void ScriptStill(const TCHAR* Name);
+	void ScriptNext(int32 Step);
 
 	bool Open();
 	void LoadInks();

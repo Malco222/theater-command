@@ -7,6 +7,8 @@
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
+#include "Battle/LandFell.h"
+#include "Battle/LandLive.h"
 #include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandScape.h"
 #include "Battle/LandShade.h"
@@ -2646,6 +2648,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	// The grass round the eye and round what it looks at: its squares coming into reach laid, those leaving it given
 	// back, every frame (nothing to do while the eye stays within its squares).
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
+	LandFell::Phase("ground: the clutter");
 	LayClutter(EyeAt, LookAt, State->Pose.bCut, EyeWorld.Z / UnitsPerMetre - GroundZ(EyeAt.X, EyeAt.Y));
 }
 
@@ -2685,6 +2688,7 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 	// The squares brought up to date: within 20 m of the eye or what it looks at made now (32 m on a cut), four more a
 	// frame, nearest first (the old way made the whole 90 m box again every 12 m: 2.1 to 2.9 ms on the Mac each time).
 	std::vector<LandCarpet::Op> Ops;
+	LandFell::Phase("ground: the carpet's squares");
 	Carpet->Update(*State->Field, EyeAt.X, EyeAt.Y, LookAt.X, LookAt.Y, bCut, 4, RealT, Ops);
 	if (Ops.empty())
 	{
@@ -2695,6 +2699,7 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 	// removed from the mesh's end, new ones added at it, in order. (Kept packed, GS7, a place given back is filled with
 	// its mesh's last thing and the last removed, so the mesh draws only what is laid; with -TheaterLandClutterShrunk it
 	// stays, shrunk to nothing where it stood, for the next thing, as before.)
+	LandFell::Phase("ground: the clutter's meshes", static_cast<int>(Ops.size()));
 	const double U = UnitsPerMetre;
 	size_t From = 0;
 	for (size_t N = Ops.size(); N-- > 0;)
@@ -3040,6 +3045,10 @@ void ALandBattle::MakeMen()
 		float MinPx = 2.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandMassMinPx="), MinPx);
 		MassMinPx = FMath::Clamp(static_cast<double>(MinPx), 0.0, 50.0);
+		// (and in the general's own view, "-TheaterLandGeneralMinPx=" (4): about two by four of the picture's points)
+		float GeneralPx = 4.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGeneralMinPx="), GeneralPx);
+		GeneralMinPx = FMath::Clamp(static_cast<double>(GeneralPx), 0.0, 50.0);
 	}
 	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
 	{
@@ -3123,6 +3132,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	};
 	TArray<FSkinJob> Jobs;
 	int32 Floats = 0;
+	LandFell::Phase("men: who is drawn", Crowd.Count());
 	// (the banked men's meshes made as first needed: at most four a frame; a man whose mesh waits is skinned meanwhile)
 	int32 Builds = 4;
 	// (a man's mesh made again for a new level of detail rebuilds its whole draw: at most MenRebuildsMax a frame, the
@@ -3131,10 +3141,14 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	// (no man drawn under some 2 of the picture's lines, GS3, but in the camera's wide of the whole army, where the far
 	// men are its crowd)
 	const bool bMass = S.Eye.MassShot();
+	// (the general's own view, high over the field: every man drawn, the far ones no smaller than GeneralMinPx of the
+	// picture's lines and at most 2.5 times their size, so a section reads as a dark dash and a platoon as a row of them;
+	// the art director, 22 November 18:29Z: "the men are not on screen at all" at his height, culled under two lines)
+	const bool bHigh = S.General.bOn && !S.General.bFilm;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || Crowd.SeenDistance(Man) <= S.MenCullFrom);
+		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || bHigh || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
@@ -3174,6 +3188,10 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			if (bMass && Level == static_cast<int32>(LandMen::Far) && MassMinPx > 0.0)
 			{
 				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
+			}
+			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0)
+			{
+				Grow = FMath::Clamp(GeneralMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines), 1.0, 2.5);
 			}
 			FTransform Helmet;
 			LandMen::Xform Worn;
@@ -3308,6 +3326,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Job.Offset = Floats;
 		Floats += Job.Points * 3;
 	}
+	LandFell::Phase("men: the bank sent", BankCopies.Num());
 	// (the gate's names, nested to the function's end: DrawMen alone is the choice above, MenSend the sends, MenSkin the
 	// skinning, MenMeshes the near men's meshes)
 	LAND_SCOPE(MenSend);
@@ -3329,6 +3348,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	{
 		return;
 	}
+	LandFell::Phase("men: skinned", Jobs.Num());
 	LAND_SCOPE(MenSkin);
 	SkinAt.SetNumUninitialized(Floats);
 	SkinFacing.SetNumUninitialized(Floats);
@@ -3353,6 +3373,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		const FSkinJob& Job = Jobs[Spread[K]];
 		Crowd.Skin(Job.Man, Job.Level, SkinAt.GetData() + Job.Offset, SkinFacing.GetData() + Job.Offset);
 	});
+	LandFell::Phase("men: their meshes sent", Jobs.Num());
 	LAND_SCOPE(MenMeshes);
 	TArray<FVector> P, N;
 	TArray<FColor> C;
@@ -3452,6 +3473,7 @@ int32 ALandBattle::BankCopyFor(int32 Set, int32 Pose, int32& Builds)
 		return -1;
 	}
 	--Builds;
+	LandFell::Phase("men: a banked pose's mesh made", Id);
 	const double Began = LandParts::Seconds();
 	std::vector<float> At, Facing;
 	const FString Name = FString::Printf(TEXT("LandBankMan_%d_%d"), Set, Pose);
@@ -3946,6 +3968,11 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	// TK1: the far vehicles put as their pieces' instances (and who is in the picture, for TK3), before their bodies
 	if (FarCrowd.IsValid())
 	{
+		// (the general's own view, high over the field: a far vehicle grown to stand at least 14 by 7 of the men's lines,
+		// her barrel drawn at least a line wide, her far ink's sky shine taken down; the art director, 22 November 18:27Z,
+		// "tanks read as grey-blue chips". FLandCrowd's "-TheaterLandGeneralTankPx=", "-TheaterLandGeneralBarrelPx=" and
+		// "-TheaterLandGeneralTankInk=")
+		FarCrowd->SetHigh(S.General.bOn && !S.General.bFilm, S.MenLines / 1.8);
 		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
 	}
 	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
@@ -3988,7 +4015,18 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			continue;
 		}
 		const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(D.Body)];
-		Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
+		// (in the general's view a far vehicle her own meshes draw is grown as her pieces would grow her, about the ground
+		// under her middle: a gun laid high, a manned roof gun's cradle)
+		const double Grow = FarCrowd.IsValid() ? FarCrowd->GrowOf(D.Vehicle) : 1.0;
+		if (Grow != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
+		{
+			const FVector Foot = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow)));
+		}
+		else
+		{
+			Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
+		}
 		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond (TK1: where it has a far
 		// section of its own; a body merged into her far pieces keeps its near level while her own meshes draw her).
 		const double Far = (LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z) - EyeAt).Length();
@@ -4113,7 +4151,7 @@ int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 			// (drawn before the smoke and fire, which must not be darkened where they pass in front of it; gone past
 			// 800 m, where a tank is a few pixels)
 			Copies->SetTranslucentSortPriority(-100);
-			Copies->SetCullDistances(0, FMath::RoundToInt32(800.0 * UnitsPerMetre));
+			Copies->SetCullDistances(0, FMath::RoundToInt32((bShadesHigh ? 3000.0 : 800.0) * UnitsPerMetre));
 			Copies->RegisterComponent();
 			Index = ShadeCopies.Add(Copies);
 			ShadeFree.SetNum(ShadeCopies.Num());
@@ -4155,6 +4193,28 @@ void ALandBattle::DrawShades()
 		GiveBack(ShadesDrawn[K]);
 	}
 	ShadesDrawn.SetNum(Count);
+	// The general's view (the art director, 22 November 18:27Z: "give each tank a soft cast shadow on the ground, which
+	// doubles its footprint and gives the hull its shape"): her shade grown with her (FLandCrowd::GrowOf), laid 1.4
+	// times as big and moved away from the sun by half the shadow two thirds of her height throws (never more than 0.6
+	// of her length), along the ground she stands on: from his height it is her footprint and her cast shadow in one;
+	// and seen to 3 km, as far as his eye looks over the field (800 m, where a tank is a few pixels, out of it).
+	const bool bHigh = S.General.bOn && !S.General.bFilm;
+	if (bHigh != bShadesHigh)
+	{
+		bShadesHigh = bHigh;
+		for (UInstancedStaticMeshComponent* Copies : ShadeCopies)
+		{
+			if (Copies)
+			{
+				Copies->SetCullDistances(0, FMath::RoundToInt32((bHigh ? 3000.0 : 800.0) * UnitsPerMetre));
+			}
+		}
+	}
+	FVector Away(-TowardSun.X, -TowardSun.Y, 0.0);
+	const double SunFlat = Away.Size();
+	Away = SunFlat > 1e-3 ? Away / SunFlat : FVector::ZeroVector;
+	// (the shadow's length a metre of height: never past 3, the low sun's)
+	const double ThrowPerMetre = FMath::Min(3.0, SunFlat / FMath::Max(0.05, static_cast<double>(TowardSun.Z)));
 	for (int32 K = 0; K < Count; ++K)
 	{
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
@@ -4187,16 +4247,27 @@ void ALandBattle::DrawShades()
 			continue;
 		}
 		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(K);
-		const FVector At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+		FVector At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
 		const FQuat Q(V.Root.Q.X, V.Root.Q.Y, V.Root.Q.Z, V.Root.Q.W);
-		if (bShown == D.bShown && (!bShown || (At.Equals(D.At, 1.0) && Q.Equals(D.Q, 1e-4))))
+		double Size = FarCrowd.IsValid() ? FarCrowd->GrowOf(K) : 1.0;
+		if (bHigh && bShown)
+		{
+			// (away from the sun along the ground under her: the way taken into her own frame, kept level in it)
+			FVector Along = Q.UnrotateVector(Away);
+			Along.Z = 0.0;
+			const double Throw = FMath::Min(0.6 * FMath::Max(Model.Long, 1.0), 0.67 * FMath::Max(Model.High, 1.0) * ThrowPerMetre) * Size;
+			At += Q.RotateVector(Along.GetSafeNormal()) * (0.5 * Throw * UnitsPerMetre);
+			Size *= 1.4;
+		}
+		if (bShown == D.bShown && (!bShown || (At.Equals(D.At, 1.0) && Q.Equals(D.Q, 1e-4) && FMath::IsNearlyEqual(Size, D.Size, 0.01))))
 		{
 			continue;
 		}
 		D.bShown = bShown;
 		D.At = At;
 		D.Q = Q;
-		ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector(bShown ? 1.0 : 1e-3)), true, false, true);
+		D.Size = Size;
+		ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector(bShown ? Size : 1e-3)), true, false, true);
 		Touched[D.Copy] = true;
 	}
 	for (int32 C = 0; C < Touched.Num(); ++C)
@@ -5447,9 +5518,11 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// (a live battle: first what the rules have fought since the last frame; its contact unknown until it is made)
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the rules' pieces taken");
 		LAND_SCOPE(PumpLive);
 		PumpLive();
 	}
+	LandFell::Phase("tick: the clock");
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
 	if (S.bOwnSpeed)
 	{
@@ -5468,6 +5541,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The cores, in order: the tanks and the men posed first (their muzzles and hulls are where the rounds start and
 	// strike), then the fire, then the camera, then the words.
 	double Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the tanks posed");
 	if (S.Armour)
 	{
 		LAND_SCOPE(Armour);
@@ -5475,6 +5549,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	ArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the men posed");
 	if (S.Men)
 	{
 		LAND_SCOPE(Men);
@@ -5492,6 +5567,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	S.Noises.clear();
 	S.Losses.clear();
 	S.Takes.clear();
+	LandFell::Phase("tick: the fire stepped");
 	if (!bNight)
 	{
 		LAND_SCOPE(Rules);
@@ -5501,7 +5577,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		S.Eye.Hold(true);
 	}
+	LandFell::Phase("tick: the movers placed");
 	LandParts::PlaceMovers(S);
+	LandFell::Phase("tick: the film's eye");
 	{
 		LAND_SCOPE(Camera);
 		// (the camera's own ms, for its 10 s line)
@@ -5524,15 +5602,18 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the general's view");
 		LAND_SCOPE(GeneralView);
 		const double GenMark = LandParts::Seconds();
 		GeneralView(Real);
 		const double GenFrameMs = (LandParts::Seconds() - GenMark) * 1000.0;
 		GenEyeMs += GenFrameMs;
 		GenEyeMostMs = FMath::Max(GenEyeMostMs, GenFrameMs);
+		GeneralViewMs += GenFrameMs;
 	}
 	WalkPan(Real);
 	ReadDark(Real);
+	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
 	{
 		LAND_SCOPE(Desk);
@@ -5542,12 +5623,19 @@ void ALandBattle::Tick(float DeltaSeconds)
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The picture: the camera, the ground round it, the men and the tanks.
+	LandFell::Phase("tick: the lens aimed");
 	AimEye(static_cast<float>(Real));
 	if (Live.IsValid())
 	{
+		LandFell::Phase("tick: the general's screen");
+		const double ScreenBegan = LandParts::Seconds();
 		LAND_SCOPE(ShowGeneral);
 		ShowGeneral();
+		GeneralScreenMs += (LandParts::Seconds() - ScreenBegan) * 1000.0;
+		LandFell::Phase("tick: the walk", ScriptStep);
+		TickScript();
 	}
+	LandFell::Phase("tick: a cut told");
 	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
 	// not carried over a frame into the new one (the film check's smoke popping in a frame after a cut).
 	if (S.Pose.bCut)
@@ -5562,18 +5650,25 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	const FVector EyeWorld = Eye ? Eye->GetActorLocation() : World(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z);
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the ground shown");
 	ShowField(EyeWorld, S.Battle);
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the effects played");
 	// What happens first: the frame's fire (the shells, guns and smoke rounds, told the kit before its frame begins, so
 	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
 	// in FieldMs).
 	PlayEffects();
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the breaches");
 	MakeBreaches();
+	LandFell::Phase("tick: the craters");
 	MakeCraters();
+	LandFell::Phase("tick: the wires");
 	MakeWires();
+	LandFell::Phase("tick: the stretchers");
 	MakeStretchers();
 	MakeReels();
+	LandFell::Phase("tick: the ruts");
 	MakeRuts();
 	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -5584,6 +5679,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// read-only: nothing here changes it), and what the scene asks of the kit (a tank's dust, a cook-off, a fire) is
 	// held and done at TickEnd, first drawn the next frame. EffectsMs is the two halves' own time on this thread.
 	bool bEffectsBegun = false;
+	LandFell::Phase("tick: the effects kit begun");
 	if (Effects && Eye)
 	{
 		LAND_SCOPE(EffectsBegin);
@@ -5603,23 +5699,29 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	Mark = LandParts::Seconds();
 	const int32 InPictureWas = MenInPicture;
+	LandFell::Phase("tick: the men drawn");
 	DrawMen(EyeWorld);
 	DrawMenMs += (LandParts::Seconds() - Mark) * 1000.0;
 	MostInPicture = FMath::Max(MostInPicture, MenInPicture - InPictureWas);
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the tanks drawn");
 	DrawArmour(EyeWorld);
 	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the men's shades");
 	DrawManShades();
 	// (the pool's players stopped since the last frame free their voices before this frame's first take, the tanks'
 	// own beats below, as the cloud test frees them; once a frame)
 	FreeVoices();
 	// (the tanks' own beats and the men's: cook-offs, wreck fires, falls)
+	LandFell::Phase("tick: the tanks' beats");
 	PlayArmourEvents();
+	LandFell::Phase("tick: the men's beats");
 	PlayMenEvents();
 	if (bEffectsBegun)
 	{
 		LAND_SCOPE(EffectsEnd);
 		Mark = LandParts::Seconds();
+		LandFell::Phase("tick: the effects kit ended");
 		Effects->TickEnd();
 		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
 		// (the smoke's puffs drawn and the room asked, the most in the log's 10 s)
@@ -5630,8 +5732,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 		}
 	}
 	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the sound");
 	PlaySound(Real);
 	SoundMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the end and the notes");
 
 	// The battle's end: the last words shown, then the after card a few seconds on.
 	if (S.Words.bOver && S.Battle >= S.Rec.End)
@@ -5656,7 +5760,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 			S.Note.clear();
 		}
 	}
+	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
+	LandFell::Phase("tick: the 10 s log");
 
 	// The log, every 10 s: the frames, the slowest, and what each part cost.
 	const double FrameMs = (LandParts::Seconds() - FrameBegan) * 1000.0;
@@ -5697,6 +5803,15 @@ void ALandBattle::Tick(float DeltaSeconds)
 		EyeStepsMost = 0;
 		EyeCuts = 0;
 		LongestGapSinceCut = 1000;
+		// (a live battle: the general's own parts, and the rules' step on their thread with how far ahead of the picture
+		// they have fought; the production lead's frame-time read, 22 November)
+		if (Live.IsValid())
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): a frame's general's view %.2f ms, his screen %.2f ms; the rules' last step %.0f ms, the slowest %.0f ms, fought to %.1f s, %.1f s ahead of the picture%s"),
+				GeneralViewMs / LogFrames, GeneralScreenMs / LogFrames, Live->LastMs(), Live->MostMs(), Live->Fought(), Live->Fought() - S.Battle,
+				S.Rec.bSetup ? TEXT(" (the setup step: the clock stands)") : TEXT(""));
+		}
+		GeneralViewMs = GeneralScreenMs = 0.0;
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
@@ -5708,6 +5823,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		TornBakeMostMs = 0.0;
 		PuffsMost = PuffsMostAsked = 0;
 	}
+	LandFell::Phase("tick: done");
 }
 
 void ALandBattle::WalkPan(double Real)
@@ -8302,6 +8418,14 @@ void ALandBattle::HideScreen()
 void ALandBattle::Finish()
 {
 	// CONTINUE: the scene taken down and the table shown again.
+	// (a campaign battle he fought himself: its result taken now, while the rules' thread is still open, for after)
+	TFunction<void(const FString&)> Hand = MoveTemp(HandBack);
+	HandBack = nullptr;
+	FString Handed;
+	if (Hand && !LiveResult(Handed))
+	{
+		Handed.Empty();
+	}
 	HideScreen();
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
@@ -8313,6 +8437,10 @@ void ALandBattle::Finish()
 		Controller->SetViewTarget(Controller->GetPawn());
 	}
 	ShowTheTable();
+	if (Hand)
+	{
+		Hand(Handed); // (the campaign books it and its attack card shows the result)
+	}
 	Destroy();
 }
 

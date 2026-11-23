@@ -15,6 +15,7 @@
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Battle/LandBattle.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Layout/WidgetPath.h"
 #include "HAL/IConsoleManager.h"
@@ -8621,6 +8622,10 @@ bool ACampaignPlayerController::IsTableBusy() const
 
 bool ACampaignPlayerController::IsAnswering() const
 {
+	if (LiveBattle.IsValid())
+	{
+		return true; // (his own battle is open: the map takes no order until it is handed back)
+	}
 	if (Afterwards.Num() > 0)
 	{
 		return true;
@@ -9888,6 +9893,10 @@ void ACampaignPlayerController::SendOnlyPicked()
 
 void ACampaignPlayerController::ConfirmAttack()
 {
+	if (LiveBattle.IsValid())
+	{
+		return; // (his own battle is open: the card behind it waits for its result)
+	}
 	// (Rulings 134(f), 138(a) and 177(b).) On the card before a march the key, like the lit button, gives the order
 	// the forecast favours.
 	if (FaceOff.bVisible && !FaceOff.bResolved && (FaceOff.bMarch || FaceOff.bStorm) && FaceOff.bFavourSiege)
@@ -9946,6 +9955,90 @@ void ACampaignPlayerController::ResolveAttack()
 				Me->AfterFight(RegionId, bMarch, bStorm, bSally, Result);
 			}
 		});
+}
+
+bool ACampaignPlayerController::CanFightLive() const
+{
+	// (a plain attack on the card, ready to go in: not a march, a storm, or a sortie, and a pick that can go)
+	return ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bMarch && !FaceOff.bStorm
+		&& !FaceOff.bSally && FaceOff.Alone.IsEmpty() && PickedCorps.Num() > 0 && !LiveBattle.IsValid();
+}
+
+void ACampaignPlayerController::FightLive()
+{
+	FCampaignSession* Session = GetSession();
+	UWorld* Here = GetWorld();
+	if (!Session || !Map.IsValid() || !Here || !CanFightLive() || IsAnswering() || TActorIterator<ALandBattle>(Here))
+	{
+		return;
+	}
+	const int32 RegionId = FaceOff.Region;
+	const TArray<int32> CorpsIds = PickedCorps;
+	const FString IdsText = FString::JoinBy(CorpsIds, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+	FString LookText, LookError;
+	if (!Session->CallBattle(TEXT("battleLook"), FString::Printf(TEXT("[[%s],%d]"), *IdsText, RegionId), LookText, LookError))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: TC.battleLook failed: %s"), *LookError);
+		Notify(TEXT("This battle cannot be fought in the field: SEND THEM IN lets your generals fight it."), 6.0);
+		return;
+	}
+	TSharedPtr<FJsonObject> LookAnswer;
+	const TSharedRef<TJsonReader<>> LookReader = TJsonReaderFactory<>::Create(LookText);
+	const bool bLookRead = FJsonSerializer::Deserialize(LookReader, LookAnswer) && LookAnswer.IsValid();
+	const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+	if (!bLookRead || !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+	{
+		FString Why;
+		if (bLookRead && LookAnswer->TryGetStringField(TEXT("why"), Why) && !Why.IsEmpty())
+		{
+			// (a kind of place the staff still settles: the card stays, and SEND THEM IN with it)
+			Notify(Why, 7.0);
+			return;
+		}
+		// (no field battle here at all: the generals' answer is the only one there is)
+		Notify(TEXT("There is no field battle to fight here: your generals send them in."), 5.0);
+		ResolveAttack();
+		return;
+	}
+	double TicketSeed = 0.0;
+	(*LookTicket)->TryGetNumberField(TEXT("seed"), TicketSeed);
+	ALandBattle* Field = Here->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (!Field)
+	{
+		return;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF, the attack on %d by [%s] opened live (seed %.0f)"), RegionId, *IdsText, TicketSeed);
+	LiveBattle = Field;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Field->HandBack = [Self, RegionId, CorpsIds, TicketSeed](const FString& ResultJson)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->LiveHandBack(RegionId, CorpsIds, TicketSeed, ResultJson);
+		}
+	};
+	Field->LiveTicketWhenReady(LookText, TEXT("att"), true);
+}
+
+void ACampaignPlayerController::LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson)
+{
+	LiveBattle.Reset();
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	if (ResultJson.IsEmpty())
+	{
+		// (the field closed with no result: the attack card is as he left it, SEND THEM IN and CALL IT OFF still on it)
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: the battle for %d closed with no result; nothing booked"), RegionId);
+		Notify(TEXT("The battle ended without a result: nothing was booked."), 6.0);
+		return;
+	}
+	const FAttackResult Result = Session->SettleLandLive(CorpsIds, RegionId, ResultJson, TicketSeed);
+	UE_LOG(LogTheater, Display, TEXT("Campaign: the battle for %d booked (%s)"), RegionId, Result.bFought ? TEXT("fought") : TEXT("not booked"));
+	FaceOffSince = FPlatformTime::Seconds(); // (the result card's half second before Enter, as after SEND THEM IN)
+	AfterFight(RegionId, false, false, false, Result);
 }
 
 void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result)
@@ -10077,6 +10170,10 @@ void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bSt
 
 void ACampaignPlayerController::CloseFaceOff()
 {
+	if (LiveBattle.IsValid())
+	{
+		return; // (his own battle is open: the card behind it waits for its result)
+	}
 	if (FaceOff.bVisible && !FaceOff.bResolved && IsAnswering())
 	{
 		return; // (the attack has been sent in and its answer is on its way: the card is not called off under it)
@@ -10103,6 +10200,10 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	if (LiveBattle.IsValid())
+	{
+		return; // (his own battle is open: no key reaches the map behind it)
+	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
 	FinishAnswer();

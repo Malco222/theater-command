@@ -37,8 +37,8 @@
 import data from '../../../data/battle/drill.json';
 import { DT, type Side, type Zone } from '../core/types';
 import { GROUNDS, type Ground, type LandField } from './field';
-import { LAND, MOTION, type Kind, type Team } from './rules';
-import type { LandBattle } from './sim';
+import { LAND, MOTION, bearerShare, killedShare, type Kind, type Team } from './rules';
+import type { LandBattle, Screen } from './sim';
 import type { LandUnit } from './units';
 import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
@@ -65,7 +65,12 @@ export type Role = 'officer' | 'rifle' | 'mg' | 'at' | 'sapper' | 'holder' | 'ta
 export type Pose =
   | 'idle' | 'walk' | 'run' | 'advance' | 'creep' | 'crawl' | 'flee' | 'fire_stand' | 'fire_kneel' | 'fire_prone' | 'lmg_burst'
   | 'throw_grenade' | 'cower' | 'wait' | 'hide' | 'observe' | 'mounted' | 'ride' | 'horses' | 'down'
-  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked';
+  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked'
+  // Field telephone lines (release 2): a lineman walking his wire out with the cable reel, and kneeling at the cut, splicing.
+  | 'reel' | 'splice'
+  // Stretcher bearers (release 2; LandBattle.bearers): a wounded man lying for the bearers (or for his dressing), the man
+  // on the stretcher (head first, his head toward the front bearer), and the stretcher's front and rear bearers.
+  | 'wounded' | 'carried' | 'stretcher_front' | 'stretcher_rear';
 /** What the block as a whole is doing, as its men see it. */
 export type Phase = 'column' | 'deploy' | 'bound' | 'startline' | 'fight' | 'hold' | 'rest' | 'pinned' | 'fallback' | 'flee' | 'rally' | 'gone' | 'battery' | 'limbered';
 /** What shelters a man where he stands. */
@@ -95,6 +100,12 @@ export interface Man {
   sub?: number;
   /** A squad's leader or the platoon's (drawn as a leader): his group forms on him. */
   lead?: true;
+  /**
+   * A key man drawn with men of his section (hasSec: he shows as its leader where he is a rifleman) and of his platoon
+   * (plat: its squads take their turns by squad). Under the battle's scale (GR3) a block's keys may differ.
+   */
+  hasSec?: true;
+  plat?: true;
   /** Lorried foot drawn as platoons: his lorry (one to each squad and to the headquarters) and his place on its benches. */
   lor?: number;
   seat?: number;
@@ -115,6 +126,14 @@ export interface Man {
   v: number;
   /** Where he is going, or the place he holds. */
   spot: [number, number];
+  /**
+   * On a field with hedges (the Normandy bocage), his way through the first gate on his way to his spot: a stride short
+   * of the gap and a stride through it, then on (Drill.via); the spot and the place he stood when it was found. None
+   * where his way meets no hedge, or no gate serves it.
+   */
+  via?: [number, number][];
+  viaFor?: [number, number];
+  viaAt?: [number, number];
   /** What shelters him at his spot. */
   cover: CoverKind;
   /** Where he fires, while he fires. */
@@ -156,13 +175,35 @@ export interface Man {
   el?: 1 | 2;
   rapid?: number;
   call?: number;
+  /** A spotter's signaller: where his last call brought the fire, the middle of the block it was called on as he began it. */
+  callAt?: [number, number];
   /** A gun's or a mortar's round of the salvo called: the battle time it fires (every gun within a second or two). */
   due?: number;
   /** A tank's machine guns on the enemy's foot (the drill book: against infantry mostly machine guns). */
   coax?: true;
   /** A tank's commander struck up in his hatch (BOOK.tankMg): the battle time; she fights buttoned up from then. */
   cmdDown?: number;
+  /**
+   * Stretcher bearers (release 2; LandBattle.bearers): the battle time he fell wounded, not killed (wd), lying for the
+   * bearers or, a light case (light), for his dressing; the time a light case is back in the line (back); the carry that
+   * took him to his block's aid post (cy: [from, to, by1, by2], by1 the front bearer, each bearer as k x 1000 + j) and
+   * the time he reached it (gone). A bearer (br), and the carry he is on now (job): off his block's drill while on it.
+   */
+  wd?: number;
+  light?: true;
+  back?: number;
+  cy?: [number, number, number, number][];
+  gone?: number;
+  br?: true;
+  job?: Carry;
 }
+
+/**
+ * A stretcher's carry (stretcher bearers, release 2): the man carried, his front and rear bearers; fetching him (the
+ * bearers walking to him), lifting (at his side, turning to the way), carrying him to the aid post, or walking home; where
+ * he was lifted, the aid post and the way between; the battle times the carry began and reaches the aid post.
+ */
+interface Carry { man: Man; front: Man; rear: Man; stage: 'fetch' | 'lift' | 'carry' | 'home'; from: [number, number]; to: [number, number]; way: number; t0: number; t1: number }
 
 /**
  * What fired a round: a tank's gun, an anti-tank launcher or rifle, a field gun, a machine gun (a rifle section's or a
@@ -198,6 +239,12 @@ export interface Round {
   cm?: 1;
   /** A tank knocked out ('kill'): how she ends, out of the fight, burning, or blown up (armour.ts fateOf: by her model and the face struck). */
   fate?: 'out' | 'burn' | 'blow';
+  /**
+   * Smoke on call (release 2, ruling 242 S6): a round of a screen the rules laid (LandBattle.screens), battle seconds its
+   * smoke hangs once it lands (the screen's until less l); such a round is fired at no block (on -1). Absent on every
+   * other round, the drill book's own smoke among them.
+   */
+  hang?: number;
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -210,15 +257,30 @@ export interface MenBlock {
   /** The foot block the spotter is with, and the block his guns fire on (absent while they are quiet). */
   foWith?: number;
   foOn?: number;
+  /**
+   * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire, each with ln: 1 (absent
+   * where none is out, and while the switch is off).
+   */
+  ln?: MenOut[];
 }
 export interface MenOut {
   k: number; j?: number; r: Role; x: number; y: number; f: number; p: Pose; v: number; c: CoverKind;
   a?: [number, number]; s?: number; d?: number; h?: 1; b?: 1; mk?: Mark[];
   /** The drill book (tactics.ts): his element (1 the base of fire, 2 moving), and a signaller's call stamp (the radio
-   * man's call_support clip plays once from it). */
-  e?: 1 | 2; cl?: number;
+   * man's call_support clip plays once from it), with cs the spot that call brings the fire on (the middle of the block
+   * called on as he began it: the ranging rounds fall about half its depth beyond, then short, then the salvos on it). */
+  e?: 1 | 2; cl?: number; cs?: [number, number];
   /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
   ld?: 1;
+  /** Field telephone lines (release 2): a lineman, outside the block's squads (MenBlock.ln). */
+  ln?: 1;
+  /**
+   * Stretcher bearers (release 2; LandBattle.bearers): wd, the battle time he fell wounded (p wounded while he lies); cy,
+   * the carry that took him to the aid post, [from, to, by1, by2] (p carried from 'from', his bearers by1 at the front and
+   * by2 at the rear, each named as k x 1000 + j); gone, the time he reached the aid post; back, the time a light case got
+   * up again; br, one of the block's stretcher bearers.
+   */
+  wd?: number; cy?: [number, number, number, number][]; gone?: number; back?: number; br?: 1;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -256,7 +318,7 @@ const isFoot = (u: LandUnit): boolean => MOTION[u.kind] === 'foot' || u.kind ===
 const CLOSE: Ground[] = ['woods', 'buildings', 'industry', 'suburb'];
 const BUILT: Ground[] = ['buildings', 'industry', 'suburb'];
 /** Poses that carry a man over the ground: the 3D plays them only while he moves (walk: one he reaches his place in ends). */
-const MOVING: ReadonlySet<Pose> = new Set<Pose>(['walk', 'run', 'advance', 'creep', 'crawl', 'flee', 'drive', 'reverse', 'towed']);
+const MOVING: ReadonlySet<Pose> = new Set<Pose>(['walk', 'run', 'advance', 'creep', 'crawl', 'flee', 'drive', 'reverse', 'towed', 'stretcher_front', 'stretcher_rear']);
 /** Poses that go with whatever carries him (a horse, a lorry, the horses he leads): they move at any speed. */
 const CARRIED: ReadonlySet<Pose> = new Set<Pose>(['ride', 'mounted', 'horses']);
 /** Poses a rifleman or a machine gun fires from (each shot a round: Drill.fire). */
@@ -344,6 +406,12 @@ const storeysOf = (f: LandField, x: number, y: number): number => {
 
 interface Squad {
   u: LandUnit;
+  /**
+   * How its men are drawn (GR3, the true-scale plan): 2 as platoons, 1 as sections, 0 its key men only. The battle's own
+   * setting (Drill.sections, Drill.platoons), or less where a scale is set and the block's men at that scale are fewer
+   * than the setting would draw (Drill.tierFor).
+   */
+  tier: 0 | 1 | 2;
   men: Man[];
   /** Lorries (lorried infantry, a battery's tractor). */
   veh: Man[];
@@ -411,6 +479,16 @@ interface Squad {
   /** The drill book's smoke: when its platoons last laid smoke on the enemy's flank, and the rounds still to come. */
   smokeAt?: number;
   smokeLeft?: number;
+  /** Smoke on call (release 2): the screen the rules laid for it, being drawn as rounds, the next i of n. */
+  screenQ?: { s: Screen; i: number; n: number };
+  /**
+   * Stretcher bearers (release 2): its bearers, picked from its riflemen the first step the switch is on; its litter cases
+   * lying for them, earliest first; its light cases lying at their dressing; and the carries under way.
+   */
+  brs?: Man[];
+  lying?: Man[];
+  dressing?: Man[];
+  carries?: Carry[];
 }
 
 /** A block's men on their feet this step (Drill.memo). */
@@ -483,17 +561,25 @@ export class Drill {
    * together. On with platoons unless asked off.
    */
   readonly byBook: boolean;
+  /**
+   * The battle's scale (the true-scale plan, GR1 and GR3; Brian's standing rule of 22 November 04:14Z: the numbers on
+   * screen reflect the units each side brings): one drawn man stands for this many. No block draws more men than its
+   * men0 over it: drawn as platoons where they fit, else as sections, else its key men only. Null: the battle's setting
+   * for every block, as before.
+   */
+  readonly scale: number | null;
   private readonly sup = new Suppression();
   /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
     this.platoons = !!opts.platoons;
     this.byBook = opts.book ?? this.platoons;
+    this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) this.squads.set(u.id, this.make(u));
   }
 
@@ -503,12 +589,18 @@ export class Drill {
     this.squads.set(u.id, this.make(u));
   }
 
+  /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
+  join(u: LandUnit): void {
+    if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+  }
+
   // ---- Who is in a block ------------------------------------------------------------------------------------------
 
   private make(u: LandUnit): Squad {
     const men: Man[] = [], veh: Man[] = [];
     const n = Math.max(0, u.figures0);
     const roles = rolesFor(u.kind, u.tray, n, u.team);
+    const fill = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = fill.tier;
     const man = (k: number, nn: number, role: Role, team: 0 | 1 | 2): Man => {
       const jx = (roll(this.seed, u.id, nn, 1) - 0.5) * 6, jy = (roll(this.seed, u.id, nn, 2) - 0.5) * 5;
       return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: 'idle', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx, jy };
@@ -516,12 +608,13 @@ export class Drill {
     for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
     // The rest of each model's section, after the key men (so a key man is always first of his k); drawn as platoons, a
     // rifle model's other squads (each on its own leader) and its headquarters after it. Lorried, each group has a lorry.
+    // Under the battle's scale (GR3) a key man's section and platoon may be drawn short (fill): their first men only.
     let lor = 0;
-    if (this.sections) for (let k = 0; k < n; k++) {
-      const key = men[k], mot = u.kind === 'mot' && this.platoons;
+    if (tier >= 1) for (let k = 0; k < n; k++) {
+      const key = men[k], mot = u.kind === 'mot' && tier === 2;
       if (mot) { key.lor = lor; key.seat = 0; }
       const sec = sectionOf(u.nat, key.role);
-      sec.forEach(([role, pr, scout], i) => {
+      sec.slice(0, fill.sec[k]).forEach(([role, pr, scout], i) => {
         const m = man(k, 1000 + k * 32 + i + 1, role, key.team);
         m.j = i + 1; m.sec = k;
         if (pr) m.pr = true;
@@ -529,40 +622,65 @@ export class Drill {
         if (mot) { m.lor = lor; m.seat = i + 1; }
         men.push(m);
       });
+      if (fill.sec[k] > 0) key.hasSec = true;
       lor++;
-      if (!this.platoons || key.role !== 'rifle') continue;
-      const P = platoonOf(u.nat);
+      if (tier < 2 || key.role !== 'rifle' || fill.plat[k] <= 0) continue;
+      key.plat = true;
+      const P = platoonOf(u.nat), most = fill.plat[k];
       let j = sec.length, x = 0;
-      const add = (sub: number, role: Role, seat: number, opts: { pr?: boolean; lead?: boolean } = {}): void => {
+      const add = (sub: number, role: Role, seat: number, opts: { pr?: boolean; lead?: boolean } = {}): boolean => {
+        if (x >= most) return false;
         const m = man(k, 20000 + k * 128 + x++, role, key.team);
         m.j = ++j; m.sec = k; m.sub = sub;
         if (opts.pr) m.pr = true;
         if (opts.lead) m.lead = true;
         if (mot) { m.lor = lor; m.seat = seat; }
         men.push(m);
+        return true;
       };
       // The platoon's other squads, each its leader and the same section as the key man's (its scouts in the squad).
-      for (let s = 1; s < P.squads; s++, lor++) {
+      for (let s = 1; s < P.squads && x < most; s++, lor++) {
         add(s, 'rifle', 0, { lead: true });
         sec.forEach(([role, pr], i) => add(s, role, i + 1, { pr }));
       }
       // Its headquarters: its leader and the men with him (a sergeant, the runners).
-      add(P.squads, 'rifle', 0, { lead: true });
-      for (let i = 1; i < P.hq; i++) add(P.squads, 'rifle', i);
-      lor++;
+      if (x < most) {
+        add(P.squads, 'rifle', 0, { lead: true });
+        for (let i = 1; i < P.hq; i++) add(P.squads, 'rifle', i);
+        lor++;
+      }
     }
     // Lorried foot's lorries (drawn as sections, one to each section; as platoons, one to each group) and a battery's
     // tractor (one to each gun).
-    const lorries = u.kind === 'mot' ? (this.sections ? lor : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (this.sections ? n : 1) : 0; // a team's crews carry their weapons
+    const lorries = u.kind === 'mot' ? (tier >= 1 ? lor : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (tier >= 1 ? n : 1) : 0; // a team's crews carry their weapons
     for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: 'lorry', team: 0, x: u.x, y: u.y, face: u.face, pose: 'parked', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
     const sq: Squad = {
-      u, men, veh, fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 3) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
+      u, tier, men, veh, fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 3) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
       lastX: u.x, lastY: u.y, heading: u.face, speed: 0, track: [], wx: 0, wy: 0, net: 0, down: u.kind !== 'mot' && u.kind !== 'cav', fast: 0, slow: 0, close: false, ran: false, salvoAt: 0, ripple: 0, flank: 0, officerAt: 0, leap: true,
       m0: men.length, lost: 0,
     };
     // Drawn up where the battle opens: each man at his place in the line, in the best cover near it.
     this.layStart(sq);
     return sq;
+  }
+
+  /**
+   * How many of each key man's section (sec) and platoon (plat: its other squads and headquarters, in order) a block
+   * draws (GR3; the production lead, 22 November 07:23Z). Unscaled, all the battle's setting draws. Under the scale its
+   * key men always (the rules' models), then their sections in squad order, then the rifle models' platoons squad by
+   * squad, as many men as fit its men0 over N, counted as the 3D game shows them (menOnScreen): the last group drawn
+   * short, so every block draws within a man of its cap where its whole draw would be more. tier: the most any key draws.
+   */
+  private fillFor(u: LandUnit, keys: Role[]): { tier: 0 | 1 | 2; sec: number[]; plat: number[] } {
+    const top: 0 | 1 | 2 = this.platoons ? 2 : this.sections ? 1 : 0;
+    const secs = keys.map((r) => (top >= 1 ? sectionOf(u.nat, r).length : 0));
+    const P = platoonOf(u.nat);
+    const plats = keys.map((r, i) => (top === 2 && r === 'rifle' ? (P.squads - 1) * (1 + secs[i]) + P.hq : 0));
+    if (this.scale === null || top === 0) return { tier: top, sec: secs, plat: plats };
+    let room = Math.floor(u.men0 / this.scale) - keys.reduce((c, r) => c + menOnScreen(r), 0);
+    const take = (most: number): number => { const n = Math.max(0, Math.min(room, most)); room -= n; return n; };
+    const sec = secs.map(take), plat = plats.map(take);
+    return { tier: plat.some((x) => x > 0) ? 2 : sec.some((x) => x > 0) ? 1 : 0, sec, plat };
   }
 
   private layStart(sq: Squad): void {
@@ -589,7 +707,7 @@ export class Drill {
       } else for (const m of sq.men) { const p = this.seat(sq, m); m.x = p[0]; m.y = p[1]; m.spot = p; m.cover = 'none'; }
     }
     // Drawn as sections, no two men on one spot from the first (space): each stands clear of those placed before him.
-    if (this.sections) {
+    if (sq.tier >= 1) {
       const room: Room = new Map(), order = [...sq.men].sort((a, c) => (a.j === undefined ? 0 : 1) - (c.j === undefined ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
       for (const m of order) {
         if (VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
@@ -629,7 +747,9 @@ export class Drill {
       // fast seconds wears off then, and is gone once it has stood a second.
       sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
       this.falls(sq);
-      if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); }
+      // Stretcher bearers (release 2): the bearers fetch, carry and come home (off the block's drill while they do).
+      if (b.bearers) this.litters(sq);
+      if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (sq.screenQ) this.screenRound(sq); }
       this.walk(sq);
       this.fire(sq);
     }
@@ -686,6 +806,8 @@ export class Drill {
     const won = this.b.over?.winner;
     for (const sq of this.squads.values()) {
       const u = sq.u;
+      // Stretcher bearers (release 2): a stretcher on the way is set down where it is.
+      for (const c of sq.carries ?? []) if (c.stage === 'carry') c.man.pose = 'wounded';
       for (const m of [...sq.men, ...sq.veh, ...(sq.fo ?? [])]) {
         if (m.fell !== undefined) continue;
         m.v = 0; m.went = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.hidden = undefined;
@@ -754,10 +876,11 @@ export class Drill {
       if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
       m.pose = 'down';
       m.spot = [m.x, m.y];
+      if (this.b.bearers) this.hurt(sq, m);
       this.aid(sq, m);
-      if (this.sections) this.regroup(sq, m);
+      if (sq.tier >= 1) this.regroup(sq, m);
     }
-    if (this.sections) this.thin(sq);
+    if (sq.tier >= 1) this.thin(sq);
   }
 
   /** A comrade goes to a man who fell, where one is near and the block is not running (nor riding, nor mounting again). */
@@ -805,8 +928,11 @@ export class Drill {
     let up = 0;
     for (const m of sq.men) if (this.stands(sq, m) || (m.j !== undefined && m.fell === undefined)) up++;
     let n = up - want;
+    // Stretcher bearers (release 2): its strength back above its men on their feet, its light cases dressed get up.
+    if (n < 0 && this.b.bearers) { this.rise(sq, -n); return; }
     if (n <= 0) return;
-    const cand = sq.men.filter((m) => m.j !== undefined && m.fell === undefined);
+    // (Bearers on a carry go on with it: never the next to fall.)
+    const cand = sq.men.filter((m) => m.j !== undefined && m.fell === undefined && !m.job);
     if (!cand.length) return;
     // Who struck: the enemy block owed most for the harm, else the one it faces.
     let by: LandUnit | undefined;
@@ -831,9 +957,144 @@ export class Drill {
       if (by) this.killRound(by, sq, m, shell ? burst : undefined);
       m.pose = 'down';
       m.spot = [m.x, m.y];
+      if (b.bearers) this.hurt(sq, m);
       this.aid(sq, m);
     }
     sq.memo = undefined;
+  }
+
+  // ---- Stretcher bearers (release 2) ------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z; the design director's rulings Q4 and Q5 (18:36Z); LandBattle.bearers and LAND.bearers.
+  // The rules count the bearers and the wounded (LandBattle.litter); the drill draws them, looks only. Of the men who
+  // fall, the rules' share (1 - killed) lie wounded: a man of a section a light case at the rules' share, lying for his
+  // dressing and up again once it is done and his block's strength has them back (thin, rise); the rest lie for the
+  // bearers. The bearers are riflemen of the block (br), two to a stretcher, as many stretchers as the rules' bearers
+  // carry cases at once (its army's share of its men over LAND.bearers.litter). A pair fetches the litter case fallen
+  // earliest, lifts him and carries him head first to its aid post (LandBattle.aidOf) at LAND.bearers.pace, his place the
+  // stretcher's middle, the front bearer 1.12 m ahead of him and the rear 1.35 m behind; he stays there (gone), and they
+  // walk home. A block running, fled or gone sends no stretcher out; one on its way goes on. Every choice is the drill's
+  // own dice: the men drawn and the fight are the same as without them.
+
+  /** A man who falls, with the bearers on: wounded at the rules' share (else killed), a man of a section a light case at theirs. */
+  private hurt(sq: Squad, m: Man): void {
+    if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== undefined) return;
+    const B = LAND.bearers, u = sq.u;
+    if (roll(this.seed, u.id, m.n, 71) >= 1 - killedShare(u.nat)) return;
+    m.wd = this.b.t; m.pose = 'wounded';
+    if (m.j !== undefined && roll(this.seed, u.id, m.n, 72) < B.light.share) { m.light = true; (sq.dressing ??= []).push(m); }
+    else (sq.lying ??= []).push(m);
+  }
+
+  /** Its light cases whose dressing is done get up, up to n of them, the earliest hurt first, while its block fights. */
+  private rise(sq: Squad, n: number): void {
+    const u = sq.u, t = this.b.t, L = LAND.bearers.light, foot = LAND.speed.inf;
+    if (!fighting(u) || !sq.dressing?.length) return;
+    const walk = L.at > 0 ? L.at / (foot * L.out) + L.at / (foot * L.back) : 0;
+    while (n > 0 && sq.dressing.length && sq.dressing[0].wd! + walk + L.dress <= t + 1e-9) {
+      const m = sq.dressing.shift()!;
+      m.light = undefined; m.fell = undefined; m.back = t;
+      m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; m.slotAt = [m.x, m.y]; m.until = t + 1;
+      // His section's key man fallen meanwhile, he joins the nearest section still on its feet (as regroup).
+      if (!this.memo(sq).keyOf.has(m.sec ?? m.k)) {
+        const to = this.nearest(this.memo(sq).keys.filter((x) => !VEHICLE.has(x.role) && !CREWED.has(x.role)), m)?.[0];
+        if (to) { m.sec = to.k; m.sub = undefined; m.lead = undefined; }
+      }
+      sq.memo = undefined;
+      n--;
+    }
+  }
+
+  /** A bearer named in a carry: his model and his place in it. */
+  private byId(m: Man): number { return m.k * 1000 + (m.j ?? 0); }
+
+  /**
+   * Each step with the bearers on: its bearers picked (the first time), each pair free of a carry and on its feet sent
+   * for the next litter case (its block fighting, its men down), and every carry moved on a step.
+   */
+  private litters(sq: Squad): void {
+    const u = sq.u, b = this.b, t = b.t, B = LAND.bearers, f = b.field;
+    if (!sq.brs) {
+      const cand = sq.men.filter((m) => m.j !== undefined && m.role === 'rifle' && !m.pr && !m.scout && !m.lead && m.fell === undefined)
+        .sort((a, c) => roll(this.seed, u.id, a.n, 73) - roll(this.seed, u.id, c.n, 73) || a.n - c.n);
+      const pairs = Math.min(Math.floor(cand.length / 2), Math.max(1, Math.round((bearerShare(u.nat) * sq.m0) / B.litter)));
+      sq.brs = cand.slice(0, 2 * pairs);
+      for (const m of sq.brs) m.br = true;
+    }
+    const carries = (sq.carries ??= []);
+    // Free pairs out to the earliest fallen: by their places in the block's list, two by two.
+    if (sq.lying?.length && fighting(u) && sq.down && sq.boarding === undefined) {
+      const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose));
+      for (let i = 0; i + 1 < free.length && sq.lying.length; i += 2) {
+        const man = sq.lying.shift()!, [ax, ay] = b.aidOf(u);
+        const to: [number, number] = [clamp(ax, 3, f.w - 3), clamp(ay, 3, f.h - 3)], way = bearing(man.x, man.y, to[0], to[1]);
+        const c: Carry = { man, front: free[i], rear: free[i + 1], stage: 'fetch', from: [man.x, man.y], to, way, t0: t, t1: t };
+        for (const m of [c.front, c.rear]) { m.job = c; m.aim = undefined; m.hidden = undefined; m.pose = 'walk'; m.v = B.pace; }
+        carries.push(c);
+        sq.memo = undefined;
+      }
+    }
+    for (const c of carries) this.carryStep(sq, c);
+    // A carry is done once both its bearers are home.
+    if (carries.some((c) => c.front.job !== c && c.rear.job !== c)) sq.carries = carries.filter((c) => c.front.job === c || c.rear.job === c);
+  }
+
+  /** A carry's step: the bearers walk to the man, lift him, carry him to the aid post and walk home. */
+  private carryStep(sq: Squad, c: Carry): void {
+    const u = sq.u, t = this.b.t, B = LAND.bearers, rate = TURN.foot * DT, [wx, wy] = fwd(c.way);
+    const FRONT = 1.12, REAR = 1.35;
+    // One step toward p at pace v, turning as he can (he turns before he goes): whether he is there.
+    const stride = (m: Man, p: [number, number], v: number): boolean => {
+      const ddx = p[0] - m.x, ddy = p[1] - m.y, d = Math.hypot(ddx, ddy);
+      if (d < 0.05) { m.went = 0; return true; }
+      const want = Math.atan2(ddx, ddy);
+      m.face = turnTo(m.face, want, rate);
+      const s = Math.min(d, v * DT) * Math.max(0, Math.cos(wrap(want - m.face)));
+      m.x += (ddx / d) * s; m.y += (ddy / d) * s; m.went = s / DT;
+      return s >= d - 1e-9;
+    };
+    const bearers = [c.front, c.rear];
+    if (c.stage === 'fetch') {
+      const at = (m: Man): [number, number] => (m === c.front ? [c.man.x + wx * FRONT, c.man.y + wy * FRONT] : [c.man.x - wx * REAR, c.man.y - wy * REAR]);
+      let there = 0;
+      for (const m of bearers) if (stride(m, at(m), B.pace)) there++;
+      if (there === 2) { c.stage = 'lift'; for (const m of bearers) { m.pose = 'wait'; m.v = 0; m.went = 0; } }
+      return;
+    }
+    if (c.stage === 'lift') {
+      // At his side, all three turned to the way (he is lifted head first, his head toward the front bearer).
+      for (const m of [...bearers, c.man]) m.face = turnTo(m.face, c.way, rate);
+      if (![...bearers, c.man].every((m) => Math.abs(wrap(m.face - c.way)) < 1e-6)) return;
+      c.stage = 'carry'; c.t0 = t;
+      c.t1 = Math.round((t + Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y) / B.pace) * 1000) / 1000;
+      c.from = [c.man.x, c.man.y];
+      (c.man.cy ??= []).push([c.t0, c.t1, this.byId(c.front), this.byId(c.rear)]);
+      c.man.pose = 'carried'; c.front.pose = 'stretcher_front'; c.rear.pose = 'stretcher_rear';
+      for (const m of bearers) m.v = B.pace;
+      return;
+    }
+    if (c.stage === 'carry') {
+      const left = Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y), s = Math.min(left, B.pace * DT);
+      c.man.x += wx * s; c.man.y += wy * s; c.man.spot = [c.man.x, c.man.y];
+      c.front.x = c.man.x + wx * FRONT; c.front.y = c.man.y + wy * FRONT;
+      c.rear.x = c.man.x - wx * REAR; c.rear.y = c.man.y - wy * REAR;
+      for (const m of bearers) { m.face = c.way; m.went = s / DT; }
+      if (s < left - 1e-9) return;
+      // At the aid post: he is set down there, and the bearers walk home.
+      c.man.gone = t; c.man.pose = 'wounded';
+      c.stage = 'home';
+      for (const m of bearers) { m.pose = 'walk'; m.v = B.pace; }
+      return;
+    }
+    // Home: back into the block's ground, where its drill takes them up again. A block gone off the field takes them with it.
+    for (const m of bearers) {
+      if (m.job !== c) continue;
+      const p = this.leash(sq, [m.x, m.y], -4);
+      if (!live(u) || stride(m, p, B.pace)) {
+        m.job = undefined; m.pose = 'wait'; m.v = 0; m.went = 0; m.spot = [m.x, m.y]; m.slotAt = [m.x, m.y]; m.until = t + 1;
+        sq.memo = undefined;
+      }
+    }
   }
 
   // ---- What the block is doing ------------------------------------------------------------------------------------
@@ -935,7 +1196,7 @@ export class Drill {
    */
   private turnFor(sq: Squad, m: Man, bound: Bound): number {
     const key = this.memo(sq).keyOf.get(m.sec ?? m.k);
-    const plat = this.platoons && (key ? key.role === 'rifle' : m.role === 'rifle');
+    const plat = key ? !!key.plat : sq.tier === 2 && m.role === 'rifle';
     const squads = plat ? platoonOf(sq.u.nat).squads : 0, s = plat ? m.sub ?? 0 : m.sec ?? m.k;
     return turnOf(bound, m.role === 'mg', s, plat && s >= squads);
   }
@@ -1091,7 +1352,7 @@ export class Drill {
     }
     this.ambush(sq);
     this.officer(sq);
-    for (const m of sq.men) if (m.fell === undefined && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+    for (const m of sq.men) if (m.fell === undefined && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
   }
 
   /**
@@ -1126,7 +1387,7 @@ export class Drill {
    * Whether a man is on his feet: a key man while the rules keep his model; the rest of a section while their block is
    * on the field and he has not fallen (falls).
    */
-  private stands(sq: Squad, m: Man): boolean { return m.fell === undefined && (m.j === undefined ? m.k < sq.u.figures : live(sq.u)); }
+  private stands(sq: Squad, m: Man): boolean { return m.fell === undefined && !m.job && (m.j === undefined ? m.k < sq.u.figures : live(sq.u)); }
 
   /**
    * The block's men on their feet, worked out again only when that changes: a man falls or joins another section (falls,
@@ -1144,7 +1405,7 @@ export class Drill {
       up.push(m);
       if (m.j !== undefined) { const s = grp(m); let l = bySec.get(s); if (!l) bySec.set(s, (l = [])); l.push(m); }
     }
-    const all = this.sections ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
+    const all = sq.tier >= 1 ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
     return (sq.memo = { fig: u.figures, on, stand, struck: on ? [...stand, ...sq.veh] : stand, up, keys, keyOf, all, bySec });
   }
 
@@ -1204,7 +1465,7 @@ export class Drill {
    * rifle section's gunner fallen, his number two takes the gun up; with none to keep by, he fights as a rifleman.
    */
   private pairs(sq: Squad, room?: Room): void {
-    if (!this.sections) return;
+    if (sq.tier < 1) return;
     const u = sq.u, t = this.b.t;
     const count = new Map<Man, number>(), booked = new Set<Man>();
     for (const m of sq.men) {
@@ -1278,7 +1539,7 @@ export class Drill {
    * there. Returns the places booked, for pairs.
    */
   private space(sq: Squad): Room | undefined {
-    if (!this.sections) return undefined;
+    if (sq.tier < 1) return undefined;
     const M = this.memo(sq), t = this.b.t, room: Room = new Map();
     const order = [...M.up].sort((a, c) => (a.j === undefined ? 0 : 1) - (c.j === undefined ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
     for (const m of order) {
@@ -1346,7 +1607,7 @@ export class Drill {
    * whole block goes in files (as many as its men need), section after section.
    */
   private slot(sq: Squad, m: Man, tpl: 'line' | 'column' | 'rest'): [number, number] {
-    const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = this.sections;
+    const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = sq.tier >= 1;
     // A loader, a gun's crew, a runner: his place is his weapon's (or his officer's); Drill.pairs puts him beside it.
     if (m.pr) { const L = this.leadOf(sq, m); if (L) return this.slot(sq, L, tpl); }
     if (sec && tpl === 'column' && u.kind !== 'arm' && u.kind !== 'art') {
@@ -1382,7 +1643,7 @@ export class Drill {
     // The machine gun at the outer end; the riflemen inward from it.
     const outer = side * Math.min(half, u.w / 4 + span / 2);
     const a = outer - side * (n > 1 ? (span * i) / (n - 1) : 0);
-    const l = u.d / 2 - 4 + (i % 2 ? (sec ? -(this.platoons ? S.platoon.rows : S.rows) : -3) : 0) + m.jy * 0.5;
+    const l = u.d / 2 - 4 + (i % 2 ? (sec ? -(sq.tier === 2 ? S.platoon.rows : S.rows) : -3) : 0) + m.jy * 0.5;
     return [a + m.jx * 0.4, l];
   }
 
@@ -1456,6 +1717,44 @@ export class Drill {
    * A point pulled inside the block's leash: its box, as the rules hold it, and a margin round it (more for men running).
    * The block is the truth: no man strays from it further than this.
    */
+  /**
+   * Where a man on foot makes for next, on a field with hedges: the gate on his way, found again when his spot has moved
+   * more than 2 m (or he more than 5 m) since, and on through it and beyond. Only a gate inside his block's ring (he
+   * never leaves his block for one). He goes through square, a stride either side of the gap, at his own place across it
+   * by his number: a section goes through abreast and not in one file on one point.
+   */
+  private via(sq: Squad, m: Man): [number, number] | null {
+    const sp = m.spot;
+    if (!m.viaFor || Math.hypot(sp[0] - m.viaFor[0], sp[1] - m.viaFor[1]) > 2 || (!m.via?.length && (!m.viaAt || Math.hypot(m.x - m.viaAt[0], m.y - m.viaAt[1]) > 5))) {
+      m.viaFor = [sp[0], sp[1]]; m.viaAt = [m.x, m.y]; m.via = this.gateFor(sq, m);
+    }
+    while (m.via?.length && Math.hypot(m.via[0][0] - m.x, m.via[0][1] - m.y) < 0.4) {
+      m.via.shift();
+      if (!m.via.length) { m.viaAt = [m.x, m.y]; m.via = this.gateFor(sq, m); break; }
+    }
+    return m.via?.[0] ?? null;
+  }
+
+  private gateFor(sq: Squad, m: Man): [number, number][] | undefined {
+    const g = this.b.gateOn(m.x, m.y, m.spot[0], m.spot[1]);
+    if (!g) return undefined;
+    const [lx, ly] = this.leash(sq, [g.x, g.y]);
+    if (Math.hypot(lx - g.x, ly - g.y) > 0.5) return undefined;
+    // Along the hedge and square across it, the square pointing to his spot's side.
+    let [hx, hy] = this.b.hedgeDir(g.x, g.y) ?? [0, 0];
+    if (!hx && !hy) { const wx = g.x - m.x, wy = g.y - m.y, wl = Math.hypot(wx, wy) || 1; hx = -wy / wl; hy = wx / wl; }
+    let nx = -hy, ny = hx;
+    if ((m.spot[0] - g.x) * nx + (m.spot[1] - g.y) * ny < 0) { nx = -nx; ny = -ny; }
+    const half = Math.max(0, (g.width ?? 3) / 2 - 0.5), o = (roll(this.seed, sq.u.id, m.n, 61) * 2 - 1) * half, S = 1.5;
+    const cx = g.x + hx * o, cy = g.y + hy * o, at = (m.x - g.x) * nx + (m.y - g.y) * ny;
+    // Already in the gap (in line with it and within a stride of it), he goes on through; anywhere else, to its mouth.
+    const inGap = Math.abs((m.x - cx) * hx + (m.y - cy) * hy) <= half + 0.5;
+    const way: [number, number][] = [];
+    if (!inGap || at < -S + 0.3) way.push([cx - nx * S, cy - ny * S]);
+    if (!inGap || at < S - 0.3) way.push([cx + nx * S, cy + ny * S]);
+    return way.length ? way : undefined;
+  }
+
   private leash(sq: Squad, p: [number, number], extra = 0): [number, number] {
     const u = sq.u, m = (sq.phase === 'flee' ? 70 : 45) + extra;
     if (!sq.ax || sq.ax[0] !== u.face) { const [rx0, ry0] = right(u.face), [fx0, fy0] = fwd(u.face); sq.ax = [u.face, rx0, ry0, fx0, fy0]; }
@@ -1512,7 +1811,7 @@ export class Drill {
     const M = this.memo(sq);
     let best: Man | undefined, d = Infinity;
     for (const o of M.keys) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
-    if (best && this.sections) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
+    if (best && sq.tier >= 1) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
     return best ? [best.x, best.y] : [e.x, e.y];
   }
 
@@ -1758,8 +2057,9 @@ export class Drill {
     const away: [number, number] | undefined = e && near < BOOK.lift.mg + 15 ? [e.x + fx * e.d / 2, e.y + fy * e.d / 2] : undefined;
     const out = assault.size > 0;
     // Smoke on the enemy's flank as the assault goes out (its platoons' own light mortars), a round a think.
-    if (BOOK.smoke.on && !home && e && out && S.smoke > 0 && (sq.smokeAt === undefined || t - sq.smokeAt >= BOOK.smoke.every)) { sq.smokeAt = t; sq.smokeLeft = S.smoke; }
-    if (sq.smokeLeft && e && !home) { sq.smokeLeft--; this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke); }
+    // With smoke on call (release 2, ruling 242 S6) the screens are the rules' (screen): none of the book's own.
+    if (BOOK.smoke.on && !b.smoke && !home && e && out && S.smoke > 0 && (sq.smokeAt === undefined || t - sq.smokeAt >= BOOK.smoke.every)) { sq.smokeAt = t; sq.smokeLeft = S.smoke; }
+    if (sq.smokeLeft && e && !home && !b.smoke) { sq.smokeLeft--; this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke); }
     for (const m of men) {
       if (m.role === 'officer') continue; // he walks his line (officer)
       const [a, l] = this.slot(sq, m, 'line');
@@ -1835,6 +2135,43 @@ export class Drill {
     if (by.j !== undefined) r.j = by.j;
     this.book(r);
     by.v = 0; by.spot = [by.x, by.y]; by.pose = 'wait'; by.aim = [ax, ay]; by.until = t + 1.5;
+  }
+
+  /**
+   * Smoke on call (release 2, ruling 242 S6): a screen the rules just laid (LandBattle.lay), drawn as the rounds that lay
+   * it, one round for each BOOK.smoke.per metres of its line (at most BOOK.smoke.most; looks only), one a think from the
+   * block's base of fire, as the book's own smoke is fired (smoke). A screen laid while one is still being drawn takes its
+   * place.
+   */
+  screen(s: Screen): void {
+    const sq = this.squads.get(s.unit);
+    if (!sq) return;
+    const n = clamp(Math.ceil(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / BOOK.smoke.per), 1, BOOK.smoke.most);
+    sq.screenQ = { s, i: 0, n };
+  }
+
+  /**
+   * The next round of the screen being drawn: from the platoon's headquarters (its light mortar) or a rifleman standing,
+   * else from the block's front, onto its place along the line ((i + 1/2) of n), scattered a little as a mortar's round;
+   * it hangs from its landing to the screen's end (hang). No harm, at no block (on -1). The shooter's stamp is the round's
+   * only change to his drill: he stands and fires it.
+   */
+  private screenRound(sq: Squad): void {
+    const q = sq.screenQ!, u = sq.u, b = this.b, t = b.t, R = DR.rounds, s = q.s;
+    if (q.i >= q.n || !live(u) || t >= s.until) { delete sq.screenQ; return; }
+    const men = this.up(sq), squads = platoonOf(u.nat).squads;
+    const by = men.find((m) => (m.sub ?? 0) >= squads && m.role === 'rifle') ?? men.find((m) => m.role === 'rifle');
+    const k = (q.i + 0.5) / q.n, ax = s.x0 + (s.x1 - s.x0) * k, ay = s.y0 + (s.y1 - s.y0) * k, z = Math.round(t * 10);
+    const [fx, fy] = fwd(u.face), ox = by ? by.x : u.x + (fx * u.d) / 2, oy = by ? by.y : u.y + (fy * u.d) / 2, n = by ? by.n : 0;
+    const range = Math.hypot(ax - ox, ay - oy), [i0, i1] = R.indirect.mortar, sg = i0 + i1 * range;
+    const x = clamp(ax + gauss(roll(this.seed, u.id, n, z, 81), roll(this.seed, u.id, n, z, 82)) * sg * 0.35, 1, b.field.w - 1);
+    const y = clamp(ay + gauss(roll(this.seed, u.id, n, z, 83), roll(this.seed, u.id, n, z, 84)) * sg * 0.35, 1, b.field.h - 1);
+    const l = Math.round((t + range / R.speed.mortar) * 10) / 10;
+    const r: Round = { t: Math.round(t * 10) / 10, l, by: u.id, w: 'smoke', on: -1, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: 'miss', hang: Math.max(0, Math.round((s.until - l) * 10) / 10) };
+    if (by) { r.k = by.k; if (by.j !== undefined) r.j = by.j; }
+    this.book(r);
+    if (by) { by.v = 0; by.spot = [by.x, by.y]; by.pose = 'wait'; by.aim = [ax, ay]; by.until = t + 1.5; }
+    if (++q.i >= q.n) delete sq.screenQ;
   }
 
   /** Whether a mate lies within arm's length of him, down. */
@@ -2015,7 +2352,7 @@ export class Drill {
     lead.v = 0; lead.spot = [lead.x, lead.y]; lead.pose = 'idle'; lead.aim = undefined;
     men.forEach((m, i) => {
       if (m === lead) return;
-      const ang = (i / men.length) * Math.PI * 2, r = this.sections ? 7 + 0.25 * men.length : 7;
+      const ang = (i / men.length) * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men.length : 7;
       const p: [number, number] = [lead.x + Math.sin(ang) * r + dir[0] * 4, lead.y + Math.cos(ang) * r + dir[1] * 4];
       if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, 'run', 4, t + 2, dir, 4);
       else if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) { m.v = 0; m.pose = 'wait'; }
@@ -2082,12 +2419,12 @@ export class Drill {
   /** The lorry a lorried man rides in: his own, by his place on the tray. */
   private lorryOf(sq: Squad, m: Man): Man { return sq.veh[this.lorryIx(sq, m)]; }
   /** Which of the block's lorries is his: by his place on the tray, or (drawn as sections) his section's own. */
-  private lorryIx(sq: Squad, m: Man): number { return (m.lor ?? (this.sections ? m.sec ?? m.k : m.k)) % sq.veh.length; }
+  private lorryIx(sq: Squad, m: Man): number { return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length; }
   /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
   private seat(sq: Squad, m: Man): [number, number] {
     const v = this.lorryOf(sq, m);
     // Drawn as sections, a section to a lorry (a gun's crew to its tractor): its key man first, close benches.
-    if (this.sections) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
+    if (sq.tier >= 1) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
     const j = Math.floor(m.k / sq.veh.length);
     return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
   }
@@ -2407,7 +2744,7 @@ export class Drill {
     const e = u.aim !== undefined ? b.unit(u.aim) ?? null : u.engaged !== undefined ? b.unit(u.engaged) ?? null : null;
     const guns = this.up(sq).filter((m) => m.role === 'gun'), tractor = sq.veh[0];
     // Drawn as sections, each gun has her own tractor (her crew aboard it: pairs), just ahead of her.
-    const own = this.sections && sq.veh.length > 1;
+    const own = sq.tier >= 1 && sq.veh.length > 1;
     if (sq.phase === 'limbered' || sq.phase === 'flee' || sq.phase === 'fallback') {
       guns.forEach((g, i) => { g.aim = undefined; this.follow(sq, g, toWorld(u, h, 0, -10 - i * (own ? 26 : 18)), 'towed'); if (g.v === 0) g.pose = 'towed'; });
       if (own) guns.forEach((g) => { const v = this.lorryOf(sq, g); this.follow(sq, v, toWorld(g, g.face, 0, 7), 'drive'); });
@@ -2563,7 +2900,7 @@ export class Drill {
       sq.foWith = base.id; sq.foOn = e.id; sq.foAt = [base.x, base.y];
     }
     // The drill book: his signaller on the handset for each call of the guns' mission (the radio man's call_support).
-    if (this.byBook && sq.ms && sq.ms.on === e.id) sq.fo[1].call = sq.ms.call;
+    if (this.byBook && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) { sq.fo[1].call = sq.ms.call; sq.fo[1].callAt = [e.x, e.y]; }
     for (const m of sq.fo) {
       const d = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]);
       if (d < 1 && m.v === 0) { m.pose = m.k === 200 ? 'observe' : 'wait'; m.aim = [e.x, e.y]; }
@@ -2578,9 +2915,9 @@ export class Drill {
     const u = sq.u, f = this.b.field, t = this.b.t;
     let e: LandUnit | null | undefined;
     // Drawn as sections, the men on foot where they stand, by 2 m cell: a man on the move steps round a mate in his way.
-    const crowd = this.sections ? new Map<number, Man[]>() : null;
+    const crowd = sq.tier >= 1 ? new Map<number, Man[]>() : null;
     if (crowd) for (const m of sq.men) {
-      if (m.fell !== undefined || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
+      if (m.fell !== undefined || m.job || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
       const key = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
       let l = crowd.get(key);
       if (!l) crowd.set(key, (l = []));
@@ -2599,7 +2936,9 @@ export class Drill {
       if (m.role === 'tank') m.v = Math.min(m.v, tankTop(sq));
       const veh = m.role === 'tank' || m.role === 'lorry' || m.role === 'gun';
       const rate = (m.role === 'tank' ? TURN.tank : veh ? TURN.wheels : m.pose === 'ride' ? TURN.ride : TURN.foot) * DT;
-      const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
+      // On foot across hedged fields, he makes for the gate in the hedge ahead of him first (never through the bank).
+      const via = !veh && MOVING.has(m.pose) && this.b.gates.length ? this.via(sq, m) : null;
+      const dx = (via ? via[0] : m.spot[0]) - m.x, dy = (via ? via[1] : m.spot[1]) - m.y, d = Math.hypot(dx, dy);
       if (m.v > 0 && (d > 0.05 || MOVING.has(m.pose))) {
         // A step toward his spot, turning toward it as fast as he can turn; a last step under 5 cm still arrives (no tank
         // drives on the spot).
@@ -2657,7 +2996,7 @@ export class Drill {
           // At the field's edge he can go no further that way: he halts there (no one marches on the spot against it).
           if (s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) { m.spot = [m.x, m.y]; this.arrive(sq, m); }
         }
-        if (s >= d - 1e-9 && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered' && sq.boarding === undefined) this.arrive(sq, m);
+        if (s >= d - 1e-9 && !via && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered' && sq.boarding === undefined) this.arrive(sq, m);
       } else {
         // Still: toward what he fires at, else toward the enemy, turning as he can.
         let want: number | undefined;
@@ -2699,6 +3038,8 @@ export class Drill {
     for (const m of sq.veh) step(m);
     for (const m of sq.men) {
       if (m.fell !== undefined) { m.went = 0; continue; }
+      // A bearer on a carry goes his own way (litters).
+      if (m.job) continue;
       // Aboard: he sits in his seat in his lorry, wherever it goes (in the stride he climbs in, from beside it to his seat).
       if (m.pose === 'mounted' && (u.kind === 'mot' || m.role === 'crew') && sq.veh.length) {
         const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
@@ -3017,7 +3358,7 @@ export class Drill {
     const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
     const one = (m: Man): MenOut => {
       // A rifle section's key man is its leader (the 3D game gives him his army's leader's weapon).
-      const o: MenOut = { k: m.k, r: (this.sections && m.j === undefined && m.role === 'rifle') || m.lead ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
+      const o: MenOut = { k: m.k, r: (m.hasSec && m.role === 'rifle') || m.lead ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
       if (m.j !== undefined) o.j = m.j;
       if (m.aim) o.a = [r1(m.aim[0]), r1(m.aim[1])];
       if (m.shot !== undefined) o.s = r1(m.shot);
@@ -3027,6 +3368,12 @@ export class Drill {
       if (m.marks?.length) o.mk = m.marks.map((x) => [...x] as Mark);
       if (m.el && this.byBook) o.e = m.el;
       if (m.call !== undefined) o.cl = r1(m.call);
+      if (m.wd !== undefined) o.wd = r1(m.wd);
+      if (m.cy) o.cy = m.cy.map((c) => [r1(c[0]), r1(c[1]), c[2], c[3]]);
+      if (m.gone !== undefined) o.gone = r1(m.gone);
+      if (m.back !== undefined) o.back = r1(m.back);
+      if (m.br) o.br = 1;
+      if (m.call !== undefined && m.callAt) o.cs = [r1(m.callAt[0]), r1(m.callAt[1])];
       return o;
     };
     for (const sq of this.squads.values()) {
@@ -3034,7 +3381,7 @@ export class Drill {
       const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : undefined;
       if (as !== undefined && u.side !== as && !b.known(u)) continue;
       if (u.state === 'withdrawn' && !sq.men.some((m) => m.fell !== undefined)) continue;
-      const men = sq.men.filter((m) => m.fell !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
+      const men = sq.men.filter((m) => m.fell !== undefined || m.job !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
         const o = one(m);
         if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
         return o;
@@ -3042,7 +3389,32 @@ export class Drill {
       for (const v of sq.veh) if (live(u)) men.push(one(v));
       const blk: MenBlock = { id: u.id, ph: sq.phase, men };
       if (sq.fo && live(u)) { blk.fo = sq.fo.map(one); blk.foWith = sq.foWith; blk.foOn = sq.foOn; }
+      if (b.phones && b.phonesSeen(as)) { const ln = this.linemen(u.id); if (ln.length) blk.ln = ln; }
       out.push(blk);
+    }
+    return out;
+  }
+
+  /**
+   * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire now, one for each mend.
+   * He leaves the headquarters at the mend's t0 with the cable reel ('reel'), walking the wire at foot pace to the cut,
+   * kneels there splicing ('splice') from t1, as he gets there, until the mend's t, then walks back along it ('walk') and
+   * is gone once he is home. Worked out from the mend alone, as the clock stands: looks only, and nothing here draws.
+   * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
+   */
+  private linemen(id: number): MenOut[] {
+    const b = this.b, t = b.t, out: MenOut[] = [], pace = LAND.speed.inf;
+    const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
+    for (const m of b.wireMends) {
+      const w = b.wires[m.wire - 1];
+      if (!w || w.unit !== id || t < m.t0) continue;
+      const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace;
+      if (t >= home) continue;
+      const out1 = bearing(hx, hy, m.x, m.y);
+      // Out along the wire, at the cut, or back along it: how far out from the headquarters he stands (0 to 1).
+      const k = t < m.t1 ? (m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1) : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - ((t - m.t) * pace) / d) : 0;
+      const p: Pose = t < m.t1 ? 'reel' : t < m.t ? 'splice' : 'walk';
+      out.push({ k: 300 + m.man, r: 'rifle', x: r1(hx + (m.x - hx) * k), y: r1(hy + (m.y - hy) * k), f: r2(wrap(p === 'walk' ? out1 + Math.PI : out1)), p, v: p === 'splice' ? 0 : pace, c: 'none', ln: 1 });
     }
     return out;
   }
@@ -3097,6 +3469,24 @@ const grp = (m: Man): number => (m.sec ?? m.k) * 8 + (m.sub ?? 0);
 export function platoonOf(nat: string): { squads: number; hq: number } {
   const P = DR.sections.platoon, p = P[nat] ?? P.default;
   return { squads: Math.max(1, Math.min(7, p.squads)), hq: Math.max(1, p.hq) };
+}
+
+/**
+ * How many men a block's key men put on screen at a tier (GR3): 1, each key man and his section; 2, as well a rifle key
+ * man's platoon (its other squads, each on its leader, and its headquarters). Counted as the 3D game shows them: a gun,
+ * a tank and a lorry are no men (a gun's crew is its section), and a support team's weapon comes with the three the 3D
+ * game draws beside it (drill.json sections: hmg 7 and mortar 8 count them).
+ */
+export const menOnScreen = (r: Role): number => (r === 'hmg' || r === 'mortar' ? 3 : VEHICLE.has(r) ? 0 : 1);
+export function menDrawn(nat: string, keys: Role[], tier: 1 | 2): number {
+  let c = 0;
+  for (const r of keys) {
+    c += menOnScreen(r);
+    const sec = sectionOf(nat, r);
+    c += sec.length;
+    if (tier === 2 && r === 'rifle') { const P = platoonOf(nat); c += (P.squads - 1) * (1 + sec.length) + P.hq; }
+  }
+  return c;
 }
 
 export function sectionOf(nat: string, key: Role): [Role, boolean, boolean][] {
