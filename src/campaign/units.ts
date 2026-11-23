@@ -7,7 +7,9 @@
 // Set at a grand campaign's start only (g.flags.unitsDecide), never in one under way, and never in a history
 // campaign. Off, nothing behind it is read and every war is the war without it.
 //
-// Steps on it so far: the convoy war by cause (audit #5, navy.ts 'The convoy war by cause').
+// Steps on it so far: the convoy war by cause (audit #5, navy.ts 'The convoy war by cause'); the honest win chance on
+// land (audit #1, game.ts winChanceOn), on its own sub-flag 'winChance' as well (stage.json), off until the 3D field's
+// spread matches the card's.
 
 import type { Game } from './types';
 

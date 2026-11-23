@@ -39,6 +39,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
+import { unitsDecide } from './units';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
@@ -1075,8 +1076,11 @@ const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
 /** The honest win chance on land (release 2, auto-resolve fix 1; data/campaign/winchance.json): the record's luck in the field. */
 const WIN = winData as unknown as { field: [number, number]; prepared: number };
-/** True in a grand campaign opened with the honest win chance on land (stage.json 'winChance'). */
-export const winChanceOn = (g: Game): boolean => g.flags.winChance === 1;
+/**
+ * True in a grand campaign opened with the honest win chance on land: its own step inside Units decide (the design
+ * director, 23 Nov 2026 10:14Z), so it needs both flags, and the other steps can go on without it.
+ */
+export const winChanceOn = (g: Game): boolean => unitsDecide(g) && g.flags.winChance === 1;
 /**
  * The run of the day's luck an attack in the field is decided by, with the honest win chance on: the record's, fitted
  * over combat power, so that the card's odds (which count training, doctrine, supply and tech) carry the ground as often

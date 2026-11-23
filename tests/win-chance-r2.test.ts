@@ -22,14 +22,14 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 /** The grand campaign of September 1939, with the honest win chance on or off. */
 function war(on: boolean, seed = 3): Game {
   const g = startOpen(createGame(seed, null));
-  if (on) g.flags.winChance = 1;
+  if (on) { g.flags.unitsDecide = 1; g.flags.winChance = 1; }
   return g;
 }
 
 /** The same with Germany's general at the table, his first month open, as the game's own screen would have it. */
 function playing(on: boolean, seed = 3): Game {
   const g = startOpen(createGame(seed, 'GER'));
-  if (on) g.flags.winChance = 1;
+  if (on) { g.flags.unitsDecide = 1; g.flags.winChance = 1; }
   for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
   beginHuman(g);
   return g;
@@ -64,6 +64,18 @@ describe('the switch', () => {
     const a = assess(g, l.att, l.target);
     expect(a.dice).toEqual(FIELD_DICE);
     expect(a.luck).toBeUndefined();
+  });
+
+  it('is a step inside Units decide: it needs both flags, and either alone throws today\'s luck', () => {
+    for (const [units, win] of [[1, 0], [0, 1]]) {
+      const g = war(false);
+      if (units) g.flags.unitsDecide = 1;
+      if (win) g.flags.winChance = 1;
+      expect(winChanceOn(g)).toBe(false);
+      const l = line(g);
+      expect(assess(g, l.att, l.target).luck).toBeUndefined();
+    }
+    expect(winChanceOn(war(true))).toBe(true);
   });
 });
 
