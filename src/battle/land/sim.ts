@@ -2838,8 +2838,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
    * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
    */
-  private groundTake(t: LandUnit): number {
-    const gt = coverAt(this.field, t.x, t.y);
+  private groundTake(t: LandUnit, at: [number, number] = [t.x, t.y]): number {
+    const gt = coverAt(this.field, at[0], at[1]);
     let take = LAND.cover[gt];
     // Men on foot beside a wreck take light cover, either army's (b477).
     const ws = this.wreckShare(t);
@@ -2854,7 +2854,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
    */
   private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number } {
-    const gu = coverAt(this.field, u.x, u.y);
+    // An overrun's tank strikes and is struck as from where it stood before the drive (its height and its own ground
+    // there), face to face: harm unchanged (b418; the design director, 06:02Z).
+    const pair = this.inOverrun(u, t);
+    const uAt: [number, number] = pair && u.ovr ? u.ovr.back : [u.x, u.y], tAt: [number, number] = pair && t.ovr ? t.ovr.back : [t.x, t.y];
+    const gu = coverAt(this.field, uAt[0], uAt[1]);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     // Stretcher bearers (release 2): the men out carrying the wounded back strike nothing.
     if (this.bearers) p *= this.atHand(u);
@@ -2892,15 +2896,14 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
     }
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
-    const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
+    const rise = heightAt(this.field, uAt[0], uAt[1]) - heightAt(this.field, tAt[0], tAt[1]);
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
-    // (an overrun's two blocks strike as blocks standing face to face: harm unchanged, b418)
-    const aspect = rearguard || this.inOverrun(u, t) ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
+    const aspect = rearguard || pair ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
     // Measured armour (release 2): a tank's blow on a tank, or a gun's over open sights, by the face and the range.
     let amx = 1;
     if (this.measured && t.kind === 'arm' && (u.kind === 'arm' || (u.kind === 'art' && !u.team && this.gap(u, t) < gunsOf(u).closeAt))) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
-    const ground = this.groundTake(t);
+    const ground = this.groundTake(t, tAt);
     let take = ground;
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
     if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
