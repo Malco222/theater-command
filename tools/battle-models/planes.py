@@ -45,6 +45,7 @@ import carrier_wildcat
 import fighters
 import france_d520
 import france_leo451
+import italy_sm79
 import fitout
 import rigid
 from rigid import Model, smooth
@@ -520,19 +521,25 @@ carrier(carrier_wildcat)
 
 
 # ---- France's own machines of 1940, release 2: each in a module of her own (france_d520.py). ----
+FINISH = {}                                                 # (what a land machine's module lays on her once she is built: her finish())
+
+
 def land(module):
     """Takes in a land machine from her module, as carrier() takes in a carrier plane: her NAME, her NUMBERS, who sits
     under her glass (SEATS), her coat (module.coat(), her camouflage field, as NUMBERS["graded"]) and any table of her
-    own the module gives (SEAT_DROP, BAY, TAIL_CUT, TURRET, and NOSE_CREW for the men in a glass nose)."""
+    own the module gives (SEAT_DROP, BAY, TAIL_CUT, TURRET, and NOSE_CREW for the men in a glass nose; UPRIGHT for bombs
+    stowed nose up in her bay; FAR_LOADS for her loads on her far model too; finish(), laid on her once she is built)."""
     numbers = module.NUMBERS
     if hasattr(module, "coat"):
         numbers["graded"] = module.coat()
     EXTRA_PLANES[module.NAME] = numbers
     fitout.SEATS[module.NAME] = module.SEATS
     for table, into in (("SEAT_DROP", fitout.SEAT_DROP), ("BAY", BAYS), ("TAIL_CUT", TAIL_CUT), ("TURRET", TURRET_LIMITS),
-                        ("NOSE_CREW", fitout.NOSE_CREW)):
+                        ("NOSE_CREW", fitout.NOSE_CREW), ("UPRIGHT", fitout.UPRIGHT), ("finish", FINISH)):
         if hasattr(module, table):
             into[module.NAME] = getattr(module, table)
+    if getattr(module, "FAR_LOADS", False):
+        fitout.PLAIN_LOADS.add(module.NAME)
     if _G is not None:
         _G["PLANES"][module.NAME] = numbers
 
@@ -541,6 +548,8 @@ def land(module):
 land(france_d520)
 # (the LeO 451, her medium bomber of 1939-40: france_leo451.py)
 land(france_leo451)
+# (Italy's SM.79 Sparviero, her three-engined medium bomber: italy_sm79.py)
+land(italy_sm79)
 
 
 # ---- the twin-engined bombers of release 2 (Brian, 2026-11-23: "do 1 and 3"), each in a module of her own:
@@ -580,6 +589,10 @@ def _torpedo(x, z, long=5.3, r=0.225):
     a, b = x + 0.5 * long, x - 0.5 * long
     return [("body", ([(a, z, 0.03, 0.03), (a - 0.22, z, 0.17, 0.17), (a - 0.55, z, r, r), (b + 1.0, z, r, r), (b + 0.35, z, 0.1, 0.1), (b, z, 0.03, 0.03)], 0.0, 2.0, "torpedo")),
             ("rod", ((b + 0.02, 0.0, z), (b + 0.42, 0.0, z), 0.24, 0.24, "torpedo"))]
+
+
+fitout.TURNED_TORPEDO["Betty"] = _torpedo                   # (the Type 91 in the Betty's bay is the Nell's, turned as finely)
+fitout.PLAIN_LOADS.add("Betty")                             # (and her far model carries it and her bombs: fitout.plain_loads)
 
 
 _PALE = {"upper": "A9B19F", "upper2": "A9B19F", "under": "9DA593", "nose": "1E1F22", "boss": "8E9092"}      # (the Japanese navy's pale grey of the early war)
@@ -1857,9 +1870,9 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "D520": 1, "LeO451": 4, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "D520": 1, "LeO451": 4, "SM79": 5, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5, "Wellington": 6, "Pe2": 3}
-ROLE = {"Betty": "bomber", "Nell": "bomber", "LeO451": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber", "Wellington": "bomber", "Pe2": "bomber"}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "LeO451": "bomber", "SM79": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber", "Wellington": "bomber", "Pe2": "bomber"}
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -2801,6 +2814,7 @@ def convert(name, fine=True):
     if has_torpedo:
         m.info["file"]["loads"] = (["torpedo", "bombs"] if has_bombs else ["torpedo"])
     f.bay, f.bay_half, f.rings_x = (bay if fine else None), BAY_HALF, rings_x
+    f.load_bay = bay                                         # (her bay on either model: where her far model's loads hang, fitout.plain_loads)
     f.bay_torpedo = BAY_TORPEDO.get(name) if bay else None
     f.prop_parent = prop_parent
     f.fins = fins
@@ -2818,6 +2832,8 @@ def convert(name, fine=True):
     f.engine_list = list(s.get("engines", []))
     fitout.fit(m, f, s, G, hull)
     clips_for_plane(m, f)
+    if name in FINISH:
+        FINISH[name](m, fine)
     return m, f
 
 
@@ -3168,4 +3184,4 @@ def torpedo(fine=True):
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
-                                                                  "Amerikabomber", "B29", "Bomber", "D520", "LeO451", "Wellington", "Pe2")}
+                                                                  "Amerikabomber", "B29", "Bomber", "D520", "LeO451", "Wellington", "Pe2", "SM79")}

@@ -102,7 +102,7 @@ SIDES = (("port", 1.0), ("starboard", -1.0))              # (her own axes: y to 
 
 # Which styles each bomber wears (planes.BUILDERS names); the plain Bomber is flown by every small or medium nation,
 # so she carries every style but Germany's.
-MODELS = {"Lancaster": ("letter",), "He111": ("code",), "Amerikabomber": ("code",), "Betty": ("tail",), "Nell": ("tail",), "LeO451": ("number",), "Wellington": ("letter",), "Pe2": ("tactical",),
+MODELS = {"Lancaster": ("letter",), "He111": ("code",), "Amerikabomber": ("code",), "Betty": ("tail",), "Nell": ("tail",), "LeO451": ("number",), "Wellington": ("letter",), "Pe2": ("tactical",), "SM79": ("squadron",),
           "Bomber": ("letter", "tail", "squadron", "tactical", "number")}
 
 # The paints (the layer's own, as livery.PAINTS are the livery's). Each must read by its lightness under the battle
@@ -173,7 +173,7 @@ BLOCK_EDGE = 0.06                                        # (the same edge round 
 # letters are fitted to her fin and come out smaller where it is small. On her fuselage a style is never more than
 # three fifths of her height there.
 SIZE = {"Lancaster": {"letter": 0.75}, "He111": {"code": 0.65}, "Amerikabomber": {"code": 0.65},
-        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45}, "LeO451": {"number": 0.55}, "Wellington": {"letter": 0.65}, "Pe2": {"tactical": 0.4},
+        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45}, "LeO451": {"number": 0.55}, "Wellington": {"letter": 0.65}, "Pe2": {"tactical": 0.4}, "SM79": {"squadron": 0.55},
         "Bomber": {"letter": 0.6, "tail": 0.45, "squadron": 0.55, "tactical": 0.55, "number": 0.55}}
 # A fin style her owner painted on her forward fuselage instead, on both sides, its places about this middle (x, z:
 # her own metres) and as tall as `SIZE` says, made smaller only as any style on her fuselage is (`side_places`): the
@@ -473,8 +473,13 @@ class Her:
         self.tree = BVHTree.FromPolygons([tuple(v) for v in m.verts], [tuple(f) for f in m.faces])
         self.skin = livery.Skin(m)
         side = [mk for mk in (m.marks or []) if mk.get("place") == "side"]
-        mk = side[0]
-        self.mark = (mk["at"][0], mk["at"][2], mk["radius"], mk["tag"])
+        if side:
+            mk = side[0]
+            self.mark = (mk["at"][0], mk["at"][2], mk["radius"], mk["tag"])
+        else:                                             # (a band round her painted on her skin in its place, Italy's white one:
+            x0, x1 = s["band"]                            #  her marking stands either side of it as of a roundel there)
+            xm = 0.5 * (x0 + x1)
+            self.mark = (xm, self.hull.z(-xm), 0.5 * abs(x0 - x1), "band")
         self.fin_marks = [mk for mk in (m.marks or []) if mk.get("place") == "fin"]
         self.x_cut = m.parts[m.part_at["tail"]].pivot.x
         self.rudders = [p.name for p in m.parts if p.name.startswith("rudder")]

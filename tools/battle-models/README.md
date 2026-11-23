@@ -523,7 +523,9 @@ What they add to the form:
 - **A torpedo is a second load.** Part `torpedo` (a slide, like `bombs`), socket `torpedo`, clip `torpedo_away` (a
   bay's doors open first). A machine that can carry either says so in her file (`loads`: `["torpedo", "bombs"]`), and
   she carries one or the other, never both: play `load.torpedo` or `load.bombs` first (each scales the other load
-  away) and leave it applied. Extras painted `torpedo` are her torpedo; `BAY_TORPEDO` puts one in a bay. The new
+  away) and leave it applied. Extras painted `torpedo` are her torpedo; `BAY_TORPEDO` puts one in a bay. The Betty's
+  is the Nell's Type 91, ringed as finely (`fitout.TURNED_TORPEDO`), and her far model carries it and her bombs too,
+  at the game's own grain for what hangs under a machine (`fitout.PLAIN_LOADS`, `PLAIN_GRAIN`). The new
   `Torpedo` model is for the game to drop and run: clips `drop` and `run` (its wooden air fins, part `box`, are
   scaled away in the water; part `screws` turns), sockets `nose` and `wake`.
 - **A coat graded down her sides** (`graded` in the numbers, patched in by `GRADED`): the Hellcat's sea blue on top,
@@ -770,6 +772,27 @@ names its drawing, its licence and its scales.
   `turret.2`, `bombs` and the usual others; clips a bomber's (`fire.turrets`, `bombs_away`, `doors.close`, ...). She has
   `LeO451Damage`, `LeO451EngineOut` (`damage.MANY_ENGINED`) and `LeO451Codes` (the `number` style: France is among
   "everyone else" in codes.py).
+
+### Italy's SM.79 (release 2)
+
+| file | what she is | year | crew | she carries |
+| --- | --- | --- | --- | --- |
+| `SM79` | the Savoia-Marchetti SM.79 Sparviero, three Alfa Romeo 126 radials, the hump over her cabin, the ventral gondola: sand with soft green blotches over light grey, the white band round her rear fuselage, the white cross on her rudder, bare wings | 1937 | 5 | a fixed gun over her cabin, the dorsal gun, the gondola's gun and a waist gun each side (`flexgun.1` to `flexgun.5`), five bombs stowed nose up in her bay |
+
+- In `italy_sm79.py`, taken in by `planes.land` as France's are, measured from a public three-view (the module names
+  it, its licence and its scale). Her hump is a raised cabin (`hoods` with `cabin`, as the B-17's): its windscreen two
+  flat panes in a V, its side windows, then the metal hump back to the dorsal gunner's step.
+- What `land` takes from a module besides France's: `UPRIGHT` (fitout.UPRIGHT: bombs stowed nose up in one row along
+  her keel, (how many, the bay roof's height)), `FAR_LOADS` (fitout.PLAIN_LOADS: her far model has her `bombs` part too,
+  at the far grain, where her bay is, without its doors) and `finish()` (planes.FINISH: laid on her once she is built;
+  hers paints the band on her skin and puts `ITA-CROSS` on her rudder).
+- Parts: `plane`, `wing.*`, `tail`, `bombs`, `bay.port`, `bay.starboard`, `prop.1` to `prop.3` (2 is her nose's) and
+  their blurs, `aileron.*`, `elevator.*`, `rudder`, `flexgun.1` to `flexgun.5`; sockets `engine.1` to `engine.3`,
+  `turret.1` to `turret.5`, `bombs` and the usual others; clips a bomber's (`bombs_away`, `doors.close`, ...). She has
+  `SM79Damage`, `SM79EngineOut` (her nose engine is feathered, no scorch: nothing lies behind it but her cabin) and
+  `SM79Codes` (the `squadron` style, "278-7", anchored on her white band, as there is no roundel on her side).
+- `ITA-CROSS` (`marks.py`): the white cross over her rudder with a small plain shield at its middle; Italy's marking
+  is never the fasces.
 
 ### Battle damage: bullet holes and flak holes
 

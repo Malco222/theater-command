@@ -1388,9 +1388,24 @@ def lamps(m, f, s, G, hull):
     m.ball((hull.back - 0.01, 0.0, hull.z(-hull.back)), 0.035, "lamp_white", 8, 4)
 
 
+# Bombs stowed upright, nose up, in one row along her keel over the doors, as the SM.79 hung hers in her bay: (how
+# many, the height of the bay's roof). Her far model has them too (PLAIN_LOADS).
+UPRIGHT = {}
+# The machines whose far (plain) model carries her loads as well: the parts `torpedo` and `bombs` where her bay is,
+# at the far model's grain, with no doors and no bay round them (the game draws one load a group from them).
+PLAIN_LOADS = set()
+# The machines whose bay torpedo is turned as the game turns one slung under a machine (the Nell's, planes._torpedo):
+# name: a function of (its middle, the height of its axis, how long, half as thick) giving its body and the box of its
+# wooden fins in the game's form of extras. Round at 24 a ring close up; the far model takes PLAIN_GRAIN or her own
+# `plain_extras`.
+TURNED_TORPEDO = {}
+PLAIN_GRAIN = (12, 0.3, 10)                                 # (around, step, rod sides: the game's own grain for what hangs under her)
+
+
 def bomb_bay(m, f, s, G, hull):
     """A bomber's bay behind its two doors: the doors' inner faces, the dark of the bay, and the bombs hung in it."""
     if not f.bay:
+        plain_loads(m, f, s, G, hull)
         return
     x0, x1 = f.bay
     half = math.radians(f.bay_half)
@@ -1418,7 +1433,7 @@ def bomb_bay(m, f, s, G, hull):
         m.strip([port(hull.at(x, a)) for a in arc], [port(hull.out(x, a)) for a in arc], 0.006, "line", lift=0.005)
     # the bay itself: two walls up from the doors' hinges, a roof, a bulkhead at each end
     xm = 0.5 * (x0 + x1)
-    roof = min(hull.z(-x) - 0.05 * hull.h(-x) for x in xs)
+    roof = UPRIGHT[f.name][1] if f.name in UPRIGHT else min(hull.z(-x) - 0.05 * hull.h(-x) for x in xs)
     heart = Vector((xm, 0.0, hull.z(-xm) - 0.5 * hull.h(-xm)))
     inward = lambda q: heart - q
     edges = []
@@ -1436,12 +1451,23 @@ def bomb_bay(m, f, s, G, hull):
         c = sum(ring, Vector()) / len(ring)
         m.add(ring + [c], [(k, (k + 1) % len(ring), len(ring)) for k in range(len(ring))], "inside", False, inward)
     # her torpedo, where her bay can hold one instead of bombs
-    if getattr(f, "bay_torpedo", None):
+    if getattr(f, "bay_torpedo", None) and f.name in TURNED_TORPEDO:
+        turned_torpedo(m, f, s, G, hull, xm, lo)
+    elif getattr(f, "bay_torpedo", None):
         long, r = f.bay_torpedo
         m.use("torpedo")
         at = Vector((xm + 0.5 * long, 0.0, hull.at(xm, lo).z + r + 0.06))
         m.lathe(at, -X, [(0.0, 0.0), (0.06, 0.1), (0.22, 0.2), (0.5, r), (long - 1.0, r), (long - 0.35, 0.1), (long, 0.03)], "torpedo", 14 if m.fine else 8)
         m.lathe(at - X * (long - 0.4), -X, [(0.0, r), (0.38, r)], "torpedo", 12 if m.fine else 8, caps=(False, False))
+    if f.name in UPRIGHT:                                   # (her bombs stowed nose up in a row, each hung by its nose from the roof)
+        m.use("bombs")
+        for at in upright_bombs(f, hull, x0, x1, lo):
+            m.lathe(at, -Z, BOMB_PROFILE, "bomb", 10)
+            m.lathe(at - Z * 1.08, -Z, [(0.0, 0.16), (0.2, 0.16)], "bomb", 10, caps=(False, False))
+            m.use("plane")                                 # (her racks stay with her when the bombs go)
+            m.rod(at + Z * 0.02, Vector((at.x, at.y, roof)), 0.025, "gunmetal", sides=4)
+            m.use("bombs")
+        return
     # her bombs, in two rows on their racks
     m.use("bombs")
     wide = abs(hull.at(xm, lo).y)
@@ -1457,6 +1483,61 @@ def bomb_bay(m, f, s, G, hull):
             m.use("plane")                                 # (her racks stay with her when the bombs go)
             m.rod(at - X * 0.55 + Z * 0.15, Vector((at.x - 0.55, at.y, roof)), 0.025, "gunmetal", sides=4)
             m.use("bombs")
+
+
+BOMB_PROFILE = [(0.0, 0.0), (0.07, 0.07), (0.2, 0.14), (0.4, 0.17), (0.85, 0.17), (1.1, 0.11), (1.24, 0.05)]      # (a bomb from its tail: as the racks hold them)
+
+
+def upright_bombs(f, hull, x0, x1, lo):
+    """Where the nose of each of her upright bombs is (UPRIGHT): each 1.24 m long, its tail a hand above her doors, the
+    row along her keel in the middle of her bay."""
+    n = UPRIGHT[f.name][0]
+    xm, pitch = 0.5 * (x0 + x1), min(0.4, (x0 - x1 - 0.3) / max(n, 1))
+    nose = hull.at(xm, lo).z + 0.05 + 1.24
+    return [Vector((xm + ((n - 1) / 2.0 - k) * pitch, 0.0, nose)) for k in range(n)]
+
+
+def turned_torpedo(m, f, s, G, hull, xm, lo):
+    """Her bay torpedo (TURNED_TORPEDO) in the middle of her bay, a hand above her doors' hinges: its body ringed as the
+    game rings a body under a machine, the box of its fins a rod."""
+    long, r = f.bay_torpedo
+    around, step, sides = (24, 0.12, 22) if m.fine else s.get("plain_extras", PLAIN_GRAIN)
+    m.use("torpedo")
+    for kind, v in TURNED_TORPEDO[f.name](xm, hull.at(xm, lo).z + r + 0.06, long, r):
+        if kind == "body":
+            body = G["Body"](v[0], v[2])
+            m.skin([[port(body.at(x, 2.0 * math.pi * k / around)) for k in range(around)] for x in body.xs(step)], "torpedo", (True, True))
+        else:
+            m.rod(port(v[0]), port(v[1]), v[2], "torpedo", v[3], sides=sides)
+
+
+def plain_loads(m, f, s, G, hull):
+    """Her loads on her far model (PLAIN_LOADS), where her bay is: her torpedo, or her bombs, at the far grain, in the
+    places the near model hangs them, without the bay's doors or its dark (they drop out through her belly)."""
+    if f.name not in PLAIN_LOADS or not getattr(f, "load_bay", None):
+        return
+    x0, x1 = f.load_bay
+    half = math.radians(f.bay_half)
+    lo = 1.5 * math.pi - half
+    xm = 0.5 * (x0 + x1)
+    if getattr(f, "bay_torpedo", None) and f.name in TURNED_TORPEDO:
+        turned_torpedo(m, f, s, G, hull, xm, lo)
+    m.use("bombs")
+    if f.name in UPRIGHT:
+        for at in upright_bombs(f, hull, x0, x1, lo):
+            m.lathe(at, -Z, BOMB_PROFILE, "bomb", 6)
+        m.use("plane")
+        return
+    xs = [x for x in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= x <= x0 + 1e-4]
+    roof = min(hull.z(-x) - 0.05 * hull.h(-x) for x in xs)
+    wide = abs(hull.at(xm, lo).y)
+    foot_z = hull.at(xm, lo).z
+    rows = max(1, int((x0 - x1 - 0.5) / 1.5))
+    for r in range(rows):
+        x = xm + ((rows - 1) / 2.0 - r) * 1.5
+        for sy in (1.0, -1.0):
+            m.lathe(Vector((x + 0.62, 0.5 * wide * sy, foot_z + 0.45 * (roof - foot_z))), -X, BOMB_PROFILE, "bomb", 6)
+    m.use("plane")
 
 
 # The machines whose flaps are full of holes (they were opened as brakes in the dive, and the holes kept her tail from
