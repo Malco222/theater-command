@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 78b1658e 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of d52d6377 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -391,6 +391,31 @@
     /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
     spread: 4,
     apart: 10,
+    /**
+     * Overrun (release 2; Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them";
+     * the design director, 05:48Z): with LandBattle.escort on, a tank block fighting a foot block in the open, with its own
+     * foot within LAND.alone.near and no enemy weapon that can hurt a tank by direct fire in its own reach of the way,
+     * drives through that block's ground to its far edge and backs out to its place: once per foot block per contact
+     * (until the block breaks or no tank of the enemy is in reach of it), every side, staffs and player alike. Not where the
+     * foot carries its own anti-tank weapon. Harm unchanged (b418): the overrun is a picture of losses the rules already
+     * take (the men taken from that block while a tank is on its ground die under her tracks, Drill.thin); the blows
+     * between the two are struck as between blocks standing face to face. 'reverse': its pace backing out, a share of its
+     * pace forward. 'at': from when to when a nation's foot carries its own anti-tank weapon, [from, to) as the year and
+     * twelfths (the design director: looks gating only until the historian checks the dates on resumption; the
+     * Commonwealth's foot carries Britain's): the US bazooka from November 1942; Britain's Boys rifle 1939-42, then the
+     * PIAT; Germany's anti-tank rifles 1939-42, the Panzerschreck and Panzerfaust from late 1943; the Soviet anti-tank
+     * rifles from 1941. Japan, Italy and the rest none until the historian names one.
+     */
+    overrun: {
+      reverse: 0.5,
+      at: {
+        USA: [[1942 + 10 / 12, 9999]],
+        UK: [[1939, 9999]],
+        GER: [[1939, 1943], [1943 + 9 / 12, 9999]],
+        SOV: [[1941, 9999]]
+      },
+      commonwealth: ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"]
+    },
     /**
      * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
      * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
@@ -7348,10 +7373,12 @@
       /**
        * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
        * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
-       * clearOfVehicles, thin; DRILL.escort). Looks only: the drill reads it, the fight never. Off unless turned on (the
-       * bridge's { escort: true }, the Battle rules card's Infantry with tanks row).
+       * clearOfVehicles, thin; DRILL.escort). Off unless turned on (the bridge's { escort: true }, the Battle rules card's
+       * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
        */
       __publicField(this, "escort", false);
+      /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
+      __publicField(this, "overrun", /* @__PURE__ */ new Map());
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
       __publicField(this, "litters", /* @__PURE__ */ new Map());
       /**
@@ -9503,6 +9530,7 @@
       const at = () => new Map(this.units.map((u) => [u.id, [u.x, u.y]]));
       const before = this.cutters && this.hedges.length ? at() : null;
       const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === "att" && u.kind === "arm" && live2(u)).map((u) => [u, u.x, u.y]) : null;
+      if (this.escort) this.overruns();
       for (const u of this.units) if (live2(u)) this.move(u);
       const moved = before ? at() : null;
       this.spread();
@@ -9546,6 +9574,7 @@
         const pl = a.w / 2 + b.w / 2 * c + b.d / 2 * s - Math.abs(lat);
         const pd = a.d / 2 + b.w / 2 * s + b.d / 2 * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
         if (pl <= 0 || pd <= 0) continue;
+        if (a.side !== b.side && this.inOverrun(a, b)) continue;
         if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
           const into = (u, ox, oy) => u.pressing !== void 0 && ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) > 0;
           const pa = into(a, dx, dy), pb = into(b, -dx, -dy);
@@ -9673,6 +9702,117 @@
       this.toldShift = true;
       this.say({ what: "land:reserve", unit: toward.id, side: toward.side, text: `Your ${this.named(toward)} reports movement behind the enemy line, shifting toward it.`, x: toward.x, y: toward.y });
     }
+    // ---- Overrun (release 2) -------------------------------------------------------------------------------------------
+    //
+    // Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them"; the design director,
+    // 05:48Z: through the block's ground to its far edge and back, once per foot block per contact, open ground only, no
+    // enemy weapon that can hurt a tank in its own direct-fire reach of the way, the foot's own anti-tank weapon counted,
+    // harm unchanged. LAND.overrun.
+    /** Whether one of the two is driving through the other's ground. */
+    inOverrun(a, b) {
+      return a.ovr?.on === b.id || b.ovr?.on === a.id;
+    }
+    /** Whether a block's foot carries its own anti-tank weapon in the battle's month (LAND.overrun.at, by its army). */
+    ownAntiTank(u) {
+      const O = LAND.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
+      const nat = O.commonwealth.includes(u.nat) ? "UK" : u.nat;
+      return (O.at[nat] ?? []).some(([from, to]) => when >= from && when < to);
+    }
+    /**
+     * How far an enemy block's weapons that can hurt a tank reach by direct fire (null: none): a tank block's reach, a
+     * gun's over open sights, a fort's, foot with its own anti-tank weapon its reach. Support teams' bullets and bombs: none.
+     */
+    tankReach(e) {
+      if (e.team) return null;
+      if (e.kind === "arm" || e.kind === "fort") return reachOf(e);
+      if (e.kind === "art") return gunsOf(e).closeAt;
+      if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
+      return null;
+    }
+    /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */
+    overruns() {
+      const foot = (f) => fighting2(f) && LAND.alone.foot.includes(f.kind);
+      for (const [id] of this.overrun) {
+        const f = this.unit(id);
+        if (!f || !fighting2(f) || !this.units.some((e) => e.side !== f.side && e.kind === "arm" && fighting2(e) && this.gap(e, f) <= reachOf(e))) this.overrun.delete(id);
+      }
+      for (const u of this.units) {
+        if (u.ovr || u.kind !== "arm" || u.team || !fighting2(u) || u.state === "wavering" || u.gives || u.fellBack || u.engaged === void 0) continue;
+        if (u.order && u.order.kind !== "attack") continue;
+        const f = this.unit(u.engaged);
+        if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
+        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep || this.ownAntiTank(f)) continue;
+        if (!this.units.some((g) => g.side === u.side && foot(g) && this.gap(u, g) <= LAND.alone.near)) continue;
+        const dx = f.x - u.x, dy = f.y - u.y, len = Math.hypot(dx, dy) || 1;
+        const to = [clamp(f.x + dx / len * (f.d / 2), 5, this.field.w - 5), clamp(f.y + dy / len * (f.d / 2), 5, this.field.h - 5)];
+        const run = dist(u.x, u.y, to[0], to[1]);
+        let open = true;
+        for (let s = 0; s <= run && open; s += 10) {
+          const x = u.x + (to[0] - u.x) * s / Math.max(1, run), y = u.y + (to[1] - u.y) * s / Math.max(1, run), g = groundAt(this.field, x, y);
+          if (!OPEN_GROUND.includes(coverAt(this.field, x, y)) || inRiver(g) || this.onHedge(x, y) || LAND.pace.tracks[g] <= LAND.queue.hard) open = false;
+        }
+        if (!open || this.bocage && this.barredCross(u.x, u.y, to[0], to[1])) continue;
+        const threat = this.units.some((e) => {
+          if (e.side === u.side || e.id === f.id || !fighting2(e)) return false;
+          const r = this.tankReach(e);
+          if (r === null) return false;
+          const ex = e.x - u.x, ey = e.y - u.y, k = clamp((ex * (to[0] - u.x) + ey * (to[1] - u.y)) / Math.max(1, run * run), 0, 1);
+          const near = dist(e.x, e.y, u.x + (to[0] - u.x) * k, u.y + (to[1] - u.y) * k) - (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 4;
+          return near <= r;
+        });
+        if (threat) continue;
+        u.ovr = { on: f.id, to, back: [u.x, u.y], leg: "in" };
+        u.path = [];
+        this.overrun.set(f.id, u.id);
+        const mine = this.ticket[u.side].human, theirs = this.ticket[f.side].human;
+        if (mine || theirs) this.say({ what: "land:overrun", unit: mine ? u.id : f.id, side: mine ? u.side : f.side, text: mine ? `${this.named(u)} drives through the enemy's line.` : `Enemy tanks drive through ${this.named(f)}'s line.`, x: f.x, y: f.y });
+      }
+    }
+    /**
+     * A tank block on its overrun this tick: on through the foot's ground to its far edge, then backing out, facing the
+     * enemy, to where it stood. False when the overrun is over or called off (it broke, wavered, or was ordered away).
+     */
+    drive(u) {
+      const O = u.ovr;
+      if (!fighting2(u) || u.state === "wavering" || u.gives || u.fellBack || u.order && u.order.kind !== "attack") {
+        u.ovr = void 0;
+        return false;
+      }
+      const f = this.unit(O.on);
+      if (O.leg === "in" && (!f || !fighting2(f))) O.leg = "back";
+      const to = O.leg === "in" ? O.to : O.back;
+      const d = dist(u.x, u.y, to[0], to[1]);
+      if (d < 1) {
+        if (O.leg === "back") {
+          u.ovr = void 0;
+          return false;
+        }
+        O.leg = "back";
+        u.speed = 0;
+        u.act = "fight";
+        return true;
+      }
+      const head = bearing(u.x, u.y, to[0], to[1]), on = O.leg === "in";
+      if (on) {
+        if (Math.abs(turn(u.face, head)) > 0.6) {
+          this.turnTo(u, head);
+          u.speed = 0;
+          u.act = "turn";
+          return true;
+        }
+        this.turnTo(u, head);
+      }
+      const g = groundAt(this.field, u.x, u.y);
+      const v = LAND.speed.arm * Math.max(0.12, LAND.pace.tracks[g]) * (on ? 1 : LAND.overrun.reverse);
+      const step = Math.min(d, v * DT), [ax, ay] = ahead(head);
+      u.x = clamp(u.x + ax * step, 5, this.field.w - 5);
+      u.y = clamp(u.y + ay * step, 5, this.field.h - 5);
+      u.speed = step / DT;
+      if (on) u.pressing = head;
+      u.act = "march";
+      u.cover = groundAt(this.field, u.x, u.y);
+      return true;
+    }
     /** Metres between two blocks' edges, roughly. */
     gap(a, b) {
       return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
@@ -9723,7 +9863,7 @@
       const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
       if (rise > LAND.height.over) p *= LAND.height.up;
       else if (rise < -LAND.height.over) p *= LAND.height.down;
-      const aspect = rearguard ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
+      const aspect = rearguard || this.inOverrun(u, t) ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
       const [am, nm] = LAND.aspect[aspect];
       let amx = 1;
       if (this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt)) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
@@ -9879,6 +10019,7 @@
     move(u) {
       const k = u.kind;
       u.pressing = void 0;
+      if (u.ovr && this.drive(u)) return;
       const gave = u.yieldTo !== void 0 ? this.unit(u.yieldTo) : void 0;
       u.yieldTo = void 0;
       let to = null, run = false;
