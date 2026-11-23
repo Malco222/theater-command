@@ -791,6 +791,10 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** Men in lorries (the rules card's row): each lorried man near the eye seated on his lorry's bench, or on his way down
+	 * over her tailboard, and her tailboard dropped as her first man gets down (after the vehicles are posed, before the
+	 * men are updated). */
+	void RideLorries();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

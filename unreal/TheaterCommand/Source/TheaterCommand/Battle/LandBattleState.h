@@ -90,6 +90,13 @@ struct FLandBattleState
 	/** Each vehicle's roof gun manned now (the German MG 34 is drawn only while it is: the tank modeller's rule); true
 	 * where she has no commander drawn. */
 	std::vector<uint8_t> RoofManned;
+	/**
+	 * Men in lorries (the Battle rules card's row "trucks", a live battle's): on, the lorries are drawn with their tilts
+	 * stowed and each man the rules seat in one is shown on her bench, and getting down, as a rider dressed as he is
+	 * (RideLorries, LandBench); his rider by his number in the crowd (-1: none yet, made as he first rides near the eye).
+	 */
+	bool bTrucks = false;
+	std::vector<int> LorryRider;
 
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;

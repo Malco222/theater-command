@@ -294,6 +294,9 @@ namespace LandKit
 		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
 		 * showing at the chipped edges and where the brush missed. Empty: her own. */
 		std::string Captured;
+		/** Swaps chosen over the month's and the nation's (swap group -> choice), where the model has that choice: Men in
+		 * lorries (the Battle rules card's row) carries her men with the Truck's tilt stowed ("tilt" -> "off"). */
+		std::map<std::string, std::string> Force;
 	};
 
 	class Model
@@ -527,6 +530,10 @@ namespace LandKit
 
 		/** A socket's field point and way at the pose now; false if the model has none of that name. */
 		bool SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const;
+		/** Men in lorries (the Battle rules card's row): her way down thrown open at battle time T (her `dismount` clip,
+		 * the tailboard dropped, from T), as her first man gets down; it closes again (the clip backward) as she next moves
+		 * off. Times before the last one given are passed over. Nothing where her model has no `dismount`. */
+		void OpenBoard(double T);
 		/** The same at any battle time (poses her then; a little dearer). */
 		bool SocketAt(const std::string& Name, double T, V3& OutAt, V3& OutFacing) const;
 		/** Every scar (mk) on her, its surface place found; show one from its Word.From. */
@@ -598,6 +605,7 @@ namespace LandKit
 		std::vector<Tick> Ticks;
 		std::vector<double> Shots, MoveOffs, Stops, HeavyHits, Hatch; // times (Hatch: the open/shut changes)
 		std::vector<bool> HatchOpens;
+		std::vector<double> Boards;    // the times her way down was thrown open (OpenBoard)
 		std::vector<Strike> Strikes;
 		std::vector<Timed> Timeline;
 		size_t NextEvent = 0;
@@ -715,6 +723,9 @@ namespace LandKit
 		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
 		 * dressed for it (Dress::Terrain). Read by Load. */
 		std::string Terrain = "plains";
+		/** Men in lorries (the Battle rules card's row): every lorry's model dressed with her tilt stowed (Dress::Force), so
+		 * the men on her benches are seen. Set before Load. */
+		bool bOpenLorries = false;
 		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
 		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
 		std::map<std::string, FireOdds> Fires;

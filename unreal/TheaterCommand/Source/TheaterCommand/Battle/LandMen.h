@@ -407,6 +407,18 @@ namespace LandMen
 		};
 		void SetRide(int Man, const Ride& R);
 		bool IsRider(int Man) const;
+		/**
+		 * Men in lorries (the Battle rules card's row, off unless set): whether man Man (one of the recording's) rides
+		 * aboard a lorry now by his shown stance (alive, the rules' pose mounted, with their word for her and his seat):
+		 * OutBlock his block, OutSeatOn her track's k in it, OutSeat his seat in her bed (0 her front left, 1 her front
+		 * right, 2 the next left ...), and OutDown the battle seconds since his turn to get down over her tailboard came
+		 * (the rules' word: each man his own time, her rear seats first), or -1 while he sits. Such a man is not drawn himself (under her canvas, Visible): the scene shows a rider dressed as
+		 * he is (AddRiderLike) on her bench and getting down, until his stance leaves mounted and he is drawn again.
+		 */
+		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat, double& OutDown) const;
+		/** A rider (AddRider, appended after the men there are) dressed as man Man is: his soldier file, colours, face,
+		 * helmet and patches. -1 where Man is not one of the recording's men. */
+		int AddRiderLike(int Man);
 		/** The soldier file added under that name (AddSoldier), or none. */
 		const Soldier* SoldierFile(const std::string& FileArmy) const;
 

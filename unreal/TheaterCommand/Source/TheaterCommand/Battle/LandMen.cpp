@@ -1301,6 +1301,10 @@ namespace LandMen
 			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
 			float Lift = 0.f;               // carried on a stretcher: the canvas's height over the ground, metres
 			bool bUnderCanvas = false;      // riding in a lorry (pose mounted): under her canvas, not drawn (Crowd::Visible)
+			// Men in lorries (the Battle rules card's row): the rules' vehicle (her k in his block) and seat, -1 where not
+			// said; OffAt, the battle time his turn to get down over her tailboard comes (-1: not told to get down)
+			int SeatOn = -1, Seat = -1;
+			double OffAt = -1.0;
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -1352,6 +1356,8 @@ namespace LandMen
 				double T = 0.0;
 				std::string Pose, Cover;
 				bool bHidden = false;
+				int SeatOn = -1, Seat = -1;   // aboard, Men in lorries: his vehicle's k in his block and his seat (-1: not said)
+				double OffAt = -1.0;          // and when his turn to get down over her tailboard comes (-1: not yet told)
 			};
 			std::vector<Change> Ch;
 			double D = -1.0, OutT = -1.0;
@@ -1434,6 +1440,13 @@ namespace LandMen
 					Cg.Pose = C.At(1).Text("idle");
 					Cg.Cover = C.At(2).Text("none");
 					Cg.bHidden = C.At(5).Num0() != 0.0;
+					// (aboard, with Men in lorries on: [..., seatOn, seat] and, told to get down, when his turn comes)
+					if (C.Size() >= 9)
+					{
+						Cg.SeatOn = static_cast<int>(C.At(7).Num0(-1.0));
+						Cg.Seat = static_cast<int>(C.At(8).Num0(-1.0));
+						Cg.OffAt = C.Size() >= 10 ? C.At(9).Num0(-1.0) : -1.0;
+					}
 					Ch.push_back(Cg);
 				}
 			}
@@ -1645,6 +1658,7 @@ namespace LandMen
 			// A rider (a tank's commander in his hatch, Crowd::AddRider): no track; posed each frame by what the scene
 			// says (SetRide).
 			bool bRider = false;
+			int LookTrack = -1;             // a rider dressed as a man of the recording's (AddRiderLike): that man's track, for his patches
 			Crowd::Ride RideNow;
 		};
 
@@ -2051,7 +2065,8 @@ namespace LandMen
 			const Variant& V = *Mn.Var[L];
 			const double A = Mn.WornA;
 			// (a rider has no track: his own seed, PhaseSeed, tells his patches from another rider's)
-			const uint64_t Who = Mn.Track >= 0 ? (static_cast<uint64_t>(static_cast<uint32_t>(Mn.Track)) << 20) ^ 0xA6EDull
+			const int LookOf = Mn.Track >= 0 ? Mn.Track : Mn.LookTrack;
+			const uint64_t Who = LookOf >= 0 ? (static_cast<uint64_t>(static_cast<uint32_t>(LookOf)) << 20) ^ 0xA6EDull
 				: static_cast<uint64_t>(static_cast<double>(Mn.PhaseSeed) * 4294967296.0) ^ 0xB1DEull;
 			auto Ratio = [](uint32_t To, uint32_t From, double Value, float* Out) {
 				for (int K = 0; K < 3; ++K)
@@ -3806,6 +3821,9 @@ namespace LandMen
 				}
 				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving);
 				St.T = Cg.T;
+				St.SeatOn = Cg.SeatOn;
+				St.Seat = Cg.Seat;
+				St.OffAt = Cg.OffAt;
 				St.Cover = Cg.Cover;
 				St.bMoving = bMoving;
 				if (C < Mn.Stances.size()) Mn.Stances[C] = std::move(St);
@@ -4072,8 +4090,9 @@ namespace LandMen
 				});
 			});
 		};
-		// (his changes, [t, pose, cover, aimX, aimY, hidden, buttoned] each, as TrackData::ReadChanges reads them)
-		Scan::Plain Item[6];
+		// (his changes, [t, pose, cover, aimX, aimY, hidden, buttoned] each, and aboard [..., seatOn, seat, off], as
+		// TrackData::ReadChanges reads them)
+		Scan::Plain Item[10];
 		auto ReadChanges = [&]() {
 			return In.Items([&](size_t) {
 				TrackData::Change Cg;
@@ -4082,7 +4101,7 @@ namespace LandMen
 				bool bOk = true;
 				if (!In.AtList()) bOk = In.Skip();
 				else bOk = In.Items([&](size_t K) {
-					Scan::Plain& Into = K < 6 ? Item[K] : V;
+					Scan::Plain& Into = K < 10 ? Item[K] : V;
 					if (!In.Value(Into)) return false;
 					bAllNumbers = bAllNumbers && Into.K == J::Num;
 					return true;
@@ -4092,6 +4111,12 @@ namespace LandMen
 				Cg.Pose = Item[1].Text("idle");
 				Cg.Cover = Item[2].Text("none");
 				Cg.bHidden = Item[5].Num0() != 0.0;
+				if (Item[7].K == J::Num && Item[8].K == J::Num)
+				{
+					Cg.SeatOn = static_cast<int>(Item[7].N);
+					Cg.Seat = static_cast<int>(Item[8].N);
+					Cg.OffAt = Item[9].K == J::Num ? Item[9].N : -1.0;
+				}
 				Chs.push_back(std::move(Cg));
 				return bOk;
 			});
@@ -4961,6 +4986,70 @@ namespace LandMen
 	bool Crowd::IsRider(int Man) const
 	{
 		return Man >= 0 && Man < Count() && Inner->Men[static_cast<size_t>(Man)].bRider;
+	}
+
+	bool Crowd::AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat, double& OutDown) const
+	{
+		OutBlock = OutSeatOn = OutSeat = -1;
+		OutDown = -1.0;
+		if (Man < 0 || Man >= Count()) return false;
+		const Impl& I = *Inner;
+		const Impl::Man& M = I.Men[static_cast<size_t>(Man)];
+		if (M.bRider || M.State != Impl::Man::Alive || M.Shown < 0 || static_cast<size_t>(M.Shown) >= M.Stances.size()) return false;
+		const Stance& St = M.Stances[static_cast<size_t>(M.Shown)];
+		if (!St.bUnderCanvas || St.SeatOn < 0 || St.Seat < 0) return false;
+		OutBlock = M.Info.Block;
+		OutSeatOn = St.SeatOn;
+		OutSeat = St.Seat;
+		// (on his own clock, a little behind the battle's: his Delay)
+		if (St.OffAt >= 0.0 && I.Clock - M.Info.Delay >= St.OffAt) OutDown = I.Clock - M.Info.Delay - St.OffAt;
+		return true;
+	}
+
+	int Crowd::AddRiderLike(int Man)
+	{
+		Impl& I = *Inner;
+		if (!I.bBuilt || Man < 0 || Man >= Count()) return -1;
+		// (his look taken before the crowd grows: a man is made in place, and the men may move)
+		const Impl::Man& From = I.Men[static_cast<size_t>(Man)];
+		if (From.bRider || !From.S || !From.Colours) return -1;
+		const Soldier* S = From.S;
+		const ArmyColours* Colours = From.Colours;
+		const ArmyColours* Fresh = From.Fresh;
+		const float WornA = From.WornA, PhaseSeed = From.PhaseSeed, StylePick = From.StylePick;
+		const int Track = From.Track;
+		ManInfo Info = From.Info;
+		const Variant* Var[LodCount];
+		const FaceRest* FaceAt[LodCount];
+		for (int L = 0; L < LodCount; ++L)
+		{
+			Var[L] = From.Var[L];
+			FaceAt[L] = From.FaceAt[L];
+		}
+		Impl::Man& Mn = I.Men.emplace_back();
+		Mn.bRider = true;
+		Mn.Track = -1;
+		Mn.LookTrack = Track;
+		Mn.S = S;
+		Mn.Colours = Colours;
+		Mn.Fresh = Fresh;
+		Mn.WornA = WornA;
+		Mn.Info = std::move(Info);
+		Mn.Info.Block = -1;
+		Mn.Info.K = -1;
+		Mn.Info.Role = "rider";
+		Mn.Info.Dead = Mn.Info.Out = -1.0;
+		Mn.Info.Delay = 0.0;
+		Mn.PhaseSeed = PhaseSeed;
+		Mn.StylePick = StylePick;
+		Mn.bVisible = false;
+		RestPose(Mn.Now);
+		for (int L = 0; L < LodCount; ++L)
+		{
+			Mn.Var[L] = Var[L];
+			Mn.FaceAt[L] = FaceAt[L];
+		}
+		return static_cast<int>(I.Men.size()) - 1;
 	}
 
 	const Soldier* Crowd::SoldierFile(const std::string& FileArmy) const

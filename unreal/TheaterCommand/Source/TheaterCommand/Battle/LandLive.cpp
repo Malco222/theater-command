@@ -97,6 +97,12 @@ namespace
 		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
 		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
+		// (Men in lorries, release 1.5: Brian, 23 November 14:10Z, "troops are stuck under the truck", and 15:50Z "yes" to the
+		// ride and the hop out in 1.5 if it passes the pre-check and his Mac in time. The drill seats each lorried man on
+		// her benches and has them get down one at a time (sim.trucks); the 3D seats a man dressed as each on her bench,
+		// her tilt stowed, and walks him to the tailboard and down. Off until the Mac's shots and 45 fps pass it;
+		// -TheaterLandRuleTrucks turns it on for a run.)
+		{ TEXT("trucks"), TEXT("Men in lorries"), TEXT("Lorried infantry ride on the benches in the back of their lorries, the canvas rolled away, and get down over the tailboard one at a time. Off: they ride out of sight under the canvas and all get down at once."), TEXT("TheaterLandNoTrucks"), false, TEXT("TheaterLandRuleTrucks") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 		// (release 1.5, Brian 23 Nov 06:35Z "yes 1 and 2 for 1.5": the campaign's weather word on the field, off until the art
 		// director's stills and 45 fps pass it; -TheaterLandRuleWetMud turns it on for a run. The 3D's -TheaterLandWeatherWord=
