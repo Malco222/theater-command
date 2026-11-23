@@ -80,6 +80,11 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       if (why) return { ticket: null, why };
       const ticket: typeof t = { ...t };
+      // Scarred ground: the battles fought here before this one, and the months since the last, for the field to be laid
+      // already torn up; absent where none has been. Old ruts: of those, the ones fought in the mud.
+      const scar = g.scars?.[to];
+      if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g.turn - scar.last) };
+      if (scar?.mudN && scar.mudLast !== undefined) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g.turn - scar.mudLast) };
       // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only. The land
       // rules send it to the 3D game only with the Battle rules card's "Wet mud" row on.
       const wx = groundWeather(g, g.regions[to]);

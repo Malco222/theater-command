@@ -1175,6 +1175,13 @@ export interface Game {
   human: string | null;
   reports: BattleReport[];
   headlines: Headline[];
+  /**
+   * Scarred ground (release 2, in release 1.5 for its looks): for each region a land battle was fought in, how many have
+   * been fought there and the month of the last, and of those how many in the mud and the month of the last of them
+   * (mud memory), so a battle there is fought over ground already torn up. Kept apart from the reports, which a save
+   * keeps only the last of. Absent until the first battle. Nothing in the war reads it.
+   */
+  scars?: Record<number, { n: number; last: number; mudN?: number; mudLast?: number }>;
   flags: Record<string, number>;
   supplyDirty: boolean;
   /** Regions each nation can draw supply in, rebuilt when the map changes. */

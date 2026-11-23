@@ -2232,6 +2232,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
+  // (scarred ground, looks only: one more battle fought over this region, this month; a walk-in where the defenders
+  // gave ground fought none, so it leaves none)
+  const scar = (g.scars ??= {})[target.id];
+  const muddy = groundWeather(g, target) === 'mud';
+  g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
+  // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
+  if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
