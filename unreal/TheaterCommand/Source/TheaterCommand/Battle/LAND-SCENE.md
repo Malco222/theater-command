@@ -642,21 +642,32 @@ for fall and skin for skin the same as with none).
   the twin's mesh, faces and helmets with the file's own clips and sockets, the gore falls after them, so a man swapped
   to it mid-battle keeps every clip number he had. A twin with no gore falls is passed over, and said in the log.
 - **Who.** A man killed by a field gun's or a howitzer's shell, a tank's gun, a mortar's bomb or a grenade
-  (`KillWeapon`), by how far he stood from its burst (the round's x, y, as the drill writes a shell's): 0.55, 0.5, 0.45
-  and 0.3 of them at the burst, falling away to none at 12, 10, 8 and 4 m; a man lying or in cover half that. His own
-  dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to his file's twin
-  (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore falls by the same
-  weights as any fall (a shell's: thrown, mostly). A replay from the start gives him his own file back.
+  (`KillWeapon`), by how far he stood from its burst (the round's x, y, as the drill writes a shell's). The art
+  director's round 1 (23 Nov 17:52Z): rarer and stronger, about 1 shell kill in 8 to 10. Within 2 m of the burst 0.55
+  of them for a gun's shell, 0.35 for a tank's or a mortar's, 0.25 for a grenade's, falling away by e every 1.5 m past
+  2 m to none past 8 m (gun), 6 m (tank, mortar) or 2 m (grenade). The rules lay most bursts on the man they kill (8 in
+  10 shell kills read 0 m), which says nothing of how close the shell truly fell: such a man 0.2 (gun) or 0.12. A man
+  lying or in cover half that. Measured on the rules' Normandy and Prokhorovka, shell blasts off and on: 1 shell kill
+  in 7.6 to 11. His own dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to
+  his file's twin (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore
+  falls. Which side: where the burst was 1.5 m or more off, by its side against his facing (front, back, side, so a
+  fall of kind `back` throws him away from a burst in front of him); nearer, by the gun's. The big throw (`thrown`,
+  `die_blast_*`) is a field gun's or a howitzer's; a tank's, a mortar's or a grenade's mostly knocks him down an arm or
+  a leg short. A replay from the start gives him his own file back.
 - **The scene.** His mesh's number changes at the swap (`Crowd::MeshNo`); `DrawMen` then makes his triangles and
   colours again, as for a new level (`FManDrawn::MeshNo`). His fall's `limb_off` events come with the rest of the men's
   (`Crowd::Events`, at the stump's socket); no blood is drawn from them yet (Brian has not ruled on blood).
 - **Cost.** A gored man is posed and skinned as any falling man; at rest he is frozen as any body. The twins are read
   only with the switch on (about 6 MB of json each).
-- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above, and
-  `gore_falls.ppm`, six gored men from the hit to rest. Pictures: `/mnt/project-files/battle-fx/gore/`.
+- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above (with
+  rifle never, none past reach, nearer more often, the man a burst was laid on less often than one within 2 m, the
+  burst's side), a note for each limb resting under 1 m from its joint, and `gore_falls.ppm`, six gored men from the hit
+  to rest, no army's clip twice. Pictures: `/mnt/project-files/battle-fx/gore/`.
 - **Owed.** Twins made from the soldier files as they are now (the ones made on 22 November predate the faces' and
   eyes' rebuild, so a man would change face as he is struck), and twins with gore falls for every army (today only the
-  German and the Americans'; the British, French, Polish and Soviet twins have no gore falls yet).
+  German and the Americans'; the British, French, Polish and Soviet twins have no gore falls yet). The art director's
+  clip notes with the re-make: limbs in a low arc (1 to 3 m up, 2 to 8 m out, tumbling, settling flat), the shove and
+  half-turn on the hit frame, throws by calibre with a slide on landing, each kind's throw by its side.
 
 ## Packaging
 
