@@ -15,7 +15,7 @@
 //                                             | null (a film). staff and radio (direct command) are on unless false
 //   TC.landStartTicket(look, opts)         -> the same header for a campaign battle (release 2, switched): the campaign's
 //                                             TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears,
-//                                             sky } }) or a bare ticket, opts as landStart's (and any of live's, which they
+//                                             sky, latLon } }) or a bare ticket, opts as landStart's (and any of live's, which they
 //                                             override); the last delta's over goes back to TC.battleSettleLand
 //   TC.landResult()                        -> { over }: the battle's result once it is over (null before), as the
 //                                             campaign's TC.battleSettleLand takes it; the battle is kept
@@ -49,7 +49,7 @@
 // Nothing here decides anything about the fight.
 
 import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
-import { LiveBattle, livePiece, liveTicket, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
+import { LiveBattle, livePiece, liveTicket, ticketSky, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
 import { PIECES } from '../../../src/battle/land/pieces';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
@@ -88,19 +88,22 @@ function need(): LiveBattle {
    * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
    */
   landStartTicket(
-    ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+    ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> & { latLon?: [number, number] } },
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky; latLon?: [number, number] } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
     const ticket = look ? look.ticket : (ticketOrLook as FieldTicket<LandPlace>);
     const o = { ...(look?.live ?? {}), ...(opts ?? {}) };
+    // (release 1.5: the place on the earth the campaign's card sends, live.latLon, so the 3D game lays the field the
+    // card weighed, desert or steppe or bocage, under that latitude's sun; without it, as before)
+    const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(ticket), latLon: o.latLon } : undefined);
     live = liveTicket(ticket, {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
       phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false,
-      fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
+      fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(sky ? { sky } : {}),
     });
     return live.header();
   },

@@ -1,0 +1,20 @@
+# Release 1.5: the battlefields where the attack card offers FIGHT IT YOURSELF.
+#
+# Brian, 23 November 05:18Z: a battlefield is offered only once it has passed its Mac still, 45 frames a second and the
+# art director. Everywhere else the card offers SEND THEM IN only (no button, no failed press).
+#
+# One look a line, as the land battle picks it from the region's latitude, longitude, terrain and month
+# (LandScape::Pick): bocage, farmland, desert, med, drysteppe, steppe, jungle, island. Snow lying adds "+snow", so
+# "farmland+snow" is its own line. "#" starts a note; "*" offers every look. Read each time an attack card opens;
+# no rebuild needed. Launch with -TheaterFightEveryLook to offer every look whatever this file says (the Mac's runs).
+#
+# The game's log names the look of every card: "FIGHT IT YOURSELF offered at <region> (<look>)" or "... not offered ...".
+
+bocage
+
+# Due this week, once each passes (Mac still, 45 fps, art director):
+# farmland
+# farmland+snow
+# desert
+# med
+# drysteppe

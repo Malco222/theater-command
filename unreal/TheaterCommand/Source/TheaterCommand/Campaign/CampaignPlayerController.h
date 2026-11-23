@@ -5,6 +5,8 @@
 #include "Campaign/CampaignView.h"
 #include "CampaignPlayerController.generated.h"
 
+class FCampaignMapData;
+
 class ACampaignMapActor;
 class ACampaignCameraPawn;
 class AArmyPiece;
@@ -401,6 +403,17 @@ struct FFaceOff
 	bool bVisible = false;
 	bool bResolved = false;
 	int32 Region = INDEX_NONE;
+	/**
+	 * (Release 1.5, Brian 23 November 05:18Z) Whether FIGHT IT YOURSELF is offered on this card, worked out once when it is
+	 * first asked (WeighFieldOffer): -1 not yet, 0 no, 1 yes. Offered only where the battlefield's look has passed its Mac
+	 * still, 45 fps and the art director (Content/Rules/fight-yourself-looks.txt) and the field can fight this attack;
+	 * everywhere else the card offers SEND THEM IN only, with no button and no failed press.
+	 */
+	int32 FieldOffer = -1;
+	/** The battlefield's look as the land battle will pick it: "bocage", "farmland+snow", "desert", ... */
+	FString FieldLook;
+	/** The corps FieldOffer was weighed for: a change of pick on the open card weighs it again. */
+	TArray<int32> FieldPicks;
 	FText Title;
 	FText OurName;
 	FText TheirName;
@@ -1067,6 +1080,12 @@ public:
 	 */
 	bool CanFightLive() const;
 	void FightLive();
+	/** (Release 1.5) The look of the land a battle for this region is fought on, this month, as LandScape::Pick lays it,
+	 * with "+snow" where snow lies (LandScape::SnowOf a quarter or more). */
+	static FString FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn);
+	/** (Release 1.5) Whether a look has passed (Content/Rules/fight-yourself-looks.txt, one look a line; bocage alone
+	 * where the file is missing). -TheaterFightEveryLook offers every look (the Mac's per-theatre runs). */
+	static bool FieldLookPassed(const FString& Look);
 	/** True while his own battle is open: the map takes no order, key or month's end until it is handed back. */
 	bool IsFightingLive() const { return LiveBattle.IsValid(); }
 	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
@@ -1263,6 +1282,8 @@ private:
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
 
 	FFaceOff FaceOff;
+	/** Works out FaceOff.FieldOffer, once a card and pick (CanFightLive). */
+	void WeighFieldOffer();
 	FWarPrompt WarPrompt;
 	FLedger Ledger;
 	bool bLedgerOpen = false;

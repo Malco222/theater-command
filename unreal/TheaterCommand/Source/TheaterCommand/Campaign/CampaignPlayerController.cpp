@@ -16,6 +16,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Battle/LandBattle.h"
+#include "Battle/LandField.h"
+#include "Battle/LandScape.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Layout/WidgetPath.h"
 #include "HAL/IConsoleManager.h"
@@ -26,6 +28,8 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/Parse.h"
 
 namespace
@@ -9960,8 +9964,105 @@ void ACampaignPlayerController::ResolveAttack()
 bool ACampaignPlayerController::CanFightLive() const
 {
 	// (a plain attack on the card, ready to go in: not a march, a storm, or a sortie, and a pick that can go)
-	return ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bMarch && !FaceOff.bStorm
+	const bool bPlain = ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bMarch && !FaceOff.bStorm
 		&& !FaceOff.bSally && FaceOff.Alone.IsEmpty() && PickedCorps.Num() > 0 && !LiveBattle.IsValid();
+	if (!bPlain)
+	{
+		return false;
+	}
+	// (release 1.5, Brian 23 November 05:18Z: only on a battlefield that has passed, and only where the field can fight it;
+	// worked out once a card, the first time it is asked)
+	if (FaceOff.FieldOffer < 0 || FaceOff.FieldPicks != PickedCorps)
+	{
+		const_cast<ACampaignPlayerController*>(this)->WeighFieldOffer();
+	}
+	return FaceOff.FieldOffer > 0;
+}
+
+FString ACampaignPlayerController::FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn)
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return FString();
+	}
+	const FCampaignRegion& R = Data.Regions[RegionId];
+	LandField::Field F;
+	F.Lat = Data.LatitudeAt(R.Center.Y);
+	double Lon = Data.LongitudeAt(R.Center.X);
+	while (Lon > 180.0) Lon -= 360.0;
+	while (Lon < -180.0) Lon += 360.0;
+	F.Lon = Lon;
+	F.Terrain = TCHAR_TO_UTF8(*R.Terrain.ToLower());
+	F.Month = (8 + FMath::Max(1, Turn) - 1) % 12 + 1; // (turn 1 is September 1939)
+	const LandScape::Look L = LandScape::Pick(F);
+	FString Word = UTF8_TO_TCHAR(LandScape::NameOf(L));
+	if (LandScape::SnowOf(F, L) >= 0.25)
+	{
+		Word += TEXT("+snow");
+	}
+	return Word.ToLower();
+}
+
+bool ACampaignPlayerController::FieldLookPassed(const FString& Look)
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterFightEveryLook")))
+	{
+		return true;
+	}
+	TArray<FString> Lines;
+	const FString File = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Rules"), TEXT("fight-yourself-looks.txt"));
+	if (!FFileHelper::LoadFileToStringArray(Lines, *File))
+	{
+		return Look == TEXT("bocage"); // (the list as Brian left it on 23 November: the bocage alone)
+	}
+	for (FString Line : Lines)
+	{
+		int32 Hash = INDEX_NONE;
+		if (Line.FindChar(TEXT('#'), Hash))
+		{
+			Line.LeftInline(Hash);
+		}
+		Line.TrimStartAndEndInline();
+		if (!Line.IsEmpty() && (Line == TEXT("*") || Line.Equals(Look, ESearchCase::IgnoreCase)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ACampaignPlayerController::WeighFieldOffer()
+{
+	FaceOff.FieldOffer = 0;
+	FaceOff.FieldPicks = PickedCorps;
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || PickedCorps.Num() == 0)
+	{
+		return;
+	}
+	if (FaceOff.FieldLook.IsEmpty())
+	{
+		FaceOff.FieldLook = FieldLookAt(Map->GetData(), FaceOff.Region, Session->GetView().Turn);
+	}
+	if (!FieldLookPassed(FaceOff.FieldLook))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF not offered at %d: its battlefield (%s) has not passed yet; SEND THEM IN only"), FaceOff.Region, *FaceOff.FieldLook);
+		return;
+	}
+	// (the field must be able to fight this attack: a ticket, and not a kind of place the staff still settles)
+	const FString IdsText = FString::JoinBy(PickedCorps, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+	FString LookText, LookError;
+	TSharedPtr<FJsonObject> LookAnswer;
+	const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+	if (!Session->CallBattle(TEXT("battleLook"), FString::Printf(TEXT("[[%s],%d]"), *IdsText, FaceOff.Region), LookText, LookError)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(LookText), LookAnswer) || !LookAnswer.IsValid()
+		|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF not offered at %d (%s): no field battle to fight here %s"), FaceOff.Region, *FaceOff.FieldLook, *LookError);
+		return;
+	}
+	FaceOff.FieldOffer = 1;
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF offered at %d (%s)"), FaceOff.Region, *FaceOff.FieldLook);
 }
 
 void ACampaignPlayerController::FightLive()
@@ -10002,6 +10103,29 @@ void ACampaignPlayerController::FightLive()
 	}
 	double TicketSeed = 0.0;
 	(*LookTicket)->TryGetNumberField(TEXT("seed"), TicketSeed);
+	// (release 1.5) The place on the earth, for the land rules' sky: the battle is laid on the look the card weighed
+	// (LandScape::Pick from its latitude and longitude) under that latitude's sun, not Normandy's.
+	if (Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		const FCampaignMapData& Data = Map->GetData();
+		const FVector2D At = Data.Regions[RegionId].Center;
+		double Lon = Data.LongitudeAt(At.X);
+		while (Lon > 180.0) Lon -= 360.0;
+		while (Lon < -180.0) Lon += 360.0;
+		const TSharedPtr<FJsonObject>* Live = nullptr;
+		TSharedPtr<FJsonObject> LiveObject = LookAnswer->TryGetObjectField(TEXT("live"), Live) && Live && Live->IsValid() ? *Live : MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> LatLon;
+		LatLon.Add(MakeShared<FJsonValueNumber>(FMath::RoundToDouble(Data.LatitudeAt(At.Y) * 100.0) / 100.0));
+		LatLon.Add(MakeShared<FJsonValueNumber>(FMath::RoundToDouble(Lon * 100.0) / 100.0));
+		LiveObject->SetArrayField(TEXT("latLon"), LatLon);
+		LookAnswer->SetObjectField(TEXT("live"), LiveObject);
+		FString Placed;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Placed);
+		if (FJsonSerializer::Serialize(LookAnswer.ToSharedRef(), Writer))
+		{
+			LookText = Placed;
+		}
+	}
 	ALandBattle* Field = Here->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
 	if (!Field)
 	{
