@@ -5412,7 +5412,6 @@ namespace LandKit
 					W.Role = Role;
 					W.Model = Man["ml"].Str("");
 					ReadSwaps(Man["sw"], W.Swaps);
-			ReadSwaps(Man["sw"], W.Swaps);
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
