@@ -195,10 +195,9 @@ void ACampaignPlayerController::AskGrandNations()
 		Opening.bWorking = false;
 		return;
 	}
-	FString Shots;
-	if (bScripted || !TheaterSpeed::NationsAside() || FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false))
+	if (bScripted || !TheaterSpeed::NationsAside() || TheaterSpeed::PictureRun())
 	{
-		// At once, as before (and always in a run that takes pictures, whose opening screen is pictured as it was).
+		// At once, as before (and always in a run that only takes pictures, whose opening screen is pictured as it was).
 		Opening.bWorking = false;
 		LoadGrandNations();
 		++Opening.Revision;
@@ -607,8 +606,7 @@ void ACampaignPlayerController::PickGrandYear(int32 Index, bool bAtOnce)
 	}
 	Opening.YearIndex = Index;
 	++Opening.Revision;
-	FString Shots;
-	if (!bAtOnce && !bScripted && TheaterSpeed::NationsAside() && !FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false))
+	if (!bAtOnce && !bScripted && TheaterSpeed::NationsAside() && !TheaterSpeed::PictureRun())
 	{
 		// (Release 2, tc.Speed.NationsAside) Said at once, and worked out on the rules' own thread: the screen stays live.
 		AskGrandNations();
@@ -803,11 +801,9 @@ void ACampaignPlayerController::BeginWar(TFunction<bool(ACampaignGameMode&)>&& S
 		return; // (a war is already being begun)
 	}
 	bNationsAsked = false; // (tc.Speed.NationsAside: a war begun or read in drops a list still being worked out; the screen asks again when it next opens)
-	FString Shots;
-	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
-	if (!TheaterSpeed::WarSpread() || bScripted || bPictures)
+	if (!TheaterSpeed::WarSpread() || bScripted || TheaterSpeed::PictureRun())
 	{
-		// At once, as before (and always in a run that takes pictures, which looks at the war the moment it is begun).
+		// At once, as before (and always in a run that only takes pictures, which looks at the war the moment it is begun).
 		if (Start(*Mode))
 		{
 			if (bFresh)
@@ -5694,7 +5690,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 
 	// History being played for the opening screen: the screen has said so for a few frames; now do it. (With
 	// tc.Speed.NationsAside it is being worked out on the rules' own thread instead, and laid when it is in.)
-	if (Opening.bWorking && !bNationsAsked && (bScripted || !TheaterSpeed::NationsAside() || FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr) && ++WorkingFrames >= 3)
+	if (Opening.bWorking && !bNationsAsked && (bScripted || !TheaterSpeed::NationsAside() || TheaterSpeed::PictureRun()) && ++WorkingFrames >= 3)
 	{
 		Opening.bWorking = false;
 		LoadGrandNations();
@@ -9347,7 +9343,7 @@ bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn
 	}
 	Opening.AskKind = 0;
 	BeginGrandCampaign(false);
-	return !Opening.bVisible;
+	return !Opening.bVisible || WarDue || bEnterWhenLaid; // (tc.Speed.WarSpread: a war being laid under the plate is begun; the step player waits for it)
 }
 
 FString ACampaignPlayerController::StepState() const

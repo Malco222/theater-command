@@ -535,6 +535,12 @@ namespace TheaterSpeed
 		return CVarPicturesAside.GetValueOnGameThread() != 0;
 	}
 
+	bool PictureRun()
+	{
+		const TCHAR* Line = FCommandLine::Get();
+		return FCString::Strifind(Line, TEXT("TheaterShots=")) != nullptr && FCString::Strifind(Line, TEXT("TheaterSteps=")) == nullptr;
+	}
+
 	double TreesSpread()
 	{
 		return FMath::Clamp(static_cast<double>(CVarTreesSpread.GetValueOnGameThread()), 0.0, 1000.0);

@@ -16542,7 +16542,7 @@ namespace
 			// arsenal, a province's raise list, opened for the first time) took them all in the press's frame. The card
 			// now stands at once, each picture's place kept at its size, and the pictures are taken one a frame after it
 			// (TakeOwedPortrait), each laid in its place as it is taken. A run that takes pictures takes them at once.
-			static const bool bPictureRun = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr;
+			static const bool bPictureRun = TheaterSpeed::PictureRun(); // (a step run's pictures are a player's: see PictureRun)
 			if (Table && TheaterSpeed::PicturesAside() && !bPictureRun && !Table->HasPortrait(Model, bLarge))
 			{
 				Made = MakeShared<FSlateBrush>();

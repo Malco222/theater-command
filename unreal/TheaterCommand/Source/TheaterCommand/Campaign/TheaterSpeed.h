@@ -242,6 +242,15 @@ namespace TheaterSpeed
 	bool SaveAside(); // (tc.Speed.SaveAside) the month's save written out off the game thread: false in the month's frames, as before
 	bool NationsAside(); // (tc.Speed.NationsAside) the opening screen's countries worked out on the rules' thread: false in the press's frame, as before
 	bool PicturesAside(); // (tc.Speed.PicturesAside) a card's unit pictures not yet taken are taken one a frame after it stands: false all in its frame, as before
+	/**
+	 * A run that only takes pictures ("-TheaterShots=<folder>" with no "-TheaterSteps="): the photographer arranges each
+	 * picture the moment it asks, so the switches above that spread a press over frames (WarSpread, NationsAside,
+	 * PicturesAside) keep it at once there. A step run puts its pictures in a -TheaterShots= folder too, but its step
+	 * player waits while the table is busy (IsBusyForSteps, a war being laid or a list being worked out among it), so it
+	 * plays them as a player meets them: the Mac's A/B of each switch is a step run. (Map run 9, 23 November: with this
+	 * read as any -TheaterShots= run, WarSpread's B laid the war at once and could not be measured.)
+	 */
+	bool PictureRun();
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would
