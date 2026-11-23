@@ -229,10 +229,12 @@ void ACampaignPlayerController::AskGrandNations()
 			Screen.bWorking = false;
 			++Screen.Revision;
 		}
-		else if (Screen.bWorking)
+		else if (Screen.bWorking && Screen.bVisible && !Hand->WarDue && !Hand->bEnterWhenLaid)
 		{
 			Hand->AskGrandNations(); // (another year, or new dice, were picked while this list was worked out)
 		}
+		// (With the screen put away, or a war being begun, nothing is asked behind the map: the screen asks afresh when it
+		// next opens, its dice new then too. The pre-check's note of 00:15Z.)
 	});
 }
 
