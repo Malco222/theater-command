@@ -364,6 +364,7 @@ namespace LandCrater
 		const double R = 0.5 * S.Across;
 		const double RimHigh = std::max(0.0, S.Rim);
 		const double ReachOf = std::max(1.2, S.Reach);
+		const double Feather = std::min(1.5, 0.9 * R); // (how far past the thrown soil's reach it thins into the grass)
 		const int N = std::clamp(S.Sides, 8, 48);
 		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
 
@@ -466,6 +467,16 @@ namespace LandCrater
 				{
 					// the thrown soil, falling away from the crest to a thin ragged edge over the grass
 					Radius = Rc * (1.0 + Rg.T * (Reach[Kk] - 1.0)) * (bRim ? D.U(0.78, 1.12) : D.U(0.96, 1.04));
+					if (bRim && Under)
+					{
+						// (feathered into the grass: the soil thinning out over a metre and a half past where it lay
+						// thick, its edge broken, so the eye finds no line where the hole's earth ends. Ended at the
+						// thrown soil's reach it drew a hard polygon round every hole: the art director, 23 November)
+						// (each draw in its own statement: the same hole on every compiler)
+						const double Far = D.U(0.6, 1.4);
+						const double Short = D.U() < 0.25 ? D.U(0.35, 0.7) : 1.0;
+						Radius += Feather * Far * Short;
+					}
 					// (falling away fast from the crest: a narrow lip, the thrown soil beyond it a thin layer on the
 					// ground, not the flank of a mound)
 					Over = bRim ? 0.0 : RimHigh * RimK[Kk] * std::pow(1.0 - Rg.T, 3.0) * D.U(0.85, 1.15);
@@ -482,7 +493,9 @@ namespace LandCrater
 					else if (Deep > 0.0 && Rg.T < 0.4 && Patch < 0.62) Colour = Mixed(Colour, Soot, D.U(0.15, 0.35) * Fresh); // (blast-blackened soil thrown with it)
 				}
 				const double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
-				const double Edge = Rg.bOut && Rg.T >= 1.0 ? 0.6 : 1.0; // (the thin edge a little lower: it lies on the grass)
+				// (the thin edge lies on the grass: 2 mm over what is there, no step. At 0.6 of Base, 1.8 cm, its lip cast a thin
+				// dark line on the grass round every hole in the Mac's stills, 23 November, a seam where none should be)
+				const bool bLip = Rg.bOut && Rg.T >= 1.0;
 				if (Rg.bOut && Under && TurfShare >= 0.0)
 				{
 					// (turf torn from this ground: its own colour, a little darker for the soil on it)
@@ -496,7 +509,7 @@ namespace LandCrater
 					const Rgb8 Ground = Under(Px, Py);
 					Painted = bRim ? Ground : Rg.T >= 0.6 ? Mixed(Painted, Ground, 0.4) : Painted;
 				}
-				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + Base * Edge + Over, Painted);
+				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + (bLip ? 0.002 : Base + Over), Painted);
 			}
 		}
 		if (OutCut && Deep > 0.0)
@@ -1145,8 +1158,32 @@ namespace LandCrater
 				}
 				continue;
 			}
-			const double Bare_ = H.BareR > 0.0 ? H.BareR : 1.2 * H.R;
-			if ((X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y) < Bare_ * Bare_)
+			const double D2 = (X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y);
+			if (H.BareR > 0.0)
+			{
+				if (D2 < H.BareR * H.BareR)
+				{
+					return true;
+				}
+				continue;
+			}
+			// (a fresh hole: bare to its crest, then a ragged clearing, a tuft here and there left standing in the thrown
+			// soil and more the further out, not a ruled circle of grass round it: the art director, 23 November)
+			const double In = 1.12 * H.R, Out = 1.3 * H.R;
+			if (D2 >= Out * Out)
+			{
+				continue;
+			}
+			if (D2 < In * In)
+			{
+				return true;
+			}
+			uint64_t Mix = (static_cast<uint64_t>(static_cast<int64_t>(std::floor(X * 50.0))) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::floor(Y * 50.0))) * 0xC2B2AE3D27D4EB4Full);
+			Mix ^= Mix >> 31;
+			Mix *= 0xBF58476D1CE4E5B9ull;
+			Mix ^= Mix >> 29;
+			const double Chance = static_cast<double>(Mix >> 11) * (1.0 / 9007199254740992.0);
+			if (Chance >= (std::sqrt(D2) - In) / (Out - In))
 			{
 				return true;
 			}

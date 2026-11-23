@@ -65,6 +65,12 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
    keeps its default, so `-TheaterLandFill=0.42` changes only the first):
    - `-TheaterLandWeather=cover,deck,base`: another day than the recording's (cover 0 to 1; deck 1 for a deck of
      cloud, 0 for cumulus; the cloud base in metres). `-TheaterLandWeather=0.95,1` is an overcast morning.
+   - `-TheaterLandWeatherWord=mud` (release 2): the campaign's word for the ground, as a recording's root `"weather"`
+     gives it (clear, rain, snow, mud). `mud` turns open earth to the thaw's mud (the holes' soil, torn ruts, mud
+     thrown). It is not the sky's `-TheaterLandWeather=` above: given that one as `mud`, the sky read a clear day and
+     the ground stayed dry (23 November). The two may sit on one line.
+   - `-TheaterLandScars=N`, `-TheaterLandScarMonths=M`, `-TheaterLandNoScars` (release 2): old shell holes from
+     earlier battles over the same field, as a recording's root `"scars": {"count", "months"}` gives them.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
    - `-TheaterLandFill=shade,overcast shade,kelvin,height` (0.36, 0.62, 7500, 60): shaded open ground's share of
      sunlit in light on a fair day and on an overcast one, the sky fill's warmth, and how high it stands in degrees.
