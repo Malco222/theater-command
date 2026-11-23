@@ -821,6 +821,8 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
+	void BailOut();
 	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
 	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
 	void SeatLight(int32 FromVehicle);

@@ -493,6 +493,40 @@ The art director's Mac shots, with `-TheaterLandFilmFire` against without: a bre
 from 50 m and from 300 m, plus a frame at dusk; an engine fire at the same times. Also the frame rate in a battle with
 eight wrecks or more, against the 45 fps gate.
 
+## A knocked-out tank's crew getting out (release 2, off until passed)
+
+Brian, 23 November: "if a tank gets hit people try and get out before it explosdes". Before this, nobody left a
+knocked-out tank: her commander, if he was up, died in his hatch, and the rest of her crew were never seen; and a
+brew-up blew at the instant of the kill, so there was no time to get out. `-TheaterLandBailOut` plays the fates table's
+own `crew_out` steps (how many, when, running or crawling, to her rear, to cover or to a crater) and its `crew_in`
+(a crew that bails out and climbs back in), with `LandBail`:
+
+- **The wait.** A brew-up's ammunition now goes 5.5 to 10 life seconds after the hit (the table's 5 to 10), by her own
+  dice (`LandKit::Battle::BrewWaitLeast/Most`, each vehicle's `BrewWait`). Until then she plays `knocked_out` (hatch
+  blown, smoke, bail-out); then `brew_up`. Her fire, column and cook-offs start at the blast. With the switch off both
+  are 0 and the kill is as it was.
+- **Getting out.** Each man climbs out of his hatch (the commander's, the driver's, then the loader's and hull gunner's
+  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes: running bent
+  double for her rear (18 to 38 m), to cover, crawling to a crater, or crouching in her lee.
+- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown down dead beside her; a man
+  who had not yet started is lost inside. While the fight goes on round her, a man in the open is cut down about one
+  time in six, or hit and left crawling about one in eight (a man crouching in her lee is never hit). Now and then the
+  first man out of a burning tank is on fire: he runs a few weaving steps, falls, and burns on 12 to 25 seconds.
+- **The men.** They are the crowd's riders, drawn from `USA_tanker` / `GER_panzer` (or the army's own soldier file),
+  posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+  `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
+  asked of the soldiers' thread; until they come these stand in.
+
+None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
+own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
+Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/land_bail/run.sh` plays every land way
+with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s; `LAND_BREW_WAIT=5.5,10` runs the kit's
+own test with the wait.
+
+The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
+crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
+`-TheaterLandFilmFire` as well. Also the frame rate in a battle with eight kills or more, against the 45 fps gate.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

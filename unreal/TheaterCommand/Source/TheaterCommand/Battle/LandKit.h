@@ -504,6 +504,10 @@ namespace LandKit
 		double Died = -1.0;      // battle time knocked out, -1 never
 		double BurnFrom = -1.0;  // battle time the fire takes hold (-1 never): it burns to BurnUntil
 		double BurnUntil = 0.0;
+		/** Effects (R2): battle seconds her brew-up waits after her kill, her knocked_out clip playing first while her
+		 * crew get out (LandBail, -TheaterLandBailOut; Brian, 23 November: "if a tank gets hit people try and get out
+		 * before it explosdes"). 0: at once, as before. Battle::BrewWaitLeast and Most give it, before Build. */
+		double BrewWait = 0.0;
 
 		// The pose now (after Update).
 		double Now = 0.0;
@@ -745,6 +749,10 @@ namespace LandKit
 		 * half of it): the vehicles' clips and their crews' hands timed in life's seconds. 1, the default, is as before.
 		 * Set before Load. */
 		double Life = 1.0;
+		/** Effects (R2): life's seconds a brew-up waits after her kill, the least and the most (each vehicle her own
+		 * between, by her number), her knocked_out clip first so her crew can get out (Vehicle::BrewWait; LandBail,
+		 * -TheaterLandBailOut). 0: at once, as before. Set before Load. */
+		double BrewWaitLeast = 0.0, BrewWaitMost = 0.0;
 		int Year = 1944, Month = 7;
 		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
 		 * dressed for it (Dress::Terrain). Read by Load. */
@@ -803,6 +811,8 @@ namespace LandKit
 		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
 		 * Rounds: those that struck her, the killing one among them. */
 		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew);
+		/** Effects (R2): vehicle V's brew-up wait, battle seconds (BrewWaitLeast, BrewWaitMost). */
+		double BrewWaitOf(size_t V) const;
 	};
 
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */
