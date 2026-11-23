@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ed70075b 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of abd12b05 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -63567,7 +63567,6 @@
     if (nat === "USA") return "B17";
     if (nat === "GER") return "He111";
     if (COMMONWEALTH2.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
-    if (nat === "ITA") return "SM79";
     if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
     if (nat === "SOV") return design >= 1942 ? "Pe2" : `Bomber:${nat}`;
     if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
