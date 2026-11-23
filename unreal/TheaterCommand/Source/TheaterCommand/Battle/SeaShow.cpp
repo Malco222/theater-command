@@ -255,14 +255,23 @@ namespace SeaShow
 		if (Class == "bb") return Nation == "USA" ? 406.0 : Nation == "JAP" ? 410.0 : Nation == "GER" ? 380.0 : Nation == "UK" ? 381.0 : Nation == "ITA" ? 381.0 : Nation == "FRA" ? 380.0 : 356.0;
 		if (Class == "ca") return 203.0;
 		if (Class == "dd") return Nation == "USA" || Nation == "JAP" || Nation == "GER" ? 127.0 : 120.0;
+		// A boat's deck gun until the battle names it (gunMm; estimates for the historian): a German's 88 mm (a Type IX's
+		// 105 the battle names); a British boat's 4-inch (102 mm); an American's 3-inch to 1941, 4-inch 1942-43, 5-inch
+		// from 1944 (by year, as the show knows no boat's class); a Japanese boat's 120 mm; an Italian's, a French boat's
+		// and a Soviet's 100 mm.
+		if (Class == "ss") return Nation == "GER" ? 88.0 : Nation == "UK" ? 102.0 : Nation == "USA" ? (F.Year >= 1944 ? 127.0 : F.Year >= 1942 ? 102.0 : 76.0) : Nation == "JAP" ? 120.0 : 100.0;
+		// A merchant's gunners (the Royal Navy's DEMS men, the US Navy's Armed Guard): a 4-inch on her stern; others an old
+		// 88 mm or the like.
+		if (Class == "mv") return Nation == "UK" || Nation == "USA" ? 102.0 : 88.0;
 		return 127.0;
 	}
 
 	double Show::Cadence(const std::string& Class)
 	{
 		// Seconds between a ship's salvos in a gunnery action: a battleship's big guns about two a minute, a cruiser's
-		// eight-inch about four, a destroyer's guns in rapid fire about eight (each a little ragged).
-		const double Base = Class == "bb" ? 30.0 : Class == "ca" ? 16.0 : 7.5;
+		// eight-inch about four, a destroyer's guns in rapid fire about eight; a boat's deck gun a round about every 5 s
+		// (her crew on a wet, rolling casing), a merchant's gunners slower (each a little ragged).
+		const double Base = Class == "bb" ? 30.0 : Class == "ca" ? 16.0 : Class == "ss" ? 5.0 : Class == "mv" ? 8.0 : 7.5;
 		return Base * Roll.U(0.85, 1.15);
 	}
 
@@ -359,8 +368,10 @@ namespace SeaShow
 		{
 			for (const Event& E : InEvents)
 			{
-				// (and a convoy's depth charge on a boat, ruling 241 §7)
-				if ((E.What == "sea:strike" || E.What == "sea:air" || E.What == "sea:torpedoHit" || E.What == "sea:depthChargeHit") && E.Unit >= 0) AirBlowAt[E.Unit] = E.T;
+				// (and a convoy's depth charge on a boat, ruling 241 §7; and a deck gun's hits, told one by one, sea:gunHit: drawn
+				// as told, not again as the hull they took)
+				if ((E.What == "sea:strike" || E.What == "sea:air" || E.What == "sea:torpedoHit" || E.What == "sea:depthChargeHit" || E.What == "sea:gunHit") && E.Unit >= 0)
+					AirBlowAt[E.Unit] = E.T;
 			}
 			Debts(Views.back(), V, InEvents);
 		}
@@ -369,9 +380,9 @@ namespace SeaShow
 		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
 		for (const Event& E : InEvents) Queue.push_back(E);
 		// (at one moment the blow before what it did: the torpedo that sank her strikes her before she goes down, and on
-		// her, not on the empty place in her line; and a depth-charge attack before a hit told at its own moment, so the hit
-		// has its charges to burst)
-		auto Rank = [](const Event& E) { return E.What == "sea:depthCharge" ? 0 : E.What == "sea:torpedoHit" || E.What == "sea:depthChargeHit" ? 1 : 2; };
+		// her, not on the empty place in her line, as a gun's last hits do as she is shelled under; and a depth-charge attack
+		// before a hit told at its own moment, so the hit has its charges to burst)
+		auto Rank = [](const Event& E) { return E.What == "sea:depthCharge" ? 0 : E.What == "sea:torpedoHit" || E.What == "sea:depthChargeHit" || E.What == "sea:gunHit" ? 1 : 2; };
 		std::stable_sort(Queue.begin(), Queue.end(), [&Rank](const Event& A, const Event& B) { return A.T < B.T || (A.T == B.T && Rank(A) < Rank(B)); });
 		if (InZones) Zones = *InZones;
 		if (Contact >= 0.0 && ContactT < 0.0) ContactT = Contact;
@@ -492,6 +503,10 @@ namespace SeaShow
 				H.P = Lead - Ahead(P.Face) * H.Back;
 				H.Hdg = H.CourseHdg = P.Face;
 				H.Spd = P.Speed;
+				// (a boat's deck gun: an American fleet boat's aft of her tower, as the battle modeller's boat has it, lying
+				// stowed facing aft from the first; any other's forward of it, facing forward)
+				H.bAftGun = H.Class == "ss" && H.Nation == "USA";
+				H.Train = H.bAftGun ? 180.0 : 0.0;
 				H.Roll0 = Mix(static_cast<uint64_t>(H.Key) * 97 + F.Seed) * 2.0 * Pi;
 				const Ride R = RideOf(SizeOf(H.Class).Long);
 				H.RollT = R.RollT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 13 + 5));
@@ -520,6 +535,41 @@ namespace SeaShow
 			if (D < BestD) { BestD = D; Best = H; }
 		}
 		return Best;
+	}
+
+	bool Show::StillAfloat(const Hull& H)
+	{
+		return H.Doing == Fate::Line || H.Doing == Fate::Limping || (H.Doing == Fate::Sinking && H.bAbandoned);
+	}
+
+	Show::Hull* Show::NearestAfloatOf(int PieceId, double X, double Y)
+	{
+		// (every ship of her piece, in her line or out of it: a straggler fallen out of her column, or one her men have left)
+		Hull* Best = nullptr;
+		double BestD = 1e18;
+		for (auto& Pair : Hulls)
+		{
+			Hull& H = Pair.second;
+			if (H.Piece != PieceId || !StillAfloat(H)) continue;
+			const double D = Flat(H.P - Vec(X, Y, 0.0));
+			if (D < BestD) { BestD = D; Best = &H; }
+		}
+		return Best;
+	}
+
+	std::map<int, const Event*> Show::GunHitsDue() const
+	{
+		std::map<int, const Event*> Due;
+		for (const Event& E : Queue)
+		{
+			if (E.What != "sea:gunHit" || E.From < 0 || E.Unit < 0 || E.T <= ShownT + 1e-9 || Due.count(E.From)) continue;
+			// (one a round already carries is on its way: the next of hers is the one to lay for)
+			bool bCarried = false;
+			for (const Shells& S : Flying)
+				bCarried = bCarried || (S.ToldAt == E.T && S.Piece == E.From && S.OnPiece == E.Unit);
+			if (!bCarried) Due[E.From] = &E;
+		}
+		return Due;
 	}
 
 	Show::Hull* Show::ByZone(int PieceId, const Zone* Z)
@@ -1099,6 +1149,67 @@ namespace SeaShow
 		{
 			// (a boat's sighting report: its words, above, are all it shows)
 			++Check.ReportEvents;
+			return;
+		}
+		if (E.What == "sea:gun")
+		{
+			// (a gun action begun or ceased, a boat's deck gun or a merchant's: its words, above, are all it shows; its rounds
+			// come of the pieces' own "gun", view by view, Gunnery)
+			++Check.GunEvents;
+			return;
+		}
+		if (E.What == "sea:gunHit")
+		{
+			// A gun's hits, told as they strike (n of them, one where not said): drawn on the ship struck at once, through the
+			// round of the gun that fired them that carries them (fired its flight before, Gunnery: so the gun has fired as a hit
+			// lands, and it lands as its words are told), each of that gun's bore, the last ones as she is shelled under too
+			// (told at her end's moment, they are played before it, Take); the hull they took in the view is not owed again
+			// (Take). On the ship struck where she lies afloat, in her line or out of it (a straggler, or one her men have left:
+			// what a deck gun most often finished). Only a boat already under as she is told struck (her crash dive begun with
+			// the round in the air) owes them, drawn when a round falls on her up again (LandShells), its own round falling
+			// about where she went down: a shell's hit shows on the hull it struck, never under the sea.
+			++Check.GunHitEvents;
+			const int Struck = std::max(1, E.N);
+			Check.GunHitsTold += Struck;
+			if (E.Unit < 0) return;
+			Check.OwedAll += Struck;
+			Shells ItsRound;
+			bool bCarried = false;
+			for (size_t K = 0; K < Flying.size(); ++K)
+			{
+				if (Flying[K].ToldAt != E.T || Flying[K].Piece != E.From || Flying[K].OnPiece != E.Unit) continue;
+				ItsRound = Flying[K];
+				Flying.erase(Flying.begin() + static_cast<long>(K));
+				bCarried = true;
+				break;
+			}
+			Hull* On = bCarried ? FindHull(ItsRound.OnKey) : nullptr;
+			if (!On || !StillAfloat(*On)) On = NearestAfloatOf(E.Unit, At.X, At.Y);
+			if (!On || (On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0))
+			{
+				Debt[E.Unit].Hits += Struck;
+				if (bCarried)
+				{
+					// (its round falls as any other now: about where she went down)
+					ItsRound.ToldAt = -1.0;
+					Flying.push_back(ItsRound);
+				}
+				return;
+			}
+			const Piece* By = E.From >= 0 ? PieceNow(E.From) : nullptr;
+			const double Cal = bCarried ? ItsRound.Calibre : By && By->GunMm > 0.0 ? By->GunMm : By ? Calibre(By->Class, By->Nation) : 102.0;
+			const std::string Weapon = Cal >= 300.0 ? "shell_heavy" : Cal >= 180.0 ? "shell_medium" : "shell_light";
+			const ClassSize& Sz = SizeOf(On->Class);
+			for (int K = 0; K < Struck; ++K)
+			{
+				Fx& X = Emit(FxKind::ShellHit, PlaceOn(*On, Roll.U(-0.35, 0.35), Roll.U(-0.3, 0.3) * Sz.Beam, Roll.U(4.0, 10.0)), Weapon, On->Key);
+				X.Size = Cal;
+				X.Side = On->Side;
+				++Check.ShellHits;
+			}
+			On->LastBlow = Weapon;
+			On->ShakenAt = ShownT;
+			SightHit(*On); // (a boat struck is found: SetMine)
 			return;
 		}
 		if (E.What == "sea:depthCharge")
@@ -2887,70 +2998,191 @@ namespace SeaShow
 
 	void Show::Gunnery(double Dt)
 	{
+		// The hits the battle has told of a boat's deck gun or a merchant's gun still to come, each firer's next (GunHitsDue):
+		// her gun laid on the ship it strikes from as soon as it is known, and its round fired its flight before it, so the
+		// hit lands as it is told with the round that carries it (Play draws it through that round).
+		const std::map<int, const Event*> Due = GunHitsDue();
 		for (auto& Pair : Lines)
 		{
 			const Piece* P = PieceNow(Pair.first);
 			if (!P) continue;
-			const Piece* Foe = P->Engaged >= 0 ? PieceNow(P->Engaged) : nullptr;
+			// A boat's deck gun and a merchant's gun fire only where the battle says they do (its "gun", view by view, and the
+			// hits it tells of them); a warship's line on the piece it is engaged with. (A boat or a merchant told "engaged"
+			// alone never opens fire: the show fires no gun the battle did not.)
+			const bool bOneGun = P->Class == "ss" || P->Class == "mv";
+			const int FoeId = bOneGun ? P->GunOn : P->Engaged;
+			const Piece* Foe = FoeId >= 0 ? PieceNow(FoeId) : nullptr;
+			// (her next hit told: the ship it strikes, afloat, nearest her piece, and the ship of hers nearest that one, whose
+			// gun fires it)
+			const auto Next = bOneGun ? Due.find(P->Id) : Due.end();
+			const Event* Told = Next != Due.end() ? Next->second : nullptr;
+			Hull* Struck = Told ? NearestAfloatOf(Told->Unit, P->X, P->Y) : nullptr;
+			const Hull* Firer = Struck ? NearestOf(P->Id, Struck->P.X, Struck->P.Y) : nullptr;
 			for (const int Key : Pair.second.Line)
 			{
 				Hull* H = FindHull(Key);
 				if (!H) continue;
 				H->bFiring = false;
-				const double Train = H->Class == "bb" ? 3.0 : H->Class == "ca" ? 6.0 : 12.0; // degrees a second
+				const double Train = H->Class == "bb" ? 3.0 : H->Class == "ca" ? 6.0 : bOneGun ? 8.0 : 12.0; // degrees a second
+				const bool bTold = H == Firer;
 				Hull* On = nullptr;
-				if (Foe && H->Class != "cv")
+				if (bTold) On = Struck;
+				else if (Foe && H->Class != "cv")
 				{
 					On = H->AimKey >= 0 ? FindHull(H->AimKey) : nullptr;
-					if (!On || On->Piece != Foe->Id || On->Doing != Fate::Line || std::fmod(ShownT, 5.0) < Dt) On = NearestOf(Foe->Id, H->P.X, H->P.Y);
-					// (a boat dived is no gun target: her hunters' weapon is the depth charge)
-					if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0) On = nullptr;
-					// (nor does a boat dived fire: her deck gun is under)
-					if (On && H->Class == "ss" && H->Keel > SurfacedKeel(H->Class) + 1.0) On = nullptr;
+					// (a boat's or a merchant's gun on a ship out of her line too while she is afloat: a straggler, or one her
+					// men have left, as a deck gun most often finished one)
+					if (!On || On->Piece != Foe->Id || !(bOneGun ? StillAfloat(*On) : On->Doing == Fate::Line) || std::fmod(ShownT, 5.0) < Dt)
+						On = bOneGun ? NearestAfloatOf(Foe->Id, H->P.X, H->P.Y) : NearestOf(Foe->Id, H->P.X, H->P.Y);
+				}
+				// (a boat dived is no gun target: her hunters' weapon is the depth charge)
+				if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0) On = nullptr;
+				// (nor does a boat dived fire: her deck gun is under)
+				if (On && H->Class == "ss" && H->Keel > SurfacedKeel(H->Class) + 1.0) On = nullptr;
+				// (nor one told down, her casing still awash: at the diving alarm her gun's crew are below before the hatch
+				// shuts; nor one coming up until her casing is clear, above)
+				if (On && H->Class == "ss" && !H->Dive.empty() && H->Dive != "surfaced") On = nullptr;
+				// (her gun's crew at it while it is laid: told on a ship she can fire at, she up)
+				H->bGunLaid = bOneGun && On;
+				// A boat's deck gun or a merchant's gun: one gun, trained by hand the short way round from where it lies stowed
+				// fore and aft (Stow, degrees off her bow) no further than its mount turns either side of that (Arc), and fired
+				// only on a target it bears on. A boat's sits forward of her tower and never fires through it (an American fleet
+				// boat's, as the battle modeller's boat has it, aft of her tower: DeckGunArc). Of a merchant's bow and stern
+				// guns her stern gun, her main one, takes a target it bears on (from 30 degrees off her bow round her stern:
+				// MerchantGunArc), her bow gun only one finer on her bow than that, each laid afresh from where it lies stowed
+				// (the one at her target changed over 3 degrees past the line between them, so neither swings to and fro on a
+				// target near it).
+				auto Around = [](double A) { return Wrap(A * Deg) / Deg; };
+				const double Rel = On ? Wrap(Bearing(H->P, On->P) - H->Hdg) / Deg : 0.0;
+				const double Fine = 180.0 - MerchantGunArc;
+				double Stow = 0.0, Arc = 180.0;
+				bool bBears = true;
+				if (bOneGun)
+				{
+					if (H->Class == "ss")
+					{
+						// (her gun forward of her tower or, an American fleet boat's, aft of it: as her hull was made)
+						Arc = DeckGunArc;
+					}
+					else
+					{
+						const bool bAft = !On ? H->bAftGun : H->bAftGun ? std::fabs(Rel) > Fine - 3.0 : std::fabs(Rel) >= Fine + 3.0;
+						if (On && (bAft != H->bAftGun || H->AimKey < 0)) H->Train = bAft ? 180.0 : 0.0;
+						H->bAftGun = bAft;
+						Arc = MerchantGunArc;
+					}
+					Stow = H->bAftGun ? 180.0 : 0.0;
+					bBears = std::fabs(Around(Rel - Stow)) <= Arc && (H->Class != "mv" || (H->bAftGun ? std::fabs(Rel) >= Fine : std::fabs(Rel) < Fine));
 				}
 				if (!On)
 				{
 					// Nothing to fire on: turrets back fore and aft.
 					H->AimKey = -1;
 					H->NextSalvo = -1.0;
-					H->Train += Clamp(-H->Train, -Train * 0.3 * Dt, Train * 0.3 * Dt);
+					if (bOneGun)
+					{
+						const double Off = Clamp(Around(H->Train - Stow), -Arc, Arc);
+						H->Train = Around(Stow + Off - Clamp(Off, -Train * 0.3 * Dt, Train * 0.3 * Dt));
+					}
+					else H->Train += Clamp(-H->Train, -Train * 0.3 * Dt, Train * 0.3 * Dt);
 					H->Elev += Clamp(-H->Elev, -2.0 * Dt, 2.0 * Dt);
 					continue;
 				}
+				if (bOneGun)
+				{
+					const double Off = Clamp(Around(H->Train - Stow), -Arc, Arc);
+					const double Want = Clamp(Around(Rel - Stow), -Arc, Arc);
+					H->Train = Around(Stow + Off + Clamp(Want - Off, -Train * Dt, Train * Dt));
+				}
+				else H->Train += Clamp(Rel - H->Train, -Train * Dt, Train * Dt);
 				H->AimKey = On->Key;
 				const double Range = Flat(On->P - H->P);
-				const double Rel = Wrap(Bearing(H->P, On->P) - H->Hdg) / Deg;
-				H->Train += Clamp(Rel - H->Train, -Train * Dt, Train * Dt);
-				// Elevation for the range: a gun's flat-fire angle (about 800 m/s at the muzzle), raised a little for drag.
-				const double Mv = H->Class == "dd" ? 760.0 : 820.0;
+				// Elevation for the range: a gun's flat-fire angle (about 800 m/s at the muzzle; a boat's or a merchant's
+				// lighter gun about 700), raised a little for drag.
+				const double Mv = H->Class == "dd" ? 760.0 : bOneGun ? 700.0 : 820.0;
 				const double WantElev = 0.5 * std::asin(Clamp(Gee * Range / (Mv * Mv), 0.0, 1.0)) / Deg * 1.6;
 				H->Elev += Clamp(WantElev - H->Elev, -3.0 * Dt, 3.0 * Dt);
+				// Her guns fire: the shells in the air until they fall (LandShells, or Play for a round that carries a hit told:
+				// ToldAt), the flash at her guns.
+				auto Fire = [&](double Lands, double ToldAt)
+				{
+					H->NextSalvo = ShownT + Cadence(H->Class);
+					H->bFiring = true;
+					H->FiredAt = ShownT;
+					// (guns laid on a boat, or hers firing, have her in sight: the flash and her hull come together, SetMine; a
+					// round that carries a hit told on a boat her gun is not told on finds her no sooner than the hit does)
+					Sight(*H);
+					if (ToldAt < 0.0 || P->GunOn == On->Piece) Sight(*On);
+					// (a boat's or a merchant's gun: the bore the battle names, else the table's)
+					const double Cal = bOneGun && P->GunMm > 0.0 ? P->GunMm : Calibre(H->Class, H->Nation);
+					Shells S;
+					S.From = H->Key;
+					S.Piece = H->Piece;
+					S.OnPiece = On->Piece;
+					S.Calibre = Cal;
+					S.Class = H->Class;
+					S.Count = H->Class == "bb" ? 3 : H->Class == "ca" ? 3 : bOneGun ? 1 : 2; // (one gun: one round)
+					S.Fired = H->P;
+					S.Lands = Lands;
+					S.ToldAt = ToldAt;
+					S.OnKey = ToldAt >= 0.0 ? On->Key : -1;
+					Flying.push_back(S);
+					const ClassSize& Sz = SizeOf(H->Class);
+					// (a boat's gun on her casing, forward of her tower or aft of it; a merchant's on her forecastle or her poop)
+					const Vec GunAt = !bOneGun ? PlaceOn(*H, 0.12, 0.0, Sz.Beam * 0.45)
+					                : H->Class == "ss" ? PlaceOn(*H, H->bAftGun ? -0.18 : 0.26, 0.0, Sz.Beam * 0.6)
+					                                   : PlaceOn(*H, H->bAftGun ? -0.47 : 0.45, 0.0, Sz.Beam * 0.5);
+					Fx& E = Emit(FxKind::Salvo, GunAt, H->Class, H->Key);
+					E.Aim = On->P;
+					E.Size = Cal;
+					E.Side = H->Side;
+					if (bOneGun) E.Until = Lands;
+					++Check.Salvos;
+					if (H->Class == "ss") ++Check.DeckRounds;
+					else if (H->Class == "mv") ++Check.MerchantRounds;
+				};
+				// A hit told of her gun: its round goes its flight before it (a boat's or a merchant's lighter shell about 560 m/s
+				// over its arc, below), whatever her cadence, so it lands as it is told; laid on her by then, or else as her gun
+				// lies (told too late for it to come round to her, or her in the blind arc her tower makes: the battle says she
+				// hit her, and the hit has its round). None of hers in the few seconds before it: one gun. A boat the player has
+				// not found, her gun not told by the view, fires no round he sees (SetMine: nothing of hers is shown before
+				// anything the battle told finds her): her hit lands with no flash of hers, and finds her (Play).
+				if (bTold)
+				{
+					// (a round of hers in the air on her as the hit comes to be known is the one that strikes: it lands as the hit
+					// is told, at most a second after its own flight would have it, and no second round goes after it)
+					Shells* InAir = nullptr;
+					for (Shells& S : Flying)
+					{
+						if (S.From == H->Key && S.ToldAt < 0.0 && S.OnPiece == Told->Unit && Told->T - S.Lands <= 1.0 && (!InAir || S.Lands > InAir->Lands)) InAir = &S;
+					}
+					if (InAir)
+					{
+						InAir->Lands = Told->T;
+						InAir->ToldAt = Told->T;
+						InAir->OnKey = On->Key;
+						++Check.GunHitRounds;
+						continue;
+					}
+					const double Flight = Range / 560.0 + 0.5;
+					if (ShownT + 1e-9 >= Told->T - Flight)
+					{
+						if (P->GunOn < 0 && !InSight(*H)) continue;
+						++Check.GunHitRounds;
+						if (!bBears || std::fabs(Around(Rel - H->Train)) > 6.0) ++Check.GunHitRoundsHasty;
+						Fire(Told->T, Told->T);
+						continue;
+					}
+					if (Told->T - Flight - ShownT < 3.0) continue;
+				}
+				// (a gun laid on a ship for a hit told fires no other round on her the view does not tell)
+				if (bTold && P->GunOn != On->Piece) continue;
 				if (H->NextSalvo < 0.0) H->NextSalvo = ShownT + Roll.U(1.5, Cadence(H->Class));
-				if (ShownT < H->NextSalvo || std::fabs(Rel - H->Train) > 6.0) continue;
-				H->NextSalvo = ShownT + Cadence(H->Class);
-				H->bFiring = true;
-				H->FiredAt = ShownT;
-				// (guns laid on a boat, or hers firing, have her in sight: the flash and her hull come together, SetMine)
-				Sight(*H);
-				Sight(*On);
-				const double Cal = Calibre(H->Class, H->Nation);
-				Shells S;
-				S.From = H->Key;
-				S.Piece = H->Piece;
-				S.OnPiece = On->Piece;
-				S.Calibre = Cal;
-				S.Class = H->Class;
-				S.Count = H->Class == "bb" ? 3 : H->Class == "ca" ? 3 : 2;
-				S.Fired = H->P;
-				// Time of flight: about 650 m/s over the shell's arc (a battleship's at 5 km about 8 s).
-				S.Lands = ShownT + Range / (H->Class == "dd" ? 560.0 : 650.0) + 0.5;
-				Flying.push_back(S);
-				const ClassSize& Sz = SizeOf(H->Class);
-				Fx& E = Emit(FxKind::Salvo, PlaceOn(*H, 0.12, 0.0, Sz.Beam * 0.45), H->Class, H->Key);
-				E.Aim = On->P;
-				E.Size = Cal;
-				E.Side = H->Side;
-				++Check.Salvos;
+				// (laid on her: a target out of a gun's arc is never fired at, its gun held at the arc's edge)
+				if (ShownT < H->NextSalvo || !bBears || std::fabs(bOneGun ? Around(Rel - H->Train) : Rel - H->Train) > 6.0) continue;
+				// Time of flight: about 650 m/s over the shell's arc (a battleship's at 5 km about 8 s; a destroyer's, a boat's
+				// and a merchant's lighter shells slower).
+				Fire(ShownT + Range / (H->Class == "dd" || bOneGun ? 560.0 : 650.0) + 0.5, -1.0);
 			}
 		}
 	}
@@ -2963,10 +3195,15 @@ namespace SeaShow
 			if (S.Lands > ShownT) { ++K; continue; }
 			const Shells Fell = S;
 			Flying.erase(Flying.begin() + static_cast<long>(K));
-			Hull* On = NearestOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y);
+			// (a boat's deck gun's or a merchant's gun's round falls on the ship it was laid on in her line or out of it, a
+			// straggler or one her men have left, as Gunnery lays it: NearestAfloatOf)
+			const bool bOneGun = Fell.Class == "ss" || Fell.Class == "mv";
+			Hull* On = bOneGun ? NearestAfloatOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y) : NearestOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y);
 			if (!On) continue;
 			const std::string Weapon = Fell.Calibre >= 300.0 ? "shell_heavy" : Fell.Calibre >= 180.0 ? "shell_medium" : "shell_light";
-			const std::string Splash = Fell.Calibre >= 300.0 ? "heavy" : Fell.Calibre >= 180.0 ? "medium" : "light";
+			// (a boat's deck gun's or a merchant's gun's round, a 4-inch or less, throws a smaller column than a warship's
+			// shell of a bore near it)
+			const std::string Splash = bOneGun && Fell.Calibre < 130.0 ? "small" : Fell.Calibre >= 300.0 ? "heavy" : Fell.Calibre >= 180.0 ? "medium" : "light";
 			const double Range = Flat(On->P - Fell.Fired);
 			const Vec Down = (On->P - Fell.Fired) * (1.0 / std::max(1.0, Range));
 			const Vec Across(Down.Y, -Down.X, 0.0);
@@ -2974,7 +3211,11 @@ namespace SeaShow
 			const Vec Middle = On->P + Down * (Roll.Bell() * (0.012 * Range + 40.0)) + Across * (Roll.Bell() * (0.003 * Range + 10.0));
 			Owed& D = Debt[Fell.OnPiece];
 			int Hits = 0;
-			if (D.Hits >= 0.5 && On->Doing == Fate::Line)
+			// (a boat gone under while the round was in the air takes no hit: what she is owed waits until she is up again; a
+			// boat's or a merchant's round draws what a straggler or a ship abandoned is owed too, where she lies afloat; a round
+			// that carried a hit told is drawn as told, Play, and one here is one whose hit she was under for: a miss)
+			const bool bUnder = On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0;
+			if (Fell.ToldAt < 0.0 && !bUnder && D.Hits >= 0.5 && (On->Doing == Fate::Line || (bOneGun && StillAfloat(*On))))
 			{
 				Hits = Fell.Class == "bb" && D.Hits >= 1.5 ? 2 : 1;
 				D.Hits -= Hits;
@@ -2988,7 +3229,11 @@ namespace SeaShow
 				On->LastBlow = Weapon;
 				++Check.ShellHits;
 			}
-			if (Hits > 0) SightHit(*On); // (a boat struck is found: SetMine)
+			if (Hits > 0)
+			{
+				SightHit(*On); // (a boat struck is found: SetMine)
+				On->ShakenAt = ShownT;
+			}
 			for (int C = Hits; C < Fell.Count; ++C)
 			{
 				const Vec At = Middle + Down * (Roll.Bell() * (0.006 * Range + 25.0)) + Across * (Roll.Bell() * (0.002 * Range + 8.0));
@@ -3001,10 +3246,14 @@ namespace SeaShow
 				Fall.Z = 0.0;
 				// (nor on another ship near her: a shell there would be a hit on her, which the battle did not say)
 				if (OnHull(Fall, 4.0, -1)) continue;
-				if (!Columns.Take(ShownT, Flat(Fall - Eye))) continue;
+				// (a boat's or a merchant's one round throws a light column, which takes none of the kit's room for the big
+				// ones: as a ship's anti-aircraft gun's splash, GunShots)
+				if (!bOneGun && !Columns.Take(ShownT, Flat(Fall - Eye))) continue;
 				Fx& E = Emit(FxKind::Splash, Fall, Splash);
 				E.Size = Fell.Calibre;
 				++Check.Splashes;
+				// (close aboard her: it shakes her, her gun's crew ducking)
+				if (Flat(Fall - On->P) < Sz.Long * 0.5 + 30.0) On->ShakenAt = ShownT;
 			}
 		}
 	}
@@ -4443,6 +4692,10 @@ namespace SeaShow
 			S.Elevation = H.Elev;
 			S.Aim = H.AimKey;
 			S.bFiring = H.bFiring;
+			S.bAftGun = H.bAftGun;
+			S.bGunLaid = H.bGunLaid && H.Doing == Fate::Line;
+			S.ShakenAt = H.ShakenAt;
+			S.FiredAt = H.FiredAt;
 			S.bBurning = H.Doing == Fate::Limping;
 			S.bScreen = H.bScreen;
 			if (H.Doing == Fate::Line)

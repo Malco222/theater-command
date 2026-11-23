@@ -375,6 +375,77 @@ namespace ConvoyLook
 	};
 	std::vector<Rope> NetOf(const NetIn& In);
 
+	// -------------------------------------------------------------------------------------------------------------
+	// A gun's crew
+
+	/**
+	 * A gun's mount on the battle modeller's model the stage draws her with, where the stage trains it (AirStage's
+	 * TrainGun: a boat's deck gun, the model's turret.A; a merchant's bow gun, turret.A, and her stern gun, turret.Y): the
+	 * file's name (as the stage names it, without "Ships/"), the part, the mount's middle along her forward from amidships
+	 * (metres, the file's own), the deck its crew stand on there (metres over her waterline: a boat's casing, a merchant's
+	 * gun platform), how far its crew may stand from the mount's middle (Room) and from her middle line (HalfWide) and stay
+	 * on that deck, where a merchant's gun shield ends behind the mount (Shield, metres; 0, a boat's gun with none: her
+	 * crew stand beside it), the bearing it lies stowed at (degrees off her bow) and how far its mount turns either way.
+	 * Measured off the files; Tools/convoy_looks checks each row against its file. Empty File: no such row.
+	 */
+	struct GunMount
+	{
+		std::string File, Part;
+		double Along = 0.0, Deck = 0.0, Room = 2.0, HalfWide = 1.0, Shield = 0.0, Rest = 0.0, Arc = 145.0;
+	};
+	/** The mount of a model's gun: bStern, a merchant's stern gun (turret.Y); else her gun forward of the two (turret.A: a
+	 * boat's deck gun, an American fleet boat's aft of her tower though it is). */
+	GunMount MountOf(const std::string& File, bool bStern);
+
+	/** What the show says of her gun this frame (ShipOut): whether it is laid (bGunLaid: told on a ship she can fire at,
+	 * she up and her casing clear), her Dive ("surfaced", "periscope", "deep"; a merchant's empty) and Dived (metres under
+	 * her surfaced trim), its Train (degrees off her bow), when a shell last struck her or fell close aboard her (ShakenAt;
+	 * below 0, never), the battle's clock (T), and her key (for each man's own hash). */
+	struct CrewIn
+	{
+		bool bLaid = false;
+		std::string Dive;
+		double Dived = 0.0, Train = 0.0, ShakenAt = -1.0, T = 0.0;
+		int Key = 0;
+	};
+	/** One man of a gun's crew: where he stands (metres toward her bow and to her starboard from the mount's middle, on its
+	 * deck), the way he faces (degrees off her bow, clockwise), whether he crouches, and how far into his clip he is
+	 * (seconds, his own: no two of a crew move as one). */
+	struct CrewMan
+	{
+		double Fore = 0.0, Right = 0.0, Facing = 0.0, Clip = 0.0;
+		bool bDuck = false;
+	};
+	/** At most this many men at a gun [EST]; how long each crouches after a shell strikes her or falls close aboard
+	 * (seconds) [EST], each a fraction of a second after it as he hears it (at most DuckLate). */
+	constexpr int CrewMost = 4;
+	constexpr double DuckFor = 2.5, DuckLate = 0.3;
+	/**
+	 * A gun's crew [EST]: up to CrewMost men at its mount, turned with it as it trains: at a boat's gun its layer and
+	 * trainer to either side of it, a loader behind its breech and a man with the next round behind him; at a merchant's,
+	 * two by two in its platform behind its shield. All on its deck (within Room of its middle and HalfWide of her middle
+	 * line). Only while her gun is laid and she is up: none from the diving alarm (told down: below before the hatch
+	 * shuts) or once her gun is dropped. Each crouches for DuckFor seconds after a shell strikes her or falls close aboard
+	 * her, and stands to it else. The show says whether the gun is laid and when she was struck; nothing here changes either.
+	 */
+	std::vector<CrewMan> GunCrewOf(const GunMount& M, const CrewIn& In);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// A hit's looks on a boat and a merchant
+
+	/** Whether a boat's hits' looks are put out this frame (the stage's PutOut: what they had still to come gives way,
+	 * their fires out under the sea), as the show has her (ShipOut's Dive and Dived, metres under her surfaced trim): each
+	 * frame she is told down ("periscope", "deep": at the diving alarm, her casing still awash) or is under, her casing
+	 * more than a metre down. The scene asks it each frame for each boat; the sea show's cloud test holds the show's hits to
+	 * it (nothing of a hit's look left burning on a boat under). */
+	bool PutsOutLooks(const std::string& Dive, double Dived);
+	/** The looks table's family for a hit on a ship (Battle/Fates, its "sea" rows), from her own (FamilyOf's: her class)
+	 * and the table's weapon for the strike: a merchant ("mv", the convoy battle's, which the table has no rows for) struck
+	 * by a shell (a boat's deck gun's, "shell_light" and the like) takes the transports' and merchants' ("ap": a gun hit's
+	 * fire, splinters and smoke); her torpedo and bomb hits keep her own family, as before the deck gun (no look of the
+	 * table's: the sea show's own way down shows them). Any other ship keeps her own. */
+	std::string HitLookFamily(const std::string& Family, const std::string& Weapon);
+
 	/**
 	 * A mesh section's shape as it was last made: its point count, then its triangles' corners. While a section keeps
 	 * its shape (a hung net, a burning flare: the same points and triangles, moved), only where its points are, which way

@@ -15,7 +15,7 @@ OUT="${CONVOY_LOOKS_OUT:-${TMPDIR:-/tmp}/convoy_looks}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
 $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
-  "$HERE/convoy_looks_test.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" -o "$OUT/convoy_looks_test"
+  "$HERE/convoy_looks_test.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" "$SRC/Battle/Fates.cpp" -o "$OUT/convoy_looks_test"
 "$OUT/convoy_looks_test" "$SRC"
 # (against the show: the game's own SeaShow and its feed, as the sea show's cloud test builds them)
 $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

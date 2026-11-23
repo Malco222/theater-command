@@ -146,13 +146,16 @@ namespace SeaSailors
 		case Act::Climb: return "climb_net";
 		case Act::Row: return "row";
 		case Act::Sit: return "sit_raft";
+		case Act::Stand: return "idle";
+		case Act::Duck: return "cower";
 		default: return "";
 		}
 	}
 
 	int PosesOf(Act A)
 	{
-		// (about one a fifth of a second of a quick loop, fewer for the slow ones: 64 in all)
+		// (about one a fifth of a second of a quick loop, fewer for the slow ones: 64 in all for the men in the water and
+		// their boats, and 10 more for a gun's crew, whose stand is slow and whose crouch is held)
 		switch (A)
 		{
 		case Act::Fall: return 4;
@@ -165,6 +168,8 @@ namespace SeaSailors
 		case Act::Climb: return 6;
 		case Act::Row: return 8;
 		case Act::Sit: return 6;
+		case Act::Stand: return 6;
+		case Act::Duck: return 4;
 		default: return 1;
 		}
 	}

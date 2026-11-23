@@ -148,6 +148,10 @@ namespace SeaShow
 		int GunOn = -1;
 		int EchoOn = -1;
 		std::string EchoKind;
+		/** A boat's deck gun or an armed merchant's gun (the convoy battle's "gun", above): its rounds are fired only while a
+		 * view names whom it is on, never on "engaged", which is a warship's line's. Its bore where the battle names it
+		 * (gunMm: a Type IX's 105 mm against a Type VII's 88; as last told), else 0 and the show's table by navy and year. */
+		double GunMm = 0.0;
 	};
 
 	/** One event of a view, with what the show needs of its extra. */
@@ -243,6 +247,13 @@ namespace SeaShow
 		double Train = 0.0, Elevation = 0.0;
 		int Aim = -1;
 		bool bFiring = false;
+		/** A boat's deck gun or a merchant's gun (the convoy battle's "gun": one gun, Train and Elevation above its own):
+		 * whether it is her after one (an American fleet boat's, aft of her tower; a merchant's stern gun, which takes any
+		 * target it bears on), whether it is laid (her gun told on a ship she can fire at while she is up, her casing clear:
+		 * its crew at it), when a shell last struck her or fell close aboard her, and when her guns last fired (battle time;
+		 * below 0, never: the scene runs a gun back as it fires). */
+		bool bAftGun = false, bGunLaid = false;
+		double ShakenAt = -1.0, FiredAt = -1.0;
 		bool bBurning = false;
 		bool bScreen = false; // laying smoke
 		int LineAt = -1;      // in her column, her piece's place in its side's battle line (0 the guide), -1 in none
@@ -456,8 +467,11 @@ namespace SeaShow
 	/** What the show asks of the effects kit, the scene and the sound this frame. */
 	enum class FxKind
 	{
-		Salvo,       // a ship's guns firing: Key (ship), At (her guns), Aim (where the shells will fall), What (class), Size (calibre mm)
-		Splash,      // a shell into the sea: At, What ("heavy", "medium", "light"), Size (calibre mm)
+		Salvo,       // a ship's guns firing: Key (ship), At (her guns), Aim (where the shells will fall), What (class), Size (calibre mm);
+		             //   What "ss": a boat's deck gun, "mv": a merchant's gun (one gun, one round: the scene lights it at her
+		             //   model's muzzle, her after gun's where her ShipOut's bAftGun, laid as its Train and Elevation; Until,
+		             //   when its round falls)
+		Splash,      // a shell into the sea: At, What ("heavy", "medium", "light"; "small": a boat's or a merchant's gun), Size (calibre mm)
 		ShellHit,    // a shell striking a ship: Key (ship), At, What ("shell_heavy", "shell_medium", "shell_light"), Size (calibre mm)
 		TorpedoHit,  // a torpedo striking a ship: Key (ship), At (at her side)
 		BombHit,     // a bomb striking a ship: Key (ship), At, What ("dive", "level", "torpedo" for an aerial torpedo)
@@ -555,6 +569,11 @@ namespace SeaShow
 		int DiveEvents = 0, SonarEvents = 0, ChargeEvents = 0, ChargeHitEvents = 0, ReportEvents = 0, StarshellEvents = 0, RescueEvents = 0;
 		int ChargeDrops = 0, ChargeBursts = 0, ChargeBurstsBooked = 0, ChargeHitUnmatched = 0, Dives = 0, Starshells = 0, Rescues = 0;
 		int AirOnBoats = 0, AirBlowsOnBoats = 0; // aircraft told on a boat (sea:air), and their blows let go on her while she was afloat
+		// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): their actions told (sea:gun), their hits told
+		// (sea:gunHit: the events, and the hits they name), and the rounds the show fired from each; of those rounds, the ones
+		// that carried a hit told (fired its flight before it, whatever the cadence), and of those the ones whose gun could
+		// not be laid on her in time (told too late for it, or her in its blind arc: fired as it lay, so the hit has its round)
+		int GunEvents = 0, GunHitEvents = 0, GunHitsTold = 0, DeckRounds = 0, MerchantRounds = 0, GunHitRounds = 0, GunHitRoundsHasty = 0;
 		// Enemy boats the player has not found (SetMine): contacts an escort of the other side gained on one and lost, a loss
 		// told for a contact no escort held, and radio bearings (a line on the plot, not her place: they find nothing).
 		int Contacts = 0, ContactsLost = 0, ContactsOdd = 0, Bearings = 0;
@@ -623,6 +642,13 @@ namespace SeaShow
 		 * hunters' run in on where she was lost and their charges sinking to her (form.md section 5: asdic lost close at 150
 		 * to 300 m, charges 20 to 25 s down). */
 		static constexpr double FoundFor = 90.0;
+		/** A boat's deck gun and a merchant's guns (the convoy battle's "gun", one gun firing at a time): how far either side
+		 * of where it lies stowed each trains, as the battle modeller's models' mounts turn (their turret.A and turret.Y
+		 * limits, which Tools/convoy_looks reads): a boat's 145 degrees, so it never fires through her own tower (an American
+		 * fleet boat's gun stowed facing aft, any other's forward); a merchant's 150, so her stern gun, her main one, bears
+		 * from 30 degrees off her bow round her stern and takes any target it bears on, and her bow gun only one finer on
+		 * her bow than that. */
+		static constexpr double DeckGunArc = 145.0, MerchantGunArc = 150.0;
 
 		/** Where the camera is (board metres): columns and screens near it come first when the room is short. */
 		Vec Eye;
@@ -697,6 +723,9 @@ namespace SeaShow
 			double SOn = 0.0;       // a follower: where she is along his track (how far he had steamed when he passed there)
 			double Roll0 = 0.0, RollT = 10.0, PitchT = 7.0; // her own phase on the swell, and her roll and pitch periods
 			double Train = 0.0, Elev = 0.0;
+			// (a boat's or a merchant's one gun: her after one, laid, and when a shell last shook her: ShipOut's)
+			bool bAftGun = false, bGunLaid = false;
+			double ShakenAt = -1.0;
 			int AimKey = -1;
 			double NextSalvo = -1.0; // battle time of her next salvo (below 0: not yet laid)
 			int Engaged = -1;
@@ -778,6 +807,10 @@ namespace SeaShow
 			int Count = 2;
 			std::string Class;
 			Vec Fired;
+			// (a boat's or a merchant's round that carries a hit the battle told, sea:gunHit: the hit's moment, when it lands,
+			// and the ship it was laid on; Play draws the hit through it as it is told. Below 0, none: a round like any other)
+			double ToldAt = -1.0;
+			int OnKey = -1;
 		};
 
 		struct Torp
@@ -1062,6 +1095,15 @@ namespace SeaShow
 
 		/** The ship of a piece nearest a board point, afloat in its line (null: none). */
 		Hull* NearestOf(int PieceId, double X, double Y);
+		/** The same, out of its line too while she is still afloat (StillAfloat): a straggler fallen out burning or limping,
+		 * a ship her men have left settling until the battle sends her down. A boat's deck gun's and a merchant's gun's
+		 * target: a straggler or a ship abandoned is what a deck gun most often finished off. */
+		Hull* NearestAfloatOf(int PieceId, double X, double Y);
+		/** In her line, out of it limping, or left by her men and not yet sent down (sea:abandon until sea:sunk). */
+		static bool StillAfloat(const Hull& H);
+		/** The first hit told of each piece's gun still to come (sea:gunHit, of the views in hand) and not yet carried by a
+		 * round in the air, by the piece that fired it. */
+		std::map<int, const Event*> GunHitsDue() const;
 		Hull* FindHull(int Key);
 		/** A hull afloat (not Except's) that a point of the sea lies within Margin metres of. */
 		bool OnHull(const Vec& At, double Margin, int Except) const;

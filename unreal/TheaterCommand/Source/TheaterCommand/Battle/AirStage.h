@@ -136,6 +136,31 @@ public:
 	 * X Y Z) and its width there in metres (W), for the effects kit's funnel smoke. False if her model has none the stage
 	 * can find (it finds them by their dark caps), or she is going down or gone. */
 	bool FunnelTops(int32 Id, TArray<FVector4>& Out) const;
+	/** Ship Id's model socket Name ("muzzle.turret.A.1": her forward gun's muzzle) where she lies now (world: her hull as
+	 * it is drawn, heeled, trimmed and on the swell), and the way out of it (world, of length 1): for the muzzle of a gun
+	 * the stage draws trained (TrainGun), its barrel's end as it is laid and run back now and the way its bore points;
+	 * for any other socket, its place on her model and the way along her keel from her middle toward that end of her.
+	 * False for a ship drawn with the kit's code-built miniature (no model file), a model without the socket, or a ship
+	 * going down, gone or out of the player's sight. */
+	bool SocketAt(int32 Id, const FString& Name, FVector& OutWorld, FVector& OutWay) const;
+	/**
+	 * A gun of ship Id's model that trains (a boat's deck gun, a merchant's bow or stern gun: Mount, the model's
+	 * "turret.A" or "turret.Y"), laid as the show lays it: Bearing degrees off her bow (clockwise, 0 ahead, 180 astern),
+	 * the barrel's Elevation (degrees up), and Back, how far it has run back firing (0 run out, 1 its whole slide). Its
+	 * mount turns no further than the model's limits from where it lies stowed. Drawn only where she is drawn with the
+	 * battle modeller's model and it has the mount; else nothing.
+	 */
+	void TrainGun(int32 Id, const FString& Mount, double Bearing, double Elevation, double Back);
+	/**
+	 * A place on ship Id's deck by her gun's mount (Mount as TrainGun's): Fore metres toward her bow and Right toward her
+	 * starboard side from the mount's middle, Up metres over her waterline, where she lies now (world: her hull as it is
+	 * drawn), and her turn there (world: X along her bow, Y to her starboard, Z up). False where TrainGun draws no such
+	 * gun, or she is going down, gone or out of the player's sight.
+	 */
+	bool GunDeck(int32 Id, const FString& Mount, double Fore, double Right, double Up, FVector& OutWorld, FQuat& OutHer) const;
+	/** Ship Id gone under and not lost (a boat dived, each frame she is told down or under): what her hits' looks had still
+	 * to come gives way and their fires go out under the sea (FShipLooks::PutOut); her pose stays. */
+	void PutOut(int32 Id, double Now);
 	/** Where ship Id broke in two: the sea's face over her cut where she lies now (world) and when her end came (the
 	 * scene's seconds, as Sink was given them); false unless she has broken in two. */
 	bool BreakOf(int32 Id, FVector& OutWorld, double& OutAt) const;
@@ -198,6 +223,22 @@ private:
 		bool bTwoMeshes = false;
 		bool bNearShown = true;
 		bool bHidden = false; // out of the player's sight (SetShown)
+		// Her guns that train (TrainGun): each mount of her model (its "turret.A", a merchant's "turret.Y" too) and its
+		// barrel cut out of her hull's meshes and drawn on their own, the mount on her hull at its pivot and the barrel on the
+		// mount at its own, near and far as she is (bFar: each has the far model's too). Kept alive by ShipMeshes.
+		struct FGun
+		{
+			FString Part;
+			TObjectPtr<UProceduralMeshComponent> Mount = nullptr;
+			TObjectPtr<UProceduralMeshComponent> Barrel = nullptr;
+			FVector BarrelAt = FVector::ZeroVector;                   // the barrel's pivot on the mount (units)
+			FVector TurnAxis = FVector::UpVector, LiftAxis = FVector::RightVector, Slide = FVector::ZeroVector; // the model's
+			double Rest = 0.0, Least = -180.0, Most = 180.0;          // degrees off her bow, and the mount's turn either way
+			double LiftLeast = -5.0, LiftMost = 35.0, SlideMost = 0.0; // degrees; metres
+			FVector Muzzle = FVector::ZeroVector, Bore = FVector::ForwardVector; // on the barrel (units), and the way it points
+			bool bMuzzle = false, bFar = false;
+		};
+		TArray<FGun> Guns;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */

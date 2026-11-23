@@ -21,7 +21,8 @@
  *
  * The show (SeaShow) decides where every man is and what he is doing; this file says only which clip shows it, how far
  * into it he is, and where its root stands (the README's roots: `surface` on the sea where he is, `feet` under him as he
- * falls, `net` at the foot of the net up a rescuer's side, `seat` on a thwart, a raft's deck or a boat's boards).
+ * falls, `net` at the foot of the net up a rescuer's side, `seat` on a thwart, a raft's deck or a boat's boards; `deck`
+ * under his boots on a ship's deck, a gun's crew, whom the scene places itself).
  *
  * Plain C++, no Unreal types: the scene (ASeaBattle) copies what Skin writes into its own meshes, and Tools/sea_show
  * checks it in the cloud. A man's own axes are the files': x forward, y to his RIGHT, z up, metres. The board is the
@@ -44,6 +45,8 @@ namespace SeaSailors
 		Climb,  // climb_net: up a rescuer's side
 		Row,    // row: pulling an oar on a thwart
 		Sit,    // sit_raft: on a raft's deck or a boat's boards
+		Stand,  // idle: on a deck, standing to a gun (a gun's crew, ConvoyLook::GunCrewOf)
+		Duck,   // cower: crouched on a deck as a shell strikes or falls close aboard
 		Count
 	};
 	constexpr int Acts = static_cast<int>(Act::Count);

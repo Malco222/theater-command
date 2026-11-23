@@ -68,6 +68,10 @@ public:
 	 * where ship Id lies now (false: she is gone, her steps are dropped). */
 	void Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf);
 
+	/** Ship Id gone under the sea and not lost (a boat dived): what her hits' looks had still to come gives way and their
+	 * fires go out under the sea, as at an end at sea, the burst of a hit that has just landed still shown; her list, trim
+	 * and settle stay. Called each frame she is down. */
+	void PutOut(int32 Id, double Now);
 	/** Her list (degrees, plus toward her +Y side), trim (degrees, plus down by the bow) and settle (metres) now. */
 	bool Pose(int32 Id, double Now, double& OutList, double& OutTrim, double& OutSettle) const;
 	/** The side her looks have her flooding on (-1 or 1), or 0 if none yet. */
@@ -127,7 +131,7 @@ private:
 
 	void Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurstsOnly = false);
 	static bool IsBurst(const Fates::Beat& Step);
-	void GiveWay(int32 Id, bool bUnder, double Now);
+	void GiveWay(int32 Id, bool bUnder, double Now, bool bKeepOuts = false);
 	void StopLeaks(int32 Id);
 	void Ride(int32 Ship, uint8 What, int32 Id, const FShipLie& Lie, const FVector& Mine, const FVector& Way, double Now, double Until);
 	/** A place (a way) in her own frame, metres, in the world where she lies. */

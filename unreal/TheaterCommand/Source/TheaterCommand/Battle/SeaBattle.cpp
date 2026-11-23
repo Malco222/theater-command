@@ -184,10 +184,11 @@ namespace SeaParts
 		OutAzimuth = FMath::Fmod(FMath::RadiansToDegrees(Bearing) + 360.0, 360.0);
 	}
 
-	/** The effects kit's size row for a column of water (the kit has no naval rows yet: the nearest it has). */
+	/** The effects kit's size row for a column of water (the kit has no naval rows yet: the nearest it has; "small", a
+	 * boat's deck gun's or a merchant's gun's round, the kit's 105 mm shell's). */
 	static const TCHAR* SplashRow(const std::string& What)
 	{
-		return What == "heavy" ? TEXT("bomb500") : What == "medium" ? TEXT("bomb250") : TEXT("how150");
+		return What == "heavy" ? TEXT("bomb500") : What == "medium" ? TEXT("bomb250") : What == "small" ? TEXT("how105") : TEXT("how150");
 	}
 
 	/** The effects kit's nation rows (us, gb, de, it, jp, su, as the air scene's KitNation) from a ship's nation (USA,
@@ -276,9 +277,14 @@ namespace SeaParts
 		return Else;
 	}
 
-	/** The sound of a ship's guns by her class (the battle pack's takes). */
+	/** The sound of a ship's guns by her class (the battle pack's takes): a boat's deck gun and a merchant's gun, one gun of
+	 * a field gun's size, the field gun's crack, not a warship's broadside. */
 	static FName GunsOf(const std::string& Class)
 	{
+		if (Class == "ss" || Class == "mv")
+		{
+			return FName(TEXT("field_gun_fire"));
+		}
 		return Class == "bb" ? FName(TEXT("ship_gun_heavy")) : Class == "dd" ? FName(TEXT("ship_guns")) : FName(TEXT("ship_gun_medium"));
 	}
 
@@ -2027,6 +2033,26 @@ void ASeaBattle::LayAndSteer()
 		{
 			LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
 		}
+		// A boat's deck gun and a merchant's gun drawn laid as the show lays it (the review of 23 November: the model's gun
+		// stood stowed while its rounds flew off trained), run back as it fires (a tenth of a second) and out again (half a
+		// second more), a merchant's other gun lying stowed (TrainGun); and a boat told down or under, her hits' looks put out
+		// so that nothing of them burns on under the sea (PutOut, when ConvoyLook::PutsOutLooks says: the rule the sea show's
+		// cloud test holds the show's hits on boats to).
+		if (Ship.Class == "ss" || Ship.Class == "mv")
+		{
+			const bool bStern = Ship.Class == "mv" && Ship.bAftGun;
+			const double Since = S.BattleT - Ship.FiredAt;
+			const double Back = Ship.FiredAt < 0.0 || Since < 0.0 || Since >= 0.6 ? 0.0 : Since < 0.1 ? Since / 0.1 : 1.0 - (Since - 0.1) / 0.5;
+			Stage->TrainGun(Ship.Key, bStern ? TEXT("turret.Y") : TEXT("turret.A"), Ship.Train, Ship.Elevation, Back);
+			if (Ship.Class == "mv")
+			{
+				Stage->TrainGun(Ship.Key, bStern ? TEXT("turret.A") : TEXT("turret.Y"), bStern ? 0.0 : 180.0, 0.0, 0.0);
+			}
+			if (Ship.Class == "ss" && ConvoyLook::PutsOutLooks(Ship.Dive, Ship.Dived))
+			{
+				Stage->PutOut(Ship.Key, S.BattleT);
+			}
+		}
 	}
 }
 
@@ -2163,6 +2189,44 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		case SeaShow::FxKind::Salvo:
 		{
+			// A boat's deck gun or a merchant's gun (the convoy battle's "gun": one gun, one round): its flash and smoke at its
+			// muzzle as the stage draws it laid now (TrainGun, LayAndSteer: muzzle.turret.A.1, a merchant's stern gun's
+			// muzzle.turret.Y.1 where the show's bAftGun has that one bearing) and out along its bore; its crack after the
+			// flash (the mix's sea.deckGun.fire where the sound director has given one, else the field gun's).
+			if (E.What == "ss" || E.What == "mv")
+			{
+				const SeaShow::ShipOut* Firer = S.Show.Ship(E.Key);
+				if (Firer && Firer->bShown && Kit)
+				{
+					const bool bStern = E.What == "mv" && Firer->bAftGun;
+					FVector GunMuzzle = FVector::ZeroVector, GunBore = FVector::ZeroVector;
+					if (!Stage || !Stage->SocketAt(E.Key, bStern ? TEXT("muzzle.turret.Y.1") : TEXT("muzzle.turret.A.1"), GunMuzzle, GunBore))
+					{
+						// (no model of hers with the gun, as on the kit's code-built boat: its mount where the show puts it, a
+						// boat's a quarter of her length forward of her middle, an American fleet boat's aft of her tower; a
+						// merchant's on her forecastle or her poop; laid as the show lays it, a barrel of 45 calibres out from it,
+						// an 88 mm's about 4 m and a 4-inch's 4.6)
+						const FVector2D GunWay = Ahead(Firer->Heading + Firer->Train);
+						const double GunUp = FMath::DegreesToRadians(FMath::Clamp(Firer->Elevation, 0.0, 45.0));
+						GunBore = WorldVector(GunWay.X * FMath::Cos(GunUp), GunWay.Y * FMath::Cos(GunUp), FMath::Sin(GunUp)).GetSafeNormal();
+						const double Barrel = FMath::Clamp(E.Size * 0.045, 2.0, 6.5) * UnitsPerMetre;
+						const double GunLong = DrawnLong.Contains(E.Key) ? DrawnLong[E.Key] : Firer->Long;
+						const double Along = E.What == "ss" ? (Firer->bAftGun ? -0.18 : 0.26) : bStern ? -0.47 : 0.45;
+						const FVector2D Mount = FVector2D(Firer->At.X, Firer->At.Y) + Ahead(Firer->Heading) * (Along * GunLong);
+						const double High = E.What == "ss" ? GunLong * 0.052 : Firer->Beam * 0.52;
+						GunMuzzle = World(Mount.X, Mount.Y, High + Firer->Heave) + GunBore * Barrel;
+					}
+					Kit->Muzzle(GunMuzzle, GunBore.IsNearlyZero() ? FVector::UpVector : GunBore, TEXT("ship_aa"), TEXT("water"));
+				}
+				// (an enemy boat out of the player's sight is never heard: SeaShow's SetMine finds her as she fires, so this is
+				// only a guard)
+				if (!Firer || Firer->bShown)
+				{
+					const FString Bang = MixTake(Mix, TEXT("sea.deckGun.fire"), 0);
+					Sound(Bang.IsEmpty() ? GunsOf(E.What) : FName(*Bang), At, TEXT("big_guns"));
+				}
+				break;
+			}
 			// Her turrets' flashes along her deck, laid toward the target and up; her guns heard after the flash.
 			if (const SeaShow::ShipOut* From = S.Show.Ship(E.Key); From && Kit)
 			{
@@ -3700,6 +3764,101 @@ void ASeaBattle::DrawWrecks()
 			if (bInFar)
 			{
 				FarMen.Add(Man.Key);
+			}
+		}
+	}
+	// A gun's crew at it (the review of 23 November: no one served the gun): a boat's deck gun's or a merchant's gun's men
+	// while the show has it laid and she is up (ConvoyLook::GunCrewOf: gone at the diving alarm, or as her gun is dropped),
+	// on its deck by its mount as the stage draws it trained (GunDeck), standing to it, or crouched for a moment after a
+	// shell strikes her or falls close aboard her: copies of the pose bank's men (the sailor files' idle and cower), only
+	// within LiveReach of the eye. They are not the show's men (Men: those over the side and in the water), and are keyed
+	// apart from them, below 0; put away with any banked man not drawn this frame, below.
+	if (bFiles && Stage)
+	{
+		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		{
+			if ((Ship.Class != "ss" && Ship.Class != "mv") || !Ship.bGunLaid || !Ship.bShown || DistanceTo(Ship.At.X, Ship.At.Y, 0.0) > LiveReach + Ship.Long * 0.5)
+			{
+				continue;
+			}
+			FString ModelFile;
+			FVector ModelStretch = FVector::OneVector;
+			if (!Stage->ShipModel(Ship.Key, ModelFile, ModelStretch) || ModelFile.IsEmpty())
+			{
+				continue;
+			}
+			const ConvoyLook::GunMount Gun = ConvoyLook::MountOf(std::string(TCHAR_TO_UTF8(*FPaths::GetCleanFilename(ModelFile))), Ship.Class == "mv" && Ship.bAftGun);
+			const int32 File = S.Crew.FileFor(Ship.Nation);
+			if (Gun.File.empty() || File < 0)
+			{
+				continue;
+			}
+			ConvoyLook::CrewIn Told;
+			Told.bLaid = Ship.bGunLaid;
+			Told.Dive = Ship.Class == "ss" ? Ship.Dive : std::string();
+			Told.Dived = Ship.Dived;
+			Told.Train = Ship.Train;
+			Told.ShakenAt = Ship.ShakenAt;
+			Told.T = Now;
+			Told.Key = Ship.Key;
+			const std::vector<ConvoyLook::CrewMan> Gunners = ConvoyLook::GunCrewOf(Gun, Told);
+			const int32 Dress = DressFor(S, Ship.Nation, File, 0);
+			const FString GunPart = UTF8_TO_TCHAR(Gun.Part.c_str());
+			for (int32 K = 0; K < static_cast<int32>(Gunners.size()); ++K)
+			{
+				const ConvoyLook::CrewMan& Gunner = Gunners[static_cast<size_t>(K)];
+				FVector Feet = FVector::ZeroVector;
+				FQuat Her = FQuat::Identity;
+				if (!Stage->GunDeck(Ship.Key, GunPart, Gunner.Fore, Gunner.Right, Gun.Deck, Feet, Her))
+				{
+					break;
+				}
+				const FVector Board = BoardOf(Feet);
+				const double D = DistanceTo(Board.X, Board.Y, Board.Z);
+				const double Pixels = 0.45 * PerRadian / D;
+				if (D > LiveReach || Pixels < 0.5)
+				{
+					continue;
+				}
+				const SeaSailors::Act What = Gunner.bDuck ? SeaSailors::Act::Duck : SeaSailors::Act::Stand;
+				const int32 Pose = S.Crew.PoseOf(File, What, static_cast<float>(Now + Gunner.Clip));
+				const int32 Level = Pixels >= MidLodFrom ? LandMen::Mid : LandMen::Far;
+				const int32 Copy = SailorCopy(SailorKey(File, Dress, static_cast<int32>(What), Pose, Level, false, false), File, Dress, static_cast<int32>(What), Pose, Level, false, false, Builds);
+				if (Copy < 0)
+				{
+					continue;
+				}
+				// (his own feet on her deck, his own turn hers and then his facing: she heels and pitches, and he with her)
+				const FTransform Put(Her * FQuat(FVector::UpVector, FMath::DegreesToRadians(Gunner.Facing)), Feet);
+				const int32 Mine = -(Ship.Key * ConvoyLook::CrewMost + K + 1);
+				FBankedSailor* Had = SailorBanked.Find(Mine);
+				if (!Had)
+				{
+					Had = &SailorBanked.Add(Mine, FBankedSailor());
+				}
+				if (Had->Copy != Copy)
+				{
+					SailorAway(*Had);
+					TArray<int32>& Free = SailorFree[Copy];
+					if (Free.Num() > 0)
+					{
+						Had->Slot = Free.Pop();
+						SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
+					}
+					else
+					{
+						Had->Slot = SailorCopies[Copy]->AddInstance(Put, false);
+					}
+					Had->Copy = Copy;
+				}
+				else
+				{
+					SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
+				}
+				Had->At = Feet;
+				Had->Yaw = Put.Rotator().Yaw;
+				Had->bSeen = true;
+				SailorDirty[Copy] = 1;
 			}
 		}
 	}

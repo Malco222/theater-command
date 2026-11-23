@@ -8,6 +8,7 @@
 //
 // Plain C++20, no engine: it builds anywhere with g++ or clang++.
 
+#include "Battle/ConvoyLooksCore.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaShow.h"
 
@@ -21,6 +22,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -161,6 +163,37 @@ namespace
 		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
 		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
+		// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): the rounds each class fired; those no view the
+		// show had told her gun for, those on another piece than the one told, those of another bore than the one told (or,
+		// none told, of no deck gun's); a boat's fired under or awash; the bores each piece fired; the frames a boat's gun
+		// was told while she was under or awash (held: no round); the small columns thrown, and those of a warship's bore;
+		// the shell hits drawn on each piece, and those on a boat under.
+		int DeckRounds = 0, MerchantRounds = 0, GunRoundsUntold = 0, GunRoundsOff = 0, GunRoundsOdd = 0, DeckRoundsUnder = 0;
+		std::map<int, std::set<long>> GunBores;
+		std::map<int, long> GunHeld;
+		int SmallSplashes = 0, SmallSplashesOdd = 0, HitsUnder = 0;
+		std::map<int, std::vector<double>> ShellHitsAt;
+		// (and each such round against its gun's own arc and lay: fired at a bearing outside the arc its mount turns
+		// through, or off the bearing its gun was trained to; a merchant's from the other of her two guns than the one that
+		// bears; her bow and her stern guns' rounds; the frames a boat's gun was told on a ship in her blind arc while she was
+		// up, her casing clear (held: no round); the rounds each piece fired on each piece)
+		int GunRoundsOutOfArc = 0, GunRoundsUnlaid = 0, MerchantRoundsWrongGun = 0, MerchantBowRounds = 0, MerchantSternRounds = 0;
+		std::map<int, long> GunBlind;
+		std::map<std::pair<int, int>, int> GunRoundsOn;
+		// (the rounds that carry a hit told, sea:gunHit, fired its flight before it to land as it is told: those whose gun
+		// was off its lay or the target outside its arc as they went, fired as it lay because the hit came to be known too
+		// late for it to come round; and each piece's rounds, when fired and when each falls, the show's own Until)
+		int GunRoundsTold = 0, GunRoundsHasty = 0;
+		std::map<int, std::vector<std::tuple<double, double, int>>> RoundsOf; // (fired, falls, on the piece)
+		// (whether each piece had a ship hidden from the player, as it changed: no round of hers is shown then)
+		std::map<int, std::vector<std::pair<double, bool>>> HiddenAt;
+		// (whether each piece had a ship up, afloat in the line and, a boat, her casing clear, as it changed: a gun's hit
+		// told on her while she is up is drawn as told)
+		std::map<int, std::vector<std::pair<double, bool>>> UpAt;
+		// (the looks of the hits on a boat, as the scene keeps them: lit by each hit on her, put out every frame she is told
+		// down or under; the boat-frames under with a look lit in the last 140 s still burning on her)
+		std::map<int, double> LooksLitAt, LooksOutAt;
+		long LooksUnder = 0;
 		// Enemy boats the player has not found (SetMine, the views' "me"): what the show hid, and anything of hers out while
 		// it did; against the recording's own finds (FindsOf): shown before anything could find her, hidden while held.
 		int EnemyBoats = 0;
@@ -455,6 +488,13 @@ namespace
 		const double EndT = Rec.Views.back().Head.T;
 		double NextSample = T;
 		size_t Seen = 0; // the last view at or before the shown time
+		size_t GunView = 0, GunViewBefore = 0; // the same, and a step before it (a boat's or a merchant's gun, below)
+		// (the hits the recording tells of each piece's gun, sea:gunHit: when, and on which piece; a round of hers that falls
+		// as one of them is told carries it)
+		std::map<int, std::vector<std::pair<double, int>>> HitsBy;
+		for (const SeaFeed::Frame& Told : Rec.Views)
+			for (const SeaShow::Event& Hit : Told.Events)
+				if (Hit.What == "sea:gunHit" && Hit.From >= 0 && Hit.Unit >= 0) HitsBy[Hit.From].push_back({ Hit.T, Hit.Unit });
 		while (true)
 		{
 			const auto F0 = std::chrono::steady_clock::now();
@@ -481,6 +521,22 @@ namespace
 			std::set<int> HiddenPieces;
 			for (const SeaShow::ShipOut& S : Ships)
 				if (!S.bShown) HiddenPieces.insert(S.Piece);
+			// (whom a piece's gun is on as the show reads it: the view it has, the last at or before its step; its step lies
+			// within the show's twentieth of a second before the moment drawn, so a round is told by the view at either)
+			while (GunView + 1 < Rec.Views.size() && Rec.Views[GunView + 1].Head.T <= Show.Shown()) ++GunView;
+			while (GunViewBefore + 1 < Rec.Views.size() && Rec.Views[GunViewBefore + 1].Head.T <= Show.Shown() - 0.05) ++GunViewBefore;
+			auto GunTold = [&Rec](size_t View, int PieceId) -> const SeaShow::Piece*
+			{
+				for (const SeaShow::Piece& Q : Rec.Views[View].Pieces)
+					if (Q.Id == PieceId) return Q.GunOn >= 0 ? &Q : nullptr;
+				return nullptr;
+			};
+			auto PieceIn = [&Rec](size_t View, int PieceId) -> const SeaShow::Piece*
+			{
+				for (const SeaShow::Piece& Q : Rec.Views[View].Pieces)
+					if (Q.Id == PieceId) return &Q;
+				return nullptr;
+			};
 
 			for (const SeaShow::Fx& E : Show.Effects)
 			{
@@ -525,6 +581,12 @@ namespace
 				case SeaShow::FxKind::Gun: Out.OpenStreams.insert(E.Key); break;
 				case SeaShow::FxKind::GunStop: Out.OpenStreams.erase(E.Key); break;
 				case SeaShow::FxKind::Splash:
+					// (a boat's deck gun's or a merchant's gun's round: a small column, of a deck gun's bore)
+					if (E.What == "small")
+					{
+						++Out.SmallSplashes;
+						if (E.Size >= 130.0) ++Out.SmallSplashesOdd;
+					}
 					for (const SeaShow::ShipOut& S : Ships)
 						if (S.Doing != SeaShow::Fate::Gone && Inside(E.At, S) > -2.0) { ++Out.SplashOnHull; break; }
 					break;
@@ -536,12 +598,84 @@ namespace
 					if (It == ByKey.end()) { ++Out.HitsOnGone; break; }
 					// on her (a torpedo at her side): within her outline and a few metres
 					if (Inside(E.At, *It->second) < -(E.Kind == SeaShow::FxKind::TorpedoHit ? 8.0 : 12.0)) ++Out.HitsOff;
+					// (a shell's hit: when, on her piece; never on a boat under, whose hull the shell could not reach)
+					if (E.Kind == SeaShow::FxKind::ShellHit)
+					{
+						Out.ShellHitsAt[It->second->Piece].push_back(Show.Shown());
+						if (It->second->Class == "ss" && It->second->Dived > 1.0) ++Out.HitsUnder;
+					}
+					// (a hit on a boat lights her looks: her fires and smoke)
+					if (It->second->Class == "ss") Out.LooksLitAt[E.Key] = Show.Shown();
 					break;
 				}
 				case SeaShow::FxKind::Salvo:
 				{
 					auto It = ByKey.find(E.Key);
 					if (It == ByKey.end() || It->second->Doing != SeaShow::Fate::Line) ++Out.SalvosFromOut;
+					// A boat's deck gun's round or a merchant's gun's (one gun, one round): told by the view the show has (her
+					// piece's "gun"), aimed at a ship of the piece told, of the bore the battle names or else a deck gun's; a
+					// boat's only on the surface, her casing clear.
+					else if (It->second->Class == "ss" || It->second->Class == "mv")
+					{
+						const SeaShow::ShipOut& Firer = *It->second;
+						++(Firer.Class == "ss" ? Out.DeckRounds : Out.MerchantRounds);
+						if (Firer.Class == "ss" && (Firer.Dived > 1.0 || Firer.Dive != "surfaced")) ++Out.DeckRoundsUnder;
+						const SeaShow::Piece* Told = GunTold(GunView, Firer.Piece);
+						if (!Told) Told = GunTold(GunViewBefore, Firer.Piece);
+						// (or the round that carries a hit told of her gun, falling as it is told: the battle says she hit, so she
+						// fired; on the piece that hit struck)
+						int OnPiece = Told ? Told->GunOn : -1;
+						bool bCarries = false;
+						const auto Hits = HitsBy.find(Firer.Piece);
+						if (Hits != HitsBy.end())
+						{
+							for (const auto& Hit : Hits->second)
+							{
+								if (std::fabs(Hit.first - E.Until) > 1e-6) continue;
+								bCarries = true;
+								OnPiece = Hit.second;
+							}
+						}
+						if (bCarries) ++Out.GunRoundsTold;
+						Out.RoundsOf[Firer.Piece].push_back({ Show.Shown(), E.Until, OnPiece });
+						const SeaShow::Piece* Hers = Told ? Told : PieceIn(GunView, Firer.Piece);
+						if (OnPiece < 0 || !Hers) ++Out.GunRoundsUntold;
+						else
+						{
+							bool bOnTold = false;
+							for (const SeaShow::ShipOut& O : Ships)
+								if (O.Piece == OnPiece && Flat(O.At - E.Aim) <= 5.0) bOnTold = true;
+							if (!bOnTold) ++Out.GunRoundsOff;
+							if (Hers->GunMm > 0.0 ? std::fabs(E.Size - Hers->GunMm) > 1e-6 : E.Size < 40.0 || E.Size > 140.0) ++Out.GunRoundsOdd;
+							++Out.GunRoundsOn[{ Firer.Piece, OnPiece }];
+						}
+						Out.GunBores[Firer.Piece].insert(std::lround(E.Size));
+						// Its bearing off her bow and her gun's lay: within the arc its mount turns through (a boat's 145 degrees
+						// either side of where it lies stowed, an American fleet boat's aft), her gun trained on it within the
+						// show's 6 degrees (and half a degree for the moment drawn past the step it was fired in); a merchant's
+						// from her stern gun on any target it bears on (from 30 degrees off her bow round her stern), else from
+						// her bow gun (a degree's grace at the line between them). A round that carries a hit told and is none of
+						// these was fired as its gun lay, the hit known too late for it to come round: counted apart (Hasty).
+						const double Rel = std::remainder(std::atan2(E.Aim.X - Firer.At.X, E.Aim.Y - Firer.At.Y) * 180.0 / Pi - Firer.Heading, 360.0);
+						const double Fine = 180.0 - SeaShow::Show::MerchantGunArc;
+						const bool bOutOfArc = Firer.Class == "ss" && (Firer.Nation == "USA" ? std::fabs(Rel) < 180.0 - SeaShow::Show::DeckGunArc : std::fabs(Rel) > SeaShow::Show::DeckGunArc);
+						const bool bUnlaid = std::fabs(std::remainder(Rel - Firer.Train, 360.0)) > 6.5;
+						bool bWrongGun = false;
+						if (Firer.Class == "mv")
+						{
+							const double Bow = Firer.Heading * Pi / 180.0;
+							const bool bFromAft = (E.At.X - Firer.At.X) * std::sin(Bow) + (E.At.Y - Firer.At.Y) * std::cos(Bow) < 0.0;
+							++(bFromAft ? Out.MerchantSternRounds : Out.MerchantBowRounds);
+							bWrongGun = bFromAft != Firer.bAftGun || (std::fabs(std::fabs(Rel) - Fine) > 1.0 && bFromAft != (std::fabs(Rel) >= Fine));
+						}
+						if (bCarries && (bOutOfArc || bUnlaid || bWrongGun)) ++Out.GunRoundsHasty;
+						else
+						{
+							if (bOutOfArc) ++Out.GunRoundsOutOfArc;
+							if (bUnlaid) ++Out.GunRoundsUnlaid;
+							if (bWrongGun) ++Out.MerchantRoundsWrongGun;
+						}
+					}
 					break;
 				}
 				case SeaShow::FxKind::ScreenStart:
@@ -587,9 +721,16 @@ namespace
 
 			// Every ship: no pop beyond her speed, no heel past reason, two hulls never one through the other.
 			bool bTouching = false;
+			std::map<int, bool> UpNow, HiddenNow;
 			for (size_t I = 0; I < Ships.size(); ++I)
 			{
 				const SeaShow::ShipOut& S = Ships[I];
+				{
+					bool& bUp = UpNow[S.Piece];
+					bUp = bUp || (S.Doing == SeaShow::Fate::Line && (S.Class != "ss" || S.Dived <= 1.0));
+					bool& bHid = HiddenNow[S.Piece];
+					bHid = bHid || !S.bShown;
+				}
 				// Whom the player sees (SetMine): only an enemy boat in the fight hidden, with nothing of her on the sea; never
 				// shown before the battle told anything that could find her, never hidden while an escort held her.
 				{
@@ -691,6 +832,25 @@ namespace
 					}
 					Out.MostBoatKeel = std::max(Out.MostBoatKeel, S.Keel);
 					if (S.Keel < 0.0 || (S.Dive != "surfaced" && S.Dive != "periscope" && S.Dive != "deep")) ++Out.BoatOdd;
+					// (her deck gun told while she is under or awash: held, no round, DeckRoundsUnder above)
+					if (S.Doing == SeaShow::Fate::Line && (S.Dived > 1.0 || S.Dive != "surfaced") && GunTold(GunView, S.Piece)) ++Out.GunHeld[S.Piece];
+					// (and told up, her casing clear, on a ship in the blind arc her tower makes: held at its arc's edge)
+					else if (const SeaShow::Piece* Told = S.Doing == SeaShow::Fate::Line ? GunTold(GunView, S.Piece) : nullptr)
+					{
+						const SeaShow::ShipOut* Target = nullptr;
+						for (const SeaShow::ShipOut& O : Ships)
+							if (O.Piece == Told->GunOn && O.Doing == SeaShow::Fate::Line && (!Target || Flat(O.At - S.At) < Flat(Target->At - S.At))) Target = &O;
+						const double Rel = Target ? std::remainder(std::atan2(Target->At.X - S.At.X, Target->At.Y - S.At.Y) * 180.0 / Pi - S.Heading, 360.0) : 0.0;
+						if (Target && (S.Nation == "USA" ? std::fabs(Rel) < 180.0 - SeaShow::Show::DeckGunArc : std::fabs(Rel) > SeaShow::Show::DeckGunArc)) ++Out.GunBlind[S.Piece];
+					}
+					// (her looks, as the scene keeps them: a look lit on her since they were last put out, under, within 140 s
+					// of its hit, is still burning on her under the sea; put out each frame the scene's own rule says, the one
+					// it asks before the stage's PutOut, ConvoyLook::PutsOutLooks: so the show's hits are held to the scene's)
+					const auto Lit = Out.LooksLitAt.find(S.Key);
+					const auto PutOut = Out.LooksOutAt.find(S.Key);
+					if (S.Dived > 1.0 && Lit != Out.LooksLitAt.end() && Show.Shown() - Lit->second < 140.0 && (PutOut == Out.LooksOutAt.end() || PutOut->second < Lit->second))
+						++Out.LooksUnder;
+					if (ConvoyLook::PutsOutLooks(S.Dive, S.Dived)) Out.LooksOutAt[S.Key] = Show.Shown();
 				}
 				else if (S.Doing != SeaShow::Fate::Sinking)
 				{
@@ -725,6 +885,16 @@ namespace
 				}
 			}
 			if (bTouching) ++Out.TouchingFrames;
+			for (const auto& Up : UpNow)
+			{
+				std::vector<std::pair<double, bool>>& Seq = Out.UpAt[Up.first];
+				if (Seq.empty() || Seq.back().second != Up.second) Seq.emplace_back(Show.Shown(), Up.second);
+			}
+			for (const auto& Hid : HiddenNow)
+			{
+				std::vector<std::pair<double, bool>>& Seq = Out.HiddenAt[Hid.first];
+				if (Seq.empty() || Seq.back().second != Hid.second) Seq.emplace_back(Show.Shown(), Hid.second);
+			}
 			// Men in the water: none popping from frame to frame (falling from a deck, or climbing a moving rescuer's side, the
 			// most), and twice a second, none inside a ship afloat but a man jumping from her or climbing her side, nor any
 			// raft, boat or piece of wreckage.
@@ -896,13 +1066,24 @@ int main(int Argc, char** Argv)
 	int DiveEvents = 0, ChargeEvents = 0, ChargeHits = 0, Starshells = 0, Rescues = 0, Boats = 0; // a convoy's night (ruling 241)
 	int MenTold = 0, OilTold = 0, AbandonTold = 0; // the naval rules' sailor events (22 November)
 	bool bGunfire = false;
+	// (a boat's deck gun and a merchant's gun, the convoy battle's: told on some view, their actions told, the hits each piece
+	// was told it took of them, one entry a hit)
+	bool bDeckGunTold = false, bMerchantGunTold = false;
+	int GunActionsTold = 0, GunHitEventsTold = 0, GunHitsTold = 0;
+	std::map<int, std::vector<double>> GunHitsOn;
+	// (and each hit event told of a gun, by when, the piece that fired it and the piece it struck: one round each)
+	std::vector<std::tuple<double, int, int>> GunHitsFrom;
+	std::map<int, std::string> ClassOf;
 	std::set<int> Pieces;
 	for (const SeaFeed::Frame& F : Rec.Views)
 	{
 		for (const SeaShow::Piece& P : F.Pieces)
 		{
 			Pieces.insert(P.Id);
+			ClassOf[P.Id] = P.Class;
 			if (P.Engaged >= 0) bGunfire = true;
+			if (P.GunOn >= 0 && P.Class == "ss") bDeckGunTold = true;
+			if (P.GunOn >= 0 && P.Class == "mv") bMerchantGunTold = true;
 		}
 		for (const SeaShow::Event& E : F.Events)
 		{
@@ -924,6 +1105,17 @@ int main(int Argc, char** Argv)
 			else if (E.What == "sea:men") ++MenTold;
 			else if (E.What == "sea:oil") ++OilTold;
 			else if (E.What == "sea:abandon") ++AbandonTold;
+			else if (E.What == "sea:gun") ++GunActionsTold;
+			else if (E.What == "sea:gunHit")
+			{
+				++GunHitEventsTold;
+				for (int K = 0; K < std::max(1, E.N); ++K)
+				{
+					++GunHitsTold;
+					GunHitsOn[E.Unit].push_back(E.T);
+				}
+				if (E.From >= 0 && E.Unit >= 0) GunHitsFrom.push_back({ E.T, E.From, E.Unit });
+			}
 		}
 	}
 	const SeaFeed::Frame& Last = Rec.Views.back();
@@ -1135,6 +1327,212 @@ int main(int Argc, char** Argv)
 		                   "all" });
 		Limits.push_back({ "no more men drawn picked up than the battle's count of them", C.PickedOver == 0, std::to_string(C.PickedOver) + " over", "0" });
 	}
+	// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): their rounds only where the battle says, as the
+	// show counts them; their misses small columns; every hit told of them drawn on the ship struck, soon. Where the
+	// recording tells none of it, each holds at nothing (no round, no small column).
+	{
+		const int Rounds = P.DeckRounds + P.MerchantRounds;
+		Limits.push_back({ "a boat's deck gun fires only where the battle says, on the surface", (P.DeckRounds > 0) == bDeckGunTold && P.DeckRoundsUnder == 0,
+		                   std::to_string(P.DeckRounds) + " rounds (" + (bDeckGunTold ? "told" : "none told") + "), " + std::to_string(P.DeckRoundsUnder) + " under or awash",
+		                   "some where told, none where not; 0 under" });
+		Limits.push_back({ "a merchant's gun fires only where the battle says", (P.MerchantRounds > 0) == bMerchantGunTold,
+		                   std::to_string(P.MerchantRounds) + " rounds (" + (bMerchantGunTold ? "told" : "none told") + ")", "some where told, none where not" });
+		Limits.push_back({ "every such round told by the view, on the piece told, of its bore", P.GunRoundsUntold == 0 && P.GunRoundsOff == 0 && P.GunRoundsOdd == 0,
+		                   std::to_string(P.GunRoundsUntold) + " untold, " + std::to_string(P.GunRoundsOff) + " on another, " + std::to_string(P.GunRoundsOdd) + " of another bore",
+		                   "0, 0, 0 (the bore told, else a deck gun's 40 to 140 mm)" });
+		Limits.push_back({ "the show's own count of them the rounds drawn", C.DeckRounds == P.DeckRounds && C.MerchantRounds == P.MerchantRounds,
+		                   std::to_string(C.DeckRounds) + " and " + std::to_string(C.MerchantRounds) + " counted, " + std::to_string(P.DeckRounds) + " and " +
+		                       std::to_string(P.MerchantRounds) + " drawn",
+		                   "the same" });
+		Limits.push_back({ "their misses fall as small columns", (Rounds == 0 ? P.SmallSplashes == 0 : P.SmallSplashes > 0 && P.SmallSplashes <= Rounds) && P.SmallSplashesOdd == 0,
+		                   std::to_string(P.SmallSplashes) + " small for " + std::to_string(Rounds) + " rounds, " + std::to_string(P.SmallSplashesOdd) + " of a warship's bore",
+		                   "some, one a round at most; none with no round" });
+		// (each hit told matched, in order, to the first shell hit drawn on her piece at or after it and not matched before)
+		// (those told on a piece up when told, by the last frame drawn before it, held to a frame or two: a merchant's last
+		// hits told with her sinking at the same moment among them)
+		int Undrawn = 0, UpHits = 0, UpLate = 0;
+		double Lag = 0.0, UpLag = 0.0;
+		for (const auto& Struck : GunHitsOn)
+		{
+			std::vector<double> Times = Struck.second;
+			std::sort(Times.begin(), Times.end());
+			const auto Drawn = P.ShellHitsAt.find(Struck.first);
+			const auto Ups = P.UpAt.find(Struck.first);
+			size_t Next = 0;
+			for (const double When : Times)
+			{
+				bool bUp = false;
+				if (Ups != P.UpAt.end())
+					for (const auto& Was : Ups->second)
+						if (Was.first < When - 1e-9) bUp = Was.second;
+				if (bUp) ++UpHits;
+				while (Drawn != P.ShellHitsAt.end() && Next < Drawn->second.size() && Drawn->second[Next] < When - 1e-6) ++Next;
+				if (Drawn == P.ShellHitsAt.end() || Next >= Drawn->second.size())
+				{
+					++Undrawn;
+					if (bUp) ++UpLate;
+					continue;
+				}
+				Lag = std::max(Lag, Drawn->second[Next] - When);
+				if (bUp)
+				{
+					UpLag = std::max(UpLag, Drawn->second[Next] - When);
+					if (Drawn->second[Next] - When > 0.1) ++UpLate;
+				}
+				++Next;
+			}
+		}
+		Limits.push_back({ "every gun hit told drawn on the ship struck within 30 s",
+		                   Undrawn == 0 && Lag <= 30.0 && C.GunHitEvents == GunHitEventsTold && C.GunHitsTold == GunHitsTold,
+		                   std::to_string(GunHitsTold - Undrawn) + " of " + std::to_string(GunHitsTold) + " drawn (" + std::to_string(C.GunHitEvents) + " of " +
+		                       std::to_string(GunHitEventsTold) + " told), at most " + Num(Lag, 1) + " s after",
+		                   "all, 30 s or less" });
+		// (a ship up, afloat and her casing clear, shows a hit as it is told, the reel the player reads at that moment)
+		Limits.push_back({ "every gun hit told on a ship up drawn as told", UpLate == 0 && UpLag <= 0.1,
+		                   std::to_string(UpHits - UpLate) + " of " + std::to_string(UpHits) + " drawn in time, at most " + Num(UpLag, 2) + " s after", "all, 0.1 s or less" });
+		Limits.push_back({ "every gun action told counted", C.GunEvents == GunActionsTold, std::to_string(C.GunEvents) + " of " + std::to_string(GunActionsTold), "all" });
+		// Every hit told of a boat's or a merchant's gun has its round (the review of 23 November: a merchant struck by a gun
+		// that had not fired): one of the piece that fired it, on the piece it struck, fired at or before the hit and falling
+		// no more than a second before it by the round's own flight (the show's Until: the round that carries it falls as it
+		// is told; one of hers in the air as the hit came to be known is the one that strikes, a moment later than its own
+		// flight would have it). Else only where she was hidden from the player as it was told (SetMine: no gun of a boat he
+		// has not found is shown; the hit finds her as it lands).
+		auto RoundsFor = [&GunHitsFrom, &ClassOf](const Played& Of, int& Unseen)
+		{
+			int Without = 0;
+			Unseen = 0;
+			for (const auto& Hit : GunHitsFrom)
+			{
+				const double When = std::get<0>(Hit);
+				const int By = std::get<1>(Hit), Struck = std::get<2>(Hit);
+				const auto Cls = ClassOf.find(By);
+				if (Cls == ClassOf.end() || (Cls->second != "ss" && Cls->second != "mv")) continue;
+				bool bRound = false;
+				const auto Fired = Of.RoundsOf.find(By);
+				if (Fired != Of.RoundsOf.end())
+				{
+					for (const auto& Round : Fired->second)
+						bRound = bRound || (std::get<2>(Round) == Struck && std::get<0>(Round) <= When + 1e-6 && When <= std::get<1>(Round) + 1.0 + 1e-6);
+				}
+				if (bRound) continue;
+				bool bHidden = false;
+				const auto Hid = Of.HiddenAt.find(By);
+				if (Hid != Of.HiddenAt.end())
+				{
+					for (const auto& Was : Hid->second)
+						if (Was.first < When - 1e-9) bHidden = Was.second;
+				}
+				++(bHidden ? Unseen : Without);
+			}
+			return Without;
+		};
+		int Unseen = 0;
+		const int Roundless = RoundsFor(P, Unseen);
+		Limits.push_back({ "every gun hit told has its round, fired before it and falling with it", Roundless == 0,
+		                   std::to_string(Roundless) + " without one; " + std::to_string(Unseen) + " of a boat the player had not found (no round of hers shown); " +
+		                       std::to_string(C.GunHitRounds) + " rounds carried them",
+		                   "0 (each with a round of the gun that fired it, but a boat's not yet found)" });
+		// (each round from the mount the rule names, inside the arc it turns through and off the bearing it was laid on by
+		// no more than the show's own fire gate, 6 degrees, with half a degree for the frame between; a round that carries a
+		// hit told, fired its flight before it whatever the cadence, may go as its gun lies where the hit came to be known too
+		// late for it to come round (Hasty): only those the show counts so)
+		Limits.push_back({ "every such round inside its mount's arc, laid on it, from the gun that bears",
+		                   P.GunRoundsOutOfArc == 0 && P.GunRoundsUnlaid == 0 && P.MerchantRoundsWrongGun == 0 && P.GunRoundsHasty <= C.GunHitRoundsHasty,
+		                   std::to_string(P.GunRoundsOutOfArc) + " outside the arc, " + std::to_string(P.GunRoundsUnlaid) + " off the lay, " +
+		                       std::to_string(P.MerchantRoundsWrongGun) + " from a merchant's other gun; " + std::to_string(P.GunRoundsHasty) + " of a hit told fired as its gun lay (" +
+		                       std::to_string(C.GunHitRoundsHasty) + " so by the show)",
+		                   "0, 0, 0 (a boat's within her mount's arc of where it stows, a merchant's bow gun only fine on her bow); a hit's, the show's own at most" });
+		Limits.push_back({ "no hit's look left burning on a boat under", P.LooksUnder == 0, std::to_string(P.LooksUnder) + " boat-frames", "0 (put out as she goes down)" });
+		Limits.push_back({ "no shell hit drawn on a boat under", P.HitsUnder == 0, std::to_string(P.HitsUnder), "0" });
+		// The stand-in's own (convoy_night.py): Boat C's gun a Type IX's 105 mm as the battle names it; Merchant 3's gunners'
+		// and Merchant 12's a British merchant's 4-inch and Boat D's a German boat's 88, by the show's table; Boat A's told as
+		// she comes up from 80 m, before her casing is clear, and held until it is, and Boat C's told on until 242, past her
+		// dive at 240 (theirs the only guns held: the pin was hers alone, Boat A's, until the review of 23 November gave Boat C's
+		// those two seconds); Boat A's told, up, on Escort 2 dead astern, in the blind arc her tower makes, and held there (no
+		// round of hers on him, the only gun so held); Merchant 12's bow gun on Boat A fine on her bow and Merchant 3's stern
+		// gun on Boat C abeam, both fired.
+		if (Rec.Key == "convoy-night" || Rec.Key == "convoy-night-air")
+		{
+			const bool bAir = Rec.Key == "convoy-night-air";
+			auto BoresOf = [&P](int PieceId)
+			{
+				const auto It = P.GunBores.find(PieceId);
+				std::string Said;
+				if (It != P.GunBores.end())
+					for (const long Mm : It->second) Said += (Said.empty() ? "" : "/") + std::to_string(Mm);
+				return Said.empty() ? std::string("none") : Said;
+			};
+			auto CountOf = [](const std::map<int, long>& Of, int PieceId)
+			{
+				const auto It = Of.find(PieceId);
+				return It == Of.end() ? 0L : It->second;
+			};
+			const long HeldFrames = CountOf(P.GunHeld, 30), HeldC = CountOf(P.GunHeld, 32), BlindA = CountOf(P.GunBlind, 30);
+			const auto OnEscort = P.GunRoundsOn.find({ 30, 21 });
+			const int RoundsOnEscort = OnEscort == P.GunRoundsOn.end() ? 0 : OnEscort->second;
+			const bool bOk = BoresOf(32) == "105" && BoresOf(3) == "102" && BoresOf(12) == "102" && BoresOf(33) == (bAir ? "88" : "none") && HeldFrames > 0 && HeldC > 0 &&
+			                 P.GunHeld.size() == 2 && BlindA > 0 && P.GunBlind.size() == 1 && RoundsOnEscort == 0 && P.MerchantBowRounds > 0 && P.MerchantSternRounds > 0;
+			Limits.push_back({ "the stand-in's guns: their bores, held as the boats come up and go down, held in the blind arc, both a merchant's guns", bOk,
+			                   "Boat C " + BoresOf(32) + " mm, Merchants 3 and 12 " + BoresOf(3) + " and " + BoresOf(12) + ", Boat D " + BoresOf(33) + "; Boat A held " +
+			                       std::to_string(HeldFrames) + " frames, Boat C " + std::to_string(HeldC) + ", " + std::to_string(P.GunHeld.size()) + " guns held; Boat A held astern " +
+			                       std::to_string(BlindA) + " frames (" + std::to_string(P.GunBlind.size()) + " guns), " + std::to_string(RoundsOnEscort) + " rounds on Escort 2; " +
+			                       std::to_string(P.MerchantBowRounds) + " bow and " + std::to_string(P.MerchantSternRounds) + " stern rounds",
+			                   bAir ? "105, 102 and 102, 88; some frames each, theirs alone; some frames, hers alone, none; some of each"
+			                        : "105, 102 and 102, none; some frames each, theirs alone; some frames, hers alone, none; some of each" });
+			// Each hit told with its round (the review of 23 November): every one but Boat C's first on Merchant 3 at 63.8,
+			// told before the view that says her gun is on and before anything finds her (no round of hers is shown, the hit
+			// finds her); Boat D's first on Merchant 13 at 26, told 6 s after her gun, as it comes round to him, its round fired
+			// as her gun lies (the hit known a view ahead, too late to lay for it), the only one so.
+			const int CarriedRounds = bAir ? 7 : 4, HastyRounds = bAir ? 1 : 0;
+			Limits.push_back({ "the stand-in's gun hits each with its round, one of a boat not yet found, one fired as her gun lay",
+			                   Unseen == 1 && C.GunHitRounds == CarriedRounds && C.GunHitRoundsHasty == HastyRounds && P.GunRoundsHasty == HastyRounds,
+			                   std::to_string(Unseen) + " unseen, " + std::to_string(C.GunHitRounds) + " rounds carried hits, " + std::to_string(C.GunHitRoundsHasty) + " (" +
+			                       std::to_string(P.GunRoundsHasty) + " drawn) fired as the gun lay",
+			                   bAir ? "1, 7, 1 (1)" : "1, 4, 0 (0)" });
+			// The straggler a deck gun finishes, left by her men (the review of 23 November: a gun told on a ship out of her
+			// line fired nothing, and its hits were owed for ever): Merchant 13 abandoned at 12, before Boat D's gun is told on
+			// her at 20. Boat D's rounds go on her where she lies settling, every hit told on her is drawn as told on her with
+			// its round, and nothing is owed.
+			if (bAir)
+			{
+				SeaFeed::Recording Left = Rec;
+				int Side13 = -1;
+				for (const SeaShow::Piece& Q : Rec.Views.front().Pieces)
+					if (Q.Id == 13) Side13 = Q.Side;
+				for (SeaFeed::Frame& F : Left.Views)
+				{
+					if (F.Head.T < 12.0 - 1e-9) continue;
+					SeaShow::Event Abandon;
+					Abandon.T = 12.0;
+					Abandon.What = "sea:abandon";
+					Abandon.Unit = 13;
+					Abandon.Side = Side13;
+					Abandon.Text = "Merchant 13's crew abandon her.";
+					F.Events.push_back(Abandon);
+					break;
+				}
+				const Played Q = Play(Left, Fps, nullptr, Player);
+				const auto OnHer = Q.GunRoundsOn.find({ 33, 13 });
+				const int RoundsOnHer = OnHer == Q.GunRoundsOn.end() ? 0 : OnHer->second;
+				std::vector<double> Told13 = GunHitsOn[13], Drawn13;
+				const auto Drawn = Q.ShellHitsAt.find(13);
+				if (Drawn != Q.ShellHitsAt.end()) Drawn13 = Drawn->second;
+				std::sort(Told13.begin(), Told13.end());
+				bool bAsTold = !Told13.empty() && Told13.size() == Drawn13.size();
+				for (size_t K = 0; bAsTold && K < Told13.size(); ++K) bAsTold = Drawn13[K] >= Told13[K] - 1e-6 && Drawn13[K] - Told13[K] <= 0.1;
+				int UnseenLeft = 0;
+				const int RoundlessLeft = RoundsFor(Q, UnseenLeft);
+				const auto Owed13 = Q.Check.OwedBy.find(13);
+				const double OwedHer = Owed13 == Q.Check.OwedBy.end() ? 0.0 : Owed13->second;
+				Limits.push_back({ "a gun told on a ship her men have left fires on her, each hit told drawn on her as told, nothing owed",
+				                   Q.Check.Abandons == 1 && RoundsOnHer > 0 && bAsTold && RoundlessLeft == 0 && UnseenLeft == 1 && OwedHer < 0.5,
+				                   std::to_string(Q.Check.Abandons) + " abandoned; " + std::to_string(RoundsOnHer) + " rounds on her, " + std::to_string(Drawn13.size()) + " hits drawn of " +
+				                       std::to_string(Told13.size()) + (bAsTold ? " as told" : " (not as told)") + ", " + std::to_string(RoundlessLeft) + " without a round, " +
+				                       Num(OwedHer, 2) + " owed",
+				                   "1; some rounds, all hits as told, 0 without a round (but Boat C's unseen), 0 owed" });
+			}
+		}
+	}
 	// A convoy's night (ruling 241: the submarine scene). Where the recording has none of it, each holds at nothing.
 	if (Boats > 0 || DiveEvents + ChargeEvents + ChargeHits + Starshells + Rescues > 0)
 	{
@@ -1210,12 +1608,12 @@ int main(int Argc, char** Argv)
 			// asdic contact held a hundred seconds with no attack on her and lost at 230, found again by asdic at 280 to its loss
 			// close at 335, kept in sight by the blow the battle booked on her at 358 to FoundFor after it, found again at 456 for
 			// the ahead-thrown run, to her end. Boat C (2048, her views' heard and no sea:sonar) found at 63.8 by her deck gun's
-			// hit on Merchant 3, before the view that says her gun is on, held by her heard from 100 to 130 and kept by his
-			// lookouts while she stays up within the night's seeing, out of sight FoundFor after she is under (dived at 240);
-			// held by her heard again from 472 deep, out of sight FoundFor after it lets her go at 500. The night with an
-			// aircraft over it (convoy-night-air) the same, and Boat D (2112) found at 20 by her deck gun laid on Merchant 3
-			// (before the aircraft run in on her at 30, over Boat C not yet found: Boat C's guns quiet, the check above), out of
-			// sight FoundFor after she is under (dived at 76).
+			// hit on Merchant 3, before the view that says her gun is on, held by her heard from 100 to 130 and kept by the guns
+			// laid each way (hers on him, his on her, to her dive) and his lookouts while she stays up within the night's seeing,
+			// out of sight FoundFor after she is under (dived at 240); held by her heard again from 472 deep, out of sight
+			// FoundFor after it lets her go at 500. The night with an aircraft over it (convoy-night-air) the same, and Boat D
+			// (2112) found at 20 by her deck gun laid on Merchant 3 (before the aircraft run in on her at 30, over Boat C not yet
+			// found: Boat C's guns quiet, the check above), out of sight FoundFor after she is under (dived at 76).
 			auto Pin = [](const std::vector<Played::Sighting>& Got, const std::vector<Played::Sighting>& Want, std::string& Words)
 			{
 				bool bSame = Got.size() == Want.size();

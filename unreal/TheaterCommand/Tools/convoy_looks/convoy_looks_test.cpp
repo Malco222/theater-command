@@ -8,6 +8,7 @@
 // rescue against the sea scene's wreck model in its.
 
 #include "Battle/ConvoyLooksCore.h"
+#include "Battle/Fates.h"
 
 #include <algorithm>
 #include <cmath>
@@ -544,6 +545,15 @@ namespace
 		const std::string Stage = TextOf(Root + "/Battle/AirStage.cpp");
 		Check(Stage.find("Kind = TEXT(\"Submarine\");") != std::string::npos && Stage.find("TEXT(\"Ships/\") + Asked") != std::string::npos,
 		      "the stage draws a boat as the battle modeller's Ships/Submarine_<navy>, else Ships/Submarine");
+		// (a socket's place or facing in a model's sockets file, as Tools/battle_ships_in.py writes it: along her forward and
+		// up, in metres for a place)
+		auto ReadSocket = [](const std::string& Text, const std::string& Name, const std::string& Field, double& OutAlong, double& OutUp)
+		{
+			const size_t Named = Text.find("\"name\":\"" + Name + "\"");
+			const size_t Where = Named == std::string::npos ? std::string::npos : Text.find("\"" + Field + "\":[", Named);
+			double Across = 0.0;
+			return Where != std::string::npos && std::sscanf(Text.c_str() + Where + Field.size() + 4, "%lf,%lf,%lf", &OutAlong, &Across, &OutUp) == 3;
+		};
 		for (const char* File : { "Submarine_GER", "Submarine_USA", "Submarine" })
 		{
 			const BoatModel M = SculptedOf(File);
@@ -570,8 +580,42 @@ namespace
 			const size_t L = Model.find("\"long\":");
 			Check(L != std::string::npos && std::sscanf(Model.c_str() + L + 7, "%lf", &Long) == 1 && std::fabs(Long - M.Long) < 0.05, N + F("her bounds %.1f m long", Long));
 			Check(M.WireTop > M.TowerTop && M.TowerFore > M.TowerAft && M.Deck < M.TowerTop && M.Top == M.ScopeTop, N + "her standard (or shears) over her bridge's rim, her casing under it");
+			// Her deck gun's muzzle (muzzle.turret.A.1, where the scene lights a round of hers): on her casing clear of her
+			// bridge, inside her length, a barrel's height over the casing, and at the end the show stows it at (Gunnery: an
+			// American fleet boat's aft of her tower, stowed facing aft; any other navy's forward of it, facing forward).
+			const bool bGunAft = std::string(File) == "Submarine_USA";
+			double Up = 0.0;
+			Check(SocketAt("muzzle.turret.A.1", X, Z) && (bGunAft ? X < M.TowerAft : X > M.TowerFore) && std::fabs(X) < M.BowAlong && Z - M.Deck >= 0.5 && Z - M.Deck <= 2.0,
+			      N + (bGunAft ? "aft of her bridge, " : "forward of her bridge, ") + F("her deck gun's muzzle %.2f m along, %.2f m over her casing", X, Z - M.Deck));
+			Check(ReadSocket(Sockets, "muzzle.turret.A.1", "facing", X, Up) && (bGunAft ? X < -0.9 : X > 0.9) && std::fabs(Up) < 0.1,
+			      N + F("her deck gun stowed fore and aft toward its own end: facing %.3f along, %.3f up", X, Up));
 		}
 		Check(SculptedOf("Submarine_ITA").Name.empty(), "no row for a file the game does not have");
+		// (the show stows a boat's deck gun by her navy as these models lay it, trains it no further than its arc (its arcs
+		// against the models' own limits: TestGuns), and the scene draws the gun laid so and lights the round at its muzzle.
+		// These pins were the show's "Stow = H->Nation == "USA" ? 180.0 : 0.0;" and "Arc = 150.0;" and the scene's swung
+		// muzzle until the review of 23 November: changed on purpose with them.)
+		const std::string ShowSource = TextOf(Root + "/Battle/SeaShow.cpp"), SceneSource = TextOf(Root + "/Battle/SeaBattle.cpp");
+		Check(ShowSource.find("H.bAftGun = H.Class == \"ss\" && H.Nation == \"USA\";") != std::string::npos && ShowSource.find("H.Train = H.bAftGun ? 180.0 : 0.0;") != std::string::npos &&
+		          ShowSource.find("Stow = H->bAftGun ? 180.0 : 0.0;") != std::string::npos && ShowSource.find("Arc = DeckGunArc;") != std::string::npos &&
+		          ShowSource.find("Arc = MerchantGunArc;") != std::string::npos,
+		      "the show stows an American boat's deck gun aft and any other's forward, each gun bearing no further than its arc");
+		Check(SceneSource.find("Stage->SocketAt(E.Key, bStern ? TEXT(\"muzzle.turret.Y.1\") : TEXT(\"muzzle.turret.A.1\"), GunMuzzle, GunBore)") != std::string::npos &&
+		          SceneSource.find("const bool bStern = E.What == \"mv\" && Firer->bAftGun;") != std::string::npos &&
+		          SceneSource.find("Stage->TrainGun(Ship.Key, bStern ? TEXT(\"turret.Y\") : TEXT(\"turret.A\"), Ship.Train, Ship.Elevation, Back);") != std::string::npos,
+		      "the scene draws the gun the show lays as it lays it, and lights the round at its muzzle (a merchant's stern gun's where the show's bAftGun has it)");
+		// A merchant's guns (the stage draws one as a Freighter, a Tanker or a Troopship): her bow gun's muzzle (A.1) forward and
+		// her stern gun's (Y.1) aft, each stowed facing its own end, as the show trains the one that bears.
+		for (const char* File : { "Freighter", "Tanker", "Troopship" })
+		{
+			const std::string N = std::string("[") + File + "] ";
+			const std::string Sockets = TextOf(Content + "Ships/" + File + ".sockets.json");
+			double BowX = 0.0, BowZ = 0.0, BowWay = 0.0, SternX = 0.0, SternZ = 0.0, SternWay = 0.0, Up = 0.0;
+			Check(ReadSocket(Sockets, "muzzle.turret.A.1", "at", BowX, BowZ) && BowX > 0.0 && BowZ > 0.0 && ReadSocket(Sockets, "muzzle.turret.A.1", "facing", BowWay, Up) && BowWay > 0.9,
+			      N + F("her bow gun's muzzle %.1f m forward, %.1f m up, facing %.3f along", BowX, BowZ, BowWay));
+			Check(ReadSocket(Sockets, "muzzle.turret.Y.1", "at", SternX, SternZ) && SternX < 0.0 && SternZ > 0.0 && ReadSocket(Sockets, "muzzle.turret.Y.1", "facing", SternWay, Up) && SternWay < -0.9,
+			      N + F("her stern gun's muzzle %.1f m aft, %.1f m up, facing %.3f along", -SternX, SternZ, SternWay));
+		}
 	}
 
 	/**
@@ -1013,6 +1057,12 @@ namespace
 		Check(Nets.size() == 1 && OnNets(Nets, 1.0, -10.0, 0.0) && Nets[0].Out > 0.0 && Nets[0].Out < 0.1, "standing by, a net goes over where a man swims for her");
 		for (int I = 0; I < 20; ++I) StepNets(Nets, R, Men, true, 0.1);
 		Check(Nets.size() == 1 && Nets[0].Out == 1.0, F("down her side in %.0f s", NetDropFor()));
+		// (one 2 m off her side, his heading through the water meeting it 14.4 m forward while she still has way on her: a
+		// net there, and one at his place along her now, 12 m forward, where the scene may bring him to it)
+		std::vector<NetHung> Close;
+		StepNets(Close, R, { Swimmer(1012.0, 1992.0, 1014.4, 1994.0) }, true, 0.1);
+		Check(Close.size() == 2 && OnNets(Close, 1.0, 14.4, 0.0) && OnNets(Close, 1.0, 12.0, 0.0),
+		      F("one close to her side: a net where his heading meets it and one where he is along her now (%.0f nets)", static_cast<double>(Close.size())));
 		Men = { Climber(-8.5, 1.0), Climber(20.0, 1.0), Climber(-7.0, 1.0), Climber(-7.4, 1.0) };
 		StepNets(Nets, R, Men, true, 0.1);
 		Check(Nets.size() == 3, F("men on it, at the next station and 20 m forward: three nets (%.0f)", static_cast<double>(Nets.size())));
@@ -1135,6 +1185,360 @@ namespace
 		Check(Show.find("if (How == \"scuttled\") return { 0.95, 0.02, 0.02, 0.5 };") != std::string::npos && Show.find("if (How == \"crushed\") return { 0.0, 0.0, 0.0, 0.0 };") != std::string::npos,
 		      "a boat scuttled leaves most of her men in the water, one crushed none: the scene's");
 	}
+
+	/** A flat array of numbers in a model file's text: the first "Key":[ at or after From (empty where there is none). */
+	std::vector<double> NumbersOf(const std::string& Text, const std::string& Key, size_t From)
+	{
+		std::vector<double> Out;
+		const size_t At = Text.find("\"" + Key + "\":[", From);
+		if (At == std::string::npos) return Out;
+		const char* P = Text.c_str() + At + Key.size() + 4;
+		while (*P && *P != ']')
+		{
+			char* End = nullptr;
+			const double V = std::strtod(P, &End);
+			if (End == P) break;
+			Out.push_back(V);
+			P = End;
+			while (*P == ',' || *P == ' ') ++P;
+		}
+		return Out;
+	}
+
+	/** Where a part of a model file's "parts" begins in its text (its name), and its place in the list; npos and -1 where
+	 * it has none. */
+	size_t PartAt(const std::string& Text, const std::string& Name, int& OutIndex)
+	{
+		OutIndex = -1;
+		const size_t Start = Text.find("\"parts\":[");
+		const size_t Stop = Start == std::string::npos ? std::string::npos : Text.find("}]", Start);
+		int Index = 0;
+		for (size_t At = Text.find("{\"name\":\"", Start); Start != std::string::npos && At != std::string::npos && At < Stop; At = Text.find("{\"name\":\"", At + 1), ++Index)
+		{
+			if (Text.compare(At + 9, Name.size() + 1, Name + "\"") == 0)
+			{
+				OutIndex = Index;
+				return At;
+			}
+		}
+		return std::string::npos;
+	}
+
+	/**
+	 * A boat's deck gun and a merchant's guns, as the stage draws them trained (AirStage's TrainGun) and the scene mans them
+	 * (GunCrewOf), against the battle modeller's files (the review of 23 November): each mount's row (MountOf) against its
+	 * file (where it stands along her, the deck about it, where it lies stowed and how far it turns); the show's arcs
+	 * (SeaShow.h's DeckGunArc and MerchantGunArc) against the models' own limits, and where the show stows each gun against
+	 * the model's rest bearing; at every bearing the mount turns to, each man of its crew on its deck, clear of its mount
+	 * and barrel as they are turned, apart from the others and, on a boat, off her bridge; his crew only while the gun is
+	 * laid and she is up, crouching only for a moment after a shell; the scene's crew and acts pinned in its source and the
+	 * sailor files' clips for them; a merchant's hit looks (the table's "ap" family: the review found "mv" gave none).
+	 */
+	void TestGuns(const std::string& Root)
+	{
+		if (Root.empty())
+		{
+			return;
+		}
+		const std::string Content = Root + "/../../Content/";
+		const std::string ShowHeader = TextOf(Root + "/Battle/SeaShow.h");
+		double DeckArc = 0.0, MerchantArc = 0.0;
+		{
+			const size_t At = ShowHeader.find("static constexpr double DeckGunArc = ");
+			Check(At != std::string::npos && std::sscanf(ShowHeader.c_str() + At, "static constexpr double DeckGunArc = %lf, MerchantGunArc = %lf;", &DeckArc, &MerchantArc) == 2,
+			      F("the show's arcs read: a boat's deck gun %.0f degrees either side of where it stows, a merchant's guns %.0f", DeckArc, MerchantArc));
+		}
+		const struct
+		{
+			const char* File;
+			bool bStern, bBoat;
+		} Mounts[] = {
+			{ "Submarine_GER", false, true }, { "Submarine_USA", false, true }, { "Submarine", false, true },
+			{ "Freighter", false, false }, { "Freighter", true, false }, { "Tanker", false, false },
+			{ "Tanker", true, false }, { "Troopship", false, false }, { "Troopship", true, false },
+		};
+		for (const auto& Asked : Mounts)
+		{
+			const GunMount M = MountOf(Asked.File, Asked.bStern);
+			const std::string N = std::string("[") + Asked.File + (Asked.bStern ? " stern gun] " : " gun] ");
+			const std::string Model = TextOf(Content + "Models/Ships/" + Asked.File + ".json");
+			const std::string Sockets = TextOf(Content + "Models/Ships/" + Asked.File + ".sockets.json");
+			int MountIndex = -1, BarrelIndex = -1;
+			const size_t MountAt = PartAt(Model, M.Part, MountIndex), BarrelAt = PartAt(Model, M.Part + ".gun.1", BarrelIndex);
+			Check(M.File == Asked.File && M.Part == (Asked.bStern ? "turret.Y" : "turret.A") && MountIndex >= 0 && BarrelIndex >= 0, N + "a row, its mount and barrel in the model");
+			if (M.File.empty() || MountIndex < 0 || BarrelIndex < 0)
+			{
+				continue;
+			}
+			const std::vector<double> Pivot = NumbersOf(Model, "pivot", MountAt), Limits = NumbersOf(Model, "limits", MountAt), Breech = NumbersOf(Model, "pivot", BarrelAt);
+			// (the note first says a bearing is the "rest bearing plus the turn", then names it after a semicolon)
+			const size_t Said = Model.find("; rest bearing ", MountAt);
+			double RestSaid = -1.0;
+			Check(Said != std::string::npos && Said < Model.find('}', MountAt) && std::sscanf(Model.c_str() + Said, "; rest bearing %lf", &RestSaid) == 1 && RestSaid == M.Rest,
+			      N + F("the model's rest bearing %.0f, the row's %.0f", RestSaid, M.Rest));
+			double MuzzleX = 0.0, MuzzleY = 0.0, MuzzleZ = 0.0;
+			const size_t Named = Sockets.find("\"name\":\"muzzle." + M.Part + ".1\"");
+			const size_t AtSaid = Named == std::string::npos ? std::string::npos : Sockets.find("\"at\":[", Named);
+			const bool bMuzzle = AtSaid != std::string::npos && std::sscanf(Sockets.c_str() + AtSaid + 6, "%lf,%lf,%lf", &MuzzleX, &MuzzleY, &MuzzleZ) == 3;
+			Check(Pivot.size() == 3 && Breech.size() == 3 && Limits.size() == 2 && bMuzzle, N + "its pivots, limits and muzzle read");
+			if (Pivot.size() != 3 || Breech.size() != 3 || Limits.size() != 2 || !bMuzzle)
+			{
+				continue;
+			}
+			// (where it lies stowed: its muzzle's bearing from its barrel's pivot, x forward and y to starboard)
+			const double Stowed = std::atan2(MuzzleY - Breech[1], MuzzleX - Breech[0]) * 180.0 / Pi;
+			Check(std::fabs(std::remainder(Stowed - M.Rest, 360.0)) < 1.0 && M.Rest == (Asked.bStern || std::string(Asked.File) == "Submarine_USA" ? 180.0 : 0.0),
+			      N + F("stowed at %.1f degrees off her bow, the row's %.0f (an American fleet boat's gun and a merchant's stern gun facing aft: the show's)", Stowed, M.Rest));
+			const double ShowArc = Asked.bBoat ? DeckArc : MerchantArc;
+			Check(std::fabs(Pivot[0] - M.Along) < 0.01 && Limits[0] == -M.Arc && Limits[1] == M.Arc && M.Arc == ShowArc,
+			      N + F("its mount %.2f m along her (row %.2f), turning %.0f degrees either way, the row's and the show's %.0f", Pivot[0], M.Along, Limits[1]) +
+			          F(" (%.0f)", ShowArc));
+
+			// Her near mesh: its points, their facings and parts, its triangles; the deck about the mount (flat, facing up,
+			// not of the gun), and how much of it lies at the row's height.
+			const size_t Near = Model.find("\"near\":{");
+			const std::vector<double> Points = NumbersOf(Model, "points", Near), Facings = NumbersOf(Model, "facings", Near);
+			const std::vector<double> Corners = NumbersOf(Model, "triangles", Near), Parts = NumbersOf(Model, "part", Near);
+			Check(Near != std::string::npos && Points.size() == Facings.size() && Points.size() == Parts.size() * 3 && Corners.size() % 3 == 0 && !Corners.empty(),
+			      N + "her near mesh read");
+			if (Points.size() != Parts.size() * 3 || Facings.size() != Points.size() || Corners.empty())
+			{
+				continue;
+			}
+			auto OfGun = [&](size_t K) { const int Part = static_cast<int>(Parts[K]); return Part == MountIndex || Part == BarrelIndex; };
+			struct Flat
+			{
+				double X[3], Y[3], Z[3];
+			};
+			std::vector<Flat> Decks;
+			double Area = 0.0;
+			for (size_t T = 0; T + 2 < Corners.size(); T += 3)
+			{
+				const size_t A = static_cast<size_t>(Corners[T]), B = static_cast<size_t>(Corners[T + 1]), C = static_cast<size_t>(Corners[T + 2]);
+				if (A >= Parts.size() || B >= Parts.size() || C >= Parts.size() || OfGun(A) || OfGun(B) || OfGun(C)) continue;
+				if (Facings[A * 3 + 2] + Facings[B * 3 + 2] + Facings[C * 3 + 2] < 2.7) continue;
+				Flat Tri;
+				for (int K = 0; K < 3; ++K)
+				{
+					const size_t V = K == 0 ? A : K == 1 ? B : C;
+					Tri.X[K] = Points[V * 3];
+					Tri.Y[K] = Points[V * 3 + 1];
+					Tri.Z[K] = Points[V * 3 + 2];
+				}
+				const double Cx = (Tri.X[0] + Tri.X[1] + Tri.X[2]) / 3.0 - Pivot[0], Cy = (Tri.Y[0] + Tri.Y[1] + Tri.Y[2]) / 3.0 - Pivot[1];
+				const double Cz = (Tri.Z[0] + Tri.Z[1] + Tri.Z[2]) / 3.0;
+				if (std::hypot(Cx, Cy) > 4.0) continue;
+				Decks.push_back(Tri);
+				if (std::hypot(Cx, Cy) > 0.6 && std::hypot(Cx, Cy) < 3.0 && std::fabs(Cz - M.Deck) <= 0.15)
+				{
+					Area += 0.5 * std::fabs((Tri.X[1] - Tri.X[0]) * (Tri.Y[2] - Tri.Y[0]) - (Tri.X[2] - Tri.X[0]) * (Tri.Y[1] - Tri.Y[0]));
+				}
+			}
+			Check(Area >= 4.0 && M.Deck < Pivot[2], N + F("her deck by the mount %.2f m up: %.1f square metres of it, under the mount's foot (%.2f)", M.Deck, Area, Pivot[2]));
+			// (the deck's height under a point, where a flat of it lies at the row's height there; -1e9 where none)
+			auto DeckAt = [&Decks, &M](double X, double Y)
+			{
+				for (const Flat& Tri : Decks)
+				{
+					const double D = (Tri.Y[1] - Tri.Y[2]) * (Tri.X[0] - Tri.X[2]) + (Tri.X[2] - Tri.X[1]) * (Tri.Y[0] - Tri.Y[2]);
+					if (std::fabs(D) < 1e-12) continue;
+					const double L0 = ((Tri.Y[1] - Tri.Y[2]) * (X - Tri.X[2]) + (Tri.X[2] - Tri.X[1]) * (Y - Tri.Y[2])) / D;
+					const double L1 = ((Tri.Y[2] - Tri.Y[0]) * (X - Tri.X[2]) + (Tri.X[0] - Tri.X[2]) * (Y - Tri.Y[2])) / D;
+					const double L2 = 1.0 - L0 - L1;
+					if (L0 < -1e-9 || L1 < -1e-9 || L2 < -1e-9) continue;
+					const double Z = L0 * Tri.Z[0] + L1 * Tri.Z[1] + L2 * Tri.Z[2];
+					if (std::fabs(Z - M.Deck) <= 0.3) return Z;
+				}
+				return -1e9;
+			};
+			// The gun's own points (its mount's and barrel's), the height of a man over the deck, to be turned with it.
+			std::vector<double> GunX, GunY;
+			for (size_t K = 0; K < Parts.size(); ++K)
+			{
+				if (OfGun(K) && Points[K * 3 + 2] > M.Deck + 0.05 && Points[K * 3 + 2] < M.Deck + 1.9)
+				{
+					GunX.push_back(Points[K * 3] - Pivot[0]);
+					GunY.push_back(Points[K * 3 + 1] - Pivot[1]);
+				}
+			}
+			const BoatModel Hers = Asked.bBoat ? SculptedOf(Asked.File) : BoatModel();
+			int Placed = 0, OffDeck = 0, OnGun = 0, Crowded = 0, OnBridge = 0;
+			double Closest = 1e9;
+			for (double Turn = -M.Arc; Turn <= M.Arc + 1e-9; Turn += 5.0)
+			{
+				CrewIn In;
+				In.bLaid = true;
+				In.Dive = Asked.bBoat ? "surfaced" : "";
+				In.Train = M.Rest + Turn;
+				In.Key = 7;
+				const std::vector<CrewMan> Crew = GunCrewOf(M, In);
+				const double C = std::cos(Turn * Pi / 180.0), S = std::sin(Turn * Pi / 180.0);
+				for (size_t K = 0; K < Crew.size(); ++K)
+				{
+					++Placed;
+					const double X = M.Along + Crew[K].Fore, Y = Crew[K].Right;
+					if (DeckAt(X, Y) < -1e8) ++OffDeck;
+					double Gap = 1e9;
+					for (size_t G = 0; G < GunX.size(); ++G)
+					{
+						// (+Turn carries her forward toward her starboard side: x cos - y sin, x sin + y cos)
+						Gap = std::min(Gap, std::hypot(M.Along + GunX[G] * C - GunY[G] * S - X, Pivot[1] + GunX[G] * S + GunY[G] * C - Y));
+					}
+					Closest = std::min(Closest, Gap);
+					if (Gap < 0.25) ++OnGun;
+					for (size_t J = 0; J < K; ++J)
+					{
+						if (std::hypot(Crew[J].Fore - Crew[K].Fore, Crew[J].Right - Crew[K].Right) < 0.5) ++Crowded;
+					}
+					if (Asked.bBoat && X > Hers.TowerAft - 0.3 && X < Hers.TowerFore + 0.3) ++OnBridge;
+				}
+			}
+			Check(Placed > 0 && OffDeck == 0 && OnGun == 0 && Crowded == 0 && OnBridge == 0,
+			      N + std::to_string(Placed) + " men placed at every bearing it turns to: " + std::to_string(OffDeck) + " off its deck, " + std::to_string(OnGun) +
+			          " in its mount or barrel (the nearest " + F("%.2f m", Closest) + "), " + std::to_string(Crowded) + " crowded, " + std::to_string(OnBridge) + " on her bridge (all 0)");
+		}
+		Check(MountOf("Submarine_ITA", false).File.empty() && MountOf("Submarine_GER", true).File.empty(), "no mount for a file the game does not have, nor a boat's stern gun");
+
+		// Who mans it, and when (the show's bGunLaid: told on a ship she can fire at, she up, her casing clear).
+		{
+			const GunMount M = MountOf("Submarine_GER", false);
+			CrewIn In;
+			In.bLaid = true;
+			In.Dive = "surfaced";
+			In.Train = 40.0;
+			In.T = 100.0;
+			In.Key = 1920;
+			const std::vector<CrewMan> Up = GunCrewOf(M, In);
+			bool bFacing = Up.size() == static_cast<size_t>(CrewMost), bClips = true;
+			for (const CrewMan& Man : Up)
+			{
+				bFacing = bFacing && Man.Facing == In.Train && !Man.bDuck;
+				bClips = bClips && Man.Clip >= 0.0 && Man.Clip < 4.0;
+			}
+			Check(bFacing && bClips, "a boat's gun laid, she up: its crew of four at it, facing as it bears, standing, each at his own place in his clip");
+			CrewIn Down = In;
+			Down.Dive = "periscope";
+			CrewIn Awash = In;
+			Awash.Dived = 1.5;
+			CrewIn Dropped = In;
+			Dropped.bLaid = false;
+			Check(GunCrewOf(M, Down).empty() && GunCrewOf(M, Awash).empty() && GunCrewOf(M, Dropped).empty(),
+			      "none at it from the diving alarm, awash, or once her gun is dropped");
+			CrewIn Merchant = In;
+			Merchant.Dive.clear();
+			Check(GunCrewOf(MountOf("Freighter", true), Merchant).size() == static_cast<size_t>(CrewMost), "a merchant's gun laid: its crew at it");
+			// (a shell close aboard at 100 s: each crouches within DuckLate of it, for DuckFor, and stands again)
+			int Before = 0, Soon = 0, During = 0, After = 0;
+			for (const double At : { 99.9, 100.05, 100.0 + DuckLate + 0.01, 100.0 + DuckFor - 0.01, 100.0 + DuckLate + DuckFor + 0.01 })
+			{
+				CrewIn Shaken = In;
+				Shaken.ShakenAt = 100.0;
+				Shaken.T = At;
+				int Ducked = 0;
+				for (const CrewMan& Man : GunCrewOf(M, Shaken)) Ducked += Man.bDuck ? 1 : 0;
+				if (At < 100.0) Before = Ducked;
+				else if (At < 100.1) Soon = Ducked;
+				else if (At < 100.0 + DuckFor) During += Ducked;
+				else After = Ducked;
+			}
+			Check(Before == 0 && Soon < CrewMost && During == 2 * CrewMost && After == 0,
+			      F("a shell close aboard: %.0f crouched before it, %.0f at once (each as he hears it)", Before, Soon) + F(", all through it (%.0f of 8), none after (%.0f)", During, After));
+			const std::vector<CrewMan> Again = GunCrewOf(M, In);
+			bool bSame = Again.size() == Up.size();
+			for (size_t K = 0; bSame && K < Up.size(); ++K) bSame = Again[K].Fore == Up[K].Fore && Again[K].Right == Up[K].Right && Again[K].Clip == Up[K].Clip;
+			Check(bSame, "the same crew for the same frame (the look's own hash, no dice of the battle's)");
+		}
+
+		// The scene: the crew drawn from GunCrewOf on the deck the stage gives, standing or crouched by the sailor files'
+		// idle and cower; a boat's hits' looks put out while she is told down or under (as the sea show's check has it); a
+		// merchant's hits by the table's "ap" family.
+		const std::string Scene = TextOf(Root + "/Battle/SeaBattle.cpp"), Sailors = TextOf(Root + "/Battle/SeaSailors.cpp");
+		Check(Scene.find("const std::vector<ConvoyLook::CrewMan> Gunners = ConvoyLook::GunCrewOf(Gun, Told);") != std::string::npos &&
+		          Scene.find("Stage->GunDeck(Ship.Key, GunPart, Gunner.Fore, Gunner.Right, Gun.Deck, Feet, Her)") != std::string::npos &&
+		          Scene.find("const SeaSailors::Act What = Gunner.bDuck ? SeaSailors::Act::Duck : SeaSailors::Act::Stand;") != std::string::npos &&
+		          Scene.find("const int32 Mine = -(Ship.Key * ConvoyLook::CrewMost + K + 1);") != std::string::npos &&
+		          Sailors.find("case Act::Stand: return \"idle\";") != std::string::npos && Sailors.find("case Act::Duck: return \"cower\";") != std::string::npos,
+		      "the scene mans each gun from GunCrewOf on its deck, standing or crouched (idle, cower), keyed apart from the men in the water");
+		for (const char* Navy : { "GER", "ITA", "JAP", "SOV", "UK", "USA" })
+		{
+			const std::string Men = TextOf(Content + "Models/Soldiers/soldier_" + Navy + "_sailor.json");
+			bool bBoth = !Men.empty();
+			for (const char* Clip : { "idle", "cower" })
+			{
+				const size_t At = Men.find(std::string("\"") + Clip + "\":{\"long\":");
+				const size_t Rooted = At == std::string::npos ? std::string::npos : Men.find("\"root\":\"", At);
+				bBoth = bBoth && Rooted != std::string::npos && Men.compare(Rooted + 8, 5, "deck\"") == 0;
+			}
+			Check(bBoth, std::string("the ") + Navy + " sailors' file has idle and cower, each on a deck");
+		}
+		// A boat's hits' looks put out by one rule, ConvoyLook::PutsOutLooks, which the scene asks each frame just before it
+		// puts them out on the stage (and the stage's PutOut hands to the ship looks'), and the sea show's cloud test holds the
+		// show's hits on boats to (the review of 23 November: the test had its own copy of the rule). These pins were the
+		// scene's "if (Ship.Class == "ss" && (Ship.Dive != "surfaced" || Ship.Dived > 1.0))" until then: changed on purpose.
+		{
+			const std::string Asks = "if (Ship.Class == \"ss\" && ConvoyLook::PutsOutLooks(Ship.Dive, Ship.Dived))";
+			const size_t At = Scene.find(Asks);
+			const size_t Out = At == std::string::npos ? std::string::npos : Scene.find("Stage->PutOut(Ship.Key, S.BattleT);", At);
+			const std::string StageSource = TextOf(Root + "/Battle/AirStage.cpp");
+			const size_t Puts = StageSource.find("void AAirStage::PutOut(int32 Id, double Now)");
+			Check(Out != std::string::npos && Out - At < Asks.size() + 16 && Puts != std::string::npos && StageSource.find("Looks.PutOut(Id, Now);", Puts) != std::string::npos,
+			      "the scene puts out a boat's hits' looks when PutsOutLooks says, each frame, the stage handing it to her looks");
+			Check(!PutsOutLooks("surfaced", 0.0) && !PutsOutLooks("surfaced", 1.0) && PutsOutLooks("surfaced", 1.2) && PutsOutLooks("periscope", 0.0) &&
+			          PutsOutLooks("periscope", 9.0) && PutsOutLooks("deep", 60.0),
+			      "her hits' looks put out from the diving alarm (told down, her casing still awash) and while she is under, not while she is up");
+		}
+		// A merchant's hit looks (the review of 23 November: every hit on a merchant took the transports' and merchants' "ap"
+		// looks, her torpedo hits too): the table's "ap" for a shell's hit on her alone, a boat's deck gun's; her torpedo and
+		// bomb hits her own "mv", as before the deck gun (no look of the table's), by one rule, ConvoyLook::HitLookFamily, that
+		// the ship looks ask for every hit and the reel. These pins were "return Class == TEXT("mv") ? std::string("ap") :
+		// FamilyOf(Class);" and "Blow.Family = ShipLookParts::HitFamilyOf(Class);" until then: changed on purpose.
+		const std::string Looks = TextOf(Root + "/Battle/ShipLooks.cpp");
+		size_t Uses = 0;
+		for (size_t At = Looks.find("Blow.Family = ShipLookParts::HitFamilyOf(Class, Strike);"); At != std::string::npos;
+		     At = Looks.find("Blow.Family = ShipLookParts::HitFamilyOf(Class, Strike);", At + 1))
+		{
+			++Uses;
+		}
+		Check(Looks.find("return ConvoyLook::HitLookFamily(FamilyOf(Class), WeaponOf(Strike));") != std::string::npos && Uses == 3 &&
+		          Looks.find("HitFamilyOf(Class)") == std::string::npos,
+		      "a hit's look family by its strike (HitLookFamily), in the scene and its reel");
+		Check(HitLookFamily("mv", "shell_light") == "ap" && HitLookFamily("mv", "shell_medium") == "ap" && HitLookFamily("mv", "shell_heavy") == "ap" &&
+		          HitLookFamily("mv", "torpedo") == "mv" && HitLookFamily("mv", "bomb") == "mv" && HitLookFamily("mv", "bomb_heavy") == "mv" &&
+		          HitLookFamily("dd", "shell_light") == "dd" && HitLookFamily("ss", "shell_light") == "ss" && HitLookFamily("ap", "torpedo") == "ap" &&
+		          HitLookFamily("bb", "bomb") == "bb",
+		      "a merchant struck by a shell takes the transports' and merchants' looks (\"ap\"); by a torpedo or a bomb her own (\"mv\"); any other ship her own");
+		{
+			Fates::Table Table;
+			std::string Why;
+			Check(Table.Load(TextOf(Content + "Data/Battle/fates.json"), Why), "the looks table loads: " + Why);
+			Fates::Director Picker(Table, 241u);
+			int Some = 0, None = 0, Torpedoed = 0;
+			for (int K = 0; K < 20; ++K)
+			{
+				Fates::Blow Worn;
+				Worn.Domain = "sea";
+				Worn.Family = "ap";
+				Worn.Weapon = "shell_light";
+				Worn.Result = "worn";
+				Worn.Hurt = 0.05 * K;
+				Worn.Nerve = 0.65;
+				Worn.Unit = 3 * 64 + K;
+				Some += Picker.Choose(Worn).Key.empty() ? 0 : 1;
+				Worn.Family = "mv";
+				None += Picker.Choose(Worn).Key.empty() ? 0 : 1;
+				// (and her torpedo and bomb hits as the ship looks ask for them: none of the table's, as before)
+				for (const char* Weapon : { "torpedo", "bomb", "bomb_heavy" })
+				{
+					Worn.Weapon = Weapon;
+					Worn.Family = HitLookFamily("mv", Worn.Weapon);
+					Torpedoed += Picker.Choose(Worn).Key.empty() ? 0 : 1;
+				}
+			}
+			Check(Some == 20 && None == 0 && Torpedoed == 0, "a worn sea blow on a merchant from a deck gun's shell (\"ap\", shell_light) has a look every time: " +
+			                                                     std::to_string(Some) + " of 20 (as \"mv\", " + std::to_string(None) + "); her torpedo and bomb hits none, as before (" +
+			                                                     std::to_string(Torpedoed) + " of 60)");
+		}
+	}
 }
 
 int main(int ArgC, char** ArgV)
@@ -1149,6 +1553,7 @@ int main(int ArgC, char** ArgV)
 	TestEnds();
 	TestRescue(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestMeshShape();
+	TestGuns(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	std::printf("convoy looks: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

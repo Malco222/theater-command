@@ -176,6 +176,9 @@ namespace SeaFeed
 				}
 			}
 			P.GunOn = X["gun"].IsNumber() ? X["gun"].Int() : -1;
+			// (her gun's bore where the battle names it, as last told: a boat's gun is the same gun all night; a bore past any
+			// ship's deck gun is not read)
+			if (X["gunMm"].IsNumber() && X["gunMm"].Num() > 0.0 && X["gunMm"].Num() <= 200.0) P.GunMm = X["gunMm"].Num();
 			const Json& Echo = X["echo"];
 			P.EchoOn = Echo.IsObject() && Echo["on"].IsNumber() ? Echo["on"].Int() : -1;
 			P.EchoKind = Echo.IsObject() ? Echo["kind"].Str("") : std::string();

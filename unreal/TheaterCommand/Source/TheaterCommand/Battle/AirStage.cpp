@@ -205,6 +205,131 @@ namespace StageParts
 	}
 
 	/**
+	 * A model file's parts (its "parts": each one's name, pivot, axis of turning, limits and way of sliding) and which part
+	 * each point of its near and far meshes belongs to (their "part", by point as Sculpted keeps the points), in the game's
+	 * frame as the points are (nose toward -X, right hand at -Y, metres), read once a file: a gun's mount and barrel are
+	 * cut out of her hull by them and drawn on their own, to be trained (TrainGun).
+	 */
+	struct FModelPart
+	{
+		FString Name;
+		FVector Pivot = FVector::ZeroVector, Axis = FVector::UpVector, Slide = FVector::ZeroVector;
+		double Least = -180.0, Most = 180.0, SlideMost = 0.0;
+	};
+	struct FModelParts
+	{
+		TArray<FModelPart> List;
+		TArray<int32> Near, Far; // by point: its part's place in List
+		int32 Find(const FString& Name) const
+		{
+			return List.IndexOfByPredicate([&Name](const FModelPart& Each) { return Each.Name == Name; });
+		}
+	};
+	static const FModelParts& PartsOf(const FString& File)
+	{
+		static TMap<FString, FModelParts> Read;
+		if (const FModelParts* Known = Read.Find(File))
+		{
+			return *Known;
+		}
+		FModelParts& Out = Read.Add(File);
+		FString Text;
+		TSharedPtr<FJsonObject> Json;
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (File + TEXT(".json"))))
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) || !Json.IsValid() || !Json->TryGetArrayField(TEXT("parts"), List))
+		{
+			return Out;
+		}
+		// (the file has x forward and y to the right: both turned, as the points are)
+		auto Turned = [](const TArray<TSharedPtr<FJsonValue>>* Three, const FVector& Unsaid)
+		{
+			return Three && Three->Num() >= 3 ? FVector(-(*Three)[0]->AsNumber(), -(*Three)[1]->AsNumber(), (*Three)[2]->AsNumber()) : Unsaid;
+		};
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			FModelPart& Each = Out.List.AddDefaulted_GetRef();
+			const TSharedPtr<FJsonObject> Part = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Part.IsValid())
+			{
+				continue;
+			}
+			const TArray<TSharedPtr<FJsonValue>> *Pivot = nullptr, *Axis = nullptr, *Slide = nullptr, *Limits = nullptr, *SlideLimits = nullptr;
+			Part->TryGetStringField(TEXT("name"), Each.Name);
+			Part->TryGetArrayField(TEXT("pivot"), Pivot);
+			Part->TryGetArrayField(TEXT("axis"), Axis);
+			Part->TryGetArrayField(TEXT("slide"), Slide);
+			Part->TryGetArrayField(TEXT("limits"), Limits);
+			Part->TryGetArrayField(TEXT("slide_limits"), SlideLimits);
+			Each.Pivot = Turned(Pivot, FVector::ZeroVector);
+			Each.Axis = Turned(Axis, FVector::UpVector).GetSafeNormal();
+			Each.Slide = Turned(Slide, FVector::ZeroVector).GetSafeNormal();
+			if (Limits && Limits->Num() >= 2)
+			{
+				Each.Least = (*Limits)[0]->AsNumber();
+				Each.Most = (*Limits)[1]->AsNumber();
+			}
+			if (SlideLimits && SlideLimits->Num() >= 2)
+			{
+				Each.SlideMost = (*SlideLimits)[1]->AsNumber();
+			}
+		}
+		for (const bool bFarMesh : { false, true })
+		{
+			const TSharedPtr<FJsonObject>* Mesh = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Of = nullptr;
+			TArray<int32>& Into = bFarMesh ? Out.Far : Out.Near;
+			if (Json->TryGetObjectField(bFarMesh ? TEXT("far") : TEXT("near"), Mesh) && (*Mesh)->TryGetArrayField(TEXT("part"), Of))
+			{
+				Into.Reserve(Of->Num());
+				for (const TSharedPtr<FJsonValue>& Point : *Of)
+				{
+					Into.Add(static_cast<int32>(Point->AsNumber()));
+				}
+			}
+		}
+		return Out;
+	}
+
+	/**
+	 * Model's triangles parted by the parts their points belong to (Of, by point; a triangle whose corners lie in more
+	 * than one part stays with the hull): those of each of Cut into a mesh of its own (Out, in Cut's order), its points
+	 * less that part's pivot (Pivots, units) so that it turns about it; the rest, Model's own corners, into Keep.
+	 */
+	static void CutParts(const FMiniatureMesh& Model, const TArray<int32>& Of, const TArray<int32>& Cut, const TArray<FVector>& Pivots, TArray<int32>& Keep, TArray<FMiniatureMesh>& Out)
+	{
+		Keep.Reset(Model.Triangles.Num());
+		Out.Reset();
+		Out.SetNum(Cut.Num());
+		TArray<TMap<int32, int32>> Slots;
+		Slots.SetNum(Cut.Num());
+		for (int32 T = 0; T + 2 < Model.Triangles.Num(); T += 3)
+		{
+			const int32 A = Model.Triangles[T], B = Model.Triangles[T + 1], C = Model.Triangles[T + 2];
+			const int32 Part = Of.IsValidIndex(A) && Of.IsValidIndex(B) && Of.IsValidIndex(C) && Of[A] == Of[B] && Of[A] == Of[C] ? Of[A] : INDEX_NONE;
+			const int32 Which = Part == INDEX_NONE ? INDEX_NONE : Cut.IndexOfByKey(Part);
+			if (Which == INDEX_NONE || !Pivots.IsValidIndex(Which))
+			{
+				Keep.Append({ A, B, C });
+				continue;
+			}
+			FMiniatureMesh& Into = Out[Which];
+			for (const int32 Corner : { A, B, C })
+			{
+				const int32* Had = Slots[Which].Find(Corner);
+				const int32 Slot = Had ? *Had : Slots[Which].Add(Corner, Into.Vertices.Num());
+				if (!Had)
+				{
+					Into.Vertices.Add(Model.Vertices[Corner] - Pivots[Which]);
+					Into.Normals.Add(Model.Normals[Corner]);
+					Into.Colors.Add(Model.Colors[Corner]);
+				}
+				Into.Triangles.Add(Slot);
+			}
+		}
+	}
+
+	/**
 	 * Her model, near (all its detail) or far (the modeller's lighter one, for a ship well off): the battle modeller's
 	 * where the game has it, else the kit's code-built miniature (near only), fitted to her size where it is to be
 	 * (FitHull, NamedHull), and the stretch that took. False where there is none, or no far one.
@@ -659,6 +784,88 @@ bool AAirStage::FunnelTops(int32 Id, TArray<FVector4>& Out) const
 		Out.Add(FVector4(At.X, At.Y, At.Z, Top.W));
 	}
 	return true;
+}
+
+bool AAirStage::SocketAt(int32 Id, const FString& Name, FVector& OutWorld, FVector& OutWay) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship || !Ship->Hull || Ship->bGone || Ship->SunkAt >= 0.0 || Ship->bHidden || Ship->File.IsEmpty())
+	{
+		return false;
+	}
+	// (a gun drawn trained, TrainGun: its muzzle at its barrel's end as it is laid and run back now, and its bore's way)
+	for (const FShip::FGun& Gun : Ship->Guns)
+	{
+		if (Gun.bMuzzle && Gun.Barrel && Name == TEXT("muzzle.") + Gun.Part + TEXT(".1"))
+		{
+			const FTransform Barrel = Gun.Barrel->GetComponentTransform();
+			OutWorld = Barrel.TransformPosition(Gun.Muzzle);
+			OutWay = Barrel.TransformVectorNoScale(Gun.Bore).GetSafeNormal();
+			return true;
+		}
+	}
+	const FVector* Socket = StageParts::SocketsOf(Ship->File).Find(Name);
+	if (!Socket)
+	{
+		return false;
+	}
+	// (fitted as her model is, as her funnels' sockets are, on her hull where it is drawn now; her model's bow is its -X, so
+	// a socket forward of her middle lies toward -X)
+	const FTransform Frame = Ship->Hull->GetComponentTransform();
+	OutWorld = Frame.TransformPosition(*Socket * Ship->Stretch * UnitsPerMetre);
+	OutWay = Frame.TransformVectorNoScale(FVector(Socket->X < 0.0 ? -1.0 : 1.0, 0.0, 0.0)).GetSafeNormal();
+	return true;
+}
+
+void AAirStage::TrainGun(int32 Id, const FString& Mount, double Bearing, double Elevation, double Back)
+{
+	FShip* Ship = Ships.Find(Id);
+	if (!Ship)
+	{
+		return;
+	}
+	for (FShip::FGun& Gun : Ship->Guns)
+	{
+		if (Gun.Part != Mount || !Gun.Mount || !Gun.Barrel)
+		{
+			continue;
+		}
+		// (the model's own turns, about its own axes: the mount plus clockwise seen from above, from where it lies stowed,
+		// no further than its limits; the barrel plus lifting its muzzle; and back along its own length as it fires)
+		const double Turn = FMath::Clamp(FMath::UnwindDegrees(Bearing - Gun.Rest), Gun.Least, Gun.Most);
+		const double Lift = FMath::Clamp(Elevation, Gun.LiftLeast, Gun.LiftMost);
+		const FQuat Lifted(Gun.LiftAxis, FMath::DegreesToRadians(Lift));
+		Gun.Mount->SetRelativeRotation(FQuat(Gun.TurnAxis, FMath::DegreesToRadians(Turn)));
+		Gun.Barrel->SetRelativeLocationAndRotation(Gun.BarrelAt + Lifted.RotateVector(Gun.Slide * (FMath::Clamp(Back, 0.0, 1.0) * Gun.SlideMost * UnitsPerMetre)), Lifted);
+	}
+}
+
+bool AAirStage::GunDeck(int32 Id, const FString& Mount, double Fore, double Right, double Up, FVector& OutWorld, FQuat& OutHer) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship || !Ship->Hull || Ship->bGone || Ship->SunkAt >= 0.0 || Ship->bHidden)
+	{
+		return false;
+	}
+	const FShip::FGun* Gun = Ship->Guns.FindByPredicate([&Mount](const FShip::FGun& Each) { return Each.Part == Mount && Each.Mount; });
+	if (!Gun)
+	{
+		return false;
+	}
+	// (her model's bow is its -X and her starboard its -Y; the mount's middle where it stands on her, in her hull's frame)
+	const FTransform Frame = Ship->Hull->GetComponentTransform();
+	const FVector Middle = Gun->Mount->GetRelativeLocation();
+	OutWorld = Frame.TransformPosition(FVector(Middle.X - Fore * Ship->Stretch.X * UnitsPerMetre, Middle.Y - Right * Ship->Stretch.Y * UnitsPerMetre, Up * Ship->Stretch.Z * UnitsPerMetre));
+	OutHer = Frame.GetRotation() * FQuat(FVector::UpVector, UE_DOUBLE_PI);
+	return true;
+}
+
+void AAirStage::PutOut(int32 Id, double Now)
+{
+	if (Ships.Contains(Id))
+	{
+		Looks.PutOut(Id, Now);
+	}
 }
 
 bool AAirStage::BreakOf(int32 Id, FVector& OutWorld, double& OutAt) const
@@ -1598,11 +1805,39 @@ void AAirStage::LayShip(const FStageShip& Given)
 		Hull->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Hull->SetCastShadow(true);
 		Hull->RegisterComponent();
-		Hull->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		// Her guns that train (a boat's deck gun, a merchant's bow and stern guns: the model's turret.A and turret.Y, each
+		// with its barrel, turret.A.gun.1): cut out of her model by its parts, to be drawn on their own and laid as the show
+		// lays them (TrainGun), the review of 23 November: the gun stood stowed fore and aft while its rounds left it trained.
+		// (PartsOf's table is read once a file and not added to while this one is held.)
+		const StageParts::FModelParts* Parted = nullptr;
+		TArray<int32> GunParts;   // each gun's mount, then its barrel
+		TArray<FVector> GunPivots; // their pivots on her (units)
+		if (!Ship.File.IsEmpty() && (Given.Class == TEXT("ss") || Given.Class == TEXT("mv")))
+		{
+			Parted = &StageParts::PartsOf(Ship.File);
+			for (const TCHAR* Turret : { TEXT("turret.A"), TEXT("turret.Y") })
+			{
+				const int32 OnMount = Parted->Find(Turret), OnBarrel = Parted->Find(FString(Turret) + TEXT(".gun.1"));
+				if (OnMount != INDEX_NONE && OnBarrel != INDEX_NONE && Parted->Near.Num() == Model.Vertices.Num() && Model.Normals.Num() == Model.Vertices.Num()
+					&& Model.Colors.Num() == Model.Vertices.Num())
+				{
+					GunParts.Append({ OnMount, OnBarrel });
+					GunPivots.Append({ Parted->List[OnMount].Pivot * Ship.Stretch * UnitsPerMetre, Parted->List[OnBarrel].Pivot * Ship.Stretch * UnitsPerMetre });
+				}
+			}
+		}
+		TArray<int32> HullNear;
+		TArray<FMiniatureMesh> GunNear;
+		if (GunParts.Num() > 0)
+		{
+			StageParts::CutParts(Model, Parted->Near, GunParts, GunPivots, HullNear, GunNear);
+		}
+		Hull->CreateMeshSection(0, Model.Vertices, GunParts.Num() > 0 ? HullNear : Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		Hull->SetMaterial(0, SteelInk);
 		// The modeller's lighter model of her beside it (section 1), shown in its place while she is well off (Advance):
 		// a destroyer's 18,000 triangles near and 6,000 far, a submarine's 22,000 and 2,300, as the B-17's 23,000 and 7,000.
 		Ship.bTwoMeshes = false;
+		TArray<FMiniatureMesh> GunFar;
 		if (!Ship.File.IsEmpty())
 		{
 			FMiniatureMesh Far;
@@ -1610,7 +1845,14 @@ void AAirStage::LayShip(const FStageShip& Given)
 			FVector FarStretch;
 			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch) && FarFile == Ship.File)
 			{
-				Hull->CreateMeshSection(1, Far.Vertices, Far.Triangles, Far.Normals, TArray<FVector2D>(), Far.Colors, TArray<FProcMeshTangent>(), false);
+				// (her guns out of the far one too, where it says its points' parts; else it keeps them stowed, and her guns
+				// drawn on their own show only near)
+				TArray<int32> HullFar;
+				if (GunParts.Num() > 0 && Parted->Far.Num() == Far.Vertices.Num() && Far.Normals.Num() == Far.Vertices.Num() && Far.Colors.Num() == Far.Vertices.Num())
+				{
+					StageParts::CutParts(Far, Parted->Far, GunParts, GunPivots, HullFar, GunFar);
+				}
+				Hull->CreateMeshSection(1, Far.Vertices, GunFar.Num() > 0 ? HullFar : Far.Triangles, Far.Normals, TArray<FVector2D>(), Far.Colors, TArray<FProcMeshTangent>(), false);
 				Hull->SetMaterial(1, SteelInk);
 				Hull->SetMeshSectionVisible(1, false);
 				Ship.bTwoMeshes = true;
@@ -1619,6 +1861,62 @@ void AAirStage::LayShip(const FStageShip& Given)
 		}
 		Ship.Hull = Hull;
 		ShipMeshes.Add(Hull);
+		// Each gun: its mount on her hull at its pivot, its barrel on the mount at its own (near, and far beside it hidden),
+		// laid as the model lies until the show trains it; where it lies stowed (its rest bearing) from its muzzle's socket.
+		auto GunMesh = [this](USceneComponent* Holder, const FVector& Pivot, const FMiniatureMesh& NearPart, const FMiniatureMesh* FarPart)
+		{
+			UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(this);
+			Piece->SetupAttachment(Holder);
+			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Piece->SetCastShadow(true);
+			Piece->RegisterComponent();
+			Piece->SetRelativeLocation(Pivot);
+			Piece->CreateMeshSection(0, NearPart.Vertices, NearPart.Triangles, NearPart.Normals, TArray<FVector2D>(), NearPart.Colors, TArray<FProcMeshTangent>(), false);
+			Piece->SetMaterial(0, SteelInk);
+			if (FarPart)
+			{
+				Piece->CreateMeshSection(1, FarPart->Vertices, FarPart->Triangles, FarPart->Normals, TArray<FVector2D>(), FarPart->Colors, TArray<FProcMeshTangent>(), false);
+				Piece->SetMaterial(1, SteelInk);
+				Piece->SetMeshSectionVisible(1, false);
+			}
+			ShipMeshes.Add(Piece);
+			return Piece;
+		};
+		Ship.Guns.Reset();
+		const TMap<FString, FVector>& Sockets = StageParts::SocketsOf(Ship.File);
+		for (int32 G = 0; G + 1 < GunParts.Num() && G + 1 < GunNear.Num(); G += 2)
+		{
+			const StageParts::FModelPart& OfMount = Parted->List[GunParts[G]];
+			const StageParts::FModelPart& OfBarrel = Parted->List[GunParts[G + 1]];
+			const bool bFarGun = GunFar.Num() == GunNear.Num();
+			FShip::FGun& Gun = Ship.Guns.AddDefaulted_GetRef();
+			Gun.Part = OfMount.Name;
+			Gun.Mount = GunMesh(Hull, GunPivots[G], GunNear[G], bFarGun ? &GunFar[G] : nullptr);
+			Gun.BarrelAt = GunPivots[G + 1] - GunPivots[G];
+			Gun.Barrel = GunMesh(Gun.Mount.Get(), Gun.BarrelAt, GunNear[G + 1], bFarGun ? &GunFar[G + 1] : nullptr);
+			Gun.bFar = bFarGun;
+			Gun.TurnAxis = OfMount.Axis;
+			Gun.Least = OfMount.Least;
+			Gun.Most = OfMount.Most;
+			Gun.LiftAxis = OfBarrel.Axis;
+			Gun.LiftLeast = OfBarrel.Least;
+			Gun.LiftMost = OfBarrel.Most;
+			Gun.Slide = OfBarrel.Slide;
+			Gun.SlideMost = OfBarrel.SlideMost;
+			// (her bow is the model's -X and her starboard its -Y: the muzzle's bearing from the barrel's pivot, 0 ahead,
+			// 180 astern, is where the mount lies stowed)
+			Gun.Rest = Gun.Part == TEXT("turret.Y") ? 180.0 : 0.0;
+			if (const FVector* Muzzle = Sockets.Find(TEXT("muzzle.") + Gun.Part + TEXT(".1")))
+			{
+				const FVector Out = *Muzzle - OfBarrel.Pivot;
+				Gun.Rest = FMath::RadiansToDegrees(FMath::Atan2(-Out.Y, -Out.X));
+				Gun.Muzzle = *Muzzle * Ship.Stretch * UnitsPerMetre - GunPivots[G + 1];
+				Gun.Bore = Gun.Muzzle.GetSafeNormal();
+				Gun.bMuzzle = !Gun.Bore.IsNearlyZero();
+			}
+			Gun.Mount->SetVisibility(!Ship.bHidden);
+			Gun.Barrel->SetVisibility(!Ship.bHidden);
+		}
 	}
 	Ship.Hull->SetRelativeLocationAndRotation(Ship.Base, FRotator(0.0, Ship.Yaw, 0.0));
 }
@@ -1752,6 +2050,19 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		if (Bow.Num() > 0 && Stern.Num() > 0 && Ship->Hull)
 		{
 			Ship->Hull->CreateMeshSection(0, Model.Vertices, Stern, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			// (her halves are cut from her whole model, her guns in it as they lie stowed: those drawn on their own go)
+			for (FShip::FGun& Gun : Ship->Guns)
+			{
+				if (Gun.Mount)
+				{
+					Gun.Mount->SetVisibility(false);
+				}
+				if (Gun.Barrel)
+				{
+					Gun.Barrel->SetVisibility(false);
+				}
+			}
+			Ship->Guns.Reset();
 			if (Ship->bTwoMeshes)
 			{
 				// (her halves are cut from her near model: the far one goes, and the halves are drawn however far off she is)
@@ -1938,6 +2249,17 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 		{
 			Ship.Fore->SetVisibility(false);
 		}
+		for (FShip::FGun& Gun : Ship.Guns)
+		{
+			if (Gun.Mount)
+			{
+				Gun.Mount->SetVisibility(false);
+			}
+			if (Gun.Barrel)
+			{
+				Gun.Barrel->SetVisibility(false);
+			}
+		}
 	}
 }
 
@@ -1999,6 +2321,21 @@ void AAirStage::ShowNearOrFar()
 			Ship.Hull->SetMeshSectionVisible(0, bNear);
 			Ship.Hull->SetMeshSectionVisible(1, !bNear);
 			Ship.bNearShown = bNear;
+			// (her guns drawn on their own likewise; one with no far model of its own is in her far hull's, stowed)
+			for (FShip::FGun& Gun : Ship.Guns)
+			{
+				for (UProceduralMeshComponent* Mesh : { Gun.Mount.Get(), Gun.Barrel.Get() })
+				{
+					if (Mesh)
+					{
+						Mesh->SetMeshSectionVisible(0, bNear);
+						if (Gun.bFar)
+						{
+							Mesh->SetMeshSectionVisible(1, !bNear);
+						}
+					}
+				}
+			}
 		}
 	}
 }
@@ -2203,6 +2540,18 @@ void AAirStage::SetShown(int32 Id, bool bShown)
 	if (Ship->Fore)
 	{
 		Ship->Fore->SetVisibility(bShown);
+	}
+	// (her guns drawn on their own go with her: a hull's visibility is its own)
+	for (FShip::FGun& Gun : Ship->Guns)
+	{
+		if (Gun.Mount)
+		{
+			Gun.Mount->SetVisibility(bShown);
+		}
+		if (Gun.Barrel)
+		{
+			Gun.Barrel->SetVisibility(bShown);
+		}
 	}
 }
 

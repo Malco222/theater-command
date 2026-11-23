@@ -659,8 +659,9 @@ namespace ConvoyLook
 		 * otherwise); a man swims for her side 1 m out from it, at the nearest place along it within 0.35 of her length of
 		 * amidships, and climbs it 0.3 m out from it. */
 		constexpr double StandByBelow = 3.0, SwimOut = 1.0, ClimbAlong = 0.35, ClimbOut = 0.3;
-		/** [EST] A man swimming for her side gets his net once he is within 60 m of it (a minute or two before he is there). */
-		constexpr double NetSee = 60.0;
+		/** [EST] A man swimming for her side gets his net once he is within 60 m of it (a minute or two before he is there);
+		 * within 3 m of it (two seconds' swim or so, about a net's time going down), at his place along her now too. */
+		constexpr double NetSee = 60.0, NetNear = 3.0;
 	}
 
 	std::vector<BoilShot> CrushPlan(uint64_t Seed)
@@ -757,19 +758,16 @@ namespace ConvoyLook
 	{
 		const bool bStanding = bRescue && StandsBy(R.Speed);
 		std::vector<char> Wanted(Nets.size(), bStanding ? 1 : 0);
-		for (const ManIn& M : Men)
+		// (the station a place on her side is at, and the next one too where it is at its end)
+		auto Want = [&Nets, &Wanted](double Place, double OnSide)
 		{
-			double Along = 0.0, Side = 1.0;
-			bool bClimbing = false;
-			if (!ClimbPlace(R, M, Along, Side, bClimbing) || (!bStanding && !bClimbing)) continue;
-			// (the station his place is at, and the next one too where he is at its end)
-			const double Station = std::round(Along / NetWide), Off = Along - Station * NetWide;
+			const double Station = std::round(Place / NetWide), Off = Place - Station * NetWide;
 			for (const double K : { Station, std::fabs(Off) > 0.5 * NetWide - NetMargin ? Station + (Off > 0.0 ? 1.0 : -1.0) : Station })
 			{
 				bool bHung = false;
 				for (size_t I = 0; I < Nets.size(); ++I)
 				{
-					if (Nets[I].Side == Side && std::fabs(Nets[I].Along - K * NetWide) < 1e-6)
+					if (Nets[I].Side == OnSide && std::fabs(Nets[I].Along - K * NetWide) < 1e-6)
 					{
 						Wanted[I] = 1;
 						bHung = true;
@@ -778,11 +776,29 @@ namespace ConvoyLook
 				if (!bHung)
 				{
 					NetHung N;
-					N.Side = Side;
+					N.Side = OnSide;
 					N.Along = K * NetWide;
 					Nets.push_back(N);
 					Wanted.push_back(1);
 				}
+			}
+		};
+		const P3 Fore = AheadOf(R.Heading), Right = RightOf(R.Heading);
+		for (const ManIn& M : Men)
+		{
+			double Along = 0.0, Side = 1.0;
+			bool bClimbing = false;
+			if (!ClimbPlace(R, M, Along, Side, bClimbing) || (!bStanding && !bClimbing)) continue;
+			Want(Along, Side);
+			if (bClimbing) continue;
+			// (one close to her side: she may still have way on her, standing by under 3 m/s, and the scene has him make for a
+			// place on her side as she goes, so he comes to it about where he is along her now, not where his heading through
+			// the water meets her side; a man brought to her side holding on to a float swims only those last metres. His net
+			// there too, so that it is down before he is up it)
+			const double RX = M.At.X - R.At.X, RY = M.At.Y - R.At.Y;
+			if (std::fabs(RX * Right.X + RY * Right.Y) - 0.5 * R.Beam - SwimOut <= NetNear)
+			{
+				Want(std::clamp(RX * Fore.X + RY * Fore.Y, -ClimbAlong * R.Long, ClimbAlong * R.Long), Side);
 			}
 		}
 		size_t Kept = 0;
@@ -828,6 +844,98 @@ namespace ConvoyLook
 			Out.push_back({ At(-0.5, V), At(0.5, V) });
 		}
 		return Out;
+	}
+
+	// -------------------------------------------------------------------------------------------------------------
+	// A gun's crew
+
+	GunMount MountOf(const std::string& File, bool bStern)
+	{
+		// Measured off the battle modeller's files (Content/Models/Ships; x forward, z up from her waterline): the turret
+		// part's pivot along her; the deck where most of the walking surface about the mount lies (within 3 m of it, below
+		// its pivot); how far that deck reaches from her middle line within 2 m along of the mount (a boat's casing) or from
+		// the mount (a merchant's round gun platform), less a man's half width and a hand; a merchant's shield's back from
+		// the mount's middle (its turret part's), and a hand; its muzzle's bearing from its barrel's pivot (stowed); and its
+		// limits. Tools/convoy_looks checks each against its file.
+		struct Row
+		{
+			const char* Name;
+			bool bAft;
+			GunMount M;
+		};
+		static const Row Rows[] = {
+			{ "Submarine_GER", false, { "Submarine_GER", "turret.A", 11.5, 1.64, 2.6, 0.95, 0.0, 0.0, 145.0 } },
+			{ "Submarine_USA", false, { "Submarine_USA", "turret.A", -13.0, 2.49, 2.6, 1.95, 0.0, 180.0, 145.0 } },
+			{ "Submarine", false, { "Submarine", "turret.A", 14.0, 1.96, 2.6, 1.2, 0.0, 0.0, 145.0 } },
+			{ "Freighter", false, { "Freighter", "turret.A", 53.6, 7.98, 1.8, 1.8, 1.0, 0.0, 150.0 } },
+			{ "Freighter", true, { "Freighter", "turret.Y", -61.6, 8.14, 2.15, 2.15, 1.25, 180.0, 150.0 } },
+			{ "Tanker", false, { "Tanker", "turret.A", 65.6, 7.53, 1.8, 1.8, 1.0, 0.0, 150.0 } },
+			{ "Tanker", true, { "Tanker", "turret.Y", -69.4, 7.53, 2.25, 2.25, 1.25, 180.0, 150.0 } },
+			{ "Troopship", false, { "Troopship", "turret.A", 81.6, 12.53, 1.8, 1.8, 1.0, 0.0, 150.0 } },
+			{ "Troopship", true, { "Troopship", "turret.Y", -90.6, 11.88, 2.25, 2.25, 1.25, 180.0, 150.0 } },
+		};
+		for (const Row& R : Rows)
+		{
+			if (File == R.Name && bStern == R.bAft) return R.M;
+		}
+		return GunMount();
+	}
+
+	std::vector<CrewMan> GunCrewOf(const GunMount& M, const CrewIn& In)
+	{
+		std::vector<CrewMan> Out;
+		// (none at a gun not laid, nor on a boat told down or under: at the diving alarm her gun's crew go below first)
+		if (M.File.empty() || !In.bLaid || !(In.Dive.empty() || In.Dive == "surfaced") || In.Dived > 1.0) return Out;
+		// Each man's place by the gun (metres behind its mount's middle along its bore, and to its right), as it lies laid
+		// now: a boat's gun's layer and trainer beside it, its loader behind its breech (0.65 m behind the mount), the
+		// next round's man behind him; a merchant's crew in its platform behind its shield, two by two.
+		const bool bShield = M.Shield > 0.0;
+		const double Back[CrewMost] = { bShield ? M.Shield + 0.25 : 0.1, bShield ? M.Shield + 0.25 : 0.1, bShield ? M.Shield + 0.75 : 1.2, bShield ? M.Shield + 0.75 : 2.1 };
+		const double Aside[CrewMost] = { bShield ? -0.65 : -0.85, bShield ? 0.65 : 0.85, 0.35, -0.35 };
+		const double Bore = In.Train * LookPi / 180.0;
+		const double Ahead = std::cos(Bore), Starboard = std::sin(Bore);
+		for (int K = 0; K < CrewMost; ++K)
+		{
+			CrewMan Man;
+			// (turned with the gun: behind it is against its bore, its right a quarter round clockwise of it)
+			Man.Fore = -Back[K] * Ahead - Aside[K] * Starboard;
+			Man.Right = -Back[K] * Starboard + Aside[K] * Ahead;
+			// (on its deck: no further than Room from its middle, nor HalfWide from her middle line; one past her side kept
+			// as far from the mount, along her instead)
+			const double Far = std::hypot(Man.Fore, Man.Right);
+			if (Far > M.Room)
+			{
+				Man.Fore *= M.Room / Far;
+				Man.Right *= M.Room / Far;
+			}
+			if (std::fabs(Man.Right) > M.HalfWide)
+			{
+				const double Spare = std::sqrt(std::max(0.0, Man.Fore * Man.Fore + Man.Right * Man.Right - M.HalfWide * M.HalfWide));
+				Man.Right = Man.Right > 0.0 ? M.HalfWide : -M.HalfWide;
+				Man.Fore = Man.Fore >= 0.0 ? Spare : -Spare;
+			}
+			Man.Facing = In.Train;
+			const uint64_t Own = static_cast<uint64_t>(static_cast<int64_t>(In.Key)) * 8u + static_cast<uint64_t>(K);
+			Man.Clip = Hash01(Own * 3u + 1u) * 4.0;
+			const double Late = Hash01(Own * 3u + 2u) * DuckLate;
+			Man.bDuck = In.ShakenAt >= 0.0 && In.T >= In.ShakenAt + Late && In.T < In.ShakenAt + Late + DuckFor;
+			Out.push_back(Man);
+		}
+		return Out;
+	}
+
+	// -------------------------------------------------------------------------------------------------------------
+	// A hit's looks on a boat and a merchant
+
+	bool PutsOutLooks(const std::string& Dive, double Dived)
+	{
+		// (told down, her casing awash at the diving alarm, or under: the show's own line between up and under, a metre)
+		return Dive != "surfaced" || Dived > 1.0;
+	}
+
+	std::string HitLookFamily(const std::string& Family, const std::string& Weapon)
+	{
+		return Family == "mv" && Weapon.rfind("shell_", 0) == 0 ? std::string("ap") : Family;
 	}
 
 	bool MeshShape::Holds(int Points, const int* Corners, int Count) const

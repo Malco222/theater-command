@@ -3,10 +3,14 @@
 (naval-battles/wolfpack-r2/form.md section 5, field-side-read.md section 3). Hand-made, not the battle's: it exercises
 every new name (boats surfaced, at periscope depth and deep; a boat's wakeless salvo; asdic, radar, a radio bearing and a
 sighting, which find the boats the defender does not see until then, a contact held long with no attack on her, a boat
-whose views say who is running in on her (heard, as the D1 stager writes it), a merchant's gun laid on her, boats' deck
-guns laid on a merchant and a hit of theirs, and an aircraft running in on a boat past another one not yet found; a
-pattern of depth charges and an ahead-thrown salvo; hits, a boat crushed and one forced up, given up and scuttled; a star
-shell; a sighting report; a rescue) until the production lead's staged recording lands.
+whose views say who is running in on her (heard, as the D1 stager writes it), a merchant's stern gun answering her and
+another's bow gun on a boat fine on his bow, an escort's guns on a boat up, boats' deck guns laid on a merchant (one a
+Type IX's 105 mm, gunMm) with their hits and his told one by one (sea:gunHit: one as she is about to dive, the last ones
+as a straggler is shelled under) and the gun actions' words (sea:gun), a boat's gun told as she comes up from deep
+before her casing is clear, one view past her dive and on a ship astern of her tower, a merchant engaged on a boat with
+no gun told him, and an aircraft running in on a boat past another one not yet found; a pattern of depth charges and an
+ahead-thrown salvo; hits, a boat crushed and one forced up, given up and scuttled; a star shell; a sighting report; a
+rescue) until the production lead's staged recording lands.
 
     python3 Tools/sea_show/stand-ins/convoy_night.py   (writes convoy-night.json and convoy-night-air.json beside it)
 
@@ -60,20 +64,23 @@ B2 = along(B1, 270, 2 * 196)
 piece(31, "att", "ss", "Boat B", "GER", [(0, *B0), (285, *B1), (481, *B2), (620, *B2)])
 # C shadows the convoy's port quarter on the surface, 1250 m off its last port merchant, until she dives at 240 and goes deep
 # at 300, closing it at 2.5 m/s under. Her hunters are told by her views alone (heard, and each escort's echo on her: no
-# sea:sonar for her), so it is her heard that holds her and lets her go: the sea show's SetMine.
+# sea:sonar for her), so it is her heard that holds her and lets her go: the sea show's SetMine. She is a Type IX, her deck
+# gun a 105 mm the battle names (gunMm), not the German table's 88.
 C0 = (7400, 5000)
 C1 = (C0[0], C0[1] + V * 240)
 C2 = along(C1, 45, 2.5 * 60)
 C3 = along(C2, 45, 2.5 * 320)
-piece(32, "att", "ss", "Boat C", "GER", [(0, *C0), (240, *C1), (300, *C2), (620, *C3)])
-# D (convoy-night-air only) trails the convoy on the surface, two kilometres astern of its port column, and lays her deck
-# gun on its last port merchant; an aircraft of the escort's runs in on her from ahead, over Boat C not yet found (her guns
-# quiet), and lets go on her; she dives, goes deep and falls astern, unseen again for the rest of the night.
+piece(32, "att", "ss", "Boat C", "GER", [(0, *C0), (240, *C1), (300, *C2), (620, *C3)], gunMm=105)
+# D (convoy-night-air only) trails the convoy on the surface, two kilometres astern of its port column, and finishes a
+# straggler with her deck gun: Merchant 13, torpedoed before the night's views begin, stopped and settling 600 m off her
+# starboard beam; an aircraft of the escort's runs in on her from ahead, over Boat C not yet found (her guns quiet), and
+# lets go on her; she dives, goes deep and falls astern, unseen again for the rest of the night.
 D0 = (7550, 3000)
 D1 = (D0[0], D0[1] + V * 76)
 D2 = (D1[0], D1[1] + 2.5 * (END - 76))
 piece(33, "att", "ss", "Boat D", "GER", [(0, *D0), (76, *D1), (END, *D2)])
-AIR = {33}
+piece(13, "def", "mv", "Merchant 13", "UK", [(0, 8150, 3150), (END, 8150, 3150)])
+AIR = {33, 13}
 
 
 def place(path, t):
@@ -85,7 +92,7 @@ def place(path, t):
     return x0, y0, 0.0, 0.0, 1.0
 
 
-SUNK = {1: 272.0, 31: 481.0, 30: 450.0}
+SUNK = {1: 272.0, 31: 481.0, 30: 450.0, 13: 40.0}
 DIVES = {  # piece -> [(from t, state, keel or None, scope)]
     30: [(0, "surfaced", None, False), (65, "periscope", None, True), (150, "deep", 80, False), (360, "surfaced", None, False)],
     31: [(0, "periscope", None, True), (285, "deep", 80, False)],
@@ -99,11 +106,26 @@ DIVES = {  # piece -> [(from t, state, keel or None, scope)]
 # 2.5 s beat of the swirls she has laid since she went deep at 300: found, her next swirl must come on that beat, not at once)
 HEARD = {32: [(0, []), (100, [21]), (130, []), (472, [20]), (500, [])]}
 ECHO = {21: [(100, 130, 32, "radar")], 20: [(472, 500, 32, "asdic")]}
-# Deck guns laid (extra.gun, as each view says, while she is up): Boat D's on Merchant 3 from 20, her gun found before
-# anything else has her; Boat C's on Merchant 3 from 64, her first round falling on him at 63.8, before the view that says
-# her gun is on (a gun's hit from her finds her at the hit); Merchant 3's gunners on Boat C on the surface from 80.
-GUN = {3: [(80, 90, 32)], 32: [(64, 74, 3)], 33: [(20, 30, 3)]}
-STR = {30: [(0, 1.0), (330, 0.5), (450, 0.0)], 31: [(0, 1.0), (358, 0.7), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)]}
+# Deck guns laid (extra.gun, as each view says, while she is up): Boat D's on Merchant 13 from 20, her gun found before
+# anything else has her, until the straggler goes down under it at 40 (her last two hits told at that moment, as the
+# battle shells her under), as her lookouts see the aircraft coming; Boat C's on Merchant 3 from 64, her first hit on him at
+# 63.8, before the view that says her gun is on (a gun's hit from her finds her at the hit), one more at 130 and two at
+# 175, told one view past her dive at 240 (the show holds her gun as she is told down, her casing still clear); Merchant 3's
+# gunners answering her with his stern gun from 80 until she dives, one hit on her at 205 and one at 238, a view before she
+# dives (drawn as told, not owed to a round that never comes); Boat A's on Escort 3 from 400, forced up at 360 from 80 m and
+# told at her gun 40 s on (the battle's surfaced and her crew up, while the show still has her coming up: it holds her gun
+# until her casing is clear), then from 436 on Escort 2 coming up astern of her, in the blind arc her tower makes (a view the
+# battle should never send: the show holds her gun at its arc's edge, no round), until her crew give her up at 446; and
+# Merchant 12's gunners on her from 400, fine on his bow (his bow gun's: his stern gun does not bear). Each hit is told as
+# it strikes and taken from her hull in that view.
+GUN = {3: [(80, 240, 32)], 12: [(400, 446, 30)], 30: [(400, 436, 22), (436, 446, 21)], 32: [(64, 242, 3)], 33: [(20, 40, 13)]}
+STR = {30: [(0, 1.0), (330, 0.5), (450, 0.0)], 31: [(0, 1.0), (358, 0.7), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)],
+       3: [(0, 1.0), (64, 0.96), (130, 0.92), (176, 0.84)], 32: [(0, 1.0), (206, 0.9), (238, 0.8)],
+       13: [(0, 0.6), (26, 0.45), (32, 0.3), (40, 0.0)]}
+# Guns engaged other than the gun told (a warship's line, "engaged"): Escort 3's on Boat A forced up, until her crew give her
+# up; Escort 2's on Boat C up, from 110 to her dive (no hit booked: its rounds all fall about her); and Merchant 2 engaged on
+# Boat C from 150 with no gun told him (a merchant's gun fires only where told: none of his).
+ENGAGED = {22: [(436, 446, 30)], 21: [(110, 240, 32)], 2: [(150, 160, 32)]}
 
 
 def at(table, t, default):
@@ -125,8 +147,9 @@ def unit(pid, t, first):
     u = {"id": pid, "x": round(x, 1), "y": round(y, 1), "face": round(face, 4), "str": strength, "mor": 1, "state": "gone" if gone else "steady",
          "figures": ships, "d": 0, "act": "march", "speed": round(speed, 2), "engaged": -1,
          "extra": {"ships": ships, "sunk": 1 - ships}}
-    if pid == 22 and 436 <= t < 446:
-        u["engaged"] = 30  # (the boat forced up: her hunter's guns on her until her crew give her up, then off her)
+    for (t0, t1, on) in ENGAGED.get(pid, []):
+        if t0 <= t < t1:
+            u["engaged"] = on
     for (t0, heard) in HEARD.get(pid, []):
         if t0 <= t < t0 + STEP - 1e-9:
             u["extra"]["heard"] = heard
@@ -188,8 +211,23 @@ EVENTS = [
     # ahead of the convoy calls it back and it loses her: she is in sight all the while it holds her, and FoundFor after)
     ev(130, "sea:sonar", 20, "def", "Escort 1 has a contact.", on=31, kind="asdic", **contact(20, 31, 130)),
     ev(230, "sea:sonar", 20, "def", "", on=31, kind="asdic", lost="faded"),
-    # (Boat C's first round hits Merchant 3)
+    # (Boat C's gun action on Merchant 3 and his gunners' answer, each told with its words and ceased as she dives; her
+    # first hit on him before the view that says her gun is on, her later ones and his on her, each told as it strikes)
     ev(63.8, "sea:gunHit", 3, "att", "A shell from a U-boat's deck gun hits Merchant 3.", here=pos(3, 63.8), n=1, **{"from": 32}),
+    ev(64, "sea:gun", 32, "att", "Boat C opens fire on Merchant 3 with her deck gun.", on=3, why="attack"),
+    ev(80, "sea:gun", 3, "def", "Merchant 3's gunners return fire on the U-boat.", on=32, why="fight"),
+    ev(130, "sea:gunHit", 3, "att", "Merchant 3 is hit again by the U-boat's gun.", here=pos(3, 130), n=1, **{"from": 32}),
+    ev(175, "sea:gunHit", 3, "att", "Two more shells hit Merchant 3.", here=pos(3, 175), n=2, **{"from": 32}),
+    ev(205, "sea:gunHit", 32, "def", "Merchant 3's gunners hit the U-boat.", here=pos(32, 205), n=1, **{"from": 3}),
+    ev(238, "sea:gunHit", 32, "def", "Merchant 3's gunners hit the U-boat again.", here=pos(32, 238), n=1, **{"from": 3}),
+    ev(240, "sea:gun", 32, "att", "", on=3, why="cease"),
+    ev(240, "sea:gun", 3, "def", "", on=32, why="cease"),
+    # (Boat A forced up: her crew at her deck gun against Escort 3, then Escort 2 astern, until they give her up; Merchant
+    # 12's gunners on her)
+    ev(400, "sea:gun", 30, "att", "Boat A's crew make for her deck gun.", on=22, why="fight"),
+    ev(400, "sea:gun", 12, "def", "Merchant 12's gunners open fire on the surfaced U-boat.", on=30, why="fight"),
+    ev(446, "sea:gun", 30, "att", "", on=21, why="cease"),
+    ev(446, "sea:gun", 12, "def", "", on=30, why="cease"),
     ev(60, "sea:starshell", 20, "def", "Escort 1 fires star shell.", here=pos(30, 60), by=20),
     ev(65, "sea:dive", 30, "att", "Boat A dives.", dive="periscope", why="radar"),
     ev(120, "sea:torpedo", 31, "att", "Boat B fires a salvo at the convoy.", "torpedo_launch", here=pos(31, 120), target=1, x=pos(1, 270)[0], y=pos(1, 270)[1],
@@ -223,10 +261,17 @@ EVENTS = [
     ev(520, "sea:rescue", 20, "def", "Escort 1 picks up survivors.", here=pos(20, 520), on=1),
 ]
 EVENTS.sort(key=lambda e: e["t"])
-# convoy-night-air's own: Boat D's gun on Merchant 3 brings an aircraft of the escort's running in on her from ahead (over
-# Boat C, not yet found: her guns quiet as it passes), letting go on her; she dives and goes deep.
+# convoy-night-air's own: Boat D's gun on Merchant 3 (begun and ceased, told) brings an aircraft of the escort's running in
+# on her from ahead (over Boat C, not yet found: her guns quiet as it passes), letting go on her; she dives and goes deep.
 AIR_EVENTS = [
+    ev(20, "sea:gun", 33, "att", "Boat D opens fire on a straggler with her deck gun.", on=13, why="finish"),
+    ev(26, "sea:gunHit", 13, "att", "A shell from a U-boat's deck gun hits Merchant 13.", here=pos(13, 26), n=1, **{"from": 33}),
     ev(30, "sea:air", 33, "def", "An escort aircraft runs in on a U-boat astern of the convoy.", kind="patrol", n=1, running=40),
+    ev(32, "sea:gunHit", 13, "att", "Merchant 13 is hit again.", here=pos(13, 32), n=1, **{"from": 33}),
+    # (the straggler shelled under: her last two hits told at the moment she goes, played before it)
+    ev(40, "sea:sunk", 13, "def", "Merchant 13 goes down under the U-boat's gunfire.", "ship_sinking", here=pos(13, 40), cls="mv", how="shelled"),
+    ev(40, "sea:gunHit", 13, "att", "Two more shells hit Merchant 13.", here=pos(13, 40), n=2, **{"from": 33}),
+    ev(40, "sea:gun", 33, "att", "", on=13, why="cease"),
     ev(76, "sea:dive", 33, "att", "Boat D dives.", dive="periscope", why="aircraft"),
     ev(120, "sea:dive", 33, "att", "", dive="deep", keel=60, why="evade"),
 ]

@@ -1,5 +1,6 @@
 #include "Battle/ShipLooks.h"
 
+#include "Battle/ConvoyLooksCore.h"
 #include "Effects/BattleEffects.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -184,6 +185,16 @@ namespace ShipLookParts
 		return Strike == TEXT("torpedo") ? std::string("torpedo") : Strike == TEXT("dive") ? std::string("bomb") : Strike == TEXT("level") ? std::string("bomb_heavy") : std::string("bomb");
 	}
 
+	/** The table's family for a hit's look (ConvoyLook::HitLookFamily, which Tools/convoy_looks checks): a merchant ("mv",
+	 * the convoy battle's) struck by a shell, a boat's deck gun's, takes the table's transports' and merchants' ("ap": a
+	 * gun hit's fire, splinters and smoke), which has no "mv"; her torpedo and bomb hits, and any other ship's hit, FamilyOf's,
+	 * as before. Her end keeps FamilyOf's: a merchant's way down is the sea show's own (broken, shelled, settling), not
+	 * the table's. */
+	static std::string HitFamilyOf(const FString& Class, const FString& Strike)
+	{
+		return ConvoyLook::HitLookFamily(FamilyOf(Class), WeaponOf(Strike));
+	}
+
 	/** How far along her a place lies, as a share of her length from amidships (minus toward the bow, her model's -X). */
 	static double AlongOf(const FString& At, uint32 Mix)
 	{
@@ -270,7 +281,7 @@ void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool
 	}
 	Fates::Blow Blow;
 	Blow.Domain = "sea";
-	Blow.Family = ShipLookParts::FamilyOf(Class);
+	Blow.Family = ShipLookParts::HitFamilyOf(Class, Strike);
 	Blow.Weapon = ShipLookParts::WeaponOf(Strike);
 	Blow.Result = "worn";
 	Blow.Hurt = FMath::Clamp(Hurt, 0.0, 1.0);
@@ -329,7 +340,14 @@ const Fates::Fate* FShipLooks::Sink(int32 Id, const FString& Class, const FStrin
 	return &Ends.Add(Id, Look);
 }
 
-void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
+void FShipLooks::PutOut(int32 Id, double Now)
+{
+	// (each frame she is down: the fires' burnouts put in the first time kept for the kit to play, so a frame that comes
+	// before the stage's next Advance, as a picture run skips, does not take them back and leave her fires lit)
+	GiveWay(Id, true, Now, true);
+}
+
+void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now, bool bKeepOuts)
 {
 	// Her end overtakes her earlier looks (the pre-check, 20 November 15:19Z: 13 of the 14 recorded hits come with her
 	// end, 12 in the same instant). The burst of the hit itself still shows; what that look had still to come (a fire
@@ -343,7 +361,7 @@ void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
 		{
 			continue;
 		}
-		const bool bKept = (IsBurst(Step.Step) && Step.At <= Now + 2.0) || (!bUnder && Step.Step.Do == "burnout");
+		const bool bKept = (IsBurst(Step.Step) && Step.At <= Now + 2.0) || ((!bUnder || bKeepOuts) && Step.Step.Do == "burnout");
 		if (!bKept)
 		{
 			Due.RemoveAt(K, 1, EAllowShrinking::No);
@@ -673,7 +691,7 @@ TArray<FString> FShipLooks::ReelOf(const FString& Class, bool bHarbour) const
 	{
 		Fates::Blow Blow;
 		Blow.Domain = "sea";
-		Blow.Family = ShipLookParts::FamilyOf(Class);
+		Blow.Family = ShipLookParts::HitFamilyOf(Class, Strike);
 		Blow.Weapon = ShipLookParts::WeaponOf(Strike);
 		Blow.Result = "worn";
 		Blow.Nerve = 0.65;
@@ -721,7 +739,7 @@ FString FShipLooks::Reel(int32 Id, const FString& Class, const FString& KeyAndSt
 	Sides.Remove(Id);
 	Fates::Blow Blow;
 	Blow.Domain = "sea";
-	Blow.Family = ShipLookParts::FamilyOf(Class);
+	Blow.Family = ShipLookParts::HitFamilyOf(Class, Strike);
 	Blow.Weapon = ShipLookParts::WeaponOf(Strike);
 	Blow.Result = "worn";
 	Blow.Nerve = 0.65;

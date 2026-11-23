@@ -8,8 +8,10 @@ SRC="$ROOT/Source/TheaterCommand"
 OUT="${SEA_SHOW_OUT:-${TMPDIR:-/tmp}/sea_show}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
+# (and the convoy looks' core, for the scene's own rule a boat's hits' looks are put out by, which the show's hits are held to)
 $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/sea_show_test.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  "$SRC/Battle/ConvoyLooksCore.cpp" \
   -o "$OUT/sea_show_test"
 # (with the stand-ins: a hand-made convoy night until the battle's own recordings of one land, ruling 241; and the D1 stager's
 # Italian flying boat on a British boat, June 1942, so the aircraft-on-a-boat check is run every time, not only when asked)
