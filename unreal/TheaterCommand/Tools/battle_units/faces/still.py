@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 S = "/mnt/project-files/battle-models/land/soldier/"
 out, stage = argv[1], argv[2]
 MEN = [("soldier_GER.json", "GER", 2, "German rifleman"), ("soldier_USA.json", "USA", 4, "American rifleman (moustache)"),
-       ("soldier_UK_sailor.json", "UK", 0, "British sailor (had no brows)"), ("soldier_JAP.json", "JAP", 1, "Japanese rifleman")]
+       ("soldier_UK_sailor.json", "UK", 0, "British sailor"), ("soldier_JAP.json", "JAP", 1, "Japanese rifleman")]
 try:
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
     small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
@@ -23,7 +23,7 @@ for f, row, k, label in MEN:
         im = Image.fromarray(t).resize((W, W), Image.LANCZOS)
         d = ImageDraw.Draw(im)
         d.rectangle((0, 0, W, 20), fill=(30, 30, 30))
-        d.text((6, 2), ("BEFORE" if tag == "before" else "AFTER") + (" (turned)" if v == "q" else ""), fill=(240, 240, 240), font=small)
+        d.text((6, 2), ("ROUND 1" if tag == "before" else "ROUND 2") + (" (turned)" if v == "q" else ""), fill=(240, 240, 240), font=small)
         tl.append(np.array(im))
     r = np.concatenate(tl, 1)
     lab = Image.new("RGB", (r.shape[1], 24), (235, 232, 225))
@@ -31,7 +31,7 @@ for f, row, k, label in MEN:
     rows += [np.array(lab), r]
 img = Image.fromarray(np.concatenate(rows, 0))
 head = Image.new("RGB", (img.width, 30), (235, 232, 225))
-ImageDraw.Draw(head).text((6, 6), "Close-range faces, before and after (game colours, within about 9 m)", fill=(0, 0, 0), font=font)
+ImageDraw.Draw(head).text((6, 6), "Close-range faces, round 1 and round 2 (game colours, within about 9 m)", fill=(0, 0, 0), font=font)
 img = Image.fromarray(np.concatenate([np.array(head), np.array(img)], 0))
 img.save(out, quality=86)
 print(img.size)
