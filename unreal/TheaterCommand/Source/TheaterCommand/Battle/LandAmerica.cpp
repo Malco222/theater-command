@@ -227,7 +227,7 @@ namespace LandScape
 						const uint64_t Hs = Hash(0xC0F5, static_cast<uint64_t>(R * 6 + Sg * 2 + (S > 0.0 ? 1 : 0)));
 						const double XC = -0.87 + 0.87 * Sg + 0.2 * (Unit(Hash(Hs, 1)) - 0.5), XT = XC + 0.4 * (Unit(Hash(Hs, 3)) - 0.5);
 						const double Top = (2.0 + 0.2 * Unit(Hash(Hs, 2))) * High, Low = (1.3 + 0.2 * Unit(Hash(Hs, 5))) * High;
-						F.Blade(XC, Y, Top, XT, Y + S * (0.5 + 0.14 * Unit(Hash(Hs, 4))), Low, 1.0, Ridge, Point);
+						F.Blade(XC, Y, Top, XT, Y + S * (0.46 + 0.12 * Unit(Hash(Hs, 4))), Low, 1.1, Ridge, Point);
 					}
 			}
 		}
@@ -370,7 +370,7 @@ namespace LandScape
 			/** A field's own month, a fortnight either way (each farmer plants and cuts in his own week). */
 			double MonthOf(uint64_t Key) const { return Month + 0.5 + 0.7 * (Unit(Hash(Key, 0x0A7E)) - 0.5); }
 			/** The wheat's harvest: the plains' late June, the north's July. */
-			double Harvest() const { return bPlains ? 6.75 : bSouth ? 6.5 : 7.3; }
+			double Harvest() const { return bPlains ? 6.6 : bSouth ? 6.5 : 7.3; }
 			/** A corn field shocked in the fall (the rest picked standing). */
 			static bool Shocked(uint64_t Key) { return Unit(Hash(Key, 0x5C0C)) < 0.5; }
 			/** A corn or small-grain field ploughed in the fall (the rest left in its stalks or stubble till spring). */
@@ -416,7 +416,7 @@ namespace LandScape
 					if (M < 2.9) P = { Mixed(Soil, Rgb(104, 108, 70), 0.4), CGrain, 0.6, 0.12, 0.6 };
 					else if (M < 4.2) P = { Mixed(Soil, WheatGreen, 0.55), CGrain, 0.9, 0.25, 0.0 };
 					else if (M < 5.6) P = { WheatGreen, CGrain, 1.1, 0.6, 0.0 };
-					else if (M < H - 0.4) P = { Mixed(WheatGreen, Mixed(WheatGold, StubbleC, 0.35), 0.5), CGrain, 1.1, 0.95, 0.5 };
+					else if (M < H - 0.4) P = { Mixed(WheatGreen, Mixed(WheatGold, StubbleC, 0.35), 0.7), CGrain, 1.1, 0.95, 0.65 };
 					else if (M < H + 0.3) P = { Mixed(WheatGold, StubbleC, 0.35), CGrain, 1.1, 1.0, 1.0 };
 					else if (M < 9.3) P = { Mixed(StubbleC, Soil, 0.15 + 0.15 * (M - H)), CStubble, 0.9, 0.7, 1.0 };
 					else if (M < 10.0) P = { Harrowed, CStubble, 0.04, 0.5, 1.0 };
@@ -472,7 +472,8 @@ namespace LandScape
 
 			int CropOf(int Kind, double U) const override
 			{
-				if (Kind == KRough) return Pasture;
+				// (on the survey the rules' rough patches inside a section are farmed with it: one crop to a field)
+				if (Kind == KRough && !bSurveyed) return Pasture;
 				if (Kind == KOpen && !bSurveyed)
 				{
 					// (the rules' open land here is the farm's as much as its grazing: most of it in the rotation; on the
@@ -602,10 +603,13 @@ namespace LandScape
 			 * the wheels' two pale tracks, loose stone at its edges, the ditch's rank grass beyond. */
 			Tone RoadColour(const Spot& S, double Off, double Half) const
 			{
-				const Tone Base = Varied(Gravel, 0.97 + 0.06 * S.N2, 0.0);
-				const double Track = std::exp(-std::pow((Off - 1.0) / 0.4, 2.0));
+				// (the stones' grain, broken, a few points of value from one ground point to the next; the wheels' two tracks
+				// paler and smooth: the art director, farmland round 2)
+				const double Track = std::exp(-std::pow((Off - 1.0) / 0.45, 2.0));
+				const double Grain = Unit(Hash(Seed ^ 0x6A41, static_cast<uint64_t>(std::llround(S.X * 3.0) + 1048576), static_cast<uint64_t>(std::llround(S.Y * 3.0) + 1048576))) - 0.5;
+				const Tone Base = Varied(Gravel, (0.97 + 0.06 * S.N2) * (1.0 + 0.09 * Grain * (1.0 - Track)), 0.0);
 				const double Crown = Smooth(0.45, 0.0, Off), Loose = Smooth(Half - 1.0, Half - 0.2, Off);
-				Tone T = Mixed(Base, Rgb(184, 178, 164), 0.6 * Track);
+				Tone T = Mixed(Base, Rgb(190, 184, 170), 0.8 * Track);
 				T = Mixed(T, Rgb(132, 126, 116), 0.45 * Crown + 0.5 * Loose);
 				const Tone Ditch = Mixed(GrassAt(S), Rgb(70, 96, 46), bBare ? 0.0 : 0.4);
 				return Mixed(T, Ditch, Smooth(Half - 0.1, Half + 0.7, Off));
@@ -761,8 +765,9 @@ namespace LandScape
 					P.Scale = static_cast<float>(0.85 + 0.3 * U4);
 					P.ScaleZ = static_cast<float>(Ph.High * (0.9 + 0.2 * U5));
 					const double L = 0.94 + 0.12 * U6;
-					// (green to the wheat's gold, about 186, 160, 92 at its ears)
-					P.Tint = Tint(Lerp(0.85, 1.75, Ph.Ripe) * L, Lerp(1.05, 1.3, Ph.Ripe) * L, Lerp(0.85, 0.95, Ph.Ripe) * L);
+					// (the clump built ripe, its ears about 186, 160, 94; the tint takes it back to the spring's green, red under
+					// green, and the straw comes as the green goes: the art director's lime wheat, farmland round 2)
+					P.Tint = Tint(Lerp(0.26, 1.0, Ph.Ripe) * L, Lerp(0.6, 1.0, Ph.Ripe) * L, Lerp(0.42, 1.0, Ph.Ripe) * L);
 					return true;
 				}
 				case CStubble:
@@ -858,21 +863,22 @@ namespace LandScape
 					// crates, round 1's first mend, seen again from 12 m)
 					M.Far = LandField::Mesh();
 					Writer F(M.Far);
-					FarCorn(F, Rgb(78, 106, 54), Rgb(44, 66, 34));
+					FarCorn(F, Rgb(78, 106, 54), Rgb(56, 82, 42));
 					break;
 				}
 				case CGrain:
 				{
 					// a clump of wheat (or oats by the tint): twenty-four stalks a metre tall over half a metre, each its ear
-					// a slim blade on its top (the heads touching across the field), a leaf at every third
+					// a slim blade on its top (the heads touching across the field), a leaf at every third; built in the
+					// ripe straw's colours, the tint greening it
 					for (int B = 0; B < 24; ++B)
 					{
 						const double A = 2.0 * Pi * Unit(Hash(0x6E41, B)), D = 0.26 * std::sqrt(Unit(Hash(0x6E42, B)));
 						const double X = D * std::cos(A), Y = D * std::sin(A), High = 0.85 + 0.2 * Unit(Hash(0x6E43, B));
 						const double LX = 0.07 * std::cos(A), LY = 0.07 * std::sin(A);
-						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.018, Rgb(92, 110, 54), Rgb(130, 140, 72));
-						W.Blade(X + 0.9 * LX, Y + 0.9 * LY, High - 0.04, X + 1.3 * LX, Y + 1.3 * LY, High + 0.1, 0.03, Rgb(132, 140, 72), Rgb(146, 150, 80));
-						if (B % 3 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(80, 100, 48), Rgb(116, 132, 66));
+						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.018, Rgb(150, 128, 80), Rgb(178, 152, 96));
+						W.Blade(X + 0.9 * LX, Y + 0.9 * LY, High - 0.04, X + 1.3 * LX, Y + 1.3 * LY, High + 0.1, 0.03, Rgb(184, 158, 94), Rgb(196, 170, 104));
+						if (B % 3 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(146, 126, 80), Rgb(170, 146, 94));
 					}
 					M.Paint = 2;
 					M.FarFrom = 45.0f;
@@ -989,7 +995,7 @@ namespace LandScape
 					// far off: the green corn's fans, buff, hanging lower
 					M.Far = LandField::Mesh();
 					Writer F(M.Far);
-					FarCorn(F, Rgb(170, 150, 108), Rgb(126, 106, 76), 0.92);
+					FarCorn(F, Rgb(170, 150, 108), Rgb(144, 124, 90), 0.92);
 					break;
 				}
 				default: break;
