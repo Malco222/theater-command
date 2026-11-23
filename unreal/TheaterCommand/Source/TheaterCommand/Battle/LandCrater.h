@@ -26,7 +26,8 @@
  * there), as LandField's are; the meshes are LandField::Mesh, in the field's frame (metres, x east, y north, z up),
  * counter-clockwise seen from above.
  *
- * Cost: a 105's hole is some 270 points and 480 triangles, a mortar's about 200 and 340; a few hundred holes by the
+ * Cost: a 105's hole is some 270 points and 480 triangles, a mortar's about 200 and 340 (with crater variety about
+ * twice the points and 1.7 times the triangles: its spray, more sides, a puddle's water); a few hundred holes by the
  * end of a battle are some 100,000 points. They are kept by place: each 64 m square of the field (a Patch) is its own
  * mesh in the game, its holes in sections of PerChunk. The engine copies and uploads every section of a mesh again
  * when any one of them changes, and the shadows cached under that mesh's bounds are drawn again; so a new hole makes
@@ -74,7 +75,22 @@ namespace LandCrater
 		double Scorch = 0.0;
 		double Subsoil = 0.0;
 		uint64_t Vary = 0;
+		/**
+		 * Crater variety, the art director's round 1 (23 November: "feather the outer edge into broken, speckled spray:
+		 * clods and dots that thin out, rays of uneven length, and no straight edge anywhere"; "in mud, deep holes hold a
+		 * puddle with the sky in it, under a dark wet ring"). Spray: specks of soil thrown past the thick soil out over
+		 * the thin edge and beyond it, laid after the clods as clods are (Field::TopAt reads them so). Puddle: 0 to 0.6,
+		 * the share of the bowl's depth that water stands in it (a flat disc of PuddleWater, which TopAt does not read:
+		 * a man wades in it). Both 0 unless Vary.
+		 */
+		int Spray = 0;
+		double Puddle = 0.0;
 	};
+
+	/** A flooded hole's water (Size::Puddle): the grey of the sky it holds in its middle, darker at its edge where the
+	 * bowl's dark side is in it; two colours only, so a test can tell it. */
+	inline constexpr Rgb8 PuddleWater = { 98, 106, 114 };
+	inline constexpr Rgb8 PuddleShore = { 70, 72, 72 };
 
 	/**
 	 * The hole a round leaves, by the effects kit's name for it (LandPlay::Effect::Name) and its calibre: "grenade" a
@@ -95,8 +111,9 @@ namespace LandCrater
 		/** How much each point's tone wanders: 1 for torn soil, less for grass grown over it. */
 		double Mottle = 1.0;
 		/** Crater variety (Size::Subsoil, Size::Scorch): the soil from under the topsoil a deep hole throws up, and how
-		 * far the burst's soot reaches onto the thrown soil's thin edge (0 none: the edge the ground's own colour; snow
-		 * shows the burst's dark star far out on the white, sand a little). */
+		 * much of the burst's soot the far spray of specks carries (Size::Spray: snow shows it dark far out on the white,
+		 * sand a little; elsewhere the specks are the thrown soil's colour). The thin edge itself is always the ground's
+		 * own colour: soot on it drew a grey halo with straight sides on the snow, the art director, 23 November. */
 		Rgb8 Sub;
 		double EdgeSoot = 0.0;
 	};
@@ -228,7 +245,10 @@ namespace LandCrater
 		 * round comes in flat and leaves a long hole with its soil thrown forward and out in two wings, a howitzer's
 		 * less, a mortar bomb's falls steeply and leaves a round one), turned along the way the round came; a star of
 		 * soot round a fresh burst; a deep hole's lighter subsoil on its crest; and the ground's own ways (mud slumps
-		 * wide and low, sand sprays wide and shallow, on snow the thrown earth and soot reach far over the white).
+		 * wide and low, sand sprays wide and shallow, on snow the thrown earth and soot reach far over the white). The
+		 * art director's round 1 (23 November): more points round each hole, its thrown soil broken into tongues and a
+		 * spray of specks past its edge, soft rays of soot, a smooth bowl, water in about half the deep holes in mud,
+		 * and a newer hole's thrown soil lying on an older one's in its colour (SoilAt).
 		 */
 		bool bVariety = false;
 		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
@@ -274,6 +294,14 @@ namespace LandCrater
 		 * hole is not read where a later hole's cut has taken it away.
 		 */
 		bool TopAt(double X, double Y, double& OutZ) const;
+		/**
+		 * Crater variety (bVariety): the holes' own soil at a point, as TopAt reads it but their rings' faces only (no
+		 * clod, no breach): the highest face's height, and its colour and normal there as laid. A newer hole's thrown
+		 * soil lies on an older one's in its colours and light, so no edge shows where it ends over it (the art
+		 * director's round 1, 23 November: a grey halo of torn paper with straight sides on the snow, a newer hole's
+		 * feathered edge in the field's white lying over an older one's grey thrown soil).
+		 */
+		bool SoilAt(double X, double Y, double& OutZ, Rgb8& OutColour, double& OutUpX, double& OutUpY, double& OutUpZ) const;
 
 		struct Hole
 		{

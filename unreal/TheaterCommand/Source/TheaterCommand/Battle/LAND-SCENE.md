@@ -542,19 +542,41 @@ only its ragged outline its own. `-TheaterLandCraterVariety` (`LandCrater::Field
   thrown forward and out in two wings to either side, little behind. A field gun's or howitzer's shell leaves a
   slightly oval hole with some wings. A mortar bomb falls nearly straight down and leaves a round one. A round of no
   known way (a blast in the record with no round) is turned by its own dice.
-- **The burst's soot:** a star of dark spikes out over the thrown soil. On snow it reaches out onto the white (as in
-  the winter photographs), on sand a little, elsewhere the thin edge stays the ground's own colour.
+- **The burst's soot:** four to nine soft-sided rays of blackened soil over the thrown soil, each its own width,
+  length and darkness, the longest thrown downrange by a tank's slanting burst. The thin edge itself always stays the
+  ground's own colour (soot on it drew a grey halo with straight sides on the snow).
 - **The subsoil:** a deep hole throws lighter soil from under the topsoil onto its crest in patches. Normandy's
   yellow-brown clay, the steppe's loess, paler sand, a town's plaster dust.
 - **The ground:** mud slumps wide and low with its soot smothered, sand sprays wide and shallow, and on snow the dark
   earth reaches further.
 - **Overlapping holes:** a new hole's thrown soil stops at an older hole's rim and steps down into it, rather than
-  lying across the older bowl as a sheet.
+  lying across the older bowl as a sheet. Where it reaches over an older hole's thrown soil it lies on it, in that
+  soil's colour and light at its thin edge (`Field::SoilAt`), so the newer edge never shows as a white sheet over
+  the older soil.
+
+The art director's round 1 (23 November) mended four things, all inside the switch:
+
+- **No straight edges:** each hole has 40% more points round it, and the thrown soil's outer band is broken from side
+  to side, thick where a ray or wing threw it and thinning early elsewhere, so the dark soil runs out in tongues of
+  uneven length.
+- **The spray:** specks of soil and torn turf thrown past the thick soil and beyond the thin edge, thinning as they
+  go, most along the rays and into the wings; on snow and sand some are blackened. They are laid as clods are, so a
+  body lies on them.
+- **A smooth bowl:** the bowl's points a quarter as jittered and its tone smoothed from side to side, so the sand's
+  bowls no longer fan into pie slices.
+- **Puddles in mud:** about half the deep holes in mud hold water, a flat disc at a quarter to a half of the bowl's
+  depth, the grey of the sky in its middle, darker at its edge, under a dark wet ring on the bowl's side. A man wades
+  in it: `TopAt` reads the bowl under it, not the water.
+
+Cost: a varied hole has about twice the points and 1.7 times the triangles (a 105's about 580 points and 750
+triangles, a mortar's 360 and 490). Laying 500 holes takes half a second in the cloud with the switch on, against a
+fifth of a second off, so the Mac's speed gate must check it.
 
 It is all drawn from each hole's own dice, so the same battle lays the same holes. It applies to scarred ground's old
 holes too. With the switch off every hole is laid as before to the byte: checked on 500 holes of every name and
 ground, including old ones, against the code before it. `Tools/land_crater/run.sh` checks it (each hole its own
-size, the long ones along their rounds' way, a body still lies on every hole's face, no hole through the world) and
+size, the long ones along their rounds' way, a body still lies on every hole's face but a puddle's water, no hole
+through the world) and
 paints a barrage's holes on earth, sand, snow, mud and black earth, switch off and on, from a man's height and from
 above.
 

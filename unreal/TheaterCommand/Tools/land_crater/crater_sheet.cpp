@@ -21,9 +21,13 @@ namespace
 
 	double GroundZ(double X, double Y) { return 0.35 * std::sin(X * 0.045) * std::cos(Y * 0.038) + 0.12 * std::sin(X * 0.17 + Y * 0.11); }
 
+	// (the ground's colours as the game's are: its points some 4.2 m apart, so its colour changes over metres, not
+	// centimetres; the fine grain is the material's, laid alike over the ground and the holes: Grain. A fine pattern in
+	// the ground's own colours showed every hole's thrown soil as a smooth patch with straight sides, which the game,
+	// its holes on the ground's own material, never draws)
 	LandField::Rgb8 GroundColour(const std::string& Word, double X, double Y)
 	{
-		const double N = 0.5 + 0.5 * std::sin(X * 1.7 + std::sin(Y * 1.3) * 2.0) * std::cos(Y * 2.1 - X * 0.4);
+		const double N = 0.5 + 0.5 * std::sin(X * 0.31 + std::sin(Y * 0.23) * 1.5) * std::cos(Y * 0.27 - X * 0.09);
 		const auto C = [N](int R, int G, int B, double By)
 		{
 			LandField::Rgb8 O;
@@ -77,6 +81,16 @@ namespace
 		}
 	};
 
+	/** M_LandSurface's grain (Tools/land_look's T_LandGrain, about 2 m a repeat), over every face alike: a share to
+	 * scale its colour by. */
+	double Grain(double X, double Y)
+	{
+		const double A = std::sin(X * 3.1 + Y * 1.7) * std::cos(Y * 2.9 - X * 0.8);
+		const double B = std::sin(X * 7.3 - Y * 5.1 + std::sin(Y * 4.0)) * std::cos(X * 6.1 + Y * 8.3);
+		const double C = std::sin(X * 17.0 + Y * 11.0) * std::sin(Y * 15.0 - X * 9.0);
+		return 1.0 + 0.07 * A + 0.06 * B + 0.05 * C;
+	}
+
 	void Paint(Picture& P, const Camera& Cam, const LandField::Mesh& M)
 	{
 		// (a low morning sun from the south-east, a sky's light from above)
@@ -118,9 +132,12 @@ namespace
 					const size_t Pi_ = static_cast<size_t>(Y * P.W + X);
 					if (Dz >= P.Depth[Pi_] - 1e-4) continue;
 					P.Depth[Pi_] = static_cast<float>(Dz);
+					const double Wx = W0 * M.Positions[A * 3] + U * M.Positions[B * 3] + V * M.Positions[C * 3];
+					const double Wy = W0 * M.Positions[A * 3 + 1] + U * M.Positions[B * 3 + 1] + V * M.Positions[C * 3 + 1];
+					const double G = Grain(Wx, Wy);
 					for (int Ch = 0; Ch < 3; ++Ch)
 					{
-						P.Rgb[Pi_ * 3 + static_cast<size_t>(Ch)] = static_cast<float>(W0 * Lit[A * 3 + static_cast<size_t>(Ch)] + U * Lit[B * 3 + static_cast<size_t>(Ch)] + V * Lit[C * 3 + static_cast<size_t>(Ch)]);
+						P.Rgb[Pi_ * 3 + static_cast<size_t>(Ch)] = static_cast<float>(G * (W0 * Lit[A * 3 + static_cast<size_t>(Ch)] + U * Lit[B * 3 + static_cast<size_t>(Ch)] + V * Lit[C * 3 + static_cast<size_t>(Ch)]));
 					}
 				}
 			}
@@ -284,9 +301,15 @@ int main(int Argc, char** Argv)
 		Check(static_cast<size_t>(OffSame) == Off.Holes.All().size(), "with the switch off every hole is round, as before", Buf);
 	}
 
-	// A body lies on each hole's face, the switch on: wherever a hole's triangle stands, TopAt is at least that high.
+	// A body lies on each hole's face, the switch on: wherever a hole's triangle stands, TopAt is at least that high
+	// (but a flooded hole's water, which a man wades in: Size::Puddle).
 	{
-		long Points = 0, Missed = 0, Under = 0;
+		long Points = 0, Missed = 0, Under = 0, Water = 0;
+		const auto IsWater = [](const LandField::Rgb8& C)
+		{
+			return (C.R == LandCrater::PuddleWater.R && C.G == LandCrater::PuddleWater.G && C.B == LandCrater::PuddleWater.B)
+				|| (C.R == LandCrater::PuddleShore.R && C.G == LandCrater::PuddleShore.G && C.B == LandCrater::PuddleShore.B);
+		};
 		for (int P = 0; P < On.Holes.Patches(); ++P)
 		{
 			for (const LandField::Mesh& M : On.Holes.PatchAt(P).Sections)
@@ -296,6 +319,11 @@ int main(int Argc, char** Argv)
 					const float* A = &M.Positions[M.Triangles[Tr] * 3];
 					const float* B = &M.Positions[M.Triangles[Tr + 1] * 3];
 					const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+					if (IsWater(M.Colours[M.Triangles[Tr]]) && IsWater(M.Colours[M.Triangles[Tr + 1]]) && IsWater(M.Colours[M.Triangles[Tr + 2]]))
+					{
+						++Water;
+						continue;
+					}
 					const double Px = (A[0] + B[0] + C[0]) / 3.0, Py = (A[1] + B[1] + C[1]) / 3.0, Pz = (A[2] + B[2] + C[2]) / 3.0;
 					++Points;
 					double Top = 0.0;
@@ -310,8 +338,8 @@ int main(int Argc, char** Argv)
 				}
 			}
 		}
-		char Buf[160];
-		std::snprintf(Buf, sizeof Buf, "%ld triangles' middles, %ld with no face, %ld under it", Points, Missed, Under);
+		char Buf[200];
+		std::snprintf(Buf, sizeof Buf, "%ld triangles' middles, %ld with no face, %ld under it; %ld of flooded holes' water", Points, Missed, Under, Water);
 		Check(Missed == 0 && Under == 0, "the switch on, a body still lies on every hole's face", Buf);
 	}
 
