@@ -1036,13 +1036,13 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	// lettered smaller rather than run wider than the flag and a half, which would lie over the next army's flag.
 	if (!EarnedName.IsEmpty() && What == 0)
 	{
-		const FString Shown = FString::Printf(TEXT("\u201C%s\u201D"), *EarnedName);
+		const FString Shown = FString::Printf(TEXT("\"%s\""), *EarnedName); // (straight quotes: the engine's own text font is sure to have them)
 		const double Letter = PlateHeight * 0.6;
 		const double Wanted = Letter * (0.9 + 0.56 * Shown.Len());
 		const double Widest = FlagWidth * 1.5;
 		const double Scroll = FMath::Min(Wanted, Widest);
-		const double Size = Letter * Scroll / Wanted;
-		const double High = FMath::Max(Size * 1.45, Letter * 0.95);
+		const double Lettered = Letter * Scroll / Wanted;
+		const double High = FMath::Max(Lettered * 1.45, Letter * 0.95);
 		const FVector ScrollAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight + 1.9 * U + High * 0.5);
 		AddPart(Cube, ScrollAt - StandardFoot, FVector(0.16 * U, Scroll + 0.3 * U, High), Map->GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("15130F"))), 0.7f, 0.0f, 0.6f), Standard)->SetCastShadow(false);
 		for (const double Edge : { -1.0, 1.0 })
@@ -1053,7 +1053,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		NameLabel = NewObject<UTextRenderComponent>(this);
 		NameLabel->SetupAttachment(Standard);
 		NameLabel->SetText(FText::FromString(Shown));
-		NameLabel->SetWorldSize(static_cast<float>(Size));
+		NameLabel->SetWorldSize(static_cast<float>(Lettered));
 		NameLabel->SetTextRenderColor(FColor::FromHex(TEXT("E9C77B")));
 		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
 		{

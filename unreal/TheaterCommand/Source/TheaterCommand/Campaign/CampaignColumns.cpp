@@ -219,8 +219,11 @@ void ACampaignMapActor::ShowColumns(const TArray<FViewColumn>& Columns)
 					Nearest = K;
 				}
 			}
-			const FVector2D Way = Road.Curve[FMath::Min(Nearest + 1, Road.Curve.Num() - 1)] - Road.Curve[FMath::Max(Nearest - 1, 0)];
-			const double Heading = FMath::RadiansToDegrees(FMath::Atan2(Way.Y, Way.X));
+			const FVector2D RoadFore = Road.Curve[FMath::Min(Nearest + 1, Road.Curve.Num() - 1)], RoadAft = Road.Curve[FMath::Max(Nearest - 1, 0)];
+			const FVector2D Way = RoadFore - RoadAft;
+			// (the turn is a yaw in the world, which lies a quarter turn from the map: the way is read in the world, as the convoys' is)
+			const FVector Downroad = (MapToWorld(RoadFore.X, RoadFore.Y) - MapToWorld(RoadAft.X, RoadAft.Y)).GetSafeNormal2D();
+			const double Heading = FMath::RadiansToDegrees(FMath::Atan2(Downroad.Y, Downroad.X));
 			const int32 Seed = FMath::Abs(FMath::RoundToInt32(Hit.At.X * 7.0 + Hit.At.Y * 13.0));
 			const FVector2D At = Road.Curve[Nearest];
 			// (a figure not turned faces along -X: a turn of 180 more faces it down the road, and the slew is added)
@@ -302,13 +305,13 @@ void ACampaignMapActor::UpdateColumns(const FVector& CameraFocus, float CameraDi
 		else if (bClose && !Road.bManned && ColumnConvoys.Num() + Road.Convoys <= MostConvoys && Road.Length > 1.0)
 		{
 			const FCampaignNation* Whose = Data.FindNation(Road.Nation);
-			const FLinearColor Paint = Whose ? FLinearColor(Whose->Color) : ColumnHex(TEXT("6D5A3A"));
+			const FLinearColor Livery = Whose ? FLinearColor(Whose->Color) : ColumnHex(TEXT("6D5A3A"));
 			// Three lorries nose to tail, the first at the middle of the model, facing +X (a figure not turned faces -X).
 			FMiniatureMesh Model;
 			const double Scale = 0.85 * U;
 			for (int32 Lorry = 0; Lorry < 3; ++Lorry)
 			{
-				Model.Lorry(FVector(-Lorry * 2.9 * Scale, 0.0, 0.0), Scale, Paint, 180.0);
+				Model.Lorry(FVector(-Lorry * 2.9 * Scale, 0.0, 0.0), Scale, Livery, 180.0);
 			}
 			if (Model.Vertices.Num() == 0)
 			{
