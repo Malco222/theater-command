@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 044eefff 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of aaf1b11f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -4477,7 +4477,9 @@
       const was = sq.phase;
       let ph = this.phaseOf(sq);
       let got = false;
-      if (!sq.down && sq.slow >= MOUNT.downAfter && (ph === "fight" || ph === "pinned" || ph === "hold" || ph === "startline" || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0)) {
+      const hulls = sq.of !== void 0 && sq.veh.length > 0 && sq.veh.every((v) => DR.mech.armoured.includes(v.ml ?? ""));
+      const cue = hulls ? this.b.hullThreat(u) : ph === "fight" || ph === "pinned" || ph === "hold" || ph === "startline" || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0;
+      if (!sq.down && sq.slow >= MOUNT.downAfter && cue) {
         if (u.kind === "mot" || u.kind === "cav" && this.nearestGap(u) < DR.ranges.debus * 0.85) {
           got = sq.down = true;
           this.alight(sq);
@@ -9835,6 +9837,19 @@
       if (e.kind === "art") return gunsOf(e).closeAt;
       if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
       return null;
+    }
+    /**
+     * Whether an enemy weapon that can pierce a hull reaches a block now (tankReach: a tank's, a gun's over open sights, a
+     * fort's, foot with its own anti-tank weapon), the overrun's threat test. Looks only for the drill: armoured infantry
+     * aboard their half-tracks ride on till one does (the design director, 23 November 07:06Z(2); Drill.think).
+     */
+    hullThreat(u) {
+      for (const e of this.units) {
+        if (e.side === u.side || !fighting2(e)) continue;
+        const r = this.tankReach(e);
+        if (r !== null && this.gap(u, e) <= r) return true;
+      }
+      return false;
     }
     /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */
     overruns() {
