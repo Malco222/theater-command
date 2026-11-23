@@ -29,7 +29,7 @@ from motorpool import LEFT, RIGHT, SIDES, X, Y, Z
 from tanks_ger import coat, coats
 
 # What a light car or a motorcycle wears in the field (the E7 surface pass: shade in her creases, dirt by her ground).
-LIGHT_WORN = dict(shade=True, shade_deep=0.42, layers=2, marks=0.45, gear=0.6, rim=True, foot=0.40, top=0.95)      # (a tank's dirt climbs to 0.95 m and thins out by 1.45: a car is not that tall)
+LIGHT_WORN = dict(shade=True, shade_deep=0.42, shade_knee=0.5, shade_reach=0.25, layers=2, marks=0.45, gear=0.6, rim=True, foot=0.35, top=0.70)      # (a tank's dirt climbs to 0.95 m and thins out by 1.45: a car is not that tall)
 
 
 class LightWorks(CarWorks):

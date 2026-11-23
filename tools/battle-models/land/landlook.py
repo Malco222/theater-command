@@ -84,6 +84,7 @@ def main():
         "front": ((cx + L * 1.05, -L * 0.85, H * 1.0), (cx + 0.3, 0, H * 0.36), 50),
         "rear": ((cx - L * 1.05, L * 0.85, H * 1.0), (cx - 0.3, 0, H * 0.36), 50),
         "side": ((cx, -L * 1.6, H * 0.5), (cx, 0, H * 0.4), 50),
+        "left": ((cx, L * 1.6, H * 0.5), (cx, 0, H * 0.4), 50),
         "top": ((cx - 0.01, -0.3, L * 1.7), (cx, 0, 0), 50),
         "gear": ((cx + L * 0.46, -L * 0.42, 0.62), (cx + L * 0.26, -1.0, 0.5), 50),
         "game": ((cx + 16 * math.cos(math.radians(30)) * 0.8, -16 * math.cos(math.radians(30)) * 0.6, 16 * math.sin(math.radians(30))), (cx, 0, H * 0.3), 50),

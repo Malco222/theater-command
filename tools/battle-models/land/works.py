@@ -398,7 +398,7 @@ class Works(Shop, Gear, Fittings):
         return self
 
     def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False, disc=0.55, tyre=0.45, lie=0.24,
-             shade_deep=None, ground=None):
+             shade_deep=None, ground=None, shade_knee=0.3, shade_reach=0.5):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
@@ -521,7 +521,9 @@ class Works(Shop, Gear, Fittings):
             # (the E7 pass, shade_deep given: the creases to 1 - shade_deep, an open face left clear (knee), the ground's
             # own light under her (bounce) and no film along a long plate or trail (film), so her lit side darkens by
             # under the art director's 8%: 1.4 to 7.3% on the seven theatre vehicles built so far)
-            self.shaded(**({"deep": shade_deep, "knee": 0.3, "bounce": 0.4, "film": 0.3} if shade_deep is not None else {}))
+            # (shade_knee, shade_reach: an open-topped car or a motorcycle, whose floor and seats the sun lights straight in,
+            # shuts more of her sky before a point darkens, and looks less far for what shuts it: her creases are smaller)
+            self.shaded(**({"deep": shade_deep, "knee": shade_knee, "reach": shade_reach, "bounce": 0.4, "film": 0.3} if shade_deep is not None else {}))
         return self
 
     def shaded(self, reach=0.5, deep=0.7, rays=20, knee=0.0, bounce=1.0, film=0.0):

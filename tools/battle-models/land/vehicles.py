@@ -196,3 +196,7 @@ BUILDERS["R75"] = motorcycles.r75
 ABOUT["R75"] = {"nation": "GER", "role": "motorcycle with sidecar", "years": "1941-45",
                 "units": "the motorcycle troops and the scouts ahead of Germany's armor and motorized infantry, in Europe, Russia and Africa; solo (the sidecar off), the despatch riders"}
 FACES["R75"] = [("With her sidecar and its MG 34, dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"}), ("Solo: a despatch rider", {"sidecar": False})]
+BUILDERS["M72"] = motorcycles.m72
+ABOUT["M72"] = {"nation": "SOV", "role": "motorcycle with sidecar", "years": "1942-45",
+                "units": "the motorcycle battalions and the scouts of the Red Army's tank and mechanized corps; solo (the sidecar off), the despatch riders. Lend-Lease Harleys and captured BMWs rode beside her"}
+FACES["M72"] = [("With her sidecar and its DT", {}), ("Solo: a despatch rider", {"sidecar": False})]
