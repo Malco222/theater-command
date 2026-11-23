@@ -1589,7 +1589,13 @@ export class Drill {
     // men on foot can keep (the lorries drive in close and the men jump down); they stay down while it keeps to a foot
     // pace, and mount again if it goes on faster (below).
     let got = false;
-    if (!sq.down && sq.slow >= MOUNT.downAfter && (ph === 'fight' || ph === 'pinned' || ph === 'hold' || ph === 'startline' || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0)) {
+    // Armoured infantry all aboard half-tracks (sq.of, DR.mech.armoured; the design director, 23 November 07:06Z(2)): they
+    // ride on, near the enemy or fighting, till an enemy weapon that can pierce a hull reaches them (the overrun's threat
+    // test, sim.hullThreat; no distance of their own), and get down then once their carriers slow, as any do. With lorries
+    // among their carriers they get down as lorried foot do.
+    const hulls = sq.of !== undefined && sq.veh.length > 0 && sq.veh.every((v) => DR.mech.armoured.includes(v.ml ?? ''));
+    const cue = hulls ? this.b.hullThreat(u) : ph === 'fight' || ph === 'pinned' || ph === 'hold' || ph === 'startline' || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0;
+    if (!sq.down && sq.slow >= MOUNT.downAfter && cue) {
       if (u.kind === 'mot' || (u.kind === 'cav' && this.nearestGap(u) < DR.ranges.debus * 0.85)) { got = sq.down = true; this.alight(sq); }
     }
     // Down, and the block goes on faster than they can follow on foot: up again (board). Slowed again while they mount:

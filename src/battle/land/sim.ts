@@ -2759,6 +2759,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     return null;
   }
 
+  /**
+   * Whether an enemy weapon that can pierce a hull reaches a block now (tankReach: a tank's, a gun's over open sights, a
+   * fort's, foot with its own anti-tank weapon), the overrun's threat test. Looks only for the drill: armoured infantry
+   * aboard their half-tracks ride on till one does (the design director, 23 November 07:06Z(2); Drill.think).
+   */
+  hullThreat(u: LandUnit): boolean {
+    for (const e of this.units) {
+      if (e.side === u.side || !fighting(e)) continue;
+      const r = this.tankReach(e);
+      if (r !== null && this.gap(u, e) <= r) return true;
+    }
+    return false;
+  }
+
   /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */
   private overruns(): void {
     const foot = (f: LandUnit): boolean => fighting(f) && LAND.alone.foot.includes(f.kind);
