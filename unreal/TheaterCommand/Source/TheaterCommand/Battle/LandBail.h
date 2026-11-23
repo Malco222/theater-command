@@ -25,6 +25,15 @@ namespace Fates
  * her ammunition goes is thrown down dead beside her; a man in the open may be cut down, or hit and left crawling; and
  * now and then the first man out of a burning tank is on fire himself, runs a few steps and falls, burning on.
  *
+ * The art director's notes of 23 November: tankers get out (the scene draws them in their tankers' files, no
+ * rifle; an army with no tankers' file, for now, in its infantry figure, no rifle); a man first runs or crawls straight back in her lee, 8 to
+ * 12 m (a crawler 3 to 5), keeping her hull between him and the enemy, then breaks for his cover; her ammunition
+ * going throws a man on her deck 2 to 5 m, and anyone on the ground within 15 m of her flinches flat for a second or
+ * two, then goes on; his odds in the open are by the enemy who can see him (Wreck::Threat: 1 in 6 running with the
+ * enemy close, much less with none in sight); a man on fire comes out of at most about one brew-up in eight, his
+ * flames in patches with smoke trailing from him, and about one in three of them rolls it out and lives, lying
+ * wounded and smoking.
+ *
  * The rules decide who lives and dies in the battle's numbers; none of this changes them (the fates table's own rule:
  * looks only). Its dice are its own, by the wreck's seed, so the same battle bails out the same way each time.
  */
@@ -57,6 +66,11 @@ namespace LandBail
 		double BackAt = -1.0;     // life's seconds after the kill he goes back to climb in again (crew_in), -1 never
 		int Side = 1;             // the side of her hull he drops from: +1 her right, -1 her left
 		V3 Hatch, Deck, Down, Goal; // his hatch; the hull's edge he jumps from; where he lands; where he makes for
+		V3 Lee;                   // the end of his first leg, straight back in her lee (Down for a man staying beside her)
+		double Thrown = 0.0;      // caught by her blast: how far it throws him, metres
+		double FlinchAt = -1.0;   // life's seconds after the kill he flinches flat at her blast, -1 never
+		double FlinchS = 0.0;     // and for how long, before he goes on
+		bool bLives = false;      // on fire: he rolls it out and lives, lying wounded and smoking
 		double Speed = 4.5;       // metres a second on the ground
 		double Crawl = 0.0;       // a wounded man's crawl after he falls, metres
 		int Fall = 0;             // which fall: 0 forward, 1 back
@@ -70,10 +84,14 @@ namespace LandBail
 		V3 Middle;                       // the ground under her middle
 		double Heading = 0.0;            // radians, 0 north, clockwise
 		double Wide = 3.0;               // her width, metres
+		double Long = 6.0;               // her length, metres
 		double Away = 0.0;               // radians, 0 north, clockwise: the way away from her enemy
 		double Blast = -1.0;             // life's seconds after her kill her ammunition goes (-1 never)
 		bool bBurns = false;             // she burns (a man may come out on fire)
 		bool bUnderFire = true;          // the fight goes on round her (men in the open may be hit)
+		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
+		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
+		double Threat = 1.0;
 		int MostMen = 5;                 // her crew
 		uint64_t Seed = 1;
 		std::function<double(double, double)> Ground; // the ground's height at a field point (none: Middle's)

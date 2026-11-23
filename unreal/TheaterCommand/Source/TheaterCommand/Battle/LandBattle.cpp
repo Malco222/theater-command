@@ -1626,6 +1626,79 @@ bool ALandBattle::Open()
 			OutNormal = LandPlay::Vec(Normal.X, Normal.Y, Normal.Z);
 			return true;
 		};
+		// Effects (R2): each gun's own flash (-TheaterLandGunFlash; Brian, 23 November: "how does the gun fire look when
+		// they shoot? can we make the mussel flash realistic?"). The kit's looks are muzzle.look.<look> in
+		// battle-fx-guns.json, laid over the recipe in Open: star, the MG 42's spikes; cone, a flash hider's narrow cone
+		// (the Bren, the DP, the BAR, the Japanese Type 99); open, a heavy machine gun's long tongue (the M1919, the Maxim,
+		// the Vickers); tank, a machine gun in a tank's mantlet; smg, a squad leader's sub-machine gun, a burst of pistol
+		// rounds with no tracer; rifle, a full-power rifle's flash and the haze it leaves; brake, a gun with a muzzle
+		// brake, its side jets and the dust they throw aside. Off: none, every flash by its row as before.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+		{
+			PlayWorld.GunLook = [Weak](int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond) -> std::string
+			{
+				const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+				if (!Pinned.IsValid() || Track < 0)
+				{
+					return std::string();
+				}
+				FLandBattleState& St = *Pinned;
+				const size_t K = static_cast<size_t>(Track);
+				const bool bVehicle = K < St.VehicleOf.size() && St.VehicleOf[K] >= 0 && St.Armour;
+				if (Weapon == "tank" || Weapon == "at" || Weapon == "gun")
+				{
+					// (a muzzle brake by her model: the Tiger's and the Panther's, the long Panzer IV's and the StuG's, the
+					// ZiS-3's and the SU-76's, the 25-pounder's on the Sexton)
+					if (!bVehicle)
+					{
+						return std::string();
+					}
+					const std::string& Name = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])].Look().Name;
+					for (const char* Braked : { "Tiger", "Panther", "Panzer IV", "StuG", "ZiS-3", "SU-76", "Sexton", "Firefly" })
+					{
+						if (Name.find(Braked) != std::string::npos)
+						{
+							return std::string("brake");
+						}
+					}
+					return std::string();
+				}
+				if (Weapon == "mg")
+				{
+					if (Role == "tank" || bVehicle)
+					{
+						return std::string("tank");
+					}
+					if (Role == "hmg")
+					{
+						return Army == "GER" ? std::string("star") : std::string("open");
+					}
+					// (the squad's gun: the MG 42's star; a flash hider's cone on the Bren, the DP, the BAR, the Type 96 and
+					// 99; the Italian Breda and the French FM 24/29 an open flame)
+					if (Army == "GER") return std::string("star");
+					if (Army == "ITA" || Army == "FRA") return std::string("open");
+					return std::string("cone");
+				}
+				if (Weapon == "rifle")
+				{
+					// (a squad leader drawn with a sub-machine gun, his file's _smg or _nco: a burst of pistol rounds,
+					// as his clip's cue sounds it; the MP 40 and the Sten about 9 a second, the Thompson 11, the PPSh 15)
+					if (K < St.ManOf.size() && St.ManOf[K] >= 0 && St.Men)
+					{
+						const std::string& File = St.Men->Info(St.ManOf[K]).FileArmy;
+						const auto Ends = [&File](const std::string& Tail) { return File.size() >= Tail.size() && File.compare(File.size() - Tail.size(), Tail.size(), Tail) == 0; };
+						if (Ends("_smg") || Ends("_nco"))
+						{
+							OutRounds = Army == "SOV" ? 5 : 4;
+							OutPerSecond = Army == "SOV" ? 15.0 : Army == "USA" ? 11.0 : 9.0;
+							return std::string("smg");
+						}
+					}
+					return std::string("rifle");
+				}
+				return std::string();
+			};
+		}
 	}
 	{
 		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
@@ -1833,6 +1906,12 @@ bool ALandBattle::Open()
 	if (S.Burns.bOn)
 	{
 		Effects->LayOver(TEXT("battle-fx-film.json"));
+	}
+	// Effects (R2): each gun's own flash (-TheaterLandGunFlash, PlayWorld.GunLook above): its looks laid over the recipe
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+	{
+		Effects->LayOver(TEXT("battle-fx-guns.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: each gun's own flash (-TheaterLandGunFlash, release 2)"));
 	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
@@ -4263,8 +4342,23 @@ void ALandBattle::BailOut()
 		{
 			continue;
 		}
-		const std::string File = Veh.Nation == "USA" && S.Men->SoldierFile("USA_tanker") ? std::string("USA_tanker")
-			: Veh.Nation == "GER" && S.Men->SoldierFile("GER_panzer") ? std::string("GER_panzer") : Veh.Nation;
+		// (tankers where the army has them, the art director's notes of 23 November: "riflemen climbing out of a Tiger
+		// would break it at once". Her second note: an army with no tankers' file still bails out, in its own infantry
+		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; said once,
+		// until the soldiers' thread makes its tankers' file)
+		const std::string Tankers = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
+		const bool bTankers = !Tankers.empty() && S.Men->SoldierFile(Tankers);
+		const std::string File = bTankers ? Tankers : Veh.Nation;
+		if (!bTankers)
+		{
+			static TSet<FString> Told;
+			const FString Nation = LandParts::Wide(Veh.Nation);
+			if (!Told.Contains(Nation))
+			{
+				Told.Add(Nation);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden (bail-out)"), *Nation);
+			}
+		}
 		if (!S.Men->SoldierFile(File))
 		{
 			continue;
@@ -4275,6 +4369,7 @@ void ALandBattle::BailOut()
 		W.Middle = LandBail::V3{ Veh.Root.At.X, Veh.Root.At.Y, Veh.Root.At.Z };
 		W.Heading = Veh.Heading;
 		W.Wide = Look.Wide > 0.5 ? Look.Wide : 3.0;
+		W.Long = Look.Long > 1.0 ? Look.Long : 6.0;
 		const LandBail::V3 Right{ std::cos(Veh.Heading), -std::sin(Veh.Heading), 0.0 };
 		// Her hatches: the commander's, the driver's, and the loader's and the hull gunner's across from them.
 		LandKit::V3 Spot, Way3;
@@ -4307,6 +4402,33 @@ void ALandBattle::BailOut()
 		W.Blast = Veh.bBrewUp && Veh.BrewWait > 0.0 ? Veh.BrewWait * S.Life : -1.0;
 		W.bBurns = Veh.bBrewUp || Veh.FateKey == "tank.brew_up" || Veh.FateKey == "tank.turret_off" || Veh.FateKey == "tank.engine_fire" || Veh.FateKey == "tank.knocked_out_later_burns";
 		W.bUnderFire = S.Rec.End <= 0.0 || S.Battle < S.Rec.End - 5.0;
+		{
+			// (the enemy who can see her men in the open: her nearest living enemy, a man or a vehicle, 1 within 150 m,
+			// falling to a tenth at 600 m and beyond, a tenth with none on the field)
+			double Nearest = 1e30;
+			for (int32 I = 0; I < S.Men->Count(); ++I)
+			{
+				const LandMen::ManInfo& Info = S.Men->Info(I);
+				if (Info.Army == Veh.Nation || (Info.Dead >= 0.0 && Info.Dead <= S.Battle) || S.Men->IsRider(I))
+				{
+					continue;
+				}
+				double Mx = 0.0, My = 0.0, Mz = 0.0;
+				float Facing = 0.f;
+				if (S.Men->PlaceAsPosed(I, Mx, My, Mz, Facing))
+				{
+					Nearest = std::min(Nearest, std::hypot(Mx - W.Middle.X, My - W.Middle.Y));
+				}
+			}
+			for (const LandKit::Vehicle& Other : All)
+			{
+				if (Other.Nation != Veh.Nation && (Other.Died < 0.0 || Other.Died > S.Battle))
+				{
+					Nearest = std::min(Nearest, std::hypot(Other.Root.At.X - W.Middle.X, Other.Root.At.Y - W.Middle.Y));
+				}
+			}
+			W.Threat = Nearest <= 150.0 ? 1.0 : Nearest >= 600.0 ? 0.1 : 1.0 - 0.9 * (Nearest - 150.0) / 450.0;
+		}
 		W.MostMen = Look.Kind == "car" ? 3 : Look.Long < 5.3 ? 3 : Look.Long < 6.0 ? 4 : 5;
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
@@ -4348,7 +4470,9 @@ void ALandBattle::BailOut()
 			if (!H.bLit)
 			{
 				H.bLit = true;
-				Effects->Vent(Chest, 0.45f, static_cast<float>(FMath::Max(1.0, M.FireOut - Since)), Id);
+				// (his clothes alight in patches, not a bonfire: a small vent of flame, its smoke trailing from him as
+				// he runs; once it dies its thin grey wisp goes on, a man smoking where he lies)
+				Effects->Vent(Chest, 0.22f, static_cast<float>(FMath::Max(1.0, M.FireOut - Since)), Id);
 			}
 			else
 			{
@@ -4391,6 +4515,7 @@ void ALandBattle::BailOut()
 		Ride.bShown = true;
 		Ride.Clip = Clip;
 		Ride.Time = static_cast<float>(P.Time);
+		Ride.bUnarmed = true; // (a crewman out of his tank: his file's infantry clips carry a rifle he has not got)
 		S.Men->SetRide(H.Man, Ride);
 	}
 }

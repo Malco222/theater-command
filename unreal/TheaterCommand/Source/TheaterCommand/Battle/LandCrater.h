@@ -87,10 +87,11 @@ namespace LandCrater
 		double Puddle = 0.0;
 	};
 
-	/** A flooded hole's water (Size::Puddle): the grey of the sky it holds in its middle, darker at its edge where the
-	 * bowl's dark side is in it; two colours only, so a test can tell it. */
-	inline constexpr Rgb8 PuddleWater = { 98, 106, 114 };
-	inline constexpr Rgb8 PuddleShore = { 70, 72, 72 };
+	/** A flooded hole's water (Size::Puddle): murky brown-grey, darker than the mud round it, as water shows from
+	 * above (the sky in it only at a low eye's angle, which a vertex colour cannot do: the material's to give, the art
+	 * director's carry, 23 November); a little darker at its edge; two colours only, so a test can tell it. */
+	inline constexpr Rgb8 PuddleWater = { 66, 62, 54 };
+	inline constexpr Rgb8 PuddleShore = { 58, 54, 47 };
 
 	/**
 	 * The hole a round leaves, by the effects kit's name for it (LandPlay::Effect::Name) and its calibre: "grenade" a

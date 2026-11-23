@@ -2,7 +2,11 @@
 // step, made for many wrecks and seeds, each man posed every tenth of a second for three minutes. Checks: no NaN; never
 // shown before he starts out; nobody out of a brew-up after its blast, and a man still climbing when it goes is caught;
 // once down he stays on the ground (no floating, no sinking); the same wreck gives the same crew; a crew_in brings its
-// crouching men back in. Prints how the crews went, for the log.
+// crouching men back in. The art director's notes (23 November): a man's first leg runs straight back in her lee, her
+// hull between him and the enemy; a man caught by her blast is thrown 2 to 5 m; every man on the ground within 15 m
+// flinches flat at it; a man on fire out of at most about one burning wreck in eight, a third of them living; the odds
+// in the open by the enemy in sight (about 1 in 6 running with the enemy close, much less with none). Prints how the
+// crews went, for the log.
 #include "Battle/Fates.h"
 #include "Battle/LandBail.h"
 
@@ -28,6 +32,8 @@ int main(int Argc, char** Argv)
 	}
 	auto Ground = [](double X, double Y) { return 0.3 * std::sin(X * 0.07) + 0.2 * std::cos(Y * 0.11); };
 	int Bad = 0, Wrecks = 0, Men = 0;
+	int BurnWrecks = 0, OnFire = 0, Lives = 0, Flinched = 0;
+	int RunNear = 0, HitNear = 0, RunFar = 0, HitFar = 0;
 	std::map<std::string, std::map<std::string, int>> Tally;
 	for (const Fates::Way& Way : Table.Ways())
 	{
@@ -53,6 +59,8 @@ int main(int Argc, char** Argv)
 			W.Middle = LandBail::V3{ 10.0, -4.0, Ground(10.0, -4.0) };
 			W.Heading = 0.3 * static_cast<double>(Seed % 20);
 			W.Wide = 3.4;
+			W.Long = 6.4;
+			W.Threat = Seed % 2 ? 1.0 : 0.1; // (odd seeds: the enemy close and in sight; even: none in sight)
 			const double S = std::sin(W.Heading), C = std::cos(W.Heading);
 			// (the commander's hatch on her turret, the driver's on her hull's front, the loader's beside the commander's,
 			// the hull gunner's beside the driver's)
@@ -65,11 +73,18 @@ int main(int Argc, char** Argv)
 			W.Blast = bBrew ? 5.5 + 4.5 * static_cast<double>(Seed % 10) / 9.0 : -1.0;
 			W.bBurns = bBrew || Way.Key == "tank.engine_fire" || Way.Key == "tank.knocked_out_later_burns" || Way.Key == "soft.burns";
 			W.MostMen = Way.Key.rfind("tank.", 0) == 0 ? 5 : 3;
-			W.Seed = Seed * 7919u;
+			// (each way its own seeds, so the tallies are not one draw seen thirteen times)
+			uint64_t KeyHash = 1469598103934665603ull;
+			for (const char Ch : Way.Key)
+			{
+				KeyHash = (KeyHash ^ static_cast<unsigned char>(Ch)) * 1099511628211ull;
+			}
+			W.Seed = Seed * 7919u ^ KeyHash;
 			W.Ground = Ground;
 			const LandBail::Crew Cr = LandBail::Make(W);
 			const LandBail::Crew Again = LandBail::Make(W);
 			++Wrecks;
+			BurnWrecks += W.bBurns && !Cr.Men.empty();
 			if (Again.Men.size() != Cr.Men.size() || Again.Story != Cr.Story)
 			{
 				std::printf("FAIL %s seed %llu: not the same crew twice\n", Way.Key.c_str(), static_cast<unsigned long long>(Seed));
@@ -94,6 +109,63 @@ int main(int Argc, char** Argv)
 					std::printf("FAIL %s: a man still climbing at the blast is not caught\n", Way.Key.c_str());
 					++Bad;
 				}
+				OnFire += M.How == LandBail::End::Burning;
+				Lives += M.How == LandBail::End::Burning && M.bLives;
+				if (M.To != "beside" && M.Go == "run" && M.How != LandBail::End::Caught && M.How != LandBail::End::Burning && W.bUnderFire)
+				{
+					const bool bHit = M.How == LandBail::End::Shot || M.How == LandBail::End::Wounded;
+					(W.Threat > 0.5 ? RunNear : RunFar)++;
+					(W.Threat > 0.5 ? HitNear : HitFar) += bHit;
+				}
+				// (his first leg: back from where he lands to past her rear as the enemy sees her, never through her hull,
+				// ending in her hull's shadow or as far toward it as it keeps clear)
+				if (M.To != "beside")
+				{
+					const double Lx = std::sin(W.Away), Ly = std::cos(W.Away);
+					const double Back = (M.Lee.X - W.Middle.X) * Lx + (M.Lee.Y - W.Middle.Y) * Ly;
+					const double Aside = (M.Lee.X - W.Middle.X) * Ly - (M.Lee.Y - W.Middle.Y) * Lx;
+					const double DownAside = (M.Down.X - W.Middle.X) * Ly - (M.Down.Y - W.Middle.Y) * Lx;
+					const double Rel = W.Heading - W.Away;
+					const double ShadowHalf = 0.5 * (W.Wide * std::abs(std::cos(Rel)) + W.Long * std::abs(std::sin(Rel)));
+					const double Rear = 0.5 * (W.Long * std::abs(std::cos(Rel)) + W.Wide * std::abs(std::sin(Rel)));
+					const double Leg = std::hypot(M.Lee.X - M.Down.X, M.Lee.Y - M.Down.Y);
+					bool bThrough = false;
+					for (int Q = 0; Q <= 50; ++Q)
+					{
+						const double U = Q / 50.0;
+						const double Px = M.Down.X + (M.Lee.X - M.Down.X) * U - W.Middle.X, Py = M.Down.Y + (M.Lee.Y - M.Down.Y) * U - W.Middle.Y;
+						bThrough = bThrough || (std::abs(Px * S + Py * C) < 0.5 * W.Long && std::abs(Px * C - Py * S) < 0.5 * W.Wide);
+					}
+					if (Back < Rear + 0.75 || std::abs(Aside) > std::max(std::max(0.6, 0.75 * ShadowHalf), std::abs(DownAside)) + 1e-6 || Leg < 2.5 || Leg > 18.0 || bThrough)
+					{
+						std::printf("FAIL %s: his first leg is not back in her lee (%.1f m behind her, %.1f aside from %.2f, %.1f long%s, rear %.2f)\n", Way.Key.c_str(), Back, Aside, DownAside, Leg, bThrough ? ", through her" : "", Rear);
+						++Bad;
+					}
+				}
+				// (caught by her blast: thrown 2 to 5 m from where he was)
+				if (M.How == LandBail::End::Caught)
+				{
+					const LandBail::Pose A = LandBail::PoseAt(M, M.FallAt, Ground), B = LandBail::PoseAt(M, M.FallAt + 3.0, Ground);
+					const double Throw = std::hypot(B.At.X - A.At.X, B.At.Y - A.At.Y);
+					if (Throw < 1.9 || Throw > 5.1)
+					{
+						std::printf("FAIL %s: thrown %.1f m by her blast\n", Way.Key.c_str(), Throw);
+						++Bad;
+					}
+				}
+				// (on the ground within 15 m of her as her ammunition goes, and not down: flat for a second or two)
+				if (bBrew && M.How != LandBail::End::Caught && M.How != LandBail::End::Burning && M.Out + 2.05 <= W.Blast && !(M.FallAt >= 0.0 && M.FallAt <= W.Blast))
+				{
+					const LandBail::Pose A = LandBail::PoseAt(M, W.Blast - 0.01, Ground);
+					const bool bNear = std::hypot(A.At.X - W.Middle.X, A.At.Y - W.Middle.Y) <= 14.5;
+					const LandBail::Pose B = LandBail::PoseAt(M, W.Blast + 0.5, Ground);
+					if (bNear && (M.FlinchAt < 0.0 || B.Clip != "go_prone"))
+					{
+						std::printf("FAIL %s: %.1f m from her at the blast and no flinch (%s)\n", Way.Key.c_str(), std::hypot(A.At.X - W.Middle.X, A.At.Y - W.Middle.Y), B.Clip.c_str());
+						++Bad;
+					}
+					Flinched += M.FlinchAt >= 0.0;
+				}
 				bool bWasIn = false;
 				for (double T = 0.0; T <= 180.0; T += 0.1)
 				{
@@ -115,7 +187,7 @@ int main(int Argc, char** Argv)
 						++Bad;
 						break;
 					}
-					const bool bDown = T > M.Out + 2.1 && (M.BackAt < 0.0 || T < M.BackAt) && !(M.How == LandBail::End::Caught && T < M.FallAt + 0.65);
+					const bool bDown = T > M.Out + 2.1 && (M.BackAt < 0.0 || T < M.BackAt) && !(M.How == LandBail::End::Caught && T < M.FallAt + 0.95);
 					if (bDown && std::abs(P.At.Z - Ground(P.At.X, P.At.Y)) > 0.01)
 					{
 						std::printf("FAIL %s: off the ground by %.2f m at %.1f s (%s)\n", Way.Key.c_str(), P.At.Z - Ground(P.At.X, P.At.Y), T, P.Clip.c_str());
@@ -150,6 +222,23 @@ int main(int Argc, char** Argv)
 			std::printf(" %s %d,", Count.first.c_str(), Count.second);
 		}
 		std::printf("\n");
+	}
+	// The art director's odds: a man on fire out of no more than about one burning wreck in eight, about a third of them
+	// living; a runner hit about 1 in 6 with the enemy close, much less with none in sight.
+	const double FireShare = BurnWrecks ? static_cast<double>(OnFire) / BurnWrecks : 0.0;
+	const double LiveShare = OnFire ? static_cast<double>(Lives) / OnFire : 0.0;
+	const double NearShare = RunNear ? static_cast<double>(HitNear) / RunNear : 0.0, FarShare = RunFar ? static_cast<double>(HitFar) / RunFar : 0.0;
+	std::printf("\n  on fire: %d of %d burning wrecks (%.3f), %d of them living (%.2f); %d men flinched flat at a blast\n", OnFire, BurnWrecks, FireShare, Lives, LiveShare, Flinched);
+	std::printf("  runners hit: %.3f with the enemy close (%d), %.3f with none in sight (%d)\n", NearShare, RunNear, FarShare, RunFar);
+	if (FireShare > 0.135 || (OnFire > 30 && (LiveShare < 0.2 || LiveShare > 0.47)))
+	{
+		std::printf("FAIL: men on fire too often or living too seldom\n");
+		++Bad;
+	}
+	if (RunNear > 300 && (NearShare < 0.12 || NearShare > 0.21 || FarShare > 0.05))
+	{
+		std::printf("FAIL: the odds in the open are not the enemy's in sight\n");
+		++Bad;
 	}
 	std::printf("\n%d wrecks, %d men: %s (%d faults)\n", Wrecks, Men, Bad ? "FAIL" : "ok", Bad);
 	return Bad ? 1 : 0;

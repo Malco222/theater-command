@@ -246,6 +246,9 @@ namespace
 		return Is && std::sscanf(Is, "%lf,%lf,%lf", &R, &G, &B) == 3;
 	}
 
+	// (FX_DIM=k: the land and the sky that much darker, a dusk to judge a lamp on; the kit is told the same light)
+	double DimK = 1.0;
+
 	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false, size_t DarkFrom = static_cast<size_t>(-1))
 	{
 		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
@@ -293,7 +296,7 @@ namespace
 					const double N = bSea ? Noise(P.X * 0.02, P.Y * 0.08) * 0.6 + Noise(P.X * 0.3, P.Y * 0.9) * 0.4 : Noise(P.X * 0.35, P.Y * 0.35) * 0.7 + Noise(P.X * 3.0, P.Y * 3.0) * 0.3;
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = GrassA[K] + (GrassB[K] - GrassA[K]) * N;
+						Col[K] = (GrassA[K] + (GrassB[K] - GrassA[K]) * N) * DimK;
 					}
 					double Lift[3] = { 1.0, 1.0, 1.0 };
 					for (int L = 0; L < NLamps; ++L)
@@ -313,7 +316,7 @@ namespace
 					const double Fog = 1.0 - std::exp(-std::max(0.0, T - 60.0) / (bSea ? 6000.0 : 700.0));
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = Col[K] * Lift[K] * (1.0 - Fog) + Haze[K] * Fog;
+						Col[K] = Col[K] * Lift[K] * (1.0 - Fog) + Haze[K] * DimK * Fog;
 					}
 					C.Depth[I] = (D * T).Dot(Cam.Forward);
 				}
@@ -323,7 +326,7 @@ namespace
 					const double Top[3] = { ToLinear(150), ToLinear(178), ToLinear(214) };
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
+						Col[K] = (Haze[K] + (Top[K] - Haze[K]) * Up) * DimK;
 					}
 				}
 				C.R[I] = bFlatBack ? ToLinear(FlatBack[0]) : Col[0];
@@ -2511,7 +2514,7 @@ namespace
 				if (bFire && T >= NextShot && NextShot >= 0.0)
 				{
 					const Vec Muzzle = Shot == "gun" ? GunAt + Vec(2.2, 0.0, 1.0) : CarAt(0, T) + Vec(CarL * 0.5 + 2.0, 0.0, 2.0);
-					Fx.Muzzle(T, Muzzle, Vec(1.0, 0.0, 0.0), Shot == "gun" ? "at_gun" : "tank_gun", Ground.c_str());
+					Fx.Muzzle(T, Muzzle, Vec(1.0, 0.0, 0.0), std::getenv("FX_GUN_ROW") ? std::getenv("FX_GUN_ROW") : Shot == "gun" ? "at_gun" : "tank_gun", Ground.c_str()); // (FX_GUN_ROW: its row, or row:look)
 					NextShot = Every > 0.0 ? NextShot + Every : -1.0;
 				}
 				Fx.Draw(T, View);
@@ -2942,7 +2945,7 @@ int main(int Argc, char** Argv)
 	{
 		Cam.Ppr = W / (2.0 * std::tan(std::clamp(std::atof(LensIs), 5.0, 170.0) * 3.14159265358979 / 360.0));
 	}
-	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6); // (the "mg" shot's gun)
+	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + EnvNum("FX_MG_UP", 0.6)); // (the "mg" shot's gun; FX_MG_UP: its muzzle that high, 0.6 m)
 	if (const char* MgView = std::getenv("FX_MG_VIEW"); Size == "mg" && MgView)
 	{
 		// (FX_MG_VIEW=side: square to the line of fire, 30 m off it; =behind: 10 m behind the gun and 3 m up, along it)
@@ -2958,6 +2961,17 @@ int main(int Argc, char** Argv)
 			const Vec Under = MgGun - Fire * 0.6 - Vec(0, 0, 0.6);
 			Cam.Eye = MgGun - Fire * 3.0 - Square * 1.5 + Vec(0, 0, 1.0);
 			Cam.Forward = (Under + Fire * 0.7 + Vec(0, 0, 0.25) - Cam.Eye).Unit();
+		}
+		if (std::string(MgView) == "flash")
+		{
+			// (=flash: square to the line of fire FX_FLASH_OFF m (3.5) off the muzzle and a little above it, looking just
+			// ahead of it: the flash's own shape, its spikes, cone or tongue, and the dust under it)
+			// (FX_FLASH_AHEAD m (0.5) along the line of fire: 2.5 with FX_FLASH_OFF=2.5 is a three-quarter view from ahead,
+			// where the MG 42's star shows as a star)
+			const double Off = EnvNum("FX_FLASH_OFF", 3.5);
+			const double Ahead = EnvNum("FX_FLASH_AHEAD", 0.5);
+			Cam.Eye = MgGun + Fire * Ahead - Square * Off + Vec(0, 0, EnvNum("FX_FLASH_UP", 0.35)); // (FX_FLASH_UP: the eye that much above the muzzle)
+			Cam.Forward = (MgGun + Fire * (Ahead > 1.0 ? 0.25 : 0.55) - Cam.Eye).Unit();
 		}
 		if (std::string(MgView) == "game")
 		{
@@ -3043,6 +3057,11 @@ int main(int Argc, char** Argv)
 			View.SunLight = Rgb(R, G, B);
 		}
 	}
+	if (const char* DimIs = std::getenv("FX_DIM")) // (FX_DIM=k: a dusk, the land and sky k as light, the kit told it is dusk)
+	{
+		DimK = std::clamp(std::atof(DimIs), 0.02, 1.0);
+		View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+	}
 	// (FX_TEST_TANK=seconds, the "mg" shot: the game's own test barrage (BattleEffects.cpp, RunTest) round the machine
 	// gun. Its tank gun fires that long before the machine gun's burst (0.5 s in the test): the muzzle 4 m south and 4 m
 	// east of the machine gun's and 1.4 m higher, firing on a bearing of 10 degrees where the machine gun fires on 28;
@@ -3068,8 +3087,12 @@ int main(int Argc, char** Argv)
 	{
 		// (a machine gun's burst from 30 m off to the left into the ground by the hit: close tracer and strikes)
 		const Vec Gun = MgGun;
-		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
-		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
+		// (FX_MG_GUN=row or row:look, the gun named as the game names it, mg by default; FX_MG_ROUNDS, FX_MG_RATE its burst)
+		const char* MgGunIs = std::getenv("FX_MG_GUN");
+		const std::string MgRow = MgGunIs ? MgGunIs : "mg";
+		const int MgRounds = static_cast<int>(EnvNum("FX_MG_ROUNDS", 25.0));
+		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), MgRow.c_str(), Ground.c_str()); // (on its ground, as the game's: a prone kick off snow is snow)
+		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), MgRow.c_str(), MgRounds, EnvNum("FX_MG_RATE", 15.0), Ground.c_str());
 	}
 	// (FX_BARRAGE=n: n shells in a row across the view, FX_BARRAGE_STEP m apart (5) and FX_BARRAGE_GAP s apart (1.5), the
 	// first at the hit's own moment: a barrage's dust hanging and drifting, as the game's test fires one. With FX_WIND_X,

@@ -506,14 +506,25 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   blown, smoke, bail-out); then `brew_up`. Her fire, column and cook-offs start at the blast. With the switch off both
   are 0 and the kill is as it was.
 - **Getting out.** Each man climbs out of his hatch (the commander's, the driver's, then the loader's and hull gunner's
-  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes: running bent
-  double for her rear (18 to 38 m), to cover, crawling to a crater, or crouching in her lee.
-- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown down dead beside her; a man
-  who had not yet started is lost inside. While the fight goes on round her, a man in the open is cut down about one
-  time in six, or hit and left crawling about one in eight (a man crouching in her lee is never hit). Now and then the
-  first man out of a burning tank is on fire: he runs a few weaving steps, falls, and burns on 12 to 25 seconds.
-- **The men.** They are the crowd's riders, drawn from `USA_tanker` / `GER_panzer` (or the army's own soldier file),
-  posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes. First he runs
+  straight back in her lee, 8 to 12 m (a crawler 3 to 5), past her rear as the enemy sees her and into the shadow her
+  hull casts, never through it. Then he breaks for her rear (18 to 38 m further), for cover, or crawls to a crater. A
+  man staying by her crouches in her lee.
+- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown 2 to 5 m and lies dead; a man
+  who had not yet started is lost inside. Everyone on the ground within 15 m of her flinches flat for a second or two
+  as it goes, then carries on. While the fight goes on round her, a runner in the open is hit about one time in six
+  when her nearest living enemy is within 150 m, falling to one in sixty at 600 m or with none on the field (a crawler
+  half that; a little over half of those hit are killed, the rest left crawling). A man crouching in her lee is never
+  hit. In at most about one burning wreck in eight, the first man out is on fire, his clothes alight in patches with
+  smoke trailing from him. He runs a few weaving steps and falls; his flames die to a smoulder over 10 to 15 s. About
+  one in three rolls them out in a few seconds and lives, lying wounded and smoking.
+- **The men.** Tankers where the army has them (the art director: "riflemen climbing out of a Tiger would break it at
+  once"). They are the crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`:
+  those files' infantry clips carry one). An army without a tankers' file (UK, SOV, ITA, JAP, FRA for now) bails out
+  in its own infantry figure, rifle hidden, pack still on (no file carries the pack on a bone of its own): her second
+  note, "a man with a pack is a far smaller fault than no one getting out". The log says so once per army, until the
+  soldiers' thread makes its tankers' file (own uniform, no pack; the Soviets' padded tank helmet, the British beret
+  or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
   asked of the soldiers' thread; until they come these stand in.
 
@@ -583,6 +594,37 @@ above.
 The art director's Mac shots, with `-TheaterLandCraterVariety` against without: a barrage's field from 40 m up and
 from a man's height, on the bocage and on snow or sand. A field after tanks have shot high explosive at a hedge line
 should show the long holes pointing back at the guns.
+
+## Each gun its own flash (release 2, off until passed)
+
+Brian, 23 November: "how does the gun fire look when they shoot? can we make the mussel flash realistic?" Behind
+`-TheaterLandGunFlash`. Off: every gun draws its row's flash as before (the kit's preview draws the same frames, byte
+for byte, with the switch off).
+
+- **Who has which.** `LandPlay::World::GunLook` (set in `ALandBattle::Open` only when on) names each shot's look by the
+  shooter: `star`, the German MG 42 or MG 34 (squad and heavy); `cone`, a flash hider's narrow cone (the Bren, the DP,
+  the BAR, the Type 96 and 99); `open`, a long tongue (heavy guns: the M1919, the Maxim, the Vickers; the Italian and
+  French squad guns); `tank`, a tank's machine guns; `smg`, a squad leader drawn with a sub-machine gun (his figure's
+  `_smg` or `_nco` file): a burst of 4 (the PPSh 5) at 9 to 15 a second, no tracer, as his clip's cue sounds it;
+  `rifle`, every other rifleman; `brake`, a main gun with a muzzle brake by her model (Tiger, Panther, Panzer IV, StuG,
+  ZiS-3, SU-76, Sexton). The kit is told "mg:star": the row `mg` as ever, with the look's pieces laid after it.
+- **The looks** are `muzzle.look.<look>` in `Content/Effects/battle-fx-guns.json` (`tools/battle-fx/fx-guns.json`),
+  laid over the recipe for that battle only. Each can narrow or lengthen the flame, add a star of spikes round the bore,
+  a brake's two side jets and the dust they blow aside, a pale haze that hangs, a kick of the ground's dust under a
+  muzzle lower than `prone_under_m`, and a small lamp on the firer's face at dusk and night (`bNightOnly`).
+- **The art director's round 1** (23 November, 17:06Z; the cone, tongue, SMG, tank MG and brake passed): the MG 42's
+  star is 4 to 6 short straight tapered spikes, yellow-white, leaning 70 degrees off the bore, rolled anew each round
+  (one star a round: a burst's first round is the Shots', so `Muzzle` drops its own); by day a look is drawn at `day_k`
+  of its size and `day_pale` toward pale yellow-white (`View.SmokeLight`); the rifle's haze is a thin puff gone in 1 to
+  2 s; the prone kick is tan on dry ground (half to full by the ground's dust share), white on snow, none on mud, water
+  or marsh; rifles and sub-machine guns draw no tracer (`tracer 0`); machine-gun tracer is a short travelling streak even
+  close in (`streak 1`); the face lamp is 2 to 3 m and lit on the flash's own frame alone (`Flash::bOneFrame`). Round 2
+  (17:19Z) PASSED, with two carries made: the kick off snow a bright bluish-white (`snow_kick`), and each spike white at
+  its root running out to a yellow tip (`Bit::Hub`), so the star sits with the flash at dusk.
+- **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 6 spikes or 4 jets, 10 brake dust puffs and one lamp; a
+  burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
+- **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
+  `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
 
 ## Packaging
 
