@@ -95,6 +95,7 @@ export function saveGame(g: Game): string {
     // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
     // its scars back from its reports when loaded.
     scars: g.flags.open === 1 ? g.scars : undefined,
+    captured: g.flags.open === 1 ? g.captured : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -253,6 +254,7 @@ export function loadGame(text: string): Game | null {
   if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
   if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
   // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.
+  if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
   if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
   else
     for (const r of g.reports ?? []) {

@@ -502,7 +502,7 @@ import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
 import type { BattleReport, Game } from '../../../src/campaign/types';
-import type { FieldBill } from '../../../src/campaign/game';
+import { groundWeather, type FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
 import { attackOutlook, endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
 import { seaLoop } from '../../../src/battle/sea/cues';
@@ -731,7 +731,27 @@ export function battleCalls(h: BattleHooks) {
       // Scarred ground (release 2): the battles fought here before this one, and the months since the last, for the
       // field to be laid already torn up; absent where none has been.
       const scar = g.scars?.[to];
-      const ticket = scar && scar.n > 0 ? { ...t, scars: { count: scar.n, months: Math.max(0, g.turn - scar.last) } } : t;
+      const ticket: typeof t = { ...t };
+      if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g.turn - scar.last) };
+      // Mud memory (release 2): the battles fought here in the mud, and the months since the last of them.
+      if (scar?.mudN && scar.mudLast !== undefined) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g.turn - scar.mudLast) };
+      // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only.
+      const wx = groundWeather(g, g.regions[to]);
+      if (wx && !ticket.weather) ticket.weather = wx;
+      // Captured kit (release 2): each side's latest capture of the last six months, whose tanks and how many blocks.
+      const took = (nat: string) => (g.captured?.[nat] ?? []).filter((k) => g.turn - k.turn < 6).slice(-1)[0];
+      const ca = took(t.att.nat), cd = took(t.def.nat);
+      if (ca || cd) ticket.captured = { ...(ca ? { att: { from: ca.from, n: ca.n } } : {}), ...(cd ? { def: { from: cd.from, n: cd.n } } : {}) };
+      // Uniforms that age (release 2): each side's months in the line without a rest (its corps' weeks, as the stories
+      // keep them, weighed by divisions), where the campaign counts them.
+      const worn = (cs: typeof corps) => {
+        const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
+        return divs > 0 && cs.some((c) => c.line !== undefined) ? Math.round(cs.reduce((s2, c) => s2 + (c.line ?? 0) * c.divs, 0) / divs / 4.345) : undefined;
+      };
+      const ids = new Set(corps.map((c) => c.id));
+      const wa = worn(corps), wd = worn(g.corps.filter((c) => c.reg === to && !ids.has(c.id) && c.kind !== 'fort'));
+      if (wa !== undefined) ticket.att = { ...ticket.att, worn: wa };
+      if (wd !== undefined) ticket.def = { ...ticket.def, worn: wd };
       return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
     },
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {
