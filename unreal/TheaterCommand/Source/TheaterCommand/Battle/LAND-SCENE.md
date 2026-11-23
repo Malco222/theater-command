@@ -493,6 +493,97 @@ The art director's Mac shots, with `-TheaterLandFilmFire` against without: a bre
 from 50 m and from 300 m, plus a frame at dusk; an engine fire at the same times. Also the frame rate in a battle with
 eight wrecks or more, against the 45 fps gate.
 
+## A knocked-out tank's crew getting out (release 2, off until passed)
+
+Brian, 23 November: "if a tank gets hit people try and get out before it explosdes". Before this, nobody left a
+knocked-out tank: her commander, if he was up, died in his hatch, and the rest of her crew were never seen; and a
+brew-up blew at the instant of the kill, so there was no time to get out. `-TheaterLandBailOut` plays the fates table's
+own `crew_out` steps (how many, when, running or crawling, to her rear, to cover or to a crater) and its `crew_in`
+(a crew that bails out and climbs back in), with `LandBail`:
+
+- **The wait.** A brew-up's ammunition now goes 5.5 to 10 life seconds after the hit (the table's 5 to 10), by her own
+  dice (`LandKit::Battle::BrewWaitLeast/Most`, each vehicle's `BrewWait`). Until then she plays `knocked_out` (hatch
+  blown, smoke, bail-out); then `brew_up`. Her fire, column and cook-offs start at the blast. With the switch off both
+  are 0 and the kill is as it was.
+- **Getting out.** Each man climbs out of his hatch (the commander's, the driver's, then the loader's and hull gunner's
+  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes: running bent
+  double for her rear (18 to 38 m), to cover, crawling to a crater, or crouching in her lee.
+- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown down dead beside her; a man
+  who had not yet started is lost inside. While the fight goes on round her, a man in the open is cut down about one
+  time in six, or hit and left crawling about one in eight (a man crouching in her lee is never hit). Now and then the
+  first man out of a burning tank is on fire: he runs a few weaving steps, falls, and burns on 12 to 25 seconds.
+- **The men.** They are the crowd's riders, drawn from `USA_tanker` / `GER_panzer` (or the army's own soldier file),
+  posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+  `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
+  asked of the soldiers' thread; until they come these stand in.
+
+None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
+own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
+Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/land_bail/run.sh` plays every land way
+with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s; `LAND_BREW_WAIT=5.5,10` runs the kit's
+own test with the wait.
+
+The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
+crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
+`-TheaterLandFilmFire` as well. Also the frame rate in a battle with eight kills or more, against the 45 fps gate.
+
+## Shell holes each their own (release 2, off until passed)
+
+Brian, 23 November: "make the explosion craters different varations so its not always the same". Before this, every
+round of a kind left the same hole: every 105's 2.8 m across and 0.7 m deep, round, its soil thrown evenly all round,
+only its ragged outline its own. `-TheaterLandCraterVariety` (`LandCrater::Field::bVariety`) gives each round its own:
+
+- **Its size:** a quarter bigger or smaller, and one in ten a big one (up to half as big again); its depth, rim and
+  clods with it.
+- **Its fuze:** most burst at once on the ground. One in eight is a delay that bursts under the ground: deeper,
+  narrower, a high rim, big clods, little soot. One in ten grazes: a shallow, wide, sooty scoop, longer.
+- **Its slant, along the way its round came** (the scene passes `LandPlay::Effect::Way`). A tank's or anti-tank gun's
+  high explosive comes in nearly flat and leaves a long hole (1.35 to 1.8 times as long as wide), most of its soil
+  thrown forward and out in two wings to either side, little behind. A field gun's or howitzer's shell leaves a
+  slightly oval hole with some wings. A mortar bomb falls nearly straight down and leaves a round one. A round of no
+  known way (a blast in the record with no round) is turned by its own dice.
+- **The burst's soot:** four to nine soft-sided rays of blackened soil over the thrown soil, each its own width,
+  length and darkness, the longest thrown downrange by a tank's slanting burst. The thin edge itself always stays the
+  ground's own colour (soot on it drew a grey halo with straight sides on the snow).
+- **The subsoil:** a deep hole throws lighter soil from under the topsoil onto its crest in patches. Normandy's
+  yellow-brown clay, the steppe's loess, paler sand, a town's plaster dust.
+- **The ground:** mud slumps wide and low with its soot smothered, sand sprays wide and shallow, and on snow the dark
+  earth reaches further.
+- **Overlapping holes:** a new hole's thrown soil stops at an older hole's rim and steps down into it, rather than
+  lying across the older bowl as a sheet. Where it reaches over an older hole's thrown soil it lies on it, in that
+  soil's colour and light at its thin edge (`Field::SoilAt`), so the newer edge never shows as a white sheet over
+  the older soil.
+
+The art director's round 1 (23 November) mended four things, all inside the switch:
+
+- **No straight edges:** each hole has 40% more points round it, and the thrown soil's outer band is broken from side
+  to side, thick where a ray or wing threw it and thinning early elsewhere, so the dark soil runs out in tongues of
+  uneven length.
+- **The spray:** specks of soil and torn turf thrown past the thick soil and beyond the thin edge, thinning as they
+  go, most along the rays and into the wings; on snow and sand some are blackened. They are laid as clods are, so a
+  body lies on them.
+- **A smooth bowl:** the bowl's points a quarter as jittered and its tone smoothed from side to side, so the sand's
+  bowls no longer fan into pie slices.
+- **Puddles in mud:** about half the deep holes in mud hold water, a flat disc at a quarter to a half of the bowl's
+  depth, the grey of the sky in its middle, darker at its edge, under a dark wet ring on the bowl's side. A man wades
+  in it: `TopAt` reads the bowl under it, not the water.
+
+Cost: a varied hole has about twice the points and 1.7 times the triangles (a 105's about 580 points and 750
+triangles, a mortar's 360 and 490). Laying 500 holes takes half a second in the cloud with the switch on, against a
+fifth of a second off, so the Mac's speed gate must check it.
+
+It is all drawn from each hole's own dice, so the same battle lays the same holes. It applies to scarred ground's old
+holes too. With the switch off every hole is laid as before to the byte: checked on 500 holes of every name and
+ground, including old ones, against the code before it. `Tools/land_crater/run.sh` checks it (each hole its own
+size, the long ones along their rounds' way, a body still lies on every hole's face but a puddle's water, no hole
+through the world) and
+paints a barrage's holes on earth, sand, snow, mud and black earth, switch off and on, from a man's height and from
+above.
+
+The art director's Mac shots, with `-TheaterLandCraterVariety` against without: a barrage's field from 40 m up and
+from a man's height, on the bocage and on snow or sand. A field after tanks have shot high explosive at a hedge line
+should show the long holes pointing back at the guns.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

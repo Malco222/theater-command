@@ -3,6 +3,7 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandBail.h"
 #include "Battle/LandBurn.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
@@ -54,6 +55,8 @@ struct FLandBattleState
 	std::unique_ptr<LandKit::Battle> Armour;
 	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
 	LandBurn::Director Burns;
+	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
+	LandBail::Book Bails;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */

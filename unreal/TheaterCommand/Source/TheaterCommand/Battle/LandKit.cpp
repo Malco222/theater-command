@@ -3704,7 +3704,7 @@ namespace LandKit
 		BurnUntil = std::max(End, LoopsUntil);
 		if (Died >= 0.0)
 		{
-			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2) / Life); // (0.6 or 1.2 s of life after the hit)
+			BurnFrom = std::min(End, Died + (bBrewUp ? BrewWait + 0.6 / Life : 1.2 / Life)); // (0.6 or 1.2 s of life after the hit, or the blast)
 		}
 
 		// What she shows the effects and the sound, worked out ahead. (Worked out again: what falls by Given, the last
@@ -3852,7 +3852,16 @@ namespace LandKit
 		}
 		if (Died >= 0.0)
 		{
-			AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			if (bBrewUp && BrewWait > 0.0)
+			{
+				// Effects (R2): knocked out first, her crew getting out, then her ammunition going (BrewWait)
+				AddClip("knocked_out", Died, Died + BrewWait, false, BurnUntil, KillRound, Kill);
+				AddClip("brew_up", Died + BrewWait, End, false, BurnUntil, 0, nullptr);
+			}
+			else
+			{
+				AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			}
 			if (BurnFrom >= 0.0)
 			{
 				AddClip("burn", BurnFrom, End, true, BurnUntil, 0, nullptr);
@@ -4091,9 +4100,11 @@ namespace LandKit
 		}
 		if (bDeadNow)
 		{
-			if (const Clip* C = M.FindClip(bBrewUp ? "brew_up" : "knocked_out"))
+			// (Effects (R2): a brew-up that waits, BrewWait, is knocked out until her ammunition goes)
+			const bool bBlownNow = bBrewUp && T >= Died + BrewWait;
+			if (const Clip* C = M.FindClip(bBlownNow ? "brew_up" : "knocked_out"))
 			{
-				PlayDeath(M, *C, (T - Died) * Life, S); // (life's seconds, as her death's events are planned)
+				PlayDeath(M, *C, (T - Died - (bBlownNow ? BrewWait : 0.0)) * Life, S); // (life's seconds, as her death's events are planned)
 			}
 			if (BurnFrom >= 0.0 && T >= BurnFrom)
 			{
@@ -5333,6 +5344,17 @@ namespace LandKit
 	}
 
 
+	double Battle::BrewWaitOf(size_t V) const
+	{
+		// Effects (R2): her own wait between the least and the most, by her number (life's seconds, made the battle's)
+		if (!(BrewWaitMost > 0.0) || !(Life > 0.0))
+		{
+			return 0.0;
+		}
+		const double U = Unit01(Mix(FateSeed ^ 0xB5E3A17ull, static_cast<uint64_t>(V) + 1u, 0x5EC5u));
+		return std::max(0.0, BrewWaitLeast + (BrewWaitMost - BrewWaitLeast) * U) / Life;
+	}
+
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2)
 	{
 		// (a plunging shot through her roof or her engine deck: as through her side)
@@ -5475,6 +5497,7 @@ namespace LandKit
 		{
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
+			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
@@ -5737,6 +5760,7 @@ namespace LandKit
 			Vehicle& Ve = All[V];
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
+			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -420,6 +421,13 @@ int main(int argc, char** argv)
 	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
 	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
+	// (LAND_BREW_WAIT=least,most: release 2's brew-up wait, life's seconds (LandBail, -TheaterLandBailOut))
+	if (const char* Wait = std::getenv("LAND_BREW_WAIT"))
+	{
+		B.BrewWaitLeast = std::atof(Wait);
+		const char* Comma = std::strchr(Wait, ',');
+		B.BrewWaitMost = Comma ? std::atof(Comma + 1) : B.BrewWaitLeast;
+	}
 	// (the vehicles' measured fire odds, by the face struck: Content/Data/Battle/performance-land.json)
 	std::map<std::string, FireOdds> Fires;
 	{
