@@ -413,6 +413,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
    */
   escort = false;
+  /**
+   * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
+   * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
+   * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
+   * { trucks: true }, the Battle rules card's Men in lorries row): off, all get down at once where they sat.
+   */
+  trucks = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */

@@ -1475,6 +1475,11 @@ namespace LandKit
 				continue;
 			}
 			std::string Pick = ChoiceIn(Row, Group);
+			// (a swap the battle chooses: Men in lorries, the Truck's tilt stowed)
+			if (const auto Forced = D.Force.find(Group); Forced != D.Force.end() && S["choices"][Forced->second].IsObject())
+			{
+				Pick = Forced->second;
+			}
 			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
 			// Sherman without the American's .50 on her roof)
 			if (Pick.empty() && S["by_nation"].IsObject())
@@ -4071,6 +4076,21 @@ namespace LandKit
 				M.Play(*Open, HatchOpens[Last] ? Age : std::max(0.0, Open->Long - Age), 1.0, S);
 			}
 		}
+		// (Men in lorries: her tailboard down from the first man getting down, and up again as she next moves off)
+		if (!Boards.empty() && !bDeadNow)
+		{
+			if (const Clip* Board = M.FindClip("dismount"))
+			{
+				const auto Next = std::upper_bound(Boards.begin(), Boards.end(), T);
+				if (Next != Boards.begin())
+				{
+					const double Opened = *(Next - 1);
+					const auto Off = std::upper_bound(MoveOffs.begin(), MoveOffs.end(), Opened);
+					const double Age = Off != MoveOffs.end() && *Off <= T ? Board->Long - (T - *Off) * Life : (T - Opened) * Life;
+					M.Play(*Board, std::clamp(Age, 0.0, Board->Long), 1.0, S);
+				}
+			}
+		}
 		if (bDeadNow)
 		{
 			if (const Clip* C = M.FindClip(bBrewUp ? "brew_up" : "knocked_out"))
@@ -4348,6 +4368,24 @@ namespace LandKit
 		bPinned = true;
 		Pinned = P;
 		Update(0.0, nullptr);
+	}
+
+	void Vehicle::OpenBoard(double T)
+	{
+		if (!Shape || !Shape->FindClip("dismount") || (!Boards.empty() && T <= Boards.back()))
+		{
+			return;
+		}
+		// (still open from the last time: she has not moved off since)
+		if (!Boards.empty())
+		{
+			const auto Off = std::upper_bound(MoveOffs.begin(), MoveOffs.end(), Boards.back());
+			if (Off == MoveOffs.end() || *Off > T)
+			{
+				return;
+			}
+		}
+		Boards.push_back(T);
 	}
 
 	bool Vehicle::SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const
@@ -5054,6 +5092,10 @@ namespace LandKit
 		D.Month = Month;
 		D.Terrain = Terrain;
 		D.Captured = Captured;
+		if (bOpenLorries)
+		{
+			D.Force["tilt"] = "off";
+		}
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{

@@ -6,6 +6,7 @@
 #include "Battle/AirSky.h"
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
+#include "Battle/LandBench.h"
 #include "Battle/LandCarpet.h"
 #include "Battle/LandFell.h"
 #include "Battle/LandLive.h"
@@ -3624,6 +3625,14 @@ void ALandBattle::MakeArmour()
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
+	// Men in lorries (the Battle rules card's row, a live battle's: the rules seat the men): the lorries' tilts stowed,
+	// so the men on their benches are seen (RideLorries)
+	S.bTrucks = S.Rec.bLive && FLandLive::RuleNow(TEXT("trucks"));
+	Armour->bOpenLorries = S.bTrucks;
+	if (S.bTrucks)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: men in lorries ON: seated on the benches, the tilts stowed, getting down one at a time"));
+	}
 	// Captured kit (release 2, on trial: "-TheaterLandTrial=captured"): a block the recording marks captured (the
 	// campaign's, blocks[].captured) in her captor's coat over her maker's; "-TheaterLandNoCaptured" off whatever the
 	// trial (the player's switch on the Battle rules card); "-TheaterLandCapturedTest" every other attacker tank block drawn
@@ -3933,6 +3942,92 @@ void ALandBattle::RideTanks()
 		Ride.Clip = R.Clips[Want];
 		Ride.Time = Time;
 		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
+void ALandBattle::RideLorries()
+{
+	LAND_SCOPE(RideLorries);
+	FLandBattleState& S = *State;
+	if (!S.bTrucks || !S.Men || !S.Armour)
+	{
+		return;
+	}
+	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	// (her by her block and her track's k; a lorry with benches, a way down and the men's clips' places on her)
+	std::map<std::pair<int, int>, int> LorryOf;
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Model& Look = All[V].Look();
+		if (All[V].Words().Role == "lorry" && Look.SocketIndex("rider.1") >= 0 && Look.SocketIndex("step") >= 0)
+		{
+			LorryOf[{ All[V].Words().Block, All[V].Words().K }] = static_cast<int>(V);
+		}
+	}
+	const int Men = S.Men->Count();
+	if (S.LorryRider.size() < static_cast<size_t>(Men))
+	{
+		S.LorryRider.resize(static_cast<size_t>(Men), -1);
+	}
+	const double Now = S.Battle;
+	const double Life = S.Life;
+	bool bAdded = false;
+	auto Hide = [&S](int Rider)
+	{
+		if (Rider >= 0)
+		{
+			S.Men->SetRide(Rider, LandMen::Crowd::Ride());
+		}
+	};
+	for (int Man = 0; Man < Men; ++Man)
+	{
+		if (S.Men->IsRider(Man))
+		{
+			continue;
+		}
+		int& Rider = S.LorryRider[static_cast<size_t>(Man)];
+		int Block = -1, SeatOn = -1, Seat = -1;
+		double Down = -1.0;
+		const auto Her = S.Men->AboardOf(Man, Block, SeatOn, Seat, Down) ? LorryOf.find({ Block, SeatOn }) : LorryOf.end();
+		const int Socket = LandBench::SocketOf(Seat);
+		if (Her == LorryOf.end() || Socket <= 0)
+		{
+			Hide(Rider);
+			continue;
+		}
+		LandKit::Vehicle& V = All[static_cast<size_t>(Her->second)];
+		// (her way down thrown open as her first man starts down)
+		if (Down >= 0.0)
+		{
+			V.OpenBoard(Now - Down);
+		}
+		const double Near = FVector::Dist2D(FVector(S.Pose.Eye.X, S.Pose.Eye.Y, 0.0), FVector(V.Root.At.X, V.Root.At.Y, 0.0));
+		if (V.Fade < 0.5 || HiddenVehicle(Her->second) || Near > 160.0)
+		{
+			Hide(Rider);
+			continue;
+		}
+		if (Rider < 0)
+		{
+			Rider = S.Men->AddRiderLike(Man);
+			bAdded = bAdded || Rider >= 0;
+			if (Rider < 0)
+			{
+				continue;
+			}
+		}
+		const LandMen::Soldier* Sol = S.Men->SoldierOf(Rider);
+		LandMen::Crowd::Ride Ride;
+		if (!Sol || !LandBench::RideFor(V, *Sol, Seat, Down, Now, Life, Man, Ride))
+		{
+			Hide(Rider);
+			continue;
+		}
+		S.Men->SetRide(Rider, Ride);
+	}
+	if (bAdded)
+	{
+		MenDrawn.SetNum(S.Men->Count());
 	}
 }
 
@@ -5611,8 +5706,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
-		// (the tank commanders on their tanks as just posed)
+		// (the tank commanders on their tanks as just posed, and the men in the lorries)
 		RideTanks();
+		RideLorries();
 		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;

@@ -116,7 +116,10 @@ export class LiveKeeper {
   see(t: number, b: number, m: MenOut, fo: boolean): void {
     const key = keyOf(b, m, fo);
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
-    const ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+    const ch: (number | string | null)[] = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+    // (aboard a lorry, with Men in lorries on: [..., her k, his seat, 1 while he gets down] (MenOut.sv), which older
+    // readers never read)
+    if (m.sv) ch.push(...m.sv);
     let k = this.men.get(key);
     if (!k) {
       k = {
@@ -126,7 +129,7 @@ export class LiveKeeper {
       this.men.set(key, k);
       this.order.push(k);
     } else {
-      if (k.ch.slice(1).some((v, i) => v !== ch[i + 1])) { k.ch = ch; k.newCh.push(ch); }
+      if (k.ch.length !== ch.length || k.ch.slice(1).some((v, i) => v !== ch[i + 1])) { k.ch = ch; k.newCh.push(ch); }
       this.keep(k, p);
     }
     if (m.s !== undefined && k.shot !== m.s) { k.shot = m.s; k.newS.push(m.s); }
@@ -343,6 +346,8 @@ export interface LiveOpts {
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
   escort?: boolean;
+  /** Men in lorries (release 1.5, looks only; sim.trucks): seats said, and over the tailboard one at a time. Off unless true. */
+  trucks?: boolean;
   /**
    * Wet mud (release 1.5, looks only): the campaign's weather word over the field (thaw mud, snow, rain, clear), for
    * the 3D game's ground and the battle's sky. Off, the word is not sent and the sky is drawn as if there were none.
@@ -464,6 +469,7 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
+    if (opts.trucks === true) sim.trucks = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wet: opts.wet !== false };
