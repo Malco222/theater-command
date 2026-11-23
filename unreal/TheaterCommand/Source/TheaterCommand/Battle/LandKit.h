@@ -508,6 +508,11 @@ namespace LandKit
 		 * crew get out (LandBail, -TheaterLandBailOut; Brian, 23 November: "if a tank gets hit people try and get out
 		 * before it explosdes"). 0: at once, as before. Battle::BrewWaitLeast and Most give it, before Build. */
 		double BrewWait = 0.0;
+		/** Tanks rolling smoothly (R2, Brian 23 November 15:24Z: "have the tanks move more smooth and not rigid and zig
+		 * zagging"; -TheaterLandSmoothTanks): a tank's place and facing each step the recording's blended over this many
+		 * battle seconds either way (a bell's spread, at most about 0.45: the steps worked out again behind a live battle's
+		 * newest piece). 0: the recording's places, joined straight, as before. Set before Build (Battle::SmoothTanks). */
+		double SmoothTanks = 0.0;
 
 		// The pose now (after Update).
 		double Now = 0.0;
@@ -760,6 +765,8 @@ namespace LandKit
 		 * between, by her number), her knocked_out clip first so her crew can get out (Vehicle::BrewWait; LandBail,
 		 * -TheaterLandBailOut). 0: at once, as before. Set before Load. */
 		double BrewWaitLeast = 0.0, BrewWaitMost = 0.0;
+		/** Tanks rolling smoothly (R2; Vehicle::SmoothTanks, battle seconds): 0 off, as before. Set before Load. */
+		double SmoothTanks = 0.0;
 		int Year = 1944, Month = 7;
 		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
 		 * dressed for it (Dress::Terrain). Read by Load. */

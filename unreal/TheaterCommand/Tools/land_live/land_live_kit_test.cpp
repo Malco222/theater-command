@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -155,6 +156,12 @@ int main(int Argc, char** Argv)
 	Battle Whole, Live;
 	Whole.Life = 2.0;
 	Live.Life = 2.0;
+	// (LAND_SMOOTH_TANKS=seconds: release 2's tanks rolling smoothly, -TheaterLandSmoothTanks, to both)
+	if (const char* Smooth = std::getenv("LAND_SMOOTH_TANKS"))
+	{
+		Whole.SmoothTanks = Live.SmoothTanks = std::atof(Smooth);
+		std::printf("  tanks rolling smoothly: %.2f s\n", Whole.SmoothTanks);
+	}
 	const auto W0 = Clock::now();
 	if (!Whole.Load(WholeText, Read, Hills, bTable ? &Table : nullptr, Seed, Error))
 	{
@@ -655,7 +662,10 @@ int main(int Argc, char** Argv)
 	Check(HeadingWorst <= Facing, "every heading within " + std::to_string(Facing) + " deg");
 	Check(TurretWorst <= Facing && GunWorst <= Facing, "every turret and gun within " + std::to_string(Facing) + " deg");
 	Check(Matched > 1000, "enough events");
-	Check(Shifted * 50 < Matched, "events a step apart are few");
+	// (tanks rolling smoothly ease to a stop and away, so a provisional point's tenth of a metre dates more of their
+	// stops and starts a step apart: 2.2% of Normandy's film battle's events at 0.4 s, a brake's hiss or an idle's puff
+	// 0.05 s apart; 1 in 25 is allowed then)
+	Check(Shifted * (Live.SmoothTanks > 0.0 ? 25 : 50) < Matched, "events a step apart are few");
 	Check(Provisional * 200 < Matched, "events moved by a provisional point are few");
 	Check(Twitches * 200 < Matched, "events of a turn on the spot only a provisional point showed are few");
 	Check(JumpPlace <= 0.02 && JumpHeading <= 1.0, "no jump on the screen as a piece works her out again");

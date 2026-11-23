@@ -428,6 +428,12 @@ int main(int argc, char** argv)
 		const char* Comma = std::strchr(Wait, ',');
 		B.BrewWaitMost = Comma ? std::atof(Comma + 1) : B.BrewWaitLeast;
 	}
+	// (LAND_SMOOTH_TANKS=seconds: release 2's tanks rolling smoothly, -TheaterLandSmoothTanks)
+	if (const char* Smooth = std::getenv("LAND_SMOOTH_TANKS"))
+	{
+		B.SmoothTanks = std::atof(Smooth);
+		std::printf("  tanks rolling smoothly: %.2f s\n", B.SmoothTanks);
+	}
 	// (the vehicles' measured fire odds, by the face struck: Content/Data/Battle/performance-land.json)
 	std::map<std::string, FireOdds> Fires;
 	{

@@ -2891,6 +2891,9 @@ namespace LandKit
 		{
 			std::vector<uint8_t> bAimed, bAstern, Going;
 			std::vector<double> AimX, AimY, Way, RawV, RawW, V, W;
+			// (tanks rolling smoothly: the recording's places a step, blended, and the steps she was put at, counted)
+			std::vector<double> PlainX, PlainY, PlainF, BlendX, BlendY, BlendF, Bell;
+			std::vector<uint32_t> PutUpTo;
 		};
 		PassLists& Lists()
 		{
@@ -3041,16 +3044,100 @@ namespace LandKit
 		// are worked from the recording's below), and from there she eases onto the new line: a kept point that comes
 		// late, or a provisional one, may move her line under the screen by a tenth of a metre or a few degrees.
 		const size_t Hold = Given > -1e299 ? std::max(From, std::min(Seen, Had)) : From;
+		// Tanks rolling smoothly (R2, SmoothTanks; Brian, 23 November 15:24Z: "have the tanks move more smooth and not rigid
+		// and zig zagging"): the drill's tank makes for a place it picks again twice a second, so the recording's line
+		// zigzags a few metres either way of her road and turns sharp at its corners, and her hull swings at one steady
+		// rate, starting and stopping dead. Her place and her facing each step are the recording's blended over
+		// SmoothTanks battle seconds either way by a bell: her line rounds its corners and loses its zigzag (0.06 m off
+		// the rules' line on average at 0.4 s, under 0.8 m for 99 steps in 100), and her hull eases into and out of a
+		// turn. Only her facing's own blend, never her line's way, turns her, so a live battle's provisional points move
+		// her no more than they do unblended. Never blended across a place she was put at (a step over 2 m), and less and
+		// less toward her end, so she dies on the very spot, facing as she did.
+		const double Sigma = bTank ? SmoothTanks : 0.0;
+		const size_t Reach = Sigma > 0.0 ? std::min<size_t>(LookAhead - 3, static_cast<size_t>(std::ceil(2.5 * Sigma / Step))) : 0;
+		const size_t PlainFrom = From >= Reach + 2 ? From - Reach - 2 : 0;
+		std::vector<double>& PlainX = Li.PlainX;
+		std::vector<double>& PlainY = Li.PlainY;
+		std::vector<double>& PlainF = Li.PlainF;
+		std::vector<double>& BlendX = Li.BlendX;
+		std::vector<double>& BlendY = Li.BlendY;
+		std::vector<double>& BlendF = Li.BlendF;
+		std::vector<double>& Bell = Li.Bell;
+		std::vector<uint32_t>& PutUpTo = Li.PutUpTo;
+		if (Reach > 0)
+		{
+			const size_t Count = N + Reach + 2 - PlainFrom;
+			PlainX.resize(Count);
+			PlainY.resize(Count);
+			PlainF.resize(Count);
+			BlendX.resize(Count);
+			BlendY.resize(Count);
+			BlendF.resize(Count);
+			PutUpTo.resize(Count + 1);
+			Bell.resize(Reach + 1);
+			for (size_t K = 0; K <= Reach; ++K)
+			{
+				const double U = static_cast<double>(K) * Step / Sigma;
+				Bell[K] = std::exp(-0.5 * U * U);
+			}
+			PutUpTo[0] = 0;
+			for (size_t R = 0; R < Count; ++R)
+			{
+				PlaceAt(TimeOf(PlainFrom + R), PlainX[R], PlainY[R], PlainF[R]);
+				const bool bPut = R > 0 && std::hypot(PlainX[R] - PlainX[R - 1], PlainY[R] - PlainY[R - 1]) > 2.0;
+				PutUpTo[R + 1] = PutUpTo[R] + (bPut ? 1u : 0u);
+			}
+			for (size_t R = 0; R < Count; ++R)
+			{
+				double SX = 0.0, SY = 0.0, SW = 0.0, SS = 0.0, SC = 0.0;
+				const size_t A = R >= Reach ? R - Reach : 0, B = std::min(Count - 1, R + Reach);
+				for (size_t Q = A; Q <= B; ++Q)
+				{
+					const double Wt = Bell[Q > R ? Q - R : R - Q];
+					SX += PlainX[Q] * Wt;
+					SY += PlainY[Q] * Wt;
+					SW += Wt;
+					const double Turned = Wrap(PlainF[Q] - PlainF[R]);
+					SS += std::sin(Turned) * Wt;
+					SC += std::cos(Turned) * Wt;
+				}
+				BlendX[R] = SX / SW;
+				BlendY[R] = SY / SW;
+				BlendF[R] = std::atan2(SS, SC); // (her facing's blend, as a turn from her own facing that step)
+			}
+		}
+		auto Placed = [&](size_t I, double& OutX, double& OutY, double& OutF)
+		{
+			if (Reach == 0 || I < PlainFrom || I - PlainFrom + 1 >= BlendX.size())
+			{
+				PlaceAt(TimeOf(I), OutX, OutY, OutF);
+				return;
+			}
+			const size_t R = I - PlainFrom;
+			OutX = PlainX[R];
+			OutY = PlainY[R];
+			OutF = PlainF[R];
+			const double T = TimeOf(I);
+			const size_t A = R >= Reach ? R - Reach : 0, B = std::min(BlendX.size() - 1, R + Reach);
+			if ((Died >= 0.0 && T >= Died) || R == 0 || PutUpTo[B + 1] != PutUpTo[A + 1])
+			{
+				return;
+			}
+			const double Tail = Died >= 0.0 ? Clamp((Died - T) / (static_cast<double>(Reach) * Step), 0.0, 1.0) : 1.0;
+			OutX += (BlendX[R] - OutX) * Tail;
+			OutY += (BlendY[R] - OutY) * Tail;
+			OutF = Wrap(OutF + BlendF[R] * Tail);
+		};
 		double EaseX = 0.0, EaseY = 0.0, EaseF = 0.0;
 		for (size_t I = From; I < N; ++I)
 		{
 			if (I >= Hold)
 			{
-				PlaceAt(TimeOf(I), X[I], Y[I], F[I]);
+				Placed(I, X[I], Y[I], F[I]);
 				continue;
 			}
 			double NX = 0.0, NY = 0.0, NF = 0.0;
-			PlaceAt(TimeOf(I), NX, NY, NF);
+			Placed(I, NX, NY, NF);
 			F[I] = bTank ? F[I] : NF;
 			if (I + 1 == Hold)
 			{
@@ -3063,7 +3150,7 @@ namespace LandKit
 		{
 			// (still easing from the last time, or none of the steps worked out again shown yet)
 			double NX = 0.0, NY = 0.0, NF = 0.0;
-			PlaceAt(TimeOf(Hold - 1), NX, NY, NF);
+			Placed(Hold - 1, NX, NY, NF);
 			EaseX = X[Hold - 1] - NX;
 			EaseY = Y[Hold - 1] - NY;
 			EaseF = bTank ? Wrap(F[Hold - 1] - NF) : 0.0;
@@ -5498,6 +5585,7 @@ namespace LandKit
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
 			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
+			All[I].SmoothTanks = SmoothTanks;
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
@@ -5761,6 +5849,7 @@ namespace LandKit
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
 			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
+			Ve.SmoothTanks = SmoothTanks;
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)

@@ -4004,6 +4004,22 @@ void ALandBattle::MakeArmour()
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
+	// Tanks rolling smoothly (release 2, -TheaterLandSmoothTanks, or -TheaterLandSmoothTanks=<seconds> up to 0.45; Brian,
+	// 23 November: "have the tanks move more smooth and not rigid and zig zagging"): each tank's line blended over 0.4
+	// battle seconds either way and her hull along it (LandKit::Vehicle::SmoothTanks). Off: every tank on the rules' line
+	// as before.
+	{
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks="), Asked))
+		{
+			Armour->SmoothTanks = FMath::Clamp(FCString::Atod(*Asked), 0.0, 0.45);
+		}
+		else if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSmoothTanks")))
+		{
+			Armour->SmoothTanks = 0.4;
+		}
+		UE_LOG(LogTheater, Log, TEXT("Land battle: tanks %s"), Armour->SmoothTanks > 0.0 ? *FString::Printf(TEXT("roll smoothly, their lines blended over %.2f s (-TheaterLandSmoothTanks, release 2)"), Armour->SmoothTanks) : TEXT("on the rules' line as before"));
+	}
 	// Effects (R2): the crews' bail-out (-TheaterLandBailOut, LandBail; Brian, 23 November: "if a tank gets hit people
 	// try and get out before it explosdes"). A brew-up waits 5.5 to 10 s of life after the hit (the fates table's own
 	// brew_up step), knocked out first while her crew climb out.
