@@ -53,6 +53,31 @@ export interface Reckoning {
 }
 
 /** One corps (or ship group) as the campaign hands it to the field. */
+/**
+ * What a land corps carries, as its nation has built and researched it (release 2, "Units decide"; Brian, 23 November
+ * 07:13Z: "It's about the units and you build and attack with not historical handcuffs that determine battles"; the
+ * design director, 07:19Z: a block carries what its nation built and researched, the historian's rows by nation and month
+ * setting only the history start's mix). Each field absent: that mix, by its army and the battle's month.
+ */
+export interface ForceKit {
+  /** Of its armoured infantry's carriers, the share that are half-tracks, 0..1, the rest lorries (looks only: Drill.mechOf). */
+  halftracks?: number;
+  /** Its foot carries its own anti-tank weapons, bazookas or Panzerfausts (the overrun's test, LAND.overrun; sim ownAntiTank). */
+  at?: boolean;
+  /** An artillery corps: the share of its guns that are self-propelled, 0..1, the rest towed (looks only: Drill.spgOf). */
+  spg?: number;
+  /** An armoured corps: the share of its tanks that are tank destroyers or assault guns, 0..1 (looks only: Drill.tdOf). */
+  td?: number;
+  /** Its armoured cars to each of its blocks (1 in so many below one; looks only: Drill.escortOf). */
+  cars?: number;
+  /** Its AA vehicles to each of its blocks (1 in so many below one; looks only: Drill.escortOf). */
+  aa?: number;
+  /** Its jeeps or field cars to each of its blocks (1 in so many below one; looks only: Drill.lightOf). */
+  jeeps?: number;
+  /** Its motorcycles to each of its blocks (1 in so many below one; looks only: Drill.lightOf). */
+  bikes?: number;
+}
+
 export interface ForceTicket {
   /** The corps' id in the campaign: results are reported back against it. */
   corps: number;
@@ -73,7 +98,7 @@ export interface ForceTicket {
   first?: number;
   /** Its divisions as the campaign's army tray shows them (land): the name and short name, strength, experience, men. */
   divisions?: { name: string; short: string; str: number; xp: number; men: number }[];
-  /** Its share of its side's power in the reckoning, 0..1. The shares of a side add up to 1. */
+  /** Its share of its side's power in the reckoning, 0..1. The shares of a side, its joiners' too, add up to 1. */
   share: number;
   /** The battles it has come through before this one, staff-settled or fought (its record): from the third, a tank unit's crews name their tanks (b477). */
   battles?: number;
@@ -91,10 +116,37 @@ export interface ForceTicket {
   wear?: number;
   /** Land, looks only: its share of men who joined it this month, in new kit (Corps.fresh). Absent, none. */
   fresh?: number;
+  /** Land (release 2, "Units decide"): what it carries, as its nation has built and researched it (ForceKit). Absent, the history start's mix. */
+  kit?: ForceKit;
+  /**
+   * Neighbours join the fight (release 2; the design director's ruling of 22 November 03:15Z): set only on a corps that
+   * comes up from a province next door, which its side ticket carries in 'joiners', never in 'forces'. As the battle
+   * report keeps it (ReportUnit joined, from, arrive and corps): joined is the share of the battle it is there for, 0 to
+   * 1, from its march weeks (the campaign's joinShare). The field has it reach its side's line at (1 - joined) of the
+   * battle's own clock, never a fixed minute or a draw, and draws it arriving; its 'share' is what the card priced it at (its
+   * weight for the part of the battle it is there for, over the side's), so the field moves when its harm lands, never
+   * how much (b415, b418).
+   */
+  joined?: number;
+  /** The province it comes from (the campaign's region id): words and the result only. */
+  from?: number;
+  /** The card's word for when it comes up: words only. */
+  arrive?: 'early' | 'midway' | 'late';
+  /**
+   * The way from the battle to the province it comes from, as the field lies (radians clockwise from the field's north,
+   * which is the attack's heading on the campaign map: ticket.ts joinToward). It picks the edge the corps comes on by,
+   * never the enemy's own back edge. Absent: its own side's back edge.
+   */
+  toward?: number;
 }
 
 export interface SideTicket {
   nat: string;
+  /**
+   * Uniforms that age (release 2, looks only): the months this side's men have been in the line without a rest, as the
+   * campaign counts them (0 fresh); absent where the campaign keeps none.
+   */
+  worn?: number;
   /** "German", "Polish": the adjective the cards use. */
   adj: string;
   /** The nation's colour on the campaign map, for blocks and bars. */
@@ -120,6 +172,11 @@ export interface SideTicket {
    * 'bold', 'methodical' or 'mass' (data/battle/land-styles.json). The campaign never sets it. Never the player's.
    */
   style?: string;
+  /**
+   * Land, neighbours join the fight (release 2): the corps coming up from next door, earliest first, as the card priced
+   * them (ForceTicket.joined, from, arrive, toward). Left out or empty: the field is exactly as it was.
+   */
+  joiners?: ForceTicket[];
 }
 
 /**
@@ -184,6 +241,21 @@ export interface FieldTicket<P = unknown> {
   limit: number;
   /** The campaign's weather over the place, in its own words ('clear', 'rain', 'snow', 'mud'), where it keeps any. */
   weather?: string;
+  /**
+   * Scarred ground (release 2): the land battles fought on this place before this one, and the months since the last;
+   * absent where none has been. Looks only: the field lays old craters from it, and nothing in the fight reads it.
+   */
+  scars?: { count: number; months: number };
+  /**
+   * Mud memory (release 2): of those battles, the ones fought in the mud, and the months since the last; absent where
+   * none was. Looks only: the field keeps their old ruts.
+   */
+  oldRuts?: { count: number; months: number };
+  /**
+   * Captured kit (release 2): a side that lately beat an army with tanks fields a few of the loser's own in its paint:
+   * whose they were and how many of its tanks in this battle are drawn so. Looks only, as the scars.
+   */
+  captured?: { att?: { from: string; n: number }; def?: { from: string; n: number } };
   /**
    * Which attack on this ground this month it is, from 0: a second attack on the same place keeps its seed (and so its
    * ground) but draws a fresh day's luck, as the campaign's own dice would.
@@ -436,8 +508,12 @@ export interface FieldResult {
   level: VictoryLevel;
   /** What happened, in a few plain lines. */
   lines: string[];
-  /** Each campaign force's share of its strength lost on the field, for a domain that pays some of the bill exactly. */
-  forces: { corps: number; side: Side; lost: number }[];
+  /**
+   * Each campaign force's share of its strength lost on the field, for a domain that pays some of the bill exactly. A
+   * corps that came up from next door (land, ForceTicket.joined) also carries 'arrived': the battle second it came on,
+   * or null where the day ended before it did (its loss then 0).
+   */
+  forces: { corps: number; side: Side; lost: number; arrived?: number | null }[];
   /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
   broke?: Side;
   /**
@@ -496,6 +572,80 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * side with no style.
    */
   plan?: Partial<Record<Side, { style: string; phase?: 'guns' | 'assault' | 'hook' | 'shift'; main?: number[]; startY?: number | null; reserve?: number[] }>>;
+  /**
+   * Land, neighbours join the fight (release 2): the blocks of corps from next door still on the march, for the 3D game
+   * to draw them coming up: each block, its corps, kind, the battle second it comes on ('at'), the edge it comes on by
+   * and where. Under fog only those of the player's own side and those his staff has identified. Left out where none
+   * is coming.
+   */
+  coming?: { id: number; side: Side; corps: number; kind: string; at: number; edge: 'south' | 'north' | 'west' | 'east'; x: number; y: number; arrive?: 'early' | 'midway' | 'late' }[];
+  /**
+   * Land, the rider ahead (release 2; Brian, 22 November 12:48Z; LandBattle.rider on): the despatch rider each corps
+   * coming up from next door on the player's own side sends ahead, never the enemy's. He rides from his corps' edge at
+   * the first step to the middle of his side, at the field's fastest pace, and stands there until his corps comes up;
+   * one whose corps would beat him comes on with it and is never listed. Each: where he is (x, y, face; speed his pace
+   * while he rides, 0 standing), the battle seconds he gets there ('there') and his corps comes up ('comes'), the edge
+   * it comes by, the second it reaches its line ('line') only while its staff fights it, the corps (name, kind,
+   * divisions, men and strength as its blocks will walk on) and the words a click on him shows ('says'). Looks and words
+   * only: nothing in the fight reads him. Left out where none rides.
+   */
+  riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
+  /**
+   * Land, night patrol (release 2; Brian, 22 November 17:33Z; the design director, 18:36Z; LandBattle.patrol on, with
+   * hiding on): the attack's patrol the night before, settled as the clock starts. The side that sent it, its block
+   * ('unit'), when it was out (t0 to t1, battle seconds, negative: the night before), its men, where it set out from
+   * ('from') and where it went to ('to': where it was caught, when it was), the hidden post it found (found: where and
+   * what, null where none), whether the defence is alerted (it was caught), and the flares the defence fired over it
+   * ([t, x, y] each; none unless caught). The attack sees all of it; the defence only once alerted, and then only the
+   * patrol's men where it was caught and the flares (no 'unit', 'from' or what was found). Looks and words only beyond
+   * what the rules settled at the start. Left out where no patrol went out.
+   */
+  patrol?: { side: Side; unit?: number; t0: number; t1: number; men: number; from?: [number, number]; to: [number, number]; route?: [number, number, number][]; found: { x: number; y: number; kind: string } | null; alerted: boolean; flares: [number, number, number][] };
+  /**
+   * Land, hedge cutters (release 2; ruling 242; LandBattle.cutters on): the gaps tank blocks have cut through hedges, the
+   * side's own and those cut by enemy blocks it knew as the cut began (all of them with no side given, as a recording
+   * is). Each: the battle second the cut began (t0: the block's front at the hedge, the lead tank pushing through) and
+   * the second the gap stands open (t1), the block, where (x, y, on the hedge line), the way the hedge runs there (yaw,
+   * radians from east, as a gate's) and the gap's width in metres. Looks only. Left out where none.
+   */
+  cuts?: { t0: number; t1: number; unit: number; x: number; y: number; yaw: number; width: number }[];
+  /**
+   * Land, smoke on call (release 2; ruling 242; LandBattle.smoke on): the smoke screens standing now, either side's; seen
+   * by both sides. Each: its id, the side that laid it, the block that laid it (left out where that block is an enemy
+   * one the side has not met), the line it lies along (x0, y0 to x1, y1), the battle second it was laid (t) and the
+   * second it is gone (until). A direct blow across it strikes at half. Left out where none stands.
+   */
+  screens?: { id: number; side: Side; unit?: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }[];
+  /**
+   * Land, field telephone lines (release 2; the design director, 18:36Z; LandBattle.phones on): the defence's wires, from
+   * the first step. Seen by the defence, and by everyone where the view is unfogged (no side given, or the card knew the
+   * defence). hq: the headquarters every wire runs from. wires: each { id, side, pts: [hq, its block's middle now], hq,
+   * unit, lines (2 for Germany's double lines), cut (lines cut now: down once cut >= lines) }. cuts: each line cut, { t,
+   * wire, x, y, by? } (by: the gun, mortar team or tank that cut it, left out where the side has not met it). mends: each
+   * lineman sent, { t, wire, man, t0, t1, x, y }: he leaves hq at t0, reaches the cut at x, y at t1, and the wire is mended
+   * at t (listed from t0, so a mend's t may lie ahead). held: each order that waited for a down wire, { t, unit, due,
+   * went? }: given at t, due at due; went, when it reached the block (absent while on its way, and for good where a later
+   * order took its place). Left out with the switch off.
+   */
+  phones?: {
+    hq: [number, number];
+    wires: { id: number; side: Side; pts: [number, number][]; hq: [number, number]; unit: number; lines: number; cut: number }[];
+    cuts: { t: number; wire: number; x: number; y: number; by?: number }[];
+    mends: { t: number; wire: number; man: number; t0: number; t1: number; x: number; y: number }[];
+    held: { t: number; unit: number; due: number; went?: number }[];
+  };
+  /**
+   * Land, stretcher bearers (release 2; Brian, 22 November 17:33Z; the design director's Q4 and Q5, 18:36Z;
+   * LandBattle.bearers on), a side's own blocks (every side's with no side given, as a recording is). bearers: each block
+   * with bearers out carrying ('out') or litter cases lying for them ('waiting'), in men, and the battle second the next
+   * of its bearers are back ('back', null with none out). aid: the aid post of each block that has had wounded, where its
+   * bearers carry them. returns: the light cases back in the line in the last two battle seconds, each the battle second,
+   * the block and how many men (a block's in one battle second together): tell each once, by its t and block. Left out
+   * where none.
+   */
+  bearers?: { unit: number; out: number; waiting: number; back: number | null }[];
+  aid?: { side: Side; unit: number; x: number; y: number }[];
+  returns?: { t: number; unit: number; n: number }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

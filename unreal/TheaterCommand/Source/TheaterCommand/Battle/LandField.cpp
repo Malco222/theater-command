@@ -6985,6 +6985,27 @@ namespace LandField
 		OutZ = N.Z;
 	}
 
+	double Ground::DrawnZ(double X, double Y) const
+	{
+		// As DrawnUp: the near tile's square the place is in, cut along its flatter diagonal, the height across the
+		// triangle from its three corners.
+		const Impl& G = *In;
+		const int TI = static_cast<int>(std::floor((X + Band) / TileSize)), TJ = static_cast<int>(std::floor((Y + Band) / TileSize));
+		const double X0 = -Band + TI * TileSize, Y0 = -Band + TJ * TileSize;
+		const bool bInner = X0 >= 0.0 && Y0 >= 0.0 && X0 + TileSize <= G.FW + 1e-6 && Y0 + TileSize <= G.FH + 1e-6;
+		const int Q = bInner ? NearQuads : BandQuads;
+		const double Step = TileSize / Q;
+		const int I = std::clamp(static_cast<int>(std::floor((X - X0) / Step)), 0, Q - 1), J = std::clamp(static_cast<int>(std::floor((Y - Y0) / Step)), 0, Q - 1);
+		const double Ax = X0 + I * Step, Ay = Y0 + J * Step;
+		const double Za = G.NearZ(Ax, Ay), Zb = G.NearZ(Ax + Step, Ay), Zc = G.NearZ(Ax + Step, Ay + Step), Zd = G.NearZ(Ax, Ay + Step);
+		const double U = std::clamp((X - X0) / Step - I, 0.0, 1.0), V = std::clamp((Y - Y0) / Step - J, 0.0, 1.0);
+		if (std::fabs(Za - Zc) <= std::fabs(Zb - Zd))
+		{
+			return U >= V ? Za * (1.0 - U) + Zb * (U - V) + Zc * V : Za * (1.0 - V) + Zc * U + Zd * (V - U);
+		}
+		return U + V <= 1.0 ? Za * (1.0 - U - V) + Zb * U + Zd * V : Zb * (1.0 - V) + Zc * (U + V - 1.0) + Zd * (1.0 - U);
+	}
+
 	bool Ground::MayBeBuilt(double X, double Y) const
 	{
 		// (Top says Floor only inside a house's footprint pixels, and Wall only on a wall's, both in the raster)

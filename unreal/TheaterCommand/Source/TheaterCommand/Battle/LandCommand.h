@@ -46,6 +46,8 @@ namespace LandCommand
 		double W = 0.0, D = 0.0;
 		/** The header's words: its name, its short name, the formation it belongs to, its kind (inf, arm, art, ...). */
 		std::string Name, Short, Parent, Kind;
+		/** A support team's kind ('mg', 'mor'; empty for every other block): its card says MACHINE-GUNS or MORTARS. */
+		std::string Team;
 		double Str = 1.0, Mor = 1.0;
 		int Figures = 0, Figures0 = 0;
 		/** The real men it stands for now (-1 not said: an enemy not met) and at the start; the men drawn for it on the
@@ -64,6 +66,16 @@ namespace LandCommand
 		bool bChosen = false;
 		/** Hidden from the other side (in woods, not yet found): his own show the forest mark; the enemy's are not shown. */
 		bool bHidden = false;
+		/** An enemy found by its fire, not yet located; and his own firing into cover at a point (reconnaissance by fire). */
+		bool bVague = false, bSearch = false;
+		double SearchX = 0.0, SearchY = 0.0;
+		/** His own: a tank with hedge cutters (it can punch a gap in a hedge), and the smoke it can still lay (-1 none). */
+		bool bCutter = false;
+		int Smoke = -1;
+		/** His own, holding until relieved: waiting (dug in where it stands while not free), the battle second help can
+		 * reach it, help never came (its men break sooner), no longer waiting. */
+		bool bWaits = false, bWaitLate = false, bWaitFree = false;
+		double WaitDue = -1.0;
 		/** Seconds till his order reaches it, -1 none on the air. */
 		double OrderIn = -1.0;
 		Chip Says = Chip::Staff;
@@ -72,6 +84,28 @@ namespace LandCommand
 		double OrderX = 0.0, OrderY = 0.0;
 		int OrderTarget = -1;
 		std::vector<std::pair<double, double>> Path;
+	};
+
+	/**
+	 * A corps coming up from next door, not yet on the field (neighbours join the fight, release 2; the campaign card
+	 * priced it in): his own side's, and the enemy's his staff knows of. It walks on whole at its time, at a point on the
+	 * field's edge, its blocks under his staff like the rest.
+	 */
+	struct Neighbour
+	{
+		int Corps = 0;
+		/** 0 the attack, 1 the defence; his own side's or the enemy's. */
+		int Side = -1;
+		bool bMine = false;
+		/** The formation's name (its blocks' parent), its leading kind (arm where it brings tanks, else its first block's),
+		 * its blocks, and the real men it brings (his own; -1 for the enemy's, not counted by his staff). */
+		std::string Name, Kind;
+		int Units = 0, Men = -1;
+		/** Battle seconds till it walks on (0 at its time), the card's word for when (early, midway, late; may be empty),
+		 * and where: the field's edge (south, north, west, east) and the point on it, field metres. */
+		double In = 0.0;
+		std::string Edge, Arrive;
+		double X = 0.0, Y = 0.0;
 	};
 
 	/** Where one block of a line would stand (the rules' own lining up, for the line drawn while he drags). */
@@ -91,8 +125,16 @@ namespace LandCommand
 
 		const std::vector<Tag>& Tags() const { return Shown; }
 		const Tag* TagOf(int Block) const;
+		/** The corps still coming up from next door at the screen's time, soonest first (none: empty). */
+		const std::vector<Neighbour>& Neighbours() const { return Coming; }
+		/** His own corps' despatch riders at the screen's time, each eased toward the next view (none: empty). */
+		const std::vector<LandFeed::Rider>& Riders() const { return RidersNow; }
+		/** The rider nearest the point within Reach metres, as an index into Riders(); -1 none. */
+		int RiderAt(double X, double Y, double Reach) const;
 		/** 0 the attack, 1 the defence, -1 a film. */
 		int Side() const { return Me; }
+		/** The battle time the tags were last read at (the screen's). */
+		double Now() const { return ReadAt; }
 		/** The setup step is open: he stands his blocks on his ground, the clock still. */
 		bool Deploying() const { return bSetup; }
 
@@ -120,6 +162,9 @@ namespace LandCommand
 		std::string Move(double X, double Y, bool bRun) const;
 		std::string Attack(int Enemy) const;
 		std::string FireOn(int Enemy) const;
+		/** Reconnaissance by fire: those in hand stand and fire into the cover at a point (a wood, a hedge) to flush out
+		 * what hides there (the historian's check, 22 November); "" with none in hand. */
+		std::string FireInto(double X, double Y) const;
 		/** A line from (X0, Y0) to (X1, Y1): the blocks spread along it, facing the enemy's side. */
 		std::string Line(double X0, double Y0, double X1, double Y1) const;
 		std::string Hold() const;
@@ -128,6 +173,24 @@ namespace LandCommand
 		std::string ToStaff() const;
 		/** The rules' own lining up of the blocks in hand along a line (for the line drawn while he drags). */
 		std::vector<Ghost> LineUp(double X0, double Y0, double X1, double Y1) const;
+
+		// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z; shown only where the rules give a block one) ----
+		/** The first block in hand with hedge cutters, -1 none. */
+		int Cutter() const;
+		/** Those in hand with smoke still to lay. */
+		std::vector<int> Smokers() const;
+		/** The cutter in hand punches a gap in the hedge at (X, Y) (the screen snaps the point to a hedge first). */
+		std::string Cut(double X, double Y) const;
+		/** Those in hand with smoke lay a line of it from (X0, Y0) to (X1, Y1). */
+		std::string SmokeLine(double X0, double Y0, double X1, double Y1) const;
+
+		// ---- Hold until relieved (release 2; Brian, 22 November 12:48Z; the rules decide who may, and say why not) ----
+		/** A corps of his is coming up from next door, or is on the field: help that a block of his may wait for. */
+		bool HelpComing() const { return bHelp; }
+		/** Those in hand on foot, not waiting already (the rules take one a corps and say why for the rest). */
+		std::vector<int> Waiters() const;
+		/** Those in hand on foot dig in and wait for help. */
+		std::string Wait() const;
 
 		/**
 		 * An order he has just given, shown at once: the screen runs a couple of battle seconds behind the rules, so the
@@ -148,7 +211,7 @@ namespace LandCommand
 		struct Words
 		{
 			int Id = 0, Side = -1;
-			std::string Name, Short, Parent, Kind;
+			std::string Name, Short, Parent, Kind, Team;
 			double W = 0.0, D = 0.0;
 			int Figures0 = 0, Men0 = 0;
 			/** Drawn as tanks or guns (a model), not men. */
@@ -170,6 +233,10 @@ namespace LandCommand
 		/** The men's tracks counted up to the recording's now, and each side's ratio from them. */
 		void CountDrawn(const LandFeed::Recording& Rec);
 		std::vector<Tag> Shown;
+		std::vector<Neighbour> Coming;
+		std::vector<LandFeed::Rider> RidersNow;
+		bool bHelp = false;
+		double ReadAt = 0.0;
 		std::vector<Pending> Given;
 		std::vector<int> Hand;
 		int Me = -1;
@@ -182,4 +249,8 @@ namespace LandCommand
 
 	/** A number as the rules' JSON takes it: finite, to the centimetre. */
 	std::string Number(double V);
+
+	/** The nearest point to (X, Y) on any of the lines (each a run of corners), within Reach metres: true and the point
+	 * where one is (a hedge for the cutters to snap to), false where none comes that close. */
+	bool NearestOnLines(const std::vector<const std::vector<std::pair<double, double>>*>& Lines, double X, double Y, double Reach, double& OutX, double& OutY);
 }

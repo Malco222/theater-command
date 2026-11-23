@@ -1199,13 +1199,13 @@ namespace TheaterFx
 					LandFewSum += Few;
 				}
 				FewAlphaPow = Few < 1.0 ? LandAlphaPow : 0.0; // (its see-through pieces, laid bigger, as much thicker: Thicker)
+				CrownGround = Ground; // (the skirt reads it too: grounds.<ground>.wet)
 				if (!(Many < 0.5)) // (and under half, no skirt of dust racing out over the ground: 230 wide sheets, a few pixels long out there)
 				{
 					Skirt(Now + 0.01, At, K, P, DustK, D, Size, Few < 1.0 ? std::pow(Few, LandSkirtPow) : 1.0);
 				}
 				CrownLow = SafeNum(Num(G + "crown_low", 1.0), 0.2, 2.0, 1.0);
 				CrownWide = SafeNum(Num(G + "crown_wide", 1.0), 0.5, 3.0, 1.0);
-				CrownGround = Ground;
 				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D, Few);
 				CrownLow = CrownWide = 1.0;
 				CrownGround.clear();
@@ -1647,6 +1647,15 @@ namespace TheaterFx
 		Dice DS(PlaceKey(At) * 0xA24BAED4963EE407ull ^ 0x5C1A7ull);
 		const double HangKeep = SafeNum(Num(Sk + "hang_keep", 0.7), 0.05, 2.0, 0.7), HangWide = SafeNum(Num(Sk + "hang_wide", 0.3), 0.0, 1.0, 0.3), HangSpread = SafeNum(Num(Sk + "hang_spread", 0.3), 0.0, 1.0, 0.3);
 		const Rgb Col = P.Ring * Num(R + "colour_from_ground", 0.85); // (the ground's own ring colour where it has one: earth's darker than its dust)
+		// (art director 01:19Z 23 November, a thaw: wet ground sprays, it does not dust. With grounds.<ground>.wet on, the
+		// skirt is ring_colour, a dark grey-brown, ring_high_k as high, gone in ring_life_s, and never hangs with the
+		// cloud, as the cloud's low ring is (Bulk). By dice of its own, so its pieces go where they did. Off: as before)
+		const std::string Wt = "grounds." + CrownGround + ".wet.";
+		const bool bWetSkirt = !CrownGround.empty() && Num(Wt + "on", 0.0) >= 0.5;
+		Dice DWS(PlaceKey(At) * 0x9FB21C651E98DF25ull ^ 0x5E7ull);
+		const Rgb WetSkirtCol = bWetSkirt ? Picture(Wt + "ring_colour", Col) : Col;
+		const double WetHighK = bWetSkirt ? SafeNum(Num(Wt + "ring_high_k", 1.0), 0.05, 1.0, 1.0) : 1.0;
+		const Span WetLife = Range(Wt + "ring_life_s", 0.8, 1.2);
 		const double Many = std::max(0.7, std::sqrt(K));
 		// (burst.far, Shell: Few of its pieces, never under 8 out and 4 in, each as much wider as keeps the ring as full)
 		const bool bFew = Few < 1.0;
@@ -1710,6 +1719,10 @@ namespace TheaterFx
 			B.Rise = RiseOf * D.U(0.6, 1.4);
 			B.Windage = 0.6;
 			B.Life = LifeOf.Pick(D) * std::min(2.0, K);
+			if (bWetSkirt)
+			{
+				B.Life = SafeNum(WetLife.Pick(DWS), 0.1, 60.0, 1.0);
+			}
 			B.R0 = StartR * KS * FewR;
 			B.R1 = EndR * KS * D.U(0.7, 1.3) * (bFront ? 1.0 : InnerK) * FewR; // (fewer, broader inner ones fill the round)
 			B.Grow = GrowOf;
@@ -1720,12 +1733,13 @@ namespace TheaterFx
 			{
 				B.Flatten = std::min(B.Flatten, (HighVary > 0.0 ? MostHigh * (1.0 - HighVary * DS.U()) : MostHigh) * (bFront ? 1.0 : InnerHigh) / (1.8 * std::max(B.R1, 1e-3))); // (its top, at 1.8 times its half height, under most_high_m)
 			}
+			B.Flatten *= WetHighK;
 			if (SkirtRough > 0.0)
 			{
 				B.Rough = SkirtRough;
 				B.LumpSeed = static_cast<uint32_t>(DS.U() * 4294967295.0);
 			}
-			B.Col = Col * D.U(0.9, 1.08);
+			B.Col = WetSkirtCol * D.U(0.9, 1.08);
 			B.Col2 = B.Col;
 			// (its outer part feathers away: full strength out to FeatherFrom of the reach, a sixth of it at the rim)
 			const double Feather = Out_ > FeatherFrom ? 1.0 - 0.85 * Clamp01((Out_ - FeatherFrom) / std::max(1.0 - FeatherFrom, 1e-3)) : 1.0;
@@ -1741,8 +1755,8 @@ namespace TheaterFx
 			if (HangsOn)
 			{
 				// (hang_keep of its pieces hang on with the cloud, each to the cloud's end; the rest settle as a skirt's
-				// dust ever did, so a barrage's skirts do not fill the room)
-				if (DS.U() < HangKeep)
+				// dust ever did, so a barrage's skirts do not fill the room. A wet skirt never hangs)
+				if (DS.U() < HangKeep && !bWetSkirt)
 				{
 					Lingering(B, *HangsOn, T0, At, 0.6, 0.0, SpareAtBurst, 1.0 / std::max(HangsOn->Keep, 0.05));
 				}
@@ -2290,6 +2304,27 @@ namespace TheaterFx
 		int DustTrails = bDustTrails ? DT.Whole(static_cast<int>(SafeNum(Num("burst.debris.dust_trails.0", 3.0), 0.0, 12.0, 3.0)), static_cast<int>(SafeNum(Num("burst.debris.dust_trails.1", 5.0), 0.0, 12.0, 5.0))) : 0;
 		const double TrailFrom = SafeNum(Num("burst.debris.dust_trail_from_m", 0.08), 0.0, 5.0, 0.08) * K;
 		Dice Thin(PlaceKey(At) * 0x9FB21C651E98DF25ull ^ 0xFE3ull); // (burst.far: which clods are thrown, by dice of their own)
+		// (grounds.<ground>.wet, its own switch on: the art director's read of the thaw (23 November): thrown mud is dark
+		// wet clods that land and stay, never a dust puff. The clods and the shower take the wet colour (clod, by
+		// tint; the shower by shower_shade) and the clods r_k as big; none bounces, none sheds dust in flight, none
+		// puffs dust where it lands; and of a burst within stay_within_m of the eye, up to stay_most clods of
+		// stay_from_m or more lie stay_s where they land, fading over the last fade_s. Dice of their own; off, as before)
+		const std::string Wt = "grounds." + CrownGround + ".wet.";
+		const bool bWet = !CrownGround.empty() && Num(Wt + "on", 0.0) >= 0.5;
+		Dice DW(PlaceKey(At) * 0xE7037ED1A0B428DBull ^ 0x3E7ull);
+		const Rgb WetClod = bWet ? Picture(Wt + "clod", P.Clod) : P.Clod;
+		const Span WetTint = GradeRange(Wt + "tint", 0.9, 1.05), WetShower = GradeRange(Wt + "shower_shade", 0.7, 0.95), WetStay = Range(Wt + "stay_s", 20.0, 35.0);
+		const double WetBig = SafeNum(Num(Wt + "r_k", 1.0), 0.2, 4.0, 1.0), WetFade = SafeNum(Num(Wt + "fade_s", 5.0), 0.1, 120.0, 5.0);
+		const double WetFrom = SafeNum(Num(Wt + "stay_from_m", 0.04), 0.0, 5.0, 0.04);
+		const int WetMost = static_cast<int>(SafeNum(Num(Wt + "stay_most", 24.0), 0.0, 500.0, 24.0));
+		const bool bWetNear = bWet && bEyeKnown && (LastEye - At).Length() < SafeNum(Num(Wt + "stay_within_m", 150.0), 0.0, 1.0e6, 150.0);
+		int WetStays = 0;
+		// (art director 01:19Z: wet mud flies as lumps, few slivers, and has no shine. round_share of the wet clods are drawn
+		// no longer than round_long times their width, their ends blunt; every one is lit shade_k as strongly, its lit side
+		// darker. Dice of their own, so the colours and the stays fall as they did)
+		Dice DR(PlaceKey(At) * 0xC2B2AE3D27D4EB4Full ^ 0x40Dull);
+		const double WetShadeK = SafeNum(Num(Wt + "shade_k", 1.0), 0.0, 2.0, 1.0), WetRound = SafeNum(Num(Wt + "round_share", 0.0), 0.0, 1.0, 0.0);
+		const double WetRoundLong = std::max(1.0, SafeNum(Num(Wt + "round_long", 1.3), 1.0, 10.0, 1.3));
 		for (size_t I = 0; I < Launch.size(); ++I)
 		{
 			if (bFew && Thin.U() >= Few)
@@ -2306,6 +2341,14 @@ namespace TheaterFx
 			B.R0 = B.R1 = LaunchR[I];
 			const bool bShower = I >= ShowerFrom && I < ShowerTo;
 			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : (bShower ? P.Stone : P.Clod)) * (bShower ? ShowerShade.Pick(D) : ClodTint.Pick(D));
+			if (bWet && I < ShowerTo)
+			{
+				B.Col = WetClod * (bShower ? WetShower.Pick(DW) : WetTint.Pick(DW));
+				if (!bShower)
+				{
+					B.R0 = B.R1 = LaunchR[I] * WetBig;
+				}
+			}
 			B.Col2 = B.Col;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
@@ -2313,6 +2356,16 @@ namespace TheaterFx
 			B.Rim = 0.6;
 			B.LeastPx = ClodLeast;
 			Chunk(B, D);
+			if (bWet && I < ShowerTo)
+			{
+				B.ShadeK *= WetShadeK;
+				if (DR.U() < WetRound)
+				{
+					B.MostLong = WetRoundLong;
+					B.Point = 0.0;
+					B.Tail = 0.0;
+				}
+			}
 			if (I >= ShowerTo)
 			{
 				if (bLensRough)
@@ -2331,12 +2384,24 @@ namespace TheaterFx
 				}
 			}
 			Throw(B);
+			if (bWet)
+			{
+				B.Vel2 = Vec(); // (wet mud sticks where it lands: no bounce)
+				B.Land2 = B.Land;
+				B.At2 = B.At1;
+			}
 			B.Life = B.Land2 + (bShower ? ShowerRest.Pick(D) : D.U(2.0, 4.0));
 			B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
+			if (bWetNear && I < ShowerFrom && B.R0 >= WetFrom && WetStays < WetMost)
+			{
+				++WetStays;
+				B.Life = B.Land2 + WetStay.Pick(DW);
+				B.Hold = std::min(0.99, std::max(B.Hold, (B.Life - WetFade) / B.Life));
+			}
 			const Vec Landed = B.At1;
 			const double Down = B.Born + B.Land;
 			const double R = B.R0;
-			if (DustTrails > 0 && I < ShowerTo && R > TrailFrom && B.Land > 0.6)
+			if (DustTrails > 0 && !bWet && I < ShowerTo && R > TrailFrom && B.Land > 0.6)
 			{
 				// (thin dust shed along its flight, each puff where the clod was at that moment)
 				--DustTrails;
@@ -2363,7 +2428,7 @@ namespace TheaterFx
 				}
 			}
 			Bits.push_back(B);
-			if (R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
+			if (!bWet && R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
 			{
 				Bit Puff;
 				Puff.Born = Down;
@@ -2806,6 +2871,18 @@ namespace TheaterFx
 		const bool bDarkFoot = Has("burst.foot.count.0");
 		const double FootBand = Num("burst.foot.smoke_band", 0.45), FootSmokeDark = Num("burst.foot.smoke_dark", 0.45), FootSettle = std::max(0.1, Num("burst.foot.smoke_settle_s", 1.0));
 		const double LooksFor = SafeNum(LooksS, 1.0, 600.0, 20.0);
+		// (art director 01:19Z 23 November, a thaw: the cloud's low ring, warm at its foot at first, read at half a second
+		// as dry earth. With grounds.<ground>.wet on, no puff of the cloud is warm, and its lowest, ring_below of the
+		// cloud's height (a share of FrTall), are ring_colour, a dark grey-brown; a low wall on the ground as the skirt
+		// is, ring_high_k as high as they stood; gone in ring_life_s, never lingering with the cloud. The rest of the
+		// cloud as it was; dice of its own. Off: as before)
+		const std::string Wt = "grounds." + Ground + ".wet.";
+		const bool bWetRing = !Ground.empty() && Num(Wt + "on", 0.0) >= 0.5;
+		Dice DWR(PlaceKey(At) * 0xD6E8FEB86659FD93ull ^ 0x41Bull);
+		const double WetBelow = bWetRing ? SafeNum(Num(Wt + "ring_below", 0.1), 0.0, 1.0, 0.1) : 0.0;
+		const Rgb WetRingCol = Picture(Wt + "ring_colour", P.Smoke);
+		const double WetRingHigh = SafeNum(Num(Wt + "ring_high_k", 0.5), 0.05, 1.0, 0.5);
+		const Span WetRingLife = Range(Wt + "ring_life_s", 0.8, 1.2);
 		for (int I = 0; I < NFringe; ++I)
 		{
 			const double F = std::pow(D.U(), FrLow);
@@ -2832,7 +2909,7 @@ namespace TheaterFx
 			B.R0 = Rr * FrSmall;
 			B.R1 = Rr;
 			B.Grow = FrGrow;
-			B.Col = (F < 0.25 && B.Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base;
+			B.Col = (F < 0.25 && B.Born - T0 < 0.22 && !bWetRing) ? Base.Mix(Warm, 0.35) : Base; // (wet ground: never warm)
 			B.Col2 = Base;
 			B.Cool = B.Life / 0.15;
 			if (bDarkFoot && F < FootBand)
@@ -2858,6 +2935,21 @@ namespace TheaterFx
 			B.Centre = At + (Tilt + ZUp) * (0.45 * FrTall);
 			B.CloudR = std::max(0.3 * CloudM, 1e-3);
 			B.CentreRise = 0.3 * SqrtK;
+			if (F < WetBelow)
+			{
+				// (its top stood about Up_ and its own half width over the ground; as a low wall its top is 1.8 times its
+				// half height: Upright)
+				B.Form = Bit::Shape::Upright;
+				B.bHug = true;
+				B.Vel = Vec(To.X, To.Y, 0.0) * KB;
+				B.Rise = 0.0;
+				B.Flatten = std::clamp(WetRingHigh * (Up_ + Rr) / (1.8 * std::max(Rr, 1e-3)), 0.05, 2.0);
+				B.Col = WetRingCol * Shade;
+				B.Col2 = B.Col;
+				B.Life = SafeNum(WetRingLife.Pick(DWR), 0.1, 60.0, 1.0);
+				Bits.push_back(B);
+				continue;
+			}
 			Lingering(B, FringeOn, T0, At, 0.7, 0.0, StaysSpare, FrKeep, 1.0 + StayLow * (1.0 / (1.0 + FrLow) - F) * (1.0 + FrLow));
 			if (B.bTail)
 			{
@@ -15245,11 +15337,12 @@ namespace TheaterFx
 				}
 			}
 			Half = std::max(Half, Width);
-			if (ThrownLong > 0.0 && B.bThrown && !B.bLight && !(B.HalfLength > 0.0))
+			const double LongCap = B.MostLong > 0.0 ? B.MostLong : ThrownLong; // (a wet clod's own, Bit::MostLong)
+			if (LongCap > 0.0 && B.bThrown && !B.bLight && !(B.HalfLength > 0.0))
 			{
 				// (art director on cut 5: a fast clod drawn along its flight was a long dark slab across the men. A thrown
 				// lump is a lump: never longer than ThrownLong times its width)
-				Half = std::min(Half, ThrownLong * Width);
+				Half = std::min(Half, LongCap * Width);
 			}
 			if (B.bChip && B.Glint > 0.0 && Age < B.Land2)
 			{

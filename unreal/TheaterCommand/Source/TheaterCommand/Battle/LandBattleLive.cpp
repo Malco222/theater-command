@@ -15,12 +15,17 @@
 #include "Battle/LandBattle.h"
 
 #include "Battle/LandBattleState.h"
+#include "Battle/LandFell.h"
 #include "Battle/LandLive.h"
 #include "Battle/LandMen.h"
 #include "Battle/LandVat.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "TheaterCommand.h"
 
@@ -44,7 +49,8 @@ namespace
 	/** The screen's middle note is said in capitals, as every other. */
 	std::string NoteOf(const FString& Text)
 	{
-		return NarrowOf(Text.ToUpper());
+		// ("block" never goes on the screen: units, the UI director's word, 22 November 18:26Z)
+		return NarrowOf(Text.ToUpper().Replace(TEXT("BLOCKS"), TEXT("UNITS"), ESearchCase::CaseSensitive).Replace(TEXT("BLOCK"), TEXT("UNIT"), ESearchCase::CaseSensitive));
 	}
 
 	/** How far behind what the rules have fought the screen may come, battle seconds: a piece is up to half a second,
@@ -55,6 +61,10 @@ namespace
 	 * camera thread, 22 November: its cut on action wants 2.2 real seconds of lead and a tank's knock-out 5.2: "2.5 battle
 	 * s at 1x, 5 at 2x, 10 at 4x"). */
 	constexpr double LiveLead = 2.5;
+
+	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): on (Brian, 22 November 21:21Z). */
+	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 1,
+		TEXT("1: the attack card offers FIGHT IT YOURSELF, the campaign's land battle fought live in the land rules from its ticket (release 2). 0: SEND THEM IN only."));
 }
 
 bool ALandBattle::WantsLive(FString& OutKey)
@@ -84,7 +94,56 @@ void ALandBattle::LiveWhenReady(const FString& InKey, const FString& Me, int32 S
 	SetActorTickEnabled(true);
 }
 
+bool ALandBattle::WantsLiveTicket(FString& OutLookJson)
+{
+	FString File;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTicket="), File) || File.IsEmpty())
+	{
+		return false;
+	}
+	if (!FFileHelper::LoadFileToString(OutLookJson, *File) || !OutLookJson.TrimStart().StartsWith(TEXT("{")))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): -TheaterLandTicket=%s is not a ticket (JSON) this game can read"), *File);
+		OutLookJson.Empty();
+		return false;
+	}
+	return true;
+}
+
+bool ALandBattle::CampaignLiveOn()
+{
+	return CampaignLiveSwitch.GetValueOnGameThread() != 0 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCampaignLive"));
+}
+
+void ALandBattle::LiveTicketWhenReady(const FString& LookJson)
+{
+	// (its side and setup by the set piece's own switches)
+	LiveWhenReady(TEXT("field"));
+	PendingTicket = LookJson;
+}
+
+void ALandBattle::LiveTicketWhenReady(const FString& LookJson, const FString& Me, bool bDeploy)
+{
+	LiveWhenReady(TEXT("field"), Me, 0, bDeploy);
+	PendingTicket = LookJson;
+}
+
+bool ALandBattle::LiveResult(FString& OutJson) const
+{
+	return Live.IsValid() && Live->Result(OutJson);
+}
+
 bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy)
+{
+	return BeginLiveFrom(InKey, Seed, Me, bDeploy, FString());
+}
+
+bool ALandBattle::BeginLiveTicket(const FString& LookJson, const FString& Me, bool bDeploy)
+{
+	return BeginLiveFrom(TEXT("field"), 0, Me, bDeploy, LookJson);
+}
+
+bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy, const FString& LookJson)
 {
 	if (Live.IsValid() || State.IsValid())
 	{
@@ -95,12 +154,35 @@ bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me,
 	LiveMe = Me;
 	bLiveDeploy = bDeploy && !Me.IsEmpty();
 	TSharedPtr<FLandLive> Made = MakeShared<FLandLive>();
-	if (!Made->Start(InKey, Seed, Me, bLiveDeploy))
+	if (LookJson.IsEmpty() ? !Made->Start(InKey, Seed, Me, bLiveDeploy) : !Made->StartTicket(LookJson, Me, bLiveDeploy))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s not begun: the rules' thread could not start"), *InKey);
 		return false;
 	}
 	Live = Made;
+	// (the general's walk pressed in code for a builder with no hand on the mouse: LandBattleCommand.cpp)
+	ScriptFolder.Empty();
+	ScriptStep = 0;
+	ScriptAt = RealT;
+	ScriptUsed.Reset();
+	ScriptTaken.Reset();
+	if (!Me.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScript="), ScriptFolder) && !ScriptFolder.IsEmpty())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (script): his steps will be pressed in code, stills into %s"), *ScriptFolder);
+	}
+	// The crash locator (LandFell): on for the walk, or by -TheaterLandFell=<folder> for any live battle; a crash then
+	// leaves fell-over.txt (where it fell, its stack as library and offset) and fell-over-ring.txt (the frame's last
+	// parts, kept as it goes) in that folder.
+	FString FellFolder = ScriptFolder;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFell="), FellFolder);
+	if (!FellFolder.IsEmpty() && !LandFell::Armed())
+	{
+		IFileManager::Get().MakeDirectory(*FellFolder, true);
+		const FString Report = FPaths::ConvertRelativePathToFull(FPaths::Combine(FellFolder, TEXT("fell-over.txt")));
+		const FString Ring = FPaths::ConvertRelativePathToFull(FPaths::Combine(FellFolder, TEXT("fell-over-ring.txt")));
+		const bool bOn = LandFell::Arm(TCHAR_TO_UTF8(*Report), TCHAR_TO_UTF8(*Ring));
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the crash locator %s: %s"), bOn ? TEXT("on") : TEXT("not on this machine"), *Report);
+	}
 	bLiveWaiting = true;
 	bLiveBroken = false;
 	LiveWaited = 0.0;
@@ -118,9 +200,10 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		// (two seconds in, as a recording: the table and its light are up, so that they are put away after)
 		if (GetWorld() && GetWorld()->GetTimeSeconds() > 2.0)
 		{
-			const FString Asked = PendingLive;
+			const FString Asked = PendingLive, Look = PendingTicket;
 			PendingLive.Empty();
-			BeginLive(Asked, LiveSeed, LiveMe, bLiveDeploy);
+			PendingTicket.Empty();
+			BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look);
 		}
 		return true;
 	}
@@ -172,6 +255,39 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 	}
 	// (his clipboard: the blocks' names and his side, from the header)
 	S.General.Clipboard.Begin(S.Rec);
+	// The field as laid: its hedge lines and gateways to the rules before the clock runs (the historian's check, 22
+	// November: a block on a hedge line hides as in woods, and the men on foot go through the gates). The wood's edges
+	// are the woods' own, and the far strips lie off the field.
+	{
+		static const TCHAR* const KindWord[] = { TEXT("hedgerow"), TEXT("bank"), nullptr, TEXT("garden"), TEXT("wall"), nullptr };
+		FString Hedges = TEXT("["), Gates = TEXT("[");
+		int32 Lines = 0, Ways = 0;
+		if (S.Field)
+		{
+			for (const LandField::HedgeLine& H : S.Field->Hedges())
+			{
+				const TCHAR* Word = H.Kind >= 0 && H.Kind < 6 ? KindWord[H.Kind] : nullptr;
+				if (!Word || H.Points.size() < 2) continue;
+				Hedges += FString::Printf(TEXT("%s{\"kind\":\"%s\",\"points\":["), Lines ? TEXT(",") : TEXT(""), Word);
+				for (size_t P = 0; P < H.Points.size(); ++P)
+				{
+					Hedges += FString::Printf(TEXT("%s[%.1f,%.1f]"), P ? TEXT(",") : TEXT(""), H.Points[P].first, H.Points[P].second);
+				}
+				Hedges += TEXT("]}");
+				++Lines;
+			}
+			for (const LandField::HedgeOpening& O : S.Field->Openings())
+			{
+				if (O.Kind != 0) continue;
+				Gates += FString::Printf(TEXT("%s{\"x\":%.1f,\"y\":%.1f,\"yaw\":%.4f,\"width\":%.1f,\"kind\":\"gate\"}"), Ways ? TEXT(",") : TEXT(""), O.X, O.Y, O.Yaw, O.Width);
+				++Ways;
+			}
+		}
+		Hedges += TEXT("]");
+		Gates += TEXT("]");
+		Live->Field(Hedges, Gates);
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %d hedge lines and %d gateways handed to the rules (%d KB)"), Lines, Ways, (Hedges.Len() + Gates.Len()) / 1024);
+	}
 	return true;
 }
 
@@ -188,9 +304,13 @@ void ALandBattle::PumpLive()
 	Live->Answers(Said);
 	for (const FLandLive::FAnswer& A : Said)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
-			A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
-		if (!A.bOk)
+		// (the field's hedges are logged by the rules' thread with their count: "the field's hedges handed to the rules")
+		if (A.Kind != TEXT("hedges"))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
+				A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
+		}
+		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
 			S.NoteAge = 0.0;
@@ -216,12 +336,14 @@ void ALandBattle::PumpLive()
 		const int32 VehiclesBefore = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
 		LandFeed::Grown G;
 		std::string Error;
+		LandFell::Phase("live: a piece read", Taken);
 		if (!LandFeed::AppendDelta(Delta, S.Rec, G, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): a piece at %.1f s not read: %s"), S.Rec.Fought, *WideOf(Error));
 			continue;
 		}
 		S.Play.Extend(G);
+		LandFell::Phase("live: the men grown", G.bReset ? 1 : 0);
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the men not grown at %.1f s: %s"), G.T, *WideOf(Error));
@@ -230,6 +352,7 @@ void ALandBattle::PumpLive()
 		// part cannot be made has every mid man skinned, as MakeMen does)
 		if (Vat && S.Men)
 		{
+			LandFell::Phase("live: the men's crowd grown");
 			Vat->Grow(*S.Men, G.bReset);
 			if (Vat->MidMissing())
 			{
@@ -245,6 +368,7 @@ void ALandBattle::PumpLive()
 				WordsBefore.push_back(V.Words());
 			}
 		}
+		LandFell::Phase("live: the tanks grown", G.bReset ? 1 : 0);
 		if (S.Armour && !S.Armour->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the tanks not grown at %.1f s: %s"), G.T, *WideOf(Error));
@@ -260,6 +384,7 @@ void ALandBattle::PumpLive()
 				bVehiclesKept = W.Block == WordsBefore[V].Block && W.K == WordsBefore[V].K && W.J == WordsBefore[V].J;
 			}
 		}
+		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
 		if (G.bBegun)
 		{
@@ -268,6 +393,12 @@ void ALandBattle::PumpLive()
 		if (G.bOver)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): over at %.1f s; the rules' slowest piece %.0f ms"), S.Rec.End, Live->MostMs());
+			// (the result as the campaign takes it back, TC.battleSettleLand: in the log for a campaign battle's test run)
+			FString Result;
+			if (Live->Result(Result))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the result for the campaign (%d bytes): %s"), Result.Len(), *Result.Left(400));
+			}
 		}
 	}
 }
@@ -371,6 +502,20 @@ void ALandBattle::MapLive(int32 TracksFrom, int32 VehiclesFrom, bool bReset, boo
 		{
 			MakeBodies(NewFrom);
 		}
+		// The riders: after a reset the crowd's men were all made again, its riders gone with them, so the tank
+		// commanders and the light cars' and motorcycles' men are seated afresh (never a stale number posing another
+		// man); else the new light cars' and motorcycles' men.
+		if (bReset)
+		{
+			S.Seated.clear();
+			S.SeatedDone.clear();
+			MakeRiders();
+			SeatLight(0);
+		}
+		else
+		{
+			SeatLight(FMath::Max(0, VehiclesFrom));
+		}
 	}
 }
 
@@ -447,6 +592,7 @@ void ALandBattle::CloseLive()
 	if (Live.IsValid())
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (live): closed at %.1f s fought; the rules' last piece %.0f ms, the slowest %.0f ms"), Live->Fought(), Live->LastMs(), Live->MostMs());
+		LandFell::Disarm();
 		Live->Close();
 		Live.Reset();
 	}

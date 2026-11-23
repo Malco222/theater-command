@@ -160,6 +160,24 @@ namespace LandFeed
 				Row.bHidden = U["hid"].Truth(false);
 				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
 				Row.Men = U["men"].Int(-1);
+				Row.bVague = U["vague"].Truth(false);
+				Row.bCutter = U["cutter"].Truth(false);
+				Row.Smoke = U["smoke"].Int(-1);
+				const Json& Waits = U["waits"];
+				if (Waits.IsObject())
+				{
+					Row.bWaits = true;
+					Row.WaitDue = Waits["due"].Num(-1.0);
+					Row.bWaitLate = Waits["late"].Truth(false);
+					Row.bWaitFree = Waits["free"].Truth(false);
+				}
+				const Json& Search = U["search"];
+				if (Search.IsArray() && Search.Count() >= 2)
+				{
+					Row.bSearch = true;
+					Row.SearchX = Search.Items[0].Num(0.0);
+					Row.SearchY = Search.Items[1].Num(0.0);
+				}
 				const Json& O = U["order"];
 				if (O.IsObject())
 				{
@@ -170,6 +188,42 @@ namespace LandFeed
 					for (const Json& P : O["path"].Items) Row.OrderPath.push_back({ P.At(0).Num(0.0), P.At(1).Num(0.0) });
 				}
 				V.Units.push_back(std::move(Row));
+			}
+			// (neighbours join the fight, release 2: the corps still coming up from next door, where and when)
+			for (const Json& C : J["coming"].Items)
+			{
+				Arrival Row;
+				Row.Id = C["id"].Int(0);
+				Row.Side = SideOf(C["side"].Str());
+				Row.Corps = C["corps"].Int(0);
+				Row.Kind = C["kind"].Str("inf");
+				Row.Edge = C["edge"].Str("");
+				Row.Arrive = C["arrive"].Str("");
+				Row.At = C["at"].Num(0.0);
+				Row.X = C["x"].Num(0.0);
+				Row.Y = C["y"].Num(0.0);
+				V.Coming.push_back(std::move(Row));
+			}
+			// (the rider ahead, release 2: his own corps' despatch riders)
+			for (const Json& R : J["riders"].Items)
+			{
+				Rider Row;
+				Row.Corps = R["corps"].Int(0);
+				Row.Side = SideOf(R["side"].Str());
+				Row.X = R["x"].Num(0.0);
+				Row.Y = R["y"].Num(0.0);
+				Row.Face = R["face"].Num(0.0);
+				Row.Speed = R["speed"].Num(0.0);
+				Row.There = R["there"].Num(0.0);
+				Row.Comes = R["comes"].Num(0.0);
+				Row.Line = R["line"].IsNumber() ? R["line"].Num() : -1.0;
+				Row.Edge = R["edge"].Str("");
+				Row.Name = R["name"].Str("");
+				Row.Kind = R["kind"].Str("");
+				Row.Says = R["says"].Str("");
+				Row.Men = R["men"].Int(0);
+				Row.Str = R["str"].Num(1.0);
+				V.Riders.push_back(std::move(Row));
 			}
 		}
 
@@ -348,6 +402,11 @@ namespace LandFeed
 				R.ScarCount = std::max(0, Root["scars"]["count"].Int(0));
 				R.ScarMonths = std::max(0.0, Root["scars"]["months"].Num(0.0));
 			}
+			if (Root["oldRuts"].IsObject())
+			{
+				R.OldRutCount = std::max(0, Root["oldRuts"]["count"].Int(0));
+				R.OldRutMonths = std::max(0.0, Root["oldRuts"]["months"].Num(0.0));
+			}
 		}
 
 		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or
@@ -429,6 +488,7 @@ namespace LandFeed
 			Row.H = R["h"].Num(0.0);
 			Row.G = R["g"].Str("");
 			Row.bCm = R["cm"].Int(0) != 0;
+			Row.bMate = R["m"].Int(0) != 0;
 			Row.Hang = R["hang"].IsNumber() ? R["hang"].Num() : -1.0;
 		}
 
@@ -675,6 +735,8 @@ namespace LandFeed
 			Row.Men0 = B["men0"].Int(0);
 			Row.W = B["w"].Num(0.0);
 			Row.D = B["d"].Num(0.0);
+			Row.Corps = B["corps"].Int(0);
+			Row.bJoins = B["joins"].Truth(false);
 			Out.Blocks.push_back(std::move(Row));
 		}
 		for (const Json& P : Root["phases"].Items)
@@ -828,7 +890,11 @@ namespace LandFeed
 			const bool bHurt = ReadHurt(M, T);
 			if (ReadCarries(M, T, R) || bHurt) Note(Out.Hurt, N);
 		}
-		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point.
+		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point. (Each man noted as moved once, by
+		// a mark a track: a search of the moved so far for each tail, thousands of tails against thousands of moved men,
+		// was 12 ms of a big battle's 31 a piece in the cloud. Release 1.5's Orel stall note, 23 November.)
+		std::vector<uint8_t> MovedNow(R.Tracks.size(), 0);
+		for (const int N : Out.Moved) MovedNow[static_cast<size_t>(N)] = 1;
 		const Json& Tails = Root["tails"];
 		for (size_t K = 0; K + 3 < Tails.Count(); K += 4)
 		{
@@ -847,7 +913,11 @@ namespace LandFeed
 			P.F = Tails.At(K + 3).Num(0.0);
 			T.At.push_back(P);
 			T.bTail = true;
-			if (Out.Moved.empty() || std::find(Out.Moved.begin(), Out.Moved.end(), N) == Out.Moved.end()) Out.Moved.push_back(N);
+			if (!MovedNow[static_cast<size_t>(N)])
+			{
+				MovedNow[static_cast<size_t>(N)] = 1;
+				Out.Moved.push_back(N);
+			}
 		}
 		std::sort(Out.Moved.begin(), Out.Moved.end());
 		// A wreck stays where it was hit; and the spotter pair drawn once (as ReadRecording, on what is fought so far).

@@ -119,7 +119,7 @@ namespace LandField
 		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
 		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
-		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
 		 */
 		std::string Trial;
@@ -467,6 +467,11 @@ namespace LandField
 		 * the place is in): for what is laid flat on it, a shell hole's thrown soil, a track's strip, to be lit alike.
 		 * Under a bank or a house the ground's own, not theirs. Any thread. */
 		void DrawnUp(double X, double Y, double& OutX, double& OutY, double& OutZ) const;
+		/** The near ground's height at a place as its mesh is drawn: the flat triangle the place is in, its corners some
+		 * 4 m apart, not HeightAt's smooth height between them (they differ by a centimetre or two on a slope's bend).
+		 * For what lies thin on the ground, a shell hole's thrown soil's edge, not to sink under it. The ground's own
+		 * (no bank, no floor). Any thread. */
+		double DrawnZ(double X, double Y) const;
 		/** Whether a house's floor or a stone wall's line may be drawn at a place (the field's 2 m raster): where false,
 		 * HeightAt never says Floor or Wall there. A few nanoseconds, so the camera's sight (LandSight) asks HeightAt
 		 * only where it may. Any thread. */

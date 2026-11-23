@@ -36,6 +36,11 @@ namespace LandFeed
 		/** The real men it stands for at the start (a live battle's header; 0 where the recording does not say). */
 		int Men0 = 0;
 		double W = 0.0, D = 0.0;
+		/** The corps it belongs to (a live battle's header; 0 where not said), and whether that corps comes up from next door
+		 * later in the battle (neighbours join the fight, release 2): its block is in the header from the start, in the
+		 * views only once it has walked on, and till then in the views' Coming. */
+		int Corps = 0;
+		bool bJoins = false;
 		/** Tank crews' names, one per tank in the block's model order (empty strings for a plain tank). */
 		std::vector<std::string> CrewNames;
 	};
@@ -159,6 +164,9 @@ namespace LandFeed
 		std::string G;
 		/** It struck the tank's commander up in his hatch (the rules' cm: 1): he drops inside, and she fights buttoned up. */
 		bool bCm = false;
+		/** Shell blasts (release 2): a man struck by the burst of the round before it, or of the 'shell' event that burst
+		 * there (the rules' m: 1). No shot and no burst of its own: the one burst is drawn once. */
+		bool bMate = false;
 		/** A smoke round the player called (release 2, the general's smoke on call): how long its screen hangs once it
 		 * lands, battle seconds, as the rules' sight block holds it (the rules' "hang"); -1 where the round does not say
 		 * (the calibre's own time). */
@@ -206,6 +214,21 @@ namespace LandFeed
 		double OrderIn = -1.0;
 		/** The real men it stands for now (its start's men by its strength now), -1 where not said (an enemy not met). */
 		int Men = -1;
+		/** Found by its own fire but not yet located (the historian's check, 22 November: its men not yet plain, the fire
+		 * back at it halved for a while). */
+		bool bVague = false;
+		/** Firing into cover at a point to flush out what hides there (reconnaissance by fire), and the point. */
+		bool bSearch = false;
+		double SearchX = 0.0, SearchY = 0.0;
+		/** His own blocks' tools (Brian, 22 November 14:19Z; the rules say, on his own blocks only): a Sherman with hedge
+		 * cutters that can punch a gap at a hedge point he picks; and the smoke a section can still lay (-1 none said). */
+		bool bCutter = false;
+		int Smoke = -1;
+		/** Hold until relieved (release 2; Brian, 22 November 12:48Z; his own only): told to wait for a corps coming up from
+		 * next door; the battle second help can reach it; help never came (its men break sooner); no longer waiting (his
+		 * re-order or giving ground). Dug in where it stands while waiting and not free. */
+		bool bWaits = false, bWaitLate = false, bWaitFree = false;
+		double WaitDue = -1.0;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;
@@ -293,6 +316,39 @@ namespace LandFeed
 		std::string Cal;
 	};
 
+	/**
+	 * A block of a corps coming up from next door, not yet on the field (neighbours join the fight, release 2; the rules'
+	 * view().coming): his own side's, and the enemy's his staff knows of. Its corps walks on together at At (battle
+	 * seconds) at (X, Y) on the field's Edge (south, north, west, east); Arrive the card's word for when (early, midway,
+	 * late; empty where not said).
+	 */
+	struct Arrival
+	{
+		int Id = 0;
+		int Side = -1;
+		int Corps = 0;
+		std::string Kind, Edge, Arrive;
+		double At = 0.0, X = 0.0, Y = 0.0;
+	};
+
+	/**
+	 * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+	 * strength and arrival time"): his own corps coming up from next door sends a despatch rider on a motorcycle first. He
+	 * rides from its edge to the middle of his army (there: the battle second he reaches it) and stands there until his
+	 * corps comes up (comes), then leaves the views. Says: the relief's strength and times in words for a click. Looks and
+	 * words only: nothing in the fight reads him.
+	 */
+	struct Rider
+	{
+		int Corps = 0, Side = -1;
+		double X = 0.0, Y = 0.0, Face = 0.0, Speed = 0.0, There = 0.0, Comes = 0.0;
+		/** When his staff fights it, the battle second it reaches his line (-1 where it waits for his orders). */
+		double Line = -1.0;
+		std::string Edge, Name, Kind, Says;
+		int Men = 0;
+		double Str = 1.0;
+	};
+
 	/** One battle second's view: the bars and the blocks' stands. */
 	struct View
 	{
@@ -301,6 +357,10 @@ namespace LandFeed
 		double BreakingAtt = 0.0, BreakingDef = 0.0;
 		double Contact = -1.0;
 		std::vector<Unit> Units;
+		/** The blocks of corps still coming up from next door that the player may know of (empty: none). */
+		std::vector<Arrival> Coming;
+		/** His own corps' despatch riders riding in ahead of them (empty: none). */
+		std::vector<Rider> Riders;
 	};
 
 	struct Field
@@ -415,6 +475,13 @@ namespace LandFeed
 		 */
 		int ScarCount = 0;
 		double ScarMonths = 0.0;
+		/**
+		 * Mud memory (release 2, Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for
+		 * the next battle there; looks only, as the scars): root "oldRuts" {"count": the battles fought here in mud
+		 * before, "months": since the last}. Count 0 where none is given.
+		 */
+		int OldRutCount = 0;
+		double OldRutMonths = 0.0;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header

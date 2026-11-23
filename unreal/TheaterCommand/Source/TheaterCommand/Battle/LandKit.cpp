@@ -1474,7 +1474,9 @@ namespace LandKit
 			{
 				continue;
 			}
-			std::string Pick = ChoiceIn(Row, Group);
+			// (release 2: a choice the rules picked for her, where her model has it: a motorcycle's sidecar, a staff jeep's gun)
+			const auto Chosen = D.Choose.find(Group);
+			std::string Pick = Chosen != D.Choose.end() && S["choices"][Chosen->second].IsObject() ? Chosen->second : ChoiceIn(Row, Group);
 			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
 			// Sherman without the American's .50 on her roof)
 			if (Pick.empty() && S["by_nation"].IsObject())
@@ -2260,12 +2262,13 @@ namespace LandKit
 		}
 		else
 		{
-			// Wheels on the ground (their lowest point at the ground), and a gun's spades.
+			// Wheels on the ground (their lowest point at the ground), and a gun's spades. (Not a wheel her swaps leave off: a
+			// solo motorcycle's sidecar wheel.)
 			std::vector<V3> Contacts;
 			for (int P : Wheels)
 			{
 				const Part& W = Parts[static_cast<size_t>(P)];
-				if (W.Pivot.Z - W.Radius < 0.05)
+				if (W.bShown && W.Pivot.Z - W.Radius < 0.05)
 				{
 					Contacts.emplace_back(W.Pivot.X, W.Pivot.Y, 0.0);
 				}
@@ -3285,6 +3288,12 @@ namespace LandKit
 
 		// When she moves off and stops (a tenth of a second of going to move off, three tenths of standing to stop, so a
 		// halt of a moment in the recording does not jerk her). Each is dated back to when she began to go or to stand.
+		// A turn on the spot alone must hold TurnHolds to move her off: in a live battle the reader dates a provisional
+		// point at its piece's own time, so a hull wandering inside the keeper's own slack (KEEP_F, 0.05 rad) over the
+		// 0.2 to 0.4 s before the next kept point reads as 0.2 rad/s, over the turning threshold below, and a vehicle
+		// standing still gave an engine note, a brake and a puff of dust she never gave in the battle read whole (the
+		// pre-check's find of 23 November, an M4 at 247.65 s). A real turn on the spot of under half a second is a
+		// twitch nobody sees; one that lasts is still dated back to where it began.
 		// (Worked out again: her moving off and stopping by Given are as the screen showed them, and so is she through
 		// those steps, while the new words still count how long she has been going or standing; one that the new words
 		// date by Given, too late to be shown then, comes at the first step after it.)
@@ -3294,7 +3303,8 @@ namespace LandKit
 			const double Soonest = TimeOf(Seen);
 			auto ShownOf = [Given](const std::vector<double>& L) { return static_cast<size_t>(std::upper_bound(L.begin(), L.end(), Given) - L.begin()); };
 			bool bOn = false;
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
+			constexpr double TurnHolds = 0.45;
 			size_t KeepOffs = ShownOf(MoveOffs), KeepStops = ShownOf(Stops);
 			if (From > 0)
 			{
@@ -3302,6 +3312,7 @@ namespace LandKit
 				bOn = R.bOn;
 				OnFor = R.OnFor;
 				OffFor = R.OffFor;
+				RollFor = R.RollFor;
 				KeepOffs = std::max(KeepOffs, R.MoveOffs);
 				KeepStops = std::max(KeepStops, R.Stops);
 			}
@@ -3318,6 +3329,7 @@ namespace LandKit
 					R.bOn = bOn;
 					R.OnFor = OnFor;
 					R.OffFor = OffFor;
+					R.RollFor = RollFor;
 					R.MoveOffs = MoveOffs.size();
 					R.Stops = Stops.size();
 				}
@@ -3328,7 +3340,8 @@ namespace LandKit
 					continue; // (knocked out for good: nothing moves her again)
 				}
 				const bool bTurning = !bGun && std::fabs(W[I]) > 0.12;
-				const bool bGo = std::fabs(V[I]) > 0.35 || bTurning;
+				const bool bRolling = std::fabs(V[I]) > 0.35;
+				const bool bGo = bRolling || bTurning;
 				const bool bStill = std::fabs(V[I]) < 0.15 && (bGun || std::fabs(W[I]) < 0.06);
 				if (I <= Seen || I == From)
 				{
@@ -3350,18 +3363,22 @@ namespace LandKit
 					{
 						bOn = bNow;
 						OnFor = bOn ? OnFor : 0.0;
+						RollFor = bOn ? RollFor : 0.0;
 						OffFor = bOn ? 0.0 : OffFor;
 					}
 				}
+				// (RollFor: how long of this run of going she has rolled, not only turned; a run that breaks clears it)
 				if (I < Seen)
 				{
 					OnFor = !bOn && bGo ? OnFor + Step : 0.0;
+					RollFor = !bOn && bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
 					OffFor = bOn && bStill ? OffFor + Step : 0.0;
 				}
 				else if (!bOn)
 				{
 					OnFor = bGo ? OnFor + Step : 0.0;
-					if (OnFor > 0.1 - 1e-9)
+					RollFor = bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
+					if (OnFor > 0.1 - 1e-9 && (RollFor > 0.0 || OnFor > TurnHolds - 1e-9))
 					{
 						bOn = true;
 						OffFor = 0.0;
@@ -3375,6 +3392,7 @@ namespace LandKit
 					{
 						bOn = false;
 						OnFor = 0.0;
+						RollFor = 0.0;
 						Stops.push_back(std::max(Soonest, T - OffFor + Step));
 					}
 				}
@@ -4534,6 +4552,16 @@ namespace LandKit
 	{
 		bool IsVehicle(const std::string& Role) { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 
+		/** A track's swaps the rules picked (release 2, "sw": {swap: choice}); none where it says none. */
+		void ReadSwaps(const Json::Value& Sw, std::map<std::string, std::string>& Out)
+		{
+			Out.clear();
+			for (size_t I = 0; Sw.IsObject() && I < Sw.Count(); ++I)
+			{
+				Out[Sw.Name(I)] = Sw.At(I).Str("");
+			}
+		}
+
 		/** A change of a track: [t, pose, cover, aimX | null, aimY | null, hidden, buttoned]. */
 		Change ReadChange(const Json::Value& C)
 		{
@@ -4924,6 +4952,11 @@ namespace LandKit
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
 			B.Captured = V["captured"].Str("");
+			const Json::Value Mls = V["mls"];
+			for (size_t J = 0; Mls.IsArray() && J < Mls.Count(); ++J)
+			{
+				B.Extra.push_back(Mls.At(J).Str(""));
+			}
 			OutBlocks.push_back(B);
 		}
 		const Json::Value Men = R["men"];
@@ -4941,6 +4974,8 @@ namespace LandKit
 			W.K = Man["k"].Int();
 			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
+			W.Model = Man["ml"].Str("");
+			ReadSwaps(Man["sw"], W.Swaps);
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
 			{
@@ -4989,19 +5024,26 @@ namespace LandKit
 		return FindBlock(BlockList, Id);
 	}
 
-	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError)
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier,
+		const std::map<std::string, std::string>& Choose)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
-		// she wears her owner's coat)
-		const std::string ModelName = Role == "lorry" ? "Truck" : B.Model;
+		// she wears her owner's coat. Release 2: where the recording names a vehicle's own model (ml), she is drawn as
+		// that: an armoured infantry's carrier, a half-track of her army's or the lorry; a battery's self-propelled gun;
+		// an armoured block's tank destroyer)
+		const std::string ModelName = !Carrier.empty() ? Carrier : Role == "lorry" ? std::string("Truck") : B.Model;
 		if (ModelName.empty())
 		{
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
 			return false;
 		}
 		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
-		const std::string Captured = Role != "lorry" && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
+		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
 		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
+		for (const auto& Sw : Choose)
+		{
+			OutKey += "|" + Sw.first + "=" + Sw.second; // (her swaps the rules picked: a look of her own)
+		}
 		if (Looks.count(OutKey))
 		{
 			return true;
@@ -5021,7 +5063,8 @@ namespace LandKit
 				bLight = bLight || ModelName.find(L) != std::string::npos;
 			}
 			std::vector<std::string> Near;
-			if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			if (Role == "lorry") Near = { "Truck" }; // (a carrier not in the game yet: the lorry)
+			else if (B.Kind == "art" && Carrier.empty()) Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
 			else if (bLight || N == "JAP") Near = { "LightTank" };
 			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
 			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
@@ -5050,6 +5093,7 @@ namespace LandKit
 		D.Month = Month;
 		D.Terrain = Terrain;
 		D.Captured = Captured;
+		D.Choose = Choose;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -5127,7 +5171,10 @@ namespace LandKit
 		// a self-propelled gun: the fates' tank ways name theirs, blow, burn or still). The table then picks how that end
 		// looks.
 		const Block* Of = BlockOf(W.Block);
-		const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+		// (by the model's file name, as performance-land.json keys it: her own where the recording names it, a tank
+		// destroyer's or a self-propelled gun's, else her block's)
+		const std::string Named = !W.Model.empty() && W.Role != "lorry" ? W.Model : Of ? Of->Model : M.Name;
+		const auto Odds = Fires.find(Named);
 		if (Kill && (Kill->Fate == "out" || Kill->Fate == "burn" || Kill->Fate == "blow"))
 		{
 			Bl.How = Kill->Fate == "out" ? "still" : Kill->Fate;
@@ -5151,7 +5198,7 @@ namespace LandKit
 			Bl.How.clear();
 			F = Picker->Choose(Bl);
 		}
-		Ends.push_back({ Index, Of ? Of->Model : M.Name, Bl.Aspect, Drawn, F.Key });
+		Ends.push_back({ Index, Named, Bl.Aspect, Drawn, F.Key });
 		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
 		return F.Key;
 	}
@@ -5235,7 +5282,7 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError))
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model, Tracks[I].Swaps))
 			{
 				return false;
 			}
@@ -5243,13 +5290,34 @@ namespace LandKit
 		if (bLive)
 		{
 			// A live battle's header has no men yet: the models its blocks name are read now (and the lorry of a side
-			// with guns to tow), so its first pieces do not wait on them.
+			// with guns to tow; release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn
+			// with, "mls"), so its first pieces do not wait on them.
 			for (const Block& B : BlockList)
 			{
 				std::string Key;
 				if (!B.Model.empty() && (!LoadLook(B, "tank", Key, OutError) || (B.Kind == "art" && !LoadLook(B, "lorry", Key, OutError))))
 				{
 					return false;
+				}
+				for (const std::string& Look : B.Extra)
+				{
+					// ("Jeep|mg=off": the model and the swaps the rules pick for her)
+					std::map<std::string, std::string> Choose;
+					size_t Bar = Look.find('|');
+					const std::string Ml = Look.substr(0, Bar);
+					while (Bar != std::string::npos)
+					{
+						const size_t Next = Look.find('|', Bar + 1), Eq = Look.find('=', Bar + 1);
+						if (Eq != std::string::npos && Eq < Next)
+						{
+							Choose[Look.substr(Bar + 1, Eq - Bar - 1)] = Look.substr(Eq + 1, Next == std::string::npos ? std::string::npos : Next - Eq - 1);
+						}
+						Bar = Next;
+					}
+					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml, Choose))
+					{
+						return false;
+					}
 				}
 			}
 		}
@@ -5357,6 +5425,8 @@ namespace LandKit
 					W.K = Man["k"].Int();
 					W.J = std::max(0, Man["j"].Int(0));
 					W.Role = Role;
+					W.Model = Man["ml"].Str("");
+					ReadSwaps(Man["sw"], W.Swaps);
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
@@ -5364,7 +5434,7 @@ namespace LandKit
 						return false;
 					}
 					std::string Key;
-					if (!LoadLook(*B, Role, Key, OutError))
+					if (!LoadLook(*B, Role, Key, OutError, W.Model, W.Swaps))
 					{
 						return false;
 					}

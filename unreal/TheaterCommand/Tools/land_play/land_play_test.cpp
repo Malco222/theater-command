@@ -1030,7 +1030,8 @@ int main(int argc, char** argv)
 				if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water || Under.What == LandField::Drawn::Marsh) return std::string();
 				if (OldPtr->Dig && !OldPtr->Dig(X, Y)) return std::string();
 				return std::string(Under.Fx);
-			});
+			},
+			LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR));
 		const double ScarMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ScarT0).count();
 		const int ScarWanted = std::min(LandCrater::Field::Most / 6, 150 * 2);
 		int NotDig = 0, NotBare = 0, NoBareR = 0, TooDeep = 0;
@@ -1041,7 +1042,57 @@ int main(int argc, char** argv)
 			if (!Old.Bare(H.X, H.Y)) ++NotBare;
 			if (H.BareR <= 0.0) ++NoBareR;
 			DeepestOld = std::max(DeepestOld, H.Deep);
-			if (H.Deep > 0.75) ++TooDeep;
+			if (H.Deep > 0.81) ++TooDeep;
+		}
+		// (along the old lines, the art director's 23 November: most within 25 m of a hedge, a wall or a lane, or 30 m of
+		// a junction or the village's edge, where the field has any over the fought-over ground)
+		const LandCrater::OldLines OldOnes = LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR);
+		const auto OnOld = [&OldOnes](double Px, double Py)
+		{
+			for (const auto& Sp : OldOnes.Spots)
+				if (std::hypot(Px - Sp.first, Py - Sp.second) <= 30.0) return true;
+			for (const auto& Ln : OldOnes.Lines)
+			{
+				for (size_t K = 0; K + 1 < Ln.size(); ++K)
+				{
+					const double Ax = Ln[K].first, Ay = Ln[K].second, Bx = Ln[K + 1].first, By = Ln[K + 1].second;
+					const double L2 = (Bx - Ax) * (Bx - Ax) + (By - Ay) * (By - Ay);
+					const double T = L2 > 0.0 ? std::clamp(((Px - Ax) * (Bx - Ax) + (Py - Ay) * (By - Ay)) / L2, 0.0, 1.0) : 0.0;
+					if (std::hypot(Px - (Ax + (Bx - Ax) * T), Py - (Ay + (By - Ay) * T)) <= 25.0) return true;
+				}
+			}
+			return false;
+		};
+		int OnLine = 0, FoughtOn = 0, FoughtSeen = 0;
+		for (const LandCrater::Field::Hole& H : Old.All())
+			if (OnOld(H.X, H.Y)) ++OnLine;
+		const double OnShare = ScarsLaid > 0 ? static_cast<double>(OnLine) / ScarsLaid : 0.0;
+		// (against the fought-over ground itself: as many of its points, read the same way, for the share strewn holes would have)
+		for (size_t K = 0; K < Fought.size(); K += std::max<size_t>(1, Fought.size() / 300), ++FoughtSeen)
+			if (OnOld(Fought[K].first, Fought[K].second)) ++FoughtOn;
+		const double StrewnShare = FoughtSeen > 0 ? static_cast<double>(FoughtOn) / FoughtSeen : 0.0;
+		// (its age: a 150's bowl at 6, 12 and 24 months against a fresh one's, laid where nothing stops the dig)
+		double AgedDeep[4] = { 0.0, 0.0, 0.0, 0.0 };
+		if (!Fought.empty())
+		{
+			LandCrater::Field Ages;
+			Ages.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, 7);
+			const double AgeMonths[4] = { -1.0, 6.0, 12.0, 24.0 };
+			for (int K = 0; K < 4; ++K)
+			{
+				const double Ax = Fought[0].first + 40.0 * K, Ay = Fought[0].second;
+				if (AgeMonths[K] < 0.0 ? Ages.Add(Ax, Ay, "heavy", 0.0, "earth") : Ages.AddOld(Ax, Ay, "heavy", 0.0, "earth", AgeMonths[K]))
+					AgedDeep[K] = Ages.All().back().Deep;
+			}
+		}
+		std::printf("scars: %.0f%% of the old holes on an old line (the fought-over ground's own points %.0f%%; %zu lines, %zu junctions and village edge); a 150's bowl %.2f m fresh, %.2f at 6 months, %.2f at 12, %.2f at 24\n",
+			100.0 * OnShare, 100.0 * StrewnShare, OldOnes.Lines.size(), OldOnes.Spots.size(), AgedDeep[0], AgedDeep[1], AgedDeep[2], AgedDeep[3]);
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && OnShare < 0.55) Fault("scars: the old holes strewn, not along the old lines");
+		if (AgedDeep[0] > 0.0)
+		{
+			const double Mark[3] = { 0.8, 0.65, 0.5 };
+			for (int K = 0; K < 3; ++K)
+				if (std::fabs(AgedDeep[K + 1] / AgedDeep[0] - Mark[K]) > 0.01) Fault("scars: an old bowl's depth off the art director's mark for its age");
 		}
 		// (a fresh 105 after them, on the first open ground of the fought-over ground with no old hole's cut on it)
 		bool bFreshLaid = false, bFreshTried = false;
@@ -1060,8 +1111,127 @@ int main(int argc, char** argv)
 		if (NotDig > 0) Fault("scars: an old hole on ground Dig keeps (a lane, a yard, a floor, water)");
 		if (NotBare > 0) Fault("scars: the grass not kept off an old hole's middle");
 		if (NoBareR > 0) Fault("scars: an old hole without its own bare patch");
-		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.75 m (not silted)");
+		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.81 m (a 150's at six months is 0.8)");
 		if (bFreshTried && !bFreshLaid) Fault("scars: a fresh round's hole not laid after the old ones");
+	}
+	// The thrown soil's thin edge on the ground as drawn (pre-check's probe, 23 November: laid 2 mm over HeightAt's
+	// smooth height, a quarter of its points sank under the drawn ground's flat triangles on a slope's bend): holes laid
+	// as the game lays them (on HeightAt, painted by the ground's colour, lit by its normal, their soil on DrawnZ), each
+	// outer point at or over the drawn ground but inside a newer hole's cut, where that ground is cut away.
+	{
+		LandCrater::Field Edge;
+		Edge.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, 29u, [&Field](double X, double Y) { return Field.ColourAt(X, Y); });
+		Edge.Lit = [&Field](double X, double Y, double& NX, double& NY, double& NZ) { Field.DrawnUp(X, Y, NX, NY, NZ); };
+		Edge.Drawn = [&Field](double X, double Y) { return Field.DrawnZ(X, Y); };
+		Edge.Dig = LandCrater::Field::DigOn(Field);
+		int Tried = 0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size() && Tried < 300; K += 37)
+			{
+				const double X = Tr.At[K].X, Y = Tr.At[K].Y;
+				if (!Edge.Dig(X, Y) || Edge.Bare(X, Y)) continue;
+				++Tried;
+				Edge.Add(X, Y, Tried % 3 == 0 ? "mortar" : Tried % 3 == 1 ? "field" : "heavy", 0.0, std::string(Field.At(X, Y).Fx));
+			}
+		}
+		int EdgePoints = 0, EdgeUnder = 0;
+		double EdgeWorst = 0.0;
+		for (const LandCrater::Field::Hole& H : Edge.All())
+		{
+			if (H.bBreach || H.Sides < 3) continue;
+			const LandField::Mesh& M = Edge.Section(H.In);
+			for (int K = 0; K < H.Sides; ++K)
+			{
+				// (its outer ring: the middle, then nine rings of Sides points, the ninth the thin edge)
+				const size_t I = static_cast<size_t>(H.First) + 1u + static_cast<size_t>(8 * H.Sides + K);
+				if (I * 3 + 2 >= M.Positions.size()) continue;
+				const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
+				if (Edge.InCut(Px, Py)) continue;
+				++EdgePoints;
+				const double Below = Field.DrawnZ(Px, Py) - Pz;
+				EdgeWorst = std::max(EdgeWorst, Below);
+				if (Below > 0.0005) ++EdgeUnder;
+			}
+		}
+		std::printf("thrown soil's edge: %zu holes, %d edge points, %d under the drawn ground (the most %.1f mm)\n", Edge.All().size(), EdgePoints, EdgeUnder, 1000.0 * EdgeWorst);
+		if (EdgePoints > 0 && EdgeUnder > 0) Fault("a shell hole's thin edge sank under the ground as drawn");
+	}
+	// Mud memory (release 2; Brian 23 November): the ruts of two battles fought here in mud before, laid as LandBattle's
+	// LayOldRuts lays them (its ways through the hedges' gateways, else along the machines' heading); how many, how fast,
+	// within their cap; a month on bare (no grass stands in them), at six grassed (it stands again).
+	{
+		std::vector<std::pair<double, double>> Fought, Gates;
+		double Sx = 0.0, Sy = 0.0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size(); K += 4) Fought.emplace_back(Tr.At[K].X, Tr.At[K].Y);
+			if (Tr.IsVehicle() && Tr.At.size() >= 2)
+			{
+				const double Dx = Tr.At.back().X - Tr.At.front().X, Dy = Tr.At.back().Y - Tr.At.front().Y, Long = std::hypot(Dx, Dy);
+				if (Long > 20.0) { Sx += Long * std::cos(2.0 * std::atan2(Dy, Dx)); Sy += Long * std::sin(2.0 * std::atan2(Dy, Dx)); }
+			}
+		}
+		for (const LandField::HedgeOpening& O : Field.Openings()) Gates.emplace_back(O.X, O.Y);
+		const double Heading = Sx * Sx + Sy * Sy > 0.0 ? 0.5 * std::atan2(Sy, Sx) : std::nan("");
+		const auto RutT0 = std::chrono::steady_clock::now();
+		// (where a column may drive, as LandBattle's LayOldRuts says)
+		const auto Open = [&Field](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Field.HeightAt(X, Y, &What);
+			return What == LandField::Drawn::Pasture || What == LandField::Drawn::Crop || What == LandField::Drawn::Rough || What == LandField::Drawn::Works || What == LandField::Drawn::Beyond;
+		};
+		const auto Ways = LandCrater::OldWays(Fought, 2, Rec.Seed ? Rec.Seed : 1, Gates, Heading, Open);
+		// (none across a hedge's bank, a lane, a wall, a yard, a wood or water, but within 6 m of a gateway: pre-check's
+		// 01:36Z, the ways had crossed banks away from any gateway; read every 1.2 m along them)
+		int Crossed = 0, Read = 0;
+		for (const auto& W : Ways)
+			for (size_t K = 0; K + 1 < W.size(); ++K)
+			{
+				const double L = std::hypot(W[K + 1].first - W[K].first, W[K + 1].second - W[K].second);
+				for (int I = 0; I < std::max(1, static_cast<int>(L / 1.2)); ++I)
+				{
+					const double T = I * 1.2 / std::max(1e-6, L), Px = W[K].first + (W[K + 1].first - W[K].first) * T, Py = W[K].second + (W[K + 1].second - W[K].second) * T;
+					bool bNearGate = false;
+					for (const auto& G : Gates)
+						if (std::hypot(Px - G.first, Py - G.second) < 6.5) { bNearGate = true; break; }
+					if (bNearGate) continue;
+					++Read;
+					if (!Open(Px, Py)) ++Crossed;
+				}
+			}
+		int Laid[2] = { 0, 0 }, FlatOn[2] = { 0, 0 }, Asked = 0;
+		double RutMs = 0.0;
+		for (int Age = 0; Age < 2; ++Age)
+		{
+			LandCrater::Ruts Old;
+			Old.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, [&Field](double X, double Y) { return Field.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(Field));
+			Laid[Age] = Old.LayOld(Ways, Age == 0 ? 1.0 : 6.0, false, Rec.Seed ? Rec.Seed : 1);
+			if (Age == 0) RutMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - RutT0).count();
+			// (on each way's ruts, either side of its line some 1.35 m)
+			for (const auto& W : Ways)
+				for (size_t K = 1; K + 1 < W.size(); K += 3)
+				{
+					const double Dx = W[K + 1].first - W[K - 1].first, Dy = W[K + 1].second - W[K - 1].second, L = std::max(1e-6, std::hypot(Dx, Dy));
+					for (const double Side : { 1.35, -1.35 })
+					{
+						if (Age == 0) ++Asked;
+						if (Old.Flat(W[K].first - Dy / L * Side, W[K].second + Dx / L * Side)) ++FlatOn[Age];
+					}
+				}
+		}
+		std::printf("mud memory: %d of %d places along the ways where no column drives (but at a gateway)\n", Crossed, Read);
+		if (Crossed > 0) Fault("mud memory: an old way crosses a hedge's bank, a lane, a wall, a yard, a wood or water");
+		std::printf("mud memory: %zu ways (%zu gateways), %d pieces of old ruts at a month and %d at six (at most %d) laid in %.1f ms; grass kept off at %d of %d places on them at a month, %d at six\n",
+			Ways.size(), Gates.size(), Laid[0], Laid[1], LandCrater::Ruts::MostOld, RutMs, FlatOn[0], Asked, FlatOn[1]);
+		if (!Fought.empty() && Ways.empty()) Fault("mud memory: no way laid over the fought-over ground");
+		if (!Ways.empty() && Laid[0] == 0) Fault("mud memory: no old rut laid");
+		if (Laid[0] > LandCrater::Ruts::MostOld || Laid[1] > LandCrater::Ruts::MostOld) Fault("mud memory: more old ruts than their cap");
+		if (Laid[0] != Laid[1]) Fault("mud memory: the same ways laid differently by their age");
+		if (RutMs > 500.0) Fault("mud memory: laying the old ruts took past half a second");
+		if (Laid[0] > 0 && FlatOn[0] == 0) Fault("mud memory: grass standing in a month-old rut (dried mud)");
+		if (FlatOn[1] > 0) Fault("mud memory: grass kept off a rut grassed over at six months");
 	}
 	if (std::getenv("LAND_PLAY_ONLY_SCARS"))
 	{

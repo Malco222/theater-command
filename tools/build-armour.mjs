@@ -19,6 +19,7 @@ for (const [name, v] of Object.entries(d.vehicles)) {
     ...(v.fire_when_pierced ? { fire: { front: r2(v.fire_when_pierced.front), side: r2(v.fire_when_pierced.side), rear: r2(v.fire_when_pierced.rear) } } : {}),
     ...(v.explodes_of_fires !== undefined ? { explodes: r2(v.explodes_of_fires) } : {}),
     ...(gun?.heat_from ? { heat: gun.heat_from } : {}),
+    ...(v.radio !== undefined ? { radio: r2(v.radio) } : {}),
     sure: v.sure ?? 'design',
   };
 }
@@ -30,7 +31,7 @@ for (const [s, row] of Object.entries(d.duels.table)) {
 const out = {
   _about: [
     "Measured armour and guns (release 2; Brian, 22 November 04:03Z to 04:16Z: 'the named tanks have real advantages from their measured performance against their peers; German tanks are far weaker at the back, so hits there pay'). Built by tools/build-armour.mjs from the land vehicle modeller's sheet (performance-land.json); the historian checks the figures (sure: high, medium, low, or design for our own inventions). Do not edit by hand: rebuild.",
-    'ranges: metres. duels[shooter][target][face]: the chance a hit on that face comes through at each range (before: the same before the shooter had its hollow-charge round, from the month models[shooter].heat). models[name]: kills, the share of the hits that come through that put her out of the fight (the shooter\'s gun); fire, how often one that comes through sets her burning, by face; explodes, how often a fire reaches her ammunition.',
+    'ranges: metres. duels[shooter][target][face]: the chance a hit on that face comes through at each range (before: the same before the shooter had its hollow-charge round, from the month models[shooter].heat). models[name]: kills, the share of the hits that come through that put her out of the fight (the shooter\'s gun); fire, how often one that comes through sets her burning, by face; explodes, how often a fire reaches her ammunition; radio, the share of her kind with a set that talks (orders reach her the sooner).',
   ],
   source: src.split('/').slice(-1)[0],
   ranges: d.ranges_m,

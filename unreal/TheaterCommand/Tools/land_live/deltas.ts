@@ -7,12 +7,23 @@
 // so the test sees taken blocks and orders on the air.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LiveKeeper, livePiece, type LiveDelta } from '../../../../src/battle/land/live';
+import { LiveKeeper, livePiece, liveTicket, type LiveDelta, type LiveOpts } from '../../../../src/battle/land/live';
+import { PIECES, ticketOf } from '../../../../src/battle/land/pieces';
 import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
 const me: Side | null = meArg === 'none' ? null : (meArg as Side);
-const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false });
+// (LAND_LIVE_SWITCHES=blast,escort,mech,spg,td,cars,aa turns those Battle rules card rows on for the run (release 2). LAND_LIVE_BEARERS=0:
+// stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
+// run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
+const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
+const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}) };
+// (LAND_LIVE_CAMPAIGN=1: the set piece's ticket fought as a campaign battle, no set piece: its stand-in models, and the
+// self-propelled guns and tank destroyers the spg and td switches draw only there)
+const piece = PIECES.find((p) => p.key === key);
+const L = process.env.LAND_LIVE_CAMPAIGN === '1' && piece
+  ? liveTicket(ticketOf(piece, seedArg ? Number(seedArg) : piece.seeds[0], me), opts)
+  : livePiece(key, seedArg ? Number(seedArg) : undefined, opts);
 const header = L.header();
 const deltas: LiveDelta[] = [];
 const lines: string[] = [];

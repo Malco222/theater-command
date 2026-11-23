@@ -350,7 +350,7 @@ namespace LandCrater
 	}
 
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit)
+		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit, const HeightFn& Thin)
 	{
 		if (OutCut)
 		{
@@ -364,6 +364,7 @@ namespace LandCrater
 		const double R = 0.5 * S.Across;
 		const double RimHigh = std::max(0.0, S.Rim);
 		const double ReachOf = std::max(1.2, S.Reach);
+		const double Feather = std::min(1.5, 0.9 * R) * std::clamp(S.Feather, 0.0, 1.0); // (how far past the thrown soil's reach it thins into the grass)
 		const int N = std::clamp(S.Sides, 8, 48);
 		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
 
@@ -461,11 +462,26 @@ namespace LandCrater
 						Over = RimHigh * RimK[Kk] * std::pow(Smooth(W), 1.25);
 						Colour = Rg.T >= 1.0 ? Paint.Crest : Mixed(Paint.Wall, Paint.Crest, Smooth(W) * 0.8);
 					}
+					if (Paint.Bared > 0.0 && Rg.T >= 0.5 && Rg.T < 1.0 && D.U() < Paint.Bared)
+					{
+						// (an old hole's sides: here and there the bare soil still showing through the grass)
+						Colour = Mixed(Paint.Bare, Colour, D.U(0.0, 0.3));
+					}
 				}
 				else
 				{
 					// the thrown soil, falling away from the crest to a thin ragged edge over the grass
 					Radius = Rc * (1.0 + Rg.T * (Reach[Kk] - 1.0)) * (bRim ? D.U(0.78, 1.12) : D.U(0.96, 1.04));
+					if (bRim)
+					{
+						// (feathered into the grass: the soil thinning out over a metre and a half past where it lay
+						// thick, its edge broken, so the eye finds no line where the hole's earth ends. Ended at the
+						// thrown soil's reach it drew a hard polygon round every hole: the art director, 23 November)
+						// (each draw in its own statement: the same hole on every compiler)
+						const double Far = D.U(0.6, 1.4);
+						const double Short = D.U() < 0.25 ? D.U(0.35, 0.7) : 1.0;
+						Radius += Feather * Far * Short;
+					}
 					// (falling away fast from the crest: a narrow lip, the thrown soil beyond it a thin layer on the
 					// ground, not the flank of a mound)
 					Over = bRim ? 0.0 : RimHigh * RimK[Kk] * std::pow(1.0 - Rg.T, 3.0) * D.U(0.85, 1.15);
@@ -482,13 +498,15 @@ namespace LandCrater
 					else if (Deep > 0.0 && Rg.T < 0.4 && Patch < 0.62) Colour = Mixed(Colour, Soot, D.U(0.15, 0.35) * Fresh); // (blast-blackened soil thrown with it)
 				}
 				const double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
-				const double Edge = Rg.bOut && Rg.T >= 1.0 ? 0.6 : 1.0; // (the thin edge a little lower: it lies on the grass)
+				// (the thin edge lies on the grass: 2 mm over what is there, no step. At 0.6 of Base, 1.8 cm, its lip cast a thin
+				// dark line on the grass round every hole in the Mac's stills, 23 November, a seam where none should be)
+				const bool bLip = Rg.bOut && Rg.T >= 1.0;
 				if (Rg.bOut && Under && TurfShare >= 0.0)
 				{
 					// (turf torn from this ground: its own colour, a little darker for the soil on it)
 					Colour = Mixed(Unturfed, Mixed(Paint.Turf, Under(Px, Py), 0.7), TurfShare);
 				}
-				Rgb8 Painted = Toned(Colour, Tone[Kk] * D.U(0.92, 1.08));
+				Rgb8 Painted = Toned(Colour, 1.0 + (Tone[Kk] * D.U(0.92, 1.08) - 1.0) * Paint.Mottle);
 				if (Rg.bOut && Under)
 				{
 					// The thrown soil fades into the ground it lies on: its thin edge is the ground's own colour (no
@@ -496,7 +514,10 @@ namespace LandCrater
 					const Rgb8 Ground = Under(Px, Py);
 					Painted = bRim ? Ground : Rg.T >= 0.6 ? Mixed(Painted, Ground, 0.4) : Painted;
 				}
-				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + Base * Edge + Over, Painted);
+				// (the thrown soil on the ground as drawn: on HeightAt's smooth height its thin edge sank under the drawn
+				// triangles at a quarter of its points on a slope's bend, pre-check's probe, 23 November)
+				const double Gz = Rg.bOut && Thin ? Thin(Px, Py) : Height(Px, Py);
+				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Gz + (bLip ? (S.Feather > 0.0 ? 0.002 : 0.6 * Base) : Base + Over), Painted);
 			}
 		}
 		if (OutCut && Deep > 0.0)
@@ -904,17 +925,26 @@ namespace LandCrater
 		{
 			S.Deep *= 0.35;
 		}
-		// (an old hole: weathered toward a year's look. Its soot and its clods gone in the first weeks' rain; then its
-		// bowl silts and slumps, its crest wears down and its thrown soil spreads and thins; the art director's to tune)
+		// (an old hole, by the art director's marks, 23 November: at six months its bowl 80% as deep and its crest 70% as
+		// high, the soot, the clods and the splinters gone; at a year 65% and 50%; older, half as deep. Between them in
+		// a straight line; a month or two old, nearly as fresh but for the soot the first rains wash out)
 		const bool bOld = Months >= 0.0;
-		const double Age = bOld ? std::clamp(Months / 12.0, 0.0, 1.0) : 0.0;
+		const auto ByAge = [Months](double At0, double At6, double At12, double At24)
+		{
+			const double M = std::max(0.0, Months);
+			return M <= 6.0 ? At0 + (At6 - At0) * M / 6.0 : M <= 12.0 ? At6 + (At12 - At6) * (M - 6.0) / 6.0 : M <= 24.0 ? At12 + (At24 - At12) * (M - 12.0) / 12.0 : At24;
+		};
 		if (bOld)
 		{
-			S.Weathered = 0.4 + 0.6 * Age;
-			S.Deep *= 1.0 - 0.55 * Age;
-			S.Rim *= 1.0 - 0.65 * Age;
-			S.Reach *= 1.0 - 0.25 * Age;
+			S.Weathered = std::min(1.0, 0.4 + 0.1 * Months);
+			S.Deep *= ByAge(1.0, 0.8, 0.65, 0.5);
+			S.Rim *= ByAge(1.0, 0.7, 0.5, 0.4);
+			S.Reach *= ByAge(1.0, 0.88, 0.78, 0.72);
 			S.Clods = 0;
+		}
+		if (bOldEdge)
+		{
+			S.Feather = 0.0;
 		}
 		if (S.Deep > 0.0 && Dig)
 		{
@@ -946,19 +976,48 @@ namespace LandCrater
 		Soil Paint = SoilOf((Ground == "earth" || Ground == "rock") && !Earth.empty() ? Earth : Ground);
 		if (bOld)
 		{
-			// (grown over toward the ground's own colour there: the thrown soil first and most, then the crest, the walls
-			// and the hollow, which keep a damper, darker earth longest)
+			// Grown over by six months (the art director's marks, 23 November): the worn rim grassed and a little paler than
+			// the field round it (8% at six months, 5% at a year, the dry grass on its crest), the bowl's floor darker and
+			// greener (15%, then 10%, older 6%: damp, the grass lusher there), its sides between; bare soil showing on no
+			// more than a seventh of the sides at six months, none at a year. Under six months the fresh soil's colours
+			// grow toward these by the month. The field's colour round it is what it is measured against, so a hole in
+			// stubble is paler stubble on its rim and a hole in pasture greener pasture in its bowl.
 			const Rgb8 Grown = Under ? Under(X, Y) : Paint.Turf;
-			const double Over = 0.3 + 0.6 * Age, Inner = 0.12 + 0.43 * Age;
-			Paint.Thrown = Mixed(Paint.Thrown, Grown, Over);
-			Paint.Edge = Mixed(Paint.Edge, Grown, std::min(1.0, Over + 0.1));
-			Paint.Crest = Mixed(Paint.Crest, Grown, Over * 0.85);
-			Paint.Turf = Mixed(Paint.Turf, Grown, 0.6);
-			Paint.Clod = Mixed(Paint.Clod, Grown, Over);
-			Paint.Wall = Mixed(Paint.Wall, Toned(Grown, 0.82), Inner);
-			Paint.Hollow = Mixed(Paint.Hollow, Toned(Grown, 0.7), Inner * 0.8);
+			const double By = std::clamp(Months / 6.0, 0.0, 1.0);
+			const Rgb8 Rim = Toned(Grown, ByAge(1.08, 1.08, 1.05, 1.03));
+			const Rgb8 Dark = Toned(Grown, ByAge(0.85, 0.85, 0.9, 0.94));
+			const double Green = ByAge(1.0, 1.0, 0.7, 0.45); // (the bowl's lusher green, wearing into the field's)
+			Rgb8 Bowl = Dark;
+			Bowl.R = Byte(Dark.R * (1.0 - 0.06 * Green));
+			Bowl.B = Byte(Dark.B * (1.0 - 0.1 * Green));
+			const Soil Was = Paint;
+			Paint.Thrown = Mixed(Was.Thrown, Rim, By);
+			Paint.Edge = Mixed(Was.Edge, Grown, std::min(1.0, By + 0.1));
+			Paint.Crest = Mixed(Was.Crest, Rim, By);
+			Paint.Turf = Mixed(Was.Turf, Grown, 0.6 + 0.4 * By);
+			Paint.Clod = Mixed(Was.Clod, Toned(Rim, 0.95), By);
+			Paint.Hollow = Mixed(Was.Hollow, Bowl, By);
+			Paint.Wall = Mixed(Was.Wall, Mixed(Bowl, Rim, 0.45), By);
+			Paint.Bare = Mixed(Was.Wall, Was.Crest, 0.4);
+			Paint.Bared = Months < 6.0 ? 1.0 - 0.85 * By : 0.15 * std::clamp((12.0 - Months) / 6.0, 0.0, 1.0);
+			// (grass is evener than torn soil: each point's tone wanders less as it grows over)
+			Paint.Mottle = 1.0 - 0.6 * By;
 		}
-		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
+		// (the thrown soil on the ground as drawn, or on an older hole's faces inside its cut)
+		HeightFn Thin;
+		if (Drawn)
+		{
+			Thin = [this](double Px, double Py)
+			{
+				double Z = 0.0;
+				if (InCut(Px, Py) && TopAt(Px, Py, Z))
+				{
+					return Z;
+				}
+				return std::max(Height(Px, Py), Drawn(Px, Py));
+			};
+		}
+		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit, Thin);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		// (an old hole's grass and corn stand round it but over its bowl: on its worn rim they have grown back)
 		H.BareR = bOld ? (H.Deep > 0.0 ? 0.92 : 0.55) * 0.5 * S.Across : 0.0;
@@ -1145,8 +1204,32 @@ namespace LandCrater
 				}
 				continue;
 			}
-			const double Bare_ = H.BareR > 0.0 ? H.BareR : 1.2 * H.R;
-			if ((X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y) < Bare_ * Bare_)
+			const double D2 = (X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y);
+			if (H.BareR > 0.0)
+			{
+				if (D2 < H.BareR * H.BareR)
+				{
+					return true;
+				}
+				continue;
+			}
+			// (a fresh hole: bare to its crest, then a ragged clearing, a tuft here and there left standing in the thrown
+			// soil and more the further out, not a ruled circle of grass round it: the art director, 23 November)
+			const double In = bOldEdge ? 1.2 * H.R : 1.12 * H.R, Out = bOldEdge ? 1.2 * H.R : 1.3 * H.R;
+			if (D2 >= Out * Out)
+			{
+				continue;
+			}
+			if (D2 < In * In)
+			{
+				return true;
+			}
+			uint64_t Mix = (static_cast<uint64_t>(static_cast<int64_t>(std::floor(X * 50.0))) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::floor(Y * 50.0))) * 0xC2B2AE3D27D4EB4Full);
+			Mix ^= Mix >> 31;
+			Mix *= 0xBF58476D1CE4E5B9ull;
+			Mix ^= Mix >> 29;
+			const double Chance = static_cast<double>(Mix >> 11) * (1.0 / 9007199254740992.0);
+			if (Chance >= (std::sqrt(D2) - In) / (Out - In))
 			{
 				return true;
 			}
@@ -1933,12 +2016,21 @@ namespace LandCrater
 		Pc.Apart = Apart;
 		Pc.Width = Width;
 		Pc.bCorn = Mid == Under::Corn;
+		Keep(Pc);
+		++Count;
+		Touched(In);
+		Mark();
+		return true;
+	}
+
+	void Ruts::Keep(const Piece& Pc)
+	{
 		const int Number = static_cast<int>(Laid.size());
 		Laid.push_back(Pc);
-		const double Reach = 0.5 * Apart + Width;
+		const double Reach = 0.5 * Pc.Apart + Pc.Width;
 		constexpr double Square = 8.0;
-		const int I0 = static_cast<int>(std::floor((std::min(PX, MX) - Reach) / Square)), I1 = static_cast<int>(std::floor((std::max(PX, MX) + Reach) / Square));
-		const int J0 = static_cast<int>(std::floor((std::min(PY, MY) - Reach) / Square)), J1 = static_cast<int>(std::floor((std::max(PY, MY) + Reach) / Square));
+		const int I0 = static_cast<int>(std::floor((std::min(Pc.AX, Pc.BX) - Reach) / Square)), I1 = static_cast<int>(std::floor((std::max(Pc.AX, Pc.BX) + Reach) / Square));
+		const int J0 = static_cast<int>(std::floor((std::min(Pc.AY, Pc.BY) - Reach) / Square)), J1 = static_cast<int>(std::floor((std::max(Pc.AY, Pc.BY) + Reach) / Square));
 		for (int J = J0; J <= J1; ++J)
 		{
 			for (int I = I0; I <= I1; ++I)
@@ -1946,14 +2038,140 @@ namespace LandCrater
 				Squares[SquareOf(I, J)].push_back(Number);
 			}
 		}
-		++Count;
+	}
+
+	void Ruts::Touched(const Place& In)
+	{
 		const bool bListed = std::any_of(Changed.begin(), Changed.end(), [&In](const Place& C) { return C.Patch == In.Patch && C.Section == In.Section; });
 		if (!bListed)
 		{
 			Changed.push_back(In);
 		}
-		Mark();
-		return true;
+	}
+
+	int Ruts::LayOld(const std::vector<std::vector<std::pair<double, double>>>& Ways, double Months, bool bWet, uint64_t Seed)
+	{
+		if (!Height || !Kind)
+		{
+			return 0;
+		}
+		Dice D(Mix(Seed, 0x0D5A75ull));
+		const double M = std::max(0.0, Months);
+		// (a grassed rut's green: whole at three months, a quarter at two years)
+		const double Shows = M < 3.0 ? 1.0 : std::clamp(1.0 - 0.75 * (M - 3.0) / 21.0, 0.25, 1.0);
+		const bool bBare = bWet || M < 3.0; // (dried mud or puddled: nothing grows in them yet)
+		int Pieces_ = 0;
+		uint64_t Salt = Mix(Seed, 0x01DA75ull);
+		for (const std::vector<std::pair<double, double>>& Way : Ways)
+		{
+			// (the way at an even step along it, each point's heading from its neighbours, so the pieces join at a bend)
+			std::vector<std::pair<double, double>> At;
+			for (size_t K = 0; K + 1 < Way.size(); ++K)
+			{
+				const double AX = Way[K].first, AY = Way[K].second, BX = Way[K + 1].first, BY = Way[K + 1].second;
+				const double Long = std::hypot(BX - AX, BY - AY);
+				if (!(Long > 1e-6) || Long > 1e4)
+				{
+					continue;
+				}
+				const int Steps = std::max(1, static_cast<int>(std::ceil(Long / OldStep)));
+				for (int I = (At.empty() ? 0 : 1); I <= Steps; ++I)
+				{
+					const double T = static_cast<double>(I) / Steps;
+					At.emplace_back(AX + (BX - AX) * T, AY + (BY - AY) * T);
+				}
+			}
+			if (At.size() < 2)
+			{
+				continue;
+			}
+			const double Apart = D.U(2.5, 2.9);
+			const double Width = D.U(0.5, 0.7);
+			std::vector<std::pair<double, double>> Left(At.size()), Right(At.size());
+			for (size_t K = 0; K < At.size(); ++K)
+			{
+				const std::pair<double, double>& P0 = At[K > 0 ? K - 1 : 0];
+				const std::pair<double, double>& P1 = At[K + 1 < At.size() ? K + 1 : K];
+				const double Dx = P1.first - P0.first, Dy = P1.second - P0.second, Long = std::max(1e-6, std::hypot(Dx, Dy));
+				const double Nx = -Dy / Long, Ny = Dx / Long;
+				// (each rut wandering its own few centimetres: a column's tracks never quite on one line)
+				const double WanderL = 0.08 * std::sin(0.11 * static_cast<double>(K) + 1.7 * static_cast<double>(Salt % 7));
+				const double WanderR = 0.08 * std::sin(0.13 * static_cast<double>(K) + 0.9 * static_cast<double>(Salt % 5));
+				Left[K] = { At[K].first + Nx * (0.5 * Apart + WanderL), At[K].second + Ny * (0.5 * Apart + WanderL) };
+				Right[K] = { At[K].first - Nx * (0.5 * Apart + WanderR), At[K].second - Ny * (0.5 * Apart + WanderR) };
+			}
+			for (size_t K = 0; K + 1 < At.size(); ++K)
+			{
+				if (Pieces_ >= MostOld || Count >= Most)
+				{
+					return Pieces_;
+				}
+				const double MX = 0.5 * (At[K].first + At[K + 1].first), MY = 0.5 * (At[K].second + At[K + 1].second);
+				if (DugAt && (DugAt(At[K].first, At[K].second) || DugAt(At[K + 1].first, At[K + 1].second) || DugAt(MX, MY)))
+				{
+					continue;
+				}
+				Under Sides[2];
+				bool bAny = false;
+				for (int Side = 0; Side < 2; ++Side)
+				{
+					const std::vector<std::pair<double, double>>& Line = Side ? Right : Left;
+					Sides[Side] = Kind(0.5 * (Line[K].first + Line[K + 1].first), 0.5 * (Line[K].second + Line[K + 1].second));
+					bAny = bAny || (Sides[Side] != Under::None && Sides[Side] != Under::Corn);
+				}
+				if (!bAny)
+				{
+					continue;
+				}
+				Place In;
+				Patch& P = PatchFor(MX, MY, In);
+				LandField::Mesh& Out = P.Sections[static_cast<size_t>(In.Section)];
+				for (int Side = 0; Side < 2; ++Side)
+				{
+					++Salt;
+					if (Sides[Side] == Under::None || Sides[Side] == Under::Corn)
+					{
+						continue;
+					}
+					const std::vector<std::pair<double, double>>& Line = Side ? Right : Left;
+					const double AX = Line[K].first, AY = Line[K].second, BX = Line[K + 1].first, BY = Line[K + 1].second;
+					const Rgb8 Ground = UnderColour ? UnderColour(0.5 * (AX + BX), 0.5 * (AY + BY)) : Rgb(100, 100, 70);
+					Rgb8 Paint;
+					if (bWet)
+					{
+						Paint = Mixed(Ground, Rgb(44, 38, 30), 0.72); // (water standing in them, wet mud at their sides)
+					}
+					else if (M < 3.0)
+					{
+						Paint = Mixed(Ground, Rgb(138, 124, 98), 0.62); // (the spring's mud dried in them, pale)
+					}
+					else
+					{
+						// (grassed over: the ruts hold the wet, so their grass grows lusher and darker than the field's)
+						Rgb8 Lush = Toned(Ground, 0.84);
+						Lush.R = Byte(Lush.R * 0.94);
+						Lush.B = Byte(Lush.B * 0.88);
+						Paint = Mixed(Ground, Lush, Shows);
+					}
+					Strip(Out, AX, AY, BX, BY, 0.4 * Width, 0.6 * Width, Paint, 0.017, Salt);
+				}
+				if (bBare)
+				{
+					Piece Pc;
+					Pc.AX = At[K].first;
+					Pc.AY = At[K].second;
+					Pc.BX = At[K + 1].first;
+					Pc.BY = At[K + 1].second;
+					Pc.Apart = Apart;
+					Pc.Width = Width;
+					Keep(Pc);
+				}
+				++Count;
+				++Pieces_;
+				Touched(In);
+			}
+		}
+		return Pieces_;
 	}
 
 	bool Ruts::Flat(double X, double Y) const
@@ -1995,8 +2213,228 @@ namespace LandCrater
 		return false;
 	}
 
+	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
+		const std::vector<std::pair<double, double>>& Gates, double Heading, const std::function<bool(double X, double Y)>& Open)
+	{
+		std::vector<std::vector<std::pair<double, double>>> Ways;
+		if (Battles <= 0)
+		{
+			return Ways;
+		}
+		// The fought-over ground, as LayScars reads it: the middle four fifths each way, 300 m at least.
+		std::vector<double> Xs, Ys;
+		for (const auto& P : Fought)
+		{
+			if (P.first == P.first && P.second == P.second)
+			{
+				Xs.push_back(P.first);
+				Ys.push_back(P.second);
+			}
+		}
+		if (Xs.empty())
+		{
+			return Ways;
+		}
+		std::sort(Xs.begin(), Xs.end());
+		std::sort(Ys.begin(), Ys.end());
+		const auto At = [](const std::vector<double>& V, double Q) { return V[std::min(V.size() - 1, static_cast<size_t>(Q * static_cast<double>(V.size() - 1) + 0.5))]; };
+		double X0 = At(Xs, 0.1), X1 = At(Xs, 0.9), Y0 = At(Ys, 0.1), Y1 = At(Ys, 0.9);
+		const auto Widen = [](double& A, double& B) { const double Mid = 0.5 * (A + B), Half = std::max(150.0, 0.5 * (B - A)); A = Mid - Half; B = Mid + Half; };
+		Widen(X0, X1);
+		Widen(Y0, Y1);
+		const auto InBox = [&](double X, double Y) { return X >= X0 && X <= X1 && Y >= Y0 && Y <= Y1; };
+		const int Wanted = std::min(10, 3 + 2 * Battles);
+		Dice D(Mix(Seed, 0x3A7Dull));
+		// (a leg from A to B, bowed a little to one side, a point every 6 m; false, and nothing added, where it would cross
+		// what a column cannot drive over, but within 6 m of its ends, the gateways, whose floor reads as the bank's)
+		const auto Leg = [&D, &Open](std::vector<std::pair<double, double>>& Way, double AX, double AY, double BX, double BY)
+		{
+			const double Long = std::hypot(BX - AX, BY - AY);
+			const double Bow = D.U(-0.12, 0.12) * Long;
+			const double Cx = 0.5 * (AX + BX) - (BY - AY) / std::max(1e-6, Long) * Bow, Cy = 0.5 * (AY + BY) + (BX - AX) / std::max(1e-6, Long) * Bow;
+			const auto On = [&](double T) { const double U = 1.0 - T; return std::pair<double, double>(U * U * AX + 2.0 * U * T * Cx + T * T * BX, U * U * AY + 2.0 * U * T * Cy + T * T * BY); };
+			if (Open)
+			{
+				const int Looks = std::max(2, static_cast<int>(Long / 1.2));
+				for (int I = 0; I <= Looks; ++I)
+				{
+					const double T = static_cast<double>(I) / Looks;
+					if (T * Long < 6.0 || (1.0 - T) * Long < 6.0) continue;
+					const std::pair<double, double> P = On(T);
+					if (!Open(P.first, P.second)) return false;
+				}
+			}
+			const int Steps = std::max(2, static_cast<int>(Long / 6.0));
+			for (int I = Way.empty() ? 0 : 1; I <= Steps; ++I)
+			{
+				Way.push_back(On(static_cast<double>(I) / Steps));
+			}
+			return true;
+		};
+		std::vector<std::pair<double, double>> Gate;
+		for (const auto& G : Gates)
+		{
+			if (InBox(G.first, G.second)) Gate.push_back(G);
+		}
+		if (Gate.size() >= 4)
+		{
+			// Through the gateways: from one to another, on and on, never back the way it came.
+			for (int W = 0; W < Wanted * 3 && static_cast<int>(Ways.size()) < Wanted; ++W)
+			{
+				size_t Here = std::min(Gate.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Gate.size())));
+				std::vector<size_t> Been{ Here };
+				std::vector<std::pair<double, double>> Way;
+				double Was = 0.0;
+				const int Legs = 2 + static_cast<int>(D.U() * 3.0);
+				for (int L = 0; L < Legs; ++L)
+				{
+					std::vector<size_t> Next;
+					for (size_t K = 0; K < Gate.size(); ++K)
+					{
+						if (std::find(Been.begin(), Been.end(), K) != Been.end()) continue;
+						const double Dx = Gate[K].first - Gate[Here].first, Dy = Gate[K].second - Gate[Here].second;
+						const double Long = std::hypot(Dx, Dy);
+						if (Long < 30.0 || Long > 220.0) continue;
+						if (L > 0 && std::cos(std::atan2(Dy, Dx) - Was) < std::cos(75.0 * Pi / 180.0)) continue;
+						Next.push_back(K);
+					}
+					if (Next.empty())
+					{
+						break;
+					}
+					// (a gateway that way a column could reach without crossing a hedge: tried in a seeded order)
+					bool bTook = false;
+					while (!Next.empty() && !bTook)
+					{
+						const size_t Pick = std::min(Next.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Next.size())));
+						const size_t To = Next[Pick];
+						Next.erase(Next.begin() + static_cast<std::ptrdiff_t>(Pick));
+						if (Leg(Way, Gate[Here].first, Gate[Here].second, Gate[To].first, Gate[To].second))
+						{
+							Was = std::atan2(Gate[To].second - Gate[Here].second, Gate[To].first - Gate[Here].first);
+							Been.push_back(To);
+							Here = To;
+							bTook = true;
+						}
+					}
+					if (!bTook)
+					{
+						break;
+					}
+				}
+				if (Way.size() >= 2)
+				{
+					Ways.push_back(std::move(Way));
+				}
+			}
+			if (!Ways.empty())
+			{
+				return Ways;
+			}
+		}
+		// Open ground: across it along the battle's heading (else the line its ground spreads along most), wandering.
+		double Head = Heading;
+		if (!(Head == Head))
+		{
+			double Mx = 0.0, My = 0.0;
+			for (size_t K = 0; K < Xs.size(); ++K) { Mx += Xs[K]; My += Ys[K]; }
+			Mx /= static_cast<double>(Xs.size());
+			My /= static_cast<double>(Xs.size());
+			double Sxx = 0.0, Syy = 0.0, Sxy = 0.0;
+			for (const auto& P : Fought)
+			{
+				if (!(P.first == P.first && P.second == P.second)) continue;
+				Sxx += (P.first - Mx) * (P.first - Mx);
+				Syy += (P.second - My) * (P.second - My);
+				Sxy += (P.first - Mx) * (P.second - My);
+			}
+			Head = 0.5 * std::atan2(2.0 * Sxy, Sxx - Syy);
+		}
+		const double Cx = 0.5 * (X0 + X1), Cy = 0.5 * (Y0 + Y1), Half = 0.5 * std::max(X1 - X0, Y1 - Y0);
+		for (int W = 0; W < Wanted; ++W)
+		{
+			// (starting behind the ground's middle, off to a side, and driving on through it)
+			const double Back = D.U(0.4, 0.9) * Half, Aside = D.U(-0.8, 0.8) * Half;
+			const double Hx = std::cos(Head), Hy = std::sin(Head);
+			double X = Cx - Hx * Back - Hy * Aside, Y = Cy - Hy * Back + Hx * Aside;
+			double A = Head + D.U(-0.3, 0.3);
+			const double Long = D.U(150.0, 450.0);
+			if (Open && !Open(X, Y))
+			{
+				continue;
+			}
+			std::vector<std::pair<double, double>> Way{ { X, Y } };
+			for (double Gone = 0.0; Gone < Long; Gone += 6.0)
+			{
+				A += D.U(-0.07, 0.07) + 0.1 * std::remainder(Head - A, 2.0 * Pi);
+				// (ended where it meets what a column cannot drive over: checked every 1.2 m of the step)
+				bool bBlocked = false;
+				for (int K = 1; K <= 5 && Open && !bBlocked; ++K)
+				{
+					bBlocked = !Open(X + std::cos(A) * 1.2 * K, Y + std::sin(A) * 1.2 * K);
+				}
+				if (bBlocked)
+				{
+					break;
+				}
+				X += std::cos(A) * 6.0;
+				Y += std::sin(A) * 6.0;
+				Way.emplace_back(X, Y);
+			}
+			if (Way.size() >= 11) // (60 m at least, or no way to read)
+			{
+				Ways.push_back(std::move(Way));
+			}
+		}
+		return Ways;
+	}
+
+	OldLines OldLinesOf(const LandField::Ground& G, double TownX, double TownY, double TownR)
+	{
+		OldLines Out;
+		for (const LandField::HedgeLine& H : G.Hedges())
+		{
+			if (H.Points.size() >= 2) Out.Lines.push_back(H.Points);
+		}
+		const std::vector<std::vector<std::pair<double, double>>>& Lanes = G.Lanes();
+		for (const std::vector<std::pair<double, double>>& L : Lanes)
+		{
+			if (L.size() >= 2) Out.Lines.push_back(L);
+		}
+		for (size_t A = 0; A < Lanes.size(); ++A)
+		{
+			if (Lanes[A].size() < 2) continue;
+			for (const std::pair<double, double>& End : { Lanes[A].front(), Lanes[A].back() })
+			{
+				bool bMeets = false;
+				for (size_t B = 0; B < Lanes.size() && !bMeets; ++B)
+				{
+					if (B == A) continue;
+					for (const std::pair<double, double>& P : Lanes[B])
+					{
+						if (std::fabs(P.first - End.first) < 8.0 && std::fabs(P.second - End.second) < 8.0)
+						{
+							bMeets = true;
+							break;
+						}
+					}
+				}
+				if (bMeets) Out.Spots.push_back(End);
+			}
+		}
+		if (TownR > 0.0)
+		{
+			for (int K = 0; K < 10; ++K)
+			{
+				const double A = 2.0 * Pi * (K + 0.5) / 10.0;
+				Out.Spots.emplace_back(TownX + std::cos(A) * TownR, TownY + std::sin(A) * TownR);
+			}
+		}
+		return Out;
+	}
+
 	int LayScars(Field& Holes, const std::vector<std::pair<double, double>>& Fought, int Battles, double Months, uint64_t Seed,
-		const std::function<std::string(double X, double Y)>& GroundWord)
+		const std::function<std::string(double X, double Y)>& GroundWord, const OldLines& Lines)
 	{
 		if (Battles <= 0 || Fought.empty() || !GroundWord)
 		{
@@ -2027,21 +2465,114 @@ namespace LandCrater
 		Widen(Y0, Y1);
 		const int Wanted = std::min(Field::Most / 6, 150 * Battles);
 		Dice D(Mix(Seed, 0x5CA25ull));
+		const auto InBox = [&](double X, double Y) { return X >= X0 && X <= X1 && Y >= Y0 && Y <= Y1; };
+
+		// The old lines: the pieces of hedge, wall and lane over the fought-over ground, 4 m long at least.
+		struct Piece
+		{
+			double AX, AY, BX, BY, Long, Ux, Uy;
+		};
+		std::vector<Piece> Pieces;
+		for (const std::vector<std::pair<double, double>>& Line : Lines.Lines)
+		{
+			for (size_t K = 0; K + 1 < Line.size(); ++K)
+			{
+				const double AX = Line[K].first, AY = Line[K].second, BX = Line[K + 1].first, BY = Line[K + 1].second;
+				const double Long = std::hypot(BX - AX, BY - AY);
+				if (Long >= 4.0 && Long < 1e5 && InBox(0.5 * (AX + BX), 0.5 * (AY + BY)))
+				{
+					Pieces.push_back({ AX, AY, BX, BY, Long, (BX - AX) / Long, (BY - AY) / Long });
+				}
+			}
+		}
+		std::vector<std::pair<double, double>> Spots;
+		for (const std::pair<double, double>& P : Lines.Spots)
+		{
+			if (InBox(P.first, P.second)) Spots.push_back(P);
+		}
+		// (a few fronts, more the more battles were fought here: each the pieces lying in one heading within 30 m of a
+		// first piece's line, the shells falling mostly on one side of it, the side held)
+		struct Front
+		{
+			std::vector<size_t> Of;
+			double Long = 0.0;
+			double Side = 1.0;
+		};
+		std::vector<Front> Fronts;
+		if (!Pieces.empty())
+		{
+			double Total = 0.0;
+			for (const Piece& Pc : Pieces) Total += Pc.Long;
+			const int Want = std::min(5, 2 + Battles);
+			for (int F = 0; F < Want * 3 && static_cast<int>(Fronts.size()) < Want; ++F)
+			{
+				double Pick = D.U() * Total;
+				size_t First = 0;
+				while (First + 1 < Pieces.size() && Pick > Pieces[First].Long) Pick -= Pieces[First++].Long;
+				const Piece& A = Pieces[First];
+				Front Fr;
+				for (size_t K = 0; K < Pieces.size(); ++K)
+				{
+					const Piece& B = Pieces[K];
+					const double Mx = 0.5 * (B.AX + B.BX) - A.AX, My = 0.5 * (B.AY + B.BY) - A.AY;
+					if (std::fabs(A.Ux * B.Ux + A.Uy * B.Uy) >= 0.85 && std::fabs(Mx * A.Uy - My * A.Ux) <= 30.0)
+					{
+						Fr.Of.push_back(K);
+						Fr.Long += B.Long;
+					}
+				}
+				Fr.Side = D.U() < 0.5 ? 1.0 : -1.0;
+				// (a front of one short hedge is no line to find: 60 m of it at least)
+				if (Fr.Long >= 60.0) Fronts.push_back(std::move(Fr));
+			}
+		}
+
 		int Laid = 0;
 		// (clusters: a barrage's dozen, a mortar's few; tried a while longer than wanted, since open ground is not all)
 		for (int Tries = 0; Laid < Wanted && Tries < Wanted * 6; )
 		{
-			const double CX = X0 + (X1 - X0) * D.U(), CY = Y0 + (Y1 - Y0) * D.U();
+			double CX = X0 + (X1 - X0) * D.U(), CY = Y0 + (Y1 - Y0) * D.U();
 			const bool bBarrage = D.U() < 0.45;
 			const int InIt = bBarrage ? 8 + static_cast<int>(D.U() * 9.0) : 2 + static_cast<int>(D.U() * 4.0);
-			const double Spread = bBarrage ? 35.0 : 12.0;
+			double Spread = bBarrage ? 35.0 : 12.0;
+			// (along a front: the cluster's middle a few metres off a piece of it, the barrage walked along it, not across)
+			double Ux = 1.0, Uy = 0.0, Along = 1.0, Across = 1.0;
+			const double Where = D.U();
+			if (!Fronts.empty() && Where < 0.68)
+			{
+				const Front& Fr = Fronts[std::min(Fronts.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Fronts.size())))];
+				double Pick = D.U() * Fr.Long;
+				size_t K = 0;
+				while (K + 1 < Fr.Of.size() && Pick > Pieces[Fr.Of[K]].Long) Pick -= Pieces[Fr.Of[K++]].Long;
+				const Piece& Pc = Pieces[Fr.Of[K]];
+				const double T = std::clamp(Pick / Pc.Long, 0.0, 1.0);
+				const double Held = D.U() < 0.8 ? Fr.Side : -Fr.Side;
+				const double Off = Held * D.U(3.0, 18.0);
+				CX = Pc.AX + (Pc.BX - Pc.AX) * T - Pc.Uy * Off;
+				CY = Pc.AY + (Pc.BY - Pc.AY) * T + Pc.Ux * Off;
+				Ux = Pc.Ux;
+				Uy = Pc.Uy;
+				Along = 1.2;
+				Across = 0.3;
+			}
+			else if (!Spots.empty() && Where < (Fronts.empty() ? 0.6 : 0.88))
+			{
+				// (at a junction or the village's edge: a tighter knot)
+				const std::pair<double, double>& P = Spots[std::min(Spots.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Spots.size())))];
+				const double A = D.U(0.0, 2.0 * Pi), Rr = D.U(0.0, 15.0);
+				CX = P.first + std::cos(A) * Rr;
+				CY = P.second + std::sin(A) * Rr;
+				Spread *= 0.6;
+			}
 			// (which battle before: the last the most, an earlier one's holes older by some months each)
 			const int Before = Battles > 1 ? static_cast<int>(D.U() * D.U() * Battles) : 0;
 			const double Older = Months + Before * (2.0 + 4.0 * D.U());
 			for (int K = 0; K < InIt && Laid < Wanted; ++K, ++Tries)
 			{
-				// (about the cluster's middle, thicker at it: the sum of two throws each way)
-				const double X = CX + Spread * (D.U() + D.U() - 1.0), Y = CY + Spread * (D.U() + D.U() - 1.0);
+				// (about the cluster's middle, thicker at it: the sum of two throws each way, drawn out along a front)
+				const double Sa = Spread * Along * (D.U() + D.U() - 1.0);
+				const double Sc = Spread * Across * (D.U() + D.U() - 1.0);
+				const double X = CX + Ux * Sa - Uy * Sc, Y = CY + Uy * Sa + Ux * Sc;
 				const double Kind = D.U();
 				const double Age = std::max(0.0, Older + D.U() * 0.5);
 				const std::string Ground = GroundWord(X, Y);

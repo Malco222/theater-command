@@ -138,7 +138,7 @@ namespace LandPlay
 		for (size_t I = 0; I < N; ++I)
 		{
 			const Round& R = Rec->Rounds[I];
-			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && !R.bMate && R.W != "rifle" && R.W != "mg" && R.W != "track") ++FollowerBursts;
 		}
 		Falls.clear();
 		FallListed.assign(Rec->Tracks.size(), 0);
@@ -226,7 +226,7 @@ namespace LandPlay
 		for (size_t I = G.RoundsFrom; I < N; ++I)
 		{
 			const Round& R = Rec->Rounds[I];
-			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && !R.bMate && R.W != "rifle" && R.W != "mg" && R.W != "track") ++FollowerBursts;
 		}
 		// The new falls, in order after those played.
 		FallListed.resize(Rec->Tracks.size(), 0);
@@ -438,6 +438,8 @@ namespace LandPlay
 
 	void Replay::Fire(const Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise)
 	{
+		if (R.bMate) return; // (shell blasts: the round before it fired the one shot)
+		if (R.W == "track") return; // (infantry with tanks: a man run over by a tank; no shot, his fall is the look)
 		const int S = Shooter[static_cast<size_t>(Index)];
 		const int Target = TargetTrack[static_cast<size_t>(Index)];
 		const LandFeed::Block* By = R.By >= 0 ? Rec->BlockOf(R.By) : nullptr;
@@ -511,6 +513,8 @@ namespace LandPlay
 	void Replay::Land(const Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise)
 	{
 		if (EventOf[static_cast<size_t>(Index)] >= 0) return; // its 'shell' event draws it (Blast)
+		if (R.bMate) return; // (shell blasts: struck by the burst before it, drawn once by that round or its event)
+		if (R.W == "track") return; // (run over: nothing lands)
 		const int Target = TargetTrack[static_cast<size_t>(Index)];
 		const int S = Shooter[static_cast<size_t>(Index)];
 		const LandFeed::Block* By = R.By >= 0 ? Rec->BlockOf(R.By) : nullptr;

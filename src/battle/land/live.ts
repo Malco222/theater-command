@@ -22,10 +22,9 @@ import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import { DT } from '../core/types';
 import { DROPS, LOOPS, TOWN } from '../core/cues';
 import { GROUNDS, groundAt, type LandPlace } from './field';
-import { LandBattle } from './sim';
+import { LandBattle, type Gate, type Hedge } from './sim';
 import { LAND, MOTION, type Kind } from './rules';
 import { calFor } from './shells';
-import { ARMOUR } from './armour';
 import type { LandUnit } from './units';
 import type { Drill, MenBlock, MenOut, Round } from './drill';
 import { PIECES, openSteppe, ticketOf, type SetPiece, type Steppe } from './pieces';
@@ -47,12 +46,16 @@ type Ch = (number | string | null)[];
 /** One man's track as the scene reads it (the recording's men[]). */
 export interface TrackOut {
   b: number; k: number; j?: number; r: string; at: Pt[]; ch: Ch[]; s: number[]; d?: number; mk?: unknown[]; out?: number; fo?: 1;
+  /** The model the 3D game draws her with where it is not her block's (release 2, looks only): a carrier of armoured infantry (absent: the lorry), a self-propelled gun, a tank destroyer. */
+  ml?: string;
+  /** Her model's swaps the rules pick (release 2, looks only): a motorcycle's sidecar, a staff jeep's gun. */
+  sw?: Record<string, string>;
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
 export interface TrackDelta {
   n: number;
-  b?: number; k?: number; j?: number; r?: string; fo?: 1;
+  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string; sw?: Record<string, string>;
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
@@ -76,6 +79,11 @@ export interface LiveDelta {
   views: Record<string, unknown>[];
   phases: { b: number; ph: [number, string, number | null, number | null][] }[];
   contact: number | null;
+  /**
+   * Hedge cutters: the gaps begun since the last delta that the player may know of (his own, and the enemy's he knew as
+   * it began), each once, as the 3D field reads a recording's cuts: begun at t0, open as a gateway at t1.
+   */
+  cuts?: { t0: number; t1: number; unit: number; x: number; y: number; yaw: number; width: number }[];
   /** The battle's end (the after card's result), once it is over, with its last battle second. */
   over?: unknown;
   end?: number;
@@ -88,7 +96,7 @@ const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' :
 
 interface Kept {
   n: number;
-  who: { b: number; k: number; j?: number; r: string; fo?: 1 };
+  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string; sw?: Record<string, string> };
   /** The last kept point (the line test's start), and the points seen since. */
   last: Pt;
   pend: Pt[];
@@ -116,7 +124,7 @@ export class LiveKeeper {
     let k = this.men.get(key);
     if (!k) {
       k = {
-        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}) },
+        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}), ...(m.sw ? { sw: m.sw } : {}) },
         last: p, pend: [], ch, shot: undefined, newAt: [p], newCh: [ch], newS: [], sentWho: false, sentD: false, sentMk: false, sentOut: undefined, sentTail: null,
       };
       this.men.set(key, k);
@@ -202,7 +210,7 @@ export class LiveKeeper {
       if (dl.reset) tracks.length = 0;
       for (const d of dl.men) {
         let tr = tracks[d.n];
-        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}) }; }
+        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}), ...(d.sw ? { sw: d.sw } : {}) }; }
         if (d.at) tr.at.push(...d.at);
         if (d.ch) tr.ch.push(...d.ch);
         if (d.s) tr.s.push(...d.s);
@@ -216,7 +224,7 @@ export class LiveKeeper {
 }
 
 /** One block as the 3D game reads it: the bridge's unitOut for land, plus whether the player has met it. */
-export function landUnitOut(u: LandUnit, t: number, known = true): Record<string, unknown> {
+export function landUnitOut(u: LandUnit, t: number, known = true, mine = false, sim?: LandBattle): Record<string, unknown> {
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
   const town = u.act === 'fight' && (u.cover === 'buildings' || u.cover === 'suburb' || u.cover === 'industry') && !!loops && motion !== 'guns';
@@ -247,8 +255,22 @@ export function landUnitOut(u: LandUnit, t: number, known = true): Record<string
     // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
     ...(u.hid ? { hid: 1 } : {}),
     ...(u.orderAt !== undefined ? { orderIn: Math.max(0, r1(u.orderAt - t)) } : {}),
+    // Hold until relieved (release 2, sim.relief), his own blocks only: waiting for a corps coming up from next door, dug in
+    // where it stands while not free; late, help never came and its men break sooner.
+    ...(mine && u.waits ? { waits: { due: r1(u.waits.due), ...(u.waits.late ? { late: true } : {}), ...(u.waits.free ? { free: true } : {}) } } : {}),
+    // Hedge cutters (release 2, sim.cutters): a tank block that carries them, with the share of its tanks fitted (the
+    // 3D game draws the cutters on that many). Smoke on call (sim.smoke): his own blocks that may lay it, with the
+    // screens they have left.
+    ...(sim?.cutters && sim.cutterOf(u) ? { cutter: LAND.cutters.share } : {}),
+    ...(mine && sim?.smoke ? smokeOut(sim, u) : {}),
     order: u.order ? { kind: u.order.kind, x: r1(u.order.x), y: r1(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r1(x), r1(y)]) } : null,
   };
+}
+
+/** A block's smoke for the 3D game (smoke on call): the screens it has left, where its army has the means. */
+function smokeOut(sim: LandBattle, u: LandUnit): Record<string, unknown> {
+  const m = sim.smokeOf(u);
+  return m ? { smoke: u.smokeLeft ?? m.count ?? LAND.smoke.count } : {};
 }
 
 export interface LiveOpts {
@@ -278,6 +300,126 @@ export interface LiveOpts {
    * turned off.
    */
   armour?: boolean;
+  /**
+   * Army names (release 2; the historian, 22 November 05:50Z; the rules' sim.namesOn): a regiment block reads its army's
+   * own word for a third of a division over its division's full name. On unless turned off.
+   */
+  names?: boolean;
+  /**
+   * Hold until relieved (release 2; Brian, 22 November 12:48Z; the design director's R1 to R5, 13:43Z; the rules'
+   * sim.relief): a block of his on foot told to wait ('land:wait') digs in for a corps coming up from next door, and
+   * breaks sooner if help never comes. On for the player unless turned off.
+   */
+  relief?: boolean;
+  /** The rider ahead (release 2; the rules' sim.rider): his own corps coming up sends a despatch rider first (view riders). */
+  rider?: boolean;
+  /**
+   * Hedge cutters and smoke on call (release 2; Brian, 22 November 14:19Z; ruling 242; the rules' sim.cutters and
+   * sim.smoke): his tanks may cut a gap through a hedge where he picks and his men on foot lay a screen along a line he
+   * drags, and both staffs use them too. On unless turned off.
+   */
+  cutters?: boolean;
+  smoke?: boolean;
+  /**
+   * The bocage (ruling 242 C1-B, as amended 17:45Z; the rules' sim.bocage): on a field with hedges, a tank block without
+   * cutters crosses a hedge line only at a gap. Off unless turned on (the tactics thread is still finishing it).
+   */
+  bocage?: boolean;
+  /**
+   * Field telephones, stretcher bearers and the night patrol (release 2; Brian, 22 November 17:33Z, "make it where we can
+   * toggle it off", and 21:21Z, each starting on; the rules' sim.phones, sim.bearers and sim.patrol): on unless false.
+   * The patrol goes out only where hiding is on (hide). Views carry phones, returns and patrol.
+   */
+  phones?: boolean;
+  bearers?: boolean;
+  patrol?: boolean;
+  /**
+   * Looks the player can switch off on the Battle rules card (release 2; Brian, 23 November 01:11Z "Do all of these"):
+   * captured tanks drawn in their captor's paint (blocks[].captured), uniforms that age (sides' worn), and ground that
+   * keeps the ruts of its battles fought in mud (oldRuts). On unless false; the fight reads none of them.
+   */
+  captured?: boolean;
+  worn?: boolean;
+  mud?: boolean;
+  /** Scarred ground (release 2, looks only): the campaign's earlier battles here, as old craters; off, none are sent. */
+  scars?: boolean;
+  /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
+  blast?: boolean;
+  /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
+  escort?: boolean;
+  /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
+  mech?: boolean;
+  /** Self-propelled guns (release 2, looks only; sim.spg): some of a battery's guns drawn self-propelled. A campaign battle's only; off unless true. */
+  spg?: boolean;
+  /** Tank destroyers (release 2, looks only; sim.td): one model in an armoured block's mix a tank destroyer. A campaign battle's only; off unless true. */
+  td?: boolean;
+  /** Armoured cars (release 2, looks only; sim.cars): out ahead of a block on its flanks till it meets the enemy. A campaign battle's only; off unless true. */
+  cars?: boolean;
+  /** AA vehicles (release 2, looks only; sim.aa): behind a block, moving with it. A campaign battle's only; off unless true. */
+  aa?: boolean;
+  /** Jeeps and motorcycles (release 2, looks only; sim.light): out ahead with a block's screen or behind it. A campaign battle's only; off unless true. */
+  light?: boolean;
+  /**
+   * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
+   * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
+   * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
+   * (armourYear), by which its tanks' shells go. Left out for a set piece.
+   */
+  fog?: boolean;
+  seen?: number[];
+  designYears?: Record<string, number>;
+  /**
+   * A campaign battle's sky over the field (looks only), where the 3D game or the campaign knows the place on the earth:
+   * the cloud, the sun's latitude and longitude and the hour. Left out, ticketSky draws one from the ticket's weather and
+   * seed; a set piece keeps its own.
+   */
+  sky?: LiveSky;
+}
+
+/** The battle's year from its ticket's date ("June 1944"), or 1942 where it names none. */
+export function yearOf(t: FieldTicket<LandPlace>): number {
+  const m = /(19[34]\d)/.exec(t.date ?? '');
+  return m ? Number(m[1]) : 1942;
+}
+
+/**
+ * A campaign battle's stand-in model for a tank or gun block (release 2, looks only): the 3D game has a Sherman, a Panzer
+ * IV, a Tiger, a StuG, a T-34, a light tank and three guns so far, so each nation is drawn with the nearest it has, in
+ * its own coat (LandKit dresses a model in its owner's colours), until the art director's models for every theatre come
+ * (Brian, 22 November: "it's a world war game not just France"). The Nth tank of a side, for a mix.
+ */
+export function standInModel(kind: string, nat: string, year: number, n: number): string {
+  const axis = ['GER', 'ITA', 'JAP', 'HUN', 'ROM', 'BUL', 'FIN'].includes(nat);
+  if (kind === 'art') return nat === 'SOV' ? 'ZiS3' : axis ? 'leFH18' : 'Howitzer105';
+  if (nat === 'GER') return year >= 1943 ? ['PanzerIV', 'PanzerIV', 'Tiger', 'StuG3'][n % 4] : year >= 1941 ? ['PanzerIV', 'StuG3', 'LightTank'][n % 3] : ['LightTank', 'PanzerIV'][n % 2];
+  if (nat === 'SOV') return year >= 1941 ? ['T34', 'T34', 'LightTank'][n % 3] : 'LightTank';
+  if (axis) return year >= 1943 && nat !== 'JAP' ? ['StuG3', 'LightTank'][n % 2] : 'LightTank';
+  return year >= 1942 ? ['Sherman', 'Sherman', 'LightTank'][n % 3] : 'LightTank';
+}
+
+/** The sky the header carries (the set piece's own shape): cloud cover 0..1 and its base, the place on the earth, the hour. */
+export interface LiveSky {
+  cover: number;
+  base: number;
+  kind: 'cumulus' | 'deck';
+  wind?: [number, number];
+  latLon?: [number, number];
+  hour?: number;
+}
+
+/**
+ * A campaign battle's sky where none is given: the campaign's weather over the place in its own words, varied a little by
+ * the ticket's seed (Brian, 20 November: the weather varies battle to battle, clear to overcast). Looks only.
+ */
+export function ticketSky(t: FieldTicket<LandPlace>): LiveSky {
+  const w = (t.weather ?? '').toLowerCase();
+  const lean = ((t.seed % 21) - 10) / 100;
+  const c = (x: number): number => Math.round(Math.min(1, Math.max(0, x + lean)) * 100) / 100;
+  if (w === 'rain') return { cover: c(0.85), base: 600, kind: 'deck', hour: 11 };
+  if (w === 'snow') return { cover: c(0.9), base: 500, kind: 'deck', hour: 11 };
+  if (w === 'mud') return { cover: c(0.7), base: 800, kind: 'deck', hour: 11 };
+  if (w === 'clear') return { cover: c(0.2), base: 1400, kind: 'cumulus', hour: 10 };
+  return { cover: c(0.45), base: 1000, kind: 'cumulus', hour: 10 };
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -286,48 +428,93 @@ export class LiveBattle {
   readonly drill: Drill;
   readonly me: Side | null;
   private keeper = new LiveKeeper();
+  /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
+  private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
+  /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
+  private looks: { worn: boolean; mud: boolean; scars: boolean } = { worn: true, mud: true, scars: true };
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
   private phaseNew = new Map<number, [number, string, number | null, number | null][]>();
   private events: FieldEvent[] = [];
   private views: Record<string, unknown>[] = [];
+  /** The hedge cutters' gaps already sent (the rules' cuts, in the order begun). */
+  private cutsSent = 0;
   private lastView = -1;
   private placed = false;
   private sentOver = false;
 
   constructor(readonly ticket: FieldTicket<LandPlace>, readonly piece: SetPiece | null, opts: LiveOpts = {}) {
     this.me = opts.me ?? null;
+    this.skyOf = opts.sky ?? ticketSky(ticket);
     const sim = (this.sim = new LandBattle(ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
-    for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
+    // (every block, those of corps still coming up from next door too: neighbours join the fight, release 2)
+    for (const u of sim.allBlocks()) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn, opts.designYears?.[u.nat]); if (c) u.cal = c; }
+    if (opts.fog) { sim.fog = true; sim.seen = new Set(opts.seen ?? []); }
     // The player's side is still thought for by its staff (the rules thread keeps the blocks he takes his own); the other
     // side's general fights as ever.
     for (const s of ['att', 'def'] as Side[]) sim.command({ do: 'auto', side: s, on: true }, s);
     if (this.me && opts.staff !== false) sim.perUnit = true;
     if (this.me && opts.radio !== false) sim.radio = true;
+    // (armoured infantry: before the drill is made, which draws them with their blocks)
+    if (opts.mech === true) sim.mech = true;
+    // (self-propelled guns and tank destroyers: a campaign battle's, set pieces stay as the historian drew them)
+    if (opts.spg === true && !piece) sim.spg = true;
+    if (opts.td === true && !piece) sim.td = true;
+    if (opts.cars === true && !piece) sim.cars = true;
+    if (opts.aa === true && !piece) sim.aa = true;
+    if (opts.light === true && !piece) sim.light = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
     if (opts.armour !== false) sim.measured = true;
-    // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger: the
-    // sim's own model cache, seeded before the clock runs)
-    const models = (sim as unknown as { models: Map<number, string | null> }).models;
+    if (opts.names !== false) sim.namesOn();
+    if (this.me && opts.relief !== false) sim.relief = true;
+    if (this.me && opts.rider !== false) sim.rider = true;
+    if (opts.cutters !== false) sim.cutters = true;
+    if (opts.smoke !== false) sim.smoke = true;
+    if (opts.bocage) sim.bocage = true;
+    if (opts.phones !== false) sim.phones = true;
+    if (opts.bearers !== false) sim.bearers = true;
+    if (opts.blast === true) sim.blast = true;
+    if (opts.escort === true) sim.escort = true;
+    if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
-    this.blocks = sim.units.map((u) => {
+    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+    // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
+    // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
+    const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
+    const caughtLeft: Record<string, number> = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
+    // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
+    // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
+    this.blocks = sim.allBlocks().map((u) => {
       const a = piece ? (u.side === 'att' ? piece.att : piece.def) : null;
       let model: string | null = null;
       if (a && u.kind === 'arm') model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
       else if (a && u.kind === 'art' && !u.team) model = a.gun;
-      if (model && sim.measured && ARMOUR.models[model] && (u.kind !== 'arm' || ARMOUR.duels[model])) models.set(u.id, model);
+      // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger)
+      if (model) sim.vehicleIs(u.id, model);
+      // A campaign battle (no piece): the nearest model the 3D game has for the nation and year, looks only, so the
+      // battle stays the one the campaign priced (the fight never reads it).
+      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+      const took = caught && u.kind === 'arm' && caughtLeft[u.side] > 0 ? caught[u.side as 'att' | 'def'] : undefined;
+      if (took) {
+        caughtLeft[u.side]--;
+        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+      }
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
+        ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
+        // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
+        // read before the battle opens)
+        ...((mls) => (mls.length ? { mls } : {}))(this.drill.modelsFor(u)),
       };
     });
     this.look();
@@ -340,10 +527,15 @@ export class LiveBattle {
     return {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
-      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : {}),
+      // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
+      // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
+      ...(t.weather ? { weather: t.weather } : {}),
+      ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
+      ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
+      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
-        att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}) },
-        def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}) },
+        att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },
+        def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}), ...(t.def.worn !== undefined && this.looks.worn ? { worn: t.def.worn } : {}) },
       },
       field: {
         w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x: number) => r1(x)),
@@ -383,11 +575,23 @@ export class LiveBattle {
     if (Math.floor(t) !== this.lastView || v.over) {
       this.lastView = Math.floor(t);
       this.views.push({
-        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit))), balance: v.balance, zones: v.zones,
+        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me, this.sim)), balance: v.balance, zones: v.zones,
         ...(v.breaking ? { breaking: { att: r3(v.breaking.att), def: r3(v.breaking.def) } } : {}),
         ...(v.contact !== undefined ? { contact: v.contact } : {}),
         ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
         ...(v.setup ? { setup: v.setup } : {}),
+        // (the corps still coming up from next door that the player may know of: where on its edge and when)
+        ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
+        // (the rider ahead: his own corps' despatch riders, riding in before it)
+        ...(v.riders?.length ? { riders: v.riders } : {}),
+        // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
+        // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
+        ...this.sim.screenView(this.me ?? undefined),
+        // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+        // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+        ...this.sim.phonesView(this.me ?? undefined),
+        ...this.sim.bearerView(this.me ?? undefined),
+        ...this.sim.patrolView(this.me ?? undefined),
         ...(v.over ? { over: v.over } : {}),
       });
     }
@@ -422,6 +626,10 @@ export class LiveBattle {
       phases: [...this.phaseNew.entries()].map(([b, ph]) => ({ b, ph })),
       contact: this.sim.contactAt,
     };
+    // (the gaps begun since the last delta, each once, those of the enemy only where he knew the block as it began)
+    const cuts = this.sim.cuts.slice(this.cutsSent).filter((c) => !this.me || c.side === this.me || c.known);
+    this.cutsSent = this.sim.cuts.length;
+    if (cuts.length) d.cuts = cuts.map((c) => ({ t0: r2(c.t0), t1: r2(c.t1), unit: c.unit, x: r1(c.x), y: r1(c.y), yaw: r3(c.yaw), width: r2(c.width) }));
     if (last) { d.over = over; this.sentOver = true; }
     this.events = []; this.views = []; this.roundsNew = []; this.phaseNew.clear(); this.placed = false;
     return d;
@@ -431,6 +639,48 @@ export class LiveBattle {
   order(c: Command): boolean {
     if (!this.me) return false;
     return this.sim.command(c, this.me);
+  }
+
+  /**
+   * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
+   * could reach it there (null where it may not wait).
+   */
+  waitWhy(id: number): { why: string | null; due: number | null } {
+    const u = this.sim.unit(id);
+    if (!u) return { why: 'No such block.', due: null };
+    if (!this.me || u.side !== this.me) return { why: 'Only your own troops take your orders.', due: null };
+    const why = this.sim.waitWhy(u);
+    return { why, due: why === null ? this.sim.dueAt(u)?.due ?? null : null };
+  }
+
+  /**
+   * Hedge cutters: why one of his tank blocks may not cut a gap through the hedge at (x, y) (null where it may); with no
+   * point, whether it may cut at all.
+   */
+  cutWhy(id: number, x?: number, y?: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.cutWhy(u, x, y);
+  }
+
+  /**
+   * Smoke on call: why one of his blocks may not lay a screen along that line (x0, y0 to x1, y1, or only its middle; null
+   * where it may); with no line, whether it may lay one at all.
+   */
+  smokeWhy(id: number, x0?: number, y0?: number, x1?: number, y1?: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.smokeWhy(u, x0, y0, x1, y1);
+  }
+
+  /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
+  patrolWhy(id: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.patrolWhy(u);
   }
 
   /** Why a block may not stand there in the setup step, or null where it may. */
@@ -444,6 +694,17 @@ export class LiveBattle {
   place(id: number, x: number, y: number, face?: number): boolean {
     if (!this.me || !this.sim.setup) return false;
     const ok = this.sim.command({ do: 'land:place', units: [id], x, y, ...(face !== undefined ? { face } : {}) }, this.me);
+    if (ok) this.replace();
+    return ok;
+  }
+
+  /**
+   * The 3D field's hedges and their gates, before the clock runs (the rules' sim.hedgesOn; the historian's check, 22
+   * November: a block on a hedge line hides as in woods, and the men on foot go through the gates). False once the clock
+   * has run. The men stand again (a reset piece), as their hiding may have changed.
+   */
+  hedges(hedges: Hedge[], gates: Gate[]): boolean {
+    const ok = this.sim.hedgesOn(hedges, gates);
     if (ok) this.replace();
     return ok;
   }
@@ -464,6 +725,15 @@ export class LiveBattle {
     this.placed = true;
     this.look();
   }
+}
+
+/**
+ * Opens a campaign battle live from its ticket (the campaign's battleLook): no set piece, so no piece's sky, models or
+ * army kit; the scene dresses the field by the ticket's place. A ticket that is a set piece's own may name its piece.
+ */
+export function liveTicket(ticket: FieldTicket<LandPlace>, opts: LiveOpts = {}, pieceKey?: string): LiveBattle {
+  const p = pieceKey ? PIECES.find((x) => x.key === pieceKey) ?? null : null;
+  return new LiveBattle(ticket, p, opts);
 }
 
 /** Opens a set piece live: the piece by key, its first seed unless one is given. */

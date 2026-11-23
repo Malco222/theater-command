@@ -54,6 +54,9 @@ namespace LandCrater
 		double Deep = 0.0;
 		/** 0 a fresh hole; up to 1 one long weathered (scarred ground: Field::Add's Months): no blast soot in it. */
 		double Weathered = 0.0;
+		/** 1: the thrown soil feathered into the ground past its reach, its thin edge flush on it (the art director, 23
+		 * November); 0: the old edge, ended at its reach a little over the ground (Field::bOldEdge, for the A/B). */
+		double Feather = 1.0;
 	};
 
 	/**
@@ -69,6 +72,11 @@ namespace LandCrater
 	struct Soil
 	{
 		Rgb8 Hollow, Wall, Crest, Thrown, Edge, Clod, Turf;
+		/** An old hole grown over (Field::AddOld): the share of its sides' points still showing bare soil, and that soil. */
+		double Bared = 0.0;
+		Rgb8 Bare;
+		/** How much each point's tone wanders: 1 for torn soil, less for grass grown over it. */
+		double Mottle = 1.0;
 	};
 	/** By the effects kit's ground word: "earth" (the bocage's brown loam), "woods" (darker, with leaf mould), "mud",
 	 * "town" (grey with stone and plaster), "sand", "snow" (brown-black earth thrown on the white). Any other: earth. */
@@ -91,10 +99,12 @@ namespace LandCrater
 	 * when OutCut is given, writes there the outline to cut the ground by (x, y pairs, counter-clockwise, convex: the
 	 * hull of its wall's 0.86 ring, where the wall already stands over the ground). The thrown soil is lit by Lit's
 	 * normal toward its edge (by the slope of Height across the drawn ground's spacing where none is given), so it is
-	 * lit as the ground round it.
+	 * lit as the ground round it. The thrown soil runs a metre and a half or so past its reach, feathered into the
+	 * ground with a broken edge, laid on Thin where given (the ground as drawn, its flat triangles), on Height where not,
+	 * its thin edge 2 mm over it.
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn());
+		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn(), const HeightFn& Thin = HeightFn());
 
 	/**
 	 * Cuts out of a mesh what lies inside a convex outline seen from above (x, y pairs, counter-clockwise): every
@@ -179,6 +189,12 @@ namespace LandCrater
 		std::function<bool(double X, double Y)> Dig;
 		/** The drawn ground's normal, to light the thrown soil by (Lay's Lit; set before the first Add). */
 		UpFn Lit;
+		/** The ground's height as drawn (LandField::Ground::DrawnZ), for the thrown soil to lie on, over Height where
+		 * that is higher and not in an older hole's cut (Lay's Thin; set before the first Add; none: Height). */
+		HeightFn Drawn;
+		/** The crater's edge as it was before 23 November: no feather, its lip 0.6 of the floor's lift over the ground,
+		 * a fresh hole's grass cleared to a round 1.2 of its radius (-TheaterLandCraterOldEdge, for the A/B). */
+		bool bOldEdge = false;
 		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
 		 * grass, the country beyond), not a lane, a bank, a yard, a garden or orchard, the woods (a tree or a hedge would
 		 * hang over a bowl dug under it), a floor, a wall's line, water or marsh. G must outlive the function. */
@@ -402,6 +418,19 @@ namespace LandCrater
 		bool Flat(double X, double Y) const;
 		/** A dug hole's cut (Field::TakeCuts): the marks inside it cut away. */
 		void Cut(const std::vector<double>& Outline);
+		/**
+		 * Mud memory (release 2; Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for the
+		 * next battle there; looks only): an earlier battle's worn ways, laid before this one opens. Each way (a line of
+		 * points, field metres) laid as one pair of ruts some 2.7 m apart, worn wider than one tank's by the column that
+		 * drove it, a piece every OldStep. By Months since: under three the mud dried in them, pale, the grass beside
+		 * them flattened (Flat says so: none stands in them); then grassed over, a lusher, darker green line, fainter
+		 * month by month to a quarter at two years. bWet (the ground in mud now): puddled, dark. None in standing corn
+		 * (sown since), none where no mark is left (Kind None), none across a dug hole. Laid a few millimetres under
+		 * the battle's own marks. At most MostOld pieces (and Most in all). Returns how many pieces laid.
+		 */
+		int LayOld(const std::vector<std::vector<std::pair<double, double>>>& Ways, double Months, bool bWet, uint64_t Seed);
+		static constexpr int MostOld = 2500;
+		static constexpr double OldStep = 2.4;
 		/** Where the ground is cut (Field::InCut): no mark is laid across it. */
 		std::function<bool(double X, double Y)> DugAt;
 		/** The drawn ground's normal, each strip lit by it (none: the slope of the height across the ground's spacing). */
@@ -436,7 +465,34 @@ namespace LandCrater
 		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
 			uint64_t Salt) const;
 		Patch& PatchFor(double X, double Y, Place& OutIn);
+		/** A laid piece kept for Flat, in the squares it reaches. */
+		void Keep(const Piece& Pc);
+		/** A section laid in, listed for TakeChanged once. */
+		void Touched(const Place& In);
 		static int64_t SquareOf(int I, int J) { return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J)); }
+	};
+
+	/**
+	 * Mud memory's ways (Ruts::LayOld): where an earlier battle's columns drove over the fought-over ground (Fought, read
+	 * as LayScars reads it). Through the hedges' gateways where the field has them there (Gates: the openings' places),
+	 * each way from one gateway to another 30 to 220 m on, turning less than 75 degrees, two to four legs, each gently
+	 * bowed; on open ground across it along Heading (radians from east, the way the battle's machines went; not a
+	 * number: the line its ground is spread along most), wandering a little, 150 to 450 m. Three, and two more for
+	 * each battle before, ten at most. Open: where a column may drive (a field, a pasture, rough ground, field works; not a bank, a
+	 * lane, a wall, a yard, a wood, water): a leg between gateways crossing anything else but at its ends is not
+	 * taken, and a way on open ground ends where it meets one (none: anywhere). Seeded: the same field, the same ways.
+	 */
+	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
+		const std::vector<std::pair<double, double>>& Gates, double Heading, const std::function<bool(double X, double Y)>& Open = nullptr);
+
+	/**
+	 * Where an earlier battle's fight lay along (LayScars): the hedgerows', walls' and lanes' middle lines (each a line of
+	 * points, the field's metres), and the places a fight gathers at (the lanes' junctions, the village's edge).
+	 */
+	struct OldLines
+	{
+		std::vector<std::vector<std::pair<double, double>>> Lines;
+		std::vector<std::pair<double, double>> Spots;
 	};
 
 	/**
@@ -445,10 +501,17 @@ namespace LandCrater
 	 * Months ago, laid into Holes before the battle opens (Field::AddOld, weathered by their age). In clusters, a
 	 * barrage's or a mortar's few, over the middle of where this battle's men and machines go (Fought: points of their
 	 * tracks; its middle four fifths each way, at least 300 m); some 150 for each battle before, at most a sixth of
-	 * Field::Most so the battle's own rounds keep their room. GroundWord: the effects kit's word for the ground at a
+	 * Field::Most so the battle's own rounds keep their room. Where Lines are given, most of the clusters lie along a
+	 * few old lines (the art director, 23 November: found from 300 m up in two seconds, not strewn evenly): each old
+	 * line a run of hedges or lanes across the fought-over ground in one heading, its holes mostly on one side of it;
+	 * some at the Spots; a few strewn. GroundWord: the effects kit's word for the ground at a
 	 * place, empty where no old hole is left (a floor, a wall, water, a lane or a yard mended since: the scene's). An
 	 * earlier battle's holes are older still. Seeded: the same field and seed, the same holes. Returns how many.
 	 */
 	int LayScars(Field& Holes, const std::vector<std::pair<double, double>>& Fought, int Battles, double Months, uint64_t Seed,
-		const std::function<std::string(double X, double Y)>& GroundWord);
+		const std::function<std::string(double X, double Y)>& GroundWord, const OldLines& Lines = OldLines());
+
+	/** A field's old lines for LayScars: its hedgerows, walls and lanes; its lanes' junctions (a lane's end within 8 m
+	 * of another lane); the village's edge, ten places round it (TownR 0: none). */
+	OldLines OldLinesOf(const LandField::Ground& G, double TownX, double TownY, double TownR);
 }

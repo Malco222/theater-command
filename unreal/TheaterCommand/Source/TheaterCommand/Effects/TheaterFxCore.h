@@ -281,6 +281,7 @@ namespace TheaterFx
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
+		double MostLong = 0.0; // (a thrown lump: drawn no longer than this times its width, in place of burst.debris.clods.most_long; 0: that)
 		bool bChip = false; // (grounds.<ground>.chips: a stone splinter flung low and fast, its face catching the sun as it turns, Glint)
 		bool bFarCull = false; // (a land hit's piece, burst.far: past gone_beyond_m and under gone_px across at its biggest, it takes no place and is not laid)
 		double LensNear = 0.0; // (game.lens_cap: its burst's own near_m, sizes.<size>.lens_near_m, where that is more than the cap's)

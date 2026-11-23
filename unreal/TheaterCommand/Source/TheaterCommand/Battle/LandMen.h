@@ -128,6 +128,9 @@ namespace LandMen
 		float FlashT = -1.f;            // the first muzzle_flash's time (the shot), -1 none
 		float ReleaseT = -1.f;          // grenade_release's, -1 none
 		float LeftFoot = -1.f;          // the left foot's (or elbow's) step as a share of the loop, for keeping step
+		/** Release 2's run styles (the soldiers thread's run_styles.py): the clip this one is another runner's take of
+		 * ("run" for run_b, run_c, run_d; "advance" for advance_b...), empty for any other clip. */
+		std::string StyleOf;
 		/** A tank clip's places (its "places"): the vehicle model (Piece, its file's name: "Sherman") and its socket his
 		 * root goes to, moved by Offset (forward, right, up of the socket's facing). Empty for a man on his feet. */
 		struct Seat
@@ -204,6 +207,9 @@ namespace LandMen
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
+		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
+		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
+		std::vector<std::vector<int>> Styles;
 
 		int ClipIndex(const std::string& Name) const;
 		int BoneIndex(const std::string& Name) const;
@@ -383,10 +389,18 @@ namespace LandMen
 		 * root_offset) and which clip he plays how far in (SetRide); he is drawn, skinned and given his level of detail
 		 * as every man is, never banked, never fades, fires no shot and sends no event. While a clip whose weapon is
 		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
-		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Appended after the men there are
-		 * (call after Build); -1 where the file was not added.
+		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Row: armies.json's row he is painted
+		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
+		 * after Build); -1 where the file was not added.
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed);
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string());
+		/**
+		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
+		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert
+		 * or winter dress where made; the front's row ("UK@desert") or the dress's own ("ITA_desert"). Empty where no file
+		 * draws him. Release 2's light cars and motorcycles: their drivers and riders, from the army's infantry file.
+		 */
+		std::string RiderFileOf(const std::string& Army, std::string& OutRow) const;
 		struct Ride
 		{
 			bool bShown = false;
@@ -454,6 +468,15 @@ namespace LandMen
 		 * ForcedMonths at 0 or more stands in for both sides' (the Mac's off/on line). Off unless set.
 		 */
 		void SetWorn(bool bOn, double ForcedMonths = -1.0);
+		/**
+		 * Run styles (release 2, Brian's 23 Nov: "not all players are running exactly the same at the same time"): on,
+		 * each man runs and advances as his own one of the file's runners (its run and the run's styles, run_b, run_c,
+		 * run_d: other men's motion capture, each with his own stride, so at one speed each steps at his own beat),
+		 * chosen by his seed, the same runner whether he runs or advances. His feet stay on the ground as before (the
+		 * clip at his speed over its own). Far men banked in poses show the base clip's. Any time: a man takes his runner
+		 * at his next change of gait. Off unless set (each man the file's own run, as before).
+		 */
+		void SetRunStyles(bool bOn);
 		/** The detail levels' bounds, in metres as the picture sees him (SeenDistance, a 50 degree lens's): Near under
 		 * NearTo, Mid under MidTo, Far beyond, each crossed back with a twentieth's give. 25 and 120 unless set; the scene
 		 * sets them by his height on the screen (the battle-scale plan's GS3). */

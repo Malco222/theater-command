@@ -292,6 +292,10 @@ namespace LandKit
 		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
 		 * showing at the chipped edges and where the brush missed. Empty: her own. */
 		std::string Captured;
+		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
+		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
+		 * that choice; any other is let be. */
+		std::map<std::string, std::string> Choose;
 	};
 
 	class Model
@@ -396,6 +400,8 @@ namespace LandKit
 		int Block = 0, K = 0;
 		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
+		std::string Model;                   // her own model where not her block's (ml): a carrier (empty, the lorry), an SP gun, a TD
+		std::map<std::string, std::string> Swaps; // swaps the rules picked for her (sw, release 2): {swap, choice}
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;
 		std::vector<double> Shots;
@@ -577,7 +583,7 @@ namespace LandKit
 			double Carriage = 0.0;                           // a gun's carriage, and whether her crew are swinging it
 			bool bShifting = false;
 			bool bOn = false;                                // moving off and stopping
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
 			size_t MoveOffs = 0, Stops = 0;
 			double Turret = 0.0, Lay = 0.0, Trav = 0.0, Steer = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 			double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
@@ -633,6 +639,7 @@ namespace LandKit
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
 		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come; "Jeep|mg=off": with those swaps
 	};
 
 	/**
@@ -754,7 +761,8 @@ namespace LandKit
 
 		const Block* BlockOf(int Id) const;
 		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
-		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
+		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier = std::string(),
+			const std::map<std::string, std::string>& Choose = {});
 		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
 		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
 		 * Rounds: those that struck her, the killing one among them. */
