@@ -35,7 +35,7 @@ import time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REF = os.path.join(HERE, "light_riders_ref.json")
+REF = os.environ.get("RIDERS_FIT_REF", os.path.join(HERE, "light_riders_ref.json"))
 SHARED = "/mnt/project-files/battle-models/land/soldier/"
 BACKUP = "/home/user/art/looks/backup/riders/"
 FILES = ["soldier_" + n for n in ("CHN", "FRA", "GER", "ITA", "ITA_desert", "JAP", "POL", "SOV", "SOV_snow", "SOV_winter",
@@ -467,7 +467,10 @@ ABOUT = ("light_riders.py and light_riders_fit.py (release 2, 23 November 2026):
          "for each, made on one pattern man at the vehicles' own seat sockets and grips and fitted to this man (his "
          "arms and legs reach the same grips, pedals and footrests). `ride_clips` says which clip goes at which seat. "
          "Each clip's root goes at its seat socket moved by its root_offset (forward, right, up of the socket's "
-         "facing, the game's axes), as the tank crew's commander_hatch goes at its hatch.")
+         "facing, the game's axes), as the tank crew's commander_hatch goes at its hatch. Each car seat's death falls to "
+         "the car's outside (die_seat_slump/_r for the driver, die_ride_slump/_l for a passenger), so two men side "
+         "by side never slump onto each other. Fitted to the mended Kübelwagen and Kurogane seats (the seat-fix "
+         "models).")
 
 
 def contract(ref):
@@ -487,10 +490,14 @@ def contract(ref):
                   "right, up of the socket's facing, the game's axes); the clip's root goes there, facing as the "
                   "socket does. A seat's root is the seat's point (anchor `seat`); the Jeep's gunner's is the floor at "
                   "his feet (anchor `feet`). Loops are 4 s; the deaths 2.4 s, the last pose held from 1.5 s (play once "
-                  "and hold).",
+                  "and hold). Each car seat has exactly one death in its `places`, falling to the car's outer "
+                  "side (away from the man beside him): die_seat_slump (driver, folds to his left) and die_seat_slump_r "
+                  "(the right-hand-drive Fiat 508 and Kurogane drivers, to his right); die_ride_slump (a passenger on "
+                  "the car's right, slumps to his right) and die_ride_slump_l (a passenger on the left, to his left). "
+                  "Find a seat's death by the death clips' `places`, as you find its loop.",
         "weapon": "`weapon`: `none` the rifle put away 2 m under his feet (hide the weapon, bolt and bipod triangles, "
                   "as for the tank crew); `slung` on his back, drawn; `rifle` stood between his knees in his hands, "
-                  "drawn (car_ride, car_ride_back, die_ride_slump).",
+                  "drawn (car_ride, car_ride_back, die_ride_slump, die_ride_slump_l).",
         "turn_with_gun": "jeep_gunner, sidecar_gunner and sidecar_gunner_b hold the gun's grips (grip.gunner.l/.r): if "
                          "the game turns the gun on its mount (mg_mount), turn the man with it about the mount's "
                          "upright axis.",
@@ -504,7 +511,7 @@ def contract(ref):
 
 def checks_at_seats():
     """The pattern man's checks at every seat (light_riders_checks.json: light_riders.py's check_all), worst first."""
-    path = os.path.join(HERE, "light_riders_checks.json")
+    path = os.path.join(os.path.dirname(REF), "light_riders_checks.json")
     if not os.path.exists(path):
         return {}
     C = json.load(open(path))

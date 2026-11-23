@@ -1,5 +1,5 @@
 {
- "how": "light_riders.py check_all on the pattern man, every 8th frame of 60 a second, against each vehicle's mesh (crew.check; the sidecar tubs by tub_check): how deep any point of him goes into the vehicle, and his hands' gap to their grips",
+ "how": "light_riders.py check_all on the pattern man, every 8th frame of 60 a second, against each vehicle's mesh (crew.check with the nine-ray overlap test; the sidecar tubs by tub_check): how deep any point of him goes into the vehicle, and his hands' gap to their grips. The K\u00fcbelwagen and Kurogane are the mended seat-fix models.",
  "clips": {
   "sidecar_ride": [
    {
@@ -61,6 +61,15 @@
   ],
   "die_bike_slump": [
    {
+    "at": "Motorcycle driver",
+    "deepest_m": 0.014,
+    "where": [
+     0.0,
+     "fingers_r"
+    ],
+    "grip_gap_m": 0.011
+   },
+   {
     "at": "R75 driver",
     "deepest_m": 0.015,
     "where": [
@@ -97,15 +106,6 @@
     "grip_gap_m": 0.011
    },
    {
-    "at": "Motorcycle driver",
-    "deepest_m": 0.014,
-    "where": [
-     0.0,
-     "fingers_r"
-    ],
-    "grip_gap_m": 0.011
-   },
-   {
     "at": "WLA driver",
     "deepest_m": 0.01,
     "where": [
@@ -126,6 +126,15 @@
   ],
   "die_sidecar_slump": [
    {
+    "at": "Motorcycle rider.2",
+    "deepest_m": 0.031,
+    "where": [
+     2.4,
+     "ball_l"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
     "at": "R75 gunner",
     "deepest_m": 0.031,
     "where": [
@@ -136,15 +145,6 @@
    },
    {
     "at": "M72 gunner",
-    "deepest_m": 0.031,
-    "where": [
-     2.4,
-     "ball_l"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Motorcycle rider.2",
     "deepest_m": 0.031,
     "where": [
      2.4,
@@ -196,19 +196,19 @@
   "car_ride": [
    {
     "at": "Jeep rider.1",
-    "deepest_m": 0.024,
+    "deepest_m": 0.02,
     "where": [
-     2.267,
+     1.733,
      "lowerarm_l"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "GAZ67 rider.1",
-    "deepest_m": 0.026,
+    "deepest_m": 0.012,
     "where": [
-     0.0,
-     "foot_r"
+     0.267,
+     "pelvis"
     ],
     "grip_gap_m": 0.0
    },
@@ -252,16 +252,16 @@
   "car_ride_back": [
    {
     "at": "Jeep rider.2",
-    "deepest_m": 0.03,
+    "deepest_m": 0.022,
     "where": [
-     2.133,
-     "foot_l"
+     0.0,
+     "ball_l"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "Jeep rider.3",
-    "deepest_m": 0.022,
+    "deepest_m": 0.023,
     "where": [
      0.0,
      "ball_r"
@@ -270,37 +270,37 @@
    },
    {
     "at": "GAZ67 rider.2",
-    "deepest_m": 0.019,
+    "deepest_m": 0.023,
     "where": [
      0.0,
-     "foot_l"
+     "ball_l"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "GAZ67 rider.3",
-    "deepest_m": 0.024,
+    "deepest_m": 0.019,
     "where": [
-     1.067,
-     "foot_l"
+     0.0,
+     "foot_r"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "Kubelwagen rider.2",
-    "deepest_m": 0.08,
+    "deepest_m": 0.034,
     "where": [
-     0.933,
-     "foot_r"
+     2.267,
+     "thigh_r"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "Kubelwagen rider.3",
-    "deepest_m": 0.081,
+    "deepest_m": 0.034,
     "where": [
-     0.933,
-     "foot_r"
+     2.267,
+     "thigh_r"
     ],
     "grip_gap_m": 0.0
    },
@@ -315,36 +315,36 @@
    },
    {
     "at": "Fiat508 rider.3",
-    "deepest_m": 0.015,
+    "deepest_m": 0.014,
     "where": [
-     0.0,
-     "foot_r"
+     2.267,
+     "pelvis"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "FieldCar rider.2",
-    "deepest_m": 0.016,
+    "deepest_m": 0.015,
     "where": [
      0.0,
-     "foot_l"
+     "pelvis"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "FieldCar rider.3",
-    "deepest_m": 0.02,
+    "deepest_m": 0.015,
     "where": [
-     0.0,
-     "foot_r"
+     1.2,
+     "pelvis"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "Kurogane rider.2",
-    "deepest_m": 0.082,
+    "deepest_m": 0.034,
     "where": [
-     1.067,
+     2.933,
      "calf_l"
     ],
     "grip_gap_m": 0.0
@@ -353,8 +353,8 @@
     "at": "Kurogane rider.3",
     "deepest_m": 0.034,
     "where": [
-     1.333,
-     "thigh_r"
+     2.933,
+     "calf_l"
     ],
     "grip_gap_m": 0.0
    }
@@ -380,33 +380,15 @@
    },
    {
     "at": "Kubelwagen driver",
-    "deepest_m": 0.014,
+    "deepest_m": 0.016,
     "where": [
-     1.6,
-     "pelvis"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Fiat508 driver",
-    "deepest_m": 0.014,
-    "where": [
-     1.6,
-     "pelvis"
+     0.0,
+     "ball_r"
     ],
     "grip_gap_m": 0.0
    },
    {
     "at": "FieldCar driver",
-    "deepest_m": 0.014,
-    "where": [
-     1.6,
-     "pelvis"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Kurogane driver",
     "deepest_m": 0.014,
     "where": [
      1.6,
@@ -422,15 +404,6 @@
     "where": [
      1.2,
      "upperarm_l"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Jeep rider.2",
-    "deepest_m": 0.001,
-    "where": [
-     0.0,
-     "foot_r"
     ],
     "grip_gap_m": 0.0
    },
@@ -453,15 +426,6 @@
     "grip_gap_m": 0.0
    },
    {
-    "at": "GAZ67 rider.2",
-    "deepest_m": 0.001,
-    "where": [
-     0.0,
-     "foot_r"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
     "at": "GAZ67 rider.3",
     "deepest_m": 0.007,
     "where": [
@@ -480,38 +444,11 @@
     "grip_gap_m": 0.0
    },
    {
-    "at": "Kubelwagen rider.2",
-    "deepest_m": 0.034,
-    "where": [
-     0.933,
-     "calf_l"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
     "at": "Kubelwagen rider.3",
     "deepest_m": 0.034,
     "where": [
-     1.2,
-     "hand_l"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Fiat508 rider.1",
-    "deepest_m": 0.001,
-    "where": [
-     0.0,
-     "foot_r"
-    ],
-    "grip_gap_m": 0.0
-   },
-   {
-    "at": "Fiat508 rider.2",
-    "deepest_m": 0.001,
-    "where": [
-     0.0,
-     "foot_r"
+     1.6,
+     "pelvis"
     ],
     "grip_gap_m": 0.0
    },
@@ -534,7 +471,7 @@
     "grip_gap_m": 0.0
    },
    {
-    "at": "FieldCar rider.2",
+    "at": "FieldCar rider.3",
     "deepest_m": 0.001,
     "where": [
      0.0,
@@ -543,7 +480,63 @@
     "grip_gap_m": 0.0
    },
    {
-    "at": "FieldCar rider.3",
+    "at": "Kurogane rider.3",
+    "deepest_m": 0.006,
+    "where": [
+     1.2,
+     "calf_l"
+    ],
+    "grip_gap_m": 0.0
+   }
+  ],
+  "die_ride_slump_l": [
+   {
+    "at": "Jeep rider.2",
+    "deepest_m": 0.001,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "GAZ67 rider.2",
+    "deepest_m": 0.001,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Kubelwagen rider.2",
+    "deepest_m": 0.034,
+    "where": [
+     1.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Fiat508 rider.1",
+    "deepest_m": 0.001,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Fiat508 rider.2",
+    "deepest_m": 0.001,
+    "where": [
+     0.0,
+     "foot_r"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "FieldCar rider.2",
     "deepest_m": 0.001,
     "where": [
      0.0,
@@ -568,15 +561,6 @@
      "calf_l"
     ],
     "grip_gap_m": 0.0
-   },
-   {
-    "at": "Kurogane rider.3",
-    "deepest_m": 0.002,
-    "where": [
-     1.2,
-     "calf_l"
-    ],
-    "grip_gap_m": 0.0
    }
   ],
   "die_gunner_slump": [
@@ -593,21 +577,41 @@
   "car_drive_b": [
    {
     "at": "Kubelwagen driver",
-    "deepest_m": 0.011,
+    "deepest_m": 0.016,
     "where": [
-     2.0,
-     "pelvis"
+     0.0,
+     "ball_r"
     ],
-    "grip_gap_m": 0.023
+    "grip_gap_m": 0.019
    },
    {
     "at": "Fiat508 driver",
     "deepest_m": 0.01,
     "where": [
-     2.8,
-     "fingers_l"
+     2.533,
+     "hand_r"
     ],
-    "grip_gap_m": 0.023
+    "grip_gap_m": 0.019
+   }
+  ],
+  "die_seat_slump_r": [
+   {
+    "at": "Fiat508 driver",
+    "deepest_m": 0.014,
+    "where": [
+     1.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
+   },
+   {
+    "at": "Kurogane driver",
+    "deepest_m": 0.014,
+    "where": [
+     1.6,
+     "pelvis"
+    ],
+    "grip_gap_m": 0.0
    }
   ],
   "car_drive_c": [
@@ -615,8 +619,8 @@
     "at": "FieldCar driver",
     "deepest_m": 0.01,
     "where": [
-     0.267,
-     "fingers_l"
+     2.933,
+     "fingers_r"
     ],
     "grip_gap_m": 0.036
    },
@@ -624,7 +628,7 @@
     "at": "Kurogane driver",
     "deepest_m": 0.01,
     "where": [
-     1.333,
+     0.533,
      "fingers_r"
     ],
     "grip_gap_m": 0.036
@@ -673,7 +677,7 @@
    },
    {
     "at": "Alce rider.1",
-    "deepest_m": 0.001,
+    "deepest_m": 0.019,
     "where": [
      1.6,
      "thigh_l"
@@ -682,7 +686,7 @@
    },
    {
     "at": "Rikuo rider.1",
-    "deepest_m": 0.014,
+    "deepest_m": 0.017,
     "where": [
      1.6,
      "thigh_l"
@@ -724,10 +728,10 @@
   "bike_pillion_d": [
    {
     "at": "Alce rider.1",
-    "deepest_m": 0.029,
+    "deepest_m": 0.03,
     "where": [
      0.8,
-     "foot_l"
+     "thigh_l"
     ],
     "grip_gap_m": 0.0
    }

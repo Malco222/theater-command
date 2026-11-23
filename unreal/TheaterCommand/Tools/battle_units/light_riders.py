@@ -49,6 +49,7 @@ from soldier import M4, R_axis, _n, add3, bump, ramp  # noqa: E402
 S = C.S
 WORK = os.environ.get("RIDERS_WORK", "/home/user/art/riders/")
 REF = os.path.join(WORK, "light_riders_ref.json")
+C.VEH = os.environ.get("RIDERS_VEH", C.VEH)       # (another shelf of the vehicles: a staged set, to fit the riders to it)
 RATE = {"loop": 10, "death": 15}        # (keys a second: the seats' gentle loops, the deaths)
 LOOP = 4.0                              # (s: every seat's loop)
 DIE = 2.4                               # (s: every death; the last pose held from DIE_REST)
@@ -93,6 +94,11 @@ def B(v):
 
 
 CARS = ("Jeep", "GAZ67", "Kubelwagen", "Fiat508", "Kurogane", "FieldCar")
+
+
+def on_left(v, seat):
+    """A seat on the vehicle's left (the game's y < 0): the Fiat 508's and the Kurogane's drivers sit on the right."""
+    return float(socks(v)[seat]["at"][1]) < 0.0
 # (the cars' seats over the floor their boots are on, from the cars' socket notes: the Jeep's and the GAZ-67's front
 #  seats 0.32, the others' 0.34; every back seat 0.38)
 DRIVE = {"car_drive": {"cars": ("Jeep", "GAZ67"), "seat_h": 0.32},
@@ -101,10 +107,46 @@ DRIVE = {"car_drive": {"cars": ("Jeep", "GAZ67"), "seat_h": 0.32},
 RIDE = {"car_ride": {"seat_h": 0.33, "seats": ("rider.1",), "feet": 0.40, "hip_x": -0.07},
         "car_ride_back": {"seat_h": 0.38, "seats": ("rider.2", "rider.3"), "feet": 0.31, "hip_x": -0.05}}
 HIP = {"drive": -0.07}
+# two men side by side (a car's front pair, its back pair) must not go into each other: knees kept together over his
+# boots, the elbows in by his sides (tuned with crew_pairs: each man against the other's body)
+_K = json.loads(os.environ.get("RIDERS_KNOBS", "{}"))
+KNOBS = {"ride_feet_y": 0.10, "ride_knee": 0.08, "ride_elbow": (-0.5, 0.4, -1.0), "ride_pole_w": 0.03,
+         "drive_feet_y": (0.09, -0.10), "drive_knee": 0.15, "sidecar_pole_l": (-0.8, 0.15, -0.8),
+         "pillion_back": {"Alce": 0.08, "Rikuo": 0.07}, "pillion_feet_back": {}}
+KNOBS.update(_K)
 # where a back seat's man goes from the seat's point (forward, toward the car's middle): his back to the backrest (each
 # car's measured 0.25 over the seat), his boots clear of the Jeep's wheel arches
 BACK_SEAT = {"Jeep": (0.115, 0.08), "GAZ67": (0.19, 0.0), "Kubelwagen": (-0.05, 0.0), "Fiat508": (0.09, 0.0),
-             "Kurogane": (0.165, 0.05), "FieldCar": (0.06, 0.04)}
+             "Kurogane": (0.165, -0.03), "FieldCar": (0.06, 0.04)}
+
+
+BACK_SEAT.update({k: tuple(v) for k, v in json.loads(os.environ.get("RIDERS_BACK_SEAT", "{}")).items()})
+
+# crew.inside counts crossings along three rays: a ray that grazes a seam (one hit counted two or three times) or runs
+# through a part a metre away that is not closed (the Kurogane's rear arches, seen from its driver) flips its answer.
+# RIDERS_ROBUST=1 asks nine rays, counts hits closer than 1 mm as one, and takes the most of them.
+ROBUST_RAYS = [(0.31, 0.17, 0.93), (-0.62, 0.71, -0.33), (0.45, -0.83, 0.12), (0.83, 0.42, -0.36), (-0.27, -0.55, 0.79),
+               (-0.91, -0.12, 0.40), (0.12, 0.95, 0.29), (0.58, -0.21, -0.79), (-0.36, 0.33, 0.87)]
+
+
+def inside_robust(tree, p, far=6.0):
+    from mathutils import Vector
+    votes = 0
+    for d in ROBUST_RAYS:
+        d = Vector(d).normalized()
+        q, k, last = Vector(p), 0, None
+        for _ in range(60):
+            hit = tree.ray_cast(q, d, far)
+            if hit[0] is None:
+                break
+            if last is None or (hit[0] - last).length > 1e-3:
+                k += 1
+            last, q = hit[0], hit[0] + d * 1e-4
+        votes += k % 2
+    return 2 * votes > len(ROBUST_RAYS)
+
+
+C.inside = inside_robust       # (the nine-ray overlap test, in place of crew.inside's three)
 
 
 def ride_place(v, s):
@@ -307,8 +349,10 @@ def drive_fn(name, cars, seat_h):
         ride_in(P, roll, pitch, br)
         look_about(P, t)
         ank = C.MAN["ankle"]
-        P["foot_l"] = {"at": (0.46, 0.10, -seat_h + ank + 0.03), "yaw": 8.0, "pitch": -12.0, "pole": (0.8, 0.5, 0.5)}
-        P["foot_r"] = {"at": (0.50, -0.12, -seat_h + ank + 0.03), "yaw": -8.0, "pitch": -16.0, "pole": (0.8, -0.5, 0.5)}
+        fl, fr = KNOBS["drive_feet_y"]
+        kn = KNOBS["drive_knee"]
+        P["foot_l"] = {"at": (0.46, fl, -seat_h + ank + 0.03), "yaw": 8.0, "pitch": -12.0, "pole": (0.8, kn, 0.5)}
+        P["foot_r"] = {"at": (0.50, fr, -seat_h + ank + 0.03), "yaw": -8.0, "pitch": -16.0, "pole": (0.8, -kn, 0.5)}
         away(P)
         P["hand_l"] = C.on_rim("l", centre, up, r, 90.0, a_lean=0.6)
         P["hand_r"] = C.on_rim("r", centre, up, r, -90.0, a_lean=0.6)
@@ -339,18 +383,20 @@ def ride_body(t, seat_h, seed, feet, hip_x):
     P = C.sit_body(seat_h, slouch=0.7, hip_x=hip_x)
     ride_in(P, roll, pitch, br)
     ank = C.MAN["ankle"]
-    P["foot_l"] = {"at": (feet, 0.15, -seat_h + ank), "yaw": 14.0, "pole": (1.0, 0.35, 0.55)}
-    P["foot_r"] = {"at": (feet + 0.02, -0.14, -seat_h + ank), "yaw": -12.0, "pole": (1.0, -0.3, 0.55)}
+    fy, kn = KNOBS["ride_feet_y"], KNOBS["ride_knee"]
+    P["foot_l"] = {"at": (feet, fy, -seat_h + ank), "yaw": 6.0, "pole": (1.0, kn, 0.55)}
+    P["foot_r"] = {"at": (feet + 0.02, -fy, -seat_h + ank), "yaw": -6.0, "pole": (1.0, -kn, 0.55)}
     return P, roll, pitch
 
 
 def rifle_hold(P, seat_h, butt_x, roll, pitch):
     W = C.rifle_upright((butt_x, 0.0, -seat_h), lean_back=10.0 + 0.5 * pitch, side=-0.5 * roll)
     P["weapon"] = W
-    P["hand_l"] = C.on_rifle(W, "l", 0.6, (0.75, -0.65, -0.1), pole=(-0.2, 1.0, -0.8))
-    P["hand_r"] = C.on_rifle(W, "r", 0.49, (0.75, 0.65, -0.1), pole=(-0.2, -1.0, -0.8))
+    e = KNOBS["ride_elbow"]
+    P["hand_l"] = C.on_rifle(W, "l", 0.6, (0.75, -0.65, -0.1), pole=(e[0], e[1], e[2]))
+    P["hand_r"] = C.on_rifle(W, "r", 0.49, (0.75, 0.65, -0.1), pole=(e[0], -e[1], e[2]))
     for s in ("l", "r"):
-        P["hand_" + s]["pole_weight"] = 0.03
+        P["hand_" + s]["pole_weight"] = KNOBS["ride_pole_w"]
     P["fingers_l"], P["fingers_r"], P["thumb_l"], P["thumb_r"] = 62.0, 62.0, 45.0, 45.0
     return P
 
@@ -421,14 +467,21 @@ def make_astride():
          "back. Fitted to the %s." % ", the ".join(_d["bikes"]), death="die_bike_slump")(astride_fn(_n_, _d["bikes"]))
 
 
+def pillion_back(bike):
+    """How far back of the bike's pillion socket this pillion sits (m): clear of the rider's back and kit ahead of him."""
+    return float(KNOBS["pillion_back"].get(bike, 0.0))
+
+
 def pillion_fn(name, bike, hands, feet, ahead=-0.04):
+    b = pillion_back(bike)                                      # (his root moved back: what he reaches for comes nearer him)
+    fb = float(KNOBS["pillion_feet_back"].get(bike, 0.0))
     if hands is None:                                           # (the Alce's second saddle has its own bars)
-        gl, gr = np.array((0.17, -0.26, 0.11)), np.array((0.17, 0.26, 0.11))
+        gl, gr = np.array((0.17 + b, -0.26, 0.11)), np.array((0.17 + b, 0.26, 0.11))
     else:
-        gl = np.array((hands[0], -hands[1], hands[2]))
-        gr = np.array((hands[0], hands[1], hands[2]))
-    fl = np.array((feet[0], -feet[1], feet[2]))
-    fr = np.array((feet[0], feet[1], feet[2]))
+        gl = np.array((hands[0] + b, -hands[1], hands[2]))
+        gr = np.array((hands[0] + b, hands[1], hands[2]))
+    fl = np.array((feet[0] + b - fb, -feet[1], feet[2]))
+    fr = np.array((feet[0] + b - fb, feet[1], feet[2]))
     glb, grb, flb, frb = B(gl), B(gr), B(fl), B(fr)
     base = astride_feet(astride_body(0.0), flb, frb, knee_out=0.7, ahead=ahead)
     lean = lean_to(base, {"l": glb, "r": grb}, lift=0, start=2.0)
@@ -449,7 +502,7 @@ def pillion_fn(name, bike, hands, feet, ahead=-0.04):
 
 def make_pillions():
   for _n_, _d in PILLION.items():
-    clip(_n_, LOOP, True, "seat", "slung", [("vehicle", _d["bike"], "rider.1", (0, 0, 0))],
+    clip(_n_, LOOP, True, "seat", "slung", [("vehicle", _d["bike"], "rider.1", (-pillion_back(_d["bike"]), 0, 0))],
          "The man on the %s's pillion, astride: his hands on %s, his boots on his rests, looking about over his "
          "shoulders; his rifle slung on his back." % (_d["bike"], "the second saddle's own bars" if _d["hands"] is None
                                                        else "the grab handle ahead of him" if _d["bike"] != "Rikuo"
@@ -479,7 +532,7 @@ def sidecar_fn(name, bikes):
         ride_in(P, roll, pitch, br, hips=False)
         look_about(P, t, a=(1.2, 1.7, 2.3), b=(2.8, 3.2, 3.7), yaw=(16.0, -20.0))
         away(P)
-        P["hand_l"] = spade_hand("l", glb)
+        P["hand_l"] = dict(spade_hand("l", glb), pole_world=tuple(KNOBS["sidecar_pole_l"]))   # (his left elbow in: the bike's rider is there)
         P["hand_r"] = spade_hand("r", grb)
         P["fingers_l"], P["fingers_r"], P["thumb_l"], P["thumb_r"] = 66.0, 66.0, 25.0, 25.0
         return seat(name, P)
@@ -639,44 +692,63 @@ def _plain(name, P):
 
 def build_deaths():
     CALM.clear()
-    # a car's driver: struck back, then folded forward over his lap and to his left, hands slid off the wheel
+    # a car's driver: struck back, then folded forward over his lap and toward the car's side (his left where he
+    # sits on the left, his right in the right-hand-drive cars: never onto the man beside him), hands off the wheel
     P0 = C.CREW["car_drive"]["fn"](0.0)
-    F1 = limp(slumped(P0, fwd=24.0, side=10.0), on_thigh("l", 0.30, 0.16, 0.20), on_thigh("r", 0.30, 0.16, 0.20))
-    F2 = limp(slumped(P0, fwd=34.0, side=16.0, head=(44.0, 14.0, 20.0), sink=0.01), on_thigh("l", 0.22, 0.2, 0.12),
-              hang("r", (0.18, -0.24, 0.05)))
-    fn = die_keys("car_drive", [(0.55, F1), (DIE_REST, F2)])
-    clip("die_seat_slump", DIE, False, "seat", "none", [p for c in DRIVE for p in C.CREW[c]["place"]],
-         "A car's driver killed in his seat: struck back, his hands slide off the wheel and he folds forward over "
-         "his lap and to his left, his head hanging; the last pose held. Played from the drivers' clips (car_drive, "
-         "car_drive_b, car_drive_c).")(calm("die_seat_slump", fn, seat))
+    drv = [p for c in DRIVE for p in C.CREW[c]["place"]]
+    for dname, k, places in (("die_seat_slump", 1.0, [p for p in drv if on_left(p[1], p[2])]),
+                             ("die_seat_slump_r", -1.0, [p for p in drv if not on_left(p[1], p[2])])):
+        near, far = ("l", "r") if k > 0 else ("r", "l")
+        F1 = limp(slumped(P0, fwd=24.0, side=10.0 * k), on_thigh("l", 0.30, 0.16, 0.20), on_thigh("r", 0.30, 0.16, 0.20))
+        F2 = slumped(P0, fwd=34.0, side=16.0 * k, head=(44.0, 14.0 * k, 20.0 * k), sink=0.01)
+        F2 = limp(F2, *((on_thigh(near, 0.22, 0.2, 0.12), hang(far, (0.18, -0.24 * k, 0.05)))[::1 if k > 0 else -1]))
+        fn = die_keys("car_drive", [(0.55, F1), (DIE_REST, F2)])
+        side = "left" if k > 0 else "right"
+        clip(dname, DIE, False, "seat", "none", places,
+             "A car's driver killed in his seat: struck back, his hands slide off the wheel and he folds forward over "
+             f"his lap and to his {side} (toward the car's side, away from the man beside him), his head hanging; the "
+             "last pose held. Played from the drivers' clips (car_drive, car_drive_b, car_drive_c) at the seats in "
+             f"its places (the {'left' if k > 0 else 'right'}-hand drivers').")(calm(dname, fn, seat))
 
-    # a man in a car holding his rifle: the rifle tips forward from his hands, he slumps forward and to his side
+    # a man in a car holding his rifle: the rifle tips forward from his hands, he slumps forward and toward the car's
+    # side he sits on (his right on the right, his left on the left)
     P0 = C.CREW["car_ride"]["fn"](0.0)
     seat_h = RIDE["car_ride"]["seat_h"]
     butt = (RIDE["car_ride"]["feet"] - 0.06, 0.0, -seat_h)
+    rides = [p for c in RIDE for p in C.CREW[c]["place"]]
 
-    def ride_die(t):
-        fall = ramp(t, 0.15, 1.1)
-        W = C.rifle_upright(butt, lean_back=10.0 - 34.0 * fall, side=-6.0 * fall)
-        F1 = limp(slumped(P0, fwd=20.0, side=-10.0), on_thigh("l", 0.30, 0.15, 0.20), on_thigh("r", 0.30, 0.15, 0.20))
-        F2 = limp(slumped(P0, fwd=30.0, side=-16.0, head=(40.0, -14.0, -18.0), sink=0.01), on_thigh("l", 0.24, 0.15, 0.13),
-                  hang("r", (0.18, -0.18, 0.08)))
-        P = dict(S.keyed([(0.0, P0), (0.1, dict(P0, chest=add3(P0["chest"], (-6.0, 0.0, 0.0)), head=add3(P0["head"], (-10.0, 0.0, 0.0)))),
-                          (0.55, F1), (DIE_REST, F2)])(t))
-        P["weapon"] = W
-        hold = 1.0 - ramp(t, 0.1, 0.6)
-        HL = C.on_rifle(W, "l", 0.6, (0.75, -0.65, -0.1), pole=(-0.2, 1.0, -0.8))
-        HR = C.on_rifle(W, "r", 0.49, (0.75, 0.65, -0.1), pole=(-0.2, -1.0, -0.8))
-        if hold > 1e-3:
-            P["hand_l"] = {"blend": [(hold, HL), (1.0 - hold, P["hand_l"])]} if hold < 1.0 - 1e-3 else HL
-            P["hand_r"] = {"blend": [(hold, HR), (1.0 - hold, P["hand_r"])]} if hold < 1.0 - 1e-3 else HR
-        return P
-    clip("die_ride_slump", DIE, False, "seat", "rifle", [p for c in RIDE for p in C.CREW[c]["place"]],
-         "A man killed in a car's seat with his rifle stood between his knees: struck back, his hands let the rifle go "
-         "and it tips forward against what is ahead of him; he slumps forward and to his right, his head hanging. "
-         "Played from car_ride and car_ride_back (fitted at the front seat's 0.33: in the back seat his boots stay "
-         "0.05 over the floor).")(calm("die_ride_slump", ride_die, seat))
-    HOLD["die_ride_slump"] = lambda t: (1.0 - ramp(t, 0.1, 0.6),) * 2
+    def ride_die_fn(k):                 # (k 1: to his right; -1: to his left)
+        def ride_die(t):
+            fall = ramp(t, 0.15, 1.1)
+            W = C.rifle_upright(butt, lean_back=10.0 - 34.0 * fall, side=-6.0 * fall * k)
+            F1 = limp(slumped(P0, fwd=20.0, side=-10.0 * k), on_thigh("l", 0.30, 0.15, 0.20), on_thigh("r", 0.30, 0.15, 0.20))
+            F2 = slumped(P0, fwd=30.0, side=-16.0 * k, head=(40.0, -14.0 * k, -18.0 * k), sink=0.01)
+            if k > 0:
+                F2 = limp(F2, on_thigh("l", 0.24, 0.15, 0.13), hang("r", (0.18, -0.18, 0.08)))
+            else:
+                F2 = limp(F2, hang("l", (0.18, 0.18, 0.08)), on_thigh("r", 0.24, 0.15, 0.13))
+            P = dict(S.keyed([(0.0, P0), (0.1, dict(P0, chest=add3(P0["chest"], (-6.0, 0.0, 0.0)), head=add3(P0["head"], (-10.0, 0.0, 0.0)))),
+                              (0.55, F1), (DIE_REST, F2)])(t))
+            P["weapon"] = W
+            hold = 1.0 - ramp(t, 0.1, 0.6)
+            e = KNOBS["ride_elbow"]
+            HL = C.on_rifle(W, "l", 0.6, (0.75, -0.65, -0.1), pole=(e[0], e[1], e[2]))
+            HR = C.on_rifle(W, "r", 0.49, (0.75, 0.65, -0.1), pole=(e[0], -e[1], e[2]))
+            if hold > 1e-3:
+                P["hand_l"] = {"blend": [(hold, HL), (1.0 - hold, P["hand_l"])]} if hold < 1.0 - 1e-3 else HL
+                P["hand_r"] = {"blend": [(hold, HR), (1.0 - hold, P["hand_r"])]} if hold < 1.0 - 1e-3 else HR
+            return P
+        return ride_die
+    for dname, k, places in (("die_ride_slump", 1.0, [p for p in rides if not on_left(p[1], p[2])]),
+                             ("die_ride_slump_l", -1.0, [p for p in rides if on_left(p[1], p[2])])):
+        side = "right" if k > 0 else "left"
+        clip(dname, DIE, False, "seat", "rifle", places,
+             "A man killed in a car's seat with his rifle stood between his knees: struck back, his hands let the rifle "
+             f"go and it tips forward against what is ahead of him; he slumps forward and to his {side} (toward the "
+             "car's side, away from the man beside him), his head hanging. Played from car_ride and car_ride_back at "
+             f"the seats in its places (the {side}-hand seats; fitted at the front seat's 0.33: in the back seat his "
+             "boots stay 0.05 over the floor).")(calm(dname, ride_die_fn(k), seat))
+        HOLD[dname] = lambda t: (1.0 - ramp(t, 0.1, 0.6),) * 2
 
     # a motorcycle's rider: struck, slumps forward over the tank, the hands slide off the bars and hang
     P0 = C.CREW["bike_astride"]["fn"](0.0)
@@ -819,7 +891,10 @@ def check_all(names, step=8):
     """Every clip at every seat it is played at, against the vehicle's meshes (crew.check: how deep the man goes into
     it, past 1.2 cm, and his hands' gap to their grips), every `step`th frame of 60."""
     res = {}
+    only = set(filter(None, os.environ.get("RIDERS_ONLY_VEH", "").split(",")))
     for v, items in vehicles_of(names).items():
+        if only and v not in only:
+            continue
         t0 = time.time()
         objs = C.load_piece("vehicle", v)
         tree, bm = C.env_tree(objs)
