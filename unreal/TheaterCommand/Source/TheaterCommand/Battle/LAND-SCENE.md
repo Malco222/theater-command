@@ -667,6 +667,13 @@ for fall and skin for skin the same as with none).
   fall of kind `back` throws him away from a burst in front of him); nearer, by the gun's. The big throw (`thrown`,
   `die_blast_*`) is a field gun's or a howitzer's; a tank's, a mortar's or a grenade's mostly knocks him down an arm or
   a leg short. A replay from the start gives him his own file back.
+- **Whole joints stay whole** (the art director's PASS, 18:34Z: the caps hidden till his limb goes). The twin's skin is
+  split hard at the eight cuts, which opens a crack of up to 20 cm at a bent shoulder or hip with its red caps inside.
+  Its `gore.joined` lists, per level, the points at each joint with the man's own weights and the cuts they sit at:
+  `Crowd::Skin` skins those so while none of their cuts is off (a cut is off once its bone has left the joint its
+  parent holds by over a centimetre), the twin's hard weights after. The twin's `gore.cuts` are read as
+  `Soldier::Cuts` (each cut's bone, its caps' points per level), `gore.joined` as `Soldier::Joins`; a joined list with a
+  point or a bone out of range is dropped for that level, and he falls cracked as before.
 - **The scene.** His mesh's number changes at the swap (`Crowd::MeshNo`); `DrawMen` then makes his triangles and
   colours again, as for a new level (`FManDrawn::MeshNo`). His fall's `limb_off` events come with the rest of the men's
   (`Crowd::Events`, at the stump's socket); no blood is drawn from them yet (Brian has not ruled on blood).
@@ -674,13 +681,13 @@ for fall and skin for skin the same as with none).
   only with the switch on (about 6 MB of json each).
 - **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above (with
   rifle never, none past reach, nearer more often, the man a burst was laid on less often than one within 2 m, the
-  burst's side), a note for each limb resting under 1 m from its joint, and `gore_falls.ppm`, six gored men from the hit
-  to rest, no army's clip twice. Pictures: `/mnt/project-files/battle-fx/gore/`.
-- **Owed.** Twins made from the soldier files as they are now (the ones made on 22 November predate the faces' and
-  eyes' rebuild, so a man would change face as he is struck), and twins with gore falls for every army (today only the
-  German and the Americans'; the British, French, Polish and Soviet twins have no gore falls yet). The art director's
-  clip notes with the re-make: limbs in a low arc (1 to 3 m up, 2 to 8 m out, tumbling, settling flat), the shove and
-  half-turn on the hit frame, throws by calibre with a slide on landing, each kind's throw by its side.
+  burst's side), no whole joint of a gored man open on its caps (his twin's seam copies within 2 mm of the points they
+  copy, skinned; without the joined skin 225 mm), a note for each limb resting under 1 m from its joint or flying over
+  3 m high (the art director's asks; the clips' own to mend), and `gore_falls.ppm`, six gored men from the hit to rest,
+  no army's clip twice. Pictures: `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
+- **Owed.** The deaths thread's re-runs of the falls (USA and GER `die_leg_off_a`, GER `die_arm_off_b` rest under 1 m
+  from the joint; USA and GER `die_blast_a` throw a limb 3.6 to 3.7 m up), gore falls in every army's twin, and the Mac
+  shots behind the switch.
 
 ## Packaging
 
