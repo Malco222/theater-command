@@ -773,6 +773,10 @@ names its drawing, its licence and its scales.
   finer `grain` on her wing, tail, fin and fuselage, so that an edge is not a staircase of half-metre cells. An edge
   narrower than her mesh comes out in steps of the mesh, so `_EDGE` is about as broad as her rings stand apart. Her
   nose's cowling stays plain sand.
+- Her far model thins cleanly (the 3D thread, 23 Nov: the game's quarter copy tore at her cabin). Her windscreen's
+  panes run down below the whole front of her hump, so both halves of the cabin's box lay on them, one sheet on
+  another; with `plain_floor` in her `cabin` (fitout.cabin_body) the lower half lies 2 cm under them on her far model.
+  Her far bombs are capped at their first ring, with no ring of points on each tip.
 - Parts: `plane`, `wing.*`, `tail`, `bombs`, `bay.port`, `bay.starboard`, `prop.1` to `prop.3` (2 is her nose's) and
   their blurs, `aileron.*`, `elevator.*`, `rudder`, `flexgun.1` to `flexgun.5`; sockets `engine.1` to `engine.3`,
   `turret.1` to `turret.5`, `bombs` and the usual others; clips a bomber's (`bombs_away`, `doors.close`, ...). She has

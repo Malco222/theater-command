@@ -64,7 +64,10 @@ _HUMP = [(2.18, 0.95, 0.62, 0.3), (2.1, 0.95, 0.69, 0.3), (1.95, 0.95, 0.71, 0.3
          (0.05, 0.95, 0.71, 0.55), (0.02, 0.95, 0.71, 0.52), (-0.5, 0.95, 0.71, 0.53), (-0.54, 0.95, 0.7, 0.49), (-0.58, 0.95, 0.68, 0.43),
          (-0.62, 0.95, 0.6, 0.3)]
 _CABIN = {"square": 1.3, "ease": 4.0, "screen": (2.12, 0.88, 1.84, 1.16, 0.9), "pane": (0.4, 0.26, 1.0, 0.02), "back": 1.25, "sill": 0.96,
-          "top": 1.12, "posts": (1.7, 1.48, 1.25)}
+          "top": 1.12, "posts": (1.7, 1.48, 1.25),
+          # (her panes run down below the whole front of her hump: on her far model its lower half lies 2 cm under
+          #  them, not on them, so that the far mesh has no sheet lying on another (fitout.cabin_body))
+          "plain_floor": 0.02}
 
 # (her wing: the plan's leading and trailing edges; the head-on view's upper surface, level at -0.034, and lower
 #  surface, rising 7 cm to the metre out, give each section's height and thickness)

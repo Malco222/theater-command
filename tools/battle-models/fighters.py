@@ -326,11 +326,11 @@ CANOPY = [
      '    for scoop_row in s.get("scoops", []):\n'
      '        stations, side, square = scoop_row[:3]\n'
      '        for hand_side in ((side, -side) if side and len(scoop_row) < 4 else (side,)):\n'),
-    ('        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull) if s.get("cabin") else Body(hood_stations, 2.3)\n',
+    ('        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull, fine) if s.get("cabin") else Body(hood_stations, 2.3)\n',
      '        if s.get("canopy"):\n'
      '            battle_canopy(parts, frames, glints, s, hull, coat, PAINTS)\n'
      '            break\n'
-     '        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull) if s.get("cabin") else Body(hood_stations, 2.3)\n'),
+     '        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull, fine) if s.get("cabin") else Body(hood_stations, 2.3)\n'),
     ('        parts.strip(glare, [hull.at(x, math.radians(90.0)) for x in xs], [hull.out(x, math.radians(90.0)) for x in xs], half, 0.003)\n',
      '        if s.get("canopy"):\n'
      '            battle_glare(parts, glare, hull, xs, half, 0.003)\n'
