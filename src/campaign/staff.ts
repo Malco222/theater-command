@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { CONVOY_STAGE, UNITS_STAGE, WINCHANCE_STAGE } from './stage';
+import { COLUMNS_STAGE, CONVOY_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -137,6 +137,9 @@ export function startOpen(g: Game, wide = true): Game {
   // Units decide (release 2, src/campaign/units.ts): set at a campaign's start only, where stage.json switches it on,
   // and before the opening research, so a later start's staffs take its research rows in their catch-up months.
   if (UNITS_STAGE) g.flags.unitsDecide = 1;
+  // Earned nicknames and supply columns (release 2, nicknames.ts and columns.ts): set as the campaign opens, where stage.json switches them on.
+  if (NICKNAMES_STAGE) g.flags.nicknames = 1;
+  if (COLUMNS_STAGE) g.flags.columns = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);

@@ -1,4 +1,5 @@
 import type { Rng } from '../core/rng';
+import type { ColumnRun } from './columns';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
 /** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
@@ -1447,6 +1448,8 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
+  columns?: Record<string, ColumnRun[]>;
   /** Release 2 (ruling 241 D1), record only, written only while the submarine scene's viewing setting is on: this month's and last month's hunts, torpedoings and convoy months, for the scene to stage. Absent otherwise. */
   subLook?: SubLook[];
   airFleets: AirFleet[];

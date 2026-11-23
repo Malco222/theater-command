@@ -40,6 +40,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import { unitsDecide } from './units';
+import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
@@ -4090,6 +4091,8 @@ export function startPhase(g: Game, nat: string): void {
   tellSettled(g, nat);
   computeSupply(g);
   cutOffNews(g);
+  // Supply columns (release 2, columns.ts): the month's lorries go out from the railhead to the corps beyond it, and some are caught on the road.
+  columnsMonth(g, nat);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
   // from what is left. A treasury that is empty pays nobody: no drafts go out, the armies rest badly and men drift away.
   // Trade agreements are looked over first: what war has ended, what the sea lets through (the grand campaign).
@@ -4121,7 +4124,7 @@ export function startPhase(g: Game, nat: string): void {
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
   const stored = new Set(army.filter((c) => onPortStores(g, c)));
-  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
   // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
   const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
   const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));
@@ -4161,7 +4164,7 @@ export function startPhase(g: Game, nat: string): void {
       const cold = frozen(g, nat, g.regions[c.reg]);
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-      const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c) + ward(c).org) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
+      const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c) + ward(c).org) * lineStrength(g, c).mul * columnShare(g, c) * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {

@@ -88,6 +88,8 @@ export function saveGame(g: Game): string {
     ac: g.ac,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
+    // The month's lorry columns (release 2, columns.ts): absent while the switch is off, so such a save is written as it always was.
+    columns: g.columns,
     // A neutral's bargains (release 2): absent while the switch is off, so such a save is written as it always was.
     bargains: g.bargains,
     // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
@@ -251,6 +253,7 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
+  if (d.columns && typeof d.columns === 'object') g.columns = d.columns;
   if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
   if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
   // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.

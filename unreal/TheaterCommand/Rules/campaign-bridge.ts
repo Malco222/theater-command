@@ -141,6 +141,8 @@ import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 import { seaWhere } from '../../../src/campaign/sea-words';
 import { bargainCalls } from './bargains-look';
+import { columnsOn as columnsAreOn, columnsView, setColumns } from '../../../src/campaign/columns';
+import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -843,6 +845,13 @@ function drawView() {
       // The player's trade routes, over land and sea, in gold: red where one is cut.
       ...(pictureTrade(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
     ] : [],
+    // (Release 2, columns.ts) The month's supply columns the player can see: the road from the railhead to the corps as
+    // map points (x, y, ...), whose they are ('ours', 'friend', 'theirs'), the lorries sent and lost, the share that got
+    // through, and where they were caught (x, y, 1 aircraft or 2 partisans, lorries lost; four numbers a place). Empty
+    // while the columns are off.
+    columns: (() => { try { return columnsView(s).map((v) => ({ nat: v.nat, side: v.side, path: v.points.flat(), lorries: v.lorries, lost: v.lost, share: Math.round(v.share * 100) / 100, hits: v.hits.flatMap((h) => [h.x, h.y, h.by === 'air' ? 1 : 2, h.lost]) })); } catch { return []; } })(),
+    // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
+    nickFlags: nicknamesOn(s),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -6833,3 +6842,7 @@ function find(name: string) {
 // start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
+// (Release 2) Earned nicknames and supply columns, each its own switch: TC.nicknames(on) at any time (a name is only a
+// name), TC.columns(on) only at a campaign's start, before the first month is played ('set' false otherwise).
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };

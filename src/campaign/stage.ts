@@ -76,3 +76,13 @@ export const WINCHANCE_STAGE: boolean = winForced !== undefined ? !!winForced &&
 const units = (globalThis as { TC_UNITS?: unknown }).TC_UNITS ?? G.process?.env?.TC_UNITS;
 /** True where new grand campaigns open with Units decide (data/campaign/stage.json 'unitsDecide'). */
 export const UNITS_STAGE: boolean = units !== undefined ? !!units && units !== '0' : (stage as { unitsDecide?: boolean }).unitsDecide === true;
+
+// Earned nicknames and supply columns (release 2; Brian's yes of 23 November 2026 12:05Z): the grand campaigns opened
+// while these are true carry the flags 'nicknames' (nicknames.ts) and 'columns' (columns.ts). Forced by TC_NICKNAMES
+// and TC_COLUMNS, as the far side's switch is by TC_FAR.
+const nicks = (globalThis as { TC_NICKNAMES?: unknown }).TC_NICKNAMES ?? G.process?.env?.TC_NICKNAMES;
+/** True where new grand campaigns open with earned nicknames (data/campaign/stage.json 'nicknames'). */
+export const NICKNAMES_STAGE: boolean = nicks !== undefined ? !!nicks && nicks !== '0' : (stage as { nicknames?: boolean }).nicknames === true;
+const cols = (globalThis as { TC_COLUMNS?: unknown }).TC_COLUMNS ?? G.process?.env?.TC_COLUMNS;
+/** True where new grand campaigns open with supply columns (data/campaign/stage.json 'columns'). */
+export const COLUMNS_STAGE: boolean = cols !== undefined ? !!cols && cols !== '0' : (stage as { columns?: boolean }).columns === true;

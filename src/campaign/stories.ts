@@ -22,6 +22,7 @@ import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
+import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -171,6 +172,7 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'cut': return `Cut off at ${at}.`;
     case 'relief': return `Back in supply at ${at} after ${n} months cut off.`;
     case 'honour': { const a = n ? awardOf(g, n) : undefined; return a ? `Honoured: ${awardTitle(g, a)}.` : 'Honoured.'; }
+    case 'named': { const nick = (u as { nick?: string | null }).nick; return `Called ${nick ?? 'by a name of its own'} by its own army after ${n ?? NICKNAMES.need} hard fights, the last at ${at}.`; }
     case 'bonds': return 'Sent home on a bond tour.';
     case 'school': return 'Sent home to the training schools as instructors.';
     case 'back': return 'Back from home and ready for orders.';
@@ -443,6 +445,44 @@ export function storyBattle(g: Game, rep: BattleReport, target: Region, preOdds:
     for (const c of attackers) if (!c.dead) earn(g, 'corps', c, target.id);
     for (const c of defenders) if (!c.dead) earn(g, 'corps', c, target.id);
   } finally { publish(g); }
+  // Earned nicknames (release 2, nicknames.ts): a corps that has won enough hard fights is given a name by its own army.
+  if (nicknamesOn(g)) hardFights(g, rep, target, preOdds, attackers, defenders);
+}
+
+/**
+ * Counts the hard fights of a battle's winners (nicknames.ts) and names any corps whose count has reached the mark.
+ * Every nation's corps alike; nothing here changes a number. The player hears of his own corps' names, and of the
+ * name an enemy corps has made fighting his.
+ */
+function hardFights(g: Game, rep: BattleReport, target: Region, preOdds: number, attackers: Corps[], defenders: Corps[]): void {
+  const win = rep.taken;
+  const named: Corps[] = [];
+  const each = (c: Corps, u: { men: number; lost: number } | undefined, side: 'att' | 'def'): void => {
+    if (!u || c.dead || c.kind === 'fort' || (side === 'att') !== win) return;
+    if (!hardWin(side, preOdds, u.men > 0 ? u.lost / u.men : 0)) return;
+    bump(c, 'hard');
+    if (c.nick || stat(g, c, 'hard') < NICKNAMES.need || !roomForName(g, c.nat)) return;
+    const name = earnedName(g, c, target.name);
+    if (!name) return;
+    c.nick = name;
+    note(g, c, 'named', target.id, stat(g, c, 'hard'));
+    named.push(c);
+  };
+  attackers.forEach((c, i) => each(c, rep.attackers[i], 'att'));
+  defenders.forEach((c, i) => each(c, rep.defenders[i], 'def'));
+  const me = g.human;
+  if (!me) return;
+  const losers = win ? defenders : attackers;
+  for (const c of named) {
+    const hard = stat(g, c, 'hard');
+    if (c.nat === me) {
+      headline(g, 'honour', `After ${hard} hard fights, the last at ${target.name}, the men of ${c.name} are being called ${c.nick}. The name goes on its flag.`, me, target.id);
+      moment(g, 5, 'nick', c, target.id, { x: c.nick! });
+    } else if (losers.some((x) => x.nat === me)) {
+      const adj = g.nations[c.nat]?.adj ?? '';
+      headline(g, 'info', `The ${adj} ${c.name}, which ${win ? 'beat us' : 'held against us'} at ${target.name}, is spoken of on our side now as ${c.nick}.`, c.nat, target.id);
+    }
+  }
 }
 
 /** Ground taken without a fight goes in the diaries of the corps that marched in. */
