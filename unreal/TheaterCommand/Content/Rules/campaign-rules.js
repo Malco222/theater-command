@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d1c977d2 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 78e334bf 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -24322,6 +24322,7 @@
     if (nat === "GER") return "He111";
     if (COMMONWEALTH.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
     if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
+    if (nat === "ITA") return "SM79";
     if (nat === "SOV") return design >= 1941 ? "Pe2" : `Bomber:${nat}`;
     if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
     return `Bomber:${nat}`;
@@ -76132,6 +76133,8 @@
     // Italy's 12.7 mm and 7.7 mm (the historian, question 10: the guns; rates and speeds unchecked).
     breda127: { gun: "Breda-SAFAT 12.7 mm", kind: "hmg", rate: 700, mv: 765 },
     breda77: { gun: "Breda-SAFAT 7.7 mm", kind: "rifle", rate: 900, mv: 730 },
+    // Japan's flexible 7.7 mm, the Lewis pattern on 97-round pans (rate and speed unchecked).
+    type92: { gun: "Type 92", kind: "rifle", rate: 600, mv: 750 },
     // The plain fighter and bomber of a nation the sources do not cover: a rifle-calibre and a heavy gun of the period.
     rifle: { gun: "rifle-calibre machine gun", kind: "rifle", rate: 1100, mv: 800 },
     heavy: { gun: "heavy machine gun", kind: "hmg", rate: 800, mv: 860 }
@@ -76210,7 +76213,6 @@
   var hand = (spec2, where, rounds, arc, more = {}) => gun(spec2, "hand", where, rounds, { arc, ...more });
   var turret = (spec2, where, rounds, arc = null) => gun(spec2, "turret", where, rounds, { arc });
   var REACH2 = { rifle: 370, hmg: 550, cannon20: 550 };
-  var MARKS2 = { SM79: "SM.79", Nell: "G3M", Betty: "G4M" };
   function bomberGuns(model, nat, w) {
     const d = at3(w);
     const box = (mark, guns2, silent = []) => ({ mark, conv: null, silent, guns: guns2, reach: REACH2 });
@@ -76252,9 +76254,19 @@
       }
       case "LeO451":
         return box("LeO 451", [hand(G4.hs404, ["turret.1"], 120, about(180, 70, 0, 70), { drum: 60 }), hand(G4.mac34, ["turret.2"], 500, about(180, 40, -60, 0)), fixed(G4.mac34, [], 300)]);
+      case "SM79":
+        return box("SM.79", [fixed(G4.breda127, ["turret.1"], 500), hand(G4.breda127, ["turret.2"], 350, about(180, 70, 0, 70)), hand(G4.breda127, ["turret.3"], 350, about(180, 40, -60, 0)), hand(G4.breda77, ["turret.4"], 500, from(30, 150, -40, 50)), hand(G4.breda77, ["turret.5"], 500, from(210, 330, -40, 50))]);
+      case "Nell":
+        return box("G3M2", [hand(G4.type99, ["turret.2"], 360, about(180, 70, 0, 70), { drum: 45 }), hand(G4.type92, ["turret.1"], 582, from(0, 360, 0, 70), { drum: 97 }), hand(G4.type92, ["turret.3"], 582, from(30, 150, -40, 50), { drum: 97 }), hand(G4.type92, ["turret.4"], 582, from(210, 330, -40, 50), { drum: 97 }), hand(G4.type92, [], 582, from(320, 40, -30, 30), { drum: 97 })]);
+      case "Betty": {
+        const nose = hand(G4.type92, ["turret.1"], 582, from(320, 40, -30, 30), { drum: 97 });
+        const tail = hand(G4.type99, ["turret.5"], 360, about(180, 30, -30, 30), { drum: 45 });
+        const up = about(180, 80, 0, 80), right2 = from(30, 150, -40, 50), left = from(210, 330, -40, 50);
+        if (d < 1943 + 8 / 12) return box("G4M1", [nose, hand(G4.type92, ["turret.2"], 582, up, { drum: 97 }), hand(G4.type92, ["turret.3"], 582, right2, { drum: 97 }), hand(G4.type92, ["turret.4"], 582, left, { drum: 97 }), tail]);
+        return box("G4M2", [nose, turret(G4.type99, ["turret.2"], 450, up), hand(G4.type99, ["turret.3"], 360, right2, { drum: 45 }), hand(G4.type99, ["turret.4"], 360, left, { drum: 45 }), tail]);
+      }
     }
-    const named3 = MARKS2[model];
-    return named3 ? { ...plainBomber(nat, d), mark: named3 } : plainBomber(nat, d);
+    return plainBomber(nat, d);
   }
   function plainBomber(nat, d) {
     const nose = from(320, 40, -30, 30), reach3 = REACH2;
