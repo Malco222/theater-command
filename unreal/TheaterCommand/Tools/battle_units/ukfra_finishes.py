@@ -5,6 +5,11 @@ left off), and the French Adrian's front badge (the arm's grenade or anchor) is 
 """
 
 LEAF = ["4E6B2C", "5C7A32", "3F5A25", "6F7F3B"]
+OLIVE = "4C4E38"                  # (the olive paint showing where a coat over it is rubbed through: the art director's)
+MUD = "6B5E48"                    # (dry brown-grey mud, the art director's) and MUD_THIN, it rubbed thin over the olive
+MUD_THIN = "5D5741"
+MUD_SMEAR = [{"kind": "smear", "hex": MUD_THIN, "high": 0.62, "hard": False},
+             {"kind": "smear", "hex": MUD, "high": 0.36, "seed": 3, "hard": False}]
 LEAF_DRY = ["8A8A4A", "A3965E", "6B5A3A"]
 HESSIAN = ["8E7B55", "77744A", "6B6A44", "5E6040"]   # (scrim: hessian strips dyed green and brown, and raw)
 
@@ -37,18 +42,21 @@ UK = [   # (the Brodie, Mk II: a shallow bowl with a wide flat brim all round)
      "the green shows at the chips (the Western Desert, 1940 to 1943).",
      "from": "1940-06", "to": "1943-05", "front": "desert", "share": 0.55, "base": "B4A27A",
      "paint": [{"kind": "wear", "hex": "6E6A4E"}, {"kind": "dust", "hex": "C6B48C", "level": 0.35, "hard": False}]},
-    {"name": "desert dust", "about": "Never repainted: the khaki-green helmet under a coat of desert dust.",
+    {"name": "desert dust", "about": "Never repainted: the khaki-green helmet under a coat of desert dust, rubbed through "
+     "to the green in a few places at the rim and the crown.",
      "from": "1940-06", "to": "1943-05", "front": "desert", "share": 0.3,
-     "paint": [{"kind": "dust", "hex": "A89A76", "level": 0.2, "hard": False}, {"kind": "wear", "hex": UK_WEAR}]},
-    {"name": "mud", "about": "Mud smeared on by hand to kill the shine.",
+     "paint": [{"kind": "dust", "hex": "A89A76", "level": 0.2, "hard": False}],
+     "extras": [{"kind": "chips", "hex": OLIVE, "rim": 4, "crown": 2}]},
+    {"name": "mud", "about": "Mud smeared on by hand to kill the shine: dull and heaviest on the brim and low on the dome, "
+     "thinning to nothing on the crown.",
      "from": "1939-09", "to": "1945-05", "share": 0.05,
-     "paint": [{"kind": "mud", "hex": "564A38", "level": 0.05, "high": 0.55, "scale": 0.03},
-               {"kind": "mud", "hex": "6C604C", "level": 0.35, "high": 0.9, "seed": 3, "scale": 0.03}]},
-    {"name": "whitewash", "about": "Whitewash brushed over in the snow (the Ardennes and Holland, winter 1944-45), rubbed "
-     "back to the green at the rim.",
+     "paint": MUD_SMEAR},
+    {"name": "whitewash", "about": "Whitewash brushed over in the snow (the Ardennes and Holland, winter 1944-45), grimy "
+     "on the brim and worn through to the green in a few places at the rim and the crown.",
      "from": "1944-12", "to": "1945-02", "season": "winter", "share": 0.25, "inside": None,
-     "paint": [{"kind": "wash", "hex": "E3E0D5", "level": -0.4, "under": False},
-               {"kind": "mud", "hex": "B8B5A4", "level": 0.35, "high": 0.4, "under": False}]},
+     "paint": [{"kind": "wash", "hex": "E3E0D5", "level": -1.2, "under": False, "hard": False},
+               {"kind": "smear", "hex": "B8B5A4", "high": 0.15, "under": False, "hard": False}],
+     "extras": [{"kind": "chips", "hex": OLIVE, "rim": 5, "crown": 2}]},
 ]
 
 FR_PAINT = "50513A"              # (armies.json's FRA row)
@@ -63,12 +71,12 @@ FRA = [   # (the Adrian, M26: a round crown in pressed pieces, a brim fore and a
      "paint": [{"kind": "dust", "hex": "8F8669", "level": 0.3, "hard": False}, {"kind": "wear", "hex": FR_WEAR}]},
     {"name": "horizon blue", "about": "An older helmet never repainted, still in the faded horizon blue of before 1935 "
      "(reservists' issue).",
-     "from": "1939-09", "to": "1940-06", "share": 0.07, "base": "76838C",
+     "from": "1939-09", "to": "1940-06", "share": 0.07, "base": "6A767E",
      "paint": [{"kind": "wear", "hex": "4E575C", "level": 0.2}]},
-    {"name": "mud", "about": "Mud smeared on by hand (the winter of 1939-40 on the frontier, and the spring rains).",
+    {"name": "mud", "about": "Mud smeared on by hand (the winter of 1939-40 on the frontier, and the spring rains): dull "
+     "and heaviest on the brim and low on the dome, thinning to nothing on the crown.",
      "from": "1939-09", "to": "1945-05", "share": 0.08,
-     "paint": [{"kind": "mud", "hex": "564A38", "level": 0.05, "high": 0.55, "scale": 0.03},
-               {"kind": "mud", "hex": "6C604C", "level": 0.35, "high": 0.9, "seed": 3, "scale": 0.03}]},
+     "paint": MUD_SMEAR},
     {"name": "desert sand", "about": "Painted sand in Africa and the Levant (1940 to 1943).",
      "from": "1940-06", "to": "1943-05", "front": "desert", "share": 0.6, "base": "B6A47C",
      "paint": [{"kind": "wear", "hex": "6E6A4E"}, {"kind": "dust", "hex": "C6B48C", "level": 0.35, "hard": False}]},
