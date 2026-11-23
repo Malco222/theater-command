@@ -953,9 +953,11 @@ namespace AirShow
 			BankWant = std::atan(S * Omega / Gee); // bank = atan(v squared / (g r))
 		}
 		// (a bomber of two engines or more, flying, banks no more than her pilot would with a load and a box about her:
-		// wings level on her run, a gentle rally turn in her box, rolled into slowly)
+		// wings level on her run, a gentle rally turn in her box, rolled into slowly; by her engines, not only her span:
+		// the Pe-2, 17.2 m, and the plain bomber, 19.8, banked 21 degrees with her doors open, and her box spread on its
+		// rally turn)
 		double RollMost = C.RollMax;
-		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0) && C.Doing != Role::Fall)
+		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2) && C.Doing != Role::Fall)
 		{
 			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
 			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
@@ -4327,6 +4329,10 @@ namespace AirShow
 			{ "b17", 12 }, { "lancaster", 14 }, { "he111", 8 }, { "b29", 20 }, { "betty", 4 }, { "g4m", 4 }, { "sm79", 5 },
 			{ "avenger", 4 }, { "tbf", 4 }, { "sturmovik", 4 }, { "il2", 4 }, { "nell", 2 }, { "g3m", 2 }, { "kate", 1 },
 			{ "b5n", 1 }, { "dauntless", 1 }, { "sbd", 1 }, { "val", 1 }, { "d3a", 1 }, { "stuka", 1 }, { "ju87", 1 },
+			// (the modeller's of 23 November: the Wellington's nine 500 lb bombs; the Pe-2's four from her fuselage bay
+			// (her nacelles' two are not drawn), not the one a span under 18 m gives, which let one bomb go through her
+			// shut doors; the LeO 451 takes her span's six)
+			{ "wellington", 9 }, { "pe2", 4 },
 		};
 		for (const auto& Load : Loads) if (M == Load.first) return Load.second;
 		return Span > 25.0 ? 10 : Span > 18.0 ? 6 : 1;
