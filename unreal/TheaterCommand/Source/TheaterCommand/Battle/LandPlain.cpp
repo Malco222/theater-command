@@ -1373,7 +1373,9 @@ namespace LandScape
 							// sun's shadow; the art director, 23 November), the stubs' rows what reads)
 							const double Y = -0.3 + 0.6 * R;
 							const size_t First = M.Near.Points();
-							Ridge(W, 1.8, bWhite ? 0.04 : 0.1, bWhite ? 0.52 : 0.42, bWhite ? Rgb(210, 214, 222) : Rgb(70, 62, 52), bWhite ? Rgb(220, 224, 231) : Rgb(62, 55, 46), bWhite ? Rgb(226, 230, 236) : Rgb(58, 52, 44), true, bWhite ? 0.7 : 0.3);
+							// (bare, lower and broader, its ends drawn out long and low as under the snow: the art director's
+							// black logs, 23 November, were these lengths' blunt rounded ends close by)
+							Ridge(W, 1.8, bWhite ? 0.04 : 0.07, bWhite ? 0.52 : 0.55, bWhite ? Rgb(210, 214, 222) : Rgb(70, 62, 52), bWhite ? Rgb(220, 224, 231) : Rgb(62, 55, 46), bWhite ? Rgb(226, 230, 236) : Rgb(58, 52, 44), true, 0.7);
 							for (size_t P = First; P < M.Near.Points(); ++P) M.Near.Positions[3 * P + 1] = static_cast<float>(M.Near.Positions[3 * P + 1] + Y);
 							for (int H = 0; H < 12; ++H)
 							{
@@ -1491,7 +1493,9 @@ namespace LandScape
 					const double Half = 0.5 * (K == KRidge ? RidgeLong : RidgeShort);
 					{
 						Writer W(M.Near);
-						Ridge(W, Half, bSnow ? 0.14 : 0.12, bSnow ? 0.95 : 0.8, Crest, Flank, Foot, true, 0.15, K == KRidge ? 8 : 3);
+						// (low and broad near by, so from a man's eye it is a bank of earth, not a pipe: the art director, 23
+						// November)
+						Ridge(W, Half, bSnow ? 0.14 : 0.09, bSnow ? 0.95 : 1.1, Crest, Flank, Foot, true, 0.15, K == KRidge ? 8 : 3);
 					}
 					{
 						Writer W(M.Far);
