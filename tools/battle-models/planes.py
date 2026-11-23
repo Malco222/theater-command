@@ -593,6 +593,7 @@ def _torpedo(x, z, long=5.3, r=0.225):
 
 fitout.TURNED_TORPEDO["Betty"] = _torpedo                   # (the Type 91 in the Betty's bay is the Nell's, turned as finely)
 fitout.PLAIN_LOADS.add("Betty")                             # (and her far model carries it and her bombs: fitout.plain_loads)
+fitout.TORPEDO_HUNG.add("Betty")                            # (on a torpedo sortie her bay's doors were off, the torpedo half out of her belly)
 
 
 _PALE = {"upper": "A9B19F", "upper2": "A9B19F", "under": "9DA593", "nose": "1E1F22", "boss": "8E9092"}      # (the Japanese navy's pale grey of the early war)
@@ -2973,7 +2974,8 @@ def clips_for_plane(m, f):
         C["watch"] = {"long": long, "loop": True, "about": "Her gunners keeping watch: every turret and gun sweeping slowly across its piece of sky (lay it over `fly`).",
                       "tracks": swing, "events": []}
     if f.has_torpedo:
-        in_bay = f.bay_torpedo is not None and "bay.port" in m.part_at
+        hung = f.name in fitout.TORPEDO_HUNG                # (her doors are off on a torpedo sortie, the torpedo half out of her)
+        in_bay = f.bay_torpedo is not None and "bay.port" in m.part_at and not hung
         t0 = 0.9 if in_bay else 0.0
         C["torpedo_away"] = {"long": t0 + 1.5, "loop": False, "after": "hold",
                              "about": "Her torpedo leaves: " + ("the doors of her bay swing open, it" if in_bay else "it") + " drops clear and is gone, and she lifts as its weight comes off (the game's own torpedo is spawned at `torpedo` and takes over).",
@@ -2981,8 +2983,10 @@ def clips_for_plane(m, f):
                                        [{"part": "torpedo", "slide": [[0.0, 0.0], [t0, 0.0], [t0 + 0.5, 1.2], [t0 + 1.0, 4.9], [t0 + 1.5, 11.0]], "scale": [[0.0, 1.0], [t0 + 1.4, 1.0], [t0 + 1.5, 0.001]]},
                                         {"part": "plane", "move": [[0.0, 0, 0, 0], [t0, 0, 0, 0], [t0 + 0.4, 0, 0, 0.3], [t0 + 1.5, 0, 0, 0]]}],
                              "events": ([{"t": 0.0, "fx": "", "socket": "torpedo", "cue": "bomb_doors"}] if in_bay else []) + [{"t": t0, "fx": "torpedo_away", "socket": "torpedo", "cue": "torpedo_launch"}]}
-        C["load.torpedo"] = {"long": 0.0, "loop": False, "after": "hold", "about": "She carries her torpedo: her bombs are not there (lay it over everything else).",
-                             "tracks": [{"part": "bombs", "scale": [[0.0, 0.001]]}] if f.has_bombs else [], "events": []}
+        C["load.torpedo"] = {"long": 0.0, "loop": False, "after": "hold", "about": "She carries her torpedo: her bombs are not there (lay it over everything else)."
+                             if not hung else "She carries her torpedo, half out of her belly, and flies with the doors of her bay off: her bombs and her doors are not there (lay it over everything else).",
+                             "tracks": ([{"part": "bombs", "scale": [[0.0, 0.001]]}] if f.has_bombs else [])
+                                       + ([{"part": nm, "scale": [[0.0, 0.001]]} for nm in ("bay.port", "bay.starboard") if nm in m.part_at] if hung else []), "events": []}
         if f.has_bombs:
             C["load.bombs"] = {"long": 0.0, "loop": False, "after": "hold", "about": "She carries her bombs for bombing from high up: her torpedo is not there.",
                                "tracks": [{"part": "torpedo", "scale": [[0.0, 0.001]]}], "events": []}

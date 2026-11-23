@@ -525,7 +525,12 @@ What they add to the form:
   she carries one or the other, never both: play `load.torpedo` or `load.bombs` first (each scales the other load
   away) and leave it applied. Extras painted `torpedo` are her torpedo; `BAY_TORPEDO` puts one in a bay. The Betty's
   is the Nell's Type 91, ringed as finely (`fitout.TURNED_TORPEDO`), and her far model carries it and her bombs too,
-  at the game's own grain for what hangs under a machine (`fitout.PLAIN_LOADS`, `PLAIN_GRAIN`). The new
+  at the game's own grain for what hangs under a machine (`fitout.PLAIN_LOADS`, `PLAIN_GRAIN`). On a torpedo sortie
+  she flew with her bay's doors off and the torpedo half out of her belly (`fitout.TORPEDO_HUNG`): it hangs so on her
+  near and far models, her `load.torpedo` also scales `bay.port` and `bay.starboard` away, and her `torpedo_away`
+  drops it at once (no doors to open). On a bomb sortie (`load.bombs`) her doors are on and closed, and `bombs_away`
+  opens them as before. Her default, with neither load clip, shows the torpedo through her closed doors: always play
+  one. The new
   `Torpedo` model is for the game to drop and run: clips `drop` and `run` (its wooden air fins, part `box`, are
   scaled away in the water; part `screws` turns), sockets `nose` and `wake`.
 - **A coat graded down her sides** (`graded` in the numbers, patched in by `GRADED`): the Hellcat's sea blue on top,
@@ -785,7 +790,13 @@ names its drawing, its licence and its scales.
 - What `land` takes from a module besides France's: `UPRIGHT` (fitout.UPRIGHT: bombs stowed nose up in one row along
   her keel, (how many, the bay roof's height)), `FAR_LOADS` (fitout.PLAIN_LOADS: her far model has her `bombs` part too,
   at the far grain, where her bay is, without its doors) and `finish()` (planes.FINISH: laid on her once she is built;
-  hers paints the band on her skin and puts `ITA-CROSS` on her rudder).
+  hers paints the band on her skin, puts `ITA-CROSS` on her rudder, and rings her nose engine's dark face with the
+  fourteen steel cylinder heads the sculptor gives her wing engines, on the fine model).
+- Her coat (the art director, 23 Nov): the blotches as shipped, with a tight sprayed edge of one breadth everywhere
+  (`coat()` takes the noise as a distance from the edge, soft for `_EDGE` each side, as the Me 262's lines are) and a
+  finer `grain` on her wing, tail, fin and fuselage, so that an edge is not a staircase of half-metre cells. An edge
+  narrower than her mesh comes out in steps of the mesh, so `_EDGE` is about as broad as her rings stand apart. Her
+  nose's cowling stays plain sand.
 - Parts: `plane`, `wing.*`, `tail`, `bombs`, `bay.port`, `bay.starboard`, `prop.1` to `prop.3` (2 is her nose's) and
   their blurs, `aileron.*`, `elevator.*`, `rudder`, `flexgun.1` to `flexgun.5`; sockets `engine.1` to `engine.3`,
   `turret.1` to `turret.5`, `bombs` and the usual others; clips a bomber's (`bombs_away`, `doors.close`, ...). She has

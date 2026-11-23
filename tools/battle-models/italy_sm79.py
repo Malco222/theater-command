@@ -7,11 +7,14 @@ as (x, z of its middle, half its width, half its height), sections of a flying s
 trailing edge, height, thickness)), x ahead, z up, in metres, z = 0 on the hub of her nose airscrew.
 
 What planes.py reads from here: NAME and NUMBERS (her numbers, as EXTRA_PLANES[NAME]); SEATS (her two pilots under
-her cabin's glass: fitout.SEATS[NAME]); BAY (her bomb bay) and UPRIGHT (her bombs stowed nose up in it); finish()
-(her white band and her rudder's cross, laid on her once she is built). planes.land takes all of these in; install()
-does the same for a scratch copy of this file.
+her cabin's glass: fitout.SEATS[NAME]); BAY (her bomb bay) and UPRIGHT (her bombs stowed nose up in it); coat() (her
+camouflage field, NUMBERS["graded"]); finish() (her white band, her rudder's cross and her nose engine's cylinder heads,
+laid on her once she is built). planes.land takes all of these in; install() does the same for a scratch copy of this
+file.
 """
-from mathutils import Vector
+import math
+
+from mathutils import Vector, noise
 
 NAME = "SM79"
 
@@ -98,6 +101,41 @@ SMOKE = "4E5232"          # (the dark olive green of her soft blotches)
 UNDER = "A9ACA8"          # (the light grey under her)
 WHITE = "E6E4DA"          # (her band)
 
+# Her coat: the blotches as shipped (the game's own noise, at her patches' size and where the game lays it), with an
+# edge of the same breadth everywhere, as the French machines' is tight (the art director, 23 Nov: the edges were a
+# staircase of half-metre cells). The coat is laid point by point and the game mixes between points, so an edge
+# narrower than her mesh comes out in steps of the mesh (steepening the field alone, as france_d520._EDGE does, left
+# steps of 13 cm on her): the field is taken as a distance from the edge, in metres (the noise over its slope), and the
+# edge is _EDGE each side of it, about as broad as her rings stand apart (`grain`, closer than the usual), as the
+# Me 262's is (planes._me262_edge). Her nose's cowling stays plain sand, as it was (ahead of nose_back the field is
+# below nought: her upper colour, the sand of her nose).
+_PATCH = 1.9
+_EDGE = 0.09                                                # (half the breadth of a sprayed edge, in metres)
+_NOSE_BACK = 3.55
+
+
+def _noise(x, y):
+    return noise.noise(Vector(((x + 31.7) / _PATCH, (y * 1.3 + 12.3) / _PATCH, 0.0))) - 0.02      # (the sculptor's coat_of)
+
+
+def coat():
+    """Her camouflage field: the sculptor's own noise, as a distance from a blotch's edge, soft for _EDGE each side."""
+    def field(p):
+        if p.x > _NOSE_BACK:
+            return -1.0
+        f = _noise(p.x, p.y)
+        slope = math.hypot(_noise(p.x + 0.01, p.y) - f, _noise(p.x, p.y + 0.01) - f) / 0.01
+        return max(-2.0, min(2.0, f / max(slope, 0.05) / _EDGE)) * 0.045
+    return field
+
+
+# The radial in her nose, as the sculptor lays one in each of her wing nacelles (fine model only): fourteen steel
+# cylinder heads in a ring round the dark face of the engine, round her airscrew's hub. Her nose's face is not flat, as
+# the nacelles' is, but falls toward her spinner, so each head stands square to it where the ring crosses it (0.43 m
+# out, at 4.809 m, falling 2.46 to 1), 2.5 cm proud of it. (The art director, 23 Nov: the face read as a flat black
+# disc, like a hole.) (ring out, face x, its facing (along, out), a head's radius)
+_HEADS = (0.43, 4.809, (0.927, 0.376), 0.075)
+
 NUMBERS = {
     "title": "SM.79 Sparviero (our own model)", "year": 1937,
     "hull": _HULL, "square": 2.0, "squares": _SQUARES,
@@ -109,6 +147,7 @@ NUMBERS = {
     "rudder_line": ([(-0.12, -9.85), (2.405, -9.85)], ((-0.12, -9.85), (2.405, -9.85))),
     # (sand with soft green blotches over light grey, as she was shipped; her scribed lines soft, as on every pale machine)
     "patch": 1.9, "colours": {"upper": SAND, "upper2": SMOKE, "under": UNDER, "nose": SAND, "boss": SAND}, "lines": (0.6, 0.45),
+    "grain": {"wing": 0.13, "tail": 0.12, "fin": 0.12, "hull": 0.15},
     # (each wing's Alfa Romeo 126 radial: its airscrew 2.62 m out and 0.55 m below her nose's, its nacelle running back
     #  under her wing past its trailing edge; her wheels fold back into it)
     "engines": [(2.62, 1.38, -0.55, True, 3.63)], "well": (2.62, 0.45, 0.5), "pitot": True,
@@ -141,8 +180,9 @@ FAR_LOADS = True                                            # (her far model car
 
 def finish(m, fine=True):
     """What the sculptor does not lay on her: the white band round her rear fuselage, her skin's faces between its two
-    ends painted white; and the white cross on her rudder, both sides, a small plain shield at its middle, placed as
-    an owner's flag is (planes.rudder_flag), its tag `ITA-CROSS`."""
+    ends painted white; the white cross on her rudder, both sides, a small plain shield at its middle, placed as an
+    owner's flag is (planes.rudder_flag), its tag `ITA-CROSS`; and on the fine model the cylinder heads of her nose
+    engine (_HEADS)."""
     import planes
     s = NUMBERS
     G = planes.game()
@@ -171,6 +211,14 @@ def finish(m, fine=True):
         m.marks.insert(at, mk)
     m.info.setdefault("file", {})["marks_note"] = ("Italy (art director, 19 Nov): the white band round the rear fuselage is painted on the skin; "
                                                    "ITA-CROSS is the white cross on the rudder with a small plain shield at its middle; the wings are bare")
+    if fine:
+        ring, x, (along, out), r = _HEADS
+        m.use("plane")
+        for k in range(14):                                  # (as the sculptor's radial_details: the first at her beam)
+            a = 2.0 * math.pi * k / 14.0
+            way = Vector((0.0, math.cos(a), math.sin(a)))
+            m.rod(Vector((x - 0.11 * along, 0.0, 0.0)) + way * (ring - 0.11 * out), Vector((x + 0.025 * along, 0.0, 0.0)) + way * (ring + 0.025 * out),
+                  r, "steel", sides=8)
 
 
 def install():
