@@ -692,7 +692,7 @@ int main(int Argc, char** Argv)
 	{
 		const size_t Data = Path.rfind("/Data/AirBattles/");
 		const std::string Models = Data == std::string::npos ? std::string("Content/Models/") : Path.substr(0, Data) + "/Models/";
-		const std::map<std::string, std::string> Named = { { "B-17", "B17" }, { "B5N", "Kate" }, { "G4M", "Betty" }, { "G3M", "Nell" }, { "SM.79", "SM79" }, { "D3A", "Val" }, { "SBD", "Dauntless" }, { "TBD", "Devastator" }, { "TBF", "Avenger" } };
+		const std::map<std::string, std::string> Named = { { "B-17", "B17" }, { "B5N", "Kate" }, { "G4M", "Betty" }, { "G3M", "Nell" }, { "SM.79", "SM79" }, { "Pe-2", "Pe2" }, { "LeO 451", "LeO451" }, { "D.520", "D520" }, { "D3A", "Val" }, { "SBD", "Dauntless" }, { "TBD", "Devastator" }, { "TBF", "Avenger" } };
 		std::set<std::string> Asked;
 		for (const AirFeed::Frame& View : Rec.Views)
 			for (const AirShow::Group& G : View.Groups)
