@@ -66,8 +66,8 @@ int main(int Argc, char** Argv)
 	M.Face = 0.0;
 	M.Out = 0.0;
 	M.Hatch = W.Exits[0];
-	M.Deck = LandBail::V3{ 1.55, -0.3, 1.9 };
-	M.Down = LandBail::V3{ 1.55 + 1.70, -0.3, 0.0 };
+	M.Deck = LandBail::V3{ 1.3, -0.3, 1.9 };
+	M.Down = LandBail::V3{ 1.3 + 1.70, -0.3, 0.0 };
 	M.Lee = LandBail::V3{ 3.6, -9.0, 0.0 };
 	M.Goal = LandBail::V3{ 6.0, -22.0, 0.0 };
 	M.Speed = 3.8;
@@ -79,10 +79,10 @@ int main(int Argc, char** Argv)
 	F.FireOut = F.FallAt + 3.0;
 	F.bLives = true;
 	const std::vector<std::pair<const LandBail::Man*, std::vector<double>>> Rows = {
-		{ &M, { 0.2, 0.7, 1.1, 1.45, 1.8, 2.45, 2.9, OnGround + 0.4 } },
-		{ &F, { OnGround + 0.6, OnGround + 1.4, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.6 } },
+		{ &M, { 0.2, 0.7, 1.1, 1.45, 1.8, 2.2, 2.7, 3.05, OnGround + 0.4 } },
+		{ &F, { OnGround + 0.6, OnGround + 1.4, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
 	};
-	const int Cols = 8, CellH = 240, SheetW = 1920;
+	const int Cols = 9, CellH = 240, SheetW = 2160;
 	std::vector<uint8_t> Sheet(static_cast<size_t>(SheetW) * static_cast<size_t>(CellH * static_cast<int>(Rows.size())) * 3, 236);
 	Light Lt = Daylight(215.0, 24.0);
 	Lt.EarthA = Lin(118, 98, 76);
@@ -117,8 +117,17 @@ int main(int Argc, char** Argv)
 			C.Update(Now);
 			std::vector<float> At, Fa;
 			Skinned(C, Man, At, Fa);
-			std::printf("  row %zu, %.2f s: %s at %.2f s, seat (%.2f, %.2f, %.2f), body (%.2f, %.2f, %.2f)\n", Row, T,
-				P.Clip.c_str(), P.Time, P.At.X, P.At.Y, P.At.Z, P.Root.X, P.Root.Y, P.Root.Z);
+			// (his feet: the balls of his feet against what is under them)
+			double Feet = 1e9;
+			for (const char* Ball : { "ball_l", "ball_r" })
+			{
+				const int Bi = Tk->BoneIndex(Ball);
+				if (Bi < 0) continue;
+				const Vec3 Pt = C.FramesOf(Man)[Bi].Point(Tk->Bones[static_cast<size_t>(Bi)].Head);
+				Feet = std::min(Feet, static_cast<double>(Pt.Z) - HullAt(static_cast<double>(Pt.X), static_cast<double>(Pt.Y)));
+			}
+			std::printf("  row %zu, %.2f s: %s at %.2f s, seat (%.2f, %.2f, %.2f), body (%.2f, %.2f, %.2f), feet %.2f m up\n", Row, T,
+				P.Clip.c_str(), P.Time, P.At.X, P.At.Y, P.At.Z, P.Root.X, P.Root.Y, P.Root.Z, Feet);
 			Scene Sc;
 			Sc.AddMan(C.LookOf(Man, Near), At, Fa);
 			Sc.AddGround(-5.0, -10.0, 9.0, 5.0, 0.1, Hull);

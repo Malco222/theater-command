@@ -288,14 +288,18 @@ namespace LandBail
 				M.Hatch = W.Exits[static_cast<size_t>(M.Exit)];
 				const double Along = std::clamp((M.Hatch.X - W.Middle.X) * Fwd.X + (M.Hatch.Y - W.Middle.Y) * Fwd.Y, -3.5, 3.5);
 				const double Half = std::max(0.8, W.Wide * 0.5);
-				M.Deck = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * (Half + 0.05), W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * (Half + 0.05), 0.0 };
+				// (her deck's edge he jumps from; with the bail clips his root 0.2 m in from it, his toes at it, as
+				// bail_jump_down stands)
+				const double Edge = W.bClips ? Half - 0.2 : Half + 0.05;
+				M.Deck = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Edge, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Edge, 0.0 };
 				const double DeckGround = Ground(M.Deck.X, M.Deck.Y);
 				M.Deck.Z = std::max(DeckGround + 0.8, std::min(M.Hatch.Z, DeckGround + 1.9));
 				// (with the bail clips: where bail_jump_down lands him, 1.70 m out from her edge; and he climbs out facing
 				// her way or back from it, so that his right, the clip's way, is the side he drops from)
 				M.bClips = W.bClips;
 				M.Face = M.Side > 0 ? W.Heading : W.Heading + Pi;
-				const double Off = M.bClips ? Half + 0.05 + JumpOut : Half + 1.1;
+				M.RoofUp = W.RoofUp;
+				const double Off = M.bClips ? Edge + JumpOut : Half + 1.1;
 				M.Down = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Off, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Off, 0.0 };
 				M.Down.Z = Ground(M.Down.X, M.Down.Y);
 				M.Lee = M.Down;
@@ -504,11 +508,12 @@ namespace LandBail
 				// his right is the side he drops from), at a run along her deck to its edge, and off it, landed by the
 				// jump's own fall where she is higher or lower than its 1.5 m.
 				const V3 FwdF{ std::sin(M.Face), std::cos(M.Face), 0.0 }, RightF{ std::cos(M.Face), -std::sin(M.Face), 0.0 };
-				const V3 Up{ M.Hatch.X + RightF.X * ClimbRight + FwdF.X * ClimbFwd, M.Hatch.Y + RightF.Y * ClimbRight + FwdF.Y * ClimbFwd, M.Hatch.Z - BootsUnder + ClimbUp };
+				// (her own roof made up from 0.8 s, his knee on it, over 0.2 s)
+				const V3 Up{ M.Hatch.X + RightF.X * ClimbRight + FwdF.X * ClimbFwd, M.Hatch.Y + RightF.Y * ClimbRight + FwdF.Y * ClimbFwd, M.Hatch.Z - BootsUnder + M.RoofUp };
 				if (Tc < ClipClimbS)
 				{
 					const double E = Ease(Tc / ClipClimbS);
-					Q.At = V3{ M.Hatch.X, M.Hatch.Y, M.Hatch.Z - BootsUnder };
+					Q.At = V3{ M.Hatch.X, M.Hatch.Y, M.Hatch.Z - BootsUnder + (M.RoofUp - ClimbUp) * std::clamp((Tc - 0.8) / 0.2, 0.0, 1.0) };
 					Q.Facing = M.Face;
 					Q.Clip = "bail_climb_out";
 					Q.Time = Tc;

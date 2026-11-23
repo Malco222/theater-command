@@ -4468,6 +4468,9 @@ void ALandBattle::BailOut()
 			const LandMen::Soldier* Sol = S.Men->SoldierFile(File);
 			W.bClips = Sol && Sol->ClipIndex("bail_climb_out") >= 0 && Sol->ClipIndex("bail_jump_down") >= 0
 				&& Sol->ClipIndex("burning_run") >= 0 && Sol->ClipIndex("burning_fall_roll") >= 0;
+			// (her roof over his boots in the hatch, where the soldiers measured it; else the clip's own 0.95 m)
+			W.RoofUp = Look.Name.find("Sherman") != std::string::npos ? 1.07 : Look.Name.find("Tiger") != std::string::npos ? 0.97
+				: Look.Name.find("PanzerIV") != std::string::npos || Look.Name.find("Panzer IV") != std::string::npos ? 0.82 : 0.95;
 		}
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
