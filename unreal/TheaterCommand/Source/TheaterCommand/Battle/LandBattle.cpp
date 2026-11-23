@@ -5295,12 +5295,17 @@ void ALandBattle::HideTheTable()
 					CloudShadeInk->SetScalarParameterValue(TEXT("Cover"), static_cast<float>(FMath::Clamp(0.8 * Day.Cover, 0.0, 0.4)));
 					CloudShadeInk->SetScalarParameterValue(TEXT("Strength"), 1.0f);
 					// The opening in sun, as a film crew waits for it: the picture's clear disc (280 m round its middle,
-					// make_sky_textures.py) over the field's middle at the battle's start, and the shadows cross the rest,
-					// coming over it as the clouds drift. (Where the field's middle's sun ray meets the clouds' base, as the
-					// material reads it; the drift is nothing at the start, AirSky::Field::DriftAt.)
+					// make_sky_textures.py) over what the opening shot looks at (the director's first pose, between the two
+					// lines; the field's middle if it has none), and the ring of clouds round the disc lying on the shot's
+					// flanks and far fields, so its first frame reads as cloud country (the art director's round 2); the
+					// shadows come over the middle as the clouds drift. (Where that point's sun ray meets the clouds' base,
+					// as the material reads it; the drift is nothing at the start, AirSky::Field::DriftAt.)
 					{
 						const LandFeed::Field& Plan = State->Rec.Ground;
-						const double MidX = 0.5 * Plan.Cols * Plan.Cell, MidY = 0.5 * Plan.Rows * Plan.Cell;
+						const double Wide = Plan.Cols * Plan.Cell, Deep = Plan.Rows * Plan.Cell;
+						const LandEye::Pose& First = State->Eye.Current();
+						const bool bLooked = First.Look.X > 0.0 && First.Look.X < Wide && First.Look.Y > 0.0 && First.Look.Y < Deep;
+						const double MidX = bLooked ? First.Look.X : 0.5 * Wide, MidY = bLooked ? First.Look.Y : 0.5 * Deep;
 						const FVector Mid = World(MidX, MidY, GroundZ(MidX, MidY)) / UnitsPerMetre;
 						const double Climb = (Day.Base - Mid.Z) / FMath::Max(TowardSun.Z, 0.15);
 						const double UnderX = Mid.X + TowardSun.X * Climb, UnderY = Mid.Y + TowardSun.Y * Climb;

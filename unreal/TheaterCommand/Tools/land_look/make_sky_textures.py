@@ -41,6 +41,7 @@ REACH = 400.0          # metres either side of the edge that R holds
 CLEAR_UV = (0.5, 0.5)  # the clear disc's middle, in repeats (M_LandCloudShade's "Clear")
 CLEAR_RADIUS = 280.0   # metres
 GAP = 40.0             # metres of sun at least between two clouds
+RING = 6               # clouds laid round the clear disc
 
 
 def periodic_noise(rng, n, low, high, power=1.0):
@@ -80,12 +81,10 @@ def clouds(rng):
     placed = []   # (x, y, reach, parts)
     at = np.zeros((0, 3))  # (x, y, reach) of those placed, to test a new one against all at once
     cx, cy = CLEAR_UV[0] * SIZE, CLEAR_UV[1] * SIZE
-    # (more small clouds than big, the body's radius 55 to 220 m so the cloud is 150 to 600 m across; laid biggest
-    # first, so the small ones fill the sun between)
-    extents = np.sort(75.0 * (300.0 / 75.0) ** (rng.uniform(size=900) ** 1.5))[::-1]
-    for extent in extents:
-        # (a cumulus from below: a body, five to nine lobes round its rim reaching out to the cloud's extent, and on
-        # each lobe two smaller ones, so the outline is a cauliflower's, not an oval's; some drawn out along an axis)
+    def cumulus(extent):
+        """A cumulus from below, `extent` metres from its middle to its rim: a body, five to nine lobes round its rim
+        reaching out to the extent, and on each lobe two smaller ones, so the outline is a cauliflower's, not an oval's;
+        some drawn out along an axis. (parts, reach): parts [(x, y, r)] from its middle."""
         body = extent * rng.uniform(0.5, 0.62)
         parts = [(0.0, 0.0, body)]
         lobes = int(rng.integers(5, 10))
@@ -103,27 +102,55 @@ def clouds(rng):
         ca, sa = np.cos(axis), np.sin(axis)
         parts = [((qx * ca + qy * sa) * stretch * ca - (-qx * sa + qy * ca) * sa,
                   (qx * ca + qy * sa) * stretch * sa + (-qx * sa + qy * ca) * ca, r) for qx, qy, r in parts]
-        reach = max(np.hypot(qx, qy) + r for qx, qy, r in parts) + 6.0
+        return parts, max(np.hypot(qx, qy) + r for qx, qy, r in parts) + 6.0
+
+    def room(x, y, reach):
+        """Whether a cloud may stand there: off the clear disc, and GAP from every other."""
+        dx = (x - cx + SIZE / 2) % SIZE - SIZE / 2
+        dy = (y - cy + SIZE / 2) % SIZE - SIZE / 2
+        if np.hypot(dx, dy) < CLEAR_RADIUS + reach:
+            return False
+        if len(at):
+            dx = (x - at[:, 0] + SIZE / 2) % SIZE - SIZE / 2
+            dy = (y - at[:, 1] + SIZE / 2) % SIZE - SIZE / 2
+            if np.any(np.hypot(dx, dy) < reach + at[:, 2] + GAP):
+                return False
+        return True
+
+    # A ring of clouds just off the clear disc, all round it (the art director's round 2: the opening's first frame
+    # shows cloud country, one or two patches on its flanks or far fields, whichever way it looks, the middle still in
+    # sun). They are first in the day's order, so every day with clouds has them.
+    ring = 0
+    turn = rng.uniform(0.0, 2.0 * np.pi)
+    for k in range(RING):
+        parts, reach = cumulus(rng.uniform(120.0, 210.0))
+        for _ in range(40):
+            a = turn + 2.0 * np.pi * (k + rng.uniform(-0.25, 0.25)) / RING
+            d = CLEAR_RADIUS + reach + rng.uniform(10.0, 90.0)
+            x, y = (cx + d * np.cos(a)) % SIZE, (cy + d * np.sin(a)) % SIZE
+            if room(x, y, reach):
+                placed.append((x, y, reach, parts))
+                at = np.vstack([at, [x, y, reach]])
+                ring += 1
+                break
+    # (the rest: more small clouds than big, 150 to 600 m across; laid biggest first, so the small ones fill the sun
+    # between)
+    extents = np.sort(75.0 * (300.0 / 75.0) ** (rng.uniform(size=900) ** 1.5))[::-1]
+    for extent in extents:
+        parts, reach = cumulus(extent)
         for _ in range(80):
             x, y = rng.uniform(0.0, SIZE, 2)
             # (gathered loosely in groups: fewer where the groups' noise is low)
             g = groups[int(y / px) % N, int(x / px) % N]
             if rng.uniform() > 1.0 / (1.0 + np.exp(-2.2 * (g + 0.3))):
                 continue
-            dx = (x - cx + SIZE / 2) % SIZE - SIZE / 2
-            dy = (y - cy + SIZE / 2) % SIZE - SIZE / 2
-            if np.hypot(dx, dy) < CLEAR_RADIUS + reach:
-                continue
-            if len(at):
-                dx = (x - at[:, 0] + SIZE / 2) % SIZE - SIZE / 2
-                dy = (y - at[:, 1] + SIZE / 2) % SIZE - SIZE / 2
-                if np.any(np.hypot(dx, dy) < reach + at[:, 2] + GAP):
-                    continue
-            placed.append((x, y, reach, parts))
-            at = np.vstack([at, [x, y, reach]])
-            break
-    # (the order the day's cover keeps them in, at random, so a thin day's few clouds are as spread as a full day's)
-    orders = rng.permutation(len(placed)).astype(np.float64)
+            if room(x, y, reach):
+                placed.append((x, y, reach, parts))
+                at = np.vstack([at, [x, y, reach]])
+                break
+    # (the order the day's cover keeps them in: the ring first, then the rest at random, so a thin day's few clouds
+    # are as spread as a full day's)
+    orders = np.concatenate([rng.permutation(ring), ring + rng.permutation(len(placed) - ring)]).astype(np.float64)
     orders = (orders + 0.5) / len(placed)
     inside = np.full((N, N), -REACH * 4.0)
     order = np.zeros((N, N))
