@@ -82,7 +82,7 @@ namespace
 		// passes, and nothing in the fight reads them)
 		{ TEXT("captured"), TEXT("Captured tanks"), TEXT("An army that lately beat one with tanks fields a few of them in its own paint. Off: every tank is its own side's."), TEXT("TheaterLandNoCaptured"), true, nullptr },
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), true, nullptr },
-		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoMud"), true, nullptr },
+		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), true, nullptr },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
