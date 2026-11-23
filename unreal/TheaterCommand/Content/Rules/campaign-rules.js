@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e022ea0e 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 76104363 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -41283,6 +41283,30 @@
     const list4 = enemy ? [enemy] : n.atWar;
     return list4.some((e) => n.offStart[e] !== void 0 && g2.turn - n.offStart[e] <= 1);
   }
+  function groundWeather(g2, r) {
+    const zone = WEATHER.zones[zoneOfRegion(g2, r.id)];
+    const m = turnToDate(g2.turn).month;
+    if (zone && (zone.key === "nrus" || zone.key === "srus") && weather(g2).mud) return "mud";
+    if (zone && zone.snow.includes(m + 1)) return "snow";
+    if (!weatherOn(g2)) return "";
+    const sky = skyAt(g2, r.id);
+    return sky === "closed" ? "rain" : sky === "clear" ? "clear" : "";
+  }
+  function capturedKit(g2, rep, target) {
+    const attWon = rep.level.endsWith("victory");
+    const heavy = rep.level === "Heroic victory" || rep.level === "Decisive defeat" ? 50 : rep.level === "Decisive victory" ? 33 : 0;
+    if (!heavy) return;
+    const losers = (attWon ? rep.defenders : rep.attackers).filter((u) => u.kind === "arm" && u.divs > 0);
+    if (!losers.length) return;
+    const throwOf = (rep.id * 7919 + target.id * 104729 + g2.turn * 31) % 100;
+    if (throwOf >= heavy) return;
+    const winner = attWon ? rep.attNat : rep.defNat;
+    const from2 = losers.reduce((a, b) => b.divs > a.divs ? b : a).nat;
+    if (from2 === winner) return;
+    const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
+    const book3 = g2.captured ?? (g2.captured = {});
+    book3[winner] = [...(book3[winner] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-2), { from: from2, n, turn: g2.turn }];
+  }
   function weather(g2) {
     const m = turnToDate(g2.turn).month;
     if (EASTERN.mud.includes(m)) return { mud: true, winter: false, text: "Mud in the east slows every army there." };
@@ -42719,7 +42743,13 @@
     if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
     g2.reports.push(rep);
     const scar = (g2.scars ?? (g2.scars = {}))[target.id];
-    g2.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g2.turn };
+    const muddy = groundWeather(g2, target) === "mud";
+    g2.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g2.turn, ...scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {} };
+    if (muddy) {
+      g2.scars[target.id].mudN = (scar?.mudN ?? 0) + 1;
+      g2.scars[target.id].mudLast = g2.turn;
+    }
+    capturedKit(g2, rep, target);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
       g2.flags.lateBattles = (g2.flags.lateBattles ?? 0) + 1;
@@ -48605,6 +48635,7 @@
       // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
       // its scars back from its reports when loaded.
       scars: g2.flags.open === 1 ? g2.scars : void 0,
+      captured: g2.flags.open === 1 ? g2.captured : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -48760,6 +48791,7 @@
     if (Array.isArray(d.subLook)) g2.subLook = d.subLook;
     if (d.bargains && typeof d.bargains === "object") g2.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
     if (d.legions && typeof d.legions === "object") g2.legions = { abroad: {}, done: {}, ...d.legions };
+    if (d.captured && typeof d.captured === "object") g2.captured = d.captured;
     if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
     else
       for (const r of g2.reports ?? []) {
@@ -75253,7 +75285,22 @@
         const why = staffOnly(t);
         if (why) return { ticket: null, why };
         const scar = g2.scars?.[to];
-        const ticket = scar && scar.n > 0 ? { ...t, scars: { count: scar.n, months: Math.max(0, g2.turn - scar.last) } } : t;
+        const ticket = { ...t };
+        if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g2.turn - scar.last) };
+        if (scar?.mudN && scar.mudLast !== void 0) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g2.turn - scar.mudLast) };
+        const wx = groundWeather(g2, g2.regions[to]);
+        if (wx && !ticket.weather) ticket.weather = wx;
+        const took = (nat) => (g2.captured?.[nat] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-1)[0];
+        const ca = took(t.att.nat), cd = took(t.def.nat);
+        if (ca || cd) ticket.captured = { ...ca ? { att: { from: ca.from, n: ca.n } } : {}, ...cd ? { def: { from: cd.from, n: cd.n } } : {} };
+        const worn = (cs) => {
+          const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
+          return divs > 0 && cs.some((c) => c.line !== void 0) ? Math.round(cs.reduce((s2, c) => s2 + (c.line ?? 0) * c.divs, 0) / divs / 4.345) : void 0;
+        };
+        const inAttack = new Set(corps.map((c) => c.id));
+        const wa = worn(corps), wd = worn(g2.corps.filter((c) => c.reg === to && !inAttack.has(c.id) && c.kind !== "fort"));
+        if (wa !== void 0) ticket.att = { ...ticket.att, worn: wa };
+        if (wd !== void 0) ticket.def = { ...ticket.def, worn: wd };
         return { ticket, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
       },
       battleSettleLand(ids2, to, result, seed) {
