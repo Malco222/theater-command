@@ -55,11 +55,13 @@ describe('looks from the campaign (release 2)', () => {
     const look = TC.battleLook(ids, to) as Look;
     const on = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null } as never).header() as Record<string, any>;
     expect(on.oldRuts).toEqual({ count: 1, months: 0 });
+    expect(on.scars).toEqual({ count: 1, months: 0 });
     expect(on.sides.att.worn).toBe(2);
     const arms = (on.blocks as { side: string; captured?: string }[]).filter((b) => b.side === 'att');
     if (arms.some((b) => (b as { kind?: string }).kind === 'arm')) expect(arms.filter((b) => b.captured === t0.def.nat).length).toBe(1);
-    const off = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null, captured: false, worn: false, mud: false } as never).header() as Record<string, any>;
+    const off = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null, captured: false, worn: false, mud: false, scars: false } as never).header() as Record<string, any>;
     expect(off.oldRuts).toBeUndefined();
+    expect(off.scars).toBeUndefined();
     expect(off.sides.att.worn).toBeUndefined();
     expect((off.blocks as { captured?: string }[]).some((b) => b.captured)).toBe(false);
   });
