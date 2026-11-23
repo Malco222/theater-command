@@ -1323,14 +1323,21 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
-	const FString File = FPaths::ProjectContentDir() / TEXT("Data/SeaBattles") / InKey + TEXT(".json");
+	// U1 hook (under water): a recording named by its path ("-TheaterSeaBattle=Tools/sea_show/stand-ins/convoy-night.json"),
+	// so a Mac can play a convoy night before the battle's own recordings of one land; its pictures named by its file. Only
+	// in a development build: a shipped game plays what is staged with it.
+	bool bPath = false;
+#if !UE_BUILD_SHIPPING
+	bPath = InKey.EndsWith(TEXT(".json"));
+#endif
+	const FString File = bPath ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), InKey) : FPaths::ProjectContentDir() / TEXT("Data/SeaBattles") / InKey + TEXT(".json");
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *File))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Sea battle: no recorded action %s (is Content/Data/SeaBattles staged with the build?)"), *File);
 		return false;
 	}
-	return OpenOn(Text, InKey, File);
+	return OpenOn(Text, bPath ? FPaths::GetBaseFilename(InKey) : InKey, File);
 }
 
 bool ASeaBattle::BeginMonthScene(const FString& Text, const FString& Name)
@@ -1617,6 +1624,24 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		}
 	}
 
+	// U1 hook (under water): the view under the sea, bound to the room as it now is (the battle's haze, the eye, the
+	// stage's sun and its key lamp), before the shots are planned (they ask it whether it is on).
+	Under = MakeUnique<FSeaUnder>();
+	{
+		FSeaUnder::FRoom Below;
+		Below.Owner = this;
+		Below.Root = Root;
+		Below.Eye = Eye;
+		Below.Stage = Stage;
+		for (const FKeptHaze& Kept : KeptHazes)
+		{
+			Below.Fogs.Add(Kept.Haze);
+		}
+		Below.Key = BattleKey;
+		Below.UnitsPerMetre = UnitsPerMetre;
+		Under->Bind(Below, S.Rec.Board);
+	}
+
 	PlanShots();
 	if (!ShotFolder.IsEmpty())
 	{
@@ -1835,10 +1860,12 @@ void ASeaBattle::LightTheBattle()
 			continue;
 		}
 		const bool bMain = Light == BattleKey.Get();
-		const float Want = bMain ? 7.0f : 0.75f;
-		if (!Light->GetLightColor().Equals(FLinearColor::White, 0.002f))
+		// U1 hook (under water): under the sea the sun's lamp is what reaches her depth, in the water's own colour
+		const float Want = (bMain ? 7.0f : 0.75f) * (Under ? Under->LightShare() : 1.0f);
+		const FLinearColor Shade = Under ? Under->LightTint() : FLinearColor::White;
+		if (!Light->GetLightColor().Equals(Shade, 0.002f))
 		{
-			Light->SetLightColor(FLinearColor::White);
+			Light->SetLightColor(Shade);
 		}
 		if (!FMath::IsNearlyEqual(Light->Intensity, Want, 0.001f))
 		{
@@ -1856,13 +1883,17 @@ void ASeaBattle::LightTheBattle()
 		{
 			continue;
 		}
-		if (!Sky->GetLightColor().Equals(FLinearColor::White, 0.002f))
+		// U1 hook (under water): the sky's light tinted and dimmed with the sun's, so the under-water picture does not
+		// wash out and nothing pops at the face
+		const FLinearColor Shade = Under ? Under->LightTint() : FLinearColor::White;
+		const float SkyWant = 0.72f * (Under ? FMath::Max(0.3f, Under->LightShare()) : 1.0f);
+		if (!Sky->GetLightColor().Equals(Shade, 0.002f))
 		{
-			Sky->SetLightColor(FLinearColor::White);
+			Sky->SetLightColor(Shade);
 		}
-		if (!FMath::IsNearlyEqual(Sky->Intensity, 0.72f, 0.001f))
+		if (!FMath::IsNearlyEqual(Sky->Intensity, SkyWant, 0.001f))
 		{
-			Sky->SetIntensity(0.72f);
+			Sky->SetIntensity(SkyWant);
 		}
 	}
 	// (the campaign's controller may stand a piece again under the pointer: put away again)
@@ -2015,7 +2046,8 @@ void ASeaBattle::LayAndSteer()
 		// A boat (ruling 241) drawn as far under as the show has her dived. D1 hook (convoy looks): the submarine scene's
 		// boat states (surfaced, periscope, deep) may give her own heave here.
 		const double Heave = FConvoyLooks::Steer(SubLooks, Root, Stage, Effects.Get(), S.Show, UnitsPerMetre, S.BattleT, bSkipping, bOnWater, Ship); // D1 hook (convoy looks)
-		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Heave);
+		// U1 hook (under water): the boat in the picture shaken by a burst near her, under the water only
+		Stage->Steer(Ship.Key, At, Face, Ship.Heel + (Under ? Under->Shudder(Ship.Key, S.BattleT) : 0.0), Ship.Pitch, Heave);
 		LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
 	}
 }
@@ -2030,6 +2062,10 @@ void ASeaBattle::PlayEffects(bool bSkip)
 	TArray<TPair<FString, int32>> Said;
 	for (const SeaShow::Fx& E : S.Show.Effects)
 	{
+		if (Under)
+		{
+			Under->Effect(E, S.Show, Now, bSkip); // U1 hook (under water): the bursts, an ahead salvo's bombs, her end
+		}
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector OnSea = World(E.At.X, E.At.Y, 0.0);
 		// What lasts, played even while a picture run skips ahead: every hit on the ship it struck, a ship's end, the
@@ -4032,11 +4068,15 @@ void ASeaBattle::PlanShots()
 	Trial.SetField(S.Rec.Board);
 	const double Mid = S.Rec.Board.Size * 0.5;
 	Trial.Eye = SeaShow::Vec(Mid, Mid - 3000.0, 900.0);
+	// U1 hook (under water): the director weighs this same trial for the moments to go under the sea (Battle/SeaUnderCore)
+	SeaUnder::Director UnderPlan;
+	UnderPlan.Begin(S.Rec.Board, SeaFeed::SideOf(S.Rec.Views.front().Head.Me) == 1 ? 1 : 0, Under ? Under->UnheldClear() : SeaUnder::UnheldClearBy());
 	size_t Given = 0;
-	auto TakeNext = [&Trial, &S, &Given]()
+	auto TakeNext = [&Trial, &S, &Given, &UnderPlan]()
 	{
 		const SeaFeed::Frame& F = S.Rec.Views[Given++];
 		Trial.Take(F.Head.T, F.Pieces, F.Events, F.bZones ? &F.Zones : nullptr, F.Head.Contact);
+		UnderPlan.Told(F.Head.T, F.Pieces, F.Events); // U1 hook (under water): its events and the boats' hunters
 	};
 	TakeNext();
 	FShot Fleets, Line, Broadside, Fall, Struck, Run, Strike, Down, Burning, Funnels;
@@ -4304,6 +4344,7 @@ void ASeaBattle::PlanShots()
 				break;
 			}
 		}
+		UnderPlan.Step(T, Trial); // U1 hook (under water): the step's effects read before they go
 		Trial.Effects.clear();
 		const bool bDuel = T - LastSalvoAt[0] <= 30.0 && T - LastSalvoAt[1] <= 30.0;
 		if (Step % 4 == 0 && (bDuel || LinesSeen.Num() > 0))
@@ -4642,6 +4683,65 @@ void ASeaBattle::PlanShots()
 			UE_LOG(LogTheater, Display, TEXT("Sea battle: both lines from %.0f s, %d and %d ships, %.0f in the hundred in the picture at the least over 7 s, held %.0f s; the eye %.0f m up, a %.0f degree lens."),
 				Lines.At - SeaParts::CutBefore, LinesShips[0], LinesShips[1], 100.0 * LinesShare, Lines.Hold, Lines.EyeFrom.Z, Lines.Lens);
 		}
+	}
+	// U1 hook (under water): the director's windows under the sea, each a shot (its window in Way.X) that cuts in as it
+	// opens, and a second picture as its first charge bursts; clear of the shots above, but the whole battle from above (a
+	// filler) gives way, moved to after it. A fleet action has no boats and so no windows. The windows are always planned,
+	// so that the switch can be turned on while the battle plays; with it off none of them becomes a shot.
+	if (Under)
+	{
+		std::vector<double> Busy;
+		for (const FShot& Taken : Shots)
+		{
+			if (Taken.Name != TEXT("the-battle"))
+			{
+				Busy.push_back(Taken.At - SeaParts::CutBefore);
+			}
+		}
+		// (the month's scene plays beats, each at its own pace; watched and in a picture run there are none)
+		std::vector<SeaUnder::Director::Beat> Paces;
+		if (bMonthScene)
+		{
+			for (const SeaFeed::Beat& Window : S.Rec.Beats)
+			{
+				Paces.push_back({ Window.From, Window.To, Window.Screen });
+			}
+			if (Paces.empty())
+			{
+				// (a scene with no beats plays the whole battle at the one pace: ASeaBattle::RunMonthScene's FastestWindow)
+				Paces.push_back({ S.BeginT, S.EndT, (S.EndT - S.BeginT) / FMath::Clamp((S.EndT - S.BeginT) / 40.0, 1.0, SeaUnder::Director::FastestBeat) });
+			}
+		}
+		std::vector<SeaUnder::Window> UnderWindows = UnderPlan.Finish(Busy, Paces, S.BeginT, S.EndT);
+		if (Under->IsOn() && !ShotFolder.IsEmpty())
+		{
+			// (a picture run takes the windows as its own pictures: named by their window, so no two shots share a name)
+			for (int32 K = 0; K < static_cast<int32>(UnderWindows.size()); ++K)
+			{
+				const SeaUnder::Window& W = UnderWindows[K];
+				const FString Named = FString::Printf(TEXT("%s-%d"), UTF8_TO_TCHAR(W.Name.c_str()), K + 1);
+				FShot Dived;
+				Dived.Kind = ESeaShot::Under;
+				Dived.Subject = W.Boat;
+				Dived.Other = W.Escort;
+				Dived.Spot = FVector2D(W.Aim.X, W.Aim.Y);
+				Dived.Way = FVector2D(static_cast<double>(K), 0.0);
+				Add(Dived, *Named, W.From + SeaParts::CutBefore);
+				if (W.FirstBurst > W.From + SeaParts::CutBefore + 1.0)
+				{
+					Add(Dived, *(Named + TEXT("-burst")), W.FirstBurst + 0.15); // (the flash and the globe at its widest)
+				}
+				for (FShot& Filler : Shots)
+				{
+					const double Cut = Filler.At - SeaParts::CutBefore;
+					if (Filler.Name == TEXT("the-battle") && Cut >= W.From - 3.0 && Cut <= W.Until + 3.0)
+					{
+						Filler.At = W.Until + SeaParts::CutBefore + 6.0;
+					}
+				}
+			}
+		}
+		Under->TakeWindows(MoveTemp(UnderWindows), UnderPlan.Sighted());
 	}
 	if (bWaterSheet)
 	{
@@ -5069,6 +5169,13 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		OutLens = 50.0;
 		return true;
 	}
+	case ESeaShot::Under:
+	{
+		// U1 hook (under water): the director's window under the sea (Battle/SeaUnder): beside the boat at her depth or
+		// under her, then on the surface over the pattern; past that, or with the view off or let go, false, so AimEye
+		// shows the whole battle as BothLines does past its hold.
+		return Under && Under->EyeFor(static_cast<int32>(Shot.Way.X), S.Show, S.BattleT, OutEye, OutLook, OutLens);
+	}
 	case ESeaShot::BothLines:
 	{
 		// Both lines in one picture: the eye PlanShots weighed for it, riding on with the player's own ships; past the time
@@ -5148,17 +5255,31 @@ void ASeaBattle::AimEye()
 	Whole.Kind = ESeaShot::Overview;
 	FVector From = FVector::ZeroVector, To = FVector::ForwardVector;
 	double Lens = 50.0;
-	if (!Shots.IsValidIndex(Want) || !ShotEye(Shots[Want], From, To, Lens))
+	// U1 hook (under water): the window standing in for the shots now (the player's own dive, the director's window
+	// watched or in the month's scene; a picture run plays them as its own pictures instead).
+	const double WantCut = Shots.IsValidIndex(Want) ? Shots[Want].At - SeaParts::CutBefore : S.EndT + 1e9;
+	const int32 Standing = Under ? Under->StandsIn(S.BattleT, WantCut, !ShotFolder.IsEmpty()) : INDEX_NONE;
+	bool bUnderEye = Standing != INDEX_NONE && Under->EyeFor(Standing, S.Show, S.BattleT, From, To, Lens);
+	if (!bUnderEye && (!Shots.IsValidIndex(Want) || !ShotEye(Shots[Want], From, To, Lens)))
 	{
 		ShotEye(Whole, From, To, Lens);
 	}
-	From.Z = FMath::Max(From.Z, 3.0 * UnitsPerMetre);
+	// (the under shots of a picture run go through ShotEye: its eye is under the water too)
+	bUnderEye = bUnderEye || (Shots.IsValidIndex(Want) && Shots[Want].Kind == ESeaShot::Under && From.Z < 0.0);
+	// (under the water the eye goes below the sea; everywhere else at least 3 m above it) U1 hook (under water)
+	if (!(bUnderEye && From.Z < 0.0))
+	{
+		From.Z = FMath::Max(From.Z, 3.0 * UnitsPerMetre);
+	}
+	const int32 WasWindow = UnderWindow;
+	UnderWindow = bUnderEye ? (Standing != INDEX_NONE ? Standing : static_cast<int32>(Shots[Want].Way.X)) : INDEX_NONE; // U1 hook
 	// A cut: a new shot whose eye is not where the last left it, the first, or after a skip. (The ride strip's pictures
-	// follow on from each other, the eye carried with her: no cut, the history kept.)
+	// follow on from each other, the eye carried with her: no cut, the history kept.) U1 hook (under water): through the
+	// sea's face, and from one window to another, always a clean cut.
 	const FVector Looking = (To - From).GetSafeNormal();
 	const bool bMoved = FVector::Dist(From, EyeAt) > 25.0 * UnitsPerMetre || FMath::Abs(Lens - EyeLens) > 2.0 ||
 		FVector::DotProduct(Looking, EyeFacing.Vector()) < FMath::Cos(FMath::DegreesToRadians(3.0));
-	if (bEyeCut || (Want != ShotNow && bMoved))
+	if (bEyeCut || (Want != ShotNow && bMoved) || ((From.Z < 0.0) != (EyeAt.Z < 0.0)) || (UnderWindow != WasWindow && bMoved))
 	{
 		bEyeCut = false;
 		TicksSinceCut = 0;
@@ -5179,7 +5300,8 @@ void ASeaBattle::AimEye()
 	EyeFacing = Looking.Rotation();
 	EyeLens = Lens;
 	ShotNow = Want;
-	Eye->SetActorLocationAndRotation(EyeAt, EyeFacing);
+	// U1 hook (under water): a burst's shock in the eye, on the camera only (never in EyeAt, so no cut comes of it)
+	Eye->SetActorLocationAndRotation(EyeAt + (Under ? Under->ShakeAt(S.BattleT) : FVector::ZeroVector), EyeFacing);
 	Eye->GetCameraComponent()->SetFieldOfView(static_cast<float>(EyeLens));
 }
 
@@ -5257,6 +5379,10 @@ void ASeaBattle::SayFrameTimes()
 	const FIntPoint Size = GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
+	if (Under)
+	{
+		Under->SayFrameTimes(); // U1 hook (under water): the frames under the water, said apart
+	}
 	if (State.IsValid())
 	{
 		const SeaShow::Checks& Kept = State->Show.Checked();
@@ -5378,7 +5504,12 @@ UAudioComponent* ASeaBattle::Sound(const FName& Name, const FVector& Where, cons
 	{
 		return nullptr;
 	}
-	return UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
+	UAudioComponent* Heard = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
+	if (Under)
+	{
+		Under->Muffle(Heard); // U1 hook (under water): a sound from above the sea dulled under it
+	}
+	return Heard;
 }
 
 void ASeaBattle::GunFired(int32 Key, int32 Slot, const FVector& At)
@@ -5487,6 +5618,12 @@ void ASeaBattle::Beds()
 			}
 		}
 	}
+	if (Under && State.IsValid())
+	{
+		// U1 hook (under water): the beds pressed down under the sea and given back to their own levels, the day's whole
+		// and the battle's at its fade-in's -6 dB above
+		Under->Beds(DayBed.Get(), 1.0f, BattleBed.Get(), SeaParts::FromDb(-6.0), State->Show);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -5532,6 +5669,10 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	else if (RealT >= 1.0 && Took < 30.0 && FrameTimes.Num() < 1000000)
 	{
 		FrameTimes.Add(static_cast<float>(Took));
+		if (Under)
+		{
+			Under->Took(Took); // U1 hook (under water): the frames under the water timed apart too
+		}
 	}
 	bLastFrameApart = false;
 	RealT += Dt;
@@ -5557,7 +5698,10 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		}
 		bSkippedOn = RunMonthScene() || bSkippedOn;
 	}
-	StepTo(FMath::Min(S.BattleT + Dt * Speed, S.EndT + 12.0), false);
+	// U1 hook (under water): under the sea no faster than one and a half times, so the charges are seen to sink (a
+	// picture run and the month's scene keep their own pace: their windows are timed)
+	const double Pace = Under ? Under->PaceCap(Speed, bMonthScene || !ShotFolder.IsEmpty()) : Speed;
+	StepTo(FMath::Min(S.BattleT + Dt * Pace, S.EndT + 12.0), false);
 	MoveKnot(Dt, bSkippedOn);
 	for (int32 K = FlakLater.Num() - 1; K >= 0; --K)
 	{
@@ -5584,6 +5728,16 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	RunTrails();
 	DrawMarks();
 	AimEye();
+	// U1 hook (under water): the water round the eye once it is under the sea's face (its murk and light, the silt, the
+	// charges sinking, the sounds) and the U key; through the face, the lamps said again this same frame.
+	if (Under)
+	{
+		Under->Tick(S.Show, S.BattleT, EyeAt, EyeFacing, UnderWindow, bSkipping || bSkippedOn, !bMonthScene && ShotFolder.IsEmpty());
+		if (Under->Crossed())
+		{
+			RoomCheckedAt = -10.0;
+		}
+	}
 	DrawWrecks();
 	if (Effects && Eye)
 	{
@@ -5643,6 +5797,10 @@ void ASeaBattle::SkipTo(double To)
 	Later.Reset();
 	bEyeCut = true;
 	bLastFrameApart = true;
+	if (Under)
+	{
+		Under->Skipped(); // U1 hook (under water): nothing of what was skipped is heard under the water
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -5654,6 +5812,16 @@ namespace SeaParts
 	 * window is played faster than the battle (the show is stepped a frame at a time), and the longest the scene is
 	 * let run (the form's 30 to 45 s, and the caption, with room). */
 	constexpr double CaptionHold = 6.0, CaptionFade = 0.8, FastestWindow = 6.0, LongestScene = 90.0;
+}
+
+void ASeaBattle::UnderKey(bool bShift)
+{
+	// U1 hook (under water): the month scene's screen takes every key; U and Shift+U it hands over here instead of
+	// skipping the scene (a modifier alone it lets by).
+	if (Under && State.IsValid())
+	{
+		Under->PressU(bShift, State->Show, State->BattleT, EyeAt);
+	}
 }
 
 bool ASeaBattle::RunMonthScene()
@@ -5760,6 +5928,11 @@ void ASeaBattle::EndMonthScene()
 void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	SayFrameTimes();
+	if (Under) // U1 hook (under water): the haze, the lens and the lamps given back before the room is
+	{
+		Under->End();
+		Under.Reset();
+	}
 	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{

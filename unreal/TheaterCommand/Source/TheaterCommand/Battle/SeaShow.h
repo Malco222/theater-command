@@ -139,6 +139,10 @@ namespace SeaShow
 		double Keel = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
+		/** A boat's hunters (extra.heard, field-side-read.md section 3: the pieces of the escorts holding her), as last told;
+		 * bHeard once a view has told it. U1 hook (under water): read only by the view under the water (SeaUnder::Sight). */
+		std::vector<int> Heard;
+		bool bHeard = false;
 	};
 
 	/** One event of a view, with what the show needs of its extra. */
@@ -639,6 +643,12 @@ namespace SeaShow
 		const Checks& Checked() const { return Check; }
 		/** One line a ship and a strike: her piece, her place, what she is doing (a debug overlay; the cloud test's trace). */
 		std::string Describe() const;
+		/** U1 hook (under water): a depth charge on its way down, as the view under the water draws it (Battle/SeaUnder): its
+		 * escort's ship key, the boat's piece, where it bursts (Z minus the depth; a charge told on her bursts Off from her,
+		 * where she is then), when it went in and when it bursts, its kind. Whether it is the battle's blow is left out: the
+		 * view draws every charge alike. Read only. */
+		struct ChargeDown { int Escort = -1, Boat = -1; Vec At, Off; double Bursts = 0.0, Dropped = 0.0; std::string Kind; bool bOnBoat = false; };
+		void ChargesDown(std::vector<ChargeDown>& Out) const;
 
 	private:
 		struct View

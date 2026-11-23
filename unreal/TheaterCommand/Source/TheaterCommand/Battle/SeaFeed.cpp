@@ -163,6 +163,17 @@ namespace SeaFeed
 			P.Keel = X["keel"].IsNumber() ? std::clamp(X["keel"].Num(), 0.0, 1000.0) : -1.0;
 			P.bScope = X["scope"].Truth(false);
 			if (X["column"].IsNumber()) P.ConvoyColumn = X["column"].Int();
+			// (a boat's hunters, the escorts holding her: told when they change, so as last told until then)
+			const Json& Hunters = X["heard"];
+			if (Hunters.IsArray())
+			{
+				P.Heard.clear();
+				for (size_t K = 0; K < Hunters.Count(); ++K)
+				{
+					if (Hunters.At(K).IsNumber()) P.Heard.push_back(Hunters.At(K).Int());
+				}
+				P.bHeard = true;
+			}
 			Kept.Still[P.Id] = P;
 		}
 

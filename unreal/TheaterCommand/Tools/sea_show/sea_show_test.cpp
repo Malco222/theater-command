@@ -161,6 +161,7 @@ namespace
 		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
 		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
+		int ChargesListedOdd = 0, MostChargesListed = 0; // U1 (the view under the water): ChargesDown's list, charges burst or above the sea
 		// where ships went down (Brian, 22 November 05:32Z): men in the water and wreckage never inside a ship, no man popping
 		int MenInHull = 0, FloatsInHull = 0;
 		std::string MenInHullFirst;
@@ -220,6 +221,16 @@ namespace
 			Out.TotalMs += Ms;
 			Out.FrameMs.push_back(Ms);
 			++Out.Frames;
+			// U1 (the view under the water): every charge the show lists going down is still to burst, under the sea. (Shown()
+			// is the moment drawn, up to one of the show's fixed steps of a twentieth of a second past the steps it bursts them
+			// on: SeaShow.h's Fixed, so a charge due inside that step is still listed.)
+			{
+				std::vector<SeaShow::Show::ChargeDown> Down;
+				Show.ChargesDown(Down);
+				for (const SeaShow::Show::ChargeDown& D : Down)
+					if (D.Bursts <= Show.Shown() - 0.05 - 1e-9 || D.At.Z > 1e-9) ++Out.ChargesListedOdd;
+				Out.MostChargesListed = std::max(Out.MostChargesListed, static_cast<int>(Down.size()));
+			}
 
 			// The eye follows the fight, as the camera rig will: south of the middle of every piece, above the sea.
 			{
@@ -795,6 +806,8 @@ int main(int Argc, char** Argv)
 		                   std::to_string(C.ChargeBurstsBooked) + " of " + std::to_string(ChargeHits) + ", " + std::to_string(C.ChargeHitUnmatched) + " with no attack before it, " +
 		                       std::to_string(P.ChargesOffBoat) + " out of her reach",
 		                   "all, on her" });
+		Limits.push_back({ "every charge listed going down (for the view under the water) still to burst, under the sea", P.ChargesListedOdd == 0,
+		                   std::to_string(P.ChargesListedOdd) + " odd, " + std::to_string(P.MostChargesListed) + " at once at the most", "0" });
 		Limits.push_back({ "every aircraft told on a boat seen, letting go on her before she goes", C.AirOnBoats == 0 || (C.AirBlowsOnBoats == C.AirOnBoats && C.MostPlanes > 0),
 		                   std::to_string(C.AirBlowsOnBoats) + " of " + std::to_string(C.AirOnBoats) + " let go on her, aircraft up " + std::to_string(C.MostPlanes) + " at the most", "all, seen" });
 		Limits.push_back({ "every star shell and rescue shown", C.Starshells == Starshells && C.Rescues == Rescues,

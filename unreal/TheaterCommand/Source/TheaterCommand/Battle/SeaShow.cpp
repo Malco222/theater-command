@@ -1154,13 +1154,23 @@ namespace SeaShow
 			if (Boat) Boat->LastBlow = "depthcharge";
 			const double Keel = E.Keel >= 0.0 ? E.Keel : Boat ? Boat->Keel : F.DeepKeel;
 			const Vec Near = Boat ? Boat->P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), 0.0) * (F.ChargeLethal * 0.6) : At;
-			// The blow: that escort's charge bursting nearest this moment, moved within its lethal reach of her and burst now
-			// (the battle's moment); an ahead-thrown salvo's bombs burst only now, on her, two or three of them.
+			// The blow: of that escort's charges due within 15 s, the one nearest her keel where it is now (going down at the
+			// charge's rate to its burst: where the view under the water draws it), burst now (the battle's moment); an
+			// ahead-thrown salvo's bombs burst only now, on her, two or three of them. U1 hook (under water): the one nearest
+			// her, not the one nearest in time, so a charge seen sinking by her is the one that bursts there.
+			const Vec Her = Boat ? Vec(Boat->P.X, Boat->P.Y, -Keel) : Vec(At.X, At.Y, -Keel);
+			auto NowOf = [&E, this](const Charge& C) { return Vec(C.At.X, C.At.Y, std::min(0.0, C.At.Z + std::max(0.0, C.Bursts - E.T) * std::max(0.5, F.ChargeSink))); };
 			Charge* Best = nullptr;
+			double BestFar = 0.0;
 			for (Charge& C : Charges)
 			{
 				if (C.Piece != E.From || C.bHit || std::fabs(C.Bursts - E.T) > 15.0) continue;
-				if (!Best || std::fabs(C.Bursts - E.T) < std::fabs(Best->Bursts - E.T)) Best = &C;
+				const double Far = (NowOf(C) - Her).Length();
+				if (!Best || Far < BestFar)
+				{
+					Best = &C;
+					BestFar = Far;
+				}
 			}
 			auto It = AheadAt.find(E.From);
 			const double AheadT = It != AheadAt.end() ? It->second : -1e18;
@@ -1198,14 +1208,26 @@ namespace SeaShow
 				return;
 			}
 			Best->bHit = true;
-			Best->At = Vec(Near.X, Near.Y, -Keel);
-			if (std::fabs(Best->Bursts - E.T) <= 15.0) Best->Bursts = E.T;
-			else if (Boat)
+			if (std::fabs(Best->Bursts - E.T) <= 15.0)
 			{
-				// (bursting later, at its own time: beside her where she is by then)
-				Best->bOnBoat = true;
-				Best->Boat = E.Unit;
-				Best->Off = Vec(Near.X - Boat->P.X, Near.Y - Boat->P.Y, 0.0);
+				// (bursting now: where it is, within its lethal reach of her keel; else moved that reach at the most toward her
+				// keel, where that brings it within it; only where none of hers lies so near is it put by her, a jump the
+				// pattern's place makes, laid where her hunter ran rather than where she is)
+				const Vec Going = NowOf(*Best);
+				const double Reach = F.ChargeLethal, Far = (Going - Her).Length();
+				Best->At = Far <= Reach ? Going : Far <= 2.0 * Reach ? Going + (Her - Going) * (Reach / Far) : Vec(Near.X, Near.Y, -Keel);
+				Best->Bursts = E.T;
+			}
+			else
+			{
+				Best->At = Vec(Near.X, Near.Y, -Keel);
+				if (Boat)
+				{
+					// (bursting later, at its own time: beside her where she is by then)
+					Best->bOnBoat = true;
+					Best->Boat = E.Unit;
+					Best->Off = Vec(Near.X - Boat->P.X, Near.Y - Boat->P.Y, 0.0);
+				}
 			}
 			return;
 		}
@@ -4254,5 +4276,25 @@ namespace SeaShow
 			Out += Line;
 		}
 		return Out;
+	}
+
+	void Show::ChargesDown(std::vector<ChargeDown>& Out) const
+	{
+		// U1 hook (under water): the charges sinking, for the view under the water; read only, the blow left out.
+		Out.clear();
+		Out.reserve(Charges.size());
+		for (const Charge& C : Charges)
+		{
+			ChargeDown D;
+			D.Escort = C.Escort;
+			D.Boat = C.Boat;
+			D.At = C.At;
+			D.Off = C.Off;
+			D.Bursts = C.Bursts;
+			D.Dropped = C.Dropped;
+			D.Kind = C.Kind;
+			D.bOnBoat = C.bOnBoat;
+			Out.push_back(D);
+		}
 	}
 }

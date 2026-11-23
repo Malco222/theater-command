@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Effects/BattleEffects.h"
 #include "Battle/ConvoyLooks.h" // D1 hook (convoy looks)
+#include "Battle/SeaUnder.h" // U1 hook (under water)
 #include "GameFramework/Actor.h"
 #include "SeaBattle.generated.h"
 
@@ -27,7 +28,7 @@ class SWidget;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
-enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels, Water, BothLines };
+enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels, Water, BothLines, Under /* U1 hook (under water) */ };
 
 /**
  * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could
@@ -85,6 +86,8 @@ public:
 	bool GetCaption(TArray<FString>& OutLines, float& OutShown) const;
 	/** The month's scene skipped (a key or a click on its screen): it closes on the next frame. */
 	void SkipMonthScene() { bMonthEnding = bMonthScene; }
+	/** U1 hook (under water): the month scene's U and Shift+U, handed over by its screen (which takes every key there). */
+	void UnderKey(bool bShift);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -162,6 +165,8 @@ private:
 	TSharedPtr<FSeaBattleState> State;
 	TUniquePtr<FBattleEffects> Effects;
 	TUniquePtr<FConvoyLooks> SubLooks; // D1 hook (convoy looks)
+	TUniquePtr<FSeaUnder> Under;       // U1 hook (under water)
+	int32 UnderWindow = INDEX_NONE;    // U1 hook (under water): the window AimEye stands in (FSeaUnder::ByHandWindow his own dive)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;

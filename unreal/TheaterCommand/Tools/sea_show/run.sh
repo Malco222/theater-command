@@ -18,5 +18,12 @@ STATUS=0
 for F in "$@"; do
   "$OUT/sea_show_test" "$F" "$OUT" || STATUS=1
 done
+# The view under the water (U1): the director and the look (Battle/SeaUnderCore) over the same recordings, the shots
+# PlanShots plans mirrored from the game's own source (Tools/sea_show/sea_under_test.cpp).
+$CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/sea_under_test.cpp" "$SRC/Battle/SeaUnderCore.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" \
+  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/sea_under_test"
+"$OUT/sea_under_test" "$SRC" "$@" || STATUS=1
 echo "tracks in $OUT"
 exit $STATUS
