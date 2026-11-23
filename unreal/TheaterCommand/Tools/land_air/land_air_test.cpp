@@ -147,7 +147,7 @@ int main(int Argc, char** Argv)
 	Check(In == 4 && Strafe == 4 && Bomb == 3 && Lost == 3 && bFields, "feed: every note read, with its flight, run, models, strafe, bombs and loss");
 
 	// ---- machine
-	Check(MachineOf("USA", 1944).Model == "Mustang" && MachineOf("USA", 1943).Model == "Warhawk" && MachineOf("GER", 1942).Model == "Stuka"
+	Check(MachineOf("USA", 1944).Model == "Mustang" && MachineOf("USA", 1943).Model == "Warhawk" && MachineOf("GER", 1942).Model == "Stuka" && MachineOf("GER", 1943).Model == "Stuka"
 		&& MachineOf("GER", 1944).Model == "Fw190" && MachineOf("UK", 1941).Model == "Hurricane" && MachineOf("CAN", 1944).Model == "Spitfire"
 		&& MachineOf("SOV", 1941).Model == "Sturmovik" && MachineOf("JAP", 1942).Model == "Zero" && MachineOf("ITA", 1942).Model == "Fighter",
 		"machine: each air force's machine by year");

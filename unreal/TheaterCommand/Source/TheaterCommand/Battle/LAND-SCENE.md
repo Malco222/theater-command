@@ -708,7 +708,7 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   a Stuka from 1,800 m rolled into a 75 degree dive, its two guns a short burst (1,100 to 700 m), out at 300 m; an Il-2
   from 160 m at 8 degrees, guns from 700 to 200 m, out at 15 m. A lane starts at least 150 m past its own side's front
   (the rules' strip is unchanged; only where the rounds are seen to strike moves on). The machine by nation and year
-  (`MachineOf`): Mustang or Warhawk, Stuka or Fw 190, Spitfire or Hurricane, the Il-2, Zero, else a plain fighter in the
+  (`MachineOf`): Mustang or Warhawk, Stuka (to 1943) or Fw 190 (1944 on), Spitfire or Hurricane, the Il-2, Zero, else a plain fighter in the
   nation's paint. The ground's guns: the other side's four blocks nearest the run, two guns a block, ragged bursts,
   aimed short of the lead so that the tracers fall behind. A plane lost is the last of its leg not yet lost: blown apart
   in its pass, or hit climbing away and going down on fire in a long shallow dive, or spinning in (about 3 s from 150 m);
