@@ -36,6 +36,20 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REF = os.environ.get("RIDERS_FIT_REF", os.path.join(HERE, "light_riders_ref.json"))
+TRUCK_REF = os.environ.get("RIDERS_FIT_TRUCK_REF", os.path.join(HERE, "truck_riders_ref.json"))
+
+
+def load_ref():
+    """light_riders_ref.json with truck_riders_ref.json's clips added (the lorry's and the half-tracks' benches and
+    their ways out: truck_riders.py, the same pattern man, the same bones and rest)."""
+    ref = json.load(open(REF))
+    if os.path.exists(TRUCK_REF):
+        tr = json.load(open(TRUCK_REF))
+        assert tr["bones"] == ref["bones"], "truck_riders_ref.json is on another skeleton"
+        ref["clips"].update(tr["clips"])
+        ref["made_trucks"] = tr["made"]
+        ref["aisle"] = tr.get("aisle", {})
+    return ref
 SHARED = "/mnt/project-files/battle-models/land/soldier/"
 BACKUP = "/home/user/art/looks/backup/riders/"
 FILES = ["soldier_" + n for n in ("CHN", "FRA", "GER", "ITA", "ITA_desert", "JAP", "POL", "SOV", "SOV_snow", "SOV_winter",
@@ -51,7 +65,8 @@ SLUNG_FROM = ("stretcher_front", "stretcher_rear", "reel_walk")
 SLUNG_ON = ("chest", "spine_02", "spine_01", "pelvis")
 # the clips with a backrest behind him (a car's seats, the sidecar's), and how far forward a man may sit for his kit
 BACKREST = ("car_drive", "car_drive_b", "car_drive_c", "car_ride", "car_ride_back", "die_seat_slump", "die_ride_slump",
-            "sidecar_gunner", "sidecar_gunner_b", "sidecar_ride", "die_sidecar_slump")
+            "sidecar_gunner", "sidecar_gunner_b", "sidecar_ride", "die_sidecar_slump", "bench_ride", "die_bench_slump")
+BACKREST_START = ("bench_rise_", "bench_sit_")        # (and every clip whose name starts so: up from and down onto a bench)
 BACK_Z = (0.90, 1.15)        # (standing: from the belt to the backrest's top once seated)
 SHIFT_MAX = 0.06
 MUZZLE_KEEP = 0.07           # (a hand's grip no nearer his weapon's end than this)
@@ -300,6 +315,7 @@ def fit_clip(man, ref, name, rc, slung, shift):
                 G[i] = G[p] if p is not None else np.eye(3)
         pel = np.asarray(rc["pelvis"][f], float) + (shift, 0.0, 0.0)
         X = man.place(G, pel)
+        root = np.asarray(rc["root"][f], float) if rc.get("root") else None       # (a way out's root motion)
         # his weapon
         if mode == "rifle":
             Rw = q2m(rc["W"][f][3:])
@@ -341,6 +357,8 @@ def fit_clip(man, ref, name, rc, slung, shift):
         for i in man.subtree("weapon"):
             G[i] = Rw
         X = man.place(G, pel)
+        if root is not None:
+            X[0] = man.H0[0] + root
         off = Xw - X[w]
         for i in man.subtree("weapon"):
             X[i] = X[i] + off
@@ -351,13 +369,17 @@ def fit_clip(man, ref, name, rc, slung, shift):
     return frames, gaps
 
 
-def tracks_of(man, frames, times):
-    """Local turns and the pelvis's and weapon's moves as json tracks (signs kept continuous, unmoving bones left out)."""
+def tracks_of(man, frames, times, root=False):
+    """Local turns and the pelvis's and weapon's moves as json tracks (signs kept continuous, unmoving bones left out);
+    with `root`, the root's move too (a way out's root motion)."""
     nb = len(man.names)
     out = []
     for i, n in enumerate(man.names):
         p = man.parent[i]
         if p is None:
+            if root:
+                out.append({"part": i, "part_name": n, "move": [[round(t, 4)] + [round(float(x), 4) for x in X[i] - man.H0[i]]
+                                                                for t, (G, X) in zip(times, frames)]})
             continue
         locs = [G[p].T @ G[i] for G, X in frames]
         tr = {"part": i, "part_name": n}
@@ -399,11 +421,13 @@ def riders_for(D, ref, log=print):
     slung = slung_frame(D, man)
     clips, report = {}, {}
     for name, rc in ref["clips"].items():
-        sh = shift if name in BACKREST else 0.0
+        sh = shift if (name in BACKREST or name.startswith(BACKREST_START)) else 0.0
         frames, gaps = fit_clip(man, ref, name, rc, slung, sh)
         c = {"long": rc["long"], "loop": rc["loop"], "stride": 0.0, "weapon": rc["mode"], "events": [],
              "anchor": rc["anchor"], "about": rc["about"], "from": FROM,
-             "places": rc["places"], "tracks": tracks_of(man, frames, rc["times"])}
+             "places": rc["places"], "tracks": tracks_of(man, frames, rc["times"], root=bool(rc.get("root")))}
+        if rc.get("root"):
+            c["root_motion"] = True
         if rc.get("death"):
             c["death"] = rc["death"]
         if sh:
@@ -418,11 +442,19 @@ def riders_for(D, ref, log=print):
 
 
 # ================================================================================================ the checks
+def JUMP_MAX(name):
+    """The most a bone may turn between two keys (a 15th of a second) before it reads as a snap: a death's fall is
+    quicker, and so is a way out's jump down (truck_riders.py's out_*: a man dropping a metre off a lorry's or a
+    half-track's floor straightens his knee to reach the ground and folds it as he lands at up to 1,000 degrees a
+    second, the knee's own turn measured against the thigh's)."""
+    return 75.0 if name.startswith("die_") else 70.0 if name.startswith("out_") else 40.0
+
+
 def check(D, names=None, ref=None, log=print):
     """The delivered clips against the reference: each hand and ankle where the reference's is (within REF_TOL,
     beyond each man's reach difference), turns continuous, loops closed, the weapon put away or on him."""
     man = Man(D)
-    ref = ref or json.load(open(REF))
+    ref = ref or load_ref()
     bad = []
     for name, rc in ref["clips"].items():
         if names and name not in names:
@@ -453,7 +485,7 @@ def check(D, names=None, ref=None, log=print):
                     if np.dot(a[1:], b[1:]) < 0:
                         bad.append(f"{name} {tr['part_name']} sign flips at {b[0]}")
                         break
-                    if math.degrees(2 * math.acos(min(1.0, abs(float(np.dot(a[1:], b[1:])))))) > (75.0 if name.startswith("die_") else 40.0):
+                    if math.degrees(2 * math.acos(min(1.0, abs(float(np.dot(a[1:], b[1:])))))) > JUMP_MAX(name):
                         bad.append(f"{name} {tr['part_name']} jumps at {b[0]}")
                         break
                 if c["loop"] and keys and np.abs(np.asarray(keys[0][1:]) - np.asarray(keys[-1][1:])).max() > 1e-3:
@@ -470,7 +502,10 @@ ABOUT = ("light_riders.py and light_riders_fit.py (release 2, 23 November 2026):
          "facing, the game's axes), as the tank crew's commander_hatch goes at its hatch. Each car seat's death falls to "
          "the car's outside (die_seat_slump/_r for the driver, die_ride_slump/_l for a passenger), so two men side "
          "by side never slump onto each other. Fitted to the mended Kübelwagen and Kurogane seats (the seat-fix "
-         "models).")
+         "models). With them (truck_riders.py, the same way): the men on the benches in the back of the Truck, the "
+         "Hanomag and the M3 half-track (bench_ride and its death, getting up toward the way out and sitting down), "
+         "and their ways out over the Truck's tailboard and through the half-tracks' stern doors (out_*, with root "
+         "motion).")
 
 
 def contract(ref):
@@ -505,17 +540,40 @@ def contract(ref):
                        "from where the grips are, so nothing needs changing); the motorcycles' bar grips are on their "
                        "steering part: if the game turns the bars, the hands are where the bars are straight.",
         "far": "the far pose bank (pose_bank.json) has no seated poses: draw riders with the near or mid meshes.",
+        "trucks": "The benches in the back of the Truck, the Hanomag and the M3 (rider.1-10: rider.1-5 on her left bench "
+                  "facing her right, rider.6-10 on the right): bench_ride is each seat's loop (4 s), his rifle stood "
+                  "between his knees in both hands; die_bench_slump its death (2.4 s, held from 1.5: he folds forward "
+                  "over his knees inside his own place). bench_rise_* gets him up turning toward the way out, ending "
+                  "upright in the aisle facing aft, his rifle at the port; bench_sit_* is the way back down, from "
+                  "standing in the aisle facing forward. aisle.<vehicle>.seats names each seat's rise and sit (the "
+                  "M3's front pair and both half-tracks' rear pair have their own: the M3's machine gun over the aisle, "
+                  "the stern and its rolled canvas just behind the rear pair). Walk him along her floor (aisle.floor_z) "
+                  "from where the rise leaves him to aisle.way_out.start, facing aft; empty the rear seats first. "
+                  "Then play one of aisle.way_out.clips at the `step` socket with its root_offset (as any place): "
+                  "these carry root motion (the root track: the root under his boots, from her floor onto the ground; "
+                  "its last key is where he stands, aisle.way_out.clips.<clip>.ends_at in her own axes): hand him to "
+                  "the ground battle's walking there. Play her `dismount` clip first (the board or doors open: the "
+                  "ways out are checked so). The Truck carries men with her tilt stowed (swap `tilt` off).",
+        "aisle": ref.get("aisle", {}),
+        "root_motion": [n for n, rc in ref["clips"].items() if rc.get("root")],
         "check": checks_at_seats(),
     }
 
 
 def checks_at_seats():
-    """The pattern man's checks at every seat (light_riders_checks.json: light_riders.py's check_all), worst first."""
-    path = os.path.join(os.path.dirname(REF), "light_riders_checks.json")
-    if not os.path.exists(path):
-        return {}
-    C = json.load(open(path))
-    return {"how": C["how"], "clips": {k: sorted(v, key=lambda r: -r["deepest_m"]) for k, v in C["clips"].items()}}
+    """The pattern man's checks at every seat (light_riders_checks.json: light_riders.py's check_all, and
+    truck_riders_checks.json: truck_riders.py's), worst first."""
+    out = {}
+    for fn in ("light_riders_checks.json", "truck_riders_checks.json"):
+        path = os.path.join(os.path.dirname(REF), fn)
+        if not os.path.exists(path):
+            continue
+        C = json.load(open(path))
+        out.setdefault("how", []).append(C["how"])
+        out.setdefault("clips", {}).update({k: sorted(v, key=lambda r: -r["deepest_m"]) for k, v in C["clips"].items()})
+    if "how" in out:
+        out["how"] = " ".join(out["how"])
+    return out
 
 
 # ================================================================================================ stage, deliver
@@ -532,7 +590,7 @@ def targets(names):
 
 
 def stage(dir_, names, log=print):
-    ref = json.load(open(REF))
+    ref = load_ref()
     os.makedirs(dir_, exist_ok=True)
     rep = {}
     for n in targets(names):
@@ -560,7 +618,7 @@ def unchanged(before, after, added):
 
 
 def deliver(names, log=print, folder=SHARED):
-    ref = json.load(open(REF))
+    ref = load_ref()
     stamp = time.strftime("%Y%m%dT%H%M%S")
     os.makedirs(BACKUP, exist_ok=True)
     done = []
@@ -607,7 +665,7 @@ if __name__ == "__main__":
     elif a and a[0] == "--deliver":
         deliver(a[1:])
     elif a and a[0] == "--check":
-        ref = json.load(open(REF))
+        ref = load_ref()
         bad = {}
         for n in targets(a[1:]):
             bad[n] = check(json.load(open(os.path.join(SHARED, n + ".json"))), ref=ref)
