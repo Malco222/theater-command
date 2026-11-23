@@ -1295,6 +1295,11 @@ def refit(rc, fl):
                 n *= 1.25
             elif L["turns"] > G["turns"][1] - 0.05:
                 n *= 0.85
+            if away and (L.get("gap", 9.0) < G["gap"] or L["from_man"] < G["from_man"]) and L["away"] is not None \
+                    and L["away"] > G["away"] + 0.15:
+                # (he came down on it: send it wider of his way, still away from the burst)
+                a = math.radians(20.0) * (1.0 if away[0] * v[1] - away[1] * v[0] >= 0.0 else -1.0)
+                v[0], v[1] = v[0] * math.cos(a) - v[1] * math.sin(a), v[0] * math.sin(a) + v[1] * math.cos(a)
             if away and L["away"] is not None and L["away"] < G["away"]:
                 h = math.hypot(v[0], v[1])
                 u = np.array((v[0], v[1])) / max(h, 1e-6) * 0.6 + np.array(away) * 0.4
