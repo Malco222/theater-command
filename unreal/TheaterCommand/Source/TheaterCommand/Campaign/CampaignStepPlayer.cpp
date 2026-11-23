@@ -1208,14 +1208,14 @@ void FStepPlayer::LandMouse(SLandBattleScreen& Screen, const FKey& Button, const
 	// screen, and a point there reaches nothing (the press steps' note of 18 November). There the screen's own handlers are
 	// given the same events directly, and the note says so.
 	const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
-	auto Reaches = [&](const FVector2D& At)
+	auto Reaches = [&](const FVector2D& Point)
 	{
 		if (!Window.IsValid())
 		{
 			return false;
 		}
 		const TArray<TSharedRef<SWindow>> Windows = { Window.ToSharedRef() };
-		const FWidgetPath Under = App.LocateWindowUnderMouse(At, Windows, false, 0);
+		const FWidgetPath Under = App.LocateWindowUnderMouse(Point, Windows, false, 0);
 		for (int32 Index = 0; Under.IsValid() && Index < Under.Widgets.Num(); ++Index)
 		{
 			if (&Under.Widgets[Index].Widget.Get() == static_cast<SWidget*>(&Screen))
@@ -1236,9 +1236,9 @@ void FStepPlayer::LandMouse(SLandBattleScreen& Screen, const FKey& Button, const
 	const int32 Moves = FVector2D::Distance(From, To) > 1.0 ? 8 : 0;
 	for (int32 K = 1; K <= Moves; ++K)
 	{
-		const FVector2D At = From + (To - From) * (static_cast<double>(K) / Moves);
-		Events.Add(FPointerEvent(0u, 0u, At, Last, Down, EKeys::Invalid, 0.0f, Mods)); // dragged
-		Last = At;
+		const FVector2D Spot = From + (To - From) * (static_cast<double>(K) / Moves);
+		Events.Add(FPointerEvent(0u, 0u, Spot, Last, Down, EKeys::Invalid, 0.0f, Mods)); // dragged
+		Last = Spot;
 	}
 	Events.Add(FPointerEvent(0u, 0u, To, Last, TSet<FKey>(), Button, 0.0f, Mods)); // let up
 	SWidget& Widget = Screen;
