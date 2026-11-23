@@ -10,5 +10,7 @@
   "_bargains": "A neutral's bargains (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and ruling of 03:47 UTC). Off: nothing of src/campaign/bargains.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'bargains', and their neutrals sell their goods to whichever country at war bids best (data/campaign/bargains.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_BARGAINS=1.",
   "bargains": false,
   "_legions": "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC). Off: nothing of src/campaign/legions.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'legions', and a country at peace outside both sides may send one legion of volunteers at a time to fight in a patron's army (data/campaign/legions.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_LEGIONS=1.",
-  "legions": false
+  "legions": false,
+  "_winChance": "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's order of 07:06Z; data/campaign/winchance.json). Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on carry the flag 'winChance', and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting that flag; a run outside the browser by TC_WINCHANCE=1.",
+  "winChance": false
 }

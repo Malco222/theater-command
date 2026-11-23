@@ -62,3 +62,11 @@ const legionsForced = B.TC_LEGIONS ?? B.process?.env?.TC_LEGIONS;
 
 /** True where new grand campaigns open with volunteer legions (data/campaign/stage.json 'legions'). */
 export const LEGIONS_STAGE: boolean = legionsForced !== undefined ? !!legionsForced && legionsForced !== '0' : (stage as { legions?: boolean }).legions === true;
+
+// The honest win chance on land (release 2, auto-resolve fix 1): the grand campaigns opened while this is true carry the
+// flag 'winChance' (game.ts luckOf; data/campaign/winchance.json). A run outside the browser can be given it by its
+// environment: TC_WINCHANCE=1 node ...
+const winForced = (globalThis as { TC_WINCHANCE?: unknown }).TC_WINCHANCE ?? G.process?.env?.TC_WINCHANCE;
+
+/** True where new grand campaigns open with the honest win chance on land (data/campaign/stage.json 'winChance'). */
+export const WINCHANCE_STAGE: boolean = winForced !== undefined ? !!winForced && winForced !== '0' : (stage as { winChance?: boolean }).winChance === true;
