@@ -242,9 +242,19 @@ namespace LandScape
 				}
 		}
 
+		/** One ring of a ridge as Ridge laid it: its place along x, its crest's height, and whether its crest is bare. */
+		struct RidgeRing
+		{
+			double X = 0.0, Z = 0.0;
+			bool bBare = false;
+		};
 		/** A ridge along x, Half either way: its profile Wide across and High up (round, or plain for afar), sunk at its
-		 * ends Sink so lengths laid end to end run on as one line. (The rice country's bund, LandAsia.) */
-		void Ridge(Writer& W, double Half, double High, double Wide, const Tone& Crest, const Tone& Flank, const Tone& Foot, bool bRound, double Sink, int Sections = 1)
+		 * ends Sink so lengths laid end to end run on as one line. (The rice country's bund, LandAsia.) Lean (1 as built)
+		 * tilts its normals across it, less to light it nearer as the flat ground about it is lit; Lumps raises and lowers
+		 * each ring's crest by up to that share, so its top line rises and falls; Bare, where given, is beaten earth laid
+		 * over some rings' crests, so a grassed top is broken; Out, where given, has each ring. */
+		void Ridge(Writer& W, double Half, double High, double Wide, const Tone& Crest, const Tone& Flank, const Tone& Foot, bool bRound, double Sink, int Sections = 1,
+				   double Lean = 1.0, double Lumps = 0.0, const Tone* Bare = nullptr, std::vector<RidgeRing>* Out = nullptr)
 		{
 			struct Pt
 			{
@@ -269,7 +279,16 @@ namespace LandScape
 				const double X = Xs[static_cast<size_t>(R)];
 				const bool bEnd = Sink > 0.0 && (R == 0 || R == Rings - 1);
 				const double Sh = Sections > 1 ? 0.9 + 0.2 * Unit(Hash(0x41D6, static_cast<uint64_t>(R))) : 1.0;
-				for (const Pt& P : Pr) V[static_cast<size_t>(R)].push_back(W.Vert(X, P.Y * (bEnd ? 0.7 : 1.0), bEnd ? -0.06 : P.Z, 0.0, P.NY, P.NZ, Varied(P.C, Sh, 0.0)));
+				const double Lf = !bEnd && Lumps > 0.0 ? 1.0 + Lumps * (2.0 * Unit(Hash(0x41D7, static_cast<uint64_t>(R))) - 1.0) : 1.0;
+				const bool bBare = !bEnd && Bare != nullptr && Unit(Hash(0x41D8, static_cast<uint64_t>(R))) < 0.3;
+				for (const Pt& P : Pr)
+				{
+					const double NY = P.NY * Lean, NL = std::sqrt(NY * NY + P.NZ * P.NZ);
+					// (a bare ring: its crest the beaten earth, its flanks half way to it)
+					const Tone C = !bBare ? P.C : P.Z >= High * 0.99 ? *Bare : P.Z > 0.0 ? Mixed(P.C, *Bare, 0.5) : P.C;
+					V[static_cast<size_t>(R)].push_back(W.Vert(X, P.Y * (bEnd ? 0.7 : 1.0), bEnd ? -0.06 : P.Z > 0.0 ? P.Z * Lf : P.Z, 0.0, NY / NL, P.NZ / NL, Varied(C, Sh, 0.0)));
+				}
+				if (Out) Out->push_back(RidgeRing{ X, bEnd ? -0.06 : High * Lf, bBare });
 			}
 			for (int R = 0; R + 1 < Rings; ++R)
 				for (size_t K = 0; K + 1 < Pr.size(); ++K)
@@ -763,6 +782,8 @@ namespace LandScape
 			// ---------------------------------------------------------------- the paint
 
 			Tone Soil() const { return bManchuria ? BlackEarth : bIndia ? Alluvium : Loess; }
+			/** Manchuria's ridges' earth as built (a gaoliang stubble strip's floor); Dress tints each to its own strip's. */
+			Tone RowEarth() const { return Mixed(Varied(Soil(), 0.95, 0.0), GaoStubbleC, 0.3); }
 			Tone GrassAt(const Spot& S, const Tone& Base) const
 			{
 				Tone T = Mixed(Mixed(Base, Rgb(158, 144, 104), 1.0 - Green), Rgb(140, 130, 92), 0.15 * Smooth(0.0, 0.6, S.N1));
@@ -1143,6 +1164,31 @@ namespace LandScape
 				case CStubble:
 					P.Yaw = Rows;
 					P.Scale = 1.0f;
+					if (bManchuria && bField && S.Crop != Terrace && !L.bUp)
+					{
+						// Manchuria's ridges: each length laid on its row's line (Grow's, 1.2 m apart), so lengths along a
+						// row run on as one ridge, not each a hand to the side of the last; every length in a strip the same
+						// height (the stubs' own heights vary), but for a hair so two that overlap do not fight; tinted to
+						// its strip's floor, its earth the same as the ground's between (the art director, 23 November)
+						const Strip St = StripOf(S);
+						const double Sn = std::sin(St.Angle), Cs = std::cos(St.Angle), V = -S.X * Sn + S.Y * Cs, D = 1.2 * std::round(V / 1.2) - V;
+						if (std::fabs(D) < 0.15)
+						{
+							P.X = static_cast<float>(S.X - Sn * D);
+							P.Y = static_cast<float>(S.Y + Cs * D);
+						}
+						P.ScaleZ = static_cast<float>((L.Crop == Gao ? (bSnow ? 2.75 : 2.25) : (bSnow ? 1.9 : 1.0)) * (0.985 + 0.03 * U5));
+						if (bSnow) P.Tint = L.Crop == Gao ? Tint(1.0, 0.94, 0.86) : Tint(0.98, 0.94, 0.9);
+						else
+						{
+							Tone F = Varied(StateColour(L, Varied(Soil(), 0.95, 0.0)), St.Shade, 0.0);
+							F = Tone{ F.R * (1.0 + 0.24 * St.Warm), F.G * (1.0 + 0.06 * St.Warm), F.B * (1.0 - 0.28 * St.Warm) };
+							const Tone E = RowEarth();
+							auto To = [](double Want, double Built) { return std::clamp(std::pow(std::max(Want, 1.0) / std::max(Built, 1.0), 2.2), 0.2, 1.95); };
+							P.Tint = Tint(To(F.R, E.R), To(F.G, E.G), To(F.B, E.B));
+						}
+						return true;
+					}
 					if (bField && L.bUp)
 					{
 						// (the winter wheat and the young millet a hand high in their rows)
@@ -1366,31 +1412,44 @@ namespace LandScape
 						// of each, the cut stubs along their crests (the gaoliang's by its height); under the snow the crests
 						// blown clear, dark lines over the white
 						const bool bWhite = SnowLying > 0.25;
+						// (each ridge low and rounded, 4.8 m of it, its ends drawn out long and low so the lengths, laid on
+						// their row's line (Dress), run on as one unbroken ridge; the stubble's own earth, each strip's
+						// floor by its tint (Dress), lit nearly as the flat ground is, so it reads as the field's ridged
+						// earth and not as dark lengths laid on it: the art director's sausages, 23 November. Under the
+						// snow a soft white mound along it (no ledge to throw the low sun's shadow), the stubs' rows what
+						// reads)
+						const double Half = 2.4, High = bWhite ? 0.04 : 0.055;
+						std::vector<RidgeRing> Rings;
 						for (int R = 0; R < 2; ++R)
 						{
-							// (each ridge low and rounded, 3.6 m of it, its ends sunk so the lengths run on as one line; under
-							// the snow a soft white mound along it, its ends drawn out long and low (no ledge to throw the low
-							// sun's shadow; the art director, 23 November), the stubs' rows what reads)
 							const double Y = -0.3 + 0.6 * R;
 							const size_t First = M.Near.Points();
-							// (bare, lower and broader, its ends drawn out long and low as under the snow: the art director's
-							// black logs, 23 November, were these lengths' blunt rounded ends close by)
-							Ridge(W, 1.8, bWhite ? 0.04 : 0.07, bWhite ? 0.52 : 0.55, bWhite ? Rgb(210, 214, 222) : Rgb(70, 62, 52), bWhite ? Rgb(220, 224, 231) : Rgb(62, 55, 46), bWhite ? Rgb(226, 230, 236) : Rgb(58, 52, 44), true, 0.7);
+							Rings.clear();
+							Ridge(W, Half, High, bWhite ? 0.52 : 0.55, bWhite ? Rgb(210, 214, 222) : RowEarth(), bWhite ? Rgb(220, 224, 231) : RowEarth(), bWhite ? Rgb(226, 230, 236) : RowEarth(), true, 1.0, 1, 0.55, 0.0, nullptr, &Rings);
 							for (size_t P = First; P < M.Near.Points(); ++P) M.Near.Positions[3 * P + 1] = static_cast<float>(M.Near.Positions[3 * P + 1] + Y);
-							for (int H = 0; H < 12; ++H)
+						}
+						const size_t Stubs = M.Near.Points();
+						for (int R = 0; R < 2; ++R)
+						{
+							const double Y = -0.3 + 0.6 * R;
+							for (int H = 0; H < 16; ++H)
 							{
-								const uint64_t Hs = Hash(0x57BF, static_cast<uint64_t>(R * 12 + H));
-								const double X = -1.65 + 0.3 * H + 0.05 * (Unit(Hash(Hs, 1)) - 0.5);
+								const uint64_t Hs = Hash(0x57BF, static_cast<uint64_t>(R * 16 + H));
+								const double X = -2.25 + 0.3 * H + 0.05 * (Unit(Hash(Hs, 1)) - 0.5);
+								// (from the crest, or where its ends go down, from the earth there)
+								double Crest = -0.06;
+								for (size_t Q = 0; Q + 1 < Rings.size(); ++Q)
+									if (X >= Rings[Q].X && X <= Rings[Q + 1].X) Crest = Lerp(Rings[Q].Z, Rings[Q + 1].Z, (X - Rings[Q].X) / std::max(1e-6, Rings[Q + 1].X - Rings[Q].X));
+								const double Foot = std::max(0.0, Crest - 0.01);
 								for (int B = 0; B < 3; ++B)
 								{
 									// (a stub from the crest, standing a hand or more over it)
 									const double A = 2.0 * Pi * (B + Unit(Hash(Hs, 2, B))) / 3.0, Tall = 0.2 + 0.08 * Unit(Hash(Hs, 3, B));
-									const double Foot = bWhite ? 0.03 : 0.07;
 									W.Blade(X, Y, Foot, X + 0.025 * std::cos(A), Y + 0.025 * std::sin(A), Tall + Foot - 0.07, 0.02, Rgb(118, 104, 74), Rgb(170, 152, 108));
 								}
 							}
 						}
-						LitUp(M.Near, 0);
+						LitUp(M.Near, Stubs);
 						M.Paint = 2;
 						M.FarFrom = 35.0f;
 						break;
@@ -1491,11 +1550,73 @@ namespace LandScape
 					const Tone Flank = bSnow ? Rgb(218, 222, 229) : Mixed(Varied(Dust, 0.86, 0.0), Rgb(96, 108, 60), 0.8 * Green);
 					const Tone Foot = bSnow ? Rgb(226, 230, 236) : Mixed(Varied(Soil(), 0.85, 0.0), Rgb(92, 104, 58), 0.5 * Green);
 					const double Half = 0.5 * (K == KRidge ? RidgeLong : RidgeShort);
+					// (bare of snow, near by: the ground's own earth by a balk, the strips' with a little of the balk's
+					// grass, at its feet; its sides between that and its top's earth and grass; its trodden crest's earth)
+					const Tone Sward = Mixed(OpenGrass, Rgb(158, 144, 104), 1.0 - Green);
+					const Tone Ground = Mixed(Varied(Soil(), 0.95, 0.0), Mixed(Sward, Soil(), 0.35), 0.3);
+					const Tone Top = Mixed(Dust, Rgb(112, 118, 74), 0.4 * Green), Side = Mixed(Mixed(Dust, Ground, 0.5), Rgb(100, 110, 64), 0.35 * Green);
+					const Tone Bare = Varied(Dust, 1.03, 0.0);
 					{
 						Writer W(M.Near);
 						// (low and broad near by, so from a man's eye it is a bank of earth, not a pipe: the art director, 23
-						// November)
-						Ridge(W, Half, bSnow ? 0.14 : 0.09, bSnow ? 0.95 : 1.1, Crest, Flank, Foot, true, 0.15, K == KRidge ? 8 : 3);
+						// November.) Near by, bare of snow, its sides go into the ground about it: their earth the ground's
+						// own by a balk (the strips' earth with a little of the balk's grass), lit nearly as the flat ground
+						// is, so no line shows where it meets the ground; its top line broken, rising and falling a little
+						// and here and there trodden bare, tufts of the balk's grass standing from the rest of its crest and a
+						// few from its sides, so from a man's eye it is a grassed bank, not a green pipe (the art director's
+						// low eye in the corn, 23 November). All of it under LowKitHigh, tufts and all, so it still lies across
+						// the men's ways
+						if (bSnow) Ridge(W, Half, 0.14, 0.95, Crest, Flank, Foot, true, 0.15, K == KRidge ? 8 : 3);
+						else
+						{
+							std::vector<RidgeRing> Rings;
+							Ridge(W, Half, 0.09, 1.2, Top, Side, Ground, true, 0.15, K == KRidge ? 16 : 6, 0.45, 0.15, &Bare, &Rings);
+							const Tone TuftFoot = Mixed(Rgb(122, 108, 78), Rgb(88, 100, 56), Green), TuftTip = Mixed(Rgb(184, 166, 120), Rgb(146, 154, 92), Green);
+							// (the balk's grass in tufts over its crest and its sides and along its feet, a place every 0.13 m
+							// along each of eight lanes across it: on the crest five in six where it is not trodden, on its
+							// sides three in four to three in five, at its feet nearly one in two, each tuft its own shade)
+							const double H = 0.6, Lane[8] = { -0.6, -0.43, -0.26, -0.08, 0.08, 0.26, 0.43, 0.6 }, Keep[8] = { 0.45, 0.6, 0.75, 0.85, 0.85, 0.75, 0.6, 0.45 };
+							const int Steps = static_cast<int>((2.0 * Half - 0.4) / 0.13);
+							for (int T = 0; T <= Steps; ++T)
+								for (int Ln = 0; Ln < 8; ++Ln)
+								{
+									const uint64_t Ht = Hash(0x41D9, static_cast<uint64_t>(T * 8 + Ln), static_cast<uint64_t>(K));
+									const double X = -Half + 0.2 + 0.13 * T + 0.1 * (Unit(Hash(Ht, 1)) - 0.5), Y = Lane[Ln] + 0.08 * (Unit(Hash(Ht, 2)) - 0.5);
+									// (the crest's height here and whether it is a trodden ring's; the bank's height across, as
+									// Ridge's round profile)
+									double Z = 0.0;
+									bool bTrod = false;
+									for (size_t Q = 0; Q + 1 < Rings.size(); ++Q)
+										if (X >= Rings[Q].X && X <= Rings[Q + 1].X)
+										{
+											const double F = (X - Rings[Q].X) / std::max(1e-6, Rings[Q + 1].X - Rings[Q].X);
+											Z = Lerp(Rings[Q].Z, Rings[Q + 1].Z, F);
+											bTrod = (F < 0.5 ? Rings[Q] : Rings[Q + 1]).bBare;
+										}
+									if (Z <= 0.02) continue;
+									const double Ay = std::fabs(Y) / H;
+									const double Up = Ay < 0.24 ? 1.0 : Ay < 0.62 ? Lerp(1.0, 0.62, (Ay - 0.24) / 0.38) : std::max(0.0, Lerp(0.62, -0.55, (Ay - 0.62) / 0.38));
+									const double Foot0 = std::max(0.0, Z * Up) - 0.015;
+									if (Unit(Hash(Ht, 3)) >= Keep[Ln] * (bTrod ? (Ln >= 2 && Ln <= 5 ? 0.0 : 0.5) : 1.0)) continue;
+									const double Sh = 0.85 + 0.25 * Unit(Hash(Ht, 4));
+									const Tone TF = Varied(TuftFoot, Sh, 0.0), TT = Varied(TuftTip, Sh, 0.0);
+									const int N = 5 + static_cast<int>(3.0 * Unit(Hash(Ht, 5)));
+									for (int B = 0; B < N; ++B)
+									{
+										const double A = 2.0 * Pi * (B + 0.6 * Unit(Hash(Ht, 6, B))) / N, Out = 0.03 + 0.04 * Unit(Hash(Ht, 7, B));
+										const double Tall = (0.05 + 0.02 * Green) + (0.02 + 0.015 * Green) * Unit(Hash(Ht, 8, B));
+										const double FX = X + 0.035 * std::cos(A), FY = Y + 0.035 * std::sin(A);
+										W.Blade(FX, FY, Foot0, FX + Out * std::cos(A), FY + Out * std::sin(A), Foot0 + 0.015 + Tall, 0.026, TF, TT);
+									}
+								}
+						}
+					}
+					if (!bSnow)
+					{
+						// (from 20 m the same bank without its tufts, which only the near eye sees)
+						Writer W(M.Mid);
+						Ridge(W, Half, 0.09, 1.2, Top, Side, Ground, true, 0.15, K == KRidge ? 16 : 6, 0.45, 0.15, &Bare);
+						M.MidFrom = 20.0f;
 					}
 					{
 						Writer W(M.Far);
