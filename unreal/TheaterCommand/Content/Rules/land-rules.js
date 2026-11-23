@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of edd70eb8 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 06cc3f4a 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12134,6 +12134,7 @@
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
+      const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(ticket), latLon: o.latLon } : void 0);
       live3 = liveTicket(ticket, {
         me: o.me ?? null,
         setup: !!o.setup,
@@ -12160,7 +12161,7 @@
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
-        ...o.sky ? { sky: o.sky } : {}
+        ...sky ? { sky } : {}
       });
       return live3.header();
     },
