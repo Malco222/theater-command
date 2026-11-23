@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 06cc3f4a 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 30a57d1f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11745,7 +11745,7 @@
       __publicField(this, "steppe");
       __publicField(this, "blocks");
       /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-      __publicField(this, "looks", { worn: true, mud: true, scars: true });
+      __publicField(this, "looks", { worn: true, mud: true, scars: true, wet: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -11758,7 +11758,7 @@
       __publicField(this, "placed", false);
       __publicField(this, "sentOver", false);
       this.me = opts.me ?? null;
-      this.skyOf = opts.sky ?? ticketSky(ticket);
+      this.skyOf = opts.sky ?? ticketSky(opts.wet === false ? { ...ticket, weather: void 0 } : ticket);
       const sim = this.sim = new LandBattle(ticket);
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -11789,7 +11789,7 @@
       if (opts.escort === true) sim.escort = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
-      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wet: opts.wet !== false };
       const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
       const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
@@ -11845,7 +11845,7 @@
         turn: t.turn,
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
         // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
-        ...t.weather ? { weather: t.weather } : {},
+        ...t.weather && this.looks.wet ? { weather: t.weather } : {},
         ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
         ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
@@ -12134,7 +12134,7 @@
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
-      const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(ticket), latLon: o.latLon } : void 0);
+      const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(o.wet === false ? { ...ticket, weather: void 0 } : ticket), latLon: o.latLon } : void 0);
       live3 = liveTicket(ticket, {
         me: o.me ?? null,
         setup: !!o.setup,
@@ -12156,6 +12156,7 @@
         worn: o.worn !== false,
         mud: o.mud !== false,
         scars: o.scars !== false,
+        wet: o.wet !== false,
         blast: o.blast === true,
         escort: o.escort === true,
         fog: !!o.fog,

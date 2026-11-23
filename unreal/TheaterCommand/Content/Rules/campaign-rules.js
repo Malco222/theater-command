@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 06cc3f4a 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9f64dee6 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -36734,6 +36734,30 @@
     if (EASTERN.winter.months.includes(m)) return { mud: false, winter: true, text: "Winter in the east: armies without winter kit fight and march badly there." };
     return { mud: false, winter: false, text: "Clear campaigning weather." };
   }
+  function groundWeather(g2, r) {
+    const zone = WEATHER.zones[zoneOfRegion(g2, r.id)];
+    const m = turnToDate(g2.turn).month;
+    if (zone && (zone.key === "nrus" || zone.key === "srus") && weather(g2).mud) return "mud";
+    if (zone && zone.snow.includes(m + 1)) return "snow";
+    if (!weatherOn(g2)) return "";
+    const sky = skyAt(g2, r.id);
+    return sky === "closed" ? "rain" : sky === "clear" ? "clear" : "";
+  }
+  function capturedKit(g2, rep, target) {
+    const attWon = rep.level.endsWith("victory");
+    const heavy = rep.level === "Heroic victory" || rep.level === "Decisive defeat" ? 50 : rep.level === "Decisive victory" ? 33 : 0;
+    if (!heavy) return;
+    const losers = (attWon ? rep.defenders : rep.attackers).filter((u) => u.kind === "arm" && u.divs > 0);
+    if (!losers.length) return;
+    const throwOf = (rep.id * 7919 + target.id * 104729 + g2.turn * 31) % 100;
+    if (throwOf >= heavy) return;
+    const winner = attWon ? rep.attNat : rep.defNat;
+    const from = losers.reduce((a, b) => b.divs > a.divs ? b : a).nat;
+    if (from === winner) return;
+    const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
+    const book = g2.captured ?? (g2.captured = {});
+    book[winner] = [...(book[winner] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-2), { from, n, turn: g2.turn }];
+  }
   function lineOwners(g2) {
     const more = EASTERN.lineOwners ?? [];
     if (!more.length || EASTERN.lineStops && !EASTERN.lineStops.includes(stopOf(g2))) return EASTERN.deepOwners;
@@ -38105,6 +38129,14 @@
       rep.air = { att: a.air.att.strikes, def: a.air.def.strikes };
     }
     g2.reports.push(rep);
+    const scar = (g2.scars ?? (g2.scars = {}))[target.id];
+    const muddy = groundWeather(g2, target) === "mud";
+    g2.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g2.turn, ...scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {} };
+    if (muddy) {
+      g2.scars[target.id].mudN = (scar?.mudN ?? 0) + 1;
+      g2.scars[target.id].mudLast = g2.turn;
+    }
+    capturedKit(g2, rep, target);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
       g2.flags.lateBattles = (g2.flags.lateBattles ?? 0) + 1;
@@ -43255,6 +43287,10 @@
       atSea: g2.atSea?.length ? g2.atSea : void 0,
       // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
       ac: g2.ac,
+      // Scarred ground (release 1.5's looks): the grand campaign's own; a historical save is written as it always was,
+      // and is given its scars back from its reports when loaded.
+      scars: g2.flags.open === 1 ? g2.scars : void 0,
+      captured: g2.flags.open === 1 ? g2.captured : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -43407,6 +43443,14 @@
     g2.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g2);
     if (Array.isArray(d.atSea) && d.atSea.length) g2.atSea = d.atSea;
     if (d.ac && typeof d.ac === "object") g2.ac = d.ac;
+    if (d.captured && typeof d.captured === "object") g2.captured = d.captured;
+    if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
+    else
+      for (const r of g2.reports ?? []) {
+        if (r.yielded) continue;
+        const was = (g2.scars ?? (g2.scars = {}))[r.region];
+        g2.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
+      }
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -47382,7 +47426,16 @@
         if (!t) return null;
         const why = staffOnly(t);
         if (why) return { ticket: null, why };
-        return { ticket: t, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
+        const ticket = { ...t };
+        const scar = g2.scars?.[to];
+        if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g2.turn - scar.last) };
+        if (scar?.mudN && scar.mudLast !== void 0) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g2.turn - scar.mudLast) };
+        const wx = groundWeather(g2, g2.regions[to]);
+        if (wx && !ticket.weather) ticket.weather = wx;
+        const took = (nat) => (g2.captured?.[nat] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-1)[0];
+        const ca = took(t.att.nat), cd = took(t.def.nat);
+        if (ca || cd) ticket.captured = { ...ca ? { att: { from: ca.from, n: ca.n } } : {}, ...cd ? { def: { from: cd.from, n: cd.n } } : {} };
+        return { ticket, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
       },
       battleSettleLand(ids2, to, result, seed) {
         const r = result && "over" in result ? result.over : result;
@@ -50477,6 +50530,7 @@
     const loaded = loadGame(text);
     if (!loaded) return null;
     g = loaded;
+    airCampaignsOnLoad(g);
     lessonsBegin(false);
     swapAsked = "";
     wreckAsked = "";
@@ -50544,6 +50598,11 @@
       if (acCalls.shipped?.()) acCalls.on?.(g2, true);
     } catch {
     }
+  }
+  function airCampaignsOnLoad(g2) {
+    if (!isOpen(g2) || g2.flags.ac) return;
+    openAirCampaigns(g2);
+    if (g2.flags.ac) headline(g2, "info", "Air campaigns are flown in this war from this month: the air forces fight standing campaigns for the sky and bomb to a plan.", g2.human ?? void 0);
   }
   var repairView = (g2, region) => {
     try {
