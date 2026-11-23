@@ -357,6 +357,9 @@ private:
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> CraterMeshes;
+	/** Effects (R2): the fighters on call, one mesh a plane by its key (FlyOver). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UProceduralMeshComponent>> AirSupportMeshes;
 	/** The track marks (LandCrater::Ruts), the same way: one mesh a 64 m patch, a section for each 48 pieces, sent again
 	 * a quarter second after a piece is laid in it. */
 	UPROPERTY()
@@ -825,6 +828,9 @@ private:
 	void RideTanks();
 	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
 	void BailOut();
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; Battle/LandBattleAir.cpp):
+	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down. */
+	void FlyOver();
 	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
 	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
 	void SeatLight(int32 FromVehicle);

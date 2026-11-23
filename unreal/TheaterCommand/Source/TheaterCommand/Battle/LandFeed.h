@@ -183,6 +183,24 @@ namespace LandFeed
 		bool bWhere = false;
 	};
 
+	/**
+	 * Effects (R2): one of the rules' notes of the fighters on call (air support, src/battle/land/sim.ts), read from an
+	 * event's extra block where the event is one of them: "land:air-in" (a leg of a strike over the start of its run:
+	 * Run the run, Models, Alt, Nat, Year, Heading), "land:strafe" (its guns down the strip: Run from and to, Width,
+	 * Secs battle seconds), "land:bomb-drop" (a bomb let go: At the battle second it bursts, To where), "air:lost" (a
+	 * plane of it down: Kind explode, burn or spin, Chutes, Alt). Side 0 the attacker's fighters, 1 the defender's.
+	 * Read for LandAir (-TheaterLandAirSupport); nothing else reads them.
+	 */
+	struct AirNote
+	{
+		double T = 0.0;
+		std::string What, Nat, Kind;
+		int Side = -1, Flight = -1, Models = 4, Year = 1944, Chutes = 0;
+		double X = 0.0, Y = 0.0, Alt = 0.0, Heading = 0.0, Secs = 0.0, Width = 60.0, At = -1.0;
+		double Run[4] = { 0.0, 0.0, 0.0, 0.0 };
+		double To[2] = { 0.0, 0.0 };
+	};
+
 	/** A block's phase from a battle time on: column, deploy, bound, startline, fight, hold, rest, pinned, fallback,
 	 * flee, rally, gone, battery, limbered. */
 	struct Phase
@@ -455,6 +473,8 @@ namespace LandFeed
 		std::vector<std::pair<int, std::vector<Phase>>> Phases;
 		std::vector<View> Views;
 		std::vector<Event> Events;
+		/** Effects (R2): the fighters on call's notes (AirNote), in the events' order. */
+		std::vector<AirNote> Air;
 		std::vector<Round> Rounds;
 		std::vector<Track> Tracks;
 		std::vector<Crater> Craters;
