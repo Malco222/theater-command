@@ -115,6 +115,11 @@ export interface ForceTicket {
 
 export interface SideTicket {
   nat: string;
+  /**
+   * Uniforms that age (release 2, looks only): the months this side's men have been in the line without a rest, as the
+   * campaign counts them (0 fresh); absent where the campaign keeps none.
+   */
+  worn?: number;
   /** "German", "Polish": the adjective the cards use. */
   adj: string;
   /** The nation's colour on the campaign map, for blocks and bars. */
@@ -214,6 +219,16 @@ export interface FieldTicket<P = unknown> {
    * absent where none has been. Looks only: the field lays old craters from it, and nothing in the fight reads it.
    */
   scars?: { count: number; months: number };
+  /**
+   * Mud memory (release 2): of those battles, the ones fought in the mud, and the months since the last; absent where
+   * none was. Looks only: the field keeps their old ruts.
+   */
+  oldRuts?: { count: number; months: number };
+  /**
+   * Captured kit (release 2): a side that lately beat an army with tanks fields a few of the loser's own in its paint:
+   * whose they were and how many of its tanks in this battle are drawn so. Looks only, as the scars.
+   */
+  captured?: { att?: { from: string; n: number }; def?: { from: string; n: number } };
   /**
    * Which attack on this ground this month it is, from 0: a second attack on the same place keeps its seed (and so its
    * ground) but draws a fresh day's luck, as the campaign's own dice would.
