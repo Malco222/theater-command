@@ -1014,7 +1014,7 @@ GORE = [
          release=0.0, throw=(1.0, -2.4, 2.0)),
     dict(name="die_arm_off_b", stance="stand", kind="back", blast_from="front", start=("advance", 0.2), travel=1.4,
          blast=(-2.6, -0.3, 0.3), spin=(0.0, 0.0, -6.0),
-         cut=[(0.0, "upperarm_l")], fling=[("upperarm_l", (-2.1, -2.2, 2.8), 1.6)],
+         cut=[(0.0, "upperarm_l")], fling=[("upperarm_l", (-2.5, -1.6, 2.8), 1.6)],
          tone={"legs": (0.15, 0.3), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.08)},
          release=0.05, throw=(-3.0, 2.0, 2.4), helmet=dict(t=0.0, v=(-2.0, -0.6, 2.6))),
     dict(name="die_arm_off_d", stance="stand", kind="forward", blast_from="behind", start=("fire_stand", 0.5),
@@ -1034,7 +1034,7 @@ GORE = [
          release=0.0, throw=(1.8, 0.6, 1.8)),
     # ---- a leg taken off: the leg flung away from the burst, he drops on the side it went from
     dict(name="die_leg_off_a", stance="stand", kind="back", blast_from="front", start=("advance", 0.25), travel=1.5,
-         blast=(-2.8, 0.0, 0.2), cut=[(0.0, "calf_l")], fling=[("calf_l", (-1.8, -1.1, 5.0), 1.5)],
+         blast=(-2.8, 0.0, 0.2), cut=[(0.0, "calf_l")], fling=[("calf_l", (-1.3, -2.1, 5.0), 1.5)],
          tone={"legs": (0.0, 0.08), "trunk": (0.2, 0.35), "neck": (0.1, 0.25), "arms": (0.05, 0.2)},
          release=0.0, throw=(-3.6, -0.6, 1.8)),
     dict(name="die_leg_off_b", stance="stand", kind="forward", blast_from="behind", start=("fire_stand", 0.6),
@@ -1238,6 +1238,9 @@ def fit_gore(m, rd, rc):
         for b, a in limb_arcs(m, c).items():
             f.flight["limbs"][b].update(a)
         miss = gate_misses(r, f.flight)
+        Gw, X = m.fk(m.local_at(c, c["long"] + 1.0))
+        if float(X[m.i("chest")][2]) >= LIE_MAX:
+            miss += ["sitting up"] * 3                  # (he must lie: worse than any one ask missed)
         if best is None or len(miss) < best[0]:
             best = (len(miss), c, f, k, r, i + 1)
         if not miss:
