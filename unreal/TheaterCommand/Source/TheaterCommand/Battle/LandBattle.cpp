@@ -7472,9 +7472,9 @@ void ALandBattle::MakeRuts()
 	{
 		return;
 	}
-	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (the middles of her
-	// tracks are her dust sockets, at her tail): pressed grass, torn stubble or plough, and in standing corn the corn
-	// between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
+	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (laid from the front of
+	// her tracks' ground, under her: Vehicle::TreadLeft): pressed grass, torn stubble or plough, and in standing corn the
+	// corn between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
 	// marks start afresh.
 	for (const LandKit::Vehicle& V : S.Armour->Vehicles())
 	{
@@ -7488,7 +7488,7 @@ void ALandBattle::MakeRuts()
 			continue;
 		}
 		const double Width = LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind);
-		if (S.Ruts.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, Width))
+		if (S.Ruts.Drive(V.Index, V.TreadLeft.X, V.TreadLeft.Y, V.TreadRight.X, V.TreadRight.Y, Width))
 		{
 			// (the grass and corn squares under her laid again, without what she flattened, LandCarpet)
 			if (Carpet.IsValid())

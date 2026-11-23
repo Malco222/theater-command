@@ -517,6 +517,13 @@ namespace LandKit
 		double Fade = 1.0;       // 1 shown; to 0 over a second once she has left the field
 		/** Her dust sockets now (field), for the effects kit's VehicleDust each frame while she moves. */
 		V3 DustLeft, DustRight;
+		/**
+		 * The front of each track's (each side's wheels') ground now (field: Model::Foot's front corners), where her marks
+		 * are laid from (the ground's Ruts): under her, so the newest piece, laid a step on, is hidden by her hull. (Laid
+		 * from the dust sockets at her tail, the marks began a stride and more behind her, bare snow between: Brian, 23
+		 * November 15:25Z.) Her dust sockets where her model has no footprint.
+		 */
+		V3 TreadLeft, TreadRight;
 
 		/** A socket's field point and way at the pose now; false if the model has none of that name. */
 		bool SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const;
