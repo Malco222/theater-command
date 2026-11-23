@@ -99,7 +99,11 @@ namespace LandScape
 		const Tone BarnRed = Rgb(140, 52, 40);
 		const Tone Shingle = Rgb(82, 78, 74);
 		const Tone Tin = Rgb(126, 126, 122);
-		const Tone Glass = Rgb(52, 58, 64);
+		const Tone Glass = Rgb(104, 118, 132);
+		const Tone GlassLow = Rgb(78, 88, 98);
+		const Tone GlassSky = Rgb(150, 164, 178);
+		const Tone Curtain = Rgb(222, 214, 194);
+		const Tone Concrete = Rgb(176, 172, 164);
 		const Tone Brick = Rgb(146, 86, 64);
 
 		struct V3
@@ -148,8 +152,92 @@ namespace LandScape
 		/** A window with its white frame round it (a pane a little larger behind). */
 		void Window(Writer& W, int Dir, double Plane, double A, double Z, double HA, double HZ)
 		{
+			// (the frame white; the glass the sky in its upper sash, darker in its lower; the sash rail and the muntin white; a
+			// curtain drawn in a few)
+			const double Out = Dir == 0 || Dir == 2 ? -0.01 : 0.01;
 			Pane(W, Dir, Plane, A, Z, HA + 0.08, HZ + 0.08, Trim);
-			Pane(W, Dir, Plane + (Dir == 0 || Dir == 2 ? -0.01 : 0.01), A, Z, HA, HZ, Glass);
+			Pane(W, Dir, Plane + Out, A, Z - 0.5 * HZ, HA, 0.5 * HZ, GlassLow);
+			Pane(W, Dir, Plane + Out, A, Z + 0.5 * HZ, HA, 0.5 * HZ, GlassSky);
+			Pane(W, Dir, Plane + 2.0 * Out, A, Z, HA, 0.035, Trim);
+			Pane(W, Dir, Plane + 2.0 * Out, A, Z, 0.025, HZ, Trim);
+			if (Unit(Hash(static_cast<uint64_t>(std::llround(A * 10.0 + 5000.0)), static_cast<uint64_t>(std::llround(Z * 10.0 + 5000.0)), static_cast<uint64_t>(std::llround(Plane * 10.0 + 5000.0)) + static_cast<uint64_t>(Dir))) < 0.35)
+				for (const double Side : { -1.0, 1.0 }) Pane(W, Dir, Plane + 1.5 * Out, A + Side * 0.72 * HA, Z + 0.05 * HZ, 0.26 * HA, 0.9 * HZ, Curtain);
+		}
+
+		/** A leaf as a ribbon: from P[0] through P[1] and P[2] to its tip P[3], Wd[0] to Wd[2] wide at the first three, both
+		 * faces lit as grass is (from above), Foot to Tip in colour. */
+		void Ribbon(Writer& W, const double (&P)[4][3], const double (&Wd)[3], const Tone& Foot, const Tone& Tip)
+		{
+			uint32_t PA = 0, PB = 0, QA = 0, QB = 0;
+			for (int K = 0; K < 3; ++K)
+			{
+				const double* P0 = P[K];
+				const double* P1 = P[K + 1];
+				double AX = -(P1[1] - P0[1]), AY = P1[0] - P0[0];
+				const double L = std::hypot(AX, AY);
+				if (L < 1e-9) { AX = 1.0; AY = 0.0; }
+				else { AX /= L; AY /= L; }
+				const double UX = P1[0] - P0[0], UY = P1[1] - P0[1], UZ = P1[2] - P0[2];
+				double NX = AY * UZ, NY = -AX * UZ, NZ = AX * UY - AY * UX;
+				const double NL = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+				if (NL > 1e-9) { NX /= NL; NY /= NL; NZ /= NL; }
+				NZ = std::fabs(NZ) + 0.6;
+				const double NN = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+				NX /= NN; NY /= NN; NZ /= NN;
+				const Tone C0 = Mixed(Foot, Tip, K / 3.0), C1 = Mixed(Foot, Tip, (K + 1) / 3.0);
+				const double H0 = 0.5 * Wd[K];
+				// (this segment's foot: the last one's end where there is one, so the ribbon runs on unbroken)
+				if (K == 0)
+				{
+					PA = W.Vert(P0[0] - AX * H0, P0[1] - AY * H0, P0[2], NX, NY, NZ, C0);
+					PB = W.Vert(P0[0] + AX * H0, P0[1] + AY * H0, P0[2], NX, NY, NZ, C0);
+					QA = W.Vert(P0[0] - AX * H0, P0[1] - AY * H0, P0[2], -NX, -NY, NZ, C0);
+					QB = W.Vert(P0[0] + AX * H0, P0[1] + AY * H0, P0[2], -NX, -NY, NZ, C0);
+				}
+				if (K == 2)
+				{
+					const uint32_t T = W.Vert(P1[0], P1[1], P1[2], NX, NY, NZ, C1), U = W.Vert(P1[0], P1[1], P1[2], -NX, -NY, NZ, C1);
+					W.Tri(PA, PB, T);
+					W.Tri(QB, QA, U);
+					break;
+				}
+				const double H1 = 0.5 * Wd[K + 1];
+				const uint32_t NA = W.Vert(P1[0] - AX * H1, P1[1] - AY * H1, P1[2], NX, NY, NZ, C1), NB = W.Vert(P1[0] + AX * H1, P1[1] + AY * H1, P1[2], NX, NY, NZ, C1);
+				const uint32_t MA = W.Vert(P1[0] - AX * H1, P1[1] - AY * H1, P1[2], -NX, -NY, NZ, C1), MB = W.Vert(P1[0] + AX * H1, P1[1] + AY * H1, P1[2], -NX, -NY, NZ, C1);
+				W.Tri(PA, PB, NB);
+				W.Tri(PA, NB, NA);
+				W.Tri(QB, QA, MA);
+				W.Tri(QB, MA, MB);
+				PA = NA; PB = NB; QA = MA; QB = MB;
+			}
+		}
+		/** A soft noise between 0 and 1 over cells of Cell metres (each corner its own, smoothly between). */
+		/** A corn clump's far mesh (two rows a yard apart, 1.2 m of each, along x): each row's leaves as three pointed fans
+		 * a side, from a ridge at the tassels' foot drooping out over the furrow; light at the ridge, dark at the points. Its
+		 * edges ragged, its rows read as rows and its top as leaves at 30 m and more, and from 12 m up. High scales the
+		 * heights (the fall's dry corn hangs lower). */
+		static void FarCorn(Writer& F, const Tone& Ridge, const Tone& Point, double High = 1.0)
+		{
+			for (int R = 0; R < 2; ++R)
+			{
+				const double Y = -0.46 + 0.92 * R;
+				for (int Sg = 0; Sg < 3; ++Sg)
+					for (const double S : { -1.0, 1.0 })
+					{
+						const uint64_t Hs = Hash(0xC0F5, static_cast<uint64_t>(R * 6 + Sg * 2 + (S > 0.0 ? 1 : 0)));
+						const double XC = -0.87 + 0.87 * Sg + 0.2 * (Unit(Hash(Hs, 1)) - 0.5), XT = XC + 0.4 * (Unit(Hash(Hs, 3)) - 0.5);
+						const double Top = (2.0 + 0.2 * Unit(Hash(Hs, 2))) * High, Low = (1.3 + 0.2 * Unit(Hash(Hs, 5))) * High;
+						F.Blade(XC, Y, Top, XT, Y + S * (0.5 + 0.14 * Unit(Hash(Hs, 4))), Low, 1.0, Ridge, Point);
+					}
+			}
+		}
+		double Mottle(double X, double Y, double Cell, uint64_t S)
+		{
+			const double FX = X / Cell, FY = Y / Cell;
+			const double IX = std::floor(FX), IY = std::floor(FY), TX = FX - IX, TY = FY - IY;
+			auto At = [S](double I, double J) { return Unit(Hash(S, static_cast<uint64_t>(static_cast<int64_t>(I) + 100000), static_cast<uint64_t>(static_cast<int64_t>(J) + 100000))); };
+			const double SX = TX * TX * (3.0 - 2.0 * TX), SY = TY * TY * (3.0 - 2.0 * TY);
+			return Lerp(Lerp(At(IX, IY), At(IX + 1.0, IY), SX), Lerp(At(IX, IY + 1.0), At(IX + 1.0, IY + 1.0), SX), SY);
 		}
 
 		/** A gable roof along x over walls Long by Deep standing at CX, CY: its eaves at Eave, its ridge at Ridge, overhanging
@@ -233,6 +321,11 @@ namespace LandScape
 		{
 			double X = 0.0, Y = 0.0, R = 40.0;
 		};
+		/** A farm's dirt drive, from the road to the barn. */
+		struct Drive
+		{
+			double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0;
+		};
 
 		class America final : public Region
 		{
@@ -247,6 +340,9 @@ namespace LandScape
 				bSouth = !bPlains && !bEast && F.Lat < 36.5;
 				bSouth = bSouth || (F.Lat < 35.5 && F.Lon > -92.0);
 				bBelt = !bPlains && !bEast && !bSouth;
+				// (the public land survey's square miles west of Pennsylvania and north of the Ohio; the east's and the South's
+				// fields older, metes and bounds)
+				bSurveyed = !bSouth && F.Lon < -80.52;
 				SnowLying = SnowOf(F, Look::America);
 				bBare = Month >= 11 || Month <= 3;
 				// the soil: the corn belt's black prairie loam, the plains' lighter brown, the east's brown, the South's red clay
@@ -267,7 +363,7 @@ namespace LandScape
 				MeanZ = F.Height.empty() ? 0.0 : Sum / static_cast<double>(F.Height.size());
 			}
 			Look Which() const override { return Look::America; }
-			bool Surveyed() const override { return true; }
+			bool Surveyed() const override { return bSurveyed; }
 
 			// ---------------------------------------------------------------- the year
 
@@ -303,7 +399,7 @@ namespace LandScape
 					{
 						// (a picked field's stalks stand broken over the winter, the cattle turned into them)
 						if (CornPloughed(Key)) P = { Soil, CStubble, 0.04, 0.6, 1.0 };
-						else P = { Mixed(Soil, CornStalk, 0.4), CDry, 0.3, 0.5, 1.0 };
+						else P = { Mixed(Soil, CornStalk, 0.4), CDry, 0.55, 0.5, 1.0 };
 					}
 					else if (M < 5.7) P = { Harrowed, CGrass, 0.35, 0.25, 0.0 };
 					else if (M < 6.6) P = { Mixed(Soil, CornGreen, 0.35), CCorn, 0.5, 0.32 + 0.2 * (M - 5.7), 0.0 };
@@ -311,7 +407,7 @@ namespace LandScape
 					else if (M < 9.0) P = { Mixed(CornGreen, Varied(Soil, 0.8, 0.0), 0.2), CCorn, 0.55, 1.0, 0.0 };
 					else if (M < 9.8) P = { Mixed(CornGreen, CornDry, 0.45), CCorn, 0.55, 1.0, 0.45 };
 					else if (M < 11.4 && !Shocked(Key)) P = { Mixed(CornDry, Soil, 0.2), CDry, 0.5, 0.95, 1.0 };
-					else if (!Shocked(Key) && !CornPloughed(Key)) P = { Mixed(Soil, CornStalk, 0.4), CDry, 0.3, 0.6, 1.0 }; // (picked: its stalks broken)
+					else if (!Shocked(Key) && !CornPloughed(Key)) P = { Mixed(Soil, CornStalk, 0.4), CDry, 0.55, 0.8, 1.0 }; // (picked: its stalks broken)
 					else P = { Mixed(Soil, CornStalk, 0.5), CStubble, 0.5, 1.0, 1.0 };
 					break;
 				case Wheat:
@@ -320,8 +416,8 @@ namespace LandScape
 					if (M < 2.9) P = { Mixed(Soil, Rgb(104, 108, 70), 0.4), CGrain, 0.6, 0.12, 0.6 };
 					else if (M < 4.2) P = { Mixed(Soil, WheatGreen, 0.55), CGrain, 0.9, 0.25, 0.0 };
 					else if (M < 5.6) P = { WheatGreen, CGrain, 1.1, 0.6, 0.0 };
-					else if (M < H - 0.4) P = { Mixed(WheatGreen, WheatGold, 0.5), CGrain, 1.1, 0.95, 0.5 };
-					else if (M < H + 0.3) P = { WheatGold, CGrain, 1.1, 1.0, 1.0 };
+					else if (M < H - 0.4) P = { Mixed(WheatGreen, Mixed(WheatGold, StubbleC, 0.35), 0.5), CGrain, 1.1, 0.95, 0.5 };
+					else if (M < H + 0.3) P = { Mixed(WheatGold, StubbleC, 0.35), CGrain, 1.1, 1.0, 1.0 };
 					else if (M < 9.3) P = { Mixed(StubbleC, Soil, 0.15 + 0.15 * (M - H)), CStubble, 0.9, 0.7, 1.0 };
 					else if (M < 10.0) P = { Harrowed, CStubble, 0.04, 0.5, 1.0 };
 					else P = { Mixed(Soil, WheatGreen, 0.3), CGrain, 0.8, 0.12, 0.0 };
@@ -368,17 +464,19 @@ namespace LandScape
 			}
 			double LaneDepth(double /*X*/, double /*Y*/) const override { return 0.0; }
 			double LaneHalf(bool bVillage, double U) const override { return (bVillage ? 4.4 : 3.0) + 0.6 * U; }
-			double PlotMin() const override { return bPlains ? 150000.0 : bEast ? 60000.0 : 90000.0; }
-			double PlotMax() const override { return bPlains ? 400000.0 : bEast ? 200000.0 : 330000.0; }
+			// (the survey's quarters, eighties and half sections; the plains' great wheat fields; the east's small old fields)
+			double PlotMin() const override { return !bSurveyed ? 40000.0 : bPlains ? 150000.0 : 85000.0; }
+			double PlotMax() const override { return !bSurveyed ? 140000.0 : bPlains ? 650000.0 : 420000.0; }
 			double FarTilled() const override { return bEast ? 0.5 : 0.72; }
 			double WoodsEdge() const override { return bPlains ? 0.5 : bEast ? 0.24 : 0.36; }
 
 			int CropOf(int Kind, double U) const override
 			{
 				if (Kind == KRough) return Pasture;
-				if (Kind == KOpen)
+				if (Kind == KOpen && !bSurveyed)
 				{
-					// (the rules' open land here is the farm's as much as its grazing: most of it in the rotation)
+					// (the rules' open land here is the farm's as much as its grazing: most of it in the rotation; on the
+					// survey a field is one crop whatever the rules' ground under it, so the grazing is in the shares)
 					const double Grazing = bPlains ? 0.36 : bEast ? 0.34 : 0.26;
 					if (U < Grazing) return U < 0.6 * Grazing ? Pasture : Hay;
 					U = (U - Grazing) / (1.0 - Grazing);
@@ -388,8 +486,8 @@ namespace LandScape
 					int C;
 					double Part;
 				};
-				static const Share BeltShares[] = { { Corn, 0.42 }, { Oats, 0.2 }, { Hay, 0.18 }, { Wheat, 0.1 }, { Pasture, 0.05 }, { Fallow, 0.05 } };
-				static const Share PlainShares[] = { { Wheat, 0.56 }, { Fallow, 0.16 }, { Corn, 0.1 }, { Pasture, 0.08 }, { Hay, 0.05 }, { Oats, 0.05 } };
+				static const Share BeltShares[] = { { Corn, 0.38 }, { Oats, 0.18 }, { Hay, 0.17 }, { Pasture, 0.13 }, { Wheat, 0.08 }, { Fallow, 0.06 } };
+				static const Share PlainShares[] = { { Wheat, 0.5 }, { Fallow, 0.15 }, { Pasture, 0.15 }, { Corn, 0.1 }, { Hay, 0.05 }, { Oats, 0.05 } };
 				static const Share EastShares[] = { { Hay, 0.3 }, { Corn, 0.25 }, { Oats, 0.15 }, { Pasture, 0.15 }, { Wheat, 0.1 }, { Fallow, 0.05 } };
 				static const Share SouthShares[] = { { Corn, 0.4 }, { Pasture, 0.2 }, { Hay, 0.1 }, { Oats, 0.1 }, { Wheat, 0.1 }, { Fallow, 0.1 } };
 				const Share* Shares = bPlains ? PlainShares : bEast ? EastShares : bSouth ? SouthShares : BeltShares;
@@ -445,6 +543,30 @@ namespace LandScape
 				const double OnV = std::fabs(V) < 0.5 * StreetStep ? 99.0 : DV;
 				return std::min(OnV, DU);
 			}
+			/** Main street's sidewalk: the first three metres off its floor, along its stores. */
+			bool OnSidewalk(const Spot& S) const
+			{
+				const double Out = std::max(3.1, MainHalf + 3.4 - S.LaneHalf);
+				if (!bTownGrid || S.Lane < -0.1 || S.Lane > Out + 4.0) return false;
+				const double DX = S.X - TownMX, DY = S.Y - TownMY;
+				if (std::fabs(DX * TownCa + DY * TownSa) >= FrontReach) return false;
+				if (S.Lane <= Out) return true;
+				// (and on under the stores' fronts, so the ground's coarse points blend no grass up to their walls)
+				for (const auto& [SX, SY] : StoreAt)
+					if (std::fabs((S.X - SX) * TownCa + (S.Y - SY) * TownSa) < 8.6 && std::fabs((S.Y - SY) * TownCa - (S.X - SX) * TownSa) < 8.6) return true;
+				return false;
+			}
+			/** The winter stalks' mesh built this much lower under snow, and drawn as much taller: the snow takes another
+			 * ground's clutter for 0.35 m high times its height scale, so its depth then buries them as deep as they truly
+			 * stand. */
+			double StalkSquash() const { return bBare && SnowLying > 0.25 ? 0.37 : 1.0; }
+			/** On main street's floor, along its stores (the crossing lanes' floors too, a few metres either side of it). */
+			bool OnMain(const Spot& S) const
+			{
+				if (!bTownGrid || S.Lane > 0.0) return false;
+				const double DX = S.X - TownMX, DY = S.Y - TownMY;
+				return std::fabs(DX * TownCa + DY * TownSa) < FrontReach && std::fabs(-DX * TownSa + DY * TownCa) < MainHalf + 6.0;
+			}
 			/** The farmstead's yard at a place: 0 outside, 1 at its middle. */
 			double YardAt(double X, double Y) const
 			{
@@ -456,6 +578,39 @@ namespace LandScape
 				}
 				return Best;
 			}
+			/** Metres to the middle of the section road nearest (the survey's mile lines, out of town); 99 where none. */
+			double RoadAt(double X, double Y) const
+			{
+				if (!bSurveyed) return 99.0;
+				if (bTownSet && std::hypot(X - TownCX, Y - TownCY) < TownCR + 40.0) return 99.0;
+				const double Mile = 4.0 * SurveyLine;
+				return std::min(std::fabs(X - Mile * std::floor(X / Mile + 0.5)), std::fabs(Y - Mile * std::floor(Y / Mile + 0.5)));
+			}
+			/** Metres to the nearest farm drive. */
+			double DriveAt(double X, double Y) const
+			{
+				double Best = 99.0;
+				for (const Drive& D : Drives)
+				{
+					const double DX = D.X1 - D.X0, DY = D.Y1 - D.Y0, L2 = DX * DX + DY * DY;
+					const double T = L2 > 1e-9 ? std::clamp(((X - D.X0) * DX + (Y - D.Y0) * DY) / L2, 0.0, 1.0) : 0.0;
+					Best = std::min(Best, std::hypot(X - D.X0 - T * DX, Y - D.Y0 - T * DY));
+				}
+				return Best;
+			}
+			/** A gravel road's paint Off metres from its middle (the lanes' and the section roads'): its crown's loose stone,
+			 * the wheels' two pale tracks, loose stone at its edges, the ditch's rank grass beyond. */
+			Tone RoadColour(const Spot& S, double Off, double Half) const
+			{
+				const Tone Base = Varied(Gravel, 0.97 + 0.06 * S.N2, 0.0);
+				const double Track = std::exp(-std::pow((Off - 1.0) / 0.4, 2.0));
+				const double Crown = Smooth(0.45, 0.0, Off), Loose = Smooth(Half - 1.0, Half - 0.2, Off);
+				Tone T = Mixed(Base, Rgb(184, 178, 164), 0.6 * Track);
+				T = Mixed(T, Rgb(132, 126, 116), 0.45 * Crown + 0.5 * Loose);
+				const Tone Ditch = Mixed(GrassAt(S), Rgb(70, 96, 46), bBare ? 0.0 : 0.4);
+				return Mixed(T, Ditch, Smooth(Half - 0.1, Half + 0.7, Off));
+			}
+
 			Tone FieldColour(const Spot& S) const
 			{
 				const Phase P = PhaseOf(S.Crop < 0 ? Pasture : S.Crop, S.Key);
@@ -468,6 +623,22 @@ namespace LandScape
 				}
 				// (each field its own shade, a soft breakup over it so it is not flat paint where the clutter has gone)
 				T = Varied(T, (0.93 + 0.14 * Unit(Hash(S.Key, 0x11))) * (0.97 + 0.04 * S.N1 + 0.02 * S.Broad), 0.0);
+				if (S.Crop == Pasture || S.Crop < 0)
+				{
+					// (the pasture mottled: its grazed and its rank patches, its clover)
+					const double Mo = Mottle(S.X, S.Y, 9.0, 0x3077) - 0.5;
+					T = Varied(T, 1.0 + 0.16 * Mo, 0.0);
+					T = Mixed(T, Rgb(128, 122, 80), 0.2 * Smooth(0.15, 0.4, Mottle(S.X, S.Y, 23.0, 0x3078) - 0.5));
+				}
+				else if (S.Edge > 3.0)
+				{
+					// (the planter's, the drill's or the mower's passes along the field, three ground points to a pass: seen
+					// from the air; the hay's windrows raked after its cutting)
+					const double F = S.Across / 12.5 - std::floor(S.Across / 12.5);
+					const double Band = Smooth(0.02, 0.14, F) * Smooth(0.46, 0.34, F);
+					if (S.Crop == Hay && P.Ripe > 0.4) T = Mixed(T, Varied(HayCut, 0.86, 0.0), 0.65 * Band);
+					else T = Varied(T, 1.0 - (S.Crop == Fallow ? 0.05 : 0.1) * Band, 0.0);
+				}
 				// (the headland the plough turned on, a few metres in; the fence row's grass along the edge)
 				if (S.Crop != Pasture && S.Crop >= 0) T = Mixed(T, Varied(SoilC, 1.04, 0.0), 0.25 * Smooth(5.0, 2.0, S.Edge) * Smooth(0.6, 2.0, S.Edge));
 				return Mixed(T, GrassAt(S), Smooth(2.0, 0.6, S.Edge));
@@ -475,18 +646,23 @@ namespace LandScape
 
 			Tone Colour(const Spot& S) const override
 			{
+				// (main street's sidewalks, concrete, before the stores, whatever the rules' ground under them)
+				if (S.Kind != KWater && OnSidewalk(S)) return Varied(Concrete, 0.97 + 0.05 * S.N2, 0.0);
 				switch (S.Kind)
 				{
 				case KLane:
-				{
-					// a gravel road: its crown pale, the wheels' two tracks darker, the loose gravel at its edges, the ditch's
-					// grass beyond
-					const double Off = std::fabs(S.Lane + S.LaneHalf);
-					const double Track = std::exp(-std::pow((Off - 1.0) / 0.35, 2.0));
-					Tone T = Varied(Gravel, 1.0 + 0.05 * S.N2, 0.0);
-					T = Mixed(T, Varied(Gravel, 0.84, 0.01), 0.45 * Track);
-					return Mixed(T, GrassAt(S), Smooth(S.LaneHalf - 0.5, S.LaneHalf + 0.8, Off));
-				}
+					if (OnMain(S))
+					{
+						// main street paved: its concrete slabs, their joints across every 9 m and down the middle, the
+						// gutters dark along the sidewalks, the tyres' oil between
+						const double DX = S.X - TownMX, DY = S.Y - TownMY, U = DX * TownCa + DY * TownSa, V = -DX * TownSa + DY * TownCa;
+						const double FU = std::fabs(U / 9.0 - std::floor(U / 9.0 + 0.5)) * 9.0;
+						const double Joint = std::max(Smooth(0.14, 0.04, FU), Smooth(0.14, 0.04, std::fabs(V)));
+						const double Gutter = Smooth(-0.7, -0.15, S.Lane);
+						const double Oil = Smooth(0.5, 0.0, std::fabs(std::fabs(V) - 0.5 * MainHalf)) * 0.06;
+						return Varied(Concrete, (0.76 + 0.04 * S.N2) * (1.0 - 0.14 * Joint - 0.3 * Gutter - Oil), 0.0);
+					}
+					return RoadColour(S, std::fabs(S.Lane + S.LaneHalf), S.LaneHalf);
 				case KVillage:
 				{
 					const double St = StreetGap(S.X, S.Y);
@@ -495,17 +671,22 @@ namespace LandScape
 					const Tone T = Mixed(Lawn, YardDirt, 0.12 * Smooth(0.3, 0.8, S.N1));
 					return Mixed(T, Varied(Gravel, 0.98 + 0.04 * S.N2, 0.0), Smooth(5.0, 3.6, St));
 				}
-				case KYard: return Mixed(GrassAt(S), Varied(YardDirt, 1.0 + 0.06 * S.N2, 0.0), 0.35 + 0.3 * Smooth(-0.3, 0.5, S.N1));
+				case KYard:
+					if (DriveAt(S.X, S.Y) < 2.2) return Varied(YardDirt, 1.0 + 0.06 * S.N2, 0.0);
+					return Mixed(Mixed(GrassAt(S), Rgb(84, 114, 56), bBare ? 0.0 : 0.3), Varied(YardDirt, 1.0 + 0.06 * S.N2, 0.0), 0.15 * Smooth(0.2, 0.8, S.N1));
 				case KWoods: return Mixed(GrassAt(S), Litter, (bBare || Month == 10 ? 0.45 : 0.22) + 0.2 * S.N1); // (the summer's woods floored green)
 				case KWater: return Rgb(82, 96, 98);
 				case KMarsh: return Mixed(GrassAt(S), Rgb(98, 104, 70), 0.4 + 0.2 * S.N1);
 				case KWorks: return Mixed(GrassAt(S), Varied(SoilC, 0.9, 0.0), 0.6);
 				default: break;
 				}
+				const double Rd = RoadAt(S.X, S.Y);
+				if (Rd < 5.5) return RoadColour(S, Rd, 3.0);
 				Tone T = FieldColour(S);
-				// (a farmstead's yard: the lawn round the house, the barnyard's beaten earth)
+				// (a farmstead's yard: the mown lawn round the house, its dirt drive to the barn)
 				const double Yd = YardAt(S.X, S.Y);
-				if (Yd > 0.0) T = Mixed(T, Mixed(GrassAt(S), Varied(YardDirt, 1.0 + 0.05 * S.N2, 0.0), 0.35 + 0.35 * Smooth(-0.2, 0.6, S.N1)), Yd);
+				if (Yd > 0.0) T = Mixed(T, Mixed(Mixed(GrassAt(S), Rgb(84, 114, 56), bBare ? 0.0 : 0.3), Varied(YardDirt, 1.0 + 0.05 * S.N2, 0.0), 0.12 * Smooth(0.2, 0.8, S.N1)), Yd);
+				if (DriveAt(S.X, S.Y) < 2.2) T = Varied(YardDirt, 1.0 + 0.05 * S.N2, 0.0);
 				return T;
 			}
 
@@ -518,7 +699,7 @@ namespace LandScape
 					Tone T = Month >= 11 || Month <= 3 ? Rgb(112, 102, 94) : Month == 4 ? Rgb(104, 118, 72) : Month == 10 ? Rgb(126, 104, 62) : Rgb(66, 88, 46);
 					return Varied(T, 0.95 + 0.1 * S.Broad, 0.0);
 				}
-				if (S.Kind == KField || S.Kind == KOpen || S.Kind == KRough) return FieldColour(S);
+				if ((S.Kind == KField || S.Kind == KOpen || S.Kind == KRough) && RoadAt(S.X, S.Y) >= 5.5) return FieldColour(S);
 				return Colour(S);
 			}
 
@@ -526,22 +707,27 @@ namespace LandScape
 
 			Grown Grow(const Spot& S, double Pick) const override
 			{
-				if (S.Kind == KWater || S.Drawn == 9 /*floor*/ || S.Drawn == 10 /*wall*/) return Grown{};
+				if (S.Kind == KWater || S.Drawn == 9 /*floor*/ || S.Drawn == 10 /*wall*/ || OnSidewalk(S)) return Grown{};
 				const bool bSnow = SnowLying > 0.25;
 				if (S.Kind == KLane) return S.Lane > 0.6 ? Grown{ ClutOf(CGrass), bSnow ? 0.3 : 1.0 } : Grown{};
 				if (S.Kind == KVillage) return StreetGap(S.X, S.Y) < 4.0 ? Grown{} : Pick < 0.9 ? Grown{ ClutOf(CGrass), bSnow ? 0.2 : 1.1 } : Grown{ ClutOf(CWeed), 0.1 };
-				if (S.Kind == KYard) return Pick < 0.7 ? Grown{ ClutOf(CGrass), 0.5 * Smooth(-0.3, 0.5, S.N1) + 0.1 } : Grown{ ClutOf(CWeed), 0.1 };
+				if (S.Kind == KYard) return DriveAt(S.X, S.Y) < 2.2 ? Grown{} : Grown{ ClutOf(CGrass), bSnow ? 0.2 : 1.2 };
 				if (S.Kind == KWorks) return Grown{ ClutOf(CGrass), 0.2 };
 				if (S.Kind == KMarsh) return Pick < 0.6 ? Grown{ ClutOf(CWeed), 0.9 } : Grown{ ClutOf(CGrass), 1.2 };
 				if (S.Kind == KWoods) return Pick < 0.7 ? Grown{ ClutOf(CGrass), 0.5 } : Grown{ ClutOf(CWeed), 0.25 };
+				// the section road: bare gravel, its ditches' rank grass
+				const double Rd = RoadAt(S.X, S.Y);
+				if (Rd < 3.0) return Grown{};
+				if (Rd < 5.5) return Pick < 0.75 ? Grown{ ClutOf(CGrass), bSnow ? 0.4 : 1.3 } : Grown{ ClutOf(CWeed), bSnow ? 0.3 : 0.6 };
 				// the fence row: grass and weeds along the field's edge
 				if (S.Edge < 1.4) return Pick < 0.5 ? Grown{ ClutOf(CWeed), bSnow ? 0.5 : 0.9 } : Grown{ ClutOf(CGrass), bSnow ? 0.4 : 1.2 };
-				// a farmstead's yard: the lawn and the barnyard's grass
-				if (YardAt(S.X, S.Y) > 0.3) return Pick < 0.8 ? Grown{ ClutOf(CGrass), bSnow ? 0.2 : 0.8 } : Grown{ ClutOf(CWeed), 0.1 };
+				// a farmstead's yard: the mown lawn, the drive bare
+				if (DriveAt(S.X, S.Y) < 2.2) return Grown{};
+				if (YardAt(S.X, S.Y) > 0.3) return Grown{ ClutOf(CGrass), bSnow ? 0.2 : 1.2 };
 				if (bSnow)
 				{
 					// under the snow: the corn's stalks and the stubble through it, dead grass here and there
-					if (S.Crop == Corn) return CornPloughed(S.Key) ? Grown{ ClutOf(CStubble), 0.06 } : Grown{ ClutOf(CDry), 0.3 };
+					if (S.Crop == Corn) return CornPloughed(S.Key) ? Grown{ ClutOf(CStubble), 0.06 } : Grown{ ClutOf(CDry), 0.55 };
 					if (S.Crop == Pasture || S.Crop == Hay || S.Crop < 0) return Pick < 0.4 ? Grown{ ClutOf(CGrass), 0.25 } : Grown{};
 					return Grown{ ClutOf(CStubble), 0.15 };
 				}
@@ -590,7 +776,7 @@ namespace LandScape
 					// (the picked or the shocked corn's rows, standing; broken to half over the winter)
 					P.Yaw = static_cast<float>(S.Angle + (U7 < 0.5 ? 0.0 : Pi));
 					P.Scale = 1.0f;
-					P.ScaleZ = static_cast<float>((bField ? Ph.High : 0.5) * (0.88 + 0.24 * U5));
+					P.ScaleZ = static_cast<float>((bField ? Ph.High : 0.5) * (0.88 + 0.24 * U5) / StalkSquash());
 					const double L = 0.9 + 0.2 * U6;
 					P.Tint = SnowLying > 0.25 ? Tint(0.92 * L, 0.88 * L, 0.84 * L) : Tint(L, L, 0.96 * L);
 					return true;
@@ -601,6 +787,14 @@ namespace LandScape
 					P.Tint = Tint(0.96 + 0.08 * U6, 0.98, 0.94);
 					return true;
 				case CGrass:
+					if (S.Kind == KYard || (bField && YardAt(S.X, S.Y) > 0.3))
+					{
+						// (the lawn mown short and even)
+						P.Scale = static_cast<float>(0.9 + 0.3 * U4);
+						P.ScaleZ = static_cast<float>(0.3 + 0.1 * U5);
+						P.Tint = Tint(0.92 + 0.06 * U7, 1.04, 0.92);
+						return true;
+					}
 					P.Scale = static_cast<float>(0.6 + 0.7 * U4);
 					P.ScaleZ = static_cast<float>((bField && S.Crop != Pasture && S.Crop >= 0 && S.Edge > 1.4 ? Ph.High : 1.0) * (0.6 + 0.7 * U5));
 					if (bField && S.Crop == Hay && S.Edge > 1.4)
@@ -630,8 +824,8 @@ namespace LandScape
 				case CCorn:
 				{
 					// two rows a yard apart along x, two plants to a row (1.2 m of row): each a stalk 2.1 to 2.45 m with its
-					// tassel, seven leaves arching out and down from it in turn, an ear at its middle (the field's tint makes it
-					// the summer's green or the fall's buff)
+					// tassel, five long leaves arching up and out from it in turn and drooping at their tips (ribbons, three
+					// lengths each), an ear at its middle (the field's tint makes it the summer's green or the fall's buff)
 					for (int R = 0; R < 2; ++R)
 						for (int Pl = 0; Pl < 2; ++Pl)
 						{
@@ -641,15 +835,15 @@ namespace LandScape
 							W.Blade(X, Y, 0.0, X + 0.01, Y, Tall, 0.05, Rgb(84, 102, 50), Rgb(112, 124, 66));
 							W.Blade(X, Y, 0.0, X, Y + 0.01, Tall, 0.05, Rgb(84, 102, 50), Rgb(112, 124, 66));
 							const double A0 = 2.0 * Pi * Unit(Hash(Hs, 4));
-							for (int L = 0; L < 7; ++L)
+							for (int L = 0; L < 5; ++L)
 							{
-								const double Z = 0.3 + (Tall - 0.75) * L / 6.5;
-								const double A = A0 + (L % 2 ? Pi : 0.0) + 0.5 * (Unit(Hash(Hs, 10 + L)) - 0.5);
-								const double Out = (0.5 + 0.25 * Unit(Hash(Hs, 20 + L))) * (1.0 - 0.35 * L / 7.0);
-								const double MX = X + 0.5 * Out * std::cos(A), MY = Y + 0.5 * Out * std::sin(A), MZ = Z + 0.26;
-								const double TX = X + Out * std::cos(A), TY = Y + Out * std::sin(A), TZ = Z + 0.1;
-								W.Blade(X, Y, Z, MX, MY, MZ, 0.08, Rgb(54, 80, 38), Rgb(74, 100, 48));
-								W.Blade(MX, MY, MZ, TX, TY, TZ, 0.06, Rgb(74, 100, 48), Rgb(98, 118, 58));
+								const double Z = 0.35 + (Tall - 0.8) * L / 4.5;
+								const double A = A0 + (L % 2 ? Pi : 0.0) + 0.6 * (Unit(Hash(Hs, 10 + L)) - 0.5);
+								const double Out = (0.62 + 0.3 * Unit(Hash(Hs, 20 + L))) * (1.0 - 0.3 * L / 5.0);
+								const double Ca = std::cos(A), Sa = std::sin(A), Droop = 0.2 + 0.25 * Unit(Hash(Hs, 30 + L));
+								const double P[4][3] = { { X, Y, Z }, { X + 0.28 * Out * Ca, Y + 0.28 * Out * Sa, Z + 0.24 }, { X + 0.66 * Out * Ca, Y + 0.66 * Out * Sa, Z + 0.3 }, { X + Out * Ca, Y + Out * Sa, Z + 0.3 - Droop } };
+								const double Wd[3] = { 0.05, 0.085, 0.06 };
+								Ribbon(W, P, Wd, Rgb(54, 80, 38), Rgb(92, 114, 56));
 							}
 							for (int T = 0; T < 3; ++T)
 							{
@@ -660,31 +854,25 @@ namespace LandScape
 						}
 					M.Paint = 2;
 					M.FarFrom = 32.0f;
-					// far off: each row a sheet of leaves the plants' height, the tassels' band over it (both faces)
+					// far off: each row's leaves, FarCorn's pointed fans (no lid and no box's sides: the art director's
+					// crates, round 1's first mend, seen again from 12 m)
 					M.Far = LandField::Mesh();
 					Writer F(M.Far);
-					for (int R = 0; R < 2; ++R)
-					{
-						const double Y = -0.46 + 0.92 * R;
-						for (const double S : { -1.0, 1.0 })
-						{
-							Face(F, { { -0.62, Y, 0.0 }, { 0.62, Y, 0.0 }, { 0.62, Y, 2.2 }, { -0.62, Y, 2.2 } }, { 0.0, S, 0.3 }, Rgb(62, 88, 44));
-							Face(F, { { -0.62, Y, 2.2 }, { 0.62, Y, 2.2 }, { 0.5, Y, 2.36 }, { -0.5, Y, 2.36 } }, { 0.0, S, 0.3 }, Rgb(112, 112, 74));
-						}
-					}
+					FarCorn(F, Rgb(78, 106, 54), Rgb(44, 66, 34));
 					break;
 				}
 				case CGrain:
 				{
-					// a clump of wheat (or oats by the tint): fourteen stalks a metre tall from a small foot, each its ear
-					for (int B = 0; B < 14; ++B)
+					// a clump of wheat (or oats by the tint): twenty-four stalks a metre tall over half a metre, each its ear
+					// a slim blade on its top (the heads touching across the field), a leaf at every third
+					for (int B = 0; B < 24; ++B)
 					{
-						const double A = 2.0 * Pi * Unit(Hash(0x6E41, B)), D = 0.14 * Unit(Hash(0x6E42, B));
+						const double A = 2.0 * Pi * Unit(Hash(0x6E41, B)), D = 0.26 * std::sqrt(Unit(Hash(0x6E42, B)));
 						const double X = D * std::cos(A), Y = D * std::sin(A), High = 0.85 + 0.2 * Unit(Hash(0x6E43, B));
-						const double LX = 0.06 * std::cos(A), LY = 0.06 * std::sin(A);
-						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.02, Rgb(92, 110, 54), Rgb(130, 140, 72));
-						W.Bead(X + LX, Y + LY, High + 0.04, 0.012, 0.07, Rgb(150, 146, 80), Rgb(120, 122, 62));
-						if (B % 2 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(80, 100, 48), Rgb(116, 132, 66));
+						const double LX = 0.07 * std::cos(A), LY = 0.07 * std::sin(A);
+						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.018, Rgb(92, 110, 54), Rgb(130, 140, 72));
+						W.Blade(X + 0.9 * LX, Y + 0.9 * LY, High - 0.04, X + 1.3 * LX, Y + 1.3 * LY, High + 0.1, 0.03, Rgb(132, 140, 72), Rgb(146, 150, 80));
+						if (B % 3 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(80, 100, 48), Rgb(116, 132, 66));
 					}
 					M.Paint = 2;
 					M.FarFrom = 45.0f;
@@ -731,8 +919,42 @@ namespace LandScape
 				}
 				case CDry:
 				{
-					// the corn dry in the fall: the CCorn's two rows of two, buff, its leaves hanging, its ears turned down in
-					// their husks, the tassels broken dark (over the winter the same, broken to half its height by the tint)
+					if (bBare)
+					{
+						// the winter's stalk field: the picked corn's stalks broken a metre high and less, three to a row in
+						// two rows, a dead leaf hanging from some; far off a few thin stalks, no sheet (under snow built low and
+						// drawn tall again: StalkSquash)
+						const double Kz = StalkSquash();
+						for (int R = 0; R < 2; ++R)
+							for (int Pl = 0; Pl < 3; ++Pl)
+							{
+								const uint64_t Hs = Hash(0xD1B5, static_cast<uint64_t>(R * 3 + Pl));
+								const double X = -0.45 + 0.45 * Pl + 0.1 * (Unit(Hash(Hs, 1)) - 0.5), Y = -0.46 + 0.92 * R + 0.05 * (Unit(Hash(Hs, 2)) - 0.5);
+								const double Tall = (0.5 + 0.9 * Unit(Hash(Hs, 3))) * Kz, LX = 0.25 * (Unit(Hash(Hs, 4)) - 0.5), LY = 0.25 * (Unit(Hash(Hs, 5)) - 0.5);
+								W.Blade(X, Y, 0.0, X + LX, Y + LY, Tall, 0.045, Rgb(122, 104, 76), Rgb(158, 140, 104));
+								W.Blade(X, Y, 0.0, X + LX + 0.01, Y + LY, Tall, 0.045, Rgb(122, 104, 76), Rgb(158, 140, 104));
+								if (Unit(Hash(Hs, 6)) < 0.6)
+								{
+									const double A = 2.0 * Pi * Unit(Hash(Hs, 7)), Z = 0.6 * Tall;
+									const double P[4][3] = { { X + 0.6 * LX, Y + 0.6 * LY, Z }, { X + 0.6 * LX + 0.12 * std::cos(A), Y + 0.6 * LY + 0.12 * std::sin(A), Z + 0.04 * Kz }, { X + 0.6 * LX + 0.2 * std::cos(A), Y + 0.6 * LY + 0.2 * std::sin(A), Z - 0.15 * Kz }, { X + 0.6 * LX + 0.24 * std::cos(A), Y + 0.6 * LY + 0.24 * std::sin(A), Z - 0.45 * Kz } };
+									const double Wd[3] = { 0.04, 0.06, 0.04 };
+									Ribbon(W, P, Wd, Rgb(150, 130, 94), Rgb(176, 158, 118));
+								}
+							}
+						M.Paint = 2;
+						M.FarFrom = 32.0f;
+						M.Far = LandField::Mesh();
+						Writer F(M.Far);
+						for (int R = 0; R < 2; ++R)
+							for (int Pl = 0; Pl < 3; ++Pl)
+							{
+								const double X = -0.45 + 0.45 * Pl, Y = -0.46 + 0.92 * R, Tall = (0.6 + 0.3 * ((R + Pl) % 3)) * Kz;
+								F.Blade(X, Y, 0.0, X + 0.02, Y, Tall, 0.06, Rgb(132, 114, 84), Rgb(156, 138, 102));
+							}
+						break;
+					}
+					// the corn dry in the fall: the CCorn's two rows of two, buff, its leaves curled and hanging down along
+					// the stalk, its ears turned down in their husks, the tassels broken dark
 					for (int R = 0; R < 2; ++R)
 						for (int Pl = 0; Pl < 2; ++Pl)
 						{
@@ -743,15 +965,14 @@ namespace LandScape
 							W.Blade(X, Y, 0.0, X + Lean, Y + 0.01, Tall, 0.045, Rgb(132, 112, 80), Rgb(170, 150, 108));
 							W.Blade(X, Y, 0.0, X + Lean + 0.01, Y, Tall, 0.045, Rgb(132, 112, 80), Rgb(170, 150, 108));
 							const double A0 = 2.0 * Pi * Unit(Hash(Hs, 4));
-							for (int L = 0; L < 6; ++L)
+							for (int L = 0; L < 5; ++L)
 							{
-								const double Z = 0.3 + (Tall - 0.7) * L / 5.5;
-								const double A = A0 + (L % 2 ? Pi : 0.0) + 0.6 * (Unit(Hash(Hs, 10 + L)) - 0.5);
-								const double Out = (0.35 + 0.2 * Unit(Hash(Hs, 20 + L))) * (1.0 - 0.3 * L / 6.0);
-								const double MX = X + 0.6 * Out * std::cos(A), MY = Y + 0.6 * Out * std::sin(A), MZ = Z + 0.1;
-								const double TX = X + Out * std::cos(A), TY = Y + Out * std::sin(A), TZ = Z - 0.3 - 0.2 * Unit(Hash(Hs, 30 + L));
-								W.Blade(X, Y, Z, MX, MY, MZ, 0.06, Rgb(150, 128, 90), Rgb(172, 152, 108));
-								W.Blade(MX, MY, MZ, TX, TY, TZ, 0.045, Rgb(172, 152, 108), Rgb(190, 172, 128));
+								const double Z = 0.4 + (Tall - 0.7) * L / 4.5;
+								const double A = A0 + (L % 2 ? Pi : 0.0) + 0.7 * (Unit(Hash(Hs, 10 + L)) - 0.5);
+								const double Out = 0.3 + 0.18 * Unit(Hash(Hs, 20 + L)), Ca = std::cos(A), Sa = std::sin(A);
+								const double P[4][3] = { { X, Y, Z }, { X + 0.4 * Out * Ca, Y + 0.4 * Out * Sa, Z + 0.08 }, { X + 0.8 * Out * Ca, Y + 0.8 * Out * Sa, Z - 0.12 }, { X + Out * Ca, Y + Out * Sa, Z - 0.55 - 0.2 * Unit(Hash(Hs, 30 + L)) } };
+								const double Wd[3] = { 0.04, 0.06, 0.035 };
+								Ribbon(W, P, Wd, Rgb(150, 128, 90), Rgb(186, 168, 124));
 							}
 							for (int T = 0; T < 2; ++T)
 							{
@@ -765,17 +986,10 @@ namespace LandScape
 						}
 					M.Paint = 2;
 					M.FarFrom = 32.0f;
+					// far off: the green corn's fans, buff, hanging lower
 					M.Far = LandField::Mesh();
 					Writer F(M.Far);
-					for (int R = 0; R < 2; ++R)
-					{
-						const double Y = -0.46 + 0.92 * R;
-						for (const double S : { -1.0, 1.0 })
-						{
-							Face(F, { { -0.62, Y, 0.0 }, { 0.62, Y, 0.0 }, { 0.62, Y, 2.1 }, { -0.62, Y, 2.1 } }, { 0.0, S, 0.3 }, Rgb(156, 136, 98));
-							Face(F, { { -0.62, Y, 2.1 }, { 0.62, Y, 2.1 }, { 0.5, Y, 2.25 }, { -0.5, Y, 2.25 } }, { 0.0, S, 0.3 }, Rgb(120, 102, 74));
-						}
-					}
+					FarCorn(F, Rgb(170, 150, 108), Rgb(126, 106, 76), 0.92);
 					break;
 				}
 				default: break;
@@ -1035,37 +1249,65 @@ namespace LandScape
 					break;
 				}
 				case KStore:
-				{
-					// a brick store on main street, 7.6 m wide and 16 deep, two storeys and a parapet to 8.6 m, a pale stone
-					// cornice; along its front (-y) the shop's two windows and its door, the awning over them, three windows
-					// up
-					W.Box(0.0, 0.0, 3.8, 3.8, 8.0, 3.8, 0.0, Brick);
-					W.Box(0.0, -7.6, 8.1, 3.8, 0.4, 0.5, 0.0, Brick);
-					W.Box(0.0, -7.95, 8.0, 3.9, 0.12, 0.22, 0.0, Rgb(196, 186, 164));
-					W.Box(0.0, -7.95, 3.85, 3.9, 0.1, 0.15, 0.0, Rgb(196, 186, 164));
-					Pane(W, 0, -8.0, -2.0, 1.75, 1.3, 1.25, Glass);
-					Pane(W, 0, -8.0, 2.0, 1.75, 1.3, 1.25, Glass);
-					Pane(W, 0, -8.0, 0.0, 1.35, 0.5, 1.2, Rgb(70, 58, 48));
-					for (int Wn = 0; Wn < 3; ++Wn) Window(W, 0, -8.0, -2.4 + 2.4 * Wn, 5.8, 0.42, 0.75);
-					const Tone Awn = Unit(Hash(Seed, 0xA3A)) < 0.5 ? Rgb(64, 96, 70) : Rgb(150, 70, 56);
-					Face(W, { { -3.7, -8.0, 3.4 }, { 3.7, -8.0, 3.4 }, { 3.7, -9.6, 2.85 }, { -3.7, -9.6, 2.85 } }, { 0.0, -0.3, 1.0 }, Awn);
-					Face(W, { { -3.7, -8.0, 3.38 }, { 3.7, -8.0, 3.38 }, { 3.7, -9.6, 2.83 }, { -3.7, -9.6, 2.83 } }, { 0.0, 0.0, -1.0 }, Varied(Awn, 0.6, 0.0));
-					for (int Wn = 0; Wn < 4; ++Wn) Window(W, 1, 8.0, -2.4 + 1.6 * Wn, 5.8, 0.4, 0.7);
-					break;
-				}
 				case KFront:
 				{
-					// a frame store behind its square false front: 7 m wide and 14 deep, a gable roof behind the front's 7.4 m,
-					// painted white; its shop window and door, two windows over them
-					const Tone Paint = Rgb(214, 210, 198);
-					W.Box(0.0, 0.0, 2.3, 3.5, 7.0, 2.3, 0.0, Paint);
-					Gable(W, 0.0, 0.0, 7.0, 14.0, 4.6, 6.2, 0.2, 0.0, Tin, Paint);
-					W.Box(0.0, -7.0, 3.7, 3.6, 0.1, 3.7, 0.0, Paint);
-					W.Box(0.0, -7.1, 7.3, 3.7, 0.12, 0.12, 0.0, Rgb(176, 172, 160));
-					Pane(W, 0, -7.1, -1.6, 1.7, 1.4, 1.1, Glass);
-					Pane(W, 0, -7.1, 1.9, 1.3, 0.5, 1.2, Rgb(70, 58, 48));
-					Window(W, 0, -7.1, -1.5, 4.9, 0.45, 0.75);
-					Window(W, 0, -7.1, 1.5, 4.9, 0.45, 0.75);
+					// two stores on main street, shoulder to shoulder, 16 m of front (-y) and 15 deep: KStore's both of brick,
+					// two storeys, their parapets and stone cornices at their own heights; KFront's a frame store behind its
+					// square false front and a one-storey brick. Each its shop windows and door, its awning, its blank
+					// signboard (no words), its windows up.
+					const bool bBrickRow = K == KStore;
+					for (int I = 0; I < 2; ++I)
+					{
+						const double CX = -4.0 + 8.0 * I;
+						const uint64_t Hs = Hash(Seed ^ 0x5707, static_cast<uint64_t>(K * 3 + I));
+						const bool bFalse = !bBrickRow && I == 0;
+						const double Pk = Unit(Hash(Hs, 4));
+						const Tone Wall = bFalse ? (Pk < 0.6 ? Rgb(214, 210, 198) : Rgb(186, 190, 168)) : Pk < 0.4 ? Brick : Pk < 0.75 ? Varied(Brick, 0.82, 0.0) : Rgb(158, 118, 84);
+						const double Top = bFalse ? 7.4 : bBrickRow ? 7.4 + 1.4 * Unit(Hash(Hs, 5)) : 5.2;
+						const double Body = bFalse ? 4.6 : Top - 0.4;
+						W.Box(CX, 0.0, 0.5 * Body, 3.98, 7.5, 0.5 * Body, 0.0, Wall);
+						if (bFalse)
+						{
+							Gable(W, CX, 0.0, 7.9, 15.0, 4.6, 6.0, 0.15, 0.0, Tin, Wall);
+							W.Box(CX, -7.55, 0.5 * Top, 3.98, 0.06, 0.5 * Top, 0.0, Wall);
+							W.Box(CX, -7.65, Top - 0.06, 4.0, 0.12, 0.12, 0.0, Rgb(176, 172, 160));
+						}
+						else
+						{
+							W.Box(CX, 0.0, Body + 0.2, 3.98, 7.5, 0.2, 0.0, Wall);
+							W.Box(CX, -7.62, Top - 0.12, 4.0, 0.14, 0.22, 0.0, Rgb(196, 186, 164));
+							if (Top > 6.0) W.Box(CX, -7.58, 3.85, 4.0, 0.1, 0.12, 0.0, Rgb(196, 186, 164));
+							W.Box(CX, 0.0, Top + 0.02, 3.6, 7.1, 0.05, 0.0, Rgb(70, 66, 62));
+						}
+						// the shop front
+						Pane(W, 0, -7.62, CX - 2.1, 1.7, 1.25, 1.2, Glass);
+						Pane(W, 0, -7.62, CX + 2.1, 1.7, 1.25, 1.2, Glass);
+						Pane(W, 0, -7.63, CX - 2.1, 2.35, 1.25, 0.45, GlassSky);
+						Pane(W, 0, -7.63, CX + 2.1, 2.35, 1.25, 0.45, GlassSky);
+						Pane(W, 0, -7.62, CX, 1.3, 0.5, 1.2, Rgb(70, 58, 48));
+						// its signboard over the windows, blank, painted (cream, a dark green, black)
+						const double Sg = Unit(Hash(Hs, 1));
+						Pane(W, 0, -7.64, CX, 3.75, 3.3, 0.28, Sg < 0.4 ? Rgb(212, 204, 176) : Sg < 0.7 ? Rgb(52, 76, 58) : Rgb(44, 42, 40));
+						// the awning (green, red or striped by its stripes' two colours) out over the sidewalk
+						if (Unit(Hash(Hs, 2)) < 0.75)
+						{
+							const double Aw = Unit(Hash(Hs, 3));
+							const Tone A1 = Aw < 0.4 ? Rgb(64, 96, 70) : Aw < 0.75 ? Rgb(150, 70, 56) : Rgb(204, 196, 176);
+							const Tone A2 = Aw < 0.75 ? A1 : Rgb(150, 70, 56);
+							for (int St = 0; St < 6; ++St)
+							{
+								const double X0 = CX - 3.7 + 7.4 * St / 6.0, X1 = CX - 3.7 + 7.4 * (St + 1) / 6.0;
+								const Tone C = St % 2 ? A2 : A1;
+								Face(W, { { X0, -7.62, 3.35 }, { X1, -7.62, 3.35 }, { X1, -9.4, 2.75 }, { X0, -9.4, 2.75 } }, { 0.0, -0.3, 1.0 }, C);
+								Face(W, { { X0, -7.62, 3.33 }, { X1, -7.62, 3.33 }, { X1, -9.4, 2.73 }, { X0, -9.4, 2.73 } }, { 0.0, 0.0, -1.0 }, Varied(C, 0.9, 0.0)); // (the canvas lit through from above)
+							}
+						}
+						// the windows up
+						if (Top > 6.0)
+							for (int Wn = 0; Wn < 3; ++Wn) Window(W, 0, -7.6, CX - 2.4 + 2.4 * Wn, 5.7, 0.42, 0.72);
+						else if (bFalse)
+							for (int Wn = 0; Wn < 2; ++Wn) Window(W, 0, -7.6, CX - 1.5 + 3.0 * Wn, 5.0, 0.45, 0.7);
+					}
 					break;
 				}
 				case KChurch:
@@ -1230,11 +1472,25 @@ namespace LandScape
 				for (size_t K = 0; K + 1 < L.size(); ++K) S += std::hypot(L[K + 1].first - L[K].first, L[K + 1].second - L[K].second);
 				return S;
 			}
+			/** Room for a pair of stores (16 m of front, 16 deep) beside a lane at X, Y heading A, on side Sd, Set metres out:
+			 * none in the rules' woods, water or marsh, on a man's or a vehicle's way, by a building or on a lane. */
+			static bool StoreRoom(const Host& H, double X, double Y, double A, double Sd, double Set)
+			{
+				const double C = std::cos(A), S = std::sin(A);
+				for (double DU = -9.0; DU <= 9.01; DU += 3.0)
+					for (double DV = -9.0; DV <= 9.01; DV += 3.0)
+					{
+						const double V = Set + Sd * DV;
+						const Spot Q = H.At(X + C * DU - Sd * S * V, Y + S * DU + Sd * C * V);
+						if (Q.Drawn == 2 || Q.Drawn == 11 || Q.Drawn == 12 || Q.bMan || Q.bVehicle || Q.bNear || Q.Lane < 0.8) return false;
+					}
+				return true;
+			}
 			static bool Farmable(int Kind) { return Kind == KField || Kind == KOpen || Kind == KRough || Kind == KYard; }
 
 			/** A farmstead with its house at (X, Y) facing the lane along heading A (the lane on its -y side as built: Side
 			 * says which side of the lane it is), its yard behind it; false where its house does not fit. */
-			bool Farmstead(Host& H, Rng& R, double X, double Y, double A, int& Built)
+			bool Farmstead(Host& H, Rng& R, double X, double Y, double A, int& Built, double RoadV = 0.0)
 			{
 				const double Ca = std::cos(A), Sa = std::sin(A);
 				// (the yard's frame: U along the lane, V away from it)
@@ -1261,6 +1517,17 @@ namespace LandScape
 					const double End = R.Next() < 0.5 ? 1.0 : -1.0;
 					const double SX = PX + End * 16.2 * std::cos(BA) - 2.0 * std::sin(BA), SY = PY + End * 16.2 * std::sin(BA) + 2.0 * std::cos(BA);
 					if (H.House(KitOf(KSilo), SX, SY, BA, 4.6, 4.6)) ++Built;
+				}
+				// the dirt drive from the road up beside the house to the barn
+				if (RoadV > 0.0)
+				{
+					const double Ud = BU > 0.0 ? 9.0 : -9.0;
+					double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0, X2 = 0.0, Y2 = 0.0;
+					At(Ud, -RoadV + 3.2, X0, Y0);
+					At(Ud, BV - 14.0, X1, Y1);
+					At(BU, BV - 7.0, X2, Y2);
+					Drives.push_back(Drive{ X0, Y0, X1, Y1 });
+					Drives.push_back(Drive{ X1, Y1, X2, Y2 });
 				}
 				// the crib and the shed round the yard, the windmill between the house and the barn
 				At(BU + (BU > 0.0 ? -30.0 : 30.0), R.Range(30.0, 40.0), PX, PY);
@@ -1315,33 +1582,63 @@ namespace LandScape
 			void Sites(Host& H) override
 			{
 				Steads.clear();
+				StoreAt.clear();
 				Rng R(H.Seed() ^ 0xA3E7);
 				int Built = 0, Farms = 0;
 				double TX = 0.0, TY = 0.0, TR = 0.0;
 				const bool bTown = H.Town(TX, TY, TR);
+				bTownSet = bTown;
+				TownCX = TX;
+				TownCY = TY;
+				TownCR = TR;
 				// The town: main street is the lane nearest its middle; its stores face it on both sides, the side streets
 				// square to it.
 				if (bTown)
 				{
+					// (of the lanes through the middle of town, the one with the most room for stores beside it: the rules'
+					// woods and the men's ways keep theirs)
 					size_t Main = H.Lanes();
 					double Best = 1e18, MA = 0.0, MS = 0.0;
+					int MostRoom = -1;
 					for (size_t K = 0; K < H.Lanes(); ++K)
 					{
 						const auto& L = H.LaneLine(K);
-						double S = 0.0;
+						double S = 0.0, Near = 1e18, KA = 0.0, KS = 0.0, KX = 0.0, KY = 0.0;
 						for (size_t I = 0; I + 1 < L.size(); ++I)
 						{
 							const double D = std::hypot(L[I].first - TX, L[I].second - TY);
-							if (D < Best)
+							if (D < Near)
 							{
-								Best = D;
-								Main = K;
-								MA = std::atan2(L[I + 1].second - L[I].second, L[I + 1].first - L[I].first);
-								MS = S;
-								TownMX = L[I].first;
-								TownMY = L[I].second;
+								Near = D;
+								KA = std::atan2(L[I + 1].second - L[I].second, L[I + 1].first - L[I].first);
+								KS = S;
+								KX = L[I].first;
+								KY = L[I].second;
 							}
 							S += std::hypot(L[I + 1].first - L[I].first, L[I + 1].second - L[I].second);
+						}
+						if (Near > 0.5 * TR) continue;
+						int Room = 0;
+						for (double U = -0.42 * TR; U <= 0.42 * TR + 0.1; U += 18.4)
+							for (const double Sd : { 1.0, -1.0 })
+								for (const double Shift : { 0.0, 4.6, -4.6 })
+								{
+									double X = 0.0, Y = 0.0, A = 0.0;
+									if (Along(L, KS + U + Shift, X, Y, A) && StoreRoom(H, X, Y, A, Sd, H.LaneHalf(K) + 3.2 + 8.0))
+									{
+										++Room;
+										break;
+									}
+								}
+						if (Room > MostRoom || (Room == MostRoom && Near < Best))
+						{
+							MostRoom = Room;
+							Best = Near;
+							Main = K;
+							MA = KA;
+							MS = KS;
+							TownMX = KX;
+							TownMY = KY;
 						}
 					}
 					if (Main < H.Lanes() && Best < TR)
@@ -1352,20 +1649,29 @@ namespace LandScape
 						TownReach = TR * 1.05;
 						const auto& L = H.LaneLine(Main);
 						const double Half = H.LaneHalf(Main);
-						// the stores, shoulder to shoulder for a few blocks of main street, a vacant lot here and there
-						for (double U = -0.5 * TR; U <= 0.5 * TR; U += 8.0)
-						{
-							double X = 0.0, Y = 0.0, A = 0.0;
-							if (!Along(L, MS + U, X, Y, A)) continue;
+						// the stores in their rows of three, shoulder to shoulder for two blocks of main street on both sides, an
+						// alley between the rows, the sidewalk before them
+						MainHalf = Half;
+						FrontReach = 0.42 * TR + 10.0;
+						for (double U = -0.42 * TR; U <= 0.42 * TR + 0.1; U += 18.4)
 							for (const double Sd : { 1.0, -1.0 })
 							{
-								if (R.Next() < 0.12) continue;
 								const bool bBrick = R.Next() < 0.6;
-								const double Deep = bBrick ? 16.0 : 14.2, Set = Half + 1.8 + 0.5 * Deep;
-								const double SX = X - Sd * std::sin(A) * Set, SY = Y + Sd * std::cos(A) * Set;
-								if (H.House(KitOf(bBrick ? KStore : KFront), SX, SY, Sd > 0.0 ? A : A + Pi, bBrick ? 7.8 : 7.4, Deep)) ++Built;
+								// (a pair of stores where the rules' men and vehicles leave room: here, or a few metres along)
+								for (const double Shift : { 0.0, 4.6, -4.6 })
+								{
+									double X = 0.0, Y = 0.0, A = 0.0;
+									if (!Along(L, MS + U + Shift, X, Y, A)) continue;
+									const double Set = Half + 3.2 + 8.0;
+									const double SX = X - Sd * std::sin(A) * Set, SY = Y + Sd * std::cos(A) * Set;
+									if (H.House(KitOf(bBrick ? KStore : KFront), SX, SY, Sd > 0.0 ? A : A + Pi, 16.0, 16.0))
+									{
+										StoreAt.push_back({ SX, SY });
+										Built += 2;
+										break;
+									}
+								}
 							}
-						}
 						// the church a block off main street; the grain elevator at the edge of town by the road
 						for (int K = 0; K < 30; ++K)
 						{
@@ -1434,7 +1740,7 @@ namespace LandScape
 						const double Sd = R.Next() < 0.5 ? 1.0 : -1.0, Set = Half + 26.0;
 						const double FX = X - Sd * std::sin(A) * Set, FY = Y + Sd * std::cos(A) * Set;
 						if (!Farmable(H.At(FX, FY).Kind)) continue;
-						if (Farmstead(H, R, FX, FY, Sd > 0.0 ? A : A + Pi, Built)) ++Farms;
+						if (Farmstead(H, R, FX, FY, Sd > 0.0 ? A : A + Pi, Built, Set)) ++Farms;
 					}
 				}
 				// (where the rules lay a farmyard, a farmstead on it too)
@@ -1446,7 +1752,7 @@ namespace LandScape
 				}
 				// The rest on the section lines, a farm to a quarter section or so as the survey sold them, facing the line.
 				const double Mile = 4.0 * SurveyLine;
-				for (int Dir = 0; Dir < 2; ++Dir)
+				for (int Dir = 0; Dir < 2 && bSurveyed; ++Dir)
 					for (double Line = 0.0; Line < (Dir == 0 ? H.Width() : H.Depth()) + 1.0; Line += Mile)
 						for (double S = R.Range(60.0, 200.0); S < (Dir == 0 ? H.Depth() : H.Width()) && Farms < 40; S += 2.0 * SurveyLine)
 						{
@@ -1456,7 +1762,7 @@ namespace LandScape
 							const double Sd = R.Next() < 0.5 ? 1.0 : -1.0, Set = 22.0;
 							const double FX = X - Sd * std::sin(A) * Set, FY = Y + Sd * std::cos(A) * Set;
 							if (!Farmable(H.At(FX, FY).Kind) || YardAt(FX, FY) > 0.0) continue;
-							if (Farmstead(H, R, FX, FY, Sd > 0.0 ? A : A + Pi, Built)) ++Farms;
+							if (Farmstead(H, R, FX, FY, Sd > 0.0 ? A : A + Pi, Built, Set)) ++Farms;
 						}
 				H.Tally(Built, 0, Farms);
 			}
@@ -1507,11 +1813,11 @@ namespace LandScape
 								if (Keep < 0.03) Tree(3.0);
 								break;
 							default:
-								if (S.Kind == KOpen && S.Crop == Pasture && Keep < 0.0015)
+								if (S.Kind == KOpen && S.Crop == Pasture && Keep < 0.0015 && RoadAt(X, Y) > 7.0)
 								{
 									if (H.Free(X, Y, 4.0)) H.Plant(LandField::Base::Oak, X, Y, Yaw, 1.25 * Sc, 1.1 * Sz, Leaf);
 								}
-								else if (S.Edge < 2.5 && Keep < 0.004) Tree(2.5); // (a tree let grow in the fence row)
+								else if (S.Edge < 2.5 && Keep < 0.004 && RoadAt(X, Y) > 7.0) Tree(2.5); // (a tree let grow in the fence row)
 								break;
 							}
 						}
@@ -1527,7 +1833,7 @@ namespace LandScape
 			{
 				const double Bd = H.Band();
 				auto Field = [](const Spot& S) { return S.Kind == KField || S.Kind == KOpen || S.Kind == KRough; };
-				for (int Dir = 0; Dir < 2; ++Dir)
+				for (int Dir = 0; Dir < 2 && bSurveyed; ++Dir)
 				{
 					const double Span = Dir == 0 ? H.Width() : H.Depth(), Run = Dir == 0 ? H.Depth() : H.Width();
 					for (int K = static_cast<int>(std::ceil(-Bd / SurveyLine)); K * SurveyLine < Span + Bd; ++K)
@@ -1540,10 +1846,21 @@ namespace LandScape
 							const bool bRail = (bEast || bSouth) && Unit(Hash(Seed, 0xF3C1, static_cast<uint64_t>(K + 64) * 131 + static_cast<uint64_t>(Stretch + 64) + static_cast<uint64_t>(Dir) * 7919)) < 0.45;
 							if (bRail && std::fmod(T + 4096.0 * RailStep, RailStep) >= PostStep) continue;
 							const double X = Dir == 0 ? C : T, Y = Dir == 0 ? T : C;
+							const double Yaw = Dir == 0 ? 0.5 * Pi : 0.0;
+							if (RoadAt(X, Y) < 1.0)
+							{
+								// (a section road: its fence each side, beyond the ditch)
+								for (const double Sd : { -4.6, 4.6 })
+								{
+									const double PX = Dir == 0 ? X + Sd : X, PY = Dir == 0 ? Y : Y + Sd;
+									if (!Field(H.At(Dir == 0 ? PX + Sd * 0.5 : PX, Dir == 0 ? PY : PY + Sd * 0.5)) || YardAt(PX, PY) > 0.0 || DriveAt(PX, PY) < 3.0 || !H.Free(PX, PY, 0.5)) continue;
+									H.Plant(KitOf(KPost), PX, PY, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+								}
+								continue;
+							}
 							const Spot A = H.At(Dir == 0 ? X - 2.5 : X, Dir == 0 ? Y : Y - 2.5), B = H.At(Dir == 0 ? X + 2.5 : X, Dir == 0 ? Y : Y + 2.5);
 							if (!Field(A) || !Field(B) || A.Key == B.Key) continue;
-							if (!H.Free(X, Y, 0.5)) continue;
-							const double Yaw = Dir == 0 ? 0.5 * Pi : 0.0;
+							if (YardAt(X, Y) > 0.0 || DriveAt(X, Y) < 3.0 || !H.Free(X, Y, 0.5)) continue;
 							H.Plant(KitOf(bRail ? KRail : KPost), X, Y, Yaw, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
 						}
 					}
@@ -1560,13 +1877,16 @@ namespace LandScape
 						double X = 0.0, Y = 0.0, A = 0.0, X1 = 0.0, Y1 = 0.0, A1 = 0.0;
 						if (!Along(L, S, X, Y, A) || !Along(L, S + PostStep, X1, Y1, A1)) break;
 						if (bTown && std::hypot(X - TX, Y - TY) < TR + 60.0) continue;
+						// (the east's and the South's roads lined with worm fences here and there, the rest wire)
+						const bool bRail = !bSurveyed && Unit(Hash(Seed, 0xF3C2, static_cast<uint64_t>(K) * 977 + static_cast<uint64_t>(S / 200.0))) < 0.5;
+						if (bRail && std::fmod(S, RailStep) >= PostStep) continue;
 						for (const double Sd : { -1.0, 1.0 })
 						{
 							const double Off = Half + 4.0;
 							const double PX = X - Sd * std::sin(A) * Off, PY = Y + Sd * std::cos(A) * Off;
 							const double QX = X1 - Sd * std::sin(A1) * Off, QY = Y1 + Sd * std::cos(A1) * Off;
-							if (!Field(H.At(PX, PY)) || YardAt(PX, PY) > 0.2 || !H.Free(PX, PY, 0.5)) continue;
-							H.Plant(KitOf(KPost), PX, PY, std::atan2(QY - PY, QX - PX), 1.0, 1.0, Tint(1.0, 1.0, 1.0));
+							if (!Field(H.At(PX, PY)) || YardAt(PX, PY) > 0.0 || DriveAt(PX, PY) < 3.0 || !H.Free(PX, PY, 0.5)) continue;
+							H.Plant(KitOf(bRail ? KRail : KPost), PX, PY, std::atan2(QY - PY, QX - PX), 1.0, 1.0, Tint(1.0, 1.0, 1.0));
 						}
 					}
 				}
@@ -1607,7 +1927,7 @@ namespace LandScape
 						const double X = -Bd + (I + 0.5) * Step + R.Range(-0.8, 0.8), Y = -Bd + (J + 0.5) * Step + R.Range(-0.8, 0.8);
 						const double Yaw = R.Range(0.0, 2.0 * Pi), Sc = R.Range(0.9, 1.1), Keep = R.Next();
 						const Spot S = H.At(X, Y);
-						if ((S.Kind != KField && S.Kind != KOpen) || S.Edge < 4.0 || SnowLying > 0.6) continue;
+						if ((S.Kind != KField && S.Kind != KOpen) || S.Edge < 4.0 || SnowLying > 0.6 || RoadAt(X, Y) < 7.0) continue;
 						const double M = MonthOf(S.Key);
 						if (S.Crop == Corn && Shocked(S.Key) && M >= 9.8 && M < 12.4)
 						{
@@ -1647,7 +1967,12 @@ namespace LandScape
 			bool bTownGrid = false;
 			double TownMX = 0.0, TownMY = 0.0, TownCa = 1.0, TownSa = 0.0, TownReach = 0.0;
 			std::vector<Stead> Steads;
+			/** Main street's store pairs, where they stand. */
+			std::vector<std::pair<double, double>> StoreAt;
 			std::vector<std::pair<double, double>> Farmhouses;
+			std::vector<Drive> Drives;
+			bool bSurveyed = true, bTownSet = false;
+			double TownCX = 0.0, TownCY = 0.0, TownCR = 0.0, MainHalf = 3.0, FrontReach = 0.0;
 		};
 	}
 
