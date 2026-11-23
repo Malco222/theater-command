@@ -128,6 +128,9 @@ namespace LandMen
 		float FlashT = -1.f;            // the first muzzle_flash's time (the shot), -1 none
 		float ReleaseT = -1.f;          // grenade_release's, -1 none
 		float LeftFoot = -1.f;          // the left foot's (or elbow's) step as a share of the loop, for keeping step
+		/** Release 2's run styles (the soldiers thread's run_styles.py): the clip this one is another runner's take of
+		 * ("run" for run_b, run_c, run_d; "advance" for advance_b...), empty for any other clip. */
+		std::string StyleOf;
 		/** A tank clip's places (its "places"): the vehicle model (Piece, its file's name: "Sherman") and its socket his
 		 * root goes to, moved by Offset (forward, right, up of the socket's facing). Empty for a man on his feet. */
 		struct Seat
@@ -138,6 +141,23 @@ namespace LandMen
 		std::vector<Seat> Seats;
 		/** The seat on that model, or none. */
 		const Seat* SeatOn(const std::string& Piece) const;
+		/**
+		 * A prop's keys the clip gives (release 2's field clips, the soldiers thread's: "reel", the cable reel's root and
+		 * his two fists on its handles; "hands", the spliced wire's two ends in his fists; "grips", the stretcher's): its
+		 * fields after the time ("t" left out), in his root's frame (his own axes: x forward, y to his right, z up,
+		 * metres), at each key's time T, Fields.size() values a key.
+		 */
+		struct PropKeys
+		{
+			std::string Name;
+			std::vector<std::string> Fields;
+			std::vector<float> T, Values;
+			/** Its fields at clip time At (a loop's wrapped round its Length, else held at the ends), into Out. */
+			void Sample(float At, bool bLooped, float Length, float* Out) const;
+		};
+		std::vector<PropKeys> Props;
+		/** The clip's prop keys by name, or none. */
+		const PropKeys* PropOf(const std::string& Track) const;
 		float Speed() const { return Long > 0.f && Stride > 0.f ? Stride / Long : 0.f; }
 	};
 
@@ -187,6 +207,13 @@ namespace LandMen
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
+		/** deaths_gore[stance][kind] = clip names: a gore twin's falls (soldier_<ARMY>_gore.json: the same bones, its skin
+		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
+		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
+		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
+		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
+		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
+		std::vector<std::vector<int>> Styles;
 
 		int ClipIndex(const std::string& Name) const;
 		int BoneIndex(const std::string& Name) const;
@@ -227,6 +254,25 @@ namespace LandMen
 	using GroundFn = std::function<Ground(double X, double Y)>;
 
 	/**
+	 * A seat in a vehicle's bed: a lorried man aboard (the rules' pose "mounted") was drawn kneeling on the ground where
+	 * the rules seat him, so under his lorry (Brian, 23 November 14:10Z: "troops are stuck under the truck"). The scene
+	 * says where his bench is: its top (field metres, its height the field's), the bed's floor beside it, and the way he
+	 * faces on it (radians clockwise from north, as a man's heading). Inboard: the bench faces the bed's middle; a man
+	 * past the benches kneels in the bed's middle at its front, facing aft.
+	 */
+	struct SeatPlace
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		double Floor = 0.0;
+		float Facing = 0.f;
+		bool bBench = true;   // false: no bench left for him (the bed's middle)
+	};
+	/** The seat for a man aboard: his place (the rules', on his vehicle's bed), his block, and the rules' vehicle (her k in
+	 * that block) and seat in her bed (two abreast, the odd ones on her right, front to back), each -1 where the rules
+	 * did not say; false where no vehicle carries him. Asked from several threads at once, as GroundFn is. */
+	using SeatFn = std::function<bool(double X, double Y, int Block, int SeatOn, int Seat, SeatPlace& Out)>;
+
+	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
 	 * (0 upright, as a man stands on a hillside; 1 lying, his body laid on the slope). The pivot (his own axes, on z = 0)
 	 * is where the turn onto the slope is made: his root, or where a dead man's pelvis came to rest.
@@ -237,9 +283,15 @@ namespace LandMen
 		float Facing = 0.f;
 		float Lie = 0.f;
 		Vec3 Pivot;
+		/** Metres over the ground (release 2: a wounded man carried on a stretcher, its canvas's height). */
+		float Lift = 0.f;
 	};
-	/** The field from the man's own axes for that placing (it reads the ground at the pivot). */
-	Xform WorldOf(const Placing& P, const GroundFn& GroundAt);
+	/** A wounded man carried on a stretcher lies this high over the ground (metres): the soldiers thread's stretcher
+	 * clips' four fists at 0.83 m on the mean, the Stretcher prop's root 0.14 m under them and its `lie` 0.11 m over it. */
+	constexpr float CarriedLift = 0.80f;
+	/** The field from the man's own axes for that placing (it reads the ground at the pivot; OutGround, when given,
+	 * takes the ground's height read there). */
+	Xform WorldOf(const Placing& P, const GroundFn& GroundAt, float* OutGround = nullptr);
 
 	/**
 	 * Skins one mesh by bone frames that already include the man's world (Compose(World, Frame) per bone): positions
@@ -322,6 +374,28 @@ namespace LandMen
 
 		/** The soldier file drawn for an army's men (by the file's army: "GER", "POL" for the Americans until theirs). */
 		void AddSoldier(const std::string& FileArmy, std::shared_ptr<const Soldier> S);
+		/**
+		 * Effects (R2): the gore twin (soldier_<ARMY>_gore.json) of the file added under that name, after it (AddSoldier).
+		 * The crowd keeps the twin's mesh, faces, helmets and gore falls with the file's own clips and sockets, so a man
+		 * swapped to it mid-battle keeps every clip he had. False, and why: no such file, its bones not the file's, or no
+		 * gore falls in it (deaths_gore).
+		 */
+		bool AddGore(const std::string& FileArmy, const Soldier& Twin, std::string& OutWhy);
+		/**
+		 * Shell and tank hits throw men and take limbs off (release 2, behind -TheaterLandGore; Brian, 22 November: "make
+		 * more graphic animations if a guy gets shot or blown up", "with limbs coming off"). On: a man killed by a shell,
+		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
+		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (a field gun's 0.55 at
+		 * the burst, a tank's 0.5, a mortar's 0.45, a grenade's 0.3) and fall away to none at its reach (12, 10, 8 and 4
+		 * m); a man lying or in cover half that. The same battle gores the same men every time (his own dice). Who dies
+		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 */
+		void SetGore(bool bOn);
+		/** Men who fell as their file's gore twin so far in this play. */
+		int Gored() const;
+		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and
+		 * colours are made again (LookOf), so a drawn man's must be too. */
+		uint32_t MeshNo(int Man) const;
 		/** Content/Data/LandBattles/armies.json: each army's colours and its helmet rule. */
 		bool ReadArmies(const std::string& Text, std::string& OutError);
 
@@ -360,10 +434,18 @@ namespace LandMen
 		 * root_offset) and which clip he plays how far in (SetRide); he is drawn, skinned and given his level of detail
 		 * as every man is, never banked, never fades, fires no shot and sends no event. While a clip whose weapon is
 		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
-		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Appended after the men there are
-		 * (call after Build); -1 where the file was not added.
+		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Row: armies.json's row he is painted
+		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
+		 * after Build); -1 where the file was not added.
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed);
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string());
+		/**
+		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
+		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert
+		 * or winter dress where made; the front's row ("UK@desert") or the dress's own ("ITA_desert"). Empty where no file
+		 * draws him. Release 2's light cars and motorcycles: their drivers and riders, from the army's infantry file.
+		 */
+		std::string RiderFileOf(const std::string& Army, std::string& OutRow) const;
 		struct Ride
 		{
 			bool bShown = false;
@@ -375,6 +457,9 @@ namespace LandMen
 			int FromClip = -1;
 			float FromTime = 0.f;
 			float W = 1.f;
+			/** Effects (R2): his gun never drawn, whatever his clip holds (a tank's crew bailing out in the tankers'
+			 * infantry clips, which carry a rifle; the art director, 23 November). False: as before. */
+			bool bUnarmed = false;
 		};
 		void SetRide(int Man, const Ride& R);
 		bool IsRider(int Man) const;
@@ -396,6 +481,13 @@ namespace LandMen
 		 * man than the usual one does (tan of half the usual 50 deg over tan of half this lens's, both vertical): the
 		 * levels go by his distance over Zoom, so a long lens's men 120 m off are drawn at the middle level. */
 		void SetEye(double X, double Y, double Z, double Zoom = 1.0);
+		/** Where the men aboard vehicles sit (SeatFn): set once; without it a man aboard kneels where the rules have him. A
+		 * file with a seated clip (car_ride_back, release 2's riders) sits him on the bench; one without kneels him on the
+		 * bed's floor beside it. */
+		void SetSeats(SeatFn Fn);
+		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
+		 * and his seat in her bed (each -1 where the rules did not say). */
+		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
 		/**
@@ -406,6 +498,16 @@ namespace LandMen
 		 * man posed every frame, as before); the scene turns it on.
 		 */
 		void SetThrift(bool bOn);
+		/** Runs Count jobs at once where it can, Job(K) for each K from 0 to Count - 1, and returns when all are done
+		 * (the scene's ParallelFor). */
+		using RunFn = std::function<void(int Count, const std::function<void(int)>& Job)>;
+		/**
+		 * Update steps the men over the cores through Run, a run of men each, where there are some hundreds: a man's step
+		 * reads only his own state and what the crowd holds still meanwhile (the tracks, the soldiers, the bank and the
+		 * GroundFn, which must bear being asked from several threads at once), so every man ends as he would one after
+		 * another, to the bit, and the events come in the same order. Unset (the default): one after another, as before.
+		 */
+		void SetRun(RunFn Run);
 		/**
 		 * Life seconds a battle second: the rules' clock runs faster than life (about twice: a man rushing at 6 m/s, a
 		 * tank across a field at 10), so the scene plays the fight at half the battle's clock. The clips are life's: a
@@ -414,6 +516,26 @@ namespace LandMen
 		 * 1, the default, is as before. Set before Build (the shots are planned there).
 		 */
 		void SetLife(double LifePerBattleSecond);
+		/**
+		 * Uniforms that age (release 2, Brian's 23 Nov "Do all of these"; before Build): on, each side's cloth faded by its
+		 * months in the line (the recording's sides.att.worn and sides.def.worn, the campaign's count; a year and a half
+		 * the most), and some of its near men in a newer tunic or trousers or with a patch at an elbow or a knee.
+		 * ForcedMonths at 0 or more stands in for both sides' (the Mac's off/on line). Off unless set.
+		 */
+		void SetWorn(bool bOn, double ForcedMonths = -1.0);
+		/**
+		 * Run styles (release 2, Brian's 23 Nov: "not all players are running exactly the same at the same time"): on,
+		 * each man runs and advances as his own one of the file's runners (its run and the run's styles, run_b, run_c,
+		 * run_d: other men's motion capture, each with his own stride, so at one speed each steps at his own beat),
+		 * chosen by his seed, the same runner whether he runs or advances. His feet stay on the ground as before (the
+		 * clip at his speed over its own). Far men banked in poses show the base clip's. Any time: a man takes his runner
+		 * at his next change of gait. Off unless set (each man the file's own run, as before).
+		 */
+		void SetRunStyles(bool bOn);
+		/** The detail levels' bounds, in metres as the picture sees him (SeenDistance, a 50 degree lens's): Near under
+		 * NearTo, Mid under MidTo, Far beyond, each crossed back with a twentieth's give. 25 and 120 unless set; the scene
+		 * sets them by his height on the screen (the battle-scale plan's GS3). */
+		void SetLevels(double NearTo, double MidTo);
 		/** Every how many frames he is posed now (1 when not thrifty). */
 		int PoseEvery(int Man) const;
 		/** This Update's events, in time order. */
@@ -439,7 +561,7 @@ namespace LandMen
 		float SeenDistance(int Man) const;
 		/** Points a skin of him writes at that level (the body, then his helmet's finish). */
 		int PointsOf(int Man, Lod L) const;
-		/** His triangles and colours at that level (the same all battle: read once). */
+		/** His triangles and colours at that level (the same all battle, read once, unless his MeshNo changes). */
 		const Look& LookOf(int Man, Lod L);
 		/**
 		 * Skins him at that level: PointsOf * 3 floats each into OutAt and OutFacing (Facing may be null). Different men
@@ -464,8 +586,18 @@ namespace LandMen
 		bool SocketAt(int Man, const std::string& Socket, Vec3& OutAt, Vec3& OutDir) const;
 		/** Where he stands now (his root on the ground) and his heading. */
 		bool PlaceOf(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
+		/** As PlaceOf, but his height the ground's under him as he was last posed (a thrifty far man's some frames ago,
+		 * a falling one's under his pivot), so no ground is asked: for a frame's loops over every man. A few centimetres
+		 * from PlaceOf's at most on a slope; the same as it where he was posed this frame standing. */
+		bool PlaceAsPosed(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
 		/** The clip he shows now, for tests and debug lines. */
 		Playing PlayingOf(int Man) const;
+		/** How far he lies now (PlayingOf's Lie, without the clip's name). */
+		float LieOf(int Man) const;
+		/** Prop keys Track of the clip he shows now (Clip::Props: "reel", "hands", "grips") at its time now: each field
+		 * after the time into Out, in his own axes (WorldFrame takes them to the field). False: he is not on his feet in
+		 * a clip that has them. */
+		bool PropAt(int Man, const std::string& Track, std::vector<float>& Out) const;
 		/** His bone frames on the field now (the soldier's bones in order), for tests and pictures. */
 		const Xform* FramesOf(int Man) const;
 		const Soldier* SoldierOf(int Man) const;
@@ -595,6 +727,10 @@ namespace LandMen
 		/** The battle's month (year * 12 + month - 1), season and front, as the finishes were picked. */
 		int Month() const;
 		const std::string& Season() const;
+		/** One line for each army drawn with another's soldier file for want of its own (a stand-in, never a blank side). */
+		const std::vector<std::string>& StandIns() const;
+		/** armies.json's stand-in soldier file for an army ("POL"), empty where it names none. */
+		std::string StandInOf(const std::string& Army) const;
 		const std::string& FrontName() const;
 	private:
 		struct Impl;

@@ -3,6 +3,8 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandBail.h"
+#include "Battle/LandBurn.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
@@ -12,9 +14,11 @@
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
+#include "Battle/LandNight.h"
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandWalkPan.h"
 #include "Battle/Fates.h"
 
 #include <memory>
@@ -32,6 +36,8 @@ struct FLandBattleState
 	LandPlay::Replay Play;
 	LandSound::Mixer Mix;
 	LandEye::Director Eye;
+	/** The walk pan's plan once chosen (-TheaterLandWalkPan, the Mac recipe's look 7; it asks EyeWorld below). */
+	LandWalkPan::Plan Pan;
 	LandDesk::Desk Desk;
 	std::unique_ptr<LandField::Ground> Field;
 	/** What stands where, for the camera (LandSight): the field's trees, shrubs and houses laid once, the men and the
@@ -47,6 +53,10 @@ struct FLandBattleState
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
+	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
+	LandBurn::Director Burns;
+	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
+	LandBail::Book Bails;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
@@ -87,6 +97,34 @@ struct FLandBattleState
 	 * where she has no commander drawn. */
 	std::vector<uint8_t> RoofManned;
 
+	/**
+	 * The men who ride the light cars and motorcycles (release 2: the art director's rule, none moves empty): her driver,
+	 * and the seats her kind fills (a car's front passenger, a jeep's gunner at her gun, a sidecar's gunner or rider, a
+	 * pillion where the machine has no sidecar seat), each from his army's infantry file's seat clips (the soldiers
+	 * thread's ride_clips: a clip whose places name her model and that socket). He sits his seat's loop and slumps by its
+	 * death clip from the moment she is knocked out (SeatLight, RideLight).
+	 */
+	struct FSeated
+	{
+		int Vehicle = -1, Man = -1;
+		std::string Socket;
+		/** His seat's loop and his death in it (-1: none), and each one's root offset from the socket. */
+		int Clip = -1, Death = -1;
+		LandMen::Vec3 Offset, DeathOffset;
+		float Phase = 0.f;              // his own offset into the loop (life seconds)
+	};
+	std::vector<FSeated> Seated;
+	/** Each vehicle looked at for seats yet (her men seated, or none to seat). */
+	std::vector<uint8_t> SeatedDone;
+
+	/**
+	 * The carriers' benches as they stand this frame (the lorries and half-tracks whose models have bench seats,
+	 * rider.1 to rider.10: LandKit::BenchesNow), for the lorried men aboard (LandMen's SeatFn, LandKit::BenchFor; Brian,
+	 * 23 November 14:10Z: "troops are stuck under the truck"). Made before the men are posed (SeatCarriers); read by the
+	 * men's posing threads at once, never written then.
+	 */
+	std::vector<LandKit::Benches> Carriers;
+
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
 	/** The camera's world as the film has it (Open), kept for the general's view. */
@@ -122,6 +160,21 @@ struct FLandBattleState
 	/** The speed this frame ran at, against life (the battle's clock ran at SpeedNow / Life). */
 	double SpeedNow = 1.0;
 
+	/** The men's draw (the battle-scale plan's GS3): a man the lens draws under ~2 px tall (CullPx) is not drawn, past
+	 * MenCullFrom metres of seen distance (the usual 50 deg lens's), except in the wide mass shot, where the far men stay
+	 * as dots; and at most MenRebuildsMax men's meshes made again for a new level of detail a frame, the rest kept at
+	 * their old level a frame or two longer (a remade mesh rebuilds its whole draw). */
+	double MenCullFrom = 1e12;
+	int MenRebuildsMax = 50;
+	/** The picture's lines a man 1.8 m tall stands over at 1 m, at the usual 50 deg lens and 665 lines (GS3's measure:
+	 * Lines / D at D metres), for the mass shot's least size. */
+	double MenLines = 1283.5;
+
+	/** The night before the attack (LandNight): its shots, and this frame's (while NightNow.bNight its shots play and the
+	 * battle's clock waits at its start; Dark and Black the night's light and the dip to black, over the dawn too). */
+	LandNight::Prelude Night;
+	LandNight::Frame NightNow;
+
 	/** The battle's end: the last line shown, then the after card a few seconds on. */
 	bool bOver = false, bCard = false;
 	double OverReal = 0.0;
@@ -137,4 +190,10 @@ struct FLandBattleState
 	/** Takes held for later (flash to bang, the same take held 0.15 s): the real second each is due. */
 	std::vector<std::pair<double, LandSound::Take>> Later;
 	std::vector<LandSound::Bed> Beds;
+	/** The one-shot takes' voices (land.voices: ALandBattle::VoicePlayers holds a player for each), and the cuts due
+	 * this frame. */
+	LandSound::Voices Voices;
+	std::vector<int> VoiceFades;
+	/** Each vehicle's engine loop's name, worked out when her cue changes (ALandBattle::EngineLoopNames). */
+	LandSound::EngineNames EngineNames;
 };

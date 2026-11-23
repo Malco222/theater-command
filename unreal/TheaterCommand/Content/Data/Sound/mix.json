@@ -855,8 +855,22 @@
         "gunner_burst": [0.0, 1.18],
         "maxim_burst": [1.85, 2.71]
       },
+      "moreParts": {
+        "maxim_burst": [[0.03, 0.66], [0.9, 1.6]],
+        "mg42_burst_01": [[0.31, 1.19], [0.5, 1.19]],
+        "mg42_burst_02": [[0.19, 0.59]]
+      },
+      "_moreParts": "A take's other stretches of firing, besides its part: where a close burst finds its recording crowded (every pitch near it already sounding a copy that instant) and no other take on its list is free, it plays from one of these before it is heard in a copy. maxim_burst's first two bursts (rounds at 0.05 to 0.54 and 0.92 to 1.48 s, measured 22 Nov) hold 5 and 6 rounds about 100 ms apart: room for a Soviet section's burst of 6 at 10 a second (0.6 s), not a Maxim's 8 (0.8 s), which keeps the part. The Soviet list has only this take, so in Prokhorovka two bursts nearer than the far takes (500 m) were heard only in a copy already sounding; with these they play from the Maxim's first or second burst. The German tank row holds mg42_burst_01 and 02, and 02 fires for less than her burst of 9 (0.6 s), so a crowded 01 had nowhere to go: Kursk (seed 11) hid one nearer than 500 m. Each stretch here starts at a round (rounds measured 22 Nov: 01 every 40 to 80 ms, peaks at 0.339 and 0.504 s; 02 at 0.212 s) and runs to its part's end: 01 from its 6th and 9th rounds (0.88 and 0.69 s, room for her 0.6 s burst), 02 from its 5th (0.40 s, an infantry MG 42 burst of up to 8).",
       "_parts": "maxim_burst fires in three short bursts with silences between (rounds at 0.05 to 0.54, 0.92 to 1.48 and 1.87 to 2.59 s): its part is the last and longest, seven rounds about 120 ms apart, so a cut burst (a Soviet section's 6 or 8, a tank's DT 7, at 10 a second) plays from its first round with no silence in it. Without a part it played whole, 18 rounds for a burst of 6.",
       "endFade": 0.04
+    },
+    "voices": {
+      "_how": "The one-shot takes' players (the game's audio components), pooled: made once and reused for take after take, not one spawned and destroyed for every take, and a cut take's fade kept with its voice, not a timer for each (the production study of 22 Nov, section 5, item 9: 0.4 to 1.2 ms a frame at 235 s). warm are made before the battle; more are made as needed up to most; with every one sounding, the take nearest its end gives way. pool false (or the game's -TheaterLandVoicesSpawned) spawns one for each take, as before.",
+      "pool": true,
+      "_pool": "true from 22 Nov 20:45Z: the 3D pre-check passed 8a8aac63 (compile and link on 5.8's headers, the player's reuse read against the engine's spawn: a short take out of hearing gets no voice, as before). The Mac's sound-on run compares it with -TheaterLandVoicesSpawned; set false to go back.",
+      "warm": 256,
+      "most": 768,
+      "_sizes": "Takes sounding at once, measured by the cloud test (each take's whole length at its pitch, or its cut and fade, and 50 ms more for the game to hear its player stop): Normandy 1944 106, Prokhorovka 140, the live 1,989-man Normandy battle 303 (its mass wide), Kursk seed 11 313, Normandy seed 11 281, the camera's 2,000-man normandy-1944-platoons-seed11-cam 347 on one join and over 384 on another (the 3D pre-check, 22 Nov 21:30Z: the framing moves which takes are in hearing). warm covers the content battles; most is twice the largest seen, a voice past warm made once when first needed (as the old path spawned without a limit)."
     },
     "tankMg": {
       "_how": "A tank's machine guns, by army, over mgClose and byNation.mg: a close burst whose shooter is a tank plays her army's row (LandPlay.TankMg names which of her guns fired it, as Noise.Mount); roof is the gun on her commander's hatch, where it differs from her others. Each row is the pack's recordings nearest her guns' rate, measured 22 Nov (each round's time in the take's firing; the median gap between rounds): the pack has no MG 34, M1919, DT or Besa yet.",

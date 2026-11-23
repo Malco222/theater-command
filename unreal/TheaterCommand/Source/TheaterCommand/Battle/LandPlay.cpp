@@ -138,7 +138,7 @@ namespace LandPlay
 		for (size_t I = 0; I < N; ++I)
 		{
 			const Round& R = Rec->Rounds[I];
-			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && !R.bMate && R.W != "rifle" && R.W != "mg" && R.W != "track") ++FollowerBursts;
 		}
 		Falls.clear();
 		FallListed.assign(Rec->Tracks.size(), 0);
@@ -226,7 +226,7 @@ namespace LandPlay
 		for (size_t I = G.RoundsFrom; I < N; ++I)
 		{
 			const Round& R = Rec->Rounds[I];
-			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && !R.bMate && R.W != "rifle" && R.W != "mg" && R.W != "track") ++FollowerBursts;
 		}
 		// The new falls, in order after those played.
 		FallListed.resize(Rec->Tracks.size(), 0);
@@ -266,10 +266,18 @@ namespace LandPlay
 		// (no roof gun drawn on her, World::RoofGun: none fired)
 		const bool bRoof = !Here.RoofGun || TrackIndex < 0 || Here.RoofGun(TrackIndex);
 		if (Gun == "roof") return bRoof ? "roof_mg" : "coax";
-		if (Gun == "hull") return "hull_mg";
 		if (Gun == "coax") return "coax";
-		if (!Rec || TrackIndex < 0) return "coax";
+		if (!Rec || TrackIndex < 0) return Gun == "hull" ? "hull_mg" : "coax";
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
+		// (the hull gunner's ball mount swings some 25 degrees either side of her bow: a burst the rules gave him at a
+		// mark wider of her bow, as the film has her facing then, is the turret's coaxial instead, which turns to it)
+		const auto InBowArc = [&Tr, T, &Toward]()
+		{
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
+			const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
+			return std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979)) < 25.0 * 3.14159265358979 / 180.0;
+		};
+		if (Gun == "hull") return InBowArc() ? "hull_mg" : "coax";
 		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
 		const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
 		const std::string Army = B ? B->Army : std::string();
@@ -280,10 +288,7 @@ namespace LandPlay
 		H ^= H >> 32;
 		const int Roll = static_cast<int>(H % 6);
 		if (bRoof && C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
-		const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
-		const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
-		const double Off = std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979));
-		if (Off < 25.0 * 3.14159265358979 / 180.0 && Roll % 2 == 1) return "hull_mg";
+		if (Roll % 2 == 1 && InBowArc()) return "hull_mg";
 		return "coax";
 	}
 
@@ -433,6 +438,8 @@ namespace LandPlay
 
 	void Replay::Fire(const Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise)
 	{
+		if (R.bMate) return; // (shell blasts: the round before it fired the one shot)
+		if (R.W == "track") return; // (infantry with tanks: a man run over by a tank; no shot, his fall is the look)
 		const int S = Shooter[static_cast<size_t>(Index)];
 		const int Target = TargetTrack[static_cast<size_t>(Index)];
 		const LandFeed::Block* By = R.By >= 0 ? Rec->BlockOf(R.By) : nullptr;
@@ -470,20 +477,24 @@ namespace LandPlay
 		M.Way = Facing;
 		M.Ground = Ground;
 		M.Round = R.N;
+		// Effects (R2): the shooter's own gun's look (-TheaterLandGunFlash): "mg:star", the MG 42's; none, as before
+		int LookRounds = 0;
+		double LookRate = 0.0;
+		const std::string Look = Here.GunLook && S >= 0 ? Here.GunLook(S, R.W, Army, Role, LookRounds, LookRate) : std::string();
 		if (R.W == "rifle" || R.W == "mg")
 		{
 			const Burst B = BurstOf(R.W, Army, Role);
-			M.Name = R.W;
+			M.Name = Look.empty() ? R.W : R.W + ":" + Look;
 			Effect Sh;
 			Sh.T = R.T;
 			Sh.Kind = FxKind::Shots;
 			Sh.At = At;
 			Sh.To = To;
 			Sh.Way = Facing;
-			Sh.Name = R.W;
+			Sh.Name = M.Name;
 			Sh.Gun = S >= 0 ? S : 100000 + R.N;
-			Sh.Rounds = B.Rounds;
-			Sh.PerSecond = B.PerSecond;
+			Sh.Rounds = LookRounds > 0 ? std::min(LookRounds, 40) : B.Rounds; // (Effects (R2): a sub-machine gun's burst, seen; heard by his clip)
+			Sh.PerSecond = LookRate > 0.0 ? std::min(LookRate, 30.0) : B.PerSecond;
 			Sh.Ground = GroundAt(To.X, To.Y);
 			Sh.Round = R.N;
 			N.Rounds = B.Rounds;
@@ -498,6 +509,7 @@ namespace LandPlay
 		else
 		{
 			M.Name = R.W == "tank" ? "tank_gun" : R.W == "at" ? "at_gun" : R.W == "gun" ? "howitzer" : R.W == "mortar" || R.W == "smoke" ? "mortar" : "rifle";
+			if (!Look.empty()) M.Name += ":" + Look; // (Effects (R2): a muzzle brake's side jets, "tank_gun:brake")
 			if (S >= 0) OutFx.push_back(M);
 		}
 		OutNoise.push_back(N);
@@ -506,6 +518,8 @@ namespace LandPlay
 	void Replay::Land(const Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise)
 	{
 		if (EventOf[static_cast<size_t>(Index)] >= 0) return; // its 'shell' event draws it (Blast)
+		if (R.bMate) return; // (shell blasts: struck by the burst before it, drawn once by that round or its event)
+		if (R.W == "track") return; // (run over: nothing lands)
 		const int Target = TargetTrack[static_cast<size_t>(Index)];
 		const int S = Shooter[static_cast<size_t>(Index)];
 		const LandFeed::Block* By = R.By >= 0 ? Rec->BlockOf(R.By) : nullptr;
@@ -560,6 +574,7 @@ namespace LandPlay
 		{
 			F.Kind = FxKind::Screen;
 			F.Name = Army == "USA" ? "wp" : "canister";
+			F.Hang = R.Hang;
 			OutFx.push_back(F);
 			return;
 		}

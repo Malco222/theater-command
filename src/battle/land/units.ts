@@ -7,9 +7,10 @@
 // card's odds are the field's.
 
 import type { CrewMarks } from './crews';
-import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
+import type { Calibre, ForceKit, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
 import { LAND, TEAMS, type Kind, type Team } from './rules';
+import { turnToDate } from '../../core/ticket';
 
 export interface LandOrder {
   kind: 'move' | 'attack' | 'withdraw';
@@ -63,6 +64,19 @@ export interface LandUnit extends UnitBase {
   hid?: boolean;
   /** When it sprang its ambush (opened fire while hidden): its first fire strikes harder (LAND.hide.surprise). */
   sprung?: number;
+  /**
+   * Overrun (release 2, LAND.overrun, LandBattle.escort): a tank block driving through the foot block 'on' to its far
+   * edge ('to'), then backing out to where it stood ('back').
+   */
+  ovr?: { on: number; to: [number, number]; back: [number, number]; leg: 'in' | 'back' };
+  /** Found by its fire but not yet located, till this battle time: fire back at it strikes softer (LAND.hide.locate). */
+  unloc?: number;
+  /**
+   * Firing on a stretch of cover to flush out what may hide there (reconnaissance by fire, LAND.hide.search): the point,
+   * and how far round it (LAND.hide.search.reach where not said; the computer's sweep of the cover ahead, wider).
+   */
+  search?: [number, number];
+  searchR?: number;
   home: [number, number];
   /** Seconds since it was last hit, and since it last had an enemy near (for a rally). */
   still: number;
@@ -94,7 +108,8 @@ export interface LandUnit extends UnitBase {
   gives?: boolean;
   /**
    * A defence's reserve (the design director, b407): 'held' behind the line until the line is struck, then 'sent' at
-   * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too.
+   * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too,
+   * and so is a corps come up from next door, of either side (neighbours join the fight, release 2).
    * A block that is sent no longer goes back to the ground it was drawn up on.
    */
   reserve?: 'held' | 'sent';
@@ -113,6 +128,8 @@ export interface LandUnit extends UnitBase {
   worth?: number;
   /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
   crew?: CrewMarks;
+  /** What its corps carries, as its nation built and researched it ("Units decide", ForceKit); absent, the history start's mix. */
+  kit?: ForceKit;
   /**
    * What its guns throw, as the explosions sheet sizes it (shells.ts): data for the 3D game, never read by the fight.
    * None where it has only small arms.
@@ -153,9 +170,50 @@ export interface LandUnit extends UnitBase {
    * field.ts, Bend), and the river's hold is not counted against what it strikes (LAND.hold.river).
    */
   dry?: boolean;
+  /**
+   * Neighbours join the fight (release 2): set only on a block of a corps that comes up from next door, its corps'
+   * ForceTicket.joined (the share of the battle it is there for). It stands off the field till its march from its edge
+   * would bring it to its side's line at (1 - joined) of the battle's clock (LandBattle.comeOn), then walks on as a b407
+   * reserve already sent.
+   */
+  joined?: number;
+  /**
+   * A joiner's part of its side's power as the card priced it (its weight for the part of the battle it is there for).
+   * Its power0 is its corps' whole weight, what it strikes with and takes once on the field; the bar and the break
+   * count it at this, from the first second, as the card did.
+   */
+  priced?: number;
+  /**
+   * Hold until relieved (release 2; Brian, 22 November 12:48Z; LandBattle.relief): told to wait for a corps coming up
+   * from next door. It stands and fires, never advances, and its staff never orders it; dug in harder while it keeps
+   * within LAND.dug.keep of 'at'. 'corps' is the corps whose help it waits for, 'due' the battle second that help can
+   * reach it, 'since' the second it began to wait. 'late': help never came (the due passed, or its corps is out of the
+   * fight): its men are let down, and break sooner until relieved. 'free': late, then given another order by the player:
+   * it no longer stands, but keeps the mark. Absent on every other block, and on every block while the switch is off.
+   */
+  waits?: { corps: number; due: number; at: [number, number]; since: number; late?: true; free?: true };
+  /** It has waited for help once this battle: never again (hold until relieved). */
+  waited?: true;
+  /**
+   * What the cover of waiting spared it, in power, and the nerve that would have cost: kept while it waits, then landed
+   * (LandBattle.endWait): the field moves when harm lands, never how much (b415, b418).
+   */
+  debt?: number;
+  debtN?: number;
+  /**
+   * Hedge cutters (release 2; ruling 242; LandBattle.cutters): the cut its order sends it to make, where its front will
+   * reach the hedge, at (x, y) on the hedge line, the line there running 'yaw' (radians from east, as a Gate's). Absent
+   * on every other block, and on every block while the switch is off.
+   */
+  cut?: { x: number; y: number; yaw: number };
+  /**
+   * Smoke on call (release 2; ruling 242; LandBattle.smoke): the screens it may still lay this battle. Absent until it
+   * first lays one, and on every block while the switch is off.
+   */
+  smokeLeft?: number;
 }
 
-const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const ORD =(n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const KIND_WORD: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain', cav: 'Cavalry', eng: 'Engineers', mot: 'Motorized', arm: 'Armoured', art: 'Artillery', fort: 'Fortress' };
 const TEAM_WORD: Record<Team, string> = { mg: 'Machine-Gun Battalion', mor: 'Mortar Battalion' };
 /** The team a ticket force makes, where its kind is one (release 2). */
@@ -165,14 +223,13 @@ export const teamOf = (f: { kind: string }): Team | undefined => (TEAMS as reado
 export interface BlockPart { divs: number[]; regiment?: number }
 
 /** How each force is cut into blocks: one a division, split into regiments until the side has at least 'least'. */
-export function partsFor(forces: ForceTicket[]): BlockPart[][] {
-  const B = LAND.blocks;
+export function partsFor(forces: ForceTicket[], least: number = LAND.blocks.least): BlockPart[][] {
   const parts: BlockPart[][] = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
   // A support team is one block a battalion, never cut into regiments, and never counted toward the side's least: a side
   // with teams cuts its divisions as it would without them.
   const total = (): number => parts.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
   // The force whose blocks are biggest gives up a whole division to its regiments first.
-  while (total() < B.least) {
+  while (total() < least) {
     let best = -1, size = 0;
     parts.forEach((p, i) => {
       if (teamOf(forces[i]) || !p.some((x) => x.regiment === undefined && x.divs.length === 1)) return;
@@ -181,9 +238,91 @@ export function partsFor(forces: ForceTicket[]): BlockPart[][] {
     });
     if (best < 0) break;
     const p = parts[best], j = p.findIndex((x) => x.regiment === undefined && x.divs.length === 1);
-    p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+    p.splice(j, 1, ...Array.from({ length: LAND.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
   }
   return parts;
+}
+
+/** The Commonwealth's armies cut a division into brigades as Britain's did (the historian). */
+const BRIGADES = ['UK', 'CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'];
+
+/**
+ * The kind's word in a division's name, as its army's English wrote it (the historian, 22 November 18:54Z,
+ * historian/unit-type-words-by-nation.md, from the UI director's "4th Armored"): the US Armored and Motorized, Britain
+ * and the Commonwealth Armoured and Motor; Germany's Panzer, its motorized divisions Panzergrenadier from mid-1943;
+ * the Soviets' and Japan's Tank, the Soviets' Motorized, Rifle and Mountain Rifle (the historian, 19:09Z); every other army Armoured and Motorised (the UI director's house
+ * style, 19:03Z: "Panzer" a proper name, "1st Panzer Division"). 'ym' the battle's year times 12 plus the month from 1.
+ */
+function kindWord(nat: string, k: Kind, ym = 0): string {
+  if (k === 'arm') return nat === 'USA' ? 'Armored' : nat === 'GER' ? 'Panzer' : nat === 'SOV' || nat === 'JAP' ? 'Tank' : 'Armoured';
+  if (k === 'mot') {
+    if (nat === 'USA' || nat === 'SOV') return 'Motorized';
+    if (BRIGADES.includes(nat)) return 'Motor';
+    if (nat === 'GER') return ym >= 1943 * 12 + 6 ? 'Panzergrenadier' : 'Motorized';
+    return 'Motorised';
+  }
+  // (the Soviets' foot: the Rifle Division, as its Rifle Regiments under it)
+  if (k === 'inf' && nat === 'SOV') return 'Rifle';
+  if (k === 'mtn' && nat === 'SOV') return 'Mountain Rifle';
+  return KIND_WORD[k];
+}
+
+/**
+ * A regiment block's own word in its army, in the battle's month (the historian's ruling, 22 November; release 2, the
+ * 'namesOn' switch): what a third of a division was called. 'n' is its number, 'i' which third (0 to 2), 'ym' the year
+ * times 12 plus the month from 1.
+ * - Foot: a regiment ("33rd Infantry Regiment", the Soviets' "Rifle Regiment"); Britain and the Commonwealth's armies a
+ *   brigade (three battalions), never a regiment; Germany's Infanterie-Regiment until September 1942, Grenadier-Regiment
+ *   from October 1942. Italy's divisions were binary from 1938: two regiments, and a Blackshirt legion as the third.
+ * - Armour: the American Combat Commands A, B and R; Germany's Panzer-Regiment; the Soviet tank brigade (1942 to 1945,
+ *   a tank regiment before); the British armoured brigade; a tank regiment elsewhere.
+ * The numbers are ours: a division's thirds numbered on from its own (the 11th's are the 31st to 33rd).
+ */
+export function regimentWord(nat: string, kind: Kind, n: number, i: number, ym: number): string {
+  const o = ORD(n);
+  if (kind === 'arm') {
+    if (nat === 'USA') return `Combat Command ${'ABR'[i] ?? 'R'}`;
+    if (nat === 'GER') return `Panzer-Regiment ${n}`;
+    if (nat === 'SOV') return ym >= 1942 * 12 + 1 ? `${o} Tank Brigade` : `${o} Tank Regiment`;
+    if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
+    return `${o} Tank Regiment`;
+  }
+  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? kindWord(nat, 'mot', ym) : kind === 'eng' ? 'Engineer' : 'Infantry';
+  if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
+  if (nat === 'GER') {
+    const late = ym >= 1942 * 12 + 10;
+    const word = kind === 'mtn' ? 'Gebirgsjäger' : kind === 'cav' ? 'Reiter' : kind === 'mot' ? (late ? 'Panzergrenadier' : 'Infanterie') : kind === 'eng' ? 'Pionier' : late ? 'Grenadier' : 'Infanterie';
+    return `${word}-Regiment ${n}${kind === 'mot' && !late ? ' (mot.)' : ''}`;
+  }
+  if (nat === 'SOV') return `${o} ${kind === 'mtn' ? 'Mountain Rifle' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? 'Motor Rifle' : kind === 'eng' ? 'Engineer' : 'Rifle'} Regiment`;
+  if (nat === 'ITA' && i === 2 && (kind === 'inf' || kind === 'mtn')) return `${o} Blackshirt Legion`;
+  return `${o} ${arm} Regiment`;
+}
+
+/**
+ * Names a side's regiment blocks as their armies did (regimentWord): its tag the block's own word, its parent its
+ * division's full name, its card name the two together. The blocks of whole divisions keep their names. In the order
+ * makeBlocks made them.
+ */
+export function armyNames(t: SideTicket, units: LandUnit[], turn: number): void {
+  const d = turnToDate(turn), ym = d.year * 12 + d.month + 1;
+  const cut = partsFor(t.forces);
+  let j = 0;
+  t.forces.forEach((f, i) => {
+    const team = teamOf(f);
+    const k = (team ? 'art' : Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
+    for (const p of cut[i]) {
+      const u = units[j++];
+      if (!u || p.regiment === undefined || team) continue;
+      const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
+      const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k, ym)}`;
+      const lead = /^(\d+)/.exec(full)?.[1];
+      const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
+      u.short = regimentWord(u.nat, k, n, p.regiment, ym);
+      u.parent = full;
+      u.name = `${u.short}, ${short}`;
+    }
+  });
 }
 
 /** How many blocks each force gives. */
@@ -191,10 +330,12 @@ export function blocksFor(forces: ForceTicket[]): number[] {
   return partsFor(forces).map((p) => p.length);
 }
 
-/** The blocks of one side, not yet placed. */
-export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number): LandUnit[] {
+/** The blocks of one side, not yet placed. least: the fewest blocks the side is cut into (regiments make up the rest). */
+export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number, least: number = LAND.blocks.least, turn?: number): LandUnit[] {
   const out: LandUnit[] = [];
-  const cut = partsFor(t.forces);
+  // (the battle's month, for the words that changed with the war: Germany's Panzergrenadier from mid-1943)
+  const ym = turn === undefined ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn));
+  const cut = partsFor(t.forces, least);
   t.forces.forEach((f, i) => {
     const team = teamOf(f);
     const k = (team ? 'art' : Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
@@ -204,7 +345,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       const own = f.divisions?.[d];
       const no = (f.first ?? 1) + d;
       return {
-        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${KIND_WORD[k]} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${KIND_WORD[k]}`),
+        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)}`),
         str: own?.str ?? f.str, xp: own?.xp ?? f.xp, men: own?.men ?? f.men / n,
       };
     });
@@ -238,9 +379,34 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         ...(f.cross === false ? { dry: true } : {}),
         ...(f.wear !== undefined ? { wear: f.wear } : {}),
         ...(f.fresh ? { fresh: f.fresh } : {}),
+        ...(f.kit ? { kit: f.kit } : {}),
       });
     }
   });
+  return out;
+}
+
+/**
+ * Neighbours join the fight (release 2): both sides' blocks of the corps coming up from next door (SideTicket.joiners),
+ * the attack's first, numbered on from firstId after both armies, one a division (never cut into regiments), not yet
+ * placed and never dug in. Each carries its corps' joined, its part as the card priced it (priced: what makeBlocks
+ * gives, the side's power times its share), and its corps' whole weight as its power0 (priced over joined). None where
+ * there are no joiners.
+ */
+export function joinBlocks(t: { att: SideTicket; def: SideTicket; turn?: number }, power: Record<Side, number>, firstId: number): LandUnit[] {
+  const out: LandUnit[] = [];
+  for (const side of ['att', 'def'] as Side[]) {
+    const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined! > 0 && f.share > 0);
+    if (!js.length) continue;
+    for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0, t.turn)) {
+      const j = Math.min(1, js.find((f) => f.corps === u.corps)!.joined!);
+      u.joined = j;
+      u.priced = u.power0;
+      u.power0 = u.priced / j;
+      u.dug = false;
+      out.push(u);
+    }
+  }
   return out;
 }
 

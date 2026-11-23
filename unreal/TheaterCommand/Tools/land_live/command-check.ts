@@ -70,5 +70,67 @@ for (const [id, x, y, may] of places) {
   if (!may && no !== null) onlyRules++;
 }
 console.log(`placings: ${places.length} asked; both yes ${both}, both no ${onlyRules}, the screen yes but the rules no ${clipboardYesRulesNo}${why.size ? ` (${[...why.entries()].map(([w, n]) => `${w} ${n}`).join('; ')})` : ''}`);
+
+// The walk pressed in code for the Mac's builder (-TheaterLandScript): the two units it carries into the woods are placed
+// there, and when the clock starts the rules hide them (Brian's ambushes, 22 November 04:18Z).
+const woods = readFileSync(join(setupFolder, 'woods.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t').map(Number));
+if (woods.length < 2) fail(`the walk found woods for ${woods.length} of its 2 units`);
+for (const [id, x, y] of woods) {
+  const no = S.canPlace(id, x, y);
+  if (no !== null) fail(`the walk's block ${id} at ${x},${y}: the rules would not place it (${no})`);
+  else if (!S.place(id, x, y)) fail(`the walk's block ${id} at ${x},${y}: not placed`);
+}
+if (!S.begin()) fail('the setup step would not end');
+const after = S.tick(2);
+const lastView = after.views[after.views.length - 1] as { units?: { id: number; hid?: number }[] } | undefined;
+const hidden = woods.filter(([id]) => lastView?.units?.find((u) => u.id === id)?.hid === 1).length;
+console.log(`the walk: ${woods.length} units carried into the woods, ${hidden} hidden when the clock started`);
+if (hidden !== woods.length) fail(`only ${hidden} of the walk's ${woods.length} units in the woods were hidden`);
+// Hedge cutters and smoke on call (Brian, 22 November 14:19Z), as the live battle opens them for the game: his sections
+// lay a screen 150 m ahead, and with a hedge line across the field ahead of his first tank, it cuts a gap through it.
+// Without the hedge the rules say why; and the enemy's blocks never take his orders.
+{
+  const H = livePiece(key, seed, { me: 'att', setup: false });
+  const own = H.sim.units.filter((u) => u.side === 'att');
+  const tank = own.find((u) => u.kind === 'arm'), foot = own.filter((u) => u.kind === 'inf');
+  const foe = H.sim.units.find((u) => u.side !== 'att');
+  if (!tank || !foot.length || !foe) fail('the battle has no tank and sections of his, or no enemy');
+  else {
+    const noHedge = H.cutWhy(tank.id, tank.x, tank.y + 50);
+    if (noHedge !== 'There are no hedges on this field.') fail(`a cut with no hedge: ${noHedge}`);
+    if (H.cutWhy(foe.id) !== 'Only your own troops take your orders.') fail(`the enemy took his cut: ${H.cutWhy(foe.id)}`);
+    // (a hedge line across the field 60 m ahead of his tank, before the clock runs, as the 3D field hands it over)
+    const [fx, fy] = [Math.cos(tank.face), Math.sin(tank.face)], ax = tank.x + fx * (tank.d / 2 + 60), ay = tank.y + fy * (tank.d / 2 + 60);
+    const hedge = { kind: 'hedge', points: [[ax - fy * 400, ay + fx * 400], [ax + fy * 400, ay - fx * 400]] as [number, number][] };
+    if (!H.hedges([hedge], [])) fail('the hedge would not go on the field');
+    const d0 = H.tick(1, 100);
+    const cutNo = H.cutWhy(tank.id, ax, ay);
+    const cut = cutNo === null && H.order({ do: 'land:cut', units: [tank.id], x: ax, y: ay } as Command);
+    const f = foot[0], line = { x0: f.x + Math.cos(f.face) * 150 - 50, y0: f.y + Math.sin(f.face) * 150, x1: f.x + Math.cos(f.face) * 150 + 50, y1: f.y + Math.sin(f.face) * 150 };
+    const smokeNo = H.smokeWhy(f.id, line.x0, line.y0, line.x1, line.y1);
+    const smoke = smokeNo === null && H.order({ do: 'land:smoke', units: [f.id], ...line } as Command);
+    let cutSaid = 0, smokeSaid = 0, cutterShown = 0, smokeShown = -1, cutViews = 0, screenViews = 0, hang = -1;
+    for (let i = 0; i < 400 && !H.sim.over; i++) {
+      const d = i === 0 ? d0 : H.tick(0.5, 100);
+      for (const e of d.events as { what?: string; unit?: number }[]) {
+        if (e.what === 'land:cut' && e.unit === tank.id) cutSaid++;
+        if (e.what === 'land:smoke' && e.unit === f.id) smokeSaid++;
+      }
+      for (const r of d.rounds as { w?: string; by?: number; hang?: number }[]) if (r.w === 'smoke' && r.by === f.id && r.hang !== undefined) hang = Math.max(hang, r.hang);
+      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[]; screens?: { unit?: number }[] } | undefined;
+      for (const c of d.cuts ?? []) if (c.unit === tank.id) cutViews++;
+      if (v?.screens?.some((c) => c.unit === f.id)) screenViews++;
+      if (v?.units?.find((u) => u.id === tank.id)?.cutter) cutterShown++;
+      const s = v?.units?.find((u) => u.id === f.id)?.smoke;
+      if (s !== undefined) smokeShown = s;
+      if (cutSaid && smokeSaid && cutViews && screenViews > 2 && hang >= 0) break;
+    }
+    console.log(`cutters and smoke: with no hedge "${noHedge}"; tank ${tank.id} told to cut ${cut ? 'taken' : `refused (${cutNo})`}, began ${cutSaid ? 'yes' : 'no'}, cutters shown in ${cutterShown} views; section ${f.id} told to lay smoke ${smoke ? 'taken' : `refused (${smokeNo})`}, laid ${smokeSaid ? 'yes' : 'no'}, ${smokeShown} screens left`);
+    if (!cut || !cutSaid || !cutterShown) fail('his tank did not cut the gap he picked');
+    if (!smoke || !smokeSaid) fail('his section did not lay the screen he dragged');
+    console.log(`  the 3D field hears of them: the cut in ${cutViews} delta (once), the screen in ${screenViews} views, its smoke rounds hang ${hang} s`);
+    if (cutViews !== 1 || !screenViews || hang < 0) fail('the deltas do not carry the cut once and the screen for the 3D field');
+  }
+}
 console.log(failures ? `FAIL (${failures})` : 'the rules took every order');
 process.exit(failures ? 1 : 0);

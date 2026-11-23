@@ -45,8 +45,10 @@ namespace Fates { class Table; class Director; }
  * that take a body's own points (model axes) into the axes x north, y east, z up: the axes World() lays the field in
  * Unreal (FVector(north, east, up)), so FQuat(Q.X, Q.Y, Q.Z, Q.W) is a proper rotation there and needs no mirroring:
  *     Mesh->SetWorldLocationAndRotation(World(P.At.X, P.At.Y, P.At.Z), FQuat(P.Q.X, P.Q.Y, P.Q.Z, P.Q.W));
- * with the body's vertices FVector(x, y, z) * UnitsPerMetre as they stand. Headings are radians, 0 north, clockwise,
- * as the recording's facing f.
+ * with the body's vertices FVector(x, y, z) * UnitsPerMetre as they stand, and each triangle's last two corners
+ * swapped: the files wind a face counter-clockwise seen from its front, the engine draws the side it sees clockwise
+ * (LandBattle.cpp's LandParts::KitFront; handed over unturned, every vehicle was drawn inside out, 23 November).
+ * Headings are radians, 0 north, clockwise, as the recording's facing f.
  */
 namespace LandKit
 {
@@ -279,11 +281,23 @@ namespace LandKit
 		V3 Move;
 	};
 
-	/** The coat a model is painted in, by the nation that owns it and the month of the battle. */
+	/** The coat a model is painted in, by the nation that owns it, the month of the battle and the field's ground. */
 	struct Dress
 	{
 		std::string Nation = "USA";
 		int Year = 1944, Month = 7;
+		/** The field's ground (the recording's field.place.terrain: plains, desert ...): a model's swaps.paint.by_ground
+		 * rows for it are read before by_month (the German desert coats of 1941 and 1942, the British Light Stone).
+		 * Empty: none. */
+		std::string Terrain;
+		/** Captured kit (release 2, behind its switch): the nation she was taken from, where the recording's block says
+		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
+		 * showing at the chipped edges and where the brush missed. Empty: her own. */
+		std::string Captured;
+		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
+		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
+		 * that choice; any other is let be. */
+		std::map<std::string, std::string> Choose;
 	};
 
 	class Model
@@ -388,6 +402,8 @@ namespace LandKit
 		int Block = 0, K = 0;
 		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
+		std::string Model;                   // her own model where not her block's (ml): a carrier (empty, the lorry), an SP gun, a TD
+		std::map<std::string, std::string> Swaps; // swaps the rules picked for her (sw, release 2): {swap, choice}
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;
 		std::vector<double> Shots;
@@ -488,6 +504,10 @@ namespace LandKit
 		double Died = -1.0;      // battle time knocked out, -1 never
 		double BurnFrom = -1.0;  // battle time the fire takes hold (-1 never): it burns to BurnUntil
 		double BurnUntil = 0.0;
+		/** Effects (R2): battle seconds her brew-up waits after her kill, her knocked_out clip playing first while her
+		 * crew get out (LandBail, -TheaterLandBailOut; Brian, 23 November: "if a tank gets hit people try and get out
+		 * before it explosdes"). 0: at once, as before. Battle::BrewWaitLeast and Most give it, before Build. */
+		double BrewWait = 0.0;
 
 		// The pose now (after Update).
 		double Now = 0.0;
@@ -507,6 +527,13 @@ namespace LandKit
 		double Fade = 1.0;       // 1 shown; to 0 over a second once she has left the field
 		/** Her dust sockets now (field), for the effects kit's VehicleDust each frame while she moves. */
 		V3 DustLeft, DustRight;
+		/**
+		 * The front of each track's (each side's wheels') ground now (field: Model::Foot's front corners), where her marks
+		 * are laid from (the ground's Ruts): under her, so the newest piece, laid a step on, is hidden by her hull. (Laid
+		 * from the dust sockets at her tail, the marks began a stride and more behind her, bare snow between: Brian, 23
+		 * November 15:25Z.) Her dust sockets where her model has no footprint.
+		 */
+		V3 TreadLeft, TreadRight;
 
 		/** A socket's field point and way at the pose now; false if the model has none of that name. */
 		bool SocketNow(const std::string& Name, V3& OutAt, V3& OutFacing) const;
@@ -529,6 +556,7 @@ namespace LandKit
 			double X = 0.0, Y = 0.0, Heading = 0.0;
 			double Turret = 0.0, Gun = 0.0, Traverse = 0.0, Steer = 0.0, Trail = 0.0;
 			double Hatches = 0.0;       // 0 shut to 1 every hatch open
+			bool bOpenUp = false;       // her open_up clip played to its end (her commander's lid as she stands unbuttoned)
 			double FireAge = -1.0;      // seconds since a shot (the barrel's recoil), -1 none
 			double DeathAge = -1.0;     // seconds since knocked out (-1 alive)
 			bool bBrewUp = false;
@@ -568,7 +596,7 @@ namespace LandKit
 			double Carriage = 0.0;                           // a gun's carriage, and whether her crew are swinging it
 			bool bShifting = false;
 			bool bOn = false;                                // moving off and stopping
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
 			size_t MoveOffs = 0, Stops = 0;
 			double Turret = 0.0, Lay = 0.0, Trav = 0.0, Steer = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 			double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
@@ -623,6 +651,8 @@ namespace LandKit
 	{
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
+		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come; "Jeep|mg=off": with those swaps
 	};
 
 	/**
@@ -645,6 +675,40 @@ namespace LandKit
 	 * (fire) and U2 (blast), each 0..1.
 	 */
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2);
+
+	/**
+	 * A carrier's bench seats as she stands now: a lorry's or a half-track's rider.1 to rider.10, where the lorried men
+	 * aboard sit (they were drawn kneeling on the ground where the rules seat them, so under the lorry: Brian, 23
+	 * November 14:10Z, "troops are stuck under the truck"). Her root and axes on the field, and her seats each side front
+	 * to back, each its top and its inboard way (field metres; x east, y north, z up).
+	 */
+	struct Benches
+	{
+		int Block = -1, K = -1;      // whose: her block and her number in it (the rules' vehicle)
+		V3 At, Forward, Right;
+		int Left = 0, Righted = 0;   // Seat[0, Left) down her left side, Seat[Left, Left + Righted) down her right
+		V3 Seat[10], Way[10];
+	};
+	/** Her benches now (after her Update): false where her model is no carrier with bench seats (a lorry or a
+	 * half-track, "carrier", with rider.1 and on). */
+	bool BenchesNow(const Vehicle& V, Benches& Out);
+	/** A man aboard's seat: its top, the bed's floor beside it (0.5 m under it), his heading on it (radians clockwise
+	 * from north: inboard), and bBench false where the benches are full (he kneels in the bed's middle at her front,
+	 * facing aft; At the floor there). */
+	struct BenchSeat
+	{
+		V3 At;
+		double Floor = 0.0, Heading = 0.0;
+		bool bBench = true;
+	};
+	/**
+	 * The seat of a man aboard. Where the rules say his vehicle and seat (Block, SeatOn: her k; Seat: two abreast, the odd
+	 * ones on her right, front to back): that seat of hers, or the bed's middle past her benches. Else by his field place
+	 * (the rules' place for him): the nearest carrier whose bed he is on (within 1.6 m of her middle line, 5 m aft to 3 m
+	 * forward of her root), and his bench by where the drill seats him (a row each 0.6 m aft from 1.4 m forward of her
+	 * root, his side his bench's). False where he is on none.
+	 */
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out);
 
 	class Battle
 	{
@@ -692,7 +756,14 @@ namespace LandKit
 		 * half of it): the vehicles' clips and their crews' hands timed in life's seconds. 1, the default, is as before.
 		 * Set before Load. */
 		double Life = 1.0;
+		/** Effects (R2): life's seconds a brew-up waits after her kill, the least and the most (each vehicle her own
+		 * between, by her number), her knocked_out clip first so her crew can get out (Vehicle::BrewWait; LandBail,
+		 * -TheaterLandBailOut). 0: at once, as before. Set before Load. */
+		double BrewWaitLeast = 0.0, BrewWaitMost = 0.0;
 		int Year = 1944, Month = 7;
+		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
+		 * dressed for it (Dress::Terrain). Read by Load. */
+		std::string Terrain = "plains";
 		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
 		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
 		std::map<std::string, FireOdds> Fires;
@@ -704,12 +775,22 @@ namespace LandKit
 		std::vector<Event> Events;
 		/** Loaded from a live battle's header (Extend grows it); and over (its last piece has come). */
 		bool bLive = false, bOver = false;
+		/** One line for each model drawn as another for want of its own file (the nearest generic in Content/Models/Battle
+		 * by kind and nation: never a side's vehicles left undrawn): the caller logs them. */
+		const std::vector<std::string>& StandIns() const { return StandInLines; }
+		/** Captured kit (release 2, Brian's 23 Nov "Do all of these"): on, a block the recording marks captured is drawn
+		 * in her captor's coat over her maker's (Dress::Captured). Off unless set; set before Load. */
+		bool bCapturedLook = false;
+		/** Any block marked captured, whatever the switch: stands in for every tank block of the attacker taken from the
+		 * defender's model (the Mac's off/on line, "-TheaterLandCapturedTest"). Set before Load. */
+		bool bCapturedTest = false;
 
 	private:
 		std::vector<Vehicle> All;
 		std::vector<Round> RoundList;
 		std::vector<Block> BlockList;
 		std::map<std::string, Model> Looks;
+		std::vector<std::string> StandInLines;
 		// What Extend goes on with: Load's reader, ground and kill picker (it remembers what it has shown), the battle's
 		// limit, the last Update's time; and each vehicle's model, her words as the pieces grew them (ending in her
 		// provisional point when she has one), the rounds she fired or that struck her, whether her death's look is
@@ -731,14 +812,106 @@ namespace LandKit
 
 		const Block* BlockOf(int Id) const;
 		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
-		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
+		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier = std::string(),
+			const std::map<std::string, std::string>& Choose = {});
 		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
 		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
 		 * Rounds: those that struck her, the killing one among them. */
 		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew);
+		/** Effects (R2): vehicle V's brew-up wait, battle seconds (BrewWaitLeast, BrewWaitMost). */
+		double BrewWaitOf(size_t V) const;
 	};
 
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */
 	bool ReadRecording(const Json& Doc, std::vector<Block>& OutBlocks, std::vector<TrackWords>& OutTracks,
 		std::vector<Round>& OutRounds, double& OutEnd, int& OutYear, int& OutMonth, std::string& OutError);
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// TK1: the far level merged, for drawing far vehicles as instances (the scene's Battle/LandCrowd).
+
+	/**
+	 * One piece of a model's far level: bodies merged into one mesh as they stand at rest (every part's turn, slide
+	 * and clip at nothing: the gun at its rest lay, every hatch shut, the wheels unturned), in the frame of its anchor
+	 * body (model axes, metres from the anchor's pivot, as a body's own points). Drawn at the anchor's place
+	 * (Vehicle::Bodies()[Anchor]) exactly as the anchor body's own mesh would be.
+	 */
+	struct FarPiece
+	{
+		int Anchor = -1;                     // the body whose place it is drawn at (-1: no piece)
+		Mesh Merged;                         // points, normals, colours, soot weights and triangles (no links)
+		std::vector<int> Bodies;             // the bodies merged in, in body order
+		std::vector<uint32_t> FirstPoint;    // where each of Bodies' points begin in Merged, and the end (one more than Bodies)
+		std::vector<uint32_t> FirstTriangle; // where each one's triangles begin (in triangles), and the end
+		bool Empty() const { return Merged.Triangles.empty(); }
+	};
+
+	/** A model's far level cut for instancing: a hull piece and, where she has a turret, a turret piece. */
+	struct FarSplit
+	{
+		enum : int { HullPiece = 0, TurretPiece = 1 };
+		/** The hull (every body not under the turret, at her root body) and the turret (the turret's body and every body
+		 * under it, at the turret body). A model with no turret (a gun, a lorry) has the first only. */
+		FarPiece Pieces[2];
+		/**
+		 * By body: the piece it is drawn in past the hand-over, or -1. Each body goes in at its far level; a body with
+		 * no far level, which the scene draws at its near level at every distance, stands in at its near level
+		 * (StandIn), so a piece looks as the bodies looked from afar. Left out (-1, with Kept set where it has a far
+		 * level, to be drawn by its own mesh as before): a body with no near level (drawn far at every distance), and a
+		 * body the scene may hide while she stands (MayHide, or the caller's KeepOut: a manned roof gun's cradle) with
+		 * every body hanging on it, which must never be baked into a piece.
+		 */
+		std::vector<int> PieceOf;
+		std::vector<uint8_t> Kept, StandIn;
+		/** By body: the farthest of its merged points from its pivot (metres; FarOff weighs a turn by it). */
+		std::vector<double> Reach;
+		/** By body: what FarOff passes by, near-only motions shown at rest from afar: 1 its turn (a wheel's spin), 2 all
+		 * of it (a hatch and what hangs on it, the barrel's recoil and the breech on it). */
+		std::vector<uint8_t> Loose;
+		/**
+		 * TK1 (the commander's lid): the piece that holds her commander's hatch (OpenOf: the turret, or the hull where she
+		 * has none, as a StuG) once more, with her open_up clip played to its end (the lid up, lifted up its post first
+		 * where it lifts, as the Tiger's and the Panther's): drawn in that piece's stead while her lid stands open
+		 * OpenFrom or more (Vehicle::HatchOpen), so an unbuttoned tank shows her lid up past the hand-over and her
+		 * commander standing clear of it, not through it. The same bodies as that piece, in the same order. Empty
+		 * (OpenOf -1) where she has no open_up clip, her commander's lid is in no piece, or the clip moves a body of
+		 * another piece.
+		 */
+		FarPiece Open;
+		int OpenOf = -1;
+		static constexpr double OpenFrom = 0.5;
+		bool Empty() const { return Pieces[0].Empty() && Pieces[1].Empty(); }
+		/** The pieces drawn: 1, or 2 with a turret piece. */
+		int Count() const { return Pieces[1].Empty() ? (Pieces[0].Empty() ? 0 : 1) : 2; }
+		/** The level body B is merged at (its far mesh, or its near one where it stands in). */
+		const Mesh& Level(const Model& M, int B) const
+		{
+			const Body& Of = M.Bodies[static_cast<size_t>(B)];
+			return StandIn[static_cast<size_t>(B)] ? Of.Near : Of.Far;
+		}
+	};
+
+	/** Whether the scene may hide this body while her vehicle stands (a body flagged bWhileManned, where the model has
+	 * that flag): such a body is never merged into a far piece. False for every body of a model without the flag. */
+	bool MayHide(const Body& B);
+
+	/** A body the ground scene draws only while her commander mans it: a German roof gun, the MG 34 in its cradle on
+	 * the cupola's rail (the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post).
+	 * The one rule for the scene's bodies and the far pieces' KeepOut. */
+	inline bool ShownWhileManned(const Model& M, const Body& B) { return B.Name == "roof_mg_cradle" && M.Nation == "GER"; }
+
+	/**
+	 * Cuts M's far level into its pieces (once a model, at load). KeepOut (by body, may be null or short): bodies the
+	 * caller keeps out of the pieces as well as those MayHide names. Every triangle of a merged body's level (FarSplit::
+	 * Level) is in its piece exactly once, its points carried from the body's pivot to the anchor's as they stand at
+	 * rest, with its normals, colours and soot weights. Also cuts the lid-up copy (FarSplit::Open) where she has one.
+	 */
+	void SplitFar(const Model& M, FarSplit& Out, const std::vector<uint8_t>* KeepOut = nullptr);
+
+	/**
+	 * How far (metres) the merged bodies of a vehicle posed now (Vehicle::Bodies()) stand off where their piece draws
+	 * them (their rest place on the anchor's place), the worst of them: each body's shift plus its turn times its
+	 * reach. A wheel's spin, a hatch (and what hangs on it) and the barrel's recoil are passed by: near-only motions,
+	 * shown shut and still from afar. PerBody (optional): each body's own (0 for a body in no piece or passed by).
+	 */
+	double FarOff(const Model& M, const FarSplit& Split, const std::vector<Place>& Now, std::vector<double>* PerBody = nullptr);
 }

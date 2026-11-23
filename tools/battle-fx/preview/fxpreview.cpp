@@ -95,6 +95,7 @@
 // the recipe's picture colours put straight on the screen.
 
 #include "Effects/TheaterFxCore.h"
+#include "Battle/LandBurn.h"
 
 #include <algorithm>
 #include <cmath>
@@ -245,6 +246,9 @@ namespace
 		return Is && std::sscanf(Is, "%lf,%lf,%lf", &R, &G, &B) == 3;
 	}
 
+	// (FX_DIM=k: the land and the sky that much darker, a dusk to judge a lamp on; the kit is told the same light)
+	double DimK = 1.0;
+
 	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false, size_t DarkFrom = static_cast<size_t>(-1))
 	{
 		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
@@ -292,7 +296,7 @@ namespace
 					const double N = bSea ? Noise(P.X * 0.02, P.Y * 0.08) * 0.6 + Noise(P.X * 0.3, P.Y * 0.9) * 0.4 : Noise(P.X * 0.35, P.Y * 0.35) * 0.7 + Noise(P.X * 3.0, P.Y * 3.0) * 0.3;
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = GrassA[K] + (GrassB[K] - GrassA[K]) * N;
+						Col[K] = (GrassA[K] + (GrassB[K] - GrassA[K]) * N) * DimK;
 					}
 					double Lift[3] = { 1.0, 1.0, 1.0 };
 					for (int L = 0; L < NLamps; ++L)
@@ -312,7 +316,7 @@ namespace
 					const double Fog = 1.0 - std::exp(-std::max(0.0, T - 60.0) / (bSea ? 6000.0 : 700.0));
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = Col[K] * Lift[K] * (1.0 - Fog) + Haze[K] * Fog;
+						Col[K] = Col[K] * Lift[K] * (1.0 - Fog) + Haze[K] * DimK * Fog;
 					}
 					C.Depth[I] = (D * T).Dot(Cam.Forward);
 				}
@@ -322,7 +326,7 @@ namespace
 					const double Top[3] = { ToLinear(150), ToLinear(178), ToLinear(214) };
 					for (int K = 0; K < 3; ++K)
 					{
-						Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
+						Col[K] = (Haze[K] + (Top[K] - Haze[K]) * Up) * DimK;
 					}
 				}
 				C.R[I] = bFlatBack ? ToLinear(FlatBack[0]) : Col[0];
@@ -365,6 +369,33 @@ namespace
 	}
 
 	double PictureGain = 1.0; // (what the game's material multiplies the kit's colours by: Battle::PictureGain)
+	bool GammaBytes = false; // (while Puffs paints the kit's puffs whose bytes are raised to 1/2.2: Battle::SrgbBytes, as M_BattlePuffs reads them)
+	// (FX_BYTES=srgb: the kit writes its colours as the game does when it draws with M_BattlePuffs, raised to 1/2.2 so a
+	// dark smoke keeps its hue; unset or linear: plain bytes, as with M_Highlight, and every picture as it was)
+	bool GammaWanted()
+	{
+		const char* Is = std::getenv("FX_BYTES");
+		return Is && std::string(Is) == "srgb";
+	}
+
+	// (FX_LAND_GRADE=1: the kit's colours as written for the land battle's grade, Battle::SetLandGrade; see the frames
+	// through that grade with land_grade.py, not game_curve.py)
+	bool LandGradeWanted()
+	{
+		const char* Is = std::getenv("FX_LAND_GRADE");
+		return Is && std::string(Is) == "1";
+	}
+
+	// (FX_SOFT_CONTACT=metres: the land battle's soft contact, FBattleEffects::SetSoftContact. The kit lays its lying
+	// pieces nearer the eye, and here, as M_BattlePuffsSoft does, every piece fades where it comes within that depth in
+	// front of the ground, a box or a man)
+	double SoftWanted()
+	{
+		const char* Is = std::getenv("FX_SOFT_CONTACT");
+		const double M = Is ? std::atof(Is) : 0.0;
+		return M > 0.0 && M < 100.0 ? M : 0.0;
+	}
+	const double SoftFadeM = SoftWanted();
 
 	void Triangle(Canvas& C, const Camera& Cam, const Vec P[3], const unsigned char* Rgba[3])
 	{
@@ -405,14 +436,21 @@ namespace
 				{
 					continue; // (behind the ground or a man: as Unreal's depth test for see-through things)
 				}
-				const double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				if (SoftFadeM > 0.0)
+				{
+					A *= std::clamp((C.Depth[I] - Deep) / SoftFadeM, 0.0, 1.0);
+				}
 				if (A <= 0.0)
 				{
 					continue;
 				}
-				const double Cr = (W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0 * PictureGain;
-				const double Cg = (W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0 * PictureGain;
-				const double Cb = (W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0 * PictureGain;
+				// (the material reads the bytes as the GPU blends them across the triangle, and M_BattlePuffs then raises
+				// that to 2.2)
+				auto Read = [](double Blended) { return GammaBytes ? std::pow(Blended, 2.2) : Blended; };
+				const double Cr = Read((W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0) * PictureGain;
+				const double Cg = Read((W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0) * PictureGain;
+				const double Cb = Read((W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0) * PictureGain;
 				C.R[I] = C.R[I] * (1.0 - A) + Cr * A;
 				C.G[I] = C.G[I] * (1.0 - A) + Cg * A;
 				C.B[I] = C.B[I] * (1.0 - A) + Cb * A;
@@ -476,6 +514,7 @@ namespace
 		const std::vector<uint8_t>& Rgba = Fx.Colours();
 		const int Rim = Fx.Ring();
 		PictureGain = Fx.PictureGain();
+		GammaBytes = Fx.SrgbBytes();
 		for (int Each = 0; Each < N; ++Each)
 		{
 			const int First = Each * Fx.PerPuff();
@@ -494,6 +533,7 @@ namespace
 				Tri(In0, Out1, Out0);
 			}
 		}
+		GammaBytes = false;
 	}
 }
 
@@ -507,6 +547,10 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
@@ -637,6 +681,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
@@ -744,7 +792,7 @@ namespace
 				case 1:
 					if (BurnAcross > 0.0)
 					{
-						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
+						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7, true);
 					}
 					break;
 				case 2:
@@ -853,6 +901,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
@@ -1086,7 +1138,7 @@ namespace
 			{
 				// (the whole trail laid so far, from far off the beam: FX_DIST metres, 2500)
 				const Vec Mid = Fly(0.5 * Shown).At;
-				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * 250.0;
+				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * EnvNum("FX_WAKE_UP", 250.0); // (FX_WAKE_UP: how far above it, 250)
 				Cam.Forward = (Mid - Cam.Eye).Unit();
 			}
 			else if (ShotName == "map")
@@ -1301,6 +1353,18 @@ namespace
 			Battle::Lamp AirLamps[2];
 			const int NAirLamps = bAbove ? Fx.Lamps(Now, AirLamps, 2, Fx.DayOf(View.SmokeLight)) : 0; // (over the fields: the flash's lamp on the ground)
 			Paint(C, Cam, AirLamps, NAirLamps, {}, false);
+			if (const char* FlatIs = std::getenv("FX_FLAT_BACK"))
+			{
+				// (FX_FLAT_BACK=r,g,b: the whole picture behind the kit one flat colour, so that a trail drawn over two of
+				// them shows its own opacity and colour: see trailmeasure.py)
+				double Fr = 0.0, Fg = 0.0, Fb = 0.0;
+				if (std::sscanf(FlatIs, "%lf,%lf,%lf", &Fr, &Fg, &Fb) == 3)
+				{
+					std::fill(C.R.begin(), C.R.end(), ToLinear(Fr));
+					std::fill(C.G.begin(), C.G.end(), ToLinear(Fg));
+					std::fill(C.B.begin(), C.B.end(), ToLinear(Fb));
+				}
+			}
 			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
 			if (!(bFall && FallKind == "explode" && Now > FallFrom))
 			{
@@ -1475,6 +1539,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
@@ -1487,18 +1555,92 @@ namespace
 		struct Due
 		{
 			double At = 0.0;
-			int What = 0; // (1 Burn, 2 the hatch's cook-off)
+			int What = 0; // (1 Burn, 2 the hatch's cook-off, 3 a fuel ball; release 2's film fire: 4 Vent, 5 Steam of Kind, 6 a cook-off of Pops over Over, jet Jet)
 			Vec Where;
 			double Across = 0.0, Seconds = 0.0;
 			int Key = -1;
 			bool bDone = false;
+			std::string Kind;
+			int Pops = 0;
+			double Over = 0.0, Jet = 0.0;
 		};
 		const double Long = EnvNum("FX_BURN_S", 900.0);
 		std::vector<Due> Script;
 		const std::string Kind = std::getenv("FX_SCRIPT") ? std::getenv("FX_SCRIPT") : "ground";
+		// (FX_SCRIPT=fuel: her fuel goes up at 0.5 s, a FuelBall FX_FUEL_M across (8) at the engine deck, and she burns
+		// on as the ground script has it; crash: an aeroplane's fuel, FX_FUEL_M (20) across at the ground at 0.5 s,
+		// coming in at 60 m/s, with no tank (FX_NOTANK too), its wreck burning on from 1.5 s; dump: a fuel dump's, the
+		// same but standing still)
+		const bool bNoTank = Kind == "crash" || Kind == "dump" || std::getenv("FX_NOTANK") != nullptr;
 		if (Kind == "one")
 		{
 			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 });
+		}
+		else if (Kind == "film")
+		{
+			// (release 2's film fire, -TheaterLandFilmFire: the scene's own plan, Battle/LandBurn. FX_FATE the fates
+			// table's key (tank.engine_fire), FX_BREW=1 a brew-up (its clip's jets and fuel ball first), FX_CLASS heavy,
+			// medium or light, FX_WRECK_SEED her dice. The kill's own clip beats the scene keeps are laid as it does)
+			LandBurn::Wreck Wk;
+			Wk.Fate = std::getenv("FX_FATE") ? std::getenv("FX_FATE") : "tank.engine_fire";
+			Wk.bBrewUp = std::getenv("FX_BREW") != nullptr;
+			Wk.bRing = true;
+			Wk.Class = std::getenv("FX_CLASS") ? std::getenv("FX_CLASS") : "heavy";
+			Wk.Seed = static_cast<uint64_t>(EnvNum("FX_WRECK_SEED", 7.0));
+			Wk.Left = Long;
+			const LandBurn::Plan Pl = LandBurn::Make(Wk);
+			std::printf("film fire: %s (%zu calls)\n", Pl.Story.c_str(), Pl.Calls.size());
+			const Vec Ring(0.12, 0.0, G + 1.8);
+			if (Wk.bBrewUp)
+			{
+				// (the clip's flame jets, as the film fire plays them: a flash jetting up out of each hatch for half a second)
+				for (const Vec& J : { Fire2, Fire1, Fire3 })
+				{
+					Due Jt;
+					Jt.At = 0.05;
+					Jt.What = 6;
+					Jt.Where = J;
+					Jt.Across = 0.8;
+					Jt.Pops = 1;
+					Jt.Over = 0.2;
+					Jt.Jet = 0.5;
+					Jt.Key = -1;
+					Script.push_back(Jt);
+				}
+				Script.push_back({ 0.55, 3, Engine, 8.0, 0.0, -1 });
+			}
+			else
+			{
+				Script.push_back({ 0.35, 2, Commander, 0.8, 0.0, 1 }); // hatch_blown
+				Script.push_back({ 0.5, 5, Engine, 0.7, 5.0, 100002, false, "smoke" }); // smoke_burst, as the film fire lays it
+			}
+			for (const LandBurn::Call& Cl : Pl.Calls)
+			{
+				const Vec At = Cl.Socket == "ring" ? Ring : Cl.Socket == "fire.1" ? Fire1 : Cl.Socket == "fire.2" ? Fire2 : Cl.Socket == "fire.3" ? Fire3 : Engine;
+				Due Du;
+				Du.At = Cl.At;
+				Du.Where = At;
+				Du.Across = Cl.Across;
+				Du.Seconds = Cl.Seconds;
+				Du.Key = 700000 + Cl.Slot;
+				Du.Kind = Cl.Kind;
+				Du.Pops = Cl.Pops;
+				Du.Over = Cl.Over;
+				Du.Jet = Cl.Jet;
+				Du.What = Cl.What == LandBurn::Do::Fire ? 1 : Cl.What == LandBurn::Do::Vent ? 4 : Cl.What == LandBurn::Do::Wisp ? 5 : 6;
+				std::printf("  %7.1f s %-5s %-7s %.2f m %6.1f s %s\n", Cl.At, Du.What == 1 ? "fire" : Du.What == 4 ? "vent" : Du.What == 5 ? "wisp" : "cook", Cl.Socket.c_str(), Cl.Across, Cl.What == LandBurn::Do::Cook ? Cl.Over : Cl.Seconds, Cl.Kind.c_str());
+				Script.push_back(Du);
+			}
+		}
+		else if (Kind == "crash" || Kind == "dump")
+		{
+			Script.push_back({ 0.5, 3, Vec(0.0, 0.0, G), EnvNum("FX_FUEL_M", 20.0), Kind == "crash" ? 60.0 : 0.0, -1 });
+			// (and what is left burns on the ground from a second in, as the scene would light it: the wreck where it came
+			// to rest, or the dump's spilt fuel; FX_GROUND_FIRE=0 for none)
+			if (EnvNum("FX_GROUND_FIRE", 1.0) > 0.0)
+			{
+				Script.push_back({ 1.5, 1, Vec(Kind == "crash" ? 8.0 : 0.0, 0.0, G + 0.5), 0.3 * EnvNum("FX_FUEL_M", 20.0), Long, 11 });
+			}
 		}
 		else
 		{
@@ -1511,6 +1653,10 @@ namespace
 			Script.push_back({ 3.0, 1, Fire2, 2.4, Long, 7 });
 			Script.push_back({ 3.0, 1, Fire3, 2.4, Long, 8 });
 			Script.push_back({ 3.0, 1, Engine, 1.2, Long, 100009 });
+			if (Kind == "fuel")
+			{
+				Script.push_back({ 0.5, 3, Engine, EnvNum("FX_FUEL_M", 8.0), 0.0, -1 });
+			}
 		}
 		auto Play = [&](double Now)
 		{
@@ -1524,6 +1670,22 @@ namespace
 				if (D.What == 1)
 				{
 					Fx.Burn(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else if (D.What == 3)
+				{
+					Fx.FuelBall(D.At, D.Where, D.Across, Vec(D.Seconds, 0.0, -0.15 * D.Seconds)); // (Seconds: its speed in, along +X and a little down)
+				}
+				else if (D.What == 4)
+				{
+					Fx.Vent(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else if (D.What == 5)
+				{
+					Fx.Steam(D.At, D.Key, D.Where, Upward, D.Across, D.Seconds, D.Kind.c_str());
+				}
+				else if (D.What == 6)
+				{
+					Fx.CookOff(D.At, D.Where, Upward, D.Across, D.Pops, D.Over, D.Jet, -1.0, D.Key);
 				}
 				else
 				{
@@ -1570,6 +1732,14 @@ namespace
 			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
 			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
 		}
+		if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun)
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
 		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
 		if (bDusk)
 		{
@@ -1606,12 +1776,15 @@ namespace
 			Paint(C, Cam, Lamps, NL, Men, false);
 			const Vec Sun = View.Sun.Unit();
 			const double SunShare = bDusk ? 0.0 : 0.6;
-			LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			if (!bNoTank)
+			{
+				LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			}
 			if (bDusk)
 			{
 				for (size_t I = 0; I < C.R.size(); ++I)
@@ -1662,6 +1835,10 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		SeaDecks Decks;
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
@@ -1747,7 +1924,7 @@ namespace
 			bSmokes = true;
 			if (!bLit && BurnAcross > 0.0)
 			{
-				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7);
+				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7, true);
 				bLit = true;
 			}
 			if (bLit)
@@ -1850,6 +2027,10 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		SeaDecks Decks; // (no decks: a flat sea)
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
@@ -2032,6 +2213,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, +[](void*, double, double) { return 0.0; }, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
@@ -2244,6 +2429,10 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &Swell, nullptr, 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
@@ -2325,7 +2514,7 @@ namespace
 				if (bFire && T >= NextShot && NextShot >= 0.0)
 				{
 					const Vec Muzzle = Shot == "gun" ? GunAt + Vec(2.2, 0.0, 1.0) : CarAt(0, T) + Vec(CarL * 0.5 + 2.0, 0.0, 2.0);
-					Fx.Muzzle(T, Muzzle, Vec(1.0, 0.0, 0.0), Shot == "gun" ? "at_gun" : "tank_gun", Ground.c_str());
+					Fx.Muzzle(T, Muzzle, Vec(1.0, 0.0, 0.0), std::getenv("FX_GUN_ROW") ? std::getenv("FX_GUN_ROW") : Shot == "gun" ? "at_gun" : "tank_gun", Ground.c_str()); // (FX_GUN_ROW: its row, or row:look)
 					NextShot = Every > 0.0 ? NextShot + Every : -1.0;
 				}
 				Fx.Draw(T, View);
@@ -2380,6 +2569,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &FlatSea, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
 		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
@@ -2531,14 +2724,14 @@ namespace
 				{
 					for (; Lit < Early && T >= LostAt - EarlyS + Lit * 20.0; ++Lit)
 					{
-						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit);
+						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit, true);
 					}
 					if (!bLost && T >= LostAt)
 					{
 						bLost = true;
 						for (int K = 0; K < std::max(2, 5 - Early); ++K)
 						{
-							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0);
+							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, -1, true);
 						}
 						if (!std::getenv("FX_NO_OIL"))
 						{
@@ -2552,7 +2745,7 @@ namespace
 					const Vec Burning = Ship - Bow * EnvNum("FX_ABLAZE", 1200.0);
 					for (int K = 0; K < 5; ++K)
 					{
-						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0);
+						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0, -1, true);
 					}
 					Fx.OilFire(T, 238001, Burning, 0.6 * 260.7, OilIs ? OilIs : "ablaze", 0.0, EnvNum("FX_OIL_SINCE", 180.0));
 				}
@@ -2723,6 +2916,10 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+	Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
@@ -2748,7 +2945,7 @@ int main(int Argc, char** Argv)
 	{
 		Cam.Ppr = W / (2.0 * std::tan(std::clamp(std::atof(LensIs), 5.0, 170.0) * 3.14159265358979 / 360.0));
 	}
-	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6); // (the "mg" shot's gun)
+	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + EnvNum("FX_MG_UP", 0.6)); // (the "mg" shot's gun; FX_MG_UP: its muzzle that high, 0.6 m)
 	if (const char* MgView = std::getenv("FX_MG_VIEW"); Size == "mg" && MgView)
 	{
 		// (FX_MG_VIEW=side: square to the line of fire, 30 m off it; =behind: 10 m behind the gun and 3 m up, along it)
@@ -2764,6 +2961,17 @@ int main(int Argc, char** Argv)
 			const Vec Under = MgGun - Fire * 0.6 - Vec(0, 0, 0.6);
 			Cam.Eye = MgGun - Fire * 3.0 - Square * 1.5 + Vec(0, 0, 1.0);
 			Cam.Forward = (Under + Fire * 0.7 + Vec(0, 0, 0.25) - Cam.Eye).Unit();
+		}
+		if (std::string(MgView) == "flash")
+		{
+			// (=flash: square to the line of fire FX_FLASH_OFF m (3.5) off the muzzle and a little above it, looking just
+			// ahead of it: the flash's own shape, its spikes, cone or tongue, and the dust under it)
+			// (FX_FLASH_AHEAD m (0.5) along the line of fire: 2.5 with FX_FLASH_OFF=2.5 is a three-quarter view from ahead,
+			// where the MG 42's star shows as a star)
+			const double Off = EnvNum("FX_FLASH_OFF", 3.5);
+			const double Ahead = EnvNum("FX_FLASH_AHEAD", 0.5);
+			Cam.Eye = MgGun + Fire * Ahead - Square * Off + Vec(0, 0, EnvNum("FX_FLASH_UP", 0.35)); // (FX_FLASH_UP: the eye that much above the muzzle)
+			Cam.Forward = (MgGun + Fire * (Ahead > 1.0 ? 0.25 : 0.55) - Cam.Eye).Unit();
 		}
 		if (std::string(MgView) == "game")
 		{
@@ -2849,6 +3057,11 @@ int main(int Argc, char** Argv)
 			View.SunLight = Rgb(R, G, B);
 		}
 	}
+	if (const char* DimIs = std::getenv("FX_DIM")) // (FX_DIM=k: a dusk, the land and sky k as light, the kit told it is dusk)
+	{
+		DimK = std::clamp(std::atof(DimIs), 0.02, 1.0);
+		View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+	}
 	// (FX_TEST_TANK=seconds, the "mg" shot: the game's own test barrage (BattleEffects.cpp, RunTest) round the machine
 	// gun. Its tank gun fires that long before the machine gun's burst (0.5 s in the test): the muzzle 4 m south and 4 m
 	// east of the machine gun's and 1.4 m higher, firing on a bearing of 10 degrees where the machine gun fires on 28;
@@ -2874,8 +3087,12 @@ int main(int Argc, char** Argv)
 	{
 		// (a machine gun's burst from 30 m off to the left into the ground by the hit: close tracer and strikes)
 		const Vec Gun = MgGun;
-		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
-		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
+		// (FX_MG_GUN=row or row:look, the gun named as the game names it, mg by default; FX_MG_ROUNDS, FX_MG_RATE its burst)
+		const char* MgGunIs = std::getenv("FX_MG_GUN");
+		const std::string MgRow = MgGunIs ? MgGunIs : "mg";
+		const int MgRounds = static_cast<int>(EnvNum("FX_MG_ROUNDS", 25.0));
+		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), MgRow.c_str(), Ground.c_str()); // (on its ground, as the game's: a prone kick off snow is snow)
+		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), MgRow.c_str(), MgRounds, EnvNum("FX_MG_RATE", 15.0), Ground.c_str());
 	}
 	// (FX_BARRAGE=n: n shells in a row across the view, FX_BARRAGE_STEP m apart (5) and FX_BARRAGE_GAP s apart (1.5), the
 	// first at the hit's own moment: a barrage's dust hanging and drifting, as the game's test fires one. With FX_WIND_X,

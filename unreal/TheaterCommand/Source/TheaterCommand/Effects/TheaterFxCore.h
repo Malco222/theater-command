@@ -1,8 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -112,6 +115,10 @@ namespace TheaterFx
 		double BySpeed = 0.0, DimFrom = 1.0, DimTo = 1.0, DayPx = 0.0;
 		bool bOwnDay = false;
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
+		// (CoolFrom over 0: its colour holds as laid until this share of its life and only then cools, Cool of the way to
+		// Col2 by its end, so a fuel ball's middle stays yellow-orange through its first half second. 0: it cools from
+		// birth, as ever)
+		double CoolFrom = 0.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
 		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
@@ -199,6 +206,7 @@ namespace TheaterFx
 			Rgb Col, Col2; double Cool = 0.0; // (and its own colour, young and old: a piece with bSoft runs to it along its length)
 			double PaleTo = -1.0; // (0 and over: how far that piece pales with age, its own PaleTo, 1 not at all; under 0: as the piece reaching back to it does)
 			double Lean = 0.0; // (and how much thinner its one side is: see Bit::Lean)
+			double CutAt = 1.0e18; // (and that piece's own cut: see Bit::CutAt)
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
@@ -218,6 +226,15 @@ namespace TheaterFx
 		// director 15:38Z: 1.5 m at the nacelle, 5 to 6 m past the tail)
 		double WakeBy = 0.0, WakeR = 0.0;
 		double WakeOn = 0.0; // (over 0: past WakeBy it keeps widening, as WakeR times this power of its age over WakeBy: a trail flares on behind the tail and is never a tube)
+		// (a far trail's short piece, game.air_far: until the bar over it is laid (its trail has laid more than StandBars bars),
+		// it stands in for that bar too, as dark as the two would be together, by StandA, coming in between StandFrom and
+		// StandBy seconds as the bar would. A far bar is laid many seconds after the short pieces at its old end, and the
+		// trail there went pale waiting for it; the art director's mend of 18:44Z)
+		double StandA = 0.0, StandFrom = 0.0, StandBy = 0.0; unsigned StandBars = 0;
+		bool bFarLong = false; // (a far trail's piece, game.air_far: many times longer than it is wide, so its line bows between its two ends no more than its own width, or its outline folds over itself and a sliver is drawn twice)
+		bool bShadeTwin = false; // (game.from_above: not a puff but its shadow on the ground, laid by LayShadows from the puff itself, where the sun's line through it meets the ground)
+		bool bShowEach = false; // (a far trail's bar, game.air_far: it comes into sight point by point along it, each point by the age of the trail there, not by the ages at its two ends alone; a bar many seconds long comes in as the short ones it stands in for go, all along it)
+		double Billow = 0.0; // (a far trail's long piece, game.air_far.trails_billow: its two sides swell and pinch together by up to this share of its width at each point along them, its own, so one long piece is as lumpy along its length as the several short ones it stands in for; its ends as laid)
 		double EdgeSoft = 0.0; // (over 0: its lumpy outline is gentler the wider the piece is for its length, so a wide old length has soft swells, never a comb of spikes: all of it up to a width of its length over EdgeSoft)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
@@ -264,6 +281,9 @@ namespace TheaterFx
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
+		double MostLong = 0.0; // (a thrown lump: drawn no longer than this times its width, in place of burst.debris.clods.most_long; 0: that)
+		bool bChip = false; // (grounds.<ground>.chips: a stone splinter flung low and fast, its face catching the sun as it turns, Glint)
+		bool bFarCull = false; // (a land hit's piece, burst.far: past gone_beyond_m and under gone_px across at its biggest, it takes no place and is not laid)
 		double LensNear = 0.0; // (game.lens_cap: its burst's own near_m, sizes.<size>.lens_near_m, where that is more than the cap's)
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
@@ -323,6 +343,17 @@ namespace TheaterFx
 		// PaleUpM to the power PaleUpPow, it goes PaleUpMost of that share of the way to PaleUpCol, its sunlit side to
 		// PaleUpLit, and thins by ThinUp of that share: black and dense low, browner grey and thinner high)
 		double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0, PaleUpZ = 0.0;
+		// (the production lead's FX2: its number in the order the battle made its pieces, given at the first Draw after
+		// it was made. Prune fills each gap with the last piece, so Bits keeps no order; two pieces equally deep are
+		// drawn in this order, the older first, as they were when Bits kept the order they were made in)
+		uint64_t Serial = 0;
+		// (an aircraft trail's piece: the trail's run, Trailing::Run, and the moment by which it is gone however long its
+		// life, CutAt. The pre-check on 13388a4f: an aircraft that speeds up lays pieces of a shorter life, longest_m, and
+		// those went before the slow pieces laid before them: a hole in the trail with an old length hanging alone
+		// behind it. So no piece of a run outlives a piece laid after it: it is cut to that one's end, fading over the
+		// last game.trail_cut_fade_s before it, and the trail goes from its old end)
+		uint32_t TrailRun = 0;
+		double CutAt = 1.0e18;
 		Rgb PaleUpCol, PaleUpLit;
 		// (the far form, Battle::FarLay: 0, anything else, drawn as ever. 1, a piece of a near burst that has a far form
 		// too (a bomb of a stick), drawn while FarAt, where it struck, is within the draw range; 2, a piece of that far
@@ -390,6 +421,28 @@ namespace TheaterFx
 		/** Whether a shell leaves its flat painted crater (Scar) in the kit's own mesh: on as made. A scene that lays
 		 * craters of its own in the ground (the land battle's torn earth) turns it off; nothing else of a shell changes. */
 		void SetScars(bool bOn) { bScars = bOn; }
+		/** The scene grades its picture as the land battle does (most of the colour out of the darks and the middles,
+		 * contrast 1.42: tools/battle-fx/land_grade.py), not by the game's own curve the recipe's colours are written
+		 * for. With it the recipe's land_grade row stands in for what it names: colours (the clods' paint, the tracer's)
+		 * and the clods' shade and tint, written to land in that grade as the art director ruled them (cut 5: a clod
+		 * earth brown about 70,58,45 with its form, never a black silhouette; a yellow tracer yellow, not khaki). Off as
+		 * made and at every Setup (a kit set up again for another scene is off until that scene asks); without the row
+		 * nothing changes. */
+		void SetLandGrade(bool bOn);
+		/** The scene's material fades every piece where it meets the ground or a hull, over Metres (the land battle's,
+		 * FBattleEffects::SetSoftContact: the art director's cut 5, still 07, a burning wreck's flame cut along a
+		 * straight line where it met the hull). A piece lying on the ground (a thrown clod or fragment come to rest, a
+		 * spent case, a crater's mark) would fade with it, so it is drawn game.soft_contact.lie_nearer times Metres
+		 * nearer the eye along its own line of sight and smaller to match: the same picture, every point of it that far
+		 * in front of what it lies on, so it stays whole. 0: off, as made and at every Setup. */
+		void SetSoftContact(double Metres);
+		/** For a scene seen from high above the ground: the land battle's general, 300 m up (the art director's read of
+		 * the general's stills, item 5, 22 November: from up there smoke was a flat dark smudge). game.from_above: as the
+		 * eye climbs past eye_m and looks down more steeply than steep, smoke's face toward the sun is lit toward
+		 * lit_colour, most on each puff's sunward side and on its cloud's, and its big puffs lay their shadows on the
+		 * ground away from the sun, each following its puff as it drifts, grows and thins. A low eye sees nothing
+		 * changed. Off as made and at every Setup; without game.from_above.on nothing changes either. */
+		void SetFromAbove(bool bOn);
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -480,8 +533,27 @@ namespace TheaterFx
 		void BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* Size, const char* Ground, double Over = -1.0);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. Id, 0 or
 		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
-		 * same number takes the number; the earlier one burns on as it was. */
-		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		 * same number takes the number; the earlier one burns on as it was. bOnShip: a fire on a ship's deck (or
+		 * anything afloat). It never takes a burning tank's look (fire.land_tongues, fire.land_column, the land lamp) and
+		 * never joins another fire (fire.join), however small, low or still it is: the kit cannot tell a deck from the
+		 * ground, and a scene's ground under a ship is her deck. The pre-check of 22 November. */
+		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1, bool bOnShip = false);
+		/** A burning opening (release 2, Brian 23 November: "the tank on fire doesnt look realistic"): flame and smoke
+		 * forced out of a hatch or a grille Across metres wide at At, for Seconds, then a thinning grey column as Burn's.
+		 * It is a fire as Burn's (put out by BurnOut, moved by BurnMove, burning down by fire.late) with three
+		 * differences: it never joins another fire nor takes one in (fire.join), so a wreck's hatches burn as hatches
+		 * and never melt into one bonfire on her deck; it never founds a column of its own (the deck's fire carries the
+		 * wreck's column); and its flames are fire.vent_tongues where the recipe has that row (narrow, tall, roaring
+		 * out of the hole), else fire.land_tongues as a small fire on land. Without fire.vent_tongues.every_s it is a
+		 * Burn that does not join. */
+		void Vent(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
+		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
+		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+		 * dump 15 to 25 m for 1.5 to 2 s, its time by its width. Velocity: what it was moving at (a crashing
+		 * aeroplane's, a truck's), which the fire carries a little of. It lights the ground round it while it burns. A
+		 * fire that burns on after it is the caller's Burn. */
+		void FuelBall(double Now, const Vec& At, double Across, const Vec& Velocity = Vec());
 		/** That fire's crew puts it out (the recipe's fire.put_out; no such row, or no fire burning under that number:
 		 * nothing). Over Over seconds (0 or less: the row's own) its flames are eaten back from the edges to its seat,
 		 * lower and sputtering, never thinner. How "water" (a ship's hoses): a surge of white steam at the seat for the
@@ -593,8 +665,29 @@ namespace TheaterFx
 		int Ring() const { return Sides; }
 		/** What the picture must multiply the colours by (the material's brightness): picture.lit_gain, 1 by default. */
 		double PictureGain() const { return LitGain; }
+		/** How the colours go into the bytes (Colours()). false: the light itself, a byte 1/255 of it, as M_Highlight reads
+		 * them. true: raised to 1/2.2 first, as M_BattlePuffs reads them (its Power of 2.2), so a dark smoke keeps its hue:
+		 * in plain bytes a charcoal, written lit_gain times darker, is one to four steps a channel, and its red, green and
+		 * blue round apart (a big far piece of dark earth read olive over grass, 55,59,37; the dusk specks). Set by the
+		 * scene for the material it draws with, once, before the first Draw; Setup leaves it as it is. false by default. */
+		void SetSrgbBytes(bool bOn) { bSrgbBytes = bOn; }
+		bool SrgbBytes() const { return bSrgbBytes; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
+		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
+		 *  been made since (RoomAsked; over Room() when the room is short). For a scene's log, the production lead's ask
+		 *  of 22 November. */
+		int PuffsDrawn() const { return LastDrawn; }
+		int PuffsAsked() const { return static_cast<int>(std::min<size_t>(RoomAsked(), 1000000000u)); }
+		/** burst.far (FX3): land hits since Setup, those laid with fewer pieces, and the mean share of their pieces they kept. */
+		int LandHitsMade() const { return static_cast<int>(std::min<size_t>(LandHits, 1000000000u)); }
+		int LandHitsThinned() const { return static_cast<int>(std::min<size_t>(LandHitsFew, 1000000000u)); }
+		double LandKeptMean() const { return LandHits > 0 ? LandFewSum / static_cast<double>(LandHits) : 1.0; }
+		/** game.smoke_budget (FX9): the smoke the last Draw laid, in screens of fill (its pieces' areas on the screen,
+		 *  each clipped to one screen, over the screen's), and the share of the big smoke near the lens left out then.
+		 *  0 and 0 with the row off, or the view's width not given. For a scene's log, beside PuffsDrawn. */
+		double SmokeScreens() const { return SmokeLaidScreens; }
+		double SmokeThinned() const { return ThinShare; }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -674,6 +767,40 @@ namespace TheaterFx
 		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
+		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "how does the gun fire look when they shoot? can we make
+		 *  the mussel flash realistic?"): a gun's own look, muzzle.look.<look> (laid over from battle-fx-guns.json), named
+		 *  after its row as "mg:star" in Muzzle and Shots. Every number has its row's or the old look's meaning when left
+		 *  out; a name with no colon is drawn as ever. Its pieces have their own dice, laid after the row's. */
+		struct GunLook
+		{
+			bool bOn = false;
+			double FlameM = 0.0;            // flame_m: its flame's length (0: the row's)
+			double Narrow = 1.0;            // narrow: its flame's width as a share of the row's (a flash hider's cone: under 1)
+			double LicksK = 1.0;            // licks: its licks thrown sideways, as a share of the row's
+			bool bFlicker = false;          // flicker: each round of a burst flickers at the muzzle (Shots), as a machine gun's
+			double HotM = 0.0;              // hot_m: a round's close flame in a burst (0: muzzle.hot.mg_flame_m)
+			double FarK = 1.0;              // far_k: a round's far flicker's size, a share of the machine gun's
+			bool bTracer = true;            // tracer: 0, its rounds lay no tracer (a sub-machine gun's pistol rounds)
+			int Star = 0;                   // star: spikes thrown out round the bore (the MG 42's star), 0 none
+			double StarM = 0.0, StarWide = 0.12, StarLean = 75.0, StarFarM = 0.0; // star_m, star_wide, star_lean (degrees off the bore), star_far_m
+			int Jets = 0;                   // jets: a muzzle brake's side jets, left and right (2), 0 none
+			double JetM = 0.0, JetBackM = 0.15, JetWide = 0.2, JetDust = 0.0; // jet_m, jet_back_m, jet_wide, jet_dust (its dust thrown aside)
+			double Haze = 0.0, HazeR = 0.6, HazeWithinM = 200.0; // haze (most opaque), haze_r, haze_within_m: a pale puff that hangs
+			Span HazeS{ 2.5, 4.0 };         // haze_s
+			double ProneUnderM = 0.0, ProneDust = 0.0, DustWithinM = 150.0; // prone_under_m, prone_dust, dust_within_m
+			double LampW = 0.0, LampBackM = 0.4, LampR = 3.0, LampWithinM = 150.0; // lamp_w, lamp_back_m, lamp_r, lamp_within_m: its glow on the firer, dusk and night only
+			// (the art director's round 1, 17:06Z: by day a flash barely shows: day_k its size in full day as a share of
+			// dusk's, day_pale how far its colours go toward a pale yellow-white; streak 1, its tracer a short travelling
+			// streak even close in, never the whole path at once)
+			double DayK = 1.0, DayPale = 0.0;
+			bool bStreak = false;
+		};
+		bool GunLookOf(const std::string& Look, GunLook& Out_) const; // (false: no muzzle.look.<look>.on in the recipe)
+		double LookDay = 0.0; // (how much the last Draw's hour was day, DayOf its SmokeLight: a look's flash by day)
+		double LookDayK(const GunLook& L) const { return 1.0 - (1.0 - L.DayK) * LookDay; }
+		/** A look's own after-pieces: the haze that hangs, the dust a low muzzle or a brake kicks up, its lamp. */
+		void LookLaid(double Now, const Vec& At, const Vec& Fw, const GunLook& L, const char* Ground);
+		void LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L);
 		/** A ground gun's flash close to the eye (muzzle.hot, art director 07:08Z): lit from within, a yellow-white root
 		 *  and an orange body, as the air guns' close flash. */
 		struct HotFlash
@@ -689,7 +816,14 @@ namespace TheaterFx
 			// (yellow_over; 0: a share of the root's, as before), and the root's glow is the kit's own soft halo, HaloM
 			// past the root all round and Halo opaque at the root's edge, never the game's bloom)
 			double YellowOver = 0.0, Halo = 0.0, HaloM = 0.0;
+			GunLook Look; // (Effects (R2): a gun's own look's spikes and jets, laid after the rest; off, none)
 		};
+		/** Effects (R2): a look's own flame pieces, its star's spikes and its brake's side jets, lit as the close flash (H)
+		 *  or, H null, as the far one. */
+		void LookFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const GunLook& L, const HotFlash* H, Dice& D);
+		/** Effects (R2): a look's close flash by day (the art director's round 1): its colours Pale of the way toward a
+		 *  pale yellow-white, the root kept. */
+		static void PaleHot(HotFlash& H, double Pale);
 		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
 		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
 		 *  tongues, red-orange only at their ends, with short licks thrown sideways and a thin glow round it. Its length
@@ -722,8 +856,10 @@ namespace TheaterFx
 		{
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			double Longest = 0.0; // (longest_m over 0: the most sky a trail is laid over in its life; a faster aircraft's is squeezed, see TrailMove)
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
-			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
+			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1, KeepFar = 0; // (KeepFar over 0: the far form's, game.air_far.trails_keep_one_in, its bars one in that many of its puffs; ThinKeep still sets how far one reaches back)
+			// (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
 			// (a ribbon, Core over 0: every piece a length of one strip back to the piece before it, sharing its edge,
 			// dense over Core of its half width and thinning to its sides; 0: the trail as it was, each puff a lens. The
@@ -808,6 +944,8 @@ namespace TheaterFx
 			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
 			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
 			double Span = 0.0; // (the aircraft's span, metres, as TrailStart was told: a fire's flame is sized by it)
+			double FarK = 1.0; // (game.air_far: how many times farther apart its puffs are laid now; 1, as ever)
+			unsigned BarsLaid = 0; // (how many bars that hang on it has laid: Bit::StandBars)
 			unsigned Puffs = 0, NextKept = 0, KeptGap = 0; // (puffs laid, counted only when the row thins its old puffs; the next to hang on, and how many back the last one kept was)
 			Vec At, Carry, LastPuffAt;
 			Vec KeptAt; bool bKeptAt = false; // (where the last puff kept to hang was laid)
@@ -833,6 +971,11 @@ namespace TheaterFx
 			// and that power a few seconds late, for a sharp rise is her ringing up; the black surge that follows; and the
 			// slow wander of its puffs' climb and drift, each taking most of the last one's)
 			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
+			double Squeeze = 1.0; // (longest_m: the share of its row's time the trail was last laid by, 1 when not squeezed; TrailKind's closing bar takes it)
+			// (Bit::CutAt: this kind's run of the trail, a new one at each TrailKind, and when the row's life ends for the
+			// last piece TrailMove laid; a later call whose first piece would end sooner cuts the pieces before it)
+			uint32_t Run = 0;
+			double RunEnd = -1.0e18;
 			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
@@ -850,6 +993,7 @@ namespace TheaterFx
 			Rgb Col;
 			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
 			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
+			bool bOneFrame = false; // (Effects (R2): lit on the flash's own frame alone, not half the next)
 			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 		};
 		struct Knock
@@ -1021,6 +1165,7 @@ namespace TheaterFx
 			Vec Vel;
 			double MovedAt = 0.0;
 			bool bMoves = false;
+			bool bOnShip = false; // (a burning thing: lit on a ship's deck, Burn's bOnShip; never the land look, never joined)
 			uint32_t Ride = 0;
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
@@ -1039,6 +1184,7 @@ namespace TheaterFx
 			bool bMoverSet = false;
 			double NextGlow = 0.0; // (a burning thing's warm glow on the ground, fire.glow, by the clock)
 			bool bLandColumn = false; // (a big fire's own column, Kind 3, that stands over a burning vehicle on land: fire.land_column)
+			bool bVent = false; // (a burning thing: a burning opening, Vent: never joined, no column of its own, fire.vent_tongues)
 		};
 		struct Paint
 		{
@@ -1051,7 +1197,17 @@ namespace TheaterFx
 			bool bFirst = false, bSplinter = false;
 			double Grain = 1.0; // (the crown's puffs as a share of their size: under 1, broken and granular, as snow)
 			double FirstAtFoot = 1.0, FirstAtTip = 1.0; // (how much of a jet is the ground's first colour, foot to tip)
+			bool bSmokeTop = false; // (grounds.<ground>.smoke_of_ground: the cloud's top from the ground the game shows there)
+			Rgb SmokeTop;
+			bool bBruise = false; // (paint.bruise: the scar a pale powder bruise with a small dark middle, as on rock, never a dark star)
+			Rgb Bruise;
+			double BruiseCore = 0.4, BruiseLobesLo = 4.0, BruiseLobesHi = 6.0, BruiseChipsLo = 3.0, BruiseChipsHi = 5.0;
 		};
+		// (grounds.<ground>.crown_low and crown_wide, while one burst's crown is laid: a hard ground's fan lower and wider,
+		// each jet's way and reach squashed so, its body and lumps as much)
+		double CrownLow = 1.0, CrownWide = 1.0;
+		std::string CrownGround; // (and its ground's word, for its chips: grounds.<ground>.chips)
+		void Squash(Vec& Dir, double& Reach) const;
 
 		const Recipe* Book = nullptr;
 		GroundFn GroundAt = nullptr;
@@ -1078,6 +1234,8 @@ namespace TheaterFx
 			double Mid = 0.0; // (the column's middle at the puff's height, along Right)
 			double R = 1.0, Gain = 0.0, Level = 1.0, Up = 0.0; // (the column's radius there; how strong; the sun's level and upward shares)
 			double Lobe = 0.25; // (the share of its light a fan takes from its own sunward side, the rest from the column's)
+			double Top = 0.0; // (game.from_above: seen from a high steep eye, this share of the way to TopLift on its top's sunward side, two fifths of it on the far side)
+			Rgb TopLift; // (and the lift it takes toward: smoke's own lit colour from above, dark_lit_colour for black smoke)
 			double Rim = 0.0; // (over 0, a lump on a lump: its rim keeps this share of its light, however see-through it is there)
 		};
 		double RoundUp = 0.35;
@@ -1093,7 +1251,8 @@ namespace TheaterFx
 		// run to leave each edge along the path there; LayTailAlpha: its far edge's opacity as a share of its near
 		// edge's; LayLump, LayLumpFar: how far its near and far ends have drawn in to a round lump, 0 a link of the
 		// strip and 1 a round puff)
-		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0;
+		std::vector<std::pair<uint32_t, unsigned>> RunBars; // (set by Draw: each trail run's Trailing::BarsLaid, by run, for Bit::StandBars)
+		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0, LayBillow = 0.0; uint32_t LayBillowSeed = 0; bool bLayShowEach = false; double LayShowFrom = 0.0, LayShowBy = 0.0, LayAgeNear = 0.0, LayAgeFar = 0.0;
 		bool bLayFarCol = false; Rgb LayFarBy, LayFarFloor; bool bLayLean = false; double LayLean = 0.0, LayLeanFar = 0.0; // (Bit::bSoft: how its far edge's colour differs from its near edge's, in the hour's light)
 		// (while laying one bit: bLayGlare, its Lift is its burst's flash and not the sun, Bit::GlareK: each point lit by how
 		// far it is round toward LayGlareWay, the way to the flash; LayGlareAll: 1 the eye sees the face the flash lights and
@@ -1108,6 +1267,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		bool bSrgbBytes = false; // (SetSrgbBytes)
 		double LayFadeHead = 1.0, LayFadeTail = 1.0; bool bLayFade = false; // (fx-air r2, while laying one bit: its opacity runs evenly from its tail end to its head, a ship's tracer or hose)
 		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
@@ -1177,6 +1337,38 @@ namespace TheaterFx
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
+		Span ClodTint; // (burst.debris.clods.tint: each clod's own shade of its paint, 0.8 to 1.2 as made)
+		double ThrownLong = 0.0; // (burst.debris.clods.most_long: a thrown lump drawn no longer than that times its width; 0, as before)
+		bool bLandGrade = false; // (SetLandGrade)
+		double LieNearer = 0.0, LieNearerK = 1.5; // (SetSoftContact: how much nearer the eye a lying piece is drawn; game.soft_contact.lie_nearer)
+		double LayNear = 1.0; // (while laying one bit: every point of it this share of the way from the eye to where it is, LayEye; see SetSoftContact)
+		Vec LayEye;
+		// (FX9, game.smoke_budget, the production lead's battle-scale plan of 22 November: a budget for the screen's area
+		// of smoke. A piece of smoke under skip_px.0 across at its biggest takes no place and is not laid, whole by
+		// skip_px.1; past screens of fill, the big smoke near the lens, over thin_from_px across, is thinned: a share of
+		// its pieces left out, by each one's own lot, and the rest that much darker, so a cloud of many keeps its weight.
+		// The share follows what is asked over thin_s seconds, never more than thin_most; only with thin 1 as well (the art
+		// director refused the thinning at 17:43Z, so thin is 0). on 0 or no row: as before.
+		// Smoke here is a puff or a low skirt of a burst or a fire, not a light, a column kept, a trail, a thrown piece,
+		// a far form or a funnel's even plume: Smoky)
+		double SkipPxLo = 0.0, SkipPxHi = 0.0, ThinScreens = 0.0, ThinFromPx = 150.0, ThinMost = 0.5, ThinS = 1.0, ThinBand = 0.15;
+		double ThinShare = 0.0, ThinAt = -1.0e9, ScreenPx = 0.0, ScreenHalfX = 0.0, ScreenHalfY = 0.0, FillSmall = 0.0, FillBig = 0.0, FillLaid = 0.0, SmokeLaidScreens = 0.0;
+		bool Smoky(const Bit& B) const;
+		// (FX7, game.six_sided, the production lead's battle-scale plan of 22 November: a piece under under_px across on the
+		// screen, its long way, is laid as six sides, not Sides. The ring is worked out at six of its points (SixSlot:
+		// the first, the one half way round, where a piece's point and tail are, and four between) and every other point
+		// of it is a copy of the nearest of those (SixOf), so the mesh is the same and the triangles between two copies
+		// cover nothing. At under 8 px the six sides lie within half a pixel of the round. on 0 or no row: as before)
+		double SixUnderPx = 0.0;
+		bool LaySix = false; // (while laying one bit's own fans: it is small enough, see LayBit)
+		int SixSlot[6] = { 0, 0, 0, 0, 0, 0 };
+		std::vector<int> SixOf;
+		double MostRad(const Bit& B, double Now) const; // (a piece's radius at its biggest by Now, its long way: never under what LayBit lays)
+		/** What the scene's grade changes (SetLandGrade), read at Setup and again when it changes: the clods' shade and
+		 * tint and every colour Setup keeps (Picture), each from land_grade.<its path> where the scene is under that grade. */
+		void ReadGradeLooks();
+		double GradeNum(const std::string& Path, double Fallback) const;
+		Span GradeRange(const std::string& Path, double Low, double High) const;
 		// (fire.lamp: the steady lamps lit at the last frame, by their source's seed, and how far each has come up, so a
 		// fire's lamp comes up smoothly and keeps its place against near equals instead of hopping between them)
 		struct LampKept
@@ -1190,9 +1382,35 @@ namespace TheaterFx
 		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
-		std::vector<Bit> Bits; // alive or still to be born
+		std::vector<Bit> Bits; // alive or still to be born (in no order: Prune puts the last into each gap)
+		// (Bit::Serial: the last number given, and how many of Bits have theirs. Pieces made since the last Draw are at
+		// the end, in the order made, and are numbered in that order before Prune moves any)
+		uint64_t Serials = 0;
+		size_t Numbered = 0;
+		// (Bit::CutAt: the trail runs given out, and the cuts asked since the last Draw, each for the pieces of its run
+		// born by LaidBy, done at the next Draw in one pass; and the fade before a cut)
+		struct TrailCut
+		{
+			uint32_t Run = 0;
+			double LaidBy = 0.0, End = 0.0;
+		};
+		uint32_t TrailRuns = 0;
+		std::vector<TrailCut> TrailCuts;
+		double TrailCutFade = 3.0;
+		void CutTrails();
+		double CutOf(uint32_t Run_, double Born, double Was) const;
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
+		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
+		struct BallLamp
+		{
+			Vec At, Vel;
+			double Born = 0.0, Life = 1.0, Strength = 0.0, Radius = 10.0, Lift = 0.0;
+			uint64_t Seed = 0;
+			Rgb Col;
+		};
+		std::vector<BallLamp> BallLamps;
+		bool BallLampAt(const BallLamp& L, double Now, double Day, Lamp& Into) const; // (false when it is not lit at Now)
 		std::vector<Knock> Knocks;
 		std::vector<Source> Sources;
 		std::vector<int> GunRounds; // rounds fired by each gun so far
@@ -1218,6 +1436,9 @@ namespace TheaterFx
 		int AirTracerMost = 1500; double AirOneFanBeyond = 0.0;
 		double AirGlowSoft = 0.0; // (over 0: by day its glow is that strong beside the core and fades smoothly to nothing at its edge, never a solid bar; 0: solid across, as it was)
 		double AirFarPx = 0.0; // (over 0: a one-fan tracer is a solid dash that wide in the core's colour; 0: the glow alone, as it was)
+		// (game.air_far, the air scene's far forms; 0: off. See Setup)
+		double FarTrailFromM = 0.0, FarTrailBand = 0.15, FarTrailPuffs = 40.0, FarTrailBillow = 0.25; int FarTrailKeep = 3; double FarGunFromM = 0.0, FarGunDashS = 0.2, FarGunFlightS = 0.12;
+		void FarGunDash(double T, const Vec& At, const Vec& Way, const Vec& Carry, const AirRow& Row, double Mps, const TracerHue& Hue);
 		std::vector<double> AirTracerEnds; // (when each air tracer now alight goes out)
 		int HoseMost = 0; std::vector<double> HoseEnds; // (fx-air r2: no more than HoseMost ship guns' hose lines at once, and when each goes)
 		std::vector<Firing> Firings; // the air guns
@@ -1227,6 +1448,7 @@ namespace TheaterFx
 		{
 			int Id = 0;
 			double Last = -1e9, Owed = 0.0;
+			double DropUntil = -1e18; // (FX5: a far trail let go in the heaviest barrage lays nothing until then)
 			Vec At;
 		};
 		std::vector<Dusting> Dusts; // (the vehicles' dust sockets being laid)
@@ -1261,6 +1483,7 @@ namespace TheaterFx
 			double Deep;
 			bool bKeep; // (counted first when the room is short: a kept oil column, or a light)
 			double Far = 0.0; // (a puff that may carry lumps, Bit::Lumps: how far it is from the eye; else 0)
+			uint64_t Serial = 0; // (Bit::Serial: two as deep are laid in the order they were made, wherever they lie in Bits)
 		};
 		std::vector<Order> Sorted;
 		struct ColumnSpan
@@ -1294,7 +1517,44 @@ namespace TheaterFx
 		std::vector<Vec> NearSockets;
 		Span ThinAbove{ 15.0, 25.0 }, ThinSteep{ 0.3, 0.5 }, ThinNear{ 6.0, 12.0 };
 		double ThinKeep = 0.25;
+		// (game.from_above, SetFromAbove: how much the eye is a high steep one this Draw, the shadows' strength, and the
+		// recipe's numbers, read at Setup)
+		bool bFromAboveAsked = false, bAboveOn = false;
+		double FromAbove = 0.0, ShadeTwinA = 0.0;
+		Span AboveEye{ 100.0, 220.0 }, AboveSteep{ 0.4, 0.7 };
+		double AboveLit = 0.0, AboveShadow = 0.0, AboveWide = 1.5, AboveLeastM = 3.0, AboveLeastR = 1.5, AboveStretch = 2.5;
+		double AboveDarkLit = 0.45, AboveDarkest = 0.55, AboveSoftM = 60.0;
+		Span AboveDarkLum{ 0.015, 0.04 };
+		int AboveEvery = 2, AboveMost = 300;
+		Rgb AboveLitCol, AboveDarkCol, AboveShadowCol;
+		std::unordered_map<uint64_t, float> ShadowCells; // (this Draw's shadows: how much light each patch of ground has left, by the shadows' sizes)
+		int LayShadows(int Slot, double Now, const View& Eye); // (the shadows of the big smoke, laid with the craters: how many slots they took)
+		// (and the room they may take: what the rest left last Draw, eased; how many were laid then; the puffs that may cast
+		// one, by Bit::Serial, so the oldest smoke keeps its shadow when the room is short)
+		int ShadowRoom = 0, ShadowsWere = 0;
+		std::vector<std::pair<uint64_t, uint32_t>> ShadowCands;
 		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
+		/** FX5, room shares by kind (game.room_shares, off by default): the room every gate but the vehicles' dust reads.
+		 *  Off, RoomAsked. On, RoomAsked less the dust trails' own pieces, up to their share (dust.vehicles.most_of_room),
+		 *  so a column of tanks never thins the bursts, their smoke's slow fade or a fire: the cloud rig (11-22) had 120
+		 *  tanks take a third of the lingering smoke at 3.5 shells a second. The dust thins its far trails to fit what the
+		 *  rest leaves (ShareThin): fewer, longer, softer pieces, never gaps, and never stopped, so a heavy barrage no
+		 *  longer leaves every tank without a trail; a vehicle within dust_full_m of the eye keeps its whole trail. */
+		size_t RoomGate() const
+		{
+			if (!(ShareDustFloor >= 0.0))
+			{
+				return RoomAsked();
+			}
+			const size_t Asked = RoomAsked();
+			const size_t Dust = std::min(DustInSight + DustSince, static_cast<size_t>(DustRoom * std::max(1, MaxPuffs)));
+			return Asked - std::min(Asked, Dust);
+		}
+		double ShareDustFloor = -1.0, ShareDustTop = 0.92, ShareDustMemory = 4.0, SharePeak = 0.0;
+		double ShareDustFullM = 300.0, ShareDustMostThin = 8.0, ShareDustThinS = 2.0, ShareDustLeastAlive = 2.0, ShareThin = 1.0, ShareThinAt = -1.0e9;
+		double ShareDrop = 0.0, ShareDropHoldS = 2.0, ShareDropFrom = 1.0, ShareDropBack = 0.9; // (FX5: how many far trails are let go when thinning is not enough; and for how long at least)
+		double SharePeaks[8] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+		int64_t SharePeakSlot = std::numeric_limits<int64_t>::min();
 		/** The room asked for on the screen alone: what the last frame laid, and what has been made since. The close
 		 *  grit (spent cases) goes by this: build 1720's test barrage, off the screen behind the eye, held the room over
 		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when
@@ -1314,6 +1574,7 @@ namespace TheaterFx
 		bool Has(const std::string& Path) const;
 		double Height(double X, double Y) const;
 		Paint PaintOf(const std::string& Ground) const;
+		const char* GroundOn(const char* Ground) const; // (grounds.<ground>.on off: "earth"; else Ground as given)
 		void Throw(Bit& B) const; // a clod's flight worked out against the ground
 		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 
@@ -1329,9 +1590,9 @@ namespace TheaterFx
 		};
 		LandTable LandTableOf() const;
 		void RaggedFlash(double T0, const Vec& At, double K, double Small, double GrowK = 1.0, double LastsS = 0.0); // (a shell's flash by the gun flashes' rule: burst.flash.tongues; GrowK times as big, and LastsS seconds long where that is over 0)
-		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size = std::string()); // (Size: a skirt that rolls out to its cloud's width and hangs with it: burst.shock_ring.of_cloud)
+		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size = std::string(), double Few = 1.0); // (Size: a skirt that rolls out to its cloud's width and hangs with it: burst.shock_ring.of_cloud. Few: burst.far, that share of its pieces, each as much wider)
 		void Bulk(double T0, const Vec& At, double CrownH, double K, const std::string& Size, const std::string& Ground, const Paint& P, double CloudM, double LooksS, Dice& D, double Many); // (a burst's cloud as a dense column of earth standing on the ground in lighter smoke: burst.bulk)
-		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
+		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D, double Few = 1.0); // (Few: burst.far, see Shell)
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
 		// (a shell falling in the sea by its calibre, SeaSplash: how its column stands and falls, its foam, its dye and its
 		// floor far off. Given to Spout; none, and the spout is as it always was)
@@ -1377,13 +1638,14 @@ namespace TheaterFx
 		OilRow OilRowOf(const std::string& Kind) const;
 		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
 		bool JoinBurn(double Now, const Vec& At, double Across, double Seconds, int Id); // (fire.join: a fire lit by one already burning joins it; true when it did)
+		void Burning(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip, bool bVent); // (Burn and Vent: a burning thing, joined or not)
 		int OwnColumn(double Now, const Source& Fire, bool bLand = false); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
 		SteamRow SteamRowOf(const std::string& Kind) const; // (the row, every dial held to a sane span)
 		CookRow CookRowOf() const;
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
-		TongueRow TongueRowOf(bool bLand = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues)
+		TongueRow TongueRowOf(bool bLand = false, bool bVent = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues; bVent: fire.vent_tongues before either)
 		/** A burning thing on land under a ship's size (a tank's, not a ship's): no wider than fire.smoke_column.from_m,
 		 * no higher over the ground than fire.land_column.above_m, and not under way. The test OwnColumn's land column
 		 * makes, without its from_m and from_s; fire.land_tongues and fire.lamp.land_strength are for these. */
@@ -1537,7 +1799,7 @@ namespace TheaterFx
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
-		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn);
+		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look = nullptr);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
 		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)
@@ -1546,6 +1808,20 @@ namespace TheaterFx
 		Vec Where(const Bit& B, double Age) const;
 		// (a sea battle's far floors, UseSea: 0 until then, and what is laid is as it always was)
 		bool bSeaFar = false;
+		// (FX3, the production lead's battle-scale plan of 22 November, burst.far: a hit on land outside a sea battle that
+		// stands small in the picture, or lands with the room busy, is fewer and bigger pieces; and far off, a piece of
+		// one too small to see takes no place. No row: as before)
+		bool bLandFar = false;
+		double LandFullPx = 0.0, LandLeast = 0.1, LandHalvePast = 1800.0, LandNearBusy = 0.5, LandOverBusy = 0.125, LandGonePx = 0.0, LandGoneBeyond = 300.0;
+		double LandSmokePow = 0.5, LandSkirtPow = 0.5;
+		// (burst.far.alpha_pow, the art director 12:33Z: a see-through piece laid Bigger is as much thicker, up to alpha_most,
+		// so where fewer layers lie the ground does not show through and tint the smoke. FewAlphaPow is alpha_pow only while
+		// Shell lays a land hit that keeps Few under 1; 0 otherwise, so a sea hit's far pieces are as they were)
+		double LandAlphaPow = 0.0, LandAlphaMost = 0.9, FewAlphaPow = 0.0;
+		double Thicker(double Alpha, double Bigger) const;
+		bool bLandGoneDirt = false;
+		size_t LandHits = 0, LandHitsFew = 0; // (since Setup: land hits, and those laid with fewer pieces)
+		double LandFewSum = 0.0; // (and the shares they kept, summed)
 		double SeaFlashPx = 0.0, SeaFlashKeep = 0.0, SeaGlowPx = 0.0, SeaGlowAlpha = 0.0, SeaGlowS = 0.0, SeaColumnPx = 0.0, SeaColumnKeep = 0.0;
 		double SeaFlashHot = 0.0, SeaFlashOver = 1.0, SeaGonePx = 0.0, SeaGoneBeyond = 0.0, SeaHitFullPx = 0.0, SeaHitLeast = 1.0, SeaHitOver = 2000.0;
 		Rgb SeaFlashCol;

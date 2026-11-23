@@ -4,6 +4,7 @@
 #include "Battle/LandPlay.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -65,6 +66,11 @@ namespace LandEye
 		int Subject = -1;
 		/** True on the frame of a cut (the scene snaps, the sky and effects may re-sort). */
 		bool bCut = false;
+		/** The film's shallow focus (the graphics audit's E9, Brian's D3): on a close follow shot (Watch, Track, Low on
+		 * its man, Shoulder past its man) the distance in metres held sharp, pulled after the subject as a focus puller
+		 * would; 0 on the wide ones, where all of it is sharp and the scene draws no depth of field at all. Decided at the
+		 * cut, so the scene's depth of field is never switched on or off in the middle of a shot. */
+		double Focus = 0.0;
 	};
 
 	/** Whether a point is in a pose's picture (its vertical lens, the picture Aspect wide for 1 high), with a margin. */
@@ -120,6 +126,13 @@ namespace LandEye
 		 * frame of the camera's passes about 2 ms (the production lead's plan for battles of 8,000 men, 22 November). An
 		 * asked shot, and a shot whose man has gone into hiding, are chosen at once. 0: a cut's choice all in one frame. */
 		int ChooseSteps = 3000;
+		/** And by the clock: past ChooseMs milliseconds of the camera's frame, the choice goes on next frame too, whatever
+		 * the steps (0: steps only). Brian's Mac read a step at some 5 to 8 microseconds against the cloud's 1, so 3,000
+		 * steps a frame were 14 to 27 ms there: LandCamera among a long frame's three heaviest jobs some 50 times a battle
+		 * (the lit Normandy trace of 22 November). The test keeps it 0, so its runs are the same on any machine. Whatever
+		 * the clock, a frame goes ChooseLeast steps into the choice, so it always goes on. */
+		double ChooseMs = 3.0;
+		int ChooseLeast = 250;
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
 		/** Brian's feel for the ground battle (22 November: a war film's fury with a squad's-eye realism, the feel only,
@@ -155,10 +168,16 @@ namespace LandEye
 		double ScreenFar = 30.0, ScreenMost = 0.25, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
+		/** A shot screened over ScreenMost this long on the screen, seconds, once it has held ShotLeast, is left: placed
+		 * clear, Sedan's shots walked and drove on into the trees, a fifth to two fifths screened for four seconds. */
+		double ScreenStrain = 1.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
 		double DeadAfter = 4.0;
 		/** How long a fall is held after the man is hit: his fall to the ground and a moment where he lies (real s). */
 		double FallHold = 4.0;
+		/** How long into a fall nothing else cuts it (real s): the man seen on his way to the ground. After it a tank's end
+		 * is gone to, and a man walking into the lens ends the hold (a fall at Kursk was held 2 s with a man at the lens). */
+		double FallSeen = 0.8;
 		/** The camera director's rules from the second cut's frame check (21 November): what the operator of a war film
 		 * would never let happen.
 		 *  - Its own man: the lens never nearer his head or chest than OwnClear (the lens was at a man's face as he rose
@@ -182,6 +201,9 @@ namespace LandEye
 		/** Its own man come in a frame within OwnCutInside of OwnClear of the lens (a man lying down turned about where he
 		 * lay): the shot is cut away from, not shoved a metre. */
 		double OwnCutInside = 0.55;
+		/** Nor shoved farther than this in a frame to keep OwnNearest (metres): a crawling man whose track hopped 2.4 m at
+		 * Prokhorovka shoved the lens 0.47 m in one frame, a kick of 1,869 deg/s/s. Cut away instead. */
+		double OwnShoveMost = 0.15;
 		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
 		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
@@ -197,6 +219,25 @@ namespace LandEye
 		 * ball's first FuelFor seconds on the screen; one going up that near a held shot cuts it on its flash. Held as
 		 * a burst's cloud is (InCloud, LensBurst). Farther off, the ball may fill the picture: that drama is wanted. */
 		double FuelFor = 2.0, FuelVehicle = 16.0;
+		/** A live battle (the general's, fought as it is shown): the film's own section is chosen HeroAfter battle seconds
+		 * into the fight, from what has been fought, and again when its last man is down. Lean: the order the general
+		 * gave a block draws the film's next cut to its men, if one comes within LeanFor real seconds. */
+		double HeroAfter = 20.0, LeanFor = 8.0;
+		/** Radio call, then the barrage (Brian's release 2 camera ask): a forward observer's fresh call for fire (his cl
+		 * marks with their spot; none of his guns' rounds landing from RadioQuiet battle seconds before it to RadioSoonest
+		 * after), whose first salvo lands RadioSoonest to RadioLatest battle seconds after it, RadioRounds or more of his
+		 * rounds within RadioNear metres of the spot in the 15 s from then. The film cuts to him as he calls, then to the
+		 * men under the fire RadioLead real seconds before the first salvo lands, and holds for it; one call in RadioEvery
+		 * real seconds at the most (0: none). A recorded battle only: a live one's rounds are not known ahead. */
+		double RadioEvery = 40.0, RadioLead = 1.2, RadioQuiet = 8.0, RadioSoonest = 4.0, RadioLatest = 14.0, RadioNear = 150.0;
+		int RadioRounds = 3;
+		/** The shallow focus (Pose::Focus): a close follow shot whose subject is within FocusFar metres at the cut is shot
+		 * in shallow focus; the distance follows the subject on a critically damped spring of FocusPull a second (a focus
+		 * puller, not a snap), and never past FocusMost metres. FocusFar 0: never, and nothing asked for it a frame. (The
+		 * film is mostly close shots: at 40 m or 80 m alike some 47 of 50 shots are in it, 94-95% of the fight's frames, so
+		 * the Mac pays for the pass nearly all fight long. Held at 0 from 21:22Z, on again at 23:10Z (Brian's "full speed
+		 * ahead on graphics"): it ships on only if the Mac's A/B, -TheaterLandFocusLive=0 against 1, holds 45 fps.) */
+		double FocusFar = 40.0, FocusPull = 5.0, FocusMost = 300.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -222,6 +263,42 @@ namespace LandEye
 		 * tank's end or a man's fall, and it waits for a moment with no tank about to be knocked out in its time unless the
 		 * window is closing. MassFrom 0 or less: none. */
 		double MassFrom = 150.0, MassTo = 200.0, MassShare = 0.85, MassLength = 7.0, MassHighest = 500.0;
+		/** A front wider than this (the middle nine tenths of the men across the own side's rear way, metres): the wide
+		 * holds MassShare of the men in its densest MassFront instead of the whole (MassStretch). */
+		double MassFront = 1200.0;
+		/** No place fit on the best four men in the middle of the battle (men packed shoulder to shoulder, every place in
+		 * a burst's cloud): the field weighed again for men at least this far (metres) from them, both sides, before the
+		 * high view, up to ElsewhereTimes times a cut. Sedan's waiting army in the woods went up to the aerial six times
+		 * running. 0: none. */
+		double Elsewhere = 60.0;
+		int ElsewhereTimes = 2;
+		/** Riding with a unit (or going to the men the general sent), its other men this far from the four none fit on
+		 * are weighed once before the field: Kursk's ride left its 120 men for 7 s in 80. */
+		double ElsewhereRide = 20.0;
+		/** The picture run's asked shots (the ground's cut 5: "among the men" and "in the grass" asked of the attack's
+		 * first man, an officer waiting among his headquarters' men, every place by him crossed by one of them; "the
+		 * fallen" asked of a man lost in the grass): an asked shoulder, low, tank or village shot that will not fit on its man is
+		 * tried on up to AskOthers other men, his own unit's first, then his side's within AskWithin metres (standing, or
+		 * fallen as he is), each AskApart from the others tried, two places each, before it is placed unfit. */
+		int AskOthers = 12;
+		double AskWithin = 400.0, AskApart = 30.0;
+		/** An asked still keeps other men CrossClear and ManClear off (2 m) like any shot. A man may come nearer, to
+		 * AskCross metres, only running past: within CrossClear of the lens for no more than AskPass seconds on the
+		 * screen, a blur through the picture, never held (the art director on 83749bb4's 04: "a man that close is mostly
+		 * out of frame, and our near model shows its blocks"; cut 5's 04 read well with its nearest man at about 2 m).
+		 * And an asked low shot on a man up keeps him beside the lens, out of the picture, as the low shot is made (the
+		 * grass and the men ahead are its picture). */
+		double AskCross = 0.9, AskPass = 0.5;
+		/** An asked still left within AskHold real seconds (before the picture run can have taken it: it asks two battle
+		 * seconds ahead) is asked again, at most AskAgainMost times, not where it was left. */
+		double AskHold = 3.0;
+		int AskAgainMost = 2;
+		/** The village still (Ask's Building): a man within HouseNear metres of a house first, else within HouseFar; the
+		 * look turned HouseLook of the way from him toward the house; the house at least HouseLeast of the picture's height
+		 * across (half its width over the distance) and seen at HouseSeen of its points in the picture at the least. */
+		double HouseNear = 120.0, HouseFar = 320.0;
+		double HouseLook = 0.35, HouseLeast = 0.08;
+		int HouseSeen = 2;
 	};
 
 	class Director
@@ -234,8 +311,11 @@ namespace LandEye
 		/** Forces a cut on the next update (a key), or holds the shot it has (Hold true) until let go. */
 		void CutNow() { bCutAsked = true; }
 		void Hold(bool bHold) { bHeld = bHold; }
-		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. */
-		void Ask(Kind K, int Subject = -1);
+		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. Building true: a
+		 * house is kept in the picture with its man (the art director's village still, cut 5: a watch shot of a German
+		 * in a hedge and wheat, no house anywhere in it): the asked man if he stands near one, else the man of his side
+		 * nearest a house, else of either side, and the eye placed so the house stands behind or beside him. */
+		void Ask(Kind K, int Subject = -1, bool bBuilding = false);
 		/** Ride with this unit (Brian's yes, 22 November 03:36Z): the film stays with one block's men or tanks (its id as
 		 * the recording numbers it), cutting among them by the same rules as among the field's: their falls and a tank's
 		 * end are gone to, no one else's. It cuts to them at once unless the shot on the screen is already on one of them.
@@ -243,6 +323,33 @@ namespace LandEye
 		 * (Riding() then -1). No wide of the whole mass while riding. */
 		void Ride(int Block);
 		int Riding() const { return RideBlock; }
+		/** The platoon cam (Brian's yes, 22 November 02:40Z): the film rides with the platoon leading a side's assault
+		 * (Side as the recording's blocks number it; -1 lets go), as the recording marks it (each man's Lead spans, the
+		 * tactics thread's ld), going on to the next platoon as the lead passes, and among its men most of all to the
+		 * leading squad's and, in a rush, to the men moving. Before anyone leads (the approach) the film is the field's;
+		 * once a platoon has led, the film stays with it until another takes the lead or none of it stands. Ride() lets it
+		 * go: the player's own pick comes first. LeadBlock() is the platoon ridden for the lead, -1 none. */
+		void FollowLead(int Army);
+		int FollowingLead() const { return LeadSide; }
+		int LeadBlock() const { return LeadBlockNow; }
+		/** The general has just given a block an order (a live battle): the film's next cut goes to its men, as a war film
+		 * cuts from the radio call to the men it sends; the shot on the screen is left as soon as it has run its least
+		 * (Settings::ShotLeast), unless it holds for a fall or a tank's end. Not over a tank's end or a fall coming, nor
+		 * while riding with a unit; let go if no cut comes within Settings::LeanFor. Once: a new order leans anew. */
+		void Lean(int Block);
+		int Leaning() const { return LeanBlock; }
+		/** Radio call, then the barrage (Settings::RadioEvery), for the test: each call the film went to, its stamp, the
+		 * first salvo's landing and its middle, the caller; whether the cut to the men under the fire came (or the shot on
+		 * the screen already showed the spot and held for it). */
+		struct RadioBeat
+		{
+			double T = 0.0, Land = 0.0, X = 0.0, Y = 0.0;
+			int Caller = -1;
+			bool bBarrage = false;
+		};
+		const std::vector<RadioBeat>& RadioBeats() const { return Beats; }
+		/** The fresh calls for fire the film could go to (found once, at the first look). */
+		int RadioCalls() const { return static_cast<int>(Radios.size()); }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -254,6 +361,15 @@ namespace LandEye
 		/** Whether the last asked shot found no fit place and was placed anyway (its kind kept for the picture run): a
 		 * still the film's own rules would have turned away. */
 		bool AskedUnfit() const { return bAskedUnfit; }
+		/** Whether the shot on the screen keeps a house in its picture (a village shot asked with Building, placed): false
+		 * where no house fit, or none stands on the field (the steppe's cottages are things, not houses), so the picture run
+		 * can name the still for what it shows. */
+		bool HouseInShot() const { return ShotHouse >= 0 && Shot == Kind::Watch; }
+		/** The houses found on the field for the village shot (once, at its first ask), for the test. */
+		int HousesFound() const { return static_cast<int>(Houses.size()); }
+		/** Finds the field's houses for the village still now (else at its ask, in that frame: some 20 to 40 ms over a
+		 * 3 by 2 km field): the picture run calls it as the battle opens. */
+		void FindHouses();
 		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
 		long Steps() const { return RaySteps; }
 		/** Whether the shot on the screen is the whole mass (Settings::MassFrom), and the battle time it was cut to (-1:
@@ -261,6 +377,9 @@ namespace LandEye
 		bool MassShot() const { return bMassNow && Shot == Kind::Wide; }
 		double MassAt() const { return MassCutAt; }
 		void MassWindow(double& OutFrom, double& OutTo) const;
+		/** The stretch of a front too wide for one picture the last whole-mass wide held (Settings::MassFront): a man is
+		 * in it whose place, less At, runs From to To along Along. False: the whole front was held. */
+		bool MassStretch(Vec& OutAt, Vec& OutAlong, double& OutFrom, double& OutTo) const;
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
 		/** Why the last shot was left (on the frame of a cut: why this cut). */
 		Why LastWhy() const { return LeftWhy; }
@@ -318,12 +437,17 @@ namespace LandEye
 		bool bAsked = false;
 		Kind AskedKind = Kind::Wide;
 		int AskedSubject = -1;
+		bool bAskedBuilding = false;
 		/** Where the eye stands relative to its subject for this shot (metres: behind, beside, up) and its own place
 		 * for a still shot (Watch, Wide). */
 		double Back = 1.0, Side = 0.5, Up = 1.5;
 		Vec Stand, Target;
 		Vec EyeEased, LookEased;
 		double FacingEased = 0.0;
+		/** The shallow focus as pulled (Pose::Focus): whether this shot has it, the distance held and its swing. */
+		bool bFocusShot = false;
+		double FocusEased = 0.0, FocusSwing = 0.0;
+		double FocusWanted(double Battle) const;
 		/** The subject fell during this shot (the real time he went down, -1 not): hold on him a while, then cut. */
 		double FellAt = -1.0;
 		/** Battle seconds a real second (the scene plays the approach fast and the fight at life's pace, half the rules'
@@ -360,10 +484,59 @@ namespace LandEye
 		 * men drawn now and at its end weighed from the own side's rear and round it, nearest first. */
 		bool bMassNow = false, bMassDone = false;
 		double MassCutAt = -1.0;
+		bool bStretch = false;
+		Vec StretchAt, StretchAlong;
+		double StretchFrom = 0.0, StretchTo = 0.0;
 		/** The block ridden with (Ride), -1 none; whether a track is one of its men; whether any of them still stands for
 		 * the film (up, on the field, not hidden) at a battle time. */
 		int RideBlock = -1;
 		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		/** Ride's own work, for the player's pick and the platoon cam's alike. */
+		void RideWith(int Block);
+		/** The platoon cam: the side followed (-1 none), the platoon ridden for the lead, when the marks are next read
+		 * (every half second on the screen); the men with any lead marks, by track, kept up as a live battle grows. */
+		int LeadSide = -1, LeadBlockNow = -1;
+		double LeadLookAt = -1e9;
+		std::vector<int> LeadMen;
+		size_t LeadMenTracks = 0;
+		/** Whether a man leads his side's assault at a battle time (his Lead spans); whether he is in the moving group. */
+		bool InLead(size_t Track, double Battle) const;
+		bool InRush(size_t Track, double Battle) const;
+		void LookForLead(double Battle, double Real);
+		/** The block the general last ordered (Lean), -1 none, and the real time the lean lapses (-1: not yet seen). */
+		int LeanBlock = -1;
+		double LeanUntil = -1.0;
+		/** Radio call, then the barrage: the fresh calls for fire (IndexRadios, by their stamps), the next not yet passed,
+		 * the one gone to (RadioStage 1: the cut to the caller asked; 2: on him, the barrage to come), the real time of
+		 * the last; and whether the choice in hand is the radio's. */
+		struct Radio
+		{
+			double T = 0.0, Land = 0.0, X = 0.0, Y = 0.0;
+			int Caller = -1;
+		};
+		std::vector<Radio> Radios;
+		std::vector<RadioBeat> Beats;
+		size_t RadioNext = 0;
+		int RadioStage = 0, RadioNow = -1;
+		double LastRadioReal = -1e9;
+		bool bRadioChoice = false, bRadiosFound = false;
+		void IndexRadios();
+		/** The men the barrage's cut may go to (Out, how many): the two of the side under fire nearest the salvo's middle
+		 * (within 1.5 RadioNear), then the two of the caller's side nearest it, 40 to 600 m off. */
+		int RadioMen(const Radio& Rd, double Battle, int Out[4]) const;
+		/** The block a cut's weighing keeps to (riding or leaning), -1 none. */
+		int ScanBlock = -1;
+		/** The lists made from the recording (Index), kept up with a live one as it grows (KeepUp): the tracks and
+		 * rounds put in, the vehicles not yet knocked out, each track's points weighed for MenFastest (Faster); and the
+		 * film's own section chosen from the fight up to Until (ChooseHero), last looked at (battle time). */
+		size_t KeptTracks = 0, KeptRounds = 0;
+		std::vector<int> Vehicles;
+		std::vector<size_t> FastSeen;
+		double HeroLooked = -1.0;
+		void Index();
+		void Faster(size_t Track);
+		void KeepUp(double Battle);
+		void ChooseHero(double Until, double StandingAt);
 		bool RideStands(double Battle) const;
 		bool MassDue(double Battle, int Coming) const;
 		bool PlaceMass(double Battle);
@@ -391,6 +564,17 @@ namespace LandEye
 		size_t RoundFrom = 0;
 		/** The last time the lens was looked round, when it was first found blocked (-1: it is not). */
 		double NextLook = 0.0, BadSince = -1.0;
+		/** The look's second half due this frame: where the picture will be and the men coming (the look in two frames). */
+		bool bLookAhead = false;
+		/** The shot on the screen was asked (the picture run's still): men run past it as near as Settings::AskCross. */
+		bool bShotAsked = false;
+		/** Whether the shot being chosen, or else the one on the screen, was asked. */
+		bool AskedNow() const { return bChoosing ? bChoiceAsked : bShotAsked; }
+		/** Cutting away from its own man come into the lens at once: the next shot is being chosen, the eye not shoved
+		 * clear of him meanwhile (shoved, it jolted 0.43 m in the frame before the cut). */
+		bool bShoveCut = false;
+		/** When the picture was first found screened over ScreenMost, running (-1: it is not). */
+		double ScreenedSince = -1.0;
 		/** The closing aerial taken. */
 		bool bClosed = false;
 		/** The real time of the last cut to a man's fall (so they do not come one on another). */
@@ -487,11 +671,57 @@ namespace LandEye
 		Pick ChoiceTop[4];
 		size_t ChoiceScan = 0;
 		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false, bScanRide = false;
+		/** Weighing again away from the men no place fit on (Settings::Elsewhere): how many times this cut, where they were. */
+		int ScanElsewhere = 0;
+		std::vector<Vec> ScanAvoid;
+		/** And men alone, when every one no place fit on was a tank (Sedan's tanks in the woods at 38 s, while a
+		 * battalion ran up the road on foot). */
+		bool bScanMenOnly = false;
+		/** The houses on the field (a house's floor or a wall's line is no place for the eye at any height: World::Free),
+		 * found by a 6 m search of the whole field at the first village ask, each by its points 2 m apart inside it. */
+		struct House
+		{
+			Vec C;
+			double R = 0.0;
+			std::vector<Vec> Inside;
+		};
+		std::vector<House> Houses;
+		bool bHousesFound = false;
+		/** Whether a house is in a picture: HouseSeen of its points in it and seen from the eye, and big enough. */
+		bool HouseSeenIn(const Vec& Eye, const Vec& Look, double Fov, int H) const;
+		/** An asked shot's men to try (AskOthers): each with the house (and the point of it nearest him) it is framed
+		 * against for the village shot, -1 otherwise. The first is the one the asked option is on. */
+		struct AskTry
+		{
+			int Track = -1;
+			int House = -1;
+			Vec Aim;
+		};
+		std::vector<AskTry> AskTries;
+		size_t AskNext = 1;
+		int AskNextV = 0;
+		void MakeAskTries(double Battle);
+		/** The house of the place being tried and of the shot placed (-1: none), and the point of it the look turns to. */
+		int TryHouse = -1, ShotHouse = -1;
+		Vec TryAim, ShotAim;
+		/** The barrage's cut (radio call, then the barrage): framed as the village still is, the salvo's middle (TryAim)
+		 * beyond the man, so it lands in the picture round him. */
+		bool bTrySalvo = false, bShotSalvo = false;
+		/** The salvo's landing (battle time) the barrage's cut is framed for; the share of the way the look turns from
+		 * the man to the aim (the house: Settings::HouseLook; the salvo: half). */
+		double SalvoLand = -1.0;
+		double AimLook() const { return bShotSalvo ? 0.5 : Set.HouseLook; }
+		int AskAgain = 0;
+		std::vector<Vec> AskLeft;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
 		 * tries before the high view. */
 		bool bChoiceMiddle = false;
 		double ChoiceBattle = 0.0, ChoiceReal = 0.0;
 		bool ScanChoice(long Start, long Budget);
+		/** The frame's share of a choice spent: its steps (Budget past Start), or the clock (Settings::ChooseMs since the
+		 * frame's Update began), never on a choice made at once. */
+		std::chrono::steady_clock::time_point FrameClock;
+		bool ShareSpent(long Start, long Budget) const;
 		void ChoiceOptions(double Battle);
 		/** The shot on the screen, kept while a choice's tries place others in its fields, and put back. */
 		struct ShotKept
@@ -501,6 +731,9 @@ namespace LandEye
 			double FellAt = -1.0, Fov = 50.0, FacingEased = 0.0, VariantSide = 1.0, Back = 1.0, Side = 0.5, Up = 1.5, UpJitter = 0.0, TrackUp = 2.0;
 			bool bFallEye = false, bNearWatch = false, bLoose = false, bMass = false;
 			Vec Stand, Target, TrackOff;
+			int House = -1;
+			Vec Aim;
+			bool bSalvo = false;
 		};
 		ShotKept KeepShot() const;
 		void PutShot(const ShotKept& K);
@@ -549,7 +782,12 @@ namespace LandEye
 		double LookOver(double UpNow) const;
 		/** Whether a man (not Own) walks within CrossClear of an eye at N times (the eye where it will be then), read from
 		 * the recording. */
-		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own) const;
+		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own, double Clear = -1.0) const;
+		/** Whether a man within Near of a held lens at T is only running past it: within Near no more than
+		 * Settings::AskPass on the screen, and never within Settings::AskCross. */
+		bool Passes(const LandFeed::Track& Tr, const Vec& Eye, double T, double Near) const;
+		/** How many men up (Enough at most) stand in a picture within Within metres and are seen from its eye. */
+		int MenInPicture(const Pose& P, double Battle, double Within, int Enough, int Except) const;
 		/** The last real time something moved in the picture before the armies met, and when it is next looked for. */
 		double LastMoved = -1.0, NextMoveLook = 0.0;
 		/** The share of a picture filled by a thing within EdgeNear of the lens (leaves, a trunk; not men, not ground). */
@@ -566,6 +804,19 @@ namespace LandEye
 		mutable std::vector<int> BlockIx;
 		mutable size_t BlockIxTracks = 0, BlockIxBlocks = 0;
 		const LandFeed::Block* BlockOfTrack(int Track) const;
+		/** Each track's kind by bits (KindTank, KindGun, KindLorry), kept while the counts stand: the scans over every
+		 * track compare no names (CD0: at Kursk the first frame of a cut's choice went mostly on 5,800 tracks' names,
+		 * blocks and moves asked before the side was). */
+		static constexpr uint8_t KindTank = 1, KindGun = 2, KindLorry = 4;
+		mutable std::vector<uint8_t> TrackKinds;
+		uint8_t KindOf(size_t Track) const;
+		bool IsVehicleAt(size_t Track) const { return KindOf(Track) != 0; }
+		/** Whether each block is hidden from the player, asked once a frame (FrameStamp) of the scene's Hidden. */
+		mutable std::vector<uint8_t> HiddenVal;
+		mutable std::vector<uint32_t> HiddenStamp;
+		uint32_t FrameStamp = 1;
+		/** The rounds Gather takes, by their place in the recording. */
+		std::vector<int> GatherIx;
 		/** The men where they stood at a battle time (MenT), by 16 m squares in a hashed table of chains; Crossing asks
 		 * the squares round its eye, with room for how far the fastest man of the recording goes from MenT. */
 		struct ManAt

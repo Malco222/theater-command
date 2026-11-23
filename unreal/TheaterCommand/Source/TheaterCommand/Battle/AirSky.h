@@ -461,4 +461,110 @@ namespace AirSky
 	 * there, and some 23 at the heart ring (0.27 was only some 13 per cent). */
 	constexpr double ShadowDark = 0.5;
 	constexpr double ShadowReach = 10000.0;
+
+	/**
+	 * The clouds turned to the eye on the graphics chip (the speed gate's GS6; the graphics audit's item 10). The rooms
+	 * turn every puff to the eye here, on the game's thread, and send all their points to the engine again each time
+	 * the eye moves enough for a turn to show: on the Mac in the ground battle 1.98 ms a turn cool and 5.40 hot, 22 to 64
+	 * turns in 30 s, the near room's 800 puffs (26,400 points) sent each time and the far room's 3,200 on a far turn.
+	 *
+	 * Here the mesh is made once (Triangles, PointPlaces: a slot's 33 points, all at the mesh's own middle) and every
+	 * point is placed, turned, lit and faded where the engine places points (M_CloudTurned, the vertex shader), every
+	 * frame, for the eye as it is then, by AirSkyChip.inl: Painter::Paint's own arithmetic for a puff drawn from the
+	 * sheet's shapes, which the cloud test runs in C++ against the painter's own points. What it reads is a table of
+	 * the puffs round the eye, far to near (Lay, Table): the order the see-through puffs are drawn in is the one thing
+	 * the chip cannot work out for itself, so the table is laid again (and sent: about half a megabyte, no mesh) only
+	 * when the eye has moved far enough for that order to go stale (Wants), a share of the nearest puff's distance
+	 * (SetOrderTurn), and as the wind carries the clouds only while a drawn cloud's lift eases over high ground or a
+	 * cloud stands within the target's clearing.
+	 *
+	 * The table holds every puff that could be drawn while the eye stays within Margin of where it was laid (out past
+	 * the reach and each level's fade by that much), so that a puff the chip fades in between two lays is there.
+	 */
+	class Chip
+	{
+	public:
+		/** Texels (four floats each) a puff, puffs a row, the table's width, and the header's texels in row 0. */
+		static constexpr int TexelsPerPuff = 8;
+		static constexpr int PuffsPerRow = 256;
+		static constexpr int Wide = TexelsPerPuff * PuffsPerRow;
+		static constexpr int HeaderTexels = 5;
+		/** How far the eye may move from where the table was laid before it is laid again whatever else (metres): every
+		 * puff that could be drawn that far off is in the table. */
+		static constexpr double Margin = 400.0;
+		/** The order's staleness: by default the eye may move 2.5 per cent of the nearest drawn puff's distance (the near
+		 * room turned at 0.45 per cent, for the puffs' turn, which the chip makes every frame). */
+		static constexpr double DefaultOrderTurn = 0.025;
+
+		/** InRoom: the puffs the mesh is made with (its slots); a puff a slot. */
+		explicit Chip(int InRoom = 6000, int InSides = 16);
+		int Room() const { return RoomSlots; }
+		int Sides() const { return SideCount; }
+		int PerPuff() const { return 1 + 2 * SideCount; }
+		/** The table's rows: the header's and enough for every slot. */
+		int Rows() const { return 1 + (RoomSlots + PuffsPerRow - 1) / PuffsPerRow; }
+		/** The mesh's triangles: the painter's own for each slot (a middle, a heart ring and a rim ring, both faces). */
+		std::vector<int> Triangles() const;
+		/** Each point's two texture coordinates, two numbers each, a slot's points in a row: its place round its puff
+		 * (OutRing: the point round the ring, 0 to Sides - 1, and which ring, 0 the middle, 1 the heart, 2 the rim) and its
+		 * slot's first texel in the table (OutSlot: column, row). Whole numbers under 2,048, which the engine's half floats
+		 * hold exactly. */
+		void PointPlaces(std::vector<float>& OutRing, std::vector<float>& OutSlot) const;
+		/** The scene's cloud ink, as Painter::SetInk. */
+		void SetInk(double InInk) { Ink = InInk > 0.1 ? InInk : 1.0; }
+		/** The order's staleness, a share of the nearest drawn puff's distance (from 0.002 to 0.2). */
+		void SetOrderTurn(double InTurn);
+		double OrderTurn() const { return Turn; }
+		/** Whether the table wants laying again for this eye (Painter::Paint's terms): never laid, the eye moved past the
+		 * order's slack in the field's own frame, or the wind's carry while a lift eases (3 m) or a cloud stands in the
+		 * clearing (15 m). A few sums: the scene asks it every frame. */
+		bool Wants(const Vec& Eye, const Vec& Drift) const;
+		/** Lays the table for an eye (Painter::Paint's terms; the paints in the header are the painter's Tone for Light
+		 * and the ink). */
+		void Lay(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
+		/** Rows by Wide texels, four floats each, row 0 the header (AirSkyChip.inl gives what each holds). */
+		const std::vector<float>& Table() const { return Cells; }
+		/** The rows the last lay wrote (the header's and the puffs'): the rows to send. Past them, slots the shader
+		 * leaves out by the header's count. */
+		int RowsUsed() const { return 1 + (LastLaid + PuffsPerRow - 1) / PuffsPerRow; }
+		/** The puffs in the table, those it had no room for (the farthest), and those drawn from where it was laid. */
+		int Laid() const { return LastLaid; }
+		int Dropped() const { return LastDropped; }
+		int DrawnThen() const { return LastDrawn; }
+		/** The nearest drawn puff's distance less its radius when laid, and the eye's slack from there (metres). */
+		double Nearest() const { return LastNear; }
+		double Slack() const { return LastSlack; }
+		/** Which of the field's puffs a slot holds (-1 an empty slot), and which cloud. */
+		int SlotPuff(int Slot) const;
+		int SlotCloud(int Slot) const;
+		/** How many times the table has been laid. */
+		int Lays() const { return LayCount; }
+
+	private:
+		int RoomSlots = 6000;
+		int SideCount = 16;
+		double Ink = 1.0;
+		double Turn = DefaultOrderTurn;
+		std::vector<float> Cells;
+		std::vector<double> TurnCos, TurnSin;
+		struct Slotted
+		{
+			int Puff = 0, Cloud = 0;
+			double Deep = 0.0;
+		};
+		std::vector<Slotted> Order;
+		std::vector<Placed> Where;
+		// (each cloud's lift, eased as the painter's: the ground looked up again once its middle has moved 30 m, the lift
+		// drawn eased toward it as the cloud drifts)
+		struct Kept
+		{
+			double X = 1e30, Y = 1e30, PX = 1e30, PY = 1e30, Target = 0.0, Shown = -1.0;
+		};
+		std::vector<Kept> Lifts;
+		uint64_t Serial = 0;
+		bool bLaid = false, bEasing = false, bClearing = false;
+		Vec LastEye, LastDrift;
+		double LastNear = 1000.0, LastSlack = 1.0;
+		int LastLaid = 0, LastDropped = 0, LastDrawn = 0, LayCount = 0;
+	};
 }

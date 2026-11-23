@@ -74,6 +74,9 @@ namespace LandGeneralEye
 		double PanSpeed = 0.75, PanLeast = 4.0;
 		/** How fast the look-at, the zoom and the turn catch up (a critically damped spring's rate), and a glide's. */
 		double Ease = 11.0, ZoomEase = 9.0, TurnEase = 12.0, Glide = 3.2;
+		/** A glide low over the field flies higher the faster it goes, this many metres for each m/s, up to LiftMost (a
+		 * glide to a block in Sedan's woods ran 360 m/s at the treetops; it met them a frame before it braked). */
+		double GlideLift = 0.04;
 		/** How far from any thing the eye keeps (a hedge's shrubs, a house, a tree), and over the ground and the ears of
 		 * corn, metres. */
 		double ThingClear = 1.2, GroundClear = 1.0, OverCrop = 0.35;
@@ -104,6 +107,9 @@ namespace LandGeneralEye
 		/** How fast the lift is hurried when the eye is inside the near clearance (a spring's rate), and the most it
 		 * may be hurried in a frame before it is put clear with a cut instead, metres. */
 		double HurryRate = 30.0, HurryMost = 0.15;
+		/** The hurried lift's hardest push, a share of the eye's distance to its look-at a second squared (about 1,030
+		 * degrees of the picture, under the 1,200 the view is held to). */
+		double HurryPush = 18.0;
 		/** How long the lift may be shut in under leaves or eaves before the view cuts clear, seconds. */
 		double StuckMost = 0.4;
 		/** How fast the look-at's height follows the ground it slides over (a spring's rate). */

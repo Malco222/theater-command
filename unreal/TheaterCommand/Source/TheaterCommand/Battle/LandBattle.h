@@ -10,7 +10,10 @@ class ACameraActor;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
+class FLandCrowd; // TK1
+class FLandVat; // SO1
 class FLandLive;
+class FFrameGrabber;
 class SLandBattleScreen;
 class SWidget;
 class UAudioComponent;
@@ -18,12 +21,15 @@ class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UInstancedStaticMeshComponent;
+class UMeshComponent;
+class UPointLightComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 class UStaticMesh;
+class UStaticMeshComponent;
 class UTexture2D;
 struct FLandBattleState;
 namespace LandCarpet
@@ -77,7 +83,9 @@ public:
 	 * "-TheaterLandLive=<key>" on the command line (normandy-1944): the set piece fought live, the player its general
 	 * (release 2; Brian, 22 November: "im the general who controls their deployment and who to attack and move on a map
 	 * with tactics"). "-TheaterLandSide=" says his side: att (the attack, the default), def, or none (a film, the staffs
-	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step.
+	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step;
+	 * "-TheaterLandPlatoons" draws every platoon (about 2,000 men at Normandy) where sections are the default;
+	 * "-TheaterLandScript=<folder>" presses his steps in code for a builder with no hand on the mouse, a still of each.
 	 */
 	static bool WantsLive(FString& OutKey);
 	/** Opens a live battle two seconds in, as ReplayWhenReady does, its side and seed from the command line. */
@@ -88,6 +96,28 @@ public:
 	/** Starts the rules on their own thread (LandLive) on the set piece Key, the player on side Me ("att", "def", or ""
 	 * for a film), deploying first when bDeploy; the scene opens when the rules have opened the battle. False if not. */
 	bool BeginLive(const FString& Key, int32 Seed, const FString& Me, bool bDeploy);
+	/**
+	 * A campaign battle fought live from its ticket (release 2, the production lead's (a); off unless CampaignLiveOn):
+	 * LookJson is the campaign's TC.battleLook answer as it stands ({ "ticket": .., "live": { fog, seen, designYears,
+	 * sky } }) or a bare FieldTicket, opened in the land rules (TC.landStartTicket), the player on side Me, deploying
+	 * first when bDeploy. Its result, once over, is LiveResult, for the campaign's TC.battleSettleLand.
+	 */
+	bool BeginLiveTicket(const FString& LookJson, const FString& Me, bool bDeploy);
+	void LiveTicketWhenReady(const FString& LookJson, const FString& Me, bool bDeploy);
+	/** "-TheaterLandTicket=<file>": a campaign battle's look (or ticket) from a JSON file, fought live as the set piece
+	 * is by -TheaterLandLive (its side and setup by the same switches): the test path for a campaign battle. */
+	static bool WantsLiveTicket(FString& OutLookJson);
+	void LiveTicketWhenReady(const FString& LookJson);
+	/** The switch for the campaign's own battles fought live in the land rules: on, unless "-TheaterLandNoCampaignLive"
+	 * or the console variable TheaterLandCampaignLive 0. Off: the attack card offers SEND THEM IN only. */
+	static bool CampaignLiveOn();
+	/** The live battle's result once it is over, as the campaign's TC.battleSettleLand takes it ({ "over": .. }). */
+	bool LiveResult(FString& OutJson) const;
+	/**
+	 * (release 2) Where the campaign opened this battle for the player to fight (FIGHT IT YOURSELF): run once when he
+	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
+	 */
+	TFunction<void(const FString&)> HandBack;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
@@ -155,6 +185,43 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/**
+	 * The wind (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and
+	 * epic?"), on with "-TheaterLandWind" (or "=strength", 1 as worked out from the recording's wind) or
+	 * "-TheaterLandEpic": the grass, the corn and a region's blades (BladeInk), its low leafy plants and bushes (BushInk)
+	 * and the shrubs' and trees' wood (WoodInk) on M_LandBlades (build_content.py), each bent by the gusts running over
+	 * the field, as the leaves (LeafInk) and the corn's stalks (StalkInk) are, and the gusts' sheen over the grass and
+	 * the corn (and the ground's, GroundInk). None, and nothing moves, with the wind off or M_LandBlades missing.
+	 */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BladeInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BushInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WoodInk;
+	/** The art director's round 1 (23 November): the ripe grain's own (GrainInk: the wheat, bending toward the ear and
+	 * nodding back, its sheen stronger), the lively trees' (LivelyInk and their leaves LivelyLeafInk: poplars, birches,
+	 * willows, bamboo, two to three times an oak's sway, their leaves quicker) and the palms' (PalmInk, PalmLeafInk:
+	 * the fronds lifting and tossing). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GrainInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyLeafInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmLeafInk;
+	/** The clouds' shadows on the field (M_LandCloudShade, the light function on the battle's sun), on with
+	 * "-TheaterLandCloudShadows" (or "=darkness", the sun's share left under a cloud, 0.2) or "-TheaterLandEpic". */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudShadeInk;
+	bool bWindOn = false;
+	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low (under 25 degrees) before the
+	 * lens ("-TheaterLandSunShafts", or "=bloom", 0.2; or "-TheaterLandEpic"). */
+	bool bSunShafts = false;
+	float SunShaftBloom = 0.2f;
 
 	// ---- The ground (LandField) ----
 	/** One drawn square of the field (or of the far ring): its ground at two levels, what stands on it, and the
@@ -162,7 +229,9 @@ private:
 	struct FTileDrawn
 	{
 		FBox2D Box;
-		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
+		/** Each a static mesh of its own (GS8: drawn from the engine's cached draw commands), or with
+		 * -TheaterLandTilesProcedural a procedural mesh as before. */
+		TWeakObjectPtr<UMeshComponent> Near, Far, Built;
 		/** Once a hole is dug in it, its near ground by parts (LandCrater::Dug), drawn in Near's place. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> NearParts;
 		bool bNearShown = false;
@@ -171,6 +240,9 @@ private:
 	TArray<FTileDrawn> Tiles;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> FieldMeshes;
+	/** GS8: the ground tiles' own static meshes and their components. */
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> GroundKept;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
 	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn
@@ -179,6 +251,85 @@ private:
 	TArray<TObjectPtr<UStaticMesh>> ThingMeshes;
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThingCopies;
+	/** A hedge shrub standing at a hedge cutter's gap (the recording's cuts), drawn by a few copies of its own and not
+	 * the field's, so that shaking it and throwing it down touches only those: which cut, its copies (in ThingCopies)
+	 * and its place there, and where it stood (the field's metres, its turn and sizes, LandField::Placed). */
+	struct FCutShrub
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies;
+		int32 Cut = -1, Index = 0;
+		double X = 0.0, Y = 0.0, Z = 0.0, Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
+	};
+	TArray<FCutShrub> CutShrubs;
+	/** Each cut's stage (the recording's order): 0 the hedge whole, 1 she is pushing into it (from T0), 2 torn (T1). */
+	TArray<uint8> CutStage;
+	int32 CutsTorn = 0;
+
+	/** Release 2's field telephones (the recording's wires): every wire's lengths of a metre or so, copies of one piece
+	 * of wire laid on the ground (WireCopies, drawn out to some 60 m), and the field telephones at each wire's two
+	 * ends (PhoneCopies). */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> WireCopies;
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> PhoneCopies;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> PropMeshes;
+	/** A length of wire: its wire (Wires' order), its two ends (the field's metres), and where it is laid now. */
+	struct FWireLength
+	{
+		int32 Wire = 0;
+		double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0;
+		bool bHidden = false;
+	};
+	TArray<FWireLength> WireLengths;
+	/** A wire as it stands: its lengths in WireLengths (From, Count), cut or whole, a cut's hidden lengths and its two
+	 * curled ends' places in WireCopies (-1: none yet). */
+	struct FWireState
+	{
+		int32 Id = 0, From = 0, Count = 0, CurlA = -1, CurlB = -1;
+		bool bCut = false;
+		TArray<int32> Hidden;
+		/** Its break (field metres) and the wire's way there; its two curled ends as laid; whether a lineman holds
+		 * them in his fists this frame (MakeReels: the ends run from his hands to the ground while he splices). */
+		double CutX = 0.0, CutY = 0.0, WayX = 1.0, WayY = 0.0;
+		FTransform CurlAAt = FTransform::Identity, CurlBAt = FTransform::Identity;
+		bool bSpliced = false;
+	};
+	TArray<FWireState> WireStates;
+	/** The next of the recording's wire cuts and mends not yet shown, and the holes already laid when the wires were
+	 * last settled on the ground. */
+	int32 NextWireCut = 0, NextWireMend = 0, WireHolesSeen = 0;
+	/** The bearers' stretchers (Content/Models/Battle's Stretcher, one copy a carry) and the aid posts' stretchers. */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> StretcherCopies;
+	/** A carry: the man carried (a track), his two bearers (front, rear: tracks), its battle times, and its copy's place
+	 * in StretcherCopies (shown or put away). */
+	struct FCarrySpan
+	{
+		int32 Carried = -1, By1 = -1, By2 = -1, Copy = -1;
+		double From = 0.0, To = 0.0;
+		bool bShown = false;
+	};
+	TArray<FCarrySpan> CarrySpans;
+	/** The linemen's cable reels (Content/Models/Battle's CableReel): one copy a lineman ("ln") met, carried before him
+	 * by its handles while he walks his line out (the soldiers' reel_walk and its `reel` keys), set down by his right
+	 * knee while he splices, put away otherwise; the copies of a live battle's reset given back to Free. */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> ReelCopies;
+	struct FReelMan
+	{
+		int32 Track = -1, Copy = -1;
+		bool bShown = false;
+		/** Where his reel was last put by his clip, and when (battle seconds). */
+		FTransform LastAt = FTransform::Identity;
+		double ShownAt = -1e9;
+	};
+	TArray<FReelMan> ReelMen;
+	TArray<int32> FreeReels;
+	int32 ReelTracksSeen = 0;
+	bool bReelTried = false;
+	/** The wires whose ends a lineman held last frame (their Id): curled again when he lets them go unspliced. */
+	TArray<int32> SplicedWires;
 	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B), and for the clutter each
 	 * brightness third's two warmth edges (R - G; WarmEdges, three a kind): a thing's shade is its brightness third, and
 	 * the clutter's is that third split again in thirds by warmth, nine a kind, so that a blade of grass takes about its
@@ -193,6 +344,9 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
+	/** GS9: a clutter mesh's shadowed twin (by ClutterCopies' number; -1 none): the corn's bundles cast their shadow
+	 * only within -TheaterLandCornShadowTo= (25 m) of the eye, laid there in the twin (LandCarpet's ShadowTo). */
+	TArray<int32> ClutterTwin;
 	TSharedPtr<LandCarpet::Squares> Carpet;
 	/** The corn drawn stalk by stalk round the lens (the art director's cut 4, fix 4): whether the stalks' meshes were
 	 * made (StalkInk), and whether the eye is low enough for them now (they are shown, and the bundles cleared within
@@ -208,6 +362,34 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> RutMeshes;
 	double RutsSentAt = -10.0;
+	/** GS8: the torn ground's pieces (a section of a patch's holes or tracks, a part of a dug tile's near ground) are sent
+	 * into their procedural meshes as they change, and once a piece has stood unchanged TornSettleAfter seconds it is
+	 * baked into a static mesh of its own (cached draw) and its procedural section emptied: a patch's procedural mesh
+	 * then holds only its pieces still changing, and a send makes only those again. A change makes a baked piece
+	 * procedural again. -TheaterLandTornProcedural: never baked, as before. */
+	struct FTornPiece
+	{
+		/** 0: holes (CraterMeshes), 1: tracks (RutMeshes), 2: dug ground (a tile's NearParts). */
+		int32 Kind = 0;
+		/** The patch and section, or the tile and part. */
+		int32 A = 0, B = 0;
+		double ChangedAt = 0.0;
+		bool bHot = false;
+		TWeakObjectPtr<UStaticMeshComponent> Baked;
+	};
+	static int64 TornKey(int32 Kind, int32 A, int32 B)
+	{
+		return (static_cast<int64>(Kind) << 56) | (static_cast<int64>(A & 0xFFFFFF) << 28) | static_cast<int64>(B & 0xFFFFFFF);
+	}
+	TMap<int64, FTornPiece> TornPieces;
+	TArray<int64> TornHot;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> TornBaked;
+	bool bTornBakes = true;
+	double TornSettleAfter = 3.0, TornBakeMs = 1.0;
+	/** For the 10 s log: sections sent, pieces baked, and the slowest frame's baking (ms). */
+	int32 TornSent = 0, TornBakedCount = 0;
+	double TornBakeMostMs = 0.0;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
@@ -221,6 +403,8 @@ private:
 		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
 		int32 BankCopy = -1, BankSlot = -1;
 		float BankFrame[12] = {};
+		/** Effects (R2): his crowd mesh's number when his triangles were made (LandMen::Crowd::MeshNo: a gore fall swaps it). */
+		uint32 MeshNo = 0;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
@@ -244,6 +428,24 @@ private:
 	int32 BankMade = 0;
 	double BankMadeMs = 0.0;
 
+	// ---- The mid and far men as one crowd of posed instances (SO1's draw: Battle/LandVat) ----
+	/** None without M_LandCrowd or with -TheaterLandNoVat: then far men are drawn a mesh a set and pose (above) and mid
+	 * men skinned, as before. What it makes is held in VatKept. */
+	TSharedPtr<FLandVat> Vat;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> VatKept;
+	/** In the wide mass shot a far man is drawn no smaller than MassMinPx of the picture's lines (GS3's measure): grown
+	 * about his feet ("-TheaterLandMassMinPx=", 2; 0 none). For the 10 s log: men placed as instances (mid, far), men
+	 * grown and the most grown, and the card's own frame time (ms, summed). */
+	double MassMinPx = 2.0;
+	/** In the general's own view, high over the field, a far man is drawn no smaller than GeneralMinPx of the picture's
+	 * lines ("-TheaterLandGeneralMinPx=", 4; 0 none): his men are always on the screen (the art director, 22 November). */
+	double GeneralMinPx = 4.0;
+	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
+	double MostGrow = 1.0, GpuMs = 0.0;
+	/** For the 10 s log (FX2): the most smoke puffs the effects kit drew in a frame, and the room it was asked for then. */
+	int32 PuffsMost = 0, PuffsMostAsked = 0;
+
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn
 	{
@@ -254,11 +456,21 @@ private:
 		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
 		bool bWhileManned = false;
 		double SootShown = 0.0;
+		/** TK1: whether its far level is a section of its own (a body the crowd merges has none), and whether her
+		 * instances draw it now (its sections hidden). TK3: the run its links were last posed for (-1e300: to be posed). */
+		bool bFarSection = false;
+		bool bHeld = false;
+		double LinksRun = -1e300;
 	};
 	TArray<FBodyDrawn> BodiesDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> BodyMeshes;
 	TArray<float> LinkPoints;
+	/** TK1: far vehicles as instances of their models' merged far pieces, and TK3's who is in the picture
+	 * (Battle/LandCrowd); what it makes is held here. */
+	TSharedPtr<FLandCrowd> FarCrowd;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> CrowdKept;
 
 	// ---- The footprint shade (LandShade on M_LandShade: the art director's cut 4, fix 3) ----
 	/** The shade's ink (none without M_LandShade: then no shade is drawn, said once), its meshes (one a kind of tank,
@@ -278,8 +490,12 @@ private:
 		bool bShown = false;
 		FVector At = FVector::ZeroVector;
 		FQuat Q = FQuat::Identity;
+		/** Her shade's size as laid (1: her own; the general's view grows it with her and lays it as her cast shadow). */
+		double Size = 1.0;
 	};
 	TArray<FShadeDrawn> ShadesDrawn;
+	/** The vehicles' shades laid for the general's view (grown, cast away from the sun, seen to 3 km) this frame. */
+	bool bShadesHigh = false;
 	/** Each shade mesh's instances given back (shrunk to nothing), to be used again before a new one is added. */
 	TArray<TArray<int32>> ShadeFree;
 	/** The men's: a round blob under a standing man, his body's shape under a prone one, a wider blob under a body at
@@ -291,6 +507,11 @@ private:
 		int32 Kind = -1, Slot = -1;
 		FVector At = FVector::ZeroVector;
 		float Yaw = 0.0f;
+		/** His place as last posed (field metres, PlaceAsPosed): unchanged, nothing of the ground is asked. */
+		FVector Gate = FVector(1e30);
+		/** The ground's up where it was last read (field metres), read again once he is half a metre from there. */
+		FVector UpAt = FVector(1e30);
+		FVector Up = FVector::UpVector;
 	};
 	TArray<FManShade> ManShades;
 	TArray<TArray<int32>> ManShadeFree;
@@ -315,6 +536,9 @@ private:
 	{
 		TWeakObjectPtr<UAudioComponent> Player;
 		int32 Track = -1;
+		/** Its voice in the pool and the take it played there (-1: a player spawned for it alone). */
+		int32 Voice = -1;
+		int32 Use = 0;
 	};
 	TArray<FMoving> Moving;
 	/** Takes started in the last two seconds, for the ears' dulling after a blast close by. */
@@ -322,6 +546,8 @@ private:
 	{
 		TWeakObjectPtr<UAudioComponent> Player;
 		double Started = 0.0;
+		int32 Voice = -1;
+		int32 Use = 0;
 	};
 	TArray<FRecent> Recent;
 	/** The ears dulled by a blast close by: when it began, its low-pass, and how long down, held and back. */
@@ -336,6 +562,21 @@ private:
 	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
 	/** When the sound's tally was last logged (real seconds). */
 	double SoundLogAt = 0.0;
+	/** The one-shot takes' players, pooled (mix.json land.voices; LandSound::Voices in the state keeps which take each
+	 * plays): made once and reused, not one spawned and destroyed for every take. Off with land.voices.pool false or
+	 * -TheaterLandVoicesSpawned (each take spawned, as before 22 Nov). */
+	UPROPERTY()
+	TArray<TObjectPtr<UAudioComponent>> VoicePlayers;
+	bool bPoolVoices = false;
+	/** The voice and its use the last StartTake played on (-1: spawned, not pooled). */
+	int32 LastVoice = -1;
+	int32 LastVoiceUse = 0;
+	/** Short takes out of hearing where they start, given no voice (the engine's spawn makes no player for them). */
+	int32 VoicesUnheard = 0;
+	/** Each engine loop's name, one for each of LandSound::EngineNames' (worked out once, not every frame). */
+	TArray<FName> EngineLoopNames;
+	/** The buses' gains, read from the mix once each (StartTakes asked the mix's tree for every take). */
+	mutable TMap<FString, double> BusDbs;
 
 	// ---- The flags for the bar ----
 	UPROPERTY()
@@ -344,7 +585,9 @@ private:
 	TObjectPtr<UTexture2D> FlagDefence;
 
 	// ---- What the table had before the battle took its place (as the air battle keeps it) ----
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White;
+		// (the wind and the clouds' shadows, 23 November: the sun's light function and shafts as the table had them)
+		TWeakObjectPtr<UMaterialInterface> Function; float FunctionFade = 0.0f, FunctionDisabled = 0.0f; bool bShaftBloom = false, bShaftOcclusion = false; float BloomScale = 0.0f, BloomThreshold = 0.0f, ShaftDark = 0.0f; FColor BloomTint = FColor::White; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = true; FLinearColor Lower = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -382,14 +625,77 @@ private:
 	/** The map's light trims as they stood when the battle began (console variable, value), put back as it ends; and
 	 * its sun's contact shadow length (under 0: not changed). */
 	TArray<TPair<FString, FString>> KeptTrims;
+	/** The film's shallow focus (E9): r.DepthOfFieldQuality as the battle found it (the map's 0, or a capture run's
+	 * film set), the quality the scene has set now, and whether the camera's close shots may turn it on
+	 * (off unless "-TheaterLandFocusLive=1", until the Mac's A/B and the art director pass it). */
+	int32 FocusQualityKept = -1;
+	int32 FocusQualityNow = -1;
+	bool bFocusLive = false;
 	float KeptContactShadow = -1.0f;
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
-	int32 LogFrames = 0;
+	/** ...and the camera's own line (the production lead's CD0, the Mac gate's 10 s line): LandEye's frame and the
+	 * general's view, ms over the span and the slowest, the most ray steps in a frame; the cuts; and the longest gap
+	 * between two frames, with how many frames it came after a cut (0: the cut's own frame), to split a shot change's
+	 * hitch between the camera's choice and the renderer's start afresh. */
+	double EyeMs = 0.0, EyeMostMs = 0.0, GenEyeMs = 0.0, GenEyeMostMs = 0.0, LongestGapMs = 0.0;
+	int64 EyeStepsMost = 0;
+	int32 EyeCuts = 0, FramesSinceCut = 1000, LongestGapSinceCut = 1000;
+	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
+	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
+	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
+	/** A live battle's own parts, ms over the log's 10 s: the general's view (his camera) and his screen (tags, routes,
+	 * chips, the pointer); with the rules' step, said on the log's live line. */
+	double GeneralViewMs = 0.0, GeneralScreenMs = 0.0;
+	int32 LogFrames = 0, MenInPicture = 0, MenRebuilt = 0, RebuildsPut = 0, MostInPicture = 0;
 
 	// ---- The picture run (-TheaterLandBattleShots) ----
 	FString ShotFolder;
+	/** The walk pan ("-TheaterLandWalkPan=<battle s>[,<seconds>]", the Mac recipe's look 7): from that battle second the
+	 * eye stands off a walking block's flank and turns with it (LandWalkPan), a still each real second. Battle second
+	 * it starts at (-1 none), how long, the stills' next real time and count, the tries left to find a walking block
+	 * (10 s later each), whether it holds the eye now, and its look, smoothed. The tank pan ("-TheaterLandTankPan=", the
+	 * same form; the far tanks' motion vectors, LandCrowd) uses the same: a tank driving 170 to 240 m off, past the
+	 * hand-over, on a long lens (bTankPan). */
+	double WalkPanAt = -1.0, WalkPanFor = 20.0, WalkPanStillAt = -1.0;
+	int32 WalkPanStills = 0, WalkPanTries = 6;
+	bool bWalkPanOn = false, bTankPan = false;
+	FVector WalkPanLook = FVector::ZeroVector;
+	void WalkPan(double Real);
+	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
+	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
+	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
+	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked). */
+	TSharedPtr<FFrameGrabber> DarkGrab;
+	double DarkShare = -1.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
+	int32 DarkReads = 0;
+	void StartDarkRead();
+	void ReadDark(double Real);
+	void StopDarkRead();
+	/**
+	 * The night before the attack (LandNight, release 2's patrol, behind the player's patrol switch): a recording that
+	 * carries the patrol opens on the night, the battle's clock waiting at its start. The night's look is laid on the
+	 * eye's lens over the day's grade (NightLens: the day's values kept to come back to), as a film shoots day for
+	 * night: the exposure down, the colour drained and cooled, the picture's dip to black between the night and the
+	 * battle; the flares are lamps that throw shadows, each with its burning glow ("-TheaterLandFlare=candelas").
+	 * "-TheaterLandNoNight" leaves the night out; "-TheaterLandPatrol[=found,caught]" puts a stand-in patrol into a
+	 * recording without one (LandNight::AddStandInPatrol; 1,1 when bare). A key or a click skips to the dawn.
+	 */
+	struct FNightLens
+	{
+		float Stops = 0.0f;
+		FVector4 Darks = FVector4(1.0, 1.0, 1.0, 1.0), Middles = FVector4(1.0, 1.0, 1.0, 1.0), Gain = FVector4(1.0, 1.0, 1.0, 1.0);
+		bool bKept = false, bOn = false;
+	};
+	FNightLens NightLens;
+	TArray<TWeakObjectPtr<UPointLightComponent>> FlareLamps;
+	TArray<TWeakObjectPtr<UProceduralMeshComponent>> FlareGlows;
+	TWeakObjectPtr<UMaterialInstanceDynamic> FlareInk;
+	double FlareCandela = 1.3e6;
+	void StartNight();
+	void NightLook();
+	void FlareAt(int32 Index, const FVector& At, double Light, bool bRising);
 	struct FShot
 	{
 		FString Name;
@@ -410,6 +716,8 @@ private:
 	/** The rules on their own thread, fighting the battle a little ahead of the screen (none for a recording). */
 	TSharedPtr<FLandLive> Live;
 	FString PendingLive, LiveMe;
+	/** A campaign battle's look waiting to open (LiveTicketWhenReady). */
+	FString PendingTicket;
 	int32 LiveSeed = 0;
 	bool bLiveDeploy = false;
 	/** Started, and waiting on the rules to open the battle (its header): for how long, real seconds. */
@@ -429,6 +737,8 @@ private:
 	/** The battle's clock this frame never past what the rules have fought (less a margin); and the rules kept ahead. */
 	double LiveClock(double From, double To, double Real);
 	void CloseLive();
+	/** BeginLive's and BeginLiveTicket's own: a set piece by Key, or a campaign battle's look where LookJson is given. */
+	bool BeginLiveFrom(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy, const FString& LookJson);
 
 	// ---- The general's controls (LandBattleCommand.cpp) ----
 	/** His pointer pressed: where, which button, and whether it has moved past a click since. */
@@ -454,11 +764,45 @@ private:
 	/** How far a click reaches on the ground at a pixel, metres (some 24 pixels' worth there). */
 	double ReachAt(const FVector2D& Pixel) const;
 	/** The order in hand given (TC.landOrder's command): sent, shown at once, and the click answered on the screen. */
-	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY);
+	/** Only: the blocks it goes to, where not all those in hand (the cutter alone, those with smoke). */
+	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY, const TArray<int32>& Only = TArray<int32>());
+	/** Hedge cutters: the point on a hedge (a hedgerow, a lane's bank, a garden's) within Reach of (X, Y) where a gap would
+	 * be cut; false none so near. */
+	bool HedgeNear(double X, double Y, double Reach, double& OutX, double& OutY) const;
+	/** Smoke on call: those in hand with smoke lay it from (X0, Y0) to (X1, Y1). */
+	void GiveSmoke(double X0, double Y0, double X1, double Y1);
+
+	// ---- The general's walk pressed in code (LandBattleCommand.cpp, its choices LandScript.h) ----
+	/** "-TheaterLandScript=<folder>": for a builder with no hand on the mouse, his steps pressed through his own pointer
+	 * (two units carried into the woods, the battle begun, one sent forward, one at an enemy, one firing into a hedge or
+	 * a wood, a unit's plate held up), a still of each into the folder and each said in the log; then three minutes at
+	 * the battle's own pace, the rest at four times, the after card's still, and the game quits. Empty: none. */
+	FString ScriptFolder;
+	int32 ScriptStep = 0;
+	/** When the step began (real seconds), and the battle time an order went. */
+	double ScriptAt = 0.0, ScriptGiven = 0.0;
+	/** The unit the step works with, the enemy it attacks, where it goes (field metres) and that place on the screen. */
+	int32 ScriptUnit = -1, ScriptFoe = -1;
+	double ScriptX = 0.0, ScriptY = 0.0;
+	FVector2D ScriptPixel = FVector2D::ZeroVector;
+	/** Pressed through his pointer (the place on the screen), else given directly (off the screen). */
+	bool bScriptByHand = false;
+	int32 ScriptStills = 0;
+	/** His units the walk has used, and where it set those it carried into the woods. */
+	TArray<int32> ScriptUsed;
+	TArray<FVector2D> ScriptTaken;
+	/** Each frame after his tags are on the screen: the walk's next step when its time comes. */
+	void TickScript();
+	void ScriptStill(const TCHAR* Name);
+	void ScriptNext(int32 Step);
 
 	bool Open();
 	void LoadInks();
 	void LayField();
+	/** Scarred ground (release 2): the old holes of the battles fought here before, laid as the battle opens. */
+	void LayScars();
+	/** Mud memory (release 2): the ruts of the battles fought here in mud before, laid as the battle opens. */
+	void LayOldRuts();
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing
@@ -479,6 +823,15 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
+	void BailOut();
+	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
+	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
+	void SeatLight(int32 FromVehicle);
+	/** Each of them seated and posed for this frame (with RideTanks). */
+	void RideLight();
+	/** The lorries' and half-tracks' benches as they stand now, for the men aboard (FLandBattleState::Carriers). */
+	void SeatCarriers();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */
@@ -503,12 +856,34 @@ private:
 	void MakeFlags();
 
 	void PlayEffects();
+	/** This frame's hedge cutters (the recording's cuts): from T0 the shrubs at the gap shaken as she pushes into the
+	 * bank, at T1 the bank torn through (LandCrater's breach, sent by MakeCraters with the holes) and its shrubs thrown
+	 * down the way she drove. */
+	void MakeBreaches();
 	/** This frame's shells, bombs and grenades into the ground: their holes, kept the whole battle. */
 	void MakeCraters();
+	/** The field telephones' wires laid on the ground and their telephones (none where the recording has no wires). */
+	void LayWires();
+	/** This frame's wire cuts and mends, and the lengths over a new hole laid on its face. */
+	void MakeWires();
+	/** A length of wire placed from its ends, on the ground as it is now (its holes and gaps). */
+	FTransform WireAt(double X0, double Y0, double X1, double Y1) const;
+	/** The stretcher bearers' stretchers, one a carry, put away until it starts; and two stretchers laid by each aid
+	 * post (none where the recording carries no carries). */
+	void LayStretchers();
+	/** This frame's stretchers: each carry's under its man between his two bearers, the rest put away. */
+	void MakeStretchers();
+	/** This frame's linemen: each one's reel in his hands or by his knee, and a cut wire's two ends in his fists while
+	 * he splices it (the soldiers' splice_kneel and its `hands` keys). */
+	void MakeReels();
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */
 	void SendDug();
+	/** GS8: a torn piece just sent into its procedural section (its baked mesh, if any, let go). */
+	void TornChanged(int32 Kind, int32 A, int32 B);
+	/** GS8: the torn pieces unchanged TornSettleAfter seconds baked into static meshes, within TornBakeMs a frame. */
+	void SettleTorn();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);
@@ -520,6 +895,14 @@ private:
 	UAudioComponent* StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const FName& Name);
+	/** A pooled voice for a take (StartTake with land.voices on). */
+	UAudioComponent* StartPooled(USoundBase* Played, const FName& Take, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
+	UAudioComponent* MakeVoice();
+	/** The pool's players stopped since the last frame freed; the cuts due now faded out. */
+	void FreeVoices();
+	void FadeVoices();
+	/** Whether a take started on a pooled voice still holds it (always true for a spawned one). */
+	bool StillHeld(int32 Voice, int32 Use) const;
 	double BusDb(const FString& Bus) const;
 	void AimEye(float DeltaSeconds);
 	void TakeShots();

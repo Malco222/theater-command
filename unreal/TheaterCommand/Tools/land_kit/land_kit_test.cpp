@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -118,6 +119,108 @@ namespace
 		return Buf;
 	}
 
+	// TK1: the far pieces (LandKit::SplitFar). Each triangle as drawn on the field: its three corners, normals (to a
+	// millimetre and a thousandth), colours and soot weights, so the far bodies' and the pieces' can be compared as
+	// lists: every triangle there exactly once, at the same place, painted the same.
+	using TriangleKey = std::vector<long long>;
+
+	void PlacedTriangles(const Mesh& M, const Place& P, std::vector<TriangleKey>& Out)
+	{
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			TriangleKey Key;
+			Key.reserve(30);
+			for (int C = 0; C < 3; ++C)
+			{
+				const size_t K = M.Triangles[T + static_cast<size_t>(C)];
+				const V3 At = P.Point(V3(M.Points[K * 3], M.Points[K * 3 + 1], M.Points[K * 3 + 2]));
+				const V3 Way = P.Way(V3(M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2]));
+				for (double X : { At.X, At.Y, At.Z })
+				{
+					Key.push_back(std::llround(X * 1000.0));
+				}
+				for (double X : { Way.X, Way.Y, Way.Z })
+				{
+					Key.push_back(std::llround(X * 1000.0));
+				}
+				for (int Ch = 0; Ch < 4; ++Ch)
+				{
+					Key.push_back(M.Colours[K * 4 + static_cast<size_t>(Ch)]);
+				}
+				Key.push_back(std::llround(static_cast<double>(M.Soot[K]) * 10000.0));
+			}
+			Out.push_back(std::move(Key));
+		}
+	}
+
+	/** The pieces of M checked against her bodies at a pinned pose: the same triangles exactly once each, FarOff nothing
+	 * there; and every far triangle of hers in a piece, or in a body kept out. bLidUp: the lid-up piece (FarSplit::Open)
+	 * drawn in its piece's stead, as the scene draws it while her commander's lid is open. Why: the first fault. */
+	bool CheckPieces(const Model& M, const FarSplit& S, const Vehicle::Pin& Pin, const GroundFn& Ground, std::string& Why, bool bLidUp = false)
+	{
+		Vehicle V;
+		V.PinPose(M, Pin, Ground);
+		const std::vector<Place>& P = V.Bodies();
+		std::vector<TriangleKey> Bodies, Pieces;
+		size_t FarAll = 0, FarIn = 0, FarKept = 0;
+		for (size_t B = 0; B < M.Bodies.size(); ++B)
+		{
+			FarAll += M.Bodies[B].Far.Triangles.size() / 3;
+			FarKept += S.Kept[B] ? M.Bodies[B].Far.Triangles.size() / 3 : 0;
+			if (S.PieceOf[B] < 0)
+			{
+				continue;
+			}
+			if (S.Kept[B])
+			{
+				Why = M.Bodies[B].Name + " is both kept out and in a piece";
+				return false;
+			}
+			FarIn += S.StandIn[B] ? 0 : M.Bodies[B].Far.Triangles.size() / 3;
+			PlacedTriangles(S.Level(M, static_cast<int>(B)), P[B], Bodies);
+		}
+		if (FarIn + FarKept != FarAll)
+		{
+			Why = std::to_string(FarAll) + " far triangles, " + std::to_string(FarIn) + " in the pieces and " + std::to_string(FarKept) + " kept out";
+			return false;
+		}
+		for (int Which = 0; Which < 2; ++Which)
+		{
+			const FarPiece& Piece = bLidUp && Which == S.OpenOf ? S.Open : S.Pieces[Which];
+			if (Piece.Empty())
+			{
+				continue;
+			}
+			if (Piece.Anchor < 0 || static_cast<size_t>(Piece.Anchor) >= P.size() || Piece.FirstTriangle.size() != Piece.Bodies.size() + 1
+				|| Piece.FirstTriangle.back() * 3 != Piece.Merged.Triangles.size())
+			{
+				Why = "a piece's anchor or its bodies' bookkeeping";
+				return false;
+			}
+			PlacedTriangles(Piece.Merged, P[static_cast<size_t>(Piece.Anchor)], Pieces);
+		}
+		std::sort(Bodies.begin(), Bodies.end());
+		std::sort(Pieces.begin(), Pieces.end());
+		if (Bodies != Pieces)
+		{
+			size_t Same = 0;
+			for (size_t K = 0; K < std::min(Bodies.size(), Pieces.size()) && Bodies[K] == Pieces[K]; ++K)
+			{
+				++Same;
+			}
+			Why = std::to_string(Bodies.size()) + " body triangles against " + std::to_string(Pieces.size()) + " in the pieces, the first " + std::to_string(Same)
+				+ " (sorted) the same";
+			return false;
+		}
+		const double Off = FarOff(M, S, P);
+		if (Off > 1e-6)
+		{
+			Why = "FarOff " + std::to_string(Off) + " m at rest";
+			return false;
+		}
+		return true;
+	}
+
 	double Percentile(std::vector<double> L, double P)
 	{
 		if (L.empty())
@@ -151,9 +254,10 @@ int main(int argc, char** argv)
 
 	// ---- The models, read and cut.
 	std::printf("THE MODELS (Content/Models/Battle)\n");
-	const char* Names[6] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck" };
-	const char* Owners[6] = { "USA", "GER", "GER", "USA", "GER", "USA" };
-	for (int I = 0; I < 6; ++I)
+	// (and Prokhorovka's: the StuG, the T-34, the light tank and the ZiS-3, for the far pieces)
+	const char* Names[10] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck", "StuG3", "T34", "LightTank", "ZiS3" };
+	const char* Owners[10] = { "USA", "GER", "GER", "USA", "GER", "USA", "GER", "SOV", "SOV", "SOV" };
+	for (int I = 0; I < 10; ++I)
 	{
 		std::string Text;
 		if (!ReadFile(Content + "/Models/Battle/" + Names[I] + ".json", Text))
@@ -193,6 +297,104 @@ int main(int argc, char** argv)
 				"  links %zu+%zu  read %.0f ms (of it JSON %.0f ms)\n",
 				Names[I], D.Nation.c_str(), static_cast<double>(Text.size()) / 1e6, M.Coat.c_str(), M.Bodies.size(), Shared, NearPoints, NearTris,
 				FarPoints, FarTris, M.Links(-1).size(), M.Links(1).size(), Ms(T0, T2), Ms(T0, T1));
+			// TK1: her far pieces, checked against her bodies at rest, on a slope with her turret trained, and with a roof
+			// gun kept out (as the scene keeps a body it may hide).
+			FarSplit Split;
+			const auto S0 = Clock::now();
+			SplitFar(M, Split);
+			const auto S1 = Clock::now();
+			const GroundFn Slope = [](double X, double Y, double& OutZ, V3& OutNormal)
+			{
+				OutZ = 0.06 * X - 0.04 * Y + 3.0;
+				OutNormal = V3(-0.06, 0.04, 1.0).Unit();
+			};
+			const GroundFn Level = [](double, double, double& OutZ, V3& OutNormal)
+			{
+				OutZ = 0.0;
+				OutNormal = V3(0.0, 0.0, 1.0);
+			};
+			Vehicle::Pin Rest, Trained;
+			Trained.X = 120.0;
+			Trained.Y = -45.0;
+			Trained.Heading = 2.2;
+			Trained.Turret = M.Turret >= 0 ? 57.0 : 0.0;
+			std::string Why;
+			bool bPieces = CheckPieces(M, Split, Rest, Level, Why) && CheckPieces(M, Split, Trained, Slope, Why);
+			std::vector<uint8_t> KeepOut(M.Bodies.size(), 0);
+			int Kept = -1;
+			for (size_t B = 0; B < M.Bodies.size() && Kept < 0; ++B)
+			{
+				if (M.Bodies[B].Name.find("roof_mg") == 0 || M.Bodies[B].Name == "aerial")
+				{
+					KeepOut[B] = 1;
+					Kept = static_cast<int>(B);
+				}
+			}
+			if (bPieces && Kept >= 0)
+			{
+				FarSplit Without;
+				SplitFar(M, Without, &KeepOut);
+				bPieces = CheckPieces(M, Without, Trained, Slope, Why);
+				for (size_t B = 0; bPieces && B < M.Bodies.size(); ++B)
+				{
+					bool bUnder = false;
+					for (int Up = static_cast<int>(B); Up >= 0; Up = M.Bodies[static_cast<size_t>(Up)].Parent)
+					{
+						bUnder = bUnder || Up == Kept;
+					}
+					if (bUnder && Without.PieceOf[B] >= 0)
+					{
+						bPieces = false;
+						Why = M.Bodies[B].Name + " kept out with " + M.Bodies[static_cast<size_t>(Kept)].Name + ", but in a piece";
+					}
+				}
+			}
+			// TK1 (the commander's lid): the lid-up piece against her bodies with her open_up clip played to its end, on
+			// the slope with her turret trained; and her lid carried well clear of where the shut piece has it.
+			double LidMoved = 0.0;
+			if (bPieces && Split.OpenOf >= 0)
+			{
+				Vehicle::Pin Unbuttoned = Trained;
+				Unbuttoned.bOpenUp = true;
+				bPieces = CheckPieces(M, Split, Unbuttoned, Slope, Why, true);
+				const Mesh& ShutMesh = Split.Pieces[Split.OpenOf].Merged;
+				const Mesh& OpenMesh = Split.Open.Merged;
+				if (bPieces && (OpenMesh.Points.size() != ShutMesh.Points.size() || OpenMesh.Triangles != ShutMesh.Triangles || OpenMesh.Colours != ShutMesh.Colours))
+				{
+					bPieces = false;
+					Why = "the lid-up piece is not its piece's points and triangles";
+				}
+				for (size_t PK = 0; bPieces && PK + 2 < OpenMesh.Points.size(); PK += 3)
+				{
+					const V3 Gap(OpenMesh.Points[PK] - ShutMesh.Points[PK], OpenMesh.Points[PK + 1] - ShutMesh.Points[PK + 1], OpenMesh.Points[PK + 2] - ShutMesh.Points[PK + 2]);
+					LidMoved = std::max(LidMoved, std::sqrt(Gap.Dot(Gap)));
+				}
+				if (bPieces && LidMoved < 0.1)
+				{
+					bPieces = false;
+					Why = "the lid-up piece's lid moved only " + std::to_string(LidMoved) + " m";
+				}
+			}
+			size_t Stand = 0, Out = 0;
+			for (size_t B = 0; B < M.Bodies.size(); ++B)
+			{
+				Stand += Split.StandIn[B];
+				Out += Split.Kept[B];
+			}
+			const std::string Checked = Kept >= 0 ? "every far triangle once, as the bodies at rest, also with " + M.Bodies[static_cast<size_t>(Kept)].Name + " kept out"
+				: std::string("every far triangle once, as the bodies at rest");
+			std::printf("    far pieces (TK1): hull %5zu triangles from %2zu bodies, turret %4zu from %2zu; %zu standing in at their near level, %zu kept out; cut in %.1f ms: %s\n",
+				Split.Pieces[0].Merged.Triangles.size() / 3, Split.Pieces[0].Bodies.size(), Split.Pieces[1].Merged.Triangles.size() / 3,
+				Split.Pieces[1].Bodies.size(), Stand, Out, Ms(S0, S1), bPieces ? Checked.c_str() : ("FAIL " + Why).c_str());
+			if (bPieces && Split.OpenOf >= 0)
+			{
+				std::printf("    lid up (TK1): the %s piece again with open_up played to its end, its lid carried up to %.2f m: as her bodies unbuttoned\n",
+					Split.OpenOf == FarSplit::TurretPiece ? "turret" : "hull", LidMoved);
+			}
+			if (!bPieces)
+			{
+				++Failures;
+			}
 		}
 	}
 
@@ -219,6 +421,13 @@ int main(int argc, char** argv)
 	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
 	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
+	// (LAND_BREW_WAIT=least,most: release 2's brew-up wait, life's seconds (LandBail, -TheaterLandBailOut))
+	if (const char* Wait = std::getenv("LAND_BREW_WAIT"))
+	{
+		B.BrewWaitLeast = std::atof(Wait);
+		const char* Comma = std::strchr(Wait, ',');
+		B.BrewWaitMost = Comma ? std::atof(Comma + 1) : B.BrewWaitLeast;
+	}
 	// (the vehicles' measured fire odds, by the face struck: Content/Data/Battle/performance-land.json)
 	std::map<std::string, FireOdds> Fires;
 	{
@@ -229,11 +438,21 @@ int main(int argc, char** argv)
 		}
 	}
 	B.Fires = Fires;
+	// (captured kit: LAND_KIT_CAPTURED=1 every other attacker tank block drawn as the defender's tank, taken from them)
+	B.bCapturedTest = std::getenv("LAND_KIT_CAPTURED") != nullptr;
 	const auto L0 = Clock::now();
 	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
 	{
 		std::printf("FAIL the battle: %s\n", Error.c_str());
 		return 1;
+	}
+	for (const std::string& Line : B.StandIns()) std::printf("  stand-in: %s\n", Line.c_str()); // (a model not here: the nearest generic)
+	if (B.bCapturedTest)
+	{
+		std::map<std::string, int> Coats;
+		for (const Vehicle& V : B.Vehicles())
+			++Coats[V.Look().Name + ": " + V.Look().Coat];
+		for (const auto& KV : Coats) std::printf("  coat: %s (%d)\n", KV.first.c_str(), KV.second);
 	}
 	const auto L1 = Clock::now();
 	{
@@ -278,6 +497,17 @@ int main(int argc, char** argv)
 	std::vector<uint8_t> bHaveDead(Count, 0);
 	std::vector<std::vector<float>> LinkBuffer(Count);
 	Tally Nan, Joined, Trains, Traverses, Recoils, Still, Sink, Float, EventTimes, Flashes;
+	// TK1: how far each vehicle's merged bodies stand off where her far pieces draw them (FarOff), every frame. A tank or
+	// a lorry is always drawn by her pieces past the hand-over (the scene's give is 0.25 m at 140 m, more beyond); a gun
+	// only while she is that near her rest (a barrel laid high or trails swung for the tow keep her own far meshes).
+	std::map<const Model*, FarSplit> Splits;
+	for (const auto& Named : B.Models())
+	{
+		SplitFar(Named.second, Splits[&Named.second]);
+	}
+	Tally FarFit;
+	double GunOff = 0.0, FarOffSum = 0.0;
+	long GunFrames = 0, GunFit = 0;
 	std::vector<double> FrameMs, LinkMs;
 	std::map<std::string, int> FxCount;
 	std::map<int, std::vector<double>> MuzzleTimes; // by vehicle
@@ -322,6 +552,21 @@ int main(int argc, char** argv)
 				bFinite = bFinite && Finite(Pl.At) && Finite(Pl.Q);
 			}
 			Nan.Note(bFinite, 0.0, Who(V) + " at " + std::to_string(T));
+			{
+				const auto F0 = Clock::now();
+				const double Off = FarOff(M, Splits[&M], P);
+				FarOffSum += Ms(F0, Clock::now());
+				if (W.Role == "gun")
+				{
+					GunOff = std::max(GunOff, Off);
+					++GunFrames;
+					GunFit += Off <= 0.25 ? 1 : 0;
+				}
+				else
+				{
+					FarFit.Note(Off <= 0.25, Off, Who(V) + " stands " + std::to_string(Off) + " m off her far pieces at " + std::to_string(T));
+				}
+			}
 			// The bodies stay joined: each one's pivot where its parent carries it, give or take what its clips shift it.
 			const std::vector<double>& R = Reaches[&M];
 			for (size_t Bo = 0; Bo < M.Bodies.size(); ++Bo)
@@ -465,6 +710,9 @@ int main(int argc, char** argv)
 	Report("nothing sinks into flat ground by more than 5 cm", Sink, "m");
 	Report("nothing floats over flat ground by more than 5 cm", Float, "m");
 	Report("events come once, in the frame they fall in", EventTimes, "");
+	Report("tanks and lorries within 0.25 m of their far pieces (TK1)", FarFit, "m");
+	std::printf("      (guns: worst %.3f m off their far pieces, within 0.25 m in %.0f%% of frames; FarOff for every vehicle %.3f ms a frame)\n", GunOff,
+		GunFrames ? 100.0 * static_cast<double>(GunFit) / static_cast<double>(GunFrames) : 0.0, FarOffSum / static_cast<double>(Frames));
 	{
 		// The marks: the whole battle's, uncapped, in a size the scene draws without a thought.
 		long Tris = 0;
@@ -660,6 +908,156 @@ int main(int argc, char** argv)
 			}
 			Report("the rules' own end on a killing round is the one shown", Theirs, "");
 		}
+	}
+
+	// ---- The desert coats (release 2): a model's swaps.paint.by_ground rows are read before by_month on a field of that
+	// ground; a month none of them holds, and every other ground, is dressed as before.
+	{
+		std::printf("\nTHE DESERT COATS (swaps.paint.by_ground)\n");
+		// (another folder of model files, for those not in the game yet: the Matilda's Light Stone)
+		const char* More = std::getenv("LAND_KIT_MORE");
+		auto ReadModel = [&Content, More](const std::string& Name, std::string& Out)
+		{
+			return ReadFile(Content + "/Models/Battle/" + Name + ".json", Out) || (More && ReadFile(std::string(More) + "/" + Name + ".json", Out));
+		};
+		auto CoatOf = [](const std::string& Text, const std::string& Nation, int Year, int Month, const std::string& Terrain, std::string& Out)
+		{
+			Dress D;
+			D.Nation = Nation;
+			D.Year = Year;
+			D.Month = Month;
+			D.Terrain = Terrain;
+			Model M;
+			const bool bOk = M.Load(Text, D, Out);
+			if (bOk)
+			{
+				Out = M.Coat;
+			}
+			return bOk;
+		};
+		struct Want
+		{
+			const char* Name;
+			const char* Nation;
+			int Year, Month;
+			const char* Coat;
+		};
+		const Want Wants[] = {
+			{ "PanzerIV", "GER", 1941, 6, "desert41" }, { "PanzerIV", "GER", 1942, 2, "desert41" }, { "PanzerIV", "GER", 1942, 3, "desert42" },
+			{ "PanzerIV", "GER", 1943, 5, "desert42" }, { "PanzerIV", "GER", 1943, 6, "" }, { "StuG3", "GER", 1942, 11, "desert42" },
+			{ "leFH18", "GER", 1941, 4, "desert41" }, { "Tiger", "GER", 1943, 2, "desert42" }, { "Tiger", "GER", 1943, 7, "" },
+			{ "Matilda", "UK", 1941, 6, "stone" }, { "Sherman", "USA", 1943, 3, "" },
+			// (the lorry stands in for every army's: her owner's desert coat, from LandKit's NationCoat, not her file)
+			{ "Truck", "GER", 1941, 6, "desert41" }, { "Truck", "GER", 1942, 3, "desert42" }, { "Truck", "GER", 1943, 5, "desert42" },
+			{ "Truck", "GER", 1943, 6, "" }, { "Truck", "UK", 1942, 10, "stone" }, { "Truck", "ITA", 1941, 1, "sand" }, { "Truck", "USA", 1943, 3, "" } };
+		Tally Picked;
+		for (const Want& W : Wants)
+		{
+			std::string Text, Desert, Plains;
+			if (!ReadModel(W.Name, Text))
+			{
+				std::printf("  (%s.json is in neither the game's models nor LAND_KIT_MORE: not checked)\n", W.Name);
+				continue;
+			}
+			const bool bOk = CoatOf(Text, W.Nation, W.Year, W.Month, "desert", Desert) && CoatOf(Text, W.Nation, W.Year, W.Month, "plains", Plains);
+			// (an empty want: a month no desert row holds, or a model with none, dressed on the desert as by its by_month)
+			const std::string Wanted = *W.Coat ? std::string(W.Coat) : Plains;
+			std::printf("  %-9s %-3s %04d-%02d  desert: %-9s plains: %-9s %s\n", W.Name, W.Nation, W.Year, W.Month, Desert.c_str(), Plains.c_str(),
+				bOk && Desert == Wanted ? "ok" : "WRONG");
+			Picked.Note(bOk && Desert == Wanted, 0.0, std::string(W.Name) + " " + std::to_string(W.Year) + "-" + std::to_string(W.Month) + " on the desert: " + Desert + ", not " + Wanted);
+		}
+		Report("a desert field picks the desert coat of its month", Picked, "");
+
+		// Every game model, every month of the war, its owners: no ground, plains and steppe dress alike (as before this
+		// reader), and the desert differs only in the months its desert rows hold.
+		Tally Same;
+		const char* Models[10] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck", "StuG3", "T34", "LightTank", "ZiS3" };
+		const char* Nations[4] = { "USA", "GER", "SOV", "UK" };
+		long Desert = 0;
+		for (const char* Name : Models)
+		{
+			std::string Text;
+			if (!ReadModel(Name, Text))
+			{
+				continue;
+			}
+			Json Doc;
+			std::string Why;
+			Doc.Parse(Text, Why);
+			const Json::Value Rows = Doc.Root()["swaps"]["paint"]["by_ground"]["desert"];
+			const bool bOwners = !Doc.Root()["swaps"]["paint"]["choices"].IsObject()
+				&& (Doc.Root()["nation"].Str("") == "any" || Doc.Root()["camouflage"].IsObject());
+			for (const char* Nation : Nations)
+			{
+				for (int Key = 1939 * 12 + 8; Key <= 1945 * 12 + 7; ++Key)
+				{
+					const int Year = Key / 12, Month = Key % 12 + 1;
+					char MonthKey[16];
+					std::snprintf(MonthKey, sizeof(MonthKey), "%04d-%02d", Year, Month);
+					std::string None, Plains, Steppe, Sand;
+					const bool bOk = CoatOf(Text, Nation, Year, Month, "", None) && CoatOf(Text, Nation, Year, Month, "plains", Plains)
+						&& CoatOf(Text, Nation, Year, Month, "steppe", Steppe) && CoatOf(Text, Nation, Year, Month, "desert", Sand);
+					std::string Row;
+					for (size_t I = 0; I < Rows.Count(); ++I)
+					{
+						const std::string From = Rows.At(I)["from"].Str(""), To = Rows.At(I)["to"].Str("");
+						if ((From.empty() || From <= MonthKey) && (To.empty() || MonthKey <= To))
+						{
+							Row = Rows.At(I)["paint"].Str("");
+							break;
+						}
+					}
+					if (bOwners && Row.empty())
+					{
+						// (a model in her owner's coat, the lorry and the shared light tank: her desert coat is her owner's,
+						// in LandKit's NationCoat, not rows of her file)
+						const std::string N = Nation;
+						Row = N == "GER" ? (Key <= 1942 * 12 + 1 ? "desert41" : Key <= 1943 * 12 + 4 ? "desert42" : "") : N == "UK" ? "stone" : "";
+					}
+					Desert += Row.empty() ? 0 : 1;
+					Same.Note(bOk && Plains == None && Steppe == None && Sand == (Row.empty() ? None : Row), 0.0,
+						std::string(Name) + " " + Nation + " " + MonthKey + ": none " + None + ", plains " + Plains + ", steppe " + Steppe + ", desert " + Sand);
+				}
+			}
+		}
+		std::printf("  (%ld model-nation-months held by a desert row)\n", Desert);
+		Report("every other ground and month dressed as before", Same, "");
+
+		// The whole way: this battle's recording with its field made desert and its date November 1942 (Tunisia), read by
+		// Battle::Load, dresses the German models in the desert coat and leaves the others as on its own ground.
+		Tally Whole;
+		std::string Sand = Recording, Home = Recording;
+		const size_t TerrainAt = Sand.find("\"terrain\":\"");
+		const size_t DateAt = Sand.find("\"date\":\"");
+		if (TerrainAt != std::string::npos && DateAt != std::string::npos)
+		{
+			const size_t TerrainEnd = Sand.find('"', TerrainAt + 11);
+			Sand.replace(TerrainAt + 11, TerrainEnd - (TerrainAt + 11), "desert");
+			const size_t DateIn = Sand.find("\"date\":\"") + 8;
+			Sand.replace(DateIn, Sand.find('"', DateIn) - DateIn, "November 1942");
+			const size_t HomeDate = Home.find("\"date\":\"") + 8;
+			Home.replace(HomeDate, Home.find('"', HomeDate) - HomeDate, "November 1942");
+			Battle OnSand, OnHome;
+			std::string SandError, HomeError;
+			const bool bSand = OnSand.Load(Sand, Read, Flat, nullptr, 79, SandError);
+			const bool bHome = OnHome.Load(Home, Read, Flat, nullptr, 79, HomeError);
+			Whole.Note(bSand && bHome && OnSand.Terrain == "desert" && OnHome.Terrain == B.Terrain, 0.0,
+				"the battle on the desert would not load (" + SandError + HomeError + "), or its ground read " + OnSand.Terrain);
+			std::printf("  this battle's own ground: %s\n", B.Terrain.c_str());
+			for (const auto& [Key, M] : OnSand.Models())
+			{
+				const auto Other = OnHome.Models().find(Key);
+				const std::string Was = Other != OnHome.Models().end() ? Other->second.Coat : std::string("?");
+				const bool bGerman = M.Dressed.Nation == "GER";      // (the lorry too: her owner's desert coat)
+				std::printf("  %-16s November 1942 on its own ground: %-9s on the desert: %s\n", Key.c_str(), Was.c_str(), M.Coat.c_str());
+				Whole.Note(bGerman ? M.Coat == "desert42" : M.Coat == Was, 0.0, Key + " on the desert in November 1942: " + M.Coat + " (on its own ground " + Was + ")");
+			}
+		}
+		else
+		{
+			Whole.Note(false, 0.0, "the recording has no field.place.terrain or date to change");
+		}
+		Report("a recording's desert field dresses its models (Battle::Load)", Whole, "");
 	}
 
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

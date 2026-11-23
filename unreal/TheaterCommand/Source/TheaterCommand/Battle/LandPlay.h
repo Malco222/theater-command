@@ -39,7 +39,7 @@ namespace LandPlay
 	{
 		/** The ground's height at a field point, metres. */
 		std::function<double(double X, double Y)> Height;
-		/** The effects kit's word for the ground at a point: earth, sand, snow, mud, town, woods, water. */
+		/** The effects kit's word for the ground at a point: earth, sand, snow, mud, town, woods, water, rock. */
 		std::function<std::string(double X, double Y)> GroundWord;
 		/** A shooter's muzzle (a man's from his skinned rifle, a tank's or a gun's from its model's socket) at a battle
 		 * time: where and which way, for track index Track. Socket names a vehicle's other gun (TankMg: hull_mg, coax,
@@ -52,6 +52,12 @@ namespace LandPlay
 		 * and for her nation: no .50 on a British Sherman, no MG 34 on an early Tiger's roof). False: TankMg never gives
 		 * her roof gun, so her commander never fires one she has not got. Empty: every American and German tank has one. */
 		std::function<bool(int Track)> RoofGun;
+		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "can we make the mussel flash realistic?"): the look of
+		 * the shooter's own gun (track Track; Weapon the round's: rifle, mg, tank, at, gun; Army and Role his), the
+		 * kit's look named after the weapon's row as "mg:star"; for a man whose one round is a burst (a squad leader's
+		 * sub-machine gun) its rounds and their rate a life second, else left at 0 for the round's own. Empty, or this
+		 * unset: the kit's row by the weapon alone, as before. */
+		std::function<std::string(int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond)> GunLook;
 	};
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
@@ -81,6 +87,8 @@ namespace LandPlay
 		double CalibreMm = 75.0;
 		/** The round's number in the recording (0 for a blast with no round). */
 		int Round = 0;
+		/** For Screen: how long the rules hold its screen, battle seconds (the round's Hang); -1 the calibre's own. */
+		double Hang = -1.0;
 	};
 
 	/** One thing for the sound (LandSound), at battle time T. */

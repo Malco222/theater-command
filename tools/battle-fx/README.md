@@ -646,6 +646,12 @@ Gouges and scorch that stay are the MODEL's to show.
   half (`jet_torn`), a pulse that only takes from its height (`jet_pulse`), a lean with the wind (`jet_lean`),
   sparks up in it (`jet_sparks`), black smoke off its sides and top by the clock (`jet_smoke_every_s`) so the
   column above is one torn piece, and an orange lamp on hull and ground (`jet_lamp`, `jet_lamp_day`).
+- **`Burn(WorldAt, AcrossMetres, Seconds, Id, bOnShip)`.** `bOnShip` true: a fire on a ship's deck (anything
+  afloat). A small, low, still fire on land takes the burning tank's look (`fire.land_tongues`, `fire.land_column`,
+  the land lamp) and joins a fire beside it (`fire.join`); a scene's ground under a ship is her deck, so a deck
+  fire would too. With the flag it never does, and burns as a ship's fire (the pre-check of 22 November: a ship's
+  fire 2.5 m across at rest drew 426 pieces with a column and a lamp four times as strong; with the flag 100, as
+  at 07d21fff). False (the default): as before. The sea scene and the air stage pass it for every fire on a ship.
 - **`Burn(WorldAt, AcrossMetres, Seconds, Id)`, `BurnOut(Id, OverSeconds, How)`** (row `fire.put_out`). The
   flames are eaten back from the edges to the seat, shrinking steadily: half their height by two fifths of the
   time, fewer tongues as it goes, never all gone and back. `How` "water": a surge of the vent's own steam rags
@@ -738,7 +744,9 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
 - **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
   and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
   kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
-  `battle-fx/stills/air-*.png`.
+  `battle-fx/stills/air-*.png`. For measuring a trail: `FX_FLAT_BACK=r,g,b` paints the sky one flat colour (run it
+  over 0,0,0 and 255,255,255 and the two pictures give the trail's opacity and its own colour), and `FX_WAKE_UP`
+  (250 m) is how high the `wake` shot's eye rides over the trail (0: level with it, seen side-on).
 
 ## The art director's mends to the air look (after head ea8c1ba)
 
@@ -1414,6 +1422,315 @@ most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 
 numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
 float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
 
+## Trails that thin, pale and go: the Bremen mend (after head f7bf0b2)
+
+Art director, 22 November, mend 2 on the air scene's Mac frames (a1acb552): at Bremen the trails were ropes, a core of
+78 against a sky of 226, one width all along, crossing the whole frame. Wanted: 1-2 m at the source, 6-12 m by 10 s;
+opacity 0.9, 0.3 by 15 s and gone by 30 s; colour lifting from about 45 to 100-120 with age; edges breaking into
+puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning fuel black and only near the aircraft.
+
+- **The rows** `air_trails.smoke`, `fire`, `fuel` and `oil` (the kinds the flight core passes are unchanged). Each
+  widens to `r1_m` by `widen_by_s` 10 and on by `thin_grow` after; pales to `pale_to` 0.35 from 2 to 15 s; fades from
+  `thin_hold` 0.5 of `life_s` 30; cools to a light grey `colour_old` (smoke: grey-brown from the start, never black);
+  draws into lumps only from `lumps_from` 0.8 of its life, so its old end never breaks into a row of beads; and its
+  edges are torn (`soft`, `edge_torn`, `wisps`). Fire and fuel heavier, below. The streak stays as it was, with the length rule below.
+- **`longest_m`** (2400): the most sky a trail is laid over in its life. A faster aircraft's puffs live that much
+  shorter, and its whole age curve (widening, paling, thinning, lumps and knots) is squeezed by the same share, so it
+  is the same trail, only shorter: at 80 m/s as above, at 150 m/s gone by 16 s. Without the key, as before.
+- **Measured** side-on at 80 m/s over flat black and white (`FX_FLAT_BACK`, `FX_WAKE_UP=0`, the wake shot at 31 s):
+
+  | Age | Engine hit (smoke): opacity, colour, width at half | Fire: opacity, colour, width at half |
+  |---|---|---|
+  | 0.5 s | 0.94, 79, 1.3 m | 0.95, 39, 4.7 m |
+  | 5 s | 0.88, 93, 5.4 m | 0.96, 63, 11.4 m |
+  | 10 s | 0.51, 109, 8.7 m | 0.74, 87, 13.4 m |
+  | 15 s | 0.33, 112, 12.7 m | 0.41, 101, 15.4 m |
+  | 20 s | 0.18, 127 | 0.23, 109 |
+  | 25 s | 0.06, 135 | 0.08, 125 |
+  | 30 s | none | none |
+
+- **Fire out-reads a hit** (art director 08:54Z: the engine hit passed; a burning aircraft must out-read a damaged
+  one). Fire and fuel are one step heavier: `r1_m` 7 and 7.5, `thin_grow` 1.5, `pale_to` 0.56 from 5 to 15 s,
+  `thin_hold` 0.4, and the wake past the tail kept at 5 to 6 m (`tail_wide_m`, her ruling of 20 November; 4.0 to
+  5.4 m measured at 0.2 s). "1-2 m at the source" is the engine hit's.
+
+## The kit at scale: the mesh in sections, and its Draw on a worker (FX1, FX2, after head 13388a4)
+
+The production lead's battle-scale plan (/mnt/project-files/production/battle-scale-1122/plan.md), items FX1 and FX2.
+
+- **FX1, the mesh made once.** The kit's room (3,000 puffs) is made at the first frame with something to draw as
+  sections of 300 puffs, and never rebuilt. Each frame sends only the sections that hold puffs, points and colours
+  only; a section that empties is folded flat once and hidden (`SetMeshSectionVisible`). The kit lays its puffs far
+  to near and section k holds puffs k x 300 on, so the far-to-near order holds across sections.
+- **Readouts.** `FBattleEffects::PuffsDrawn()` and `PuffsAsked()`: the last frame's puffs drawn and room asked.
+  `-TheaterFxRoomLog`: a line every 10 s of the kit's clock (Tick's Now): the most drawn, when, the room asked then,
+  the room and the sections in use.
+- **FX2, old pieces go cheaply.** A piece (`Bit`) is about 1.8 kB. Prune used to close each gap by moving every piece
+  after it; now the last piece fills each gap. Two pieces equally deep are drawn in the order they were made
+  (`Bit::Serial`, numbered at the Draw after they are made), so the picture does not depend on where they lie: the
+  96 old frames byte for byte, and 23 of 24 heavy frames (6 pixels one level apart in the raid shot, an exact tie).
+  A barrage of 6 shells a second seen from a hill (16,500 asked of the room): Draw 6.8 ms against 7.3 (median of 5).
+- **FX2, Draw on a worker.** `TickBegin(...)` takes what `Tick` takes, does on the game thread what must be done there
+  (the test barrage, the camera's jolt, the view), starts the kit's Draw on a worker (`UE::Tasks`) and returns the
+  jolt. `TickEnd()` waits for it, sends the mesh and lights the lamps, then does what was asked of the kit in
+  between, in order. Between the two:
+  - every call on the kit is held, its arguments copied, and done at `TickEnd` with this frame's time, as a call
+    made after a `Tick`: first seen at the next frame. So call `TickBegin` after the frame's shells and fires where
+    you can, and only what comes after (a vehicle's dust) waits;
+  - `GroundUnder` and `GroundColour` are called from the worker: nothing may change what they read (the field's
+    heights, craters, ruts) until `TickEnd`;
+  - `PuffsDrawn`/`PuffsAsked` give the last frame's; `Clear` and `End` wait for the worker first; a `TickBegin`
+    with no `TickEnd` is ended by the next `TickBegin` or `Tick`.
+  `Tick` is both at once on the game thread, as before (the air and sea scenes). The kit keeps no shared state: two
+  kits drawing at once on two threads ran clean under the thread sanitiser and drew what each drew alone.
+- **The box of a moving battle** (the pre-check on FX1). A hidden section's box still counts in the mesh's bounds,
+  and the translucent sort goes by the bounds' middle, so sections folded where the battle was stretched the box as
+  the battle moved on (a bomber stream most). When the farthest puff is more than 500 m from where the idle sections
+  were folded, they are sent once more, folded onto it and still hidden: one send of the idle sections each 500 m.
+
+## A trail that speeds up keeps no hole (after head 9cc20a7)
+
+The pre-check on 13388a4f: an aircraft that speeds up from 80 to 220 m/s squeezes its row's life (`longest_m`), so
+the first piece laid fast ended before the slow pieces laid just behind it: a hole in the trail, kilometres wide,
+for over 10 s. Now each piece of a trail (and of its kind: a kind change keeps its own rows) laid before the squeeze
+rose is cut to end with that first fast piece, never later than its own end, and fades out over the last
+`game.trail_cut_fade_s` (3 s) before it. The trail dies from its old end, and lives no longer than it did.
+
+Measured with a probe on the kit (80 m/s for 10 s, up to 220 over 8 s or 2 s, held to 30 s, back down), the widest
+stretch with no living piece:
+
+| Trail | Before (8 s / 2 s) | Now (8 s / 2 s) | Longest now |
+|---|---|---|---|
+| smoke | 3,644 m / 4,032 m | 73 m / 72 m | 4,369 m / 3,484 m |
+| fire, fuel | 3,600 m / 4,008 m | 65 m / 65 m | 4,375 m / 3,489 m |
+| oil | 3,616 m / 4,000 m | 72 m / 73 m | 4,370 m / 3,485 m |
+| streak, doused | 2,080 m / 2,352 m | 72 m / 72 m | 3,818 m / 3,421 m |
+| glycol, mist | no hole | unchanged | |
+
+About 70 m is the spacing of the pieces themselves. Longest: the slow stretch laid before the speed-up lives on
+until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
+cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
+
+The cut is now laid in the pass the kit already makes over every piece each frame (Prune), not in a pass of its
+own: CutTrails only sorts the frame's cuts and mends the trails' own records, and each piece of a cut trail looks
+its cut up as Prune walks past it (Battle::CutOf, a search of the sorted cuts). The pre-check's cost note on head
+5833912: the own pass walked all the pieces again in any frame with a cut, and with many trails speeding up and
+slowing, that was most frames. With 300 trails swinging between slow and fast (60,000 pieces), five runs each,
+taken in turn: the pictures' fingerprints are the same to the last byte, before and after (and with 300 at a
+steady speed), and the draw's middle run is 12.1 ms against 14.0 before, lower in four of the five pairs. The
+96 old frames and the 24 heavy frames are again byte for byte as before.
+
+## Far bursts: fewer, bigger pieces (FX3, after head 5833912)
+
+The production lead's FX3 (/mnt/project-files/production/battle-scale-1122/plan.md): on the ground scene's whole-army
+wide shot the bursts asked for six times the room, and the room leaves out the farthest first, so the far half of
+the front showed only dots. Recipe row `burst.far` (no row: as before, byte for byte):
+
+- **The share kept** (Shell, a hit on land outside a sea battle). FarK: the crown's height in the picture (`crown_m`
+  at the scene's own window pixels) against `full_px` 110, all of it at that or taller, never under `least` 0.08. Times
+  BusyK: with more than `halve_past` 1,500 pieces asked for on the screen a half, with the room four fifths full a
+  quarter, with more asked than the room `over_busy` 0.125; a hit whole in the picture only `near_busy` 0.5, and only
+  with the room four fifths full; between, by how small it stands. Whole at 1,080 px wide: a grenade within 33 m, a
+  mortar 104 m, a 75 mm 160 m, a 105 mm 212 m, a 150 mm 297 m, a 500 lb bomb 660 m.
+- **What it keeps.** The flash always. The crown keeps every heavy jet, each of fewer pieces up to three times as
+  long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of
+  the spikes, clumps and thrown clods. The skirt keeps the share to `skirt_pow` 0.75 and the smoke to `smoke_pow` 0.75,
+  each piece as much wider, so a cloud seen after a cut to a nearer eye is softer but whole.
+- **Too small to see.** A piece of a land hit past `gone_beyond_m` 300 that stands under `gone_px` 2 across at its
+  biggest takes no place and is not laid; so is a crater's mark. The marks are laid first and stay all battle, up to
+  2,400 of them: at 45 s of the wide shot they held a third of the room. Thrown dirt is left alone unless `gone_dirt` 1.
+- **Readout.** `-TheaterFxRoomLog` adds the land hits so far, how many kept fewer pieces, and the mean share kept.
+
+Measured with a probe on the kit (the wide shot: 1,080 x 670, a 1.5 km front 500 m deep, the eye 810 m back and
+470 m up; shells of 60 mm to 250 lb mixed; the kit's crater marks off, as the ground scene has them; how many 0.3-8 s
+old bursts change at least 6 pixels of the picture at 15, 30, 45 and 59 s; with `alpha_pow`, below):
+
+| Wide shot | Room asked (mean) | Pieces held | Draw (median of 3) | Bursts that show |
+|---|---|---|---|---|
+| 6 shells a second, before | 18,436 | 19,530 | 7.9 ms | 35 of 101 |
+| 6 shells a second, now | 3,161 | 3,767 | 3.5 ms | 96 of 101 |
+| 7.6 shells a second (Prokhorovka's busiest), before | 22,941 | 24,286 | 10.9 ms | 37 of 153 |
+| 7.6 shells a second, now | 3,704 | 4,434 | 4.7 ms | 147 of 153 |
+
+(First measured with the kit's marks on, which the ground scene never lays: 25 of 74 before and 70 of 74 after. The
+marks were never what emptied the far half; the bursts' own pieces asked for six times the room.)
+
+From a hill 350 m off at 6 a second (1,600 px wide): Draw 5.7 ms before and 4.0 now, asked at the end 15,811 and 4,643. A
+single burst at the preview's own distance draws as before, byte for byte; the 96 old frames and 24 heavy frames
+(the raid, the fleet, the wrecks) too, with the row and without it. Pictures: battle-fx/stills/fx3/.
+
+## Dark smoke keeps its hue: sRGB bytes and M_BattlePuffs (after head c86e3ec)
+
+The art director passed FX3 at 12:33Z 22 November with one fix: at the medium shot a big far piece read olive over
+grass (55,59,37, ground 87,86,70), and the share of dark smoke with green above red went from 7% to 15%. The cause was
+not the grass alone. The kit writes each colour into a byte a channel, as light, `picture.lit_gain` (4) times darker
+so its hottest flames can burn past white. A charcoal or dark earth smoke is then one to four steps a channel, and its
+red, green and blue round apart: a dark brown of 2.3, 2.0 and 1.5 steps goes in as 2, 2, 1, which is olive. Many small
+pieces each rounded a little differently and the errors evened out; one big piece shows its own plainly. The same
+rounding is the dusk specks (red and blue blotches in near-black smoke).
+
+- **The cure.** The kit can write its colours raised to 1/2.2 first (`Battle::SetSrgbBytes(true)`), and the new
+  material `M_BattlePuffs` (Tools/build_content.py) raises them back to 2.2 before its Brightness, as M_MapSurface and
+  M_LandLeaves read theirs. A dark smoke then has 30 to 50 steps a channel instead of 1 to 4. `FBattleEffects::Begin`
+  uses M_BattlePuffs when it is there and says so in its ready line ("colours as sRGB bytes"); without it (the Mac's
+  content not built since), M_Highlight and plain bytes, as before. **On the Mac: run Tools/build_content.sh once**;
+  it builds M_BattlePuffs when it is missing and leaves everything else alone.
+- **Thicker far pieces.** `burst.far.alpha_pow` 2 and `alpha_most` 0.95: a see-through piece of a thinned land hit
+  (skirt, smoke, the cloud's lighter fringe) laid Bigger times as wide is as thick as Bigger to alpha_pow of them laid
+  one over another, never over alpha_most, so less grass shows through the fewer layers. Sea hits are untouched.
+- **The preview.** `FX_BYTES=srgb` draws as the game will with M_BattlePuffs; unset, plain bytes as before, so every
+  older check holds. Byte checks need clang builds: the 96 old frames were made with clang, and g++ rounds a few
+  sums differently.
+
+Measured on the medium shot (150 m back, the kit's crater marks off as the ground scene has them; frames at 20 and 30 s):
+
+| | Dark smoke with green above red (20 s / 30 s) | The big low piece | Dark smoke area at 30 s |
+|---|---|---|---|
+| Before FX3 | 3.0% / 12.8% | 77,68,60 (many small pieces) | 50,753 px |
+| FX3 as passed | 2.4% / 22.7% | 54,59,37 | 35,702 px |
+| FX3 with the cure | 2.4% / 14.8% | 58,57,43 | 36,908 px |
+
+At dusk, over the burning wreck (960 x 540, frame 450), dark pixels with red six or more above green fell from 10,371 to
+2,697, and with blue above red from 852 to 560; the smoke reads as its own brown-grey, not grey with purple blotches.
+By day every older test frame moves by 1.7 levels on average where it moves at all (92 of 96 frames, mostly the smoke's
+blue up a level or two, at most 6 to 8 levels; 21 at the darkest heart of a 75's cloud on mud). The cost is a table
+look-up a channel: Draw 3.66 ms against 3.70 on the wide shot (median of 3). Pictures:
+battle-fx/stills/fx3-colour/ (medium-colour-fix.png, dusk-specks.png).
+
+## A rifle's round off armour: its flash and its sparks (FX4, after head f027cdf)
+
+The ground battle sends a glance for every rifle and machine-gun round that strikes a tank's plate and does not go in,
+at 8 mm: 1,541 of them in the Normandy battle. Each laid a shell's whole ricochet: a lamp, a puff of paint, and a
+glowing shot followed off for about a second, some 470 pieces of its 500. With glance.shot_from_mm at 20, a glance
+from anything smaller is its two-frame ragged flash and its sparks only. Its sparks are as before for its calibre
+(read at 20 mm at the least: 7 to 13, about half a 75's in count, speed and size). It takes no lamp and no place
+among the shots followed (most_shots, most_a_frame), so a tank's own gun glancing nearby is still followed. A
+calibre that is no number counts as a shell's, and without the key every glance is as before.
+
+| | One glance | Ten a second along a tank's side, 30 s | Standing at the most |
+|---|---|---|---|
+| 8 mm before | 507 pieces, a lamp, a shot followed | 123,917 pieces | 3,023 |
+| 8 mm now (and 12.7 mm) | 32 pieces | 10,562 pieces | 95 |
+| 20 mm and 75 mm | as before | as before | as before |
+
+## Fire under a scene's grade: the fire's spread (after head 2811047)
+
+The land battle grades its picture for its fields: it takes most of the colour out of the darks and the middles
+(0.45 and 0.48 of it) and keeps the brights. A burning wreck's flame is mostly middles, and translucent flame laid
+over dark smoke falls into them, so under that grade the flame went salmon and peach (the art director's read of
+cut 5; fire median 174,116,89 where the game's own curve gives 221,129,36). No colour the kit writes can mend it:
+a deeper orange lands peach all the same, a brighter one goes yellow-white, and the tonemapper takes the grade from a
+table read by the scene's colour, which no colour under zero can reach (a spread before it, clamped, gets 205,101,79
+at best).
+
+So it is mended after the grade, on the picture as the screen shows it. M_BattlePuffs marks the kit's pixels in the
+custom depth (translucent custom depth writes, wherever a piece is a tenth seen or more), and M_FireSpread, a
+post-process after tonemapping (Tools/build_content.py), finds the marked pixels the opaque world does not hide and,
+of those, only two sorts: fire's colour (hue between orange-red and yellow, and deep colour, or bright and a little
+coloured; a red tracer is in it), and a bright bluish-green light (a Soviet tracer, which the grade leaves grey-green,
+at about 124 degrees; a field's greens are yellow-green, under 95, and blue and violet are the sky's: all left alone). The whitest are left alone, so a white-hot core stays as ruled. Their colour
+is spread from their own grey by Spread (2.0, the art director's) and the green of fire's orange raised by Warm (1.2;
+on yellow it went lime, and on a sky seen through smoke cyan, the pre-check's find),
+feathered by that "heat" so there is no seam at a flame's edge. Smoke, dust, earth and the field seen through a thin
+flame stay as the grade left them. A scene asks for it with FBattleEffects::SetFireSpread(its eye's lens), after
+Begin; it costs the custom depth pass for the kit's mesh. Without the materials it says so and does nothing. The mark
+cannot say which kind of piece made a pixel (the mesh carries places and colours only), so a tracer is known by being
+bright and coloured, not by its kind.
+
+Modelled on the wreck at 14 m through the land battle's grade (land_grade.py here: lands_land is the grade,
+fire_spread the same sums as the material's code; the picture is stills/hot-fire/fire-spread-model-2.png):
+
+| | Fire median | Flame tips | Bright core | Rims | Field behind thin flame |
+|---|---|---|---|---|---|
+| game's own curve (the aim) | 221,129,36 | about 67,26,24 | 254,208,101 | 174,189,203 | |
+| ground grade today | 174,116,89 | | 240,210,188 | 164,174,184 | 192,194,168 |
+| ground grade + spread | 221,125,51 | 108,55,21 | 255,246,160 | as graded | as graded (not lime) |
+
+The kit's other colours, written as the recipe has them, on the game's curve, through the ground grade, and after:
+
+| | Game's curve | Ground grade | + spread |
+|---|---|---|---|
+| US and British tracer glow | 231,85,46 | 175,87,78 | 244,83,51 |
+| Soviet tracer glow | 119,225,121 | 167,210,170 | 135,222,143 |
+| ground tracer (the ruled yellow) | 214,207,103 | 202,197,162 | 204,197,148 |
+| white-hot cores (tracer, muzzle root) | as ruled | as ruled | unchanged |
+| muzzle flash orange | 234,156,0 | 201,146,102 | 248,164,50 |
+| sand dust | 206,193,156 | 190,181,163 | unchanged |
+| clod earth (written 118,99,72) | 119,87,45 | 72,59,45 | 77,64,37 |
+| grey and pale smoke | | | unchanged |
+
+The mark is every piece a tenth seen or more, smoke and dust too, so the colour alone decides: a field seen through
+thin dust whose colour on the screen is deep orange-brown or gold (ripe wheat at 215,180,95 would go 249,179,9) is
+spread in the piece's shape. Under the land battle's grade a field lands far paler than that, but if dust over wheat
+shows a patch on the Mac, M_BattlePuffs' opacity_mask_clip_value (0.1) is the lever: at 0.3 the wreck's fire is the
+same in the model, and thin edges no longer mark.
+
+The ground's yellow tracer is only half brought back: pale khaki and a wheat field seen through thin smoke are the same
+colour on the screen, and the field must stay as graded.
+
+## Clods and tracer under the land battle's grade (after head 95d4019)
+
+The land battle's grade is steep: a clod a tenth darker lands ten levels darker. Earth's clod paint, written to show
+40,33,26 on the game's own curve, landed 17,13,10 under it, and with its dark face (shade 2.5) and the shower's
+backlit undersides (0.55) the clods were flat black silhouettes, core L 9 (the art director's 06 of cut 5); a fast
+one, drawn along its flight, was a long dark slab across the men. The scene now says it is under that grade
+(FBattleEffects::SetLandGrade, after Begin) and the recipe's land_grade row stands in for what it names
+(Battle::Picture, and GradeNum and GradeRange for the clods' shade, tint and the shower's shade). Without the call, or
+without the row, nothing changes.
+
+- Clods, written with land_grade.py write: earth 118,103,61 (lands 72,62,42, the art director's lit earth; 118,99,72
+  for 70,58,45 leaned rose-brown on the lit faces), mud 110,97,59, snow 125,114,76, woods 138,118,67; sand's stones
+  107,93,53. Their shade 0.5 and tint 0.95 to 1.05, the shower's shade 0.9 to 1.0, so a clod holds within about L 40
+  to 80 with a lit face and a dark one.
+- Soft edges (art director 14:09Z, in every scene): the burst's own dark pieces were hard straight-cut polygons, the
+  cut-card look, solid to a rim with straight sides between the ring's 16 points. They keep their dark hearts and fade
+  at their very edge: the foot's body to burst.foot.rim 0.1 (0.3 before), a jet root's side clumps to
+  burst.crown.side_clump_rim 0 (0.55), and the lumps thrown past the lens to burst.debris.lens.rim 0.1 from
+  lens.inner 0.6 (0.6 and 0.5). The burst's mean level is the same to a tenth.
+- burst.debris.clods.most_long 3 (in every scene, not only under the grade): a thrown lump that is not a light (clod,
+  shower, lens piece, a gun's kicked dirt) is drawn no longer than 3 times its width. Sparks, embers and tracers keep
+  their streaks, and the crown's jets their length.
+- The tracer: colour 232,208,0 lands 213,206,154 and, with the fire's spread, 220,207,118 (the art director's
+  214,207,103; plain it was pale khaki 202,197,162). By day its edge 255,178,0 lands 233,193,110 with the spread. Its
+  white-hot core is as it was.
+
+A 105 on earth at 14 m, 1.5 s (stills/clods/clods-ground-grade-2.png, through the land grade): the clods that changed
+were median 28,26,21 (L 26), now 67,60,43 (L 60, nine in ten between about 40 and 80); the lit ones 73,66,48, their
+edges blended with the smoke behind. With the old recipe all 96 check frames are the same to the byte; with the new
+recipe and the grade off only the 500 lb bomb's frames change (the 3:1 and the soft edges), of 24 heavy frames.
+
+## Soft contact: flames meet the hull softly (after head 5dc2e51)
+
+The art director's cut 5, still 07: a burning wreck's flame cards met the hull along a hard straight line. The
+mesh carries only places and colours, so the material cannot tell a flame from a case lying in the dirt; the art
+director ruled (14:16Z, 22 November) option B: fade every piece where it meets the ground or a hull over 0.1 m, and
+keep the lying pieces whole.
+
+- The scene: `FBattleEffects::SetSoftContact(0.1f)` after Begin, on the game thread (the land battle only; the air
+  and sea scenes never call it and pay nothing). The kit's mesh takes `M_BattlePuffsSoft`, `M_BattlePuffs` with its
+  opacity times `saturate((SceneDepth - PixelDepth) / FadeCm)`. Build it once on the Mac:
+  `TC_REBUILD=M_BattlePuffsSoft Tools/build_content.sh` (built anyway when missing). Without it: a log line, and the
+  kit draws as before.
+- The kit (`Battle::SetSoftContact`): a piece lying on the ground (a thrown clod or fragment come to rest, a crater's
+  mark) is laid `game.soft_contact.lie_nearer` (1.5) times that depth nearer the eye along its own line of sight and
+  smaller to match: the same picture, every point of it that far in front of what it lies on, from any height of eye.
+  A spent case already did this (`ground_cases.nearer_m`); it now takes the larger of the two. A flat piece already
+  higher than that (a fire's glow, 0.2 m up) is left where it is; pulled the whole way, a glow by the wreck showed a
+  strip more of itself under the hull's foot.
+- Why along the line of sight and not straight up: the fade is by depth. Lifted 3 cm straight up, a case seen from
+  45 degrees above is 4 cm in front of the ground, and keeps 40% of itself; pulled 15 cm along the line of sight it is
+  15 cm in front from any angle and keeps all of it. What changes on the screen: a resting clod shows the bottom few
+  centimetres of itself the ground had hidden (about one pixel on a 105's clods at 5 s).
+- Preview: `FX_SOFT_CONTACT=0.1` (the kit's call, and the material's fade in the preview's own depth test).
+- Measured (960 x 540, the land grade on): the wreck at 10 s, from the side and the battle camera, about 2,000
+  pixels change by more than 8 of 255, all of them flame where it meets the turret and the deck; with the lying
+  pieces not pulled, a 500 lb bomb's clods at 5 and 10 s faded on 134 and 255 pixels (mean 9 and 6 levels), pulled
+  16 and 4 (mean under 1). Draw on the wide heavy shot (6 a second): 3.3 to 3.5 ms either way. The GPU's one depth
+  read a pixel is the Mac's to measure.
+- Stills: `battle-fx/stills/soft-contact/wreck-soft-contact.png` (now on the left, soft contact on the right).
+- Checked first (the art director: only if free): the colour's alpha cannot gate it. A thrown solid's middle is at
+  full alpha in 24% of its frames (it fades in and out, and its rim is soft since 5dc2e51), and a flame's in 18 to 42%.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
@@ -1451,6 +1768,37 @@ Without the `far` row a stick is its bombs as plain `Shell` calls at their momen
 The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.txt out raid earth 120,483,1233
 3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
 FX_REF=1 for the same bombs as Shell calls).
+
+## Fuel going up: the fuel ball (head D)
+
+The art director's ruling of 21 November, section 2: a shell or bomb burst is earth and smoke, never a petrol
+fireball; rolling fireballs come only from fuel, a vehicle's 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+dump 15 to 25 m for 1.5 to 2 s, with black smoke from its top after half a second.
+
+- **The call** `FuelBall(Now, At, Across, Velocity)` (the game's `FBattleEffects::FuelBall`). Call it at the moment
+  the fuel goes; a fire that burns on after it is the caller's `Burn`, called with it. Velocity is what it was moving
+  at (a crashing aeroplane's, a truck's); the fire keeps a little of it. Without the recipe's `fuel_ball` row:
+  nothing.
+- **What it draws.** Its time comes from its width (`small_s` at `small_m`, `big_s` at `big_m`). Its lobes are thrown
+  out and up from a seat just above the ground and slowed by the air. The whole ball climbs `rise_of_across` of its
+  width while it burns, faster as it goes, and each lobe rolls as it climbs. The fire is lit from within: white-hot
+  knots (`hearts`) for its first moment, then a yellow-orange middle (`heart_in`, its lobes sorted `core_nearer`
+  toward the eye so the middle shows from any side) inside orange billows, some deeper toward the outside
+  (`deep_mix`). Each holds its colour for `cool_from` of its life, then cools to an orange `ember`, with no dark rim.
+  No lobe goes before its smoke can take it, and with `soot_in_s` a lobe goes the moment its smoke is whole, so none
+  fades pink over the sky. The dark comes in on top first (`soot_life`): from `smoke_from_s` black smoke boils off
+  the top (`top_puffs_per_m`), and lobes lower down turn to smoke later.
+- **The cloud after it** (art director 08:08Z 22 November). By `cap_s` the smoke spreads out (`cap_spread`) under a
+  flat top (`cap_top`, `cap_flat`, `cap_raise`), about twice the ball across, leaning `lean_deg` down the wind, on a
+  dark stem from the ground (`stem_puffs_per_m` up to `stem_s`). It thins as `linger.fuel` says (thick 2.5 s, gone
+  by 20 s, four in ten of its puffs retiring early). A lamp of `lamp` times the root of its width lights the ground
+  while it burns, rising with it. A camera inside it dims and never goes black (`lens_near_of_across`, the
+  `game.lens_cap` backstop); the camera itself keeps twice the ball's width off it.
+- **Preview.** `FX_SCRIPT=fuel` on the wreck shot: her fuel goes up at 0.5 s, `FX_FUEL_M` across (8), at the engine
+  deck, and she burns on. `FX_SCRIPT=crash`: an aeroplane's fuel, 20 m at the ground, coming in at 60 m/s, with no tank.
+  `FX_SCRIPT=dump`: the same standing still. With crash and dump the wreck or the spilt fuel burns on from 1.5 s (a
+  `Burn` 0.3 of its width across, as a scene would light it; `FX_GROUND_FIRE=0` for none). For example
+  `FX_SCRIPT=crash FX_DIST=110 FX_LOOK_H=14 FX_LOOK_X=0 fxpreview recipe.txt out wreck far 18,36,54 960x540`.
 
 ## Oil fires at sea
 
@@ -1660,3 +2008,68 @@ RunTest, again and again, for test pictures.
 `-TheaterFxLampLog` writes a log line for each frame a lamp is lit (where it hangs, in world units; how strong, in
 candelas; how far it reaches; its colour), and one for the first frame after with none. A 105 mm shell's lamp shows
 once at full strength, once at half, then out.
+
+## Smoke seen from above: a lit top and its shadow on the ground (game.from_above, OFF)
+
+The art director's read of the general's stills (`art-director/battles/general-cf671cb9/general-stills-read.md`, item
+5, 22 November): from the general's height, 300 m and up, smoke was a flat dark smudge. She asked for a lit top, a pale
+side toward the sun, and its shadow laid on the ground downwind, and liked the smoke at ground level as it is.
+
+- The scene: `FBattleEffects::SetFromAbove(true)` after Begin (the land battle only), and `game.from_above.on` 1 in
+  the recipe. Either missing: nothing changes. Only as the eye climbs from `eye_m` 100 to 220 m over the ground and
+  looks down from `steep` 0.4 to 0.7 (the sine of the angle down): a low eye is byte for byte as before.
+- Lit: a smoke or dust puff's face toward the sun goes up to `lit` (0.45) of the way to `lit_colour`, most on its own
+  sunward side (as flak's FaceLit) and on its cloud's; none against the sun, at night, or where it would darken.
+- Black smoke (the art director's 19:59Z mend): smoke whose own colour's light is under `dark_lum` (0.015, going
+  over by 0.04) goes only toward `dark_lit_colour` (120,108,95), a warm brown-grey, as black oil smoke never goes pale
+  in the sun. Every burning wreck's or oil fire's column counts as black: its top takes `dark_lit` (0.45) toward that
+  colour by the sun's height (all of it from 45 degrees up), all of it on its sunward side and a little over half on
+  the far side, fading with each puff's edge; its young smoke over the fire takes as little as of the sun's side, so
+  the root stays black. In the side-sun general's still the column measures 0.14 of the way there in the middle, 0.22
+  at its brightest; the barrage's earth smoke is as before.
+- Shadow: one puff in `shadow_every` (2) of the smoke at least `shadow_least_r_m` (1.5) across and `shadow_least_m`
+  (3) over the ground, a burning wreck's column too, lays a flat soft piece where the sun's line through it meets the
+  ground: `shadow_colour` at `shadow` (0.2) of its own opacity, `shadow_wide` (1.5) as wide, drawn out along the sun's
+  way by the sun's height (at most `shadow_stretch_most`). It is the puff itself laid again (`Bit::bShadeTwin`), so it
+  drifts, grows and thins as the puff does. The higher its puff the softer and a fifth wider its edge, fully so by
+  `shadow_soft_m` (60). Where shadows lie over each other the ground keeps at least 1 - `shadow_darkest` (0.55) of
+  its light, kept by patches a little smaller than each size of shadow, so a wide plume never stacks into a dark
+  puddle: in the side-sun still the ground under the column keeps 0.83 near the wreck, 0.73 mid-run, 0.63 at the
+  widest (it was 0.50). None with the sun under about 9 degrees. Laid with the craters, under all
+  the smoke, pulled nearer the eye as a lying piece (soft contact).
+- Room: shadows never take smoke's own. They use what the rest left in the last frame, less a twentieth, at most an
+  eighth of the room and `shadow_most` (300), eased 25 a frame; when short, the oldest smoke keeps its shadow and the
+  last 20 laid fade, so none blinks. At the 300 m bench (12 burning tanks, 6 shells a second, room full) the most
+  drawn is the same with it on or off.
+- Preview: `FX_FROM_ABOVE=1` with a recipe whose `game.from_above.on` is 1; the wreck shot now reads `FX_SUN` too.
+  General's eye: `FX_DIST=150 FX_EYE_H=300 FX_LOOK_H=0 FX_LOOK_X=0 ... wreck tall`, or `... how105 earth F WxH 150 300`
+  with `FX_LOOK_HIT=0 FX_BARRAGE=8 FX_BARRAGE_STEP=25`.
+- Stills: `battle-fx/stills/from-above/from-above-sheet.png` (today left, on right).
+
+## Rock ground: a low pale spray, skittering chips, a pale bruise (grounds.rock, drawn only when the scene passes "rock")
+
+The production lead's theatre ask (17:46Z 22 November), with the environments thread: Italy's hills, the desert's
+escarpments and stony steppe were drawn as earth (the game's own ground table maps its rock cells to earth today).
+The art director's 20:25Z read of the first look gave rock its own shape: "earth throws a tall dark brown fountain,
+rock a low pale grey spray".
+
+- Shape: rock can't be dug, so the blast vents sideways. `crown_low` (0.6) and `crown_wide` (1.35), new for any ground
+  (none written: 1, byte for byte as before), squash the crown's fan: each jet's way and reach, the spikes, the body,
+  the foot, the lumps and the shower, so the fan stands 0.6 as tall and spreads wider. Its jets pale grey (`soil`
+  150, `heavy` 132, `foot` 150 with `foot_dust` 0.6), granular (`grain` 0.75), dark lumps a minority (`clods` 0.25).
+  The darkest tenth of the burst measures 112,103,95 at 0.1 s and 107,103,97 at 0.7 s (earth 77,64,56 and 71,62,54).
+- Chips (`grounds.rock.chips`, new): 24 to 36 stone splinters 10 to 25 cm across, flung 3 to 12 degrees above level
+  out to 30 to 60 m, their fresh faces catching the sun as they turn (`glint`, Bit::bChip); 3 in 10 skitter on along
+  the ground keeping 0.4 to 0.6 of their speed, kicking up a little dust where they strike and come down again; they
+  lie 1.5 to 3 s. Their own dice; fewer far off (burst.far).
+- Scar (`paint.bruise`, new): a pale powder splash (175,170,160) with 4 to 6 broad, short, soft lobes, a small dark
+  middle 0.4 of its radius (`paint.scar`), and pale chips scattered 3 to 5 m out. `crater_k` (new, any ground)
+  scales the size's crater; rock's is 1.
+- Cloud (`smoke_of_ground`, new): the ground's own colour where the game can say (SetGroundColour), pulled `grey`
+  (0.4) of the way to its own grey, `shade` (0.9) times as light and its top `top_shade` (0.78) times, written to
+  land on that. One rule, no table: pale limestone 182,174,156 gives a warm pale cloud (162,158,148), a tan
+  escarpment 168,142,108 a tan one (156,143,127), grey steppe stone 124,122,118 a neutral one (143,142,140). Where
+  the game cannot say, `paint.smoke`.
+- Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes.
+- Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 3,21,300 960x540`.
+- Stills: `battle-fx/stills/rock/rock-mend-*.png`.

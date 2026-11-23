@@ -30,8 +30,40 @@ struct FLandGeneralShown
 		/** The block's ground's four corners (chosen blocks only, for the ring round them). */
 		bool bCorners = false;
 		double Corners[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		/** Its real frontage and depth's four corners on the screen, for its ground washed in its side's colour from high
+		 * up (every unit he can see, while PrintInk is above nothing). */
+		bool bPrint = false;
+		double Print[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	};
+	/** How strongly each unit's ground is washed (0 to 0.25): full from 300 m up, gone by 150 m (the art director, 22
+	 * November 18:29Z: "the pin's stem ends over empty ground"). */
+	double PrintInk = 0.0;
 	std::vector<Mark> Marks;
+
+	/**
+	 * A corps coming up from next door (neighbours join the fight, release 2), its chip on the screen this frame: over the
+	 * place on the field's edge where it will walk on when that is in sight (bThere), else pinned just inside the screen's
+	 * edge on the way to it, with that way (a unit vector on the screen) for its arrow.
+	 */
+	struct Comer
+	{
+		LandCommand::Neighbour What;
+		double X = 0.0, Y = 0.0;
+		bool bThere = false;
+		double WayX = 0.0, WayY = 1.0;
+	};
+	std::vector<Comer> Comers;
+	/** His despatch riders on the screen this frame (the rider ahead, release 2): the corps each rides for, where he is (on
+	 * the screen), and the despatch read out by a click on him (his corps, -1 none) and when (real seconds). */
+	struct RiderMark
+	{
+		int Corps = 0;
+		double X = 0.0, Y = 0.0;
+		std::string Says;
+	};
+	std::vector<RiderMark> RiderMarks;
+	int RiderRead = -1;
+	double RiderReadAt = -10.0;
 
 	/** An order's route on the ground: from the block along its path to where it goes or whom it attacks. */
 	struct Route
@@ -73,12 +105,22 @@ struct FLandGeneralShown
 	double PointerX = -1.0, PointerY = -1.0;
 	int Hover = -1;
 	std::string Would;
-	/** An order armed by a button: the next click goes at the double ("double") or fires on what it is on ("fire"). */
+	/** An order armed by a button: the next click goes at the double ("double"), fires on what it is on ("fire"), cuts a
+	 * gap in the hedge there with the cutters in hand ("gap") or lays smoke there, or along a line dragged ("smoke"). */
 	std::string Armed;
+	/** Hedge cutters armed, the pointer near a hedge: where on it the gap would be cut (on the screen). */
+	bool bGapAt = false;
+	double GapAtX = 0.0, GapAtY = 0.0;
+	/** Smoke armed and a line dragged: its two ends on the screen. */
+	bool bSmoke = false;
+	double SmokeEnds[4] = { 0, 0, 0, 0 };
 	/** Where he last gave an order (on the field, and on the screen this frame) and when (real seconds), for the mark
 	 * that answers his click at once. */
 	double PingFieldX = 0.0, PingFieldY = 0.0, PingX = 0.0, PingY = 0.0, PingAt = -10.0;
 	bool bPingOn = false, bPingAttack = false;
 	/** How long ago that was (real seconds), for the ring opening out. */
 	double PingAge = 0.0;
+	/** A block whose plate is held up with no pointer over it (-1 none): the walk pressed in code (-TheaterLandScript)
+	 * has no hand on the mouse to hover with. */
+	int ShowPlate = -1;
 };

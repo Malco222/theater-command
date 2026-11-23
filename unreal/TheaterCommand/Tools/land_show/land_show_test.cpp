@@ -8,6 +8,10 @@
 // LAND_SHOW_THREADS=n (4 by default) times the scene's own skin of the men in the picture over n threads too.
 // LAND_SHOW_LIFE=x: life seconds a battle second (Crowd::SetLife), 2 by default as the scene plays the fight (the rules'
 // clock about twice life's); 1 plays the clips on the battle's clock, as before.
+// LAND_SHOW_LEVELS=1 sets the scene's GS3 levels (Crowd::SetLevels: Near under 8.6 m, the 150 lines of a 1.8 m man at
+// the 50 deg lens and 665 lines; Mid to 80 m, where his shadow ends) and plays the scene's cap of 50 meshes made again
+// a frame: how many men change level a frame, how long the cap keeps one at his old level, and that no man flickers
+// between two levels (back again within half a second).
 #include "land_json.h"
 #include "Battle/LandMen.h"
 
@@ -18,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -256,6 +261,34 @@ int main(int Argc, char** Argv)
 		std::printf("%s: %zu bytes, %zu bones, %zu clips, near/mid/far %d/%d/%d points, %zu faces, %zu helmet finishes, deaths map %s; read in %.1f ms\n",
 			Path.c_str(), Text.size(), S->Bones.size(), S->Clips.size(), S->Meshes[Near].Points, S->Meshes[Mid].Points, S->Meshes[Far].Points,
 			S->Faces.size(), S->Finishes.size(), S->Deaths.empty() ? "no (the README's three falls)" : "yes", Ms(A, B));
+		// (release 2's field clips' prop keys, as the scene draws the lineman's reel and the spliced wire's ends by them:
+		// the reel's root before him, his fists on its handles 0.23 m apart and 0.56 m over its root; two fists at a splice)
+		for (const char* Name : { "reel_walk", "splice_kneel", "stretcher_front" })
+		{
+			const int Ix = S->ClipIndex(Name);
+			if (Ix < 0) continue;
+			const Clip& Cl = S->Clips[static_cast<size_t>(Ix)];
+			const std::string Track = std::string(Name) == "reel_walk" ? "reel" : std::string(Name) == "splice_kneel" ? "hands" : "grips";
+			const Clip::PropKeys* Pk = Cl.PropOf(Track);
+			if (!Pk) { Fail("%s: %s has no %s keys", Path.c_str(), Name, Track.c_str()); continue; }
+			std::vector<float> V(Pk->Fields.size());
+			int Off = 0;
+			for (int K = 0; K <= 20; ++K)
+			{
+				Pk->Sample(Cl.Long * K / 20.f, Cl.bLoop, Cl.Long, V.data());
+				if (Track == "reel" && V.size() >= 9)
+				{
+					const float Apart = std::hypot(V[6] - V[3], V[7] - V[4]), Over = 0.5f * (V[5] + V[8]) - V[2];
+					Off += V[0] < 0.2f || V[0] > 0.8f || std::fabs(Apart - 0.23f) > 0.02f || std::fabs(Over - 0.56f) > 0.03f ? 1 : 0;
+				}
+				else if (Track == "hands" && V.size() >= 6)
+				{
+					Off += V[2] < 0.2f || V[2] > 1.2f || V[5] < 0.2f || V[5] > 1.2f || std::hypot(V[3] - V[0], V[4] - V[1]) > 0.5f ? 1 : 0;
+				}
+			}
+			if (Off > 0) Fail("%s: %s's %s keys off the prop's handles at %d of 21 times", Path.c_str(), Name, Track.c_str(), Off);
+			else if (Track != "grips") std::printf("  %s: %s keys, %zu fields, %zu keys over %.2f s\n", Name, Track.c_str(), Pk->Fields.size(), Pk->T.size(), Cl.Long);
+		}
 		Files[Army] = S;
 	}
 	Field Fd;
@@ -298,9 +331,25 @@ int main(int Argc, char** Argv)
 	const char* ThriftEnv = std::getenv("LAND_SHOW_THRIFT");
 	const bool bThrift = ThriftEnv && std::string(ThriftEnv) == "1";
 	C.SetThrift(bThrift);
+	// LAND_SHOW_RUN_STYLES=1: each man his own runner (Crowd::SetRunStyles, the scene's "runs" trial)
+	const char* StylesEnv = std::getenv("LAND_SHOW_RUN_STYLES");
+	const bool bRunStyles = StylesEnv && std::string(StylesEnv) == "1";
+	C.SetRunStyles(bRunStyles);
+	if (bRunStyles) std::printf("run styles: each man his own runner (Crowd::SetRunStyles)\n");
 	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
 	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
 	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
+	const char* LevelsEnv = std::getenv("LAND_SHOW_LEVELS");
+	const bool bLevels = LevelsEnv && std::string(LevelsEnv) == "1";
+	const double LevelLines = 1.8 * 665.0 / (2.0 * std::tan(25.0 * 3.14159265358979 / 180.0));
+	const double CullFrom = LevelLines / 2.0;
+	const int RebuildCap = 50;
+	if (bLevels)
+	{
+		C.SetLevels(LevelLines / 150.0, 80.0);
+		std::printf("levels (GS3): Near within %.2f m, Mid to 80 m, Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame\n",
+			LevelLines / 150.0, CullFrom, RebuildCap);
+	}
 
 	// Who is who: armies, faces and helmets.
 	{
@@ -384,6 +433,14 @@ int main(int Argc, char** Argv)
 	int MostNear = 0, MostMid = 0;
 	double SkinnedPoints = 0.0;
 	long NanFrames = 0;
+	// (GS3: each man's level as last updated and as the scene last drew it under the cap, when it last changed and
+	// from what; the changes a frame, the men held back and the longest wait, the flickers, the shadow switches)
+	std::vector<int> LevelWas(static_cast<size_t>(N), -1), LevelBefore(static_cast<size_t>(N), -1), DrawnLevel(static_cast<size_t>(N), -1);
+	std::vector<double> LevelAt(static_cast<size_t>(N), -1e9);
+	std::vector<int> HeldFrames(static_cast<size_t>(N), 0);
+	long LevelChanges = 0, Flickers = 0, ShadowSwitches = 0, HeldTotal = 0, LevelCapFrames = 0, CulledTotal = 0;
+	int MostChanges = 0, LongestHeld = 0, MostHeld = 0;
+	double MostChangesAt = 0.0;
 
 	// Deaths.
 	struct Body
@@ -483,6 +540,56 @@ int main(int Argc, char** Argv)
 			SkinnedPoints += C.Skin(I, L, At[static_cast<size_t>(I)].data(), Facing[static_cast<size_t>(I)].data());
 		}
 		const auto T2 = std::chrono::steady_clock::now();
+		if (bLevels)
+		{
+			int Changes = 0, Rebuilds = RebuildCap, Held = 0;
+			for (int I = 0; I < N; ++I)
+			{
+				const size_t K = static_cast<size_t>(I);
+				if (!C.Visible(I)) continue;
+				if (C.SeenDistance(I) > CullFrom) { ++CulledTotal; continue; }
+				const int L = static_cast<int>(C.LodOf(I));
+				if (LevelWas[K] >= 0 && L != LevelWas[K])
+				{
+					++Changes;
+					// (the test's eye jumps every half second, a cut: a change it made is no flicker, nor its undoing)
+					const bool bCut = Fr % 30 == 0;
+					if (!bCut && L == LevelBefore[K] && T - LevelAt[K] < 0.5)
+					{
+						++Flickers;
+						if (Flickers <= 3)
+						{
+							std::printf("  flicker: man %d back to level %d at %.2f s, %.2f s after leaving it (seen %.2f m)\n", I, L, T, T - LevelAt[K], C.SeenDistance(I));
+						}
+					}
+					LevelBefore[K] = LevelWas[K];
+					LevelAt[K] = bCut ? -1e9 : T;
+				}
+				LevelWas[K] = L;
+				// (the scene's DrawMen: a man whose drawn level differs is made again while the frame's cap lasts; past it,
+				// kept at his old level, and a new man not drawn yet)
+				if (DrawnLevel[K] != L)
+				{
+					if (Rebuilds > 0)
+					{
+						--Rebuilds;
+						if (DrawnLevel[K] >= 0 && (DrawnLevel[K] == static_cast<int>(Far)) != (L == static_cast<int>(Far))) ++ShadowSwitches;
+						DrawnLevel[K] = L;
+						HeldFrames[K] = 0;
+					}
+					else
+					{
+						++Held;
+						LongestHeld = std::max(LongestHeld, ++HeldFrames[K]);
+					}
+				}
+			}
+			LevelChanges += Changes;
+			HeldTotal += Held;
+			LevelCapFrames += Held > 0;
+			MostHeld = std::max(MostHeld, Held);
+			if (Changes > MostChanges) { MostChanges = Changes; MostChangesAt = T; }
+		}
 		UpdateMs.push_back(Ms(T0, T1));
 		SkinMs.push_back(Ms(T1, T2));
 		FrameMs.push_back(Ms(T0, T2));
@@ -1059,6 +1166,32 @@ int main(int Argc, char** Argv)
 		std::printf("\nclips shown (share of man-frames):");
 		for (size_t K = 0; K < V.size() && K < 16; ++K) std::printf(" %s %.1f%%;", V[K].second.c_str(), 100.0 * V[K].first / std::max(1L, ManFrames));
 		std::printf("\n");
+		// Run styles: the men on the run show the four runners, none of them the most by far; off, only the file's own.
+		long Runs[4] = { 0, 0, 0, 0 };
+		for (const auto& KV : ClipFrames)
+		{
+			const std::string& Nm = KV.first;
+			for (const char* Base : { "run", "advance" })
+			{
+				const std::string B(Base);
+				if (Nm == B) Runs[0] += KV.second;
+				else if (Nm == B + "_b") Runs[1] += KV.second;
+				else if (Nm == B + "_c") Runs[2] += KV.second;
+				else if (Nm == B + "_d") Runs[3] += KV.second;
+			}
+		}
+		const long AllRuns = Runs[0] + Runs[1] + Runs[2] + Runs[3];
+		std::printf("run styles: of %ld man-frames running or advancing, own %.0f%%, b %.0f%%, c %.0f%%, d %.0f%%\n", AllRuns,
+			100.0 * Runs[0] / std::max(1L, AllRuns), 100.0 * Runs[1] / std::max(1L, AllRuns), 100.0 * Runs[2] / std::max(1L, AllRuns),
+			100.0 * Runs[3] / std::max(1L, AllRuns));
+		if (!bRunStyles && Runs[0] != AllRuns) Fail("run styles off, yet %ld man-frames ran as another runner", AllRuns - Runs[0]);
+		if (bRunStyles && AllRuns > 2000)
+		{
+			for (int K = 0; K < 4; ++K)
+			{
+				if (Runs[K] < AllRuns / 10) Fail("run styles on, yet runner %d shows on only %.1f%% of the running", K, 100.0 * Runs[K] / AllRuns);
+			}
+		}
 	}
 
 	// The tank commanders (Crowd::AddRider): each crew file's tank clips on the seats their places name, as the scene
@@ -1180,6 +1313,114 @@ int main(int Argc, char** Argv)
 			"up in the hatch or at the roof gun, his head's top %.2f to %.2f m over the rim\n", Checked, Crews.size(), TopLo, TopHi);
 	}
 
+	// The men on the light cars and motorcycles (release 2: Crowd::AddRider with RiderFileOf, as ALandBattle::SeatLight
+	// seats them): in each infantry file with seat clips, every model's driver has a loop and a death; each seat clip on
+	// its seat sits him there (his head over the seat, never sunk under it or far off it), his gun as the clip says, nothing
+	// NaN; and a rider's file is his army's own, else its stand-in, in the battle's dress.
+	{
+		std::printf("\nTHE MEN ON THE LIGHT CARS AND MOTORCYCLES (riders)\n");
+		Crowd C4;
+		C4.SetLife(Life);
+		for (const auto& KV : Files) C4.AddSoldier(KV.first, KV.second);
+		C4.ReadArmies(ReadFile(Argv[3]), Err);
+		C4.Build(RecText, GroundAt, Err);
+		const int Before = C4.Count();
+		static const char* const Pieces[] = { "Jeep", "Kubelwagen", "GAZ67", "Fiat508", "Kurogane", "FieldCar", "R75", "M72", "Rikuo", "WLA", "M20", "Alce", "Motorcycle" };
+		int Checked = 0, Riders = 0, Seats = 0;
+		double SitLo = 1e9, SitHi = -1e9;
+		for (const auto& KV : Files)
+		{
+			const Soldier& S = *KV.second;
+			bool bAny = false;
+			for (const Clip& Cl : S.Clips) bAny = bAny || !Cl.Seats.empty();
+			if (!bAny) { std::printf("  soldier_%s.json: no seat clips yet: passed over\n", KV.first.c_str()); continue; }
+			// (every model's driver: his loop and his death)
+			for (const char* P : Pieces)
+			{
+				bool bLoop = false, bDeath = false;
+				for (const Clip& Cl : S.Clips)
+					for (const Clip::Seat& St : Cl.Seats)
+						if (St.Piece == P && St.Socket == "driver") (Cl.bLoop ? bLoop : bDeath) = true;
+				if (!bLoop || !bDeath) Fail("soldier_%s.json: the %s's driver has %s", KV.first.c_str(), P, !bLoop ? "no seat loop" : "no death");
+			}
+			const int Man = C4.AddRider(KV.first, KV.first.substr(0, 3), 0x11E7ull + static_cast<uint64_t>(Riders));
+			if (Man < 0 || !C4.IsRider(Man)) { Fail("soldier_%s.json: no rider made", KV.first.c_str()); continue; }
+			++Riders;
+			const int Head = S.BoneIndex("head"), Hips = S.BoneIndex("pelvis");
+			const int Gun = S.WeaponBone();
+			for (size_t Ci = 0; Ci < S.Clips.size(); ++Ci)
+			{
+				const Clip& Cl = S.Clips[Ci];
+				if (Cl.Seats.empty()) continue;
+				++Seats;
+				// (on its first seat: the socket facing east, 1.0 m up; his root the socket moved by the offset)
+				const Clip::Seat& St = Cl.Seats.front();
+				const double SX = 300.0, SY = 200.0, SZ = 1.0;
+				Crowd::Ride R;
+				R.bShown = true;
+				R.Clip = static_cast<int>(Ci);
+				float* M = R.Seat.R;
+				M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;    // forward east, right south, up
+				M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+				M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+				R.Seat.T[0] = static_cast<float>(SX + St.Offset.X);
+				R.Seat.T[1] = static_cast<float>(SY - St.Offset.Y);
+				R.Seat.T[2] = static_cast<float>(SZ + St.Offset.Z);
+				const float Times[3] = { 0.1f, Cl.Long * 0.5f, Cl.Long - 0.05f };
+				for (int Ti = 0; Ti < 3; ++Ti)
+				{
+					R.Time = Times[Ti];
+					C4.SetRide(Man, R);
+					C4.Update(1.0 + 0.1 * Ti);
+					++Checked;
+					if (!C4.Visible(Man)) { Fail("%s %s on %s: not shown", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str()); continue; }
+					const Xform* F = C4.FramesOf(Man);
+					const Vec3 HeadAt = F[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+					const Vec3 HipsAt = F[Hips].Point(S.Bones[static_cast<size_t>(Hips)].Head);
+					if (!Finite(HeadAt) || !Finite(HipsAt)) { Fail("%s %s: NaN posed", KV.first.c_str(), Cl.Name.c_str()); continue; }
+					const double Over = HeadAt.Z - R.Seat.T[2];
+					if (Cl.bLoop) { SitLo = std::min(SitLo, Over); SitHi = std::max(SitHi, Over); }
+					// (sitting, his head some 0.6 to 0.9 m over his seat; the jeep's gunner standing on her floor, 1.5 m and more;
+					// slumped, lower, never under the seat by more than a car's door)
+					if (Cl.bLoop ? (Over < 0.35 || Over > 1.95) : (Over < -0.6 || Over > 1.95))
+						Fail("%s %s on %s at %.2f s: his head %.2f m over the seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti], Over);
+					if (std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]) > 1.1 || std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]) > 0.8)
+						Fail("%s %s on %s at %.2f s: his head %.2f m and hips %.2f m off his seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti],
+							std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]), std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]));
+					const bool bStowed = Gun >= 0 && F[Gun].R[0] == 0.f && F[Gun].R[4] == 0.f && F[Gun].R[8] == 0.f;
+					if (Gun >= 0 && bStowed != (Cl.Weapon == "none"))
+						Fail("%s %s: his gun %s, the clip's weapon \"%s\"", KV.first.c_str(), Cl.Name.c_str(), bStowed ? "put away" : "drawn", Cl.Weapon.c_str());
+					for (int L = 0; L < LodCount; ++L)
+					{
+						const int P = C4.PointsOf(Man, static_cast<Lod>(L));
+						std::vector<float> SkAt(static_cast<size_t>(P) * 3), SkFa(static_cast<size_t>(P) * 3);
+						C4.Skin(Man, static_cast<Lod>(L), SkAt.data(), SkFa.data());
+						for (const float V : SkAt) if (!std::isfinite(V)) { Fail("%s %s: NaN skinned", KV.first.c_str(), Cl.Name.c_str()); break; }
+					}
+				}
+			}
+			Crowd::Ride Off;
+			C4.SetRide(Man, Off);
+			C4.Update(3.0);
+			if (C4.Visible(Man)) Fail("%s: a seated man shown when the scene hides him", KV.first.c_str());
+		}
+		// (a rider's file: his army's own where it is here, else armies.json's stand-in or the Pole's; always one here)
+		for (const char* Army : { "GER", "USA", "SOV", "UK", "ITA", "JAP", "FIN", "HUN" })
+		{
+			std::string Row;
+			const std::string File = C4.RiderFileOf(Army, Row);
+			if (File.empty() || !C4.SoldierFile(File)) Fail("RiderFileOf(%s): \"%s\", not a file here", Army, File.c_str());
+			else if (Files.count(Army) && File.rfind(Army, 0) != 0) Fail("RiderFileOf(%s): %s, not his own", Army, File.c_str());
+			else std::printf("  a %s rider wears soldier_%s, painted by armies.json's \"%s\"\n", Army, File.c_str(), Row.c_str());
+		}
+		bool bSame = true;
+		for (int Man = 0; Man < Before && bSame; ++Man) bSame = !C4.IsRider(Man);
+		if (!bSame || C4.Count() != Before + Riders) Fail("the seated men changed the battle's men (%d men, %d before)", C4.Count(), Before);
+		if (Riders > 0)
+			std::printf("  %d poses of %d seat clips in %d files checked (on his seat, his gun as the clip says, shown as told); sitting, his head %.2f to %.2f m over the seat\n",
+				Checked, Seats, Riders, SitLo, SitHi);
+	}
+
 	// Frame time.
 	{
 		double Sum = 0.0;
@@ -1211,6 +1452,77 @@ int main(int Argc, char** Argv)
 			Percentile(SceneWallMs, 0.95), Percentile(SceneWallMs, 0.99), OneMean < 3.0 ? "met" : "NOT met", WallMean < 1.5 ? "met" : "NOT met");
 	}
 	if (NanFrames) Fail("%ld frames with NaN", NanFrames);
+	if (bLevels)
+	{
+		const double Fs = static_cast<double>(std::max<size_t>(1, FrameMs.size()));
+		std::printf("\nlevels (GS3): %.2f men change level a frame on average, the most %d (at %.2f s); %ld shadow switches (%.2f a frame); "
+			"the cap of %d held men at their old level in %ld frames (the most %d in a frame, %.2f a frame), the longest wait %d frames (%.0f ms); "
+			"%ld flickers (a man back to his last level within half a second); %.1f men a frame too small to draw (past %.0f m)\n",
+			LevelChanges / Fs, MostChanges, MostChangesAt, ShadowSwitches, ShadowSwitches / Fs, RebuildCap, LevelCapFrames, MostHeld, HeldTotal / Fs, LongestHeld,
+			LongestHeld * Dt * 1000.0, Flickers, CulledTotal / Fs, CullFrom);
+		if (LongestHeld > 30) Fail("a man waited %d frames (over half a second) for his new level under the cap", LongestHeld);
+		if (Flickers > LevelChanges / 50 + 2) Fail("%ld of %ld level changes flicker back within half a second", Flickers, LevelChanges);
+	}
+
+	// Over the cores (SetRun, the frame-rate lane of 22 November): the same men to the bit as one after another, and the
+	// same events in the same order, frame by frame, thrifty, the eye among them; and what it costs each way.
+	{
+		Crowd One, Many;
+		Pool Cores(4);
+		for (Crowd* Cr : { &One, &Many })
+		{
+			Cr->SetLife(Life);
+			for (const auto& KV : Files) Cr->AddSoldier(KV.first, KV.second);
+			Cr->ReadArmies(ReadFile(Argv[3]), Err);
+			Cr->Build(RecText, GroundAt, Err);
+			Cr->SetThrift(true);
+		}
+		Many.SetRun([&Cores](int Count, const std::function<void(int)>& Job) { Cores.For(Count, Job); });
+		double LookX = 0.0, LookY = 0.0, LookZ = 0.0;
+		float LookFacing = 0.f;
+		One.PlaceOf(One.Count() / 2, LookX, LookY, LookZ, LookFacing);
+		long Stepped = 0, ManDiffs = 0, EventDiffs = 0, Posed = 0, Falls = 0;
+		double OneMs = 0.0, ManyMs = 0.0, PosedOff = 0.0;
+		const double Step = 1.0 / 30.0, Until = std::min(End, 240.0);
+		for (double T = 0.0; T <= Until; T += Step, ++Stepped)
+		{
+			One.SetEye(LookX, LookY - 40.0, LookZ + 6.0);
+			Many.SetEye(LookX, LookY - 40.0, LookZ + 6.0);
+			const auto A = std::chrono::steady_clock::now();
+			One.Update(T);
+			const auto B = std::chrono::steady_clock::now();
+			Many.Update(T);
+			const auto Cc = std::chrono::steady_clock::now();
+			OneMs += Ms(A, B);
+			ManyMs += Ms(B, Cc);
+			const std::vector<Event>& E1 = One.Events();
+			const std::vector<Event>& E2 = Many.Events();
+			if (E1.size() != E2.size()) ++EventDiffs;
+			else
+				for (size_t K = 0; K < E1.size(); ++K)
+					if (E1[K].T != E2[K].T || E1[K].Man != E2[K].Man || E1[K].Fx != E2[K].Fx || E1[K].Cue != E2[K].Cue || E1[K].Round != E2[K].Round) { ++EventDiffs; break; }
+			for (int M = 0; M < One.Count(); ++M)
+			{
+				if (One.IsFalling(M)) ++Falls;
+				const Soldier* S1 = One.SoldierOf(M);
+				const Xform* F1 = One.FramesOf(M);
+				const Xform* F2 = Many.FramesOf(M);
+				if (One.Visible(M) != Many.Visible(M) || (S1 && F1 && F2 && std::memcmp(F1, F2, sizeof(Xform) * S1->Bones.size()) != 0)) { ++ManDiffs; continue; }
+				double X1, Y1, Z1, X2, Y2, Z2;
+				float Fa, Fb;
+				if (One.Visible(M) && One.PlaceOf(M, X1, Y1, Z1, Fa) && One.PlaceAsPosed(M, X2, Y2, Z2, Fb))
+				{
+					++Posed;
+					PosedOff = std::max(PosedOff, std::fabs(Z1 - Z2));
+				}
+			}
+		}
+		std::printf("\nover the cores: %ld frames to %.0f s, %d men; men unlike one after another %ld, frames with unlike events %ld (%ld falling a frame summed); "
+			"Update one core %.3f ms, over 4 %.3f ms a frame; PlaceAsPosed off PlaceOf by %.3f m at most (%ld asked)\n",
+			Stepped, Until, One.Count(), ManDiffs, EventDiffs, Falls, OneMs / std::max(1L, Stepped), ManyMs / std::max(1L, Stepped), PosedOff, Posed);
+		if (ManDiffs > 0 || EventDiffs > 0) Fail("the men over the cores are not the men one after another (%ld men, %ld frames of events)", ManDiffs, EventDiffs);
+		if (PosedOff > 0.25) Fail("PlaceAsPosed is %.2f m off PlaceOf", PosedOff);
+	}
 
 	std::printf("\n%s (%d failures)\n", Fails ? "LAND SHOW FAILED" : "land show ok", Fails);
 	return Fails ? 1 : 0;

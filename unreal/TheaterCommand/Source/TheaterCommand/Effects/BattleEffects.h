@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Effects/TheaterFxCore.h"
+#include "Tasks/Task.h"
 #include "Templates/Function.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
@@ -10,6 +11,7 @@
 #include <string>
 
 class FJsonValue;
+struct FPostProcessSettings;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UProceduralMeshComponent;
@@ -23,11 +25,15 @@ struct FBattleJolt
 	float RollDegrees = 0.0f;
 };
 
-/** The recipe, Content/Effects/battle-fx.json, read for the effects (paths "sizes.how105.crown_m.0"). */
+/** The recipe, Content/Effects/battle-fx.json, read for the effects (paths "sizes.how105.crown_m.0"). A launch line
+ * -TheaterFxSet=game.from_above.on=1,grounds.rock.on=1 sets those numbers over the file's at each Load (for the Mac's
+ * switch off/on runs, with no file changed and nothing rebuilt); each one set is logged. */
 class FBattleFxRecipe final : public TheaterFx::Recipe
 {
 public:
-	bool Load(const FString& Path);
+	/** Over: further recipe files (full paths) whose numbers are laid over the file's, in order, before the launch
+	 * line's (a scene's own look behind a switch: the land battle's -TheaterLandFilmFire lays battle-fx-film.json). */
+	bool Load(const FString& Path, const TArray<FString>& Over = TArray<FString>());
 	virtual bool Find(const char* Path, double& Out) const override;
 	virtual bool FindWord(const char* Path, std::string& Out) const override;
 
@@ -45,7 +51,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn, FuelBall); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -68,6 +74,9 @@ public:
 	/** Reads the recipe and makes the mesh and lamps under Parent (its owner holds them). GroundUnder gives the
 	 * world point on the ground under a world point. False, with a warning, if the recipe or material is missing. */
 	bool Begin(USceneComponent* Parent, double InUnitsPerMetre, TFunction<FVector(const FVector&)> InGroundUnder);
+	/** A further recipe file in Content/Effects laid over battle-fx.json at Begin (call it before Begin): its numbers
+	 * replace the file's for this kit alone (release 2: the land battle's film fire). */
+	void LayOver(const FString& FileName) { Over.Add(FileName); }
 	bool IsReady() const;
 	/** Takes the mesh and lamps away (the owner's EndPlay). Begin may be called again after. */
 	void End();
@@ -172,8 +181,20 @@ public:
 	 * the near cloud does. Id: the stick's own number (one stick per number while its bombs land). */
 	void BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds = -1.0f);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
-	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
-	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	 * caller's own number for this fire, so BurnOut finds it (under 0: none). bOnShip: true for a fire on a ship's
+	 * deck (anything afloat), so it burns as a ship's fire, never as a burning tank's, however small, low or still. */
+	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1, bool bOnShip = false);
+	/** A burning opening (release 2): flame and smoke forced out of a hatch or an engine grille AcrossMetres wide, for
+	 * Seconds, then a thinning grey column. A fire as Burn's (BurnOut and BurnMove find it by Id), but it never joins
+	 * another fire nor founds a column of its own, and its flames are the recipe's fire.vent_tongues: narrow and tall
+	 * out of the hole. A knocked-out tank's hatches so burn as hatches, never melted into one bonfire on her deck. */
+	void Vent(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	/** Fuel going up: a ragged ball of burning fuel about AcrossMetres wide that rolls and rises and turns to black
+	 * smoke boiling off its top, lighting the ground while it burns. A vehicle's fuel 6 to 10 m (about 1 to 1.5 s),
+	 * an aircraft's crash or a fuel dump 15 to 25 m (1.5 to 2 s). Velocity: what it was moving at (a crashing
+	 * aeroplane's, a truck's), of which the fire keeps a little. Call it at the moment the fuel goes; a fire that
+	 * burns on after it is Burn's, called with it. */
+	void FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity = FVector::ZeroVector);
 	/** The crew puts that fire out over OverSeconds (0: the recipe's 6 to 12 s): its flames are eaten back from the
 	 * edges to the seat, shrinking steadily and never all gone and back; a dull glow and small flickering embers
 	 * stay 10 to 20 s; its smoke pales from black through grey to grey-white and is gone inside about a minute. How "water" (a ship's hoses: a surge of white steam at the
@@ -271,9 +292,40 @@ public:
 	/** Whether a shell leaves the kit's own flat painted crater (on as made). A scene that lays craters of its own in
 	 * the ground (the land battle's torn earth) turns it off after Begin; nothing else of a shell changes. */
 	void SetCraters(bool bOn);
+	/** For a scene that grades its picture as the land battle does: the kit's colours written for that grade where the
+	 * recipe has them (land_grade: the clods earth brown with their form, never black silhouettes; the yellow tracer
+	 * yellow, not khaki), as TheaterFx::Battle::SetLandGrade. Call once after Begin; off as made. */
+	void SetLandGrade(bool bOn);
+	/** For a scene seen from high above the ground (the land battle, for its general's eye 300 m up): as the eye climbs
+	 * and looks down steeply, smoke's face toward the sun is lit and its big puffs lay their shadows on the ground away
+	 * from the sun, by the recipe's game.from_above row (the art director's read of the general's stills, item 5). A low
+	 * eye sees nothing changed. As TheaterFx::Battle::SetFromAbove; call once after Begin; off as made. */
+	void SetFromAbove(bool bOn);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);
+	/** Fire keeps its orange under the scene's colour grade (the art director, 22 November: the land battle's grade,
+	 * made for its fields, drained a burning wreck's flame to salmon and peach). The kit's mesh marks its pixels in the
+	 * custom depth, and M_FireSpread, drawn after the tonemapper, spreads the colour of only those marked pixels that
+	 * are fire's colour (orange to yellow, deep or bright, never grey; a red tracer's too) or a bright green light (a
+	 * Soviet tracer) by Spread from their own grey, and raises the green of fire's orange by Warm. A white-hot core
+	 * stays as ruled, and so does the sky's blue. Smoke, dust and earth stay as the grade leaves them, and so does the field
+	 * behind a thin flame.
+	 * Call it after Begin with the lens the scene's eye looks through (its camera's or post-process volume's settings:
+	 * one the engine keeps, as the lens holds the material); again to change the numbers; Spread 1 or less takes it
+	 * off. One lens at a time: it is taken out only of the lens it is given, so take it off one (Spread 1) before
+	 * putting it on another. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
+	 * M_FireSpread (Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread). */
+	bool SetFireSpread(FPostProcessSettings& Lens, float Spread = 2.0f, float Warm = 1.2f);
+	/** Soft contact, for the land battle (the art director's cut 5, still 07: a burning wreck's flame was cut along a
+	 * hard straight line where it met the hull; ruling 14:16Z 22 November, 0.1 m). The kit's mesh takes
+	 * M_BattlePuffsSoft, which fades every piece where it comes within Metres in front of the ground or a hull, and the
+	 * kit lays its lying pieces (a clod or fragment come to rest, a spent case, a crater's mark) nearer the eye and
+	 * smaller to match, the same picture, so they stay whole (TheaterFx::Battle::SetSoftContact). Call it after Begin,
+	 * on this thread; 0 takes it off. Costs one depth read for each of the kit's pixels; the scenes that never call it
+	 * pay nothing. False, with a log line, without M_BattlePuffs and M_BattlePuffsSoft (Tools/build_content.sh with
+	 * TC_REBUILD=M_BattlePuffsSoft), and the kit draws as before. */
+	bool SetSoftContact(float Metres = 0.1f);
 	/** Everything gone: a new battle. */
 	void Clear();
 
@@ -284,8 +336,30 @@ public:
 	 * covers any window wider than it is tall. Returns the camera's jolt. */
 	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
 
+	/** Tick in two halves (the production lead's FX2), so the kit's own frame runs on a worker while the scene draws its
+	 * men and tanks. TickBegin takes what Tick takes and does on this thread what must be done here (the test barrage,
+	 * the camera's jolt, the view), starts the kit's Draw on a worker and returns the jolt at once. TickEnd waits for
+	 * the worker, sends the mesh and lights the lamps, then does what was asked of the kit in between, in the order
+	 * asked. Between the two:
+	 * - every call on the kit is held, its arguments copied, and done at TickEnd, stamped with this frame's time as a
+	 *   call after a Tick is: so it is first seen at the next frame. Call TickBegin after the frame's shells and fires
+	 *   where you can, so only what comes after (a vehicle's dust) waits;
+	 * - GroundUnder and GroundColour are called from the worker: nothing may change what they read (the field's
+	 *   heights, a crater, a rut) until TickEnd;
+	 * - PuffsDrawn and PuffsAsked give the last frame's; Clear and End wait for the worker first.
+	 * Tick is both halves at once, all on this thread, as before. A TickBegin left without its TickEnd is ended by the
+	 * next TickBegin or Tick. */
+	FBattleJolt TickBegin(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
+	void TickEnd();
+
 	/** Camera shake on or off (Options: "Camera shake", default on). */
 	bool bShake = true;
+
+	/** For a scene's log line: the puffs the kit drew at the last Tick (or TickEnd), and the room asked for then (what was
+	 * on the screen and what had been made since; over the room, 3,000, when it is short). Both by the kit's clock.
+	 * -TheaterFxRoomLog on the command line also writes a line of its own every 10 s of that clock. */
+	int32 PuffsDrawn() const;
+	int32 PuffsAsked() const;
 
 	/** -TheaterBlastTest on the command line: lay a test barrage round a place (RunTest) for test frames. */
 	static bool WantsTest();
@@ -297,9 +371,14 @@ public:
 
 private:
 	FBattleFxRecipe Book;
+	TArray<FString> Over; // (LayOver's files, by name in Content/Effects)
 	TheaterFx::Battle Core;
 	TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;
+	bool bOwnPuffs = false; // (M_BattlePuffs found at Begin: only it marks the kit's pixels for SetFireSpread)
+	TWeakObjectPtr<UMaterialInstanceDynamic> SpreadInk; // (M_FireSpread as last put in a lens, so it is taken out again)
+	float InkBrightness = 1.0f; // (the Brightness Begin gave Ink: picture.lit_gain)
+	bool bSoftInk = false; // (Ink is M_BattlePuffsSoft's: SetSoftContact)
 	static constexpr int32 MostLamps = 4;
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;
@@ -310,12 +389,27 @@ private:
 	double UnitsPerMetre = 100.0;
 	double Clock = 0.0;
 	FVector Sun = FVector(-0.45, -0.35, 0.82);
-	int32 Room = 0; // puffs the mesh has room for (in steps of 300, as the map's smoke)
-	int32 RoomSpare = 0; // frames running that less room would have done
-	int32 LastSent = 0;
+	// (the mesh, the production lead's FX1 of 22 November: Sections sections of PuffsASection puffs each, made once at
+	// the first frame with something to draw and never rebuilt; a section is sent only while it holds puffs, and the
+	// rest are folded flat and hidden)
+	static constexpr int32 PuffsASection = 300;
+	int32 Sections = 0;
+	int32 SectionsUsed = 0; // sections holding puffs at the last Tick (shown)
+	FVector FoldedAt = FVector::ZeroVector; // where the sections holding no puffs were last folded (the pre-check on FX1: their boxes count in the mesh's bounds)
 	bool bShown = false;
-	TArray<FVector> Points;
+	TArray<FVector> Points; // one section's points and colours, filled for each section in turn
 	TArray<FColor> Colours;
+	// (-TheaterFxRoomLog: the most drawn in the 10 s of the kit's clock, when, and the room asked then)
+	int32 LogMost = -1, LogAsked = 0;
+	double LogMostAt = 0.0, LogFrom = -1.0;
+	int32 LastDrawn = 0, LastAsked = 0; // (PuffsDrawn, PuffsAsked)
+	// (the production lead's FX2: the kit's Draw on a worker from TickBegin to TickEnd, the frame it draws, and what is
+	// asked of the kit meanwhile, held in order for TickEnd)
+	UE::Tasks::TTask<int32> Drawing;
+	bool bDrawing = false;
+	double DrawNow = 0.0, DrawDay = 1.0;
+	FVector DrawEye = FVector::ZeroVector;
+	TArray<TUniqueFunction<void()>> Held;
 
 	struct FTestShot
 	{
@@ -336,7 +430,15 @@ private:
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;
-	void MakeSection(int32 NewRoom, const FVector& Fill);
+	void MakeSections(const FVector& Fill);
+	void RoomLog(double Now, int32 Laid);
+	/** Before the kit's Draw, on this thread: the test barrage, the jolt, the view and the day. False: nothing to draw. */
+	bool Ahead(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight, FBattleJolt& Jolt, TheaterFx::Battle::View& Sight, double& Day);
+	/** After it, on this thread: the puffs it laid into the mesh, the room log and the lamps. */
+	void Lay(double Now, const FVector& Eye, int32 Drawn, double Day);
+	/** A call on the kit: done now, or held while the kit draws on its worker. bWhenReady: only once Begin has made it. */
+	template <typename FWork>
+	void Do(FWork&& Work, bool bWhenReady = true);
 	void Hide();
 	void PlayTest(double Now);
 };

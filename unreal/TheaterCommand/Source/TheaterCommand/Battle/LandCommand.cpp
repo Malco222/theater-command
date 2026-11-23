@@ -54,6 +54,7 @@ namespace LandCommand
 	{
 		Blocks.clear();
 		Shown.clear();
+		Coming.clear();
 		Hand.clear();
 		Me = Rec.bLive ? Rec.Me : -1;
 		bSetup = Rec.bSetup;
@@ -67,6 +68,7 @@ namespace LandCommand
 			W.Short = B.Short;
 			W.Parent = B.Parent;
 			W.Kind = B.Kind;
+			W.Team = B.Team;
 			W.W = B.W;
 			W.D = B.D;
 			W.Figures0 = B.Figures0;
@@ -144,15 +146,67 @@ namespace LandCommand
 		std::copy(Rec.Room, Rec.Room + 4, RoomAt);
 		CountDrawn(Rec);
 		Shown.clear();
+		Coming.clear();
+		RidersNow.clear();
+		bHelp = false;
+		ReadAt = T;
 		const LandFeed::View* A = Rec.ViewAt(T);
 		if (!A)
 		{
 			return;
 		}
+		// (the corps still coming up from next door, a row a corps: its blocks walk on together)
+		for (const LandFeed::Arrival& C : A->Coming)
+		{
+			auto It = std::find_if(Coming.begin(), Coming.end(), [&C](const Neighbour& N) { return N.Corps == C.Corps && N.Side == C.Side; });
+			if (It == Coming.end())
+			{
+				Neighbour N;
+				N.Corps = C.Corps;
+				N.Side = C.Side;
+				N.bMine = Me >= 0 && C.Side == Me;
+				N.Kind = C.Kind;
+				N.Men = N.bMine ? 0 : -1;
+				N.In = std::max(0.0, C.At - T);
+				N.Edge = C.Edge;
+				N.Arrive = C.Arrive;
+				N.X = C.X;
+				N.Y = C.Y;
+				if (const Words* W = WordsOf(C.Id)) N.Name = W->Parent.empty() ? W->Name : W->Parent;
+				Coming.push_back(std::move(N));
+				It = Coming.end() - 1;
+			}
+			++It->Units;
+			if (C.Kind == "arm") It->Kind = "arm";
+			It->In = std::min(It->In, std::max(0.0, C.At - T));
+			if (It->bMine)
+			{
+				if (const Words* W = WordsOf(C.Id)) It->Men += W->Men0;
+			}
+		}
+		std::sort(Coming.begin(), Coming.end(), [](const Neighbour& L, const Neighbour& R) { return L.In < R.In || (L.In == R.In && L.Corps < R.Corps); });
 		// (the next view, a battle second on, where the screen has not reached it yet: each block eased toward it)
 		const size_t At = static_cast<size_t>(A - Rec.Views.data());
 		const LandFeed::View* B = At + 1 < Rec.Views.size() ? &Rec.Views[At + 1] : nullptr;
 		const double K = B && B->T > A->T ? std::clamp((T - A->T) / (B->T - A->T), 0.0, 1.0) : 0.0;
+		// (his own despatch riders, eased toward the next view as the blocks are; one gone by then stands where he was)
+		for (const LandFeed::Rider& R : A->Riders)
+		{
+			if (Me < 0 || R.Side != Me) continue;
+			LandFeed::Rider Now = R;
+			if (B && K > 0.0)
+			{
+				for (const LandFeed::Rider& N : B->Riders)
+				{
+					if (N.Corps != R.Corps || N.Side != R.Side) continue;
+					Now.X += (N.X - R.X) * K;
+					Now.Y += (N.Y - R.Y) * K;
+					break;
+				}
+			}
+			RidersNow.push_back(std::move(Now));
+		}
+		for (const Neighbour& N : Coming) bHelp = bHelp || N.bMine;
 		for (const LandFeed::Unit& U : A->Units)
 		{
 			Tag G;
@@ -181,6 +235,7 @@ namespace LandCommand
 				G.Short = W->Short;
 				G.Parent = W->Parent;
 				G.Kind = W->Kind;
+				G.Team = W->Team;
 				G.W = W->W;
 				G.D = W->D;
 				G.Figures0 = W->Figures0;
@@ -199,6 +254,16 @@ namespace LandCommand
 			G.bKnown = U.bKnown;
 			G.bTaken = U.bTaken;
 			G.bHidden = U.bHidden;
+			G.bVague = U.bVague;
+			G.bSearch = U.bSearch;
+			G.SearchX = U.SearchX;
+			G.SearchY = U.SearchY;
+			G.bCutter = G.bMine && U.bCutter;
+			G.Smoke = G.bMine ? U.Smoke : -1;
+			G.bWaits = G.bMine && U.bWaits;
+			G.bWaitLate = G.bWaits && U.bWaitLate;
+			G.bWaitFree = G.bWaits && U.bWaitFree;
+			G.WaitDue = G.bWaits ? U.WaitDue : -1.0;
 			G.OrderIn = U.OrderIn;
 			G.OrderKind = U.OrderKind;
 			G.OrderX = U.OrderX;
@@ -394,6 +459,13 @@ namespace LandCommand
 		return "{\"do\":\"land:fire\",\"units\":" + Units(Guns) + ",\"target\":" + std::to_string(Enemy) + "}";
 	}
 
+	std::string General::FireInto(double X, double Y) const
+	{
+		const std::vector<int> Ids = Chosen();
+		if (Ids.empty()) return std::string();
+		return "{\"do\":\"land:fire\",\"units\":" + Units(Ids) + ",\"x\":" + Number(X) + ",\"y\":" + Number(Y) + "}";
+	}
+
 	std::string General::Line(double X0, double Y0, double X1, double Y1) const
 	{
 		const std::vector<int> Ids = Chosen();
@@ -456,6 +528,103 @@ namespace LandCommand
 			Out.push_back({ Us[I]->Block, X0 + (X1 - X0) * F, Y0 + (Y1 - Y0) * F, Face });
 		}
 		return Out;
+	}
+
+	int General::Cutter() const
+	{
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			if (G && G->bCutter) return Id;
+		}
+		return -1;
+	}
+
+	std::vector<int> General::Smokers() const
+	{
+		std::vector<int> Out;
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			if (G && G->Smoke > 0) Out.push_back(Id);
+		}
+		return Out;
+	}
+
+	std::vector<int> General::Waiters() const
+	{
+		std::vector<int> Out;
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			const bool bFoot = G && (G->Kind == "inf" || G->Kind == "mtn" || G->Kind == "cav" || G->Kind == "eng");
+			if (bFoot && !(G->bWaits && !G->bWaitFree)) Out.push_back(Id);
+		}
+		return Out;
+	}
+
+	std::string General::Wait() const
+	{
+		const std::vector<int> Ids = Waiters();
+		return Ids.empty() ? std::string() : "{\"do\":\"land:wait\",\"units\":" + Units(Ids) + "}";
+	}
+
+	int General::RiderAt(double X, double Y, double Reach) const
+	{
+		int Best = -1;
+		double Near = Reach;
+		for (size_t K = 0; K < RidersNow.size(); ++K)
+		{
+			const double D = std::hypot(RidersNow[K].X - X, RidersNow[K].Y - Y);
+			if (D <= Near)
+			{
+				Near = D;
+				Best = static_cast<int>(K);
+			}
+		}
+		return Best;
+	}
+
+	std::string General::Cut(double X, double Y) const
+	{
+		const int Id = Cutter();
+		if (Id < 0) return std::string();
+		return "{\"do\":\"land:cut\",\"units\":[" + std::to_string(Id) + "],\"x\":" + Number(X) + ",\"y\":" + Number(Y) + "}";
+	}
+
+	std::string General::SmokeLine(double X0, double Y0, double X1, double Y1) const
+	{
+		const std::vector<int> Ids = Smokers();
+		if (Ids.empty()) return std::string();
+		return "{\"do\":\"land:smoke\",\"units\":" + Units(Ids) + ",\"x0\":" + Number(X0) + ",\"y0\":" + Number(Y0) + ",\"x1\":" + Number(X1) + ",\"y1\":" + Number(Y1) + "}";
+	}
+
+	bool NearestOnLines(const std::vector<const std::vector<std::pair<double, double>>*>& Lines, double X, double Y, double Reach, double& OutX, double& OutY)
+	{
+		double Best = Reach * Reach;
+		bool bFound = false;
+		for (const std::vector<std::pair<double, double>>* Line : Lines)
+		{
+			if (!Line) continue;
+			for (size_t K = 0; K < Line->size(); ++K)
+			{
+				const std::pair<double, double>& A = (*Line)[K];
+				const std::pair<double, double>& B = (*Line)[K + 1 < Line->size() ? K + 1 : K];
+				const double Dx = B.first - A.first, Dy = B.second - A.second, Long2 = Dx * Dx + Dy * Dy;
+				double F = Long2 > 0.0 ? ((X - A.first) * Dx + (Y - A.second) * Dy) / Long2 : 0.0;
+				F = std::max(0.0, std::min(1.0, F));
+				const double Px = A.first + Dx * F, Py = A.second + Dy * F;
+				const double D2 = (Px - X) * (Px - X) + (Py - Y) * (Py - Y);
+				if (D2 <= Best)
+				{
+					Best = D2;
+					OutX = Px;
+					OutY = Py;
+					bFound = true;
+				}
+			}
+		}
+		return bFound;
 	}
 
 	void General::Sent(const std::vector<int>& Ids, const std::string& Kind, const std::vector<std::pair<double, double>>& Points, int Target, double Until)

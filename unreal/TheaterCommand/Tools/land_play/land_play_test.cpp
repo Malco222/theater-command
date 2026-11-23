@@ -24,9 +24,11 @@
 #include "Battle/LandField.h"
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandJson.h"
+#include "Battle/LandNight.h"
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandWalkPan.h"
 
 #include <algorithm>
 #include <chrono>
@@ -69,6 +71,7 @@ namespace
 		double BurstDue = -1.0;
 		int OwnFrames = 0, OwnNear = 0, OwnFilled = 0, OwnLooks = 0;
 		int Crossed = 0, Edged = 0;
+		double CutReal = 0.0;
 		double LostSince = -1.0, LostLongest = 0.0, LostAt = 0.0;
 		double Next = 0.0;
 		// (the look's way: yaw and pitch, degrees; its swing a frame ago, degrees a second)
@@ -90,17 +93,26 @@ namespace
 		int FuelFrames = 0;
 		double FuelSince = -1.0, FuelLongest = 0.0, FuelAt = 0.0, FuelNearest = 1e18, FuelNearestAt = 0.0;
 		std::vector<int> Burnt;
+		// (the production lead's GS3 note: men the scene would draw at its near level by their height on the screen, over
+		// 150 of the 665 pixels drawn, by the kind of shot; the long lens's Track and far Watch must not put more men near)
+		bool bNearReport = false;
+		long NearSum[7] = {}, NearFrames[7] = {};
+		int NearMost[7] = {};
+		double NearMostAt[7] = {};
 		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
 		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
 		int MassShots = 0, MassMen = 0;
 		bool bMassGate = true;
+		double MassTallLeast = 1.0, MassWholeLeast = 1.0, MassStretchWide = 0.0;
+		bool MassStretched = false;
+		int MassStretchMen = 0;
 		double MassFrom = 0.0, MassTo = 0.0, MassStart = -1.0, MassReal = 0.0, MassLeast = 1.0, MassLeastAt = 0.0, MassHeight = 0.0, MassFar = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
 		{
 			++Frames;
 			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
-			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
+			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; CutReal = R; }
 			if (Frames == 1)
 			{
 				D.MassWindow(MassFrom, MassTo);
@@ -120,17 +132,68 @@ namespace
 					MassFar = std::hypot(P.Look.X - P.Eye.X, P.Look.Y - P.Eye.Y);
 				}
 				MassReal += Dt;
-				int Men = 0, In = 0;
+				int Men = 0, In = 0, Tall = 0, StretchMen = 0, StretchIn = 0;
+				// (a front too wide for one picture: the share of the men in the stretch it holds is the gate, the whole
+				// front's logged beside it; a man is in the stretch by where he stood at the cut)
+				Vec SAt, SAlong;
+				double SFrom = 0.0, STo = 0.0;
+				const bool bStretched = D.MassStretch(SAt, SAlong, SFrom, STo);
+				// (and how many of them stand 2 px or more tall on the 665 px the Mac draws: the ground scene's GS3 culls the
+				// men under that, so they are seen in the wide only as the men over it)
+				const Vec Fwd = (P.Look - P.Eye).Unit();
+				const double PxAMetre = 665.0 / (2.0 * std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0));
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 				{
 					const LandFeed::Track& Tr = Rec->Tracks[I];
 					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B) || D.HiddenNow(static_cast<int>(I))) continue;
 					const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
 					++Men;
-					if (LandEye::InPicture(P, Vec(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9))) ++In;
+					const Vec At(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9);
+					bool bInStretch = false;
+					if (bStretched)
+					{
+						const LandFeed::Spot S0 = LandFeed::SpotAt(Tr, D.MassAt());
+						const double U = (Vec(S0.X, S0.Y, 0.0) - Vec(SAt.X, SAt.Y, 0.0)).Dot(SAlong);
+						bInStretch = U >= SFrom && U <= STo;
+						StretchMen += bInStretch ? 1 : 0;
+					}
+					if (!LandEye::InPicture(P, At)) continue;
+					++In;
+					StretchIn += bInStretch ? 1 : 0;
+					const double Depth = (At - P.Eye).Dot(Fwd);
+					if (Depth > 0.5 && 1.8 / Depth * PxAMetre >= 2.0) ++Tall;
 				}
-				const double Share = static_cast<double>(In) / std::max(1, Men);
+				MassTallLeast = std::min(MassTallLeast, static_cast<double>(Tall) / std::max(1, In));
+				const double Whole = static_cast<double>(In) / std::max(1, Men);
+				MassWholeLeast = std::min(MassWholeLeast, Whole);
+				const double Share = bStretched ? static_cast<double>(StretchIn) / std::max(1, StretchMen) : Whole;
+				if (bStretched) { MassStretched = true; MassStretchMen = StretchMen; MassStretchWide = STo - SFrom; }
 				if (Share < MassLeast) { MassLeast = Share; MassLeastAt = B; MassMen = Men; }
+			}
+			if (bNearReport)
+			{
+				const Vec Way = P.Look - P.Eye;
+				const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0);
+				int Near = 0;
+				if (Way.Length() > 1e-6)
+				{
+					const Vec Fwd = Way.Unit();
+					// (a man 1.8 m tall stands over 150 px of 665 within this depth)
+					const double Within = 1.8 / (2.0 * TanV * (150.0 / 665.0));
+					for (const LandFeed::Track& Tr : Rec->Tracks)
+					{
+						if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B)) continue;
+						const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
+						const Vec At(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9);
+						const double Depth = (At - P.Eye).Dot(Fwd);
+						if (Depth > Within || Depth < 0.5) continue;
+						if (LandEye::InPicture(P, At)) ++Near;
+					}
+				}
+				const int Kd = static_cast<int>(P.Shot);
+				NearSum[Kd] += Near;
+				++NearFrames[Kd];
+				if (Near > NearMost[Kd]) { NearMost[Kd] = Near; NearMostAt[Kd] = B; }
 			}
 			// A shell landing at the lens this frame: the shot must be cut on its flash.
 			// (on the screen's clock: the scene plays the fight at half the battle's)
@@ -240,7 +303,13 @@ namespace
 				++OwnLooks;
 				if (D.OwnFill(P) > Set.OwnMost) ++OwnFilled;
 			}
-			if (D.MenCross(P, B, B)) ++Crossed;
+			if (D.MenCross(P, B, B))
+			{
+				++Crossed;
+				if (std::getenv("LAND_PLAY_CROSS"))
+					std::printf("  a man in the lens at battle %.2f (real %.2f): %s on %d, eye %.2f m up, fov %.0f, held %.2f s, cut for %s\n", B, R,
+						LandEye::NameOf(P.Shot), P.Subject, P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y), P.Fov, R - CutReal, LandEye::NameOf(D.LastWhy()));
+			}
 			if (D.EdgeFill(P) > Set.EdgeMost) ++Edged;
 			if (bMan && bUp && P.Shot != LandEye::Kind::Tank && P.Shot != LandEye::Kind::Track && D.Lost(B))
 			{
@@ -268,10 +337,19 @@ namespace
 			std::printf("; within %.0f m of a vehicle's fuel ball in its first %.0f s %d frames, the longest %.2f s (battle %.1f), the nearest %.0f m (battle %.1f)",
 				Set.FuelVehicle, Set.FuelFor, FuelFrames, FuelLongest, FuelAt, FuelNearest < 1e17 ? FuelNearest : -1.0, FuelNearestAt);
 			if (FuelLongest > 0.35) Fault("the lens stayed within a fuel ball's reach past its flash (the art director: cut on the flash)");
+			if (bNearReport)
+			{
+				std::printf("; men near by their height on the screen (over 150 of 665 px), a frame on average and at the most, by shot:");
+				for (int Kd = 0; Kd < 7; ++Kd)
+					if (NearFrames[Kd] > 0) std::printf(" %s %.1f, %d (battle %.0f)", LandEye::NameOf(static_cast<LandEye::Kind>(Kd)), static_cast<double>(NearSum[Kd]) / NearFrames[Kd], NearMost[Kd], NearMostAt[Kd]);
+			}
 			std::printf("; the whole mass %d shot%s", MassShots, MassShots == 1 ? "" : "s");
 			if (MassShots > 0)
 				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
 					MassStart, MassFrom, MassTo, MassReal, MassHeight, MassFar, 100.0 * MassLeast, MassLeastAt, MassMen);
+			if (MassShots > 0 && MassStretched)
+				std::printf(" (the front too wide for one picture: those of the densest %.0f m of it, %d men; the whole front's %.0f%% at the least)", MassStretchWide, MassStretchMen, 100.0 * MassWholeLeast);
+			if (MassShots > 0) std::printf(", of them 2 px tall or more on the 665 px drawn %.0f%% at the least", 100.0 * MassTallLeast);
 			if (bMassGate && Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
 			if (MassShots > 0 && (MassStart < MassFrom - 0.05 || MassStart > MassTo + 0.05)) Fault("the whole mass was shot outside its window (CD1)");
 			if (MassShots > 0 && MassLeast < 0.80) Fault("the whole mass's picture held under 80% of the men drawn (CD1)");
@@ -299,8 +377,19 @@ int main(int argc, char** argv)
 	std::string Text, MixText, Error;
 	auto T0 = std::chrono::steady_clock::now();
 	if (!LandJson::ReadFile(argv[1], Text)) { std::printf("cannot read %s\n", argv[1]); return 2; }
+	// (as the scene: a recording's night patrol has its men written in before it is read, LandFeed::AddPatrolMen)
+	int PatrolMen = LandFeed::AddPatrolMen(Text);
 	LandFeed::Recording Rec;
 	if (!LandFeed::ReadRecording(Text, Rec, Error)) { std::printf("cannot read the recording: %s\n", Error.c_str()); return 2; }
+	// (the scene's -TheaterLandPatrol: a stand-in patrol for a recording without one, LAND_PLAY_PATROL=found,caught)
+	if (const char* PatrolText = std::getenv("LAND_PLAY_PATROL"); PatrolText && !Rec.Night.bOn)
+	{
+		const char* Comma = std::strchr(PatrolText, ',');
+		const bool bFound = PatrolText[0] != '0', bCaught = !Comma || Comma[1] != '0';
+		PatrolMen = LandNight::AddStandInPatrol(Text, Rec, bFound, bCaught, Error);
+		std::printf("patrol: a stand-in of %d men from block %d (%s, %s)\n", PatrolMen, Rec.Night.Unit, bFound ? "the post found" : "nothing found", bCaught ? "caught under a flare" : "not seen");
+		if (PatrolMen == 0) Fault("no stand-in patrol could be made");
+	}
 	const double ReadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count();
 	if (!LandJson::ReadFile(argv[2], MixText)) { std::printf("cannot read %s\n", argv[2]); return 2; }
 	std::printf("%s: \"%s\", %s, %zu blocks, %zu tracks (%zu twins left out), %zu rounds, %zu events, %.1f s; read in %.0f ms\n",
@@ -422,12 +511,78 @@ int main(int argc, char** argv)
 	}
 	// The field the game lays (LandField) and what stands on it (LandSight), for the camera.
 	const auto FieldT0 = std::chrono::steady_clock::now();
+	// (the hedge cutters' test switch, the scene's -TheaterLandCutters=N: the first N crossings of a bank by the
+	// attacker's tanks made cuts, from the field laid once without them; the field then laid whole there until she tears
+	// it)
+	if (const char* CutText = std::getenv("LAND_PLAY_CUTTERS"); CutText && std::atoi(CutText) > 0 && Rec.Cuts.empty())
+	{
+		const LandField::Field First = LandSight::FieldOf(Rec);
+		if (!First.Steppe.bOn)
+		{
+			const LandField::Ground Plain(First);
+			Rec.Cuts = LandSight::CutsFromCrossings(Rec, Plain, std::atoi(CutText));
+		}
+		std::printf("cutters: %zu cuts made from the tanks' crossings\n", Rec.Cuts.size());
+	}
+	// (the field telephones' test switch, the scene's -TheaterLandPhones: the defender's lines, cut and mended)
+	if (std::getenv("LAND_PLAY_PHONES") && Rec.Wires.empty())
+	{
+		LandSight::PhonesFromBattle(Rec);
+		double Laid = 0.0, CutOff = 0.0;
+		int Lengths = 0, Bad = 0;
+		for (const LandFeed::Wire& W : Rec.Wires)
+		{
+			if (W.Pts.size() < 2) ++Bad;
+			for (size_t I = 0; I + 1 < W.Pts.size(); ++I)
+			{
+				const double D = std::hypot(W.Pts[I + 1].first - W.Pts[I].first, W.Pts[I + 1].second - W.Pts[I].second);
+				Laid += D;
+				Lengths += std::max(1, static_cast<int>(std::ceil(D)));
+			}
+		}
+		for (const LandFeed::WireCut& C : Rec.WireCuts)
+		{
+			const LandFeed::Wire* On = nullptr;
+			for (const LandFeed::Wire& W : Rec.Wires) if (W.Id == C.Wire) On = &W;
+			if (!On) { ++Bad; continue; }
+			double Best = 1e9;
+			for (size_t I = 0; I + 1 < On->Pts.size(); ++I)
+			{
+				const double Dx = On->Pts[I + 1].first - On->Pts[I].first, Dy = On->Pts[I + 1].second - On->Pts[I].second;
+				const double F = std::clamp(((C.X - On->Pts[I].first) * Dx + (C.Y - On->Pts[I].second) * Dy) / std::max(1e-9, Dx * Dx + Dy * Dy), 0.0, 1.0);
+				Best = std::min(Best, std::hypot(On->Pts[I].first + Dx * F - C.X, On->Pts[I].second + Dy * F - C.Y));
+			}
+			CutOff = std::max(CutOff, Best);
+		}
+		// (each mend after its wire's cut, and no wire cut again while it is cut)
+		std::map<int, double> CutAt;
+		std::vector<std::pair<double, std::pair<int, int>>> Times;
+		for (const LandFeed::WireCut& C : Rec.WireCuts) Times.push_back({ C.T, { C.Wire, 1 } });
+		for (const LandFeed::WireMend& M : Rec.WireMends) Times.push_back({ M.T, { M.Wire, 0 } });
+		std::stable_sort(Times.begin(), Times.end(), [](const auto& A, const auto& B) { return A.first < B.first || (A.first == B.first && A.second.second < B.second.second); });
+		for (const auto& T : Times)
+		{
+			const bool bWasCut = CutAt.count(T.second.first) > 0;
+			if (T.second.second == 1) { if (bWasCut) ++Bad; CutAt[T.second.first] = T.first; }
+			else { if (!bWasCut) ++Bad; CutAt.erase(T.second.first); }
+		}
+		std::printf("phones: %zu wires, %.0f m laid in %d lengths; %zu cuts (the farthest %.3f m off its wire), %zu mends; %d out of order\n", Rec.Wires.size(), Laid, Lengths,
+			Rec.WireCuts.size(), CutOff, Rec.WireMends.size(), Bad);
+		if (Bad > 0 || CutOff > 0.05 || Rec.Wires.empty()) Fault("the field telephones' wires, cuts or mends out of order");
+	}
 	const LandField::Field FieldWords = LandSight::FieldOf(Rec);
 	const LandField::Ground Field(FieldWords);
 	LandSight::Room Sight;
 	Sight.Lay(&Field);
 	std::printf("field: laid in %.2f s, %zu things standing for the camera\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - FieldT0).count(), Sight.Things());
-	auto GroundAt = [&Field](double X, double Y) { return Field.HeightAt(X, Y); };
+	// (and a hedge cutter's gap, once torn, its floor, as the scene's PlayWorld and eye take it: the holes set below)
+	const LandCrater::Field* GapHoles = nullptr;
+	int GapsTorn = 0;
+	auto GroundAt = [&Field, &GapHoles, &GapsTorn](double X, double Y)
+	{
+		double Floor = 0.0;
+		return GapsTorn > 0 && GapHoles && GapHoles->BreachFloor(X, Y, Floor) ? Floor : Field.HeightAt(X, Y);
+	};
 	LandEye::World EW;
 	EW.Height = GroundAt;
 	// (the scene's own: a house's floor and a wall's line no place to stand, a bank's hedge up to 3.2 m; a line of sight
@@ -480,6 +635,134 @@ int main(int argc, char** argv)
 	};
 	EW.Crop = CornAt;
 	EW.Solid = [&Sight](const Vec& At, int Except) { return static_cast<int>(Sight.At(At, Except)); };
+	// The night before the attack (LandNight, release 2's patrol), played through as the scene plays it at 60 frames a
+	// second: each of its shots with the patrol's men in the picture, its clock never going back, a burning flare in the
+	// flare's shot, the men home before the battle and no nearer the post than a patrol would crawl, the light risen after.
+	if (Rec.Night.bOn)
+	{
+		LandNight::Prelude Night;
+		if (!Night.Begin(Rec, GroundAt, EW.Free, 0.0))
+		{
+			Fault("the night before the attack did not begin (no patrol men written in)");
+		}
+		else
+		{
+			const std::vector<LandNight::Shot>& Plan = Night.Shots();
+			std::vector<int> ShotFrames(Plan.size(), 0), ShotSeen(Plan.size(), 0), ShotLeast(Plan.size(), 99), ShotFlares(Plan.size(), 0);
+			double Was = -1e18, Real = 0.0, NightReal = 0.0;
+			int Back = 0, Shot = -1;
+			for (int F = 0; F < 60 * 120 && !Night.Done(); ++F)
+			{
+				const LandNight::Frame Fr = Night.Update(1.0 / 60.0);
+				Real += 1.0 / 60.0;
+				if (!Fr.bNight) continue;
+				NightReal = Real;
+				if (Fr.Pose.bCut) Shot = std::min(Shot + 1, static_cast<int>(Plan.size()) - 1);
+				if (Shot < 0) continue;
+				if (Fr.Battle < Was - 1e-9) ++Back;
+				Was = Fr.Battle;
+				int In = 0;
+				for (int Ix : Night.Men())
+				{
+					const LandFeed::Track& Tr = Rec.Tracks[static_cast<size_t>(Ix)];
+					if (Tr.Out >= 0.0 && Fr.Battle > Tr.Out) continue;
+					const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, Fr.Battle);
+					if (LandEye::InPicture(Fr.Pose, Vec(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 0.4))) ++In;
+				}
+				const size_t K = static_cast<size_t>(Shot);
+				++ShotFrames[K];
+				ShotSeen[K] += In > 0 ? 1 : 0;
+				ShotLeast[K] = std::min(ShotLeast[K], In);
+				for (const LandNight::Flare& Fl : Fr.Flares) if (!Fl.bRising && Fl.Light > 0.5) { ++ShotFlares[K]; break; }
+			}
+			// (the men home before the battle opens and out as it opens, and how near they came to the post)
+			double Home = -1e18, OutLeast = 1e18, OutMost = -1e18, Nearest = 1e18;
+			for (int Ix : Night.Men())
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[static_cast<size_t>(Ix)];
+				Home = std::max(Home, Tr.At.back().T);
+				OutLeast = std::min(OutLeast, Tr.Out);
+				OutMost = std::max(OutMost, Tr.Out);
+				if (Rec.Night.bFound)
+				{
+					for (double T = Rec.Night.T0; T <= Rec.Night.T1; T += 2.0)
+					{
+						const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, T);
+						Nearest = std::min(Nearest, std::hypot(Sp.X - Rec.Night.FoundX, Sp.Y - Rec.Night.FoundY));
+					}
+				}
+			}
+			std::printf("night: %zu of the patrol's men, out %.0f to %.0f s, home by %.0f s, off the field at %.1f to %.1f s; nearest the post %.0f m; the dawn done %.1f real s in (the night's shots %.1f)\n",
+				Night.Men().size(), Rec.Night.T0, Rec.Night.T1, Home, OutLeast, OutMost, Rec.Night.bFound ? Nearest : -1.0, Real, NightReal);
+			for (size_t K = 0; K < Plan.size(); ++K)
+			{
+				std::printf("  %s from %.0f s, %.1f real s: %d frames, a man in the picture in %d (at least %d of them), a flare burning in %d\n", LandNight::NameOf(Plan[K].Kind), Plan[K].From, Plan[K].Real,
+					ShotFrames[K], ShotSeen[K], ShotLeast[K] == 99 ? 0 : ShotLeast[K], ShotFlares[K]);
+				if (ShotFrames[K] == 0 || ShotSeen[K] < 0.9 * ShotFrames[K]) Fault("a night shot without the patrol's men in the picture");
+				if (Plan[K].Kind == LandNight::Beat::Flare && ShotFlares[K] < ShotFrames[K] / 2) Fault("the flare's shot without a flare burning over it");
+			}
+			if (Back > 0) Fault("the night's clock went back within a shot");
+			if (!Night.Done()) Fault("the night's light never rose over the battle");
+			if (Home > 0.0) Fault("a patrol man not home when the battle opens");
+			if (OutLeast < 0.0 || OutMost > 1.0) Fault("a patrol man not off the field as the battle opens (a leaving time under 0 reads as never)");
+			if (Rec.Night.bFound && Nearest < 40.0) Fault("the patrol crawled within 40 m of the enemy's post");
+		}
+	}
+	{
+		// The walk pan (the Mac recipe's look 7, -TheaterLandWalkPan): a block walking steadily, an eye off its flank with
+		// the sight lines open, its men 25 to 140 m off through the pan; asked every 10 s from 30 s, the first that holds.
+		int Asked = 0, Held = 0;
+		double First = -1.0;
+		LandWalkPan::Plan FirstPlan;
+		for (double T = 30.0; T + 20.0 <= Rec.End; T += 10.0)
+		{
+			++Asked;
+			const LandWalkPan::Plan P = LandWalkPan::Choose(Rec, EW, T, 20.0);
+			const double Near = std::min({ P.FromStart, P.FromMiddle, P.FromEnd }), Far = std::max({ P.FromStart, P.FromMiddle, P.FromEnd });
+			if (P.Block < 0 || !P.bOpen || Near < 35.0 || Far > 120.0) continue;
+			++Held;
+			if (First < 0.0)
+			{
+				First = T;
+				FirstPlan = P;
+			}
+		}
+		if (First >= 0.0)
+			std::printf("walk pan (look 7): %d of %d times asked hold; the first at %.0f s: block %d, %zu men at %.1f m/s, the eye %.1f m up, %.0f, %.0f and %.0f m off\n", Held, Asked, First,
+				FirstPlan.Block, FirstPlan.Men.size(), FirstPlan.Speed, FirstPlan.Eye.Z - GroundAt(FirstPlan.Eye.X, FirstPlan.Eye.Y), FirstPlan.FromStart, FirstPlan.FromMiddle, FirstPlan.FromEnd);
+		else
+			std::printf("walk pan (look 7): none of %d times asked holds\n", Asked);
+		if (Held == 0) Fault("no walk pan found for the Mac's look 7 at any time asked");
+	}
+	{
+		// The tank pan (-TheaterLandTankPan: the far tanks' places a frame before, LandCrowd): a tank driving steadily, an
+		// eye off her flank with the sight lines open, she 150 to 300 m off through the pan (past the 140 m hand-over, so
+		// drawn by her model's far pieces); asked every 10 s from 30 s. A battle with no tank driving has none to show.
+		int Asked = 0, Held = 0, Driving = 0;
+		double First = -1.0;
+		LandWalkPan::Plan FirstPlan;
+		for (double T = 30.0; T + 20.0 <= Rec.End; T += 10.0)
+		{
+			++Asked;
+			const LandWalkPan::Plan P = LandWalkPan::ChooseTank(Rec, EW, T, 20.0);
+			if (P.Block < 0) continue;
+			++Driving;
+			const double Near = std::min({ P.FromStart, P.FromMiddle, P.FromEnd }), Far = std::max({ P.FromStart, P.FromMiddle, P.FromEnd });
+			if (!P.bOpen || Near < 150.0 || Far > 300.0) continue;
+			++Held;
+			if (First < 0.0)
+			{
+				First = T;
+				FirstPlan = P;
+			}
+		}
+		if (First >= 0.0)
+			std::printf("tank pan (far tanks' motion vectors): %d of %d times asked hold (%d with a tank driving); the first at %.0f s: track %d at %.1f m/s, the eye %.1f m up, %.0f, %.0f and %.0f m off\n", Held, Asked, Driving, First,
+				FirstPlan.Men.empty() ? -1 : FirstPlan.Men.front(), FirstPlan.Speed, FirstPlan.Eye.Z - GroundAt(FirstPlan.Eye.X, FirstPlan.Eye.Y), FirstPlan.FromStart, FirstPlan.FromMiddle, FirstPlan.FromEnd);
+		else
+			std::printf("tank pan (far tanks' motion vectors): none of %d times asked holds (%d with a tank driving)\n", Asked, Driving);
+		if (Driving > 0 && Held == 0) Fault("tanks drive but no tank pan holds at any time asked");
+	}
 	// The men and vehicles where the recording has them now (the game asks its own cores: the skinned men, the posed tanks).
 	auto PlaceMovers = [&Rec, &Sight, &GroundAt](double T)
 	{
@@ -514,6 +797,9 @@ int main(int argc, char** argv)
 	};
 	LandEye::Settings ES;
 	ES.Seed = Rec.Seed;
+	// (the choice's share by steps alone, so a run is the same on any machine; LAND_PLAY_CHOOSE_MS=ms tries the clock's
+	// share as the game has it, ms a frame)
+	ES.ChooseMs = std::getenv("LAND_PLAY_CHOOSE_MS") ? std::atof(std::getenv("LAND_PLAY_CHOOSE_MS")) : 0.0;
 	LandEye::Director Eye;
 	Eye.Begin(Rec, EW, ES);
 	LandDesk::Desk Desk;
@@ -524,6 +810,7 @@ int main(int argc, char** argv)
 	FilmMeasure Film;
 	Film.Rec = &Rec;
 	Film.Set = ES;
+	Film.bNearReport = true;
 
 	const double Fps = 60.0, Dt = 1.0 / Fps;
 	// The clock: twice life before the armies meet, then as life (the scene's own default), to the end and 6 s more.
@@ -539,6 +826,17 @@ int main(int argc, char** argv)
 	double MostLate = 0.0;
 	int VoiceLines = 0;
 	int SameTakeTooSoon = 0, FallsSeen = 0, FallsNear = 0, Falls = 0, KnockedSeen = 0, Knocked = 0;
+	// The takes' players pooled as the game pools them (LandSound::Voices, land.voices): each take started when it is
+	// due (its Delay) on a voice, the voice free once its player stops (its length at its pitch, or its cut and fade),
+	// a cut faded on the frame it falls due, as ALandBattle::StartTakes does.
+	LandSound::Voices Pool;
+	Pool.Size(Mix.VoicesWarm, Mix.VoicesMost);
+	struct FPlayer { double Stops = -1.0, CutAt = -1.0; };
+	std::vector<FPlayer> Players(static_cast<size_t>(Pool.Count()));
+	std::vector<std::pair<double, LandSound::Take>> PoolDue;
+	std::vector<int> PoolFades;
+	int PoolCutOff = 0, PoolStaleHeld = 0, PoolCuts = 0, PoolSilent = 0;
+	double PoolFadeLate = 0.0, PoolFadeEarly = 0.0;
 	double LastCutReal = -100.0, ShortestShot = 1e9, MeterMax = 0.0, MeterSum = 0.0;
 	int MeterN = 0;
 	// The meter's raw heat every 0.25 s of real time (the sound director sets fullAt from it): battle second, heat.
@@ -553,6 +851,15 @@ int main(int argc, char** argv)
 	// The camera's own share: its slowest frame, its frames over 2 ms, its average.
 	double EyeSlowest = 0.0, EyeTotal = 0.0;
 	int EyeOver2 = 0;
+	// (radio call, then the barrage: the calls the film went to, looked at as their first salvo lands)
+	size_t RadioLooked = 0;
+	int RadioBarrages = 0, RadioSeen = 0;
+	double RadioGapLeast = 1e9, RadioCutAt = -1.0;
+	// (the shallow focus, E9: frames and shots in it, by kind; switched only on a cut; how near the man it holds)
+	int FocusFrames = 0, FightFrames = 0, FocusCuts = 0, FocusAllCuts = 0, FocusWrongKind = 0, FocusMidShot = 0;
+	bool bFocusWas = false;
+	double FocusPullMost = 0.0, FocusWas = 0.0, FocusShotAt = -1.0;
+	std::vector<double> FocusOff;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -569,18 +876,380 @@ int main(int argc, char** argv)
 	double ScreenedSince = -1.0, LongestScreened = 0.0, LongestScreenedAt = 0.0;
 	std::map<std::string, int> CutsWhy;
 	const double Contact = Rec.Contact >= 0.0 ? Rec.Contact : 0.0;
+	// The general's battle, fought as it is shown (release 2, live): the same battle grown delta by delta (Tools/land_live
+	// deltas.ts writes header.json and deltas.jsonl; the recording given here is its whole.json), the screen kept 2.5
+	// battle seconds behind the rules as the scene keeps it (LandBattleLive.cpp's LiveLead) and waiting on them, and the
+	// general's orders deltas.ts gives leaned to (Director::Lean). The film keeps every rule it keeps on the battle read
+	// whole, with nothing of it known past what the rules have fought, and goes to the men he sent.
+	if (const char* LiveDir = std::getenv("LAND_PLAY_LIVE"))
+	{
+		std::string HeaderText;
+		LandFeed::Recording Live;
+		std::ifstream Deltas(std::string(LiveDir) + "/deltas.jsonl");
+		if (!LandJson::ReadFile(std::string(LiveDir) + "/header.json", HeaderText) || !LandFeed::ReadRecording(HeaderText, Live, Error) || !Deltas)
+			Fault("live: cannot read the live battle's header or deltas");
+		else
+		{
+			LandEye::Director Ld;
+			Ld.Begin(Live, EW, ES);
+			FilmMeasure LiveFilm;
+			LiveFilm.Rec = &Rec;
+			LiveFilm.Set = ES;
+			std::vector<int> Mine;
+			for (const LandFeed::Block& Bk : Live.Blocks) if (Bk.Side == Live.Me) Mine.push_back(Bk.Id);
+			// (deltas.ts's orders: an attack by his first block at 20 s, a run by his second at 25; and one more in the thick
+			// of the fight, to his third)
+			const double OrderAt[3] = { 20.0, 25.0, 120.0 };
+			double LeanAskedAt[3] = { -1.0, -1.0, -1.0 }, LeanMetAt[3] = { -1.0, -1.0, -1.0 };
+			const int Orders = std::min<int>(3, static_cast<int>(Mine.size()));
+			double B = 0.0, R = 0.0, Waited = 0.0;
+			int Deltas_ = 0, Frames_ = 0;
+			long MostSteps = 0;
+			double SlowestMs = 0.0, SumMs = 0.0;
+			std::string Line;
+			bool bMore = true;
+			while (B < Rec.End + 6.0)
+			{
+				const double BFrom = B;
+				const double Step = Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+				// (the rules kept ahead: 2.5 battle seconds at life's pace, more as the screen runs faster)
+				const double Lead = 2.5 * std::max(1.0, Step / Dt);
+				while (bMore && !Live.bOver && Live.Fought < B + Step + Lead)
+				{
+					if (!std::getline(Deltas, Line)) { bMore = false; break; }
+					LandFeed::Grown G;
+					if (!LandFeed::AppendDelta(Line, Live, G, Error)) { Fault("live: a delta not read"); bMore = false; break; }
+					++Deltas_;
+				}
+				// (the screen waits on the rules: never within LiveMargin, a battle second, of what they have fought)
+				const double Cap = Live.bOver ? 1e18 : Live.Fought - 1.0;
+				if (B + Step > Cap) Waited += Dt;
+				B = std::max(BFrom, std::min(B + Step, Cap));
+				R += Dt;
+				++Frames_;
+				PlaceMovers(B);
+				for (int K = 0; K < Orders; ++K)
+					if (LeanAskedAt[K] < 0.0 && B >= OrderAt[K]) { Ld.Lean(Mine[static_cast<size_t>(K)]); LeanAskedAt[K] = R; }
+				const long Steps0 = Ld.Steps();
+				const auto Lt0 = std::chrono::steady_clock::now();
+				const LandEye::Pose P = Ld.Update(B, R, Dt);
+				const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Lt0).count();
+				SlowestMs = std::max(SlowestMs, Ms);
+				if (Ms > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow live eye %.2f ms (%ld steps) at battle %.2f: %s%s, why %s, tracks %zu rounds %zu\n", Ms, Ld.Steps() - Steps0, B, LandEye::NameOf(P.Shot), P.bCut ? " (cut)" : "", LandEye::NameOf(Ld.LastWhy()), Live.Tracks.size(), Live.Rounds.size());
+				SumMs += Ms;
+				MostSteps = std::max(MostSteps, Ld.Steps() - Steps0);
+				LiveFilm.Feed(Ld, P, BFrom, B, R, Dt);
+				if (std::getenv("LAND_PLAY_LIVE_CUTS") && P.bCut)
+					std::printf("  live cut at battle %.1f (real %.1f): %s on %d (block %d), why %s, leaning %d\n", B, R, LandEye::NameOf(P.Shot), P.Subject,
+						P.Subject >= 0 ? Live.Tracks[static_cast<size_t>(P.Subject)].Block : -1, LandEye::NameOf(Ld.LastWhy()), Ld.Leaning());
+				for (int K = 0; K < Orders; ++K)
+					if (LeanAskedAt[K] >= 0.0 && LeanMetAt[K] < 0.0 && P.Subject >= 0 && Live.Tracks[static_cast<size_t>(P.Subject)].Block == Mine[static_cast<size_t>(K)])
+						LeanMetAt[K] = R;
+			}
+			std::printf("live: %d deltas, %d frames, the screen waited on the rules %.1f s; the film's own section block %d section %d; the camera's work at most %ld ray steps a frame, %.3f ms on average and %.2f ms the slowest (the lists kept up with the battle included); %d cuts",
+				Deltas_, Frames_, Waited, Ld.SquadBlock(), Ld.SquadK(), MostSteps, SumMs / std::max(1, Frames_), SlowestMs, Ld.Cuts());
+			// (an order followed by the next before the film came to its men gives way to the next: the film goes to the
+			// men last sent)
+			bool bGaveWay[3] = { false, false, false };
+			for (int K = 0; K < Orders; ++K)
+			{
+				bGaveWay[K] = K + 1 < Orders && LeanAskedAt[K + 1] >= 0.0 && (LeanMetAt[K] < 0.0 || LeanMetAt[K] > LeanAskedAt[K + 1]);
+				if (bGaveWay[K]) std::printf("; the order to block %d at %.0f s: the next order came first", Mine[static_cast<size_t>(K)], OrderAt[K]);
+				else std::printf("; the order to block %d at %.0f s: on its men %.1f s after", Mine[static_cast<size_t>(K)], OrderAt[K], LeanMetAt[K] >= 0.0 ? LeanMetAt[K] - LeanAskedAt[K] : -1.0);
+			}
+			LiveFilm.Report("live");
+			std::printf("\n");
+			if (Ld.SquadBlock() < 0) Fault("live: the film's own section was never chosen");
+			if (MostSteps > 6000) Fault("live: the camera's work in a frame past 6,000 ray steps");
+			// (the second order comes while the first's shot may still hold its least: each met within ShotLeast, the
+			// choice and the next order's own shot)
+			for (int K = 0; K < Orders; ++K)
+				if (!bGaveWay[K] && (LeanMetAt[K] < 0.0 || LeanMetAt[K] - LeanAskedAt[K] > 2.0 * ES.ShotLeast + 1.0)) Fault("live: the film did not go to the men the general sent");
+		}
+		if (std::getenv("LAND_PLAY_ONLY_LIVE"))
+		{
+			std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());
+			return Faults == 0 ? 0 : 1;
+		}
+	}
 	double KnotStart = -1.0, KnotEnd = -1.0;
 	double LowestEye = 1e9;
 	std::vector<std::string> CutLines;
 	// The lens near the ground over corn: frames, and how far over the ears it was at the lowest.
 	int LowOverCorn = 0, LowInCorn = 0, LensBehindStalks = 0;
 	double LeastOverEars = 1e9;
+	// The thaw's mud (release 2, seasons: the campaign's weather word "mud", LandField::Field::Weather): the same field
+	// laid again under it. Where the dry field's word is "earth" the mud field's is "mud" (the holes' soil, the rounds'
+	// thrown mud), every other word and every height the same, and a tank's track on a mud pasture tears it (Ruts'
+	// KindOn: earth, not pressed grass). Run before the scars, so LAND_PLAY_ONLY_SCARS runs it too.
+	{
+		const auto MudT0 = std::chrono::steady_clock::now();
+		LandField::Field MudWords = FieldWords;
+		MudWords.Weather = "mud";
+		const LandField::Ground MudField(MudWords);
+		const LandCrater::Ruts::KindFn DryKind = LandCrater::Ruts::KindOn(Field), MudKind = LandCrater::Ruts::KindOn(MudField);
+		int Asked = 0, EarthToMud = 0, WordOff = 0, HeightOff = 0, GrassTorn = 0, GrassLeft = 0;
+		const double Fw = FieldWords.Cell * FieldWords.Cols, Fh = FieldWords.Cell * FieldWords.Rows;
+		for (double Y = 5.0; Y < Fh; Y += 23.0)
+			for (double X = 5.0; X < Fw; X += 23.0)
+			{
+				++Asked;
+				const LandField::Surface Dry = Field.At(X, Y), Mud = MudField.At(X, Y);
+				const std::string DryWord = Dry.Fx, MudWord = Mud.Fx;
+				if (DryWord == "earth") { if (MudWord == "mud") ++EarthToMud; else ++WordOff; }
+				else if (MudWord != DryWord) ++WordOff;
+				if (std::fabs(Dry.Z - Mud.Z) > 1e-9 || Dry.What != Mud.What) ++HeightOff;
+				if (DryKind(X, Y) == LandCrater::Ruts::Under::Grass) { if (MudKind(X, Y) == LandCrater::Ruts::Under::Earth) ++GrassTorn; else ++GrassLeft; }
+			}
+		std::printf("mud: the field laid again under the thaw's mud in %.2f s; of %d places, %d earth now mud, %d words off, %d heights or surfaces off; pasture torn by a track %d, left pressed grass %d\n",
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - MudT0).count(), Asked, EarthToMud, WordOff, HeightOff, GrassTorn, GrassLeft);
+		if (EarthToMud == 0) Fault("mud: no open earth turned to mud under the weather word");
+		if (WordOff > 0) Fault("mud: a word other than earth's changed, or earth not to mud");
+		if (HeightOff > 0) Fault("mud: the weather word moved the ground or what is drawn on it");
+		if (GrassLeft > 0) Fault("mud: a track on a mud pasture left pressed grass, not torn earth");
+	}
+	// Scarred ground (release 2, looks only): the old holes of two battles fought here before, the last six months
+	// ago, laid as LandBattle's LayScars lays them (every 4th point of every track the fought-over ground; open
+	// ground only), in a field of their own: how many and how fast; none where Dig says no; each weathered (a bare
+	// patch of its own, its bowl silted under a fresh 150's); a fresh round still laid after them; and room left for
+	// the battle's own (checked against its count at the end). LAND_PLAY_ONLY_SCARS: this and the mud's alone.
+	int ScarsLaid = 0;
+	{
+		LandCrater::Field Old;
+		Old.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
+		Old.Dig = LandCrater::Field::DigOn(Field);
+		std::vector<std::pair<double, double>> Fought;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+			for (size_t K = 0; K < Tr.At.size(); K += 4) Fought.emplace_back(Tr.At[K].X, Tr.At[K].Y);
+		const LandCrater::Field* OldPtr = &Old;
+		const auto ScarT0 = std::chrono::steady_clock::now();
+		ScarsLaid = LandCrater::LayScars(Old, Fought, 2, 6.0, Rec.Seed ? Rec.Seed : 1,
+			[&Field, OldPtr](double X, double Y) -> std::string
+			{
+				const LandField::Surface Under = Field.At(X, Y);
+				if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water || Under.What == LandField::Drawn::Marsh) return std::string();
+				if (OldPtr->Dig && !OldPtr->Dig(X, Y)) return std::string();
+				return std::string(Under.Fx);
+			},
+			LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR));
+		const double ScarMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ScarT0).count();
+		const int ScarWanted = std::min(LandCrater::Field::Most / 6, 150 * 2);
+		int NotDig = 0, NotBare = 0, NoBareR = 0, TooDeep = 0;
+		double DeepestOld = 0.0;
+		for (const LandCrater::Field::Hole& H : Old.All())
+		{
+			if (!Old.Dig(H.X, H.Y)) ++NotDig;
+			if (!Old.Bare(H.X, H.Y)) ++NotBare;
+			if (H.BareR <= 0.0) ++NoBareR;
+			DeepestOld = std::max(DeepestOld, H.Deep);
+			if (H.Deep > 0.81) ++TooDeep;
+		}
+		// (along the old lines, the art director's 23 November: most within 25 m of a hedge, a wall or a lane, or 30 m of
+		// a junction or the village's edge, where the field has any over the fought-over ground)
+		const LandCrater::OldLines OldOnes = LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR);
+		const auto OnOld = [&OldOnes](double Px, double Py)
+		{
+			for (const auto& Sp : OldOnes.Spots)
+				if (std::hypot(Px - Sp.first, Py - Sp.second) <= 30.0) return true;
+			for (const auto& Ln : OldOnes.Lines)
+			{
+				for (size_t K = 0; K + 1 < Ln.size(); ++K)
+				{
+					const double Ax = Ln[K].first, Ay = Ln[K].second, Bx = Ln[K + 1].first, By = Ln[K + 1].second;
+					const double L2 = (Bx - Ax) * (Bx - Ax) + (By - Ay) * (By - Ay);
+					const double T = L2 > 0.0 ? std::clamp(((Px - Ax) * (Bx - Ax) + (Py - Ay) * (By - Ay)) / L2, 0.0, 1.0) : 0.0;
+					if (std::hypot(Px - (Ax + (Bx - Ax) * T), Py - (Ay + (By - Ay) * T)) <= 25.0) return true;
+				}
+			}
+			return false;
+		};
+		int OnLine = 0, FoughtOn = 0, FoughtSeen = 0;
+		for (const LandCrater::Field::Hole& H : Old.All())
+			if (OnOld(H.X, H.Y)) ++OnLine;
+		const double OnShare = ScarsLaid > 0 ? static_cast<double>(OnLine) / ScarsLaid : 0.0;
+		// (against the fought-over ground itself: as many of its points, read the same way, for the share strewn holes would have)
+		for (size_t K = 0; K < Fought.size(); K += std::max<size_t>(1, Fought.size() / 300), ++FoughtSeen)
+			if (OnOld(Fought[K].first, Fought[K].second)) ++FoughtOn;
+		const double StrewnShare = FoughtSeen > 0 ? static_cast<double>(FoughtOn) / FoughtSeen : 0.0;
+		// (its age: a 150's bowl at 6, 12 and 24 months against a fresh one's, laid where nothing stops the dig)
+		double AgedDeep[4] = { 0.0, 0.0, 0.0, 0.0 };
+		if (!Fought.empty())
+		{
+			LandCrater::Field Ages;
+			Ages.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, 7);
+			const double AgeMonths[4] = { -1.0, 6.0, 12.0, 24.0 };
+			for (int K = 0; K < 4; ++K)
+			{
+				const double Ax = Fought[0].first + 40.0 * K, Ay = Fought[0].second;
+				if (AgeMonths[K] < 0.0 ? Ages.Add(Ax, Ay, "heavy", 0.0, "earth") : Ages.AddOld(Ax, Ay, "heavy", 0.0, "earth", AgeMonths[K]))
+					AgedDeep[K] = Ages.All().back().Deep;
+			}
+		}
+		std::printf("scars: %.0f%% of the old holes on an old line (the fought-over ground's own points %.0f%%; %zu lines, %zu junctions and village edge); a 150's bowl %.2f m fresh, %.2f at 6 months, %.2f at 12, %.2f at 24\n",
+			100.0 * OnShare, 100.0 * StrewnShare, OldOnes.Lines.size(), OldOnes.Spots.size(), AgedDeep[0], AgedDeep[1], AgedDeep[2], AgedDeep[3]);
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && OnShare < 0.55) Fault("scars: the old holes strewn, not along the old lines");
+		if (AgedDeep[0] > 0.0)
+		{
+			const double Mark[3] = { 0.8, 0.65, 0.5 };
+			for (int K = 0; K < 3; ++K)
+				if (std::fabs(AgedDeep[K + 1] / AgedDeep[0] - Mark[K]) > 0.01) Fault("scars: an old bowl's depth off the art director's mark for its age");
+		}
+		// (a fresh 105 after them, on the first open ground of the fought-over ground with no old hole's cut on it)
+		bool bFreshLaid = false, bFreshTried = false;
+		for (const auto& P : Fought)
+		{
+			if (!Old.Dig(P.first, P.second) || Old.InCut(P.first, P.second) || Old.Bare(P.first, P.second)) continue;
+			bFreshTried = true;
+			bFreshLaid = Old.Add(P.first, P.second, "field", 105.0, "earth");
+			break;
+		}
+		std::printf("scars: %d old holes of %d wanted (2 battles, 6 months) laid in %.1f ms in %d patches; deepest old bowl %.2f m; a fresh 105 after them %s\n",
+			ScarsLaid, ScarWanted, ScarMs, Old.Patches(), DeepestOld, bFreshLaid ? "laid" : bFreshTried ? "NOT laid" : "(no open ground to try)");
+		if (!Fought.empty() && ScarsLaid == 0) Fault("scars: no old hole laid on the fought-over ground");
+		if (ScarsLaid > ScarWanted) Fault("scars: more old holes than wanted");
+		if (ScarMs > 1500.0) Fault("scars: laying the old holes took past 1.5 s");
+		if (NotDig > 0) Fault("scars: an old hole on ground Dig keeps (a lane, a yard, a floor, water)");
+		if (NotBare > 0) Fault("scars: the grass not kept off an old hole's middle");
+		if (NoBareR > 0) Fault("scars: an old hole without its own bare patch");
+		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.81 m (a 150's at six months is 0.8)");
+		if (bFreshTried && !bFreshLaid) Fault("scars: a fresh round's hole not laid after the old ones");
+	}
+	// The thrown soil's thin edge on the ground as drawn (pre-check's probe, 23 November: laid 2 mm over HeightAt's
+	// smooth height, a quarter of its points sank under the drawn ground's flat triangles on a slope's bend): holes laid
+	// as the game lays them (on HeightAt, painted by the ground's colour, lit by its normal, their soil on DrawnZ), each
+	// outer point at or over the drawn ground but inside a newer hole's cut, where that ground is cut away.
+	{
+		LandCrater::Field Edge;
+		Edge.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, 29u, [&Field](double X, double Y) { return Field.ColourAt(X, Y); });
+		Edge.Lit = [&Field](double X, double Y, double& NX, double& NY, double& NZ) { Field.DrawnUp(X, Y, NX, NY, NZ); };
+		Edge.Drawn = [&Field](double X, double Y) { return Field.DrawnZ(X, Y); };
+		Edge.Dig = LandCrater::Field::DigOn(Field);
+		int Tried = 0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size() && Tried < 300; K += 37)
+			{
+				const double X = Tr.At[K].X, Y = Tr.At[K].Y;
+				if (!Edge.Dig(X, Y) || Edge.Bare(X, Y)) continue;
+				++Tried;
+				Edge.Add(X, Y, Tried % 3 == 0 ? "mortar" : Tried % 3 == 1 ? "field" : "heavy", 0.0, std::string(Field.At(X, Y).Fx));
+			}
+		}
+		int EdgePoints = 0, EdgeUnder = 0;
+		double EdgeWorst = 0.0;
+		for (const LandCrater::Field::Hole& H : Edge.All())
+		{
+			if (H.bBreach || H.Sides < 3) continue;
+			const LandField::Mesh& M = Edge.Section(H.In);
+			for (int K = 0; K < H.Sides; ++K)
+			{
+				// (its outer ring: the middle, then nine rings of Sides points, the ninth the thin edge)
+				const size_t I = static_cast<size_t>(H.First) + 1u + static_cast<size_t>(8 * H.Sides + K);
+				if (I * 3 + 2 >= M.Positions.size()) continue;
+				const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
+				if (Edge.InCut(Px, Py)) continue;
+				++EdgePoints;
+				const double Below = Field.DrawnZ(Px, Py) - Pz;
+				EdgeWorst = std::max(EdgeWorst, Below);
+				if (Below > 0.0005) ++EdgeUnder;
+			}
+		}
+		std::printf("thrown soil's edge: %zu holes, %d edge points, %d under the drawn ground (the most %.1f mm)\n", Edge.All().size(), EdgePoints, EdgeUnder, 1000.0 * EdgeWorst);
+		if (EdgePoints > 0 && EdgeUnder > 0) Fault("a shell hole's thin edge sank under the ground as drawn");
+	}
+	// Mud memory (release 2; Brian 23 November): the ruts of two battles fought here in mud before, laid as LandBattle's
+	// LayOldRuts lays them (its ways through the hedges' gateways, else along the machines' heading); how many, how fast,
+	// within their cap; a month on bare (no grass stands in them), at six grassed (it stands again).
+	{
+		std::vector<std::pair<double, double>> Fought, Gates;
+		double Sx = 0.0, Sy = 0.0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size(); K += 4) Fought.emplace_back(Tr.At[K].X, Tr.At[K].Y);
+			if (Tr.IsVehicle() && Tr.At.size() >= 2)
+			{
+				const double Dx = Tr.At.back().X - Tr.At.front().X, Dy = Tr.At.back().Y - Tr.At.front().Y, Long = std::hypot(Dx, Dy);
+				if (Long > 20.0) { Sx += Long * std::cos(2.0 * std::atan2(Dy, Dx)); Sy += Long * std::sin(2.0 * std::atan2(Dy, Dx)); }
+			}
+		}
+		for (const LandField::HedgeOpening& O : Field.Openings()) Gates.emplace_back(O.X, O.Y);
+		const double Heading = Sx * Sx + Sy * Sy > 0.0 ? 0.5 * std::atan2(Sy, Sx) : std::nan("");
+		const auto RutT0 = std::chrono::steady_clock::now();
+		// (where a column may drive, as LandBattle's LayOldRuts says)
+		const auto Open = [&Field](double X, double Y)
+		{
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			Field.HeightAt(X, Y, &What);
+			return What == LandField::Drawn::Pasture || What == LandField::Drawn::Crop || What == LandField::Drawn::Rough || What == LandField::Drawn::Works || What == LandField::Drawn::Beyond;
+		};
+		const auto Ways = LandCrater::OldWays(Fought, 2, Rec.Seed ? Rec.Seed : 1, Gates, Heading, Open);
+		// (none across a hedge's bank, a lane, a wall, a yard, a wood or water, but within 6 m of a gateway: pre-check's
+		// 01:36Z, the ways had crossed banks away from any gateway; read every 1.2 m along them)
+		int Crossed = 0, Read = 0;
+		for (const auto& W : Ways)
+			for (size_t K = 0; K + 1 < W.size(); ++K)
+			{
+				const double L = std::hypot(W[K + 1].first - W[K].first, W[K + 1].second - W[K].second);
+				for (int I = 0; I < std::max(1, static_cast<int>(L / 1.2)); ++I)
+				{
+					const double T = I * 1.2 / std::max(1e-6, L), Px = W[K].first + (W[K + 1].first - W[K].first) * T, Py = W[K].second + (W[K + 1].second - W[K].second) * T;
+					bool bNearGate = false;
+					for (const auto& G : Gates)
+						if (std::hypot(Px - G.first, Py - G.second) < 6.5) { bNearGate = true; break; }
+					if (bNearGate) continue;
+					++Read;
+					if (!Open(Px, Py)) ++Crossed;
+				}
+			}
+		int Laid[2] = { 0, 0 }, FlatOn[2] = { 0, 0 }, Asked = 0;
+		double RutMs = 0.0;
+		for (int Age = 0; Age < 2; ++Age)
+		{
+			LandCrater::Ruts Old;
+			Old.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, [&Field](double X, double Y) { return Field.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(Field));
+			Laid[Age] = Old.LayOld(Ways, Age == 0 ? 1.0 : 6.0, false, Rec.Seed ? Rec.Seed : 1);
+			if (Age == 0) RutMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - RutT0).count();
+			// (on each way's ruts, either side of its line some 1.35 m)
+			for (const auto& W : Ways)
+				for (size_t K = 1; K + 1 < W.size(); K += 3)
+				{
+					const double Dx = W[K + 1].first - W[K - 1].first, Dy = W[K + 1].second - W[K - 1].second, L = std::max(1e-6, std::hypot(Dx, Dy));
+					for (const double Side : { 1.35, -1.35 })
+					{
+						if (Age == 0) ++Asked;
+						if (Old.Flat(W[K].first - Dy / L * Side, W[K].second + Dx / L * Side)) ++FlatOn[Age];
+					}
+				}
+		}
+		std::printf("mud memory: %d of %d places along the ways where no column drives (but at a gateway)\n", Crossed, Read);
+		if (Crossed > 0) Fault("mud memory: an old way crosses a hedge's bank, a lane, a wall, a yard, a wood or water");
+		std::printf("mud memory: %zu ways (%zu gateways), %d pieces of old ruts at a month and %d at six (at most %d) laid in %.1f ms; grass kept off at %d of %d places on them at a month, %d at six\n",
+			Ways.size(), Gates.size(), Laid[0], Laid[1], LandCrater::Ruts::MostOld, RutMs, FlatOn[0], Asked, FlatOn[1]);
+		if (!Fought.empty() && Ways.empty()) Fault("mud memory: no way laid over the fought-over ground");
+		if (!Ways.empty() && Laid[0] == 0) Fault("mud memory: no old rut laid");
+		if (Laid[0] > LandCrater::Ruts::MostOld || Laid[1] > LandCrater::Ruts::MostOld) Fault("mud memory: more old ruts than their cap");
+		if (Laid[0] != Laid[1]) Fault("mud memory: the same ways laid differently by their age");
+		if (RutMs > 500.0) Fault("mud memory: laying the old ruts took past half a second");
+		if (Laid[0] > 0 && FlatOn[0] == 0) Fault("mud memory: grass standing in a month-old rut (dried mud)");
+		if (FlatOn[1] > 0) Fault("mud memory: grass kept off a rut grassed over at six months");
+	}
+	if (std::getenv("LAND_PLAY_ONLY_SCARS"))
+	{
+		std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());
+		return Faults == 0 ? 0 : 1;
+	}
 	// The shell holes, laid as the game lays them (LandBattle's MakeCraters): every shell, bomb and grenade that lands
 	// in the ground, none on armour.
 	LandCrater::Field Holes;
 	Holes.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
 	// (dug where the game digs them, and the ground drawn cut over their bowls as the game cuts it: LandCrater::Dug)
 	Holes.Dig = LandCrater::Field::DigOn(Field);
+	GapHoles = &Holes;
+	// (each cut's bank torn at T1, as LandBattle's MakeBreaches tears it: where, how long it took, whether her path
+	// then went over the gap's floor)
+	std::vector<char> CutTorn(Rec.Cuts.size(), 0);
+	int CutsTornCount = 0, CutsNoBank = 0, CutsDrivenThrough = 0;
+	double BreachMsMost = 0.0;
 	LandCrater::Dug Dug;
 	Dug.Begin(&Field.Tiles());
 	size_t DugSentMost = 0;
@@ -601,7 +1270,293 @@ int main(int argc, char** argv)
 	int FollowerShots = 0, FollowerStruck = 0, FollowerOnHim = 0, FollowerBursts = 0, FollowerBurstsBeside = 0;
 	double FollowerWorst = 0.0;
 
-	while (Battle < Rec.End + 6.0)
+	// The picture run (LAND_PLAY_STILLS; LAND_PLAY_ONLY_STILLS runs it alone): the scene's ten stills as LandBattle asks
+	// them (each asked two battle seconds before it is taken, one film from the start), and for each what the camera made
+	// of it: the shot and its man, placed unfit or not, the men of the battle in the picture, and the share of the picture
+	// that is a house's wall or roof.
+	auto RunStills = [&]()
+	{
+		const double SContact = Rec.Contact >= 0.0 ? Rec.Contact : 30.0;
+		struct Still { const char* Name; double At; int Kind; int Subject; bool bBuilding; };
+		std::vector<Still> Stills;
+		auto Standing = [&Rec](int Side, double At, bool bVehicle) -> int
+		{
+			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+			{
+				const LandFeed::Track& T = Rec.Tracks[K];
+				const LandFeed::Block* B = Rec.BlockOf(T.Block);
+				if (!B || B->Side != Side || T.bTwin || T.IsVehicle() != bVehicle || T.Start() > At || (T.Fell >= 0.0 && T.Fell < At + 4.0) || (T.Out >= 0.0 && T.Out < At + 4.0)) continue;
+				if (!bVehicle && (T.Role == "mortar" || T.Role == "fo")) continue;
+				return static_cast<int>(K);
+			}
+			return -1;
+		};
+		const int KWide = static_cast<int>(LandEye::Kind::Wide), KShoulder = static_cast<int>(LandEye::Kind::Shoulder), KLow = static_cast<int>(LandEye::Kind::Low);
+		const int KTank = static_cast<int>(LandEye::Kind::Tank), KWatch = static_cast<int>(LandEye::Kind::Watch);
+		Stills.push_back({ "01-opening", 4.0, -1, -1, false });
+		Stills.push_back({ "02-the-advance", std::max(12.0, SContact - 14.0), KWide, -1, false });
+		Stills.push_back({ "03-among-the-men", SContact + 12.0, KShoulder, Standing(0, SContact + 10.0, false), false });
+		Stills.push_back({ "04-in-the-grass", SContact + 45.0, KLow, Standing(0, SContact + 43.0, false), false });
+		{
+			double FirstShot = -1.0;
+			int First = -1, FirstFall = -1, FirstKill = -1, Fallen = -1;
+			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+			{
+				const LandFeed::Track& T = Rec.Tracks[K];
+				if (T.Role == "tank" && !T.Shots.empty() && (FirstShot < 0.0 || T.Shots.front() < FirstShot)) { FirstShot = T.Shots.front(); First = static_cast<int>(K); }
+				if (T.Fell >= 0.0 && !T.bTwin)
+				{
+					int& Into = T.IsVehicle() ? FirstKill : FirstFall;
+					if (Into < 0 || T.Fell < Rec.Tracks[static_cast<size_t>(Into)].Fell) Into = static_cast<int>(K);
+				}
+				if (T.IsMan() && T.Fell >= 0.0 && T.Fell < Rec.End * 0.75 && !T.bTwin) Fallen = static_cast<int>(K);
+			}
+			if (First >= 0) Stills.push_back({ "05-the-tanks", FirstShot + 0.25, KTank, First, false });
+			if (FirstFall >= 0) Stills.push_back({ "06-a-man-falls", Rec.Tracks[static_cast<size_t>(FirstFall)].Fell + 0.8, KWatch, FirstFall, false });
+			if (FirstKill >= 0) Stills.push_back({ "07-a-tank-knocked-out", Rec.Tracks[static_cast<size_t>(FirstKill)].Fell + 2.0, KWatch, FirstKill, false });
+			Stills.push_back({ "08-the-village", Rec.End * 0.6, KWatch, Standing(1, Rec.End * 0.6 - 2.0, false), true });
+			if (Fallen >= 0) Stills.push_back({ "09-the-fallen", Rec.End * 0.82, KLow, Fallen, false });
+			// (the guns open: the machine guns' long fire after contact, LandFeed::GunsOpen, as the scene asks it)
+			double GunsAt = -1.0;
+			int GunsTrack = -1;
+			if (LandFeed::GunsOpen(Rec, GunsAt, GunsTrack)) Stills.push_back({ "11-the-guns-open", GunsAt, GunsTrack >= 0 ? KWatch : KWide, GunsTrack, false });
+		}
+		std::sort(Stills.begin(), Stills.end(), [](const Still& A, const Still& B) { return A.At < B.At; });
+		// (what a ray from the eye meets first within 250 m: 1 a house, 2 anything else the scene draws or the ground, 0
+		// nothing)
+		auto RayMeets = [&](const Vec& From, const Vec& Dir) -> int
+		{
+			for (double S = 1.0; S < 250.0; S += S < 40.0 ? 0.5 : 1.0)
+			{
+				const Vec P = From + Dir * S;
+				LandField::Drawn What = LandField::Drawn::Pasture;
+				const double Z = Field.HeightAt(P.X, P.Y, &What);
+				if (What == LandField::Drawn::Floor && P.Z < Z + 7.0) return 1;
+				if (P.Z < Z) return 2;
+				if (What == LandField::Drawn::Wall && P.Z < Z + 2.0) return 2;
+				if (What == LandField::Drawn::Bank && P.Z < Z + 3.0) return 2;
+				if (Sight.At(P, -1) != LandSight::Hit::None) return 2;
+			}
+			return 0;
+		};
+		auto HouseShare = [&](const LandEye::Pose& P) -> double
+		{
+			Vec F = P.Look - P.Eye;
+			F = F * (1.0 / std::max(1e-6, F.Length()));
+			Vec R(F.Y, -F.X, 0.0);
+			R = R * (1.0 / std::max(1e-6, R.Length()));
+			const Vec U(R.Y * F.Z - R.Z * F.Y, R.Z * F.X - R.X * F.Z, R.X * F.Y - R.Y * F.X);
+			const double Tv = std::tan(P.Fov * 0.5 * 3.14159265 / 180.0), Th = Tv * 16.0 / 9.0;
+			int Hits = 0, All = 0;
+			for (int Iy = 0; Iy < 9; ++Iy)
+				for (int Ix = 0; Ix < 16; ++Ix)
+				{
+					const double Sx = (Ix + 0.5) / 8.0 - 1.0, Sy = 1.0 - (Iy + 0.5) / 4.5;
+					Vec D = F + R * (Sx * Th) + U * (Sy * Tv);
+					D = D * (1.0 / D.Length());
+					++All;
+					if (RayMeets(P.Eye, D) == 1) ++Hits;
+				}
+			return static_cast<double>(Hits) / All;
+		};
+		// (twice: the second with the film cut every 2.3 s between the asks, a run whose history parts from the first,
+		// as the photographer's light A/Bs part by the dark rule: each asked still must come out the same)
+		struct Took { LandEye::Kind Shot; int Subject; Vec Eye; };
+		std::vector<Took> First(Stills.size(), Took{ LandEye::Kind::Open, -1, Vec() });
+		int Unfit = 0, Empty = 0, NoHouse = 0, Same = 0, Houses = 0, NearMan = 0;
+		double SlowMs = 0.0, SlowAt = 0.0, FindMs = 0.0;
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			LandEye::Director Pic;
+			Pic.Begin(Rec, EW, ES);
+			// (as the scene's picture run does as the battle opens)
+			const auto H0 = std::chrono::steady_clock::now();
+			Pic.FindHouses();
+			if (Pass == 0) FindMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - H0).count();
+			std::vector<bool> AskedYet(Stills.size(), false), Taken(Stills.size(), false);
+			double B = 0.0, R = 0.0, NextStir = 30.0;
+			const double Last = Stills.empty() ? 0.0 : Stills.back().At;
+			while (B < Last + 0.1)
+			{
+				const double Speed = B < Contact - 10.0 ? 2.0 : 1.0 / Life;
+				B += Dt * Speed;
+				R += Dt;
+				PlaceMovers(B);
+				if (Pass == 1 && R >= NextStir)
+				{
+					NextStir = R + 2.3;
+					bool bNearAsk = false;
+					for (const Still& St : Stills) bNearAsk = bNearAsk || (B > St.At - 2.6 && B < St.At + 0.2);
+					if (!bNearAsk) Pic.CutNow();
+				}
+				for (size_t I = 0; I < Stills.size(); ++I)
+					// (not before the still before it is taken: two asked within 2 s of each other, the later took the
+					// earlier's still, as Sedan's 05 took 06's)
+					if (!AskedYet[I] && Stills[I].Kind >= 0 && B >= Stills[I].At - 2.0 && (I == 0 || Taken[I - 1]))
+					{
+						AskedYet[I] = true;
+						Pic.Ask(static_cast<LandEye::Kind>(Stills[I].Kind), Stills[I].Subject, Stills[I].bBuilding);
+					}
+				const auto U0 = std::chrono::steady_clock::now();
+				const LandEye::Pose P = Pic.Update(B, R, Dt);
+				const double UMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - U0).count();
+				if (Pass == 0 && UMs > SlowMs) { SlowMs = UMs; SlowAt = B; }
+				for (size_t I = 0; I < Stills.size(); ++I)
+				{
+					if (Taken[I] || B < Stills[I].At) continue;
+					Taken[I] = true;
+					const Still& St = Stills[I];
+					const bool bUnfit = St.Kind >= 0 && Pic.AskedUnfit();
+					if (Pass == 1)
+					{
+						const Took& W = First[I];
+						if (W.Shot == P.Shot && W.Subject == P.Subject && (W.Eye - P.Eye).Length() < 0.5) ++Same;
+						else std::printf("  still %s in the stirred run: %s on %d, eye %.1f m from the first run's (%s on %d)\n", St.Name, LandEye::NameOf(P.Shot), P.Subject, (W.Eye - P.Eye).Length(), LandEye::NameOf(W.Shot), W.Subject);
+						continue;
+					}
+					First[I] = { P.Shot, P.Subject, P.Eye };
+					// (the battle's men standing in the picture within 150 m, and seen: no bank, house or wood across)
+					int Men = 0;
+					for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+					{
+						const LandFeed::Track& T = Rec.Tracks[K];
+						if (T.bTwin || !T.IsMan() || T.Start() > B || (T.Out >= 0.0 && B > T.Out)) continue;
+						const LandFeed::Spot Sp = LandFeed::SpotAt(T, B);
+						const Vec Chest(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 1.0);
+						if ((Chest - P.Eye).Length() > 150.0 || !LandEye::InPicture(P, Chest, 0.95)) continue;
+						if (std::getenv("LAND_PLAY_STILL_MEN") && (Chest - P.Eye).Length() < 80.0) std::printf("    %s: man %zu at %.1f m, open %d, fell %d\n", St.Name, K, (Chest - P.Eye).Length(), EW.Open(P.Eye, Chest) ? 1 : 0, T.Fell >= 0.0 && T.Fell <= B ? 1 : 0);
+						if (!EW.Open(P.Eye, Chest)) continue;
+						++Men;
+					}
+					// (the art director on 83749bb4: other men 2 m off a still's lens, wholly in frame or out; nearer only
+					// running past, within 2 m no more than half a second on the screen and never within 0.9 m)
+					double Nearest = 1e9, Held = 0.0;
+					for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+					{
+						const LandFeed::Track& T = Rec.Tracks[K];
+						if (static_cast<int>(K) == P.Subject || T.bTwin || !T.IsMan() || T.Start() > B || (T.Out >= 0.0 && B > T.Out)) continue;
+						const LandFeed::Spot Sp = LandFeed::SpotAt(T, B);
+						const double Gap = std::hypot(Sp.X - P.Eye.X, Sp.Y - P.Eye.Y);
+						if (Gap >= 2.0) continue;
+						const Vec Head(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 1.0);
+						if (!LandEye::InPicture(P, Head, 1.4)) continue;
+						const bool bDown = T.Fell >= 0.0 && T.Fell <= B;
+						double Span = 0.0, Least = Gap;
+						for (int Way = -1; Way <= 1; Way += 2)
+							for (double U = Way < 0 ? 0.01 : 0.0; U < 5.0; U += 0.01)
+							{
+								const double At = B + Way * U;
+								if (At < T.Start()) break;
+								const LandFeed::Spot S2 = LandFeed::SpotAt(T, At);
+								const double G2 = std::hypot(S2.X - P.Eye.X, S2.Y - P.Eye.Y);
+								if (G2 >= 2.0) break;
+								Least = std::min(Least, G2);
+								Span += 0.01;
+							}
+						// (battle seconds to the screen's: the fight runs at 1 / Life of the screen's pace)
+						const double OnScreen = bDown ? 99.0 : Span * Life;
+						Nearest = std::min(Nearest, Least);
+						Held = std::max(Held, OnScreen);
+					}
+					if (Held > 0.55 || Nearest < 0.85) ++NearMan;
+					const double House = HouseShare(P);
+					std::string Asked = "-";
+					if (St.Subject >= 0)
+					{
+						const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(St.Subject)];
+						const LandFeed::Change* C = LandFeed::ChangeAt(T, B);
+						Asked = T.Role + " " + (C ? C->Pose : std::string("idle"));
+					}
+					char NearText[96] = "";
+					if (Nearest < 1e8) std::snprintf(NearText, sizeof(NearText), "; a man %.2f m off the lens, within 2 m %.2f s", Nearest, Held);
+					std::printf("still %s at %.1f s: asked %s on %d (%s), took %s on %d%s%s; eye %.2f m up, fov %.0f; %d men in the picture, a house %.0f%% of it%s\n",
+						St.Name, B, St.Kind >= 0 ? LandEye::NameOf(static_cast<LandEye::Kind>(St.Kind)) : "none", St.Subject, Asked.c_str(), LandEye::NameOf(P.Shot), P.Subject,
+						bUnfit ? " UNFIT" : "", St.bBuilding ? (Pic.HouseInShot() ? " (a house kept in it)" : " (no house fit)") : "", P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), P.Fov, Men, 100.0 * House, NearText);
+					if (bUnfit) ++Unfit;
+					const bool bOnMan = St.Subject >= 0 && Rec.Tracks[static_cast<size_t>(St.Subject)].IsMan();
+					if ((St.Kind == KShoulder || St.Kind == KLow || (St.Kind == KWatch && bOnMan)) && Men == 0) ++Empty;
+					Houses = Pic.HousesFound();
+					if (St.bBuilding && Houses > 0 && House < 0.04) ++NoHouse;
+				}
+			}
+		}
+		std::printf("stills: %zu, %d placed unfit, %d on a man with no man of the battle in the picture, %d village shots with no house (%d houses on the field), %d with a man held within 2 m of the lens; %d of %d asked the same in a run cut differently between; the camera's slowest frame %.2f ms (battle %.1f s); the houses found in %.1f ms as the battle opens\n", Stills.size(), Unfit, Empty, NoHouse, Houses, NearMan, Same, static_cast<int>(Stills.size()), SlowMs, SlowAt, FindMs);
+		if (Unfit > 0) Fault("a still's asked shot found no fit place");
+		if (Empty > 0) Fault("a still on a man has no man of the battle in its picture");
+		if (NoHouse > 0) Fault("the village still has no house in the picture");
+		if (NearMan > 0) Fault("a still holds a man within 2 m of its lens, or one passes within 0.9 m");
+		if (Same < static_cast<int>(Stills.size())) Fault("an asked still parts with the run's history");
+	};
+	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
+	// is held just over the ears, never among the stalks.
+	auto RunCorn = [&]()
+	{
+		// (up to six men well in the corn, each 20 m from the others: since the art director's 2 m for asked stills
+		// (14:32Z) a man in the corn among his section's men is no place for the lens, and the ask goes to another man,
+		// at Sedan off the corn's edge; the corn's rule is then tried on the next man in it)
+		struct InCornAt { int Track; double At; LandFeed::Spot Sp; };
+		std::vector<InCornAt> Tries;
+		for (size_t K = 0; K < Rec.Tracks.size() && Tries.size() < 6; ++K)
+		{
+			const LandFeed::Track& T = Rec.Tracks[K];
+			if (T.bTwin || !T.IsMan() || T.Role == "mortar" || T.Role == "fo") continue;
+			for (double When = std::max(T.Start(), Contact); When < Rec.End - 6.0; When += 5.0)
+			{
+				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
+				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
+				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
+				// the platoon recording's first man in the corn did)
+				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
+				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
+				for (const InCornAt& Was : Tries) bDeep = bDeep && std::hypot(Was.Sp.X - Sp.X, Was.Sp.Y - Sp.Y) >= 20.0;
+				if (bDeep) { Tries.push_back({ static_cast<int>(K), When, Sp }); break; }
+			}
+		}
+		int Among = 0, Tried = 0, Seen = 0;
+		for (const InCornAt& Try : Tries)
+		{
+			const int InCorn = Try.Track;
+			const double AskAt = Try.At;
+			++Tried;
+			LandEye::Director Asked;
+			Asked.Begin(Rec, EW, ES);
+			int TakenOn = -1;
+			double Least = 1e9;
+			Seen = 0;
+			for (int F = 0; F < 4 * 60; ++F)
+			{
+				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
+				PlaceMovers(AskAt + F * Dt);
+				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
+				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
+				if (P.Shot != LandEye::Kind::Low) continue;
+				if (TakenOn < 0) TakenOn = P.Subject;
+				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
+				if (Corn <= 0.0) continue;
+				++Seen;
+				const double Over = P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y) - Corn;
+				Least = std::min(Least, Over);
+				if (Over < 0.05) ++Among;
+			}
+			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d, the man tried %d of %zu): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Tried, Tries.size(), Seen, Seen ? Least : 0.0);
+			if (Seen > 0) break;
+		}
+		if (Among > 0) Fault("an asked low shot is down among the corn");
+	};
+	if (std::getenv("LAND_PLAY_ONLY_CORN"))
+	{
+		RunCorn();
+		return 0;
+	}
+	if (std::getenv("LAND_PLAY_ONLY_STILLS"))
+	{
+		RunStills();
+		return 0;
+	}
+
+	// (LAND_PLAY_ONLY_GEN: the general's view alone, for working on it; the film's counts after it are of nothing)
+	const bool bOnlyGen = std::getenv("LAND_PLAY_ONLY_GEN") != nullptr;
+	while (!bOnlyGen && Battle < Rec.End + 6.0)
 	{
 		const double Speed = Battle < Contact - 10.0 ? 2.0 : 1.0 / Life;
 		const double From = Battle;
@@ -623,6 +1578,60 @@ int main(int argc, char** argv)
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
+		{
+			const std::vector<LandEye::Director::RadioBeat>& Beats = Eye.RadioBeats();
+			for (; RadioLooked < Beats.size() && Battle >= Beats[RadioLooked].Land; ++RadioLooked)
+			{
+				const LandEye::Director::RadioBeat& Bt = Beats[RadioLooked];
+				if (!Bt.bBarrage) continue;
+				++RadioBarrages;
+				const LandEye::Vec At(Bt.X, Bt.Y, GroundAt(Bt.X, Bt.Y) + 1.0);
+				// (in the picture, and its 15 m across not a speck: a twenty-fifth of the picture's height at the least)
+				const double Off = (At - Pose.Eye).Length();
+				const double Share = 15.0 / (2.0 * std::max(1.0, Off) * std::tan(0.5 * Pose.Fov * 3.14159265358979 / 180.0));
+				if (LandEye::InPicture(Pose, At, 0.95) && Share >= 0.04) ++RadioSeen;
+				else if (std::getenv("LAND_PLAY_RADIO")) std::printf("  radio: the salvo at %.1f not in the picture: %s on %d, %.0f m off, lens %.0f, %.1f%% of its height\n", Bt.Land, LandEye::NameOf(Pose.Shot), Pose.Subject, Off, Pose.Fov, 100.0 * Share);
+				if (std::getenv("LAND_PLAY_RADIO"))
+				{
+					const LandEye::Vec Way = (Pose.Look - Pose.Eye), To = (At - Pose.Eye);
+					const double Apart = std::acos(std::clamp((Way.X * To.X + Way.Y * To.Y + Way.Z * To.Z) / std::max(1e-9, Way.Length() * To.Length()), -1.0, 1.0)) * 180.0 / 3.14159265358979;
+					std::printf("  radio: the salvo at %.1f: %s on %d, %.0f m off, lens %.0f, %.1f%% of its height, %.1f deg off the look\n", Bt.Land, LandEye::NameOf(Pose.Shot), Pose.Subject, Off, Pose.Fov, 100.0 * Share, Apart);
+				}
+			}
+			// (the cuts to a caller: real seconds between them)
+			if (Pose.bCut && !Beats.empty() && Pose.Subject == Beats.back().Caller && Beats.size() > RadioLooked && Real != RadioCutAt)
+			{
+				if (RadioCutAt >= 0.0) RadioGapLeast = std::min(RadioGapLeast, Real - RadioCutAt);
+				RadioCutAt = Real;
+			}
+		}
+		// The shallow focus (E9): on close follow shots only, switched on or off only on a cut, pulled after its man.
+		{
+			const bool bFocus = Pose.Focus > 0.0;
+			if (Battle >= Contact)
+			{
+				++FightFrames;
+				if (bFocus) ++FocusFrames;
+			}
+			if (Pose.bCut)
+			{
+				++FocusAllCuts;
+				if (bFocus) ++FocusCuts;
+				FocusShotAt = Real;
+			}
+			else if (bFocus != bFocusWas) ++FocusMidShot;
+			if (bFocus && (Pose.Shot == LandEye::Kind::Wide || Pose.Shot == LandEye::Kind::Open || Pose.Shot == LandEye::Kind::Tank)) ++FocusWrongKind;
+			if (bFocus && bFocusWas && !Pose.bCut) FocusPullMost = std::max(FocusPullMost, std::abs(std::log(Pose.Focus / FocusWas)) / Dt);
+			// (on a watch or a tank tracked, a second into the shot: the man's or the tank's distance, his middle 1 m up)
+			if (bFocus && !Pose.bCut && Real - FocusShotAt >= 1.0 && Pose.Subject >= 0 && (Pose.Shot == LandEye::Kind::Watch || Pose.Shot == LandEye::Kind::Track))
+			{
+				const LandFeed::Spot S = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Pose.Subject)], Battle);
+				const double D = (LandEye::Vec(S.X, S.Y, GroundAt(S.X, S.Y) + 1.0) - Pose.Eye).Length();
+				if (D > 1.0) FocusOff.push_back(std::abs(Pose.Focus - D) / D);
+			}
+			bFocusWas = bFocus;
+			FocusWas = Pose.Focus;
+		}
 		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
 		EyeTotal += EyeMs;
 		// (the film's measuring is the check's own, not the game's: kept out of the frame's time)
@@ -639,6 +1648,7 @@ int main(int argc, char** argv)
 			if (!Eye.Roomy(Pose)) ++LensCrowded;
 			const double Screened = Eye.Screened(Pose);
 			if (Screened > ES.ScreenMost) ++LensScreened;
+			if (Screened > ES.ScreenMost && std::getenv("LAND_PLAY_SCREEN")) std::printf("  screened %.0f%% at battle %.2f: %s on %d, %.1f s into it, lens %.0f, eye %.1f over the ground\n", 100.0 * Screened, Battle, LandEye::NameOf(Pose.Shot), Pose.Subject, Real - LastCutReal, Pose.Fov, Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y));
 			if (Screened > ES.ScreenLeave)
 			{
 				++LensScreenedLeave;
@@ -652,7 +1662,11 @@ int main(int argc, char** argv)
 		{
 			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
 			// (the whole mass is the one wide shot asked for in the middle: CD1)
-			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot()) ++MiddleAerials;
+			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot())
+			{
+				++MiddleAerials;
+				if (std::getenv("LAND_PLAY_SCREEN")) std::printf("  aerial in the middle at battle %.2f, why %s\n", Battle, LandEye::NameOf(Eye.LastWhy()));
+			}
 		}
 		const double Ground = Rec.Ground.HeightAt(Pose.Look.X, Pose.Look.Y);
 		LandSound::Listener Ear;
@@ -685,6 +1699,42 @@ int main(int argc, char** argv)
 
 		if (KnotStart < 0.0) KnotStart = W.Knot;
 		KnotEnd = W.Knot;
+		for (size_t K = 0; K < Rec.Cuts.size(); ++K)
+		{
+			const LandFeed::Cut& Cut = Rec.Cuts[K];
+			if (CutTorn[K] || Battle < Cut.T1) continue;
+			CutTorn[K] = 1;
+			LandField::BankPlace BP;
+			if (!Field.NearestBank(Cut.X, Cut.Y, 6.0, BP) || std::hypot(BP.X - Cut.X, BP.Y - Cut.Y) > 2.5) { ++CutsNoBank; continue; }
+			const double Left = -std::sin(BP.Yaw) * std::cos(Cut.Yaw) + std::cos(BP.Yaw) * std::sin(Cut.Yaw);
+			LandCrater::Breach B;
+			B.X = BP.X;
+			B.Y = BP.Y;
+			B.Yaw = BP.Yaw;
+			B.Half = 0.5 * Cut.Width;
+			B.Foot = BP.Foot;
+			B.Through = Left >= 0.0 ? 1 : -1;
+			const auto B0 = std::chrono::steady_clock::now();
+			const bool bTorn = Holes.AddBreach(B, [&Field](double X, double Y) { return Field.BankRise(X, Y); }, "earth");
+			BreachMsMost = std::max(BreachMsMost, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - B0).count());
+			if (!bTorn) { Fault("a hedge cutter's bank not torn", Battle); continue; }
+			++CutsTornCount;
+			++GapsTorn;
+			// (her own track from the moment it gives way: over the gap's floor at some step, as she drives through it)
+			bool bOver = Cut.Unit < 0;
+			if (Cut.Unit >= 0 && static_cast<size_t>(Cut.Unit) < Rec.Tracks.size())
+			{
+				for (double T = Cut.T1; T <= Cut.T1 + 6.0 && !bOver; T += 0.05)
+				{
+					const LandFeed::Spot Sp = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Cut.Unit)], T);
+					double Z = 0.0;
+					bOver = Holes.BreachFloor(Sp.X, Sp.Y, Z);
+				}
+			}
+			if (bOver) ++CutsDrivenThrough;
+			else Fault("a hedge cutter's tank never drove over the gap she tore", Battle);
+			if (std::getenv("LAND_PLAY_BREACHES")) std::printf("  cut %zu torn at battle %.1f (T1 %.1f), %.0f, %.0f, through %+d, track %d over the floor %d\n", K, Battle, Cut.T1, BP.X, BP.Y, B.Through, Cut.Unit, bOver ? 1 : 0);
+		}
 		for (const LandPlay::Effect& E : Fx)
 		{
 			if ((E.Kind == LandPlay::FxKind::Shell || E.Kind == LandPlay::FxKind::Size) && !E.bArmour)
@@ -695,7 +1745,8 @@ int main(int argc, char** argv)
 				HoleMs += Ms;
 				HoleMsMost = std::max(HoleMsMost, Ms);
 			}
-			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate" };
+			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate", "screen" };
+			static_assert(sizeof(Names) / sizeof(Names[0]) == static_cast<size_t>(LandPlay::FxKind::Screen) + 1, "a name for every effect kind");
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
 			if (!bSections || !RoundIx.count(E.Round)) continue;
@@ -794,6 +1845,52 @@ int main(int argc, char** argv)
 			if (T.Delay > 0.0 && T.Family != "body" && T.Family != "voices") MostLate = std::max(MostLate, T.Delay);
 			if (T.Bus == "voices") ++VoiceLines;
 		}
+		{
+			// (the pool: players stopped by now free their voices; the takes due now start; the cuts due now fade)
+			for (const LandSound::Take& T : Takes) PoolDue.emplace_back(Real + std::max(0.0, T.Delay), T);
+			for (int K = 0; K < Pool.Count(); ++K)
+			{
+				// (the game hears a player has stopped a few frames late, from the audio thread: 50 ms here)
+				if (Pool.At(K).bBusy && Players[static_cast<size_t>(K)].Stops + 0.05 <= Real + 1e-9) Pool.Free(K);
+			}
+			size_t Kept = 0;
+			for (size_t K = 0; K < PoolDue.size(); ++K)
+			{
+				if (PoolDue[K].first > Real + 1e-6)
+				{
+					if (Kept != K) PoolDue[Kept] = PoolDue[K];
+					++Kept;
+					continue;
+				}
+				const LandSound::Take& T = PoolDue[K].second;
+				const double Long = Mix.Length ? Mix.Length(T.Name) : 1.5;
+				if (Long <= 0.0) { ++PoolSilent; continue; } // (no recording: the game starts nothing)
+				const double Fade = T.Cut > 0.0 ? std::max(0.02, T.CutFade) : 0.0;
+				const int StolenWas = Pool.Stolen;
+				bool bMade = false;
+				const int Slot = Pool.Take(Real, Long - T.From, T.Pitch, T.Cut, Fade, bMade);
+				if (bMade) Players.emplace_back();
+				FPlayer& P = Players[static_cast<size_t>(Slot)];
+				// (a voice handed out while its take still sounds, the pool not full: a take cut off)
+				if (P.Stops > Real + 1e-9 && Pool.Stolen == StolenWas) ++PoolCutOff;
+				// (the take it held before is no longer held: a moving take or the blast's dulling cannot reach the new one)
+				if (Pool.UseOf(Slot) > 1 && Pool.Holds(Slot, Pool.UseOf(Slot) - 1)) ++PoolStaleHeld;
+				P.Stops = Real + (T.Cut > 0.0 ? T.Cut + Fade : std::max(0.0, Long - T.From) / std::max(0.01, T.Pitch));
+				P.CutAt = T.Cut > 0.0 ? Real + T.Cut : -1.0;
+				if (T.Cut > 0.0) ++PoolCuts;
+			}
+			PoolDue.resize(Kept);
+			PoolFades.clear();
+			Pool.Due(Real, PoolFades);
+			for (const int Slot : PoolFades)
+			{
+				FPlayer& P = Players[static_cast<size_t>(Slot)];
+				PoolFadeLate = std::max(PoolFadeLate, Real - P.CutAt);
+				PoolFadeEarly = std::max(PoolFadeEarly, P.CutAt - Real);
+				P.Stops = Real + Pool.FadeOf(Slot);
+				P.CutAt = -1.0;
+			}
+		}
 		for (const LandPlay::Loss& L : Losses)
 		{
 			const double Far = (L.At - Pose.Eye).Length();
@@ -814,7 +1911,7 @@ int main(int argc, char** argv)
 			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0 && Eye.LastWhy() != LandEye::Why::Rescue && Eye.LastWhy() != LandEye::Why::Burst) ShortestShot = Real - LastCutReal;
 			LastCutReal = Real;
 			char Line[160];
-			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject);
+			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d (the shot before left: %s)", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject, LandEye::NameOf(Eye.LastWhy()));
 			CutLines.push_back(Line);
 		}
 		ShotSeconds[LandEye::NameOf(Pose.Shot)] += Dt;
@@ -889,12 +1986,59 @@ int main(int argc, char** argv)
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d heard in a copy already sounding (a volley), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
 		Mix.ShotsHeard, Mix.ShotTakes, Mix.ShotsOutOfHearing, Mix.ShotsDropped, Mix.ShotsOnScreenDropped, Mix.ShotsMerged, Mix.Cracks, Mix.Landings, Mix.Falls, Mix.Delayed);
-	// (a shot heard in a copy is the last resort of a volley in the picture: more than one in a thousand and the rule is
-	// hiding shots, not sparing a flanged copy)
-	if (Mix.ShotsMerged * 1000 > Mix.ShotsHeard) Fault("more than one shot in a thousand was heard only in a copy already sounding");
+	// (a shot heard in a copy is the last resort of a volley in the picture, every recording it could take crowded at
+	// every pitch near it. Never a shot nearer than its family's far takes: that one is heard on its own, and a merge
+	// would hide it. Far off, in a crowd, it is one crack of the crackle (the live 1,989-man battle's mass wide put
+	// 159 of 34,555 there, all 307 to 470 m off, in seven seconds); more than one in a hundred and the rule is hiding
+	// the battle, not sparing a flanged copy)
+	std::printf("heard in a copy: %d shots (%.2f in a thousand), %d takes of any kind (a shot, a crack, a blast) nearer than their family's far takes; %d machine-gun bursts crowded out of one recording took another on their list, %d another stretch of firing (moreParts), %d a shorter stretch cut at its end (a round or two fewer heard)\n",
+		Mix.ShotsMerged, 1000.0 * Mix.ShotsMerged / std::max(1, Mix.ShotsHeard), Mix.SameMergedNear, Mix.MgToOther, Mix.MgToOtherPart, Mix.MgShortPart);
+	for (const auto& Kv : Mix.MergedNearBy) if (Kv.second > 0) std::printf("  heard in a copy though nearer than its far takes: %s %d\n", Kv.first.c_str(), Kv.second);
+	if (Mix.SameMergedNear > 0) Fault("a take nearer than its family's far takes (a shot, a crack, a blast) was heard only in a copy already sounding (a sound heard on its own, hidden)");
+	if (Mix.ShotsMerged * 100 > Mix.ShotsHeard) Fault("more than one shot in a hundred was heard only in a copy already sounding");
 	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
+	{
+		// The takes' players pooled (land.voices): every take played on a voice made once, none cut off by another while
+		// it sounds, each cut faded on the frame it falls due, no take reached through a voice it has left.
+		int CutsLeft = 0;
+		for (int K = 0; K < Pool.Count(); ++K) if (Pool.At(K).bBusy && Pool.At(K).FadeAt >= 0.0) ++CutsLeft;
+		std::printf("voices (land.voices, %s): %d takes on %d players (%d made before the battle, %d during it, at most %d), the most sounding at once %d; %d gave way to a new take, %d cut off while sounding, %d stale handles held; %d cuts, %d faded (%d still due at the end), the latest %.1f ms after due, the earliest %.1f ms before; %d takes with no recording\n",
+			Mix.bVoicesPooled ? "pooled" : "spawned each in the game", Pool.Taken, Pool.Count(), Pool.Warm(), Pool.MadeLate, Mix.VoicesMost, Pool.MostBusy, Pool.Stolen, PoolCutOff, PoolStaleHeld,
+			PoolCuts, Pool.Faded, CutsLeft, 1000.0 * PoolFadeLate, 1000.0 * PoolFadeEarly, PoolSilent);
+		if (Pool.Stolen > 0) Fault("every pooled voice was sounding and a take cut another off (land.voices.most too few)");
+		if (PoolCutOff > 0) Fault("the voice pool handed out a voice whose take still sounded");
+		if (PoolStaleHeld > 0) Fault("a take's handle still held its voice after the voice took another take");
+		if (Pool.Faded + CutsLeft + Pool.StolenCuts != PoolCuts) Fault("a cut take was not faded out exactly once");
+		if (PoolFadeLate > Dt + 1e-6 || PoolFadeEarly > 1e-6) Fault("a cut take faded more than a frame after its cut, or before it");
+	}
+	{
+		// Each vehicle's engine loop's name worked out only when her cue or model changes (LandSound::EngineNames), the
+		// same name the mix gives (Mixer::EngineTake): 40 vehicles over 3,000 frames, idling and driving by turns, one
+		// burning out (no cue).
+		LandSound::EngineNames Names;
+		const char* Models[] = { "Panzer IV", "Tiger", "M4 Sherman", "T-34" };
+		const char* Loops[] = { "tank_idle_loop", "tank_loop", "tank_sherman_drive_loop", "tank_idle_sherman_loop" };
+		int Changes = 0, Wrong = 0;
+		std::vector<std::string> Last(40, "?");
+		for (int Frame = 0; Frame < 3000; ++Frame)
+		{
+			for (int V = 0; V < 40; ++V)
+			{
+				const std::string Model = Models[V % 4];
+				const std::string Cue = V == 7 && Frame > 1500 ? std::string() : std::string(Loops[(V + Frame / (60 + V)) % 4]);
+				if (Cue != Last[static_cast<size_t>(V)]) { ++Changes; Last[static_cast<size_t>(V)] = Cue; }
+				const int Name = Names.Of(Mix, V, Model, Cue);
+				const std::string Want = Cue.empty() ? std::string() : Mix.EngineTake(Model, Cue);
+				const std::string Got = Name < 0 ? std::string() : Names.Names()[static_cast<size_t>(Name)];
+				if (Got != Want) ++Wrong;
+			}
+		}
+		std::printf("engine names: %d asked over 3,000 frames of 40 vehicles, %d worked out (%d changes of cue), %d names in all, %d wrong\n", Names.Asked, Names.Built, Changes, static_cast<int>(Names.Names().size()), Wrong);
+		if (Wrong > 0) Fault("a vehicle's cached engine name differs from the mix's (Mixer::EngineTake)");
+		if (Names.Built > Changes) Fault("a vehicle's engine name was worked out again with no change of cue or model");
+	}
 	{
 		// A tank's machine guns are her own (land.tankMg, by army; its roof row the guns on her commander's hatch):
 		// every close burst from a tank plays a take on her army's row, the roof's where it has one.
@@ -917,8 +2061,8 @@ int main(int argc, char** argv)
 		if (Mix.TankMgWhole > 0) Fault("a tank's burst played a take shorter than the burst, whole (her row holds a take too short for her bursts)");
 	}
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
-	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
-		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);
+	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots kept on their own recording at a half step, %d other takes nearer than their far takes kept on theirs at a half step, %d moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
+		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameCloseHalf, Mix.SameNearHalf, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);
 	{
 		// The GI's clip cues: a reload is two pieces of garand_reload (clip in now, the rod slamming 0.246 s later, the
 		// slam's onset at 2.744 s into the file landing 0.33 s after the cue), and the squad leader's Thompson is 4
@@ -1141,6 +2285,7 @@ int main(int argc, char** argv)
 	// does, at half the battle's clock (its rules run at twice life's pace): the camera's rules are timed on the screen.
 	for (const uint32_t More : { 2u, 3u, 4u })
 	{
+		if (bOnlyGen) break;
 		LandEye::Settings MoreSet = ES;
 		MoreSet.Seed = Rec.Seed + More * 7919u;
 		LandEye::Director Other;
@@ -1277,7 +2422,10 @@ int main(int argc, char** argv)
 			Highest = std::max(Highest, P.Eye.Z - GroundAt(P.Look.X, P.Look.Y));
 			if (Gen.Zoom() < 0.02) LowestNear = std::min(LowestNear, Over);
 			if (Over < 0.5) ++Under;
-			if (!EW.Free(P.Eye) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
+			// (Free is the scene's ground-level word, a house's floor or a wall's line at any height: asked, as the view
+			// asks it, within FreeUnder of the ground; the eye 400 m over a farm's roof is not in it)
+			const bool bFreeAsked = Over < LandGeneralEye::Settings().FreeUnder;
+			if ((bFreeAsked && !EW.Free(P.Eye)) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
 			if (P.Eye.Z < G + CornAt(P.Eye.X, P.Eye.Y) + 0.1) ++InCorn;
 			if (const char* Win = std::getenv("LAND_PLAY_GEN_AT"))
 			{
@@ -1337,6 +2485,11 @@ int main(int argc, char** argv)
 		if (LowestNear > 2.5) Fault("the general's view never came down to a man's shoulder");
 		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+	}
+	if (bOnlyGen)
+	{
+		std::printf("\n(the general's view alone)\n");
+		return 0;
 	}
 	// A tank's own shot and her knock-out count as action for a lens straight off her nose or tail (her hull runs 3.2 m
 	// from her middle: the pre-check found it hid her own shot from the dead-shot rule within some 35-40 degrees of
@@ -1415,6 +2568,64 @@ int main(int argc, char** argv)
 		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
 		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
 		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
+	// The platoon cam (Brian's yes, 22 November 02:40Z), on a recording with the lead marks (the tactics thread's -cam
+	// recordings): for each side, the film rides with the platoon leading its assault, goes on to the next as the lead
+	// passes, and is with the leading squad's men much of the time; no aerial in the middle of the battle.
+	{
+		bool bMarks = false;
+		for (const LandFeed::Track& Tr : Rec.Tracks) bMarks = bMarks || !Tr.Lead.empty();
+		for (int Side = 0; Side < 2 && bMarks; ++Side)
+		{
+			auto Leads = [&Rec, Side](const LandFeed::Track& Tr, double T)
+			{
+				const LandFeed::Block* Bk = Rec.BlockOf(Tr.Block);
+				if (!Bk || Bk->Side != Side || Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell <= T) || (Tr.Out >= 0.0 && Tr.Out <= T)) return false;
+				for (const LandFeed::Track::Span& Sp : Tr.Lead)
+					if (T >= Sp.From && T <= Sp.To) return true;
+				return false;
+			};
+			LandEye::Director Ld;
+			Ld.Begin(Rec, EW, ES);
+			Ld.FollowLead(Side);
+			int LFrames = 0, OnPlatoon = 0, OnLeaders = 0, Switches = 0, Aerials = 0, Cuts = 0, LeadFrames = 0;
+			double FirstLead = -1.0, SwitchAt = -1.0, SlowestTo = 0.0, SlowestToAt = 0.0;
+			int LastBlock = -1;
+			const double From = std::max(0.0, Contact - 20.0);
+			for (double B = From; B < Rec.End; B += Dt)
+			{
+				PlaceMovers(B);
+				const double R = 3000.0 + (B - From);
+				const LandEye::Pose P = Ld.Update(B, R, Dt);
+				Cuts += P.bCut ? 1 : 0;
+				if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0 && B < Rec.End && !Ld.MassShot()) ++Aerials;
+				const int Blk = Ld.LeadBlock();
+				if (Blk < 0) continue;
+				if (FirstLead < 0.0) FirstLead = B;
+				if (Blk != LastBlock) { ++Switches; LastBlock = Blk; SwitchAt = R; }
+				const bool bOnIt = P.Subject >= 0 && Rec.Tracks[static_cast<size_t>(P.Subject)].Block == Blk;
+				if (SwitchAt >= 0.0 && bOnIt)
+				{
+					if (R - SwitchAt > SlowestTo) { SlowestTo = R - SwitchAt; SlowestToAt = B; }
+					SwitchAt = -1.0;
+				}
+				// (counted from a second after the lead passes: the cut to the new platoon takes its frame or few)
+				if (SwitchAt >= 0.0 && R - SwitchAt < 1.0) continue;
+				++LFrames;
+				OnPlatoon += bOnIt ? 1 : 0;
+				if (P.Subject >= 0 && Leads(Rec.Tracks[static_cast<size_t>(P.Subject)], B)) ++OnLeaders;
+				bool bAnyLead = false;
+				for (const LandFeed::Track& Tr : Rec.Tracks) if (Tr.Block == Blk && Leads(Tr, B)) { bAnyLead = true; break; }
+				LeadFrames += bAnyLead ? 1 : 0;
+			}
+			const double OnShare = 100.0 * OnPlatoon / std::max(1, LFrames);
+			std::printf("platoon cam, side %d: the lead first taken at %.0f s, %d platoons in turn, on the new one within %.2f s at the most (battle %.0f); %.1f%% of the frames on the leading platoon's men, %.1f%% on the leading squad's own (they lead in %.0f%% of the frames), %d cuts, %d aerials\n",
+				Side, FirstLead, Switches, SlowestTo, SlowestToAt, OnShare, 100.0 * OnLeaders / std::max(1, LFrames), 100.0 * LeadFrames / std::max(1, LFrames), Cuts, Aerials);
+			if (FirstLead < 0.0) Fault("the platoon cam never found a platoon leading the assault");
+			if (LFrames > 0 && OnShare < 90.0) Fault("the platoon cam strayed from the leading platoon");
+			if (SlowestTo > 2.0) Fault("the platoon cam was slow to the next platoon to lead");
+			if (Aerials > 0) Fault("the platoon cam went up to an aerial in the middle of the battle");
+		}
 	}
 	// Ride with this unit (Brian's yes, 22 November 03:36Z): asked to stay with one block, the film cuts to its men at
 	// once and stays with them, by every screen rule, until let go; then it goes back to the field. A block whose last man
@@ -1623,51 +2834,8 @@ int main(int argc, char** argv)
 		if (Longest > ES.DarkHold + 0.6) Fault("a shot held a dark picture past the dark rule");
 		if (Again > 0) Fault("a shot stood again where one was left for a dark picture");
 	}
-	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
-	// is held just over the ears, never among the stalks.
-	{
-		int InCorn = -1;
-		double AskAt = 0.0;
-		for (size_t K = 0; K < Rec.Tracks.size() && InCorn < 0; ++K)
-		{
-			const LandFeed::Track& T = Rec.Tracks[K];
-			if (T.bTwin || !T.IsMan() || T.Role == "mortar" || T.Role == "fo") continue;
-			for (double When = std::max(T.Start(), Contact); When < Rec.End - 6.0; When += 5.0)
-			{
-				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
-				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
-				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
-				// the platoon recording's first man in the corn did)
-				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
-				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
-				if (bDeep) { InCorn = static_cast<int>(K); AskAt = When; break; }
-			}
-		}
-		if (InCorn >= 0)
-		{
-			LandEye::Director Asked;
-			Asked.Begin(Rec, EW, ES);
-			int Seen = 0, Among = 0;
-			double Least = 1e9;
-			for (int F = 0; F < 4 * 60; ++F)
-			{
-				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
-				PlaceMovers(AskAt + F * Dt);
-				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
-				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
-				if (P.Shot != LandEye::Kind::Low) continue;
-				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
-				if (Corn <= 0.0) continue;
-				++Seen;
-				const double Over = P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y) - Corn;
-				Least = std::min(Least, Over);
-				if (Over < 0.05) ++Among;
-			}
-			std::printf("corn: a low shot asked of track %d in the corn at %.0f s: %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, Seen, Seen ? Least : 0.0);
-			if (Among > 0) Fault("an asked low shot is down among the corn");
-			if (Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
-		}
-	}
+	RunCorn();
+	if (std::getenv("LAND_PLAY_STILLS")) RunStills();
 	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
 	{
 		size_t Points = 0, Tris = 0;
@@ -1735,6 +2903,8 @@ int main(int argc, char** argv)
 				}
 			}
 		}
+		if (!Rec.Cuts.empty())
+			std::printf("cutters: %d of %zu banks torn (%d with no bank by them), %d of the tanks then over the gap's floor; a breach laid in %.3f ms at most\n", CutsTornCount, Rec.Cuts.size(), CutsNoBank, CutsDrivenThrough, BreachMsMost);
 		std::printf("holes: %d laid (", Holes.Count());
 		for (auto& P : HolesBy) std::printf(" %s %d", P.first.c_str(), P.second);
 		std::printf(" ), %zu points and %zu triangles in %d sections of %d patches (one mesh each); %.3f ms each on average, %.3f ms the most\n", Points, Tris, Sections, Holes.Patches(), HoleMs / std::max(1, Holes.Count()), HoleMsMost);
@@ -1744,6 +2914,7 @@ int main(int argc, char** argv)
 		std::printf("dug: %d of the holes dug, %d cuts; %d tiles split; the ground cut in %.3f ms a frame at most (%.1f ms in all); at most %zu points in %d parts sent again in a frame\n",
 			DugCount, Dug.Cuts(), DugSplit, DugMsMost, DugMs, DugSentMost, DugSentPartsMost);
 		if (Holes.Count() > 20 && DugCount == 0) Fault("no shell hole was dug");
+		if (Holes.Count() + ScarsLaid > LandCrater::Field::Most) Fault("scars: the old holes left the battle's own rounds no room (the guard reached)");
 		if (DugMsMost > 8.0) Fault("cutting the ground for a frame's holes took more than 8 ms");
 		if (DugSentPartsMost > 0 && DugSentMost > static_cast<size_t>(DugSentPartsMost) * 4000) Fault("a dug part sent again holds more than 4000 points");
 		if (Astray > 0) Fault("a shell hole is kept in a patch its middle is not in");
@@ -1767,6 +2938,32 @@ int main(int argc, char** argv)
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
 	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames; the camera alone %.3f ms on average, %.2f ms the slowest, %d frames over 2 ms\n",
 		Total / std::max(1, Frames), Slowest, Frames, EyeTotal / std::max(1, Frames), EyeSlowest, EyeOver2);
+	// Radio call, then the barrage (Brian's release 2 ask): on a recording with the calls' spots (the tactics thread's
+	// -cam recordings), the film goes to some callers, no more often than RadioEvery, and from each to the men under his
+	// guns' first salvo, in the picture as it lands.
+	if (!bOnlyGen)
+	{
+		const int Calls = Eye.RadioCalls(), Went = static_cast<int>(Eye.RadioBeats().size());
+		std::printf("radio call, then the barrage: %d fresh calls for fire, the film went to %d of the callers (%.0f s apart at the least), %d salvos cut to or held for, %d of them in the picture as they landed\n",
+			Calls, Went, RadioGapLeast < 1e8 ? RadioGapLeast : 0.0, RadioBarrages, RadioSeen);
+		if (Calls >= 3 && Went == 0) Fault("the film went to none of the radio calls");
+		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
+		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
+		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
+	// The film's shallow focus (the graphics audit's E9, Brian's D3): the close follow shots in it, never a wide, never
+	// switched in the middle of a shot, the distance held near its man (the Mac's cost is paid only in these frames).
+	if (!bOnlyGen)
+	{
+		std::sort(FocusOff.begin(), FocusOff.end());
+		const double Off95 = FocusOff.empty() ? 0.0 : FocusOff[std::min(FocusOff.size() - 1, static_cast<size_t>(0.95 * static_cast<double>(FocusOff.size())))];
+		std::printf("focus: %d of %d shots in shallow focus, %.0f%% of the fight's frames; on a wide %d frames, switched mid-shot %d times; off its man %.1f%% (95th in the hundred), %.1f%% at the most, over %zu frames; pulled %.2f a second at the most (in its log)\n",
+			FocusCuts, FocusAllCuts, 100.0 * FocusFrames / std::max(1, FightFrames), FocusWrongKind, FocusMidShot, 100.0 * Off95, FocusOff.empty() ? 0.0 : 100.0 * FocusOff.back(), FocusOff.size(), FocusPullMost);
+		if (FocusWrongKind > 0) Fault("a wide, the opening or a ride on a tank was shot in shallow focus");
+		if (FocusMidShot > 0) Fault("the shallow focus was switched on or off in the middle of a shot");
+		if (FocusAllCuts >= 10 && FocusCuts == 0 && ES.FocusFar > 0.0) Fault("no close shot was in shallow focus");
+		if (FocusOff.size() >= 60 && Off95 > 0.15) Fault("the shallow focus held off its man");
+	}
 	{
 		std::vector<long> Sorted = StepsByFrame;
 		std::sort(Sorted.begin(), Sorted.end());

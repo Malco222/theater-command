@@ -3,11 +3,13 @@
 #include "Battle/Fates.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <unordered_map>
 
 namespace LandKit
@@ -898,11 +900,10 @@ namespace LandKit
 			return PartKind::Fixed;
 		}
 
-		/** The month's row of a model's swaps.by_month (from and to both counted in), or a null. */
-		Json::Value MonthRow(const Json::Value& Swaps, const std::string& Key)
+		/** The month's row of a list of rows (from and to both counted in; a row with neither holds every month), or a null. */
+		Json::Value RowFor(const Json::Value& Rows, const std::string& Key)
 		{
-			const Json::Value Rows = Swaps["by_month"];
-			for (size_t I = 0; I < Rows.Count(); ++I)
+			for (size_t I = 0; Rows.IsArray() && I < Rows.Count(); ++I)
 			{
 				const Json::Value Row = Rows.At(I);
 				const std::string From = Row["from"].Str(""), To = Row["to"].Str("");
@@ -913,6 +914,8 @@ namespace LandKit
 			}
 			return Json::Value();
 		}
+		/** The month's row of a model's swaps.by_month, or a null. */
+		Json::Value MonthRow(const Json::Value& Swaps, const std::string& Key) { return RowFor(Swaps["by_month"], Key); }
 		/** A row's choice for one swap: a name, or a mix's "one" (the face a game showing one look a unit takes). */
 		std::string ChoiceIn(const Json::Value& Row, const std::string& Swap)
 		{
@@ -975,15 +978,44 @@ namespace LandKit
 		/** The nation's coat for a model that has none of its own (the lorry stands in for every army's). */
 		bool NationCoat(const Dress& D, std::string& OutName, std::string& OutUpper, std::string& OutUpper2, std::string& OutShade)
 		{
+			if (D.Terrain == "desert")
+			{
+				// On a desert field the lorry wears her owner's desert coat, as the tanks' files pick theirs there
+				// (swaps.paint.by_ground; tools/battle-models/land tanks_ger.py and motorpool.py): the Germans' order of
+				// March 1941 (brown-yellow, the grey-green blotched where the lorry's file lays them) to February 1942,
+				// then that of March 1942 (light brown, grey) to May 1943; the British Light Stone and the Italians' own
+				// sand khaki, one colour all over. Everyone else (the Americans' olive drab) as on any other ground.
+				const int Key = D.Year * 12 + D.Month;
+				if (D.Nation == "GER" && Key <= 1943 * 12 + 5)
+				{
+					const bool b41 = Key <= 1942 * 12 + 2;
+					OutName = b41 ? "desert41" : "desert42";
+					OutUpper = b41 ? "A2814F" : "B49B6C";
+					OutUpper2 = b41 ? "6B6243" : "7F7D72";
+					OutShade = b41 ? "644F30" : "6F6042";
+					return true;
+				}
+				if (D.Nation == "UK" || D.Nation == "ITA")
+				{
+					const bool bUK = D.Nation == "UK";
+					OutName = bUK ? "stone" : "sand";
+					OutUpper = bUK ? "C9B88E" : "8A7F5E";
+					OutUpper2 = OutUpper;
+					OutShade = bUK ? "7C7258" : "554E3A";
+					return true;
+				}
+			}
 			if (D.Nation == "USA")
 			{
 				// Olive drab, one colour all over (the camouflage file: a nation with one colour fills upper2 with upper),
-				// leaning brown as the paint did: red a little over green, blue about two thirds of red (the art
-				// director's mend, 21 November 2026: the old 565C3A read lime in the light).
+				// leaning brown as the paint did (the art director's mend, 21 November 2026: the old 565C3A read lime in
+				// the light). Written with about twice the colour wanted on the screen, since the ground's grade keeps
+				// 0.48 of the middle tones' colour (her cut 5 read, item 7: 585139 landed blue-grey, 98,108,106); the
+				// same coat as the American vehicles' files (tools/battle-models/land/motorpool.py).
 				OutName = "olive drab";
-				OutUpper = "585139";
-				OutUpper2 = "585139";
-				OutShade = "363123";
+				OutUpper = "625024";
+				OutUpper2 = "625024";
+				OutShade = "3B3015";
 				return true;
 			}
 			if (D.Nation == "GER")
@@ -1332,7 +1364,22 @@ namespace LandKit
 		std::string CoatUpper, CoatUpper2, CoatShade, CoatUpper3;
 		if (PaintSwap["choices"].IsObject())
 		{
-			std::string Choice = ChoiceIn(Row, "paint");
+			// The field's ground first (swaps.paint.by_ground: on a desert field the German desert coats of 1941 and 1942
+			// and the British Light Stone): its rows are read as by_month's are, and a month none of them holds (or a
+			// coat the file does not have) falls back to by_month.
+			std::string Choice;
+			if (!D.Terrain.empty())
+			{
+				Choice = ChoiceIn(RowFor(PaintSwap["by_ground"][D.Terrain], MonthKey), "paint");
+				if (!Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
+				{
+					Choice.clear();
+				}
+			}
+			if (Choice.empty())
+			{
+				Choice = ChoiceIn(Row, "paint");
+			}
 			if (Choice.empty() && Nation == "GER" && PaintSwap["choices"]["yellow"].IsObject())
 			{
 				// Dark yellow from February 1943 (the Tiger's file names the years but has no months).
@@ -1382,6 +1429,37 @@ namespace LandKit
 			// (a coat with no third colour of its own: the second's, so blend2 changes nothing)
 			Paint[static_cast<size_t>(Upper3)] = !CoatUpper3.empty() ? FromHex(CoatUpper3) : !CoatUpper2.empty() ? FromHex(CoatUpper2) : Paint[static_cast<size_t>(Upper3)];
 		}
+		// Captured kit (release 2, on its switch): her maker's coat as above kept for the wear, then her captor's put over
+		// it, one colour brushed on in the field (no sprayed blotches): the captor's coat where the game has one already
+		// (NationCoat: the Germans' grey or dark yellow, the Americans' olive drab, the British and Italian desert
+		// coats), the Soviets' the T-34's own green (the tanks thread's file); any other captor keeps her maker's coat.
+		Lin OldCoat[3] = { Paint[static_cast<size_t>(Upper)], Paint[static_cast<size_t>(Upper2)], Paint[static_cast<size_t>(Shade)] };
+		bool bCaptured = false;
+		if (!D.Captured.empty())
+		{
+			std::string New, NewUpper, NewUpper2, NewShade;
+			if (D.Nation == "SOV")
+			{
+				New = "the T-34's green";
+				NewUpper = "4F5E3E";
+				NewUpper2 = "3F4B31";
+				NewShade = "303A26";
+			}
+			else if (!NationCoat(D, New, NewUpper, NewUpper2, NewShade))
+			{
+				New.clear();
+			}
+			if (!New.empty())
+			{
+				bCaptured = true;
+				bCamouflage = false;
+				Coat = "captured from " + D.Captured + ", " + New;
+				Paint[static_cast<size_t>(Upper)] = FromHex(NewUpper);
+				Paint[static_cast<size_t>(Upper2)] = FromHex(NewUpper);
+				Paint[static_cast<size_t>(Shade)] = FromHex(NewShade);
+				if (Upper3 >= 0 && static_cast<size_t>(Upper3) < Paint.size()) Paint[static_cast<size_t>(Upper3)] = FromHex(NewUpper);
+			}
+		}
 		const bool bAmerican = D.Nation == "USA";
 
 		// The month's swaps of parts (the Panzer IV's long gun and her skirts, the lorry's tilt): parts named only by a
@@ -1396,7 +1474,9 @@ namespace LandKit
 			{
 				continue;
 			}
-			std::string Pick = ChoiceIn(Row, Group);
+			// (release 2: a choice the rules picked for her, where her model has it: a motorcycle's sidecar, a staff jeep's gun)
+			const auto Chosen = D.Choose.find(Group);
+			std::string Pick = Chosen != D.Choose.end() && S["choices"][Chosen->second].IsObject() ? Chosen->second : ChoiceIn(Row, Group);
 			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
 			// Sherman without the American's .50 on her roof)
 			if (Pick.empty() && S["by_nation"].IsObject())
@@ -1824,17 +1904,35 @@ namespace LandKit
 				}
 				// Worn edges: the paint chipped back toward a pale primer and bright steel along the plates' edges (a file
 				// with its own dirt says where with its wear: chipped to the metal that far).
+				// (captured: her maker's coat, where the captor's brush missed it, in strokes and patches, most low down
+				// on the running gear and the lower hull, and at the edges where the new paint has chipped)
+				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
+				if (bCaptured && bCoat)
+				{
+					// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
+					// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
+					// lower hull behind the wheels; the art director's mend, 23 November)
+					const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
+					// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
+					// its few corners would each carry a stripe of the old coat down the whole plate)
+					const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
+					const double At0 = 0.71 - 0.17 * Reach;
+					const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
+					C = Mix(C, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
+				}
 				if (bFileDust)
 				{
 					if (bCoat && Raw.Wear[K] > 0)
 					{
-						C = Mix(C, Paint[static_cast<size_t>(Steel)], Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
+						// third of it shows the old coat through)
+						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
 					}
 				}
 				else if (bCoat && Edge[K] > 0.0f)
 				{
 					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
-					C = Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					C = bCaptured ? Mix(C, Old, 0.25 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
 				}
 				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
 				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
@@ -1851,8 +1949,11 @@ namespace LandKit
 				{
 					// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
 					// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
-					C = Mix(C, DustColour, Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
-					C = Mix(C, HazeColour, Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
+					// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
+					// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
+					const double DustBy = bCaptured ? 0.5 : 1.0;
+					C = Mix(C, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+					C = Mix(C, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
 					C = C * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
 				}
 				Colour[K * 4] = ToPicture(C.R);
@@ -1959,6 +2060,134 @@ namespace LandKit
 				Out.Triangles.push_back(static_cast<uint32_t>(Local[Bv]));
 				Out.Triangles.push_back(static_cast<uint32_t>(Local[C]));
 			}
+
+			// Captured kit: her captor's mark, big (the art director, 23 November: crews painted them oversize so their
+			// own side would hold its fire, and the player must see whose she is at a glance): half as big again at each
+			// place her file gives for her maker's marks, once on her roof and once on her hull's back plate. The Germans'
+			// cross, black edged white, and the Americans' white star, as the cloud's pictures draw them; the Soviets' plain
+			// red star (the tank files' own red, A82020; the art director's carry, 23 November: a captor with no mark leaves
+			// the player guessing); a captor with no mark drawn yet (British, Italian), none.
+			if (bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV"))
+			{
+				const bool bStar = D.Nation == "USA" || D.Nation == "SOV";
+				const uint8_t StarR = D.Nation == "SOV" ? 168 : 214, StarG = D.Nation == "SOV" ? 32 : 211, StarB = D.Nation == "SOV" ? 32 : 196;
+				auto AddMark = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, const V3& UpHint) {
+					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size()) return;
+					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+					Mesh& Out = Level == 0 ? Bo.Near : Bo.Far;
+					const V3 Nf = Facing.Unit(V3(1.0, 0.0, 0.0));
+					V3 Upw = UpHint - Nf * Nf.Dot(UpHint);
+					if (Upw.Length() < 0.3) Upw = V3(1.0, 0.0, 0.0) - Nf * Nf.X;
+					Upw = Upw.Unit(V3(0.0, 0.0, 1.0));
+					const V3 Across = Upw.Cross(Nf).Unit(V3(0.0, 1.0, 0.0));
+					auto Point = [&](double A, double U, double Lift, uint8_t Cr, uint8_t Cg, uint8_t Cb) {
+						const V3 P = Place + Nf * Lift + Across * A + Upw * U - Bo.Pivot;
+						Out.Points.insert(Out.Points.end(), { static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z) });
+						Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Nf.X), static_cast<float>(Nf.Y), static_cast<float>(Nf.Z) });
+						Out.Colours.insert(Out.Colours.end(), { Cr, Cg, Cb, 255 });
+						Out.Soot.push_back(0.6f);
+						return static_cast<uint32_t>(Out.Soot.size() - 1);
+					};
+					auto Quad = [&](double A0, double U0, double A1, double U1, double Lift, uint8_t Cr, uint8_t Cg, uint8_t Cb) {
+						const uint32_t P0 = Point(A0, U0, Lift, Cr, Cg, Cb), P1 = Point(A1, U0, Lift, Cr, Cg, Cb);
+						const uint32_t P2 = Point(A1, U1, Lift, Cr, Cg, Cb), P3 = Point(A0, U1, Lift, Cr, Cg, Cb);
+						Out.Triangles.insert(Out.Triangles.end(), { P0, P1, P2, P0, P2, P3 }); // (counter-clockwise about her facing, as the files wind theirs)
+					};
+					if (bStar)
+					{
+						const uint32_t Mid = Point(0.0, 0.0, 0.012, StarR, StarG, StarB);
+						std::vector<uint32_t> Rim;
+						for (int I = 0; I < 10; ++I)
+						{
+							const double A = I * 36.0 * 3.14159265358979 / 180.0, Rr = I % 2 == 0 ? Size : Size * 0.382;
+							Rim.push_back(Point(Rr * std::sin(A), Rr * std::cos(A), 0.012, StarR, StarG, StarB));
+						}
+						for (int I = 0; I < 10; ++I) Out.Triangles.insert(Out.Triangles.end(), { Mid, Rim[static_cast<size_t>((I + 1) % 10)], Rim[static_cast<size_t>(I)] });
+					}
+					else
+					{
+						const double Bar = Size * 0.36, Rim = Size * 0.09;
+						Quad(-Size, -Bar, Size, Bar, 0.012, 206, 204, 194);
+						Quad(-Bar, -Size, Bar, Size, 0.012, 206, 204, 194);
+						Quad(-Size + Rim, -Bar + Rim, Size - Rim, Bar - Rim, 0.016, 24, 24, 24);
+						Quad(-Bar + Rim, -Size + Rim, Bar - Rim, Size - Rim, 0.016, 24, 24, 24);
+					}
+				};
+				for (const Mark& Mk : Marks)
+				{
+					AddMark(Parts[static_cast<size_t>(Mk.Part)].Body, Mk.At, Mk.Facing, Mk.Radius * 1.5, V3(0.0, 0.0, 1.0));
+				}
+				// (her roof and her back: the biggest flat plate of her turret's top (else her hull's) and of her hull's
+				// back, by area, among those within half a metre of the very top or back, her files' fore being +X; only
+				// where nothing of hers (any part: a hatch, a cupola, an exhaust) stands proud of the plate within the
+				// mark's reach)
+				auto Plate = [&](int PartIx, int Axis, double Sign, double Size, V3& OutAt) {
+					if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0) return false;
+					auto Along = [Axis, Sign](const V3& P) { return Sign * (Axis == 0 ? P.X : P.Z); };
+					auto Apart2 = [Axis](const V3& P, const V3& Q) {
+						const double D1 = Axis == 0 ? P.Z - Q.Z : P.X - Q.X, D2 = P.Y - Q.Y;
+						return D1 * D1 + D2 * D2;
+					};
+					struct Bit { V3 Mid; double Area, Height; };
+					std::vector<Bit> Bits;
+					double Top = -1e9;
+					for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+					{
+						const uint32_t I0 = Raw.Triangles[T], I1 = Raw.Triangles[T + 1], I2 = Raw.Triangles[T + 2];
+						if (Raw.Parts[I0] != PartIx || Raw.Parts[I1] != PartIx || Raw.Parts[I2] != PartIx) continue;
+						const V3 A(Raw.Points[I0 * 3], Raw.Points[I0 * 3 + 1], Raw.Points[I0 * 3 + 2]);
+						const V3 B(Raw.Points[I1 * 3], Raw.Points[I1 * 3 + 1], Raw.Points[I1 * 3 + 2]);
+						const V3 C(Raw.Points[I2 * 3], Raw.Points[I2 * 3 + 1], Raw.Points[I2 * 3 + 2]);
+						const V3 Cr = (B - A).Cross(C - A);
+						const double Area = 0.5 * Cr.Length();
+						if (Area < 1e-7) continue;
+						const V3 Nm = Cr * (0.5 / Area);
+						if (Sign * (Axis == 0 ? Nm.X : Nm.Z) < 0.8) continue;
+						const V3 Mid = (A + B + C) * (1.0 / 3.0);
+						Bits.push_back({ Mid, Area, Along(Mid) });
+						Top = std::max(Top, Along(Mid));
+					}
+					Bits.erase(std::remove_if(Bits.begin(), Bits.end(), [Top](const Bit& Bt) { return Bt.Height < Top - 0.5; }), Bits.end());
+					std::vector<V3> Proud;
+					for (size_t K = 0; K < N; ++K)
+					{
+						const V3 P(Raw.Points[K * 3], Raw.Points[K * 3 + 1], Raw.Points[K * 3 + 2]);
+						if (Along(P) > Top - 0.44) Proud.push_back(P);
+					}
+					const double Reach2 = (Size + 0.03) * (Size + 0.03);
+					std::map<long, std::array<double, 4>> Bins; // (area, then the area-weighted sums of x, y, z)
+					for (const Bit& Bt : Bits)
+					{
+						bool bClear = true;
+						for (const V3& P : Proud)
+						{
+							if (Along(P) > Bt.Height + 0.06 && Apart2(P, Bt.Mid) < Reach2)
+							{
+								bClear = false;
+								break;
+							}
+						}
+						if (!bClear) continue;
+						std::array<double, 4>& Bin = Bins[static_cast<long>(std::floor(Bt.Height / 0.06))];
+						Bin[0] += Bt.Area;
+						Bin[1] += Bt.Area * Bt.Mid.X;
+						Bin[2] += Bt.Area * Bt.Mid.Y;
+						Bin[3] += Bt.Area * Bt.Mid.Z;
+					}
+					const std::array<double, 4>* Best = nullptr;
+					for (const auto& Bin : Bins)
+						if (!Best || Bin.second[0] > (*Best)[0]) Best = &Bin.second;
+					if (!Best || (*Best)[0] < 0.02) return false;
+					OutAt = V3((*Best)[1] / (*Best)[0], (*Best)[2] / (*Best)[0], (*Best)[3] / (*Best)[0]);
+					return true;
+				};
+				int RoofPart = PartIndex("turret");
+				if (RoofPart < 0 || Parts[static_cast<size_t>(RoofPart)].Body < 0) RoofPart = PartIndex("hull");
+				V3 At;
+				if (Plate(RoofPart, 2, 1.0, 0.3, At)) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, At, V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
+				const int BackPart = PartIndex("hull");
+				if (Plate(BackPart, 0, -1.0, 0.25, At)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
+			}
 		}
 
 		// Bodies of one shape (a side's road wheels): drawn from one mesh.
@@ -2033,12 +2262,13 @@ namespace LandKit
 		}
 		else
 		{
-			// Wheels on the ground (their lowest point at the ground), and a gun's spades.
+			// Wheels on the ground (their lowest point at the ground), and a gun's spades. (Not a wheel her swaps leave off: a
+			// solo motorcycle's sidecar wheel.)
 			std::vector<V3> Contacts;
 			for (int P : Wheels)
 			{
 				const Part& W = Parts[static_cast<size_t>(P)];
-				if (W.Pivot.Z - W.Radius < 0.05)
+				if (W.bShown && W.Pivot.Z - W.Radius < 0.05)
 				{
 					Contacts.emplace_back(W.Pivot.X, W.Pivot.Y, 0.0);
 				}
@@ -3058,6 +3288,12 @@ namespace LandKit
 
 		// When she moves off and stops (a tenth of a second of going to move off, three tenths of standing to stop, so a
 		// halt of a moment in the recording does not jerk her). Each is dated back to when she began to go or to stand.
+		// A turn on the spot alone must hold TurnHolds to move her off: in a live battle the reader dates a provisional
+		// point at its piece's own time, so a hull wandering inside the keeper's own slack (KEEP_F, 0.05 rad) over the
+		// 0.2 to 0.4 s before the next kept point reads as 0.2 rad/s, over the turning threshold below, and a vehicle
+		// standing still gave an engine note, a brake and a puff of dust she never gave in the battle read whole (the
+		// pre-check's find of 23 November, an M4 at 247.65 s). A real turn on the spot of under half a second is a
+		// twitch nobody sees; one that lasts is still dated back to where it began.
 		// (Worked out again: her moving off and stopping by Given are as the screen showed them, and so is she through
 		// those steps, while the new words still count how long she has been going or standing; one that the new words
 		// date by Given, too late to be shown then, comes at the first step after it.)
@@ -3067,7 +3303,8 @@ namespace LandKit
 			const double Soonest = TimeOf(Seen);
 			auto ShownOf = [Given](const std::vector<double>& L) { return static_cast<size_t>(std::upper_bound(L.begin(), L.end(), Given) - L.begin()); };
 			bool bOn = false;
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
+			constexpr double TurnHolds = 0.45;
 			size_t KeepOffs = ShownOf(MoveOffs), KeepStops = ShownOf(Stops);
 			if (From > 0)
 			{
@@ -3075,6 +3312,7 @@ namespace LandKit
 				bOn = R.bOn;
 				OnFor = R.OnFor;
 				OffFor = R.OffFor;
+				RollFor = R.RollFor;
 				KeepOffs = std::max(KeepOffs, R.MoveOffs);
 				KeepStops = std::max(KeepStops, R.Stops);
 			}
@@ -3091,6 +3329,7 @@ namespace LandKit
 					R.bOn = bOn;
 					R.OnFor = OnFor;
 					R.OffFor = OffFor;
+					R.RollFor = RollFor;
 					R.MoveOffs = MoveOffs.size();
 					R.Stops = Stops.size();
 				}
@@ -3101,7 +3340,8 @@ namespace LandKit
 					continue; // (knocked out for good: nothing moves her again)
 				}
 				const bool bTurning = !bGun && std::fabs(W[I]) > 0.12;
-				const bool bGo = std::fabs(V[I]) > 0.35 || bTurning;
+				const bool bRolling = std::fabs(V[I]) > 0.35;
+				const bool bGo = bRolling || bTurning;
 				const bool bStill = std::fabs(V[I]) < 0.15 && (bGun || std::fabs(W[I]) < 0.06);
 				if (I <= Seen || I == From)
 				{
@@ -3123,18 +3363,22 @@ namespace LandKit
 					{
 						bOn = bNow;
 						OnFor = bOn ? OnFor : 0.0;
+						RollFor = bOn ? RollFor : 0.0;
 						OffFor = bOn ? 0.0 : OffFor;
 					}
 				}
+				// (RollFor: how long of this run of going she has rolled, not only turned; a run that breaks clears it)
 				if (I < Seen)
 				{
 					OnFor = !bOn && bGo ? OnFor + Step : 0.0;
+					RollFor = !bOn && bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
 					OffFor = bOn && bStill ? OffFor + Step : 0.0;
 				}
 				else if (!bOn)
 				{
 					OnFor = bGo ? OnFor + Step : 0.0;
-					if (OnFor > 0.1 - 1e-9)
+					RollFor = bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
+					if (OnFor > 0.1 - 1e-9 && (RollFor > 0.0 || OnFor > TurnHolds - 1e-9))
 					{
 						bOn = true;
 						OffFor = 0.0;
@@ -3148,6 +3392,7 @@ namespace LandKit
 					{
 						bOn = false;
 						OnFor = 0.0;
+						RollFor = 0.0;
 						Stops.push_back(std::max(Soonest, T - OffFor + Step));
 					}
 				}
@@ -3459,7 +3704,7 @@ namespace LandKit
 		BurnUntil = std::max(End, LoopsUntil);
 		if (Died >= 0.0)
 		{
-			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2) / Life); // (0.6 or 1.2 s of life after the hit)
+			BurnFrom = std::min(End, Died + (bBrewUp ? BrewWait + 0.6 / Life : 1.2 / Life)); // (0.6 or 1.2 s of life after the hit, or the blast)
 		}
 
 		// What she shows the effects and the sound, worked out ahead. (Worked out again: what falls by Given, the last
@@ -3607,7 +3852,16 @@ namespace LandKit
 		}
 		if (Died >= 0.0)
 		{
-			AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			if (bBrewUp && BrewWait > 0.0)
+			{
+				// Effects (R2): knocked out first, her crew getting out, then her ammunition going (BrewWait)
+				AddClip("knocked_out", Died, Died + BrewWait, false, BurnUntil, KillRound, Kill);
+				AddClip("brew_up", Died + BrewWait, End, false, BurnUntil, 0, nullptr);
+			}
+			else
+			{
+				AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			}
 			if (BurnFrom >= 0.0)
 			{
 				AddClip("burn", BurnFrom, End, true, BurnUntil, 0, nullptr);
@@ -3846,9 +4100,11 @@ namespace LandKit
 		}
 		if (bDeadNow)
 		{
-			if (const Clip* C = M.FindClip(bBrewUp ? "brew_up" : "knocked_out"))
+			// (Effects (R2): a brew-up that waits, BrewWait, is knocked out until her ammunition goes)
+			const bool bBlownNow = bBrewUp && T >= Died + BrewWait;
+			if (const Clip* C = M.FindClip(bBlownNow ? "brew_up" : "knocked_out"))
 			{
-				PlayDeath(M, *C, (T - Died) * Life, S); // (life's seconds, as her death's events are planned)
+				PlayDeath(M, *C, (T - Died - (bBlownNow ? BrewWait : 0.0)) * Life, S); // (life's seconds, as her death's events are planned)
 			}
 			if (BurnFrom >= 0.0 && T >= BurnFrom)
 			{
@@ -3897,6 +4153,13 @@ namespace LandKit
 			const Part& H = M.Parts[static_cast<size_t>(I)];
 			S[static_cast<size_t>(I)].Turn = Clamp(P.Hatches, 0.0, 1.0) * (H.bLimits && H.Hi > 0.0 ? H.Hi : 90.0);
 		}
+		if (P.bOpenUp)
+		{
+			if (const Clip* C = M.FindClip("open_up"))
+			{
+				M.Play(*C, C->Long, 1.0, S);
+			}
+		}
 		if (P.FireAge >= 0.0)
 		{
 			if (const Clip* C = M.FindClip("fire"))
@@ -3944,6 +4207,10 @@ namespace LandKit
 		{
 			DustRight = Root.At;
 		}
+		// (the front corners of her footprint, at her dust's height: her tracks' marks start under her)
+		const bool bFoot = M.Foot[0].X > 0.0 && M.Foot[1].X > 0.0 && M.Foot[0].Y < M.Foot[1].Y;
+		TreadLeft = bFoot ? Root.Point(V3(M.Foot[0].X, M.Foot[0].Y, 0.05)) : DustLeft;
+		TreadRight = bFoot ? Root.Point(V3(M.Foot[1].X, M.Foot[1].Y, 0.05)) : DustRight;
 	}
 
 	void Vehicle::Update(double T, std::vector<Event>* Out)
@@ -4130,6 +4397,131 @@ namespace LandKit
 		return true;
 	}
 
+	bool BenchesNow(const Vehicle& V, Benches& Out)
+	{
+		const Model& M = V.Look();
+		if (M.Kind != "carrier" || M.SocketIndex("rider.1") < 0)
+		{
+			return false;
+		}
+		Out = Benches();
+		Out.Block = V.Words().Block;
+		Out.K = V.Words().K;
+		Out.At = V.Root.At;
+		const V3 Up = V.Root.Way(V3(0.0, 0.0, 1.0)).Unit();
+		const V3 Ahead = V.Root.Way(V3(1.0, 0.0, 0.0));
+		Out.Forward = (Ahead - Up * Ahead.Dot(Up)).Unit(V3(std::sin(V.Heading), std::cos(V.Heading), 0.0));
+		Out.Right = Out.Forward.Cross(Up);
+		// (each side's seats front to back, whatever her model's numbering)
+		struct One { double Along; V3 At, Way; };
+		std::vector<One> Left, Right;
+		static const char* const Names[10] = { "rider.1", "rider.2", "rider.3", "rider.4", "rider.5", "rider.6", "rider.7", "rider.8", "rider.9", "rider.10" };
+		for (const char* Name : Names)
+		{
+			One S;
+			if (!V.SocketNow(Name, S.At, S.Way))
+			{
+				continue;
+			}
+			const V3 D = S.At - Out.At;
+			S.Along = D.Dot(Out.Forward);
+			(D.Dot(Out.Right) >= 0.0 ? Right : Left).push_back(S);
+		}
+		const auto Front = [](const One& A, const One& B) { return A.Along > B.Along; };
+		std::sort(Left.begin(), Left.end(), Front);
+		std::sort(Right.begin(), Right.end(), Front);
+		for (const One& S : Left)
+		{
+			Out.Seat[Out.Left] = S.At;
+			Out.Way[Out.Left] = S.Way;
+			++Out.Left;
+		}
+		for (const One& S : Right)
+		{
+			Out.Seat[Out.Left + Out.Righted] = S.At;
+			Out.Way[Out.Left + Out.Righted] = S.Way;
+			++Out.Righted;
+		}
+		return Out.Left + Out.Righted > 0;
+	}
+
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out)
+	{
+		const Benches* Best = nullptr;
+		double BestD = 1e18, Along = 0.0, Across = 0.0;
+		int Row = -1;
+		bool bRightSide = false;
+		// (the rules' own word: her, and his seat)
+		if (SeatOn >= 0 && Seat >= 0)
+		{
+			for (const Benches& B : All)
+			{
+				if (B.Block == Block && B.K == SeatOn)
+				{
+					Best = &B;
+					break;
+				}
+			}
+			if (Best)
+			{
+				Row = Seat / 2;
+				bRightSide = Seat % 2 == 1;
+				const double Dx = X - Best->At.X, Dy = Y - Best->At.Y;
+				Across = Dx * Best->Right.X + Dy * Best->Right.Y;
+			}
+		}
+		if (!Best) for (const Benches& B : All)
+		{
+			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
+			if (D > 36.0 || D >= BestD)
+			{
+				continue;
+			}
+			const double A = Dx * B.Forward.X + Dy * B.Forward.Y, R = Dx * B.Right.X + Dy * B.Right.Y;
+			if (std::fabs(R) > 1.6 || A < -5.0 || A > 3.0)
+			{
+				continue;
+			}
+			Best = &B;
+			BestD = D;
+			Along = A;
+			Across = R;
+		}
+		if (!Best)
+		{
+			return false;
+		}
+		// (by his place: the drill's seat, two abreast 0.55 m either side, rows 0.6 m apart from 1.4 m forward of her root;
+		// a far block's men a row each 1.1 m from 0.5 m sit as near their rows as these give)
+		if (Row < 0)
+		{
+			Row = std::max(0, static_cast<int>(std::lround((1.4 - Along) / 0.6)));
+			bRightSide = Across >= 0.0;
+		}
+		const bool bRight = bRightSide ? Best->Righted > 0 : Best->Left == 0;
+		const int First = bRight ? Best->Left : 0, Count = bRight ? Best->Righted : Best->Left;
+		if (Row < Count)
+		{
+			const V3& At = Best->Seat[First + Row];
+			const V3& Way = Best->Way[First + Row];
+			Out.At = At;
+			Out.Floor = At.Z - 0.5;
+			Out.Heading = std::atan2(Way.X, Way.Y);
+			Out.bBench = true;
+			return true;
+		}
+		// (no bench left for him: kneeling in the bed's middle at her front, facing aft, a little to his own side)
+		const V3& Front = Best->Seat[0];
+		const double FrontAlong = (Front - Best->At).Dot(Best->Forward);
+		const double Back = 0.55 * static_cast<double>(Row - Count);
+		const V3 At = Best->At + Best->Forward * (FrontAlong - Back) + Best->Right * (bRightSide ? 0.22 : -0.22);
+		Out.Floor = Front.Z - 0.5;
+		Out.At = V3(At.X, At.Y, Out.Floor);
+		Out.Heading = std::atan2(-Best->Forward.X, -Best->Forward.Y);
+		Out.bBench = false;
+		return true;
+	}
+
 	bool Vehicle::SocketAt(const std::string& Name, double T, V3& OutAt, V3& OutFacing) const
 	{
 		if (!Shape)
@@ -4299,6 +4691,16 @@ namespace LandKit
 	namespace
 	{
 		bool IsVehicle(const std::string& Role) { return Role == "tank" || Role == "gun" || Role == "lorry"; }
+
+		/** A track's swaps the rules picked (release 2, "sw": {swap: choice}); none where it says none. */
+		void ReadSwaps(const Json::Value& Sw, std::map<std::string, std::string>& Out)
+		{
+			Out.clear();
+			for (size_t I = 0; Sw.IsObject() && I < Sw.Count(); ++I)
+			{
+				Out[Sw.Name(I)] = Sw.At(I).Str("");
+			}
+		}
 
 		/** A change of a track: [t, pose, cover, aimX | null, aimY | null, hidden, buttoned]. */
 		Change ReadChange(const Json::Value& C)
@@ -4689,6 +5091,12 @@ namespace LandKit
 			B.Kind = V["kind"].Str();
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
+			B.Captured = V["captured"].Str("");
+			const Json::Value Mls = V["mls"];
+			for (size_t J = 0; Mls.IsArray() && J < Mls.Count(); ++J)
+			{
+				B.Extra.push_back(Mls.At(J).Str(""));
+			}
 			OutBlocks.push_back(B);
 		}
 		const Json::Value Men = R["men"];
@@ -4706,6 +5114,8 @@ namespace LandKit
 			W.K = Man["k"].Int();
 			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
+			W.Model = Man["ml"].Str("");
+			ReadSwaps(Man["sw"], W.Swaps);
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
 			{
@@ -4754,17 +5164,26 @@ namespace LandKit
 		return FindBlock(BlockList, Id);
 	}
 
-	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError)
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier,
+		const std::map<std::string, std::string>& Choose)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
-		// she wears her owner's coat)
-		const std::string ModelName = Role == "lorry" ? "Truck" : B.Model;
+		// she wears her owner's coat. Release 2: where the recording names a vehicle's own model (ml), she is drawn as
+		// that: an armoured infantry's carrier, a half-track of her army's or the lorry; a battery's self-propelled gun;
+		// an armoured block's tank destroyer)
+		const std::string ModelName = !Carrier.empty() ? Carrier : Role == "lorry" ? std::string("Truck") : B.Model;
 		if (ModelName.empty())
 		{
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
 			return false;
 		}
-		OutKey = ModelName + "|" + B.Nation;
+		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
+		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
+		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
+		for (const auto& Sw : Choose)
+		{
+			OutKey += "|" + Sw.first + "=" + Sw.second; // (her swaps the rules picked: a look of her own)
+		}
 		if (Looks.count(OutKey))
 		{
 			return true;
@@ -4772,13 +5191,49 @@ namespace LandKit
 		std::string Text;
 		if (!Reader || !Reader(ModelName + ".json", Text))
 		{
-			OutError = "cannot read the model " + ModelName + ".json";
-			return false;
+			// (a model not in the game yet: the nearest generic already here, by kind and nation, in her own nation's coat,
+			// said once: StandIns. A gun by her side's field gun; a light machine as the light tank; a tank as her side's
+			// medium: the German's Panzer IV, the Soviet's T-34, the rest the Sherman)
+			const std::string& N = B.Nation;
+			const bool bAxis = N == "GER" || N == "HUN" || N == "ROM" || N == "FIN" || N == "ITA";
+			static const char* const Light[] = { "Light", "L3", "L6", "Stuart", "M3L", "HaGo", "Type95", "BT", "T26", "T60", "T70", "222", "Pz38", "PzII", "Tankette" };
+			bool bLight = false;
+			for (const char* L : Light)
+			{
+				bLight = bLight || ModelName.find(L) != std::string::npos;
+			}
+			std::vector<std::string> Near;
+			if (Role == "lorry") Near = { "Truck" }; // (a carrier not in the game yet: the lorry)
+			else if (B.Kind == "art" && Carrier.empty()) Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			else if (bLight || N == "JAP") Near = { "LightTank" };
+			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
+			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
+			{
+				Near.push_back(Any);
+			}
+			std::string Drawn;
+			for (const std::string& M : Near)
+			{
+				if (M != ModelName && Reader && Reader(M + ".json", Text))
+				{
+					Drawn = M;
+					break;
+				}
+			}
+			if (Drawn.empty())
+			{
+				OutError = "cannot read the model " + ModelName + ".json";
+				return false;
+			}
+			StandInLines.push_back("the " + N + " " + ModelName + " drawn as the " + Drawn + " in her own coat (no " + ModelName + ".json in Content/Models/Battle)");
 		}
 		Dress D;
 		D.Nation = B.Nation;
 		D.Year = Year;
 		D.Month = Month;
+		D.Terrain = Terrain;
+		D.Captured = Captured;
+		D.Choose = Choose;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -4856,7 +5311,10 @@ namespace LandKit
 		// a self-propelled gun: the fates' tank ways name theirs, blow, burn or still). The table then picks how that end
 		// looks.
 		const Block* Of = BlockOf(W.Block);
-		const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+		// (by the model's file name, as performance-land.json keys it: her own where the recording names it, a tank
+		// destroyer's or a self-propelled gun's, else her block's)
+		const std::string Named = !W.Model.empty() && W.Role != "lorry" ? W.Model : Of ? Of->Model : M.Name;
+		const auto Odds = Fires.find(Named);
 		if (Kill && (Kill->Fate == "out" || Kill->Fate == "burn" || Kill->Fate == "blow"))
 		{
 			Bl.How = Kill->Fate == "out" ? "still" : Kill->Fate;
@@ -4880,11 +5338,22 @@ namespace LandKit
 			Bl.How.clear();
 			F = Picker->Choose(Bl);
 		}
-		Ends.push_back({ Index, Of ? Of->Model : M.Name, Bl.Aspect, Drawn, F.Key });
+		Ends.push_back({ Index, Named, Bl.Aspect, Drawn, F.Key });
 		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
 		return F.Key;
 	}
 
+
+	double Battle::BrewWaitOf(size_t V) const
+	{
+		// Effects (R2): her own wait between the least and the most, by her number (life's seconds, made the battle's)
+		if (!(BrewWaitMost > 0.0) || !(Life > 0.0))
+		{
+			return 0.0;
+		}
+		const double U = Unit01(Mix(FateSeed ^ 0xB5E3A17ull, static_cast<uint64_t>(V) + 1u, 0x5EC5u));
+		return std::max(0.0, BrewWaitLeast + (BrewWaitMost - BrewWaitLeast) * U) / Life;
+	}
 
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2)
 	{
@@ -4933,8 +5402,26 @@ namespace LandKit
 		{
 			return false;
 		}
+		Terrain = Doc.Root()["field"]["place"]["terrain"].Str("plains");
 		bLive = Doc.Root()["live"].Truth(false);
 		Limit = Doc.Root()["limit"].Num(0.0);
+		// (captured kit's off/on line on the Mac: every other tank block of the attacker drawn as the defender's first
+		// tank, taken from them, in the attacker's coat; the recording's own fight, only the look changed)
+		if (bCapturedTest)
+		{
+			const Block* Theirs = nullptr;
+			for (const Block& B : BlockList)
+			{
+				if (B.Side == "def" && B.Kind == "arm" && !B.Model.empty() && B.Model != "LightTank") { Theirs = &B; break; }
+			}
+			int Nth = 0;
+			for (Block& B : BlockList)
+			{
+				if (!Theirs || B.Side != "att" || B.Kind != "arm" || B.Model.empty() || B.Model == "LightTank" || Nth++ % 2) continue;
+				B.Model = Theirs->Model;
+				B.Captured = Theirs->Nation;
+			}
+		}
 
 		// The models, each once a nation (the lorry stands in for both sides').
 		KeyOf.resize(Tracks.size());
@@ -4946,7 +5433,7 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError))
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model, Tracks[I].Swaps))
 			{
 				return false;
 			}
@@ -4954,13 +5441,34 @@ namespace LandKit
 		if (bLive)
 		{
 			// A live battle's header has no men yet: the models its blocks name are read now (and the lorry of a side
-			// with guns to tow), so its first pieces do not wait on them.
+			// with guns to tow; release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn
+			// with, "mls"), so its first pieces do not wait on them.
 			for (const Block& B : BlockList)
 			{
 				std::string Key;
 				if (!B.Model.empty() && (!LoadLook(B, "tank", Key, OutError) || (B.Kind == "art" && !LoadLook(B, "lorry", Key, OutError))))
 				{
 					return false;
+				}
+				for (const std::string& Look : B.Extra)
+				{
+					// ("Jeep|mg=off": the model and the swaps the rules pick for her)
+					std::map<std::string, std::string> Choose;
+					size_t Bar = Look.find('|');
+					const std::string Ml = Look.substr(0, Bar);
+					while (Bar != std::string::npos)
+					{
+						const size_t Next = Look.find('|', Bar + 1), Eq = Look.find('=', Bar + 1);
+						if (Eq != std::string::npos && Eq < Next)
+						{
+							Choose[Look.substr(Bar + 1, Eq - Bar - 1)] = Look.substr(Eq + 1, Next == std::string::npos ? std::string::npos : Next - Eq - 1);
+						}
+						Bar = Next;
+					}
+					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml, Choose))
+					{
+						return false;
+					}
 				}
 			}
 		}
@@ -4989,6 +5497,7 @@ namespace LandKit
 		{
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
+			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
@@ -5068,6 +5577,8 @@ namespace LandKit
 					W.K = Man["k"].Int();
 					W.J = std::max(0, Man["j"].Int(0));
 					W.Role = Role;
+					W.Model = Man["ml"].Str("");
+					ReadSwaps(Man["sw"], W.Swaps);
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
@@ -5075,7 +5586,7 @@ namespace LandKit
 						return false;
 					}
 					std::string Key;
-					if (!LoadLook(*B, Role, Key, OutError))
+					if (!LoadLook(*B, Role, Key, OutError, W.Model, W.Swaps))
 					{
 						return false;
 					}
@@ -5249,6 +5760,7 @@ namespace LandKit
 			Vehicle& Ve = All[V];
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
+			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)
@@ -5281,5 +5793,268 @@ namespace LandKit
 		{
 			V.Update(T, &Events);
 		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// TK1: the far level merged, for drawing far vehicles as instances.
+
+	namespace
+	{
+		/** A body flag the scene hides a body by while her vehicle stands (bWhileManned: a roof gun's cradle shown only
+		 * while it is manned), read where the model's bodies carry it, and false where they do not. */
+		template <typename TBody>
+		bool HiddenAtTimes(const TBody& B)
+		{
+			if constexpr (requires(const TBody& X) { static_cast<bool>(X.bWhileManned); })
+			{
+				return static_cast<bool>(B.bWhileManned);
+			}
+			else
+			{
+				(void)B;
+				return false;
+			}
+		}
+	}
+
+	bool MayHide(const Body& B)
+	{
+		return HiddenAtTimes(B);
+	}
+
+	void SplitFar(const Model& M, FarSplit& Out, const std::vector<uint8_t>* KeepOut)
+	{
+		Out = FarSplit();
+		const size_t N = M.Bodies.size();
+		Out.PieceOf.assign(N, -1);
+		Out.Kept.assign(N, 0);
+		Out.StandIn.assign(N, 0);
+		Out.Reach.assign(N, 0.0);
+		Out.Loose.assign(N, 0);
+		auto Under = [&M](int P, int Top)
+		{
+			for (; P >= 0 && Top >= 0; P = M.Parts[static_cast<size_t>(P)].Parent)
+			{
+				if (P == Top)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		const int TurretBody = M.Turret >= 0 ? M.Parts[static_cast<size_t>(M.Turret)].Body : -1;
+		for (size_t B = 0; B < N; ++B)
+		{
+			if (M.Bodies[B].Parent < 0)
+			{
+				Out.Pieces[FarSplit::HullPiece].Anchor = static_cast<int>(B);
+				break;
+			}
+		}
+		Out.Pieces[FarSplit::TurretPiece].Anchor = TurretBody;
+		// (a body the scene may hide, and every body hanging on one, stays out of the pieces: bodies come after the body
+		// they hang on)
+		std::vector<uint8_t> Hides(N, 0);
+		for (size_t B = 0; B < N; ++B)
+		{
+			const Body& Bo = M.Bodies[B];
+			Hides[B] = MayHide(Bo) || (KeepOut && B < KeepOut->size() && (*KeepOut)[B])
+				|| (Bo.Parent >= 0 && static_cast<size_t>(Bo.Parent) < B && Hides[static_cast<size_t>(Bo.Parent)]);
+			// What moves near only and is drawn at rest from afar: a hatch and what hangs on it, the barrel's recoil (and
+			// the breech on it) passed by; a spinning wheel's turn passed by, its shift not.
+			bool bHatch = false;
+			for (int H : M.Hatches)
+			{
+				bHatch = bHatch || Under(Bo.Part, H);
+			}
+			if (bHatch || Under(Bo.Part, M.Barrel))
+			{
+				Out.Loose[B] = 2;
+			}
+			else if (M.Parts[static_cast<size_t>(Bo.Part)].Kind == PartKind::Spin)
+			{
+				Out.Loose[B] = 1;
+			}
+			const bool bFar = !Bo.Far.Triangles.empty(), bNear = !Bo.Near.Triangles.empty();
+			if (!bFar && !bNear)
+			{
+				continue; // (nothing drawn)
+			}
+			const int Piece = TurretBody >= 0 && Under(Bo.Part, M.Turret) ? FarSplit::TurretPiece : FarSplit::HullPiece;
+			// (a body with no near level is drawn far at every distance, by its own mesh; one with no far level, which the
+			// scene draws at its near level at every distance (the Panzer IV's suspension arms, the StuG's root), stands
+			// in at its near level, so the piece looks as the far bodies looked)
+			if (Hides[B] || !bNear || Out.Pieces[Piece].Anchor < 0)
+			{
+				Out.Kept[B] = bFar ? 1 : 0;
+				continue;
+			}
+			Out.StandIn[B] = bFar ? 0 : 1;
+			Out.PieceOf[B] = Piece;
+			Out.Pieces[Piece].Bodies.push_back(static_cast<int>(B));
+			const Mesh& Drawn = Out.Level(M, static_cast<int>(B));
+			for (size_t K = 0; K + 2 < Drawn.Points.size(); K += 3)
+			{
+				const V3 At(Drawn.Points[K], Drawn.Points[K + 1], Drawn.Points[K + 2]);
+				Out.Reach[B] = std::max(Out.Reach[B], At.Length());
+			}
+		}
+		// Each piece: its bodies' meshes one after another, carried from each pivot to the anchor's (at rest every part
+		// stands unturned, so a body's points are its pivot's offset from the anchor's away).
+		for (FarPiece& Piece : Out.Pieces)
+		{
+			if (Piece.Bodies.empty())
+			{
+				continue;
+			}
+			const V3 Origin = M.Bodies[static_cast<size_t>(Piece.Anchor)].Pivot;
+			size_t Points = 0, Indices = 0;
+			for (int B : Piece.Bodies)
+			{
+				Points += Out.Level(M, B).Count();
+				Indices += Out.Level(M, B).Triangles.size();
+			}
+			Mesh& To = Piece.Merged;
+			To.Points.reserve(Points * 3);
+			To.Normals.reserve(Points * 3);
+			To.Colours.reserve(Points * 4);
+			To.Soot.reserve(Points);
+			To.Triangles.reserve(Indices);
+			for (int B : Piece.Bodies)
+			{
+				const Body& Bo = M.Bodies[static_cast<size_t>(B)];
+				const Mesh& From = Out.Level(M, B);
+				const uint32_t Base = static_cast<uint32_t>(To.Count());
+				Piece.FirstPoint.push_back(Base);
+				Piece.FirstTriangle.push_back(static_cast<uint32_t>(To.Triangles.size() / 3));
+				const V3 Off = Bo.Pivot - Origin;
+				const size_t Count = From.Count();
+				for (size_t K = 0; K < Count; ++K)
+				{
+					To.Points.push_back(static_cast<float>(From.Points[K * 3] + Off.X));
+					To.Points.push_back(static_cast<float>(From.Points[K * 3 + 1] + Off.Y));
+					To.Points.push_back(static_cast<float>(From.Points[K * 3 + 2] + Off.Z));
+					To.Normals.insert(To.Normals.end(), From.Normals.begin() + static_cast<std::ptrdiff_t>(K * 3),
+						From.Normals.begin() + static_cast<std::ptrdiff_t>(K * 3 + 3));
+					To.Colours.insert(To.Colours.end(), From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4),
+						From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4 + 4));
+					To.Soot.push_back(From.Soot[K]);
+				}
+				for (uint32_t I : From.Triangles)
+				{
+					To.Triangles.push_back(Base + I);
+				}
+			}
+			Piece.FirstPoint.push_back(static_cast<uint32_t>(To.Count()));
+			Piece.FirstTriangle.push_back(static_cast<uint32_t>(To.Triangles.size() / 3));
+		}
+
+		// The commander's lid up: the piece that holds it once more, every body of it as it stands at the end of her
+		// open_up clip (each part's turn and slide from the clip, the rest at rest), carried into the anchor's frame as
+		// the anchor stands then (it does not move: the clip moves the lid and what hangs on it).
+		const Clip* OpenUp = M.FindClip("open_up");
+		if (M.CommanderHatch < 0 || !OpenUp)
+		{
+			return;
+		}
+		for (size_t B = 0; B < N && Out.OpenOf < 0; ++B)
+		{
+			if (Out.PieceOf[B] >= 0 && Under(M.Bodies[B].Part, M.CommanderHatch))
+			{
+				Out.OpenOf = Out.PieceOf[B];
+			}
+		}
+		if (Out.OpenOf < 0)
+		{
+			return;
+		}
+		for (const ClipTrack& T : OpenUp->Tracks)
+		{
+			for (size_t B = 0; B < N; ++B)
+			{
+				if (Out.PieceOf[B] >= 0 && Out.PieceOf[B] != Out.OpenOf && Under(M.Bodies[B].Part, T.Part))
+				{
+					Out.OpenOf = -1; // (the clip moves a body of the other piece too: no lid piece, she shows it shut)
+					return;
+				}
+			}
+		}
+		std::vector<PartState> S(M.Parts.size());
+		M.Play(*OpenUp, OpenUp->Long, 1.0, S);
+		std::vector<Xf> Posed;
+		M.Solve(Xf(), S, Posed);
+		const FarPiece& Shut = Out.Pieces[Out.OpenOf];
+		FarPiece& Up = Out.Open;
+		Up.Anchor = Shut.Anchor;
+		Up.Bodies = Shut.Bodies;
+		Up.FirstPoint = Shut.FirstPoint;
+		Up.FirstTriangle = Shut.FirstTriangle;
+		Up.Merged = Shut.Merged;
+		const Body& AnchorBody = M.Bodies[static_cast<size_t>(Up.Anchor)];
+		const Xf& A = Posed[static_cast<size_t>(AnchorBody.Part)];
+		const Quat Back = A.Q.Unit().Conj();
+		for (size_t K = 0; K < Up.Bodies.size(); ++K)
+		{
+			const Body& Bo = M.Bodies[static_cast<size_t>(Up.Bodies[K])];
+			const Xf& X = Posed[static_cast<size_t>(Bo.Part)];
+			const Mesh& From = Out.Level(M, Up.Bodies[K]);
+			const size_t Base = Up.FirstPoint[K];
+			for (size_t P = 0; P < From.Count(); ++P)
+			{
+				const V3 Local(From.Points[P * 3], From.Points[P * 3 + 1], From.Points[P * 3 + 2]);
+				const V3 At = Back.Rotate(X.Apply(Bo.Pivot + Local) - A.T) - AnchorBody.Pivot;
+				const V3 Way = Back.Rotate(X.Q.Rotate(V3(From.Normals[P * 3], From.Normals[P * 3 + 1], From.Normals[P * 3 + 2])));
+				const size_t I = (Base + P) * 3;
+				Up.Merged.Points[I] = static_cast<float>(At.X);
+				Up.Merged.Points[I + 1] = static_cast<float>(At.Y);
+				Up.Merged.Points[I + 2] = static_cast<float>(At.Z);
+				Up.Merged.Normals[I] = static_cast<float>(Way.X);
+				Up.Merged.Normals[I + 1] = static_cast<float>(Way.Y);
+				Up.Merged.Normals[I + 2] = static_cast<float>(Way.Z);
+			}
+		}
+	}
+
+	double FarOff(const Model& M, const FarSplit& Split, const std::vector<Place>& Now, std::vector<double>* PerBody)
+	{
+		if (PerBody)
+		{
+			PerBody->assign(M.Bodies.size(), 0.0);
+		}
+		double Worst = 0.0;
+		for (const FarPiece& Piece : Split.Pieces)
+		{
+			if (Piece.Empty() || Piece.Anchor < 0 || static_cast<size_t>(Piece.Anchor) >= Now.size())
+			{
+				continue;
+			}
+			const Place& A = Now[static_cast<size_t>(Piece.Anchor)];
+			const Quat Back = A.Q.Unit().Conj();
+			const V3 Origin = M.Bodies[static_cast<size_t>(Piece.Anchor)].Pivot;
+			for (int B : Piece.Bodies)
+			{
+				const size_t Bi = static_cast<size_t>(B);
+				if (Bi >= Now.size() || Split.Loose[Bi] == 2)
+				{
+					continue;
+				}
+				// Its pivot on the anchor's frame against where the piece has it, and its turn against none (a point
+				// Reach from the pivot moves by at most 2 sin(turn / 2) Reach).
+				const Place& P = Now[Bi];
+				const V3 Shift = Back.Rotate(Swap(P.At - A.At)) - (M.Bodies[Bi].Pivot - Origin);
+				double Off = Shift.Length();
+				if (Split.Loose[Bi] == 0)
+				{
+					const Quat Turn = Back * P.Q.Unit();
+					Off += 2.0 * std::sqrt(Turn.X * Turn.X + Turn.Y * Turn.Y + Turn.Z * Turn.Z) * Split.Reach[Bi];
+				}
+				if (PerBody)
+				{
+					(*PerBody)[Bi] = Off;
+				}
+				Worst = std::max(Worst, Off);
+			}
+		}
+		return Worst;
 	}
 }

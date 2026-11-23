@@ -36,6 +36,11 @@ namespace LandFeed
 		/** The real men it stands for at the start (a live battle's header; 0 where the recording does not say). */
 		int Men0 = 0;
 		double W = 0.0, D = 0.0;
+		/** The corps it belongs to (a live battle's header; 0 where not said), and whether that corps comes up from next door
+		 * later in the battle (neighbours join the fight, release 2): its block is in the header from the start, in the
+		 * views only once it has walked on, and till then in the views' Coming. */
+		int Corps = 0;
+		bool bJoins = false;
 		/** Tank crews' names, one per tank in the block's model order (empty strings for a plain tank). */
 		std::vector<std::string> CrewNames;
 	};
@@ -99,6 +104,39 @@ namespace LandFeed
 		 * place): every point from PinFrom on is at PinX, PinY. */
 		bool bPinned = false;
 		double PinFrom = 0.0, PinX = 0.0, PinY = 0.0;
+		/** The platoon cam's marks (release 2, the tactics thread's -cam recordings): the battle seconds he is one of the
+		 * squad leading his side's assault (Lead, the recording's ld), in the base of fire or the moving group (Element,
+		 * e: bMove for "move"), and his radio calls (Calls, cl), each with the spot it brings the fire on where the
+		 * recording gives one (bSpot). All empty in a recording without them. */
+		struct Span
+		{
+			double From = 0.0, To = 0.0;
+			bool bMove = false;
+		};
+		struct Call
+		{
+			double T = 0.0, X = 0.0, Y = 0.0;
+			bool bSpot = false;
+		};
+		std::vector<Span> Lead, Element;
+		std::vector<Call> Calls;
+
+		// Release 2's field telephones and stretcher bearers (Brian, 22 November 17:33Z; the tactics thread's rules,
+		// each behind its player's switch: absent, he is as before).
+		/** A lineman ("ln": he carries the cable reel and mends the wires) or a stretcher bearer ("br"). */
+		bool bLineman = false, bBearer = false;
+		/** Struck and not killed ("wd"): he goes down and lies alive from then, -1 never. */
+		double Wounded = -1.0;
+		/** Carried on a stretcher from From to To by two bearers ("cy": [[from, to, by1, by2]]), their tracks' indexes
+		 * (-1 where the rules named no one found). */
+		struct Carry
+		{
+			double From = 0.0, To = 0.0;
+			int By1 = -1, By2 = -1;
+		};
+		std::vector<Carry> Carried;
+		/** He reached the aid post and leaves the field ("gone"); he walks back to the line ("back"). -1 never. */
+		double Gone = -1.0, Back = -1.0;
 
 		bool IsVehicle() const { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 		bool IsMan() const { return !IsVehicle(); }
@@ -126,6 +164,13 @@ namespace LandFeed
 		std::string G;
 		/** It struck the tank's commander up in his hatch (the rules' cm: 1): he drops inside, and she fights buttoned up. */
 		bool bCm = false;
+		/** Shell blasts (release 2): a man struck by the burst of the round before it, or of the 'shell' event that burst
+		 * there (the rules' m: 1). No shot and no burst of its own: the one burst is drawn once. */
+		bool bMate = false;
+		/** A smoke round the player called (release 2, the general's smoke on call): how long its screen hangs once it
+		 * lands, battle seconds, as the rules' sight block holds it (the rules' "hang"); -1 where the round does not say
+		 * (the calibre's own time). */
+		double Hang = -1.0;
 	};
 
 	struct Event
@@ -169,6 +214,21 @@ namespace LandFeed
 		double OrderIn = -1.0;
 		/** The real men it stands for now (its start's men by its strength now), -1 where not said (an enemy not met). */
 		int Men = -1;
+		/** Found by its own fire but not yet located (the historian's check, 22 November: its men not yet plain, the fire
+		 * back at it halved for a while). */
+		bool bVague = false;
+		/** Firing into cover at a point to flush out what hides there (reconnaissance by fire), and the point. */
+		bool bSearch = false;
+		double SearchX = 0.0, SearchY = 0.0;
+		/** His own blocks' tools (Brian, 22 November 14:19Z; the rules say, on his own blocks only): a Sherman with hedge
+		 * cutters that can punch a gap at a hedge point he picks; and the smoke a section can still lay (-1 none said). */
+		bool bCutter = false;
+		int Smoke = -1;
+		/** Hold until relieved (release 2; Brian, 22 November 12:48Z; his own only): told to wait for a corps coming up from
+		 * next door; the battle second help can reach it; help never came (its men break sooner); no longer waiting (his
+		 * re-order or giving ground). Dug in where it stands while waiting and not free. */
+		bool bWaits = false, bWaitLate = false, bWaitFree = false;
+		double WaitDue = -1.0;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;
@@ -177,11 +237,116 @@ namespace LandFeed
 		std::vector<std::pair<double, double>> OrderPath;
 	};
 
+	/**
+	 * A hedge cutter's cut (release 2; Brian, 22 November 14:19Z; the tactics thread's rules, "cuts"): T0 she starts
+	 * to push into the bank, T1 it gives way and the gap is open from then on (men use it from T1); Unit her track
+	 * (Tracks' index, -1 where not given); X, Y the gap's middle on the bank's line; Yaw the way she drives through
+	 * (radians from east); Width the gap, bank end to bank end (metres).
+	 */
+	struct Cut
+	{
+		double T0 = 0.0, T1 = 0.0, X = 0.0, Y = 0.0, Yaw = 0.0, Width = 4.0;
+		int Unit = -1;
+	};
+
+	/**
+	 * Release 2's field telephones (Brian, 22 November 17:33Z; the tactics thread's "wires", behind the player's phones
+	 * switch): a line from a headquarters' post (block Hq) to a company (block Unit) of side Side, laid along Pts (metres,
+	 * the field's); Id its own number, as the cuts and mends name it.
+	 */
+	struct Wire
+	{
+		int Id = 0, Side = 1, Hq = -1, Unit = -1;
+		std::vector<std::pair<double, double>> Pts;
+	};
+	/** A wire broken at T at X, Y ("wireCuts"), By what: "shell" or "patrol". */
+	struct WireCut
+	{
+		double T = 0.0, X = 0.0, Y = 0.0;
+		int Wire = 0;
+		std::string By;
+	};
+	/** A wire mended at T ("wireMends") by its lineman (Man, his track's index; -1 none named): out from the post at T0
+	 * (walking in 'reel'), at the cut X, Y from T1, splicing from then to T (-1 where the recording does not say). */
+	struct WireMend
+	{
+		double T = 0.0, T0 = -1.0, T1 = -1.0, X = 0.0, Y = 0.0;
+		int Wire = 0, Man = -1;
+	};
+	/** An order held by a cut wire ("held"): due at Due, it went at Went (by a runner; -1 not yet), to block Unit; T when
+	 * the rules held it. */
+	struct HeldOrder
+	{
+		double T = 0.0, Due = 0.0, Went = -1.0;
+		int Unit = -1;
+	};
+	/** A side's aid post ("aid"), where the stretcher bearers carry the wounded. */
+	struct AidPost
+	{
+		int Side = 0;
+		double X = 0.0, Y = 0.0;
+	};
+	/**
+	 * Release 2's night patrol before the attack (the tactics thread's "patrol", behind the player's patrol switch;
+	 * settled by the rules at 0 s, a block's matter: no man of the battle's own goes): Count men of side Side sent from
+	 * block Unit (dressed as its soldiers), out between T0 and T1 (before 0 s) along Route ([t, x, y], times before 0:
+	 * out from the block to the post found or where it was caught, and back); the hidden post found at Found (bFound,
+	 * FoundKind its kind); Alerted when the enemy heard it (-1 never), and the flares sent up ([t, x, y] each). bOn
+	 * where a recording carries one.
+	 */
+	struct Patrol
+	{
+		struct Point
+		{
+			double T = 0.0, X = 0.0, Y = 0.0;
+		};
+		bool bOn = false, bFound = false;
+		int Side = 0, Unit = -1, Count = 0;
+		double T0 = 0.0, T1 = 0.0;
+		double FoundX = 0.0, FoundY = 0.0;
+		std::string FoundKind;
+		double Alerted = -1.0;
+		std::vector<Point> Route, Flares;
+	};
+
 	/** A crater the field keeps (view zones, kind crater). */
 	struct Crater
 	{
 		double X = 0.0, Y = 0.0, R = 0.0, At = 0.0;
 		std::string Cal;
+	};
+
+	/**
+	 * A block of a corps coming up from next door, not yet on the field (neighbours join the fight, release 2; the rules'
+	 * view().coming): his own side's, and the enemy's his staff knows of. Its corps walks on together at At (battle
+	 * seconds) at (X, Y) on the field's Edge (south, north, west, east); Arrive the card's word for when (early, midway,
+	 * late; empty where not said).
+	 */
+	struct Arrival
+	{
+		int Id = 0;
+		int Side = -1;
+		int Corps = 0;
+		std::string Kind, Edge, Arrive;
+		double At = 0.0, X = 0.0, Y = 0.0;
+	};
+
+	/**
+	 * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+	 * strength and arrival time"): his own corps coming up from next door sends a despatch rider on a motorcycle first. He
+	 * rides from its edge to the middle of his army (there: the battle second he reaches it) and stands there until his
+	 * corps comes up (comes), then leaves the views. Says: the relief's strength and times in words for a click. Looks and
+	 * words only: nothing in the fight reads him.
+	 */
+	struct Rider
+	{
+		int Corps = 0, Side = -1;
+		double X = 0.0, Y = 0.0, Face = 0.0, Speed = 0.0, There = 0.0, Comes = 0.0;
+		/** When his staff fights it, the battle second it reaches his line (-1 where it waits for his orders). */
+		double Line = -1.0;
+		std::string Edge, Name, Kind, Says;
+		int Men = 0;
+		double Str = 1.0;
 	};
 
 	/** One battle second's view: the bars and the blocks' stands. */
@@ -192,6 +357,10 @@ namespace LandFeed
 		double BreakingAtt = 0.0, BreakingDef = 0.0;
 		double Contact = -1.0;
 		std::vector<Unit> Units;
+		/** The blocks of corps still coming up from next door that the player may know of (empty: none). */
+		std::vector<Arrival> Coming;
+		/** His own corps' despatch riders riding in ahead of them (empty: none). */
+		std::vector<Rider> Riders;
 	};
 
 	struct Field
@@ -205,6 +374,11 @@ namespace LandFeed
 		std::vector<uint8_t> Storeys;
 		double TownX = 0.0, TownY = 0.0, TownR = 0.0;
 		std::string Region, PlaceName, Terrain, TownName, TownSize;
+		/** field.look and field.snow, where the recording names them (LandField::Field::Look, Snow): the look of the land
+		 * ("desert", "med", "jungle", "island", "farmland", "bocage"; empty: by the place) and the snow lying (0 to 1;
+		 * less than 0: by the place and the month). */
+		std::string Look;
+		double Snow = -1.0;
 		/** The deployment zones [x0, y0, x1, y1] of the attacker and the defender. */
 		double ZoneAtt[4] = { 0, 0, 0, 0 };
 		double ZoneDef[4] = { 0, 0, 0, 0 };
@@ -270,6 +444,9 @@ namespace LandFeed
 		double Dt = 0.1;
 		int Turn = 0;
 		Sky Weather;
+		/** The campaign's weather over the place in its own word (the battle ticket's weather: "clear", "rain", "snow",
+		 * "mud"; the root's "weather"), empty where it keeps none: "mud" lays the thaw's mud (LandField::Field::Weather). */
+		std::string WeatherWord;
 		SideInfo Sides[2];
 		Field Ground;
 		double Limit = 0.0, Contact = -1.0, End = 0.0;
@@ -281,6 +458,30 @@ namespace LandFeed
 		std::vector<Round> Rounds;
 		std::vector<Track> Tracks;
 		std::vector<Crater> Craters;
+		/** The hedge cutters' cuts, by T1 (none where the rules' cutters switch is off). */
+		std::vector<Cut> Cuts;
+		/** Release 2's field telephones, aid posts and night patrol (none where their switches are off): the wires, their
+		 * cuts and mends by time, the orders a cut held, the aid posts and the patrol. */
+		std::vector<Wire> Wires;
+		std::vector<WireCut> WireCuts;
+		std::vector<WireMend> WireMends;
+		std::vector<HeldOrder> Held;
+		std::vector<AidPost> Aid;
+		Patrol Night;
+		/**
+		 * Scarred ground (release 2, Brian 21:21Z: "a field fought over keeps its craters next time"; the design
+		 * director: looks only, no draw reads it): root "scars" {"count": battles fought here before, "months": since
+		 * the last}. Count 0 where none is given (the player's switch off, or a fresh field).
+		 */
+		int ScarCount = 0;
+		double ScarMonths = 0.0;
+		/**
+		 * Mud memory (release 2, Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for
+		 * the next battle there; looks only, as the scars): root "oldRuts" {"count": the battles fought here in mud
+		 * before, "months": since the last}. Count 0 where none is given.
+		 */
+		int OldRutCount = 0;
+		double OldRutMonths = 0.0;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
@@ -312,6 +513,25 @@ namespace LandFeed
 
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
 
+	/** The night patrol's men (AddPatrolMen) are numbered from PatrolK in their block (their K): no man of the rules' is. */
+	constexpr int PatrolK = 100000;
+	/** How long a flare holds the patrol flat (battle seconds: some 28 of life, a parachute flare's burning), the metres
+	 * between its men in file, and how near the post found they crawl. */
+	constexpr double PatrolFlareBurns = 14.0, PatrolGap = 5.0, PatrolCrawlNear = 70.0;
+	/**
+	 * Release 2's night patrol drawn (the tactics thread's patrol root, behind its player's switch): its men (Count, at
+	 * most 16) added to the recording's text as men of its unit (block Unit, K from PatrolK, the first its leader, the rest
+	 * riflemen), so the feed and the crowd both read them and they are dressed as the unit's soldiers. They go out in file
+	 * along the route, PatrolGap metres apart (each the leader's way a little later, a little to one side of it), creep,
+	 * crawl within PatrolCrawlNear of the post found, kneel where the way halts, go flat a breath after each flare bursts
+	 * and lie still while it burns (the way held that long), come home to their unit, and are out as the battle opens (a
+	 * leaving time under 0 reads as never everywhere: home before then, they stand among their unit till it). Run on
+	 * the text before ReadRecording and the crowd's Build. The men added (0: no patrol, or no way to walk).
+	 */
+	int AddPatrolMen(std::string& Text);
+	/** Whether a track is one of the night patrol's men. */
+	inline bool IsPatrolMan(const Track& T) { return T.K >= PatrolK; }
+
 	/**
 	 * What one live delta added (release 2), as places in the Recording, for the cores that extend what they built from
 	 * it rather than build again: the tracks are by index, the rest from where each list stood before.
@@ -328,6 +548,8 @@ namespace LandFeed
 		/** Tracks with new kept points or a new provisional last point; with new changes; new shots; a fall; an out
 		 * set or taken back; new scars. Each once, in order. */
 		std::vector<int> Moved, Changed, Shot, Fell, Left, Marked;
+		/** Tracks a wound, a carry, a going or a coming back was given in this delta (release 2's bearers). */
+		std::vector<int> Hurt;
 		/** Where the rounds, events, views and craters stood before: the new are from there on. */
 		size_t RoundsFrom = 0, EventsFrom = 0, ViewsFrom = 0, CratersFrom = 0;
 		/** Blocks with new phases. */
@@ -365,6 +587,12 @@ namespace LandFeed
 	double TurnToward(double A, double B, double Share);
 	/** A facing put into (-pi, pi]. */
 	double Wrap(double F);
+	/**
+	 * The machine guns' long fire as the armies meet (the first minute from contact): the 5 battle seconds with the most machine-gun
+	 * rounds flown over 150 m, OutAt their middle, and the gunner who fired the most of them and stands through it
+	 * (OutTrack, a track index): the moment tracer crosses a field, for the picture run's still. False with none.
+	 */
+	bool GunsOpen(const Recording& Rec, double& OutAt, int& OutTrack);
 	/** The facing from one field point toward another (0 north, clockwise). */
 	double FacingTo(double FromX, double FromY, double ToX, double ToY);
 }

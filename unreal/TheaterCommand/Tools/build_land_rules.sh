@@ -25,6 +25,8 @@ fi
 OUT="$PROJECT/Content/Rules/land-rules.js"
 mkdir -p "$(dirname "$OUT")"
 STAMP="$(cd "$REPO" && git log -1 --format='%h %cs' -- src/battle data/battle 2> /dev/null || echo unknown)"
+# (always from the project's folder, so the bundle's path notes read the same whoever runs it, from wherever)
+cd "$PROJECT"
 "$REPO/node_modules/.bin/esbuild" "$PROJECT/Rules/land-bridge.ts" \
   --bundle --format=iife --platform=neutral --target=es2020 --charset=utf8 --log-level=warning \
   --banner:js="// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of $STAMP. Do not edit: run Tools/build_land_rules.sh." \

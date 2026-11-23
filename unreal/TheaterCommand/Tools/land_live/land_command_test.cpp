@@ -5,14 +5,19 @@
 //  - picking, Shift-picking, a box, Tab and clearing take only his blocks that can take orders;
 //  - a click on an enemy attacks it (guns alone fire on it), on open ground goes there, at the double when asked; a
 //    line, hold, fall back and back to staff each make the rules' own command; every command is JSON the rules read;
-//  - in the setup step, a block's ground check (MayStand) never says yes where the rules' ground says no for want of room.
+//  - in the setup step, a block's ground check (MayStand) never says yes where the rules' ground says no for want of room;
+//  - the walk pressed in code for the Mac's builder (LandScript, -TheaterLandScript) finds woods on his ground for two of
+//    his units, a unit to send forward and a point inside the field, an enemy he can see to attack and cover to fire into.
 // The commands and placings it makes are written out (commands.jsonl, placings.jsonl) for command-check.ts, which gives
 // them to the rules at the same moments of the same battle and checks each is taken.
-// Usage: land_command_test <folder (header.json, deltas.jsonl)> <setup folder (header.json, deltas.jsonl)>
+//  - neighbours join the fight (release 2): a corps coming up from next door is told, named and counted down while it
+//    comes (his own; the enemy's his staff knows of, uncounted), and is on the field the moment it stops coming.
+// Usage: land_command_test <folder (header.json, deltas.jsonl)> <setup folder (header.json, deltas.jsonl)> [join folder]
 
 #include "Battle/LandCommand.h"
 #include "Battle/LandFeed.h"
 #include "Battle/LandJson.h"
+#include "Battle/LandScript.h"
 
 #include <algorithm>
 #include <cmath>
@@ -90,6 +95,7 @@ int main(int Argc, char** Argv)
 	int Tags = 0, Eased = 0, Chips[6] = { 0, 0, 0, 0, 0, 0 };
 	double WorstOff = 0.0;
 	int RatioSeen[2] = { 0, 0 }, MenSeen = -1;
+	int WalkAt = 0, WalkForward = 0, WalkFoe = 0, WalkCover = 0, WalkFoesSeen = 0;
 	for (const std::string& Text : Deltas)
 	{
 		LandFeed::Grown Grew;
@@ -133,6 +139,34 @@ int main(int Argc, char** Argv)
 		// ---- At this moment: picking, then the orders ----
 		const double Screen = Rec.Fought - 2.0;
 		G.Update(Rec, Screen);
+		{
+			// (the walk's choices at this moment, as the game would make them)
+			++WalkAt;
+			const int Rifle = LandScript::Mine(G, "inf", {});
+			const int Goer = Rifle >= 0 ? Rifle : LandScript::Mine(G, "", {});
+			double Wx = 0.0, Wy = 0.0;
+			if (Goer >= 0 && LandScript::Forward(G, Rec.Ground, Goer, 120.0, Wx, Wy))
+			{
+				++WalkForward;
+				Check(Wx >= 0.0 && Wy >= 0.0 && Wx <= Rec.Ground.W && Wy <= Rec.Ground.H, "the walk's forward point is on the field");
+			}
+			bool bSeen = false;
+			for (const LandCommand::Tag& T : G.Tags()) bSeen = bSeen || (!T.bMine && T.bKnown && !T.bHidden && !T.bVague && LandScript::Standing(T));
+			WalkFoesSeen += bSeen ? 1 : 0;
+			const LandCommand::Tag* Me = Goer >= 0 ? G.TagOf(Goer) : nullptr;
+			const int Foe = Me ? LandScript::Foe(G, Me->X, Me->Y) : -1;
+			Check((Foe >= 0) == (bSeen && Me != nullptr), "the walk finds an enemy to attack exactly when he can see one");
+			if (const LandCommand::Tag* F = Foe >= 0 ? G.TagOf(Foe) : nullptr)
+			{
+				++WalkFoe;
+				Check(!F->bMine && F->bKnown && !F->bHidden, "the walk attacks only an enemy he can see");
+			}
+			if (Goer >= 0 && LandScript::CoverFor(G, Rec.Ground, {}, Goer, Wx, Wy) == LandScript::Cover::Woods)
+			{
+				++WalkCover;
+				Check(LandScript::Woods(Rec.Ground, Wx, Wy), "the walk's cover to fire into is woods");
+			}
+		}
 		std::vector<const LandCommand::Tag*> Mine, Foes, Guns;
 		for (const LandCommand::Tag& T : G.Tags())
 		{
@@ -211,6 +245,12 @@ int main(int Argc, char** Argv)
 		Check(!Ghosts.empty() && std::cos(Ghosts[0].Face - (G.Side() == 0 ? 0.0 : 3.14159265358979)) > 0.99, "a line faces the enemy's side");
 		Give(G.Line(Gx - 200.0, Gy, Gx + 200.0, Gy), "line");
 		Give(G.Hold(), "hold");
+		// (reconnaissance by fire: one of his foot units fires into the cover where an enemy stands, no target named)
+		G.Choose({ Mine[0]->Block }, false);
+		const std::string Into = G.FireInto(Foes[0]->X, Foes[0]->Y);
+		Check(IsJson(Into, "land:fire") && Into.find("\"target\"") == std::string::npos, "fire into cover names a point, not a target");
+		Give(Into, "land:fire");
+		G.Choose(Sent, false);
 		if (!Guns.empty())
 		{
 			G.Choose({ Guns[0]->Block }, false);
@@ -240,9 +280,108 @@ int main(int Argc, char** Argv)
 	Check(Chips[2] > 0 && Chips[1] > 0, "some of his blocks were seen taken and with an order on the air");
 	std::printf("plates: one figure for %d men on the attack, %d on the defence; the biggest block %d men\n", RatioSeen[0], RatioSeen[1], MenSeen);
 	Check(RatioSeen[0] > 1 && RatioSeen[1] > 1 && MenSeen > 0, "each side's drawing ratio and its blocks' real men are known");
+	std::printf("the walk: at %d moments, forward %d, an enemy seen %d and attacked %d, woods to fire into %d\n", WalkAt, WalkForward, WalkFoesSeen, WalkFoe, WalkCover);
+	Check(WalkAt > 0 && WalkForward == WalkAt && WalkFoe > 0, "the walk finds a unit to send forward each time, and an enemy to attack once one is seen");
 	std::printf("orders made:");
 	for (const auto& [Do, N] : Made) std::printf(" %s %d", Do.c_str(), N);
 	std::printf("\n");
+
+	// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z): the rules mark his own blocks' tools, and his
+	// clipboard shows what they mark, never the enemy's. Then the same battle with every tool taken away (nothing shows),
+	// and with one of his tanks given cutters and two blocks given smoke, and an enemy given both (not his: never shown). ----
+	{
+		LandCommand::General Ruled;
+		Ruled.Begin(Rec);
+		Ruled.Update(Rec, Rec.Fought - 2.0);
+		int RuledSmoke = 0, RuledCutters = 0;
+		for (const LandCommand::Tag& T : Ruled.Tags())
+		{
+			if (T.bMine && T.Smoke >= 0) RuledSmoke++;
+			if (T.bMine && T.bCutter) RuledCutters++;
+			Check(T.bMine || (!T.bCutter && T.Smoke < 0), "the enemy's tools are never shown (the rules' own marks)");
+		}
+		std::printf("the rules' tools: smoke for %d of his blocks, cutters for %d (no hedges on this field)\n", RuledSmoke, RuledCutters);
+		Check(RuledSmoke > 0, "the rules give his sections smoke (smoke on call is on)");
+
+		LandFeed::Recording Bare = Rec;
+		for (LandFeed::View& V : Bare.Views)
+			for (LandFeed::Unit& U : V.Units)
+			{
+				U.bCutter = false;
+				U.Smoke = -1;
+			}
+		LandCommand::General Plain;
+		Plain.Begin(Bare);
+		Plain.Update(Bare, Bare.Fought - 2.0);
+		std::vector<int> All;
+		for (const LandCommand::Tag& T : Plain.Tags())
+		{
+			if (T.bOrderable) All.push_back(T.Block);
+			Check(!T.bCutter && T.Smoke < 0, "no cutters or smoke shown where the rules say none");
+		}
+		Plain.Choose(All, false);
+		Check(Plain.Cutter() < 0 && Plain.Smokers().empty() && Plain.Cut(10.0, 10.0).empty() && Plain.SmokeLine(0, 0, 10, 10).empty(), "no cut or smoke order without the tools");
+
+		LandFeed::Recording Kit = Bare;
+		int Tank = -1, Foe = -1;
+		std::vector<int> Smoky;
+		for (LandFeed::View& V : Kit.Views)
+		{
+			for (LandFeed::Unit& U : V.Units)
+			{
+				const LandCommand::Tag* T = Plain.TagOf(U.Id);
+				if (!T || T->State == "gone" || T->State == "withdrawn") continue;
+				if (T->bOrderable && T->Kind == "arm" && (Tank < 0 || Tank == U.Id))
+				{
+					Tank = U.Id;
+					U.bCutter = true;
+				}
+				else if (T->bOrderable && T->Kind == "inf" && (Smoky.size() < 2 || std::find(Smoky.begin(), Smoky.end(), U.Id) != Smoky.end()))
+				{
+					if (std::find(Smoky.begin(), Smoky.end(), U.Id) == Smoky.end()) Smoky.push_back(U.Id);
+					U.Smoke = 2;
+				}
+				else if (!T->bMine && (Foe < 0 || Foe == U.Id))
+				{
+					Foe = U.Id;
+					U.bCutter = true;
+					U.Smoke = 3;
+				}
+			}
+		}
+		Check(Tank >= 0 && Smoky.size() == 2 && Foe >= 0, "the battle has a tank of his, two of his sections and an enemy to give the tools to");
+		LandCommand::General K;
+		K.Begin(Kit);
+		K.Update(Kit, Kit.Fought - 2.0);
+		const LandCommand::Tag* Cutting = K.TagOf(Tank);
+		const LandCommand::Tag* Theirs = K.TagOf(Foe);
+		Check(Cutting && Cutting->bCutter, "his tank with cutters is shown with them");
+		Check(Theirs && !Theirs->bCutter && Theirs->Smoke < 0, "the enemy's tools are never shown");
+		K.Choose(Smoky, false);
+		Check(K.Cutter() < 0 && K.Cut(5.0, 5.0).empty(), "no cut order without a cutter in hand");
+		K.Choose(All, false);
+		Check(K.Cutter() == Tank, "the cutter in hand is found among the rest");
+		const std::string Cut = K.Cut(120.25, 340.5);
+		Check(IsJson(Cut, "land:cut") && Cut == "{\"do\":\"land:cut\",\"units\":[" + std::to_string(Tank) + "],\"x\":120.25,\"y\":340.5}", "a cut is the rules' JSON for the one tank: " + Cut);
+		const std::vector<int> Layers = K.Smokers();
+		Check(Layers.size() == 2 && std::find(Layers.begin(), Layers.end(), Tank) == Layers.end(), "only those with smoke lay it");
+		const std::string Smoke = K.SmokeLine(100.0, 200.0, 300.0, 200.0);
+		Check(IsJson(Smoke, "land:smoke") && Smoke.find("\"x0\":100") != std::string::npos && Smoke.find("\"y1\":200") != std::string::npos && Smoke.find(std::to_string(Tank) + "]") == std::string::npos, "smoke is the rules' JSON for a line, from those with it: " + Smoke);
+		std::printf("cutters and smoke: tank %d cuts (%s), sections lay smoke (%s)\n", Tank, Cut.c_str(), Smoke.c_str());
+	}
+
+	// ---- Hedge snapping: the nearest point of a hedge within reach ----
+	{
+		const std::vector<std::pair<double, double>> Hedge = { { 0.0, 0.0 }, { 100.0, 0.0 }, { 100.0, 100.0 } };
+		const std::vector<std::pair<double, double>> Far = { { 500.0, 500.0 }, { 600.0, 500.0 } };
+		const std::vector<std::pair<double, double>> Dot = { { 50.0, 60.0 } };
+		double Sx = -1.0, Sy = -1.0;
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 40.0, 7.0, 10.0, Sx, Sy) && std::fabs(Sx - 40.0) < 1e-9 && std::fabs(Sy) < 1e-9, "a point near a hedge snaps onto it");
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 104.0, 50.0, 10.0, Sx, Sy) && std::fabs(Sx - 100.0) < 1e-9 && std::fabs(Sy - 50.0) < 1e-9, "onto the nearest of its runs");
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 103.0, -3.0, 10.0, Sx, Sy) && std::fabs(Sx - 100.0) < 1e-9 && std::fabs(Sy) < 1e-9, "a point off a corner snaps to the corner");
+		Check(!LandCommand::NearestOnLines({ &Hedge, &Far }, 50.0, 50.0, 10.0, Sx, Sy), "none where no hedge comes within reach");
+		Check(LandCommand::NearestOnLines({ nullptr, &Dot }, 52.0, 60.0, 5.0, Sx, Sy) && std::fabs(Sx - 50.0) < 1e-9, "a hedge of one point, and an empty slot, are borne");
+	}
 
 	// ---- The setup step: his ground ----
 	LandFeed::Recording Setup;
@@ -281,6 +420,143 @@ int main(int Argc, char** Argv)
 	std::printf("setup: room [%.0f, %.0f, %.0f, %.0f]; %d placings asked, %d inside his ground; %d blocks stand where their staff drew them up inside it\n",
 		Room[0], Room[1], Room[2], Room[3], Asked, Yes, Standing);
 	Check(Asked > 0 && Yes > 0 && Yes < Asked, "some places on his ground, some off it");
+
+	// ---- The walk's two units into the woods (the rules are asked to place them and hide them: command-check.ts) ----
+	std::ofstream WoodsOut(SetupFolder + "/woods.jsonl");
+	std::vector<int> Carried;
+	std::vector<LandScript::Point> Taken;
+	for (int K = 0; K < 2; ++K)
+	{
+		int Block = LandScript::Mine(S, "inf", Carried);
+		if (Block < 0) Block = LandScript::Mine(S, "", Carried);
+		double Wx = 0.0, Wy = 0.0;
+		if (Block < 0 || !LandScript::WoodsFor(S, Setup.Ground, Block, Taken, Wx, Wy)) continue;
+		Check(LandScript::Woods(Setup.Ground, Wx, Wy) && S.MayStand(Block, Wx, Wy), "the walk's woods are woods, on his ground");
+		const LandCommand::Tag* T = S.TagOf(Block);
+		std::printf("the walk: block %d (%s) carried %.0f m into the woods at %.0f, %.0f\n", Block, T ? T->Short.c_str() : "?", T ? std::hypot(Wx - T->X, Wy - T->Y) : 0.0, Wx, Wy);
+		WoodsOut << Block << '\t' << LandCommand::Number(Wx) << '\t' << LandCommand::Number(Wy) << '\n';
+		Carried.push_back(Block);
+		Taken.push_back({ Wx, Wy });
+	}
+	WoodsOut.close();
+	Check(Carried.size() == 2, "the walk finds woods on his ground for two of his units");
+
+	// ---- Neighbours join the fight (release 2): a battle with a corps coming up from next door on each side ----
+	if (Argc >= 4)
+	{
+		LandFeed::Recording Join;
+		std::vector<std::string> JoinDeltas;
+		if (!Grow(Argv[3], Join, JoinDeltas)) return 2;
+		LandCommand::General J;
+		J.Begin(Join);
+		const int Me = Join.Me;
+		std::vector<int> Joiners[2];
+		for (const LandFeed::Block& B : Join.Blocks)
+		{
+			if (!B.bJoins || B.Side < 0 || B.Side > 1) continue;
+			Joiners[B.Side].push_back(B.Id);
+			Check(B.Corps != 0, "a joiner's corps is said");
+		}
+		Check(Me >= 0 && Me <= 1 && !Joiners[0].empty() && !Joiners[1].empty(), "the header names joiners on both sides");
+		int Told = 0, FoeTold = 0, CorpsMen = 0;
+		double LastIn = 1e9, LastToldAt = -1.0, ArrivedAt = -1.0;
+		// (hold until relieved and the rider ahead: join-check.ts tells one of his blocks to wait, and his corps sends a rider)
+		int Waiting = -1, WaitTags = 0, WaitWrong = 0, Riders = 0, RiderPicked = 0, HelpSaid = 0;
+		double WaitDue = -1.0;
+		std::string RiderSays, WaitOrder;
+		std::string CorpsName, CorpsEdge;
+		for (const std::string& Text : JoinDeltas)
+		{
+			LandFeed::Grown Grew;
+			std::string Error;
+			if (!LandFeed::AppendDelta(Text, Join, Grew, Error))
+			{
+				std::printf("join delta: %s\n", Error.c_str());
+				return 1;
+			}
+			const double Screen = Join.Fought - 2.0;
+			if (Screen < 0.0 || Me < 0 || Me > 1) continue;
+			J.Update(Join, Screen);
+			for (const LandCommand::Tag& T : J.Tags())
+			{
+				if (!T.bWaits) continue;
+				if (!T.bMine || (Waiting >= 0 && T.Block != Waiting)) ++WaitWrong;
+				Waiting = T.Block;
+				WaitDue = T.WaitDue;
+				++WaitTags;
+			}
+			for (const LandFeed::Rider& R : J.Riders())
+			{
+				Check(R.Side == Me && !R.Says.empty() && R.Men > 0, "a rider is his own side's, and says what is coming");
+				++Riders;
+				RiderSays = R.Says;
+				if (J.RiderAt(R.X + 3.0, R.Y - 2.0, 10.0) >= 0) ++RiderPicked;
+			}
+			if (J.HelpComing()) ++HelpSaid;
+			if (WaitOrder.empty() && J.HelpComing())
+			{
+				// (HOLD TILL RELIEVED with everything of his in hand: only those on foot are told)
+				std::vector<int> All;
+				for (const LandCommand::Tag& T : J.Tags())
+				{
+					if (T.bOrderable) All.push_back(T.Block);
+				}
+				J.Choose(All, false);
+				WaitOrder = J.Wait();
+				for (int Id : J.Waiters())
+				{
+					const LandCommand::Tag* T = J.TagOf(Id);
+					Check(T && T->Kind != "arm" && T->Kind != "art" && T->Kind != "mot", "only blocks on foot are told to wait");
+				}
+				J.Clear();
+			}
+			const LandCommand::Neighbour* Own = nullptr;
+			for (const LandCommand::Neighbour& N : J.Neighbours())
+			{
+				Check(N.Units > 0 && N.In >= 0.0 && !N.Edge.empty(), "a corps coming says how many units, how soon and on which edge");
+				Check(N.X >= -1.0 && N.Y >= -1.0 && N.X <= Join.Ground.W + 1.0 && N.Y <= Join.Ground.H + 1.0, "it comes on at a point on the field's edge");
+				Check(N.bMine == (N.Side == Me), "his own corps is his, the enemy's the enemy's");
+				Check(N.bMine ? N.Men > 0 : N.Men < 0, "his own corps' men said, the enemy's not counted");
+				if (N.bMine)
+				{
+					Own = &N;
+					++Told;
+				}
+				else
+				{
+					++FoeTold;
+				}
+			}
+			bool bOn = false;
+			for (const LandCommand::Tag& T : J.Tags())
+			{
+				if (std::find(Joiners[Me].begin(), Joiners[Me].end(), T.Block) != Joiners[Me].end()) bOn = true;
+			}
+			if (Own)
+			{
+				Check(!bOn, "his corps is not on the field while it is still coming");
+				Check(Own->In <= LastIn + 1e-6, "its time counts down");
+				Check(!Own->Name.empty(), "his corps coming is named");
+				LastIn = Own->In;
+				LastToldAt = Screen;
+				CorpsName = Own->Name;
+				CorpsEdge = Own->Edge;
+				CorpsMen = Own->Men;
+			}
+			if (bOn && ArrivedAt < 0.0) ArrivedAt = Screen;
+		}
+		std::printf("neighbours: his corps (%s, %d men, by the %s edge) told coming %d times, the enemy's %d; last told at %.1f with %.1f s to go; on the field from %.1f\n",
+			CorpsName.c_str(), CorpsMen, CorpsEdge.c_str(), Told, FoeTold, LastToldAt, LastIn, ArrivedAt);
+		Check(Told > 0, "his corps coming is told before it comes");
+		Check(ArrivedAt >= 0.0, "his corps walks on");
+		Check(ArrivedAt < 0.0 || LastToldAt < 0.0 || ArrivedAt - LastToldAt <= 1.01, "it is on the field the moment it stops coming");
+		Check(LastIn <= 1.01, "its time runs down to its coming");
+		std::printf("hold until relieved: block %d waits (help due at %.1f) in %d screens, help coming said in %d; the wait order %s; the rider in %d screens (%d found by a click near him): %s\n",
+			Waiting, WaitDue, WaitTags, HelpSaid, WaitOrder.c_str(), Riders, RiderPicked, RiderSays.c_str());
+		Check(WaitTags > 0 && WaitWrong == 0 && WaitDue > 0.0, "his waiting block's tag says it waits and when help is due, and no other's does");
+		Check(IsJson(WaitOrder, "land:wait"), "the wait order is the rules' JSON");
+		Check(Riders > 0 && RiderPicked == Riders, "his corps' despatch rider is read and found by a click near him");
+	}
 
 	std::printf(Failures ? "FAIL (%d)\n" : "clipboard held\n", Failures);
 	return Failures ? 1 : 0;
