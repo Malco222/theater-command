@@ -45,6 +45,20 @@ describe('the new models fire from their own sockets', () => {
     expect(fighterGuns('Fighter:FRA', 'FRA', { year: 1940, month: 5 }).guns[1].at).toEqual(['gun.1', 'gun.2']);
   });
 
+  it('the SM.79, the Nell and the Betty fire from their own sockets; Italy flies the SM.79 from the first', () => {
+    expect(bomberOf('ITA', 1939)).toBe('SM79');
+    const sm = bomberGuns('SM79', 'ITA', { year: 1941, month: 3 });
+    expect(sm.mark).toBe('SM.79');
+    expect(sm.guns.map((g) => `${g.mount}:${g.at.join('+')}`)).toEqual(['fixed:turret.1', 'hand:turret.2', 'hand:turret.3', 'hand:turret.4', 'hand:turret.5']);
+    const nell = bomberGuns('Nell', 'JAP', { year: 1940, month: 6 });
+    expect(nell.guns.flatMap((g) => g.at).sort()).toEqual(['turret.1', 'turret.2', 'turret.3', 'turret.4']);
+    const g1 = bomberGuns('Betty', 'JAP', { year: 1942, month: 0 }), g2 = bomberGuns('Betty', 'JAP', { year: 1944, month: 0 });
+    expect([g1.mark, g2.mark]).toEqual(['G4M1', 'G4M2']);
+    expect(g1.guns.map((g) => g.at[0])).toEqual(['turret.1', 'turret.2', 'turret.3', 'turret.4', 'turret.5']);
+    expect(g1.guns[4].gun).toBe('Type 99-1');
+    expect(g2.guns.filter((g) => g.kind === 'cannon20').length).toBe(4);
+  });
+
   it('the Pe-2 is drawn from 1941: a light bomber, with no heavy bomber research needed', () => {
     expect([bomberOf('SOV', 1940), bomberOf('SOV', 1941)]).toEqual(['Bomber:SOV', 'Pe2']);
   });

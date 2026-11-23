@@ -190,7 +190,7 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
     expect(bomberOf('UK', 1942)).toBe('Lancaster');
     expect(bomberOf('USA', 1939)).toBe('B17');
     expect(bomberOf('GER', 1944)).toBe('He111');
-    expect(bomberOf('ITA', 1940)).toBe('Bomber:ITA');
+    expect(bomberOf('ITA', 1940)).toBe('SM79');
     expect([enginesOf('B17'), enginesOf('Lancaster'), enginesOf('He111'), enginesOf('Bomber:FRA')]).toEqual([4, 4, 2, 2]);
     const t = ticketOf('GER', 'bomb', 'Alsace', 0);
     expect(t.place.when).toEqual({ year: 1939, month: 8 });

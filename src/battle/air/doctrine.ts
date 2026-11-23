@@ -64,8 +64,9 @@ export function bomberOf(nat: string, design: number): string {
   // 1941 (the art director's unit table); the Soviet Pe-2 from 1941, its first year at the front, the SB (the plain
   // bomber) before it. A light bomber, so it needs no heavy bomber research: only the Lancaster waits on that;
   // France's LeO 451 from 1940, the Amiot and Bloch of 1939 (the plain bomber) before it.
-  // Italy's SM79 waits for the rebuilt model (the 3D thread, 06:26Z): rules, battle and map switch together then.
+  // Italy's SM.79 from the first (in service from 1936), now its model is rebuilt to the standard (23 Nov 08:53Z).
   if (nat === 'JAP' || nat === 'JPN') return design >= 1941 ? 'Betty' : 'Nell';
+  if (nat === 'ITA') return 'SM79';
   if (nat === 'SOV') return design >= 1941 ? 'Pe2' : `Bomber:${nat}`;
   if (nat === 'FRA') return design >= 1940 ? 'LeO451' : `Bomber:${nat}`;
   return `Bomber:${nat}`;
