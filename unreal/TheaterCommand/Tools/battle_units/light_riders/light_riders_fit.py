@@ -20,6 +20,11 @@ rifle's frame and its butt's floor point where he holds one. This puts them on e
     python3 light_riders_fit.py --stage DIR [names]      fit and check, write DIR/<file>.riders.json (clips only)
     python3 light_riders_fit.py --deliver [names]        back up, fit, check, write into the shared soldier files
     python3 light_riders_fit.py --check [names]          check the shared files' delivered clips
+    python3 light_riders_fit.py --bail --stage|--deliver|--check ...
+                                                         the same for tank_bail.py's bail-out clips (tank_bail_ref.json:
+                                                         up out of the hatch, off the hull, on fire), into the 17
+                                                         infantry files and the two tank crew files (BAIL_FILES), with a
+                                                         `bail_clips` block and `about_bail`
 
 The 17 infantry files (FILES); names are soldier_<X> or X. Nothing else in a file changes: deliver adds the clips,
 a `ride_clips` block (the contract with the ground battle) and `about_riders`, and checks every other key and clip
@@ -37,9 +42,17 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 REF = os.environ.get("RIDERS_FIT_REF", os.path.join(HERE, "light_riders_ref.json"))
 TRUCK_REF = os.environ.get("RIDERS_FIT_TRUCK_REF", os.path.join(HERE, "truck_riders_ref.json"))
+BAIL_REF = os.environ.get("RIDERS_FIT_BAIL_REF", os.path.join(HERE, "tank_bail_ref.json"))
+SET = {"bail": False}        # (--bail: tank_bail.py's clips instead of the riders')
 
 
 def load_ref():
+    if SET["bail"]:
+        return json.load(open(BAIL_REF))
+    return load_riders_ref()
+
+
+def load_riders_ref():
     """light_riders_ref.json with truck_riders_ref.json's clips added (the lorry's and the half-tracks' benches and
     their ways out: truck_riders.py, the same pattern man, the same bones and rest)."""
     ref = json.load(open(REF))
@@ -54,6 +67,7 @@ SHARED = "/mnt/project-files/battle-models/land/soldier/"
 BACKUP = "/home/user/art/looks/backup/riders/"
 FILES = ["soldier_" + n for n in ("CHN", "FRA", "GER", "ITA", "ITA_desert", "JAP", "POL", "SOV", "SOV_snow", "SOV_winter",
                                   "UK", "USA", "USA_bar", "USA_bazooka", "USA_loader", "USA_nco", "USA_radio")]
+BAIL_FILES = FILES + ["soldier_USA_tanker", "soldier_GER_panzer"]     # (the bail-outs: the tank crews' own files too)
 GUN_AWAY = np.array((0.2, 0.0, -2.0))       # (soldier_tankers.py's: the weapon put away under his feet)
 BODY = ("pelvis", "spine_01", "spine_02", "chest", "neck", "head",
         "clavicle_l", "upperarm_l", "lowerarm_l", "hand_l", "fingers_l", "thumb_l",
@@ -402,6 +416,7 @@ def tracks_of(man, frames, times, root=False):
 
 
 FROM = "light_riders.py (crew.py's pattern man at the light vehicles' seats), fitted to this man by light_riders_fit.py"
+BAIL_FROM = "tank_bail.py (crew.py's pattern man at the tanks' commander hatches), fitted to this man by light_riders_fit.py"
 
 
 _PATTERN = {}
@@ -418,13 +433,13 @@ def riders_for(D, ref, log=print):
     man = Man(D)
     gref = pattern_back()
     shift = min(SHIFT_MAX, max(0.0, gref - man.back))
-    slung = slung_frame(D, man)
+    slung = slung_frame(D, man) if any(rc["mode"] == "slung" for rc in ref["clips"].values()) else None
     clips, report = {}, {}
     for name, rc in ref["clips"].items():
         sh = shift if (name in BACKREST or name.startswith(BACKREST_START)) else 0.0
         frames, gaps = fit_clip(man, ref, name, rc, slung, sh)
-        c = {"long": rc["long"], "loop": rc["loop"], "stride": 0.0, "weapon": rc["mode"], "events": [],
-             "anchor": rc["anchor"], "about": rc["about"], "from": FROM,
+        c = {"long": rc["long"], "loop": rc["loop"], "stride": rc.get("stride", 0.0), "weapon": rc["mode"], "events": [],
+             "anchor": rc["anchor"], "about": rc["about"], "from": BAIL_FROM if SET["bail"] else FROM,
              "places": rc["places"], "tracks": tracks_of(man, frames, rc["times"], root=bool(rc.get("root")))}
         if rc.get("root"):
             c["root_motion"] = True
@@ -435,9 +450,12 @@ def riders_for(D, ref, log=print):
                           "he sits that much further forward, his hands and boots where they were.)"
         clips[name] = c
         report[name] = {k: round(v, 4) for k, v in gaps.items()}
-    info = {"shift": round(shift, 4), "back": round(man.back, 4), "slung_on": slung["on"], "slung_from": slung["from"],
-            "slung_spread": round(float(slung["spread"]), 4),
+    info = {"shift": round(shift, 4), "back": round(man.back, 4),
             "weapon_long": round(float(man.gun_pts[:, 0].max() - man.gun_pts[:, 0].min()), 3)}
+    if slung:
+        info.update({"slung_on": slung["on"], "slung_from": slung["from"], "slung_spread": round(float(slung["spread"]), 4)})
+    if SET["bail"]:                               # (no backrest in these: the riders' shift is not theirs)
+        info = {"weapon_long": info["weapon_long"]}
     return clips, report, info
 
 
@@ -446,8 +464,9 @@ def JUMP_MAX(name):
     """The most a bone may turn between two keys (a 15th of a second) before it reads as a snap: a death's fall is
     quicker, and so is a way out's jump down (truck_riders.py's out_*: a man dropping a metre off a lorry's or a
     half-track's floor straightens his knee to reach the ground and folds it as he lands at up to 1,000 degrees a
-    second, the knee's own turn measured against the thigh's)."""
-    return 75.0 if name.startswith("die_") else 70.0 if name.startswith("out_") else 40.0
+    second, the knee's own turn measured against the thigh's; and the bail-outs: the jump off the hull, a man on fire
+    flailing, rolling on the ground)."""
+    return 75.0 if name.startswith("die_") else 70.0 if name.startswith(("out_", "bail_", "burning_")) else 40.0
 
 
 def check(D, names=None, ref=None, log=print):
@@ -560,6 +579,58 @@ def contract(ref):
     }
 
 
+BAIL_ABOUT = (
+    "tank_bail.py and light_riders_fit.py (release 2, 23 November 2026; Brian: \"if a tank gets hit people try and get "
+    "out before it explodes\"): a knocked-out tank's crew getting out, for the battle's bail-out (Battle/LandBail.cpp): "
+    "up out of the commander's hatch (bail_climb_out), down off the hull (bail_jump_down), and a man on fire running "
+    "(burning_run), then falling and rolling (burning_fall_roll). Made once on one pattern man (crew.py's, the German "
+    "rifleman), the climb checked against the Sherman's, the Panzer IV's and the Tiger's own hatches, and fitted to "
+    "this man (his arms and legs reach the same rim, roof and ground). His weapon is put away in all four. "
+    "`bail_clips` says where and how to play them.")
+
+
+def bail_contract(ref):
+    clips = ref["clips"]
+    return {
+        "names": list(clips),
+        "long": {n: rc["long"] for n, rc in clips.items()},
+        "root_motion": [n for n, rc in clips.items() if rc.get("root")],
+        "order": "bail_climb_out at the commander's hatch, then bail_jump_down at the edge of the hull, then the "
+                 "ground battle's own run away; a man on fire plays burning_run (looped, moved by its stride) and then "
+                 "burning_fall_roll.",
+        "climb": "bail_climb_out (1.5 s): its root at the tank's `commander` socket moved by root_offset (0, 0, -0.92: "
+                 "his boots 0.92 m under the socket, stood in the hatch as commander_hatch; its `places` name the "
+                 "Sherman, Panzer IV and Tiger, where it is checked), facing as the socket does. The root track takes "
+                 "him up 0.95 m onto the turret's roof, 0.47 m to his right and 0.10 m forward: on a roof higher or "
+                 "lower than 0.95 m over where his boots began (the Panzer IV's 0.82, the Tiger's 0.97, the Sherman's "
+                 "1.07) add the difference to his height from 0.8 s on (his knee on the roof).",
+        "jump": "bail_jump_down (1.53 s): from standing at the edge of the hull's top facing out, 1.5 m over the ground: "
+                "off the edge at 0.40 s, down at 1.05 s, into his first running stride. Root track: down 1.5 m, "
+                "forward 1.70 m. From a higher or lower hull, add the difference to his height between 0.40 s and "
+                "1.05 s. Walk him from where bail_climb_out leaves him to the hull's edge with the ground battle's walk.",
+        "burning": "burning_run (2.1 s loop, in place): `stride` 7.35 m a loop (3.5 m a second): move him that much. "
+                   "burning_fall_roll (3.8 s, play once and hold the last pose; still from 3.3 s): starts from "
+                   "burning_run's first frame (blend into it from wherever the run is); its root track is the ground "
+                   "under his pelvis (0.95 m forward and 1.20 m to his right at the end: he rolls to his right).",
+        "weapon": "`weapon` none in all four: put away 2 m under his feet (hide the weapon, bolt and bipod triangles, "
+                  "as for the tank crew's clips).",
+        "far": "the far pose bank (pose_bank.json) has none of these poses: draw them with the near or mid meshes.",
+        "check": bail_checks(),
+    }
+
+
+def bail_checks():
+    path = os.path.join(os.path.dirname(BAIL_REF), "tank_bail_checks.json")
+    if not os.path.exists(path):
+        return {}
+    C = json.load(open(path))
+    return {"how": "tank_bail.py on the pattern man: at each tank's hatch, the deepest of him into the tank over the "
+                   "rim (crew.check) and into the hatch's ring (tank_crew.cupola_check), his hands' gap to the rim; "
+                   "the lowest of him under the ground (or the roof, or the hull's top while he is on it); the fastest "
+                   "any bone turns (degrees between keys at 30 a second).",
+            "hatch": C.get("hatch"), "ground": C.get("ground"), "fastest_turn": C.get("fastest_turn")}
+
+
 def checks_at_seats():
     """The pattern man's checks at every seat (light_riders_checks.json: light_riders.py's check_all, and
     truck_riders_checks.json: truck_riders.py's), worst first."""
@@ -578,13 +649,14 @@ def checks_at_seats():
 
 # ================================================================================================ stage, deliver
 def targets(names):
+    files = BAIL_FILES if SET["bail"] else FILES
     if not names:
-        return list(FILES)
+        return list(files)
     out = []
     for n in names:
         n = n if n.startswith("soldier_") else "soldier_" + n
-        if n not in FILES:
-            raise SystemExit(f"not an infantry file: {n}")
+        if n not in files:
+            raise SystemExit(f"not a file for these clips: {n}")
         out.append(n)
     return out
 
@@ -603,7 +675,7 @@ def stage(dir_, names, log=print):
             json.dump(clips, f, separators=(",", ":"))
         worst_h = max(g["hand"] for g in gaps.values())
         worst_a = max(g["ankle"] for g in gaps.values())
-        log(f"{n:22s} {'PASS' if not bad else 'FAIL'}  shift {info['shift'] * 100:3.1f} cm  slung on {info['slung_on']:8s} "
+        log(f"{n:22s} {'PASS' if not bad else 'FAIL'}  shift {info.get('shift', 0.0) * 100:3.1f} cm  slung on {info.get('slung_on', '-'):8s} "
             f"weapon {info['weapon_long']:.2f} m  worst hand gap {worst_h * 100:.1f} cm, ankle {worst_a * 100:.1f} cm"
             + ("" if not bad else "  " + "; ".join(bad[:4])))
     return rep
@@ -635,13 +707,14 @@ def deliver(names, log=print, folder=SHARED):
         bad = check(D, ref=ref)
         if bad:
             raise RuntimeError(f"{n}: " + "; ".join(bad))
-        block = contract(ref)
+        block = bail_contract(ref) if SET["bail"] else contract(ref)
         block["this_man"] = info
         block["fit"] = gaps
-        D["ride_clips"] = block
-        D["about_riders"] = ABOUT
-        bad = unchanged(before, D, ("ride_clips", "about_riders"))
-        if [b for b in bad if b not in ("ride_clips", "about_riders")]:
+        keys = ("bail_clips", "about_bail") if SET["bail"] else ("ride_clips", "about_riders")
+        D[keys[0]] = block
+        D[keys[1]] = BAIL_ABOUT if SET["bail"] else ABOUT
+        bad = unchanged(before, D, keys)
+        if [b for b in bad if b not in keys]:
             raise RuntimeError(f"{n}: changed {bad}")
         tmp = path + ".riders.part"
         with open(tmp, "w") as f:
@@ -659,6 +732,9 @@ def deliver(names, log=print, folder=SHARED):
 
 if __name__ == "__main__":
     a = sys.argv[1:]
+    if "--bail" in a:
+        a.remove("--bail")
+        SET["bail"] = True
     if a and a[0] == "--stage":
         rep = stage(a[1], a[2:])
         print("PASS" if not any(r["bad"] for r in rep.values()) else "FAIL")
