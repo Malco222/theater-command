@@ -241,6 +241,8 @@ namespace SeaFeed
 			Out.Lost = Field("lost").IsString() ? Field("lost").Str("") : std::string();
 			Out.Fish = std::clamp(Field("fish").Int(0), 0, 12);
 			Out.bWakeless = Field("wakeless").Truth(false);
+			// (sea:surrender: the piece she strikes to; her own piece is "unit", so "by" is read here as its own name)
+			Out.By = Field("by").IsNumber() ? Field("by").Int() : -1;
 			// The men in the water (the naval rules' sailor events): counts never below none, a crew at most a carrier's few
 			// thousand (a count past it is not read); the oil's spreads to a few kilometres.
 			auto Count = [&X](const char* Name) { return X[Name].IsNumber() && X[Name].Num() >= 0.0 && X[Name].Num() <= 10000.0 ? X[Name].Int() : -1; };

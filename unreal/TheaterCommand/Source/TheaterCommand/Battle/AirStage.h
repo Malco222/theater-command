@@ -105,8 +105,10 @@ public:
 	/** air:ship-hit: a bomb or torpedo strikes ship Id. Strike: "torpedo", "dive", "level" or "bomb". */
 	void Hit(int32 Id, const FString& Strike, double Now);
 	/** air:ship-sunk: ship Id goes down. How: "settle", "sink", "capsize", "explode", "burn" or "break". bBig: the
-	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). */
-	void Sink(int32 Id, const FString& How, bool bBig, double Now);
+	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). End, where given ("bow",
+	 * "stern"), the way she goes over her look's (the sea scene's boat her crew scuttled after she struck: by the stern);
+	 * none, her look's, as before. */
+	void Sink(int32 Id, const FString& How, bool bBig, double Now, const FString& End = FString());
 
 	/** Once a frame, on the battle's clock (seconds). */
 	void Advance(double Now);

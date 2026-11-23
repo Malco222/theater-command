@@ -93,6 +93,9 @@ def place(path, t):
 
 
 SUNK = {1: 272.0, 31: 481.0, 30: 450.0, 13: 40.0}
+# Struck (sea:surrender, the naval rules' contract): her piece out of the fight from the view that tells it, ships 0, as
+# one gone, though she is not sunk until the battle says so (Boat A's crew give her up at 446, she goes at 450).
+STRUCK = {30: 446.0}
 DIVES = {  # piece -> [(from t, state, keel or None, scope)]
     30: [(0, "surfaced", None, False), (65, "periscope", None, True), (150, "deep", 80, False), (360, "surfaced", None, False)],
     31: [(0, "periscope", None, True), (285, "deep", 80, False)],
@@ -143,10 +146,10 @@ def unit(pid, t, first):
     speed = 0.0 if gone else math.hypot(dx, dy) / dt
     face = math.atan2(dx, dy) if (dx or dy) else 0.0
     strength = at(STR.get(pid, []), t, (0, 1.0))[1]
-    ships = 0 if gone else 1
+    ships = 0 if gone or (pid in STRUCK and t >= STRUCK[pid]) else 1
     u = {"id": pid, "x": round(x, 1), "y": round(y, 1), "face": round(face, 4), "str": strength, "mor": 1, "state": "gone" if gone else "steady",
          "figures": ships, "d": 0, "act": "march", "speed": round(speed, 2), "engaged": -1,
-         "extra": {"ships": ships, "sunk": 1 - ships}}
+         "extra": {"ships": ships, "sunk": 1 if gone else 0}}
     for (t0, t1, on) in ENGAGED.get(pid, []):
         if t0 <= t < t1:
             u["engaged"] = on

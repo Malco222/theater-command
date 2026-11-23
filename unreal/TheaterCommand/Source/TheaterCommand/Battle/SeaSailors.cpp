@@ -148,6 +148,8 @@ namespace SeaSailors
 		case Act::Sit: return "sit_raft";
 		case Act::Stand: return "idle";
 		case Act::Duck: return "cower";
+		case Act::Walk: return "walk";
+		case Act::Run: return "run";
 		default: return "";
 		}
 	}
@@ -155,7 +157,8 @@ namespace SeaSailors
 	int PosesOf(Act A)
 	{
 		// (about one a fifth of a second of a quick loop, fewer for the slow ones: 64 in all for the men in the water and
-		// their boats, and 10 more for a gun's crew, whose stand is slow and whose crouch is held)
+		// their boats, 10 more for a gun's crew, whose stand is slow and whose crouch is held, and 10 more for a struck boat's
+		// crew walking and running on her casing: 84)
 		switch (A)
 		{
 		case Act::Fall: return 4;
@@ -170,6 +173,8 @@ namespace SeaSailors
 		case Act::Sit: return 6;
 		case Act::Stand: return 6;
 		case Act::Duck: return 4;
+		case Act::Walk: return 6;
+		case Act::Run: return 4;
 		default: return 1;
 		}
 	}
@@ -444,6 +449,27 @@ namespace SeaSailors
 			break;
 		case Swim::Dead:
 			Loop(Act::Dead, Now + Own * Long(K, Act::Dead));
+			break;
+		// A struck boat's crew on her casing (SeaShow::Hands), his feet at At.Z: up out of her hatch or down her bridge's
+		// after end hand over hand, in time with how far he has come; standing at his place (his hands up shown standing
+		// until the files have a clip of it); walking to it and running to her side, his steps from when he set off.
+		case Swim::Hatch:
+			// (down her bridge's after end, the clip runs back: climbing down)
+			Loop(Act::Climb, M.At.Z / 0.45 * Long(K, Act::Climb));
+			P.Z = M.At.Z;
+			break;
+		case Swim::Stand:
+		case Swim::HandsUp:
+			Loop(Act::Stand, Now + Own * Long(K, Act::Stand));
+			P.Z = M.At.Z;
+			break;
+		case Swim::Walk:
+			Loop(Act::Walk, M.Since);
+			P.Z = M.At.Z;
+			break;
+		case Swim::Run:
+			Loop(Act::Run, M.Since);
+			P.Z = M.At.Z;
 			break;
 		case Swim::Swim:
 			if (LandedAt >= 0.0 && Now - LandedAt < Long(K, Act::Enter))

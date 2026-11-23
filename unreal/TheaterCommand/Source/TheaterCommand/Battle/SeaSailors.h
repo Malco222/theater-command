@@ -45,8 +45,12 @@ namespace SeaSailors
 		Climb,  // climb_net: up a rescuer's side
 		Row,    // row: pulling an oar on a thwart
 		Sit,    // sit_raft: on a raft's deck or a boat's boards
-		Stand,  // idle: on a deck, standing to a gun (a gun's crew, ConvoyLook::GunCrewOf)
+		Stand,  // idle: on a deck, standing to a gun (a gun's crew, ConvoyLook::GunCrewOf), or on a struck boat's casing (his
+		        //   hands up too, until the sailor files have a clip of a man standing with his hands raised: cower reads as
+		        //   taking cover, not as giving up)
 		Duck,   // cower: crouched on a deck as a shell strikes or falls close aboard
+		Walk,   // walk: along a struck boat's casing to his place (1.417 m a stride of 1.133 s: the show's 1.25 m/s)
+		Run,    // run: out to her side before he goes over (2.435 m a stride of 0.8 s: the show's 3 m/s)
 		Count
 	};
 	constexpr int Acts = static_cast<int>(Act::Count);

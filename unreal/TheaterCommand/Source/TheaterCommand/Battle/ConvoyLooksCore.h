@@ -74,6 +74,22 @@ namespace ConvoyLook
 		double ScopeAlong = 1.5, ScopeTop = 10.65, LowAlong = 0.0, LowTop = 9.15;
 		double Top = 10.65;
 		double BowAlong = 34.5;
+		/** Her ensign staff's foot (the sockets' "ensign", abaft her bridge's periscope standard): metres along her from
+		 * amidships, and over her waterline. Where a boat that strikes runs up her white flag (FlagAt). */
+		double EnsignAlong = -4.6, EnsignTop = 6.45;
+		/**
+		 * Her casing where her crew stand when she strikes (sea:surrender), [SHOW] SeaShow::DeckOf's rows, fitted to the
+		 * battle modeller's files where her men stand (Tools/convoy_looks checks both): its height Casing on her middle line
+		 * amidships, rising Rise a metre forward of RiseFrom, falling Fall times the square of the way across, out to Edge
+		 * from her middle line before her saddle tanks fall away (CasingAt); the stretches of it forward and aft of her tower
+		 * where they stand (ForeFrom to ForeTo, AftFrom to AftTo), and her deck gun's length along her, its mount and its
+		 * barrel stowed (GunFrom to GunTo), which they keep clear of.
+		 */
+		double Casing = 1.65, RiseFrom = 0.0, Rise = 0.0, Fall = 0.0, Edge = 1.0;
+		double ForeFrom = 7.0, ForeTo = 12.0, AftFrom = -15.0, AftTo = -8.0, GunFrom = 0.0, GunTo = 0.0;
+		/** Her fore and after hatches on her casing, metres along her from amidships ([SHOW] SeaShow::DeckOf's, where her
+		 * crew come up): where her scuttling charges go off, below them (StepBoat's Scuttle and Puff). */
+		double ForeHatch = 9.5, AftHatch = -11.5;
 	};
 	/** The row of the stage's model for a navy (the stage's own nation tag): "GER" or none, "USA", any other. */
 	BoatModel ModelOf(const std::string& Nation);
@@ -86,6 +102,9 @@ namespace ConvoyLook
 	 * standard (a fleet boat's, of her shears), the highest of her bridge but her periscopes. Empty Name: no such row.
 	 */
 	BoatModel SculptedOf(const std::string& File);
+	/** Her casing's height over her waterline at a place on it (her own frame: metres along her from amidships, across to
+	 * starboard), as the row has it. */
+	double CasingAt(const BoatModel& M, double Along, double Across);
 
 	/** How the stage draws her model: stretched along to the length it fits her to, and across and up by the beam's
 	 * share (AirStage's FitHull, to AirFeed::HullOf's size). */
@@ -147,6 +166,12 @@ namespace ConvoyLook
 		/** Her tanks blown (Blow): she rides high, not awash; how far she has come to it (0 to 1, eased). */
 		bool bBlown = false;
 		double Blown = 0.0;
+		/** Scuttled after she struck (OpenVents): when her main vents were opened (below 0 never), when the next spurt from
+		 * them is due, and how many have come (each from the other side). */
+		double VentsAt = -1.0, NextVent = 0.0;
+		int Vents = 0;
+		/** Her scuttling charges gone off since (ScuttleChargeAt's times after her vents were opened). */
+		int Charges = 0;
 		std::vector<Swirl> Swirls;
 	};
 
@@ -156,14 +181,38 @@ namespace ConvoyLook
 		Wash,    // water running off her casing as she goes down or comes up (the kit's churn)
 		Swirl,   // where her bridge went under: the last of the wash, its foam left as the swirl (the kit's churn)
 		Bow,     // surfaced and fast: her bow plunging into the swell throws spray ahead (the kit's Skip on water)
+		Vent,    // scuttled after she struck: the air roaring out of her opened main vents with spray, straight up off her
+		         // saddle tank where it is out of the sea (the kit's Steam, a vent's white jet), white water where it is under
+		Scuttle, // a scuttling charge gone off inside her, under a hatch: a low, muffled heave of white water alongside abreast
+		         // it (the kit's churn: no flash)
+		Puff,    // the same charge's smoke puffing out of the open hatch over it (the kit's CookOff, one pop, no jet), or white
+		         // water where the hatch is already under
 	};
 	struct BoatSplash
 	{
 		SplashKind Kind = SplashKind::Wash;
-		P3 At;            // on the sea (Z 0)
-		P3 Way;           // level, which way it is thrown
+		P3 At;            // on the sea (Z 0); a Vent's and a Puff's where it leaves her, as she rides and goes down
+		P3 Way;           // level, which way it is thrown; a Vent's and a Puff's its way out of her, mostly up
 		double T = 0.0;   // battle time it is due
 	};
+	/** The kit's call for a boat's splash (FConvoyLooks hands it on as it is): a spout of a size row on the water, a low
+	 * spurt along the sea, a white jet or a smoke puff. */
+	enum class KitCall
+	{
+		Spout, // ShellOfSize(Where, Row, "water")
+		Spurt, // Skip(Where, Way, "water")
+		Jet,   // Steam(Id, Where, Way, Across, Seconds, "vent")
+		Puff,  // CookOff(Where, Way, Across, 1, Seconds, 0): one pop, no jet
+	};
+	struct SplashKit
+	{
+		KitCall Call = KitCall::Spout;
+		P3 Where, Way;            // board metres, Z over the still sea; Way of length one
+		std::string Row;          // a spout's size row
+		double Across = 0.0;      // a jet's or a puff's mouth (metres)
+		double Seconds = 0.0;     // how long a jet blows, or a puff's pop takes
+	};
+	SplashKit KitOf(const BoatSplash& Sp);
 
 	struct BoatOut
 	{
@@ -196,6 +245,68 @@ namespace ConvoyLook
 	double BlowFor();
 	/** Seconds a boat forced up takes to come up. */
 	double ForcedUpFor();
+	/** Scuttled after she struck (the show's Sink "scuttled" for a boat its ShipOut has struck): her main vents opened now,
+	 * the air coming out of her tanks along her sides for VentFor seconds as she floods (StepBoat's Vent splashes). Her
+	 * going down is the stage's, by the stern; nothing here moves her. Opened once. */
+	void OpenVents(BoatState& S, double T);
+	double VentFor();
+	/** Scuttled after she struck: her scuttling charges (the after one, then the fore one, under her hatches), each so many
+	 * seconds after her vents were opened (K 0 or 1; below 0 for any other), when her crew are all over her side. */
+	constexpr int ScuttleCharges = 2;
+	double ScuttleChargeAt(int K);
+	/**
+	 * The stage's way "sink" with its end "stern" (AirStage::MoveShip, at its look's usual pace), T seconds after the stage
+	 * was told it, as SeaShow::StageSink has it: how far down her waterline goes (metres) and her trim (degrees, plus bow up)
+	 * as she goes by the stern (bByStern), or none where her end is her look's own. High: her model's top over her waterline
+	 * (BoatModel::Top, as drawn). What a struck boat's vents and charges throw comes from her as the stage takes her down.
+	 * Tools/convoy_looks holds this to the stage's own lines, read from its source.
+	 */
+	void StageSinking(double T, double High, bool bByStern, double& OutDepth, double& OutPitch);
+
+	/**
+	 * A boat's white flag when she strikes (sea:surrender; ShipOut's Struck and Lowered): a plain off-white sheet on a staff
+	 * stepped at her ensign's place abaft her bridge (her own art: no insignia, no ship's or navy's marks), run up in its
+	 * first FlagRaiseFor seconds and hauled down over FlagLowerFor seconds once she is taken or goes. It streams to
+	 * leeward of the air over her (the wind less her own way), drooping as the air falls light, its fly rippling in waves
+	 * that run out from the staff, quicker in a stronger wind; in a calm it hangs down beside the staff, never below its
+	 * foot. Her own hash sets its phase, nothing else: the same moment draws the same flag. [EST] throughout.
+	 */
+	struct FlagIn
+	{
+		P3 Foot;                    // the staff's foot in the world (metres), as she rides now (EnsignAt)
+		P3 Up = P3(0.0, 0.0, 1.0);  // her own up, as her trim tips it (UpOf)
+		P3 Air;                     // the air's way over her (metres a second): the wind, less her own way
+		double Since = -1.0;        // seconds since she struck, as the show has her up (below 0: she has not)
+		double Lowered = -1.0;      // seconds since it began to come down (below 0: it has not)
+		uint64_t Seed = 0;
+	};
+	/** The sheet's points: along its fly out from the staff, and down its hoist from its head. */
+	constexpr int FlagAlong = 7, FlagDown = 4;
+	struct FlagOut
+	{
+		bool bShown = false;
+		P3 Head;                         // the staff's head
+		P3 Point[FlagDown][FlagAlong];   // the sheet, [down its hoist][out along its fly]
+	};
+	/** The staff (2 m: a boat-hook's length, stepped at her ensign's place), the sheet's fly and hoist (metres), and the
+	 * seconds to run it up and to haul it down. */
+	double FlagStaff();
+	double FlagFly();
+	double FlagHoist();
+	double FlagRaiseFor();
+	double FlagLowerFor();
+	/** Her own up, her heading (degrees) and trim (degrees, plus bow up) given: tipped aft as her bow rises. */
+	P3 UpOf(double HeadingDeg, double PitchDeg);
+	/** Her ensign staff's foot in the world as the stage draws her model this frame (her own row, how it is drawn, what the
+	 * show says of her and how the looks ride her: her heave and her trim). */
+	P3 EnsignAt(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out);
+	/** Her flag at the battle's moment Now. */
+	FlagOut FlagAt(const FlagIn& In, double Now);
+	/** What her flag is flown with this frame (FConvoyLooks::Lay; Tools/convoy_looks/convoy_looks_show the same): from her
+	 * row, how it is drawn, what the show says of her and how the looks ride her (In, Out), the wind over the sea (metres a
+	 * second), the show's Struck and Lowered and her key. False where none flies: she has not struck, or she is out of the
+	 * player's sight. */
+	bool FlagInputsOf(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out, const P3& Wind, double Struck, double Lowered, int Key, FlagIn& OutFlag);
 	/** A swirl Age seconds old: its radius (metres) and how much of it shows (0 to 1, times its strength); false once
 	 * it is gone. */
 	bool SwirlAt(const Swirl& W, double T, double& OutRadius, double& OutShown);

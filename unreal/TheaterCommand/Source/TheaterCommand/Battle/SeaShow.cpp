@@ -90,6 +90,15 @@ namespace SeaShow
 			N ^= N >> 33;
 			return static_cast<double>(N >> 11) / 9007199254740992.0;
 		}
+		/** One of the show's ways down (Sink's words): settle, sink, capsize, explode, burn, break, crushed, scuttled,
+		 * rammed, shelled. */
+		bool IsWayDown(const std::string& How)
+		{
+			static const char* const Ways[] = { "settle", "sink", "capsize", "explode", "burn", "break", "crushed", "scuttled", "rammed", "shelled" };
+			for (const char* W : Ways)
+				if (How == W) return true;
+			return false;
+		}
 		bool Big(const std::string& Class) { return Class == "bb" || Class == "cv"; }
 
 		/** Hits a ship of the class takes to be drawn going down: the battle's wear on her hull shared out as hits. */
@@ -420,8 +429,9 @@ namespace SeaShow
 			int Out = 0;
 			for (const Event& E : Between)
 			{
-				// (and one abandoned, sea:abandon: she leaves the fight with her hull, as one sunk)
-				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning" && E.What != "sea:abandon")) continue;
+				// (and one abandoned, sea:abandon, or a boat that struck, sea:surrender: she leaves the fight with her hull, as one
+				// sunk; her strength gone to nothing is not hits owed her by gunfire, which no shell of the show's would ever pay)
+				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning" && E.What != "sea:abandon" && E.What != "sea:surrender")) continue;
 				const double Own = Out == 0 ? Was->second.Str * Ships0 - (Was->second.Ships - 1) : 0.5;
 				if (E.What != "sea:burning") Left += Clamp(Own, 0.0, 1.0);
 				else Left += E.Hull >= 0.0 ? E.Hull : Clamp(Own, 0.0, 0.5);
@@ -852,6 +862,24 @@ namespace SeaShow
 			}
 			if (Left)
 			{
+				// (a boat's end as the battle says it, where it says one of the show's ways: one her crew left and scuttled
+				// goes "scuttled", her vents open, by the stern, not as a ship settling; none said, she settles as she was)
+				if (H->Class == "ss" && IsWayDown(E.How)) H->How = E.How;
+				// (none said of one that struck, as the battle's own sea:sunk says none: her crew's own way, scuttled, the way
+				// she struck to go; one taken and sent down after all goes so too)
+				else if (H->bStruck) H->How = "scuttled";
+				if (H->bStruck)
+				{
+					// (struck: every man still below or on her casing goes over now, the last within HurryFor of it, riding her
+					// down on the stage's sinking until he does (HandAt), and her flag comes down with her; a prize the battle
+					// sends down after all leaves no prize. One taken had no slick counted as she was given up: she has one now)
+					H->SentDownAt = ShownT;
+					for (Wreck& W : Wrecked)
+						if (W.Ship == H->Key && W.bStruck) Hurry(W);
+					if (H->FlagDownAt < 0.0) H->FlagDownAt = ShownT;
+					if (H->StruckHow == "captured") ++Check.Slicks;
+					H->bPrize = false;
+				}
 				// (her going down now: she settles the rest of the way from as far down as she is, as one that settles)
 				const double Was = Clamp((ShownT - H->SinkAt) / std::max(1.0, H->SinkFor), 0.0, 0.9);
 				const double Rest = 200.0 * Roll.U(0.8, 1.25);
@@ -1346,6 +1374,32 @@ namespace SeaShow
 		}
 		// The men in the water as the naval rules count them (22 November): a ship's crew ordered off her, the men of a ship
 		// lost in the water and her oil, by her piece and her number in it.
+		// A boat beaten on the surface strikes (sea:surrender, the naval rules behind their subSurrender switch): her flag up,
+		// her crew out of her hatches onto her casing and over her side; the battle says what follows (sea:sunk how
+		// "scuttled"; or nothing more, "captured": she is taken). The show adds no loss the battle did not book: her piece's
+		// own view says she is out of the fight.
+		if (E.What == "sea:surrender")
+		{
+			++Check.SurrenderEvents;
+			Hull* H = nullptr;
+			double BestD = 1e18;
+			for (auto& Pair : Hulls)
+			{
+				Hull& A = Pair.second;
+				if (A.Piece != E.Unit || A.Class != "ss" || A.bStruck || (A.Doing != Fate::Line && A.Doing != Fate::Limping)) continue;
+				const double D = E.bAt ? Flat(A.P - Vec(E.X, E.Y, 0.0)) : A.Doing == Fate::Line ? 0.0 : 1.0;
+				if (D < BestD) { BestD = D; H = &A; }
+			}
+			if (!H)
+			{
+				++Check.StruckUnmatched;
+				return;
+			}
+			StrikeColours(*H, E);
+			NoteLost(*H, E.Ship);
+			++Check.Struck;
+			return;
+		}
 		if (E.What == "sea:abandon")
 		{
 			++Check.AbandonEvents;
@@ -1359,7 +1413,20 @@ namespace SeaShow
 				const double D = E.bAt ? Flat(A.P - Vec(E.X, E.Y, 0.0)) : A.Doing == Fate::Line ? 0.0 : 1.0;
 				if (D < BestD) { BestD = D; H = &A; }
 			}
-			if (!H) return;
+			if (!H)
+			{
+				// (a boat that struck already, sea:surrender: her crew are leaving her as the battle now orders, the same
+				// leaving, shown once from her casing; so counted as shown, once)
+				for (auto& Pair : Hulls)
+				{
+					Hull& A = Pair.second;
+					if (A.Piece == E.Unit && A.bStruck && !A.bAbandonTold) { H = &A; break; }
+				}
+				if (!H) return;
+				H->bAbandonTold = true;
+				++Check.Abandons;
+				return;
+			}
 			AbandonShip(*H, E.Text);
 			NoteLost(*H, E.Ship);
 			++Check.Abandons;
@@ -1384,6 +1451,29 @@ namespace SeaShow
 			W->Real = Real;
 			W->DeadShare = Real > 0 ? static_cast<double>(Dead) / Real : 0.0;
 			W->Men = std::max(W->Out, std::min(Real, std::max(std::min(Real, 12), Room / 2)));
+			if (W->bStruck)
+			{
+				// (a boat that struck: her men on her casing are her men, as many as the battle now counts. More: the rest come
+				// up after the last planned, by their own hashes; fewer: those still below stay in her, and none already out on
+				// her casing is taken off it)
+				const int WI = static_cast<int>(W - Wrecked.data());
+				auto PlannedOf = [this, W, WI]()
+				{
+					int N = W->Out;
+					for (const DeckHand& D : OnCasing) N += D.W == WI && !D.bParty ? 1 : 0;
+					return N;
+				};
+				int Planned = PlannedOf();
+				if (W->Men < Planned)
+				{
+					const int Keep = W->Men;
+					OnCasing.erase(std::remove_if(OnCasing.begin(), OnCasing.end(), [WI, Keep](const DeckHand& D) { return D.W == WI && !D.bParty && !D.bOut && D.N >= Keep; }), OnCasing.end());
+					Planned = PlannedOf();
+					W->Men = std::max(W->Men, Planned);
+				}
+				const Hull* H = FindHull(W->Ship);
+				if (W->Men > Planned && H && H->UpAt >= 0.0) Muster(*W, *H, Planned);
+			}
 			Check.MenKept += W->Men;
 			return;
 		}
@@ -2957,6 +3047,9 @@ namespace SeaShow
 				H.P += Ahead(H.Hdg) * (H.Spd * Dt);
 				// (left by her men: empty and stopped, she drifts down the wind faster than they do)
 				if (H.bAbandoned) H.P += Vec(WindV.X, WindV.Y, 0.0) * (AbandonedLeeway * Dt);
+				// (a prize, taken: her vents shut by her boarders, she is held afloat as she is; her going carried on with the
+				// clock, so her Down stands and she never goes)
+				if (H.bPrize) H.SinkAt += Dt;
 				if (ShownT - H.SinkAt >= H.SinkFor) H.Doing = Fate::Gone;
 			}
 		}
@@ -3037,6 +3130,9 @@ namespace SeaShow
 				}
 				// (a boat dived is no gun target: her hunters' weapon is the depth charge)
 				if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0) On = nullptr;
+				// (nor one that has struck, her white flag up: no gun is laid on her but for a hit the battle tells, which it
+				// never does once she has)
+				if (On && On->bStruck && !bTold) On = nullptr;
 				// (nor does a boat dived fire: her deck gun is under)
 				if (On && H->Class == "ss" && H->Keel > SurfacedKeel(H->Class) + 1.0) On = nullptr;
 				// (nor one told down, her casing still awash: at the diving alarm her gun's crew are below before the hatch
@@ -3811,8 +3907,53 @@ namespace SeaShow
 				if (!(Mask & (1u << I))) return I;
 			return -1;
 		}
+		/** How far a point lies from a segment, on the sea (metres). */
+		double FlatToSegment(const Vec& P, const Vec& A, const Vec& B)
+		{
+			const double DX = B.X - A.X, DY = B.Y - A.Y, L2 = DX * DX + DY * DY;
+			const double U = L2 > 0.0 ? Clamp(((P.X - A.X) * DX + (P.Y - A.Y) * DY) / L2, 0.0, 1.0) : 0.0;
+			return std::hypot(P.X - (A.X + DX * U), P.Y - (A.Y + DY * U));
+		}
+		/** How near two segments come on the sea (0 where they cross). */
+		double FlatGap(const Vec& A, const Vec& B, const Vec& C, const Vec& D)
+		{
+			auto Turn = [](const Vec& P, const Vec& Q, const Vec& R) { return (Q.X - P.X) * (R.Y - P.Y) - (Q.Y - P.Y) * (R.X - P.X); };
+			const double T1 = Turn(A, B, C), T2 = Turn(A, B, D), T3 = Turn(C, D, A), T4 = Turn(C, D, B);
+			if (((T1 > 0.0) != (T2 > 0.0)) && ((T3 > 0.0) != (T4 > 0.0))) return 0.0;
+			return std::min(std::min(FlatToSegment(A, C, D), FlatToSegment(B, C, D)), std::min(FlatToSegment(C, A, B), FlatToSegment(D, A, B)));
+		}
 		/** The keys of the oil fires the show lights where a ship's oil burns (apart from the battle's zones' own). */
 		constexpr int SlickFireKeys = 100000;
+	}
+
+	const BoatDeck& DeckOf(const std::string& Nation)
+	{
+		// (the stage's three boats, ConvoyLook::SculptedOf's rows; the casing's height fitted to the model files where her
+		// men stand, within a few centimetres; hatches where her casing has their coamings)
+		static const BoatDeck Ger = { 67.0, 6.79, 3.5, -6.5, 1.5, 4.1, 8.0, -12.2, -20.0, -7.5, 4.5, 10.0, 1.2, 1.58, 3.0, 0.0087, 0.051, 10.85, 15.55, 10.49 };
+		static const BoatDeck Usa = { 95.0, 7.97, 6.5, -5.0, 1.6, 5.3, 13.5, -12.0, -24.0, -6.0, 10.0, 21.0, 1.9, 2.54, 9.0, 0.0202, 0.031, -17.05, -12.35, 11.79 };
+		static const BoatDeck Other = { 80.0, 7.08, 4.5, -7.5, 1.5, 4.4, 10.0, -13.5, -24.0, -8.5, 5.5, 12.5, 1.5, 1.90, 5.0, 0.0122, 0.042, 13.35, 18.05, 10.99 };
+		// (a boat of no navy is the generic boat, as the stage draws her: ShipFileOf, and BoatFreeOf beside this)
+		return Nation == "USA" ? Usa : Nation == "GER" ? Ger : Other;
+	}
+
+	double CasingAt(const BoatDeck& D, double Along, double Across)
+	{
+		return D.Deck + D.Rise * std::max(0.0, Along - D.RiseFrom) - D.Fall * Across * Across;
+	}
+
+	void StageSink(double T, double High, bool bByStern, double& OutDepth, double& OutPitch)
+	{
+		// (the stage's own: Under = High + 40, Depth = Under * EaseIn(T / 70), Pitch = 14 * Down * Ease(T / 35), its Down -1
+		// for "stern", where a plus pitch lifts her stern; here plus is her bow up, so by the stern is plus)
+		const double In = Clamp(T / 70.0, 0.0, 1.0), Over = Clamp(T / 35.0, 0.0, 1.0);
+		OutDepth = (High + 40.0) * In * In;
+		OutPitch = bByStern ? 14.0 * Over * Over * (3.0 - 2.0 * Over) : 0.0;
+	}
+
+	std::string StageEndOf(const std::string& How, double Struck, double Lowered)
+	{
+		return How == "scuttled" && (Struck >= 0.0 || Lowered >= 0.0) ? std::string("stern") : std::string();
 	}
 
 	Show::Floater* Show::FloatByKey(int Key)
@@ -3878,7 +4019,8 @@ namespace SeaShow
 			if (Pair.second.Doing != Fate::Gone && Flat(Pair.second.P - H.P) < 1500.0) W.Near.push_back(Pair.first);
 		Wrecked.push_back(W);
 		++Check.Wrecks;
-		++Check.Slicks;
+		// (a boat struck to be taken does not go down: her slick is counted if the battle sends her down after all)
+		if (!(H.bStruck && H.StruckHow == "captured")) ++Check.Slicks;
 		Check.MenReal += W.Real;
 		Check.MenKept += W.Men;
 	}
@@ -3917,6 +4059,747 @@ namespace SeaShow
 			W.End = W.Start + 90.0;
 			W.BoatsFrom = ShownT + std::min(40.0, 0.8 * H.Spd / AbandonedSlowing);
 		}
+	}
+
+	void Show::StrikeColours(Hull& H, const Event& E)
+	{
+		// She is on the surface, or coming up to it (forced up, sea:dive why "forced"): her tanks blown and her engines
+		// stopped, she leaves the fight as one her crew are leaving (AbandonShip), losing her way as such a ship does (no
+		// lurch); her men come out on her casing once she is up (StepHands, Muster), not over her waist, and the battle says
+		// how she ends. Her flag is the looks' (ShipOut::Struck), up from her crew's first coming out.
+		H.bStruck = true;
+		H.StruckAt = ShownT;
+		// (the battle's "scuttle" and "scuttled" are one: her crew send her down; anything but "captured" is that)
+		H.StruckHow = E.How == "captured" ? "captured" : "scuttled";
+		H.StruckTo = E.By;
+		H.Dive = "surfaced";
+		H.bScope = false;
+		AbandonShip(H, E.Text);
+		// (out of her line Trim keeps the depth she was going to: she is coming up, whatever she was doing)
+		H.KeelTo = SurfacedKeel(H.Class);
+		for (Wreck& W : Wrecked)
+		{
+			if (W.Ship != H.Key) continue;
+			W.bStruck = true;
+			// (her men, her raft and her boats wait for her crew's plan, made once she is up)
+			W.Start = W.End = W.BoatsFrom = 1e18;
+		}
+		const Hull* By = E.By >= 0 ? NearestOf(E.By, H.P.X, H.P.Y) : nullptr;
+		Fx& S = Emit(FxKind::Surrender, H.P, H.StruckHow, H.Key);
+		S.Side = H.Side;
+		S.Size = E.By;
+		S.Text = E.Text;
+		if (By) S.Aim = Vec(By->P.X, By->P.Y, 0.0);
+		if (H.StruckHow == "captured") SendBoarders(H, E.By);
+	}
+
+	void Show::Muster(Wreck& W, const Hull& H, int From)
+	{
+		// Her crew out on her casing, as the photographs of the boats taken in the war show them: about a third up through
+		// her conning tower onto her bridge and down its after face, the rest out of her fore and after hatches, a man each
+		// one and a half to two and a half seconds from each; each walks to his place on her casing, forward or aft of her
+		// tower on the side he will go over, and stands there, his hands up where a ship of the other side is within a
+		// kilometre of her; at his turn he runs out to the edge of her casing and over (RunWrecks). Each man by his own hash
+		// (Mix: the show's Roll is not drawn, so every other show keeps its own), their turns a steady file from about
+		// half a minute after the first is up, a man each 1.2 to 1.5 seconds.
+		// (in her model's own frame: the stage draws the battle modeller's boat as made, AirStage's ShipFileOf)
+		const BoatDeck& Row = DeckOf(W.Nation);
+		const int WI = static_cast<int>(&W - Wrecked.data());
+		double Nearest = 1e18;
+		for (const auto& Pair : Hulls)
+		{
+			const Hull& A = Pair.second;
+			if (A.Side != H.Side && A.Class != "ss" && A.Doing != Fate::Gone) Nearest = std::min(Nearest, Flat(A.P - H.P));
+		}
+		// Their places, one man to each, so that none ever stands in another: along each stretch of her casing a pace apart,
+		// in ranks from its edge inboard, clear of her hatches, her tower and her deck gun. Her bridge's men take the after
+		// stretch forward of her after hatch, that hatch's men the rest of it, her fore hatch's men the stretch forward of her
+		// tower; on each, the edge's rank first and in it the place farthest from where they come up first, so that none walks
+		// past one standing. A man's own hash moves him a few centimetres in his place, no more.
+		constexpr double Pace = 0.6, RankApart = 0.6;
+		struct Spot
+		{
+			double Along = 0.0, Across = 0.0;
+			int Rank = 0;
+		};
+		const double Source[3] = { Row.TowerAft, Row.ForeHatch, Row.AftHatch };
+		auto SpotsOf = [&Row, &Source](int Via, double Toward)
+		{
+			const double Lo = Via == 1 ? Row.ForeFrom : Row.AftFrom, Hi = Via == 1 ? Row.ForeTo : Row.AftTo;
+			std::vector<Spot> Spots;
+			for (int Rank = 0;; ++Rank)
+			{
+				const double Across = Row.Edge - 0.2 - Rank * RankApart;
+				if (Across < 0.25) break;
+				std::vector<Spot> Ranked;
+				for (int K = 0;; ++K)
+				{
+					const double Along = Lo + 0.15 + K * Pace;
+					if (Along > Hi - 0.15 + 1e-9) break;
+					const bool bHers = Via == 1 || (Via == 0 ? Along > Row.AftHatch : Along <= Row.AftHatch);
+					const bool bHatch = (std::fabs(Along - Row.ForeHatch) < 0.75 || std::fabs(Along - Row.AftHatch) < 0.75) && Across < 0.75;
+					const bool bGun = Along > Row.GunFrom - 0.4 && Along < Row.GunTo + 0.4 && Across < 1.0;
+					const bool bTower = Along > Row.TowerAft - 0.4 && Along < Row.TowerFore + 0.4 && Across < Row.TowerHalf + 0.4;
+					if (!bHers || bHatch || bGun || bTower) continue;
+					Ranked.push_back({ Along, Toward * Across, Rank });
+				}
+				std::stable_sort(Ranked.begin(), Ranked.end(),
+				                 [&Source, Via](const Spot& L, const Spot& R) { return std::fabs(L.Along - Source[Via]) > std::fabs(R.Along - Source[Via]); });
+				Spots.insert(Spots.end(), Ranked.begin(), Ranked.end());
+			}
+			return Spots;
+		};
+		auto Free = [this, WI](const Spot& Sp)
+		{
+			for (const DeckHand& D : OnCasing)
+				if (D.W == WI && !D.bParty && std::fabs(D.PlaceAlong - Sp.Along) < 0.2 && std::fabs(D.PlaceAcross - Sp.Across) < 0.2) return false;
+			return true;
+		};
+		double Next[3] = { ShownT, ShownT + 1.0, ShownT + 2.0 }; // her bridge, her fore hatch, her after hatch
+		double LastTurn = ShownT + 28.8;
+		for (const DeckHand& D : OnCasing)
+		{
+			if (D.W != WI || D.bParty) continue;
+			LastTurn = std::max(LastTurn, D.TurnAt);
+			for (double& N : Next) N = std::max(N, D.OutAt + 1.5);
+		}
+		for (int N = From; N < W.Men; ++N)
+		{
+			const uint64_t S = W.Seed + 7919ULL * static_cast<uint64_t>(N + 1);
+			const int Via = Mix(S + 41) < 0.34 ? 0 : Mix(S + 43) < 0.5 ? 1 : 2;
+			DeckHand D;
+			D.W = WI;
+			D.N = N;
+			D.Via = Via;
+			D.O.Key = NextMan++;
+			D.O.Ship = W.Ship;
+			D.O.Side = W.Side;
+			D.O.Nation = W.Nation;
+			D.O.Look = static_cast<uint32_t>(Mix(S + 3) * 4294967295.0); // (RunWrecks' own hash for her N'th man: the same man)
+			D.O.Doing = Swim::Hatch;
+			D.Side = Mix(S + 17) < 0.88 ? W.Lee : -W.Lee;
+			// (his place: the first free one of his hatch's on his side; else on her other side, where he will go over; else,
+			// one of her bridge's or her after hatch's men, the other's stretch aft)
+			const int Order[4][2] = { { Via, 1 }, { Via, -1 }, { Via == 0 ? 2 : Via == 2 ? 0 : 1, 1 }, { Via == 0 ? 2 : Via == 2 ? 0 : 1, -1 } };
+			bool bPlaced = false;
+			for (const auto& Try : Order)
+			{
+				for (const Spot& Sp : SpotsOf(Try[0], D.Side * Try[1]))
+				{
+					if (!Free(Sp)) continue;
+					D.PlaceAlong = Sp.Along + 0.04 * (2.0 * Mix(S + 13) - 1.0);
+					D.PlaceAcross = Sp.Across + 0.03 * (2.0 * Mix(S + 19) - 1.0);
+					D.Rank = Sp.Rank;
+					D.Side *= Try[1];
+					bPlaced = true;
+					break;
+				}
+				if (bPlaced) break;
+			}
+			if (!bPlaced)
+			{
+				// (her casing full, which a boat's company never fills: by his hatch, at its edge)
+				D.PlaceAlong = Source[Via];
+				D.PlaceAcross = D.Side * (Row.Edge - 0.2);
+			}
+			// (out of his hatch from her hull below her casing; or onto her bridge's after rim from her tower's hatch, and down
+			// its after face from its floor)
+			const double Along0 = Via == 0 ? Row.TowerAft - 0.02 : Source[Via];
+			D.Along = Along0;
+			D.Across = 0.0;
+			D.Z = Via == 0 ? Row.Bridge - CasingAt(Row, Along0, 0.0) : -1.8;
+			D.OutAt = Next[Via];
+			Next[Via] += 1.5 + 1.0 * Mix(S + 47);
+			D.bUp = Nearest < 1000.0 && Mix(S + 53) < 0.7;
+			// (never before he is at his place: up, across and along at a walk, a few seconds' grace)
+			const double Placed = D.OutAt + std::fabs(D.Z) / 0.6 + (std::fabs(D.PlaceAcross) + std::fabs(D.PlaceAlong - D.Along)) / 1.25 + 3.0;
+			D.TurnAt = std::max(LastTurn + 1.2 + 0.3 * Mix(S + 59), Placed);
+			LastTurn = D.TurnAt;
+			OnCasing.push_back(D);
+		}
+		if (From == 0)
+		{
+			// (her raft over with her first man, her men over between her first turn and her last)
+			double First = 1e18;
+			for (const DeckHand& D : OnCasing)
+				if (D.W == WI && !D.bParty) First = std::min(First, D.TurnAt);
+			W.Start = W.Men > 0 ? First : ShownT;
+			W.End = std::max(W.Start + 1.0, LastTurn);
+			W.BoatsFrom = W.Start;
+		}
+		// (the battle has sent her down already: no waiting for turns)
+		if (!H.bAbandoned) Hurry(W);
+	}
+
+	void Show::Hurry(Wreck& W)
+	{
+		// The battle sends her down (sea:sunk, scuttled): her vents opened, every man still below comes up a hatch at a run,
+		// a file at each, a man each HurriedApart close behind the one before, and straight out to the edge of her casing and
+		// over: up his own, or, where its file is too long for him to be over within HurryFor of it, up the one that gets him
+		// over soonest. One whom none would get over in time stays below, never drawn, and is in the water with the rest of
+		// those below once she has gone (RunWrecks). Those at their places go now as well, her outer rank first, each within
+		// a few seconds: the last of all over within HurryFor. Her captor's party, where she was taken, go back down her side
+		// into their whaler (StepHands), never over it; those still on its thwarts stay there.
+		const int WI = static_cast<int>(&W - Wrecked.data());
+		const BoatDeck& Row = DeckOf(W.Nation);
+		const double Due = ShownT + HurryFor;
+		// (where each opening's men come up, as Muster has them: onto her bridge's after rim and down her tower's after face,
+		// or up a hatch's ladder from below her casing)
+		const double Source[3] = { Row.TowerAft - 0.02, Row.ForeHatch, Row.AftHatch };
+		const double Below[3] = { Row.Bridge - CasingAt(Row, Source[0], 0.0), -1.8, -1.8 };
+		// (when one starting up an opening then is over: up it at HurriedClimb, out to her edge at a run, a step's grace)
+		auto OverAt = [&Row, &Below](int Via, double Out) { return Out + std::fabs(Below[Via]) / HurriedClimb + (Row.Edge + 0.3) / 3.0; };
+		// (each file starts now, behind any man of it already on his way up, so that none climbs into the man above him)
+		double Next[3] = { ShownT, ShownT, ShownT };
+		for (const DeckHand& D : OnCasing)
+		{
+			if (D.W != WI || D.O.Key == 0 || D.bParty || !D.bOut || D.Leg != 0) continue;
+			Next[D.Via] = std::max(Next[D.Via], ShownT + HurriedApart - std::fabs(D.Z - Below[D.Via]) / HurriedClimb);
+		}
+		int Party = 0;
+		for (DeckHand& D : OnCasing)
+		{
+			if (D.W != WI || D.O.Key == 0 || D.bHurried) continue;
+			D.bHurried = true;
+			if (D.bParty)
+			{
+				// (one still on his thwart stays in it; those below up her after hatch first, close behind one another, a man
+				// each 0.2 s; the rest from where they are: all in within HurryFor)
+				if (!D.bOut)
+				{
+					D.O.Key = 0;
+					continue;
+				}
+				if (D.bBelow)
+				{
+					D.bBelow = false;
+					D.Along = Row.AftHatch;
+					D.Across = 0.0;
+					D.Z = -1.9;
+					D.O.Doing = Swim::Hatch;
+					D.O.Since = 0.0;
+					D.OutAt = ShownT + 0.2 * Party++;
+				}
+				D.Leg = D.Leg == 0 ? 12 : D.Leg == 1 || D.Leg == 2 ? 11 : 10;
+				continue;
+			}
+			const uint64_t S = W.Seed + 7919ULL * static_cast<uint64_t>(D.N + 1);
+			if (!D.bOut)
+			{
+				int Via = D.Via;
+				if (OverAt(Via, Next[Via]) > Due - 0.1)
+					for (int V = 0; V < 3; ++V)
+						if (OverAt(V, Next[V]) < OverAt(Via, Next[Via])) Via = V;
+				if (OverAt(Via, Next[Via]) > Due - 0.1)
+				{
+					// (none would get him over in time: below as she goes)
+					D.OutAt = 1e18;
+					continue;
+				}
+				if (Via != D.Via)
+				{
+					D.Via = Via;
+					D.Along = Source[Via];
+					D.Across = 0.0;
+					D.Z = Below[Via];
+				}
+				D.OutAt = Next[Via];
+				Next[Via] += HurriedApart;
+				D.TurnAt = D.OutAt;
+			}
+			else if (D.Leg == 0)
+			{
+				// (on his way up: on, at a run)
+				D.TurnAt = ShownT;
+			}
+			else
+			{
+				// (at his place or walking to it: over now, her outer rank first)
+				D.TurnAt = std::min(D.TurnAt, ShownT + 0.2 + 0.8 * D.Rank + 1.2 * Mix(S + 61));
+			}
+		}
+		W.End = std::min(W.End, Due + 1.0);
+	}
+
+	void Show::SendBoarders(const Hull& H, int ByPiece)
+	{
+		// Taken (sea:surrender how "captured"): her captor, lying stopped near her, lowers his whaler; a boarding party pulls
+		// across, climbs her casing and goes down her after hatch to shut her vents before she floods; three below for half
+		// a minute and she is a prize (her flag down). Drawn only: the battle took her.
+		const Hull* By = ByPiece >= 0 ? NearestOf(ByPiece, H.P.X, H.P.Y) : nullptr;
+		if (!By)
+		{
+			// (no piece named, or none of it afloat: the ship of the other side nearest her, not a boat)
+			double BestD = 1e18;
+			for (const auto& Pair : Hulls)
+			{
+				const Hull& A = Pair.second;
+				if (A.Side == H.Side || A.Class == "ss" || A.Doing == Fate::Gone) continue;
+				const double D = Flat(A.P - H.P);
+				if (D < BestD) { BestD = D; By = &A; }
+			}
+		}
+		if (!By) return;
+		Boarding B;
+		B.Boat = H.Key;
+		B.By = By->Key;
+		// (keys of their own, far past the wrecks' floats)
+		B.Whaler.Key = (1 << 20) + static_cast<int>(Boardings.size());
+		B.Whaler.Ship = By->Key;
+		B.Whaler.Kind = "boat";
+		B.Whaler.Long = 8.0;
+		B.Whaler.Beam = 2.3;
+		// (her davits a metre over her deck's edge)
+		B.Davit = CompanyOf(By->Class).Free + 1.0;
+		Boardings.push_back(B);
+	}
+
+	Vec Show::RoundHull(const Vec& From, const Vec& To, const Hull& H, double Clear) const
+	{
+		// (her outline as both the show and the stage have her: a boat's the larger of her class's and her model's)
+		const ClassSize& Sz = SizeOf(H.Class);
+		double Long = Sz.Long, Beam = Sz.Beam;
+		if (H.Class == "ss")
+		{
+			const BoatDeck& Row = DeckOf(H.Nation);
+			Long = std::max(Long, Row.Long);
+			Beam = std::max(Beam, Row.Wide);
+		}
+		const double Half = std::max(0.0, 0.5 * (Long - Beam)), R = 0.5 * Beam + Clear;
+		const Vec Fore = Ahead(H.Hdg), Right = RightOf(H.Hdg), Mid(H.P.X, H.P.Y, 0.0);
+		const Vec Bow = Mid + Fore * Half, Stern = Mid - Fore * Half;
+		auto Clears = [&Bow, &Stern, R](const Vec& A, const Vec& B) { return FlatGap(A, B, Bow, Stern) >= R; };
+		if (Clears(From, To)) return To;
+		// (round the end nearer the way: off her shoulder on To's side, where it can be reached; else off that end, on her
+		// middle line; else off her shoulder on its own side, to come to that end along her. Each a point half as far again
+		// out as the way must keep, so that from one to the next it clears her too.)
+		const double Ring = 1.5 * R;
+		const double SideTo = (To - Mid).Dot(Right) >= 0.0 ? 1.0 : -1.0, SideFrom = (From - Mid).Dot(Right) >= 0.0 ? 1.0 : -1.0;
+		const double Nearer = (From - Mid).Dot(Fore) + (To - Mid).Dot(Fore) >= 0.0 ? 1.0 : -1.0;
+		for (const double End : { Nearer, -Nearer })
+		{
+			const Vec Corner = Mid + Fore * (End * Half);
+			for (const Vec& Way : { Corner + Right * (SideTo * Ring), Corner + Fore * (End * Ring), Corner + Right * (SideFrom * Ring) })
+				if (Clears(From, Way)) return Way;
+		}
+		// (inside the way it must keep, which a boat pulling never is: straight out from her middle line)
+		const double U = Clamp((From - Mid).Dot(Fore), -Half, Half);
+		return Mid + Fore * U + Right * (SideFrom * Ring);
+	}
+
+	Vec Show::HandAt(const DeckHand& D, const Hull& H, double On) const
+	{
+		const BoatDeck& Row = DeckOf(Wrecked[static_cast<size_t>(D.W)].Nation);
+		// (a prize's sinking clock is held, so between steps she holds too)
+		const double Down = H.Doing == Fate::Sinking ? Clamp((ShownT + (H.bPrize ? 0.0 : On) - H.SinkAt) / std::max(1.0, H.SinkFor), 0.0, 1.0) : 0.0;
+		const double Dived = std::max(0.0, H.Keel - SurfacedKeel(H.Class));
+		const double Hdg = H.Hdg + H.Rate * On;
+		// (sent down, she goes as the stage takes her: down, and by the stern where her crew scuttled her; those still on her
+		// ride her down until they go over)
+		double Sunk = 0.0, Trim = 0.0;
+		if (H.SentDownAt >= 0.0) StageSink(ShownT + On - H.SentDownAt, Row.Top, H.How == "scuttled", Sunk, Trim);
+		Vec P = H.P + Ahead(H.Hdg) * (H.Spd * On) + Ahead(Hdg) * D.Along + RightOf(Hdg) * D.Across;
+		// (on her casing as she rides: her heave, her pitch, bow up, and her heel, starboard down, as ShipOut carries them;
+		// her casing as the stage draws the modeller's boat, as made; settling a little as she goes)
+		P.Z = H.Heave + CasingAt(Row, D.Along, D.Across) * (1.0 - 0.8 * Down) + D.Z - Dived - Sunk + D.Along * std::sin((H.Pitch + Trim) * Deg) -
+		      D.Across * std::sin(H.Heel * Deg);
+		return P;
+	}
+
+	void Show::StepHands(double Dt)
+	{
+		// A struck boat coming up: her crew's plan once her casing is clear (her keel within 0.3 m of her trim surfaced).
+		for (auto& Pair : Hulls)
+		{
+			Hull& H = Pair.second;
+			if (!H.bStruck || H.UpAt >= 0.0 || H.Doing != Fate::Sinking || H.Keel > SurfacedKeel(H.Class) + 0.3) continue;
+			H.UpAt = ShownT;
+			for (Wreck& W : Wrecked)
+				if (W.Ship == H.Key && W.bStruck) Muster(W, H, 0);
+		}
+		if (OnCasing.empty() && Boardings.empty()) return;
+		// Her crew and her boarders, a step at a time at a man's pace (climbing 0.6 m/s, walking 1.25, running 3; hurried,
+		// climbing HurriedClimb, 1.8, her captor's party, five fresh men going back up a ladder they have just come down, 1.5),
+		// so that none is ever placed where he was not.
+		auto Toward = [Dt](double& X, double To, double Pace)
+		{
+			X += Clamp(To - X, -Pace * Dt, Pace * Dt);
+			return std::fabs(To - X) < 1e-9;
+		};
+		// (a whaler's places, in its own frame: its oarsmen at the scene's rows for oars, 2, 4 and 6 of its eleven from its
+		// stern (SeaBattle's BoatRow), in pairs; its coxswain in its stern sheets, row 0; its party, going across and back,
+		// forward of the oars, one to a thwart on the side that lies toward her alongside, so that each steps from his seat up
+		// her side, never across another man; the foremost a little in from where it narrows)
+		auto SeatOf = [](const Boarding& Crossing, int K)
+		{
+			static const double PartyBench[5] = { 7.0, 8.0, 9.0, 10.0, 11.0 }, PartyHand[5] = { 0.55, 0.55, 0.55, 0.55, 0.45 };
+			const FloatOut& Whaler = Crossing.Whaler;
+			const bool bCox = K == 6, bParty = K > 6;
+			const int P = bParty ? std::clamp(K - 7, 0, 4) : 0;
+			const double Bench = bParty ? PartyBench[P] : bCox ? 0.0 : static_cast<double>(2 + 2 * (K / 2));
+			const double Seat = (Bench * 0.76 / 11.0 - 0.38) * Whaler.Long, Hand = bParty ? Crossing.Inboard * PartyHand[P] : bCox ? 0.0 : K % 2 ? -0.55 : 0.55;
+			Vec At = Whaler.At + Ahead(Whaler.Heading) * Seat + RightOf(Whaler.Heading) * Hand;
+			At.Z = Whaler.At.Z + 0.3;
+			return At;
+		};
+		for (DeckHand& D : OnCasing)
+		{
+			if (D.O.Key == 0 || ShownT < D.OutAt || D.bBelow) continue;
+			const Wreck& W = Wrecked[static_cast<size_t>(D.W)];
+			Hull* H = FindHull(W.Ship);
+			if (!H || H->Doing == Fate::Gone) continue;
+			const BoatDeck& Row = DeckOf(W.Nation);
+			const bool bFirst = !D.bOut;
+			if (!D.bOut)
+			{
+				D.bOut = true;
+				if (!D.bParty) ++Check.HandsOut;
+			}
+			const Swim Was = D.O.Doing;
+			const double Climb = D.bHurried ? (D.bParty ? 1.5 : HurriedClimb) : 0.6;
+			if (D.bParty)
+			{
+				Boarding* Back = nullptr;
+				for (Boarding& B : Boardings)
+					if (B.Boat == W.Ship) Back = &B;
+				// (his seat in the whaler alongside, in her frame, on her casing's height there: where he goes up her side from, and
+				// back to)
+				const int SeatNo = 7 + std::clamp(D.N - 10000, 0, 4);
+				const Vec Seat = Back ? SeatOf(*Back, SeatNo) : D.At;
+				const Vec Off(Seat.X - H->P.X, Seat.Y - H->P.Y, 0.0);
+				const double SeatAlong = Off.Dot(Ahead(H->Hdg)), SeatAcross = Off.Dot(RightOf(H->Hdg));
+				if (bFirst && Back)
+				{
+					// (up from his thwart: his first step from where he sat, his feet on it, and his seat left empty, so that he is
+					// drawn in one place only, never twice and never missing)
+					D.Along = SeatAlong;
+					D.Across = SeatAcross;
+					DeckHand OnThwart = D;
+					OnThwart.Z = 0.0;
+					D.Z = Seat.Z - HandAt(OnThwart, *H, 0.0).Z;
+					for (size_t K = 0; K < Back->Oars.size() && K < Back->Seated.size(); ++K)
+					{
+						if (Back->Oars[K].Key != D.O.Key) continue;
+						Back->Oars.erase(Back->Oars.begin() + static_cast<long>(K));
+						Back->Seated.erase(Back->Seated.begin() + static_cast<long>(K));
+						break;
+					}
+					Back->Whaler.Aboard = static_cast<int>(Back->Oars.size());
+				}
+				if (D.Leg == 0)
+				{
+					// (up her side from the whaler alongside, onto the edge of her casing)
+					const bool bIn = Toward(D.Across, D.Side * Row.Edge, 0.6);
+					if (Toward(D.Z, 0.0, 0.45) && bIn) { D.Leg = 1; D.O.Doing = Swim::Walk; }
+				}
+				else if (D.Leg == 1)
+				{
+					// (along her casing to her after hatch, a step inboard of the edge)
+					if (Toward(D.Across, D.Side * 0.6, 1.25) && Toward(D.Along, Row.AftHatch, 1.25)) D.Leg = 2;
+				}
+				else if (D.Leg == 2)
+				{
+					// (in to it)
+					if (Toward(D.Across, 0.0, 1.25)) { D.Leg = 3; D.O.Doing = Swim::Hatch; }
+				}
+				else if (D.Leg == 3)
+				{
+					if (Toward(D.Z, -1.9, 0.6))
+					{
+						// (below: shutting her vents)
+						D.bBelow = true;
+						++Check.BoardersBelow;
+						if (Back) ++Back->Below;
+					}
+				}
+				else if (D.Leg == 10)
+				{
+					// (she is going: up her after hatch again at a run)
+					D.O.Doing = Swim::Hatch;
+					if (Toward(D.Z, 0.0, Climb)) { D.Leg = 11; D.O.Doing = Swim::Run; }
+				}
+				else if (D.Leg == 11)
+				{
+					// (out to her edge at a run, heading along for his seat as he goes, and over it at once: the rest of the way
+					// along is made sliding down her side, so that the last of them is in within HurryFor)
+					D.O.Doing = Swim::Run;
+					Toward(D.Along, SeatAlong, 3.0);
+					if (Toward(D.Across, D.Side * Row.Edge, 3.0)) { D.Leg = 12; D.O.Doing = Swim::Hatch; }
+				}
+				else
+				{
+					// (down her side into the whaler, to his seat: sliding down her saddle tank and stepping across, quicker hurried)
+					D.O.Doing = Swim::Hatch;
+					const double Scramble = D.bHurried ? 2.5 : 2.0;
+					const bool bAlong = Toward(D.Along, SeatAlong, Scramble), bAcross = Toward(D.Across, SeatAcross, Scramble);
+					DeckHand Level = D;
+					Level.Z = 0.0;
+					const double SeatZ = Seat.Z - HandAt(Level, *H, 0.0).Z;
+					if (Toward(D.Z, SeatZ, Climb) && bAlong && bAcross && Back)
+					{
+						// (in: one of its crew again, sitting)
+						ManOut In = D.O;
+						In.At = HandAt(D, *H, 0.0);
+						In.Doing = Swim::Boat;
+						In.On = Back->Whaler.Key;
+						In.Since = 0.0;
+						Back->Oars.push_back(In);
+						Back->Seated.push_back(SeatNo);
+						Back->Whaler.Aboard = static_cast<int>(Back->Oars.size());
+						D.O.Key = 0;
+						continue;
+					}
+				}
+			}
+			else if (D.Leg == 0)
+			{
+				// (up his hatch's ladder, or down from her bridge, hand over hand)
+				if (Toward(D.Z, 0.0, Climb)) { D.Leg = 1; D.O.Doing = Swim::Walk; }
+			}
+			else if (D.Leg == 1 && ShownT < D.TurnAt)
+			{
+				// (out from her middle to his side first, then along to his place, clear of her tower)
+				const bool bAcross = Toward(D.Across, D.PlaceAcross, 1.25);
+				const bool bThere = bAcross && Toward(D.Along, D.PlaceAlong, 1.25);
+				D.O.Doing = bThere ? (D.bUp ? Swim::HandsUp : Swim::Stand) : Swim::Walk;
+			}
+			else
+			{
+				// (his turn: out to the edge of her casing at a run, where her saddle tanks fall away below him)
+				D.Leg = 2;
+				if (Toward(D.Across, D.Side * Row.Edge, 3.0))
+				{
+					D.bAtEdge = true;
+					D.O.Doing = Swim::Stand;
+				}
+				else D.O.Doing = Swim::Run;
+			}
+			D.O.Since = D.O.Doing == Was ? D.O.Since + Dt : 0.0;
+			D.At = HandAt(D, *H, 0.0);
+		}
+		// Her captor's whaler: lowered from his davits once she is up and he lies stopped near her, shoved off square from his
+		// side, pulled across to off her after casing on her lee side (round her bow or her stern where he lies on her other
+		// side, its way clear of both by the swing of its own length) and in square to her, its party up her side; three of
+		// them below for half a minute and she is a prize. Sent down after all, it takes its party back, shoves off her and
+		// pulls back to off his davits, in square, to be hoisted in. Square, alongside or off it, it never swings its length
+		// into a hull.
+		constexpr double LowerFor = 5.0, Shove = 0.6;
+		for (Boarding& B : Boardings)
+		{
+			if (B.bStowed) continue;
+			Hull* Boat = FindHull(B.Boat);
+			const Hull* By = FindHull(B.By);
+			const Wreck* Her = nullptr;
+			for (const Wreck& W : Wrecked)
+				if (W.Ship == B.Boat) Her = &W;
+			if (!Her) continue;
+			const BoatDeck& Row = DeckOf(Her->Nation);
+			const bool bBoat = Boat && Boat->Doing != Fate::Gone, bBy = By && By->Doing != Fate::Gone;
+			// (its middle abreast her after casing, far enough aft that its party's thwarts, forward of its oars, are all abreast
+			// that stretch, aft of her tower, where each goes up her side from his seat)
+			const double Along = Row.AftTo - 3.5;
+			// (on her lee side, out of the wind and clear of her crew going over her weather side; kept clear of her and of him
+			// on its way by the swing of its own length, so that it may turn anywhere on it)
+			const double Clear = 0.5 * B.Whaler.Long + 0.2;
+			// (alongside her, its half beam and a little more out from her side; at his davits, his side toward her, out from it
+			// by its half beam and a little more; and off each, square to it, as far again as it swings beyond its half beam)
+			const double Swing = 0.5 * (B.Whaler.Long - B.Whaler.Beam) + 0.3;
+			const Vec HerOut = bBoat ? RightOf(Boat->Hdg) * (-Her->Lee) : Vec();
+			const Vec Alongside = bBoat ? Boat->P + Ahead(Boat->Hdg) * Along + HerOut * (0.5 * Row.Wide + 0.5 * B.Whaler.Beam + 0.3) : B.Whaler.At;
+			const Vec OffHer = Alongside + HerOut * Swing;
+			const Vec HisOut = bBy ? RightOf(By->Hdg) * B.Hand : Vec();
+			const Vec Davits = bBy ? By->P + HisOut * (0.5 * SizeOf(By->Class).Beam + 0.5 * B.Whaler.Beam + 0.6) : B.Whaler.At;
+			const Vec OffHim = Davits + HisOut * Swing;
+			// (still unless it pulls this step)
+			B.Pull = Vec();
+			auto PullTo = [&B, Dt](const Vec& Goal, const Vec& Way, double Rate)
+			{
+				// (pulled at a steady 1.8 m/s, three and a half knots, for the next point of its way; shoved off or brought in
+				// square at Shove)
+				const Vec To(Way.X - B.Whaler.At.X, Way.Y - B.Whaler.At.Y, 0.0);
+				const double Left = Flat(To);
+				B.Pull = To * (std::min(Left / Dt, Rate) / std::max(1e-9, Left));
+				B.Whaler.At += B.Pull * Dt;
+				const double ToGoal = Flat(Vec(Goal.X - B.Whaler.At.X, Goal.Y - B.Whaler.At.Y, 0.0));
+				B.Whaler.Way = ToGoal > 0.05 ? Rate : 0.0;
+				return ToGoal;
+			};
+			auto Turn = [&B, Dt](double Want) { B.Whaler.Heading = Wrap(B.Whaler.Heading + Clamp(Wrap(Want - B.Whaler.Heading), -0.35 * Dt, 0.35 * Dt)); };
+			// (on its way to off a berth, round her and round him: its head round to the hull's as it comes near; there and
+			// square to it, true)
+			auto CrossTo = [&](const Vec& Off, double Hdg)
+			{
+				Vec Way = bBy ? RoundHull(B.Whaler.At, Off, *By, Clear) : Off;
+				if (bBoat) Way = RoundHull(B.Whaler.At, Way, *Boat, Clear);
+				const double Left = PullTo(Off, Way, 1.8);
+				Turn(Left > 12.0 ? Bearing(B.Whaler.At, Way) : Hdg);
+				return Left < 0.05 && std::fabs(Wrap(B.Whaler.Heading - Hdg)) < 0.02;
+			};
+			if (B.LoweredAt < 0.0)
+			{
+				if (!bBoat || Boat->UpAt < 0.0 || Boat->SentDownAt >= 0.0 || !bBy || By->Spd > 0.5 || Flat(By->P - Boat->P) > 1800.0) continue;
+				// (lowered from his davits on his side toward her, all in it: six at the oars, its coxswain, and its boarding party
+				// of five on the thwarts forward of the oars, who cross in it and go up her side from them)
+				B.LoweredAt = ShownT;
+				B.Hand = (Boat->P - By->P).Dot(RightOf(By->Hdg)) >= 0.0 ? 1.0 : -1.0;
+				// (alongside, its heading hers, it lies on her other side from her crew going over (her Lee): so she is to its Lee)
+				B.Inboard = Her->Lee;
+				B.Whaler.At = By->P + RightOf(By->Hdg) * (B.Hand * (0.5 * SizeOf(By->Class).Beam + 0.5 * B.Whaler.Beam + 0.6));
+				B.Whaler.At.Z = B.Davit;
+				B.Whaler.Heading = By->Hdg;
+				for (int K = 0; K < 12; ++K)
+				{
+					ManOut O;
+					O.Key = NextMan++;
+					O.Ship = By->Key;
+					O.Side = By->Side;
+					O.Nation = By->Nation;
+					O.Doing = Swim::Boat;
+					O.On = B.Whaler.Key;
+					// (its crew's own hash, and its party's)
+					const uint64_t Hash = K < 7 ? static_cast<uint64_t>(O.Key) * 131 + 7 : static_cast<uint64_t>(O.Key) * 137 + 11;
+					O.Look = static_cast<uint32_t>(Mix(Hash) * 4294967295.0);
+					B.Oars.push_back(O);
+					B.Seated.push_back(K);
+				}
+				B.Whaler.Aboard = static_cast<int>(B.Oars.size());
+			}
+			else if (ShownT < B.LoweredAt + LowerFor)
+			{
+				// (going down his side to the water as he lies: carried with him, down at a steady rate)
+				const Vec Was = B.Whaler.At;
+				B.Whaler.At = Vec(Davits.X, Davits.Y, B.Davit * Clamp(1.0 - (ShownT - B.LoweredAt) / LowerFor, 0.0, 1.0));
+				B.Whaler.Heading = bBy ? By->Hdg : B.Whaler.Heading;
+				B.Pull = (B.Whaler.At - Was) * (1.0 / Dt);
+			}
+			else if (B.HomeAt >= 0.0)
+			{
+				if (B.HoistAt < 0.0)
+				{
+					// (back to his davits: shoved off her square where it lay alongside, round her and round him to off them, and in
+					// square)
+					B.Whaler.At.Z = 0.0;
+					const double HisHdg = bBy ? By->Hdg : B.Whaler.Heading;
+					if (B.Leg == 3)
+					{
+						if (bBoat) Turn(Boat->Hdg);
+						if (!bBoat || PullTo(OffHer, OffHer, Shove) < 0.05) B.Leg = 4;
+					}
+					else if (B.Leg == 4)
+					{
+						if (CrossTo(OffHim, HisHdg)) B.Leg = 5;
+					}
+					else
+					{
+						Turn(HisHdg);
+						if (PullTo(Davits, Davits, Shove) < 0.05)
+						{
+							B.HoistAt = ShownT;
+							B.Whaler.Way = 0.0;
+						}
+					}
+				}
+				else
+				{
+					// (hoisted in, its crew in it, and stowed)
+					const Vec Was = B.Whaler.At;
+					B.Whaler.At = Vec(Davits.X, Davits.Y, B.Davit * Clamp((ShownT - B.HoistAt) / LowerFor, 0.0, 1.0));
+					B.Pull = (B.Whaler.At - Was) * (1.0 / Dt);
+					if (ShownT >= B.HoistAt + LowerFor) B.bStowed = true;
+				}
+			}
+			else if (B.AlongsideAt < 0.0)
+			{
+				if (!bBoat || Boat->SentDownAt >= 0.0)
+				{
+					// (she is going before it is there: back to him)
+					B.HomeAt = ShownT;
+					B.Leg = 4;
+					continue;
+				}
+				// (shoved off his side square to it; across to off her, round her bow or her stern where she lies between; and in
+				// square to her)
+				B.Whaler.At.Z = 0.0;
+				double Left = 1e9;
+				if (B.Leg == 0)
+				{
+					if (bBy) Turn(By->Hdg);
+					if (!bBy || PullTo(OffHim, OffHim, Shove) < 0.05) B.Leg = 1;
+				}
+				else if (B.Leg == 1)
+				{
+					if (CrossTo(OffHer, Boat->Hdg)) B.Leg = 2;
+				}
+				else
+				{
+					Turn(Boat->Hdg);
+					Left = PullTo(Alongside, Alongside, Shove);
+				}
+				if (Left < 0.05)
+				{
+					B.AlongsideAt = ShownT;
+					B.Whaler.Way = 0.0;
+					B.Pull = Vec();
+					// (her party up her side from their thwarts: five men, a man each two seconds, each the man who sat there (his
+					// key and his look), leaving his seat as he goes, StepHands)
+					for (size_t K = 0; K < B.Oars.size() && K < B.Seated.size(); ++K)
+					{
+						if (B.Seated[K] < 7) continue;
+						const int Boarder = B.Seated[K] - 7;
+						DeckHand D;
+						D.W = static_cast<int>(Her - Wrecked.data());
+						D.N = 10000 + Boarder;
+						D.O = B.Oars[K];
+						D.O.Doing = Swim::Hatch;
+						D.O.On = -1;
+						D.O.Since = 0.0;
+						D.bParty = true;
+						D.Side = -Her->Lee;
+						D.OutAt = ShownT + 2.0 * Boarder;
+						D.TurnAt = 1e18;
+						D.At = B.Oars[K].At;
+						OnCasing.push_back(D);
+						++B.Party;
+					}
+				}
+			}
+			else
+			{
+				// (alongside: kept there as she drifts; her vents shut, three below, she is a prize)
+				if (bBoat)
+				{
+					B.Whaler.At = Vec(Alongside.X, Alongside.Y, 0.0);
+					Turn(Boat->Hdg);
+				}
+				if (B.Below >= 3 && B.PrizeAt < 0.0) B.PrizeAt = ShownT + 30.0;
+				if (bBoat && B.PrizeAt >= 0.0 && ShownT >= B.PrizeAt && !Boat->bPrize && Boat->bAbandoned)
+				{
+					Boat->bPrize = true;
+					Boat->FlagDownAt = ShownT;
+					++Check.Prizes;
+				}
+				// (sent down after all: off once its party is back in it, or she is gone)
+				if (!bBoat || Boat->SentDownAt >= 0.0)
+				{
+					bool bAllBack = true;
+					for (const DeckHand& D : OnCasing)
+						if (D.O.Key != 0 && D.bParty && Wrecked[static_cast<size_t>(D.W)].Ship == B.Boat) bAllBack = false;
+					if (bAllBack || !bBoat || ShownT > Boat->SentDownAt + 3.0 * HurryFor)
+					{
+						B.HomeAt = ShownT;
+						B.Leg = 3;
+					}
+				}
+			}
+			for (size_t K = 0; K < B.Oars.size() && K < B.Seated.size(); ++K)
+			{
+				ManOut& O = B.Oars[K];
+				O.At = SeatOf(B, B.Seated[K]);
+				O.Heading = B.Seated[K] >= 6 ? B.Whaler.Heading : Wrap(B.Whaler.Heading + Pi);
+				O.Since += Dt;
+			}
+		}
+		OnCasing.erase(std::remove_if(OnCasing.begin(), OnCasing.end(), [](const DeckHand& D) { return D.O.Key == 0; }), OnCasing.end());
 	}
 
 	void Show::NoteLost(const Hull& H, int N)
@@ -4031,8 +4914,51 @@ namespace SeaShow
 			};
 			const double Share = Clamp((ShownT - W.Start) / std::max(1.0, W.End - W.Start), 0.0, 1.0);
 			const double Down = Clamp((ShownT - W.T0) / W.For, 0.0, 1.0);
+			// A boat that struck: her men go over from her casing, each as he reaches its edge at his turn (Muster's plan,
+			// StepHands), as the man he is (his key and his look), running and jumping clear of her saddle tanks; her dead go
+			// down in her (those who come up her hatches are her living). Gone under with men still on her casing, they are
+			// in the water where they stood.
+			if (W.bStruck)
+			{
+				const BoatDeck& Row = DeckOf(W.Nation);
+				for (DeckHand& D : OnCasing)
+				{
+					if (D.W != static_cast<int>(WI) || D.O.Key == 0) continue;
+					if (bAfloat && !D.bAtEdge) continue;
+					if (!bAfloat && (!D.bOut || D.bBelow))
+					{
+						// (still in her as she goes: one of the men the battle counts, over with the rest below)
+						D.O.Key = 0;
+						continue;
+					}
+					const uint64_t S = W.Seed + 7919ULL * static_cast<uint64_t>(D.N + 1);
+					Man M;
+					M.O = D.O;
+					M.O.At = D.At;
+					M.O.Since = 0.0;
+					M.W = static_cast<int>(WI);
+					M.Pace = 0.45 + 0.35 * Mix(S + 5);
+					M.Next = ShownT + 1.0 + 2.0 * Mix(S + 7);
+					M.O.Doing = Swim::Jump;
+					M.O.Drop = std::max(0.6, W.Free * (1.0 - 0.8 * Down));
+					// (out over her saddle tanks to land a metre clear of them: as fast across as his fall from where he stands allows)
+					const Vec Out = RightOf(Hdg) * D.Side;
+					const double Z0 = std::max(0.3, D.At.Z);
+					const double Fall = (0.8 + std::sqrt(0.64 + 2.0 * Gee * Z0)) / Gee;
+					M.O.At.Z = Z0;
+					M.V = Ahead(Hdg) * Spd + Out * (std::max(0.5, 0.5 * Row.Wide + 1.0 - std::fabs(D.Across)) / Fall);
+					M.V.Z = 0.8;
+					M.O.Heading = Bearing(Vec(), Out);
+					Swimmers.push_back(M);
+					D.O.Key = 0;
+					++Check.OverFromDeck;
+					++Check.MenOfStruck;
+					if (D.bParty) continue;
+					++W.Out;
+				}
+			}
 			// Her men over the side: from her deck's edge, the living jumping and the dead fallen or thrown.
-			const int MenDue = bAfloat ? static_cast<int>(std::floor(W.Men * Share)) : W.Men;
+			const int MenDue = W.bStruck && bAfloat ? W.Out : bAfloat ? static_cast<int>(std::floor(W.Men * Share)) : W.Men;
 			while (W.Out < MenDue)
 			{
 				const uint64_t S = W.Seed + 7919ULL * static_cast<uint64_t>(W.Out + 1);
@@ -4066,11 +4992,14 @@ namespace SeaShow
 					M.O.Doing = Swim::Jump;
 					// (down a net or a line most of the way, leaving her in good order; or jumping from her deck)
 					M.O.Drop = W.bLeft && Mix(S + 37) < 0.6 ? 0.8 : std::max(0.6, W.Free * (1.0 - 0.8 * Down));
+					// (a boat has no nets down her side: her men jump from her casing)
+					if (W.Class == "ss") M.O.Drop = std::max(0.6, W.Free * (1.0 - 0.8 * Down));
 					M.O.At = Vec(Edge.X, Edge.Y, M.O.Drop);
 					M.V = Ahead(Hdg) * (Spd * 0.8) + Out * (1.6 + 0.8 * Mix(S + 29));
 					M.V.Z = 0.8;
 					M.O.Heading = Bearing(Vec(), Out);
 				}
+				if (W.bStruck) ++Check.MenOfStruck;
 				Swimmers.push_back(M);
 				++W.Out;
 			}
@@ -4506,6 +5435,8 @@ namespace SeaShow
 					// (aboard her: picked up)
 					M.O.Key = -M.O.Key;
 					++Check.MenPicked;
+					// (a man of the other side's: a prisoner, a struck boat's crew taken off by her hunter)
+					if (By->Side != M.O.Side) ++Check.Prisoners;
 				}
 				break;
 			}
@@ -4536,6 +5467,8 @@ namespace SeaShow
 			{
 				for (size_t K = 0; K < W.NearNow.size(); ++K)
 				{
+					// (a struck boat's men jumping from her casing: over her saddle tanks, not out of her, until they are nearly in)
+					if (W.bStruck && M.O.Doing == Swim::Jump && W.NearNow[K]->Key == W.Ship && M.O.At.Z > 0.3) continue;
 					if (PushOut(M.O.At, W.NearNow[K]->P, W.NearNow[K]->Hdg, W.NearHalf[K], W.NearR[K] + 0.8) && !M.bSwept)
 					{
 						M.bSwept = true;
@@ -4601,6 +5534,7 @@ namespace SeaShow
 			FlyStrikes(Fixed);
 			CoverFleet(Fixed);
 			LayScreens();
+			StepHands(Fixed);
 			RunWrecks(Fixed);
 			// (whom the player sees, once every step's finds are in: SetMine)
 			Hunt();
@@ -4687,7 +5621,8 @@ namespace SeaShow
 			S.Doing = H.Doing;
 			S.How = H.How;
 			S.DownFor = H.SinkFor;
-			S.Down = H.Doing == Fate::Sinking ? Clamp((DrawT - H.SinkAt) / std::max(1.0, H.SinkFor), 0.0, 1.0) : 0.0;
+			// (a prize's sinking clock is held in steps, so she is drawn at the step's Down, not carried on to the frame)
+			S.Down = H.Doing == Fate::Sinking ? Clamp(((H.bPrize ? ShownT : DrawT) - H.SinkAt) / std::max(1.0, H.SinkFor), 0.0, 1.0) : 0.0;
 			S.Train = H.Train;
 			S.Elevation = H.Elev;
 			S.Aim = H.AimKey;
@@ -4709,6 +5644,10 @@ namespace SeaShow
 				S.Dived = std::max(0.0, H.Keel - SurfacedKeel(H.Class));
 				// (her periscope can be up only near periscope depth)
 				S.bScope = H.bScope && H.Keel <= F.ScopeKeel + 2.0;
+				// (struck: her flag from her crew's first coming out, until it is hauled down; a prize held as taken)
+				S.Struck = H.bStruck && H.UpAt >= 0.0 ? DrawT - H.UpAt : -1.0;
+				S.Lowered = H.FlagDownAt >= 0.0 ? DrawT - H.FlagDownAt : -1.0;
+				S.bPrize = H.bPrize;
 				// (under, she leaves no wake on the sea but her periscope's feather, the scene's own, and her diesels are stopped)
 				if (S.Dived > 1.0)
 				{
@@ -4755,6 +5694,39 @@ namespace SeaShow
 			OutSlicks = Oil;
 			OutMen.clear();
 			for (const Man& M : Swimmers) OutMen.push_back(M.O);
+		}
+		// A struck boat's crew on her casing and her boarders, laid out every frame at the drawn moment as she is (they move
+		// with her as she rides); her captor's whaler and its oarsmen.
+		OutHands.clear();
+		OutWhalers.clear();
+		for (const DeckHand& D : OnCasing)
+		{
+			if (D.O.Key == 0 || !D.bOut || D.bBelow) continue;
+			const Hull* H = FindHull(Wrecked[static_cast<size_t>(D.W)].Ship);
+			if (!H || H->Doing == Fate::Gone || !InSight(*H)) continue;
+			ManOut O = D.O;
+			O.At = HandAt(D, *H, On);
+			O.Since += On;
+			const double Hdg = H->Hdg + H->Rate * On;
+			// (facing the way he walks; out over her side running, standing or with his hands up)
+			O.Heading = D.O.Doing == Swim::Walk ? (std::fabs(D.PlaceAcross - D.Across) > 1e-6 ? Wrap(Hdg + (D.PlaceAcross > D.Across ? 0.5 : -0.5) * Pi)
+			                                        : D.PlaceAlong >= D.Along ? Hdg : Wrap(Hdg + Pi))
+			            : D.O.Doing == Swim::Hatch ? Wrap(Hdg + Pi)
+			                                       : Wrap(Hdg + (D.Side > 0.0 ? 0.5 : -0.5) * Pi);
+			OutHands.push_back(O);
+		}
+		for (const Boarding& B : Boardings)
+		{
+			if (B.LoweredAt < 0.0 || B.bStowed) continue;
+			// (carried on from the step by its pull, as the ships are, so it never stands and jumps between steps)
+			FloatOut Fl = B.Whaler;
+			Fl.At += B.Pull * On;
+			OutWhalers.push_back(Fl);
+			for (ManOut O : B.Oars)
+			{
+				O.At += B.Pull * On;
+				OutHands.push_back(O);
+			}
 		}
 		OutTorps.clear();
 		for (const Torp& T : Torps)

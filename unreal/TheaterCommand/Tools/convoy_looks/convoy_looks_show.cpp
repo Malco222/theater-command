@@ -136,7 +136,65 @@ namespace
 		double Deck = 0.0, Down = 0.0;
 		bool bNow = false;
 		int HighFrames = 0;
+		// (struck: since when, as the show has her up (below 0: not), how she ends, and how the looks ride her this frame: her
+		// drawn heave, her trim and heel, where and which way; her vents' spurts; scuttled told)
+		double Struck = -1.0, Heave = 0.0, Pitch = 0.0, Heel = 0.0, Heading = 0.0;
+		P3 At;
+		int Vents = 0;
+		bool bStruck = false, bScuttled = false;
+		// (sent down: when (the show's Sink), and whether by the stern as the stage takes her (SeaShow::StageEndOf); the last
+		// moment a man was on her or in her hatch; her scuttling charges' moments, and their puffs)
+		double SunkAt = -1.0, LastHandAt = -1.0;
+		bool bByStern = false;
+		std::vector<double> ChargesAt;
+		int Puffs = 0;
 	};
+
+	/** The show's casing rows (SeaShow::DeckOf, where a struck boat's men stand) against the looks' (SculptedOf, which
+	 * Tools/convoy_looks/convoy_looks_test holds to the model files): the same boat, the same casing, her hatches on its
+	 * stretches and her tower inside her beam. */
+	void CheckDeckRows()
+	{
+		const struct
+		{
+			const char* Nation;
+			const char* File;
+		} Navies[] = { { "GER", "Submarine_GER" }, { "", "Submarine" }, { "USA", "Submarine_USA" }, { "ITA", "Submarine" }, { "JPN", "Submarine" } };
+		auto Same = [](double A, double B) { return std::fabs(A - B) < 1e-9; };
+		for (const auto& Navy : Navies)
+		{
+			const SeaShow::BoatDeck D = SeaShow::DeckOf(Navy.Nation);
+			const BoatModel M = SculptedOf(Navy.File);
+			const bool bSame = Same(D.Long, M.Long) && Same(D.Wide, M.Wide) && Same(D.TowerFore, M.TowerFore) && Same(D.TowerAft, M.TowerAft) && Same(D.Bridge, M.TowerTop - 1.2) &&
+			                   Same(D.ForeFrom, M.ForeFrom) && Same(D.ForeTo, M.ForeTo) && Same(D.AftFrom, M.AftFrom) && Same(D.AftTo, M.AftTo) && Same(D.Edge, M.Edge) &&
+			                   Same(D.Deck, M.Casing) && Same(D.RiseFrom, M.RiseFrom) && Same(D.Rise, M.Rise) && Same(D.Fall, M.Fall) && Same(D.GunFrom, M.GunFrom) && Same(D.GunTo, M.GunTo) &&
+			                   Same(D.ForeHatch, M.ForeHatch) && Same(D.AftHatch, M.AftHatch) && Same(D.Top, M.Top);
+			const std::string Named = std::string(*Navy.Nation ? Navy.Nation : "no navy");
+			ShowCheck(bSame, "the show's casing row for " + Named + " is the looks' " + Navy.File + "'s (her men stand on her as she is drawn)");
+			ShowCheck(D.ForeHatch >= D.ForeFrom && D.ForeHatch <= D.ForeTo && D.AftHatch >= D.AftFrom && D.AftHatch <= D.AftTo && D.TowerHalf < 0.5 * D.Wide,
+			          "and its hatches open on the stretches its men stand on, its tower inside its beam (" + Named + ")");
+			for (const double Along : { D.AftFrom, D.AftTo, D.ForeFrom, D.ForeTo })
+				for (const double Across : { 0.0, 0.85, D.Edge })
+					ShowCheck(Same(SeaShow::CasingAt(D, Along, Across), CasingAt(M, Along, Across)), "and the show's casing height is the looks' (" + Named + ")");
+		}
+		// The stage's sinking as the show has a struck boat's crew ride her down (SeaShow::StageSink) and as the looks throw
+		// her vents and charges from her (StageSinking, which Tools/convoy_looks/convoy_looks_test holds to the stage's lines).
+		bool bSameSink = true;
+		for (const bool bByStern : { true, false })
+		{
+			for (double T = -1.0; T < 90.0; T += 0.37)
+			{
+				double ShowDepth = 0.0, ShowPitch = 0.0, LookDepth = 0.0, LookPitch = 0.0;
+				SeaShow::StageSink(T, 10.49, bByStern, ShowDepth, ShowPitch);
+				StageSinking(T, 10.49, bByStern, LookDepth, LookPitch);
+				bSameSink = bSameSink && Same(ShowDepth, LookDepth) && Same(ShowPitch, LookPitch);
+			}
+		}
+		ShowCheck(bSameSink, "the show's stage sinking (a struck boat's crew riding her down) is the looks' (her vents and charges thrown from her)");
+		ShowCheck(SeaShow::StageEndOf("scuttled", 3.0, -1.0) == "stern" && SeaShow::StageEndOf("scuttled", -1.0, 0.5) == "stern" && SeaShow::StageEndOf("scuttled", -1.0, -1.0).empty() &&
+		              SeaShow::StageEndOf("crushed", 3.0, -1.0).empty(),
+		          "the stage takes a boat that struck and was scuttled down by the stern, any other by her look's own end");
+	}
 
 	/** A rescuer as the looks keep her (FConvoyLooks::FRescue): until when, her nets. */
 	struct RescueSeen
@@ -182,6 +240,13 @@ namespace
 		double JumpWorst = 0.0, JumpRawWorst = 0.0, ClimbHeaveLow = 99.0, ClimbHeaveHigh = -99.0, StoodBy = 0.0, ClimbOffDrawnLow = 99.0, ClimbOffDrawnHigh = -99.0;
 		std::vector<Landing> Landings;
 		int Drops = 0, PatternBursts = 0, AheadBursts = 0, Stars = 0;
+		// (a struck boat's flag: frames it should fly, those it does not, those it streams to windward in a breeze, those any of
+		// it is near the sea, those it is still up after hauled down; her men on her casing against it as the looks ride her)
+		int FlagFrames = 0, FlagMissing = 0, FlagBreezy = 0, FlagWindward = 0, FlagUnder = 0, FlagStaysUp = 0, HandFrames = 0, HandsWorstKey = 0, HandsLate = 0;
+		double HandsWorst = 0.0, HandsWorstAt = 0.0, HandsLateMost = 0.0;
+		// (sent down, every man off her within SeaShow's HurryFor of it; her scuttling charges no sooner than ChargesFrom after
+		// it, and after the last of them)
+		const double HandsGoneIn = 5.0, ChargesFrom = 6.5;
 		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9;
 		const double Step = 1.0 / 30.0;
 		double T = Rec.Views.front().Head.T;
@@ -261,6 +326,9 @@ namespace
 				}
 				for (const BoatSplash& Sp : Out.Splashes)
 				{
+					if (Sp.Kind == SplashKind::Vent) ++B.Vents;
+					if (Sp.Kind == SplashKind::Scuttle) B.ChargesAt.push_back(T);
+					if (Sp.Kind == SplashKind::Puff) ++B.Puffs;
 					if (Sp.Kind == SplashKind::Swirl)
 					{
 						++B.Swirls;
@@ -278,6 +346,89 @@ namespace
 				B.Down = Ship.Down;
 				B.bNow = true;
 				B.bSeen = true;
+				B.Struck = Ship.Struck;
+				B.bStruck = B.bStruck || Ship.Struck >= 0.0;
+				B.Heave = Out.Heave;
+				B.Pitch = Ship.Pitch;
+				B.Heel = Ship.Heel;
+				B.Heading = Ship.Heading;
+				B.At = In.At;
+				// Her white flag, as FConvoyLooks::Lay flies it: run up once the show has her up struck, streaming to leeward of
+				// the air over her, over the sea, and down once she is taken or goes.
+				FlagIn Flag;
+				if (FlagInputsOf(B.Model, B.Size, In, Out, P3(Night.Wind().X, Night.Wind().Y, 0.0), Ship.Struck, Ship.Lowered, Ship.Key, Flag))
+				{
+					const FlagOut Flown = FlagAt(Flag, T);
+					const bool bUp = Ship.Struck > FlagRaiseFor() && Ship.Lowered < 0.0, bDown = Ship.Lowered > FlagLowerFor();
+					if (bUp)
+					{
+						++FlagFrames;
+						FlagMissing += Flown.bShown ? 0 : 1;
+					}
+					if (bDown) FlagStaysUp += Flown.bShown ? 1 : 0;
+					if (Flown.bShown)
+					{
+						double Lowest = 1e9, Streamed = 0.0;
+						const double Breeze = std::hypot(Flag.Air.X, Flag.Air.Y);
+						for (int J = 0; J < FlagDown; ++J)
+						{
+							for (int I = 0; I < FlagAlong; ++I) Lowest = std::min(Lowest, Flown.Point[J][I].Z);
+							Streamed += ((Flown.Point[J][FlagAlong - 1].X - Flown.Point[J][0].X) * Flag.Air.X + (Flown.Point[J][FlagAlong - 1].Y - Flown.Point[J][0].Y) * Flag.Air.Y) /
+							        std::max(1e-9, Breeze) / FlagDown;
+						}
+						FlagUnder += Lowest < 0.5 ? 1 : 0;
+						if (bUp && Breeze > 3.0)
+						{
+							++FlagBreezy;
+							FlagWindward += Streamed < 0.5 * FlagFly() ? 1 : 0;
+						}
+					}
+				}
+			}
+			// A struck boat's crew on her casing (the show's Hands): standing, walking and running on it as the looks ride her
+			// (her drawn heave, her casing's height there with her trim and heel), and once she is sent down as the stage takes
+			// her down (its sinking, by the stern where she was scuttled); none of them, nor of her captor's party, on her or in
+			// her hatches more than HandsGoneIn after it.
+			for (const SeaShow::ManOut& Man : Night.Hands())
+			{
+				if (Man.Doing != SeaShow::Swim::Boat)
+				{
+					for (auto& [Key, B] : Boats)
+					{
+						if (!B.bNow || B.Struck < 0.0) continue;
+						const double H = B.Heading * 3.14159265358979323846 / 180.0;
+						const double Dx = Man.At.X - B.At.X, Dy = Man.At.Y - B.At.Y;
+						if (std::fabs(Dx * std::sin(H) + Dy * std::cos(H)) > 0.5 * B.Model.Long || std::fabs(Dx * std::cos(H) - Dy * std::sin(H)) > 0.5 * B.Model.Wide + 1.5) continue;
+						B.LastHandAt = T;
+						if (B.SunkAt >= 0.0 && T - B.SunkAt > HandsGoneIn + 0.5 * Step)
+						{
+							++HandsLate;
+							HandsLateMost = std::max(HandsLateMost, T - B.SunkAt);
+						}
+						break;
+					}
+				}
+				if (Man.Doing != SeaShow::Swim::Stand && Man.Doing != SeaShow::Swim::Walk && Man.Doing != SeaShow::Swim::HandsUp && Man.Doing != SeaShow::Swim::Run) continue;
+				for (const auto& [Key, B] : Boats)
+				{
+					if (!B.bNow || B.Struck < 0.0) continue;
+					const double H = B.Heading * 3.14159265358979323846 / 180.0;
+					const double Dx = Man.At.X - B.At.X, Dy = Man.At.Y - B.At.Y;
+					const double Along = Dx * std::sin(H) + Dy * std::cos(H), Across = Dx * std::cos(H) - Dy * std::sin(H);
+					if (std::fabs(Along) > 0.5 * B.Model.Long || std::fabs(Across) > 0.5 * B.Model.Wide) continue;
+					double StageDown = 0.0, StageTrim = 0.0;
+					if (B.SunkAt >= 0.0) StageSinking(T - B.SunkAt, B.Model.Top * B.Size.Up, B.bByStern, StageDown, StageTrim);
+					const double Trim = (B.Pitch + StageTrim) * 3.14159265358979323846 / 180.0, Heel = B.Heel * 3.14159265358979323846 / 180.0;
+					const double Casing = B.Heave - StageDown + CasingAt(B.Model, Along, Across) * (1.0 - 0.8 * B.Down) * std::cos(Trim) + Along * std::sin(Trim) - Across * std::sin(Heel);
+					++HandFrames;
+					if (std::fabs(Man.At.Z - Casing) > HandsWorst)
+					{
+						HandsWorst = std::fabs(Man.At.Z - Casing);
+						HandsWorstAt = T;
+						HandsWorstKey = Key;
+					}
+					break;
+				}
 			}
 			// The sea scene's men going over a boat's side: from her deck as the looks ride her (the scene lowers its height as
 			// she goes, by four fifths of her going: taken off here, so it is her deck's height the scene had).
@@ -391,10 +542,29 @@ namespace
 				// and blown; a rescue's nets kept until its time is over)
 				if (E.Kind == SeaShow::FxKind::Dive && E.What == "surface" && E.Text == "forced") Blow(Boats[E.Key].State, true);
 				if (E.Kind == SeaShow::FxKind::Dive && E.What == "dive" && Boats.count(E.Key)) Blow(Boats[E.Key].State, false);
+				// (and as it does for a boat that struck: her tanks blown as she comes up or rides; scuttled, her vents opened, she
+				// being up already)
+				if (E.Kind == SeaShow::FxKind::Surrender) Blow(Boats[E.Key].State, true);
+				if (E.Kind == SeaShow::FxKind::Sink && Boats.count(E.Key))
+				{
+					// (the stage takes her down from now: by the stern where she struck and was scuttled, as the scene tells it)
+					BoatSeen& Sent = Boats[E.Key];
+					const SeaShow::ShipOut* Her = Night.Ship(E.Key);
+					Sent.SunkAt = T;
+					Sent.bByStern = Her && SeaShow::StageEndOf(E.What, Her->Struck, Her->Lowered) == "stern";
+				}
 				if (E.Kind == SeaShow::FxKind::Sink && E.What == "scuttled" && Boats.count(E.Key))
 				{
-					ForceUp(Boats[E.Key].State, T, Boats[E.Key].State.Sub);
-					Blow(Boats[E.Key].State, true);
+					Boats[E.Key].bScuttled = true;
+					if (Boats[E.Key].Struck >= 0.0)
+					{
+						OpenVents(Boats[E.Key].State, T);
+					}
+					else
+					{
+						ForceUp(Boats[E.Key].State, T, Boats[E.Key].State.Sub);
+						Blow(Boats[E.Key].State, true);
+					}
 				}
 				if (E.Kind == SeaShow::FxKind::Rescue)
 				{
@@ -512,12 +682,63 @@ namespace
 		ShowCheck(ClimbUnnamed == 0, Said("no man climbs a ship no rescue named (%.0f man-frames)", ClimbUnnamed));
 		ShowCheck(NetsAway == 0, Said("no net down while she is under way or her rescue over and no one is on it (%.0f net-frames)", NetsAway));
 		ShowCheck(PatternBursts > 0 && AheadBursts > 0 && Stars > 0, Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars));
+		// A boat that struck (sea:surrender): her flag, her men on her casing, her vents. Where the night has none, nothing asked.
+		int StruckBoats = 0;
+		for (const auto& [Key, B] : Boats)
+		{
+			if (!B.bStruck)
+			{
+				ShowCheck(B.Vents == 0, Said("boat %.0f, which never struck, throws no air from her vents (%.0f spurts)", Key, B.Vents));
+				continue;
+			}
+			++StruckBoats;
+			ShowCheck(!B.bScuttled || B.Vents >= 3, Said("boat %.0f struck and scuttled: her vents' air along her sides as she floods (%.0f spurts)", Key, B.Vents));
+			const double FirstCharge = B.ChargesAt.empty() ? -1.0 : B.ChargesAt.front();
+			ShowCheck(B.bScuttled ? B.ChargesAt.size() == static_cast<size_t>(ScuttleCharges) && B.Puffs == ScuttleCharges : B.ChargesAt.empty() && B.Puffs == 0,
+			          Said("boat %.0f struck: her scuttling charges both go off where she was scuttled, none where not (%.0f charges, %.0f puffs)", Key, static_cast<double>(B.ChargesAt.size()), B.Puffs));
+			ShowCheck(B.ChargesAt.empty() || (B.SunkAt >= 0.0 && FirstCharge >= B.SunkAt + ChargesFrom && FirstCharge > B.LastHandAt),
+			          Said("boat %.0f: her first charge %.1f s after she was sent down, ", Key, FirstCharge - B.SunkAt) +
+			              Said("%.1f s after the last man was off her", FirstCharge - B.LastHandAt));
+		}
+		// (any boat that never struck: no charges)
+		for (const auto& [Key, B] : Boats)
+			if (!B.bStruck) ShowCheck(B.ChargesAt.empty() && B.Puffs == 0, Said("boat %.0f, which never struck, has no scuttling charge (%.0f)", Key, static_cast<double>(B.ChargesAt.size())));
+		if (StruckBoats > 0)
+		{
+			ShowCheck(FlagFrames > 0 && FlagMissing == 0 && FlagStaysUp == 0,
+			          Said("a struck boat's white flag flies from her ensign's place once the show has her up (%.0f frames, %.0f without it), and is down once hauled down (%.0f up after)", FlagFrames,
+			               FlagMissing, FlagStaysUp));
+			ShowCheck(FlagUnder == 0 && FlagWindward == 0,
+			          Said("and streams to leeward in a breeze (%.0f of %.0f breezy frames to windward), clear of the sea (%.0f frames within half a metre)", FlagWindward, FlagBreezy, FlagUnder));
+			ShowCheck(HandFrames > 0 && HandsWorst < 0.35,
+			          Said("her men on her casing stand on it as the looks ride her: %.0f man-frames, the worst %.2f m off, at %.1f s", HandFrames, HandsWorst, HandsWorstAt) +
+			              Said(" (boat %.0f)", HandsWorstKey));
+			ShowCheck(HandsLate == 0, Said("sent down, no man on her or in her hatches more than %.0f s after (%.0f man-frames, at most %.1f s)", HandsGoneIn, HandsLate, HandsLateMost));
+		}
 		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed), %d starshells\n",
 		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, Stars);
 		std::printf("  the scene's men: %d went over a boat's side, at most %.2f m off her deck as the looks ride her; %d climbed a rescuer's side, %d man-frames, every one on a net down (most nets on one "
 		            "ship %d); she stood by %.0f s; her heave while men climbed %.2f to %.2f m (the net rides it, the scene's climbers do not); the climbers %.2f to %.2f m out "
 		            "from her side as the stage draws her\n",
 		            Jumpers, JumpWorst, Climbers, ClimbFrames, MostNets, StoodBy, ClimbHeaveLow, ClimbHeaveHigh, ClimbOffDrawnLow, ClimbOffDrawnHigh);
+		if (StruckBoats > 0)
+		{
+			std::printf("  struck boats: %d; their flags %d frames up, %d breezy; their men %d man-frames on their casings, at most %.2f m off them\n", StruckBoats, FlagFrames, FlagBreezy, HandFrames,
+			            HandsWorst);
+			for (const auto& [Key, B] : Boats)
+			{
+				if (!B.bStruck) continue;
+				// (one kept afloat, a prize, was never sent down: nothing to time)
+				if (B.SunkAt < 0.0)
+				{
+					std::printf("  struck boat %d: not sent down (a prize); %d vent spurts, %d charges\n", Key, B.Vents, static_cast<int>(B.ChargesAt.size()));
+					continue;
+				}
+				std::printf("  struck boat %d: %s, sent down at %.1f s%s, the last man off her %.1f s after; %d vent spurts, %d charges (%.1f s and %.1f s after)\n", Key,
+				            B.bScuttled ? "scuttled" : "not scuttled", B.SunkAt, B.bByStern ? " by the stern" : "", B.LastHandAt - B.SunkAt, B.Vents, static_cast<int>(B.ChargesAt.size()),
+				            B.ChargesAt.empty() ? -1.0 : B.ChargesAt.front() - B.SunkAt, B.ChargesAt.size() < 2 ? -1.0 : B.ChargesAt[1] - B.SunkAt);
+			}
+		}
 		for (const auto& [Key, B] : Boats)
 		{
 			std::printf("  boat %d: worst pop %.3f m (at %.1f s); surfaced, at most %.2f m off the show's trim awash or blown (at %.1f s), %d frames riding high; the stage's model: periscope up %d frames, its head %.2f m out at"
@@ -671,6 +892,7 @@ namespace
 int main(int ArgC, char** ArgV)
 {
 	int Status = 0;
+	CheckDeckRows();
 	for (int I = 1; I < ArgC; ++I)
 	{
 		Status = std::max(Status, PlayNight(ArgV[I]));

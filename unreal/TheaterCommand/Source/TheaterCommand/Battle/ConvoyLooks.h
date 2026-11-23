@@ -46,6 +46,10 @@ namespace SeaShow
  *  - A rescue: the scrambling nets the sea scene's men climb a rescuer's side by, where they climb it and where those
  *    swimming for it will, while she stands by as the scene has it or one of them is on a net; hauled in once she is
  *    under way and no one is on them.
+ *  - A boat that strikes (sea:surrender, the show's ShipOut Struck and Lowered): riding high, her tanks blown, her white
+ *    flag run up on a staff at her ensign's place and streaming to leeward until she is taken or goes (her crew on her
+ *    casing are the sea scene's, Show::Hands); scuttled, her vents opened, the air roaring out along her sides as she
+ *    floods and the stage takes her down by the stern.
  *
  * Everything that counts is the show's (the sea scene thread's SeaShow): this only looks. The timing and the shapes
  * are plain C++ (Battle/ConvoyLooksCore, checked by Tools/convoy_looks/run.sh); here only the kit's calls (always on
@@ -72,29 +76,35 @@ public:
 	static double Steer(TUniquePtr<FConvoyLooks>& Held, USceneComponent* InRoot, AAirStage* InStage, FBattleEffects* InKit, const SeaShow::Show& InShow, double InUnitsPerMetre,
 	                    double InNow, bool bInSkip, bool& bOnWater, const SeaShow::ShipOut& Ship);
 
-	/** PlayEffects' hooks (its marked case labels): ChargeDrop, ChargeBurst, Dive, Starshell, Rescue and Sink are taken,
-	 * the rest left. bInSkip: a picture run skipping ahead (only what lasts is kept: a boat scuttled is still brought up, a
-	 * boat forced up rides high, a rescuer's nets are kept). */
+	/** PlayEffects' hooks (its marked case labels): ChargeDrop, ChargeBurst, Dive, Starshell, Rescue, Surrender and Sink are
+	 * taken, the rest left. bInSkip: a picture run skipping ahead (only what lasts is kept: a boat scuttled is still brought
+	 * up or her vents opened, a boat forced up or struck rides high, a rescuer's nets are kept). */
 	void Effect(const SeaShow::Fx& E, double InNow, bool bInSkip);
 
 private:
-	/** A boat as kept from step to step. */
+	/** A boat as kept from step to step: what the show said of her last (In), and since when she has struck as it has her
+	 * up and since when her flag has been coming down (the show's ShipOut Struck and Lowered; below 0, not). */
 	struct FBoatKept
 	{
 		ConvoyLook::BoatState State;
 		ConvoyLook::BoatModel Model;
 		ConvoyLook::Drawn Drawn;
+		ConvoyLook::BoatIn In;
 		ConvoyLook::BoatOut Out;
 		ConvoyLook::P3 At;
 		double SeenAt = -1.0;
+		double Struck = -1.0, Lowered = -1.0;
 	};
 	/** Something for the kit, due at a moment (battle time): a spout of a size row on the water, a low spurt (the kit's
-	 * Skip, along Way) or a thrower's discharge (the kit's Muzzle, along Way). */
+	 * Skip, along Way), a thrower's discharge (the kit's Muzzle, along Way), a white jet (the kit's Steam, its vent, Across
+	 * wide for Seconds, by its Id) or a smoke puff (the kit's CookOff: one pop over Seconds, Across wide, no jet). */
 	enum class EDue : uint8
 	{
 		Spout,
 		Spurt,
 		Discharge,
+		Jet,
+		Puff,
 	};
 	struct FDue
 	{
@@ -102,6 +112,8 @@ private:
 		EDue Kind = EDue::Spout;
 		ConvoyLook::P3 Where, Way;
 		FString Row;
+		double Across = 0.0, Seconds = 0.0;
+		int32 Id = 0;
 	};
 	/** A charge of a pattern or a bomb of the ahead thrower: when the pattern went in, and its shot. */
 	struct FCharge

@@ -132,6 +132,7 @@ namespace
 		case SeaShow::FxKind::Dive: return "dive";
 		case SeaShow::FxKind::Starshell: return "starshell";
 		case SeaShow::FxKind::Rescue: return "rescue";
+		case SeaShow::FxKind::Surrender: return "surrender";
 		}
 		return "?";
 	}
@@ -219,6 +220,34 @@ namespace
 		double MostManPop = 0.0;
 		std::string ManPopAt;
 		int MostMenSeen = 0, MostFloatsSeen = 0;
+		// A boat that strikes (sea:surrender): her men on her casing (Show::Hands), off it or under the sea, in another hull or
+		// in her own conning tower, the most a man of hers moved in a frame beyond his pace, the farthest one moved going over
+		// (his last place on her casing to his first in the water); frames a gun was laid and firing on her once she had
+		// struck; a prize's Down moving after she was taken, and a prize gone.
+		std::map<int, double> StruckAt;                      // by key: when the show told her striking (FxKind::Surrender)
+		std::map<int, std::pair<Vec, int>> LastHand;         // by man: where he was, and the frame
+		std::map<int, double> PrizeDown;                     // by key: her Down as she was taken
+		int HandFrames = 0, MostHands = 0, HandsOff = 0, HandsUnder = 0, HandsInHull = 0, HandsInTower = 0, HandsAtGun = 0, HandsUp = 0, Swaps = 0;
+		int FiredOnStruck = 0, PrizeDownMoved = 0, PrizesGone = 0;
+		double MostHandPop = 0.0, HandSwapWorst = 0.0;
+		std::string HandsOffFirst, HandPopAt;
+		// (her men standing too close to another of hers; a man of her crew first seen off her casing, tower and bridge; any
+		// man on her or in her hatches long after she was sent down (her Sink, struck: by key, when); her captor's whaler or
+		// a man in it in a hull, and each whaler's first height and when it reached the sea)
+		std::map<int, double> SentDownAt;
+		std::map<int, std::string> SinkEnd;                       // by key: each Sink's way and the stage's end for her ("way/end")
+		std::set<int> HandSeen;
+		std::map<int, std::pair<double, double>> WhalerLowered;  // by whaler: its first Z, the time first seen
+		std::map<int, double> WhalerAfloat;                       // by whaler: seconds from first seen to the sea
+		int HandsCrowded = 0, HandsFirstOff = 0, HandsLate = 0, WhalerInHull = 0, OarsInHull = 0, WhalersSeen = 0, MostInWhaler = 0;
+		// (every man ever on a struck boat's casing or in a captor's whaler; a struck boat's men in the water, and of them any
+		// never seen on her first; her captor's party, and of them any first seen out of his whaler without having sat in it;
+		// how many were in the whaler the last frame it was drawn)
+		std::set<int> HandEver, InWhalerEver, StruckMen, PartySeen;
+		int MenNotFromDeck = 0, PartyNotFromWhaler = 0, LastInWhaler = -1;
+		std::string NotFromDeckFirst, PartyOffFirst;
+		double CrowdLeast = 99.0, HandsLateMost = 0.0, WhalerWorst = -99.0;
+		std::string CrowdFirst, FirstOffFirst, WhalerInFirst;
 		int SinkingAhead = 0;
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
 		std::string EndWords;
@@ -541,6 +570,14 @@ namespace
 			for (const SeaShow::Fx& E : Show.Effects)
 			{
 				++Out.Fx[FxName(E.Kind)];
+				if (E.Kind == SeaShow::FxKind::Surrender && !Out.StruckAt.count(E.Key)) Out.StruckAt[E.Key] = Show.Shown();
+				if (E.Kind == SeaShow::FxKind::Sink && Out.StruckAt.count(E.Key) && !Out.SentDownAt.count(E.Key)) Out.SentDownAt[E.Key] = Show.Shown();
+				if (E.Kind == SeaShow::FxKind::Sink)
+				{
+					// (as the scene tells the stage: her way, and her end by the stern where she struck and was scuttled)
+					const SeaShow::ShipOut* Sent = Show.Ship(E.Key);
+					Out.SinkEnd[E.Key] = E.What + "/" + (Sent ? SeaShow::StageEndOf(E.What, Sent->Struck, Sent->Lowered) : std::string("?"));
+				}
 				switch (E.Kind)
 				{
 				case SeaShow::FxKind::ShellHit:
@@ -944,6 +981,191 @@ namespace
 					}
 				}
 			}
+			// A boat that strikes: each of her men on her casing (Show::Hands) on it, above the sea but in her hatches, clear of
+			// her conning tower and of every other hull, never moving faster than a man runs as she rides; going over, in the
+			// water where he left her casing. No gun laid and firing on her five seconds after she struck; a prize held.
+			{
+				const std::vector<SeaShow::ManOut>& Hands = Show.Hands();
+				Out.MostHands = std::max(Out.MostHands, static_cast<int>(Hands.size()));
+				if (!Hands.empty()) ++Out.HandFrames;
+				std::set<int> HandNow;
+				for (const SeaShow::ManOut& M : Hands)
+				{
+					HandNow.insert(M.Key);
+					// (her speed, the fastest of the struck boats, carries him as she rides; he runs at 3 m/s at the most)
+					double Fastest = 0.0;
+					for (const SeaShow::ShipOut& S : Ships)
+						if (Out.StruckAt.count(S.Key)) Fastest = std::max(Fastest, S.Speed);
+					const auto Was = Out.LastHand.find(M.Key);
+					if (Was != Out.LastHand.end() && Was->second.second == Out.Frames - 1)
+					{
+						const double Pop = (M.At - Was->second.first).Length() - ((Fastest * 1.2 + 3.5) * std::max(Dt, 0.05) + 0.05);
+						if (Pop > Out.MostHandPop)
+						{
+							Out.MostHandPop = Pop;
+							Out.HandPopAt = "man " + std::to_string(M.Key) + " at " + Num(Show.Shown(), 2) + " s, " + std::to_string(static_cast<int>(M.Doing));
+						}
+					}
+					Out.LastHand[M.Key] = { M.At, Out.Frames };
+					Out.HandEver.insert(M.Key);
+					if (M.Doing == SeaShow::Swim::Boat)
+					{
+						// (a whaler's oarsman, its coxswain, or one of its party crossing in it)
+						Out.InWhalerEver.insert(M.Key);
+						continue;
+					}
+					// (her captor's party, first seen out of the whaler: only as he steps from his seat in it)
+					if (!Out.StruckAt.count(M.Ship) && Out.PartySeen.insert(M.Key).second && !Out.InWhalerEver.count(M.Key))
+					{
+						if (!Out.PartyNotFromWhaler) Out.PartyOffFirst = "man " + std::to_string(M.Key) + " of ship " + std::to_string(M.Ship) + " at " + Num(Show.Shown(), 2) + " s";
+						++Out.PartyNotFromWhaler;
+					}
+					if (M.Doing == SeaShow::Swim::HandsUp) ++Out.HandsUp;
+					// (her: the struck boat whose frame he is in)
+					const SeaShow::ShipOut* Her = nullptr;
+					double Along = 0.0, Across = 0.0;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (!Out.StruckAt.count(S.Key)) continue;
+						const double H = S.Heading * 3.14159265358979323846 / 180.0;
+						const Vec Off(M.At.X - S.At.X, M.At.Y - S.At.Y, 0.0);
+						const double A = Off.X * std::sin(H) + Off.Y * std::cos(H), C = Off.X * std::cos(H) - Off.Y * std::sin(H);
+						if (std::fabs(A) <= 0.5 * S.Long + 1.0 && std::fabs(C) <= 0.5 * S.Beam + 1.5) { Her = &S; Along = A; Across = C; break; }
+					}
+					auto Off = [&Out, &Show, &M](const char* Why)
+					{
+						if (!Out.HandsOff) Out.HandsOffFirst = "man " + std::to_string(M.Key) + " at " + Num(Show.Shown(), 2) + " s: " + Why;
+						++Out.HandsOff;
+					};
+					if (!Her) { Off("on no struck boat"); continue; }
+					const SeaShow::BoatDeck& Row = SeaShow::DeckOf(Her->Nation);
+					// (sent down: every man off her within HurryFor, 5 s, of it, her captor's party into their whaler too)
+					const auto Sent = Out.SentDownAt.find(Her->Key);
+					if (Sent != Out.SentDownAt.end() && Show.Shown() - Sent->second > 5.0 + 1e-6)
+					{
+						++Out.HandsLate;
+						Out.HandsLateMost = std::max(Out.HandsLateMost, Show.Shown() - Sent->second);
+					}
+					// (a man of her crew first seen on her: on or under her casing (in a hatch), or on or in her tower, never over
+					// either, never beside her)
+					if (M.Ship == Her->Key && Out.HandSeen.insert(M.Key).second)
+					{
+						const double Rad = 3.14159265358979323846 / 180.0;
+						const double Over = M.At.Z - (Her->Heave - Her->Dived + Along * std::sin(Her->Pitch * Rad) - Across * std::sin(Her->Heel * Rad));
+						const bool bOnCasing = std::fabs(Along) <= 0.5 * Row.Long && std::fabs(Across) <= Row.Edge + 0.05 && Over <= SeaShow::CasingAt(Row, Along, Across) + 0.15;
+						const bool bInTower = Along >= Row.TowerAft - 0.1 && Along <= Row.TowerFore + 0.1 && std::fabs(Across) <= Row.TowerHalf + 0.05 && Over <= Row.Bridge + 0.15;
+						if (!bOnCasing && !bInTower)
+						{
+							if (!Out.HandsFirstOff)
+								Out.FirstOffFirst = "man " + std::to_string(M.Key) + " at " + Num(Show.Shown(), 2) + " s, " + Num(Along, 2) + " m along, " + Num(Across, 2) + " across, " + Num(Over, 2) + " up";
+							++Out.HandsFirstOff;
+						}
+					}
+					// (on her casing, out to its edge; his feet over the sea, but coming up her hatches or her side)
+					const bool bDeck = M.Doing != SeaShow::Swim::Hatch;
+					if (bDeck && std::fabs(Across) > Row.Edge + 0.01) Off("past her casing's edge");
+					if (bDeck && M.At.Z < 0.2) ++Out.HandsUnder;
+					if (Along > Row.TowerAft && Along < Row.TowerFore && std::fabs(Across) < Row.TowerHalf) ++Out.HandsInTower;
+					// (her deck gun's mount, half a metre across, and its barrel over it: a man's shoulders clear of both)
+					if (Along > Row.GunFrom - 0.25 && Along < Row.GunTo + 0.25 && std::fabs(Across) < 0.75) ++Out.HandsAtGun;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (&S == Her || S.Doing == SeaShow::Fate::Gone || S.Dived > 1.0) continue;
+						if (std::fabs(M.At.X - S.At.X) > S.Long || std::fabs(M.At.Y - S.At.Y) > S.Long) continue;
+						if (Inside(Vec(M.At.X, M.At.Y, 0.0), S) > 0.0) ++Out.HandsInHull;
+					}
+				}
+				// (her men standing still on her, or with their hands up, each with room of his own: none within 0.45 m of another)
+				for (size_t I = 0; I < Hands.size(); ++I)
+				{
+					const SeaShow::ManOut& A = Hands[I];
+					if (A.Doing != SeaShow::Swim::Stand && A.Doing != SeaShow::Swim::HandsUp) continue;
+					for (size_t J = I + 1; J < Hands.size(); ++J)
+					{
+						const SeaShow::ManOut& B = Hands[J];
+						if (B.Doing != SeaShow::Swim::Stand && B.Doing != SeaShow::Swim::HandsUp) continue;
+						const double Apart = Flat(A.At - B.At);
+						if (Apart >= 0.45) continue;
+						if (!Out.HandsCrowded) Out.CrowdFirst = "men " + std::to_string(A.Key) + " and " + std::to_string(B.Key) + " at " + Num(Show.Shown(), 2) + " s";
+						++Out.HandsCrowded;
+						Out.CrowdLeast = std::min(Out.CrowdLeast, Apart);
+					}
+				}
+				// (her captor's whaler, its own length and beam, and every man in it, clear of every hull afloat: round her bow or
+				// her stern, never through her or him; lowered from his davits, it reaches the sea in four to six seconds)
+				for (const SeaShow::FloatOut& W : Show.Whalers())
+				{
+					if (!Out.WhalerLowered.count(W.Key))
+					{
+						Out.WhalerLowered[W.Key] = { W.At.Z, Show.Shown() };
+						++Out.WhalersSeen;
+					}
+					if (W.At.Z <= 1e-6 && !Out.WhalerAfloat.count(W.Key)) Out.WhalerAfloat[W.Key] = Show.Shown() - Out.WhalerLowered[W.Key].second;
+					const Vec Long(std::sin(W.Heading), std::cos(W.Heading), 0.0);
+					const double Half = std::max(0.0, 0.5 * (W.Long - W.Beam));
+					const Vec Fore = Vec(W.At.X, W.At.Y, 0.0) + Long * Half, Aft = Vec(W.At.X, W.At.Y, 0.0) - Long * Half;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (S.Doing == SeaShow::Fate::Gone || S.Dived > 1.0) continue;
+						if (std::fabs(W.At.X - S.At.X) > S.Long + W.Long || std::fabs(W.At.Y - S.At.Y) > S.Long + W.Long) continue;
+						const Capsule C = HullOf(S);
+						const double Into = C.R + 0.5 * W.Beam - SegmentToSegment(Fore, Aft, C.A, C.B);
+						Out.WhalerWorst = std::max(Out.WhalerWorst, Into);
+						if (Into > 0.0)
+						{
+							if (!Out.WhalerInHull) Out.WhalerInFirst = "whaler " + std::to_string(W.Key) + " in ship " + std::to_string(S.Key) + " at " + Num(Show.Shown(), 2) + " s, " + Num(Into, 2) + " m";
+							++Out.WhalerInHull;
+						}
+					}
+				}
+				int InWhaler = 0;
+				for (const SeaShow::ManOut& M : Hands)
+				{
+					if (M.Doing != SeaShow::Swim::Boat) continue;
+					++InWhaler;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (S.Doing == SeaShow::Fate::Gone || S.Dived > 1.0) continue;
+						if (std::fabs(M.At.X - S.At.X) > S.Long || std::fabs(M.At.Y - S.At.Y) > S.Long) continue;
+						if (Inside(Vec(M.At.X, M.At.Y, 0.0), S) > 0.0) ++Out.OarsInHull;
+					}
+				}
+				Out.MostInWhaler = std::max(Out.MostInWhaler, InWhaler);
+				if (!Show.Whalers().empty()) Out.LastInWhaler = InWhaler;
+				// (a struck boat's man in the water: seen on her casing or in her hatches first, never there from nothing)
+				for (const SeaShow::ManOut& M : Show.Men())
+				{
+					if (!Out.StruckAt.count(M.Ship) || !Out.StruckMen.insert(M.Key).second || Out.HandEver.count(M.Key)) continue;
+					if (!Out.MenNotFromDeck)
+						Out.NotFromDeckFirst = "man " + std::to_string(M.Key) + " of ship " + std::to_string(M.Ship) + " at " + Num(Show.Shown(), 2) + " s, " +
+						                       std::to_string(static_cast<int>(M.Doing));
+					++Out.MenNotFromDeck;
+				}
+				// (gone over: his first place in the water against his last on her casing)
+				for (const SeaShow::ManOut& M : Show.Men())
+				{
+					const auto Was = Out.LastHand.find(M.Key);
+					if (Was == Out.LastHand.end() || HandNow.count(M.Key)) continue;
+					if (Was->second.second == Out.Frames - 1)
+					{
+						Out.HandSwapWorst = std::max(Out.HandSwapWorst, (M.At - Was->second.first).Length());
+						++Out.Swaps;
+					}
+					Out.LastHand.erase(Was);
+				}
+				for (const SeaShow::ShipOut& S : Ships)
+				{
+					if (S.bFiring && S.Aim >= 0)
+					{
+						const auto On = Out.StruckAt.find(S.Aim);
+						if (On != Out.StruckAt.end() && Show.Shown() > On->second + 5.0) ++Out.FiredOnStruck;
+					}
+					if (!S.bPrize) continue;
+					const auto Held = Out.PrizeDown.find(S.Key);
+					if (Held == Out.PrizeDown.end()) Out.PrizeDown[S.Key] = S.Down;
+					else if (std::fabs(S.Down - Held->second) > 1e-6) ++Out.PrizeDownMoved;
+				}
+			}
 			for (const SeaShow::PlaneOut& P : Show.Planes())
 			{
 				auto Was = LastPlane.find(P.Key);
@@ -1015,6 +1237,11 @@ namespace
 
 		for (const SeaShow::ShipOut& S : Show.Ships())
 			if (S.Doing != SeaShow::Fate::Sinking) Out.EndAt[S.Key] = S.At;
+		for (const auto& Held : Out.PrizeDown)
+		{
+			const SeaShow::ShipOut* Prize = Show.Ship(Held.first);
+			if (!Prize || Prize->Doing == SeaShow::Fate::Gone || !Prize->bPrize) ++Out.PrizesGone;
+		}
 		Out.EndWords = Show.Describe();
 		Out.Check = Show.Checked();
 		Out.Guns = Show.Guns();
@@ -1137,6 +1364,41 @@ int main(int Argc, char** Argv)
 	Track << "t,kind,key,piece,side,class,nation,x,y,z,heading,heel,speed,doing,extra\n";
 	// (the player's side as the game takes it, the first view's "me": an enemy boat drawn only once found, SetMine)
 	const int Player = SeaFeed::SideOf(Rec.Views.front().Head.Me);
+	// A boat that strikes (sea:surrender, the naval rules behind their subSurrender switch): each told, how she ends (sunk
+	// scuttled after it; or taken, none), the rescues sent to her men, and anything of the fight on her after it (a hit, a
+	// pattern, a gun's action or a line engaged on her piece, a view's gun on it): the rules cease fire on her.
+	int SurrenderTold = 0, CapturedTold = 0, ScuttledStruck = 0, RescueOnStruck = 0, FoughtOnStruck = 0;
+	{
+		std::map<int, std::pair<double, std::string>> StruckOf;
+		std::set<int> SunkAfter;
+		for (const SeaFeed::Frame& F : Rec.Views)
+			for (const SeaShow::Event& E : F.Events)
+				if (E.What == "sea:surrender" && !StruckOf.count(E.Unit))
+				{
+					++SurrenderTold;
+					StruckOf[E.Unit] = { E.T, E.How };
+				}
+		auto After = [&StruckOf](int Unit, double T) { const auto It = StruckOf.find(Unit); return It != StruckOf.end() && T > It->second.first + 1e-9; };
+		for (const SeaFeed::Frame& F : Rec.Views)
+		{
+			for (const SeaShow::Piece& Pc : F.Pieces)
+				if ((Pc.Engaged >= 0 && After(Pc.Engaged, F.Head.T)) || (Pc.GunOn >= 0 && After(Pc.GunOn, F.Head.T))) ++FoughtOnStruck;
+			for (const SeaShow::Event& E : F.Events)
+			{
+				if (E.What == "sea:sunk" && After(E.Unit, E.T - 1e-6))
+				{
+					SunkAfter.insert(E.Unit);
+					if (E.How == "scuttled") ++ScuttledStruck;
+				}
+				if (E.What == "sea:rescue" && (After(E.WreckOf, E.T) || After(E.On, E.T))) ++RescueOnStruck;
+				if (((E.What == "sea:gunHit" || E.What == "sea:depthChargeHit" || E.What == "sea:torpedoHit") && After(E.Unit, E.T)) ||
+				    ((E.What == "sea:depthCharge" || (E.What == "sea:gun" && E.Why != "cease")) && After(E.On, E.T)))
+					++FoughtOnStruck;
+			}
+		}
+		for (const auto& Pair : StruckOf)
+			if (Pair.second.second == "captured" && !SunkAfter.count(Pair.first)) ++CapturedTold;
+	}
 	const Played P = Play(Rec, Fps, &Track, Player);
 	const Played Again = Play(Rec, Fps, nullptr, Player);
 	const Played Half = Play(Rec, Fps * 0.5, nullptr, Player);
@@ -1172,6 +1434,11 @@ int main(int Argc, char** Argv)
 	            "%d pushed aside by a ship, %d dead gone under for room; %d floats (%d rafts, %d boats), %d slicks (%d alight)\n",
 	            C.Wrecks, C.WrecksManned, C.WrecksDue, C.MenReal, C.MenKept, C.MenReal ? 100.0 * C.MenKept / C.MenReal : 100.0, C.MostMen, P.MostMenSeen, C.MenDead, C.MenPicked,
 	            C.MenSwept, C.MenUnder, C.Floats, C.Rafts, C.Boats, C.Slicks, C.SlicksAlight);
+	if (SurrenderTold > 0)
+		std::printf("  boats struck: %d of %d told (%d unmatched); %d men out on their casings (%d at once at the most, %d man-frames with hands up), %d over from them of %d, "
+		            "%d prisoners, %d prizes (%d boarders below); worst hand step %.2f m beyond his pace (%s), over the side %.2f m (%d)\n",
+		            C.Struck, SurrenderTold, C.StruckUnmatched, C.HandsOut, P.MostHands, P.HandsUp, C.OverFromDeck, C.MenOfStruck, C.Prisoners, C.Prizes, C.BoardersBelow,
+		            P.MostHandPop, P.HandPopAt.empty() ? "none" : P.HandPopAt.c_str(), P.HandSwapWorst, P.Swaps);
 	std::printf("  worst turn: %s; rudder: %s; heel: %s; lead: %s; off the track: %s; stations kept up to %.0f m off the battle's place\n", C.TurnWorst.c_str(),
 	            C.RudderWorst.c_str(), C.HeelWorst.c_str(), C.LeadWorst.c_str(), C.GapWorst.c_str(), C.MostKeep);
 	if (P.MostPlanePop > 0.0) std::printf("  worst aircraft step: %s\n", P.PlanePopAt.c_str());
@@ -1326,6 +1593,66 @@ int main(int Argc, char** Argv)
 		                       std::to_string(C.OilMatched) + " of " + std::to_string(OilTold) + " oil",
 		                   "all" });
 		Limits.push_back({ "no more men drawn picked up than the battle's count of them", C.PickedOver == 0, std::to_string(C.PickedOver) + " over", "0" });
+	}
+	// A boat that strikes (sea:surrender). Where the recording tells none, nothing here is asked.
+	if (SurrenderTold > 0)
+	{
+		const auto Scuttled = C.SinksBy.find("scuttled");
+		const int ScuttledShown = Scuttled != C.SinksBy.end() ? Scuttled->second : 0;
+		Limits.push_back({ "every boat that strikes shown struck, her crew out on her casing", C.Struck == SurrenderTold && C.SurrenderEvents == SurrenderTold && C.StruckUnmatched == 0 && C.HandsOut > 0,
+		                   std::to_string(C.Struck) + " of " + std::to_string(SurrenderTold) + " (" + std::to_string(C.StruckUnmatched) + " unmatched), " + std::to_string(C.HandsOut) + " men out",
+		                   "all, men out" });
+		Limits.push_back({ "a struck boat's men on her casing: on it and over the sea, in no other hull, never in her tower",
+		                   P.HandsOff == 0 && P.HandsUnder == 0 && P.HandsInHull == 0 && P.HandsInTower == 0,
+		                   std::to_string(P.HandsOff) + " off her" + (P.HandsOff ? " (first " + P.HandsOffFirst + ")" : std::string()) + ", " + std::to_string(P.HandsUnder) + " under the sea, " +
+		                       std::to_string(P.HandsInHull) + " in another hull, " + std::to_string(P.HandsInTower) + " in her tower",
+		                   "0, 0, 0, 0" });
+		Limits.push_back({ "a struck boat's men clear of her deck gun's mount and barrel", P.HandsAtGun == 0, std::to_string(P.HandsAtGun) + " man-frames in it", "0" });
+		Limits.push_back({ "a struck boat's men standing on her each with room of his own (none within 0.45 m of another)", P.HandsCrowded == 0,
+		                   std::to_string(P.HandsCrowded) + " pairs" + (P.HandsCrowded ? " (first " + P.CrowdFirst + ", " + Num(P.CrowdLeast, 2) + " m)" : std::string()), "0" });
+		Limits.push_back({ "a struck boat's crew first seen on or in her: her casing or a hatch, her tower or her bridge", P.HandsFirstOff == 0,
+		                   std::to_string(P.HandsFirstOff) + " not" + (P.HandsFirstOff ? " (first " + P.FirstOffFirst + ")" : std::string()), "0" });
+		Limits.push_back({ "a struck boat's men in the water each seen on her first: up a hatch and over her side, none there from nothing", P.MenNotFromDeck == 0 && !P.StruckMen.empty(),
+		                   std::to_string(P.MenNotFromDeck) + " of " + std::to_string(P.StruckMen.size()) + " never on her" +
+		                       (P.MenNotFromDeck ? " (first " + P.NotFromDeckFirst + ")" : std::string()),
+		                   "0 of some" });
+		Limits.push_back({ "a captor's boarding party crosses in his whaler: each first seen in it, and out of it only from his seat", P.PartyNotFromWhaler == 0,
+		                   std::to_string(P.PartyNotFromWhaler) + " of " + std::to_string(P.PartySeen.size()) + " not" +
+		                       (P.PartyNotFromWhaler ? " (first " + P.PartyOffFirst + ")" : std::string()),
+		                   "0" });
+		Limits.push_back({ "a struck boat sent down: no man on her or in her hatches more than 5 s after (HurryFor)", P.HandsLate == 0,
+		                   std::to_string(P.HandsLate) + " man-frames" + (P.HandsLate ? " (up to " + Num(P.HandsLateMost, 2) + " s after)" : std::string()) + ", " +
+		                       std::to_string(P.SentDownAt.size()) + " sent down",
+		                   "0" });
+		bool bLowered = true;
+		std::string LoweredWords;
+		for (const auto& Lowered : P.WhalerLowered)
+		{
+			const auto Afloat = P.WhalerAfloat.find(Lowered.first);
+			const double Took = Afloat != P.WhalerAfloat.end() ? Afloat->second : -1.0;
+			bLowered = bLowered && Lowered.second.first >= 1.0 && Took >= 4.0 && Took <= 6.0;
+			LoweredWords += (LoweredWords.empty() ? "" : "; ") + Num(Lowered.second.first, 2) + " m, " + Num(Took, 2) + " s";
+		}
+		Limits.push_back({ "a captor's whaler lowered from his davits to the sea in 4 to 6 s", bLowered, LoweredWords.empty() ? std::string("none") : LoweredWords, "1 m up or more; 4 to 6 s" });
+		Limits.push_back({ "a captor's whaler and every man in it clear of every hull afloat (round her bow or stern, never through)", P.WhalerInHull == 0 && P.OarsInHull == 0,
+		                   std::to_string(P.WhalerInHull) + " whaler-frames in a hull" + (P.WhalerInHull ? " (first " + P.WhalerInFirst + ")" : std::string()) + ", " +
+		                       std::to_string(P.OarsInHull) + " man-frames; nearest " + Num(-P.WhalerWorst, 2) + " m clear",
+		                   "0, 0" });
+		Limits.push_back({ "a struck boat's men never jump (a man's pace as she rides; over the side from where he stood)", P.MostHandPop <= 0.0 && P.HandSwapWorst <= 0.5,
+		                   Num(P.MostHandPop, 2) + " m beyond his pace" + (P.MostHandPop > 0.0 ? " (" + P.HandPopAt + ")" : std::string()) + ", " + Num(P.HandSwapWorst, 2) + " m going over",
+		                   "none, 0.5 m or less" });
+		Limits.push_back({ "every man of a struck boat goes over from her casing", C.OverFromDeck == C.MenOfStruck && C.MenOfStruck > 0 && P.Swaps > 0,
+		                   std::to_string(C.OverFromDeck) + " of " + std::to_string(C.MenOfStruck) + " (" + std::to_string(P.Swaps) + " seen going)", "all, some" });
+		Limits.push_back({ "nothing of the fight on a boat once she has struck: no gun laid on her, nothing told on her", P.FiredOnStruck == 0 && FoughtOnStruck == 0,
+		                   std::to_string(P.FiredOnStruck) + " frames a gun fired on her, " + std::to_string(FoughtOnStruck) + " told", "0, 0" });
+		Limits.push_back({ "a struck boat the battle scuttles goes down scuttled; one taken stays afloat a prize, held as taken",
+		                   ScuttledShown >= ScuttledStruck && C.Prizes == CapturedTold && P.PrizeDownMoved == 0 && P.PrizesGone == 0,
+		                   std::to_string(ScuttledShown) + " scuttled (" + std::to_string(ScuttledStruck) + " told after striking), " + std::to_string(C.Prizes) + " of " +
+		                       std::to_string(CapturedTold) + " prizes (" + std::to_string(C.BoardersBelow) + " boarders below), " + std::to_string(P.PrizeDownMoved) + " frames moved, " +
+		                       std::to_string(P.PrizesGone) + " gone",
+		                   "all; all, 0, 0" });
+		Limits.push_back({ "a struck boat's men picked up by the other side where the battle sends a rescue to them", RescueOnStruck == 0 || C.Prisoners > 0,
+		                   std::to_string(C.Prisoners) + " prisoners (" + std::to_string(RescueOnStruck) + " rescues told)", "some where told" });
 	}
 	// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): their rounds only where the battle says, as the
 	// show counts them; their misses small columns; every hit told of them drawn on the ship struck, soon. Where the
@@ -1653,8 +1980,8 @@ int main(int Argc, char** Argv)
 				// The rules the night does not show by themselves, each on the night changed for it: Escort 1's contact on
 				// Boat B closed by an ahead-thrown run of its at 150 (no loss told after one: she is let go FoundFor after the
 				// run) and its loss told only at 250, after that (in sight FoundFor from the loss, as from any); and Boat C given
-				// up at 200 on the surface (in sight to her end, whatever she does after: here she dives at 240 as before). The
-				// recording's own reading of each (FindsOf) holds there too.
+				// up at 200 on the surface (in sight to her end, whatever she does after: struck, she stays up through the dive
+				// told at 240, her colours down). The recording's own reading of each (FindsOf) holds there too.
 				SeaFeed::Recording Changed = Rec;
 				for (SeaFeed::Frame& F : Changed.Views)
 				{
@@ -1707,6 +2034,68 @@ int main(int Argc, char** Argv)
 			Limits.push_back({ "as the other side: his enemy's boats hidden until found", Flip.EnemyBoats > 0 && Flip.UnseenFrames > 0,
 			                   std::to_string(Flip.EnemyBoats) + " boats, " + std::to_string(Flip.UnseenFrames) + " ship-frames hidden", "some" });
 			HideLimits(Flip, FlipAgain, FlipHalf, true);
+		}
+		if (Rec.Key == "wolf-pack-surrender")
+		{
+			// A struck boat the battle sends down with no way said (its own sea:sunk names none): her crew's way, scuttled, by
+			// the stern as the stage takes her, as when it says so; on the night as recorded and with Boat A's way left out.
+			SeaFeed::Recording Unsaid = Rec;
+			int Cleared = 0;
+			for (SeaFeed::Frame& F : Unsaid.Views)
+				for (SeaShow::Event& E : F.Events)
+					if (E.What == "sea:sunk" && E.Unit == 30 && !E.How.empty())
+					{
+						E.How.clear();
+						++Cleared;
+					}
+			const Played Q = Play(Unsaid, Fps, nullptr, Player);
+			auto EndsOf = [](const Played& Of, int& OutStruck, int& OutStern)
+			{
+				std::string Words;
+				OutStruck = OutStern = 0;
+				for (const auto& Sent : Of.SinkEnd)
+				{
+					if (!Of.StruckAt.count(Sent.first)) continue;
+					++OutStruck;
+					OutStern += Sent.second == "scuttled/stern" ? 1 : 0;
+					Words += (Words.empty() ? "" : ", ") + std::to_string(Sent.first) + " " + Sent.second;
+				}
+				return Words;
+			};
+			int Struck = 0, Stern = 0, UnsaidStruck = 0, UnsaidStern = 0;
+			const std::string Said = EndsOf(P, Struck, Stern), UnsaidWords = EndsOf(Q, UnsaidStruck, UnsaidStern);
+			Limits.push_back({ "a struck boat sent down scuttled, by the stern, its way said or not", Cleared == 1 && Struck > 0 && Stern == Struck && UnsaidStruck == Struck && UnsaidStern == Struck,
+			                   Said + "; its way left out: " + UnsaidWords, "scuttled/stern each, both" });
+			// A prize the battle sends down after all (Boat B, at 500, no way said): her captor's party, below and on her, back
+			// into their whaler (seated, its crew of seven and five), none counted among her men nor going over her side, none
+			// on her more than HurryFor after; she goes scuttled, by the stern.
+			SeaFeed::Recording Lost = Rec;
+			for (SeaFeed::Frame& F : Lost.Views)
+			{
+				if (F.Head.T < 500.0 - 1e-9) continue;
+				SeaShow::Event E;
+				E.T = 500.0;
+				E.What = "sea:sunk";
+				E.Unit = 31;
+				E.Side = 0;
+				E.Ship = 1;
+				F.Events.push_back(E);
+				break;
+			}
+			const Played R = Play(Lost, Fps, nullptr, Player);
+			int LostStruck = 0, LostStern = 0;
+			const std::string LostWords = EndsOf(R, LostStruck, LostStern);
+			// (its crew of seven and its party of five cross in it; taken, it lies alongside her with its crew, its party on her
+			// or below; sent down, it goes home with all twelve)
+			const bool bBack = P.MostInWhaler == 12 && R.MostInWhaler == 12 && P.LastInWhaler == 7 && R.LastInWhaler == 12 && R.Check.HandsOut == P.Check.HandsOut &&
+			                   R.Check.OverFromDeck == R.Check.MenOfStruck && R.HandsLate == 0;
+			Limits.push_back({ "a prize sent down after all: her captor's party back in their whaler, never her crew, off her within HurryFor; scuttled, by the stern",
+			                   bBack && LostStruck == 2 && LostStern == 2,
+			                   std::to_string(R.MostInWhaler) + " in the whaler at the most, " + std::to_string(R.LastInWhaler) + " going home (" + std::to_string(P.MostInWhaler) +
+			                       " as taken, " + std::to_string(P.LastInWhaler) + " left in it alongside her), " + std::to_string(R.Check.HandsOut) + " of her men out (" +
+			                       std::to_string(P.Check.HandsOut) + "), " + std::to_string(R.Check.OverFromDeck) + " of " + std::to_string(R.Check.MenOfStruck) + " over from her casing, " +
+			                       std::to_string(R.HandsLate) + " man-frames late; " + LostWords,
+			                   "12, 12 (12, 7), the same, all, 0; scuttled/stern each" });
 		}
 	}
 	// The tug-of-war bar (release 2; the UI director's ruling, 21 November): the knot each view gives, from the

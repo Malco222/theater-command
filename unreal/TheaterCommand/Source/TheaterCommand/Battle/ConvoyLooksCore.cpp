@@ -53,6 +53,31 @@ namespace ConvoyLook
 		 * s, from SwirlFrom to SwirlTo metres across; fainter the deeper (by e each SwirlFade metres under periscope
 		 * depth), none under SwirlLeast of light. */
 		constexpr double SwirlEvery = 2.5, SwirlLast = 9.0, SwirlFrom = 3.0, SwirlTo = 13.0, SwirlFade = 50.0, SwirlLeast = 0.03;
+		/** [EST] Scuttled after she struck: her vents' air and spray along her sides, a spurt each VentEvery s, side about,
+		 * for VentSeconds as she floods (a boat flooded through her vents in well under a minute). */
+		constexpr double VentSeconds = 25.0, VentEvery = 1.5;
+		/** [EST] Her main vents on top of her saddle tanks, this far under her casing amidships and out at 0.45 of her beam;
+		 * each spurt a white jet VentMouth across, blowing VentBlows s (the next comes VentEvery s on, from the other side). */
+		constexpr double VentUnder = 1.0, VentMouth = 0.4, VentBlows = 2.0;
+		/** [EST] Her scuttling charges: the after one 7 s after her vents were opened, the fore one 2.5 s later (her crew
+		 * all over her side by then, SeaShow's HurryFor and a second), small charges set below to hole her: a muffled heave
+		 * of white water ChargeOut m out from her side, and smoke from the hatch over it, ChargeMouth across. */
+		constexpr double ChargeAfter[2] = { 7.0, 9.5 }, ChargeOut = 0.8, ChargeMouth = 0.6, ChargePop = 0.4;
+		/** [EST] Her white flag: a 2 m staff (a boat-hook stepped at her ensign's place: long enough that the sheet hanging in
+		 * a calm stays clear of her bridge), a sheet 1.1 m in the fly and 0.7 in the hoist (a bedsheet or a tablecloth, what a
+		 * boat had), run up in 3 s, hauled down in 4; it streams out fully from a breeze of FlagStreams m/s, from FlagStill up. */
+		constexpr double StaffLong = 2.0, SheetFly = 1.1, SheetHoist = 0.7, RaiseSeconds = 3.0, LowerSeconds = 4.0, FlagStill = 0.5, FlagStreams = 4.5;
+		/** [EST] Never lower than this over the staff's foot, the sheet hanging in a calm. */
+		constexpr double FlagClear = 0.15;
+
+		double Dot(const P3& A, const P3& B) { return A.X * B.X + A.Y * B.Y + A.Z * B.Z; }
+		P3 Cross(const P3& A, const P3& B) { return P3(A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X); }
+		/** A way of length one; Else where it has none. */
+		P3 Unit(const P3& Way, const P3& Else)
+		{
+			const double L = std::sqrt(Dot(Way, Way));
+			return L > 1e-9 ? Way * (1.0 / L) : Else;
+		}
 	}
 
 	P3 AheadOf(double HeadingDeg)
@@ -121,6 +146,13 @@ namespace ConvoyLook
 		M.Top = M.ScopeTop;
 		// (the stem rakes forward from the waterline at half her length to the deck 2 m on: its spray from between)
 		M.BowAlong = Hull * 0.5 + Rake * 0.5;
+		// (no ensign staff on it: her white flag is stepped at her bridge's after end; her casing its flat deck)
+		M.EnsignAlong = M.TowerAft;
+		M.EnsignTop = M.TowerTop + 0.2;
+		M.Casing = Deck;
+		// (no hatches on it: where the modeller's boats have theirs, by her length)
+		M.ForeHatch = 0.12 * Hull;
+		M.AftHatch = -0.18 * Hull;
 		return M;
 	}
 
@@ -140,6 +172,12 @@ namespace ConvoyLook
 			M.WireAlong = 0.0; M.WireTop = 5.94; M.GunAlong = -5.95; M.GunTop = 4.74;
 			M.ScopeAlong = -0.2; M.ScopeTop = 10.49; M.LowAlong = -1.2; M.LowTop = 5.79;
 			M.BowAlong = 31.3;
+			// (her ensign's staff on her bridge's after rim, 3.4 aft at 5.62 m; her casing fore and aft of her tower, its
+			// height fitted to the file where her men stand; her 88's mount and barrel stowed forward, 10.85 to 15.55)
+			M.EnsignAlong = -3.4; M.EnsignTop = 5.62;
+			M.Casing = 1.58; M.RiseFrom = 3.0; M.Rise = 0.0087; M.Fall = 0.051; M.Edge = 1.2;
+			M.ForeFrom = 4.5; M.ForeTo = 10.0; M.AftFrom = -20.0; M.AftTo = -7.5; M.GunFrom = 10.85; M.GunTo = 15.55;
+			M.ForeHatch = 8.0; M.AftHatch = -12.2;
 		}
 		else if (File == "Submarine_USA")
 		{
@@ -152,6 +190,11 @@ namespace ConvoyLook
 			M.WireAlong = 2.4; M.WireTop = 9.04; M.GunAlong = 8.65; M.GunTop = 5.81;
 			M.ScopeAlong = 2.4; M.ScopeTop = 11.79; M.LowAlong = 1.4; M.LowTop = 7.09;
 			M.BowAlong = 44.5;
+			// (her ensign's staff 5.2 aft at 6.92 m; her deck gun aft of her tower, its barrel stowed aft, -17.05 to -12.35)
+			M.EnsignAlong = -5.2; M.EnsignTop = 6.92;
+			M.Casing = 2.54; M.RiseFrom = 9.0; M.Rise = 0.0202; M.Fall = 0.031; M.Edge = 1.9;
+			M.ForeFrom = 10.0; M.ForeTo = 21.0; M.AftFrom = -24.0; M.AftTo = -6.0; M.GunFrom = -17.05; M.GunTo = -12.35;
+			M.ForeHatch = 13.5; M.AftHatch = -12.0;
 		}
 		else if (File == "Submarine")
 		{
@@ -163,6 +206,11 @@ namespace ConvoyLook
 			M.WireAlong = 0.4; M.WireTop = 6.44; M.GunAlong = -7.25; M.GunTop = 5.12;
 			M.ScopeAlong = 0.4; M.ScopeTop = 10.99; M.LowAlong = -0.6; M.LowTop = 6.29;
 			M.BowAlong = 37.5;
+			// (her ensign's staff 4.7 aft at 6.12 m; her deck gun forward, 13.35 to 18.05)
+			M.EnsignAlong = -4.7; M.EnsignTop = 6.12;
+			M.Casing = 1.90; M.RiseFrom = 5.0; M.Rise = 0.0122; M.Fall = 0.042; M.Edge = 1.5;
+			M.ForeFrom = 5.5; M.ForeTo = 12.5; M.AftFrom = -24.0; M.AftTo = -8.5; M.GunFrom = 13.35; M.GunTo = 18.05;
+			M.ForeHatch = 10.0; M.AftHatch = -13.5;
 		}
 		else
 		{
@@ -171,6 +219,11 @@ namespace ConvoyLook
 		M.Name = "Ships/" + File;
 		M.Top = M.ScopeTop;
 		return M;
+	}
+
+	double CasingAt(const BoatModel& M, double Along, double Across)
+	{
+		return M.Casing + M.Rise * std::max(0.0, Along - M.RiseFrom) - M.Fall * Across * Across;
 	}
 
 	Drawn DrawnOf(const BoatModel& M, double HullLong, double HullBeam)
@@ -192,6 +245,156 @@ namespace ConvoyLook
 
 	double BlowFor() { return BlowSeconds; }
 	double SwirlLife() { return SwirlLast; }
+
+	double VentFor() { return VentSeconds; }
+
+	void OpenVents(BoatState& S, double T)
+	{
+		if (S.VentsAt >= 0.0)
+		{
+			return;
+		}
+		S.VentsAt = T;
+		S.NextVent = T;
+	}
+
+	double ScuttleChargeAt(int K) { return K >= 0 && K < ScuttleCharges ? ChargeAfter[K] : -1.0; }
+
+	void StageSinking(double T, double High, bool bByStern, double& OutDepth, double& OutPitch)
+	{
+		// (the stage's own: Under = High + 40, Depth = Under * EaseIn(T / 70), Pitch = 14 * Down * Ease(T / 35), its Down -1
+		// for "stern", where a plus pitch lifts her stern; here plus is her bow up, so by the stern is plus)
+		const double In = Clamp(T / 70.0, 0.0, 1.0), Over = Clamp(T / 35.0, 0.0, 1.0);
+		OutDepth = (High + 40.0) * In * In;
+		OutPitch = bByStern ? 14.0 * Over * Over * (3.0 - 2.0 * Over) : 0.0;
+	}
+
+	SplashKit KitOf(const BoatSplash& Sp)
+	{
+		SplashKit K;
+		K.Where = Sp.At;
+		K.Way = Unit(Sp.Way, P3(0.0, 0.0, 1.0));
+		switch (Sp.Kind)
+		{
+		case SplashKind::Feather:
+		case SplashKind::Bow:
+			K.Call = KitCall::Spurt;
+			K.Way = Unit(P3(Sp.Way.X, Sp.Way.Y, 0.0), P3(1.0, 0.0, 0.0));
+			break;
+		case SplashKind::Vent:
+		case SplashKind::Puff:
+			// (out of the sea: her vent's white jet straight up off her saddle tank, or the charge's smoke out of the hatch; under
+			// it already, the air or the smoke comes up as white water on the sea over it)
+			if (Sp.At.Z > 0.1)
+			{
+				K.Call = Sp.Kind == SplashKind::Vent ? KitCall::Jet : KitCall::Puff;
+				K.Across = Sp.Kind == SplashKind::Vent ? VentMouth : ChargeMouth;
+				K.Seconds = Sp.Kind == SplashKind::Vent ? VentBlows : ChargePop;
+				break;
+			}
+			K.Call = KitCall::Spout;
+			K.Where = P3(Sp.At.X, Sp.At.Y, 0.0);
+			K.Row = "churn";
+			break;
+		case SplashKind::Wash:
+		case SplashKind::Swirl:
+		case SplashKind::Scuttle:
+			// (the water off her casing, the swirl where her bridge went under, a charge's muffled heave: the kit's churn, its foam
+			// lasting, no flash)
+			K.Call = KitCall::Spout;
+			K.Where = P3(Sp.At.X, Sp.At.Y, 0.0);
+			K.Row = "churn";
+			break;
+		}
+		return K;
+	}
+
+	double FlagStaff() { return StaffLong; }
+	double FlagFly() { return SheetFly; }
+	double FlagHoist() { return SheetHoist; }
+	double FlagRaiseFor() { return RaiseSeconds; }
+	double FlagLowerFor() { return LowerSeconds; }
+
+	P3 UpOf(double HeadingDeg, double PitchDeg)
+	{
+		const double Trim = (std::isfinite(PitchDeg) ? Clamp(PitchDeg, -30.0, 30.0) : 0.0) * LookPi / 180.0;
+		return AheadOf(HeadingDeg) * (-std::sin(Trim)) + P3(0.0, 0.0, std::cos(Trim));
+	}
+
+	P3 EnsignAt(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out)
+	{
+		// (her model as the stage draws it: stretched, lifted by her heave and turned by her trim about her waterline
+		// amidships, bow up: what is forward rises, what is up leans aft)
+		const double Trim = (std::isfinite(In.Pitch) ? Clamp(In.Pitch, -30.0, 30.0) : 0.0) * LookPi / 180.0;
+		const double Along = M.EnsignAlong * D.Along, Up = M.EnsignTop * D.Up;
+		const P3 Level = P3(In.At.X, In.At.Y, 0.0) + AheadOf(In.Heading) * (Along * std::cos(Trim) - Up * std::sin(Trim));
+		return P3(Level.X, Level.Y, Out.Heave + Up * std::cos(Trim) + Along * std::sin(Trim));
+	}
+
+	FlagOut FlagAt(const FlagIn& In, double Now)
+	{
+		FlagOut F;
+		if (In.Since < 0.0)
+		{
+			return F;
+		}
+		const double Raised = Clamp(In.Since / RaiseSeconds, 0.0, 1.0);
+		const double Lowered = In.Lowered >= 0.0 ? Clamp(In.Lowered / LowerSeconds, 0.0, 1.0) : 0.0;
+		const double Hoisted = Raised * (1.0 - Lowered);
+		if (Hoisted <= 0.0)
+		{
+			return F;
+		}
+		F.bShown = true;
+		const P3 Up = Unit(In.Up, P3(0.0, 0.0, 1.0));
+		F.Head = In.Foot + Up * StaffLong;
+		// (the air over her, level: the way the sheet streams, and how much it streams, by the breeze)
+		const P3 Level(In.Air.X, In.Air.Y, 0.0);
+		const double Breeze = std::sqrt(Dot(Level, Level));
+		const double Stream = Clamp((Breeze - FlagStill) / (FlagStreams - FlagStill), 0.0, 1.0);
+		const P3 Lee = Unit(Level, P3(1.0, 0.0, 0.0));
+		// (out to leeward, drooping as it falls light; in a calm, down beside the staff, a touch to leeward)
+		const P3 Fly = Unit(Lee * (0.1 + Stream) - Up * (1.0 - Stream), Lee);
+		// (its ripple across the way it streams, level)
+		const P3 Flap = Unit(Cross(Up, Lee), P3(0.0, 1.0, 0.0));
+		const double Hz = std::min(3.0, 0.6 + 0.15 * Breeze), Phase = Hash01(In.Seed) * 2.0 * LookPi;
+		// (its head runs up the staff as it is hoisted, and down it as it is hauled down)
+		const P3 Luff = F.Head - Up * ((1.0 - Hoisted) * (StaffLong - SheetHoist));
+		for (int J = 0; J < FlagDown; ++J)
+		{
+			for (int I = 0; I < FlagAlong; ++I)
+			{
+				const double U = static_cast<double>(I) / (FlagAlong - 1), V = static_cast<double>(J) / (FlagDown - 1);
+				const double Wave = 0.12 * U * (0.3 + 0.7 * Stream) * std::sin(2.0 * LookPi * (Hz * Now - 1.2 * U) + Phase);
+				P3 P = Luff - Up * (V * SheetHoist) + Fly * (U * SheetFly) + Flap * Wave;
+				// (never under the staff's foot: hanging in a calm, or as it comes down, it lies on her bridge's rail)
+				const double Over = Dot(P - In.Foot, Up);
+				if (Over < FlagClear)
+				{
+					P = P + Up * (FlagClear - Over);
+				}
+				F.Point[J][I] = P;
+			}
+		}
+		return F;
+	}
+
+	bool FlagInputsOf(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out, const P3& Wind, double Struck, double Lowered, int Key, FlagIn& OutFlag)
+	{
+		if (Struck < 0.0 || !In.bShown)
+		{
+			return false;
+		}
+		OutFlag.Foot = EnsignAt(M, D, In, Out);
+		OutFlag.Up = UpOf(In.Heading, In.Pitch);
+		// (the air over her: the wind, less her own way through it)
+		const P3 Way = AheadOf(In.Heading) * In.Speed;
+		OutFlag.Air = P3(Wind.X - Way.X, Wind.Y - Way.Y, 0.0);
+		OutFlag.Since = Struck;
+		OutFlag.Lowered = Lowered;
+		OutFlag.Seed = static_cast<uint64_t>(static_cast<uint32_t>(Key)) * 2654435761ull + 29ull;
+		return true;
+	}
 
 	void ForceUp(BoatState& S, double T, double Sub)
 	{
@@ -329,6 +532,40 @@ namespace ConvoyLook
 		{
 			Out.Splashes.push_back({ SplashKind::Bow, Mid + Fore * (M.BowAlong * D.Along), Fore, In.T });
 			S.NextBow = In.T + BowEvery;
+		}
+		// Scuttled after she struck (OpenVents): the stage takes her down by the stern from then (its sinking on top of how the
+		// looks ride her), and what comes out of her comes from her as she goes.
+		double StageDown = 0.0, StageTrim = 0.0;
+		if (S.VentsAt >= 0.0) StageSinking(In.T - S.VentsAt, TopDrawn, true, StageDown, StageTrim);
+		const double SunkTrim = Trim + StageTrim * LookPi / 180.0;
+		auto Sunk = [&](double Along, double Up) { return S.Heave - StageDown + Up * D.Up * std::cos(SunkTrim) + Along * D.Along * std::sin(SunkTrim); };
+		// Her main vents open, the air roaring out of her tanks with spray, a spurt each VentEvery s, side about, along her
+		// saddle tanks from forward aft as she floods, for VentSeconds: straight up, a little outboard.
+		if (!bJump && S.VentsAt >= 0.0 && In.T - S.VentsAt < VentSeconds && In.T >= S.NextVent)
+		{
+			const double Hand = S.Vents % 2 ? -1.0 : 1.0;
+			const double VentAlong = (0.3 - 0.6 * Clamp((In.T - S.VentsAt) / VentSeconds, 0.0, 1.0)) * M.Long;
+			P3 Vent = Mid + Fore * (VentAlong * D.Along) + Side * (Hand * 0.45 * M.Wide * D.Up);
+			Vent.Z = Sunk(VentAlong, M.Casing - VentUnder);
+			Out.Splashes.push_back({ SplashKind::Vent, Vent, Unit(Side * (0.2 * Hand) + P3(0.0, 0.0, 1.0), P3(0.0, 0.0, 1.0)), In.T });
+			S.NextVent = In.T + VentEvery;
+			++S.Vents;
+		}
+		// Her scuttling charges, the after one first, as she goes: each a muffled heave of white water alongside abreast its
+		// hatch and its smoke out of the hatch, her up tipped by her trim (one a picture run skipped past is gone with it).
+		while (S.VentsAt >= 0.0 && S.Charges < ScuttleCharges && In.T - S.VentsAt >= ChargeAfter[S.Charges])
+		{
+			if (!bJump && In.T - S.VentsAt - ChargeAfter[S.Charges] < 1.0)
+			{
+				const double HatchAlong = S.Charges == 0 ? M.AftHatch : M.ForeHatch;
+				const double Hand = Hash01(Stir(static_cast<uint64_t>(S.VentsAt * 10.0), 41u + static_cast<uint64_t>(S.Charges))) < 0.5 ? -1.0 : 1.0;
+				const P3 Abreast = Mid + Fore * (HatchAlong * D.Along);
+				Out.Splashes.push_back({ SplashKind::Scuttle, Abreast + Side * (Hand * (0.5 * M.Wide * D.Up + ChargeOut)), Side * Hand, In.T });
+				P3 Hatch = Abreast;
+				Hatch.Z = Sunk(HatchAlong, CasingAt(M, HatchAlong, 0.0));
+				Out.Splashes.push_back({ SplashKind::Puff, Hatch, Fore * (-std::sin(SunkTrim)) + P3(0.0, 0.0, std::cos(SunkTrim)), In.T });
+			}
+			++S.Charges;
 		}
 		// Deep: nothing of her but, where light falls on the sea over her, a faint swirl now and then as she runs.
 		S.Swirls.erase(std::remove_if(S.Swirls.begin(), S.Swirls.end(), [&In](const Swirl& W) { return In.T - W.T0 > SwirlLast; }), S.Swirls.end());
@@ -659,6 +896,9 @@ namespace ConvoyLook
 		 * otherwise); a man swims for her side 1 m out from it, at the nearest place along it within 0.35 of her length of
 		 * amidships, and climbs it 0.3 m out from it. */
 		constexpr double StandByBelow = 3.0, SwimOut = 1.0, ClimbAlong = 0.35, ClimbOut = 0.3;
+		/** [SHOW] One man up a net at a time: come to his place with another climbing within a metre of it, the scene moves
+		 * him 1.2 m along her side to the next (a struck boat's crew, picked up in a crowd, do). */
+		constexpr double ClimbShift = 1.2;
 		/** [EST] A man swimming for her side gets his net once he is within 60 m of it (a minute or two before he is there);
 		 * within 3 m of it (two seconds' swim or so, about a net's time going down), at his place along her now too. */
 		constexpr double NetSee = 60.0, NetNear = 3.0;
@@ -758,11 +998,12 @@ namespace ConvoyLook
 	{
 		const bool bStanding = bRescue && StandsBy(R.Speed);
 		std::vector<char> Wanted(Nets.size(), bStanding ? 1 : 0);
-		// (the station a place on her side is at, and the next one too where it is at its end)
-		auto Want = [&Nets, &Wanted](double Place, double OnSide)
+		// (the station a place on her side is at, and the next one too where it is at its end: within his hold of it, or for one
+		// still swimming to it, within the scene's move along her side to a free place, so it is down before he gets there)
+		auto Want = [&Nets, &Wanted](double Place, double OnSide, double Ends)
 		{
 			const double Station = std::round(Place / NetWide), Off = Place - Station * NetWide;
-			for (const double K : { Station, std::fabs(Off) > 0.5 * NetWide - NetMargin ? Station + (Off > 0.0 ? 1.0 : -1.0) : Station })
+			for (const double K : { Station, std::fabs(Off) > 0.5 * NetWide - Ends ? Station + (Off > 0.0 ? 1.0 : -1.0) : Station })
 			{
 				bool bHung = false;
 				for (size_t I = 0; I < Nets.size(); ++I)
@@ -789,7 +1030,7 @@ namespace ConvoyLook
 			double Along = 0.0, Side = 1.0;
 			bool bClimbing = false;
 			if (!ClimbPlace(R, M, Along, Side, bClimbing) || (!bStanding && !bClimbing)) continue;
-			Want(Along, Side);
+			Want(Along, Side, bClimbing ? NetMargin : NetMargin + ClimbShift);
 			if (bClimbing) continue;
 			// (one close to her side: she may still have way on her, standing by under 3 m/s, and the scene has him make for a
 			// place on her side as she goes, so he comes to it about where he is along her now, not where his heading through
@@ -798,7 +1039,7 @@ namespace ConvoyLook
 			const double RX = M.At.X - R.At.X, RY = M.At.Y - R.At.Y;
 			if (std::fabs(RX * Right.X + RY * Right.Y) - 0.5 * R.Beam - SwimOut <= NetNear)
 			{
-				Want(std::clamp(RX * Fore.X + RY * Fore.Y, -ClimbAlong * R.Long, ClimbAlong * R.Long), Side);
+				Want(std::clamp(RX * Fore.X + RY * Fore.Y, -ClimbAlong * R.Long, ClimbAlong * R.Long), Side, NetMargin + ClimbShift);
 			}
 		}
 		size_t Kept = 0;

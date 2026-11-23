@@ -1988,7 +1988,7 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f);
 }
 
-void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
+void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now, const FString& End)
 {
 	FShip* Ship = Ships.Find(Id);
 	if (!Ship || !Ship->How.IsEmpty())
@@ -2005,6 +2005,12 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		Ship->Roll = Look->Dial("roll", -1.0);
 		Ship->Cut = FMath::Clamp(Look->Dial("cut", 0.0), -0.35, 0.35);
 		Ship->End = UTF8_TO_TCHAR(Look->DialText("end").c_str());
+	}
+	if (!End.IsEmpty())
+	{
+		// (the scene's word over the look's: a boat her crew scuttled floods aft first through her opened vents and goes by
+		// the stern)
+		Ship->End = End;
 	}
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship->Yaw, 0.0);

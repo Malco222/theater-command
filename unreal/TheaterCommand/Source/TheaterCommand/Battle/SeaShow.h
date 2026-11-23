@@ -201,6 +201,10 @@ namespace SeaShow
 		int Fish = 0;         // sea:torpedo from a boat: the torpedoes of her salvo (0: not said)
 		double Fan = 0.0;     // sea:torpedo from a boat: the salvo's spread, degrees across
 		bool bWakeless = false; // sea:torpedo: electric torpedoes, leaving almost no track
+		/** sea:surrender (the naval rules, behind their subSurrender switch): the piece she strikes to, an escort or the
+		 * aircraft that forced her up (-1 none said). Her How is "scuttled" (her crew send her down; "scuttle" read the same)
+		 * or "captured" (a boarding party takes her). Her own piece is Unit, so this is read by name, never through it. */
+		int By = -1;
 		// The men in the water (the naval rules' sailor events, 22 November: sea:men, sea:oil, sea:abandon, sea:rescue), where
 		// the event gives them. A wreck is keyed {piece, ship}: the piece's first ship lost is 1, the next 2.
 		int Ship = 0;         // sea:men, sea:oil, sea:abandon: which of the piece's ships lost (0 not said)
@@ -265,6 +269,11 @@ namespace SeaShow
 		double Keel = 0.0;
 		bool bScope = false;
 		double Dived = 0.0;  // metres her hull lies below her surfaced trim (her keel less her draught): 0 surfaced
+		/** A boat that struck (sea:surrender): seconds since her crew began coming up and her white flag went up (below 0:
+		 * she has not); seconds since it came down (below 0: it has not; a prize's as her boarders take her, a scuttled
+		 * boat's as she goes); a prize, taken (she stays afloat as she was, her Down held). The convoy looks draw the flag. */
+		double Struck = -1.0, Lowered = -1.0;
+		bool bPrize = false;
 	};
 
 	/** One aircraft of a carrier's strike or a raid from the coast, as it is to be drawn. */
@@ -447,7 +456,51 @@ namespace SeaShow
 		Boat,  // in a boat (row)
 		Climb, // up a rescuer's side (climb_net): At.Z his feet's height
 		Dead,  // face down (float_dead)
+		// On a struck boat's casing (sea:surrender): Show::Hands() only, never Men(); At.Z his feet's height over the sea
+		Hatch,   // coming up out of a hatch, or down the side of her conning tower from her bridge (climb_net)
+		Stand,   // standing at his place on her casing (idle)
+		Walk,    // walking along her casing to his place (walk: a stride of 1.42 m each 1.133 s, so 1.25 m/s)
+		HandsUp, // standing with his hands up, a ship of the other side within a kilometre of her (idle until his own clip)
+		Run,     // his last steps out to the edge of her casing before he goes over (run)
 	};
+
+	/**
+	 * A boat's casing where her crew stand when she strikes (sea:surrender), the stage's model of her navy in its own frame
+	 * (metres: along her forward from amidships, across to starboard, up from her waterline), as ConvoyLook::SculptedOf
+	 * rows it: her bounds, her conning tower's fore and aft ends and its half-width at her casing, her bridge's floor (its
+	 * rim less a 1.2 m bulwark), her fore and after hatches, the stretches of her casing fore and aft of her tower clear of
+	 * her guns, how far out on it a man can stand before her saddle tanks fall away, and its height: Deck amidships,
+	 * rising Rise a metre forward of RiseFrom, falling Fall times the square of the way across; and her deck gun's length
+	 * along her, its mount and its barrel stowed, which her men keep clear of; and the model's top over her waterline (her
+	 * periscopes', the stage's High for her, which its sinking takes her down by). Tools/convoy_looks checks these against
+	 * the model files and the looks' own rows (ConvoyLook::SculptedOf), so her men stand on her deck as it is drawn.
+	 */
+	struct BoatDeck
+	{
+		double Long = 67.0, Wide = 6.79;
+		double TowerFore = 3.5, TowerAft = -6.5, TowerHalf = 1.3, Bridge = 4.1;
+		double ForeHatch = 8.0, AftHatch = -12.2;
+		double AftFrom = -20.0, AftTo = -7.5, ForeFrom = 4.5, ForeTo = 10.0;
+		double Edge = 1.2;
+		double Deck = 1.58, RiseFrom = 3.0, Rise = 0.0087, Fall = 0.051;
+		double GunFrom = 10.85, GunTo = 15.55;
+		double Top = 10.49;
+	};
+	/** The row for a navy (GER, USA, any other or none: the stage's three boats, AirStage's ShipFileOf). */
+	const BoatDeck& DeckOf(const std::string& Nation);
+	/** Her casing's height over her waterline at a place in the row's frame (along, across: metres). */
+	double CasingAt(const BoatDeck& D, double Along, double Across);
+	/**
+	 * The stage's way "sink" (AirStage::MoveShip, at its look's usual pace), T seconds after the stage was told it: how far
+	 * down her waterline is (metres) and her trim (degrees, plus bow up) as she goes by the stern (bByStern; a boat her crew
+	 * scuttled after she struck, the stage's end "stern"), or none where her end is the stage's own. High: the model's top
+	 * over her waterline (BoatDeck::Top). A struck boat's crew still on her ride her down on it (Show's HandAt).
+	 * Tools/convoy_looks holds this to the stage's own lines, read from its source.
+	 */
+	void StageSink(double T, double High, bool bByStern, double& OutDepth, double& OutPitch);
+	/** The stage's end for a ship going down ("stern", or empty for her look's own): a boat that struck (her ShipOut's
+	 * Struck or Lowered, 0 or more) and that the battle sends down scuttled goes by the stern, as StageSink has her. */
+	std::string StageEndOf(const std::string& How, double Struck, double Lowered);
 
 	struct ManOut
 	{
@@ -510,6 +563,8 @@ namespace SeaShow
 		Dive,        // a boat going down or coming up: Key (the boat), At, What ("dive" or "surface"), Text (why), Side
 		Starshell,   // a star shell bursting: Key (its own), At (where it bursts, Z its height), Until (battle time it burns out), Side
 		Rescue,      // a ship picking up survivors: Key (the rescuer), At (her), Aim (where they are), Until (battle time it ends), Side
+		Surrender,   // a boat striking (sea:surrender): Key (the boat), At, What ("scuttled" or "captured"), Size (the piece she
+		             //   strikes to, -1 none), Aim (that piece's ship nearest her, where there is one), Text (the line), Side
 	};
 
 	struct Fx
@@ -605,6 +660,11 @@ namespace SeaShow
 		// men drawn taken aboard a rescuer beyond the share of the battle's count of those picked up (none allowed).
 		int MenEvents = 0, MenMatched = 0, OilEvents = 0, OilMatched = 0, AbandonEvents = 0, Abandons = 0;
 		int MenCounted = 0, MenCountOff = 0, PickedOver = 0;
+		// A boat that strikes (sea:surrender): the events read; the boats struck (her piece's boat found) and not; her men
+		// come out on her casing; of her men in the water, those who went over from it and all of hers; men drawn aboard a
+		// ship of the other side (prisoners); prizes taken, and their boarders gone below
+		int SurrenderEvents = 0, Struck = 0, StruckUnmatched = 0, HandsOut = 0, OverFromDeck = 0, MenOfStruck = 0;
+		int Prisoners = 0, Prizes = 0, BoardersBelow = 0;
 		int ClearShips = 0;         // ships that altered so, once or more
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
 		double OwedAll = 0.0;       // hits the battle took off hulls by gunfire, in all
@@ -672,6 +732,10 @@ namespace SeaShow
 		const std::vector<FloatOut>& Floats() const { return OutFloats; }
 		const std::vector<SlickOut>& Slicks() const { return OutSlicks; }
 		const std::vector<ManOut>& Men() const { return OutMen; }
+		/** A struck boat's crew on her casing and her boarding party (sea:surrender), drawn as men are; kept apart from Men(),
+		 * whose counts are the men in the water. A captor's whaler and its oarsmen (Swim::Boat, On its key) are here too. */
+		const std::vector<ManOut>& Hands() const { return OutHands; }
+		const std::vector<FloatOut>& Whalers() const { return OutWhalers; }
 		/** The share of the men in the water the show keeps (1: every man; less where there were more than the room). */
 		double MenShare() const { return Check.MenReal > 0 ? static_cast<double>(Check.MenKept) / Check.MenReal : 1.0; }
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
@@ -763,6 +827,15 @@ namespace SeaShow
 			std::string Dive;
 			double Keel = -1.0, KeelTo = 0.0, KeelRate = 0.0;
 			bool bScope = false;
+			// Struck (sea:surrender): her flag up and her crew coming out on her casing once she is up (UpAt); how the battle
+			// says she ends ("scuttled", "captured"), the piece she struck to, when her flag came down; the battle's order to
+			// abandon her told (once); a prize, taken: held afloat as she was (her SinkAt carried on, so her Down stands)
+			bool bStruck = false, bAbandonTold = false, bPrize = false;
+			double StruckAt = -1.0, UpAt = -1.0, FlagDownAt = -1.0;
+			// (struck and sent down after, sea:sunk: when the stage was told her end, StageSink's clock for her crew still on her)
+			double SentDownAt = -1.0;
+			std::string StruckHow;
+			int StruckTo = -1;
 			// Keeping clear (Brian, 22 November 05:31Z: "the ships are turning into each other and going over each other"):
 			// the alteration she holds off the course she wishes (radians, plus to starboard) and the share of her wished way
 			// she keeps, when she chose it, and when she last held one.
@@ -967,6 +1040,7 @@ namespace SeaShow
 			double TrackHdg = 0.0, TrackLen = 0.0;        // her oil's way along her last track
 			bool bGone = false, bLit = false, bDue = false;
 			bool bLeft = false;                           // her men left her (sea:abandon): over one side from her waist and stern, as she loses her way
+			bool bStruck = false;                         // a boat that struck: her men come over from her casing (Muster's plan, StepHands)
 			// (the ships near her men and her wreckage, looked for each second, and found again each step)
 			std::vector<int> Near;
 			std::vector<const Hull*> NearNow;
@@ -1005,9 +1079,54 @@ namespace SeaShow
 			int Near = -1;        // the float he keeps by, treading water in its group with no place on it (its key), -1 none
 			Vec NearOff;          // his place by it (its own frame)
 		};
+		/** One of a struck boat's crew on her casing (Muster's plan), in her own frame as the show has her (Along from
+		 * amidships, Across plus to starboard, Z his feet over her casing there, below 0 still in her hatch): up out of his
+		 * hatch or down from her bridge, along her casing to his place, standing there (his hands up where a ship of the
+		 * other side is close), and at his turn out to the edge of her casing, where RunWrecks takes him into the water as
+		 * the man he is (his key and his look kept). He is stepped, never placed, so he never jumps. */
+		struct DeckHand
+		{
+			ManOut O;
+			int W = -1, N = 0;                    // her wreck (Wrecked's place); his place in her men's order (her W.Out as he goes)
+			int Via = 0;                          // her bridge (down her tower's after face), her fore hatch, her after hatch
+			double Along = 0.0, Across = 0.0, Z = 0.0;
+			double PlaceAlong = 0.0, PlaceAcross = 0.0; // his place on her casing (his slot: Muster's)
+			int Rank = 0;                         // his place's rank, 0 at her casing's edge, inboard from it
+			double Side = 1.0;                    // the side he goes over (+1 starboard)
+			double OutAt = 0.0, TurnAt = 0.0;     // he comes up; his turn to go over
+			int Leg = 0;                          // her crew: out of his hatch, to his place, out to her edge; a boarder: up her side, along to her after hatch, in to it, down it (and, sent down, back: BackLeg)
+			bool bOut = false, bAtEdge = false, bUp = false, bBelow = false;
+			bool bParty = false;                  // her captor's boarding party (SendBoarders): never her crew, never counted in her men
+			bool bHurried = false;                // the battle has sent her down: up his hatch and over at a run (Hurry)
+			Vec At;                               // his feet in the world as she rides now (StepHands), where he goes over from
+		};
+		/** A boat taken (sea:surrender how "captured"): her captor's whaler lowered from his davits and pulled across to her
+		 * (round her bow or stern to her lee side where he lies to windward), and its party up her side and down her after
+		 * hatch to shut her vents; three below and she is a prize. Sent down after all, her party back into the whaler, which
+		 * pulls back to him and is hoisted in. */
+		struct Boarding
+		{
+			int Boat = 0, By = -1;                // her key; her captor's (the ship of the piece she struck to nearest her)
+			FloatOut Whaler;                      // (Ship: her captor's key, so it is drawn in his navy's colours)
+			std::vector<ManOut> Oars;             // its crew, pulling, its coxswain at its stern, and its party until each goes up her side (and once back)
+			std::vector<int> Seated;              // each one's seat (StepHands' SeatOf): 0 to 5 the oars, 6 the coxswain, 7 to 11 its party
+			Vec Pull;                             // its way this step (metres a second), carried on to the moment drawn
+			double Hand = 1.0, Davit = 0.0;       // the side of her captor its davits are on (+1 starboard); their height over the sea
+			double Inboard = 1.0;                 // its own side that lies toward her alongside (+1 its starboard), where its party sits
+			double LoweredAt = -1.0, AlongsideAt = -1.0, PrizeAt = -1.0, HomeAt = -1.0, HoistAt = -1.0;
+			int Party = 0, Below = 0;
+			/** Its leg (StepHands): 0 shoving off his side, 1 across to off her side, 2 in alongside her; going back, 3 shoving
+			 * off her side, 4 across to off his davits, 5 in to them. */
+			int Leg = 0;
+			bool bStowed = false;                 // hoisted in: no longer drawn
+		};
 		std::vector<Wreck> Wrecked;
 		std::vector<Floater> Afloat;
 		std::vector<Man> Swimmers;
+		std::vector<DeckHand> OnCasing;
+		std::vector<Boarding> Boardings;
+		std::vector<ManOut> OutHands;
+		std::vector<FloatOut> OutWhalers;
 		std::vector<SlickOut> Oil;
 		int NextFloat = 1, NextMan = 1;
 		bool bWrecksMoved = false; // a step has moved them since Output last laid them out
@@ -1057,6 +1176,25 @@ namespace SeaShow
 		/** Her men, rafts, wreckage and oil over a step: over the side, swimming, holding on, drifting, picked up. */
 		void RunWrecks(double Dt);
 		Floater* FloatByKey(int Key);
+		/** A boat beaten on the surface strikes (sea:surrender): her flag up, out of the fight as one abandoned, her men to
+		 * come out on her casing once she is up (Muster), and, taken, a boarding party sent across (SendBoarders). */
+		void StrikeColours(Hull& H, const Event& E);
+		/** Her men's plan on her casing from her N'th man on (all of them as she comes up; those the battle adds later). */
+		void Muster(Wreck& W, const Hull& H, int From);
+		/** The battle sends her down: every man still to come up or go over hurried, the last over within HurryFor of it. */
+		void Hurry(Wreck& W);
+		static constexpr double HurryFor = 5.0;
+		/** Hurried, her men climb at HurriedClimb (metres a second) and follow one another up each opening HurriedApart
+		 * (seconds) behind: three files of them, some fifty men, up and over within HurryFor. */
+		static constexpr double HurriedClimb = 1.8, HurriedApart = 0.2;
+		void SendBoarders(const Hull& H, int ByPiece);
+		/** Where a boat pulling from From to To steers now: straight on where its way clears hull H (her beam out from her
+		 * middle line, and Clear more), else round her nearer end by a point off her shoulder, or off that end, first. */
+		Vec RoundHull(const Vec& From, const Vec& To, const Hull& H, double Clear) const;
+		/** Her crew and any boarding party a step on (Dt), at a man's pace; the whalers pulled across. */
+		void StepHands(double Dt);
+		/** Where a hand's feet are in the world as she rides now (On: seconds on from ShownT, Output's drawn moment). */
+		Vec HandAt(const DeckHand& D, const Hull& H, double On) const;
 		/** A boat's keel surfaced (metres: her draught). */
 		double SurfacedKeel(const std::string& Class) const;
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */

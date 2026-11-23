@@ -25,6 +25,8 @@ namespace ConvoyLooksParts
 	/** The kit's trail ids for the starshells' smoke: apart from the scene's own (fires 810000 and up, funnels 1000000 and
 	 * up, a ship's key times four) and the stage's (238000 and up). */
 	static constexpr int32 StarTrailIds = 3600000;
+	/** The kit's steam ids for a struck boat's vents (her key's sixteen, one for each spurt in turn): apart from the rest. */
+	static constexpr int32 VentSteamIds = 3800000;
 	/** [EST] A starshell's candle: a few hundred thousand candelas (the period's illuminating shells), its light reaching
 	 * 3 km; white with a little yellow. "-TheaterStarCandela=" tries others. */
 	static constexpr double StarCandela = 400000.0, StarReach = 3000.0;
@@ -41,6 +43,44 @@ namespace ConvoyLooksParts
 	static constexpr double ForgetAfter = 5.0;
 	/** The mesh's sections: solid things, the flares' glow, the swirls. */
 	static constexpr int32 SolidSection = 0, GlowSection = 1, SwirlSection = 2, Sections = 3;
+
+	/** A struck boat's vent blowing (the kit's Steam, its vent: a white jet), where the kit has it; none on an older kit.
+	 * Placed where it is given, never on the sea's face or a deck. */
+	template <typename TKit>
+	static void VentJet(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds)
+	{
+		if constexpr (requires(TKit* K, int32 I, const FVector& A, float C, const FString& W) { K->Steam(I, A, A, C, C, W); })
+		{
+			Kit->Steam(Id, At, Way, Across, Seconds, FString(TEXT("vent")));
+		}
+		else
+		{
+			(void)Kit;
+			(void)Id;
+			(void)At;
+			(void)Way;
+			(void)Across;
+			(void)Seconds;
+		}
+	}
+
+	/** A scuttling charge's smoke out of a hatch (the kit's CookOff: one pop, no jet), where the kit has it. */
+	template <typename TKit>
+	static void ChargePuff(TKit* Kit, const FVector& At, const FVector& Up, float Across, float Seconds)
+	{
+		if constexpr (requires(TKit* K, const FVector& A, float C, int32 P) { K->CookOff(A, A, C, P, C, C); })
+		{
+			Kit->CookOff(At, Up, Across, 1, Seconds, 0.0f);
+		}
+		else
+		{
+			(void)Kit;
+			(void)At;
+			(void)Up;
+			(void)Across;
+			(void)Seconds;
+		}
+	}
 
 	/** The scene's bOnWater held true while the kit is called, so its water goes on the sea and never on a ship's deck
 	 * (the stage's DeckUnder puts a point over a dived boat on her deck, metres under the sea). */
@@ -197,6 +237,10 @@ namespace ConvoyLooksParts
 	static const FColor NetRope(150, 132, 98, 255);
 	static const FColor FlareCore(255, 246, 222, 255);
 	static const FColor SwirlWater(196, 214, 218, 255);
+	/** [EST] A struck boat's white flag: a plain off-white sheet, weathered (a boat's bedsheet or tablecloth: nothing on it),
+	 * and its staff's grey-brown wood. */
+	static const FColor FlagCloth(232, 230, 222, 255);
+	static const FColor FlagStaffWood(92, 84, 70, 255);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -290,6 +334,11 @@ void FConvoyLooks::Effect(const SeaShow::Fx& E, double InNow, bool bInSkip)
 				ConvoyLook::Blow(B->State, false);
 			}
 		}
+		break;
+	case SeaShow::FxKind::Surrender:
+		// (a boat that strikes is on the surface or coming up to it, as the show brings her, her tanks blown: she rides high,
+		// her flag run up once the show has her up, StepBoats and Lay; never forced up here, so she keeps the show's keel)
+		ConvoyLook::Blow(Boats.FindOrAdd(E.Key).State, true);
 		break;
 	case SeaShow::FxKind::Rescue:
 	{
@@ -394,6 +443,13 @@ void FConvoyLooks::End(const SeaShow::Fx& E, bool bInSkip)
 	FBoatKept* B = Boats.Find(E.Key);
 	if (E.What == "scuttled")
 	{
+		// One that struck (sea:surrender) is up already, her crew going over from her casing: her vents open, the air
+		// roaring out of her tanks along her sides as she floods and goes by the stern (the stage's way, its end "stern").
+		if (B && B->Struck >= 0.0)
+		{
+			OpenVents(B->State, Now);
+			return;
+		}
 		// Brought up: her tanks blown, she comes to the surface wherever the show still has her, and goes from there,
 		// riding high while her crew get out over her side (the sea scene's men, from her deck's height).
 		if (B)
@@ -519,23 +575,38 @@ void FConvoyLooks::StepBoats()
 		In.Lit = Ship.Dive == "deep" ? LitAt(In.At) : 0.0;
 		In.bShown = Ship.bShown;
 		B.Out = StepBoat(B.State, In, B.Model, B.Drawn);
+		B.In = In;
 		B.At = In.At;
 		B.SeenAt = Now;
+		B.Struck = Ship.Struck;
+		B.Lowered = Ship.Lowered;
+		// (each as the looks' core calls it, KitOf: the kit's churn, its low spurt, a vent's white jet or a charge's puff)
 		for (const BoatSplash& Sp : B.Out.Splashes)
 		{
+			const SplashKit Call = KitOf(Sp);
 			FDue& D = Due.AddDefaulted_GetRef();
 			D.At = Sp.T;
-			D.Where = Sp.At;
-			D.Way = Sp.Way;
-			if (Sp.Kind == SplashKind::Feather || Sp.Kind == SplashKind::Bow)
+			D.Where = Call.Where;
+			D.Way = Call.Way;
+			D.Row = UTF8_TO_TCHAR(Call.Row.c_str());
+			D.Across = Call.Across;
+			D.Seconds = Call.Seconds;
+			switch (Call.Call)
 			{
-				D.Kind = EDue::Spurt;
-			}
-			else
-			{
-				// (the water off her casing, and the swirl where her bridge went under: the kit's churn, its foam lasting)
+			case KitCall::Spout:
 				D.Kind = EDue::Spout;
-				D.Row = TEXT("churn");
+				break;
+			case KitCall::Spurt:
+				D.Kind = EDue::Spurt;
+				break;
+			case KitCall::Jet:
+				D.Kind = EDue::Jet;
+				// (at most one spurt a step, the one just counted: her sixteen ids in turn, so each jet blows its own time)
+				D.Id = ConvoyLooksParts::VentSteamIds + (Ship.Key % 10000) * 16 + (B.State.Vents + 15) % 16;
+				break;
+			case KitCall::Puff:
+				D.Kind = EDue::Puff;
+				break;
 			}
 		}
 	}
@@ -572,6 +643,12 @@ void FConvoyLooks::PlayDue()
 				break;
 			case EDue::Discharge:
 				Kit->Muzzle(Where, Way.IsNearlyZero() ? FVector::UpVector : Way, TEXT("mortar"), TEXT("water"));
+				break;
+			case EDue::Jet:
+				ConvoyLooksParts::VentJet(Kit, D.Id, Where, Way.IsNearlyZero() ? FVector::UpVector : Way, static_cast<float>(D.Across), static_cast<float>(D.Seconds));
+				break;
+			case EDue::Puff:
+				ConvoyLooksParts::ChargePuff(Kit, Where, Way.IsNearlyZero() ? FVector::UpVector : Way, static_cast<float>(D.Across), static_cast<float>(D.Seconds));
 				break;
 			}
 		}
@@ -907,6 +984,39 @@ void FConvoyLooks::Lay()
 			{
 				Glow.Fan(At, Normal, Halo, 16, FColor(255, 238, 200, Alpha), FColor(255, 214, 150, 0));
 				Glow.Fan(At, Normal, 0.6 * U, 10, FColor(FlareCore.R, FlareCore.G, FlareCore.B, Alpha), FColor(255, 240, 210, static_cast<uint8>(Alpha / 2)));
+			}
+		}
+	}
+	// A struck boat's white flag (the show's Struck and Lowered): the staff from her ensign's place and the sheet on it, both
+	// its faces; none on a boat out of the player's sight.
+	for (const TPair<int32, FBoatKept>& Kept : Boats)
+	{
+		const FBoatKept& B = Kept.Value;
+		if (B.SeenAt != Now)
+		{
+			continue;
+		}
+		// (flown as the looks' core says, FlagInputsOf: the air over her the wind less her own way through it)
+		const SeaShow::Vec Blow = Show ? Show->Wind() : SeaShow::Vec();
+		ConvoyLook::FlagIn In;
+		if (!ConvoyLook::FlagInputsOf(B.Model, B.Drawn, B.In, B.Out, P3(Blow.X, Blow.Y, 0.0), B.Struck, B.Lowered, Kept.Key, In))
+		{
+			continue;
+		}
+		const ConvoyLook::FlagOut F = ConvoyLook::FlagAt(In, Now);
+		if (!F.bShown)
+		{
+			continue;
+		}
+		Solid.Rod(World(In.Foot), World(F.Head), 0.03 * LookScale * U, 5, FlagStaffWood);
+		for (int32 J = 0; J + 1 < ConvoyLook::FlagDown; ++J)
+		{
+			for (int32 I = 0; I + 1 < ConvoyLook::FlagAlong; ++I)
+			{
+				const FVector A = World(F.Point[J][I]), Bq = World(F.Point[J][I + 1]), C = World(F.Point[J + 1][I + 1]), D = World(F.Point[J + 1][I]);
+				const FVector Face = FVector::CrossProduct(Bq - A, D - A).GetSafeNormal();
+				Solid.Quad(A, Bq, C, D, Face, FlagCloth);
+				Solid.Quad(A, D, C, Bq, -Face, FlagCloth);
 			}
 		}
 	}

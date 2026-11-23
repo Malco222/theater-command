@@ -741,6 +741,13 @@ namespace SeaParts
 		return FVector(0.05 * FMath::Sin(W * Now + P1), 0.035 * Lively * FMath::Sin(W * Now + P1 + 1.2), 0.05 * Lively * FMath::Sin(W * 0.83 * Now + P2));
 	}
 
+	/** A float's ride with the show's own height over the sea added (a captor's whaler going down from his davits or up to
+	 * them, SeaShow's Whalers; every other float lies on the sea, its height 0). */
+	static FVector FloatRideOf(const SeaShow::FloatOut& F, double Now)
+	{
+		return FloatRide(F.Key, Now, F.Long) + FVector(FMath::Max(0.0, F.At.Z), 0.0, 0.0);
+	}
+
 	/** A whaleboat's or lifeboat's half breadth at its gunwale and its gunwale's height over the sea, U from -1 (her
 	 * stern) to 1 (her bow): double-ended, her sheer rising toward both ends (the show keeps her lines, SeaShow::BoatHalf,
 	 * for the men who hold on to her grab line). */
@@ -850,7 +857,7 @@ namespace SeaParts
 	 * thick or more). */
 	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now, bool bFine, uint64 Held = 0)
 	{
-		const FVector Ride = FloatRide(F.Key, Now, F.Long);
+		const FVector Ride = FloatRideOf(F, Now);
 		const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading, Ride.Y, Ride.Z);
 		const double H1 = Hash01(F.Key * 1.37), H2 = Hash01(F.Key * 2.71);
 		const FColor Craft = CraftPaint(Navy, bMerchant);
@@ -894,6 +901,14 @@ namespace SeaParts
 		}
 	}
 
+	/** A man of a struck boat's crew on her casing, or of her boarding party (SeaShow::Hands, but its whaler's crew): out
+	 * of the water and the oil, moving with her each frame. */
+	static bool OnHerCasing(SeaShow::Swim Doing)
+	{
+		using SeaShow::Swim;
+		return Doing == Swim::Hatch || Doing == Swim::Stand || Doing == Swim::Walk || Doing == Swim::HandsUp || Doing == Swim::Run;
+	}
+
 	/**
 	 * A sailor in the water, on a raft or in a boat, going over her side or up a rescuer's: a stand-in until the sailor
 	 * files land, his paint his navy's. bDetail: a near man's head, life jacket or shoulders, body and limbs; else a far
@@ -913,6 +928,12 @@ namespace SeaParts
 			{
 			case Swim::Jump:
 			case Swim::Climb:
+			case Swim::Hatch:
+			case Swim::Stand:
+			case Swim::Walk:
+			case Swim::HandsUp:
+			case Swim::Run:
+				// (standing: going over, up a net, or on a struck boat's casing)
 				M.Egg(Level, FVector(0.0, 0.0, Feet + 0.9), FVector(0.14, 0.2, 0.9), 2, 4, P.Top, P.Shirt, P.Legs);
 				break;
 			case Swim::Raft:
@@ -934,11 +955,13 @@ namespace SeaParts
 		{
 		case Swim::Jump:
 		case Swim::Climb:
+		case Swim::Hatch:
+		case Swim::HandsUp:
 		{
 			// (standing: going feet first over her side, his arms up, tipping a little as he falls; or up a rescuer's
-			// net hand over hand, facing her side)
-			const bool bClimb = Man.Doing == Swim::Climb;
-			const double Tip = bClimb ? 0.0 : FMath::Clamp(0.12 * Man.Since, 0.0, 0.35) * (Hash01(Man.Key * 1.9) < 0.5 ? 1.0 : -1.0);
+			// net hand over hand, facing her side, or up out of a struck boat's hatch; or on her casing, his hands up)
+			const bool bClimb = Man.Doing == Swim::Climb || Man.Doing == Swim::Hatch;
+			const double Tip = Man.Doing == Swim::Jump ? FMath::Clamp(0.12 * Man.Since, 0.0, 0.35) * (Hash01(Man.Key * 1.9) < 0.5 ? 1.0 : -1.0) : 0.0;
 			const FWreckFrame F = WreckFrame(FVector(Man.At.X, Man.At.Y, Feet), Man.Heading, Tip, 0.0);
 			const double Step = bClimb ? 0.22 * FMath::Sin(Now * 2.4 + Ph) : 0.0;
 			for (const double Hand : { -1.0, 1.0 })
@@ -946,6 +969,24 @@ namespace SeaParts
 				M.Rod(F.At(0.0, Hand * 0.1, 0.92), F.At(0.04, Hand * 0.12, 0.04 + FMath::Max(0.0, Hand * Step)), 0.07, 5, P.Legs);
 				const double Reach = bClimb ? 1.95 - Hand * Step : 2.05;
 				M.Rod(F.At(0.0, Hand * 0.21, 1.45), F.At(bClimb ? 0.18 : 0.02, Hand * (bClimb ? 0.24 : 0.3), Reach), 0.05, 5, P.Shirt);
+			}
+			M.Egg(F, FVector(0.0, 0.0, 1.2), FVector(0.13, 0.21, 0.3), 3, 8, Body, Body, P.Legs);
+			M.Egg(F, FVector(0.02, 0.0, 1.66), FVector(0.1, 0.085, 0.115), 5, 10, P.Top, P.Skin, P.Skin);
+			break;
+		}
+		case Swim::Stand:
+		case Swim::Walk:
+		case Swim::Run:
+		{
+			// (on a struck boat's casing, his arms at his sides; walking or running, his legs and arms swinging at the sailor
+			// files' own strides: 1.133 s walking, 0.8 s running)
+			const FWreckFrame F = WreckFrame(FVector(Man.At.X, Man.At.Y, Feet), Man.Heading);
+			const double Stride = Man.Doing == Swim::Run ? 0.8 : 1.133;
+			const double Swing = Man.Doing == Swim::Stand ? 0.0 : (Man.Doing == Swim::Run ? 0.35 : 0.22) * FMath::Sin(2.0 * UE_DOUBLE_PI * Man.Since / Stride);
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				M.Rod(F.At(0.0, Hand * 0.1, 0.92), F.At(Hand * Swing, Hand * 0.11, 0.04), 0.07, 5, P.Legs);
+				M.Rod(F.At(0.0, Hand * 0.21, 1.45), F.At(-0.8 * Hand * Swing, Hand * 0.26, 0.82), 0.05, 5, P.Shirt);
 			}
 			M.Egg(F, FVector(0.0, 0.0, 1.2), FVector(0.13, 0.21, 0.3), 3, 8, Body, Body, P.Legs);
 			M.Egg(F, FVector(0.02, 0.0, 1.66), FVector(0.1, 0.085, 0.115), 5, 10, P.Top, P.Skin, P.Skin);
@@ -1083,6 +1124,8 @@ namespace SeaParts
 	/** A pose bank mesh's key: its file, dress, act, pose, level, whether drawn left for right and whether black with oil. */
 	static int64 SailorKey(int32 File, int32 Dress, int32 What, int32 Pose, int32 Lod, bool bMirror, bool bOiled)
 	{
+		// (sixteen acts and sixteen poses of each at the most: a seventeenth act or pose would share another's key)
+		static_assert(SeaSailors::Acts <= 16, "SailorKey packs an act in four bits");
 		return ((((((static_cast<int64>(File) * 64 + Dress) * 16 + What) * 16 + Pose) * 4 + Lod) * 2 + (bMirror ? 1 : 0)) * 2 + (bOiled ? 1 : 0));
 	}
 
@@ -2085,10 +2128,33 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			Stage->Hit(E.Key, TEXT("torpedo"), Now);
 			break;
 		case SeaShow::FxKind::Sink:
+		{
 			// (a convoy's boat crushed deep, scuttled, rammed or shelled, ruling 241, goes down on the stage as a ship that
-			// sinks: the stage knows a ship's six ways, and is the air scene's too)
-			Stage->Sink(E.Key, StageWay(E.What), E.Size > 0.5, Now);
+			// sinks: the stage knows a ship's six ways, and is the air scene's too; one that struck and that her crew then
+			// scuttled floods aft first through her opened vents and goes by the stern)
+			const SeaShow::ShipOut* Sunk = S.Show.Ship(E.Key);
+			const std::string StageEnd = Sunk ? SeaShow::StageEndOf(E.What, Sunk->Struck, Sunk->Lowered) : std::string();
+			Stage->Sink(E.Key, StageWay(E.What), E.Size > 0.5, Now, Wide(StageEnd));
 			// D1 hook (convoy looks): Sink (E.What "crushed": the hump of air and the boil; "scuttled": men and rafts)
+			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
+			break;
+		}
+		case SeaShow::FxKind::Surrender:
+			// (a boat striking: her blown tanks, her flag and, scuttled, her vents are the convoy looks'; her crew on her casing
+			// the scene's men (DrawWrecks, Show::Hands). Kept while a picture run skips, so a boat that struck in it is up,
+			// her flag flying, after)
+			// D1 hook (convoy looks): Surrender
+			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
+			break;
+		case SeaShow::FxKind::Dive:
+			// (kept while a picture run skips too: a boat forced up in it rides high after, as ConvoyLooks.h says she does)
+			// D1 hook (convoy looks): Dive
+			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
+			break;
+		case SeaShow::FxKind::Rescue:
+			// (kept while a picture run skips too: a rescuer's nets are kept across it, ConvoyLooks.h, for the men she picks up
+			// after)
+			// D1 hook (convoy looks): Rescue
 			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		// (the torpedo tracks: a track begun while a run skips is drawn from where it was fired, its head where it is now)
@@ -2146,7 +2212,8 @@ void ASeaBattle::PlayEffects(bool bSkip)
 		default:
 			break;
 		}
-		if (E.Kind == SeaShow::FxKind::Dispatch || ((E.Kind == SeaShow::FxKind::Sink || E.Kind == SeaShow::FxKind::LeaveLine) && !E.Text.empty()))
+		if (E.Kind == SeaShow::FxKind::Dispatch ||
+		    ((E.Kind == SeaShow::FxKind::Sink || E.Kind == SeaShow::FxKind::LeaveLine || E.Kind == SeaShow::FxKind::Surrender) && !E.Text.empty()))
 		{
 			const FString Words = Wide(E.Text);
 			if (TPair<FString, int32>* Same = Said.FindByPredicate([&Words](const TPair<FString, int32>& Told) { return Told.Key == Words; }))
@@ -2175,16 +2242,8 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			// D1 hook (convoy looks): ChargeBurst
 			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
-		case SeaShow::FxKind::Dive:
-			// D1 hook (convoy looks): Dive
-			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
-			break;
 		case SeaShow::FxKind::Starshell:
 			// D1 hook (convoy looks): Starshell
-			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
-			break;
-		case SeaShow::FxKind::Rescue:
-			// D1 hook (convoy looks): Rescue
 			if (SubLooks) { SubLooks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		case SeaShow::FxKind::Salvo:
@@ -3164,8 +3223,27 @@ void ASeaBattle::DrawWrecks()
 		return;
 	}
 	const double Now = S.BattleT;
-	const std::vector<SeaShow::FloatOut>& Floats = S.Show.Floats();
-	const std::vector<SeaShow::ManOut>& Men = S.Show.Men();
+	// (a struck boat's crew on her casing and her boarding party, and her captor's whaler and its crew, are drawn as the men
+	// in the water and their boats are: Show::Hands and Show::Whalers, kept apart from the show's counts of those; joined
+	// only while there are any, so the usual frame copies nothing)
+	const std::vector<SeaShow::FloatOut>& ShowFloats = S.Show.Floats();
+	const std::vector<SeaShow::ManOut>& ShowMen = S.Show.Men();
+	std::vector<SeaShow::FloatOut> FloatsJoined;
+	std::vector<SeaShow::ManOut> MenJoined;
+	if (!S.Show.Whalers().empty())
+	{
+		FloatsJoined.reserve(ShowFloats.size() + S.Show.Whalers().size());
+		FloatsJoined.insert(FloatsJoined.end(), ShowFloats.begin(), ShowFloats.end());
+		FloatsJoined.insert(FloatsJoined.end(), S.Show.Whalers().begin(), S.Show.Whalers().end());
+	}
+	if (!S.Show.Hands().empty())
+	{
+		MenJoined.reserve(ShowMen.size() + S.Show.Hands().size());
+		MenJoined.insert(MenJoined.end(), ShowMen.begin(), ShowMen.end());
+		MenJoined.insert(MenJoined.end(), S.Show.Hands().begin(), S.Show.Hands().end());
+	}
+	const std::vector<SeaShow::FloatOut>& Floats = FloatsJoined.empty() ? ShowFloats : FloatsJoined;
+	const std::vector<SeaShow::ManOut>& Men = MenJoined.empty() ? ShowMen : MenJoined;
 	const std::vector<SeaShow::SlickOut>& Slicks = S.Show.Slicks();
 	const double Dt = FMath::Clamp(Now - WrecksDrawnAt, 0.0, 1.0);
 	WrecksDrawnAt = Now;
@@ -3185,12 +3263,21 @@ void ASeaBattle::DrawWrecks()
 			}
 		}
 	}
+	// (a captor's whaler in his navy's paint: the whaler's ship is his, afloat)
+	for (const SeaShow::FloatOut& Whaler : S.Show.Whalers())
+	{
+		const SeaShow::ShipOut* Captor = WreckNavy.Contains(Whaler.Ship) ? nullptr : S.Show.Ship(Whaler.Ship);
+		if (Captor)
+		{
+			WreckNavy.Add(Whaler.Ship, KitNation(Captor->Nation));
+		}
+	}
 	// A man who swims in her oil comes out of it black: each man's share of it grows while he is in a slick that is still
 	// thick (to four fifths: his jacket and his hat keep a little of their colour, so he still reads on the oil), and
 	// stays.
 	for (const SeaShow::ManOut& Man : Men)
 	{
-		if (Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat || Man.Doing == Swim::Raft)
+		if (Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat || Man.Doing == Swim::Raft || OnHerCasing(Man.Doing))
 		{
 			continue;
 		}
@@ -3448,7 +3535,8 @@ void ASeaBattle::DrawWrecks()
 		{
 			continue;
 		}
-		const bool bLive = D < LiveReach || Pixels >= DetailFrom || Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat;
+		// (a struck boat's crew on her casing moves with her every frame, near or far, as a man going over does)
+		const bool bLive = D < LiveReach || Pixels >= DetailFrom || Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat || OnHerCasing(Man.Doing);
 		const bool bInFar = !bLive && bFarDue;
 		if (!bLive && !bFarDue && FarMen.Contains(Man.Key))
 		{
@@ -3475,7 +3563,7 @@ void ASeaBattle::DrawWrecks()
 			if (const int32* Index = FloatAt.Find(Man.On))
 			{
 				const SeaShow::FloatOut& F = Floats[*Index];
-				const FVector Ride = FloatRide(F.Key, Now, F.Long);
+				const FVector Ride = FloatRideOf(F, Now);
 				Lift = Ride.X;
 				Where.On = &F;
 				Where.Ride = Lift;

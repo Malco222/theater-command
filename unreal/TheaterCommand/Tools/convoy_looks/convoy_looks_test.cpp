@@ -100,7 +100,7 @@ namespace
 	{
 		double MostStep = 0.0;       // the most her drawn heave moved in one frame (metres)
 		double MostVisibleStep = 0.0; // the same while any of her was within HiddenUnder of the sea
-		int Feathers = 0, Washes = 0, Swirls = 0, Bows = 0;
+		int Feathers = 0, Washes = 0, Swirls = 0, Bows = 0, Vents = 0;
 		std::vector<double> DiveWash, UpWash; // where along her each wash was, diving and coming up
 		double DeckSurfaced = 99.0, TowerAtPeriscope = -99.0, TopAtDeep = -99.0;
 		double ScopeUpLeast = 99.0, ScopeUpMost = -99.0, LowUpMost = -99.0; // her periscopes' heads, the show's periscope up
@@ -210,6 +210,12 @@ namespace
 				case SplashKind::Bow:
 					++R.Bows;
 					break;
+				case SplashKind::Vent:
+				case SplashKind::Scuttle:
+				case SplashKind::Puff:
+					// (only from her vents opened once she has struck, and her scuttling charges after: never on a dive or a surfacing)
+					++R.Vents;
+					break;
 				}
 			}
 			for (const Swirl& W : S.Swirls)
@@ -271,6 +277,7 @@ namespace
 			Check(R.DiveWash.size() >= 2 && BowFirst(R.DiveWash), N + "on the dive the wash runs from the bow aft");
 			Check(R.UpWash.size() >= 2 && BowFirst(R.UpWash), N + "coming up, the bow breaks out first in its foam");
 			Check(R.DeepSwirls == 0 && R.ShallowSwirls == 0, N + "in the dark, no swirl over her deep");
+			Check(R.Vents == 0, N + F("no air from her vents and no scuttling charge on a dive or a surfacing: %.0f", R.Vents));
 			const Run Lit = Steam(M, D, false, 0.6);
 			Check(Lit.DeepSwirls >= 10, N + F("deep under a starshell's light, a faint swirl now and then: %.0f", Lit.DeepSwirls));
 			Check(Lit.ShallowSwirls == 0, N + "no such swirl surfaced or at periscope depth");
@@ -576,6 +583,10 @@ namespace
 			Check(SocketAt("aa.1", X, Z) && std::fabs(X - M.GunAlong) < 0.05 && std::fabs(M.GunTop - Z - 0.1) < 0.02,
 			      N + F("her light gun's muzzle %.2f m up at %.2f along", Z, X));
 			Check(SocketAt("wake.bow", X, Z) && std::fabs(X - M.BowAlong) < 0.05, N + F("her stem at the waterline %.1f m forward", X));
+			// (her ensign staff's foot, where a boat that strikes runs up her white flag: abaft her bridge's periscope
+			// standard, on it)
+			Check(SocketAt("ensign", X, Z) && std::fabs(X - M.EnsignAlong) < 0.05 && std::fabs(Z - M.EnsignTop) < 0.05 && X < M.ScopeAlong && X > M.TowerAft - 0.5 && Z > M.TowerTop,
+			      N + F("her ensign staff's foot %.2f m along at %.2f m, at her bridge's after end abaft her periscopes", X, Z));
 			double Long = 0.0;
 			const size_t L = Model.find("\"long\":");
 			Check(L != std::string::npos && std::sscanf(Model.c_str() + L + 7, "%lf", &Long) == 1 && std::fabs(Long - M.Long) < 0.05, N + F("her bounds %.1f m long", Long));
@@ -1177,6 +1188,7 @@ namespace
 			     "M.O.At.Z = FreeOf(By->Class) * Clamp(",
 			     "M.O.Drop = W.bLeft && Mix(S + 37) < 0.6 ? 0.8 : std::max(0.6, W.Free * (1.0 - 0.8 * Down));",
 			     "if (Class == \"ss\") return { 55, 1, 0, 10, 2.5, 0.8 };",
+			     "const double Half = 0.35 * SizeOf(By->Class).Long, Step = (M.O.Key & 1) ? 1.2 : -1.2;",
 		     })
 		{
 			Check(Show.find(Said) != std::string::npos, std::string("the sea scene's rescue still has: ") + Said);
@@ -1222,6 +1234,370 @@ namespace
 			}
 		}
 		return std::string::npos;
+	}
+
+	/**
+	 * A boat's casing where her crew stand when she strikes (BoatModel's casing rows, which SeaShow::DeckOf mirrors and
+	 * Tools/convoy_looks/convoy_looks_show holds to them): against each of the battle modeller's files, the highest surface
+	 * facing up (not of her periscopes or her deck gun) under every station of the stretches her men stand on, half a
+	 * metre apart along her and a tenth across from 0.85 m (the least the show puts a man out) to her casing's edge, both
+	 * sides, within 0.1 m of CasingAt; each stretch clear of her bridge by half a metre; her deck gun's length along her
+	 * against its mount's and barrel's own points.
+	 */
+	void TestCasing(const std::string& Root)
+	{
+		if (Root.empty())
+		{
+			return;
+		}
+		const std::string Content = Root + "/../../Content/Models/Ships/";
+		for (const char* File : { "Submarine_GER", "Submarine_USA", "Submarine" })
+		{
+			const BoatModel M = SculptedOf(File);
+			const std::string N = std::string("[") + File + " casing] ";
+			const std::string Model = TextOf(Content + File + ".json");
+			int ScopeOne = -1, ScopeTwo = -1, Mount = -1, Barrel = -1;
+			PartAt(Model, "periscope.1", ScopeOne);
+			PartAt(Model, "periscope.2", ScopeTwo);
+			PartAt(Model, "turret.A", Mount);
+			PartAt(Model, "turret.A.gun.1", Barrel);
+			const size_t Near = Model.find("\"near\":{");
+			const std::vector<double> Points = NumbersOf(Model, "points", Near), Corners = NumbersOf(Model, "triangles", Near), Parts = NumbersOf(Model, "part", Near);
+			const bool bRead = Near != std::string::npos && !Parts.empty() && Points.size() == Parts.size() * 3 && !Corners.empty() && Corners.size() % 3 == 0 && ScopeOne >= 0 &&
+			                   ScopeTwo >= 0 && Mount >= 0 && Barrel >= 0;
+			Check(bRead, N + "her near mesh, its parts, her periscopes and her deck gun read");
+			if (!bRead)
+			{
+				continue;
+			}
+			auto Fitting = [&](size_t K)
+			{
+				const int Part = static_cast<int>(Parts[K]);
+				return Part == ScopeOne || Part == ScopeTwo || Part == Mount || Part == Barrel;
+			};
+			// Her deck gun along her: its mount's and its barrel's points, stowed.
+			double GunLo = 1e9, GunHi = -1e9;
+			for (size_t K = 0; K < Parts.size(); ++K)
+			{
+				const int Part = static_cast<int>(Parts[K]);
+				if (Part == Mount || Part == Barrel)
+				{
+					GunLo = std::min(GunLo, Points[K * 3]);
+					GunHi = std::max(GunHi, Points[K * 3]);
+				}
+			}
+			Check(std::fabs(GunLo - M.GunFrom) < 0.05 && std::fabs(GunHi - M.GunTo) < 0.05, N + F("her deck gun from %.2f to %.2f m along her (the row's %.2f", GunLo, GunHi, M.GunFrom) + F(" to %.2f)", M.GunTo));
+			// (her surfaces facing up, as flat triangles in plan; under each station the highest under Cap, as the casing's)
+			struct Facing
+			{
+				double X[3], Y[3], Z[3];
+				double Lo, Hi, Left, Right;
+			};
+			std::vector<Facing> Faces;
+			for (size_t T = 0; T + 2 < Corners.size(); T += 3)
+			{
+				const size_t A = static_cast<size_t>(Corners[T]), B = static_cast<size_t>(Corners[T + 1]), C = static_cast<size_t>(Corners[T + 2]);
+				if (A >= Parts.size() || B >= Parts.size() || C >= Parts.size() || Fitting(A) || Fitting(B) || Fitting(C)) continue;
+				Facing Tri;
+				for (int K = 0; K < 3; ++K)
+				{
+					const size_t V = K == 0 ? A : K == 1 ? B : C;
+					Tri.X[K] = Points[V * 3];
+					Tri.Y[K] = Points[V * 3 + 1];
+					Tri.Z[K] = Points[V * 3 + 2];
+				}
+				// (a wall, seen from above, has no area)
+				if (std::fabs((Tri.X[1] - Tri.X[0]) * (Tri.Y[2] - Tri.Y[0]) - (Tri.Y[1] - Tri.Y[0]) * (Tri.X[2] - Tri.X[0])) < 1e-9) continue;
+				Tri.Lo = std::min({ Tri.X[0], Tri.X[1], Tri.X[2] });
+				Tri.Hi = std::max({ Tri.X[0], Tri.X[1], Tri.X[2] });
+				Tri.Left = std::min({ Tri.Y[0], Tri.Y[1], Tri.Y[2] });
+				Tri.Right = std::max({ Tri.Y[0], Tri.Y[1], Tri.Y[2] });
+				Faces.push_back(Tri);
+			}
+			const double Cap = M.Casing + 1.5;
+			auto Surface = [&Faces, Cap](double X, double Y)
+			{
+				double Best = -1e9;
+				for (const Facing& Tri : Faces)
+				{
+					if (X < Tri.Lo - 1e-9 || X > Tri.Hi + 1e-9 || Y < Tri.Left - 1e-9 || Y > Tri.Right + 1e-9) continue;
+					const double D = (Tri.Y[1] - Tri.Y[2]) * (Tri.X[0] - Tri.X[2]) + (Tri.X[2] - Tri.X[1]) * (Tri.Y[0] - Tri.Y[2]);
+					const double L0 = ((Tri.Y[1] - Tri.Y[2]) * (X - Tri.X[2]) + (Tri.X[2] - Tri.X[1]) * (Y - Tri.Y[2])) / D;
+					const double L1 = ((Tri.Y[2] - Tri.Y[0]) * (X - Tri.X[2]) + (Tri.X[0] - Tri.X[2]) * (Y - Tri.Y[2])) / D;
+					const double L2 = 1.0 - L0 - L1;
+					if (L0 < -1e-6 || L1 < -1e-6 || L2 < -1e-6) continue;
+					const double Z = L0 * Tri.Z[0] + L1 * Tri.Z[1] + L2 * Tri.Z[2];
+					if (Z < Cap && Z > Best) Best = Z;
+				}
+				return Best;
+			};
+			int Stations = 0, Missing = 0;
+			double Worst = 0.0, WorstAlong = 0.0, WorstAcross = 0.0;
+			const double Stretches[2][2] = { { M.AftFrom, M.AftTo }, { M.ForeFrom, M.ForeTo } };
+			for (const auto& Stretch : Stretches)
+			{
+				for (double Along = Stretch[0]; Along <= Stretch[1] + 1e-9; Along += 0.5)
+				{
+					for (double Out = 0.85; Out <= M.Edge + 1e-9; Out += 0.1)
+					{
+						for (const double Hand : { -1.0, 1.0 })
+						{
+							const double Z = Surface(Along, Hand * Out);
+							if (Z < -1e8)
+							{
+								++Missing;
+								continue;
+							}
+							++Stations;
+							const double Off = std::fabs(CasingAt(M, Along, Hand * Out) - Z);
+							if (Off > Worst)
+							{
+								Worst = Off;
+								WorstAlong = Along;
+								WorstAcross = Hand * Out;
+							}
+						}
+					}
+				}
+			}
+			Check(Stations >= 100 && Missing == 0 && Worst <= 0.1,
+			      N + std::to_string(Stations) + " stations where her men stand (" + std::to_string(Missing) + " over no casing): CasingAt within " +
+			          F("%.3f m of her deck (the worst %.1f m along, %.1f across; 0.1 or less)", Worst, WorstAlong, WorstAcross));
+			Check(M.ForeFrom >= M.TowerFore + 0.5 && M.AftTo <= M.TowerAft - 0.5 && M.ForeTo > M.ForeFrom && M.AftTo > M.AftFrom && M.Edge > 0.85,
+			      N + F("her stretches clear of her bridge by half a metre (forward from %.1f, aft from %.1f), out to %.2f m", M.ForeFrom, M.AftTo, M.Edge));
+		}
+		const BoatModel Built = ModelOf("GER");
+		Check(CasingAt(Built, 10.0, 0.9) == Built.Deck && Built.EnsignAlong == Built.TowerAft && Built.EnsignTop > Built.TowerTop,
+		      "the code-built boat: her casing her flat deck, her white flag at her bridge's after end");
+	}
+
+	/**
+	 * A struck boat's white flag (FlagAt) and her vents (OpenVents, StepBoat's Vent): none before she strikes, run up from
+	 * the foot of its 2 m staff to its head in its first seconds; streaming to leeward of the air over her, rippling, the
+	 * same moment the same flag and another boat's in its own time; in a calm hanging down beside the staff, never under its
+	 * foot (nor while it goes up); hauled down and gone. Its staff's foot on her as drawn, leaning aft as her bow rises.
+	 * Scuttled, her vents' spurts a second and a half apart, side about, from forward aft along her saddle tanks, for
+	 * VentFor seconds once, and nothing thrown out of the player's sight.
+	 */
+	/**
+	 * The stage's sinking (AirStage::MoveShip's way "sink", its end "stern") as the looks reproduce it (StageSinking): its
+	 * own lines read from its source, and the curve at a few moments: down by the stern, her trim 14 degrees at 35 s, her
+	 * waterline her top and 40 m under at 70 s.
+	 */
+	void TestStageSinking(const std::string& Root)
+	{
+		if (!Root.empty())
+		{
+			const std::string Stage = TextOf(Root + "/Battle/AirStage.cpp");
+			for (const char* Said : {
+			         "const double Under = Ship.High + 40.0;",
+			         "Pitch = 14.0 * Down * StageParts::Ease(T / 35.0);",
+			         "Depth = Under * StageParts::EaseIn(T / 70.0);",
+			         "const double Down = Ship.End == TEXT(\"bow\") ? 1.0 : Ship.End == TEXT(\"stern\") ? -1.0",
+			         "return X * X * (3.0 - 2.0 * X);",
+			         "// (a positive pitch lifts the model's +X, her stern: the bow goes down)",
+			         "Ship->End = End;",
+			     })
+			{
+				Check(Stage.find(Said) != std::string::npos, std::string("the stage's sinking still has: ") + Said);
+			}
+			const size_t In = Stage.find("static double EaseIn(double X)");
+			Check(In != std::string::npos && Stage.find("return X * X;", In) != std::string::npos && Stage.find("return X * X;", In) < In + 120, "the stage's EaseIn is still X squared");
+		}
+		double Depth = 0.0, Pitch = 0.0;
+		StageSinking(0.0, 10.0, true, Depth, Pitch);
+		const bool bStill = Depth == 0.0 && Pitch == 0.0;
+		StageSinking(35.0, 10.0, true, Depth, Pitch);
+		const bool bHalf = std::fabs(Depth - 50.0 * 0.25) < 1e-9 && std::fabs(Pitch - 14.0) < 1e-9;
+		StageSinking(70.0, 10.0, false, Depth, Pitch);
+		const bool bGone = std::fabs(Depth - 50.0) < 1e-9 && Pitch == 0.0;
+		Check(bStill && bHalf && bGone, "stage sinking: from her trim, by the stern 14 degrees at 35 s, her top 40 m under at 70 s (her look's own end: no trim)");
+	}
+
+	void TestFlagAndVents()
+	{
+		FlagIn In;
+		In.Foot = P3(100.0, 200.0, 6.0);
+		In.Up = UpOf(30.0, 0.0);
+		In.Air = P3(6.0, 0.0, 0.0);
+		In.Seed = 77;
+		Check(!FlagAt(In, 10.0).bShown, "flag: none before she strikes");
+		In.Since = 0.0;
+		Check(!FlagAt(In, 10.0).bShown, "flag: none the moment she strikes, run up from there");
+		In.Since = 0.5 * FlagRaiseFor();
+		const FlagOut Going = FlagAt(In, 10.0);
+		In.Since = 10.0;
+		const FlagOut Flying = FlagAt(In, 10.0);
+		auto Apart = [](const P3& A, const P3& B) { return std::sqrt((A.X - B.X) * (A.X - B.X) + (A.Y - B.Y) * (A.Y - B.Y) + (A.Z - B.Z) * (A.Z - B.Z)); };
+		Check(Flying.bShown && Apart(Flying.Head, In.Foot + P3(0.0, 0.0, FlagStaff())) < 1e-9 && FlagStaff() >= 2.0, F("flag: on a staff %.1f m high over her ensign's place", FlagStaff()));
+		Check(Going.bShown && Going.Point[0][0].Z < Flying.Point[0][0].Z - 0.3 && std::fabs(Flying.Point[0][0].Z - Flying.Head.Z) < 1e-9,
+		      F("flag: run up the staff, its head %.2f m under the staff's head halfway up, at it once hoisted", Flying.Point[0][0].Z - Going.Point[0][0].Z));
+		double Leeward = 1e9;
+		for (int J = 0; J < FlagDown; ++J) Leeward = std::min(Leeward, Flying.Point[J][FlagAlong - 1].X - Flying.Point[J][0].X);
+		Check(Leeward > 0.8 * FlagFly(), F("flag: in a 6 m/s breeze it streams to leeward, its fly %.2f m out from the staff at the least", Leeward));
+		const FlagOut Again = FlagAt(In, 10.0), Later = FlagAt(In, 10.3);
+		bool bSame = true;
+		double Moved = 0.0;
+		for (int J = 0; J < FlagDown; ++J)
+		{
+			for (int I = 0; I < FlagAlong; ++I)
+			{
+				bSame = bSame && Apart(Again.Point[J][I], Flying.Point[J][I]) == 0.0;
+				Moved = std::max(Moved, Apart(Later.Point[J][I], Flying.Point[J][I]));
+			}
+		}
+		Check(bSame && Moved > 0.01 && Moved < 0.3, F("flag: the same moment the same flag; it ripples (%.2f m in 0.3 s at the most)", Moved));
+		In.Seed = 78;
+		Check(Apart(FlagAt(In, 10.0).Point[1][FlagAlong - 1], Flying.Point[1][FlagAlong - 1]) > 1e-4, "flag: another boat's ripples in its own time");
+		In.Seed = 77;
+		// (a calm, and a calm while it goes up: hanging down beside the staff, none of it under the staff's foot)
+		for (const double Since : { 0.3, 10.0 })
+		{
+			In.Air = P3();
+			In.Since = Since;
+			const FlagOut Calm = FlagAt(In, 10.0);
+			double Lowest = 1e9;
+			for (int J = 0; J < FlagDown; ++J)
+				for (int I = 0; I < FlagAlong; ++I) Lowest = std::min(Lowest, Calm.Point[J][I].Z - In.Foot.Z);
+			Check(Calm.bShown && Lowest >= 0.15 - 1e-9 && (Since < 1.0 || Calm.Point[0][FlagAlong - 1].Z < Calm.Point[0][0].Z - 0.5),
+			      F("flag: in a calm (%.1f s up) it hangs down beside the staff, never under its foot (%.2f m over it at the lowest)", Since, Lowest));
+		}
+		In.Air = P3(6.0, 0.0, 0.0);
+		In.Since = 60.0;
+		In.Lowered = 0.5 * FlagLowerFor();
+		const FlagOut Coming = FlagAt(In, 10.0);
+		In.Lowered = FlagLowerFor() + 0.1;
+		Check(Coming.bShown && Coming.Point[0][0].Z < Flying.Point[0][0].Z - 0.3 && !FlagAt(In, 10.0).bShown, "flag: hauled down the staff, then gone");
+		// Her staff's foot on her as the stage draws her: level, her heave and its height over her waterline; bow up, it comes
+		// aft and lower (it stands abaft amidships), and the staff leans aft.
+		const BoatModel Ger = SculptedOf("Submarine_GER");
+		BoatIn Her;
+		Her.Heading = 90.0;
+		BoatOut Rode;
+		Rode.Heave = 0.4;
+		const P3 Level = EnsignAt(Ger, Drawn(), Her, Rode);
+		Her.Pitch = 5.0;
+		const P3 Tipped = EnsignAt(Ger, Drawn(), Her, Rode);
+		const P3 Leans = UpOf(90.0, 5.0);
+		Check(std::fabs(Level.X - Ger.EnsignAlong) < 1e-9 && std::fabs(Level.Y) < 1e-9 && std::fabs(Level.Z - 0.4 - Ger.EnsignTop) < 1e-9 && Tipped.X < Level.X - 0.3 && Tipped.Z < Level.Z &&
+		          Leans.X < -0.05 && Leans.Z > 0.99,
+		      F("flag: her staff's foot %.2f m along at %.2f m, %.2f m aft with her bow 5 degrees up", Level.X, Level.Z, Level.X - Tipped.X));
+
+		// Her vents, scuttled after she struck: on a boat surfaced and riding high (her tanks blown as she struck), opened at
+		// 5 s, the stage taking her down by the stern from then.
+		for (const bool bShown : { true, false })
+		{
+			const BoatModel M = SculptedOf("Submarine_GER");
+			BoatState S;
+			Blow(S, true);
+			std::vector<double> When, Along, Across;
+			// (what the kit is called with for each: a jet straight up off her saddle tank while it is out of the sea, the
+			// heights it leaves her at against the stage's sinking, and white water once it is under)
+			int Jets = 0, Churns = 0, JetsLeaning = 0, JetsOff = 0, ChurnsOff = 0;
+			double FirstZ = -99.0;
+			// (her scuttling charges: when, where along her, how far out, how high, and what the kit is called with)
+			std::vector<double> ChargeWhen, ChargeAlong, ChargeOut, PuffAlong, PuffZ;
+			int ChargeCalls = 0, PuffCalls = 0;
+			for (double T = 0.0; T < 45.0; T += Frame)
+			{
+				if (std::fabs(T - 5.0) < 0.5 * Frame) OpenVents(S, T);
+				if (std::fabs(T - 35.0) < 0.5 * Frame) OpenVents(S, T);
+				BoatIn Up;
+				Up.T = T;
+				Up.Dive = "surfaced";
+				Up.Keel = 67.0 * 0.07;
+				Up.Heading = 90.0;
+				Up.bShown = bShown;
+				for (const BoatSplash& Sp : StepBoat(S, Up, M, Drawn()).Splashes)
+				{
+					const SplashKit Kit = KitOf(Sp);
+					if (Sp.Kind == SplashKind::Scuttle)
+					{
+						ChargeWhen.push_back(T);
+						ChargeAlong.push_back(Sp.At.X);
+						ChargeOut.push_back(std::fabs(Sp.At.Y));
+						ChargeCalls += Kit.Call == KitCall::Spout && Kit.Row == "churn" && Kit.Where.Z == 0.0 ? 1 : 0;
+					}
+					if (Sp.Kind == SplashKind::Puff)
+					{
+						PuffAlong.push_back(Sp.At.X);
+						PuffZ.push_back(Sp.At.Z);
+						PuffCalls += Kit.Call == KitCall::Puff && Kit.Way.Z > 0.95 && Kit.Across > 0.3 && Kit.Seconds > 0.0 && std::fabs(Kit.Where.Z - Sp.At.Z) < 1e-12 ? 1 : 0;
+					}
+					if (Sp.Kind != SplashKind::Vent) continue;
+					When.push_back(T);
+					Along.push_back(Sp.At.X);
+					Across.push_back(Sp.At.Y);
+					if (FirstZ < -90.0) FirstZ = Sp.At.Z;
+					// (where it leaves her, as the stage takes her down: her saddle tank's height on her as she rides and sinks)
+					double Depth = 0.0, Pitch = 0.0;
+					StageSinking(T - 5.0, M.Top, true, Depth, Pitch);
+					const double Expect = M.Casing - 1.0 - Depth + Sp.At.X * std::sin(Pitch * Pi / 180.0) + (M.Casing - 1.0) * (std::cos(Pitch * Pi / 180.0) - 1.0);
+					if (Sp.At.Z > 0.1)
+					{
+						++Jets;
+						JetsLeaning += Kit.Call == KitCall::Jet && Kit.Way.Z > 0.95 && Kit.Across > 0.2 && Kit.Seconds >= 1.0 ? 0 : 1;
+						JetsOff += std::fabs(Sp.At.Z - Expect) < 0.02 ? 0 : 1;
+					}
+					else
+					{
+						++Churns;
+						ChurnsOff += Kit.Call == KitCall::Spout && Kit.Row == "churn" && Kit.Where.Z == 0.0 ? 0 : 1;
+					}
+				}
+			}
+			if (!bShown)
+			{
+				Check(When.empty() && ChargeWhen.empty() && PuffZ.empty(),
+				      F("vents: out of the player's sight none thrown (%.0f), nor her charges' (%.0f)", static_cast<double>(When.size()), static_cast<double>(ChargeWhen.size() + PuffZ.size())));
+				continue;
+			}
+			Check(std::fabs(FirstZ - (M.Casing - 1.0)) < 1e-9 && Jets >= 3 && JetsLeaning == 0 && JetsOff == 0,
+			      F("vents: the first leaves her saddle tank %.2f m over the sea; %.0f out of the sea, each the kit's white jet straight up (%.0f not), at her saddle tank as the stage "
+			        "takes her down",
+			        FirstZ, Jets, JetsLeaning) +
+			          F(" (%.0f off it)", JetsOff));
+			Check(Churns >= 3 && ChurnsOff == 0, F("vents: once under, white water on the sea over them (%.0f, %.0f not)", Churns, ChurnsOff));
+			Check(ChargeWhen.size() == 2 && PuffZ.size() == 2 && std::fabs(ChargeWhen[0] - 5.0 - ScuttleChargeAt(0)) < 1.5 * Frame &&
+			          std::fabs(ChargeWhen[1] - 5.0 - ScuttleChargeAt(1)) < 1.5 * Frame && ScuttleChargeAt(0) >= 6.0 && ScuttleChargeAt(2) < 0.0,
+			      F("charges: two, at %.1f s and %.1f s (her vents opened at 5 s)", ChargeWhen.empty() ? -1.0 : ChargeWhen[0], ChargeWhen.size() < 2 ? -1.0 : ChargeWhen[1]));
+			if (ChargeWhen.size() == 2 && PuffZ.size() == 2)
+			{
+				Check(std::fabs(ChargeAlong[0] - M.AftHatch) < 1e-9 && std::fabs(ChargeAlong[1] - M.ForeHatch) < 1e-9 && std::fabs(PuffAlong[0] - M.AftHatch) < 1e-9 &&
+				          std::fabs(PuffAlong[1] - M.ForeHatch) < 1e-9,
+				      F("charges: the after hatch's first (%.1f m along her), then the fore one's (%.1f m)", ChargeAlong[0], ChargeAlong[1]));
+				Check(ChargeOut[0] > 0.5 * M.Wide + 0.3 && ChargeOut[1] > 0.5 * M.Wide + 0.3 && ChargeOut[0] < 0.5 * M.Wide + 2.0 && ChargeCalls == 2,
+				      F("charges: each a muffled heave of white water alongside, %.2f m and %.2f m out from her middle line (the kit's churn: no flash)", ChargeOut[0], ChargeOut[1]));
+				Check(PuffZ[0] > 0.3 && PuffZ[1] > 0.3 && PuffCalls == 2, F("charges: their smoke out of the hatch over each, %.2f m and %.2f m over the sea, straight up (the kit's puff)", PuffZ[0], PuffZ[1]));
+			}
+			// (a picture run skipping past her charges: none thrown late)
+			BoatState Skipped;
+			Blow(Skipped, true);
+			int Late = 0;
+			for (const double T : { 0.0, 0.1, 0.2, 20.0, 20.1, 20.2 })
+			{
+				if (T == 0.1) OpenVents(Skipped, T);
+				BoatIn Up;
+				Up.T = T;
+				Up.Dive = "surfaced";
+				Up.Keel = 67.0 * 0.07;
+				Up.Heading = 90.0;
+				for (const BoatSplash& Sp : StepBoat(Skipped, Up, M, Drawn()).Splashes) Late += Sp.Kind == SplashKind::Scuttle || Sp.Kind == SplashKind::Puff ? 1 : 0;
+			}
+			Check(Late == 0 && Skipped.Charges == ScuttleCharges, F("charges: skipped past, none thrown late (%.0f)", Late));
+			bool bSteady = !When.empty() && When.front() < 5.0 + Frame, bAbout = true, bAft = true, bOnHer = true;
+			for (size_t K = 0; K < When.size(); ++K)
+			{
+				bOnHer = bOnHer && std::fabs(std::fabs(Across[K]) - 0.45 * M.Wide) < 1e-6 && std::fabs(Along[K]) <= 0.3 * M.Long + 1e-6;
+				if (K == 0) continue;
+				bSteady = bSteady && std::fabs(When[K] - When[K - 1] - 1.5) < 1.5 * Frame;
+				bAbout = bAbout && Across[K] * Across[K - 1] < 0.0;
+				bAft = bAft && Along[K] < Along[K - 1];
+			}
+			Check(bSteady && bAbout && bAft && bOnHer && When.back() < 5.0 + VentFor() && When.size() >= 15 && When.size() <= 18,
+			      F("vents: %.0f spurts from %.1f s to %.1f s, a second and a half apart, side about along her saddle tanks from forward aft; opened once",
+			        static_cast<double>(When.size()), When.empty() ? -1.0 : When.front(), When.empty() ? -1.0 : When.back()));
+		}
 	}
 
 	/**
@@ -1471,6 +1847,35 @@ namespace
 			}
 			Check(bBoth, std::string("the ") + Navy + " sailors' file has idle and cower, each on a deck");
 		}
+		// A struck boat's crew on her casing (the sea show's Hands): walked to their places at 1.25 m a second and run to her
+		// side at 3, so the files' walk and run, on a deck, must cover that ground in their stride or the men's feet slide.
+		{
+			const std::string ShowText = TextOf(Root + "/Battle/SeaShow.cpp");
+			Check(Sailors.find("case Act::Walk: return \"walk\";") != std::string::npos && Sailors.find("case Act::Run: return \"run\";") != std::string::npos &&
+			          ShowText.find("const bool bAcross = Toward(D.Across, D.PlaceAcross, 1.25);") != std::string::npos &&
+			          ShowText.find("if (Toward(D.Across, D.Side * Row.Edge, 3.0))") != std::string::npos,
+			      "a struck boat's men walk to their places at 1.25 m/s and run to her side at 3 m/s, by the files' walk and run");
+			for (const char* Navy : { "GER", "ITA", "JAP", "SOV", "UK", "USA" })
+			{
+				const std::string Men = TextOf(Content + "Models/Soldiers/soldier_" + Navy + "_sailor.json");
+				bool bPaced = !Men.empty();
+				for (const auto& [Clip, Pace] : { std::pair<const char*, double>{ "walk", 1.25 }, std::pair<const char*, double>{ "run", 3.0 } })
+				{
+					const std::string Head = std::string("\"") + Clip + "\":{\"long\":";
+					const size_t At = Men.find(Head);
+					const size_t Strode = At == std::string::npos ? std::string::npos : Men.find("\"stride\":", At);
+					const size_t Rooted = At == std::string::npos ? std::string::npos : Men.find("\"root\":\"", At);
+					if (Strode == std::string::npos || Rooted == std::string::npos)
+					{
+						bPaced = false;
+						continue;
+					}
+					const double Long = std::strtod(Men.c_str() + At + Head.size(), nullptr), Stride = std::strtod(Men.c_str() + Strode + 9, nullptr);
+					bPaced = bPaced && Men.compare(Rooted + 8, 5, "deck\"") == 0 && Long > 0.0 && std::fabs(Stride / Long - Pace) < 0.05 * Pace;
+				}
+				Check(bPaced, std::string("the ") + Navy + " sailors' file has walk (1.25 m/s) and run (3 m/s), each on a deck");
+			}
+		}
 		// A boat's hits' looks put out by one rule, ConvoyLook::PutsOutLooks, which the scene asks each frame just before it
 		// puts them out on the stage (and the stage's PutOut hands to the ship looks'), and the sea show's cloud test holds the
 		// show's hits on boats to (the review of 23 November: the test had its own copy of the rule). These pins were the
@@ -1554,6 +1959,9 @@ int main(int ArgC, char** ArgV)
 	TestRescue(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestMeshShape();
 	TestGuns(ArgC > 1 ? std::string(ArgV[1]) : std::string());
+	TestCasing(ArgC > 1 ? std::string(ArgV[1]) : std::string());
+	TestStageSinking(ArgC > 1 ? std::string(ArgV[1]) : std::string());
+	TestFlagAndVents();
 	std::printf("convoy looks: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }
