@@ -241,6 +241,14 @@ export class LandBattle implements BattleSim<LandUnit> {
   private warned: Record<Side, boolean> = { att: false, def: false };
   /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
   private bar: Record<Side, number> = { att: 0, def: 0 };
+  /**
+   * All fall back (release 1.5; Brian, 23 November 14:47Z): the battle second each army was ordered back, null while it
+   * fights on. Its blocks withdraw toward its own edge and are out once behind the zone it drew up in; when the last is
+   * out, the battle ends as its withdrawal. It takes no new orders after it.
+   */
+  private falling: Record<Side, number | null> = { att: null, def: null };
+  /** The highest each falling army's bar stood from the order until its last block was out: what it pays by (DD 14:54Z, b474). */
+  private fallBar: Record<Side, number> = { att: 0, def: 0 };
   /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
   private heldFor: Record<Side, number> = { att: 0, def: 0 };
   /**
@@ -1490,6 +1498,8 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   command(c: Command, by: Side): boolean {
     if (this.over) return false;
+    // Falling back, the army takes no new orders (all fall back, release 1.5): handing it to the computer or the dice still ends it.
+    if (this.falling[by] !== null && c.do !== 'auto' && c.do !== 'dice' && c.do !== 'withdrawAll') return false;
     // A block waiting for help (hold until relieved, release 2) is never its staff's to order: only the player's own
     // order calls its wait off.
     const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort' && !(this.staffing && u.waits && !u.waits.free));
@@ -1626,6 +1636,21 @@ export class LandBattle implements BattleSim<LandUnit> {
         }
         // Hold until relieved (release 2): { do: 'land:wait', units } tells blocks on foot to dig in and wait for a corps
         // coming up from next door (waitWhy). Gated again as it lands: where one may no longer wait, it holds.
+        // All fall back (release 1.5; Brian, 23 November 14:47Z): { do: 'land:fallBack' } sends every block of the side
+        // back toward its own edge, by radio as any order (fallBackWhy). Corps still coming up from next door turn back.
+        // Each block is out once behind the zone its side drew up in (outLine); the last one out ends the battle as the
+        // side's withdrawal, billed by the highest its bar stood from now on (the design director, 14:54Z, on b474).
+        if (c.do === 'land:fallBack') {
+          if (this.fallBackWhy(by) !== null) return false;
+          const us = this.units.filter((u) => u.side === by && fighting(u) && u.kind !== 'fort');
+          this.falling[by] = this.t;
+          this.fallBar[by] = this.breaking(by);
+          this.coming = this.coming.filter((k) => k.u.side !== by);
+          hands(us);
+          for (const u of us) give(u, () => this.send(u, { kind: 'withdraw', x: u.x, y: by === 'att' ? 0 : this.field.h }));
+          this.say({ what: 'land:fallBack', side: by, text: `${this.army(by)} falls back.` });
+          return true;
+        }
         if (c.do === 'land:wait') {
           if (!this.relief) return false;
           // Gated block by block, in order: one that may not wait (its corps spoken for by one before it) keeps its order.
@@ -3181,7 +3206,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         u.state = 'withdrawn'; u.act = 'down';
         this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
       }
-    } else if (u.order?.kind === 'withdraw' && (u.side === 'att' ? u.y <= 6 : u.y >= this.field.h - 6)) {
+    } else if (u.order?.kind === 'withdraw' && (u.side === 'att' ? u.y <= this.outLine('att') : u.y >= this.outLine('def'))) {
       u.state = 'withdrawn'; u.act = 'down';
       this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
     }
@@ -3586,15 +3611,20 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   private judge(): void {
     for (const s of ['att', 'def'] as Side[]) {
-      const left = this.units.filter((u) => u.side === s && fighting(u));
+      // Falling back (all fall back), a fort's garrison cannot go with it: the battle ends when the rest are out.
+      const fall = this.falling[s] !== null;
+      const left = this.units.filter((u) => u.side === s && fighting(u) && !(fall && u.kind === 'fort'));
       if (!left.length) {
-        const how = this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed';
+        const out = this.units.some((u) => u.side === s && u.state === 'withdrawn');
+        // Ordered back, it withdrew while any block of it got out: those caught running on the way are its losses (b474).
+        const how = out && (fall || !this.units.some((u) => u.side === s && u.state === 'routing')) ? 'withdrew' : 'destroyed';
         // Driven from the field, it broke: why, as it stood when the last block left the fight (b496(2)).
         this.finish(other(s), how, undefined, how === 'destroyed' ? this.breakCause(s) : undefined);
         return;
       }
       const b = this.brink(s), near = b.bar;
       this.bar[s] = near;
+      if (fall) this.fallBar[s] = Math.max(this.fallBar[s], near);
       if (b.holding) this.heldFor[s] += DT;
       // Held at the brink, a small army gives ground with its worn (b496(1)).
       if (b.holding && this.freshHold[s]) this.giveGround(s, left);
@@ -3619,7 +3649,37 @@ export class LandBattle implements BattleSim<LandUnit> {
         return;
       }
     }
-    if (this.t >= this.ticket.limit) this.finish('def', 'time');
+    // The day done with an army still falling back: it withdrew, the rest of it caught on the way (all fall back).
+    if (this.t >= this.ticket.limit) {
+      if (this.falling.def !== null) this.finish('att', 'withdrew');
+      else if (this.falling.att !== null) this.finish('def', 'withdrew');
+      else this.finish('def', 'time');
+    }
+  }
+
+  /**
+   * Why this side may not fall back now, in the player's words; null where it may (all fall back, release 1.5). Only once
+   * the battle has begun, once, and with a block of it that can go.
+   */
+  fallBackWhy(s: Side): string | null {
+    if (this.over) return 'The battle is over.';
+    if (this.setup !== null) return 'The battle has not begun.';
+    if (this.falling[s] !== null) return 'Your army is already falling back.';
+    if (!this.units.some((u) => u.side === s && fighting(u) && u.kind !== 'fort')) return 'No unit of yours can fall back.';
+    return null;
+  }
+
+  /** Whether that army has been ordered back (all fall back), for the view and the 3D game. */
+  fallingBack(s: Side): boolean { return this.falling[s] !== null; }
+
+  /**
+   * Where a withdrawing block of that side is out: a field's breadth from its own edge (6 m), or, with its army falling
+   * back, behind the zone it drew up in (Brian: "behind them where they started").
+   */
+  private outLine(s: Side): number {
+    const z = this.field.zones[s];
+    if (s === 'att') return this.falling.att !== null ? Math.max(6, z[1]) : 6;
+    return this.falling.def !== null ? Math.min(this.field.h - 6, z[3]) : this.field.h - 6;
   }
 
   /**
@@ -3680,6 +3740,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const told = how === 'rout' && why && why.by !== 'none';
     const lines = [
       how === 'rout' ? this.brokeAfter(loser, told ? why : undefined)
+        : how === 'withdrew' && this.falling[loser] !== null ? `${this.army(loser)} fell back behind the ground it started from, to fight another day.`
         : how === 'withdrew' ? `${this.army(loser)} withdrew from the field.`
           : how === 'time' ? `${line} held until the day was done.`
             : how === 'destroyed' ? `${this.army(loser)} was driven from the field.`
@@ -3700,7 +3761,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0, ...(this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {}) })),
       ...(how === 'rout' || how === 'destroyed' ? { broke: loser, ...(why ? { brokeBy: why } : {}) } : {}),
       // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
-      ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
+      // Ordered back (all fall back), the highest its bar stood from the order until its last block was out (DD 14:54Z).
+      ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.falling[loser] !== null ? Math.max(this.fallBar[loser], this.bar[loser]) : this.bar[loser]) * 1000) / 1000 } } : {}),
+      ...(how === 'withdrew' && this.falling[loser] !== null ? { fellBack: loser } : {}),
       // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
       ...(this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}),
     };
@@ -4198,7 +4261,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
     // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...(this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

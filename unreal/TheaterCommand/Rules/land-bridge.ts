@@ -34,6 +34,9 @@
 //                                             land:cut { units, x, y } (hedge cutters: tanks cut a gap through the hedge
 //                                             there), land:smoke { units, x0, y0, x1, y1 } (smoke on call: men on foot lay
 //                                             a screen along that line); a refusal says why
+//                                             land:fallBack {} (all fall back, release 1.5: his whole army goes back behind
+//                                             the ground it drew up on, and the battle ends as his withdrawal; no orders after)
+//   TC.landFallBackWhy()                   -> { why }: why his army may not fall back now (null where it may)
 //   TC.landCutWhy(id, x?, y?)              -> { why }: why that tank block of his may not cut a gap there (null where it may)
 //   TC.landSmokeWhy(id, x0?, y0?, x1?, y1?) -> { why }: why that block of his may not lay smoke along that line (null where
 //                                             it may); with no point or line, whether it may at all
@@ -125,6 +128,9 @@ function need(): LiveBattle {
     const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };
     if (!ok && o.do === 'land:cut' && o.units?.length) return { ok, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? '' };
     if (!ok && o.do === 'land:smoke' && o.units?.length) return { ok, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? '' };
+    // (an army that may not fall back, and any order to an army already falling back: all fall back)
+    if (!ok && o.do === 'land:fallBack') return { ok, why: need().fallBackWhy() ?? '' };
+    if (!ok && need().fallingBack()) return { ok, why: 'Your army is falling back: it takes no new orders.' };
     // (and a night patrol refused)
     const n = c as { unit?: number };
     if (!ok && o.do === 'land:patrol') return { ok, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? '' };
@@ -133,6 +139,10 @@ function need(): LiveBattle {
 
   landWaitWhy(id: number) {
     return need().waitWhy(Number(id));
+  },
+
+  landFallBackWhy() {
+    return { why: need().fallBackWhy() };
   },
 
   landCutWhy(id: number, x?: number | null, y?: number | null) {

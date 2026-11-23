@@ -60,6 +60,13 @@ export function battleCalls(h: BattleHooks) {
     const out = h.attack(ids, to, r.R, fieldBill(r));
     // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
     const rep = (out as { report?: BattleReport | null } | null)?.report;
+    // His army fell back on his order (ALL FALL BACK, release 1.5): the report says so, for the month's card.
+    // (on the campaign's own report as kept, and on the answer, which is a copy of it)
+    if (rep && r.fellBack) {
+      rep.fellBack = r.fellBack;
+      const kept = h.game().reports.find((x) => x.id === rep.id);
+      if (kept) kept.fellBack = r.fellBack;
+    }
     const pursuit = rep ? pursuitLine(t, r, rep) : null;
     // Why the army broke, for the after card's words where it broke (b496(2)).
     const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };

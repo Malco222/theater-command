@@ -623,6 +623,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.line = r.relief ? (r.taken ? (att ? 'The siege is raised.' : 'Their relief broke your siege.') : (att ? 'The relief was thrown back.' : 'Their relief was thrown back.')) : (r.taken ? (att ? 'The garrison broke the ring.' : 'The garrison broke your ring.') : (att ? 'The sally was thrown back.' : 'Their sally was thrown back.'));
       row.head = r.taken ? `The siege of ${place} is raised` : `The siege of ${place} holds`;
       row.follows = r.taken ? (att ? 'The town is free of its besiegers.' : 'The ring round the town is broken.') : (att ? 'The town is still cut off.' : 'The ring round the town stands.');
+    } else if (r.fellBack && (r.fellBack === 'att') === att && (att ? !r.taken : r.taken)) {
+      // His general's ALL FALL BACK (release 1.5): called off on the field, the army kept to fight another day.
+      row.tag = 'LOST'; row.tone = 'bad';
+      row.line = 'Your army fell back to fight another day.';
+      row.head = att ? `The attack on ${place} is called off` : `${place} is given up`;
+      row.follows = att ? 'The attack gained no ground, and the army got away.' : worth(true) || 'The front falls back.';
     } else if (att) {
       row.tag = r.taken ? 'WON' : 'LOST'; row.tone = r.taken ? 'good' : 'bad';
       row.line = r.taken
