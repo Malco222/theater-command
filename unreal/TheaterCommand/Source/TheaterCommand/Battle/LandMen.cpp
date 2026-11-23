@@ -1007,6 +1007,53 @@ namespace LandMen
 				}
 			}
 		}
+		// (a gore twin's cuts and joined skin: Effects (R2); a point out of its level, or a mask past the cuts, drops
+		// the whole joined list of that level, so the twin falls cracked as before rather than torn)
+		Cuts.clear();
+		for (Joined& Jn : Joins) Jn = Joined();
+		const J& Gore = Root["gore"];
+		const J& CutList = Gore["cuts"];
+		for (size_t I = 0; I < CutList.Size(); ++I)
+		{
+			const J& Cj = CutList.At(I);
+			Cut Row;
+			Row.Bone = Cj["bone"].Text();
+			Row.BoneIx = BoneIndex(Row.Bone);
+			if (Row.BoneIx < 0 || Bones[static_cast<size_t>(Row.BoneIx)].Parent < 0) { Cuts.clear(); break; }
+			for (int L = 0; L < LodCount; ++L)
+			{
+				const J& Lv = Cj[LodNames[L]];
+				for (int K = 0; K < 2; ++K)
+				{
+					Row.Stump[L][K] = static_cast<int>(Lv["stump"]["cap_points"].Number(static_cast<size_t>(K)));
+					Row.Limb[L][K] = static_cast<int>(Lv["limb"]["cap_points"].Number(static_cast<size_t>(K)));
+				}
+			}
+			Cuts.push_back(std::move(Row));
+		}
+		const J& Joint = Gore["joined"];
+		for (int L = 0; L < LodCount && !Cuts.empty(); ++L)
+		{
+			const J& Lv = Joint[LodNames[L]];
+			const J& Pts = Lv["points"];
+			const size_t N = Pts.Size();
+			Joined& Jn = Joins[L];
+			bool bOk = Lv["part"].Size() == N && Lv["part2"].Size() == N && Lv["w2"].Size() == N && Lv["cuts"].Size() == N;
+			for (size_t K = 0; bOk && K < N; ++K)
+			{
+				const double P = Pts.Number(K, -1.0), Mask = Lv["cuts"].Number(K, -1.0);
+				const double P1 = Lv["part"].Number(K, -1.0), P2 = Lv["part2"].Number(K, -1.0);
+				bOk = P >= 0.0 && P < Meshes[L].Points && Mask >= 0.0 && Mask < static_cast<double>(1u << Cuts.size())
+					&& P1 >= 0.0 && P1 < static_cast<double>(Bones.size()) && P2 >= 0.0 && P2 < static_cast<double>(Bones.size());
+				if (!bOk) break;
+				Jn.Point.push_back(static_cast<uint32_t>(P));
+				Jn.Part.push_back(static_cast<uint8_t>(P1));
+				Jn.Part2.push_back(static_cast<uint8_t>(P2));
+				Jn.W2.push_back(static_cast<float>(Lv["w2"].Number(K)));
+				Jn.Mask.push_back(static_cast<uint16_t>(Mask));
+			}
+			if (!bOk) Jn = Joined();
+		}
 		return true;
 	}
 
@@ -5067,6 +5114,32 @@ namespace LandMen
 		{
 			const FaceRest& R = *Mn.FaceAt[L];
 			SkinMesh(V.M, Mn.Frames, At, Fa, R.At.data(), R.Facing.data());
+		}
+		if (Mn.bGore && !Mn.S->Joins[L].Point.empty())
+		{
+			// Effects (R2): a gore twin's joined skin (the art director, 18:34Z: the caps hidden in him till his limb
+			// goes): the points at each whole joint skinned with his own weights, so no bent joint cracks open on its
+			// caps; at a cut whose bone has left its joint, the twin's own hard weights, as SkinMesh laid them.
+			const Soldier& Tw = *Mn.S;
+			uint32_t Off = 0;
+			for (size_t K = 0; K < Tw.Cuts.size(); ++K)
+			{
+				const int B = Tw.Cuts[K].BoneIx;
+				const Vec3 Head = Tw.Bones[static_cast<size_t>(B)].Head;
+				const Vec3 A = Mn.Frames[B].Point(Head), Q = Mn.Frames[Tw.Bones[static_cast<size_t>(B)].Parent].Point(Head);
+				const float Dx = A.X - Q.X, Dy = A.Y - Q.Y, Dz = A.Z - Q.Z;
+				if (Dx * Dx + Dy * Dy + Dz * Dz > 1e-4f) Off |= 1u << K;
+			}
+			const Soldier::Joined& Jn = Tw.Joins[L];
+			const FaceRest& R = *Mn.FaceAt[L];
+			for (size_t K = 0; K < Jn.Point.size(); ++K)
+			{
+				if ((Jn.Mask[K] & Off) != 0u || Jn.Point[K] >= V.ToCompact.size()) continue;
+				const int P = V.ToCompact[Jn.Point[K]];
+				if (P < 0) continue;
+				const size_t O = static_cast<size_t>(P) * 3;
+				SkinPoint(0, R.At.data() + O, R.Facing.data() + O, &Jn.Part[K], &Jn.Part2[K], &Jn.W2[K], Mn.Frames, At + O, Fa ? Fa + O : nullptr);
+			}
 		}
 		if (Fi) SkinMesh(Fi->Lods[L], Mn.Frames, At + static_cast<size_t>(Body) * 3, Fa ? Fa + static_cast<size_t>(Body) * 3 : nullptr);
 		if (bRest)

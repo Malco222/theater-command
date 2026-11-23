@@ -211,6 +211,27 @@ namespace LandMen
 		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
 		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
+		/** A gore twin's cuts (its gore.cuts, in order: bit k of a joined point's mask), each by its bone, and its
+		 * caps' points per level ([first, count], the stump's and the limb's). Empty but in a twin. A cut is off where
+		 * its bone has left the joint its parent holds (more than a centimetre). */
+		struct Cut
+		{
+			std::string Bone;
+			int BoneIx = -1;
+			int Stump[LodCount][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } }, Limb[LodCount][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
+		};
+		std::vector<Cut> Cuts;
+		/** A gore twin's joined skin (its gore.joined, per level): the points its hard weights at the cuts would crack
+		 * open at a bent joint, with the man's own weights, skinned so while none of the cuts in its mask is off
+		 * (the art director, 18:34Z: the caps hidden in him till his limb goes). */
+		struct Joined
+		{
+			std::vector<uint32_t> Point;
+			std::vector<uint8_t> Part, Part2;
+			std::vector<float> W2;
+			std::vector<uint16_t> Mask;
+		};
+		Joined Joins[LodCount];
 		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
 		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
 		std::vector<std::vector<int>> Styles;
