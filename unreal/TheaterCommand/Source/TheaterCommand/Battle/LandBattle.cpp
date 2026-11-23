@@ -4468,6 +4468,8 @@ void ALandBattle::BailOut()
 			const LandMen::Soldier* Sol = S.Men->SoldierFile(File);
 			W.bClips = Sol && Sol->ClipIndex("bail_climb_out") >= 0 && Sol->ClipIndex("bail_jump_down") >= 0
 				&& Sol->ClipIndex("burning_run") >= 0 && Sol->ClipIndex("burning_fall_roll") >= 0;
+			// (and the step down off her turret's roof onto her deck, where his file has it: the soldiers' 18:52Z)
+			W.bStep = W.bClips && Sol->ClipIndex("bail_step_down") >= 0;
 			// (her roof over his boots in the hatch, where the soldiers measured it; else the clip's own 0.95 m)
 			W.RoofUp = Look.Name.find("Sherman") != std::string::npos ? 1.07 : Look.Name.find("Tiger") != std::string::npos ? 0.97
 				: Look.Name.find("PanzerIV") != std::string::npos || Look.Name.find("Panzer IV") != std::string::npos ? 0.82 : 0.95;

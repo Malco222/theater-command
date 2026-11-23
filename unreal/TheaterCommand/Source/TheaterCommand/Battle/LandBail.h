@@ -74,14 +74,22 @@ namespace LandBail
 		double Speed = 4.5;       // metres a second on the ground
 		double Crawl = 0.0;       // a wounded man's crawl after he falls, metres
 		int Fall = 0;             // which fall: 0 forward, 1 back
-		/** The soldiers' bail clips (Wreck::bClips): out of the hatch in bail_climb_out, off her hull in bail_jump_down,
-		 * a man on fire in burning_run and burning_fall_roll; his way out the clips' length (OnGroundOf). */
+		/** The soldiers' bail clips (Wreck::bClips): out of the hatch in bail_climb_out, a walk over her turret's roof
+		 * to its edge and down onto her deck in bail_step_down (where her turret stands over her deck), a walk to her
+		 * hull's edge and off it in bail_jump_down, a man on fire in burning_run and burning_fall_roll; his way out the
+		 * clips' length (OnGroundOf). */
 		bool bClips = false;
 		double Face = 0.0;        // with the clips: his facing as he climbs out (his right toward the side he drops from)
 		double RoofUp = 0.95;     // with the clips: her roof over his boots in the hatch (Wreck::RoofUp)
+		bool bStep = false;       // with the clips: he steps down off her turret's roof onto her deck (bail_step_down)
+		V3 Brink, Step;           // with the step: his boots at her turret's edge, and where the step lands him on her deck
+		double RoofS = 0.0;       // with the clips: his walk over her roof to its edge, seconds (none without the step)
+		double DeckS = 0.0;       // with the clips: his walk on her deck to her hull's edge, seconds
+		double ClipsS = 0.0;      // with the clips: from his start out of the hatch to his feet on the ground, seconds
 	};
 
-	/** Life's seconds from his start out of the hatch to his feet on the ground (2.05 s; 3.53 s with the bail clips). */
+	/** Life's seconds from his start out of the hatch to his feet on the ground (2.05 s; with the bail clips about 4 to
+	 * 5 s, his own walks over her: Man::ClipsS). */
 	double OnGroundOf(const Man& M);
 
 	struct Wreck
@@ -104,6 +112,12 @@ namespace LandBail
 		/** With the bail clips: her turret's roof over a commander's boots stood in his hatch (the soldiers' numbers:
 		 * a Panzer IV 0.82 m, a Tiger 0.97, a Sherman 1.07; the clip is made for 0.95), made up from 0.8 s of his climb. */
 		double RoofUp = 0.95;
+		/** With the bail clips: her crew's file has bail_step_down too (the soldiers' 18:52Z, 23 November): a man out of
+		 * her turret's roof walks to its edge and steps down onto her deck before he jumps off her hull. False: he
+		 * walks from her roof to her hull's edge. */
+		bool bStep = false;
+		/** Her turret's half width, metres, from her middle line (-1: a third of her width, 0.75 to 1.25 m). */
+		double TurretHalf = -1.0;
 		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
 		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
 		double Threat = 1.0;
@@ -121,6 +135,11 @@ namespace LandBail
 	/** Her crew's getting out. The same Wreck gives the same crew. */
 	Crew Make(const Wreck& W);
 
+	/** His way over her and off her, from his hatch (Man::Hatch) on the side he drops from (Man::Side): where he jumps
+	 * from and lands (Deck, Down), his facing, and with the bail clips his walks and step (Make lays each man so; a
+	 * picture may lay one by hand). */
+	void LayWayOff(const Wreck& W, Man& M);
+
 	/** His pose at a time: the clip by its name in a soldier file, how far into it (life's seconds), where his root is
 	 * and which way he faces. Not shown while he is inside her. */
 	struct Pose
@@ -132,8 +151,8 @@ namespace LandBail
 		double Facing = 0.0; // radians, 0 north, clockwise
 		bool bOnFire = false;
 		bool bMoving = false;
-		/** Where his body is: At moved as the clip's own root moves (bail_climb_out, bail_jump_down, burning_fall_roll),
-		 * else At. For what goes with him: a burning man's flames, the camera. */
+		/** Where his body is: At moved as the clip's own root moves (bail_climb_out, bail_step_down, bail_jump_down,
+		 * burning_fall_roll), else At. For what goes with him: a burning man's flames, the camera. */
 		V3 Root;
 	};
 	Pose PoseAt(const Man& M, double Since, const std::function<double(double, double)>& Ground);

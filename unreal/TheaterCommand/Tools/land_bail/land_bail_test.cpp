@@ -7,8 +7,10 @@
 // flinches flat at it; a man on fire out of at most about one burning wreck in eight, a third of them living; the odds
 // in the open by the enemy in sight (about 1 in 6 running with the enemy close, much less with none). Prints how the
 // crews went, for the log. With LAND_BAIL_CLIPS=1 the same with the soldiers' bail clips (Wreck::bClips): he climbs out
-// in bail_climb_out and jumps down in bail_jump_down, their roots landing him where the ground game takes him on; a man
-// on fire runs in burning_run, his stride the clip's, and falls in burning_fall_roll.
+// in bail_climb_out, walks over her turret's roof and steps down onto her deck in bail_step_down (or walks from a hatch
+// on her deck), walks to her hull's edge and jumps down in bail_jump_down, their roots landing him where the ground game
+// takes him on, his body never jumping between them; a man on fire runs in burning_run, his stride the clip's, and falls
+// in burning_fall_roll.
 #include "Battle/Fates.h"
 #include "Battle/LandBail.h"
 
@@ -38,11 +40,13 @@ int main(int Argc, char** Argv)
 	const bool bClips = ClipsEnv && std::string(ClipsEnv) == "1";
 	if (bClips)
 	{
-		std::printf("with the soldiers' bail clips (bail_climb_out, bail_jump_down, burning_run, burning_fall_roll)\n");
+		std::printf("with the soldiers' bail clips (bail_climb_out, bail_step_down, bail_jump_down, burning_run, burning_fall_roll)\n");
 	}
 	int Bad = 0, Wrecks = 0, Men = 0;
 	int BurnWrecks = 0, OnFire = 0, Lives = 0, Flinched = 0;
 	int RunNear = 0, HitNear = 0, RunFar = 0, HitFar = 0;
+	int Steps = 0, Walks = 0;
+	double WayMost = 0.0, ClipsLong[2] = { 1e9, 0.0 };
 	std::map<std::string, std::map<std::string, int>> Tally;
 	for (const Fates::Way& Way : Table.Ways())
 	{
@@ -91,6 +95,7 @@ int main(int Argc, char** Argv)
 			W.Seed = Seed * 7919u ^ KeyHash;
 			W.Ground = Ground;
 			W.bClips = bClips;
+			W.bStep = bClips;
 			const LandBail::Crew Cr = LandBail::Make(W);
 			const LandBail::Crew Again = LandBail::Make(W);
 			++Wrecks;
@@ -180,16 +185,33 @@ int main(int Argc, char** Argv)
 				// way on begins; on fire, burning_run and the roll)
 				if (bClips && M.How != LandBail::End::Caught)
 				{
-					const LandBail::Pose Up = LandBail::PoseAt(M, M.Out + 0.75, Ground), Off = LandBail::PoseAt(M, M.Out + 3.0, Ground);
-					const LandBail::Pose Landed = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) - 1e-6, Ground);
-					const LandBail::Pose On = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) + 1e-6, Ground);
-					const double Gap = std::hypot(Landed.Root.X - On.Root.X, Landed.Root.Y - On.Root.Y);
-					const double Rise = Landed.Root.Z - On.Root.Z;
-					if (Up.Clip != "bail_climb_out" || Off.Clip != "bail_jump_down" || Gap > 0.05 || std::abs(Rise) > 0.05 || std::abs(On.At.Z - Ground(On.At.X, On.At.Y)) > 0.01)
+					// (climb, walk over her roof, step down, walk on her deck, jump; or climb, walk to her edge, jump: each
+					// clip where it should be, and his body never jumping between them, nor at the ground where his run
+					// takes him on)
+					const double OnRoof = M.Out + 1.5 + M.RoofS, OffRoof = OnRoof + (M.bStep ? 0.7333 : 0.0), Jump = OffRoof + M.DeckS;
+					const LandBail::Pose Up = LandBail::PoseAt(M, M.Out + 0.75, Ground), Off = LandBail::PoseAt(M, Jump + 0.8, Ground);
+					const LandBail::Pose Walk = LandBail::PoseAt(M, M.bStep ? M.Out + 1.5 + 0.5 * M.RoofS : 0.5 * (OffRoof + Jump), Ground);
+					const LandBail::Pose Stepping = LandBail::PoseAt(M, OnRoof + 0.3, Ground);
+					double Most = 0.0;
+					for (double T = M.Out; T < M.Out + LandBail::OnGroundOf(M) + 0.5; T += 1.0 / 120.0)
 					{
-						std::printf("FAIL %s: the clips' way out (%s, %s; lands %.2f m off and %.2f m up from his way on)\n", Way.Key.c_str(), Up.Clip.c_str(), Off.Clip.c_str(), Gap, Rise);
+						const LandBail::Pose A = LandBail::PoseAt(M, T, Ground), B = LandBail::PoseAt(M, T + 1.0 / 120.0, Ground);
+						Most = std::max(Most, std::sqrt((A.Root.X - B.Root.X) * (A.Root.X - B.Root.X) + (A.Root.Y - B.Root.Y) * (A.Root.Y - B.Root.Y) + (A.Root.Z - B.Root.Z) * (A.Root.Z - B.Root.Z)));
+					}
+					const LandBail::Pose On = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) + 1e-6, Ground);
+					const bool bWay = Up.Clip == "bail_climb_out" && Walk.Clip == "walk" && (!M.bStep || Stepping.Clip == "bail_step_down")
+						&& Off.Clip == "bail_jump_down" && (M.bStep || M.DeckS >= 0.3);
+					// (a body at a run moves 6 m a second at most: 0.05 m a frame at 120)
+					if (!bWay || Most > 0.06 || std::abs(On.At.Z - Ground(On.At.X, On.At.Y)) > 0.01)
+					{
+						std::printf("FAIL %s: the clips' way out (%s, %s, %s, %s; his body's biggest jump %.3f m in a 120th of a second)\n", Way.Key.c_str(), Up.Clip.c_str(), Walk.Clip.c_str(), Stepping.Clip.c_str(), Off.Clip.c_str(), Most);
 						++Bad;
 					}
+					Steps += M.bStep;
+					Walks += !M.bStep;
+					WayMost = std::max(WayMost, Most);
+					ClipsLong[0] = std::min(ClipsLong[0], LandBail::OnGroundOf(M));
+					ClipsLong[1] = std::max(ClipsLong[1], LandBail::OnGroundOf(M));
 					if (M.How == LandBail::End::Burning)
 					{
 						const LandBail::Pose Run = LandBail::PoseAt(M, 0.5 * (M.Out + LandBail::OnGroundOf(M) + M.FallAt), Ground), Fell = LandBail::PoseAt(M, M.FallAt + 5.0, Ground);
@@ -265,6 +287,15 @@ int main(int Argc, char** Argv)
 	const double NearShare = RunNear ? static_cast<double>(HitNear) / RunNear : 0.0, FarShare = RunFar ? static_cast<double>(HitFar) / RunFar : 0.0;
 	std::printf("\n  on fire: %d of %d burning wrecks (%.3f), %d of them living (%.2f); %d men flinched flat at a blast\n", OnFire, BurnWrecks, FireShare, Lives, LiveShare, Flinched);
 	std::printf("  runners hit: %.3f with the enemy close (%d), %.3f with none in sight (%d)\n", NearShare, RunNear, FarShare, RunFar);
+	if (bClips)
+	{
+		std::printf("  the clips' way out: %d stepped down off her turret, %d walked from her roof (the driver's hatch); %.1f to %.1f s to the ground; his body's biggest jump %.3f m in a 120th of a second\n", Steps, Walks, ClipsLong[0], ClipsLong[1], WayMost);
+		if (Steps == 0 || Walks == 0)
+		{
+			std::printf("FAIL: no man stepped down off a turret, or none walked off a hull's roof\n");
+			++Bad;
+		}
+	}
 	if (FireShare > 0.135 || (OnFire > 30 && (LiveShare < 0.2 || LiveShare > 0.47)))
 	{
 		std::printf("FAIL: men on fire too often or living too seldom\n");
