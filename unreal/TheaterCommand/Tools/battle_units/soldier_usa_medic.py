@@ -17,10 +17,11 @@ He is soldier_usa.py's man in body, uniform, skeleton (the same 32 bones), socke
   pouch bones) hung from the medical yoke (soldier.py's Y-straps, over his shoulders to the belt), the canteen at the
   right hip and the first-aid pouch at the left. No haversack and no entrenching tool: an aid man's load was his two
   pouches (the yoke took their weight), and his back is left clear to carry and drag a man;
-- the red cross: on the M1 helmet four white discs with a red cross (front, back, both sides), thin raised slabs
-  that follow the shell, made part of the helmet's own mesh so they ride the head bone with it and are left out with
-  it when the game draws another finish; and a white brassard with a red cross round the left upper arm, skinned with
-  the sleeve. Their paints are their own: medic_white (15) and medic_red (16);
+- no red cross or crescent anywhere (the project's rule, the art director 23 November 2026: the emblem is
+  protected; RED_CROSS below stays False): he is known by a plain white brassard round the left upper arm, skinned
+  with the sleeve, and by his kit and empty hands. The helmet's four discs and crosses and the brassard's cross are
+  still made (in their own paints, so the levels of detail find them) and then taken off by plain_marks, relief and
+  all: a plain shell and a plain white band;
 - his clips: the motion capture plays with the capture's own arms (no rifle carried, none dropped; go_prone's hands
   kept off the ground, and its end up on his elbows as fire_prone begins); every keyed clip that held a rifle is keyed
   again with free hands (watching instead of firing, a signal instead of a grenade; fire_prone and lmg_burst up on
@@ -64,6 +65,40 @@ MARKS = ("medic_white", "medic_red")
 S.FIGURE_PAINTS.update({"medic_white": 15, "medic_red": 16})
 S.LOOK[NATION].update({"medic_white": "E4E1D3", "medic_red": "A3221C"})
 HELMET_PAINTS = [S.FIGURE_PAINTS[p] for p in ("helmet",) + MARKS]
+RED_CROSS = False          # (the project's rule: no red cross or crescent anywhere. False: the helmet's discs and
+                           # crosses and the brassard's cross are taken off; see plain_marks)
+
+
+def plain_marks(objs):
+    """With RED_CROSS False: the helmet's discs and crosses and the brassard's cross taken off altogether (their faces
+    and the points only they used), so neither paint nor relief leaves a cross: the helmet is the plain shell, the
+    brassard a plain white band. Done on finished objects, after the levels of detail are made (make_lods finds the
+    marks by their paints). Returns the faces taken off."""
+    if RED_CROSS:
+        return 0
+    import bmesh
+    n = 0
+    for ob in objs:
+        if ob.type != "MESH":
+            continue
+        base = ob.name.split(".")[0]
+        if base.startswith("helmet"):
+            which = MARKS
+        elif base.startswith("brassard"):
+            which = ("medic_red",)
+        else:
+            continue
+        names = [sl.material.name.split(".")[0] if sl.material else "" for sl in ob.material_slots]
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        gone = [f for f in bm.faces if names[f.material_index] in which]
+        if gone:
+            bmesh.ops.delete(bm, geom=gone, context="FACES")
+            bm.to_mesh(ob.data)
+            ob.data.update()
+        bm.free()
+        n += len(gone)
+    return n
 
 
 def _n(v):
@@ -1227,11 +1262,11 @@ def about(data):
         " rides his right hand in every clip where a rifle's grip would lie, so socket_weapon holds a prop if one is hung"
         " there. His kit: the pistol belt with no cartridge pockets; two medical pouches at the front of the hips, on the"
         " pouch bones (pouch_l, pouch_r), hung from the medical yoke (the straps over his shoulders); the canteen at the"
-        " right hip, the first-aid pouch at the left; no haversack. The red cross, in its own paints (15 medic_white, 16"
-        " medic_red): on the M1 helmet four white discs with a red cross, front, back and both sides, raised a millimetre"
-        " or two off the shell and part of the helmet's own mesh, rigid on the head bone (the helmet's triangles are"
-        " those of paints 5, 15 and 16 on the head bone: `helmet_paints`); and a white brassard with a red cross round"
-        " the left upper arm, skinned with the sleeve. Clips: the motion capture (idle, walk, run, advance, creep, crawl,"
+        " right hip, the first-aid pouch at the left; no haversack. No red cross or crescent is drawn anywhere (the"
+        " project's rule: the emblem is protected). He is known by a plain white brassard round the left upper arm"
+        " (paint 15 medic_white), skinned with the sleeve, and by his kit and empty hands. His M1 is the plain shell:"
+        " no disc or cross is on it, in paint or relief (`helmet_paints` still names 5, 15 and 16; only 5 is used)."
+        " Paint 16 medic_red is used by no point. Clips: the motion capture (idle, walk, run, advance, creep, crawl,"
         " go_prone, die_forward, die_back) plays with the capture's own arms: no rifle carried, none dropped; go_prone's"
         " hands are kept off the ground (the wrists raised, the elbows bending, where the capture's hands would go into"
         " it) and over its last 0.65 s he comes up on his elbows into fire_prone's first pose (the capture's pelvis and"
@@ -1263,6 +1298,7 @@ def export_man(info, m):
     rec["tris"] = {lod: sum(S.tris_of(o) for o in lods[lod]) for lod in lods}
     rec["parts"] = {o.name.split(".")[0]: S.tris_of(o) for o in lods[0]}
     rec["marks"] = {lod: dict(zip(("helmet", "brassard"), mark_tris(lods[lod]))) for lod in lods}
+    rec["plain"] = {lod: plain_marks(lods[lod]) for lod in lods}       # (no red cross: before anything is written)
     rec["helmet"] = {lod: sum(S.tris_of(o) for o in lods[lod] if o.name.startswith("helmet_")) for lod in lods}
     rec["short"] = {k: float(v) for k, v in m["short"].items()}
     S.export_glb(S.stage_path(f"{BASE}.glb"), [m["arm"]] + lods[0] + socks)
@@ -1346,6 +1382,7 @@ def picture(info, fast=False, deliver=True):
     kit.fresh(S.FPS)
     m = S.assemble(NATION)
     S.studio_smooth(m)
+    plain_marks(S.man_objects(m))
     ON = False
     c = S.assemble(NATION)                          # (soldier_usa.py's rifleman, face 85)
     ON = True
@@ -1373,7 +1410,7 @@ def picture(info, fast=False, deliver=True):
     kit.orbit(cam, (0.42, 0.28, 0.36), 3.3, 24.0, 6.0)
     shots.append(kit.still(os.path.join(S.SCRATCH, "pictures", "medic_tend.png")))
     out = S.stage_path("pictures", f"{BASE}.png")
-    kit.sheet(shots, out, cols=3, labels=["American medic at ease: red cross on helmet and brassard, no weapon",
+    kit.sheet(shots, out, cols=3, labels=["American medic at ease: plain white brassard, no weapon",
                                           "From behind: medical yoke, pouches, canteen; no haversack",
                                           "tend: on his knees by a wounded man, pressing on the wound"],
               title="American company aid man, Normandy 1944: soldier_usa_medic.py (our own design)")
