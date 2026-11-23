@@ -28,6 +28,9 @@
  *            grass, sand, no farms, yurts
  *   Rice     central and southern China, Korea, Japan, the Ryukyus: paddies by the season behind their bunds, terraces,
  *            tile-roofed villages facing south, bamboo, pine hills, grave mounds (release 2, on trial "rice")
+ *   America  the farm country of North America (Iowa, Kansas, Ohio, Pennsylvania): fields on the survey's square mile,
+ *            corn, wheat, oats and hay, red barns and silos, wire and rail fences, a main street and its grain elevator
+ *            (release 2, on trial "america")
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -50,6 +53,7 @@ namespace LandScape
 		Farmland,
 		Dry,      // LandDry: the dry steppe (Khalkhin Gol, 1939)
 		Rice,     // LandAsia: rice country (China, Korea, Japan; release 2, on trial "rice")
+		America,  // LandAmerica: North America's farm country (release 2, on trial "america")
 		Count
 	};
 	const char* NameOf(Look L);
@@ -409,13 +413,14 @@ namespace LandScape
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
 	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
-	// LandSnow.cpp).
+	// LandAmerica.cpp, LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
 	std::unique_ptr<Region> MakeFarm(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeDry(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeAmerica(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
