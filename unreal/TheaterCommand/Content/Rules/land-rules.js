@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 30a57d1f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of ddbfdebb 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7223,6 +7223,14 @@
       __publicField(this, "warned", { att: false, def: false });
       /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
       __publicField(this, "bar", { att: 0, def: 0 });
+      /**
+       * All fall back (release 1.5; Brian, 23 November 14:47Z): the battle second each army was ordered back, null while it
+       * fights on. Its blocks withdraw toward its own edge and are out once behind the zone it drew up in; when the last is
+       * out, the battle ends as its withdrawal. It takes no new orders after it.
+       */
+      __publicField(this, "falling", { att: null, def: null });
+      /** The highest each falling army's bar stood from the order until its last block was out: what it pays by (DD 14:54Z, b474). */
+      __publicField(this, "fallBar", { att: 0, def: 0 });
       /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
       __publicField(this, "heldFor", { att: 0, def: 0 });
       /**
@@ -8502,6 +8510,7 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
+      if (this.falling[by2] !== null && c.do !== "auto" && c.do !== "dice" && c.do !== "withdrawAll") return false;
       const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
@@ -8626,6 +8635,17 @@
             const u = this.unit(Number(c.unit ?? c.units?.[0]));
             if (!this.patrol || !u || u.side !== by2 || by2 !== this.setup || this.patrolWhy(u) !== null) return false;
             this.patrolBy = u.id;
+            return true;
+          }
+          if (c.do === "land:fallBack") {
+            if (this.fallBackWhy(by2) !== null) return false;
+            const us = this.units.filter((u) => u.side === by2 && fighting2(u) && u.kind !== "fort");
+            this.falling[by2] = this.t;
+            this.fallBar[by2] = this.breaking(by2);
+            this.coming = this.coming.filter((k) => k.u.side !== by2);
+            hands(us);
+            for (const u of us) give(u, () => this.send(u, { kind: "withdraw", x: u.x, y: by2 === "att" ? 0 : this.field.h }));
+            this.say({ what: "land:fallBack", side: by2, text: `${this.army(by2)} falls back.` });
             return true;
           }
           if (c.do === "land:wait") {
@@ -10195,7 +10215,7 @@
           u.act = "down";
           this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
         }
-      } else if (u.order?.kind === "withdraw" && (u.side === "att" ? u.y <= 6 : u.y >= this.field.h - 6)) {
+      } else if (u.order?.kind === "withdraw" && (u.side === "att" ? u.y <= this.outLine("att") : u.y >= this.outLine("def"))) {
         u.state = "withdrawn";
         u.act = "down";
         this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
@@ -10592,14 +10612,17 @@
     }
     judge() {
       for (const s of ["att", "def"]) {
-        const left = this.units.filter((u) => u.side === s && fighting2(u));
+        const fall = this.falling[s] !== null;
+        const left = this.units.filter((u) => u.side === s && fighting2(u) && !(fall && u.kind === "fort"));
         if (!left.length) {
-          const how = this.units.some((u) => u.side === s && u.state === "withdrawn") && !this.units.some((u) => u.side === s && u.state === "routing") ? "withdrew" : "destroyed";
+          const out = this.units.some((u) => u.side === s && u.state === "withdrawn");
+          const how = out && (fall || !this.units.some((u) => u.side === s && u.state === "routing")) ? "withdrew" : "destroyed";
           this.finish(other(s), how, void 0, how === "destroyed" ? this.breakCause(s) : void 0);
           return;
         }
         const b = this.brink(s), near = b.bar;
         this.bar[s] = near;
+        if (fall) this.fallBar[s] = Math.max(this.fallBar[s], near);
         if (b.holding) this.heldFor[s] += DT;
         if (b.holding && this.freshHold[s]) this.giveGround(s, left);
         if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
@@ -10622,7 +10645,35 @@
           return;
         }
       }
-      if (this.t >= this.ticket.limit) this.finish("def", "time");
+      if (this.t >= this.ticket.limit) {
+        if (this.falling.def !== null) this.finish("att", "withdrew");
+        else if (this.falling.att !== null) this.finish("def", "withdrew");
+        else this.finish("def", "time");
+      }
+    }
+    /**
+     * Why this side may not fall back now, in the player's words; null where it may (all fall back, release 1.5). Only once
+     * the battle has begun, once, and with a block of it that can go.
+     */
+    fallBackWhy(s) {
+      if (this.over) return "The battle is over.";
+      if (this.setup !== null) return "The battle has not begun.";
+      if (this.falling[s] !== null) return "Your army is already falling back.";
+      if (!this.units.some((u) => u.side === s && fighting2(u) && u.kind !== "fort")) return "No unit of yours can fall back.";
+      return null;
+    }
+    /** Whether that army has been ordered back (all fall back), for the view and the 3D game. */
+    fallingBack(s) {
+      return this.falling[s] !== null;
+    }
+    /**
+     * Where a withdrawing block of that side is out: a field's breadth from its own edge (6 m), or, with its army falling
+     * back, behind the zone it drew up in (Brian: "behind them where they started").
+     */
+    outLine(s) {
+      const z = this.field.zones[s];
+      if (s === "att") return this.falling.att !== null ? Math.max(6, z[1]) : 6;
+      return this.falling.def !== null ? Math.min(this.field.h - 6, z[3]) : this.field.h - 6;
     }
     /**
      * What a block keeps of its strength in the day's count: the fled leave LAND.count.gone behind them, runners and those
@@ -10670,7 +10721,7 @@
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
       const told = how === "rout" && why && why.by !== "none";
       const lines = [
-        how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
+        how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" && this.falling[loser] !== null ? `${this.army(loser)} fell back behind the ground it started from, to fight another day.` : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
       ];
       if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct(lost.def)}.` : `${cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
@@ -10695,7 +10746,9 @@
         forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0, ...this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {} })),
         ...how === "rout" || how === "destroyed" ? { broke: loser, ...why ? { brokeBy: why } : {} } : {},
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
-        ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
+        // Ordered back (all fall back), the highest its bar stood from the order until its last block was out (DD 14:54Z).
+        ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.falling[loser] !== null ? Math.max(this.fallBar[loser], this.bar[loser]) : this.bar[loser]) * 1e3) / 1e3 } } : {},
+        ...how === "withdrew" && this.falling[loser] !== null ? { fellBack: loser } : {},
         // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
         ...this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}
       };
@@ -11209,7 +11262,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -12040,6 +12093,15 @@
       if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
       return this.sim.smokeWhy(u, x0, y0, x1, y1);
     }
+    /** All fall back (release 1.5): whether his army has been ordered back (it takes no new orders). */
+    fallingBack() {
+      return !!this.me && this.sim.fallingBack(this.me);
+    }
+    /** All fall back (release 1.5): why his army may not fall back now, or null where it may. */
+    fallBackWhy() {
+      if (!this.me) return "Only your own troops take your orders.";
+      return this.sim.fallBackWhy(this.me);
+    }
     /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
     patrolWhy(id) {
       const u = this.sim.unit(id);
@@ -12197,12 +12259,17 @@
       const p = c;
       if (!ok2 && o.do === "land:cut" && o.units?.length) return { ok: ok2, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? "" };
       if (!ok2 && o.do === "land:smoke" && o.units?.length) return { ok: ok2, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? "" };
+      if (!ok2 && o.do === "land:fallBack") return { ok: ok2, why: need().fallBackWhy() ?? "" };
+      if (!ok2 && need().fallingBack()) return { ok: ok2, why: "Your army is falling back: it takes no new orders." };
       const n = c;
       if (!ok2 && o.do === "land:patrol") return { ok: ok2, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? "" };
       return { ok: ok2 };
     },
     landWaitWhy(id) {
       return need().waitWhy(Number(id));
+    },
+    landFallBackWhy() {
+      return { why: need().fallBackWhy() };
     },
     landCutWhy(id, x, y) {
       return { why: need().cutWhy(Number(id), x ?? void 0, y ?? void 0) };

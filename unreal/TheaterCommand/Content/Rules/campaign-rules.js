@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of be9ca178 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ddbfdebb 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -47424,6 +47424,11 @@
     const landSettle = (ids2, to, t) => (r) => {
       const out = h.attack(ids2, to, r.R, fieldBill(r));
       const rep = out?.report;
+      if (rep && r.fellBack) {
+        rep.fellBack = r.fellBack;
+        const kept2 = h.game().reports.find((x) => x.id === rep.id);
+        if (kept2) kept2.fellBack = r.fellBack;
+      }
       const pursuit = rep ? pursuitLine(t, r, rep) : null;
       const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
       return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
@@ -48259,6 +48264,12 @@
         row2.line = r.relief ? r.taken ? att ? "The siege is raised." : "Their relief broke your siege." : att ? "The relief was thrown back." : "Their relief was thrown back." : r.taken ? att ? "The garrison broke the ring." : "The garrison broke your ring." : att ? "The sally was thrown back." : "Their sally was thrown back.";
         row2.head = r.taken ? `The siege of ${place2} is raised` : `The siege of ${place2} holds`;
         row2.follows = r.taken ? att ? "The town is free of its besiegers." : "The ring round the town is broken." : att ? "The town is still cut off." : "The ring round the town stands.";
+      } else if (r.fellBack && r.fellBack === "att" === att && (att ? !r.taken : r.taken)) {
+        row2.tag = "LOST";
+        row2.tone = "bad";
+        row2.line = "Your army fell back to fight another day.";
+        row2.head = att ? `The attack on ${place2} is called off` : `${place2} is given up`;
+        row2.follows = att ? "The attack gained no ground, and the army got away." : worth3(true) || "The front falls back.";
       } else if (att) {
         row2.tag = r.taken ? "WON" : "LOST";
         row2.tone = r.taken ? "good" : "bad";
