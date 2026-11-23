@@ -69,7 +69,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1937
   },
   "a6m2_21": {
    "short": "Zero 21",
@@ -101,7 +102,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1940
   },
   "a6m3_32": {
    "short": "Zero 32",
@@ -133,7 +135,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "a6m5_52": {
    "short": "Zero 52",
@@ -165,7 +168,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "b239": {
    "short": "Brewster",
@@ -197,7 +201,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "b534": {
    "short": "B-534",
@@ -229,7 +234,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1935
   },
   "bf109_e": {
    "short": "Bf 109 E",
@@ -261,7 +267,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1939
   },
   "bf109_f4": {
    "short": "Bf 109 F",
@@ -293,7 +300,8 @@
     "turn": true,
     "climb": false,
     "dive": true
-   }
+   },
+   "year": 1941
   },
   "bf109_g2": {
    "short": "Bf 109 G",
@@ -325,7 +333,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "bf109_g6": {
    "short": "Bf 109 G-6",
@@ -357,7 +366,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "bf109_k4": {
    "short": "Bf 109 K",
@@ -389,7 +399,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "bf110_c": {
    "short": "Bf 110",
@@ -421,7 +432,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "bulldog": {
    "short": "Bulldog",
@@ -453,7 +465,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1930
   },
   "cr32": {
    "short": "CR.32",
@@ -485,7 +498,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1934
   },
   "cr42": {
    "short": "CR.42",
@@ -517,7 +531,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "d21": {
    "short": "D.XXI",
@@ -549,7 +564,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "d3801": {
    "short": "D-3801",
@@ -581,7 +597,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "d501": {
    "short": "D.501",
@@ -613,7 +630,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1935
   },
   "d520": {
    "short": "D.520",
@@ -645,7 +663,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "d551": {
    "short": "D.551",
@@ -677,7 +696,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "f2a3": {
    "short": "Buffalo",
@@ -709,7 +729,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "f4b4": {
    "short": "F4B",
@@ -741,7 +762,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1932
   },
   "f4f3": {
    "short": "Wildcat F4F-3",
@@ -773,7 +795,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "f4f4": {
    "short": "Wildcat F4F-4",
@@ -805,7 +828,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "f4u1": {
    "short": "Corsair F4U-1",
@@ -837,7 +861,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "f4u1d": {
    "short": "Corsair F4U-1D",
@@ -869,7 +894,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "f6f3": {
    "short": "Hellcat F6F-3",
@@ -901,7 +927,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "f6f5": {
    "short": "Hellcat F6F-5",
@@ -933,7 +960,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "fm2": {
    "short": "Wildcat FM-2",
@@ -965,7 +993,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "fokker_g1": {
    "short": "G.I",
@@ -997,7 +1026,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "fulmar_ii": {
    "short": "Fulmar",
@@ -1029,7 +1059,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "fury": {
    "short": "Fury",
@@ -1061,7 +1092,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1932
   },
   "fw190_a3": {
    "short": "Fw 190 A",
@@ -1093,7 +1125,8 @@
     "turn": true,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "fw190_a8": {
    "short": "Fw 190 A-8",
@@ -1125,7 +1158,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "fw190_d9": {
    "short": "Fw 190 D",
@@ -1157,7 +1191,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "g50": {
    "short": "Freccia",
@@ -1189,7 +1224,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "g55": {
    "short": "Centauro",
@@ -1221,7 +1257,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "gauntlet": {
    "short": "Gauntlet",
@@ -1253,7 +1290,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1935
   },
   "gladiator": {
    "short": "Gladiator",
@@ -1285,7 +1323,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1937
   },
   "hawk3": {
    "short": "Hawk III",
@@ -1317,7 +1356,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1935
   },
   "hawk75a": {
    "short": "Hawk 75A",
@@ -1349,7 +1389,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "hawk75m": {
    "short": "Hawk 75M",
@@ -1381,7 +1422,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "hawk75o": {
    "short": "Hawk 75O",
@@ -1413,7 +1455,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "hurricane_i": {
    "short": "Hurricane I",
@@ -1445,7 +1488,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1937
   },
   "hurricane_ii": {
    "short": "Hurricane II",
@@ -1477,7 +1521,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1940
   },
   "hurricane_iib_vvs": {
    "short": "Hurricane IIB",
@@ -1509,7 +1554,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "i153": {
    "short": "Chaika",
@@ -1541,7 +1587,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "i15bis": {
    "short": "I-15bis",
@@ -1573,7 +1620,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "i16_10": {
    "short": "I-16 type 10",
@@ -1605,7 +1653,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "i16_24": {
    "short": "I-16 type 24",
@@ -1637,7 +1686,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "iar80": {
    "short": "IAR 80",
@@ -1669,7 +1719,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "iar81c": {
    "short": "IAR 81",
@@ -1701,7 +1752,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "ik3": {
    "short": "IK-3",
@@ -1733,7 +1785,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "j22": {
    "short": "J 22",
@@ -1765,7 +1818,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "j2m3": {
    "short": "Raiden",
@@ -1797,7 +1851,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "ki27": {
    "short": "Ki-27",
@@ -1829,7 +1884,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "ki43_i": {
    "short": "Hayabusa I",
@@ -1861,7 +1917,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "ki43_ii": {
    "short": "Hayabusa II",
@@ -1893,7 +1950,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "ki44_ii": {
    "short": "Shoki",
@@ -1925,7 +1983,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "ki61_i": {
    "short": "Hien",
@@ -1957,7 +2016,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "ki84": {
    "short": "Hayate",
@@ -1989,7 +2049,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "la5": {
    "short": "La-5",
@@ -2021,7 +2082,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "la5fn": {
    "short": "La-5FN",
@@ -2053,7 +2115,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "la7": {
    "short": "La-7",
@@ -2085,7 +2148,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "lagg3": {
    "short": "LaGG-3",
@@ -2117,7 +2181,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "martlet_ii": {
    "short": "Martlet",
@@ -2149,7 +2214,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "mb152": {
    "short": "MB.152",
@@ -2181,7 +2247,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "mc200": {
    "short": "Saetta",
@@ -2213,7 +2280,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1940
   },
   "mc202": {
    "short": "Folgore",
@@ -2245,7 +2313,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "mc205v": {
    "short": "Veltro",
@@ -2277,7 +2346,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "me262_a1a": {
    "short": "Me 262",
@@ -2309,7 +2379,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "meteor3": {
    "short": "Meteor",
@@ -2341,7 +2412,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "mig3": {
    "short": "MiG-3",
@@ -2373,7 +2445,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "ms406": {
    "short": "MS.406",
@@ -2405,7 +2478,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "n1k2j": {
    "short": "Shiden-Kai",
@@ -2437,7 +2511,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1945
   },
   "na50": {
    "short": "Torito",
@@ -2469,7 +2544,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1939
   },
   "p11c": {
    "short": "P.11c",
@@ -2501,7 +2577,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1935
   },
   "p24": {
    "short": "P.24",
@@ -2533,7 +2610,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1936
   },
   "p26a": {
    "short": "Peashooter",
@@ -2565,7 +2643,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1934
   },
   "p36a": {
    "short": "P-36",
@@ -2597,7 +2676,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1938
   },
   "p38_fg": {
    "short": "Lightning G",
@@ -2629,7 +2709,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "p38_jl": {
    "short": "Lightning J",
@@ -2661,7 +2742,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "p39d": {
    "short": "Airacobra D",
@@ -2693,7 +2775,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "p39n_vvs": {
    "short": "Airacobra N",
@@ -2725,7 +2808,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "p40_bc": {
    "short": "Tomahawk",
@@ -2757,7 +2841,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "p40_e": {
    "short": "Warhawk E",
@@ -2789,7 +2874,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "p40b": {
    "short": "Hawk 81",
@@ -2821,7 +2907,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "p40n": {
    "short": "Warhawk N",
@@ -2853,7 +2940,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "p43a": {
    "short": "Lancer",
@@ -2885,7 +2973,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "p47_cd": {
    "short": "Thunderbolt C",
@@ -2917,7 +3006,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "p47_d25": {
    "short": "Thunderbolt D",
@@ -2949,7 +3039,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "p51_a": {
    "short": "Mustang A",
@@ -2981,7 +3072,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "p51_bc": {
    "short": "Mustang B",
@@ -3013,7 +3105,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "p51_d": {
    "short": "Mustang D",
@@ -3045,7 +3138,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "p80a": {
    "short": "Shooting Star",
@@ -3077,7 +3171,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1945
   },
   "re2000": {
    "short": "Re.2000",
@@ -3109,7 +3204,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "re2001": {
    "short": "Re.2001",
@@ -3141,7 +3237,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "re2005": {
    "short": "Sagittario",
@@ -3173,7 +3270,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1943
   },
   "sea_hurricane_ib": {
    "short": "Sea Hurricane",
@@ -3205,7 +3303,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "seafire_l2c": {
    "short": "Seafire II",
@@ -3237,7 +3336,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "seafire_l3": {
    "short": "Seafire III",
@@ -3269,7 +3369,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "seversky_j9": {
    "short": "Seversky",
@@ -3301,7 +3402,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "spitfire_i": {
    "short": "Spitfire I",
@@ -3333,7 +3435,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1938
   },
   "spitfire_ix": {
    "short": "Spitfire IX",
@@ -3365,7 +3468,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "spitfire_v": {
    "short": "Spitfire V",
@@ -3397,7 +3501,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1941
   },
   "spitfire_v_trop": {
    "short": "Tropical Spitfire V",
@@ -3429,7 +3534,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "spitfire_xiv": {
    "short": "Spitfire XIV",
@@ -3461,7 +3567,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "tempest_v": {
    "short": "Tempest",
@@ -3493,7 +3600,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1944
   },
   "typhoon_ib": {
    "short": "Typhoon",
@@ -3525,7 +3633,8 @@
     "turn": true,
     "climb": true,
     "dive": true
-   }
+   },
+   "year": 1942
   },
   "vg33": {
    "short": "VG-33",
@@ -3557,7 +3666,8 @@
     "turn": false,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1940
   },
   "yak1": {
    "short": "Yak-1",
@@ -3589,7 +3699,8 @@
     "turn": true,
     "climb": false,
     "dive": false
-   }
+   },
+   "year": 1941
   },
   "yak3": {
    "short": "Yak-3",
@@ -3621,7 +3732,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   },
   "yak7b": {
    "short": "Yak-7B",
@@ -3653,7 +3765,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "yak9": {
    "short": "Yak-9",
@@ -3685,7 +3798,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1942
   },
   "yak9d": {
    "short": "Yak-9D",
@@ -3717,7 +3831,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1943
   },
   "yak9u": {
    "short": "Yak-9U",
@@ -3749,7 +3864,8 @@
     "turn": true,
     "climb": true,
     "dive": false
-   }
+   },
+   "year": 1944
   }
  },
  "ladders": {

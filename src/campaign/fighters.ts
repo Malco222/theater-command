@@ -10,6 +10,8 @@ import type { AirFleet, AirMission, Game } from './types';
 import { atWar, headline, inDesert } from './game';
 import { techMul } from './research';
 import { treeLevel } from './tech';
+import { hasAircraftWorks } from './arsenal';
+import { designYear } from '../battle/air/doctrine';
 
 export type Band = 'low' | 'mid' | 'high';
 export type Mix = Record<string, number>;
@@ -27,6 +29,8 @@ interface TypeRow {
    */
   top?: number; wl?: number; climb?: number; diveLimit?: number;
   laid?: { speed: boolean; turn: boolean; climb: boolean; dive: boolean };
+  /** The year the mark first went to the front (the historian's in-service date): its design year for stolen plans. */
+  year?: number;
 }
 interface Ladder {
   clock: 'research' | 'calendar';
@@ -171,9 +175,11 @@ const deckBred = (f: AirFleet): boolean => f.ship !== undefined || f.ashore !== 
 export function typeMix(g: Game, f: AirFleet): Mix | null {
   const L = FIGHTERS.ladders[f.nat];
   const bought = Object.entries(f.bought ?? {}).filter(([k, s]) => s > 0 && FIGHTERS.types[k]);
-  if (!L && !bought.length) return null;
+  const stolen = !deckBred(f) ? stolenLead(g, f.nat, L ? landRow(g, f.nat)!.mix : {}) : null;
+  if (!L && !bought.length && !stolen) return null;
   let mix: Mix = {};
   if (L && deckBred(f) && L.deck) mix = L.deck[rowAt(L.deck, g.turn)][1];
+  else if (stolen) mix = stolen;
   else if (L) mix = landRow(g, f.nat)!.mix;
   // Bought wings fly the seller's type; the group's own share flies the nation's own (07:00Z).
   if (bought.length) {
@@ -209,6 +215,65 @@ export function joinBought(f: AirFleet, mark: string, had: number, count: number
   const b = (f.bought ??= {});
   for (const k of Object.keys(b)) b[k] = (b[k] * had) / all;
   b[mark] = (b[mark] ?? 0) + count / all;
+}
+
+// ---- The fighter's plans (the design director, 23 Nov 07:00Z, on Brian's 06:50Z; intel.ts 'fighterPlans') ----------
+// Plans give the design; research gives the means. A mark stolen joins the thief's table and is built once the thief's
+// own designers have reached its year. Then, as the latest mark in its table, it takes the place of the mark the
+// thief builds most. One rule for every nation with aircraft works, of any other's fielded mark.
+
+/** The marks a nation holds from others' plans, newest last. */
+export const stolenMarks = (g: Game, nat: string): { mark: string; from: string; turn: number }[] => g.nations[nat]?.stolenMarks ?? [];
+
+/** True for a nation with aircraft works of its own that build fighters (arsenal.ts hasAircraftWorks), open yet or not. */
+export const hasFighterWorks = (g: Game, nat: string): boolean => hasAircraftWorks(g, nat, 'ftr');
+
+/**
+ * A nation's land mix with its stolen marks: the newest stolen mark whose year its designers have reached, if it is
+ * newer than every mark in the mix, takes the leading mark's share. Null where no stolen mark is built (or the switch is off).
+ */
+function stolenLead(g: Game, nat: string, mix: Mix): Mix | null {
+  const got = g.nations[nat]?.stolenMarks;
+  if (!got?.length || !fighterTypesOn(g)) return null;
+  const reach = designYear(g, nat, 'fighters');
+  const newest = Math.max(0, ...Object.keys(mix).map((k) => FIGHTERS.types[k]?.year ?? 0));
+  const best = got.map((x) => x.mark).filter((k) => (FIGHTERS.types[k]?.year ?? Infinity) <= reach && FIGHTERS.types[k].year! > newest)
+    .sort((a, b) => FIGHTERS.types[b].year! - FIGHTERS.types[a].year!)[0];
+  if (!best) return null;
+  const lead = Object.entries(mix).sort((a, b) => b[1] - a[1])[0];
+  if (!lead) return { [best]: 1 };
+  const out: Mix = { ...mix };
+  delete out[lead[0]];
+  out[best] = (out[best] ?? 0) + lead[1];
+  return out;
+}
+
+/** The mark a nation fields most now, stolen marks counted: what its plans would give a thief. Null with no mark of its own. */
+export function fieldedMark(g: Game, nat: string): string | null {
+  const own = FIGHTERS.ladders[nat] ? landRow(g, nat)!.mix : {};
+  const mix = stolenLead(g, nat, own) ?? own;
+  return Object.entries(mix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+/** True where the mark is in the nation's own table already: its ladder at any time, or plans it holds. */
+export function holdsMark(g: Game, nat: string, mark: string): boolean {
+  const L = FIGHTERS.ladders[nat];
+  const inMix = (rows: [unknown, Mix][] | undefined): boolean => !!rows?.some(([, m]) => m[mark] !== undefined);
+  return (!!L && (inMix(L.history) || Object.values(L.rungs).some(inMix) || inMix(L.deck))) || stolenMarks(g, nat).some((x) => x.mark === mark);
+}
+
+/** The thief's sentence once it holds the plans: when its works can build the mark. */
+export function stolenWords(g: Game, nat: string, mark: string): string {
+  const y = FIGHTERS.types[mark]?.year ?? 0, short = FIGHTERS.types[mark]?.short ?? mark;
+  return designYear(g, nat, 'fighters') >= y ? `Your aircraft works can build the ${short} now.` : `Your aircraft works can build the ${short} once your designers reach ${y}.`;
+}
+
+/** The plans of a mark got out: it joins the thief's table. False where the thief holds it already. */
+export function stealMark(g: Game, nat: string, from: string, mark: string): boolean {
+  const N = g.nations[nat];
+  if (!N || !FIGHTERS.types[mark] || holdsMark(g, nat, mark)) return false;
+  (N.stolenMarks ??= []).push({ mark, from, turn: g.turn });
+  return true;
 }
 
 /** A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). */

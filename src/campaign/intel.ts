@@ -10,6 +10,7 @@
 // against the player as a monthly chance of sabotage, which the player's agents on guard at home can stop.
 // So a war with nobody at the table is fought exactly as before. Every number lives in data/campaign/intel.json.
 
+import { FIGHTERS, fieldedMark, fighterTypesOn, hasFighterWorks, holdsMark, stealMark, stolenMarks, stolenWords } from './fighters';
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
@@ -488,7 +489,7 @@ export function retire(g: Game, nat: string, id: number): boolean {
 
 // ---- Missions -------------------------------------------------------------------------------------------
 
-export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'airfield', 'orders', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans', 'guard', 'hunt'];
+export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'airfield', 'orders', 'bbPlans', 'cvPlans', 'bomberPlans', 'fighterPlans', 'jetPlans', 'rocketPlans', 'guidedPlans', 'guard', 'hunt'];
 const SABOTAGE: Mission[] = ['factory', 'rail', 'oil', 'airfield'];
 /** The work an agent can have at home; everything else is work abroad. */
 const AT_HOME: Mission[] = ['guard', 'hunt'];
@@ -496,14 +497,14 @@ const AT_HOME: Mission[] = ['guard', 'hunt'];
  * The missions offered in this campaign, each piece of the air version and the secret war only with its switch on:
  * wrecking an airfield (ruling 151(b)), stealing the orders (135), hunting enemy agents (151(c)).
  */
-const missionsIn = (g: Game): Mission[] => MISSIONS.filter((m) => (m !== 'airfield' || airPiece(g, 'field')) && (m !== 'orders' || ordersOn(g)) && (m !== 'hunt' || huntersOn(g)));
+const missionsIn = (g: Game): Mission[] => MISSIONS.filter((m) => (m !== 'airfield' || airPiece(g, 'field')) && (m !== 'orders' || ordersOn(g)) && (m !== 'hunt' || huntersOn(g)) && (m !== 'fighterPlans' || fighterTypesOn(g)));
 export const isSabotage = (m: Mission): boolean => SABOTAGE.includes(m);
 /**
  * A theft of a great power's plans of one of the weapons only the great powers make (Brian, 18 November; ruling 235
  * and its rider b542; plans.ts): tried once, like an act of sabotage.
  */
 export const THEFT: Partial<Record<Mission, PlanItem>> = { bbPlans: 'bb', cvPlans: 'cv', bomberPlans: 'heavybombers', jetPlans: 'jets', rocketPlans: 'rockets', guidedPlans: 'guided' };
-export const isTheft = (m: Mission): boolean => THEFT[m] !== undefined;
+export const isTheft = (m: Mission): boolean => THEFT[m] !== undefined || m === 'fighterPlans';
 /** True for work that is tried once as the month turns, and then the agent lies low. */
 export const triedOnce = (m: Mission): boolean => isSabotage(m) || isTheft(m);
 
@@ -532,6 +533,14 @@ export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text:
   get jetPlans() { return theftText('jets'); },
   get rocketPlans() { return theftText('rockets'); },
   get guidedPlans() { return theftText('guided'); },
+  // The fighter's plans (the design director, 23 Nov 07:00Z): any nation's fielded mark, with 235's places, odds and war chance.
+  get fighterPlans() {
+    const war = Math.round(((data as any).caught.war ?? 0) * 10);
+    return {
+      label: "Steal the fighter's plans", doing: "preparing to steal the fighter's plans",
+      text: `The plans of the fighter a country builds most are copied and got out of ${PLAN_PLACES.works.got}, and your aircraft works can build it once your designers reach its year. Tried once, next month, and then the agent must lie low. If the agent is caught, a country at peace with you, and not your ally, declares war ${war} times in 10.`,
+    };
+  },
   guard: { label: 'Guard against saboteurs', doing: 'on guard', text: 'Watches for enemy agents here and in the provinces around, and is some help everywhere at home.' },
 };
 
@@ -589,6 +598,7 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
     if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${placeName(r.name)}.`;
     return null;
   }
+  if (m === 'fighterPlans') return whyNoFighterTheft(g, nat, a, r);
   if (isTheft(m)) return whyNoTheft(g, nat, a, r, THEFT[m]!);
   if (!atWar(g, nat, r.ctrl)) return peaceWords(host);
   if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
@@ -641,6 +651,25 @@ function theftBar(g: Game, nat: string, a: Agent, r: Region, x: PlanItem): strin
   const capital = g.regions[host.capital]?.name ?? 'its capital';
   if (!keepsPlans(g, r.ctrl, r, x)) return W.place === 'capital' ? `${host.name} keeps its ${W.one} plans at ${capital}, its capital.` : `${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital} and at ${P.home.replace('its capital and ', 'its ')}.`;
   if (!givesPlans(g, r.ctrl, x)) return hull ? `${host.name} builds no ${W.many} yet: there are no plans to steal.` : `${host.name} has no ${W.many} yet: there are no plans to steal.`;
+  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
+  return null;
+}
+
+/**
+ * Why this agent cannot try for the plans of the fighter a country builds most, where it stands, or null. At peace as at
+ * war. Any nation with aircraft works may try, against any other that builds a mark of its own (07:00Z: one rule for all).
+ */
+function whyNoFighterTheft(g: Game, nat: string, a: Agent, r: Region): string | null {
+  const host = g.nations[r.ctrl], N = g.nations[nat], P = PLAN_PLACES.works;
+  if (!fighterTypesOn(g)) return 'Not in this campaign.';
+  if (!hasFighterWorks(g, nat)) return theWords(`${N.name} has no aircraft works that build fighters: plans would give it nothing to build them in.`);
+  if (!host?.alive) return theWords('There are no plans to steal here.');
+  if (r.owner !== r.ctrl) return theWords(`${host.name} keeps its plans at home, in ${P.home}: ${r.name} is ground it has taken.`);
+  const mark = fieldedMark(g, r.ctrl);
+  if (!mark) return theWords(`${host.name} builds no fighters of its own: there are no plans to steal.`);
+  const capital = g.regions[host.capital]?.name ?? 'its capital';
+  if (host.capital !== r.id && r.fac < ARSENAL.air.ftr.factories) return theWords(`${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital} and at its great aircraft works.`);
+  if (holdsMark(g, nat, mark)) return theWords(`${N.name} already has the ${FIGHTERS.types[mark]?.short ?? mark}.`);
   if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
   return null;
 }
@@ -819,7 +848,12 @@ function attempt(g: Game, a: Agent): void {
     text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : k === 2 ? `Both ${host.adj} air groups based there are` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
   }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
-  else if (ok && isTheft(m) && grantPlans(g, a.nat, THEFT[m]!, r.ctrl, 'stolen')) { done = true; text = `Agent ${a.name} copies the ${host.adj} ${PLAN_WORDS[THEFT[m]!].one} plans at ${r.name} and gets them out. ${canNowWords([THEFT[m]!], host.adj)}`; }
+  else if (ok && m === 'fighterPlans' && (() => { const mk = fieldedMark(g, r.ctrl); return !!mk && stealMark(g, a.nat, r.ctrl, mk); })()) {
+    done = true;
+    const mk = stolenMarks(g, a.nat).slice(-1)[0].mark;
+    text = `Agent ${a.name} copies the plans of the ${host.adj} ${FIGHTERS.types[mk]?.short ?? mk} at ${r.name} and gets them out. ${stolenWords(g, a.nat, mk)}`;
+  }
+  else if (ok && THEFT[m] && grantPlans(g, a.nat, THEFT[m]!, r.ctrl, 'stolen')) { done = true; text = `Agent ${a.name} copies the ${host.adj} ${PLAN_WORDS[THEFT[m]!].one} plans at ${r.name} and gets them out. ${canNowWords([THEFT[m]!], host.adj)}`; }
   else text = isTheft(m) ? `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`
     : m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
     : m === 'rail' ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.`

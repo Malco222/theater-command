@@ -163,6 +163,16 @@ export function whyNoWorks(g: Game, nat: string, wing: Wing): string | null {
   return null;
 }
 
+/**
+ * True for a nation with aircraft works of its own that build this kind, open yet or not: a great power's home province
+ * with the factories a wing is built in, or a smaller power's works on the record (ruling 213(d)). Plans stolen need
+ * works to build from (the fighter's plans, the design director 23 Nov 07:00Z).
+ */
+export function hasAircraftWorks(g: Game, nat: string, wing: Wing): boolean {
+  if (budgeted(g) && !greatPower(g, nat)) return (SMALL().works[nat]?.[wing] ?? null) !== null;
+  return industry(g, nat, ARSENAL.air[wing].factories);
+}
+
 /** The month a shut works opens for this kind, or null where it never builds it (the same reckoning as whyNoWorks). */
 function worksOpensAt(g: Game, nat: string, wing: Wing): number | null {
   const w = SMALL().works[nat];

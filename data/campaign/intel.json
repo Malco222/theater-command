@@ -82,6 +82,11 @@
       "success": 0.3,
       "gain": 3
     },
+    "fighterPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
     "jetPlans": {
       "caught": 0.2,
       "success": 0.3,

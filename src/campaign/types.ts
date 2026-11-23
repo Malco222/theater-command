@@ -78,6 +78,8 @@ export interface Nation {
   opinion: number;
   /** A smaller nation's plans of battleships or carriers, taken or stolen from a great power (plans.ts), in the order gained. */
   plans?: PlanHeld[];
+  /** Fighter marks got from other nations' plans (the fighter's plans, intel.ts; the fighter types switch): each mark, whose it was, and when. */
+  stolenMarks?: { mark: string; from: string; turn: number }[];
   home: number;
   /** Political capital: what a government can spend on diplomacy. */
   pc: number;
@@ -1515,7 +1517,7 @@ export interface Passing {
 }
 
 /** What an agent is doing: watching, reading a government's books, an act of sabotage, a theft of plans, or work at home (guarding, hunting enemy agents). */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'bbPlans' | 'cvPlans' | 'bomberPlans' | 'jetPlans' | 'rocketPlans' | 'guidedPlans' | 'guard' | 'hunt';
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'bbPlans' | 'cvPlans' | 'bomberPlans' | 'fighterPlans' | 'jetPlans' | 'rocketPlans' | 'guidedPlans' | 'guard' | 'hunt';
 
 /**
  * Plans a smaller nation holds of a weapon only the great powers make (Brian, 18 November; ruling 235 and its rider
