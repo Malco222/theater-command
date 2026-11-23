@@ -113,7 +113,7 @@ export function crewOf(model: string, w: { year: number; month: number }): numbe
  * radials).
  */
 export function coolOf(model: string): 'liquid' | 'radial' {
-  if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|Il2|Pe2|Whitley)/.test(model)) return 'liquid';
+  if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|Il2|Pe2|Whitley)/.test(model)) return 'liquid';
   if (/^(Fighter:FRA|Bomber:SOV)$/.test(model)) return 'liquid';
   return 'radial';
 }

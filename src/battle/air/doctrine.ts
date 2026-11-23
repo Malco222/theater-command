@@ -41,12 +41,15 @@ export function designYear(g: Game, nat: string, branch: 'fighters' | 'bombers')
  * The fighter the 3D game draws for a nation (CampaignAircraft.cpp MainFighterOf on the unreal branch, dad185a), from
  * its designers' year: the Spitfire from 1940, the Mustang from 1944 (the historian: first escort 13 December 1943),
  * the Yak from 1942 and the plain fighter, fitted as the I-16, before it (the historian's review, question 8).
+ * Italy's C.202 from 1942, as the Fw 190 (in service from late 1941); the plain fighter, fitted as the C.200 or
+ * C.202 by date (guns.ts), before it. Brian 23 Nov: every nation's own aircraft where the 3D game has one.
  */
 export function fighterOf(nat: string, design: number): string {
   if (nat === 'GER') return design >= 1942 ? 'Fw190' : 'Bf109';
   if (COMMONWEALTH.has(nat)) return design >= 1940 ? 'Spitfire' : 'Hurricane';
   if (nat === 'USA') return design >= 1944 ? 'Mustang' : 'Warhawk';
   if (nat === 'SOV') return design >= 1942 ? 'Yak' : `Fighter:${nat}`;
+  if (nat === 'ITA') return design >= 1942 ? 'C202' : `Fighter:${nat}`;
   if (nat === 'JAP' || nat === 'JPN') return 'Zero';
   return `Fighter:${nat}`;
 }
