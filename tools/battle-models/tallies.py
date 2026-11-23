@@ -61,8 +61,10 @@ SMALL_SIDE = 1.0              # (a bomber is small when the side under her cockp
 # metal aft of a glass nose.
 FRONT = {"B17": 5.05, "He111": 3.85, "Amerikabomber": 6.8, "B29": 8.25}
 # A whole panel a little smaller where two blocks would not fit between what must stay clear: the B-17's painting
-# ahead of it and her wing root behind (at nine tenths a bomb is still 11 cm tall and a kill symbol 8).
-SCALE = {"B17": 0.9}
+# ahead of it and her wing root behind (at nine tenths a bomb is still 11 cm tall and a kill symbol 8); and the Pe-2's
+# slim side, round from her greenhouse to where it turns under her, 0.8 m of it (at 0.65 a bomb is 8 cm tall and a
+# star 6, and all three rows of kills fit under her window).
+SCALE = {"B17": 0.9, "Pe2": 0.65}
 ART_MARGIN = 0.035            # (noseart.raster's margin: the painting stands this share of its patch in from each edge)
 DEBUG = False
 SEE_THROUGH = {"blur", "blur_tip", "glint", "glare"}
