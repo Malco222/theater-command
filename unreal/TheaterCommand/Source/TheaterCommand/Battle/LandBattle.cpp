@@ -5568,6 +5568,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 		LAND_SCOPE(PumpLive);
 		PumpLive();
 	}
+	if (bLiveBroken && !S.Rec.bOver && LiveBrokenAt >= 0.0 && RealT - LiveBrokenAt > 6.0)
+	{
+		// (release 1.5: the rules stopped mid-fight and the note has been up six seconds; the scene is destroyed here,
+		// so nothing more of this frame is run. A battle whose end had already come keeps its after card and CONTINUE.)
+		LiveBrokenAt = -1.0;
+		LiveWayOut(TEXT("its rules stopped mid-fight"));
+		return;
+	}
 	LandFell::Phase("tick: the clock");
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
 	if (S.bOwnSpeed)

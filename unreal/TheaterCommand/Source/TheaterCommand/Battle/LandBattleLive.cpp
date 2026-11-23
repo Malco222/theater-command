@@ -185,6 +185,7 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 	}
 	bLiveWaiting = true;
 	bLiveBroken = false;
+	LiveBrokenAt = -1.0;
 	LiveWaited = 0.0;
 	LiveHeld = 0.0;
 	SetActorTickEnabled(true);
@@ -203,7 +204,10 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 			const FString Asked = PendingLive, Look = PendingTicket;
 			PendingLive.Empty();
 			PendingTicket.Empty();
-			BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look);
+			if (!BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look))
+			{
+				LiveWayOut(TEXT("its rules could not be started"));
+			}
 		}
 		return true;
 	}
@@ -218,6 +222,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s did not open: %s"), *Key, Why.IsEmpty() ? TEXT("the rules did not answer in 90 s") : *Why);
 		bLiveWaiting = false;
 		CloseLive();
+		LiveWayOut(TEXT("it did not open"));
 		return true;
 	}
 	std::string Header;
@@ -236,6 +241,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s: the rules' header is unreadable: %s"), *Key, Error.empty() ? TEXT("not a live battle") : *WideOf(Error));
 		State.Reset();
 		CloseLive();
+		LiveWayOut(TEXT("its header could not be read"));
 		return true;
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s header read in %.0f ms: \"%s\", %s, %d blocks%s"), *Key, (FPlatformTime::Seconds() - Began) * 1000.0,
@@ -244,6 +250,7 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 	{
 		State.Reset();
 		CloseLive();
+		LiveWayOut(TEXT("its field could not be laid"));
 		return true;
 	}
 	// (the general sets his own pace, at life's to begin with, the keys 1 to 3 faster; a film keeps the scene's own,
@@ -321,7 +328,8 @@ void ALandBattle::PumpLive()
 	{
 		// (the rules stopped: the battle shown up to what they fought, and then held; the log says why)
 		bLiveBroken = true;
-		S.Note = "THE BATTLE STOPPED HERE: ITS RULES FAILED (THE LOG SAYS WHY)";
+		LiveBrokenAt = RealT;
+		S.Note = "THE BATTLE STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
 		S.NoteAge = -1.0;
 	}
 
@@ -571,6 +579,13 @@ void ALandBattle::BeginFight()
 	{
 		Live->Begin();
 	}
+}
+
+void ALandBattle::LiveWayOut(const TCHAR* Why)
+{
+	UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s: %s; the field closes with no result%s"), *Key, Why,
+		HandBack ? TEXT(", the campaign's attack card back as he left it") : TEXT(""));
+	Finish(); // (as CONTINUE: the screen down, the table up, an empty result handed back, and the scene destroyed)
 }
 
 void ALandBattle::CloseLive()
