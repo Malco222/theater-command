@@ -12,7 +12,7 @@ import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import * as turnAll from '../src/campaign/turn';
-import { runTurnAI, setCityDamage } from '../src/campaign/turn';
+import { airfieldTargetsShipped, runTurnAI, setAirfieldTargets, setCityDamage } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 import { hashString } from '../src/core/rng';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -82,6 +82,10 @@ describe("a war started as the game starts it is the gate runner's TC_AC=1 war (
     TC.start({ view: 'grand', human: null, seed: 17, world: true });
     const bridge = TC.save().text;
     const runner = runnerStart(17, true);
+    // (Since fe7ea2e5 the bridge also sets airfields as targets last, as the browser's newGame does, where damage.json
+    // ships them on: Brian's airfield ask, the playtester 22 November 21:26Z. The runner's start takes the same switch
+    // here; whether the gate runners set it too is the gates' own call.)
+    if (airfieldTargetsShipped()) setAirfieldTargets(runner, true);
     expect(hashString(bridge).toString(16)).toBe(fp(runner));
     expect(flagsOf(bridge).ac).toBe(1);
   });
