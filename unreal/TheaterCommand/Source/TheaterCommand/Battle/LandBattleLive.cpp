@@ -21,6 +21,7 @@
 #include "Battle/LandVat.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -341,6 +342,20 @@ void ALandBattle::PumpLive()
 	while ((Taken == 0 || bWaitedOn) && Live->TakeOne(Delta))
 	{
 		++Taken;
+		// (release 1.5, the Mac's speed gate on 2dcc018b, 23 November: on every battlefield fought live a piece took 200 to
+		// 550 ms of one frame, the picture held every few seconds, where the cloud's reading of a whole piece was some 40 ms.
+		// Each step of a piece timed, and a piece over 50 ms said in the log with its parts, so the Mac's next run names the
+		// step to mend. Timing only: nothing here changes what is laid)
+		const double PieceAt = FPlatformTime::Seconds();
+		double StepAt = PieceAt;
+		double MsRead = 0.0, MsPlay = 0.0, MsMen = 0.0, MsCrowd = 0.0, MsTanks = 0.0, MsMap = 0.0;
+		auto Lap = [&StepAt](double& Ms)
+		{
+			const double Now = FPlatformTime::Seconds();
+			Ms += (Now - StepAt) * 1000.0;
+			StepAt = Now;
+		};
+		const int32 PieceKb = static_cast<int32>(Delta.size() / 1024);
 		const int32 VehiclesBefore = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
 		LandFeed::Grown G;
 		std::string Error;
@@ -350,12 +365,15 @@ void ALandBattle::PumpLive()
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): a piece at %.1f s not read: %s"), S.Rec.Fought, *WideOf(Error));
 			continue;
 		}
+		Lap(MsRead);
 		S.Play.Extend(G);
+		Lap(MsPlay);
 		LandFell::Phase("live: the men grown", G.bReset ? 1 : 0);
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the men not grown at %.1f s: %s"), G.T, *WideOf(Error));
 		}
+		Lap(MsMen);
 		// (the men's crowd, SO1: the body sets and helmets these men bring made now, before they are drawn; a set whose mid
 		// part cannot be made has every mid man skinned, as MakeMen does)
 		if (Vat && S.Men)
@@ -367,6 +385,7 @@ void ALandBattle::PumpLive()
 				S.Men->SetPoseBankMid(false);
 			}
 		}
+		Lap(MsCrowd);
 		// (a reset made her vehicles again: kept as they are drawn if they are the same vehicles in the same order)
 		std::vector<LandKit::TrackWords> WordsBefore;
 		if (G.bReset && S.Armour)
@@ -392,8 +411,19 @@ void ALandBattle::PumpLive()
 				bVehiclesKept = W.Block == WordsBefore[V].Block && W.K == WordsBefore[V].K && W.J == WordsBefore[V].J;
 			}
 		}
+		Lap(MsTanks);
 		LandFell::Phase("live: mapped to the drawn", bVehiclesKept ? 0 : 1);
 		MapLive(static_cast<int32>(G.NewTracksFrom), VehiclesBefore, G.bReset, bVehiclesKept);
+		Lap(MsMap);
+		const double PieceMs = (StepAt - PieceAt) * 1000.0;
+		if (PieceMs > 50.0)
+		{
+			const int32 VehiclesNow = S.Armour ? static_cast<int32>(S.Armour->Vehicles().size()) : 0;
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): a slow piece, %.0f ms at %.1f s (%d KB%s, piece %d of this frame; %d men, %d tracks, %d vehicles, %d new): read %.0f, play %.0f, men %.0f, crowd %.0f, tanks %.0f, mapped and bodies made %.0f"),
+				PieceMs, G.T, PieceKb, G.bReset ? (bVehiclesKept ? TEXT(", a reset, vehicles kept") : TEXT(", a reset, vehicles made again")) : TEXT(""), Taken,
+				S.Men ? S.Men->Count() : 0, static_cast<int32>(S.Rec.Tracks.size()), VehiclesNow, FMath::Max(0, VehiclesNow - VehiclesBefore),
+				MsRead, MsPlay, MsMen, MsCrowd, MsTanks, MsMap);
+		}
 		if (G.bBegun)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): the setup step closed; the clock runs"));
