@@ -1105,6 +1105,95 @@ void ALandBattle::LoadInks()
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	// The wind and the sky's life (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually
+	// realistic and epic?"), each on its own switch and all three with "-TheaterLandEpic", off until the art director
+	// and the Mac's frame rate pass them. Built by build_content.py (TC_REBUILD=M_LandBlades,M_LandCloudShade,
+	// M_LandSurface,M_LandLeaves,M_LandStalks); without them the battle is as before, said once.
+	{
+		const TCHAR* Line = FCommandLine::Get();
+		const bool bEpic = FParse::Param(Line, TEXT("TheaterLandEpic"));
+		float WindAsked = bEpic || FParse::Param(Line, TEXT("TheaterLandWind")) ? 1.0f : 0.0f;
+		FParse::Value(Line, TEXT("TheaterLandWind="), WindAsked);
+		float ShadeAsked = bEpic || FParse::Param(Line, TEXT("TheaterLandCloudShadows")) ? 0.2f : -1.0f;
+		FParse::Value(Line, TEXT("TheaterLandCloudShadows="), ShadeAsked);
+		bSunShafts = bEpic || FParse::Param(Line, TEXT("TheaterLandSunShafts"));
+		if (FParse::Value(Line, TEXT("TheaterLandSunShafts="), SunShaftBloom))
+		{
+			bSunShafts = SunShaftBloom > 0.0f;
+		}
+		const LandFeed::Recording& Rec = State->Rec;
+		// (the wind over the field: the recording's, or the effects kit's summer breeze from the west-south-west)
+		const FVector Blowing = Rec.Weather.bWind ? WorldWay(Rec.Weather.WindX, Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0);
+		const double Speed = Blowing.Size2D();
+		const FVector Way = Speed > 0.1 ? FVector(Blowing.X / Speed, Blowing.Y / Speed, 0.0) : FVector(0.91, 0.41, 0.0);
+		UMaterialInterface* Blades = WindAsked > 0.0f ? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandBlades.M_LandBlades"), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+		bWindOn = Blades != nullptr;
+		if (WindAsked > 0.0f && !Blades)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandBlades is missing (run Tools/build_content.sh with TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks): no wind."));
+		}
+		if (bWindOn)
+		{
+			// How hard it blows, from its speed: a breeze of 3 m a second sways the corn a little, a fresh wind of 8 a lot.
+			const float Gusty = FMath::Clamp(static_cast<float>(Speed / 5.0), 0.35f, 1.6f) * FMath::Clamp(WindAsked, 0.0f, 3.0f);
+			const float Travel = static_cast<float>(FMath::Max(2.5, 1.3 * Speed));
+			auto Blow = [&](UMaterialInstanceDynamic* M, float Bend, float Curve, float SpringHz, float Flutter, float Sheen)
+			{
+				if (!M)
+				{
+					return;
+				}
+				M->SetVectorParameterValue(TEXT("WindWay"), FLinearColor(static_cast<float>(Way.X), static_cast<float>(Way.Y), 0.0f, 0.0f));
+				M->SetScalarParameterValue(TEXT("WindTravel"), Travel);
+				M->SetScalarParameterValue(TEXT("GustSize"), 150.0f);
+				M->SetScalarParameterValue(TEXT("WindCalm"), 0.3f);
+				M->SetScalarParameterValue(TEXT("Bend"), Bend * Gusty);
+				M->SetScalarParameterValue(TEXT("BendCurve"), Curve);
+				M->SetScalarParameterValue(TEXT("BendHeight"), 12.0f);
+				M->SetScalarParameterValue(TEXT("Spring"), 0.25f);
+				M->SetScalarParameterValue(TEXT("SpringHz"), SpringHz);
+				M->SetScalarParameterValue(TEXT("Flutter"), Flutter * Gusty);
+				M->SetScalarParameterValue(TEXT("FlutterHz"), 2.2f);
+				M->SetScalarParameterValue(TEXT("Sheen"), Sheen * FMath::Min(Gusty, 1.2f));
+			};
+			auto Swaying = [&](float Roughness, float Specular, float Grain)
+			{
+				UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Blades, this);
+				Made->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+				Made->SetScalarParameterValue(TEXT("Specular"), Specular);
+				Made->SetScalarParameterValue(TEXT("Grain"), Grain);
+				Made->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+				return Made;
+			};
+			// (as ThingInk, the clutter's and the trees' paint until now)
+			BladeInk = Swaying(0.9f, 0.2f, 0.06f);
+			BushInk = Swaying(0.9f, 0.2f, 0.06f);
+			WoodInk = Swaying(0.9f, 0.2f, 0.06f);
+			// (a blade leans from its root, about 8 degrees in a gust; a bush less; a tree bends toward its top, 20 cm at
+			// 18 m, slower; its leaves the same and each card flutters 2 to 3 cm; the gusts' sheen on the grass and corn)
+			Blow(BladeInk, 0.14f, 0.0f, 0.55f, 0.0f, 0.07f);
+			Blow(BushInk, 0.05f, 0.0f, 0.45f, 0.0f, 0.0f);
+			Blow(WoodInk, 0.009f, 1.0f, 0.3f, 0.0f, 0.0f);
+			Blow(LeafInk, 0.009f, 1.0f, 0.3f, 0.025f, 0.0f);
+			Blow(StalkInk, 0.14f, 0.0f, 0.55f, 0.0f, 0.07f);
+			Blow(GroundInk, 0.0f, 0.0f, 0.55f, 0.0f, 0.05f);
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the wind ON (-TheaterLandWind=%.2f): %.1f m/s toward %.0f degrees, the gusts run %.1f m/s, %.2f of a full sway"),
+				WindAsked, Speed, FMath::RadiansToDegrees(FMath::Atan2(Way.Y, Way.X)), Travel, Gusty);
+		}
+		if (ShadeAsked > 0.0f)
+		{
+			UMaterialInterface* Shade = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCloudShade.M_LandCloudShade"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+			CloudShadeInk = Shade ? UMaterialInstanceDynamic::Create(Shade, this) : nullptr;
+			if (CloudShadeInk)
+			{
+				CloudShadeInk->SetScalarParameterValue(TEXT("Dark"), FMath::Clamp(ShadeAsked, 0.0f, 1.0f));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandCloudShade is missing (run Tools/build_content.sh with TC_REBUILD=M_LandCloudShade): no cloud shadows."));
+			}
+		}
+	}
 	// The footprint shade under the tanks, guns and lorries (M_LandShade, build_content.py; the art director's cut 4,
 	// fix 3): without it, none, said once. "-TheaterLandFootShade=0.6" takes it part way (0 none, 1 as ruled).
 	UMaterialInterface* Shade = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandShade.M_LandShade"), nullptr, LOAD_NoWarn | LOAD_Quiet);
@@ -2276,6 +2365,74 @@ void ALandBattle::LayThings()
 	};
 	TArray<FTransform> CutPlaces;
 	TArray<FCutShrub> CutFound;
+	// The wind (LoadInks; Brian, 23 November): what it bends. The grass, the corn and the flowers, a region's blades
+	// (clutter or kit painted as blades, under 3 m), as blades from the root; a region's low leafy plants and bushes
+	// (painted as leaves, under 3 m), less; the shrubs and the trees, a region's tall kit painted as leaves or blades (a
+	// palm, bamboo, a poplar), bending toward the top. Nothing else (a stone, stubble, a house, a gate, a haycock).
+	const auto WindInk = [this](LandField::Base B, const LandField::BaseMesh& Shape) -> UMaterialInstanceDynamic*
+	{
+		if (!bWindOn)
+		{
+			return nullptr;
+		}
+		using LB = LandField::Base;
+		switch (B)
+		{
+		case LB::Tuft:
+		case LB::TallGrass:
+		case LB::Wheat:
+		case LB::Poppies:
+		case LB::Flowers:
+		case LB::Fern:
+		case LB::Sward:
+			return BladeInk.Get();
+		case LB::ShrubA:
+		case LB::ShrubB:
+		case LB::ShrubC:
+		case LB::Bramble:
+		case LB::Oak:
+		case LB::Elm:
+		case LB::Ash:
+		case LB::Beech:
+		case LB::Pollard:
+		case LB::Apple:
+		case LB::Birch:
+			return WoodInk.Get();
+		default:
+			break;
+		}
+		const int32 K = static_cast<int32>(B);
+		const bool bRegion = (K >= static_cast<int32>(LB::Clut0) && K <= static_cast<int32>(LB::Clut5))
+			|| (K >= static_cast<int32>(LB::Kit0) && K < static_cast<int32>(LB::Kit0) + LandField::KitSlots);
+		if (!bRegion || Shape.Paint == 0)
+		{
+			return nullptr;
+		}
+		if (Shape.bTree || Shape.Height >= 3.0f)
+		{
+			return WoodInk.Get();
+		}
+		return Shape.Paint == 2 ? BladeInk.Get() : BushInk.Get();
+	};
+	// (each copy of a swaying thing: bent only within SwayTo metres of the eye, and its shadow kept as cached, so the
+	// virtual shadow maps are not drawn again for every leaf that moves; with the wind off, the leaves' and the
+	// stalks' materials, which hold the wind, are told not to move at all)
+	float SwayTo = 250.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSwayTo="), SwayTo);
+	const auto Windblown = [this, SwayTo, U](UInstancedStaticMeshComponent* Copies, bool bSways, bool bClutterCopy)
+	{
+		if (!bSways)
+		{
+			return;
+		}
+		if (!bWindOn)
+		{
+			Copies->SetEvaluateWorldPositionOffset(false);
+			return;
+		}
+		Copies->WorldPositionOffsetDisableDistance = FMath::RoundToInt32((bClutterCopy ? FMath::Min(SwayTo, 120.0f) : SwayTo) * U);
+		Copies->ShadowCacheInvalidationBehavior = EShadowCacheInvalidationBehavior::Rigid;
+	};
 	for (int32 Kind = 0; Kind < Kinds; ++Kind)
 	{
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
@@ -2442,7 +2599,10 @@ void ALandBattle::LayThings()
 			}
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
 			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
-			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : ThingInk.Get();
+			UMaterialInstanceDynamic* Blown = bStalks ? nullptr : WindInk(Base, Shape);
+			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : Blown ? Blown : ThingInk.Get();
+			// (what the wind moves: its own paint, its leaves' cards, the stalks)
+			const bool bSways = Blown != nullptr || bStalks || (LeafInk && !Shape.Cards.Empty());
 			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U, Further);
 			if (!Mesh)
 			{
@@ -2463,6 +2623,7 @@ void ALandBattle::LayThings()
 			}
 			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Copies->SetCanEverAffectNavigation(false);
+			Windblown(Copies, bSways, bClutter);
 			const bool bCornTwin = bClutter && Base == LandField::Base::Wheat && CornShadowTo > 0.0f;
 			Copies->SetCastShadow((!bClutter || Base == LandField::Base::Wheat || bStalks) && !bCornTwin);
 			// (a thing with no far level is not drawn past where the field gives it up: gates, the well, the cart, the
@@ -2496,6 +2657,7 @@ void ALandBattle::LayThings()
 					}
 					Shadowed->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 					Shadowed->SetCanEverAffectNavigation(false);
+					Windblown(Shadowed, bSways, true);
 					Shadowed->SetCastShadow(true);
 					if (Shape.Far.Empty())
 					{
@@ -2561,6 +2723,7 @@ void ALandBattle::LayThings()
 				}
 				Own->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				Own->SetCanEverAffectNavigation(false);
+				Windblown(Own, bSways, false);
 				Own->SetCastShadow(true);
 				if (Shape.Far.Empty())
 				{
@@ -4952,6 +5115,15 @@ void ALandBattle::HideTheTable()
 				Kept.Temperature = Light->Temperature;
 				Kept.SourceAngle = Light->LightSourceAngle;
 				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
+				Kept.Function = Light->LightFunctionMaterial.Get();
+				Kept.FunctionFade = Light->LightFunctionFadeDistance;
+				Kept.FunctionDisabled = Light->DisabledBrightness;
+				Kept.bShaftBloom = Light->bEnableLightShaftBloom;
+				Kept.bShaftOcclusion = Light->bEnableLightShaftOcclusion;
+				Kept.BloomScale = Light->BloomScale;
+				Kept.BloomThreshold = Light->BloomThreshold;
+				Kept.ShaftDark = Light->OcclusionMaskDarkness;
+				Kept.BloomTint = Light->BloomTint;
 				if (Light->GetFName() == TEXT("KeyLight") || (!KeyLight && Lights.Num() == 1))
 				{
 					KeyLight = Light;
@@ -4975,6 +5147,38 @@ void ALandBattle::HideTheTable()
 				// (the sun a small hard disc, as the air battle's: the art director's ruling on build 1750; overcast, soft)
 				KeyLight->LightSourceAngle = Day.KeyAngle;
 				KeyLight->AtmosphereSunDiskColorScale = FLinearColor(Day.Disc, Day.Disc, Day.Disc);
+				// The clouds' shadows on the field (LoadInks' CloudShadeInk; Brian, 23 November: the sky "more visually
+				// realistic and epic"): the day's cumulus, at its base, over the field, the share of it the day's cover,
+				// carried as the clouds drawn are (DrawSky). None on an overcast day (the deck's light is even), a clear
+				// one, or with -TheaterLandNoClouds.
+				const bool bShadows = CloudShadeInk && !Day.bDeck && Day.Overcast < 0.6 && Day.Cover >= 0.05 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoClouds"));
+				if (bShadows)
+				{
+					CloudShadeInk->SetVectorParameterValue(TEXT("SunWay"), FLinearColor(static_cast<float>(TowardSun.X), static_cast<float>(TowardSun.Y), static_cast<float>(TowardSun.Z), 0.0f));
+					CloudShadeInk->SetScalarParameterValue(TEXT("CloudBase"), static_cast<float>(Day.Base));
+					// (a cumulus' shadow is a little smaller than the cloud seen from the side: four fifths of the cover)
+					CloudShadeInk->SetScalarParameterValue(TEXT("Cover"), static_cast<float>(FMath::Clamp(0.8 * Day.Cover, 0.0, 0.7)));
+					CloudShadeInk->SetScalarParameterValue(TEXT("Strength"), 1.0f);
+					KeyLight->SetLightFunctionMaterial(CloudShadeInk);
+					KeyLight->SetLightFunctionFadeDistance(5.0e6f);
+					KeyLight->SetLightFunctionDisabledBrightness(1.0f);
+				}
+				// The sun's shafts: through the crowns, the hedges, the smoke and the dust when it stands before the lens,
+				// a fair day's only (-TheaterLandSunShafts=bloom).
+				const bool bShafts = bSunShafts && Day.Overcast < 0.5;
+				if (bShafts)
+				{
+					KeyLight->SetEnableLightShaftOcclusion(true);
+					KeyLight->SetOcclusionMaskDarkness(0.55f);
+					KeyLight->SetEnableLightShaftBloom(true);
+					KeyLight->SetBloomScale(SunShaftBloom);
+					KeyLight->SetBloomThreshold(0.25f);
+					KeyLight->SetBloomTint(FColor(255, 236, 200));
+				}
+				UE_LOG(LogTheater, Display, TEXT("Land battle look: the clouds' shadows %s, the sun's shafts %s"),
+					bShadows ? *FString::Printf(TEXT("ON (cover %.2f, %.2f of the sun under a cloud)"), 0.8 * Day.Cover, CloudShadeInk->K2_GetScalarParameterValue(TEXT("Dark")))
+							 : CloudShadeInk ? TEXT("off for this day (overcast, clear or no clouds)") : TEXT("off"),
+					bShafts ? *FString::Printf(TEXT("ON (bloom %.2f)"), SunShaftBloom) : bSunShafts ? TEXT("off for this day (overcast)") : TEXT("off"));
 				KeyLight->MarkRenderStateDirty();
 			}
 			TArray<USkyLightComponent*> Skies;
@@ -5362,6 +5566,13 @@ void ALandBattle::DrawSky()
 		return;
 	}
 	FLandSky& Day = *SkyDay;
+	// (the clouds' shadows on the field carried with the clouds drawn, in metres of the world)
+	if (CloudShadeInk && !Day.Clouds.Puffs.empty())
+	{
+		const AirSky::Vec ShadeDrift = Day.Clouds.DriftAt(State->Battle);
+		const FVector ShadeCarried = WorldWay(ShadeDrift.X, ShadeDrift.Y, 0.0);
+		CloudShadeInk->SetVectorParameterValue(TEXT("Drift"), FLinearColor(static_cast<float>(ShadeCarried.X), static_cast<float>(ShadeCarried.Y), 0.0f, 0.0f));
+	}
 	if (Day.Chip.IsValid())
 	{
 		// GS6: turned on the graphics chip; here only the wind's carry and, when the puffs' order has gone stale, the
@@ -5587,6 +5798,19 @@ void ALandBattle::ShowTheTable()
 			}
 			Light->LightSourceAngle = Kept.SourceAngle;
 			Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+			// (the clouds' shadows and the sun's shafts, as the table had them)
+			if (Light->LightFunctionMaterial.Get() != Kept.Function.Get())
+			{
+				Light->SetLightFunctionMaterial(Kept.Function.Get());
+				Light->SetLightFunctionFadeDistance(Kept.FunctionFade);
+				Light->SetLightFunctionDisabledBrightness(Kept.FunctionDisabled);
+			}
+			Light->SetEnableLightShaftOcclusion(Kept.bShaftOcclusion);
+			Light->SetOcclusionMaskDarkness(Kept.ShaftDark);
+			Light->SetEnableLightShaftBloom(Kept.bShaftBloom);
+			Light->SetBloomScale(Kept.BloomScale);
+			Light->SetBloomThreshold(Kept.BloomThreshold);
+			Light->SetBloomTint(Kept.BloomTint);
 			Light->MarkRenderStateDirty();
 		}
 	}

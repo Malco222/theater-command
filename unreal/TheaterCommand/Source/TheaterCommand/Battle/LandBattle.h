@@ -185,6 +185,29 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/**
+	 * The wind (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and
+	 * epic?"), on with "-TheaterLandWind" (or "=strength", 1 as worked out from the recording's wind) or
+	 * "-TheaterLandEpic": the grass, the corn and a region's blades (BladeInk), its low leafy plants and bushes (BushInk)
+	 * and the shrubs' and trees' wood (WoodInk) on M_LandBlades (build_content.py), each bent by the gusts running over
+	 * the field, as the leaves (LeafInk) and the corn's stalks (StalkInk) are, and the gusts' sheen over the grass and
+	 * the corn (and the ground's, GroundInk). None, and nothing moves, with the wind off or M_LandBlades missing.
+	 */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BladeInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BushInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WoodInk;
+	/** The clouds' shadows on the field (M_LandCloudShade, the light function on the battle's sun), on with
+	 * "-TheaterLandCloudShadows" (or "=darkness", the sun's share left under a cloud, 0.2) or "-TheaterLandEpic". */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudShadeInk;
+	bool bWindOn = false;
+	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low before the lens ("-TheaterLandSunShafts",
+	 * or "=bloom", 0.2; or "-TheaterLandEpic"). */
+	bool bSunShafts = false;
+	float SunShaftBloom = 0.2f;
 
 	// ---- The ground (LandField) ----
 	/** One drawn square of the field (or of the far ring): its ground at two levels, what stands on it, and the
@@ -546,7 +569,9 @@ private:
 	TObjectPtr<UTexture2D> FlagDefence;
 
 	// ---- What the table had before the battle took its place (as the air battle keeps it) ----
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White;
+		// (the wind and the clouds' shadows, 23 November: the sun's light function and shafts as the table had them)
+		TWeakObjectPtr<UMaterialInterface> Function; float FunctionFade = 0.0f, FunctionDisabled = 0.0f; bool bShaftBloom = false, bShaftOcclusion = false; float BloomScale = 0.0f, BloomThreshold = 0.0f, ShaftDark = 0.0f; FColor BloomTint = FColor::White; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = true; FLinearColor Lower = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
