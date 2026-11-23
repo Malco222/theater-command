@@ -288,6 +288,10 @@ namespace LandKit
 		 * rows for it are read before by_month (the German desert coats of 1941 and 1942, the British Light Stone).
 		 * Empty: none. */
 		std::string Terrain;
+		/** Captured kit (release 2, behind its switch): the nation she was taken from, where the recording's block says
+		 * so (blocks[].captured) and the look is on; she wears her captor's (Nation's) coat over her maker's, the old
+		 * showing at the chipped edges and where the brush missed. Empty: her own. */
+		std::string Captured;
 	};
 
 	class Model
@@ -628,6 +632,7 @@ namespace LandKit
 	{
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
+		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
 	};
 
 	/**
@@ -715,6 +720,12 @@ namespace LandKit
 		/** One line for each model drawn as another for want of its own file (the nearest generic in Content/Models/Battle
 		 * by kind and nation: never a side's vehicles left undrawn): the caller logs them. */
 		const std::vector<std::string>& StandIns() const { return StandInLines; }
+		/** Captured kit (release 2, Brian's 23 Nov "Do all of these"): on, a block the recording marks captured is drawn
+		 * in her captor's coat over her maker's (Dress::Captured). Off unless set; set before Load. */
+		bool bCapturedLook = false;
+		/** Any block marked captured, whatever the switch: stands in for every tank block of the attacker taken from the
+		 * defender's model (the Mac's off/on line, "-TheaterLandCapturedTest"). Set before Load. */
+		bool bCapturedTest = false;
 
 	private:
 		std::vector<Vehicle> All;
