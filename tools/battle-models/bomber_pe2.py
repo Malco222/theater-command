@@ -28,9 +28,9 @@ NAME = "Pe2"
 # ShKAS; the ventral hatch and its gun behind her wing; her low wing, its centre section flat out to the nacelles and
 # the outer panels tapering and rising to rounded tips, the slatted dive brake under each outer panel; her two M-105s
 # with three-bladed airscrews; her tailplane with an oval fin and rudder at each tip; the mast on her windscreen;
-# her tailwheel. Her bombs in her bay. The two fixed guns in her nose.
+# no tailwheel: it folded up into her in flight. Her bombs in her bay. The two fixed guns in her nose.
 # Her coat is the Sturmovik's: green and black over light blue; the plain red star on her sides, on both her fins and
-# under her wings (none above them from 1941); her tactical number on her fins (codes.py).
+# under her wings (none above them from 1941); her tactical number in white just behind her greenhouse (codes.py).
 #
 # Her fuselage, measured: (x, the height of its middle, half its width, half its depth); under her greenhouse its
 # top is her skin's, the glass standing on it.
@@ -82,7 +82,7 @@ NUMBERS = {
     "brakes": (3.4, 6.6, 0.3, 0.12, 0.1),
     "patch": 2.6, "colours": {"upper": "4F5E3E", "upper2": "2C2F2A", "under": "8FB0BF", "nose": "4F5E3E", "boss": "4F5E3E"},
     "engines": [(2.3, 1.39, -0.38, False, 3.3)], "nacelle": NACELLE, "nacelle_square": 2.2,
-    "pitot": True, "tailwheel": (-5.0, -0.78), "mast": (3.14, 1.05, 1.8, 0.0),
+    "pitot": True, "mast": (3.14, 1.05, 1.8, 0.0),
     "extras": [
         # (her navigator's ShKAS at the back of the greenhouse, and the ventral hatch's, aft and down, in its fairing)
         ("rod", ((1.75, 0.0, 0.98), (1.0, 0.0, 1.16)) + _GUN),
