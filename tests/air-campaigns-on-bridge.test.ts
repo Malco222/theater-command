@@ -25,16 +25,39 @@ describe("the 3D game's start: air campaigns on in a new grand campaign as shipp
     expect(flagsOf(TC.save().text).ac).toBe(1);
     TC.start({ human: 'GER', seed: 7 });
     expect(flagsOf(TC.save().text).ac).toBeUndefined();
-    // A grand campaign saved before the switch (no flag) plays on with air campaigns off, in the bridge and the browser.
+    // A history campaign saved and loaded keeps them off: only a grand campaign is ever switched on at load.
+    TC.start({ human: 'GER', seed: 7 });
+    TC.load(TC.save().text);
+    expect(flagsOf(TC.save().text).ac).toBeUndefined();
+    // A grand campaign saved before the switch (no flag) flies them from the month it is loaded in the 3D game (Brian,
+    // 23 November: "i want this in release 1"); the browser, the test kitchen, still plays it on as saved.
     TC.start({ view: 'grand', human: 'GER', seed: 7 });
     const old = JSON.parse(TC.save().text);
     delete old.flags.ac;
     const text = JSON.stringify(old);
     TC.load(text);
-    expect(flagsOf(TC.save().text).ac).toBeUndefined();
+    expect(flagsOf(TC.save().text).ac).toBe(1);
     const g = loadGame(text)!;
     expect(g.flags.open).toBe(1);
     expect(acOn(g)).toBe(false);
+  });
+
+  it('an old grand campaign saved in 1941 with air campaigns off flies them once loaded: six months, no error, the air war running', { timeout: 600_000 }, () => {
+    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 11 });
+    const old = JSON.parse(TC.save().text);
+    delete old.flags.ac;
+    delete old.ac;
+    TC.load(JSON.stringify(old));
+    const on = JSON.parse(TC.save().text);
+    expect(on.flags.ac).toBe(1);
+    expect(on.headlines.some((h: { text: string }) => h.text.startsWith('Air campaigns are flown in this war'))).toBe(true);
+    for (let m = 0; m < 6; m++) (TC as unknown as { endMonth(): unknown }).endMonth();
+    const after = JSON.parse(TC.save().text);
+    expect(after.turn).toBe(on.turn + 6);
+    expect(after.flags.ac).toBe(1);
+    // The air war under them is running: bombing wears the stocks it is kept for (aircampaigns.ts stockLoss). The standing
+    // campaigns are the player's to open, and no 3D panel opens one in this release.
+    expect(Object.keys(after.ac.stock).length).toBeGreaterThan(0);
   });
 
   it("the grand start for nobody, on the wider world, is the gate runner's start with TC_AC=1 (seed 17, stop 3), to the byte", () => {
