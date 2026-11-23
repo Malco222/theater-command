@@ -48,13 +48,13 @@ FIRE, TRACER, LOST = (255, 150, 0), (235, 120, 40), (205, 30, 30)
 
 ROWS = [
     ([0], 'USA, July 1944: four Mustangs strafe a German line. The last is hit climbing away and goes down on fire.'),
-    ([1], 'Germany, 1942: four Stukas dive on an American line. The last is hit climbing away and spins in.'),
+    ([1], 'Germany, 1942: four Stukas roll in from high and dive at 75 degrees on an American line. The last is hit climbing away and spins in.'),
     ([2, 3], 'USSR, 1943: two legs of two Il-2s, low and shallow. One is blown apart in its pass.'),
 ]
 W, RH = 1900, 520
 img = Image.new('RGB', (W, RH * len(ROWS) + 100), BG)
 d = ImageDraw.Draw(img)
-d.text((24, 16), 'Ground-attack fighters as the planner flies them (land_air_test). Left: side-on down the run. Right: from above.', fill=INK, font=FB)
+d.text((24, 16), 'Ground-attack fighters as the planner flies them (land_air_test, round 2: the art director\'s notes). Left: side-on down the run. Right: from above.', fill=INK, font=FB)
 
 
 def side_panel(OX, OY, pw, ph, legs):
@@ -65,17 +65,22 @@ def side_panel(OX, OY, pw, ph, legs):
     _, x0, y0, x1, y1, nat, year, side = runs[leg]
     L = math.hypot(x1 - x0, y1 - y0)
     fx, fy = (x1 - x0) / L, (y1 - y0) / L
-    umin, umax, hmax = -2400.0, 1700.0, 900.0
+    # (the row's own height and length: a Stuka comes down from near 2 km)
+    ups = [(((x - x0) * fx + (y - y0) * fy), z) for k in range(leg * 8, leg * 8 + 8) for (t, x, y, z, *_r) in planes.get(k, [])]
+    umin = min(-600.0, min((u for u, z in ups), default=-2400.0) - 100.0)
+    umax = max(L + 400.0, max((u for u, z in ups), default=1700.0) + 100.0)
+    hmax = max(400.0, max((z for u, z in ups), default=900.0) + 100.0)
     sx = lambda u: ox + (u - umin) / (umax - umin) * pw
     sy = lambda h: oy + ph - 46 - h / hmax * (ph - 66)
     d.rectangle((ox, oy, ox + pw, oy + ph), outline=(210, 205, 195))
     d.line((ox, sy(0), ox + pw, sy(0)), fill=GROUND, width=3)
     d.rectangle((sx(0), sy(0) - 3, sx(L), sy(0) + 3), fill=(90, 70, 50))
     d.text((sx(0), sy(0) + 6), 'the strip', fill=MUTED, font=FS)
-    for h in (100, 300, 500, 700):
+    step = 500 if hmax > 1200 else 100
+    for h in range(step, int(hmax), step if step == 500 else 200):
         d.line((ox, sy(h), ox + 8, sy(h)), fill=MUTED)
         d.text((ox + 10, sy(h) - 8), f'{h} m', fill=MUTED, font=FS)
-    for u in (-2000, -1000, 0, 1000):
+    for u in range(int(umin // 500 + 1) * 500, int(umax), 500):
         d.text((sx(u) - 12, sy(0) + 22), f'{u} m', fill=MUTED, font=FS)
     for k in range(leg * 8, leg * 8 + 8):
         pts = planes.get(k)
@@ -104,7 +109,7 @@ def side_panel(OX, OY, pw, ph, legs):
             u = (x - x0) * fx + (y - y0) * fy
             d.ellipse((sx(u) - 9, sy(0) - 9, sx(u) + 9, sy(0) + 9), fill=FIRE, outline=LOST, width=3)
     model = next((p[0][12] for k, p in planes.items() if k // 8 == leg and p), '?')
-    d.text((ox + 14, oy + 10), f'{model}: in high down the run, the dive, guns raking the strip (orange), the pull-out and the break', fill=INK, font=FS)
+    d.text((ox + 14, oy + 10), f'{model}: in high down the run, the push-over and the dive, its guns firing (orange, fine lines to where they strike), the pull-out and the climb away', fill=INK, font=FS)
     img.paste(sub, (OX, OY))
 
 
@@ -146,10 +151,13 @@ def top_panel(OX, OY, pw, ph, legs):
             for (t, x, y, z, hd, pi, bk, firing, how, wreck, ax, ay, model) in pts:
                 if wreck:
                     continue
-                c = LOST if how else (FIRE if firing else col)
+                c = LOST if how else col
                 if prev:
-                    d.line((mx(prev[0]), my(prev[1]), mx(x), my(y)), fill=c, width=3 if (firing or how) else 1)
+                    d.line((mx(prev[0]), my(prev[1]), mx(x), my(y)), fill=c, width=3 if how else 1)
                 prev = (x, y)
+            for (t, x, y, z, hd, pi, bk, firing, how, wreck, ax, ay, model) in pts:
+                if firing and not wreck and not how:
+                    d.ellipse((mx(ax) - 2, my(ay) - 2, mx(ax) + 2, my(ay) + 2), fill=FIRE)
             if k in hits:
                 t, x, y, z, how = hits[k]
                 d.line((mx(x) - 8, my(y) - 8, mx(x) + 8, my(y) + 8), fill=LOST, width=3)
@@ -159,7 +167,7 @@ def top_panel(OX, OY, pw, ph, legs):
                 d.ellipse((mx(x) - 8, my(y) - 8, mx(x) + 8, my(y) + 8), fill=FIRE, outline=LOST, width=3)
     d.line((ox + 14, oy + ph - 16, ox + 14 + 500 * k_, oy + ph - 16), fill=INK, width=2)
     d.text((ox + 14, oy + ph - 36), '500 m', fill=INK, font=FS)
-    d.text((ox + 14, oy + 10), 'blue: the attacker\'s blocks, red: the defender\'s; thin orange: the ground\'s guns\' streams', fill=INK, font=FS)
+    d.text((ox + 14, oy + 10), 'blocks: blue attacker, red defender. Thick orange: rounds striking. Thin: ground fire', fill=INK, font=FS)
     img.paste(sub, (OX, OY))
 
 
@@ -169,6 +177,6 @@ for i, (legs, words) in enumerate(ROWS):
     side_panel(24, y + 32, 1180, RH - 46, legs)
     top_panel(1220, y + 32, 660, RH - 46, legs)
 key_y = RH * len(ROWS) + 66
-d.text((24, key_y), 'Orange line: guns firing (fine lines to where they rake). Red X: hit. Red path: falling. Orange disc: where it struck and burns.', fill=INK, font=FS)
+d.text((24, key_y), 'Side-on, orange: the plane while its guns fire (fine lines to where they strike). From above, orange dots: where its rounds strike. Red X: hit. Red path: falling. Orange disc: where it struck and burns.', fill=INK, font=FS)
 img.save(DST)
 print('wrote', DST)

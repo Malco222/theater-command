@@ -56,14 +56,15 @@ namespace
 	};
 
 	/** The recording: a 2 km field, the attacker's blocks to the south, the defender's to the north, and the strikes. */
-	std::string Recording(bool bAll, size_t Upto = 100)
+	std::string Recording(bool bAll, size_t Upto = 100, bool bOwnOnStrip = false)
 	{
 		std::ostringstream R;
 		R << "{\"key\": \"air-test\", \"date\": \"July 1944\", \"field\": {\"w\": 2000, \"h\": 2000}, \"men\": [], \"views\": [";
 		for (int V = 0; V < 2; ++V)
 		{
 			R << (V ? "," : "") << "{\"t\": " << (V ? 100 : 0) << ", \"units\": [";
-			const double Att[][2] = { { 700, 300 }, { 900, 330 }, { 1100, 300 }, { 1500, 250 } };
+			// (bOwnOnStrip: the attacker's first block stood on the Mustangs' strip, 60 m along it and 20 m aside)
+			const double Att[][2] = { { bOwnOnStrip ? 760.0 : 700.0, bOwnOnStrip ? 740.0 : 300.0 }, { 900, 330 }, { 1100, 300 }, { 1500, 250 } };
 			const double Def[][2] = { { 650, 780 }, { 900, 760 }, { 1150, 790 }, { 600, 1700 } };
 			for (int K = 0; K < 4; ++K) R << (K ? "," : "") << "{\"id\": " << K + 1 << ", \"side\": \"att\", \"x\": " << Att[K][0] << ", \"y\": " << Att[K][1] << ", \"str\": 0.8}";
 			for (int K = 0; K < 4; ++K) R << ",{\"id\": " << K + 11 << ", \"side\": \"def\", \"x\": " << Def[K][0] << ", \"y\": " << Def[K][1] << ", \"str\": " << (K == 3 ? 0.0 : 0.7) << "}";
@@ -161,7 +162,7 @@ int main(int Argc, char** Argv)
 	{
 		bool bShown = false, bFired = false, bHit = false, bCrashed = false;
 		double FirstT = 1e9, MinSpeed = 1e9, MaxSpeed = 0.0, MinPitch = 0.0, MinClear = 1e9, MaxStep = 0.0, MaxHeadStep = 0.0;
-		double FireFrom = 1e9, FireTo = -1e9;
+		double FireFrom = 1e9, FireTo = -1e9, SlantOpen = -1.0, SlantShut = -1.0;
 		double AimStartMiss = 1e9, AimEndMiss = 1e9, AimHigh = 0.0;
 		double HitT = -1.0, CrashT = -1.0, MaxHigh = 0.0, LowestFly = 1e9;
 		Plane Last;
@@ -215,6 +216,7 @@ int main(int Argc, char** Argv)
 				Sn.MaxSpeed = std::max(Sn.MaxSpeed, Sp);
 				Sn.MinPitch = std::min(Sn.MinPitch, P.Pitch);
 				Sn.MinClear = std::min(Sn.MinClear, P.At.Z);
+				Sn.LowestFly = Sn.MinClear; // (the flat field: its height is its clearance; its bottom, once past it)
 				if (Sn.bLast && Sn.Last.How == LandAir::Fall::None)
 				{
 					Sn.MaxStep = std::max(Sn.MaxStep, std::max(std::fabs(P.Pitch - Sn.Last.Pitch), std::fabs(P.Bank - Sn.Last.Bank)));
@@ -228,6 +230,9 @@ int main(int Argc, char** Argv)
 					const double W0 = St.Models > 1 ? (P.Slot - (St.Models - 1) * 0.5) * std::min(18.0, 60.0 / St.Models) : 0.0;
 					const double Sx = St.Run[0] + Fy / L * W0, Sy = St.Run[1] - Fx / L * W0, Ex = St.Run[2] + Fy / L * W0, Ey = St.Run[3] - Fx / L * W0;
 					if (!Sn.bFired) Sn.AimStartMiss = std::hypot(P.Aim.X - Sx, P.Aim.Y - Sy);
+					const double Slant = std::hypot(std::hypot(P.At.X - P.Aim.X, P.At.Y - P.Aim.Y), P.At.Z - P.Aim.Z);
+					if (!Sn.bFired) Sn.SlantOpen = Slant;
+					Sn.SlantShut = Slant;
 					Sn.AimEndMiss = std::hypot(P.Aim.X - Ex, P.Aim.Y - Ey);
 					Sn.AimHigh = std::max(Sn.AimHigh, std::fabs(P.Aim.Z));
 					Sn.bFired = true;
@@ -261,7 +266,7 @@ int main(int Argc, char** Argv)
 	}
 
 	// ---- flight
-	int Early = 0, Slow = 0, Ground = 0, Jerky = 0, NotShown = 0;
+	int Early = 0, Slow = 0, Ground = 0, Jerky = 0, NotShown = 0, BadDive = 0;
 	double Stuka = 0.0, Il2High = 0.0;
 	for (size_t L = 0; L < 4; ++L)
 	{
@@ -272,7 +277,19 @@ int main(int Argc, char** Argv)
 			const Seen& Sn = Seens[L * 8 + static_cast<size_t>(K)];
 			if (!Sn.bShown) { ++NotShown; continue; }
 			if (Sn.FirstT < St.T - 25.0 / Life) ++Early;
-			if (Sn.MinSpeed < 0.9 * M.Speed || Sn.MaxSpeed > 1.6 * M.Speed) { ++Slow; std::printf("     note: leg %zu plane %d speed %.0f to %.0f m/s (its machine's %.0f)\n", L, K, Sn.MinSpeed, Sn.MaxSpeed, M.Speed); }
+			if (Sn.MinSpeed < 0.9 * M.Speed || Sn.MaxSpeed > 1.2 * M.Speed) { ++Slow; std::printf("     note: leg %zu plane %d speed %.0f to %.0f m/s (its machine's %.0f)\n", L, K, Sn.MinSpeed, Sn.MaxSpeed, M.Speed); }
+			// (the art director's shapes, 19:08Z: a fighter's dive 20 to 30 degrees, out 30 to 60 m up, guns from about
+			// 900 m to 250 m; a Stuka's 70 to 80, out about 300 m up; an Il-2's out 10 to 20 m up)
+			const bool bLost = *St.Lost && K == St.Models - 1;
+			const double Dive = -Sn.MinPitch;
+			bool bShape = true;
+			if (M.Model == "Stuka") bShape = Dive >= 70.0 && Dive <= 80.0 && Sn.LowestFly >= 250.0 && Sn.LowestFly <= 350.0;
+			else if (M.Model == "Sturmovik") bShape = Sn.LowestFly >= 10.0 && Sn.LowestFly <= 20.0;
+			else bShape = Dive >= 20.0 && Dive <= 30.0 && Sn.LowestFly >= 30.0 && Sn.LowestFly <= 60.0 && Sn.SlantOpen >= 800.0 && Sn.SlantOpen <= 1000.0 && Sn.SlantShut >= 180.0 && Sn.SlantShut <= 320.0;
+			// (the one lost: hit before its bottom or soon after, so only its dive and its guns' opening)
+			if (bLost) bShape = M.Model == "Stuka" ? Dive >= 70.0 && Dive <= 80.0 : M.Model == "Sturmovik" ? true : Dive >= 20.0 && Dive <= 30.0 && Sn.SlantOpen >= 800.0 && Sn.SlantOpen <= 1000.0;
+			if (!bShape) ++BadDive;
+			std::printf("     leg %zu plane %d (%s): dive %.0f deg, bottom %.0f m, guns from %.0f m to %.0f m slant\n", L, K, M.Model.c_str(), Dive, Sn.LowestFly, Sn.SlantOpen, Sn.SlantShut);
 			if (Sn.MinClear < 5.0) ++Ground;
 			if (Sn.MaxStep > 3.0 || Sn.MaxHeadStep > 3.0) { ++Jerky; std::printf("     note: leg %zu plane %d steps %.1f deg (heading %.1f) a frame\n", L, K, Sn.MaxStep, Sn.MaxHeadStep); }
 			if (M.Model == "Stuka") Stuka = std::min(Stuka, Sn.MinPitch);
@@ -280,16 +297,16 @@ int main(int Argc, char** Argv)
 		}
 	}
 	Check(NotShown == 0 && Early == 0, "flight: every plane drawn, none long before its leg comes");
-	Check(Slow == 0, "flight: each at its machine's speed (0.9 to 1.6 times, the dive's sink on top: a Stuka's 50 degrees)");
+	Check(Slow == 0, "flight: each at its machine's speed along its way (0.9 to 1.2 times: the climb away's on top)");
+	Check(BadDive == 0, "flight: the art director's shapes (fighters 20 to 30 deg, out 30 to 60 m, guns 800-1000 to 180-320 m; Stuka 70 to 80 deg, out 250 to 350 m; Il-2 out 10 to 20 m)");
 	Check(Ground == 0, "flight: none flies into the ground (5 m and over)");
 	Check(Jerky == 0, "flight: heading, pitch and bank smooth (3 degrees a frame at most)");
 	char Words[200];
 	std::snprintf(Words, sizeof(Words), "flight: a Stuka dives steeply (%.0f deg), an Il-2 stays low (%.0f m at most)", Stuka, Il2High);
-	Check(Stuka < -30.0 && Il2High < 200.0, Words);
+	Check(Stuka < -65.0 && Il2High < 200.0, Words);
 
 	// ---- guns
-	int NoFire = 0, OffLane = 0, AimUp = 0;
-	double RakeWorst = 0.0;
+	int NoFire = 0, OffLane = 0, AimUp = 0, BadGap = 0;
 	for (size_t L = 0; L < 4; ++L)
 	{
 		const Strike& St = Strikes[L];
@@ -301,15 +318,36 @@ int main(int Argc, char** Argv)
 			const bool bLost = *St.Lost && K == St.Models - 1;
 			if (Sn.AimStartMiss > 10.0 || (!bLost && Sn.AimEndMiss > 10.0)) { ++OffLane; std::printf("     note: leg %zu plane %d aim starts %.1f m and ends %.1f m off its lane\n", L, K, Sn.AimStartMiss, Sn.AimEndMiss); }
 			if (Sn.AimHigh > 0.01) ++AimUp;
+			if (K > 0)
+			{
+				const double Gap = (Sn.FireFrom - Seens[L * 8 + static_cast<size_t>(K) - 1].FireFrom) * Life;
+				if (Gap < 5.99 || Gap > 12.01) { ++BadGap; std::printf("     note: leg %zu plane %d dives %.1f s after the one before\n", L, K, Gap); }
+			}
 			From = std::min(From, Sn.FireFrom);
 			To = std::max(To, Sn.FireTo);
 		}
-		const double Rules = std::hypot(St.Run[2] - St.Run[0], St.Run[3] - St.Run[1]) / 120.0;
-		RakeWorst = std::max(RakeWorst, std::fabs((To - From) - Rules) / Rules);
-		std::printf("     leg %zu (%s %d, %d planes): guns rake the strip %.1f battle s (the rules %.1f)\n", L, St.Nat, St.Year, St.Models, To - From, Rules);
+		std::printf("     leg %zu (%s %d, %d planes): guns on the strip from %.1f to %.1f battle s (the rules' run %.1f s from %.1f)\n", L, St.Nat, St.Year, St.Models, From, To,
+			std::hypot(St.Run[2] - St.Run[0], St.Run[3] - St.Run[1]) / 120.0, St.T);
 	}
 	Check(NoFire == 0 && OffLane == 0 && AimUp == 0, "guns: each plane's guns walk its lane of the strip from start to end (the lost one till it is hit), on the ground");
-	Check(RakeWorst < 1.0, "guns: each leg rakes the strip for about the rules' time (within double or half)");
+	Check(BadGap == 0, "guns: each plane dives 6 to 12 s after the one before (each dive its own beat)");
+	{
+		// (a lane never over its own men: the attacker's block stood on the Mustangs' strip, 60 m along it)
+		LandFeed::Recording Own;
+		LandFeed::ReadRecording(Recording(true, 100, true), Own, Err);
+		Sky O;
+		O.Build(Own, Flat, Life);
+		double First = 1e9;
+		std::vector<Plane> Op;
+		std::vector<Gunner> Og;
+		for (double T = T0; T <= T1; T += Dt)
+		{
+			O.At(T, Op, Og);
+			for (const Plane& P : Op) if (P.Leg == 0 && P.bFiring) First = std::min(First, P.Aim.X - 700.0);
+		}
+		std::printf("     with its own block 60 m along the strip, the Mustangs' guns strike from %.0f m along it\n", First);
+		Check(First >= 209.0 && First < 400.0, "guns: a lane starts 150 m past its own side's front at the least");
+	}
 
 	// ---- losses
 	int Hit = 0, BadOrder = 0, BadFall = 0, OtherFell = 0, NoWreck = 0, Explodes = 0;
@@ -326,13 +364,13 @@ int main(int Argc, char** Argv)
 			const double Fell = (Sn.CrashT - Sn.HitT) * Life, Across = std::hypot(Sn.CrashAt.X - Sn.HitAt.X, Sn.CrashAt.Y - Sn.HitAt.Y), Drop = Sn.HitAt.Z - Sn.CrashAt.Z;
 			std::printf("     leg %zu: %s from %.0f m, %.1f s down, %.0f m on, at %.0f deg\n", L, St.Lost, Drop, Fell, Across, std::atan2(Drop, std::max(1.0, Across)) * 57.2958);
 			if (std::strcmp(St.Lost, "burn") == 0 && (Fell < 2.0 || Fell > 25.0 || std::atan2(Drop, Across) * 57.2958 > 30.0)) ++BadFall;
-			if (std::strcmp(St.Lost, "spin") == 0 && std::atan2(Drop, std::max(1.0, Across)) * 57.2958 < 30.0) ++BadFall;
+			if (std::strcmp(St.Lost, "spin") == 0 && (std::atan2(Drop, std::max(1.0, Across)) * 57.2958 < 30.0 || Drop / std::max(0.1, Fell) < 45.0)) ++BadFall;
 			if (std::strcmp(St.Lost, "explode") == 0) { ++Explodes; if (Sn.ShownAfterExplode > 0 || Sn.WreckFrames > 0) ++BadFall; }
 			else if (Sn.WreckFrames == 0 || Sn.WreckOff > 0) ++NoWreck;
 		}
 	}
 	Check(Hit == Lost && BadOrder == 0, "losses: as many planes hit as the rules lost, each hit once and into the ground once after");
-	Check(BadFall == 0 && Explodes == 1, "losses: on fire a long dive, a spin steep, blown up gone at once");
+	Check(BadFall == 0 && Explodes == 1, "losses: on fire a long dive, a spin steep and quick (about 3 s from 150 m), blown up gone at once");
 	Check(NoWreck == 0, "losses: a wreck where each burning or spinning plane struck, the rest of the battle");
 	Check(OtherFell == 0, "losses: no other plane falls");
 
