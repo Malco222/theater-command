@@ -58,6 +58,9 @@ public:
 	bool PressDrawn(const FString& Action);
 
 private:
+	/** (the Mac's step player, a development tool: it finds a button's place by what it does, to click it as his hand
+	 * would. It only reads the buttons as last painted; the clicks go through Slate to this screen's own handlers.) */
+	friend class FStepPlayer;
 	TWeakObjectPtr<ALandBattle> Battle;
 	struct FButton
 	{
