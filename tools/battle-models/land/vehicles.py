@@ -177,3 +177,22 @@ ABOUT["Stuart"] = {"nation": "USA", "role": "light tank", "years": "1941-45",
 WHOLE["BT7"] = {"turret": "all"}
 FACES["BT7"] = [("1935: the round turret", {"turret": "round"}),
                 ("1937 on: the cone turret (half the BT-7s from 1938)", {"turret": "cone"})]
+
+# ---- light cars and motorcycles (Brian 23 Nov: jeeps and motorcycles in the ground battles; appended so no other lines move)
+import light_cars  # noqa: E402
+
+BUILDERS["Jeep"] = light_cars.jeep
+ABOUT["Jeep"] = {"nation": "USA", "role": "light car", "years": "1941-45",
+                 "units": "scouts, staffs and messengers (United States; Britain and the Commonwealth from 1942 and the Free French, in their own paint; "
+                          "the Soviet Union and China were lent her too); the jeep with the .30 on its post rides ahead of the American armor"}
+FACES["Jeep"] = [("The .30 Browning on its post, the screen folded", {}), ("A staff car: no gun", {"mg": False})]
+BUILDERS["Kubelwagen"] = light_cars.kubelwagen
+ABOUT["Kubelwagen"] = {"nation": "GER", "role": "light car", "years": "1940-45",
+                       "units": "staffs, scouts, messengers and every German unit's light car, in Europe, Russia and Africa (Italy had some too)"}
+FACES["Kubelwagen"] = [("1940 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})]
+import motorcycles  # noqa: E402
+
+BUILDERS["R75"] = motorcycles.r75
+ABOUT["R75"] = {"nation": "GER", "role": "motorcycle with sidecar", "years": "1941-45",
+                "units": "the motorcycle troops and the scouts ahead of Germany's armor and motorized infantry, in Europe, Russia and Africa; solo (the sidecar off), the despatch riders"}
+FACES["R75"] = [("With her sidecar and its MG 34, dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"}), ("Solo: a despatch rider", {"sidecar": False})]

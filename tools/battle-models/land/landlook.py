@@ -102,6 +102,8 @@ def main():
     os.makedirs(out, exist_ok=True)
     for vw in views:
         eye, tgt, lens = shots[vw]
+        if "zoom" in opt:                                 # (zoom=1.8: the camera that far again off: a small machine, a motorcycle, whole in the frame)
+            eye = tuple(t + (e - t) * float(opt["zoom"]) for e, t in zip(eye, tgt))
         cam.data.lens = lens
         kit.look_at(cam, eye, tgt)
         # the sun stands to one side of the camera, so the faces toward it are lit and the shadow falls away
