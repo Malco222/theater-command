@@ -595,6 +595,28 @@ The art director's Mac shots, with `-TheaterLandCraterVariety` against without: 
 from a man's height, on the bocage and on snow or sand. A field after tanks have shot high explosive at a hedge line
 should show the long holes pointing back at the guns.
 
+## Each gun its own flash (release 2, off until passed)
+
+Brian, 23 November: "how does the gun fire look when they shoot? can we make the mussel flash realistic?" Behind
+`-TheaterLandGunFlash`. Off: every gun draws its row's flash as before (the kit's preview draws the same frames, byte
+for byte, with the switch off).
+
+- **Who has which.** `LandPlay::World::GunLook` (set in `ALandBattle::Open` only when on) names each shot's look by the
+  shooter: `star`, the German MG 42 or MG 34 (squad and heavy); `cone`, a flash hider's narrow cone (the Bren, the DP,
+  the BAR, the Type 96 and 99); `open`, a long tongue (heavy guns: the M1919, the Maxim, the Vickers; the Italian and
+  French squad guns); `tank`, a tank's machine guns; `smg`, a squad leader drawn with a sub-machine gun (his figure's
+  `_smg` or `_nco` file): a burst of 4 (the PPSh 5) at 9 to 15 a second, no tracer, as his clip's cue sounds it;
+  `rifle`, every other rifleman; `brake`, a main gun with a muzzle brake by her model (Tiger, Panther, Panzer IV, StuG,
+  ZiS-3, SU-76, Sexton). The kit is told "mg:star": the row `mg` as ever, with the look's pieces laid after it.
+- **The looks** are `muzzle.look.<look>` in `Content/Effects/battle-fx-guns.json` (`tools/battle-fx/fx-guns.json`),
+  laid over the recipe for that battle only. Each can narrow or lengthen the flame, add a star of spikes round the bore,
+  a brake's two side jets and the dust they blow aside, a pale haze that hangs, a kick of the ground's dust under a
+  muzzle lower than `prone_under_m`, and a small lamp on the firer's face at dusk and night (`bNightOnly`).
+- **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 5 spikes or 4 jets, 10 brake dust puffs and one lamp; a
+  burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
+- **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
+  `FX_DIM` for dusk, `FX_GUN_ROW=at_gun:brake`).
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

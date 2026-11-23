@@ -767,6 +767,33 @@ namespace TheaterFx
 		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
+		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "how does the gun fire look when they shoot? can we make
+		 *  the mussel flash realistic?"): a gun's own look, muzzle.look.<look> (laid over from battle-fx-guns.json), named
+		 *  after its row as "mg:star" in Muzzle and Shots. Every number has its row's or the old look's meaning when left
+		 *  out; a name with no colon is drawn as ever. Its pieces have their own dice, laid after the row's. */
+		struct GunLook
+		{
+			bool bOn = false;
+			double FlameM = 0.0;            // flame_m: its flame's length (0: the row's)
+			double Narrow = 1.0;            // narrow: its flame's width as a share of the row's (a flash hider's cone: under 1)
+			double LicksK = 1.0;            // licks: its licks thrown sideways, as a share of the row's
+			bool bFlicker = false;          // flicker: each round of a burst flickers at the muzzle (Shots), as a machine gun's
+			double HotM = 0.0;              // hot_m: a round's close flame in a burst (0: muzzle.hot.mg_flame_m)
+			double FarK = 1.0;              // far_k: a round's far flicker's size, a share of the machine gun's
+			bool bTracer = true;            // tracer: 0, its rounds lay no tracer (a sub-machine gun's pistol rounds)
+			int Star = 0;                   // star: spikes thrown out round the bore (the MG 42's star), 0 none
+			double StarM = 0.0, StarWide = 0.12, StarLean = 75.0, StarFarM = 0.0; // star_m, star_wide, star_lean (degrees off the bore), star_far_m
+			int Jets = 0;                   // jets: a muzzle brake's side jets, left and right (2), 0 none
+			double JetM = 0.0, JetBackM = 0.15, JetWide = 0.2, JetDust = 0.0; // jet_m, jet_back_m, jet_wide, jet_dust (its dust thrown aside)
+			double Haze = 0.0, HazeR = 0.6, HazeWithinM = 200.0; // haze (most opaque), haze_r, haze_within_m: a pale puff that hangs
+			Span HazeS{ 2.5, 4.0 };         // haze_s
+			double ProneUnderM = 0.0, ProneDust = 0.0, DustWithinM = 150.0; // prone_under_m, prone_dust, dust_within_m
+			double LampW = 0.0, LampBackM = 0.4, LampR = 3.0, LampWithinM = 150.0; // lamp_w, lamp_back_m, lamp_r, lamp_within_m: its glow on the firer, dusk and night only
+		};
+		bool GunLookOf(const std::string& Look, GunLook& Out_) const; // (false: no muzzle.look.<look>.on in the recipe)
+		/** A look's own after-pieces: the haze that hangs, the dust a low muzzle or a brake kicks up, its lamp. */
+		void LookLaid(double Now, const Vec& At, const Vec& Fw, const GunLook& L, const char* Ground);
+		void LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L);
 		/** A ground gun's flash close to the eye (muzzle.hot, art director 07:08Z): lit from within, a yellow-white root
 		 *  and an orange body, as the air guns' close flash. */
 		struct HotFlash
@@ -782,7 +809,11 @@ namespace TheaterFx
 			// (yellow_over; 0: a share of the root's, as before), and the root's glow is the kit's own soft halo, HaloM
 			// past the root all round and Halo opaque at the root's edge, never the game's bloom)
 			double YellowOver = 0.0, Halo = 0.0, HaloM = 0.0;
+			GunLook Look; // (Effects (R2): a gun's own look's spikes and jets, laid after the rest; off, none)
 		};
+		/** Effects (R2): a look's own flame pieces, its star's spikes and its brake's side jets, lit as the close flash (H)
+		 *  or, H null, as the far one. */
+		void LookFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const GunLook& L, const HotFlash* H, Dice& D);
 		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
 		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
 		 *  tongues, red-orange only at their ends, with short licks thrown sideways and a thin glow round it. Its length
@@ -1757,7 +1788,7 @@ namespace TheaterFx
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
-		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn);
+		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look = nullptr);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
 		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)

@@ -477,20 +477,24 @@ namespace LandPlay
 		M.Way = Facing;
 		M.Ground = Ground;
 		M.Round = R.N;
+		// Effects (R2): the shooter's own gun's look (-TheaterLandGunFlash): "mg:star", the MG 42's; none, as before
+		int LookRounds = 0;
+		double LookRate = 0.0;
+		const std::string Look = Here.GunLook && S >= 0 ? Here.GunLook(S, R.W, Army, Role, LookRounds, LookRate) : std::string();
 		if (R.W == "rifle" || R.W == "mg")
 		{
 			const Burst B = BurstOf(R.W, Army, Role);
-			M.Name = R.W;
+			M.Name = Look.empty() ? R.W : R.W + ":" + Look;
 			Effect Sh;
 			Sh.T = R.T;
 			Sh.Kind = FxKind::Shots;
 			Sh.At = At;
 			Sh.To = To;
 			Sh.Way = Facing;
-			Sh.Name = R.W;
+			Sh.Name = M.Name;
 			Sh.Gun = S >= 0 ? S : 100000 + R.N;
-			Sh.Rounds = B.Rounds;
-			Sh.PerSecond = B.PerSecond;
+			Sh.Rounds = LookRounds > 0 ? std::min(LookRounds, 40) : B.Rounds; // (Effects (R2): a sub-machine gun's burst, seen; heard by his clip)
+			Sh.PerSecond = LookRate > 0.0 ? std::min(LookRate, 30.0) : B.PerSecond;
 			Sh.Ground = GroundAt(To.X, To.Y);
 			Sh.Round = R.N;
 			N.Rounds = B.Rounds;
@@ -505,6 +509,7 @@ namespace LandPlay
 		else
 		{
 			M.Name = R.W == "tank" ? "tank_gun" : R.W == "at" ? "at_gun" : R.W == "gun" ? "howitzer" : R.W == "mortar" || R.W == "smoke" ? "mortar" : "rifle";
+			if (!Look.empty()) M.Name += ":" + Look; // (Effects (R2): a muzzle brake's side jets, "tank_gun:brake")
 			if (S >= 0) OutFx.push_back(M);
 		}
 		OutNoise.push_back(N);

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <utility>
 
 namespace TheaterFx
@@ -107,6 +108,20 @@ namespace TheaterFx
 		double SafeNum(double Is, double Least, double Most, double Usual)
 		{
 			return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual;
+		}
+
+		/** Effects (R2), -TheaterLandGunFlash: a gun named "mg:star" is the row mg drawn with the look star; the row's
+		 * name is kept in Base. A name with no colon, as ever (Look left empty). */
+		const char* LookSplit(const char* Gun, std::string& Base, std::string& Look)
+		{
+			const char* Colon = Gun ? std::strchr(Gun, ':') : nullptr;
+			if (!Colon)
+			{
+				return Gun;
+			}
+			Base.assign(Gun, static_cast<size_t>(Colon - Gun));
+			Look.assign(Colon + 1);
+			return Base.c_str();
 		}
 
 		/** A fire's flicker by the clock (Bit::FlickerSeed, fire.lamp): three waves between Lo and Hi a second, their rates
@@ -3763,17 +3778,26 @@ namespace TheaterFx
 	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
 	{
 		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
+		// (Effects (R2): "mg:star", the row mg with its own look, muzzle.look.star; a name with no colon as ever)
+		std::string GunBase, LookName;
+		GunIn = LookSplit(GunIn, GunBase, LookName);
+		GunLook GL;
+		const bool bLook = GunLookOf(LookName, GL);
 		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
 		const size_t First = Bits.size();
-		MuzzleLaid(Now, At, Facing, GunIn, GroundIn);
+		MuzzleLaid(Now, At, Facing, GunIn, GroundIn, bLook ? &GL : nullptr);
 		if (Bits.size() > First)
 		{
 			const double Foot = Height(At.X, At.Y);
 			LingerFrom(First, LingerOf("gun", GunIn ? GunIn : "rifle"), Now, Vec(At.X, At.Y, Foot), 0.65, std::max(At.Z - Foot, 1.0));
 		}
+		if (bLook)
+		{
+			LookLaid(Now, At, Facing.Unit(Vec(1.0, 0.0, 0.0)), GL, GroundIn);
+		}
 	}
 
-	void Battle::MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
+	void Battle::MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look)
 	{
 		std::string M = std::string("muzzle.") + (GunIn ? GunIn : "rifle") + ".";
 		if (!Has(M + "flame_m"))
@@ -3783,7 +3807,7 @@ namespace TheaterFx
 		Dice D(++Seeds * 15485863ull ^ PlaceKey(At));
 		const size_t FlashFrom = Bits.size(); // (a sea battle's far floor is laid on the flash alone: SeaFlash)
 		// (a flame length that is not a number, or without end, would lay points that are not numbers: the pre-check's find)
-		const double LenIs = Num(M + "flame_m", 0.3);
+		const double LenIs = Look && Look->FlameM > 0.0 ? Look->FlameM : Num(M + "flame_m", 0.3); // (Effects (R2): the look's own length)
 		const double Len = LenIs == LenIs ? std::min(20.0, std::max(0.0, LenIs)) : 0.3;
 		const Vec Fw = Facing.Unit(Vec(1.0, 0.0, 0.0));
 		const Vec Across = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
@@ -3794,6 +3818,14 @@ namespace TheaterFx
 		HotFlash H;
 		const bool bHot = HotOf(At, H);
 		const bool bRagged = bHot && H.bRagged;
+		if (Look && bHot)
+		{
+			// (Effects (R2): the look's flame, a flash hider's narrower cone, its licks, and its star or brake jets laid last)
+			H.Wide = std::clamp(H.Wide * Look->Narrow, 0.02, 1.0);
+			H.Licks.A *= Look->LicksK;
+			H.Licks.B *= Look->LicksK;
+			H.Look = *Look;
+		}
 		// the flame: a ragged tongue along the bore with licks thrown sideways, under one frame
 		{
 			Bit B;
@@ -3829,6 +3861,11 @@ namespace TheaterFx
 				B.Edge = H.Rim;
 				B.EdgeK = 0.4;
 				B.Hold = 0.8;
+			}
+			if (Look)
+			{
+				B.R0 *= Look->Narrow;
+				B.R1 *= Look->Narrow;
 			}
 			if (bRagged)
 			{
@@ -3899,10 +3936,22 @@ namespace TheaterFx
 				B.EdgeK = 0.4;
 				B.Hold = 0.8;
 			}
-			if (!bRagged)
+			if (!bRagged && (!Look || I < std::lround(NLicks * Look->LicksK)))
 			{
 				Bits.push_back(B);
 			}
+		}
+		if (Look && !bRagged && (Look->Star > 0 || Look->Jets > 0))
+		{
+			// (Effects (R2): the look's star and brake jets past the close flash's reach, lit as the far flash, with dice
+			// of their own; the star only within star_far_m of the eye, where its spikes are more than a pixel)
+			GunLook Far_ = *Look;
+			if (!bHot && !(bEyeKnown && (LastEye - At).Length() <= Look->StarFarM))
+			{
+				Far_.Star = 0;
+			}
+			Dice DL(PlaceKey(At) * 0x8EBC6AF09C88C6E3ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x6A2ull));
+			LookFlame(Now, At, Fw, Len, DL.U(0.03, 0.045), Far_, bHot ? &H : nullptr, DL);
 		}
 		if (bSeaFar)
 		{
@@ -4675,6 +4724,284 @@ namespace TheaterFx
 			K.Rough = 0.3;
 			Bits.push_back(K);
 		}
+		if (H.Look.bOn)
+		{
+			LookFlame(Born, At, Fw, Len, Life, H.Look, &H, D); // (Effects (R2): its look's star or brake jets, after the rest)
+		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Effects (R2), -TheaterLandGunFlash: each gun's own look (Brian, 23 November: "how does the gun fire look when they
+	// shoot? can we make the mussel flash realistic?"). The scene names a gun's row and its look, "mg:star"; the look's
+	// numbers are muzzle.look.<look>, laid over the recipe from battle-fx-guns.json only when the switch is on. Its
+	// pieces are thrown with dice of their own, after the row's, so the row's own pieces fall as they did.
+
+	bool Battle::GunLookOf(const std::string& Look, GunLook& L) const
+	{
+		if (Look.empty())
+		{
+			return false;
+		}
+		const std::string P = "muzzle.look." + Look + ".";
+		if (!Has(P + "on") || Num(P + "on", 0.0) <= 0.0)
+		{
+			return false;
+		}
+		L = GunLook();
+		L.bOn = true;
+		L.FlameM = SafeNum(Num(P + "flame_m", 0.0), 0.0, 6.0, 0.0);
+		L.Narrow = SafeNum(Num(P + "narrow", 1.0), 0.2, 1.5, 1.0);
+		L.LicksK = SafeNum(Num(P + "licks", 1.0), 0.0, 1.5, 1.0);
+		L.bFlicker = Num(P + "flicker", 0.0) > 0.0;
+		L.HotM = SafeNum(Num(P + "hot_m", 0.0), 0.0, 2.0, 0.0);
+		L.FarK = SafeNum(Num(P + "far_k", 1.0), 0.2, 3.0, 1.0);
+		L.bTracer = Num(P + "tracer", 1.0) > 0.0;
+		L.Star = static_cast<int>(SafeNum(Num(P + "star", 0.0), 0.0, 8.0, 0.0));
+		L.StarM = SafeNum(Num(P + "star_m", 0.0), 0.0, 1.5, 0.0);
+		L.StarWide = SafeNum(Num(P + "star_wide", 0.12), 0.02, 0.5, 0.12);
+		L.StarLean = SafeNum(Num(P + "star_lean", 75.0), 20.0, 100.0, 75.0);
+		L.StarFarM = SafeNum(Num(P + "star_far_m", 0.0), 0.0, 1000.0, 0.0);
+		L.Jets = Num(P + "jets", 0.0) > 0.0 ? 2 : 0;
+		L.JetM = SafeNum(Num(P + "jet_m", 0.0), 0.0, 4.0, 0.0);
+		L.JetBackM = SafeNum(Num(P + "jet_back_m", 0.15), 0.0, 1.0, 0.15);
+		L.JetWide = SafeNum(Num(P + "jet_wide", 0.2), 0.05, 0.6, 0.2);
+		L.JetDust = SafeNum(Num(P + "jet_dust", 0.0), 0.0, 1.0, 0.0);
+		L.Haze = SafeNum(Num(P + "haze", 0.0), 0.0, 0.3, 0.0);
+		L.HazeR = SafeNum(Num(P + "haze_r", 0.6), 0.1, 3.0, 0.6);
+		L.HazeWithinM = SafeNum(Num(P + "haze_within_m", 200.0), 0.0, 1000.0, 200.0);
+		L.HazeS = Range(P + "haze_s", 2.5, 4.0);
+		L.HazeS.A = SafeNum(L.HazeS.A, 0.2, 20.0, 2.5);
+		L.HazeS.B = SafeNum(L.HazeS.B, L.HazeS.A, 20.0, L.HazeS.A);
+		L.ProneUnderM = SafeNum(Num(P + "prone_under_m", 0.0), 0.0, 1.5, 0.0);
+		L.ProneDust = SafeNum(Num(P + "prone_dust", 0.0), 0.0, 0.6, 0.0);
+		L.DustWithinM = SafeNum(Num(P + "dust_within_m", 150.0), 0.0, 1000.0, 150.0);
+		L.LampW = SafeNum(Num(P + "lamp_w", 0.0), 0.0, 3000.0, 0.0);
+		L.LampBackM = SafeNum(Num(P + "lamp_back_m", 0.4), 0.0, 1.5, 0.4);
+		L.LampR = SafeNum(Num(P + "lamp_r", 3.0), 0.5, 10.0, 3.0);
+		L.LampWithinM = SafeNum(Num(P + "lamp_within_m", 150.0), 0.0, 1000.0, 150.0);
+		return true;
+	}
+
+	void Battle::LookFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const GunLook& L, const HotFlash* H, Dice& D)
+	{
+		if (!RealPlace(At) || !(Born == Born) || !(Len == Len))
+		{
+			return;
+		}
+		const Vec Side = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Over_ = Side.Cross(Fw).Unit(ZUp);
+		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
+		// (one spike or jet: a thin tongue from its root at From_ out along Way, hot near its root and red-orange at its end)
+		auto Tongue = [&](const Vec& From_, const Vec& Way, double Long, double HalfWide)
+		{
+			Bit B;
+			B.Born = Born;
+			B.Life = Life;
+			B.From = From_ + Way * (Long * 0.5);
+			B.Along = Way;
+			B.R0 = std::max(HalfWide, 1e-3);
+			B.R1 = B.R0 * 0.7;
+			B.Grow = 1.0;
+			B.Stretch = std::max(1.0, Long * 0.5 / B.R0);
+			B.Point = 0.35; // (blunt and ragged at its end, as gas is: a needle reads as a drawn flame)
+			B.Alpha = 1.0;
+			B.FadeIn = 0.002;
+			B.Hold = H ? 0.8 : 0.5;
+			B.bLight = true;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			if (H)
+			{
+				// (yellow at its root, running out to orange and red-orange at its end and edge)
+				B.Col = H->Yellow.Mix(H->Orange, 0.25);
+				B.Col2 = H->Orange;
+				B.Heart = 1.0;
+				B.Rim = 0.4;
+				B.Inner = 0.75;
+				B.Edge = H->Orange.Mix(H->Red, 0.5);
+				B.EdgeK = 0.85;
+				B.EdgeIn = 0.4;
+				B.Rough = 0.3;
+				B.Hub = 0.7; // (its root's colour at its root)
+				B.Over = 1.0 + (H->Over - 1.0) * 0.2;
+			}
+			else
+			{
+				B.Col = Flame;
+				B.Col2 = Flame;
+				B.Heart = 0.8;
+				B.Rim = 0.1;
+			}
+			Bits.push_back(B);
+		};
+		if (L.Star > 0 && L.StarM > 0.0)
+		{
+			// (the MG 42's star: its muzzle booster's cone throws the gas out round the bore in a few bright spikes, near
+			// square to it, so a burst at night is a flickering star and not a tongue; each round's spikes are new)
+			const double Round0 = D.U(0.0, 2.0 * Pi);
+			for (int I = 0; I < L.Star; ++I)
+			{
+				const double Round_ = Round0 + (I + D.U(-0.25, 0.25)) * 2.0 * Pi / L.Star;
+				const double Lean = Radians(L.StarLean + D.U(-12.0, 12.0));
+				const Vec Way = (Fw * std::cos(Lean) + (Side * std::cos(Round_) + Over_ * std::sin(Round_)) * std::sin(Lean)).Unit(Side);
+				const double Long = L.StarM * D.U(0.55, 1.1);
+				Tongue(At + Fw * (Len * 0.06), Way, Long, Long * L.StarWide * D.U(0.8, 1.2));
+			}
+		}
+		if (L.Jets > 0 && L.JetM > 0.0)
+		{
+			// (a muzzle brake: the gas turned out of its baffles to either side, a little back, in two flat jets level with
+			// the ground, longer than the shortened flame ahead)
+			for (int I = 0; I < L.Jets; ++I)
+			{
+				const double Sign = I == 0 ? 1.0 : -1.0;
+				const double Back = Radians(D.U(5.0, 20.0));
+				const Vec Way = (Side * (Sign * std::cos(Back)) - Fw * std::sin(Back) + Over_ * D.U(-0.08, 0.12)).Unit(Side * Sign);
+				const double Long = L.JetM * D.U(0.8, 1.15);
+				const Vec Root = At - Fw * L.JetBackM;
+				Tongue(Root, Way, Long, Long * L.JetWide * D.U(0.85, 1.15));
+				// (and a shorter second tongue off each, the brake's other baffle)
+				const double Long2 = Long * D.U(0.45, 0.7);
+				Tongue(Root - Fw * (L.JetBackM * 0.6), (Way - Fw * 0.25).Unit(Way), Long2, Long2 * L.JetWide * 0.9);
+			}
+		}
+	}
+
+	void Battle::LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L)
+	{
+		// (the flash's glow on the firer's face and hands and the ground at his elbows: a small lamp a little back from the
+		// muzzle, at dusk and night only, as a small gun's lamp; never further than lamp_within_m from the eye)
+		if (L.LampW <= 0.0 || !bEyeKnown || !RealPlace(At) || !(Now == Now) || !((LastEye - At).Length() <= L.LampWithinM))
+		{
+			return;
+		}
+		Flash F;
+		F.At = At - Fw * L.LampBackM + ZUp * 0.05;
+		F.Col = Picture("burst.flash.light.colour", Rgb::FromPicture(255, 196, 140));
+		F.Born = Now;
+		F.Life = 0.03;
+		F.Strength = L.LampW / 8500.0;
+		F.Radius = L.LampR;
+		F.bNightOnly = true;
+		Flashes.push_back(F);
+	}
+
+	void Battle::LookLaid(double Now, const Vec& At, const Vec& Fw, const GunLook& L, const char* GroundIn)
+	{
+		if (!bEyeKnown || !RealPlace(At) || !(Now == Now))
+		{
+			return;
+		}
+		const double Far = (LastEye - At).Length();
+		Dice D(PlaceKey(At) * 0xA0761D6478BD642Full ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x6A1ull));
+		const std::string Ground = GroundIn && *GroundIn && Has(std::string("grounds.") + GroundIn + ".paint.soil.0") ? GroundIn : "earth";
+		const Vec FwFlat = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Across = FwFlat.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const double Foot = Height(At.X, At.Y);
+		if (L.Haze > 0.0 && Far <= L.HazeWithinM)
+		{
+			// (the rifle's haze: a pale grey-blue puff left at the muzzle that hangs, widens and drifts off on the wind, so
+			// a firing line is soon under a thin veil of its own smoke)
+			const Rgb Pale = Picture("muzzle.look.haze_colour", Rgb::FromPicture(196, 198, 200));
+			for (int I = 0; I < 2; ++I)
+			{
+				Bit B;
+				B.Born = Now + D.U(0.0, 0.04);
+				B.From = At + Fw * D.U(0.2, 0.6) + ZUp * D.U(0.0, 0.1);
+				B.Vel = Fw * D.U(0.6, 1.6) + Vec(D.Bell() * 0.2, D.Bell() * 0.2, D.U(0.05, 0.25));
+				B.Drag = 2.0;
+				B.Rise = 0.08;
+				B.Windage = 1.0;
+				B.Life = L.HazeS.Pick(D);
+				B.R0 = 0.08;
+				B.R1 = L.HazeR * D.U(0.75, 1.2);
+				B.Grow = 0.5;
+				B.Col = Pale * D.U(0.95, 1.05);
+				B.Col2 = B.Col;
+				B.Alpha = L.Haze * (I == 0 ? 0.65 : 0.4);
+				B.FadeIn = 0.08;
+				B.Hold = 0.35;
+				B.Heart = 0.6;
+				B.Rim = 0.0;
+				B.Rough = 0.3;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				Bits.push_back(B);
+			}
+		}
+		const double Up = At.Z - Foot;
+		const double Share = Clamp01(DustRowOf(Ground).Share);
+		const Rgb Dust = PaintOf(Ground).Dust;
+		if (L.ProneDust > 0.0 && Up < L.ProneUnderM && Far <= L.DustWithinM && Share > 0.0)
+		{
+			// (a man firing prone, or a gun on its bipod: the blast blows the ground's dust up from under and in front of
+			// the muzzle, a low brown puff that gives him away; more on dry ground, little on mud, none on water)
+			const int N = 3;
+			for (int I = 0; I < N; ++I)
+			{
+				Bit B;
+				B.Form = Bit::Shape::Upright;
+				B.bHug = true;
+				B.Born = Now + D.U(0.0, 0.03);
+				const Vec P = At + FwFlat * D.U(0.2, 0.7) + Across * (D.Bell() * 0.15);
+				B.From = Vec(P.X, P.Y, Height(P.X, P.Y) + 0.05);
+				B.Vel = (FwFlat * D.U(1.5, 3.0) + Across * (D.Bell() * 0.8)) + ZUp * D.U(0.3, 0.8);
+				B.Drag = 3.0;
+				B.Windage = 0.8;
+				B.Life = D.U(1.5, 2.5);
+				B.R0 = 0.1;
+				B.R1 = D.U(0.5, 0.9);
+				B.Grow = 0.4;
+				B.Flatten = 0.6;
+				B.Col = Dust * D.U(0.92, 1.05);
+				B.Col2 = B.Col;
+				B.Alpha = L.ProneDust * Share * (I == 0 ? 1.0 : 0.7);
+				B.FadeIn = 0.02;
+				B.Hold = 0.2;
+				B.Heart = 0.7;
+				B.Rim = 0.0;
+				B.Rough = 0.35;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				Bits.push_back(B);
+			}
+		}
+		if (L.Jets > 0 && L.JetDust > 0.0 && Up < 3.5 && Far <= L.DustWithinM * 2.0 && Share > 0.0)
+		{
+			// (a muzzle brake low over the ground: its side jets blow the dust out to either side of the gun in two low
+			// fans, as well as the row's ring ahead)
+			for (int Sd = 0; Sd < 2; ++Sd)
+			{
+				const double Sign = Sd == 0 ? 1.0 : -1.0;
+				for (int I = 0; I < 5; ++I)
+				{
+					Bit B;
+					B.Form = Bit::Shape::Upright;
+					B.bHug = true;
+					B.Born = Now + D.U(0.0, 0.05);
+					const Vec P = At - FwFlat * L.JetBackM + Across * (Sign * D.U(0.3, 1.2));
+					B.From = Vec(P.X, P.Y, Height(P.X, P.Y) + 0.1);
+					B.Vel = Across * (Sign * D.U(4.0, 9.0)) - FwFlat * D.U(0.0, 1.5) + ZUp * D.U(0.3, 1.2);
+					B.Drag = 2.5;
+					B.Windage = 0.8;
+					B.Rise = 0.1;
+					B.Life = D.U(2.5, 4.5);
+					B.R0 = 0.3;
+					B.R1 = D.U(1.2, 2.2);
+					B.Grow = 0.35;
+					B.Flatten = 0.55;
+					B.Col = Dust * D.U(0.92, 1.05);
+					B.Col2 = B.Col;
+					B.Alpha = std::min(0.8, L.JetDust * Share * D.U(0.7, 1.0));
+					B.FadeIn = 0.03;
+					B.Hold = 0.3;
+					B.Heart = 0.75;
+					B.Inner = 0.6;
+					B.Rim = 0.0;
+					B.Rough = 0.35;
+					B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+					Bits.push_back(B);
+				}
+			}
+		}
+		LookLamp(Now, At, Fw, L);
 	}
 
 	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C) const
@@ -4984,6 +5311,11 @@ namespace TheaterFx
 	void Battle::Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
 	{
 		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
+		// (Effects (R2): "mg:star", the row mg with its own look; a name with no colon as ever)
+		std::string WeaponBase, LookName;
+		Weapon = LookSplit(Weapon, WeaponBase, LookName);
+		GunLook GL;
+		const bool bLook = GunLookOf(LookName, GL);
 		// Brian: "1 out of every 5 bullets with yellow". As a belt was loaded: every fifth round of a gun is a tracer
 		// and the four between are not seen; guns are out of step with each other.
 		Gun = std::max(0, Gun);
@@ -5004,9 +5336,18 @@ namespace TheaterFx
 		const Vec Line = To - From;
 		const double Dist = Line.Length();
 		const Vec Dir = Line.Unit(Vec(1.0, 0.0, 0.0));
-		const bool bFlicker = Weapon && std::string(Weapon) == "mg";
+		const bool bFlicker = Weapon && (std::string(Weapon) == "mg" || (bLook && GL.bFlicker));
 		HotFlash HotMg;
 		const bool bHotMg = bFlicker && HotOf(From, HotMg);
+		if (bLook && bHotMg)
+		{
+			// (Effects (R2): each round's close flame by the look: its cone, its licks, its star; no brake on a small arm)
+			HotMg.Wide = std::clamp(HotMg.Wide * GL.Narrow, 0.02, 1.0);
+			HotMg.Licks.A *= GL.LicksK;
+			HotMg.Licks.B *= GL.LicksK;
+			HotMg.Look = GL;
+			HotMg.Look.Jets = 0;
+		}
 		const double Gap = 1.0 / std::max(PerSecond, 0.1);
 		auto Streak = [&](double Born, const Vec& Start, const Vec& Way, double Fast, double For)
 		{
@@ -5032,7 +5373,13 @@ namespace TheaterFx
 		const Vec CaseOut = (Dir.Cross(ZUp).Unit(Vec(0.0, -1.0, 0.0)) * Cases.Side - Dir * 0.3).Unit(Vec(0.0, -1.0, 0.0));
 		// (the close flame and the burst's smoke have dice of their own too)
 		Dice DF(PlaceKey(From) * 0xD6E8FEB86659FD93ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x51ull));
-		const double MgFlame = Num("muzzle.hot.mg_flame_m", 0.5);
+		const double MgFlame = bLook && GL.HotM > 0.0 ? GL.HotM : Num("muzzle.hot.mg_flame_m", 0.5);
+		// (Effects (R2): the look's far star and its kicks of dust through a long burst have dice of their own)
+		Dice DL(PlaceKey(From) * 0x8EBC6AF09C88C6E3ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x6A3ull));
+		GunLook Kick = GL;
+		Kick.Haze = 0.0;
+		Kick.LampW = 0.0;
+		Kick.Jets = 0;
 		// (art director 13:54Z: close to the eye, a burst of three rounds or more leaves a thin pale grey-brown wisp at
 		// the muzzle, drifting off on the wind for a second or two, and on dry ground a low puff of the ground's own
 		// dust kicked up just in front of the muzzle. Never more than a quarter opaque, however long the burst)
@@ -5049,6 +5396,16 @@ namespace TheaterFx
 		{
 			const double T = Now + R * Gap;
 			const int Which = Count++;
+			if (bLook && R > 0)
+			{
+				// (Effects (R2): each round's glow on the gunner at dusk, and through a long burst the low muzzle's dust
+				// kicked up again every fourth round; the first round's are the muzzle's own, LookLaid)
+				LookLamp(T, From, Dir, GL);
+				if (R % 4 == 0)
+				{
+					LookLaid(T, From, Dir, Kick, GroundIn);
+				}
+			}
 			if (bWisp && R % WispEvery == WispEvery - 1)
 			{
 				// (overlapping two or three deep as they drift, so each is under half the most the whole may be)
@@ -5141,7 +5498,13 @@ namespace TheaterFx
 				B.Born = T;
 				B.From = From + Dir * 0.15;
 				B.Life = 0.025;
-				B.R0 = B.R1 = 0.12;
+				B.R0 = B.R1 = 0.12 * (bLook && !bHotMg ? GL.FarK : 1.0); // (Effects (R2): the look's far flicker)
+				if (bLook && !bHotMg && GL.Star > 0 && (LastEye - From).Length() <= GL.StarFarM)
+				{
+					GunLook Far_ = GL;
+					Far_.Jets = 0;
+					LookFlame(T, From, Dir, 0.3, 0.025, Far_, nullptr, DL);
+				}
 				B.Along = Dir;
 				B.Stretch = 2.0;
 				B.Point = 0.8;
@@ -5189,7 +5552,7 @@ namespace TheaterFx
 					Bits.push_back(Root_);
 				}
 			}
-			if (Which % OneIn != 0)
+			if (Which % OneIn != 0 || (bLook && !GL.bTracer)) // (Effects (R2): a look with no tracer, a sub-machine gun's)
 			{
 				continue;
 			}

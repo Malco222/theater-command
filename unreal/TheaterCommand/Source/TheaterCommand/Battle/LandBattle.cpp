@@ -1626,6 +1626,79 @@ bool ALandBattle::Open()
 			OutNormal = LandPlay::Vec(Normal.X, Normal.Y, Normal.Z);
 			return true;
 		};
+		// Effects (R2): each gun's own flash (-TheaterLandGunFlash; Brian, 23 November: "how does the gun fire look when
+		// they shoot? can we make the mussel flash realistic?"). The kit's looks are muzzle.look.<look> in
+		// battle-fx-guns.json, laid over the recipe in Open: star, the MG 42's spikes; cone, a flash hider's narrow cone
+		// (the Bren, the DP, the BAR, the Japanese Type 99); open, a heavy machine gun's long tongue (the M1919, the Maxim,
+		// the Vickers); tank, a machine gun in a tank's mantlet; smg, a squad leader's sub-machine gun, a burst of pistol
+		// rounds with no tracer; rifle, a full-power rifle's flash and the haze it leaves; brake, a gun with a muzzle
+		// brake, its side jets and the dust they throw aside. Off: none, every flash by its row as before.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+		{
+			PlayWorld.GunLook = [Weak](int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond) -> std::string
+			{
+				const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+				if (!Pinned.IsValid() || Track < 0)
+				{
+					return std::string();
+				}
+				FLandBattleState& St = *Pinned;
+				const size_t K = static_cast<size_t>(Track);
+				const bool bVehicle = K < St.VehicleOf.size() && St.VehicleOf[K] >= 0 && St.Armour;
+				if (Weapon == "tank" || Weapon == "at" || Weapon == "gun")
+				{
+					// (a muzzle brake by her model: the Tiger's and the Panther's, the long Panzer IV's and the StuG's, the
+					// ZiS-3's and the SU-76's, the 25-pounder's on the Sexton)
+					if (!bVehicle)
+					{
+						return std::string();
+					}
+					const std::string& Name = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])].Look().Name;
+					for (const char* Braked : { "Tiger", "Panther", "Panzer IV", "StuG", "ZiS-3", "SU-76", "Sexton", "Firefly" })
+					{
+						if (Name.find(Braked) != std::string::npos)
+						{
+							return std::string("brake");
+						}
+					}
+					return std::string();
+				}
+				if (Weapon == "mg")
+				{
+					if (Role == "tank" || bVehicle)
+					{
+						return std::string("tank");
+					}
+					if (Role == "hmg")
+					{
+						return Army == "GER" ? std::string("star") : std::string("open");
+					}
+					// (the squad's gun: the MG 42's star; a flash hider's cone on the Bren, the DP, the BAR, the Type 96 and
+					// 99; the Italian Breda and the French FM 24/29 an open flame)
+					if (Army == "GER") return std::string("star");
+					if (Army == "ITA" || Army == "FRA") return std::string("open");
+					return std::string("cone");
+				}
+				if (Weapon == "rifle")
+				{
+					// (a squad leader drawn with a sub-machine gun, his file's _smg or _nco: a burst of pistol rounds,
+					// as his clip's cue sounds it; the MP 40 and the Sten about 9 a second, the Thompson 11, the PPSh 15)
+					if (K < St.ManOf.size() && St.ManOf[K] >= 0 && St.Men)
+					{
+						const std::string& File = St.Men->Info(St.ManOf[K]).FileArmy;
+						const auto Ends = [&File](const std::string& Tail) { return File.size() >= Tail.size() && File.compare(File.size() - Tail.size(), Tail.size(), Tail) == 0; };
+						if (Ends("_smg") || Ends("_nco"))
+						{
+							OutRounds = Army == "SOV" ? 5 : 4;
+							OutPerSecond = Army == "SOV" ? 15.0 : Army == "USA" ? 11.0 : 9.0;
+							return std::string("smg");
+						}
+					}
+					return std::string("rifle");
+				}
+				return std::string();
+			};
+		}
 	}
 	{
 		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
@@ -1833,6 +1906,12 @@ bool ALandBattle::Open()
 	if (S.Burns.bOn)
 	{
 		Effects->LayOver(TEXT("battle-fx-film.json"));
+	}
+	// Effects (R2): each gun's own flash (-TheaterLandGunFlash, PlayWorld.GunLook above): its looks laid over the recipe
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGunFlash")))
+	{
+		Effects->LayOver(TEXT("battle-fx-guns.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: each gun's own flash (-TheaterLandGunFlash, release 2)"));
 	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
