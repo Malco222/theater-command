@@ -1,8 +1,8 @@
 {
- "made": "2026-11-23T17:52:11Z",
+ "made": "2026-11-23T18:49:36Z",
  "jump": {
-  "takeoff": 0.4,
-  "touchdown": 1.047
+  "takeoff": 0.44,
+  "touchdown": 1.094
  },
  "hatch": [
   {
@@ -74,12 +74,21 @@
     "calf_r"
    ]
   },
-  "bail_jump_down": {
-   "lowest_m": -0.0134,
+  "bail_step_down": {
+   "lowest_m": -0.0069,
    "at": [
-    0.4,
-    "ball_l"
-   ]
+    0.533,
+    "ball_r"
+   ],
+   "landed_highest_m": 0.0
+  },
+  "bail_jump_down": {
+   "lowest_m": -0.0014,
+   "at": [
+    1.1,
+    "foot_r"
+   ],
+   "landed_highest_m": 0.0
   },
   "burning_run": {
    "lowest_m": -0.0176,
@@ -96,6 +105,7 @@
    ]
   }
  },
+ "ground_pass": true,
  "fastest_turn": {
   "bail_climb_out": [
    38.4,
@@ -104,8 +114,15 @@
     "calf_r"
    ]
   ],
+  "bail_step_down": [
+   22.1,
+   [
+    0.567,
+    "calf_r"
+   ]
+  ],
   "bail_jump_down": [
-   42.3,
+   35.4,
    [
     0.367,
     "thumb_r"
