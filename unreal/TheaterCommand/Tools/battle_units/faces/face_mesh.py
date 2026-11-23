@@ -285,7 +285,8 @@ def eye_opening(bvh, ball_tri_ids, c, r):
     return bot, top, W
 
 
-IRIS_OF_WIDTH = 0.21      # (the iris's radius, of the eye's open width: a little larger than life, to read)
+IRIS_OF_WIDTH = 0.26      # (the iris's radius, of the eye's open width: larger than life, to read; the art director, 0.21 read beady)
+OPEN_OF_WIDTH = 0.29      # (the open eye's height, of its width: about 6.2 mm, the lid still over at least the iris's top third)
 LID_MOST = 0.0035         # (m) the most an upper lid comes down
 
 
@@ -307,7 +308,7 @@ def lower_lids(M, sel_skin, eyes, ball_of, rep):
         bot, top, W = o
         Ri = IRIS_OF_WIDTH * W
         z_ic = bot + 0.9 * Ri
-        want_top = z_ic + Ri / 3
+        want_top = min(z_ic + Ri / 3, bot + OPEN_OF_WIDTH * W)
         drop = float(np.clip(top - want_top, 0.0, LID_MOST))
         if drop > 0:
             dy = P[:, 1] - c[1]
