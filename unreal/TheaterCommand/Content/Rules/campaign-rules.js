@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 456273ba 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ed70075b 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -63341,6 +63341,13 @@
         "Bomber:JAP": 7,
         "Bomber:JPN": 7,
         G4M: 7,
+        Nell: 7,
+        Betty: 7,
+        SM79: 6,
+        Wellington: 6,
+        Pe2: 3,
+        LeO451: 4,
+        // the new models (23 Nov; crews as built, unchecked)
         Lancaster: 7,
         B17: 10
       },
@@ -63551,6 +63558,7 @@
     if (COMMONWEALTH2.has(nat)) return design >= 1940 ? "Spitfire" : "Hurricane";
     if (nat === "USA") return design >= 1944 ? "Mustang" : "Warhawk";
     if (nat === "SOV") return design >= 1942 ? "Yak" : `Fighter:${nat}`;
+    if (nat === "FRA") return design >= 1940 ? "D520" : `Fighter:${nat}`;
     if (nat === "ITA") return design >= 1942 ? "C202" : `Fighter:${nat}`;
     if (nat === "JAP" || nat === "JPN") return "Zero";
     return `Fighter:${nat}`;
@@ -63558,11 +63566,15 @@
   function bomberOf(nat, design) {
     if (nat === "USA") return "B17";
     if (nat === "GER") return "He111";
-    if (COMMONWEALTH2.has(nat)) return design >= 1942 ? "Lancaster" : "Bomber:UK";
+    if (COMMONWEALTH2.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
+    if (nat === "ITA") return "SM79";
+    if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
+    if (nat === "SOV") return design >= 1942 ? "Pe2" : `Bomber:${nat}`;
+    if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
     return `Bomber:${nat}`;
   }
   var SINGLE = /* @__PURE__ */ new Set(["B5N", "B6N", "D3A", "D4Y", "TBD", "TBF", "SBD", "SB2C", "Swordfish", "Barracuda", "Skua", "Stuka"]);
-  var enginesOf = (model) => model === "B17" || model === "Lancaster" ? 4 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
+  var enginesOf = (model) => model === "B17" || model === "Lancaster" ? 4 : model === "SM79" ? 3 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
   function fighterWay(nat, w) {
     const d = at(w);
     if (nat === "GER") return { form: "fours", style: "dive" };
@@ -67747,7 +67759,7 @@
   // ../../src/battle/air/fates.ts
   var HOWS = ["explode", "flamer", "burn", "wing", "tail", "pilot", "spin", "glide", "breakup"];
   var freshMemory = () => ({ last: [], looks: {} });
-  var japanTwin = (model) => /^(G4M|G3M|Bomber:(JAP|JPN))$/.test(model);
+  var japanTwin = (model) => /^(G4M|G3M|Betty|Nell|Bomber:(JAP|JPN))$/.test(model);
   function tanksOf(nat, model, w) {
     if (nat !== "JAP" && nat !== "JPN") return null;
     const d = w.year + w.month / 12;
@@ -67764,7 +67776,7 @@
     return dated2?.crew ?? F.crews[model] ?? F.crews[model.split(":")[0]] ?? F.crews.Bomber;
   }
   function coolOf(model) {
-    if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|Il2|Pe2|Whitley)/.test(model)) return "liquid";
+    if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|D520|Il2|Pe2|Whitley)/.test(model)) return "liquid";
     if (/^(Fighter:FRA|Bomber:SOV)$/.test(model)) return "liquid";
     return "radial";
   }
@@ -68000,6 +68012,9 @@
         const c = d < 1942 + 6 / 12 ? 60 : d < 1944 ? 100 : 125;
         return { mark: d < 1942 + 6 / 12 ? "A6M2" : d < 1944 ? "A6M3" : "A6M5", conv: 250, silent: [], guns: [fixed(G4.type97, ["gun.nose"], 500, { n: 2, rate: Math.round(G4.type97.rate * SYNC) }), fixed(G4.type99, ["gun.1", "gun.2"], c, c < 125 ? { drum: c } : {})] };
       }
+      // France's D.520 model (23 Nov) flies the D.520's guns from the first: the MS.406 before it is the plain fighter.
+      case "D520":
+        return plainFighter("FRA", Math.max(d, 1940 + 5 / 12));
     }
     return plainFighter(nat, d);
   }
@@ -68024,6 +68039,7 @@
   var hand = (spec2, where, rounds, arc, more = {}) => gun(spec2, "hand", where, rounds, { arc, ...more });
   var turret = (spec2, where, rounds, arc = null) => gun(spec2, "turret", where, rounds, { arc });
   var REACH2 = { rifle: 370, hmg: 550, cannon20: 550 };
+  var MARKS2 = { SM79: "SM.79", Nell: "G3M", Betty: "G4M", Wellington: "Wellington", Pe2: "Pe-2", LeO451: "LeO 451" };
   function bomberGuns(model, nat, w) {
     const d = at3(w);
     const box = (mark, guns2, silent = []) => ({ mark, conv: null, silent, guns: guns2, reach: REACH2 });
@@ -68050,7 +68066,8 @@
       case "Lancaster":
         return box("Lancaster I", [turret(G4.browning303, ["turret.1", "turret.2"], 1e3, about(0, 95, -45, 60)), turret(G4.browning303, ["turret.3", "turret.4"], 1e3, from(0, 360, 0, 70)), turret(G4.browning303, ["turret.5", "turret.6", "turret.7", "turret.8"], 2500, about(180, 95, -60, 60))]);
     }
-    return plainBomber(nat, d);
+    const named3 = MARKS2[model];
+    return named3 ? { ...plainBomber(nat, d), mark: named3 } : plainBomber(nat, d);
   }
   function plainBomber(nat, d) {
     const nose = from(320, 40, -30, 30), reach3 = REACH2;
