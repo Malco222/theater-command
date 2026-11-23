@@ -685,6 +685,15 @@ private:
 	/** Real seconds the clock has waited on the rules this time; whether they have stopped (and it was said). */
 	double LiveHeld = 0.0;
 	bool bLiveBroken = false;
+	/** (release 1.5) RealT when the rules stopped mid-fight: a few seconds on, the field closes with no result (LiveWayOut). */
+	double LiveBrokenAt = -1.0;
+	/**
+	 * (release 1.5: never a battle with no way out) The live battle could not open, or its rules stopped mid-fight: the
+	 * field closes as CONTINUE closes it (Finish), with no result, so a campaign battle's attack card comes back as he left
+	 * it, SEND THEM IN still on it, and the practice battle's table comes back. Before this the field stayed up with no
+	 * CONTINUE and the campaign took no order, key or month's end behind it: the game had to be quit.
+	 */
+	void LiveWayOut(const TCHAR* Why);
 	/** The tanks' meshes made again (a block placed anew in the setup step, her vehicles changed): their names' round. */
 	int32 BodyRound = 0;
 	/** A live battle's opening, frame by frame: true while it has the frame (the scene not open yet). */

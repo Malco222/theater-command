@@ -10156,7 +10156,7 @@ void ACampaignPlayerController::LiveHandBack(int32 RegionId, const TArray<int32>
 	{
 		// (the field closed with no result: the attack card is as he left it, SEND THEM IN and CALL IT OFF still on it)
 		UE_LOG(LogTheater, Warning, TEXT("Campaign: the battle for %d closed with no result; nothing booked"), RegionId);
-		Notify(TEXT("The battle ended without a result: nothing was booked."), 6.0);
+		Notify(TEXT("The battle could not be fought to its end, so nothing was booked: SEND THEM IN lets your generals fight it."), 7.0);
 		return;
 	}
 	const FAttackResult Result = Session->SettleLandLive(CorpsIds, RegionId, ResultJson, TicketSeed);
