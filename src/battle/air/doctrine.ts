@@ -61,11 +61,12 @@ export function bomberOf(nat: string, design: number): string {
   if (nat === 'GER') return 'He111';
   if (COMMONWEALTH.has(nat)) return design >= 1942 ? 'Lancaster' : 'Wellington';
   // Brian 23 Nov ("do 1 and 3": model the missing planes). Japan's G3M, then the G4M from
-  // 1941 (the art director's unit table); the Soviet Pe-2 from 1942, the SB (the plain bomber) before it, as the Yak;
+  // 1941 (the art director's unit table); the Soviet Pe-2 from 1941, its first year at the front, the SB (the plain
+  // bomber) before it. A light bomber, so it needs no heavy bomber research: only the Lancaster waits on that;
   // France's LeO 451 from 1940, the Amiot and Bloch of 1939 (the plain bomber) before it.
   // Italy's SM79 waits for the rebuilt model (the 3D thread, 06:26Z): rules, battle and map switch together then.
   if (nat === 'JAP' || nat === 'JPN') return design >= 1941 ? 'Betty' : 'Nell';
-  if (nat === 'SOV') return design >= 1942 ? 'Pe2' : `Bomber:${nat}`;
+  if (nat === 'SOV') return design >= 1941 ? 'Pe2' : `Bomber:${nat}`;
   if (nat === 'FRA') return design >= 1940 ? 'LeO451' : `Bomber:${nat}`;
   return `Bomber:${nat}`;
 }
