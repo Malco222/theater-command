@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <iterator>
 
 namespace AirSky
 {
@@ -323,6 +324,16 @@ namespace AirSky
 					{
 						continue;
 					}
+					// (a small one drawn out along its way: W / Long across it)
+					if (C.Long > 1.001)
+					{
+						const double Lw = std::cos(C.LongWay), Lp = std::sin(C.LongWay);
+						const double Along = Ex * Lw + Ey * Lp, Aside = (Ey * Lw - Ex * Lp) * C.Long;
+						if (Along * Along + Aside * Aside > R * R)
+						{
+							continue;
+						}
+					}
 					if (Place(static_cast<int>(K), LX, LY, Drift).Show >= 0.5)
 					{
 						++Under;
@@ -431,16 +442,20 @@ namespace AirSky
 				}
 			}
 		};
-		for (int Cell = 0; Cell < Cells; ++Cell)
+		// (the shapes' lumps drawn in the order the sheet first had them, ten tops, four domes and two feet, so that each
+		// shape kept is the one the art director passed on round 18c; the sheet keeps eight of the tops, two domes and the
+		// two feet, and in place of the rest four lids, a deck's cells, each from its own seed: her round 18d steer)
+		constexpr int Legacy = 16, LegacyTops = 10, LegacyDomes = 4;
+		std::vector<std::vector<Lump>> LumpsOf(Legacy);
+		for (int Was = 0; Was < Legacy; ++Was)
 		{
 			// (a dome, a far cloud's whole body on its flat underside, or a foot, a cloud's one base: both have the flat
 			// underside; the rest are tops)
-			const bool bFoot = Cell >= Cells - FragmentFeet;
-			const bool bBase = Cell >= Cells - FragmentFeet - FragmentBases;
-			const uint64_t Seed = 0xF1A9ull + 977ull * static_cast<uint64_t>(Cell);
+			const bool bFoot = Was >= LegacyTops + LegacyDomes;
+			const bool bBase = Was >= LegacyTops;
 			// (a base's flat underside, in half-widths from the cell's middle)
 			const double Floor = -FragmentFloor;
-			std::vector<Lump> Lumps;
+			std::vector<Lump>& Lumps = LumpsOf[static_cast<size_t>(Was)];
 			// (how far inside the lumps' outlines a point lies, the nearest outline; a base's underside cut straight)
 			auto InsideOf = [&Lumps, bBase, Floor](double X, double Y)
 			{
@@ -529,6 +544,69 @@ namespace AirSky
 					OnEdge(Roll.U(0.15 * Pi, 0.85 * Pi), Roll.U(0.05, 0.11), Roll.U(0.4, 0.6));
 				}
 			}
+		}
+		const int Tops = Cells - FragmentBases - FragmentFeet - FragmentLids;
+		for (int Cell = 0; Cell < Cells; ++Cell)
+		{
+			const bool bLid = Cell >= Cells - FragmentLids;
+			const bool bFoot = !bLid && Cell >= Tops + FragmentBases;
+			const bool bBase = !bLid && Cell >= Tops;
+			const int Was = Cell < Tops ? Cell : bLid ? Legacy + (Cell - (Cells - FragmentLids)) : bFoot ? LegacyTops + LegacyDomes + (Cell - Tops - FragmentBases) : LegacyTops + (Cell - Tops);
+			const uint64_t Seed = 0xF1A9ull + 977ull * static_cast<uint64_t>(Was);
+			const double Floor = -FragmentFloor;
+			const std::vector<Lump>& Lumps = LumpsOf[static_cast<size_t>(bLid ? 0 : Was)];
+			auto Byte = [](double V) { return static_cast<uint8_t>(Clamp(V, 0.0, 1.0) * 255.0 + 0.5); };
+			if (bLid)
+			{
+				// A lid: one of a deck's cells (the art director's round 18d steer, Bremen's winter stratocumulus): a broad,
+				// flat body whose outline is uneven and frays thin, never a wall; over it broad shallow bumps drawn out across
+				// the picture in rolls, each some five times as wide as it stands, small bumps on them, and darker seams
+				// between. Its light: red, the low winter sun across it toward the sheet's top, 13 degrees up: the faces
+				// toward the sun bright, those away and the seams grey; green, the sun behind the eye, nearly even; blue,
+				// seen from under it or against the sun, a mid grey, darker in each bump's middle, lighter where the cloud
+				// thins, in the seams and at its frayed edge, so that from under the deck no lump is ringed in white.
+				const int LidX = Cell % FragmentCells, LidY = Cell / FragmentCells;
+				const double Sine = std::sin(13.0 * Pi / 180.0), Cosine = std::cos(13.0 * Pi / 180.0);
+				// (the cell's height: a broad low dome, its slope two in five at most toward its edge, so that it is some
+				// five times as wide as it stands; small bumps on it, a little drawn out across)
+				auto Height = [Seed](double U, double V)
+				{
+					const double Dome = std::max(0.0, 1.0 - (U * U / (0.86 * 0.86) + V * V / (0.76 * 0.76)));
+					return 0.28 * Dome + 0.07 * Noise(U * 0.85 + 4.0, V * 1.2 + 4.0, 0.24, 1 << 20, Seed + 21) + 0.025 * Noise(U + 4.0, V + 4.0, 0.1, 1 << 20, Seed + 23);
+				};
+				for (int Y = 0; Y < N; ++Y)
+				{
+					for (int X = 0; X < N; ++X)
+					{
+						const double CX = (X + 0.5) * Px - 1.0, CY = 1.0 - (Y + 0.5) * Px;
+						// (its outline: an oval a little wider than tall, warped by a broad noise; frayed by a finer one over a
+						// wide edge, and inside the cell's fan)
+						const double Rho = std::sqrt(CX * CX / (0.86 * 0.86) + CY * CY / (0.76 * 0.76));
+						const double In = 1.0 - Rho + 0.45 * (Billow(CX * 0.9, CY * 0.9, Seed + 3) - 0.5);
+						const double Fray = Billow(CX * 1.2, CY * 1.2, Seed + 7) - 0.5;
+						const double Alpha = Smooth((In + 0.5 * Fray) / 0.35) * Smooth((0.93 - std::hypot(CX, CY)) / 0.05);
+						const double HX = (Height(CX + Px, CY) - Height(CX - Px, CY)) / (2.0 * Px), HY = (Height(CX, CY + Px) - Height(CX, CY - Px)) / (2.0 * Px);
+						const double NL = std::sqrt(HX * HX + HY * HY + 1.0);
+						const double Sun = std::max(0.0, (-HY * Cosine + Sine) / NL);
+						// (the seams between the small bumps, and the thinning toward the edge, both darker from above)
+						const double Bump = Noise(CX * 0.85 + 4.0, CY * 1.2 + 4.0, 0.24, 1 << 20, Seed + 21);
+						const double Seam = Smooth((0.35 - Bump) / 0.2);
+						const double Thins = Smooth(1.0 - In / 0.4);
+						const double Shade = std::max(0.5 * Seam, 0.8 * Thins);
+						const double Side = (0.66 + 0.95 * Sun) * (1.0 - 0.3 * Shade);
+						const double Front = (0.96 + 0.04 / NL) * (1.0 - 0.12 * Shade);
+						// (from under it: darker where it is thick, its middle, lighter toward its edge and in the seams)
+						const double Deep = Smooth((0.85 - Rho) / 0.6) * (0.7 + 0.3 * Bump);
+						const double Back = (0.52 - 0.12 * Deep + 0.24 * Shade) * (0.92 + 0.16 * Billow(CX * 2.0, CY * 2.0, Seed + 13));
+						const size_t O = (static_cast<size_t>(LidY * N + Y) * Sheet + static_cast<size_t>(LidX * N + X)) * 4;
+						OutRgba[O + 0] = Byte(0.5 * Side);
+						OutRgba[O + 1] = Byte(0.5 * Front);
+						OutRgba[O + 2] = Byte(0.5 * Back);
+						OutRgba[O + 3] = Byte(Alpha);
+					}
+				}
+				continue;
+			}
 			// The body's height over the picture (round lumps, a little billow over them) and how far inside its edge
 			// each pixel lies, the edge a little uneven all round.
 			for (int Y = 0; Y < N; ++Y)
@@ -579,7 +657,6 @@ namespace AirSky
 			BoxBlur(Blur, 6);
 			BoxBlur(Blur, 6);
 			const int CellX = Cell % FragmentCells, CellY = Cell / FragmentCells;
-			auto Byte = [](double V) { return static_cast<uint8_t>(Clamp(V, 0.0, 1.0) * 255.0 + 0.5); };
 			for (int Y = 0; Y < N; ++Y)
 			{
 				for (int X = 0; X < N; ++X)
@@ -644,6 +721,141 @@ namespace AirSky
 		}
 	}
 
+	double Day::CoverLaid() const
+	{
+		if (!(Cover >= 0.0))
+		{
+			return bDeck ? DefaultDeck : DefaultCumulus;
+		}
+		return bDeck ? Clamp(Cover, DeckLeast, 1.0) : Clamp(Cover, 0.0, CumulusMost);
+	}
+
+	Lighting LightOf(const Day& D, double Under)
+	{
+		Lighting L;
+		const double C = D.CoverLaid();
+		if (!D.bDeck)
+		{
+			// (the look the art director passed at three eighths kept as it is)
+			L.Sky = 1.0 + 0.15 * (C - DefaultCumulus);
+			return L;
+		}
+		const double U = Clamp(Under, 0.0, 1.0);
+		const double Through = 0.55 - 0.5 * Smooth((C - DeckLeast) / (1.0 - DeckLeast));
+		L.Sun = 1.0 - U * (1.0 - Through);
+		L.Sky = 1.0 + U * 0.25 * C;
+		return L;
+	}
+
+	DeckShade ShadeOf(const Field& F, int Side)
+	{
+		DeckShade S;
+		if (!F.Sky.bDeck || Side <= 0 || F.Clouds.empty())
+		{
+			return S;
+		}
+		S.Side = Side;
+		S.Origin = F.Origin;
+		S.Period = Period;
+		S.Z = 0.5 * (F.Base + F.Top);
+		S.Top = F.Top;
+		// (under a tile almost none of the sun: a sixth through a broken deck's thinner cells, a twentieth through a closed
+		// overcast; with the holes, about a third of the whole sun under Bremen's 0.77, as LightOf has it)
+		S.Through = 0.16 - 0.11 * Smooth((F.Sky.CoverLaid() - 0.8) / 0.2);
+		const size_t N = static_cast<size_t>(Side) * static_cast<size_t>(Side);
+		std::vector<double> Open(N), Soft(N);
+		const double Step = Period / Side;
+		for (int Y = 0; Y < Side; ++Y)
+		{
+			for (int X = 0; X < Side; ++X)
+			{
+				const double PX = F.Origin.X + (X + 0.5) * Step, PY = F.Origin.Y + (Y + 0.5) * Step;
+				Open[static_cast<size_t>(Y) * Side + X] = F.DeckAt(PX, PY) > 0.0 ? 0.0 : 1.0;
+			}
+		}
+		// (the edges softened over a few hundred metres, the field repeating: a cloud's edge is never a line on the ground)
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			for (int Y = 0; Y < Side; ++Y)
+			{
+				for (int X = 0; X < Side; ++X)
+				{
+					double Sum = 0.0;
+					for (int DY = -1; DY <= 1; ++DY)
+					{
+						for (int DX = -1; DX <= 1; ++DX)
+						{
+							Sum += Open[static_cast<size_t>((Y + DY + Side) % Side) * Side + static_cast<size_t>((X + DX + Side) % Side)];
+						}
+					}
+					Soft[static_cast<size_t>(Y) * Side + X] = Sum / 9.0;
+				}
+			}
+			Open.swap(Soft);
+		}
+		S.Light.resize(N);
+		for (size_t K = 0; K < N; ++K)
+		{
+			const double Share = S.Through + (1.0 - S.Through) * Open[K];
+			S.Light[K] = static_cast<uint8_t>(Clamp(Share * 255.0 + 0.5, 0.0, 255.0));
+		}
+		return S;
+	}
+
+	double DeckShade::At(const Vec& P, const Vec& Sun) const
+	{
+		if (Side <= 0 || Light.size() != static_cast<size_t>(Side) * static_cast<size_t>(Side) || Period <= 0.0)
+		{
+			return 1.0;
+		}
+		// (read where the ray to the sun crosses the deck's middle; over the tops nothing, faded over 100 m)
+		const double Over = Smooth((P.Z - (Top - 100.0)) / 100.0);
+		const double Along = std::max(0.0, (Z - P.Z) / std::max(0.05, Sun.Z));
+		double U = (P.X + Sun.X * Along - Origin.X) / Period * Side - 0.5;
+		double V = (P.Y + Sun.Y * Along - Origin.Y) / Period * Side - 0.5;
+		U -= Side * std::floor(U / Side);
+		V -= Side * std::floor(V / Side);
+		const int X0 = std::min(Side - 1, static_cast<int>(U)), Y0 = std::min(Side - 1, static_cast<int>(V));
+		const int X1 = (X0 + 1) % Side, Y1 = (Y0 + 1) % Side;
+		const double FX = U - X0, FY = V - Y0;
+		auto L = [this](int X, int Y) { return Light[static_cast<size_t>(Y) * Side + X] / 255.0; };
+		const double Here = (L(X0, Y0) * (1.0 - FX) + L(X1, Y0) * FX) * (1.0 - FY) + (L(X0, Y1) * (1.0 - FX) + L(X1, Y1) * FX) * FY;
+		return Here + (1.0 - Here) * Over;
+	}
+
+	double DeckShade::Mean() const
+	{
+		if (Light.empty())
+		{
+			return 1.0;
+		}
+		double Sum = 0.0;
+		for (uint8_t B : Light)
+		{
+			Sum += B;
+		}
+		return Sum / (255.0 * Light.size());
+	}
+
+	double DeckHoleBelow(double Cover)
+	{
+		// (the share of the whole deck the kept tiles' discs cover, against the noise they are kept above, six seeds over
+		// the laid square: the 3D builder's sweep of 20 November, Tools/air_show)
+		static constexpr double Table[][2] = {
+			{ 0.556, 0.50 }, { 0.675, 0.45 }, { 0.77, 0.40 }, { 0.857, 0.35 }, { 0.917, 0.30 }, { 0.958, 0.25 }, { 0.984, 0.20 }, { 0.995, 0.15 }, { 1.0, 0.0 },
+		};
+		const double C = Clamp(Cover, Table[0][0], 1.0);
+		for (size_t K = 1; K < std::size(Table); ++K)
+		{
+			if (C <= Table[K][0])
+			{
+				const double U = (C - Table[K - 1][0]) / (Table[K][0] - Table[K - 1][0]);
+				return Table[K - 1][1] + U * (Table[K][1] - Table[K - 1][1]);
+			}
+		}
+		return 0.0;
+	}
+
 	Field Lay(const Day& D, const Placing& P)
 	{
 		Field F;
@@ -691,9 +903,9 @@ namespace AirSky
 
 		if (!D.bDeck)
 		{
-			// Scattered cumulus: about three eighths of the sky, thrown in at random over the laid square, kept apart
-			// enough to read as single clouds (a few touch; apart across the square's edges too, as it repeats), until the
-			// cover is reached. They are laid at the day's base; the painter lifts each over the ground where it is drawn,
+			// Scattered cumulus: the day's cover of the sky (none on a clear day, about three eighths as the art director
+			// passed it, up to 0.55), thrown in at random over the laid square, kept apart enough to read as single clouds
+			// (a few touch; apart across the square's edges too, as it repeats), until the cover is reached. They are laid at the day's base; the painter lifts each over the ground where it is drawn,
 			// and thins the ones that drift into the clearing over the target.
 			// (a trade-wind sky, the art director: many small, some middling, a few big; in loose clusters with gaps, in
 			// rows along the wind. A place is taken more readily where the rows and the clusters crowd: the rows a wave
@@ -711,21 +923,88 @@ namespace AirSky
 			};
 			// (downwind, level: the way the tops lean and the lee sides fray)
 			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
-			const double Wanted = 0.39 * Period * Period;
+			const double Wanted = D.CoverLaid() * Period * Period;
+			const double Fatter = Smooth((D.CoverLaid() - DefaultCumulus) / (CumulusMost - DefaultCumulus));
+			// (each kind of day its own clouds, the art director, 20 November 22:37Z: a fair day's small flat fair-weather
+			// cumulus, wider than tall and evenly spread; a heavy day's fewer, bigger, taller heaps, some towering, merging
+			// into clusters with wide gaps between, their bases darker. Three eighths as she passed it, the same draws)
+			const double Fair = Smooth((DefaultCumulus - D.CoverLaid()) / (DefaultCumulus - 0.12));
+			// (sizes by the cover each takes, laid biggest first: the art director on 2b177386's frames, 22 November 04:16Z,
+			// "popcorn: one size, even spacing ... wanted: a few big ones and many small". Drawn at random among sizes, the
+			// big ones were the likeliest to find no room, and the middling took half the cover, 600 clouds of one size.
+			// Now the big ones (1.5 to 3.5 km) are laid first and take half the sky's cover, a few middling (600 m to
+			// 1.5 km) a quarter or so, and the small ones (100 to 600 m) the rest, many of them round the bigger; within each
+			// even on a log scale. A cloudier day's cover goes more to the big ones, a fair day's more to the small)
+			const double BigShare = 0.5 + 0.15 * Fatter - 0.3 * Fair, SmallShare = 0.22 - 0.08 * Fatter + 0.25 * Fair;
+			// (the small ones are drawn one and a half to two and a half times as long as wide, and counted at the sky they
+			// truly cover, so the day's cover holds. Laid in streets they now fill their share, where scattered one by one
+			// they ran out of tries short of it: on a scattered or heavy day they take a third of their old share, about as
+			// many clouds as a1acb552's sky and its paint's cost, and the big and middling the rest, shared as before; a
+			// fair day's sky is still mostly small ones)
+			const double SmallKept = 0.35 + 0.65 * Fair;
+			const double SmallLaid = SmallShare * SmallKept;
+			const double BigLaid = BigShare + (SmallShare - SmallLaid) * BigShare / std::max(0.05, 1.0 - SmallShare);
+			const double UpTo[3] = { BigLaid, 1.0 - SmallLaid, 1.0 };
 			double Covered = 0.0;
-			for (int Try = 0; Try < 120000 && Covered < Wanted; ++Try)
+			int Pass = 0, PassTries = 0;
+			// (the small ones laid in short streets and clumps: after one is laid in a new place, the next of its street is
+			// tried where the street goes on, 1 to 5 more, each its own size, sea between them; the art director on
+			// a1acb552's frames, 22 November 08:13Z, "evenly scattered, so the sea reads as a field of cotton balls. Gather
+			// them into clumps and short streets with open sea between")
+			struct StreetNext
 			{
-				const double X = F.Origin.X + Roll.U(0.0, Period), Y = F.Origin.Y + Roll.U(0.0, Period);
-				// (sizes on a steep power law, the brief: of those tried, nine in twenty under 600 m across, eight in twenty
-				// 600 m to 1.5 km, three in twenty 1.5 to 3.5 km, and within each even on a log scale; most of the cover from
-				// the few big ones. As laid, about six in ten are small, the big ones the likeliest to find no room. Six in
-				// ten small among those tried made 2,300 clouds and 22,000 puffs, and the painter's room overflowed)
-				const double Kind = Roll.U(), Within = Roll.U();
+				double X = 0.0, Y = 0.0, W = 0.0, Way = 0.0, Sign = 1.0;
+				int Left = 0;
+			} Next;
+			for (int Try = 0; Try < 120000 && Pass < 3; ++Try)
+			{
+				// (a size's pass ends when the cover is laid up to its share, or after 40,000 tries; a clear day, wanting none,
+				// passes all three at once and lays no cloud)
+				while (Pass < 3 && (Covered >= Wanted * UpTo[Pass] || PassTries >= 40000))
+				{
+					++Pass;
+					PassTries = 0;
+				}
+				if (Pass >= 3)
+				{
+					break;
+				}
+				++PassTries;
+				double X = F.Origin.X + Roll.U(0.0, Period), Y = F.Origin.Y + Roll.U(0.0, Period);
+				const double Within = Roll.U();
 				auto Between = [Within](double Least, double Most) { return Least * std::pow(Most / Least, Within); };
-				const double W = Kind < 0.45 ? Between(300.0, 600.0) : Kind < 0.85 ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
+				double W = Pass == 0 ? Between(1500.0, 3500.0) : Pass == 1 ? Between(600.0, 1500.0) : Between(100.0, 600.0);
+				// (the next of a street, where it goes on: its place taken as it is, the street's own)
+				const bool bNext = Pass == 2 && Next.Left > 0;
+				if (bNext)
+				{
+					X = Next.X;
+					Y = Next.Y;
+					W = Next.W;
+				}
 				const bool bSmall = W < 600.0;
+				// (the small ones gather round the bigger, as a field of cumulus does, a few out in the open sea between:
+				// none of them spread evenly over it)
+				if (bSmall && !bNext)
+				{
+					double Gap = 1e9;
+					for (const Cloud& O : F.Clouds)
+					{
+						if (O.W >= 600.0)
+						{
+							const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y);
+							Gap = std::min(Gap, std::sqrt(Dx * Dx + Dy * Dy) - 0.5 * O.W);
+						}
+					}
+					if (Roll.U() > 0.12 + 0.88 * std::exp(-std::max(0.0, Gap) / 900.0))
+					{
+						continue;
+					}
+				}
 				// (the bigger ones keep to the streets; the small ones scatter in the lanes a little more)
-				if (Roll.U() > (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25) / 0.45))
+				// (a fair day's evenly over the sea; a heavy day's crowding harder, the gaps wider)
+				const double Street = (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25 - 0.1 * Fatter) / (0.45 - 0.15 * Fatter));
+				if (!bNext && Roll.U() > Street + (0.8 - Street) * Fair)
 				{
 					continue;
 				}
@@ -734,7 +1013,8 @@ namespace AirSky
 				{
 					// (two small ones kept their own width apart, so that a street of them is a line of separate clouds
 					// with sea between, not a chain of beads: the art director on round 18b, eyes 1 and 3)
-					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = (bSmall && O.W < 600.0 ? 1.0 : 0.55) * (O.W + W) * 0.5;
+					// (a heavy day's big ones closer, merging into clusters)
+					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = (bSmall && O.W < 600.0 ? 1.0 : 0.55 - 0.25 * Fatter) * (O.W + W) * 0.5;
 					if (Dx * Dx + Dy * Dy < Apart * Apart)
 					{
 						bClose = true;
@@ -743,28 +1023,42 @@ namespace AirSky
 				}
 				if (bClose)
 				{
+					// (a street that runs into another cloud ends there)
+					Next.Left = 0;
 					continue;
 				}
 				// Its height from its width, 1 to 2.5 times as wide as it is tall (never a ball), capped a little under the
 				// day's top, where the inversion stops most of them in one broken level; one big one in about twenty a tower
-				// to the day's top (the brief's flat bases and capped tops). A small one 150 m deep or more.
-				const double Least = bSmall ? 150.0 : 250.0;
-				const double Cap = Thick * Roll.U(0.8, 0.9);
-				const bool bTower = W >= 1500.0 && Roll.U() < 0.05;
-				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0, 2.5));
+				// to the day's top (the brief's flat bases and capped tops). A small one two fifths to a little over half as
+				// deep as it is wide, 50 m at least (it was 150 m at least, and from above the 200 to 300 m ones stood as
+				// round balls of one size: the art director on r2e's cloud sheets, 22 November 06:21Z, "flatter, height
+				// about half their width ... some near 100 m")
+				// (a small one drawn out along the wind, one and a half to twice as long as it is across, one in seven to two
+				// and a half (W its length): from above, round, they stood as cotton balls, the art director on a1acb552's
+				// frames; at two to three times they read as rice grains, her trim on r2g's sheets, 22 November 11:22Z; and
+				// half to four fifths as deep as it is across)
+				const double Aspect = !bSmall ? 1.0 : Roll.U() < 0.15 ? Roll.U(2.0, 2.5) : Roll.U(1.5, 2.0), Wide = W / Aspect;
+				const double Least = bSmall ? std::max(45.0, Wide * Roll.U(0.55, 0.8)) : 250.0;
+				// (a fair day's shallow, two to three and a half times as wide as tall; a heavy day's taller, a third of its big
+				// ones towering to the day's top)
+				const double Cap = Thick * Roll.U(0.8, 0.9) * (1.0 - 0.45 * Fair);
+				const bool bTower = W >= 1500.0 && Roll.U() < 0.05 + 0.3 * Fatter;
+				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0 + 1.0 * Fair - 0.1 * Fatter, 2.5 + 1.0 * Fair - 0.7 * Fatter));
 				H = std::max(H, std::min(Thick, Least));
-				// (a small one no taller than two fifths of its width, 150 m at least: in two layers, a taller one's top lumps
-				// floated clear of its base, the art director on round 18c, oahu eye 7)
+				// (a small one no taller than two fifths of its width, or its own Least: in two layers, a taller one's top
+				// lumps floated clear of its base, the art director on round 18c, oahu eye 7)
 				// (what it would have stood, its draws for turrets made by that, so the day's other clouds lie where they did)
 				const double Tall = H;
-				H = bSmall ? std::min(H, std::max(Least, 0.4 * W)) : H;
+				H = bSmall ? std::min(H, Least) : H;
 				const double Foot = Base;
 				// (its top leaning 5 to 15 degrees downwind, a shift of so much for each metre up)
 				const double Lean = std::tan(Roll.U(5.0, 15.0) * Pi / 180.0);
 				auto Leaned = [&Down, Lean, Foot](double PX, double PY, double PZ) { return Vec(PX + Down.X * Lean * (PZ - Foot), PY + Down.Y * Lean * (PZ - Foot), PZ); };
 				// (layers close enough that the puffs of one overlap the next: no gap between a cloud's base and its top; a
 				// small cloud two layers at most, of three puffs)
-				const double Rb = Clamp(W * 0.25, 90.0, 480.0);
+				// (a small one's lumps in scale with it, down to 30 m: at 90 m at least, a 100 to 300 m one was two or three
+				// lumps as big as itself, a ball)
+				const double Rb = bSmall ? Clamp(0.55 * Wide, 25.0, 480.0) : Clamp(W * 0.25, 90.0, 480.0);
 				const int Layers = static_cast<int>(Clamp(std::ceil(std::max(0.0, H - 0.5 * Rb - 0.55 * Rb) / (0.5 * Rb)) + 1.0, 2.0, bSmall ? 2.0 : 6.0));
 				Cloud& C = F.Clouds.emplace_back();
 				C.At = Vec(X, Y, Foot);
@@ -772,30 +1066,42 @@ namespace AirSky
 				C.H = H;
 				C.First = static_cast<int>(F.Puffs.size());
 				C.Fate = Roll.U(0.05, 0.85);
+				C.Long = Aspect;
 				double TopW = W * 0.5, TopR = Rb;
 				// (a small one is a rag drawn out a little along the wind, give or take, its lumps strung along it at
 				// mixed sizes: an irregular flat-based lump, never a marble, the art director on round 18b)
 				const double RagWay = std::atan2(Down.Y, Down.X) + Roll.U(-0.6, 0.6);
 				const double AlongX = std::cos(RagWay), AlongY = std::sin(RagWay);
+				C.LongWay = RagWay;
+				// (each of its lumps drawn out along it too, half as long again, the base's more: a rag, not a string of
+				// beads)
+				const double LumpLong[2] = { 1.6, 1.45 };
 				for (int K = 0; K < Layers; ++K)
 				{
 					const double Hk = static_cast<double>(K) / (Layers - 1);
-					const double Rk = Rb * (1.0 - 0.35 * Hk);
+					// (a small one's top as broad as its base: narrowing, the 200 m ones of 22 November stood on their wider
+					// grey bases as mushrooms seen from under them)
+					const double Rk = Rb * (1.0 - (bSmall ? 0.15 : 0.35) * Hk);
 					// (its base layer narrower than the body over it, so that from above the lit dome hides it and no grey
 					// plate shows round the cloud)
-					const double Wk = W * 0.5 * (1.0 - 0.45 * std::pow(Hk, 1.5)) * (K == 0 ? 0.8 : 1.0);
+					// (a small one's half breadth across it: its lumps on its middle line)
+					const double Wk = bSmall ? 0.5 * Wide : W * 0.5 * (1.0 - 0.45 * std::pow(Hk, 1.5)) * (K == 0 ? 0.8 : 1.0);
+					// (and how far along it its lumps' middles run either way: its top 0.9 of its length, its base 0.75, under it)
+					const double Run = bSmall ? std::max(0.0, 0.5 * W * (K == 0 ? 0.75 : 0.9) - Rk * LumpLong[K == 0 ? 0 : 1]) : 0.0;
 					// (a small one flatter all through: a rag of cloud wider than tall, not a ball, the brief's "dots")
 					const double Flat = K == 0 ? 0.55 : bSmall ? 0.68 : 0.85;
 					const double Low = Rk * Flat * 0.95, High = Rk * 0.85;
 					const double Zk = Foot + Low + std::max(0.0, H - Low - High) * Hk;
-					const int N = static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers || bSmall ? 2.0 : 1.0, bSmall ? 3.0 : 10.0));
+					const int N = bSmall ? (K > 0 && Aspect > 1.75 ? 3 : 2) : static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers ? 2.0 : 1.0, 10.0));
 					for (int J = 0; J < N; ++J)
 					{
 						const double A = Roll.U(0.0, 2.0 * Pi), Far = std::sqrt(Roll.U()) * std::max(0.0, Wk - 0.85 * Rk);
 						double PX = X + Far * std::cos(A), PY = Y + Far * std::sin(A);
+						// (where along a small one's length: -1 at one end, 1 at the other)
+						const double Spot = N > 1 ? (J - 0.5 * (N - 1)) / (0.5 * (N - 1)) : 0.0;
 						if (bSmall)
 						{
-							const double Stretch = (N > 1 ? (J - 0.5 * (N - 1)) / (0.5 * (N - 1)) : 0.0) * 0.55 * Wk;
+							const double Stretch = Spot * Run;
 							PX = X + AlongX * Stretch + 0.35 * (PX - X);
 							PY = Y + AlongY * Stretch + 0.35 * (PY - Y);
 						}
@@ -810,7 +1116,7 @@ namespace AirSky
 						// director on round 18b, eye 2)
 						if (K == 0)
 						{
-							Lit = std::min(Lit, 0.45);
+							Lit = std::min(Lit, 0.45 - 0.13 * Fatter);
 						}
 						// (far from the eye a layer is drawn with its first two puffs only, a cloud under 1.2 km across with its
 						// first)
@@ -819,9 +1125,17 @@ namespace AirSky
 						const double Lee = Clamp(((PX - X) * Down.X + (PY - Y) * Down.Y) / std::max(1.0, W * 0.5), 0.0, 1.0);
 						// (its base soft at the sides with a straight, crisp underside, solid enough to stand darker than the
 						// sky behind it; the lumps over it crisp where the sun catches their edges, softer and thinner to lee)
-						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * (bSmall && K > 0 ? Roll.U(0.55, 1.25) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
-						Lump.Soft = K == 0 ? 0.45 : 0.2 + 0.28 * Lee;
+						// (a small one's end lumps smaller: it thins out to its ends, ragged, not a sausage)
+						const double Taper = bSmall ? 1.0 - 0.22 * std::fabs(Spot) : 1.0;
+						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * Taper * (bSmall && K > 0 ? Roll.U(0.75, 1.2) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
+						// (a small one's lumps softer, its edges torn: the art director on r2e's sheets)
+						Lump.Soft = K == 0 ? 0.45 : bSmall ? 0.32 + 0.3 * Lee : 0.2 + 0.28 * Lee;
 						Lump.bFlatFoot = K == 0;
+						if (bSmall)
+						{
+							Lump.Long = LumpLong[K == 0 ? 0 : 1];
+							Lump.LongWay = RagWay;
+						}
 					}
 					TopW = Wk;
 					TopR = Rk;
@@ -865,7 +1179,15 @@ namespace AirSky
 				}
 				// Its far body: farther than its lumps can be told apart, one soft lit puff over most of it, in its veil
 				// (its rim 60 m under the base at most).
-				Add(Leaned(X, Y, Foot + 0.45 * H), 0.42 * W, Clamp(std::min(1.3 * H, 0.45 * H + 60.0) / (0.42 * W), 0.15, 0.9), 0.72, 0.72, 3);
+				// (a small one's drawn out along it as the cloud is, 0.95 of its length and a little over its breadth: the
+				// art director's elongated far sprite, 22 November 06:44Z and 08:13Z)
+				const double FarR = bSmall ? 0.55 * Wide : 0.42 * W;
+				Puff& Body = Add(Leaned(X, Y, Foot + 0.45 * H), FarR, Clamp(std::min(1.3 * H, 0.45 * H + 60.0) / FarR, 0.15, 0.9), 0.72, 0.72, 3);
+				if (bSmall)
+				{
+					Body.Long = Clamp(0.475 * W / FarR, 1.0, 4.0);
+					Body.LongWay = RagWay;
+				}
 				C.Count = static_cast<int>(F.Puffs.size()) - C.First;
 				// How much of its own cloud lies between each of its puffs and the sun: the other lumps' depth along the
 				// way to the sun, each by how near the way passes its middle (the brief's one sun on the cloud: a puff lit
@@ -896,7 +1218,34 @@ namespace AirSky
 					}
 					Me.Shadowed = 1.0 - std::exp(-Depth / 700.0);
 				}
-				Covered += Pi * (W * 0.5) * (W * 0.5) * 0.85;
+				// (a small one counted as drawn, W long and Wide across: narrower than before, so the sea between them opens)
+				Covered += Pi * (W * 0.5) * (Wide * 0.5) * 0.85;
+				// (a small one's street: a new one begins 1 to 5 more, along the wind give or take a sixth of a right angle,
+				// most of them downwind of it; each next one half to a little over the size of the last, its middle 1.1
+				// to 1.5 of their mean length on, and up to 0.3 of its own length aside)
+				if (bSmall)
+				{
+					if (!bNext)
+					{
+						Next.Left = 1 + static_cast<int>(Roll.U(0.0, 4.99));
+						Next.Way = std::atan2(Down.Y, Down.X) + Roll.U(-0.26, 0.26);
+						Next.Sign = Roll.U() < 0.75 ? 1.0 : -1.0;
+					}
+					else
+					{
+						--Next.Left;
+					}
+					if (Next.Left > 0)
+					{
+						const double Wn = Clamp(W * Roll.U(0.5, 1.1), 100.0, 599.0);
+						const double On = 0.5 * (W + Wn) * Roll.U(1.1, 1.5) * Next.Sign, Aside = Wn * Roll.U(-0.3, 0.3);
+						const double NX = X + std::cos(Next.Way) * On - std::sin(Next.Way) * Aside;
+						const double NY = Y + std::sin(Next.Way) * On + std::cos(Next.Way) * Aside;
+						Next.X = F.Origin.X + (NX - F.Origin.X) - Period * std::floor((NX - F.Origin.X) / Period);
+						Next.Y = F.Origin.Y + (NY - F.Origin.Y) - Period * std::floor((NY - F.Origin.Y) / Period);
+						Next.W = Wn;
+					}
+				}
 			}
 		}
 		else
@@ -909,6 +1258,9 @@ namespace AirSky
 			// keeps a ragged hole over them, a few scraps of cloud in it; it does not drift, so the hole stays there.
 			const int TilesAcross = 48;
 			const double S = Period / TilesAcross;
+			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none)
+			const double HoleBelow = DeckHoleBelow(D.CoverLaid());
+			const double RollTurn = Roll.U(0.0, 2.0 * Pi), RiftTurn = Roll.U(0.0, 2.0 * Pi);
 			struct Spot
 			{
 				double X = 0.0, Y = 0.0, R = 0.0;
@@ -922,12 +1274,22 @@ namespace AirSky
 					const double X = F.Origin.X + (GX + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double Y = F.Origin.Y + (GY + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double LX = X - F.Origin.X, LY = Y - F.Origin.Y;
-					const double N = Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.65 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.35;
+					// (the breaks: a few broad, more of them small, the art director's round 18d, 60 to 80 per cent cover; how many
+					// the day's cover)
+					// (and its cells lined up in rolls along the wind, about 2.4 km apart, the breaks lying in the troughs between
+					// them; and a few long rifts along the rolls, broken into lengths: the art director's winter-deck steer. The
+					// wind (3, -2) runs along the rolls, the waves across it, (2, 3), whole numbers of them to the square's side)
+					const double Across = 2.0 * Pi * (2.0 * LX + 3.0 * LY) / Period;
+					const double Rolls = 0.5 + 0.5 * std::cos(5.0 * Across + RollTurn);
+					const double Rift = Smooth((std::cos(2.0 * Across + RiftTurn) - 0.955) / 0.035) * Smooth((Noise(LX, LY, Period / 8.0, 8, NoiseSeed + 5) - 0.45) / 0.12);
+					const double N = (Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.45 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.55) * 0.72 + 0.28 * Rolls - 0.4 * Rift;
 					const double Fate = Roll.U(0.1, 0.9);
 					const double R = S * Roll.U(0.62, 0.9);
 					// (as many numbers drawn for every place, kept or not, so the laying stays the same where it is kept)
+					// (one tile in five with a cell standing 100 to 200 m proud of the lid, the rest flat: the art director's
+					// round 18d steer, one lid under the inversion, not a field of heaps)
 					const double LumpRoll = Roll.U();
-					const int Lumps = LumpRoll < 0.35 ? 0 : LumpRoll < 0.7 ? 1 : LumpRoll < 0.9 ? 2 : 3;
+					const int Lumps = LumpRoll < 0.2 ? 1 : 0;
 					double LumpAt[3][3];
 					for (double (&Each)[3] : LumpAt)
 					{
@@ -935,7 +1297,7 @@ namespace AirSky
 						Each[1] = Roll.U(-0.42, 0.42);
 						Each[2] = Roll.U(0.25, 0.6);
 					}
-					if (N < 0.22)
+					if (N < HoleBelow)
 					{
 						continue;
 					}
@@ -947,24 +1309,32 @@ namespace AirSky
 					C.First = static_cast<int>(F.Puffs.size());
 					C.Fate = Fate;
 					// (its top puff flattened so that its body stays within the tile's thickness, as wide as the tile is)
-					const double FlatTop = std::min(0.6, 0.95 * Th / R);
+					// (the lid's top level under the inversion, give or take 60 m: as far under the day's tops as its proud cells
+					// stand over it, so that the cells reach the tops and none goes past them; the lid that much flatter, its
+					// underside where it was, as clear of high ground as before)
+					const double Room = std::min(200.0, 0.2 * Th);
+					const double FlatTop = std::max(0.15, std::min(0.6, 0.95 * Th / R) - Room / (1.495 * R));
 					const double HalfTop = 0.55 * R * FlatTop;
-					const double TopZ = std::min(Foot + Th, Foot + Th - 0.9 * HalfTop + (N - 0.5) * std::min(160.0, 0.2 * Th));
+					const double TopZ = std::min(Foot + Th - Room, Foot + Th - Room - 0.9 * HalfTop + (N - 0.5) * std::min(60.0, 0.1 * Th));
 					Puff& Floor = Add(Vec(X, Y, TopZ), R, FlatTop, 0.9 + 0.1 * Clamp((N - 0.22) / 0.78, 0.0, 1.0), 0.85, 2);
 					Floor.Soft = 0.3;
-					Floor.Trough = 0.5;
-					// (its lumps, small to middling, crisp in the sun; the first drawn out to FarAll, the rest near)
+					Floor.Trough = 0.2;
+					// (its proud cell, broad and low, its top 100 to 200 m over the lid's; drawn out to FarAll)
 					for (int J = 0; J < Lumps; ++J)
 					{
-						const double M = std::min(R, 800.0) * LumpAt[J][2];
-						Puff& Lump = Add(Vec(X + LumpAt[J][0] * R, Y + LumpAt[J][1] * R, std::min(TopZ + 0.8 * M, Foot + Th)), M, 0.8, 0.95, 0.75, J == 0 ? 1 : 0);
-						Lump.Soft = 0.22;
+						const double M = std::min(R, 800.0) * (0.5 + 0.5 * LumpAt[J][2]);
+						const double Flat = 0.35, Proud = Room * (0.5 + 0.5 * (LumpAt[J][2] - 0.25) / 0.35);
+						const double LumpZ = std::min(Foot + Th - 1.0, TopZ + 0.55 * R * FlatTop * 0.9 + Proud - 0.55 * M * Flat);
+						Puff& Lump = Add(Vec(X + LumpAt[J][0] * R, Y + LumpAt[J][1] * R, LumpZ), M, Flat, 0.95, 0.8, 1);
+						Lump.Soft = 0.3;
 					}
 					if ((GX + GY) % 2 == 0)
 					{
 						// (its grey base: flat, its body's lower edge at the tile's foot, its underside straight)
 						const double Rb = R * 1.1;
-						const double FlatBase = Clamp(0.3 * std::min(Th, R) / (0.55 * Rb), 0.12, 0.5);
+						// (hanging no more than 170 m under the foot, so that over high ground, the foot lifted 200 m over the ground
+						// under the rims, its own rim stays 30 m clear: Bremen's deck laid over Oahu's Kaala)
+						const double FlatBase = Clamp(std::min(0.3 * std::min(Th, R) / (0.55 * Rb), 170.0 / (0.45 * Rb)), 0.12, 0.5);
 						Puff& Under = Add(Vec(X, Y, Foot + 0.55 * Rb * FlatBase), Rb, FlatBase, 0.12, 0.92, 0);
 						Under.bFlatFoot = true;
 					}
@@ -1059,8 +1429,8 @@ namespace AirSky
 			{
 				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
 				const double Off = std::hypot(Each.At.X - C.At.X, Each.At.Y - C.At.Y);
-				C.HeartReach = std::max(C.HeartReach, Off + 0.55 * Each.R);
-				C.RimReach = std::max(C.RimReach, Off + Each.R);
+				C.HeartReach = std::max(C.HeartReach, Off + 0.55 * Each.R * Each.Long);
+				C.RimReach = std::max(C.RimReach, Off + Each.R * Each.Long);
 			}
 		}
 		if (D.bDeck)
@@ -1257,7 +1627,11 @@ namespace AirSky
 			// far body alone)
 			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
 			const double Far = (Middle - Seen).Length();
-			const double Haze = Smooth((Reach - Far) / (Reach / 3.0));
+			// (a small cloud, under 600 m across, is drawn out to SmallSight times its width, thinning over the last fifth: a
+			// 100 m one to 3.4 km, a 600 m one to the reach, each about 1.7 degrees across where it goes. Farther it is a few
+			// pixels in the haze, and the many small ones the art director asked for on 22 November cost the painter a
+			// puff each out to the reach)
+			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (C.W < 600.0 ? Smooth((SmallSight * C.W - Far) / (0.2 * SmallSight * C.W)) : 1.0);
 			if (Haze <= 0.0)
 			{
 				continue;
@@ -1286,24 +1660,37 @@ namespace AirSky
 			}
 			// (its shadow, where the sun's way through its middle meets the sea: a dark disc of its body's breadth, 1.5 m
 			// over the water and laid over the land where it falls there (the art director, on build 1722: over Oahu the
-			// clouds floated with nothing under them); out to ShadowReach from the eye; a cloud 600 m across or more)
+			// clouds floated with nothing under them); out to ShadowReach from the eye)
 			// (a painter of one room lays none unless given the shadows' room: the far room's lays them all)
-			if (bShadows && (bApart || Only.bAll) && !C.bScrap && C.W >= 600.0)
+			// (a small one's too, out to 20 times its length and a kilometre, 3 km for a 100 m one, and counted as if twice
+			// as far, so that with no room for them all the small ones' go first: the art director on a1acb552's frames,
+			// "if cheap, give each a soft shadow on the sea, offset down-sun, at about 0.75 of the sea's value". Until
+			// then only a cloud 600 m across or more laid one)
+			const bool bSmallShadow = C.W < 600.0;
+			const double ShadowOut = bSmallShadow ? std::min(ShadowReach, 20.0 * C.W + 1000.0) : ShadowReach;
+			if (bShadows && (bApart || Only.bAll) && !C.bScrap)
 			{
 				const double High = C.At.Z + Here.Lift + 0.45 * Here.Squash * C.H;
 				const Vec Lies(LX - SunWay.X / SunWay.Z * High, LY - SunWay.Y / SunWay.Z * High, 1.5);
 				const Vec D = Lies - Seen;
-				const double Fade = Here.Show * Smooth((ShadowReach - D.Length()) / 2000.0);
+				const double Fade = Here.Show * Smooth((ShadowOut - D.Length()) / (bSmallShadow ? 0.25 * ShadowOut : 2000.0));
 				if (Fade * ShadowDark >= 0.002)
 				{
-					(bApart ? Shaded : Sorted).push_back({ C.First, Index, D.Dot(D), Fade, true, Lies });
+					(bApart ? Shaded : Sorted).push_back({ C.First, Index, D.Dot(D) * (bSmallShadow ? 4.0 : 1.0), Fade, true, Lies });
 				}
 			}
 		}
-		// (far to near, as see-through things are drawn; with no room for them all, the farthest go)
-		std::sort(Sorted.begin(), Sorted.end(), [](const Order& A, const Order& B) { return A.Deep > B.Deep; });
+		// (far to near, as see-through things are drawn; with no room for them all, the farthest go: only those drawn are
+		// put in order, the rest set before them as they fall. The many small clouds of 22 November put twice the room's
+		// puffs in reach, and ordering them all was a third of a paint)
+		auto Farther = [](const Order& A, const Order& B) { return A.Deep > B.Deep; };
 		const int Count = static_cast<int>(Sorted.size());
 		LastDropped = std::max(0, Count - Pool);
+		if (LastDropped > 0)
+		{
+			std::nth_element(Sorted.begin(), Sorted.begin() + LastDropped, Sorted.end(), Farther);
+		}
+		std::sort(Sorted.begin() + LastDropped, Sorted.end(), Farther);
 		LastDrawn = Count - LastDropped;
 		const int Spare = Pool - LastDrawn;
 		auto PlacedAt = [&F, this](const Order& O)
@@ -1395,13 +1782,18 @@ namespace AirSky
 			// neighbours (by as much as they differ, below), so that the ground between them does not stand through it.
 			// (The ground is asked once for each point: three times as many asks cost the painter about a millisecond
 			// at Pearl Harbor.)
-			const double Broad = 0.42 * Cl.W;
-			const Vec Along = SunFlat * (Broad * Stretch), Across = Vec(-SunFlat.Y, SunFlat.X, 0.0) * Broad;
+			// (a small one's as long and as narrow as it is, along its own way, and drawn out down-sun a third as much as a
+			// big one's: a flat rag's shadow is its own shape, a heap's drawn out by its height)
+			const bool bLong = Cl.Long > 1.001;
+			const double SunLong = bLong ? 1.0 + (Stretch - 1.0) / 3.0 : Stretch;
+			const Vec Ax = bLong ? Vec(std::cos(Cl.LongWay), std::sin(Cl.LongWay), 0.0) : SunFlat, Ay(-Ax.Y, Ax.X, 0.0);
+			const double Broad = (bLong ? 0.47 : 0.42) * Cl.W, Narrow = Broad / std::max(1.0, Cl.Long);
 			const double A = ShadowDark * O.Fade;
 			Laid[0] = C;
 			for (int K = 0; K < SideCount; ++K)
 			{
-				const Vec Way = (Along * Cos[static_cast<size_t>(K)] + Across * Sin[static_cast<size_t>(K)]) * (1.0 + 0.08 * Lumps3(K));
+				const Vec Flat = Ax * (Broad * Cos[static_cast<size_t>(K)]) + Ay * (Narrow * Sin[static_cast<size_t>(K)]);
+				const Vec Way = (Flat + SunFlat * (Flat.Dot(SunFlat) * (SunLong - 1.0))) * (1.0 + 0.08 * Lumps3(K));
 				Laid[static_cast<size_t>(1 + K)] = C + Way * 0.55;
 				Laid[static_cast<size_t>(1 + SideCount + K)] = C + Way;
 			}
@@ -1465,7 +1857,8 @@ namespace AirSky
 			// they stood as grey lenses in the cloud)
 			const bool bLowLump = bHeapHere && Each.bFlatFoot && !bFoot;
 			const double FootZ = Cl.At.Z + Here.Lift, HeapHigh = std::max(1.0, Here.Squash * Cl.H);
-			const double FootSpan = bFoot ? 0.4 * Cl.W : 0.0;
+			// (a small one's across it: drawn out along it below)
+			const double FootSpan = bFoot ? 0.4 * Cl.W / std::max(1.0, Cl.Long) : 0.0;
 			Vec C = PlacedAt(O);
 			if (bFoot)
 			{
@@ -1502,10 +1895,10 @@ namespace AirSky
 				: bFarDome ? Clamp(1.7 * HeapHigh / std::max(1.0, Cl.W), 0.4, 1.0) : std::max(0.08, (bLowLump ? 0.85 : Each.Flat) * Here.Squash);
 			Vec Fwd = C - Seen;
 			const double Dist = Fwd.Length();
-			Near = std::min(Near, Dist - Each.R);
+			Near = std::min(Near, Dist - Each.R * Each.Long);
 			if (Loose > 0.0)
 			{
-				const double Across = 1.15 * Each.R;
+				const double Across = 1.15 * Each.R * Each.Long;
 				Slackest = std::min(Slackest, std::min(Loose * Dist * Dist * Dist / (Across * Across), LooseTurn * Dist));
 			}
 			Fwd = Fwd.Unit(Vec(0.0, 0.0, -1.0));
@@ -1513,6 +1906,27 @@ namespace AirSky
 			Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
 			Vec Up = Right.Cross(Fwd);
 			Up = Up - Vec(0.0, 0.0, Up.Z * (1.0 - Flat)); // (a flat base stays flat seen from the side)
+			// (a puff drawn out along its way (a small cloud's, Long), by as much as that way lies across the picture: all
+			// of it looked down on, none looked along it. A point of the ring, so much right and up, drawn out along it)
+			const double LongHere = bFoot ? Cl.Long : Each.Long;
+			double LongR = 0.0, LongU = 0.0, LongMore = 0.0;
+			if (LongHere > 1.001)
+			{
+				const double Way = bFoot ? Cl.LongWay : Each.LongWay;
+				const double LR = std::cos(Way) * Right.X + std::sin(Way) * Right.Y, LU = std::cos(Way) * Up.X + std::sin(Way) * Up.Y;
+				const double InPicture = std::sqrt(LR * LR + LU * LU);
+				if (InPicture > 1e-6)
+				{
+					LongR = LR / InPicture;
+					LongU = LU / InPicture;
+					LongMore = (LongHere - 1.0) * std::min(1.0, InPicture);
+				}
+			}
+			auto DrawnOut = [&Right, &Up, LongR, LongU, LongMore](double R, double U)
+			{
+				const double On = (R * LongR + U * LongU) * LongMore;
+				return Right * (R + On * LongR) + Up * (U + On * LongU);
+			};
 			// (no disc across the lens as the eye passes through a cloud: it fades from 1.2 radii to 0.6; with a sweep, by
 			// the nearest the eye comes to it along that way)
 			double Lens = Dist;
@@ -1522,7 +1936,7 @@ namespace AirSky
 				const double Along = Clamp((To.X * Sweep.X + To.Y * Sweep.Y + To.Z * Sweep.Z) * BySweep2, 0.0, 1.0);
 				Lens = (To - Sweep * Along).Length();
 			}
-			const double Alpha = Here.Show * O.Fade * Each.Alpha * Clamp((Lens - 0.6 * Each.R) / (0.6 * Each.R), 0.0, 1.0);
+			const double Alpha = Here.Show * O.Fade * Each.Alpha * Clamp((Lens - 0.6 * Each.R * Each.Long) / (0.6 * Each.R * Each.Long), 0.0, 1.0);
 			// Light and shade from the cloud's shape (the art director): each point of the puff lit as the point of the
 			// cloud's rounded body it stands for, its way out from the body's middle to the sun; a deck's tile a flatter
 			// body (a floor of cells), darker at its rim where it meets the next. Seen from under it, a cloud is its grey
@@ -1588,6 +2002,8 @@ namespace AirSky
 			// (and how thick the cloud is for the light coming through it: a small cloud, a few hundred metres, is lit
 			// through nearly all over, a silver-grey; only a big one's body goes dark)
 			const double Thick = Smooth((HeapHigh - 120.0) / 600.0);
+			// (a deck's own puffs, its scraps apart: drawn from the lids where the sheet's shapes are drawn)
+			const bool bLidTile = bShapes && F.Sky.bDeck && !Cl.bScrap;
 			float LastOff2 = 0.0f;
 			// (how near the body's outline a point is, from its squared distance across the body: 0 within 0.55 of the
 			// way out, 1 from 0.95)
@@ -1600,7 +2016,8 @@ namespace AirSky
 				LastOff2 = Off2;
 				// (the cloud's own form leads, three parts in four, and what of it stands between the puff and the sun
 				// darkens it: the brief's one sun on each cloud, the shade side grey-blue and the sunlit side bright)
-				const double Shape = 0.5 + 0.5 * (0.75 * Body + 0.25 * Own);
+				// (a deck's lid a broad flat body: its tile's own roundness only a touch of it, the sheet's bumps the rest)
+				const double Shape = bLidTile ? 0.64 + 0.5 * (0.2 * Body + 0.1 * Own) : 0.5 + 0.5 * (0.75 * Body + 0.25 * Own);
 				// (a heap's base lit as the body is at its height, so that the two are of a piece)
 				const double OwnLit = bFoot || bLowLump ? 0.2 + 0.65 * Clamp((P.Z - FootZ) * PerHigh, 0.0, 1.0) : Each.Lit;
 				// (what of the cloud stands between a puff and the sun darkens the faces turned from the sun; with the sun
@@ -1614,7 +2031,7 @@ namespace AirSky
 				// its base; seen from under it, the grey less toward its outline, where the body's sides show past the base;
 				// and with the sun ahead, the body darker where the eye's way through it is long, its thin edges lit through
 				// (how near the body's outline the point is: 0 at its middle, 1 on it)
-				const double Edge = NearOutline(Off2);
+				const double Edge = bLidTile ? 0.0 : NearOutline(Off2);
 				const double Graded = Lit * (1.0 - 0.6 * Below * (1.0 - 0.6 * Edge)) * (0.8 + 0.2 * Smooth((P.Z - FootZ) * PerLower));
 				return Graded * (1.0 - 0.3 * Against * Thick * Depth) + 0.25 * Against * Edge + 0.12 * Against * (1.0 - Thick);
 			};
@@ -1627,12 +2044,14 @@ namespace AirSky
 				// crisp, sunlit edge) is turned toward the sun as the sun stands in the picture, give or take a fifth of a
 				// right angle for its own look, a base upright with its underside level; with the sun behind the eye or
 				// ahead, the shape's light is all round it and which way it is turned is no matter.
-				const int Cells = FragmentCells * FragmentCells, Tops = Cells - FragmentBases - FragmentFeet;
+				const int Cells = FragmentCells * FragmentCells, Tops = Cells - FragmentBases - FragmentFeet - FragmentLids;
 				// (a far body, the whole cloud in one shape, as a base's, a dome on a flat underside, upright, while the eye
 				// is under the cloud's top; looked down on, a top's, turned to the sun: from above no flat underside shows)
 				const double CloudTop = Cl.At.Z + Here.Lift + Here.Squash * Cl.H;
-				const bool bUpright = bFlatFoot || (Each.Lod == 3 && Seen.Z < CloudTop);
-				const int Pick = bFoot ? Tops + FragmentBases + O.Cloud % FragmentFeet : bUpright ? Tops + O.Index % FragmentBases : O.Index % Tops;
+				// (a deck's every puff one of the lids, lying flat and turned to the sun as the tops are: the art director's
+				// round 18d steer, one lid of cells, not heaps on a floor)
+				const bool bUpright = !bLidTile && (bFlatFoot || (Each.Lod == 3 && Seen.Z < CloudTop));
+				const int Pick = bLidTile ? Cells - FragmentLids + O.Index % FragmentLids : bFoot ? Tops + FragmentBases + O.Cloud % FragmentFeet : bUpright ? Tops + O.Index % FragmentBases : O.Index % Tops;
 				const double Mirror = (O.Index / Cells) % 2 == 1 ? -1.0 : 1.0;
 				const double SunAcross = Right.X * SunWay.X + Right.Y * SunWay.Y + Right.Z * SunWay.Z;
 				const double SunUp = Up.X * SunWay.X + Up.Y * SunWay.Y + Up.Z * SunWay.Z;
@@ -1644,13 +2063,15 @@ namespace AirSky
 				const double Turn = 0.5 * Pi - Toward, CT = std::cos(Turn), ST = std::sin(Turn);
 				const double CU = (Pick % FragmentCells + 0.5) / FragmentCells, CV = (Pick / FragmentCells + 0.5) / FragmentCells, Half = 0.49 / FragmentCells;
 				const float Behind = static_cast<float>(Smooth((Facing - 0.35) / 0.55)), Ahead = static_cast<float>(std::min(Against, 1.0 - Smooth((Facing - 0.35) / 0.55)));
-				const float Lumpy = static_cast<float>((0.45 + 0.5 * Beneath) * (0.25 + 0.75 * Thick));
+				const float Lumpy = bLidTile ? 0.85f : static_cast<float>((0.45 + 0.5 * Beneath) * (0.25 + 0.75 * Thick));
 				// (a point's place on the sheet from its way out across the shape, x right and y up, a share of the rim. With
 				// the sun ahead, the shape's bright thin edges only where it is the cloud's own outline: inside the cloud a
 				// lump's edge is a fold of the dark body, not silver, so there the shape's even light, as with the sun behind)
 				auto Sheet = [&](size_t At, float Off2, double SX, double SY)
 				{
-					const float Outline = Ahead > 0.0f ? static_cast<float>(NearOutline(Off2)) : 0.0f;
+					// (a lid's light from under it is its own grey, no bright outline round each puff: the art director's round
+					// 18d steer, "no white halo on every lump")
+					const float Outline = Ahead > 0.0f && !bLidTile ? static_cast<float>(NearOutline(Off2)) : 0.0f;
 					// (inside it, the shape's even light a little over half, its dark thick middle and lit thin lumps the rest,
 					// more of them from under the cloud: seen from under it or against the sun, a lumpy body, never a flat grey
 					// cushion. The art director on round 18c)
@@ -1660,6 +2081,8 @@ namespace AirSky
 					Uv[2] = Behind + Ahead * (1.0f - Lumpy) * (1.0f - Outline);
 					Uv[3] = Ahead * (Lumpy + (1.0f - Lumpy) * Outline);
 				};
+				// (a deck's lid fills its cell, so its tile is drawn at its puff's own width: the lids meet the next tile's
+				// in frayed seams, and the noise's breaks stay open)
 				const double Span = bFoot ? FootSpan : SpriteSpan * Each.R;
 				// (a base's and a far body's flat underside on the cloud's own foot, every one of a cloud's on the same
 				// level, not stacked a little apart as their sizes put them: the art director on round 18b, "a base is
@@ -1689,12 +2112,12 @@ namespace AirSky
 				// (a base under a taller body melts upward into it: its dome's top is the body's lower part, not an edge of
 				// its own, its sides softer, so only its flat underside is crisp; a small cloud's base keeps its whole outline.
 				// The art director on round 18b, eye 2, "bases continuous with the body, not saucers")
-				const double Melt = bFlatFoot && !bFoot ? Smooth((CloudTop - (Middle.Z + 0.6 * Span)) / (0.6 * Span)) : 0.0;
+				const double Melt = bFlatFoot && !bFoot && !bLidTile ? Smooth((CloudTop - (Middle.Z + 0.6 * Span)) / (0.6 * Span)) : 0.0;
 				for (int K = 0; K < SideCount; ++K)
 				{
 					const double TurnedC = Cos[static_cast<size_t>(K)] * TurnC - Sin[static_cast<size_t>(K)] * TurnS;
 					const double TurnedS = Sin[static_cast<size_t>(K)] * TurnC + Cos[static_cast<size_t>(K)] * TurnS;
-					const Vec Way = Right * TurnedC + Up * TurnedS;
+					const Vec Way = DrawnOut(TurnedC, TurnedS);
 					const Vec Heart = Middle + Way * (0.55 * Span), Rim = Middle + Way * Span;
 					const double SX = Mirror * (TurnedC * CT - TurnedS * ST), SY = TurnedC * ST + TurnedS * CT;
 					const double Upward = Melt * Smooth((TurnedS + 0.3) / 0.9);
@@ -1737,7 +2160,7 @@ namespace AirSky
 			{
 				const double TurnedC = Cos[static_cast<size_t>(K)] * TurnC - Sin[static_cast<size_t>(K)] * TurnS;
 				const double TurnedS = Sin[static_cast<size_t>(K)] * TurnC + Cos[static_cast<size_t>(K)] * TurnS;
-				Vec Way = Right * TurnedC + Up * TurnedS;
+				Vec Way = DrawnOut(TurnedC, TurnedS);
 				double Soft = std::max(Each.Soft, LeastSoft);
 				if (bCrisp && SunInPicture > 1e-6)
 				{
@@ -1769,9 +2192,13 @@ namespace AirSky
 		if (bApart)
 		{
 			// (the shadows' own room: far to near, the nearest MostShadows, the room not needed first)
-			std::sort(Shaded.begin(), Shaded.end(), [](const Order& A, const Order& B) { return A.Deep > B.Deep; });
 			const int ShadowCount = static_cast<int>(Shaded.size());
 			const int ShadowDropped = std::max(0, ShadowCount - MostShadows);
+			if (ShadowDropped > 0)
+			{
+				std::nth_element(Shaded.begin(), Shaded.begin() + ShadowDropped, Shaded.end(), Farther);
+			}
+			std::sort(Shaded.begin() + ShadowDropped, Shaded.end(), Farther);
 			LastShadows = ShadowCount - ShadowDropped;
 			const int ShadowSpare = MostShadows - LastShadows;
 			OutShadows->resize(static_cast<size_t>(MostShadows) * Per);
@@ -2041,12 +2468,14 @@ namespace AirSky
 			}
 			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
 			const double Far = (Middle - Seen).Length();
-			if (Smooth((Reach - (Far - Margin)) / (Reach / 3.0)) <= 0.0)
+			// (a small cloud, under 600 m across, drawn out to SmallSight times its width, as the painter's)
+			const double Sight = C.W < 600.0 ? SmallSight * C.W : 0.0;
+			if (Smooth((Reach - (Far - Margin)) / (Reach / 3.0)) <= 0.0 || (Sight > 0.0 && Smooth((Sight - (Far - Margin)) / (0.2 * Sight)) <= 0.0))
 			{
 				continue;
 			}
 			bEasing = bEasing || bStillEasing;
-			const double Haze = Smooth((Reach - Far) / (Reach / 3.0));
+			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (Sight > 0.0 ? Smooth((Sight - Far) / (0.2 * Sight)) : 1.0);
 			const double NearShare = Smooth((NearAll + 1000.0 - Far) / 1000.0), FarShare = Smooth((FarAll + 1500.0 - Far) / 1500.0);
 			const bool bHeap = C.Count > 1 && F.Puffs[static_cast<size_t>(C.First)].bFlatFoot;
 			for (int K = C.First; K < C.First + C.Count; ++K)
@@ -2072,7 +2501,7 @@ namespace AirSky
 				if (Haze > 0.0 && Haze * Share * Here.Show * Each.Alpha >= 0.002)
 				{
 					const Vec Mid = bFirst ? Vec(LX, LY, At.Z) : At;
-					Near = std::min(Near, (Mid - Seen).Length() - Each.R);
+					Near = std::min(Near, (Mid - Seen).Length() - Each.R * Each.Long);
 					++Drawn;
 				}
 			}
@@ -2108,7 +2537,7 @@ namespace AirSky
 		Put(0, 4, NearAll, FarAll, LastLaid, SideCount);
 
 		// Each puff: eight texels (AirSkyChip.inl).
-		const int SheetCells = FragmentCells * FragmentCells, Tops = SheetCells - FragmentBases - FragmentFeet;
+		const int SheetCells = FragmentCells * FragmentCells, Tops = SheetCells - FragmentBases - FragmentFeet - FragmentLids;
 		auto SheetU = [](int Pick) { return (Pick % FragmentCells + 0.5) / FragmentCells; };
 		auto SheetV = [](int Pick) { return (Pick / FragmentCells + 0.5) / FragmentCells; };
 		for (int Slot = 0; Slot < LastLaid; ++Slot)
@@ -2127,16 +2556,21 @@ namespace AirSky
 			const int Row = 1 + Slot / PuffsPerRow, First = (Slot % PuffsPerRow) * TexelsPerPuff;
 			const size_t Phase = static_cast<size_t>(O.Puff % 97);
 			const int FootPick = Tops + FragmentBases + O.Cloud % FragmentFeet;
-			const int UpPick = bFoot ? FootPick : Tops + O.Puff % FragmentBases, TopPick = bFoot ? FootPick : O.Puff % Tops;
-			const int Flags = (bFlatFoot ? 1 : 0) | (bFoot ? 2 : 0) | (bLowLump ? 4 : 0) | (bHeapHere ? 8 : 0);
+			// (a deck's own puffs, its scraps apart, drawn from the lids, lying flat: the painter's bLidTile)
+			const bool bLidTile = F.Sky.bDeck && !Cl.bScrap;
+			const int UpPick = bFoot ? FootPick : Tops + O.Puff % FragmentBases;
+			const int TopPick = bLidTile ? SheetCells - FragmentLids + O.Puff % FragmentLids : bFoot ? FootPick : O.Puff % Tops;
+			const int Flags = (bFlatFoot ? 1 : 0) | (bFoot ? 2 : 0) | (bLowLump ? 4 : 0) | (bHeapHere ? 8 : 0) | (bLidTile ? 16 : 0);
+			// (a small cloud's rag drawn out along its way: a base by its cloud's, a puff by its own)
+			const double LongHere = bFoot ? Cl.Long : Each.Long, LongWay = bFoot ? Cl.LongWay : Each.LongWay;
 			Put(Row, First + 0, PX, PY, PZ, Each.R);
 			Put(Row, First + 1, CloudX, CloudY, Cl.At.Z + Here.Lift, Here.Squash * Cl.H);
 			Put(Row, First + 2, Cl.W, 0.5 * Cl.W * (F.Sky.bDeck && !Cl.bScrap ? 1.25 : 1.0), Here.Squash, Each.Flat);
 			Put(Row, First + 3, Here.Show * Each.Alpha, Each.Lit, Each.Trough, Each.Shadowed);
 			Put(Row, First + 4, TurnCos[Phase], TurnSin[Phase], PhaseSines(false)[Phase], (O.Puff / SheetCells) % 2 == 1 ? -1.0 : 1.0);
 			Put(Row, First + 5, SheetU(TopPick), SheetV(TopPick), SheetU(UpPick), SheetV(UpPick));
-			Put(Row, First + 6, 1.0, 1.0, 0.0, 1.0);
-			Put(Row, First + 7, Each.Lod, Flags, 0.0, bFoot ? 0.4 * Cl.W : 0.0);
+			Put(Row, First + 6, LongHere, std::cos(LongWay), std::sin(LongWay), Each.Long);
+			Put(Row, First + 7, Each.Lod, Flags, Cl.W < 600.0 ? SmallSight * Cl.W : 0.0, bFoot ? 0.4 * Cl.W / std::max(1.0, Cl.Long) : 0.0);
 		}
 		bLaid = true;
 		++LayCount;

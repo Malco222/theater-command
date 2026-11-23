@@ -11,6 +11,7 @@
 class ACameraActor;
 class FJsonObject;
 class UMaterialInstanceDynamic;
+class UTexture2D;
 class UProceduralMeshComponent;
 class UTheaterStillMesh;
 
@@ -75,6 +76,13 @@ public:
 	/** air:ship-sunk: ship Id goes down. How: "settle", "sink", "capsize", "explode", "burn" or "break". bBig: the
 	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). */
 	void Sink(int32 Id, const FString& How, bool bBig, double Now);
+	/**
+	 * A bomb burst on the land at WorldAt: an oil tank it lands on or beside (inside its wall or within 6 m of it) goes
+	 * up, once: the effects kit's fuel ball off its roof (its width, 15 to 25 m) and the fire that burns on after it
+	 * (30 minutes), as Midway's tanks on Sand Island burned on 4 June 1942. Each ball's place (world) and width
+	 * (metres) is added to OutBalls, for the camera's rule 13. Returns how many tanks went up.
+	 */
+	int32 BombOnOil(const FVector& WorldAt, TArray<TPair<FVector, float>>& OutBalls);
 
 	/** Once a frame, on the battle's clock (seconds). */
 	void Advance(double Now);
@@ -132,6 +140,7 @@ private:
 		FString How;
 		double SunkAt = -1.0;
 		int32 Hits = 0;
+		double FirstHitAt = -1.0; // the battle's time of her first hit (-1: none yet): how long a ship ablaze has burned
 		bool bGone = false;
 		// Her end's details, from her look (FShipLooks::Sink; the numbers' How kept): the side she rolls or lists to (0:
 		// by her id, as before), her end's pace (its times multiplied by it), "bow", "stern", "even", "fore" or "aft",
@@ -139,6 +148,7 @@ private:
 		// amidships, minus toward the bow).
 		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
 		FString End;
+		double NextChurn = -1.0; // when the sea next boils round her as she goes (MoveShip)
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
@@ -177,6 +187,23 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SeaInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/** The moving sea's slopes (CampaignTextures::MakeWaterBumps), made once, for M_StageSea. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaRipples;
+	/** Its gusts and the surf's sets (CampaignTextures::MakeWaves: the swell, red, and the slow unevenness, alpha). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaWaves;
+	/** Its whitecaps (SeaFace::MakeFoam), made once. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaFoam;
+	/** Its shore: where the water lies calm, in a lee, open to the ocean, and how far from the edge (SeaFace::MakeShore),
+	 * made from this stage's land, reef and works when it is raised. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaShore;
+	/** Where the shore picture lies on the stage (metres: its west and south edges and its side), as SeaFace::MakeShore
+	 * laid it; the sea and the shallows carry where each of their points falls on it as their first texture
+	 * coordinate (ShoreAt). */
+	double ShoreWest = -1.0, ShoreSouth = -1.0, ShoreSpan = 2.0;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -184,6 +211,8 @@ private:
 	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
 	TMap<int32, int32> OilLit;
 	static constexpr int32 MostOilFires = 8;
+	/** The oil tanks (Tanks' rows) a bomb has set alight (BombOnOil): each goes up once. */
+	TSet<int32> TanksAlight;
 	FBattleEffects* Effects = nullptr;
 	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
 	FRandomStream Shown = FRandomStream(238);
@@ -192,6 +221,15 @@ private:
 	void BuildGround();
 	void BuildWorks();
 	void BuildSea();
+	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind, gusts and
+	 * whitecaps over it, calm where the shore shuts it in (bShore: the stage's land is drawn, so its shore is worked
+	 * out; else the open sea everywhere); null where the material has not been built yet (Tools/build_content.sh), or
+	 * with -TheaterFlatSea. */
+	UMaterialInstanceDynamic* MovingSea(bool bShore);
+	/** Where a stage point (metres east, north) falls on the shore picture: M_StageSea reads the picture there, from the
+	 * mesh's own first texture coordinate (the Mac's release 2 check: placed from the world's position on the GPU, the
+	 * picture missed Pearl Harbor, and the lochs drew whitecaps and no green). */
+	FVector2D ShoreAt(double East, double North) const;
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
 	void Blast(FShip& Ship, bool bBig);

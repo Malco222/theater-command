@@ -13,6 +13,20 @@
 
 namespace
 {
+	/** A number the file gives under a key ("engines", "jets"), or -1 where it gives none: the key's last place with a
+	 * colon after it (a word in quotes elsewhere, the Me 262's "tech": "jets", is a value and not the key). */
+	int TopNumber(const std::string& Text, const std::string& Key)
+	{
+		int Out = -1;
+		for (size_t At = Text.find(Key); At != std::string::npos; At = Text.find(Key, At + 1))
+		{
+			size_t Next = At + Key.size();
+			while (Next < Text.size() && (Text[Next] == ' ' || Text[Next] == '\n')) ++Next;
+			if (Next < Text.size() && Text[Next] == ':') Out = std::atoi(Text.c_str() + Next + 1);
+		}
+		return Out;
+	}
+
 	std::vector<double> NearNumbers(const std::string& Text, const char* Key)
 	{
 		std::vector<double> Out;
@@ -66,16 +80,21 @@ int main(int Argc, char** Argv)
 			BladeTris += bAll ? 1 : 0;
 			Taken += F.BladeTriangle[T / 3] ? 1 : 0;
 		}
-		bool bOk = Points.size() == Paints.size() && BladePoints > 0 && !F.Screws.empty() && Taken == BladeTris;
-		std::printf("%s: %d blade points, %zu screws, %d of %d blade triangles taken%s\n", Argv[A], BladePoints, F.Screws.size(), Taken, BladeTris,
-		            BlurPoints > 0 ? (", its own blur disc " + std::to_string(BlurPoints) + " points").c_str() : "");
+		// (a jet, every engine of hers a jet, as the Me 262: no airscrew to find, and none must be found)
+		const int Jets = TopNumber(Text, "\"jets\"");
+		const bool bJet = Jets > 0 && Jets == TopNumber(Text, "\"engines\"");
+		bool bOk = Points.size() == Paints.size() && (bJet ? BladePoints == 0 && F.Screws.empty() : BladePoints > 0 && !F.Screws.empty() && Taken == BladeTris);
+		std::printf("%s: %d blade points, %zu screws, %d of %d blade triangles taken%s%s\n", Argv[A], BladePoints, F.Screws.size(), Taken, BladeTris,
+		            BlurPoints > 0 ? (", its own blur disc " + std::to_string(BlurPoints) + " points").c_str() : "", bJet ? " (a jet: none to find)" : "");
 		for (const AirScrew::Screw& S : F.Screws)
 		{
 			std::printf("   hub (%.2f, %.2f, %.2f) axis (%.2f, %.2f, %.2f) radius %.2f, %d blades\n", S.Hub.X, S.Hub.Y, S.Hub.Z, S.Axis.X, S.Axis.Y, S.Axis.Z, S.Radius, S.Blades);
 			// (a shaft along the machine, x forward in the file; a hub on the machine's middle line or paired across it)
 			if (std::fabs(S.Axis.X) < 0.98 || S.Blades < 2 || S.Blades > 4 || S.Radius < 0.9 || S.Radius > 2.4) bOk = false;
 		}
-		if (F.Screws.size() != 1 && F.Screws.size() != 2 && F.Screws.size() != 4) bOk = false;
+		// (one, two or four; or as many as her file says she has engines: the SM.79's three, her nose and a pair)
+		const int Engines = TopNumber(Text, "\"engines\"");
+		if (!bJet && (Engines > 0 ? static_cast<int>(F.Screws.size()) != Engines : F.Screws.size() != 1 && F.Screws.size() != 2 && F.Screws.size() != 4)) bOk = false;
 		if (!bOk) { ++Bad; std::printf("  FAIL\n"); }
 	}
 	std::printf("%d aircraft, %d failed\n", Models, Bad);
