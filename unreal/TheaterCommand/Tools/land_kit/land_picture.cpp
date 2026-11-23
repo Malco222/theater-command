@@ -183,6 +183,11 @@ namespace
 			};
 			const double R = K.Radius;
 			const bool bAmerican = K.Tag == "USA" || (K.Tag == "_" && V.Nation == "USA");
+			const bool bGerman = K.Tag == "GER" || (K.Tag == "_" && V.Nation == "GER");
+			if (!bAmerican && !bGerman)
+			{
+				continue; // (no other nation's mark is drawn yet: the T-34's red star is not the Germans' cross)
+			}
 			if (bAmerican)
 			{
 				const Colour White = FromPicture(214, 211, 196);

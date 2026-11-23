@@ -1905,21 +1905,30 @@ namespace LandKit
 				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
 				if (bCaptured && bCoat)
 				{
-					const double Low = Clamp(1.0 - At.Z / 1.2, 0.0, 1.0);
-					const double Miss = Smooth(0.6 - 0.22 * Low, 0.66 - 0.22 * Low, Noise(V3(Here.X * 1.1, Here.Y * 1.1, Here.Z * 3.2), Seed + 77));
-					C = Mix(C, Old, 0.85 * Miss);
+					// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
+					// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
+					// lower hull behind the wheels; the art director's mend, 23 November)
+					const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
+					// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
+					// its few corners would each carry a stripe of the old coat down the whole plate)
+					const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
+					const double At0 = 0.71 - 0.17 * Reach;
+					const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
+					C = Mix(C, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
 				}
 				if (bFileDust)
 				{
 					if (bCoat && Raw.Wear[K] > 0)
 					{
-						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
+						// third of it shows the old coat through)
+						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
 					}
 				}
 				else if (bCoat && Edge[K] > 0.0f)
 				{
 					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
-					C = bCaptured ? Mix(C, Old, 0.7 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					C = bCaptured ? Mix(C, Old, 0.25 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
 				}
 				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
 				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
@@ -1936,8 +1945,11 @@ namespace LandKit
 				{
 					// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
 					// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
-					C = Mix(C, DustColour, Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
-					C = Mix(C, HazeColour, Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
+					// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
+					// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
+					const double DustBy = bCaptured ? 0.5 : 1.0;
+					C = Mix(C, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+					C = Mix(C, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
 					C = C * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
 				}
 				Colour[K * 4] = ToPicture(C.R);
@@ -2043,6 +2055,79 @@ namespace LandKit
 				Out.Triangles.push_back(static_cast<uint32_t>(Local[A]));
 				Out.Triangles.push_back(static_cast<uint32_t>(Local[Bv]));
 				Out.Triangles.push_back(static_cast<uint32_t>(Local[C]));
+			}
+
+			// Captured kit: her captor's mark, big (the art director, 23 November: crews painted them oversize so their
+			// own side would hold its fire, and the player must see whose she is at a glance): half as big again at each
+			// place her file gives for her maker's marks, and once on her roof. The Germans' cross, black edged white, and
+			// the Americans' white star, as the cloud's pictures draw them; a captor with no mark in the game, none.
+			if (bCaptured && (D.Nation == "GER" || D.Nation == "USA"))
+			{
+				const bool bStar = D.Nation == "USA";
+				auto AddMark = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, const V3& UpHint) {
+					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size()) return;
+					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+					Mesh& Out = Level == 0 ? Bo.Near : Bo.Far;
+					const V3 Nf = Facing.Unit(V3(1.0, 0.0, 0.0));
+					V3 Upw = UpHint - Nf * Nf.Dot(UpHint);
+					if (Upw.Length() < 0.3) Upw = V3(1.0, 0.0, 0.0) - Nf * Nf.X;
+					Upw = Upw.Unit(V3(0.0, 0.0, 1.0));
+					const V3 Across = Upw.Cross(Nf).Unit(V3(0.0, 1.0, 0.0));
+					auto Point = [&](double A, double U, double Lift, uint8_t Cr, uint8_t Cg, uint8_t Cb) {
+						const V3 P = Place + Nf * Lift + Across * A + Upw * U - Bo.Pivot;
+						Out.Points.insert(Out.Points.end(), { static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z) });
+						Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Nf.X), static_cast<float>(Nf.Y), static_cast<float>(Nf.Z) });
+						Out.Colours.insert(Out.Colours.end(), { Cr, Cg, Cb, 255 });
+						Out.Soot.push_back(0.6f);
+						return static_cast<uint32_t>(Out.Soot.size() - 1);
+					};
+					auto Quad = [&](double A0, double U0, double A1, double U1, double Lift, uint8_t Cr, uint8_t Cg, uint8_t Cb) {
+						const uint32_t P0 = Point(A0, U0, Lift, Cr, Cg, Cb), P1 = Point(A1, U0, Lift, Cr, Cg, Cb);
+						const uint32_t P2 = Point(A1, U1, Lift, Cr, Cg, Cb), P3 = Point(A0, U1, Lift, Cr, Cg, Cb);
+						Out.Triangles.insert(Out.Triangles.end(), { P0, P1, P2, P0, P2, P3 }); // (counter-clockwise about her facing, as the files wind theirs)
+					};
+					if (bStar)
+					{
+						const uint32_t Mid = Point(0.0, 0.0, 0.012, 214, 211, 196);
+						std::vector<uint32_t> Rim;
+						for (int I = 0; I < 10; ++I)
+						{
+							const double A = I * 36.0 * 3.14159265358979 / 180.0, Rr = I % 2 == 0 ? Size : Size * 0.382;
+							Rim.push_back(Point(Rr * std::sin(A), Rr * std::cos(A), 0.012, 214, 211, 196));
+						}
+						for (int I = 0; I < 10; ++I) Out.Triangles.insert(Out.Triangles.end(), { Mid, Rim[static_cast<size_t>((I + 1) % 10)], Rim[static_cast<size_t>(I)] });
+					}
+					else
+					{
+						const double Bar = Size * 0.36, Rim = Size * 0.09;
+						Quad(-Size, -Bar, Size, Bar, 0.012, 206, 204, 194);
+						Quad(-Bar, -Size, Bar, Size, 0.012, 206, 204, 194);
+						Quad(-Size + Rim, -Bar + Rim, Size - Rim, Bar - Rim, 0.016, 24, 24, 24);
+						Quad(-Bar + Rim, -Size + Rim, Bar - Rim, Size - Rim, 0.016, 24, 24, 24);
+					}
+				};
+				for (const Mark& Mk : Marks)
+				{
+					AddMark(Parts[static_cast<size_t>(Mk.Part)].Body, Mk.At, Mk.Facing, Mk.Radius * 1.5, V3(0.0, 0.0, 1.0));
+				}
+				// (her roof: the top of her turret, else of her hull, where the most of her points are highest)
+				int RoofPart = PartIndex("turret");
+				if (RoofPart < 0 || Parts[static_cast<size_t>(RoofPart)].Body < 0) RoofPart = PartIndex("hull");
+				if (RoofPart >= 0 && Parts[static_cast<size_t>(RoofPart)].Body >= 0)
+				{
+					double Top = -1e9;
+					for (size_t K = 0; K < N; ++K)
+						if (Raw.Parts[K] == RoofPart) Top = std::max(Top, static_cast<double>(Raw.Points[K * 3 + 2]));
+					double SX = 0.0, SY = 0.0, Count = 0.0;
+					for (size_t K = 0; K < N; ++K)
+					{
+						if (Raw.Parts[K] != RoofPart || Raw.Points[K * 3 + 2] < Top - 0.04 || Raw.Facings[K * 3 + 2] < 0.8) continue;
+						SX += Raw.Points[K * 3];
+						SY += Raw.Points[K * 3 + 1];
+						Count += 1.0;
+					}
+					if (Count > 0.0) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, V3(SX / Count, SY / Count, Top), V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
+				}
 			}
 		}
 
