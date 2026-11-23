@@ -12,7 +12,8 @@ import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
 const me: Side | null = meArg === 'none' ? null : (meArg as Side);
-const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false });
+// (LAND_LIVE_BEARERS=0: stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them)
+const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}) });
 const header = L.header();
 const deltas: LiveDelta[] = [];
 const lines: string[] = [];

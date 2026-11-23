@@ -76,7 +76,10 @@ namespace
 		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news. Off: help arrives with no word ahead."), TEXT("TheaterLandNoRider"), true, nullptr },
 		// (Brian, 22 November 17:33Z, "make it where we can toggle it off", and 21:21Z, each starting on)
 		{ TEXT("phones"), TEXT("Field telephones"), TEXT("The defence's posts are wired to their headquarters, so orders reach them quickly until shellfire cuts a line. Off: no telephone lines."), TEXT("TheaterLandNoPhones"), true, nullptr },
-		{ TEXT("bearers"), TEXT("Stretcher bearers"), TEXT("Bearers carry the wounded back, and the lightly hurt return to the line later in the battle. Off: no one comes back."), TEXT("TheaterLandNoBearers"), true, nullptr },
+		// (release 1.5: Stretcher bearers start off, the release 1.5 lead 23 Nov 05:37Z under Brian's rule that a new rule ships on only
+		// if it plays clean. The pre-check's land_live found a light case the rules stand back up still lying on screen: the live
+		// feed never takes his fall back, and the 3D has no man getting up. -TheaterLandRuleBearers turns them on for a run.)
+		{ TEXT("bearers"), TEXT("Stretcher bearers"), TEXT("Bearers carry the wounded back, and the lightly hurt return to the line later in the battle. Off: no one comes back."), TEXT("TheaterLandNoBearers"), false, TEXT("TheaterLandRuleBearers") },
 		{ TEXT("patrol"), TEXT("Night patrol"), TEXT("While you place your army, send a unit on foot out the night before to find hidden posts; it may be caught. Needs Forest ambushes. Off: no patrols."), TEXT("TheaterLandNoPatrol"), true, nullptr },
 		// (looks only, release 2: Brian, 23 November 01:11Z, "Do all of these"; the 3D game draws them once its own trial
 		// passes, and nothing in the fight reads them)
