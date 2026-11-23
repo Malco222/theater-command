@@ -293,6 +293,10 @@ namespace LandScape
 		/** Whether the far ring carries the bocage's tree-lined field edges for its first kilometre (dark ridges with
 		 * crowns standing up from them, the layers to the horizon): France 1940's poplar rows might; the desert not. */
 		virtual bool FarRows() const { return false; }
+		/** Whether the land is laid out by a survey's grid (North America's townships): the plots' blocks square to the
+		 * compass, half a mile on a side, unwarped, cut square at their halves into fields of 80, 40 and 20 acres (LandField
+		 * Plot); PlotMin and PlotMax still say where the cutting stops. */
+		virtual bool Surveyed() const { return false; }
 		/** A parcel's crop (the region's own number, 0 to 63) for its kind (KOpen, KField, KRough) and a number U. */
 		virtual int CropOf(int Kind, double U) const = 0;
 		/** Its word for sheets and tests. */

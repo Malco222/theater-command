@@ -532,6 +532,8 @@ namespace LandField
 		// The plots the parcels are cut from (one lattice of blocks over the field, the band and the ring, the same
 		// everywhere): the frame's turn.
 		double Theta0 = 0.0;
+		// (a region's survey grid: the plots square to the compass, unwarped, in half-mile blocks cut square at their halves)
+		bool bSurvey = false;
 		std::vector<YardBox> Yards;
 		std::vector<V2> OrchardAt;
 
@@ -1592,6 +1594,8 @@ namespace LandField
 	{
 		/** The plots' blocks: a lattice this far apart (along and across the frame), each corner jittered. */
 		constexpr double BlockU = 560.0, BlockV = 500.0, BlockJitter = 0.22;
+		/** The survey's blocks (Region::Surveyed): half a mile, square to the compass. */
+		constexpr double SurveyBlock = 804.67;
 		/**
 		 * A plot is cut again while it is larger than a size drawn between these (square metres): fields of some 2 to 5
 		 * hectares, so that at a man's eye each closes in at 100 to 200 m across (the art director's sight lines).
@@ -1612,6 +1616,9 @@ namespace LandField
 	void Ground::Impl::MakePlots()
 	{
 		Theta0 = (Unit(Hash(Seed, 0x7E7A)) < 0.5 ? 0.25 : 0.75) * Pi + (Unit(Hash(Seed, 0x7E7B)) - 0.5) * (Pi / 6.0);
+		// (North America's township survey: the fields square to the compass on the half-mile grid; Region::Surveyed)
+		bSurvey = Rg && Rg->Surveyed();
+		if (bSurvey) Theta0 = 0.0;
 	}
 
 	/**
@@ -1620,6 +1627,7 @@ namespace LandField
 	 */
 	V2 Ground::Impl::PlotFrame(double X, double Y) const
 	{
+		if (bSurvey) return { X, Y };
 		const double WX = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A01) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A02);
 		const double WY = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A03) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A04);
 		const double QX = X + WX, QY = Y + WY, C = std::cos(Theta0), S = std::sin(Theta0);
@@ -1646,11 +1654,13 @@ namespace LandField
 			return (Id % 120000) * 8 + Crop;
 		}
 		const V2 P = PlotFrame(X, Y);
-		auto Corner = [this](int64_t I, int64_t J) {
+		// (the survey's: half-mile blocks, square, their corners where the survey put them)
+		const double BU = bSurvey ? SurveyBlock : BlockU, BV = bSurvey ? SurveyBlock : BlockV, Jit = bSurvey ? 0.0 : BlockJitter;
+		auto Corner = [this, BU, BV, Jit](int64_t I, int64_t J) {
 			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
-			return V2{ (static_cast<double>(I) + 2.0 * BlockJitter * (Unit(H) - 0.5)) * BlockU, (static_cast<double>(J) + 2.0 * BlockJitter * (Unit(Mix(H)) - 0.5)) * BlockV };
+			return V2{ (static_cast<double>(I) + 2.0 * Jit * (Unit(H) - 0.5)) * BU, (static_cast<double>(J) + 2.0 * Jit * (Unit(Mix(H)) - 0.5)) * BV };
 		};
-		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BlockU)), J0 = static_cast<int64_t>(std::floor(P.Y / BlockV));
+		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BU)), J0 = static_cast<int64_t>(std::floor(P.Y / BV));
 		V2 Q[4];
 		int64_t BI = I0, BJ = J0;
 		double BestIn = -1e18;
@@ -1679,8 +1689,9 @@ namespace LandField
 			bool bTurn = L13 > L02;
 			if (std::max(L02, L13) < 1.3 * std::min(L02, L13) && Unit(Hash(Key, 2)) < 0.3) bTurn = !bTurn;
 			const V2 R[4] = { Q[bTurn ? 1 : 0], Q[bTurn ? 2 : 1], Q[bTurn ? 3 : 2], Q[bTurn ? 0 : 3] };
-			const double A = 0.34 + 0.32 * Unit(Hash(Key, 3));
-			const double B = std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
+			// (the survey cuts a block square at its half: the eighty, the forty, the twenty)
+			const double A = bSurvey ? 0.5 : 0.34 + 0.32 * Unit(Hash(Key, 3));
+			const double B = bSurvey ? 0.5 : std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
 			const V2 Cut0 = Lerp2(R[0], R[1], A), Cut1 = Lerp2(R[3], R[2], B);
 			const bool bFirst = Cross2(Cut1 - Cut0, P - Cut0) * Cross2(Cut1 - Cut0, R[0] - Cut0) >= 0.0;
 			if (bFirst)
