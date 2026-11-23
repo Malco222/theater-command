@@ -1460,6 +1460,8 @@ namespace LandScape
 				}
 			}
 			bool KitBuilt(int K) const override { return K == KPoplar || (K >= KRidge && K <= KCave); }
+			// (a balk's ridge, 0.12 to 0.14 m: the men's ways cross it, so its line runs on unbroken where they do)
+			bool KitLow(int K) const override { return K == KRidge || K == KRidgeShort; }
 			void KitPlain(int K, LandField::BaseMesh& M) const override
 			{
 				if (K != KPoplar && (K < KRidge || K > KCave))

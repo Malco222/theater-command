@@ -238,7 +238,7 @@ namespace LandScape
 		virtual bool Free(double X, double Y, double Room, bool bManMay = false) const = 0;
 		/** Plant one of a base (a tree, a kit model, a rock): its foot on the surface drawn. Off a recorded way, else not. */
 		virtual void Plant(LandField::Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, LandField::Rgb8 Tint) = 0;
-		/** A building from the region's kit (B one of Kit0..Kit15): its floor levelled, its footprint (Long along Yaw,
+		/** A building from the region's kit (B one of Kit0..Kit19): its floor levelled, its footprint (Long along Yaw,
 		 * Deep across) kept clear and stood on, planted. False where it does not fit. */
 		virtual bool House(LandField::Base B, double X, double Y, double Yaw, double Long, double Deep) = 0;
 		/** A building of the ground's own builder (the bocage's stone houses: walls, roof, door and windows; the
@@ -342,10 +342,10 @@ namespace LandScape
 			return false;
 		}
 
-		// ---- the kit: Kit0..Kit15 from a region's battle models, Clut0..Clut5 its clutter
+		// ---- the kit: Kit0..Kit19 (LandField::KitSlots) from a region's battle models, Clut0..Clut5 its clutter
 		/** The kit's folder: Content/Models/<Folder> in the game, battle-models/<folder> in the shared folder. */
 		virtual const char* Folder() const { return ""; }
-		/** The model file (without .json) drawn for a kit slot (0..15), or null where the slot is unused. */
+		/** The model file (without .json) drawn for a kit slot (0..19), or null where the slot is unused. */
 		virtual const char* KitName(int Slot) const { (void)Slot; return nullptr; }
 		/** A kit slot after it is read (or plainly drawn where its file is missing): its far level's distance, its shape for
 		 * the men's and the camera's sight (BaseMesh::Sight*). */
@@ -354,6 +354,10 @@ namespace LandScape
 		virtual void KitPlain(int Slot, LandField::BaseMesh& M) const;
 		/** A kit slot the region builds itself in KitPlain (a yurt, a cairn), with no file to read or to miss. */
 		virtual bool KitBuilt(int Slot) const { (void)Slot; return false; }
+		/** A kit slot whose model lies low, LandField::LowKitHigh or less as planted (a balk's ridge, a bund: a man steps
+		 * over it, a tank rolls over it): it may lie across a recorded men's way, never a vehicles'. One that stands
+		 * taller after all (its model read or built higher) is taken up off the men's ways once the models are built. */
+		virtual bool KitLow(int Slot) const { (void)Slot; return false; }
 		/** How many steps down the frame budget's ladder of nearer far-draw distances the game takes for this ground (0,
 		 * GS9's own, to 4; production/theatre-budgets-1122/budgets.md section B): its dense woods' trees and shrubs turn
 		 * plain, to crowns and out sooner. By its look unless the region says. */

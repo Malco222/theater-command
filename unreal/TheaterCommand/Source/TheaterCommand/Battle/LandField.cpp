@@ -484,7 +484,7 @@ namespace LandField
 			uint64_t Key = 0;
 			double Floor = 0.0, Foot = 0.0;
 			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
-			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit15)
+			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit19)
 			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
 		};
 
@@ -669,6 +669,15 @@ namespace LandField
 		void MakeRaster();
 		void MakeWays();
 		double WayRoom(V2 P, bool bVehicles = false) const;
+		/** Whether B is a slot of the region's kit it calls low (Region::KitLow). */
+		bool KitLowAt(Base B) const
+		{
+			const int K = static_cast<int>(B) - static_cast<int>(Base::Kit0);
+			return Rg && K >= 0 && K < KitSlots && Rg->KitLow(K);
+		}
+		/** A region's low kit standing taller than LowKitHigh after all, once its models are built: taken up where it lies
+		 * on a recorded men's way. */
+		void TakeUpTallLowKit();
 		void MakeSites();
 		struct House ChurchYard(V2 C, double Yaw) const;
 		void LayChurch(V2 C, double Yaw, int Hurt);
@@ -1584,6 +1593,21 @@ namespace LandField
 				Room = std::min(Room, SegDist(P, WayA[W], WayB[W], T) - WayHalf[W]);
 			}
 		return Room;
+	}
+
+	void Ground::Impl::TakeUpTallLowKit()
+	{
+		if (!Rg) return;
+		for (int K = 0; K < KitSlots; ++K)
+		{
+			if (!Rg->KitLow(K)) continue;
+			const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
+			const double High = Bases[static_cast<size_t>(B)].Height;
+			std::vector<Placed>& L = Inst[static_cast<size_t>(B)];
+			const size_t Was = L.size();
+			L.erase(std::remove_if(L.begin(), L.end(), [&](const Placed& P) { return High * P.ScaleZ > LowKitHigh && WayRoom({ P.X, P.Y }) < 0.8; }), L.end());
+			Count.Instances -= Was - L.size();
+		}
 	}
 }
 
@@ -3308,11 +3332,12 @@ namespace LandField
 	{
 		// Nothing stands on a recorded way, a man's or a vehicle's: no stem, trunk or prop within its half width and the
 		// thing's own body besides (the planting's coarse marks miss a stem by a pixel's corner now and then). The gates are
-		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only.
+		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only,
+		// and so is a region's low kit (Region::KitLow: a balk's ridge a man steps over; TakeUpTallLowKit holds it to that).
 		if (B != Base::Gate)
 		{
 			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : B == Base::Haycock ? 1.0 : 0.8;
-			if (WayRoom({ X, Y }, bThrough) < Body) return;
+			if (WayRoom({ X, Y }, bThrough || KitLowAt(B)) < Body) return;
 		}
 		Placed P;
 		P.Kind = B;
@@ -6147,7 +6172,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -6813,7 +6838,7 @@ namespace LandField
 		// not given) and its own clutter.
 		if (Rg)
 		{
-			for (int K = 0; K < 16; ++K)
+			for (int K = 0; K < KitSlots; ++K)
 			{
 				const char* Name = Rg->KitName(K);
 				if (!Name) continue;
@@ -6852,7 +6877,7 @@ namespace LandField
 		// A region's kit slots' classes for the game's far draw, where its KitLook set none: a tree as it marked it, a
 		// slot it laid as a house a house, else a tall thing big and a low one a shrub (the frame budget's classes).
 		if (Rg)
-			for (int K = 0; K < 16; ++K)
+			for (int K = 0; K < KitSlots; ++K)
 			{
 				const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
 				BaseMesh& M = At(B);
@@ -6900,6 +6925,7 @@ namespace LandField
 		MakePlants();
 		const auto T1 = Clock::now();
 		MakeBases();
+		TakeUpTallLowKit();
 		MakeTiles();
 		MakeRing();
 		// (snow on the roofs and the walls' tops)
