@@ -178,7 +178,7 @@ CABIN = [
      '            if blend_of and paint in ("upper", "upper2"):'),
     ('    hull_paint.blend = coat.blend\n', '    hull_paint.blend = coat.blend\n    hull_paint.coat = coat\n'),
     # (a cabin is a box with flat panes, not a round hood: its own body, and a finer mesh so that its panes' edges are clean)
-    ('        hood = Body(hood_stations, 2.3)\n', '        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull) if s.get("cabin") else Body(hood_stations, 2.3)\n'),
+    ('        hood = Body(hood_stations, 2.3)\n', '        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull, fine) if s.get("cabin") else Body(hood_stations, 2.3)\n'),
     ('hood_around = 32 if fine else 10', 'hood_around = ((64 if fine else 32) if s.get("cabin") else 32 if fine else 10)'),
 ]
 

@@ -328,7 +328,7 @@ def wall(m, hull, x, way, paint="inside", inset=0.012, sides=32):
     m.add(ring + [mid], [(k, (k + 1) % sides, sides) for k in range(sides)], paint, False, lambda q: Vector(way))
 
 
-def cabin_body(Body, stations, cabin, hull=None):
+def cabin_body(Body, stations, cabin, hull=None, fine=True):
     """The body of a raised cabin (her numbers' `cabin`). A hood is a round bubble of glass; a cabin is a box with its
     corners eased, so that its side windows are flat panes and its roof nearly flat, and its windscreen is two flat
     panes that meet at a post on her middle line and rake back to the roof (Brian, 2026-11-19, of the B-17: "see how
@@ -338,8 +338,12 @@ def cabin_body(Body, stations, cabin, hull=None):
     behind `back` it comes round again; `screen`: the post between the two panes, (its foot's x and z, its head's x
     and z), then how far each pane sweeps back for each metre out from the post; `skirt`: (from this height, down to
     this one) the hollow between its sides and her fuselage's round side is filled (`fillet`: how fully), so that it
-    grows out of her and does not sit on her as a box on a barrel."""
+    grows out of her and does not sit on her as a box on a barrel. `plain_floor`: on her plain model (`fine` False,
+    as the sculptor builds it) the box's lower half, where her panes cut it, lies this far under them and not on them.
+    Where her panes run down below the whole box (the SM.79's, at the front of her hump) its two halves would otherwise
+    both lie on the panes, one sheet on another, sharing their points: a mesh that cannot be thinned cleanly."""
     box, soft, ease = cabin.get("square", 2.3), 2.3, cabin.get("ease", 1.0)
+    floor = 0.0 if fine else cabin.get("plain_floor", 0.0)
     skirt, fillet = cabin.get("skirt"), cabin.get("fillet", 0.08)
     (xa, za, xb, zb), sweep = cabin["screen"][:4], cabin["screen"][4]
     run = (xa - xb) / (zb - za)                           # (how far back a pane goes for each metre it rises)
@@ -392,6 +396,8 @@ def cabin_body(Body, stations, cabin, hull=None):
         def at(self, x, a, proud=0.0):
             p = self.box_at(x, a, proud)
             top = self.pane_z(x, p.y) + proud
+            if floor and math.sin(a) < -1.0e-9:
+                top -= floor                              # (her plain model's lower half, under her panes: see `plain_floor`)
             if p.z > top:
                 p.z = top
             return p
@@ -1529,9 +1535,9 @@ def plain_loads(m, f, s, G, hull):
     if getattr(f, "bay_torpedo", None) and f.name in TURNED_TORPEDO:
         turned_torpedo(m, f, s, G, hull, xm, lo)
     m.use("bombs")
-    if f.name in UPRIGHT:
+    if f.name in UPRIGHT:                                    # (each from its first ring, capped: no ring of points on its tip)
         for at in upright_bombs(f, hull, x0, x1, lo):
-            m.lathe(at, -Z, BOMB_PROFILE, "bomb", 6)
+            m.lathe(at - Z * BOMB_PROFILE[1][0], -Z, [(d - BOMB_PROFILE[1][0], r) for d, r in BOMB_PROFILE[1:]], "bomb", 6)
         m.use("plane")
         return
     xs = [x for x in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= x <= x0 + 1e-4]
