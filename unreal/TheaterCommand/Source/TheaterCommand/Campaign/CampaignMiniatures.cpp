@@ -636,6 +636,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
 		bool bShip = false;
 		TArray<int32> Salt;
+		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
 		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
 		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
 		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
@@ -839,6 +840,22 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					Numbers(TEXT("wear"), Raw->Wear);
 					Numbers(TEXT("soot"), Raw->Soot);
 					Numbers(TEXT("salt"), Raw->Salt);
+					// (each file names its own paints: a sub's 24 and 25 are upper.on and hull.on, a merchant's tarp and crate;
+					// the pre-check's list, 23 November)
+					static const TSet<FString> Metal = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("flight"), TEXT("boot"), TEXT("antifoul"), TEXT("steel"),
+						TEXT("black"), TEXT("boat"), TEXT("roof"), TEXT("torn"), TEXT("brass"), TEXT("line"), TEXT("red"), TEXT("white"), TEXT("door"), TEXT("seam"),
+						TEXT("upper.on"), TEXT("hull.on"), TEXT("helmet"), TEXT("plane") };
+					static const TSet<FString> Coat = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("roof"), TEXT("door"), TEXT("seam"), TEXT("upper.on"), TEXT("hull.on") };
+					const TArray<TSharedPtr<FJsonValue>>* NameList = nullptr;
+					if (File->TryGetArrayField(TEXT("paint_names"), NameList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *NameList)
+						{
+							const FString Paint = Value->AsString();
+							Raw->ShipMetal.Add(Metal.Contains(Paint));
+							Raw->ShipPainted.Add(Coat.Contains(Paint));
+						}
+					}
 				}
 				if (KindOfModel == TEXT("aircraft"))
 				{
@@ -1021,18 +1038,16 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		{
 			if (Raw->bShip && Raw->PaintColours.Num() > 0)
 			{
-				// (The ship modeller's paints, by name: 0 hull, 1 upper, 2 deck, 3 planks, 4 flight, 5 boot, 6 antifoul, 7 steel,
-				// 8 black, 9 canvas, 10 boat, 11 glass, 12 roof, 13 torn, 14 rope, 15 brass, 16 line, 17 red, 18 white, 19 lino,
-				// 20 cork, 21 bag, 22 door, 23 seam, 24 upper.on, 25 hull.on, each in the file's own colour. Painted steel is
-				// metal and chips where the file says it is worn, in her rust's own streaks; soot from her funnels and guns
-				// darkens what it lies on; dried salt whitens her sides low down. Wood, canvas, rope, cork, lino, glass: not metal.)
+				// (The ship modeller's paints, by the file's own names (hull, upper, deck, planks, steel, black, canvas, glass, ...),
+				// each in the file's own colour. Painted steel is metal and chips where the file says it is worn, in her rust's
+				// own streaks; soot from her funnels and guns darkens what it lies on; dried salt whitens her sides low down.
+				// Wood, canvas, rope, cork, lino, glass, a tarpaulin, a crate: not metal.)
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
-				static const bool bShipMetal[26] = { true, true, true, false, true, true, true, true, true, false, true, false, true, true, false, true, true, true, true, false, false, false, true, true, true, true };
-				const bool bShipSteel = Kind < 26 ? bShipMetal[Kind] : Kind == 28; // (a merchant's 26 on: tarp, crate, khaki, helmet, pack, face)
+				const bool bShipSteel = Raw->ShipMetal.IsValidIndex(Kind) && Raw->ShipMetal[Kind];
 				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
 				Fresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;
 				FLinearColor Coat = Raw->PaintColours[Kind];
-				const bool bPainted = Kind <= 2 || Kind == 12 || (Kind >= 22 && Kind <= 25);
+				const bool bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
 				if (bPainted && Worn > 0)
 				{
 					Coat = FMath::Lerp(Coat, Raw->Rust, 0.55f * Worn / 100.0f);
