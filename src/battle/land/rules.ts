@@ -243,6 +243,31 @@ export const LAND = {
   spread: 4,
   apart: 10,
   /**
+   * Overrun (release 2; Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them";
+   * the design director, 05:48Z): with LandBattle.escort on, a tank block fighting a foot block in the open, with its own
+   * foot within LAND.alone.near and no enemy weapon that can hurt a tank by direct fire in its own reach of the way,
+   * drives through that block's ground to its far edge and backs out to its place: once per foot block per contact
+   * (until the block breaks or no tank of the enemy is in reach of it), every side, staffs and player alike. Not where the
+   * foot carries its own anti-tank weapon. Harm unchanged (b418): the overrun is a picture of losses the rules already
+   * take (the men taken from that block while a tank is on its ground die under her tracks, Drill.thin); the blows
+   * between the two are struck as between blocks standing face to face. 'reverse': its pace backing out, a share of its
+   * pace forward. 'at': from when to when a nation's foot carries its own anti-tank weapon, [from, to) as the year and
+   * twelfths (the design director: looks gating only until the historian checks the dates on resumption; the
+   * Commonwealth's foot carries Britain's): the US bazooka from November 1942; Britain's Boys rifle 1939-42, then the
+   * PIAT; Germany's anti-tank rifles 1939-42, the Panzerschreck and Panzerfaust from late 1943; the Soviet anti-tank
+   * rifles from 1941. Japan, Italy and the rest none until the historian names one.
+   */
+  overrun: {
+    reverse: 0.5,
+    at: {
+      USA: [[1942 + 10 / 12, 9999]],
+      UK: [[1939, 9999]],
+      GER: [[1939, 1943], [1943 + 9 / 12, 9999]],
+      SOV: [[1941, 9999]],
+    } as Record<string, [number, number][]>,
+    commonwealth: ['CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'],
+  },
+  /**
    * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
    * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
    * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
