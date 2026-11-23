@@ -184,7 +184,10 @@ namespace StageParts
 		FString Text;
 		TSharedPtr<FJsonObject> Json;
 		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
-		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (File + TEXT(".json"))))
+		// (Tools/battle_ships_in.py writes them alone beside the model, <name>.sockets.json: read that where it is there)
+		const FString Models = FPaths::ProjectContentDir() / TEXT("Models");
+		const FString Alone = Models / (File + TEXT(".sockets.json"));
+		if (FFileHelper::LoadFileToString(Text, *(FPaths::FileExists(Alone) ? Alone : Models / (File + TEXT(".json"))))
 			&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) && Json.IsValid() && Json->TryGetArrayField(TEXT("sockets"), List))
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *List)

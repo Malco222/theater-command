@@ -4,7 +4,8 @@
 Each named file is read from the shared battle-models folder and written to Content/Models/Ships/<name>.json, slimmed:
 the camouflage blend and the modeller's clips are left out (the stage moves its ships itself), and the numbers are
 written without spaces. Everything AAirStage and FMiniatureMesh::Sculpted read is kept: colours, paint_names, near and
-far (points, facings, paints, triangles, wear, soot, salt, part), parts, sockets, and the sizes.
+far (points, facings, paints, triangles, wear, soot, salt, part), parts, sockets, and the sizes. The sockets are also
+written alone to <name>.sockets.json, for the stage (AirStage StageParts::SocketsOf).
 
     python3 -I Tools/battle_ships_in.py /mnt/project-files/battle-models/sea Submarine Destroyer_GER Freighter ...
 """
@@ -36,6 +37,9 @@ def main():
         path = os.path.join(OUT, name + ".json")
         with open(path, "w") as f:
             json.dump(model, f, separators=(",", ":"))
+        # (the sockets alone beside it, so that the stage finds a funnel or a periscope without reading the whole model again)
+        with open(os.path.join(OUT, name + ".sockets.json"), "w") as f:
+            json.dump({"name": model.get("name"), "sockets": model.get("sockets", [])}, f, separators=(",", ":"))
         near, far = model["near"], model["far"]
         print("%-16s %5.2f MB  near %6d triangles  far %6d" % (name, os.path.getsize(path) / 1e6, len(near["triangles"]) // 3, len(far["triangles"]) // 3))
 
