@@ -389,6 +389,8 @@ namespace LandScape
 				// The loess country (Shansi, Shensi, western Honan; or where the rules say hills): the tableland rising
 				// round the field in its terraces, cut by its gullies, its cave dwellings in their banks (Relief).
 				bLoess = !bIndia && !bManchuria && (F.Lon < 114.5 || F.Terrain == "hills" || F.Terrain == "mountain");
+				// (a battle among the loess hills, not on the valley's floor: its slopes terraced in the field too)
+				bLoessHills = bLoess && (F.Terrain == "hills" || F.Terrain == "mountain");
 				if (bLoess)
 				{
 					bHills = false;
@@ -537,7 +539,7 @@ namespace LandScape
 				double Jit = 0.0, Balk = 99.0, Shade = 1.0, Warm = 0.0;
 				/** The way its rows run (radians from east). */
 				double Angle = 0.0;
-				bool bFallow = false;
+				bool bFallow = false, bTurned = false;
 			};
 			/** A block of strips (StripCell on a side): its key, whether its strips run north-south, their mean width. */
 			struct Block
@@ -574,20 +576,10 @@ namespace LandScape
 			Strip StripOf(const Spot& S) const
 			{
 				Strip St;
-				if (bIndia)
+				// Long and narrow, every strip of a block running the one way, square to the compass, on from field to field
+				// across a balk: China's and Manchuria's, and India's too (its plots' own every-way strips read from above as
+				// a shattered patchwork; one way a block, the art director, 23 November)
 				{
-					// (India's plots small and every way, each its own strips across its own grain)
-					const double W = 9.0 + 10.0 * Unit(Hash(S.Key, 0x5791));
-					const double B = S.Across / W + Unit(Hash(S.Key, 0x5792));
-					const double F = B - std::floor(B);
-					St.Key = Hash(S.Key, static_cast<uint64_t>(std::floor(B) + 512.0));
-					St.Balk = std::min(F, 1.0 - F) * W;
-					St.Angle = S.Angle;
-				}
-				else
-				{
-					// China's and Manchuria's: long and narrow, every strip of a block running the one way, square to the
-					// compass as the fields and the tracks are, on from field to field across a balk
 					const Block B = BlockOf(S.X, S.Y);
 					const double U = B.bNS ? S.X : S.Y;
 					double Lo = 0.0, Hi = 0.0;
@@ -600,8 +592,12 @@ namespace LandScape
 				St.bFallow = Unit(Hash(St.Key, 0xFA11)) < 0.1;
 				// (each strip's own shade and its own warmth, a yellower green or a bluer: the strips read on from 30 m up, as
 				// the farm's fields do; the art director, 23 November)
-				St.Shade = 0.82 + 0.36 * Unit(Hash(St.Key, 0x5AD));
+				// (a seventh either way on the dry plains, Manchuria's as the art director passed it)
+				St.Shade = bManchuria ? 0.82 + 0.36 * Unit(Hash(St.Key, 0x5AD)) : 0.85 + 0.3 * Unit(Hash(St.Key, 0x5AD));
 				St.Warm = Unit(Hash(St.Key, 0x3A3)) - 0.5;
+				// (India's baked fields: three strips in ten turned by the plough after the harvest, their clods dark among
+				// the pale crust's strips)
+				St.bTurned = bHardpan && Unit(Hash(St.Key, 0x7A1)) < 0.3;
 				return St;
 			}
 			/** A strip's crop: the parcel's, or (in China's and Manchuria's low crops) a neighbour's, one strip in three. */
@@ -730,9 +726,13 @@ namespace LandScape
 
 			int CropOf(int Kind, double U) const override
 			{
-				if (Kind == KRough) return U < (bIndia ? 0.3 : 0.55) ? Terrace : Hill;
+				// (among the loess hills the open slopes are terraced as often as not, the rough ones mostly: the art
+				// director, 23 November, the Linfen ticket's 50 s with no terrace in it)
+				if (Kind == KRough) return U < (bIndia ? 0.3 : bLoessHills ? 0.75 : 0.55) ? Terrace : Hill;
 				if (Kind == KOpen)
 				{
+					if (bLoessHills && U < 0.4) return Terrace;
+					if (bLoessHills) U = (U - 0.4) / 0.6;
 					if (U < 0.35) return Grass;
 					U = (U - 0.35) / 0.65;
 				}
@@ -781,14 +781,18 @@ namespace LandScape
 
 			// ---------------------------------------------------------------- the paint
 
-			Tone Soil() const { return bManchuria ? BlackEarth : bIndia ? Alluvium : Loess; }
+			/** The dry plains' bare earth and its stubble as the ground lays them: a seventh down from the set's swatches and
+			 * warmer, the blue held well under the red (the art director, 23 November: on the Mac the near ground was as
+			 * pale as the far, grey cream; Manchuria's black earth as it was). */
+			Tone Dried(const Tone& T) const { return bManchuria ? T : Tone{ T.R * 0.87, T.G * 0.85, T.B * 0.78 }; }
+			Tone Soil() const { return bManchuria ? BlackEarth : Dried(bIndia ? Alluvium : Loess); }
 			/** Manchuria's ridges' earth as built (a gaoliang stubble strip's floor); Dress tints each to its own strip's. */
 			Tone RowEarth() const { return Mixed(Varied(Soil(), 0.95, 0.0), GaoStubbleC, 0.3); }
 			Tone GrassAt(const Spot& S, const Tone& Base) const
 			{
-				Tone T = Mixed(Mixed(Base, Rgb(158, 144, 104), 1.0 - Green), Rgb(140, 130, 92), 0.15 * Smooth(0.0, 0.6, S.N1));
+				Tone T = Mixed(Mixed(Base, Dried(Rgb(158, 144, 104)), 1.0 - Green), Dried(Rgb(140, 130, 92)), 0.15 * Smooth(0.0, 0.6, S.N1));
 				T = Mixed(T, Base, 0.2 * Smooth(0.0, -0.6, S.N1) * Green);
-				return Varied(T, 0.96 + 0.06 * S.N2 + 0.03 * S.Broad, 0.0);
+				return Varied(T, (0.96 + 0.06 * S.N2 + 0.03 * S.Broad) * (bManchuria ? 1.0 : 0.9), 0.0);
 			}
 			Tone CanopyOf(const Life& L) const
 			{
@@ -804,33 +808,37 @@ namespace LandScape
 			}
 			static double Flower(const Life& L) { return L.Crop == Mustard && L.bUp ? Smooth(0.0, 0.15, L.Ripe) * Smooth(0.8, 0.55, L.Ripe) : 0.0; }
 			/** A crop's state's colour over its floor: the crop over the earth by its cover; the stubble; the ploughed earth. */
-			Tone StateColour(const Life& L, const Tone& Floor) const
+			Tone StateColour(const Life& L, const Tone& Floor, bool bTurned = false) const
 			{
 				if (L.bUp)
 				{
 					// (the soybeans' rows show the earth between; Manchuria's black earth between all its rows)
 					double Cover = (L.Crop == Soy ? (bManchuria ? 0.55 : 0.75) : (bManchuria ? 0.85 : 0.95)) * Smooth(0.05, 0.6, L.High);
 					if (L.Crop == Wheat) Cover = std::max(Cover, 0.22); // (the winter wheat's rows a green haze on the loess)
-					return Mixed(Floor, CanopyOf(L), Cover);
+					// (the dry plains' crops a shade deeper from above than their leaves' swatches, the canopy's own shadows
+					// in it: the art director's value carry, 23 November; Manchuria's as passed)
+					return Mixed(Floor, Varied(CanopyOf(L), bManchuria ? 1.0 : 0.86, 0.0), Cover);
 				}
-				if (L.Since < 1.3 && (L.Crop == Gao || L.Crop == Millet || L.Crop == Wheat)) return Mixed(Floor, L.Crop == Gao ? GaoStubbleC : StrawC, (L.Crop == Gao ? 0.5 : 0.6) * (bManchuria ? 0.6 : 1.0));
+				if (L.Since < 1.3 && (L.Crop == Gao || L.Crop == Millet || L.Crop == Wheat)) return Mixed(Floor, Dried(L.Crop == Gao ? GaoStubbleC : StrawC), (L.Crop == Gao ? 0.5 : 0.6) * (bManchuria ? 0.6 : 1.0));
 				// (India's fields baked before the rains: the crust's pale grey-buff, the same as its plates, so the cracked
 				// patches read as one crust with the uncracked between them)
-				if (bHardpan) return Mixed(Floor, Rgb(198, 180, 142), 0.65);
-				// (ploughed: the furrows' shade, drying paler)
-				return Varied(Mixed(Floor, bManchuria ? BlackFurrows : Mixed(Furrows, Soil(), 0.3), 0.5), L.Since < 2.5 ? 0.9 : 1.0, 0.0);
+				if (bHardpan && !bTurned) return Mixed(Floor, Dried(Rgb(198, 180, 142)), 0.65);
+				// (ploughed: the furrows' shade, drying paler; on the dry plains the furrows' shadows a deeper shade from above,
+				// the art director, 23 November; India's turned clods darkest)
+				const double Shade = bManchuria ? (L.Since < 2.5 ? 0.9 : 1.0) : bTurned ? 0.68 : L.Since < 2.5 ? 0.8 : 0.9;
+				return Varied(Mixed(Floor, bManchuria ? BlackFurrows : Mixed(Dried(Furrows), Soil(), 0.3), 0.5), Shade, 0.0);
 			}
 			Tone FloorAt(const Spot& S) const
 			{
 				// (India's parched months paler, the baked hardpan's crust in its patches; the loess's own mottle)
 				const Tone T = Varied(Soil(), (0.95 + 0.06 * S.N2) * (bIndia && Green < 0.2 ? 1.05 : 1.0), 0.0);
-				return bHardpan ? Mixed(T, Rgb(186, 168, 132), 0.35 * Smooth(-0.2, 0.5, S.N1) + 0.15 * Smooth(0.0, 0.8, S.N2)) : T;
+				return bHardpan ? Mixed(T, Dried(Rgb(186, 168, 132)), 0.35 * Smooth(-0.2, 0.5, S.N1) + 0.15 * Smooth(0.0, 0.8, S.N2)) : T;
 			}
 			Tone FieldColour(const Spot& S) const
 			{
 				const Strip St = StripOf(S);
 				const Life L = ParcelLife(StripCrop(S, St), T0() + St.Jit);
-				Tone T = Varied(StateColour(L, FloorAt(S)), St.Shade, 0.0);
+				Tone T = Varied(StateColour(L, St.bTurned ? Varied(Soil(), 0.95 + 0.06 * S.N2, 0.0) : FloorAt(S), St.bTurned), St.Shade, 0.0);
 				T = Tone{ T.R * (1.0 + 0.24 * St.Warm), T.G * (1.0 + 0.06 * St.Warm), T.B * (1.0 - 0.28 * St.Warm) };
 				// (the balks between the strips and round the field: a line of grass, beaten earth in the dry months)
 				return Mixed(T, Mixed(GrassAt(S, OpenGrass), Soil(), 0.35), 0.45 * Smooth(0.9, 0.2, St.Balk) + 0.5 * Smooth(1.2, 0.0, S.Edge));
@@ -867,7 +875,7 @@ namespace LandScape
 				{
 					// thin grass over the loess and the scree, the bare earth showing in its patches
 					Tone T = GrassAt(S, HillGrass);
-					T = Mixed(T, Varied(Scree, 0.96 + 0.08 * S.N2, 0.0), 0.35 + 0.3 * Smooth(0.0, 0.7, S.N1));
+					T = Mixed(T, Varied(Dried(Scree), 0.96 + 0.08 * S.N2, 0.0), 0.35 + 0.3 * Smooth(0.0, 0.7, S.N1));
 					return Mixed(T, Varied(Soil(), 1.02, 0.0), 0.2 * Smooth(0.3, 0.8, S.N2));
 				}
 				case Terrace:
@@ -877,7 +885,7 @@ namespace LandScape
 					const double R = Riser(S, Tread);
 					const Life L = LifeOf(Millet, T0() + 0.9 * (Unit(Hash(Tread, 0x717)) - 0.5));
 					const Tone T = Varied(StateColour(L, FloorAt(S)), 0.92 + 0.16 * Unit(Hash(Tread, 0x5AD)), 0.0);
-					return Mixed(T, Mixed(Varied(Loess, 1.06, 0.0), GrassAt(S, HillGrass), 0.35), Smooth(1.4, 0.4, R));
+					return Mixed(T, Mixed(Varied(Soil(), 1.06, 0.0), GrassAt(S, HillGrass), 0.35), Smooth(1.4, 0.4, R));
 				}
 				case Grass:
 				{
@@ -896,19 +904,19 @@ namespace LandScape
 				const double D = Outside(S.X, S.Y);
 				if (D <= 0.0) return Base;
 				for (const Cave& C : Caves)
-					if (InYard(C, S.X, S.Y, 0.0)) return Mixed(Varied(Loess, 1.04 + 0.04 * S.N2, 0.0), StrawC, 0.1 + 0.1 * Smooth(0.2, 0.8, S.N1));
+					if (InYard(C, S.X, S.Y, 0.0)) return Mixed(Varied(Soil(), 1.04 + 0.04 * S.N2, 0.0), Dried(StrawC), 0.1 + 0.1 * Smooth(0.2, 0.8, S.N1));
 				Tone T = Base;
 				const double E = LoessLift(S.X, S.Y, D), W = TerraceW(S.X, S.Y, D);
 				if (W > 0.3)
 				{
 					const double F = E / Rise - std::floor(E / Rise);
-					T = Mixed(T, Varied(Loess, 1.06, 0.0), 0.7 * Smooth(1.0 - RiserRun - 0.08, 1.0 - RiserRun + 0.04, F) * W);
+					T = Mixed(T, Varied(Soil(), 1.06, 0.0), 0.7 * Smooth(1.0 - RiserRun - 0.08, 1.0 - RiserRun + 0.04, F) * W);
 				}
 				const double G = GullyAt(S.X, S.Y, D);
 				if (G > 0.02)
 				{
 					// (its banks the loess's bare pale walls, streaked; its floor grass and a thread of the water's sand)
-					const Tone Bank = Varied(Mixed(Loess, Rgb(188, 166, 124), 0.5 + 0.3 * S.N2), 0.97 + 0.06 * S.N1, 0.0);
+					const Tone Bank = Varied(Mixed(Soil(), Dried(Rgb(188, 166, 124)), 0.5 + 0.3 * S.N2), 0.97 + 0.06 * S.N1, 0.0);
 					T = Mixed(T, Bank, Smooth(0.02, 0.35, G));
 					T = Mixed(T, GrassAt(S, HillGrass), 0.6 * Smooth(0.85, 1.0, G));
 				}
@@ -935,7 +943,7 @@ namespace LandScape
 					return Mixed(T, GrassAt(S, OpenGrass), 0.8 * Smooth(S.LaneHalf + 0.8, S.LaneHalf + 2.4, Off));
 				}
 				case KVillage: return Mixed(Varied(Soil(), 1.05, 0.0), GrassAt(S, OpenGrass), 0.12 + 0.25 * Smooth(-0.2, 0.6, S.N1) * Green); // (the village's beaten earth, a little grass by the walls)
-				case KYard: return Mixed(Varied(Soil(), 1.0, 0.0), StrawC, 0.12 + 0.12 * Smooth(0.0, 0.6, S.N2)); // (the threshing floor's earth and its straw)
+				case KYard: return Mixed(Varied(Soil(), 1.0, 0.0), Dried(StrawC), 0.12 + 0.12 * Smooth(0.0, 0.6, S.N2)); // (the threshing floor's earth and its straw)
 				case KWoods: return Mixed(GrassAt(S, HillGrass), Varied(Soil(), 0.92, 0.0), 0.3 + 0.2 * S.N1);
 				case KWater: return YellowWater;
 				case KMarsh: return Mixed(GrassAt(S, Rgb(98, 112, 64)), YellowWater, 0.25 * Smooth(0.0, 0.7, S.N1));
@@ -974,12 +982,12 @@ namespace LandScape
 					// (the tableland's gullies bare pale loess in their branching lines; its tops the fields' patchwork,
 					// dustier with the distance)
 					const double D = Outside(S.X, S.Y), G = GullyAt(S.X, S.Y, D);
-					T = Mixed(T, Varied(Rgb(184, 162, 122), 0.95 + 0.1 * S.Broad, 0.0), Smooth(0.05, 0.5, G) + 0.25 * Smooth(300.0, 2500.0, D));
+					T = Mixed(T, Varied(Dried(Rgb(184, 162, 122)), 0.95 + 0.1 * S.Broad, 0.0), Smooth(0.05, 0.5, G) + 0.25 * Smooth(300.0, 2500.0, D));
 				}
 				const double Hl = HillAt(S.X, S.Y);
 				if (Hl > 0.05)
 				{
-					const Tone Hill_ = Varied(Mixed(Rgb(156, 134, 100), HillGrass, (0.15 + 0.3 * Green) * Smooth(0.2, 0.8, Fbm(S.X, S.Y, 300.0, 2, Seed ^ 0xA53))), 0.95 + 0.1 * S.Broad, 0.0);
+					const Tone Hill_ = Varied(Mixed(Dried(Rgb(156, 134, 100)), HillGrass, (0.15 + 0.3 * Green) * Smooth(0.2, 0.8, Fbm(S.X, S.Y, 300.0, 2, Seed ^ 0xA53))), 0.95 + 0.1 * S.Broad, 0.0);
 					T = Mixed(T, Hill_, Smooth(0.08, 0.3, Hl));
 				}
 				return T;
@@ -1077,7 +1085,7 @@ namespace LandScape
 				if (L.Since < 1.3 && (L.Crop == Gao || L.Crop == Millet || L.Crop == Wheat)) return Grown{ ClutOf(CStubble), 0.95 };
 				if (L.Crop == Gao && L.Since < 3.5) return Grown{ ClutOf(CStubble), 0.5 }; // (the gaoliang's stubs stand into the winter)
 				// (India's fields baked and cracked till the rains)
-				if (bHardpan) return Pick < 0.8 ? Grown{ ClutOf(CGao), 0.45 } : Grown{ ClutOf(CStubble), 0.15 };
+				if (bHardpan && !St.bTurned) return Pick < 0.8 ? Grown{ ClutOf(CGao), 0.45 } : Grown{ ClutOf(CStubble), 0.15 };
 				return Pick < 0.08 ? Grown{ ClutOf(CStubble), 0.15 } : Grown{};
 			}
 
@@ -1116,10 +1124,14 @@ namespace LandScape
 				case CGao:
 					if (bHardpan)
 					{
-						// (the cracked crust: its plates every way)
+						// (the cracked crust: its plates every way, each the crust's own colour where it lies, a shade over the
+						// ground's between them, so plates and ground read as one crust, a paler strip's paler, a warmer's
+						// warmer; the tint on the linear colour)
 						P.Scale = static_cast<float>(0.9 + 0.3 * U4);
 						P.ScaleZ = 1.0f;
-						P.Tint = Tint(0.97 + 0.06 * U5, 0.97 + 0.05 * U5, 0.96 + 0.04 * U6);
+						const Tone F = Varied(Colour(S), 1.05 * (0.97 + 0.06 * U5), 0.0), E = Dried(Rgb(196, 178, 140));
+						auto To = [](double Want, double Built) { return std::clamp(std::pow(std::max(Want, 1.0) / std::max(Built, 1.0), 2.2), 0.2, 1.95); };
+						P.Tint = Tint(To(F.R, E.R), To(F.G, E.G), To(F.B, E.B));
 						return true;
 					}
 					// (the rows along the strip; the leaves drying as the heads ripen; the tint on the linear colour)
@@ -1258,7 +1270,7 @@ namespace LandScape
 							{
 								// the plate: its corners drawn in toward its middle by the crack's half width, raised a hair
 								const double MX = 0.25 * (PX[J][I] + PX[J][I + 1] + PX[J + 1][I + 1] + PX[J + 1][I]), MY = 0.25 * (PY[J][I] + PY[J][I + 1] + PY[J + 1][I + 1] + PY[J + 1][I]);
-								const Tone Pl = Varied(Rgb(196, 178, 140), 0.92 + 0.12 * Unit(Hash(0x4A2E, static_cast<uint64_t>(J * N + I))), 0.0);
+								const Tone Pl = Varied(Dried(Rgb(196, 178, 140)), 0.92 + 0.12 * Unit(Hash(0x4A2E, static_cast<uint64_t>(J * N + I))), 0.0);
 								// (the crack's width its own along each plate, a hairline to a finger's width)
 								const double Keep = 0.93 + 0.045 * Unit(Hash(0x4A2F, static_cast<uint64_t>(J * N + I)));
 								auto In = [&](double X, double Y, double Z, double (&Out)[3]) {
@@ -1545,16 +1557,18 @@ namespace LandScape
 					// grass through it near), dust in the dry months, each stretch its own shade; its lengths' ends barely
 					// sunk, so they run on as one line; under the snow a soft white mound, its crest a shade greyer
 					const bool bSnow = SnowLying > 0.25;
-					const Tone Dust = Mixed(Soil(), Rgb(160, 142, 106), bManchuria ? 0.3 : 0.5);
+					const Tone Dust = Mixed(Soil(), Dried(Rgb(160, 142, 106)), bManchuria ? 0.3 : 0.5);
 					const Tone Crest = bSnow ? Rgb(204, 208, 216) : Mixed(Dust, Rgb(112, 118, 74), 0.5 * Green);
 					const Tone Flank = bSnow ? Rgb(218, 222, 229) : Mixed(Varied(Dust, 0.86, 0.0), Rgb(96, 108, 60), 0.8 * Green);
 					const Tone Foot = bSnow ? Rgb(226, 230, 236) : Mixed(Varied(Soil(), 0.85, 0.0), Rgb(92, 104, 58), 0.5 * Green);
 					const double Half = 0.5 * (K == KRidge ? RidgeLong : RidgeShort);
 					// (bare of snow, near by: the ground's own earth by a balk, the strips' with a little of the balk's
 					// grass, at its feet; its sides between that and its top's earth and grass; its trodden crest's earth)
-					const Tone Sward = Mixed(OpenGrass, Rgb(158, 144, 104), 1.0 - Green);
+					const Tone Sward = Mixed(OpenGrass, Dried(Rgb(158, 144, 104)), 1.0 - Green);
 					const Tone Ground = Mixed(Varied(Soil(), 0.95, 0.0), Mixed(Sward, Soil(), 0.35), 0.3);
-					const Tone Top = Mixed(Dust, Rgb(112, 118, 74), 0.4 * Green), Side = Mixed(Mixed(Dust, Ground, 0.5), Rgb(100, 110, 64), 0.35 * Green);
+					// (the dry plains' balks a shade on their sides, so the strips' lines read in the value from above: the art
+					// director, 23 November; Manchuria's as passed)
+					const Tone Top = Mixed(Dust, Rgb(112, 118, 74), 0.4 * Green), Side = Varied(Mixed(Mixed(Dust, Ground, 0.5), Rgb(100, 110, 64), 0.35 * Green), bManchuria ? 1.0 : 0.86, 0.0);
 					const Tone Bare = Varied(Dust, 1.03, 0.0);
 					{
 						Writer W(M.Near);
@@ -2429,7 +2443,6 @@ namespace LandScape
 			 */
 			void Ridges(Host& H)
 			{
-				if (bIndia) return;
 				constexpr double Reach = 60.0;
 				const double XA = -Reach, XB = H.Width() + Reach, YA = -Reach, YB = H.Depth() + Reach;
 				const LandField::Rgb8 Plain_ = Tint(1.0, 1.0, 1.0);
@@ -2489,8 +2502,9 @@ namespace LandScape
 							if (U < U0 + 0.8 || U > U1 - 0.8) continue;
 							Line(Bk.bNS, U, V0, V1, [&](double X, double Y) { return Tilled_(H.At(X, Y)); });
 						}
-						// the fields' edges, both ways, where two tilled fields meet
-						for (int Ax = 0; Ax < 2; ++Ax)
+						// the fields' edges, both ways, where two tilled fields meet (on the surveyed grounds: India's fields keep
+						// their own every-way bunds)
+						for (int Ax = 0; Ax < (bIndia ? 0 : 2); ++Ax)
 						{
 							const bool bAlongY = Ax == 0;
 							const double C0 = bAlongY ? BX0 : BY0, A = std::max(bAlongY ? BY0 : BX0, bAlongY ? YA : XA), B = std::min((bAlongY ? BY0 : BX0) + StripCell, bAlongY ? YB : XB);
@@ -2640,7 +2654,7 @@ namespace LandScape
 			std::vector<Exit> Exits;
 			std::vector<Cave> Caves;
 			int Month = 7;
-			bool bIndia = false, bManchuria = false, bHills = false, bTownWall = false, bLoess = false, bHardpan = false, bBare = false;
+			bool bIndia = false, bManchuria = false, bHills = false, bTownWall = false, bLoess = false, bLoessHills = false, bHardpan = false, bBare = false;
 			double Green = 1.0, MeanZ = 0.0, SnowLying = 0.0;
 			double WallX = 0.0, WallY = 0.0, WallHalf = 0.0, WallTurn = 0.0;
 		};

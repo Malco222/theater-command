@@ -90,7 +90,9 @@ namespace LandScape
 
 		// (sRGB as painted, the art director's to check: the set's paddy_mud 675E4A, laterite_grass 6E7849, hill_grass
 		// 5F6E3D, laterite 985F41; the flooded plots' sky the Pacific thread's passed paddy, a little bluer)
-		const Tone Water = Rgb(140, 152, 152);
+		// (a flooded plot's water from above: a darker grey-green, the muddy water and the sky's dim in it, not the sky's
+		// own pale: the art director's new-grounds carry, 23 November; the Mac read it 207, 216, 208)
+		const Tone Water = Rgb(100, 112, 102);
 		const Tone RiceGreen = Rgb(96, 132, 50);
 		const Tone RiceYoung = Rgb(104, 136, 64);
 		const Tone RiceGold = Rgb(178, 150, 74);
@@ -208,7 +210,7 @@ namespace LandScape
 					{ { SMud, 0.35 }, { SWinter, 0.3 }, { SWater, 0.25 }, { SStubble, 0.1 } },     // March
 					{ { SWater, 0.45 }, { SRape, 0.2 }, { SWinter, 0.15 }, { SMud, 0.2 } },        // April
 					{ { SWater, 0.35 }, { SSeedling, 0.35 }, { SRipe, 0.15 }, { SMud, 0.15 } },    // May
-					{ { SSeedling, 0.35 }, { SYoung, 0.45 }, { SWater, 0.1 }, { SStubble, 0.1 } }, // June
+					{ { SYoung, 0.5 }, { SGreen, 0.25 }, { SSeedling, 0.15 }, { SWater, 0.1 } },   // June (the early rice well up by now about Changsha: three plots in four green rows over the water, a few just flooded or just planted)
 					{ { SYoung, 0.25 }, { SGreen, 0.75 }, { SGreen, 0.0 }, { SGreen, 0.0 } },      // July
 					{ { SGreen, 1.0 }, { SGreen, 0.0 }, { SGreen, 0.0 }, { SGreen, 0.0 } },        // August
 					{ { SGreen, 0.45 }, { SRipe, 0.55 }, { SRipe, 0.0 }, { SRipe, 0.0 } },         // September
@@ -250,7 +252,7 @@ namespace LandScape
 				// (the transplanted rows stand in water: the plot's floor the flooded plot's, the sky in it, the seedlings
 				// poking through it round the eye; the young rice a green haze over the water from afar)
 				case SSeedling: return Mixed(Mixed(Water, Mud, 0.15 + 0.1 * U), RiceYoung, 0.05);
-				case SYoung: return Mixed(Mixed(Water, Mud, 0.2), RiceYoung, 0.2 + 0.12 * U);
+				case SYoung: return Mixed(Mixed(Water, Mud, 0.2), RiceYoung, 0.45 + 0.15 * U); // (the rows filling in: the green over the water)
 				case SGreen: return Varied(RiceGreen, 0.95 + 0.1 * U, 0.02 * U);
 				case SRipe: return Varied(Mixed(RiceGold, RiceGreen, 0.25 * U), 0.95 + 0.08 * U, 0.0);
 				case SStubble: return Varied(Mixed(Varied(Mud, 0.86, 0.0), StubbleC, 0.3 + 0.15 * U), 0.95 + 0.08 * U, 0.0); // (cut rows on darker drained mud)
