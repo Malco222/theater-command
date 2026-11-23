@@ -1362,7 +1362,8 @@ namespace LandField
 			// Wander: long slow bends of up to a dozen metres either way over some 250 m (within the rules' road cells
 			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
 			// little in the village, whose houses front the lane.
-			const double Total = LineLength(L);
+			// (none where the land was surveyed: its roads run the section lines straight)
+			const double Total = LineLength(L), Wanders = Rg && Rg->Surveyed() ? 0.0 : 1.0;
 			Line W(L.size());
 			double S = 0.0;
 			for (size_t K = 0; K < L.size(); ++K)
@@ -1372,7 +1373,7 @@ namespace LandField
 				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
 				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
 				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
-				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
+				W[K] = L[K] + Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
 			}
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
