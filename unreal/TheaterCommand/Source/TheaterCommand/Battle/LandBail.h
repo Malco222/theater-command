@@ -65,6 +65,7 @@ namespace LandBail
 		double FireOut = -1.0;    // a burning man: life's seconds after the kill his flames go out
 		double BackAt = -1.0;     // life's seconds after the kill he goes back to climb in again (crew_in), -1 never
 		int Side = 1;             // the side of her hull he drops from: +1 her right, -1 her left
+		int OffEnd = 0;           // 0: off her side; +1 off her bow, -1 off her back (his side blocked: Wreck::Blocked)
 		V3 Hatch, Deck, Down, Goal; // his hatch; the hull's edge he jumps from; where he lands; where he makes for
 		V3 Lee;                   // the end of his first leg, straight back in her lee (Down for a man staying beside her)
 		double Thrown = 0.0;      // caught by her blast: how far it throws him, metres
@@ -74,17 +75,17 @@ namespace LandBail
 		double Speed = 4.5;       // metres a second on the ground
 		double Crawl = 0.0;       // a wounded man's crawl after he falls, metres
 		int Fall = 0;             // which fall: 0 forward, 1 back
-		/** The soldiers' bail clips (Wreck::bClips): out of the hatch in bail_climb_out, a walk over her turret's roof
-		 * to its edge and down onto her deck in bail_step_down (where her turret stands over her deck), a walk to her
-		 * hull's edge and off it in bail_jump_down, a man on fire in burning_run and burning_fall_roll; his way out the
+		/** The soldiers' bail clips (Wreck::bClips): out of the hatch in bail_climb_out, a crouched scramble over her
+		 * turret's roof to its edge and down onto her deck in bail_step_down (where her turret stands over her deck), a
+		 * scramble to her hull's edge and off it in bail_jump_down, a man on fire in burning_run and burning_fall_roll; his way out the
 		 * clips' length (OnGroundOf). */
 		bool bClips = false;
 		double Face = 0.0;        // with the clips: his facing as he climbs out (his right toward the side he drops from)
 		double RoofUp = 0.95;     // with the clips: her roof over his boots in the hatch (Wreck::RoofUp)
 		bool bStep = false;       // with the clips: he steps down off her turret's roof onto her deck (bail_step_down)
 		V3 Brink, Step;           // with the step: his boots at her turret's edge, and where the step lands him on her deck
-		double RoofS = 0.0;       // with the clips: his walk over her roof to its edge, seconds (none without the step)
-		double DeckS = 0.0;       // with the clips: his walk on her deck to her hull's edge, seconds
+		double RoofS = 0.0;       // with the clips: his scramble over her roof to its edge, seconds (none without the step)
+		double DeckS = 0.0;       // with the clips: his scramble on her deck to her hull's edge, seconds
 		double ClipsS = 0.0;      // with the clips: from his start out of the hatch to his feet on the ground, seconds
 	};
 
@@ -113,11 +114,14 @@ namespace LandBail
 		 * a Panzer IV 0.82 m, a Tiger 0.97, a Sherman 1.07; the clip is made for 0.95), made up from 0.8 s of his climb. */
 		double RoofUp = 0.95;
 		/** With the bail clips: her crew's file has bail_step_down too (the soldiers' 18:52Z, 23 November): a man out of
-		 * her turret's roof walks to its edge and steps down onto her deck before he jumps off her hull. False: he
-		 * walks from her roof to her hull's edge. */
+		 * her turret's roof scrambles to its edge and steps down onto her deck before he jumps off her hull. False: he
+		 * scrambles from her roof to her hull's edge. */
 		bool bStep = false;
 		/** Her turret's half width, metres, from her middle line (-1: a third of her width, 0.75 to 1.25 m). */
 		double TurretHalf = -1.0;
+		/** Her right, left, back and bow blocked (a vehicle, living or dead, close beside her there): her men drop off
+		 * the side away from her enemy, and only where it is blocked off another way (Make). */
+		bool Blocked[4] = { false, false, false, false };
 		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
 		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
 		double Threat = 1.0;

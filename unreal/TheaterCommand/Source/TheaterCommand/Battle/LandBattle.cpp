@@ -4463,6 +4463,29 @@ void ALandBattle::BailOut()
 			W.Threat = Nearest <= 150.0 ? 1.0 : Nearest >= 600.0 ? 0.1 : 1.0 - 0.9 * (Nearest - 150.0) / 450.0;
 		}
 		W.MostMen = Look.Kind == "car" ? 3 : Look.Long < 5.3 ? 3 : Look.Long < 6.0 ? 4 : 5;
+		// (her sides, back and bow blocked where another vehicle, living or a wreck, stands close beside her there: her
+		// men drop off the side away from her enemy, another way only where that is blocked; the art director, 19:33Z)
+		{
+			const LandBail::V3 Fwd{ std::sin(Veh.Heading), std::cos(Veh.Heading), 0.0 };
+			const double HalfL = 0.5 * W.Long, HalfW = 0.5 * W.Wide;
+			for (const LandKit::Vehicle& Other : All)
+			{
+				if (Other.Index == Veh.Index)
+				{
+					continue;
+				}
+				const double Dx = Other.Root.At.X - W.Middle.X, Dy = Other.Root.At.Y - W.Middle.Y;
+				const double Al = Dx * Fwd.X + Dy * Fwd.Y, As = Dx * Right.X + Dy * Right.Y;
+				if (std::abs(Al) < HalfL + 1.0 && std::abs(As) > HalfW - 0.5 && std::abs(As) < HalfW + 4.5)
+				{
+					W.Blocked[As > 0.0 ? 0 : 1] = true;
+				}
+				if (std::abs(As) < HalfW + 0.5 && std::abs(Al) > HalfL - 0.5 && std::abs(Al) < HalfL + 4.5)
+				{
+					W.Blocked[Al < 0.0 ? 2 : 3] = true;
+				}
+			}
+		}
 		// (the soldiers' bail clips, where his file has all four: out of the hatch, off her hull, on fire)
 		{
 			const LandMen::Soldier* Sol = S.Men->SoldierFile(File);
