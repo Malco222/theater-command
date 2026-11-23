@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 #include <vector>
 
 /**
@@ -53,8 +54,12 @@ namespace LandScape
 			KGrave = 7,
 			KStack = 8,
 			KOutcrop = 9,
-			KBoulder = 10
+			KBoulder = 10,
+			// (built here in KitPlain: no file to read or to miss)
+			KBundLine = 11, // a bund's ridge 16 m long, laid along the lines between the blocks of plots: the grid seen from afar
+			KBundShort = 12 // the same 6 m long, at a line's ends
 		};
+		constexpr double BundLong = 16.0, BundShort = 6.0;
 
 		enum Clut : int
 		{
@@ -126,6 +131,41 @@ namespace LandScape
 			}
 		}
 
+		/**
+		 * A ridge along x from -Half to Half: Wide across its foot and High at its crown, rounded (six points across) or plain
+		 * (four); its ends sunk below the ground over Sink metres, so lengths laid end to end run on into one another.
+		 */
+		void Ridge(Writer& W, double Half, double High, double Wide, const Tone& Crest, const Tone& Flank, const Tone& Foot, bool bRound, double Sink)
+		{
+			struct Pt
+			{
+				double Y, Z, NY, NZ;
+				Tone C;
+			};
+			const double H = 0.5 * Wide;
+			const std::vector<Pt> Round = { { -H, -0.05, -0.6, 0.8, Foot }, { -0.62 * H, 0.62 * High, -0.45, 0.89, Flank }, { -0.24 * H, High, -0.12, 0.99, Crest },
+											{ 0.24 * H, High, 0.12, 0.99, Crest }, { 0.62 * H, 0.62 * High, 0.45, 0.89, Flank }, { H, -0.05, 0.6, 0.8, Foot } };
+			const std::vector<Pt> Plain = { { -H, -0.05, -0.5, 0.87, Foot }, { -0.25 * H, High, -0.15, 0.99, Crest }, { 0.25 * H, High, 0.15, 0.99, Crest }, { H, -0.05, 0.5, 0.87, Foot } };
+			const std::vector<Pt>& Pr = bRound ? Round : Plain;
+			const double Xs[4] = { -Half, -Half + Sink, Half - Sink, Half };
+			const int Rings = Sink > 0.0 ? 4 : 2;
+			std::vector<std::vector<uint32_t>> V(static_cast<size_t>(Rings));
+			for (int R = 0; R < Rings; ++R)
+			{
+				const double X = Sink > 0.0 ? Xs[R] : (R == 0 ? -Half : Half);
+				const bool bEnd = Sink > 0.0 && (R == 0 || R == 3);
+				for (const Pt& P : Pr) V[static_cast<size_t>(R)].push_back(W.Vert(X, P.Y * (bEnd ? 0.7 : 1.0), bEnd ? -0.06 : P.Z, 0.0, P.NY, P.NZ, P.C));
+			}
+			for (int R = 0; R + 1 < Rings; ++R)
+				for (size_t K = 0; K + 1 < Pr.size(); ++K)
+				{
+					const std::vector<uint32_t>& A = V[static_cast<size_t>(R)];
+					const std::vector<uint32_t>& B = V[static_cast<size_t>(R) + 1];
+					W.Tri(A[K], B[K], B[K + 1]);
+					W.Tri(A[K], B[K + 1], A[K + 1]);
+				}
+		}
+
 		class Asia final : public Region
 		{
 		public:
@@ -153,8 +193,9 @@ namespace LandScape
 
 			// ---------------------------------------------------------------- the year
 
-			/** A paddy plot's stage this month: each plot its own, as each family works its own. */
-			int StageOf(uint64_t Parcel, uint64_t Plot) const
+			/** A paddy plot's stage this month: the plots in blocks at one stage, as a village plants in waves; an odd plot
+			 * a step on or behind (the art director, 06:57Z: blocks of some 4 to 12 neighbouring plots). */
+			int StageOf(uint64_t Parcel, uint64_t Block, uint64_t Plot) const
 			{
 				struct Share
 				{
@@ -178,9 +219,10 @@ namespace LandScape
 				// (the north's year a fortnight behind: half its plots a month back)
 				int M = Month;
 				if (bLate && Unit(Hash(Parcel, 0x1A7E)) < 0.5) M = M == 1 ? 12 : M - 1;
-				// (the plots of a parcel mostly at one stage, a family's or a village's work together; some a step on or
-				// behind: the patchwork reads parcel by parcel from afar and plot by plot near)
-				const double U = 0.3 * Unit(Hash(Parcel, 0x57A6)) + 0.7 * Unit(Hash(Plot, 0x57A7));
+				// (a block's plots at one stage, the parcel's blocks near each other in the year; one plot in ten its own:
+				// the patchwork reads as crisp blocks of rectangles from above, not as blotches)
+				const bool bOdd = Unit(Hash(Plot, 0x0DD5)) < 0.1;
+				const double U = bOdd ? Unit(Hash(Plot, 0x57A7)) : 0.15 * Unit(Hash(Parcel, 0x57A6)) + 0.85 * Unit(Hash(Block, 0x57A8));
 				double Run = 0.0;
 				for (const Share& S : Year[M - 1])
 				{
@@ -190,10 +232,12 @@ namespace LandScape
 				return Year[M - 1][0].Stage;
 			}
 
-			/** A stage's colour, Plot's own shade of it. */
-			static Tone StageColour(int St, uint64_t Plot)
+			/** A stage's colour, Plot's own shade of it; under the snow the flooded plots and some drained ones frozen, dark
+			 * grey ice (LandSnow lays only a dusting over a ground this dark in rice country). */
+			Tone StageColour(int St, uint64_t Plot) const
 			{
 				const double U = Unit(Hash(Plot, 0xC01));
+				if (SnowLying > 0.25 && (St == SWater || (St == SMud && Unit(Hash(Plot, 0xF20)) < 0.45))) return Varied(Rgb(44, 50, 54), 0.92 + 0.16 * U, 0.0);
 				// (each plot its own light and dark, so the patchwork reads from above where the bunds are too fine to)
 				const double L = 0.87 + 0.26 * Unit(Hash(Plot, 0xC03));
 				return Varied(Painted(St, Plot, U), L, 0.0);
@@ -203,13 +247,15 @@ namespace LandScape
 				switch (St)
 				{
 				case SWater: return Varied(Mixed(Water, Mud, 0.12 + 0.25 * U), 0.96 + 0.1 * Unit(Hash(Plot, 0xC02)), -0.01);
-				case SSeedling: return Mixed(Mixed(Water, Mud, 0.18), RiceYoung, 0.1 + 0.1 * U);
-				case SYoung: return Mixed(Mixed(Water, Mud, 0.2), RiceYoung, 0.45 + 0.2 * U);
+				// (the transplanted rows stand in water: the plot's floor the flooded plot's, the sky in it, the seedlings
+				// poking through it round the eye; the young rice a green haze over the water from afar)
+				case SSeedling: return Mixed(Mixed(Water, Mud, 0.15 + 0.1 * U), RiceYoung, 0.05);
+				case SYoung: return Mixed(Mixed(Water, Mud, 0.2), RiceYoung, 0.2 + 0.12 * U);
 				case SGreen: return Varied(RiceGreen, 0.95 + 0.1 * U, 0.02 * U);
 				case SRipe: return Varied(Mixed(RiceGold, RiceGreen, 0.25 * U), 0.95 + 0.08 * U, 0.0);
-				case SStubble: return Varied(Mixed(StubbleC, Mud, 0.2 + 0.3 * U), 0.95 + 0.08 * U, 0.0);
+				case SStubble: return Varied(Mixed(Varied(Mud, 0.86, 0.0), StubbleC, 0.3 + 0.15 * U), 0.95 + 0.08 * U, 0.0); // (cut rows on darker drained mud)
 				case SMud: return Varied(Mud, 0.92 + 0.14 * U, 0.01);
-				case SWinter: return Mixed(Mud, WheatGreen, 0.45 + 0.4 * U);
+				case SWinter: return Mixed(Varied(Mud, 1.06, 0.01), WheatGreen, 0.2 + 0.12 * U); // (drilled brown earth, the green in its rows)
 				case SRape: return Mixed(RiceYoung, RapeYellow, 0.65 + 0.3 * U);
 				default: return Mud;
 				}
@@ -224,6 +270,27 @@ namespace LandScape
 				double Bund = 99.0; // metres to the nearest bund's middle
 				double Way = 0.0;   // the bund's line (radians from east)
 			};
+
+			/** A parcel's paddy lattice: its plots L along its grain and W across it, the lattice's offsets, and its blocks
+			 * BA plots along and BB across (some 4 to 12 plots to a block). */
+			struct Lattice
+			{
+				double L = 20.0, W = 13.0, OffA = 0.0, OffB = 0.0;
+				int BA = 2, BB = 2;
+			};
+			static Lattice LatticeOf(uint64_t Parcel)
+			{
+				Lattice Lt;
+				// (some 18 to 30 m along and a little over half that across: the delta's plots of a tenth of a hectare and
+				// less, large enough that the ground's points, some 4 m apart, keep their rectangles)
+				Lt.L = 18.0 + 12.0 * Unit(Hash(Parcel, 0xBADD));
+				Lt.W = Lt.L * (0.55 + 0.25 * Unit(Hash(Parcel, 0xBADE)));
+				Lt.OffA = Unit(Hash(Parcel, 0xBADF));
+				Lt.OffB = Unit(Hash(Parcel, 0xBAE0));
+				Lt.BA = 2 + static_cast<int>(2.0 * Unit(Hash(Parcel, 0xB10A)));
+				Lt.BB = 2 + static_cast<int>(3.0 * Unit(Hash(Parcel, 0xB10B)));
+				return Lt;
+			}
 
 			/** The rules' heights at a place (their cells' middles, between them straight), for the terraces' contours. */
 			double RulesZ(double X, double Y) const
@@ -250,16 +317,17 @@ namespace LandScape
 					const double F = T - std::floor(T);
 					P.Key = Hash(S.Key, static_cast<uint64_t>(std::floor(T) + 4096.0));
 					P.Bund = 6.0 * std::min(F, 1.0 - F); // (a riser's metres across, as near as the contours allow)
-					P.Stage = StageOf(S.Key, P.Key);
+					P.Stage = StageOf(S.Key, Hash(S.Key, static_cast<uint64_t>(std::floor((std::floor(T) + 4096.0) / 3.0)), 0xB10C), P.Key);
 					return P;
 				}
-				const double L = 14.0 + 10.0 * Unit(Hash(S.Key, 0xBADD));
-				const double W = L * (0.55 + 0.25 * Unit(Hash(S.Key, 0xBADE)));
-				const double A = S.Along / L + Unit(Hash(S.Key, 0xBADF)), B = S.Across / W + Unit(Hash(S.Key, 0xBAE0));
+				const Lattice Lt = LatticeOf(S.Key);
+				const double L = Lt.L, W = Lt.W;
+				const double A = S.Along / L + Lt.OffA, B = S.Across / W + Lt.OffB;
 				const double FA = A - std::floor(A), FB = B - std::floor(B);
 				const double DA = std::min(FA, 1.0 - FA) * L, DB = std::min(FB, 1.0 - FB) * W;
-				P.Key = Hash(S.Key, static_cast<uint64_t>(std::floor(A) + 512.0), static_cast<uint64_t>(std::floor(B) + 512.0));
-				P.Stage = StageOf(S.Key, P.Key);
+				const int64_t KA = static_cast<int64_t>(std::floor(A)) + 512, KB = static_cast<int64_t>(std::floor(B)) + 512;
+				P.Key = Hash(S.Key, static_cast<uint64_t>(KA), static_cast<uint64_t>(KB));
+				P.Stage = StageOf(S.Key, Hash(S.Key, static_cast<uint64_t>(KA / Lt.BA), static_cast<uint64_t>(KB / Lt.BB) ^ 0xB10C), P.Key);
 				// (the nearer bund: one across the grain, or one along it)
 				P.Bund = std::min(DA, DB);
 				P.Way = DA < DB ? S.Angle + 0.5 * Pi : S.Angle;
@@ -344,7 +412,7 @@ namespace LandScape
 				const uint64_t Strip = Hash(S.Key, static_cast<uint64_t>(std::floor(B) + 512.0));
 				const double U = Unit(Strip);
 				Tone T;
-				if (bWinter || Month == 3) T = U < 0.55 ? Mixed(Mud, WheatGreen, 0.55) : U < 0.8 ? Varied(Mud, 1.05, 0.02) : Rgb(88, 110, 58);
+				if (bWinter || Month == 3) T = U < 0.55 ? Mixed(Varied(Mud, 1.06, 0.01), WheatGreen, 0.28) : U < 0.8 ? Varied(Mud, 1.05, 0.02) : Mixed(Mud, Rgb(88, 110, 58), 0.6);
 				else if (Month == 4 && bRape && U < 0.35) T = RapeYellow;
 				else T = U < 0.3 ? Rgb(92, 112, 56) : U < 0.5 ? Rgb(84, 102, 54) : U < 0.7 ? Rgb(104, 118, 62) : U < 0.85 ? Mixed(Varied(Mixed(Mud, Soil(), 0.4), 1.04, 0.0), Rgb(98, 112, 60), 0.35) : Rgb(110, 120, 66);
 				return Varied(Mixed(T, GrassAt(S, BundGrass), 0.5 * Smooth(1.0, 0.0, S.Edge)), 0.96 + 0.06 * S.N2, 0.0);
@@ -402,7 +470,7 @@ namespace LandScape
 				// wooded above their terraces)
 				Tone T;
 				if (bWoods) T = Varied(PineCanopy, 0.95 + 0.1 * S.Broad, 0.0);
-				else if (S.Crop == Paddy || S.Crop == Terrace || (S.Crop < 0 && S.Kind == KField)) T = StageColour(StageOf(S.Key, S.Key), S.Key);
+				else if (S.Crop == Paddy || S.Crop == Terrace || (S.Crop < 0 && S.Kind == KField)) T = StageColour(StageOf(S.Key, S.Key, S.Key), S.Key);
 				else if (S.Crop == Garden) T = Mixed(Rgb(92, 116, 56), Mud, bWinter ? 0.5 : 0.2);
 				else T = Open(S);
 				const double Hl = HillAt(S.X, S.Y);
@@ -421,10 +489,15 @@ namespace LandScape
 				if (S.Kind == KWater || S.Drawn == 9 /*floor*/ || S.Drawn == 10 /*wall*/) return Grown{};
 				if (SnowLying > 0.25)
 				{
-					// under the snow: the paddies' stubble through it, dead grass and reeds here and there, nothing green
+					// under the snow: the bunds' low ridges, the stubble's rows over whole plots, dead grass and reeds here and
+					// there, nothing green (the art director, 06:57Z: plain white is an empty screen)
 					if (S.Kind == KMarsh) return Grown{ ClutOf(CReed), 0.4 };
 					if ((S.Crop == Paddy || S.Crop == Terrace) && S.Kind != KWoods && S.Kind != KLane && S.Kind != KVillage && S.Kind != KYard)
-						return PlotOf(S).Stage == SStubble ? Grown{ ClutOf(CStubble), 0.45 } : Grown{};
+					{
+						const PlotAt P = PlotOf(S);
+						if (S.Crop == Paddy && P.Bund < 0.25) return Grown{ ClutOf(CBund), 2.0 };
+						return P.Stage == SStubble ? Grown{ ClutOf(CStubble), 0.95 } : Grown{};
+					}
 					return Pick < 0.4 ? Grown{ ClutOf(CGrass), 0.25 } : Grown{};
 				}
 				if (S.Kind == KLane) return S.Lane > -0.4 ? Grown{ ClutOf(CGrass), 0.5 } : Grown{};
@@ -439,7 +512,7 @@ namespace LandScape
 				case Terrace:
 				{
 					const PlotAt P = PlotOf(S);
-					if (S.Crop == Paddy && P.Bund < 0.16) return Grown{ ClutOf(CBund), 2.0 };
+					if (S.Crop == Paddy && P.Bund < 0.25) return Grown{ ClutOf(CBund), 2.0 };
 					if (S.Edge < 0.4) return Grown{ ClutOf(CGrass), 1.0 };
 					switch (P.Stage)
 					{
@@ -447,7 +520,7 @@ namespace LandScape
 					case SYoung:
 					case SGreen:
 					case SRipe: return Grown{ ClutOf(CRice), 0.6 };
-					case SStubble: return Grown{ ClutOf(CStubble), 0.55 };
+					case SStubble: return Grown{ ClutOf(CStubble), 0.95 }; // (hand-cut rows over the whole plot)
 					case SMud: return Pick < 0.15 ? Grown{ ClutOf(CStubble), 0.2 } : Grown{};
 					case SWinter: return Grown{ ClutOf(CStubble), 0.7 }; // (the winter wheat's short green rows: the stubble's mesh, green)
 					case SRape: return Grown{ ClutOf(CCrop), 1.4 };
@@ -603,31 +676,22 @@ namespace LandScape
 					break;
 				case CBund:
 				{
-					// a bund 3 m long along its x: earth heaped some 0.18 m high, 0.5 m across its foot and 0.26 m across its
-					// rounded top, its ends sunk, grassed, the grass thick along its crown
-					const Tone Top = Rgb(106, 116, 66), Side = Rgb(98, 104, 64), Foot = Rgb(92, 92, 66);
-					const double Hl = 1.5, Hb = 0.25, Ht = 0.13, Z = 0.18;
-					uint32_t V[8];
-					V[0] = W.Vert(-Hl - 0.2, -Hb, -0.06, 0.0, -0.6, 0.8, Foot);
-					V[1] = W.Vert(Hl + 0.2, -Hb, -0.06, 0.0, -0.6, 0.8, Foot);
-					V[2] = W.Vert(Hl, -Ht, Z, 0.0, -0.2, 0.98, Side);
-					V[3] = W.Vert(-Hl, -Ht, Z, 0.0, -0.2, 0.98, Side);
-					V[4] = W.Vert(-Hl, Ht, Z, 0.0, 0.2, 0.98, Top);
-					V[5] = W.Vert(Hl, Ht, Z, 0.0, 0.2, 0.98, Top);
-					V[6] = W.Vert(Hl + 0.2, Hb, -0.06, 0.0, 0.6, 0.8, Foot);
-					V[7] = W.Vert(-Hl - 0.2, Hb, -0.06, 0.0, 0.6, 0.8, Foot);
-					W.Tri(V[0], V[1], V[2]);
-					W.Tri(V[0], V[2], V[3]);
-					W.Tri(V[3], V[2], V[5]);
-					W.Tri(V[3], V[5], V[4]);
-					W.Tri(V[4], V[5], V[6]);
-					W.Tri(V[4], V[6], V[7]);
+					// a bund 3 m long along its x: a raised, rounded ridge of earth some 0.3 m high and 0.5 m across its foot,
+					// grassed, the grass thick along its crown (the art director, 06:57Z: not flat dark boards); its ends sunk
+					// so the lengths run on into one another. Under the snow: its flanks drifted white, its crown blown bare,
+					// dark dead grass and earth.
+					const bool bSnow = SnowLying > 0.25;
+					const Tone Crest = bSnow ? Rgb(98, 90, 72) : Green > 0.5 ? Rgb(102, 110, 66) : Rgb(134, 122, 92);
+					const Tone Flank = bSnow ? Rgb(224, 228, 234) : Green > 0.5 ? Rgb(94, 98, 62) : Rgb(122, 110, 84);
+					const Tone Foot = bSnow ? Rgb(230, 234, 240) : Rgb(100, 96, 70);
+					Ridge(W, 1.5, 0.3, 0.5, Crest, Flank, Foot, true, 0.3);
 					const size_t Grass = M.Near.Points();
-					for (int T = 0; T < 10; ++T) Tuft(W, -1.4 + 0.31 * T, 0.0, 6, 0.12, 0.1, 0.18, 0.1, 0.015, Hash(0xB0D, T), Rgb(88, 102, 56), Rgb(140, 152, 88));
-					for (size_t P = Grass; P < M.Near.Points(); ++P) M.Near.Positions[3 * P + 2] += static_cast<float>(Z);
+					const Tone TuftFoot = bSnow ? Rgb(112, 100, 78) : Rgb(88, 102, 56), TuftTip = bSnow ? Rgb(160, 146, 112) : Green > 0.5 ? Rgb(140, 152, 88) : Rgb(170, 156, 112);
+					for (int T = 0; T < 10; ++T) Tuft(W, -1.35 + 0.3 * T, 0.0, bSnow ? 3 : 6, 0.1, 0.08, 0.14, 0.1, 0.015, Hash(0xB0D, T), TuftFoot, TuftTip);
+					for (size_t P = Grass; P < M.Near.Points(); ++P) M.Near.Positions[3 * P + 2] += 0.28f;
 					LitUp(M.Near, Grass);
 					M.Paint = 2;
-					M.FarFrom = 60.0f;
+					M.FarFrom = 90.0f;
 					break;
 				}
 				case CGrass:
@@ -678,8 +742,40 @@ namespace LandScape
 				case KStack: return "StrawStack";
 				case KOutcrop: return "RockOutcrop";
 				case KBoulder: return "Boulder";
+				case KBundLine: return SnowLying > 0.25 ? "BundSnow" : "BundLine";
+				case KBundShort: return SnowLying > 0.25 ? "BundSnowShort" : "BundShort";
 				default: return nullptr;
 				}
+			}
+			bool KitBuilt(int K) const override { return K == KBundLine || K == KBundShort; }
+			void KitPlain(int K, LandField::BaseMesh& M) const override
+			{
+				if (K != KBundLine && K != KBundShort)
+				{
+					Region::KitPlain(K, M);
+					return;
+				}
+				// the bund's ridge as the grid seen from afar (the art director, 06:57Z: thin lines, as Normandy's hedge
+				// lines, so the ground's points do not blur the plots' edges): near, rounded, a little inside the near
+				// clutter's bunds laid over it; far, a plain ridge. Under the snow its flanks white, its crown dark.
+				const bool bSnow = SnowLying > 0.25;
+				const Tone Crest = bSnow ? Rgb(98, 90, 72) : Green > 0.5 ? Rgb(102, 110, 66) : Rgb(134, 122, 92);
+				const Tone Flank = bSnow ? Rgb(224, 228, 234) : Green > 0.5 ? Rgb(94, 98, 62) : Rgb(122, 110, 84);
+				const Tone Foot = bSnow ? Rgb(230, 234, 240) : Rgb(100, 96, 70);
+				const double Half = 0.5 * (K == KBundLine ? BundLong : BundShort);
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				{
+					Writer W(M.Near);
+					Ridge(W, Half, 0.27, 0.46, Crest, Flank, Foot, true, 0.6);
+				}
+				{
+					Writer W(M.Far);
+					Ridge(W, Half, 0.3, 0.6, Crest, Flank, Foot, false, 0.0);
+				}
+				M.FarFrom = 50.0f;
+				M.Radius = static_cast<float>(Half);
+				M.Height = 0.3f;
 			}
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
@@ -699,10 +795,31 @@ namespace LandScape
 					Sight(0.72f, 0.28f, 0.7f, 0.35f);
 					break;
 				case KBamboo:
+				{
+					// (a clump is a fountain, not a spire: the art director, 06:57Z. Its upper culms bent out and down as they
+					// arch, the head as wide as the clump's widest and feathery, the height kept)
+					float Top = 0.1f;
+					for (size_t P = 2; P < M.Near.Positions.size(); P += 3) Top = std::max(Top, M.Near.Positions[P]);
+					for (LandField::Mesh* Each : { &M.Near, &M.Mid, &M.Far, &M.Cards, &M.Sprigs })
+						for (size_t P = 0; P + 2 < Each->Positions.size(); P += 3)
+						{
+							const double X = Each->Positions[P], Y = Each->Positions[P + 1], Z = Each->Positions[P + 2];
+							const double Up = std::clamp(Z / Top, 0.0, 1.2);
+							const double Out = 1.0 + 0.9 * Smooth(0.45, 1.0, Up);
+							const double R = std::hypot(X, Y) * Out;
+							Each->Positions[P] = static_cast<float>(X * Out);
+							Each->Positions[P + 1] = static_cast<float>(Y * Out);
+							Each->Positions[P + 2] = static_cast<float>(Z - 0.16 * Top * Smooth(0.6, 1.0, Up) * Smooth(2.0, 9.0, R));
+						}
 					M.bTree = true;
 					M.Paint = 1;
 					M.FarFrom = 80.0f;
-					Sight(0.55f, 0.45f, 0.8f, 0.2f);
+					Sight(0.55f, 0.45f, 0.9f, 0.2f);
+					break;
+				}
+				case KBundLine:
+				case KBundShort:
+					M.FarFrom = 50.0f;
 					break;
 				case KWillow:
 					M.bTree = true;
@@ -829,7 +946,8 @@ namespace LandScape
 							const int Clumps = 3 + R.Below(4);
 							for (int C = 0; C < Clumps; ++C)
 							{
-								const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(0.0, 6.0), GYaw = R.Range(0.0, 2.0 * Pi), GS = R.Range(0.45, 0.7), GZ = R.Range(0.8, 1.1);
+								// (the clumps touching, one soft mound beside the village: the art director, 06:57Z)
+								const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(0.0, 3.5), GYaw = R.Range(0.0, 2.0 * Pi), GS = R.Range(0.6, 0.8), GZ = R.Range(0.8, 1.05);
 								Put(H, KitOf(KBamboo), GX + D * std::cos(A), GY + D * std::sin(A), 2.5, GYaw, GS, GZ, Leaf);
 							}
 						};
@@ -877,6 +995,72 @@ namespace LandScape
 							break;
 						}
 						}
+					}
+				Bunds(H);
+			}
+
+			/**
+			 * The bunds between the blocks of plots as ridges in their lines over the whole field, so the grid reads from
+			 * afar where the clutter's bunds (round the eye) are not laid: each paddy parcel's lattice walked out from its
+			 * middle along each block line, a 16 m length where the whole of it lies in the parcel, a 6 m one at the ends.
+			 */
+			void Bunds(Host& H)
+			{
+				std::unordered_set<uint64_t> Seen;
+				const double Bd = H.Band();
+				const LandField::Rgb8 Plain = Tint(1.0, 1.0, 1.0);
+				for (double Y0 = -Bd + 10.0; Y0 < H.Depth() + Bd; Y0 += 20.0)
+					for (double X0 = -Bd + 10.0; X0 < H.Width() + Bd; X0 += 20.0)
+					{
+						const Spot S = H.At(X0, Y0);
+						if (S.Crop != Paddy || (S.Kind != KField && S.Kind != KOpen) || !Seen.insert(S.Key).second) continue;
+						const Lattice Lt = LatticeOf(S.Key);
+						const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
+						const double MX = X0 - S.Along * Ca + S.Across * Sa, MY = Y0 - S.Along * Sa - S.Across * Ca;
+						const double Reach = 1.6 * std::sqrt(std::max(S.Area, 400.0));
+						const uint64_t Parcel = S.Key;
+						auto In = [&H, Parcel](double X, double Y) {
+							const Spot Q = H.At(X, Y);
+							return Q.Key == Parcel && Q.Crop == Paddy && Q.Kind != KLane && Q.Edge > 0.6;
+						};
+						// (one line: At its place across the lines' direction, bAcross where it runs across the grain)
+						auto Line = [&](bool bAcross, double At) {
+							const double DX = bAcross ? -Sa : Ca, DY = bAcross ? Ca : Sa;
+							const double OX = MX + (bAcross ? At * Ca : -At * Sa), OY = MY + (bAcross ? At * Sa : At * Ca);
+							const double Yaw = std::atan2(DY, DX);
+							for (const double Dir : { 1.0, -1.0 })
+							{
+								int Miss = 0;
+								for (double T = Dir > 0.0 ? 0.0 : -BundLong; std::fabs(T) < Reach && Miss < 2; T += Dir * BundLong)
+								{
+									const double CX = OX + DX * T, CY = OY + DY * T;
+									const bool bMid = In(CX, CY);
+									const bool bA = In(CX - DX * 0.5 * BundLong, CY - DY * 0.5 * BundLong), bB = In(CX + DX * 0.5 * BundLong, CY + DY * 0.5 * BundLong);
+									if (!bMid && !bA && !bB)
+									{
+										++Miss;
+										continue;
+									}
+									Miss = 0;
+									if (bMid && bA && bB)
+									{
+										if (H.Free(CX, CY, 0.4, true)) H.Plant(KitOf(KBundLine), CX, CY, Yaw, 1.0, 1.0, Plain);
+										continue;
+									}
+									// (a line's end: the 6 m lengths that lie in the parcel)
+									for (const double Off : { -5.0, 0.0, 5.0 })
+									{
+										const double SX = CX + DX * Off, SY = CY + DY * Off;
+										if (In(SX - DX * 0.5 * BundShort, SY - DY * 0.5 * BundShort) && In(SX + DX * 0.5 * BundShort, SY + DY * 0.5 * BundShort) && H.Free(SX, SY, 0.4, true))
+											H.Plant(KitOf(KBundShort), SX, SY, Yaw, 1.0, 1.0, Plain);
+									}
+								}
+							}
+						};
+						for (int K = static_cast<int>(std::ceil(-Reach / Lt.L + Lt.OffA)); K <= static_cast<int>(std::floor(Reach / Lt.L + Lt.OffA)); ++K)
+							if ((K + 512) % Lt.BA == 0) Line(true, (K - Lt.OffA) * Lt.L);
+						for (int K = static_cast<int>(std::ceil(-Reach / Lt.W + Lt.OffB)); K <= static_cast<int>(std::floor(Reach / Lt.W + Lt.OffB)); ++K)
+							if ((K + 512) % Lt.BB == 0) Line(false, (K - Lt.OffB) * Lt.W);
 					}
 			}
 
