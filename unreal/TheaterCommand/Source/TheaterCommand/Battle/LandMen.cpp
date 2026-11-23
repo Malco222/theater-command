@@ -1473,6 +1473,7 @@ namespace LandMen
 		struct RoundRow
 		{
 			bool bBy = false, bByK = false, bOnK = false; // (by, k and ok written)
+			bool bMate = false; // (m: a shell blast's further man, the shot booked once on the round before it)
 			double By = 0.0, ByK = 0.0, ByJ = 0.0, On = 0.0, OnK = 0.0, OnJ = 0.0;
 			double T = 0.0, X = 0.0, Y = 0.0;
 			std::string W, R;
@@ -1491,6 +1492,7 @@ namespace LandMen
 				else if (Is(Key, "y")) Y = V.Num0();
 				else if (Is(Key, "w")) W = V.Text();
 				else if (Is(Key, "r")) R = V.Text();
+				else if (Is(Key, "m")) bMate = V.Num0() != 0.0;
 			}
 		};
 
@@ -1511,6 +1513,7 @@ namespace LandMen
 			Row.Y = Rd["y"].Num0();
 			Row.W = Rd["w"].Text();
 			Row.R = Rd["r"].Text();
+			Row.bMate = Rd["m"].Num0() != 0.0;
 			return Row;
 		}
 	}
@@ -2794,6 +2797,8 @@ namespace LandMen
 			M.Info.FallStance = St;
 			M.Info.FallFrom = From;
 			const bool bShell = M.KillW == Weapon::Mortar || M.KillWeapon == "gun" || M.KillWeapon == "tank" || M.KillW == Weapon::Grenade;
+			// Run over (infantry with tanks: an enemy tank's tracks): knocked flat under her, never thrown or spun.
+			const bool bCrushed = M.KillWeapon == "track";
 			if (!S.Deaths.empty())
 			{
 				// The physics-baked falls: weigh each kind by how he was struck and how he stood, then each clip of the
@@ -2836,6 +2841,7 @@ namespace LandMen
 						if (St == "kneel" || St == "cover") W *= Kind == "knees" ? 2.5 : Kind == "side" ? 1.5 : 1.0;
 						if (St == "prone") W *= Kind == "crawl" ? 3.0 : 1.0;
 						if (bShell) W *= Kind == "thrown" ? 40.0 : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
+						if (bCrushed) W *= Kind == "back" || Kind == "forward" ? 6.0 : Kind == "thrown" || Kind == "spin" ? 0.05 : 1.0;
 						if (!M.FallKindWanted.empty() && Kind == M.FallKindWanted) W *= 50.0;
 						for (const std::string& Clip : KV.second)
 						{
@@ -3791,7 +3797,8 @@ namespace LandMen
 		{
 			// (the man of the section who fired it, j, and the man it struck, oj: 0, or none written, the key man)
 			if (Struck) *Struck = -1;
-			if (R.bBy && R.bByK)
+			// (no shot for a blast's further man, or for a man run over: the tank's tracks, not a gun)
+			if (R.bBy && R.bByK && !R.bMate && R.W != "track")
 			{
 				const auto Found = ManOf.find({ static_cast<int>(R.By), static_cast<int>(R.ByK), std::max(0, static_cast<int>(R.ByJ)) });
 				if (Found != ManOf.end()) Fire(Found->second, R.T, WeaponOf(R.W));

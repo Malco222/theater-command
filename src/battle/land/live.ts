@@ -341,6 +341,8 @@ export interface LiveOpts {
   scars?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
+  /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
+  escort?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -456,6 +458,7 @@ export class LiveBattle {
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.blast === true) sim.blast = true;
+    if (opts.escort === true) sim.escort = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };

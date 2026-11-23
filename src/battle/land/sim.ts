@@ -406,6 +406,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    * whoever opens the field turns it on (the bridge's { blast: true }, the Battle rules card's Shell blasts row).
    */
   blast = false;
+  /**
+   * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
+   * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
+   * clearOfVehicles, thin; DRILL.escort). Looks only: the drill reads it, the fight never. Off unless turned on (the
+   * bridge's { escort: true }, the Battle rules card's Infantry with tanks row).
+   */
+  escort = false;
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
   private readonly litters = new Map<number, Litter>();
   /**
