@@ -425,9 +425,12 @@ darker, at 0.36, and cast shadows fade under a cloud as they should.
   are lobed, cauliflower outlines 150 to 600 m across with a 30 m soft edge, with sun between.
 - The day's cover decides how many clouds are drawn, not how big they are: four fifths of the cover, never more than
   0.4 of the field.
-- The picture's clear disc (280 m) is laid over the field's middle at the start (`Anchor`), so the opening stands in
-  sun and the shadows cross the rest. The shadows come over the middle as the clouds drift: DrawSky sets the drift
-  every frame, the same drift as the clouds drawn.
+- The picture's clear disc (280 m) is laid at the start over what the opening shot looks at (`Anchor`, from the
+  director's first pose; the field's middle if it has none). Six clouds ring the disc, first in the day's order, so the
+  opening's first frame already shows a few patches on its flanks and far fields while its middle stands in sun. A
+  simulation of the opening (170 m up, FOV 48) gives 17 to 40 per cent of the visible ground shaded at full cover, and
+  7 to 33 at a thin day's. The shadows come over the middle as the clouds drift: DrawSky sets the drift every frame,
+  the same drift as the clouds drawn.
 - It takes the sun off everything under a cloud (the ground, the hedges, the tanks, the men), never the paint.
 - There are none on an overcast day, a clear one, or with `-TheaterLandNoClouds`.
 - The table's sun is put back as it was when the battle ends.

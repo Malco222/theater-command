@@ -2226,7 +2226,7 @@ def build_land_cloud_shade():
     feather = scalar(m, "Feather", 30.0, -600, 550)
     ramp = one_in(m, unreal.MaterialExpressionSaturate, plus(m, over(m, inside, feather, -300, 300), 0.5, -150, 300), 0, 300)
     smooth = times(m, times(m, ramp, ramp, 150, 300), plus(m, 3.0, times(m, ramp, -2.0, 150, 450), 300, 450), 450, 350)
-    keep_to = over(m, scalar(m, "Cover", 0.3, -600, 700), scalar(m, "FullCover", 0.42, -600, 800), -450, 750)
+    keep_to = over(m, scalar(m, "Cover", 0.3, -600, 700), scalar(m, "FullCover", 0.41, -600, 800), -450, 750)
     kept = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, keep_to, times(m, (shade, "B"), -1.0, -450, 850), -300, 800), 255.0, -150, 800), 0, 800)
     lit = lerp(m, 1.0, scalar(m, "Dark", 0.2, 450, 500), times(m, smooth, kept, 600, 600), 750, 450)
     to_property(lerp(m, 1.0, lit, scalar(m, "Strength", 0.0, 750, 650), 900, 450), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)

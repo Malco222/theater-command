@@ -751,7 +751,7 @@ namespace LandFieldPicture
 							}
 							// (the game's clouds' shadows: where this point's sun ray meets the clouds' base, as M_LandCloudShade lays
 							// them: how far inside a cloud (red, metres either side of 0.5 over 400), the edge blurred over 30 m,
-							// the clouds the day's cover keeps (blue under four fifths of the cover, at most 0.4, over the 0.42 the
+							// the clouds the day's cover keeps (blue under four fifths of the cover, at most 0.4, over the 0.41 the
 							// picture's clouds shade in all); the field's x is the world's Y)
 							const Air& Ai = AirAsked();
 							if (Ai.Dark >= 0.0 && L.Cover >= 0.05)
@@ -760,7 +760,7 @@ namespace LandFieldPicture
 								const double QX = P.X + L.Sun.X * Climb, QY = P.Y + L.Sun.Y * Climb;
 								const double CU = QY / 4000.0 + L.AnchorU, CV = QX / 4000.0 + L.AnchorV;
 								const double Inside = (AirAt(CU, CV, 0) - 0.5) * 800.0;
-								const double Kept = std::clamp((std::min(0.8 * L.Cover, 0.4) / 0.42 - AirAt(CU, CV, 2)) * 255.0, 0.0, 1.0);
+								const double Kept = std::clamp((std::min(0.8 * L.Cover, 0.4) / 0.41 - AirAt(CU, CV, 2)) * 255.0, 0.0, 1.0);
 								const double Ramp = std::clamp(Inside / 30.0 + 0.5, 0.0, 1.0);
 								Lit *= 1.0 - Ramp * Ramp * (3.0 - 2.0 * Ramp) * Kept * (1.0 - Ai.Dark);
 							}
