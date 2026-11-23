@@ -16,8 +16,15 @@ root at his boots where each starts):
                        on a foothold higher inside, heaved up on his arms, his right knee onto the roof beside the
                        hatch, the left boot out, up on the roof crouched. Root motion: up 0.95 (the roof), 0.47 to his
                        right and 0.10 forward.
-    bail_jump_down     stood at the edge of the deck: a crouch, the jump out and down 1.5 m, landing deep on both
-                       boots and coming up into his first running stride. Root motion: down 1.5, 1.6 forward.
+    bail_step_down     stood at the edge of the turret's roof facing out: he steps off, drops 0.95 m onto the hull's
+                       deck and lands on bent knees, his left hand back onto the turret's edge. Root motion: down 0.95,
+                       0.35 forward. (0.66 s: the drop alone is 0.45 s in the air.)
+    bail_jump_down     stood at the edge of the deck: a crouch (deepest at 0.26 s), the jump out and down 1.5 m with
+                       his knees drawn up, landing deep on bent knees with his right hand going down to the ground,
+                       and coming up into his first running stride. Root motion: down 1.5, 1.7 forward.
+
+The clips leave the ground behind them (bail_step_down and bail_jump_down from their take-off on): the solver's lift of
+a knee off the root's ground is off there (light_riders.py's `_seat`), so his pelvis comes down with the root.
     burning_run        a loop of three running strides (2.1 s, 7.35 m: the game moves him): on fire, his hands at
                        his face, beating at his chest, flailing; head down and shaking.
     burning_fall_roll  from burning_run's first frame: he stumbles, falls forward onto his hands and knees and his
@@ -290,87 +297,194 @@ def check_hatch(step=3):
 
 
 # ================================================================================================ down off the hull
-def make_jump():
-    G = -DROP
-    T0, V0, VX = 0.40, 0.75, 1.55               # (off the edge at T0: up at V0 m/s, forward at VX)
-    PA0 = -0.03                                  # (the pelvis's height from standing as he leaves)
+def airborne(t, s, P, H0, T0, tau, tuck_peak, lead=0.0):
+    """A boot in the air: under him, the knees drawn up (most `tuck_peak` m a third of the way), then reaching down
+    for the ground."""
+    sg = 1.0 if s == "l" else -1.0
+    pz = float(H0[2]) + P["pelvis_at"][2]
+    u = min(max((t - T0) / tau, 0.0), 1.0)
+    tuck = math.sin(math.pi * min(u * 1.3, 1.0)) * tuck_peak
+    ahead = 0.04 + 0.12 * u + (lead - (0.06 if s == "l" else 0.0)) * (1 - u) - 0.5 * tuck
+    return {"at": (P["pelvis_at"][0] + ahead, 0.11 * sg, pz - 0.86 + tuck + ank() - 0.05),
+            "yaw": 6.0 * sg, "pitch": 18.0 - 14.0 * u + 40.0 * tuck, "toe": 0.0, "pole": (1.0, 0.1 * sg, 0.3)}
+
+
+def ballistic(T0, x0, z0, vx, vz, z_land):
+    """The pelvis off the edge at T0 from (x0, z0) at (vx, vz) m/s: its way, and the time to come down to z_land."""
     g = 9.81
-    land_pa = G - 0.10                           # (touching down: his legs near straight)
-    tau = (V0 + math.sqrt(V0 * V0 + 2 * g * (PA0 - land_pa))) / g
-    T1 = T0 + tau                                # (touchdown)
-    MEAS["jump"] = {"takeoff": T0, "touchdown": round(T1, 3)}
-    X0 = 0.10
+    tau = (vz + math.sqrt(vz * vz + 2 * g * (z0 - z_land))) / g
 
     def fly(t):
         u = t - T0
-        return X0 + VX * u, PA0 + V0 * u - 0.5 * g * u * u
+        return x0 + vx * u, z0 + vz * u - 0.5 * g * u * u
+    return fly, tau
 
+
+def feet_off(t, P, H0, plants, off, on, T0, tau, tuck, lead=None, edge=None):
+    """Each boot planted until it leaves (off[s]) and from when it lands (on[s]), in the air between (`lead`: a boot
+    stepping out ahead of him as it leaves; `edge`: no boot under the top he leaves until it is past its edge)."""
+    for s in ("l", "r"):
+        if t <= off[s] or t >= on[s]:
+            P["foot_" + s] = plants[s].at(t)
+        else:
+            a = ramp(t, off[s], off[s] + 0.10) * (1.0 - ramp(t, on[s] - 0.10, on[s]))
+            ground = plants[s].at(off[s] if t < 0.5 * (off[s] + on[s]) else on[s])
+            fly = airborne(t, s, P, H0, T0, tau, tuck, (lead or {}).get(s, 0.0))
+            f = S.mix([ground, fly], [1.0 - sm(a), sm(a)])
+            if t < off[s] + 0.10:                # (lifted as it leaves)
+                at = list(f["at"])
+                at[2] += 0.07 * math.sin(math.pi * ramp(t, off[s], off[s] + 0.10))
+                f["at"] = tuple(at)
+            if edge is not None and f["at"][0] < edge:
+                f["at"] = (f["at"][0], f["at"][1], max(f["at"][2], ank() + 0.005))
+            P["foot_" + s] = f
+
+
+def ground_reach(s, at, a=None):
+    """A hand reaching down to the ground beside him (at: where, the fingers down and ahead)."""
+    sg = 1.0 if s == "l" else -1.0
+    return {"at": at, "a": a or (0.45, 0.15 * sg, -0.88), "n": (0.0, 0.0, -1.0), "pole_world": (-0.6, 0.9 * sg, 0.3),
+            "roll": 10.0, "pole_weight": HELD}
+
+
+def make_jump():
+    G = -DROP
+    T0, V0, VX = 0.44, 0.75, 1.55               # (off the edge at T0: up at V0 m/s, forward at VX)
+    PA0 = -0.03                                  # (the pelvis's height from standing as he leaves)
+    land_pa = G - 0.14                           # (touching down: his knees already a little bent)
+    X0 = 0.10
+    fly, tau = ballistic(T0, X0, PA0, VX, V0, land_pa)
+    T1 = T0 + tau                                # (touchdown)
+    MEAS["jump"] = {"takeoff": T0, "touchdown": round(T1, 3)}
+    # a crouch at the edge (the arms back, down to his deepest at 0.26 s), the push off it, then in the air
     keys = [(0.0, dict(z=-0.02, lean=6.0, head=4.0)),
-            (0.16, dict(x=0.02, z=-0.14, lean=22.0, head=14.0)),
-            (0.30, dict(x=0.05, z=-0.22, lean=30.0, head=18.0)),
+            (0.12, dict(x=0.01, z=-0.14, lean=20.0, head=14.0)),
+            (0.26, dict(x=0.03, z=-0.36, lean=38.0, head=24.0)),
+            (0.30, dict(x=0.04, z=-0.37, lean=38.0, head=24.0)),
             (T0, dict(x=X0, z=PA0, lean=14.0, head=8.0))]
     n = 6
     for k in range(1, n):
         t = T0 + tau * k / n
         x, z = fly(t)
-        keys.append((t, dict(x=x, z=z, lean=10.0 + 4.0 * k / n, head=6.0)))
+        keys.append((t, dict(x=x, z=z, lean=10.0 + 6.0 * k / n, head=6.0)))
     xl, _ = fly(T1)
-    keys += [(T1, dict(x=xl, z=land_pa, lean=16.0, head=8.0)),
-             (T1 + 0.12, dict(x=xl + 0.12, z=G - 0.40, lean=34.0, head=18.0)),
-             (T1 + 0.28, dict(x=xl + 0.30, z=G - 0.22, lean=26.0, head=12.0)),
-             (T1 + 0.48, dict(x=xl + 0.62, z=G - 0.10, lean=20.0, head=8.0))]
-    END = round(T1 + 0.48, 2)
+    # down on bent knees, his right hand going down to the ground, then up into his first running stride
+    keys += [(T1, dict(x=xl, z=land_pa, lean=18.0, head=8.0)),
+             (T1 + 0.14, dict(x=xl + 0.12, z=G - 0.52, lean=44.0, head=24.0, side=-8.0)),
+             (T1 + 0.30, dict(x=xl + 0.30, z=G - 0.30, lean=30.0, head=14.0, side=-3.0)),
+             (T1 + 0.50, dict(x=xl + 0.62, z=G - 0.10, lean=20.0, head=8.0))]
+    END = round(round((T1 + 0.50) * 30.0) / 30.0, 4)   # (on a key: the reference's keys are at 30 a second)
     keyed = S.keyed([(t, body(**kw)) for t, kw in keys])
     H0 = None
-
-    def follow(t, s, P):
-        """In the air: his boots under him, the legs a little bent and drawn up, then reaching for the ground."""
-        sg = 1.0 if s == "l" else -1.0
-        pz = float(H0[2]) + P["pelvis_at"][2]
-        u = min(max((t - T0) / tau, 0.0), 1.0)
-        tuck = math.sin(math.pi * min(u * 1.25, 1.0)) * 0.16
-        ahead = 0.04 + 0.12 * u - (0.06 if s == "l" else 0.0) * (1 - u)
-        return {"at": (P["pelvis_at"][0] + ahead, 0.11 * sg, pz - 0.86 + tuck + ank() - 0.05),
-                "yaw": 6.0 * sg, "pitch": 18.0 - 14.0 * u, "toe": 0.0, "pole": (1.0, 0.1 * sg, 0.3)}
-
-    plants = {"l": Steps("l", [(0.0, T0 - 0.06, (0.03, 0.11, 0.0), 6.0), (T1, T1 + 0.24, (xl + 0.02, 0.12, G), 6.0),
+    plants = {"l": Steps("l", [(0.0, T0 - 0.06, (0.03, 0.11, 0.0), 6.0), (T1, T1 + 0.26, (xl + 0.02, 0.12, G), 6.0),
                                (T1 + 0.44, END, (xl + 0.72, 0.11, G), 6.0)], lift=[0.0, 0.12]),
               "r": Steps("r", [(0.0, T0, (0.0, -0.11, 0.0), -6.0), (T1 + 0.02, END, (xl + 0.08, -0.12, G), -6.0)])}
+    off, on = {"l": T0 - 0.06, "r": T0}, {"l": T1, "r": T1 + 0.02}
+    reach = ground_reach("r", (xl + 0.42, -0.26, G + 0.10))
 
     def fn(t):
         nonlocal H0
         if H0 is None:
             H0 = np.asarray(C.MODEL["rig"].H0["pelvis"], float)
         P = dict(keyed(t))
-        for s in ("l", "r"):
-            t_off = T0 - 0.06 if s == "l" else T0
-            t_on = T1 if s == "l" else T1 + 0.02
-            if t <= t_off or t >= t_on:
-                P["foot_" + s] = plants[s].at(t)
-            else:
-                a = ramp(t, t_off, t_off + 0.10) * (1.0 - ramp(t, t_on - 0.10, t_on))
-                ground = plants[s].at(t_off if t < 0.5 * (t_off + t_on) else t_on)
-                P["foot_" + s] = S.mix([ground, follow(t, s, P)], [1.0 - sm(a), sm(a)])
+        if t > 0.5 * T0:
+            P["_seat"] = 1.0                     # (no lift of his knees off the deck's height: below it from T0 on)
+        feet_off(t, P, H0, plants, off, on, T0, tau, 0.30)
         # the arms: back as he crouches, swung forward and up as he goes, out for balance in the air, forward on
-        # landing, then pumping into the run
-        k_back = bump(t, 0.0, 0.30, T0)
-        k_up = bump(t, 0.28, T0 + 0.05, T0 + 0.30)
+        # landing (the right hand down to the ground), then pumping into the run
+        k_back = bump(t, 0.0, 0.26, T0 - 0.04)
+        k_up = bump(t, 0.30, T0 + 0.05, T0 + 0.30)
         k_out = bump(t, T0 + 0.1, T0 + 0.35, T1)
         k_land = bump(t, T1 - 0.1, T1 + 0.12, T1 + 0.32)
-        k_run = ramp(t, T1 + 0.2, END)
-        sw = -35.0 * k_back + 70.0 * k_up + 35.0 * k_out + 45.0 * k_land
+        k_run = ramp(t, T1 + 0.24, END)
+        sw = -45.0 * k_back + 75.0 * k_up + 35.0 * k_out + 45.0 * k_land
         out = 14.0 + 45.0 * k_out + 10.0 * k_land
         P["hand_l"] = {"arm": swing_arm(sw + k_run * 40.0, out=out, rot=20.0, elbow=40.0 + 40.0 * k_run, pron=-10.0)}
-        P["hand_r"] = {"arm": swing_arm(sw - k_run * 30.0, out=out, rot=20.0, elbow=40.0 + 40.0 * k_run, pron=-10.0)}
+        arm_r = {"arm": swing_arm(sw - k_run * 30.0, out=out, rot=20.0, elbow=40.0 + 40.0 * k_run, pron=-10.0)}
+        k_reach = sm(bump(t, T1 - 0.06, T1 + 0.14, T1 + 0.34))
+        P["hand_r"] = {"blend": [(1.0 - k_reach, arm_r), (k_reach, reach)]} if k_reach > 0.0 else arm_r
+        P["fingers_r"] = 35.0 - 25.0 * k_reach
         return P
 
     clip("bail_jump_down", END, False, [],
-         f"Down off the tank: stood at the edge of the deck, he crouches, jumps out and down the {DROP:.1f} m (off the "
-         f"edge at {T0:.2f} s, touching down at {T1:.2f} s), lands deep on both boots and comes up into his first running "
-         "stride, his arms out for balance in the air. Root motion: the root under his boots, from the deck's edge to "
-         f"the ground, {DROP:.1f} m down and {xl + 0.6:.2f} m forward. From a higher or lower deck, add the difference to his "
-         f"height between {T0:.2f} and {T1:.2f} s.",
+         f"Down off the tank: stood at the edge of the deck, he crouches (deepest at 0.26 s), jumps out and down the "
+         f"{DROP:.1f} m (off the edge at {T0:.2f} s, touching down at {T1:.2f} s) with his knees drawn up, lands deep on "
+         "bent knees with his right hand going down to the ground, and comes up into his first running stride. Root "
+         f"motion: the root under his boots, from the deck's edge to the ground, {DROP:.1f} m down and {xl + 0.6:.2f} m "
+         f"forward. From a higher or lower deck, add the difference to his height between {T0:.2f} and {T1:.2f} s.",
          root=root_track([(0.0, (0.0, 0.0, 0.0)), (T0, (X0, 0.0, 0.0)), (T1, (xl, 0.0, G)), (END, (xl + 0.6, 0.0, G))]))(fn)
+
+
+STEP = 0.95                                      # (bail_step_down: the turret's roof over the hull's deck)
+EDGE = 0.14                                      # (the roof's edge ahead of his boots as he starts)
+STEP_HAND = {"at": (EDGE - 0.07, 0.36, 0.03), "a": (-0.3, 0.75, -0.6), "pole": (-0.2, 0.5, -1.0), "held": 0.8,
+             "hang": (-0.10, 0.36, 0.0),
+             "turn": 20.0}                       # (his left hand on the edge as he lands, the turret at his left side)
+
+
+def make_step_down():
+    G = -STEP
+    TN = STEP_HAND["turn"]
+    T0, V0, VX = 0.10, 0.0, 0.62                 # (off the roof at T0, stepping off it rather than jumping)
+    PA0 = -0.08
+    land_pa = G - 0.12
+    X0 = 0.08
+    fly, tau = ballistic(T0, X0, PA0, VX, V0, land_pa)
+    T1 = T0 + tau
+    xl, _ = fly(T1)
+    END = round(round((T1 + 0.20) * 30.0) / 30.0, 4)
+    MEAS["step"] = {"takeoff": T0, "touchdown": round(T1, 3), "long": round(END, 3)}
+    keys = [(0.0, dict(z=-0.02, lean=8.0, head=12.0)),
+            (T0, dict(x=X0, z=PA0, lean=12.0, head=14.0, turn=0.2 * TN))]
+    n = 4
+    for k in range(1, n):
+        t = T0 + tau * k / n
+        x, z = fly(t)
+        keys.append((t, dict(x=x, z=z, lean=12.0 + 4.0 * k / n, head=12.0, turn=TN * (0.2 + 0.6 * k / n))))
+    keys += [(T1, dict(x=xl, z=land_pa, lean=16.0, head=10.0, turn=0.85 * TN)),
+             (T1 + 0.09, dict(x=xl + 0.04, z=G - 0.36, lean=26.0, head=16.0, turn=TN, side=4.0)),
+             (END, dict(x=xl + 0.06, z=G - 0.38, lean=24.0, head=14.0, turn=TN, side=4.0))]
+    keyed = S.keyed([(t, body(**kw)) for t, kw in keys])
+    H0 = None
+    plants = {"l": Steps("l", [(0.0, 0.02, (0.0, 0.11, 0.0), 6.0), (T1, END, (xl + 0.10, 0.13, G), 8.0)]),
+              "r": Steps("r", [(0.0, T0, (0.0, -0.11, 0.0), -6.0), (T1 + 0.03, END, (xl - 0.06, -0.13, G), -8.0)])}
+    off, on = {"l": 0.02, "r": T0}, {"l": T1, "r": T1 + 0.03}
+    # his left hand back onto the turret's edge as he lands (the roof at his shoulder then), steadying him
+    edge = {"at": STEP_HAND["at"], "a": tuple(_n(np.asarray(STEP_HAND["a"], float))), "n": (0.0, 0.0, -1.0),
+            "pole_world": STEP_HAND["pole"], "roll": 10.0, "pole_weight": STEP_HAND["held"]}
+
+    def fn(t):
+        nonlocal H0
+        if H0 is None:
+            H0 = np.asarray(C.MODEL["rig"].H0["pelvis"], float)
+        P = dict(keyed(t))
+        if t > 0.5 * T0:
+            P["_seat"] = 1.0
+        feet_off(t, P, H0, plants, off, on, T0, tau, 0.14, lead={"l": 0.24, "r": 0.0}, edge=EDGE + 0.02)
+        k_out = bump(t, 0.0, T0 + 0.15, T1)
+        k_land = bump(t, T1 - 0.08, T1 + 0.08, END + 0.2)
+        sw, out = 10.0 + 25.0 * k_out + 35.0 * k_land, 16.0 + 40.0 * k_out
+        P["hand_r"] = {"arm": swing_arm(sw, out=out, rot=20.0, elbow=45.0, pron=-10.0)}
+        # his left hand: hanging a little out and back, then reaching to the turret's edge behind him at his left
+        # (coming down with him onto it, settling on it as his knees take the landing)
+        k_edge = sm(ramp(t, T0, T1 - 0.04))
+        sink = max(0.0, P["pelvis_at"][2] - (G - 0.38))
+        hang = np.asarray(H0, float) + np.asarray(P["pelvis_at"], float) + np.asarray(STEP_HAND["hang"], float)
+        on_edge = np.asarray(edge["at"], float) + (0.0, 0.0, sink)
+        a_ = _n((1.0 - k_edge) * np.array((0.1, 0.15, -1.0)) + k_edge * np.asarray(edge["a"], float))
+        n_ = _n((1.0 - k_edge) * np.array((0.0, -1.0, 0.0)) + k_edge * np.array((0.0, 0.0, -1.0)))
+        P["hand_l"] = dict(edge, at=tuple((1.0 - k_edge) * hang + k_edge * on_edge), a=tuple(a_), n=tuple(n_))
+        P["fingers_l"] = 35.0 - 20.0 * k_edge
+        return P
+
+    clip("bail_step_down", END, False, [],
+         f"Down off the turret: stood at the edge of the turret's roof facing out (its edge {EDGE:.2f} m ahead of his "
+         f"boots), he steps off it (off at {T0:.2f} s), drops the {STEP:.2f} m onto the hull's deck (touching down at "
+         f"{T1:.2f} s) and lands on bent knees, his left hand back onto the turret's edge (the roof at his shoulder "
+         "then) to steady him. Root motion: the root under his boots, from the turret's roof to the deck, "
+         f"{STEP:.2f} m down and {xl + 0.06:.2f} m forward. From a higher or lower turret roof, add the difference to "
+         f"his height between {T0:.2f} and {T1:.2f} s.",
+         root=root_track([(0.0, (0.0, 0.0, 0.0)), (T0, (X0, 0.0, 0.0)), (T1, (xl, 0.0, G)), (END, (xl + 0.06, 0.0, G))]))(fn)
 
 
 # ================================================================================================ on fire
@@ -671,6 +785,7 @@ def make_clips():
     ROOT.clear()
     measure_face()
     make_climb()
+    make_step_down()
     make_jump()
     make_burning_run()
     make_fall_roll()
@@ -685,7 +800,7 @@ def ground_check(name, step=2):
     c = C.CREW[name]
     rig, skin = C.MODEL["rig"], C.MODEL["skin"]
     N = int(round(c["long"] * C.FPS))
-    worst, at = 1.0, None
+    worst, at, landed = 1.0, None, 0.0
     for f in range(0, N + 1, step):
         t = f / C.FPS
         st = rig.solve(c["fn"](t))
@@ -697,18 +812,25 @@ def ground_check(name, step=2):
             if not k.any():
                 continue
             pts, bones, floor = pts[k], bones[k], ROOF
-        if name == "bail_jump_down":
-            floor = 0.0 if t < MEAS["jump"]["takeoff"] + 0.05 else -DROP
-            if t < MEAS["jump"]["touchdown"] - 0.02 and t > MEAS["jump"]["takeoff"] + 0.05:
+        drop = {"bail_jump_down": ("jump", DROP, 0.25), "bail_step_down": ("step", STEP, EDGE + 0.11)}.get(name)
+        if drop:
+            m, h, edge = MEAS[drop[0]], drop[1], drop[2]
+            floor = 0.0 if t < m["takeoff"] + 0.05 else -h
+            if m["takeoff"] + 0.05 < t < m["touchdown"] - 0.02:
                 continue                                  # (in the air: nothing under him)
-            if t <= MEAS["jump"]["takeoff"] + 0.05:
-                k = pts[:, 0] < 0.25                      # (only what is over the deck: the edge is 0.25 ahead)
+            if t <= m["takeoff"] + 0.05:
+                k = pts[:, 0] < edge                      # (only what is over the deck or roof: its edge ahead)
                 pts, bones = pts[k], bones[k]
+            elif t >= m["touchdown"] + 0.04:              # (down: his boots on the ground, not over it)
+                landed = max(landed, float(pts[:, 2].min() + h))
         i = int(np.argmin(pts[:, 2]))
         d = float(pts[i, 2] - floor)
         if d < worst:
             worst, at = d, (round(t, 3), str(bones[i]))
-    return {"lowest_m": round(worst, 4), "at": at}
+    out = {"lowest_m": round(worst, 4), "at": at}
+    if name in ("bail_jump_down", "bail_step_down"):
+        out["landed_highest_m"] = round(landed, 4)    # (the lowest of him over the ground once down: his soles)
+    return out
 
 
 def joint_speeds(name):
@@ -743,10 +865,11 @@ def picture(name, men, eye, target, tanks=(), deck=False, fast=False, lens=30):
     for v, at, yaw in tanks:
         objs = C.load_piece("vehicle", v, at=tuple(C.g2b((at[0], at[1], 0.0))), yaw=-yaw)
         C.open_up(objs)
-    if deck:
-        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(deck[0] - 1.2, deck[1], DROP / 2))
+    if deck:                                     # (x of its edge, y, width, height: a block to step off)
+        h = deck[3] if len(deck) > 3 else DROP
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(deck[0] - 1.2, deck[1], h / 2))
         box = bpy.context.active_object
-        box.scale = (2.4 + 0.0, deck[2], DROP)
+        box.scale = (2.4 + 0.0, deck[2], h)
     for clip_name, t, Mw in men:
         C.man_at(m, clip_name, t, Mw)
     m["arm"].location = (0.0, 0.0, -50.0)
@@ -787,6 +910,10 @@ def sheet(paths, labels, out, cols=3):
 
 
 def pictures(fast=False, want=None):
+    import kit
+    kit.fresh(C.FPS)
+    C.setup("GER", "rifle")
+    make_clips()                                 # (their times)
     out = []
     pdir = os.path.join(WORK, "out", "pictures")
     if not want or "bail_climb" in want:
@@ -800,10 +927,31 @@ def pictures(fast=False, want=None):
         out.append(sheet(paths, labels, os.path.join(pdir, "bail_climb.jpg")))
     if not want or "bail_jump" in want:
         G = DROP
-        ts = (0.0, 0.30, 0.62, 0.95, MEAS.get("jump", {}).get("touchdown", 1.0) + 0.12, 1.6)
+        T1 = MEAS["jump"]["touchdown"]
+        ts = (0.0, 0.28, MEAS["jump"]["takeoff"] + 0.22, T1 - 0.12, T1 + 0.14, T1 + 0.5)
         men = [("bail_jump_down", t, M4(np.eye(3), (0.0, 2.2 * k, G))) for k, t in enumerate(ts)]
         out.append(picture("bail_jump", men, eye=(5.5, -6.5, 2.4), target=(0.8, 5.0, 0.9), deck=(0.22, 5.5, 13.0),
                            fast=fast, lens=26))
+    if not want or "bail_step" in want:
+        ts = (0.0, MEAS["step"]["takeoff"] + 0.12, MEAS["step"]["touchdown"] - 0.12, MEAS["step"]["touchdown"] + 0.06,
+              MEAS["step"]["long"])
+        men = [("bail_step_down", t, M4(np.eye(3), (0.0, 1.5 * k, STEP))) for k, t in enumerate(ts)]
+        out.append(picture("bail_step", men, eye=(4.2, -4.4, 1.9), target=(0.4, 3.0, 0.8),
+                           deck=(EDGE, 3.0, 9.0, STEP), fast=fast, lens=28))
+    if not want or "bail_close" in want:         # (closer: the crouch, the step-down's landing, the jump's landing)
+        T1 = MEAS["jump"]["touchdown"]
+        men = [("bail_jump_down", 0.28, M4(np.eye(3), (0.0, 0.0, DROP)))]
+        out.append(picture("bail_jump_crouch", men, eye=(2.6, 2.4, 2.6), target=(0.0, 0.0, 2.1),
+                           deck=(0.25, 0.0, 3.0), fast=fast, lens=35))
+        men = [("bail_jump_down", T1 + 0.14, M4(np.eye(3), (0.0, 0.0, DROP)))]
+        out.append(picture("bail_jump_land", men, eye=(3.9, -2.2, 1.3), target=(1.4, 0.0, 0.45),
+                           deck=(0.25, 0.0, 3.0), fast=fast, lens=35))
+        men = [("bail_step_down", MEAS["step"]["long"], M4(np.eye(3), (0.0, 0.0, STEP)))]
+        out.append(picture("bail_step_land", men, eye=(1.9, 2.6, 1.5), target=(0.25, 0.1, 0.65),
+                           deck=(EDGE, 0.0, 3.0, STEP), fast=fast, lens=35))
+        men = [("bail_step_down", MEAS["step"]["touchdown"] - 0.10, M4(np.eye(3), (0.0, 0.0, STEP)))]
+        out.append(picture("bail_step_fall", men, eye=(1.9, 2.6, 1.5), target=(0.25, 0.1, 0.9),
+                           deck=(EDGE, 0.0, 3.0, STEP), fast=fast, lens=35))
     if not want or "burning" in want:
         men = [("burning_run", t, M4(np.eye(3), (0.0, 1.6 * k, 0.0))) for k, t in enumerate((0.1, 0.45, 0.9, 1.3, 1.6, 1.9))]
         out.append(picture("burning_run", men, eye=(4.6, -2.2, 1.6), target=(0.0, 4.0, 0.9), fast=fast, lens=30))
@@ -818,7 +966,7 @@ def main(argv):
     t0 = time.time()
     import kit
     if "pictures" in only:
-        want = [a for a in argv if a in ("bail_climb", "bail_jump", "burning")]
+        want = [a for a in argv if a in ("bail_climb", "bail_step", "bail_jump", "bail_close", "burning")]
         for p in pictures(fast="--fast" in argv, want=want):
             print("picture", p, f"{time.time() - t0:.0f} s")
         return
@@ -831,6 +979,11 @@ def main(argv):
     if "check" in only:
         report["hatch"] = check_hatch()
         report["ground"] = {n: ground_check(n) for n in names}
+        bad = [n for n, g in report["ground"].items()       # (the drops: nothing of him through the ground, his
+               if "landed_highest_m" in g and (g["lowest_m"] < -0.02 or g["landed_highest_m"] > 0.04)]  # soles on it)
+        report["ground_pass"] = not bad
+        if bad:
+            print("  GROUND FAIL:", bad)
         report["fastest_turn"] = {n: joint_speeds(n) for n in names}
         for n in names:
             print(f"  {n:18s} ground {report['ground'].get(n)}  fastest turn {report['fastest_turn'][n]}")
@@ -847,6 +1000,7 @@ def main(argv):
             if n == "burning_run":
                 rc["stride"] = round(3 * S.RUN.stride, 3)
         out["by"] = "tank_bail.py (crew.py's pattern man, GER)"
+        out["meas"] = MEAS
         with open(LR.REF + ".part", "w") as f:
             json.dump(out, f, separators=(",", ":"))
         os.replace(LR.REF + ".part", LR.REF)

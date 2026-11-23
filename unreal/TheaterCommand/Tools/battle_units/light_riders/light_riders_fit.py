@@ -589,14 +589,28 @@ BAIL_ABOUT = (
     "`bail_clips` says where and how to play them.")
 
 
+def drop_text(clips, ref, name, key, h, top, down, then):
+    """A drop's line for the contract, from the reference's own times and root track."""
+    if name not in clips:
+        return None
+    rc, m = clips[name], ref.get("meas", {}).get(key, {})
+    fwd = rc["root"][-1][0] if rc.get("root") else 0.0
+    return (f"{name} ({rc['long']:.2f} s): from standing at the edge of {top} facing out, {h:.2f} m over where he "
+            f"lands: off the edge at {m.get('takeoff', 0.0):.2f} s, down at {m.get('touchdown', 0.0):.2f} s, {then} "
+            f"Root track: down {h:.2f} m, forward {fwd:.2f} m. From a higher or lower drop, add the difference to "
+            f"his height between {m.get('takeoff', 0.0):.2f} s and {m.get('touchdown', 0.0):.2f} s. His pelvis's "
+            "track is from the root, as in every clip with root motion: it comes down with it.")
+
+
 def bail_contract(ref):
     clips = ref["clips"]
     return {
         "names": list(clips),
         "long": {n: rc["long"] for n, rc in clips.items()},
         "root_motion": [n for n, rc in clips.items() if rc.get("root")],
-        "order": "bail_climb_out at the commander's hatch, then bail_jump_down at the edge of the hull, then the "
-                 "ground battle's own run away; a man on fire plays burning_run (looped, moved by its stride) and then "
+        "order": "bail_climb_out at the commander's hatch, then (where the turret stands over the hull's deck) "
+                 "bail_step_down at the turret's edge, then bail_jump_down at the edge of the hull, then the ground "
+                 "battle's own run away; a man on fire plays burning_run (looped, moved by its stride) and then "
                  "burning_fall_roll.",
         "climb": "bail_climb_out (1.5 s): its root at the tank's `commander` socket moved by root_offset (0, 0, -0.92: "
                  "his boots 0.92 m under the socket, stood in the hatch as commander_hatch; its `places` name the "
@@ -604,10 +618,12 @@ def bail_contract(ref):
                  "him up 0.95 m onto the turret's roof, 0.47 m to his right and 0.10 m forward: on a roof higher or "
                  "lower than 0.95 m over where his boots began (the Panzer IV's 0.82, the Tiger's 0.97, the Sherman's "
                  "1.07) add the difference to his height from 0.8 s on (his knee on the roof).",
-        "jump": "bail_jump_down (1.53 s): from standing at the edge of the hull's top facing out, 1.5 m over the ground: "
-                "off the edge at 0.40 s, down at 1.05 s, into his first running stride. Root track: down 1.5 m, "
-                "forward 1.70 m. From a higher or lower hull, add the difference to his height between 0.40 s and "
-                "1.05 s. Walk him from where bail_climb_out leaves him to the hull's edge with the ground battle's walk.",
+        "step": drop_text(clips, ref, "bail_step_down", "step", 0.95, "the turret's roof", "onto the hull's deck",
+                          "on bent knees, his left hand back onto the turret's edge (the roof at his shoulder then). Walk "
+                          "him from where bail_climb_out leaves him to the turret's edge with the ground battle's walk."),
+        "jump": drop_text(clips, ref, "bail_jump_down", "jump", 1.5, "the hull's top", "to the ground",
+                          "on bent knees, his right hand going down to the ground, then up into his first running "
+                          "stride. Walk him from where bail_step_down (or bail_climb_out) leaves him to the hull's edge."),
         "burning": "burning_run (2.1 s loop, in place): `stride` 7.35 m a loop (3.5 m a second): move him that much. "
                    "burning_fall_roll (3.8 s, play once and hold the last pose; still from 3.3 s): starts from "
                    "burning_run's first frame (blend into it from wherever the run is); its root track is the ground "
