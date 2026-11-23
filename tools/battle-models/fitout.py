@@ -1540,17 +1540,36 @@ def rivets(m, f, s, G, hull):
         flush()
 
     bare_under = s.get("rivets_under") is False            # (the art director, 2026-11-19: none at all on the Lancaster's black undersides)
-    # (`geodetic`: (pitch, half width, shade). Doped fabric over a geodetic frame, the Wellington's: no rivet or joint on
-    #  her fuselage or her flying surfaces, but the frame's two sets of members crossing under the fabric, each at 45
-    #  degrees to her length: "a quiet lattice in the skin, not a cage". A member is her coat itself, in whichever of
-    #  its colours lies there, a shade darker (as soot darkens it: `shade` of the way to it), and a hair paler than
-    #  her black on her black. The members round her fuselage are as many at her tail as at her widest, closer
-    #  together as she slims, as they were.)
+    # (`geodetic`: (pitch, half width, slope). Doped fabric over a geodetic frame, the Wellington's: no rivet or joint
+    #  on her fuselage or her flying surfaces, but the frame's two sets of members crossing under the fabric, each at
+    #  45 degrees to her length. A member is a low ridge in the fabric, not a line on it (the art director, 2026-11-23:
+    #  "faint ridges in the fabric, caught by raking light"): `half width` either side of it, its shading leaning up
+    #  to `slope` degrees from her skin's (half that on her black), in the very paint of the skin it lies on (her coat
+    #  in whichever of its colours lies there, or her black). Only the light tells it from her skin: the side toward
+    #  the light a few per cent lighter, the other as much darker, on every colour alike, most in a raking light. A
+    #  ridge is a few centimetres across, under a pixel from about 30 m, where its two sides cancel; and her plain
+    #  model has none. The members round her fuselage are as many at her tail as at her widest, closer together as
+    #  she slims, as they were.)
     geo = s.get("geodetic")
     coat_blend = G["coat_of"](s).blend if geo else None
+    RIDGE_LIFT = 0.0005                                    # (a ridge's edges off her skin: the same paint and shading, so they never show)
+    skin_tree = []                                         # (her skin as it is drawn, found once, before any ridge is laid on it)
 
     def member(part, piece):
-        """A member of her geodetic frame along a row of (point, facing, under), laid on her skin a run of one paint at a time."""
+        """A member of her geodetic frame along a row of (point, facing, under): a ridge in her fabric, laid a run of
+        one paint at a time. Four points across it: its two edges lie on her skin (`Model.lying`: brought down onto
+        it and given its shading, so nothing marks where the ridge leaves the skin) and its two shoulders, a third of
+        its half width in from them, stand off it by so much that the shading leans `slope` degrees there, outward
+        on each side; across its top it turns from the one to the other.
+        It stands on her skin as it is drawn, its flat faces (found along its facing), not on the round body they are
+        cut from, which stands a few millimetres prouder between their corners: so a marking laid over it never
+        rises more than the ridge does from one of its corners to the next. On her black it leans half as far: a
+        black skin shows the light mostly as the sky it mirrors, and a ridge in it as much again as in her coat."""
+        if not skin_tree:
+            from mathutils.bvhtree import BVHTree
+            names = list(m.paints)
+            skin_tree.append(BVHTree.FromPolygons([tuple(v) for v in m.verts], [tuple(q) for q, pa in zip(m.faces, m.fpaint)
+                                                                                 if names[pa] in ("upper", "upper2", "under", "nose")]))
         k = 0
         while k < len(piece) - 1:
             j = k
@@ -1558,20 +1577,28 @@ def rivets(m, f, s, G, hull):
                 j += 1
             run = piece[k:j + 2]
             pts, nrm = [port(q[0]) for q in run], [port(q[1]).normalized() for q in run]
+            rise = geo[1] / 3.0 * math.tan(math.radians(2.0 * geo[2] * (0.5 if run[0][2] else 1.0)))
             verts, faces = [], []
             for i, (p, n) in enumerate(zip(pts, nrm)):
                 side = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).cross(n)
                 side = side.normalized() if side.length > 1e-9 else Y.copy()
-                verts += [p + n * 0.001 + side * geo[1], p + n * 0.001 - side * geo[1]]
+                hit = skin_tree[0].ray_cast(p + n * 0.03, -n, 0.06)
+                if hit[0] is not None and hit[1].dot(n) > 0.5:
+                    p = p + n * (hit[0] - p).dot(n)            # (down onto her skin as it is drawn)
+                verts += [p + n * RIDGE_LIFT + side * geo[1], p + n * (RIDGE_LIFT + rise) + side * (geo[1] * 2.0 / 3.0),
+                          p + n * (RIDGE_LIFT + rise) - side * (geo[1] * 2.0 / 3.0), p + n * RIDGE_LIFT - side * geo[1]]
             for i in range(len(pts) - 1):
-                q = (2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2)
-                if (verts[q[1]] - verts[q[0]]).cross(verts[q[2]] - verts[q[0]]).dot(nrm[i]) < 0.0:
-                    q = tuple(reversed(q))
-                faces.append(q)
+                for a in (0, 1, 2):                        # (a flank, the top, the other flank)
+                    q = (4 * i + a, 4 * i + a + 1, 4 * i + a + 5, 4 * i + a + 4)
+                    if (verts[q[1]] - verts[q[0]]).cross(verts[q[2]] - verts[q[0]]).dot(nrm[i]) < 0.0:
+                        q = tuple(reversed(q))
+                    faces.append(q)
             if run[0][2]:
-                m.raw(verts, faces, ["rivet_under"] * len(faces), part)
+                base = m.raw(verts, faces, ["under"] * len(faces), part)
             else:
-                m.raw(verts, faces, ["upper"] * len(faces), part, blend=[coat_blend(q[0]) for q in run for _ in (0, 1)], soot=[geo[2]] * len(verts))
+                base = m.raw(verts, faces, ["upper"] * len(faces), part, blend=[coat_blend(q[0]) for q in run for _ in range(4)])
+            for i in range(len(pts)):
+                m.lying[base + 4 * i] = m.lying[base + 4 * i + 3] = RIDGE_LIFT
             k = j + 1
 
     def lattice_run(run, dark=False):

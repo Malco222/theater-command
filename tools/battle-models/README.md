@@ -550,15 +550,20 @@ What they add to the form:
   TAIL_CUT, TURRET, SEAT_DROP, NOSE_CREW and NOSE_CANNON she gives). `bomber_wellington.py`: the Wellington Mk IC,
   measured from "Vickers Wellington.svg" (Wikimedia Commons, Emoscopes, CC BY-SA 3.0 and GFDL; 40.44 px to the metre,
   set by her span; the side view levelled by her thrust line and stretched 0.9% to the plan's length; measured, not
-  traced). Her own key: `geodetic` (pitch, half width, shade): her skin is doped fabric over a geodetic frame, so
+  traced). Her own key: `geodetic` (pitch, half width, slope): her skin is doped fabric over a geodetic frame, so
   `fitout.rivets` lays no rivet or joint on her fuselage or flying surfaces but the frame's two sets of members,
-  crossing at 45 degrees to her length (as many round her tail as round her widest), each her coat's own colour a
-  shade darker, a hair paler than black on her black, and none within a few degrees of the line where her coat
-  changes (the art director's ask: "a quiet lattice in the skin, not a cage"). On the fine model only; a machine
-  without the key is built as before. `bomber_pe2.py`: the Pe-2 of 1941-42, measured from "Petljakov Pe-2.svg"
+  crossing at 45 degrees to her length (as many round her tail as round her widest), none within a few degrees of
+  the line where her coat changes. Each is a low ridge in the fabric (the art director: "faint ridges in the fabric,
+  caught by raking light"), in the very paint of the skin under it: its edges lie on the skin with its shading
+  (`Model.lying`), its shoulders stand a millimetre or two off it, so that its shading leans `slope` degrees there
+  (half that on her black). Only the light shows it, a few per cent lighter on the side toward the light and darker
+  on the other, on every colour alike; a ridge is 3 cm across, under a pixel from about 30 m, where its two sides
+  cancel. On the fine model only (her plain one is plain); a machine without the key is built as before. `bomber_pe2.py`: the Pe-2 of 1941-42, measured from "Petljakov Pe-2.svg"
   (Wikimedia Commons, Kaboldy, CC BY-SA 3.0; 113.4 px to the metre, set by her span); that sheet draws the
   radial-engined Pe-2K, so her M-105s' nacelles are from the public-domain "Petlyakov Pe-2 3-view silhouette". No key
-  of her own; her tally panel is drawn at 0.65 (`tallies.SCALE`), her side being slim and round.
+  of her own; her tally panel is drawn at 0.65 (`tallies.SCALE`), her side being slim and round; her tactical number
+  is painted in white just behind her greenhouse, not on her fins (`codes.ON_SIDE`); and her tailwheel is left off,
+  folded up into her in flight.
 - **The Devastator's own keys** (`carrier_devastator.py`; no other machine has them, and none changes another):
   `squares` (how square her section is, station by station: a round cowling, slab sides under her greenhouse;
   `fitout.squared_hull`); `corrugated` (ridges in the skin of her outer wings and tailplane, on the fine model only,

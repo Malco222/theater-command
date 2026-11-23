@@ -35,7 +35,8 @@ THE STYLES (`MODELS` says which bomber wears which; America's are not here: the 
   aft of it (on her starboard side the other way round, so that both read left to right); black on a light finish,
   white on a dark one. The plain Bomber.
 - "tactical", the Soviet Union, "White 23": a number in white, red, yellow or blue on her fin, with a thin dark edge
-  (white and yellow numbers) or a thin white one (red and blue). The plain Bomber.
+  (white and yellow numbers) or a thin white one (red and blue). The plain Bomber; the Pe-2, whose number is on her
+  forward fuselage instead (`ON_SIDE`).
 - "number", everyone else: a plain white number on her fuselage aft of the national marking. The campaign's mark is
   the bare number, "14" (its name for the aircraft is "No. 14"); wear() takes either. The plain Bomber.
 
@@ -172,9 +173,15 @@ BLOCK_EDGE = 0.06                                        # (the same edge round 
 # letters are fitted to her fin and come out smaller where it is small. On her fuselage a style is never more than
 # three fifths of her height there.
 SIZE = {"Lancaster": {"letter": 0.75}, "He111": {"code": 0.65}, "Amerikabomber": {"code": 0.65},
-        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45}, "LeO451": {"number": 0.55}, "Wellington": {"letter": 0.65}, "Pe2": {"tactical": 0.5},
+        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45}, "LeO451": {"number": 0.55}, "Wellington": {"letter": 0.65}, "Pe2": {"tactical": 0.4},
         "Bomber": {"letter": 0.6, "tail": 0.45, "squadron": 0.55, "tactical": 0.55, "number": 0.55}}
-TALL = 0.6                                               # (of her fuselage's height where the letters stand, at most)
+# A fin style her owner painted on her forward fuselage instead, on both sides, its places about this middle (x, z:
+# her own metres) and as tall as `SIZE` says, made smaller only as any style on her fuselage is (`side_places`): the
+# Pe-2's number just behind her greenhouse, over her wing root, her stars keeping her fins (the art director,
+# 2026-11-23). Under her greenhouse is her record's panel, and her airscrews stand abeam of its front; behind her
+# greenhouse her nacelles hide her side's foot from abeam and it turns up above, so her number comes out 0.35 m.
+ON_SIDE = {"Pe2": {"tactical": (0.95, 0.34)}}
+TALL = 0.6                                              # (of her fuselage's height where the letters stand, at most)
 CLEAR = 0.18                                             # (between her letters and a window, a gun, anything not her skin: a hand)
 CLEAR_UP = 0.06                                          # (the same above and below them, where her wing root may run close under)
 SHRINK = 0.85                                            # (how small her letters may be made to keep them clear, of their size)
@@ -602,16 +609,19 @@ def cell_of(kind, h, narrow):
     return WIDE[kind] * h * narrow
 
 
-def side_places(her, style, h_most):
-    """A style on her fuselage, anchored at her national marking: its places' middles on each side. As tall as
-    h_most, but no taller than three fifths of her fuselage where it stands; smaller (to `HIDE_SHRINK` of it) if
-    that brings every place into plain sight from far abeam (`hidden`: her fin, her tailplane, a nacelle);
-    and smaller still (to `SHRINK` of that) if that keeps it `CLEAR` of a window, a gun or anything else that is not
-    her painted skin."""
+def side_places(her, style, h_most, at=None):
+    """A style on her fuselage, anchored at her national marking (or about the middle `at`: `ON_SIDE`): its places'
+    middles on each side. As tall as h_most, but no taller than three fifths of her fuselage where it stands; smaller
+    (to `HIDE_SHRINK` of it) if that brings every place into plain sight from far abeam (`hidden`: her fin, her
+    tailplane, a nacelle); and smaller still (to `SHRINK` of that) if that keeps it `CLEAR` of a window, a gun or
+    anything else that is not her painted skin."""
     x_m, z_m, r, _ = her.mark
+
+    def run(hh):
+        return _side_at(her, style, hh, at) if at is not None else _side_run(her, style, hh, x_m, z_m, r)
     h = h_most
     for _ in range(4):
-        out = _side_run(her, style, h, x_m, z_m, r)
+        out = run(h)
         h_fit = min([h_most] + [TALL * min(her.high(p.x - p.cell / 2.0), her.high(p.x + p.cell / 2.0)) for p in out])
         if abs(h_fit - h) < 0.005:
             break
@@ -623,7 +633,7 @@ def side_places(her, style, h_most):
             hh = round(h - 0.01 * k, 3)
             if hh < least * h - 1e-6:
                 break
-            out = _side_run(her, style, hh, x_m, z_m, r)
+            out = run(hh)
             n = score(out)
             if best is None or n < best[0]:
                 best = (n, hh, out)
@@ -704,6 +714,17 @@ def _side_run(her, style, h, x_m, z_m, r):
             edge += cells[k] + space
         for k, (kind, _, glyphs, coloured) in enumerate(st["places"]):     # (each leaning toward her marking)
             out.append(Place(style, side, k + 1, x_m + s[k] * way, z_m, h, cells[k], kind, glyphs, coloured, "side", 1 if group[k] == 0 else -1))
+    return out
+
+
+def _side_at(her, style, h, at):
+    """A fin style's places on her fuselage about the middle `at` (x, z), spaced as on her fin (`fin_cells`), read
+    from her nose aft on her port side and from her tail forward on her starboard."""
+    st = STYLE[style]
+    out = []
+    for side, w in SIDES:
+        for k, ((s_k, cell), (kind, _, glyphs, coloured)) in enumerate(zip(fin_cells(style, h), st["places"])):
+            out.append(Place(style, side, k + 1, at[0] - s_k * w, at[1], h, cell, kind, glyphs, coloured, "side"))
     return out
 
 
@@ -838,7 +859,9 @@ def layout(name, model=None):
     out, grids = {}, {}
     for style in MODELS[name]:
         h_most = SIZE[name][style]
-        if STYLE[style]["on"] == "side":
+        if style in ON_SIDE.get(name, {}):
+            places = side_places(her, style, h_most, ON_SIDE[name][style])
+        elif STYLE[style]["on"] == "side":
             places = side_places(her, style, h_most)
         else:
             places, grids = fin_places(her, style, h_most, grids)

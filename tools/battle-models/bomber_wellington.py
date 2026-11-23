@@ -33,8 +33,9 @@ NAME = "Wellington"
 # three-bladed de Havilland airscrew; her tall fin with its rounded top and the tailplane on top of her rear fuselage;
 # her tailwheel.
 # Her skin is doped fabric over her geodetic frame: no rivets on it, but the lattice of the frame under it, two sets of
-# members crossing at right angles about 45 degrees to her length, as a faint shade in the paint (`geodetic`: the art
-# director's ask, "a quiet lattice in the skin, not a cage"). Her night colours are the Lancaster's: dark green and dark
+# members crossing at right angles about 45 degrees to her length, as low ridges in the fabric that only the light
+# finds (`geodetic`: the art director's asks, "a quiet lattice in the skin, not a cage" and "faint ridges in the
+# fabric, caught by raking light"). Her night colours are the Lancaster's: dark green and dark
 # earth over black, the black up her sides and over her fin; the roundel with the yellow ring on her sides, the red and
 # blue one over her wings and none under them, the fin flash; her squadron's letters (codes.py) in medium sea grey.
 #
@@ -79,7 +80,7 @@ NUMBERS = {
     # (her night colours, as the Lancaster's: the black up her sides and over her fin; no rivets anywhere on her
     #  fabric, and the lattice of her frame under it instead)
     "patch": 3.4, "colours": {"upper": "434A33", "upper2": "685A42", "under": "1B1C1E", "nose": "434A33", "boss": "171717"},
-    "under_from": 0.45, "fins_under": True, "rivets_under": False, "geodetic": (0.46, 0.009, 0.1),
+    "under_from": 0.45, "fins_under": True, "rivets_under": False, "geodetic": (0.46, 0.015, 10.0),
     # (each Pegasus: its airscrew 2.93 out from her middle and 0.5 above it; the nacelle back under her wing; the nine
     #  heads of the engine in the cowling's mouth; her airscrews' yellow tips)
     "engines": [(2.93, 2.10, 0.5, True, 4.4)], "well": (2.93, 0.45, 0.5), "engine_face": 9, "blade_tips": True, "framed_windows": True,
