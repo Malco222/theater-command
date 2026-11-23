@@ -538,6 +538,15 @@ namespace TheaterFx
 		 * never joins another fire (fire.join), however small, low or still it is: the kit cannot tell a deck from the
 		 * ground, and a scene's ground under a ship is her deck. The pre-check of 22 November. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1, bool bOnShip = false);
+		/** A burning opening (release 2, Brian 23 November: "the tank on fire doesnt look realistic"): flame and smoke
+		 * forced out of a hatch or a grille Across metres wide at At, for Seconds, then a thinning grey column as Burn's.
+		 * It is a fire as Burn's (put out by BurnOut, moved by BurnMove, burning down by fire.late) with three
+		 * differences: it never joins another fire nor takes one in (fire.join), so a wreck's hatches burn as hatches
+		 * and never melt into one bonfire on her deck; it never founds a column of its own (the deck's fire carries the
+		 * wreck's column); and its flames are fire.vent_tongues where the recipe has that row (narrow, tall, roaring
+		 * out of the hole), else fire.land_tongues as a small fire on land. Without fire.vent_tongues.every_s it is a
+		 * Burn that does not join. */
+		void Vent(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
 		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
 		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
 		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
@@ -1133,6 +1142,7 @@ namespace TheaterFx
 			bool bMoverSet = false;
 			double NextGlow = 0.0; // (a burning thing's warm glow on the ground, fire.glow, by the clock)
 			bool bLandColumn = false; // (a big fire's own column, Kind 3, that stands over a burning vehicle on land: fire.land_column)
+			bool bVent = false; // (a burning thing: a burning opening, Vent: never joined, no column of its own, fire.vent_tongues)
 		};
 		struct Paint
 		{
@@ -1586,13 +1596,14 @@ namespace TheaterFx
 		OilRow OilRowOf(const std::string& Kind) const;
 		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
 		bool JoinBurn(double Now, const Vec& At, double Across, double Seconds, int Id); // (fire.join: a fire lit by one already burning joins it; true when it did)
+		void Burning(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip, bool bVent); // (Burn and Vent: a burning thing, joined or not)
 		int OwnColumn(double Now, const Source& Fire, bool bLand = false); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
 		SteamRow SteamRowOf(const std::string& Kind) const; // (the row, every dial held to a sane span)
 		CookRow CookRowOf() const;
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
-		TongueRow TongueRowOf(bool bLand = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues)
+		TongueRow TongueRowOf(bool bLand = false, bool bVent = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues; bVent: fire.vent_tongues before either)
 		/** A burning thing on land under a ship's size (a tank's, not a ship's): no wider than fire.smoke_column.from_m,
 		 * no higher over the ground than fire.land_column.above_m, and not under way. The test OwnColumn's land column
 		 * makes, without its from_m and from_s; fire.land_tongues and fire.lamp.land_strength are for these. */

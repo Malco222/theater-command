@@ -95,6 +95,7 @@
 // the recipe's picture colours put straight on the screen.
 
 #include "Effects/TheaterFxCore.h"
+#include "Battle/LandBurn.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1551,11 +1552,14 @@ namespace
 		struct Due
 		{
 			double At = 0.0;
-			int What = 0; // (1 Burn, 2 the hatch's cook-off, 3 a fuel ball)
+			int What = 0; // (1 Burn, 2 the hatch's cook-off, 3 a fuel ball; release 2's film fire: 4 Vent, 5 Steam of Kind, 6 a cook-off of Pops over Over, jet Jet)
 			Vec Where;
 			double Across = 0.0, Seconds = 0.0;
 			int Key = -1;
 			bool bDone = false;
+			std::string Kind;
+			int Pops = 0;
+			double Over = 0.0, Jet = 0.0;
 		};
 		const double Long = EnvNum("FX_BURN_S", 900.0);
 		std::vector<Due> Script;
@@ -1568,6 +1572,52 @@ namespace
 		if (Kind == "one")
 		{
 			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 });
+		}
+		else if (Kind == "film")
+		{
+			// (release 2's film fire, -TheaterLandFilmFire: the scene's own plan, Battle/LandBurn. FX_FATE the fates
+			// table's key (tank.engine_fire), FX_BREW=1 a brew-up (its clip's jets and fuel ball first), FX_CLASS heavy,
+			// medium or light, FX_WRECK_SEED her dice. The kill's own clip beats the scene keeps are laid as it does)
+			LandBurn::Wreck Wk;
+			Wk.Fate = std::getenv("FX_FATE") ? std::getenv("FX_FATE") : "tank.engine_fire";
+			Wk.bBrewUp = std::getenv("FX_BREW") != nullptr;
+			Wk.bRing = true;
+			Wk.Class = std::getenv("FX_CLASS") ? std::getenv("FX_CLASS") : "heavy";
+			Wk.Seed = static_cast<uint64_t>(EnvNum("FX_WRECK_SEED", 7.0));
+			Wk.Left = Long;
+			const LandBurn::Plan Pl = LandBurn::Make(Wk);
+			std::printf("film fire: %s (%zu calls)\n", Pl.Story.c_str(), Pl.Calls.size());
+			const Vec Ring(0.12, 0.0, G + 1.8);
+			if (Wk.bBrewUp)
+			{
+				for (const Vec& J : { Fire2, Fire1, Fire3 })
+				{
+					Script.push_back({ 0.05, 2, J, 1.0, 0.0, -1 });
+				}
+				Script.push_back({ 0.55, 3, Engine, 8.0, 0.0, -1 });
+			}
+			else
+			{
+				Script.push_back({ 0.35, 2, Commander, 0.8, 0.0, 1 }); // hatch_blown
+				Script.push_back({ 0.5, 5, Engine, 0.7, 5.0, 100002, false, "smoke" }); // smoke_burst, as the film fire lays it
+			}
+			for (const LandBurn::Call& Cl : Pl.Calls)
+			{
+				const Vec At = Cl.Socket == "ring" ? Ring : Cl.Socket == "fire.1" ? Fire1 : Cl.Socket == "fire.2" ? Fire2 : Cl.Socket == "fire.3" ? Fire3 : Engine;
+				Due Du;
+				Du.At = Cl.At;
+				Du.Where = At;
+				Du.Across = Cl.Across;
+				Du.Seconds = Cl.Seconds;
+				Du.Key = 700000 + Cl.Slot;
+				Du.Kind = Cl.Kind;
+				Du.Pops = Cl.Pops;
+				Du.Over = Cl.Over;
+				Du.Jet = Cl.Jet;
+				Du.What = Cl.What == LandBurn::Do::Fire ? 1 : Cl.What == LandBurn::Do::Vent ? 4 : Cl.What == LandBurn::Do::Wisp ? 5 : 6;
+				std::printf("  %7.1f s %-5s %-7s %.2f m %6.1f s %s\n", Cl.At, Du.What == 1 ? "fire" : Du.What == 4 ? "vent" : Du.What == 5 ? "wisp" : "cook", Cl.Socket.c_str(), Cl.Across, Cl.What == LandBurn::Do::Cook ? Cl.Over : Cl.Seconds, Cl.Kind.c_str());
+				Script.push_back(Du);
+			}
 		}
 		else if (Kind == "crash" || Kind == "dump")
 		{
@@ -1611,6 +1661,18 @@ namespace
 				else if (D.What == 3)
 				{
 					Fx.FuelBall(D.At, D.Where, D.Across, Vec(D.Seconds, 0.0, -0.15 * D.Seconds)); // (Seconds: its speed in, along +X and a little down)
+				}
+				else if (D.What == 4)
+				{
+					Fx.Vent(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else if (D.What == 5)
+				{
+					Fx.Steam(D.At, D.Key, D.Where, Upward, D.Across, D.Seconds, D.Kind.c_str());
+				}
+				else if (D.What == 6)
+				{
+					Fx.CookOff(D.At, D.Where, Upward, D.Across, D.Pops, D.Over, D.Jet, -1.0, D.Key);
 				}
 				else
 				{

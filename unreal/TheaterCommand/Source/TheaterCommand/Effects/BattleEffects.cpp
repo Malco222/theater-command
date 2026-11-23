@@ -502,6 +502,14 @@ void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seco
 	});
 }
 
+void FBattleEffects::Vent(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id)
+{
+	Do([=, this]()
+	{
+		Core.Vent(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id);
+	});
+}
+
 void FBattleEffects::FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity)
 {
 	Do([=, this]()

@@ -8814,7 +8814,17 @@ namespace TheaterFx
 		return (IsAPlace(In) ? In : Usual).Unit(Usual);
 	}
 
+	void Battle::Vent(double Now, const Vec& At, double Across, double Seconds, int Id)
+	{
+		Burning(Now, At, Across, Seconds, Id, false, true);
+	}
+
 	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip)
+	{
+		Burning(Now, At, Across, Seconds, Id, bOnShip, false);
+	}
+
+	void Battle::Burning(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip, bool bVent)
 	{
 		if (!IsAPlace(At))
 		{
@@ -8841,7 +8851,7 @@ namespace TheaterFx
 				}
 			}
 		}
-		if (!bOnShip && JoinBurn(Now, At, Across, Seconds, Id))
+		if (!bOnShip && !bVent && JoinBurn(Now, At, Across, Seconds, Id))
 		{
 			return;
 		}
@@ -8849,6 +8859,7 @@ namespace TheaterFx
 		S.At = At;
 		S.Kind = 0;
 		S.bOnShip = bOnShip;
+		S.bVent = bVent;
 		S.Id = Id >= 0 ? Id : -1;
 		S.Start = Now;
 		S.Next = Now;
@@ -8858,8 +8869,8 @@ namespace TheaterFx
 		S.Across = std::min(5000.0, std::max(0.3, Across)); // (a width that is not a number counts as the least, and an endless one is held: no point of it is ever laid at infinity)
 		S.Seed = ++Seeds * 49979687ull ^ PlaceKey(At);
 		S.Bank = BankRowOf(S.Across, S.Seed);
-		S.Column = OwnColumn(Now, S);
-		if (S.Column < 0 && !bOnShip)
+		S.Column = bVent ? -1 : OwnColumn(Now, S);
+		if (S.Column < 0 && !bOnShip && !bVent)
 		{
 			S.Column = OwnColumn(Now, S, true); // (a burning vehicle on land: its own black column, fire.land_column)
 		}
@@ -8894,7 +8905,7 @@ namespace TheaterFx
 		double Best = Within * Within;
 		for (Source& H : Sources)
 		{
-			if (H.Kind != 0 || H.bOnShip || H.OutAt >= 0.0 || H.Flames <= Now || Now < H.Start || std::max(H.Across, H.AcrossTo) > Most)
+			if (H.Kind != 0 || H.bOnShip || H.bVent || H.OutAt >= 0.0 || H.Flames <= Now || Now < H.Start || std::max(H.Across, H.AcrossTo) > Most)
 			{
 				continue;
 			}
@@ -9304,8 +9315,9 @@ namespace TheaterFx
 		R.Life.A = Safe(Life.A, 0.2, 60.0, 1.6);
 		R.Life.B = std::max(R.Life.A, Safe(Life.B, 0.2, 60.0, 2.8));
 		R.Reach = Safe(Num(P + "reach", 1.2), 0.05, 20.0, 1.2); // (a surge's reach, as a share of its fire's width; a vent's own is thrown when it opens)
-		R.Col = Picture("steam.colour", Rgb::FromPicture(238, 240, 244));
-		R.Old = Picture("steam.colour_old", Rgb::FromPicture(226, 230, 236));
+		// (a row's own colour where it has one: release 2's smoulder, a burnt-out wreck's grey wisps, is not white)
+		R.Col = Picture(Has(P + "colour.0") ? P + "colour" : std::string("steam.colour"), Rgb::FromPicture(238, 240, 244));
+		R.Old = Picture(Has(P + "colour_old.0") ? P + "colour_old" : std::string("steam.colour_old"), Rgb::FromPicture(226, 230, 236));
 		R.Shadow = Picture("steam.shadow", Rgb::FromPicture(186, 194, 208));
 		R.ShadowK = Safe(Num("steam.shadow_k", 0.0), 0.0, 1.0, 0.0);
 		R.SideShade = Safe(Num("steam.side_shade", 0.0), 0.0, 1.0, 0.0);
@@ -9729,7 +9741,7 @@ namespace TheaterFx
 		return Wide < Below && !(Fire.At.Z - Height(Fire.At.X, Fire.At.Y) > Above) && !Fire.bMoves && !Fire.bOnShip;
 	}
 
-	Battle::TongueRow Battle::TongueRowOf(bool bLand) const
+	Battle::TongueRow Battle::TongueRowOf(bool bLand, bool bVent) const
 	{
 		// (fire.tongues, every dial held to a sane span. Without the row's every_s: off, and a burning thing's flames
 		// are the upright cones they were. bLand, the pre-check of 22 November: head C's numbers and its mends are the
@@ -9737,7 +9749,9 @@ namespace TheaterFx
 		// and redder. A recipe with fire.land_tongues gives a fire on land (LandFire) that whole row instead, and leaves
 		// fire.tongues to the ships as they were)
 		TongueRow R;
-		const std::string P = bLand && Has("fire.land_tongues.every_s") ? "fire.land_tongues." : "fire.tongues.";
+		// (bVent, a burning opening: fire.vent_tongues, narrow and tall out of a hatch, where the recipe has it)
+		const bool bVentRow = bVent && Has("fire.vent_tongues.every_s");
+		const std::string P = bVentRow ? "fire.vent_tongues." : bLand && Has("fire.land_tongues.every_s") ? "fire.land_tongues." : "fire.tongues.";
 		R.bOn = Has(P + "every_s");
 		if (!R.bOn)
 		{
@@ -9754,7 +9768,7 @@ namespace TheaterFx
 		R.Every = Safe(Num(P + "every_s", 0.05), 0.02, 1.0, 0.05);
 		R.Seats = Held(P + "seats", 3.0, 5.0, 1.0, 12.0);
 		R.SeatsLeast = static_cast<int>(Safe(Num(P + "seats_least", 3.0), 1.0, 12.0, 3.0));
-		R.Tall = Held(P + "tall", 0.6, 1.5, 0.05, 6.0);
+		R.Tall = Held(P + "tall", 0.6, 1.5, 0.05, bVentRow ? 12.0 : 6.0); // (a hatch's flame stands many times its opening)
 		R.TallWide = Safe(Num(P + "tall_wide_m", 12.0), 0.5, 5000.0, 12.0);
 		R.Wide = Held(P + "wide", 0.14, 0.24, 0.02, 1.0);
 		R.Life = Held(P + "life_s", 0.22, 0.4, 0.05, 1.5);
@@ -12197,6 +12211,8 @@ namespace TheaterFx
 		const TongueRow Tongues = TongueRowOf();
 		const bool bLandTongues = Has("fire.land_tongues.every_s");
 		const TongueRow LandTongues = bLandTongues ? TongueRowOf(true) : TongueRow();
+		const bool bVentTongues = Has("fire.vent_tongues.every_s");
+		const TongueRow VentTongues = bVentTongues ? TongueRowOf(true, true) : TongueRow();
 		const GlowRow Glow = GlowRowOf();
 		const LateRow Late = LateRowOf();
 		// (fire.land_column: a burning vehicle's plain smoke under its own column is only its foot, base_r1 as wide and
@@ -12475,7 +12491,7 @@ namespace TheaterFx
 					FireGlow(S, Now, Glow, 1.0 - (1.0 - Late.Light) * LateShare(Late, S.Seed, S.Start, Now));
 				}
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
-				const TongueRow& Row = bLandTongues && S.Next <= Now && S.Next < S.Flames && LandFire(S) ? LandTongues : Tongues;
+				const TongueRow& Row = S.bVent && bVentTongues ? VentTongues : bLandTongues && S.Next <= Now && S.Next < S.Flames && LandFire(S) ? LandTongues : Tongues;
 				while (S.Next <= Now && S.Next < S.Flames)
 				{
 					if (Row.bOn)

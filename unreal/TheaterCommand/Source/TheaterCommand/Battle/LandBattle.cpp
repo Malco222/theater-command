@@ -8215,6 +8215,38 @@ void ALandBattle::PlayArmourEvents()
 	// The tanks' own beats: what the fire (LandPlay) does not already draw and sound. Her gun's flash and its shot are
 	// the round's, the strike's sparks the round's landing, the spent case the mix's: those are left out here.
 	static TSet<FString> Unknown;
+	// Effects (R2): the film fire (-TheaterLandFilmFire, LandBurn; Brian, 23 November: "the tank on fire doesnt look
+	// realistic"). A wreck's fire and smoke loops are left out below and her own plan is played after the loop instead.
+	if (!S.Burns.bAsked)
+	{
+		S.Burns.bAsked = true;
+		S.Burns.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFilmFire"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: wrecks' fire %s"), S.Burns.bOn ? TEXT("as a film shows it (-TheaterLandFilmFire, release 2)") : TEXT("as before"));
+	}
+	// (her story, made once at her kill from how the fates table says she ended, her size and her own dice)
+	auto PlanOf = [&S](size_t I) -> LandBurn::Director::Her&
+	{
+		LandBurn::Director::Her& L = S.Burns.Of(I);
+		if (!L.bMade)
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[I];
+			LandKit::V3 Spot, Way;
+			LandBurn::Wreck Wr;
+			Wr.Fate = V.FateKey;
+			Wr.bBrewUp = V.bBrewUp;
+			Wr.bRing = V.SocketNow("ring", Spot, Way);
+			Wr.bHatch = V.SocketNow("fire.2", Spot, Way);
+			Wr.bDriver = V.SocketNow("fire.3", Spot, Way);
+			Wr.Class = LandBurn::ClassOf(V.Look().Kind, V.Look().Name, V.Look().Long);
+			Wr.Seed = (static_cast<uint64_t>(V.Index) + 1ull) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(std::llround(std::max(0.0, V.Died) * 1000.0));
+			Wr.Left = (std::max(V.BurnUntil, S.Rec.End) + 8.0 - V.Died) * S.Life;
+			L.Story = LandBurn::Make(Wr);
+			L.bMade = true;
+			UE_LOG(LogTheater, Log, TEXT("Land battle: %s's wreck (%s, %s): %s"), *LandParts::Wide(V.Look().Name),
+				Wr.Fate.empty() ? TEXT("no fate") : *LandParts::Wide(Wr.Fate), *LandParts::Wide(Wr.Class), *LandParts::Wide(L.Story.Story));
+		}
+		return L;
+	};
 	for (const LandKit::Event& E : S.Armour->Events)
 	{
 		FString Fx = LandParts::Wide(E.Fx);
@@ -8233,13 +8265,27 @@ void ALandBattle::PlayArmourEvents()
 		// ammunition's blast) or a lorry is knocked out (its fire starting). Some 8 m across for a tank (the art
 		// director's ruling), 6 for a lorry; it rolls on as she was moving. Her own fire burns on after it as before.
 		if (Effects && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
-			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier")))
+			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier"))
+			&& (!S.Burns.bOn || PlanOf(static_cast<size_t>(E.Vehicle)).Story.bBurns)) // (Effects (R2): a lorry shot through that does not burn)
 		{
 			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
 			LandKit::V3 Deck, DeckWay;
 			const FVector BallAt = V.SocketNow("engine", Deck, DeckWay) ? World(Deck.X, Deck.Y, Deck.Z) : At;
 			const FVector Rolling = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * (UnitsPerMetre / S.Life);
 			Effects->FuelBall(BallAt, V.Look().Kind == "carrier" ? 6.0f : 8.0f, Rolling);
+		}
+		// Effects (R2), the film fire: her fire and smoke loops are her plan's (below); the puff of smoke as she is
+		// struck is a grey push of smoke, not a small fire. The brew-up's jets, the magazine's blast and the hatch blown
+		// open stay as they were.
+		if (S.Burns.bOn && Effects && !Fx.IsEmpty() && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
+			&& !Fx.Contains(TEXT("flame_jet")) && !Fx.Contains(TEXT("magazine")) && !Fx.Contains(TEXT("brew")) && !Fx.Contains(TEXT("cook"))
+			&& (Fx.Contains(TEXT("fire")) || Fx.Contains(TEXT("burn")) || Fx.Contains(TEXT("smoke"))))
+		{
+			if (Fx == TEXT("smoke_burst"))
+			{
+				Effects->Steam(E.Key + 100000, At, FVector::UpVector, 0.7f, 5.0f, TEXT("smoke"));
+			}
+			Fx.Reset();
 		}
 		if (Effects && !Fx.IsEmpty())
 		{
@@ -8291,6 +8337,47 @@ void ALandBattle::PlayArmourEvents()
 		}
 	}
 	S.Armour->Events.clear();
+	// Effects (R2), the film fire: each wreck's calls as they fall due, at her sockets as she lies now (the open ring,
+	// her hatches, her engine deck; her middle where her model has none of that name). Her numbers in the kit are her
+	// own (LandBurn::Director::IdOf), so a call laid again (a wisp's next stretch) takes up its own.
+	if (S.Burns.bOn && Effects)
+	{
+		const std::vector<LandKit::Vehicle>& Vs = S.Armour->Vehicles();
+		for (size_t I = 0; I < Vs.size(); ++I)
+		{
+			const LandKit::Vehicle& V = Vs[I];
+			if (V.Died < 0.0 || S.Battle < V.Died)
+			{
+				continue;
+			}
+			LandBurn::Director::Her& L = PlanOf(I);
+			const double Since = (S.Battle - V.Died) * S.Life;
+			while (L.Next < L.Story.Calls.size() && L.Story.Calls[L.Next].At <= Since)
+			{
+				const LandBurn::Call& C = L.Story.Calls[L.Next++];
+				LandKit::V3 Spot, Way;
+				FVector At, Up = FVector::UpVector;
+				if (V.SocketNow(C.Socket, Spot, Way) || V.SocketNow("engine", Spot, Way))
+				{
+					At = World(Spot.X, Spot.Y, Spot.Z);
+					Up = WorldWay(Way.X, Way.Y, Way.Z).GetSafeNormal(0.01, FVector::UpVector);
+				}
+				else
+				{
+					At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z + 0.8);
+				}
+				const int32 Id = LandBurn::Director::IdOf(I, C.Slot);
+				const float Across = static_cast<float>(C.Across), Seconds = static_cast<float>(C.Seconds);
+				switch (C.What)
+				{
+				case LandBurn::Do::Fire: Effects->Burn(At, Across, Seconds, Id); break;
+				case LandBurn::Do::Vent: Effects->Vent(At, Across, Seconds, Id); break;
+				case LandBurn::Do::Cook: Effects->CookOff(At, Up, Across, C.Pops, static_cast<float>(C.Over), static_cast<float>(C.Jet), -1.0f, Id); break;
+				case LandBurn::Do::Wisp: Effects->Steam(Id, At, Up, Across, Seconds, LandParts::Wide(C.Kind)); break;
+				}
+			}
+		}
+	}
 }
 
 void ALandBattle::PlayMenEvents()
