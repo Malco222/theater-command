@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a2a9f159 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2e860d01 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -880,7 +880,7 @@
     bargains: false,
     _legions: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC). Off: nothing of src/campaign/legions.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'legions', and a country at peace outside both sides may send one legion of volunteers at a time to fight in a patron's army (data/campaign/legions.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_LEGIONS=1.",
     legions: false,
-    _winChance: "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's order of 07:06Z; data/campaign/winchance.json). Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on carry the flag 'winChance', and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting that flag; a run outside the browser by TC_WINCHANCE=1.",
+    _winChance: "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's orders of 07:06Z, 07:27Z and 10:14Z; data/campaign/winchance.json). Its own step inside Units decide: it needs 'unitsDecide' too, and stays off, card and field both, until the 3D field's win share by odds band is within a tenth of the card's curve. Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on with Units decide carry the flag 'winChance' as well, and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting both flags; a run outside the browser by TC_UNITS=1 TC_WINCHANCE=1.",
     winChance: false,
     _unitsDecide: "Units decide (release 2; Brian 23 November 2026 07:11Z and 07:13Z, the core theme; the design director's audit of 07:17Z): battles come from the units each side built, researched and trained, never from a nation's flag or the date (src/campaign/units.ts). Off: nothing behind it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'unitsDecide' (set at a campaign's start only). Its steps so far: the convoy war by cause (data/campaign/convoycause.json). A run outside the browser can force it: TC_UNITS=1 or TC_UNITS=0.",
     unitsDecide: false
@@ -50050,7 +50050,7 @@
   var listAnd2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var evenOdds = (dice2) => 2.4 / (dice2[0] + dice2[1]);
   var WIN = winchance_default;
-  var winChanceOn = (g2) => g2.flags.winChance === 1;
+  var winChanceOn = (g2) => unitsDecide(g2) && g2.flags.winChance === 1;
   var sureWords = (dice2) => dice2[0] > 0 ? `nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1` : "no odds make it sure";
   var luckOf = (prepared) => {
     const f = 1 - WIN.prepared * Math.max(0, Math.min(1, prepared));
