@@ -3171,7 +3171,7 @@ namespace LandMen
 			BoneFrames(S, M.Now, M.Model);
 			M.World = R.Seat;
 			// (his gun put away under his feet while a tank clip plays: its bones drawn to a point, so not drawn at all)
-			const bool bStowed = C.Weapon == "none";
+			const bool bStowed = C.Weapon == "none" || R.bUnarmed; // (Effects (R2): a bailing crewman, unarmed)
 			const size_t NB = S.Bones.size();
 			for (size_t B = 0; B < NB; ++B)
 			{

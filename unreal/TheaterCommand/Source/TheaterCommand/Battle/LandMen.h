@@ -431,6 +431,9 @@ namespace LandMen
 			int FromClip = -1;
 			float FromTime = 0.f;
 			float W = 1.f;
+			/** Effects (R2): his gun never drawn, whatever his clip holds (a tank's crew bailing out in the tankers'
+			 * infantry clips, which carry a rifle; the art director, 23 November). False: as before. */
+			bool bUnarmed = false;
 		};
 		void SetRide(int Man, const Ride& R);
 		bool IsRider(int Man) const;

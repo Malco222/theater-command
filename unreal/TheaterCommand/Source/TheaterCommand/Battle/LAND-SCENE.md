@@ -506,14 +506,22 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   blown, smoke, bail-out); then `brew_up`. Her fire, column and cook-offs start at the blast. With the switch off both
   are 0 and the kill is as it was.
 - **Getting out.** Each man climbs out of his hatch (the commander's, the driver's, then the loader's and hull gunner's
-  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes: running bent
-  double for her rear (18 to 38 m), to cover, crawling to a crater, or crouching in her lee.
-- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown down dead beside her; a man
-  who had not yet started is lost inside. While the fight goes on round her, a man in the open is cut down about one
-  time in six, or hit and left crawling about one in eight (a man crouching in her lee is never hit). Now and then the
-  first man out of a burning tank is on fire: he runs a few weaving steps, falls, and burns on 12 to 25 seconds.
-- **The men.** They are the crowd's riders, drawn from `USA_tanker` / `GER_panzer` (or the army's own soldier file),
-  posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes. First he runs
+  straight back in her lee, 8 to 12 m (a crawler 3 to 5), past her rear as the enemy sees her and into the shadow her
+  hull casts, never through it. Then he breaks for her rear (18 to 38 m further), for cover, or crawls to a crater. A
+  man staying by her crouches in her lee.
+- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown 2 to 5 m and lies dead; a man
+  who had not yet started is lost inside. Everyone on the ground within 15 m of her flinches flat for a second or two
+  as it goes, then carries on. While the fight goes on round her, a runner in the open is hit about one time in six
+  when her nearest living enemy is within 150 m, falling to one in sixty at 600 m or with none on the field (a crawler
+  half that; a little over half of those hit are killed, the rest left crawling). A man crouching in her lee is never
+  hit. In at most about one burning wreck in eight, the first man out is on fire, his clothes alight in patches with
+  smoke trailing from him. He runs a few weaving steps and falls; his flames die to a smoulder over 10 to 15 s. About
+  one in three rolls them out in a few seconds and lives, lying wounded and smoking.
+- **The men.** Tankers only (the art director: "riflemen climbing out of a Tiger would break it at once"). They are the
+  crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`: those files'
+  infantry clips carry one). An army without a tankers' file keeps its crew inside, and the log says so once, until
+  the soldiers' thread makes its file. They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
   asked of the soldiers' thread; until they come these stand in.
 

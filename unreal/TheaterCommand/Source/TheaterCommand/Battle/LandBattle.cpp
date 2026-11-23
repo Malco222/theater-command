@@ -4263,10 +4263,18 @@ void ALandBattle::BailOut()
 		{
 			continue;
 		}
-		const std::string File = Veh.Nation == "USA" && S.Men->SoldierFile("USA_tanker") ? std::string("USA_tanker")
-			: Veh.Nation == "GER" && S.Men->SoldierFile("GER_panzer") ? std::string("GER_panzer") : Veh.Nation;
-		if (!S.Men->SoldierFile(File))
+		// (tankers only, the art director's note of 23 November: "riflemen climbing out of a Tiger would break it at
+		// once". An army with no tankers' file keeps its crew inside, said once, until the soldiers' thread makes one)
+		const std::string File = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
+		if (File.empty() || !S.Men->SoldierFile(File))
 		{
+			static TSet<FString> Told;
+			const FString Nation = LandParts::Wide(Veh.Nation);
+			if (!Told.Contains(Nation))
+			{
+				Told.Add(Nation);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their knocked-out crews stay inside (bail-out)"), *Nation);
+			}
 			continue;
 		}
 		LandBail::Wreck W;
@@ -4275,6 +4283,7 @@ void ALandBattle::BailOut()
 		W.Middle = LandBail::V3{ Veh.Root.At.X, Veh.Root.At.Y, Veh.Root.At.Z };
 		W.Heading = Veh.Heading;
 		W.Wide = Look.Wide > 0.5 ? Look.Wide : 3.0;
+		W.Long = Look.Long > 1.0 ? Look.Long : 6.0;
 		const LandBail::V3 Right{ std::cos(Veh.Heading), -std::sin(Veh.Heading), 0.0 };
 		// Her hatches: the commander's, the driver's, and the loader's and the hull gunner's across from them.
 		LandKit::V3 Spot, Way3;
@@ -4307,6 +4316,33 @@ void ALandBattle::BailOut()
 		W.Blast = Veh.bBrewUp && Veh.BrewWait > 0.0 ? Veh.BrewWait * S.Life : -1.0;
 		W.bBurns = Veh.bBrewUp || Veh.FateKey == "tank.brew_up" || Veh.FateKey == "tank.turret_off" || Veh.FateKey == "tank.engine_fire" || Veh.FateKey == "tank.knocked_out_later_burns";
 		W.bUnderFire = S.Rec.End <= 0.0 || S.Battle < S.Rec.End - 5.0;
+		{
+			// (the enemy who can see her men in the open: her nearest living enemy, a man or a vehicle, 1 within 150 m,
+			// falling to a tenth at 600 m and beyond, a tenth with none on the field)
+			double Nearest = 1e30;
+			for (int32 I = 0; I < S.Men->Count(); ++I)
+			{
+				const LandMen::ManInfo& Info = S.Men->Info(I);
+				if (Info.Army == Veh.Nation || (Info.Dead >= 0.0 && Info.Dead <= S.Battle) || S.Men->IsRider(I))
+				{
+					continue;
+				}
+				double Mx = 0.0, My = 0.0, Mz = 0.0;
+				float Facing = 0.f;
+				if (S.Men->PlaceAsPosed(I, Mx, My, Mz, Facing))
+				{
+					Nearest = std::min(Nearest, std::hypot(Mx - W.Middle.X, My - W.Middle.Y));
+				}
+			}
+			for (const LandKit::Vehicle& Other : All)
+			{
+				if (Other.Nation != Veh.Nation && (Other.Died < 0.0 || Other.Died > S.Battle))
+				{
+					Nearest = std::min(Nearest, std::hypot(Other.Root.At.X - W.Middle.X, Other.Root.At.Y - W.Middle.Y));
+				}
+			}
+			W.Threat = Nearest <= 150.0 ? 1.0 : Nearest >= 600.0 ? 0.1 : 1.0 - 0.9 * (Nearest - 150.0) / 450.0;
+		}
 		W.MostMen = Look.Kind == "car" ? 3 : Look.Long < 5.3 ? 3 : Look.Long < 6.0 ? 4 : 5;
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
@@ -4348,7 +4384,9 @@ void ALandBattle::BailOut()
 			if (!H.bLit)
 			{
 				H.bLit = true;
-				Effects->Vent(Chest, 0.45f, static_cast<float>(FMath::Max(1.0, M.FireOut - Since)), Id);
+				// (his clothes alight in patches, not a bonfire: a small vent of flame, its smoke trailing from him as
+				// he runs; once it dies its thin grey wisp goes on, a man smoking where he lies)
+				Effects->Vent(Chest, 0.22f, static_cast<float>(FMath::Max(1.0, M.FireOut - Since)), Id);
 			}
 			else
 			{
@@ -4391,6 +4429,7 @@ void ALandBattle::BailOut()
 		Ride.bShown = true;
 		Ride.Clip = Clip;
 		Ride.Time = static_cast<float>(P.Time);
+		Ride.bUnarmed = true; // (a crewman out of his tank: his tankers' infantry clips carry a rifle he has not got)
 		S.Men->SetRide(H.Man, Ride);
 	}
 }
