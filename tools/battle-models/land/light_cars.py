@@ -735,6 +735,9 @@ def _tourer(kind, fine, tag, paint):
     zbt = zt + 0.07                                       # the bonnet's top at the cowl
     hood = [(xg - 0.02, bw - 0.06, gz1 - 0.12), (xg - 0.02, bw - 0.10, gz1 - 0.01), (xg - 0.02, 0.10, gz1 + 0.005),
             (xc + 0.16, bw, zfl + 0.20), (xc + 0.16, bw, zbt - 0.06), (xc + 0.16, bw - 0.04, zbt), (xc + 0.16, 0.12, zbt + 0.012)]
+    if kind == "plain":                                   # (a squarer bonnet than the Fiat's, so the two are not mistaken at 60 m: the art director, 23 Nov)
+        hood = [(xg - 0.02, bw - 0.02, gz1 - 0.10), (xg - 0.02, bw - 0.03, gz1), (xg - 0.02, 0.10, gz1 + 0.004),
+                (xc + 0.16, bw, zfl + 0.20), (xc + 0.16, bw, zbt - 0.02), (xc + 0.16, bw - 0.01, zbt), (xc + 0.16, 0.12, zbt + 0.004)]
     v.hull(hood + [(xg - 0.02, bw - 0.06, zfl + 0.22)], "upper", 0.012)
     for s in (LEFT, RIGHT):
         v.louvres(((xg + xc) / 2 + 0.05, s * (bw - 0.035), zbt - 0.12), (0.30, 0.09), Y * s, count=6)
@@ -818,7 +821,7 @@ def _tourer(kind, fine, tag, paint):
     fy, z0, z1 = yb - 0.05, zt + 0.08, zt + 0.46
     for a, b in ((p(-fy, z0), p(fy, z0)), (p(-fy, z1), p(fy, z1)), (p(-fy, z0), p(-fy, z1)), (p(fy, z0), p(fy, z1))):
         v.rod(a, b, 0.016, "upper", 6)
-    if kind != "kurogane":
+    if kind == "fiat":
         v.rod(p(0.0, z0), p(0.0, z1), 0.012, "upper", 6)                                                    # (two panes)
     v.plate([p(fy - 0.02, z0 + 0.02), p(-fy + 0.02, z0 + 0.02), p(-fy + 0.02, z1 - 0.02), p(fy - 0.02, z1 - 0.02)], 0.006, "glass")
     v.use("hull")
