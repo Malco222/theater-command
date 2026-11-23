@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of dfd163b5 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c4160ce1 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -6282,13 +6282,30 @@
     }
     /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
     seat(sq, m) {
-      const v = this.lorryOf(sq, m);
-      if (sq.tier >= 1) {
-        const j2 = m.seat ?? m.j ?? 0;
-        return toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2));
-      }
-      const j = Math.floor((m.k - (sq.of !== void 0 ? DR.mech.base : 0)) / sq.veh.length);
+      const v = this.lorryOf(sq, m), j = this.seatNo(sq, m);
+      if (sq.tier >= 1) return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2));
       return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+    }
+    /**
+     * His seat's number in his lorry's bed (seat): two abreast, the odd ones on her right, front to back. Each lorry's men
+     * are numbered once, in their sections' own order (a section to a lorry keeps its seats: its key man first); where
+     * sections share a lorry (more sections than lorries) they sit turn about, so no two men have one seat (they sat on
+     * one another: the seats' cloud test, 23 November).
+     */
+    seatNo(sq, m) {
+      const own = (x) => sq.tier >= 1 ? x.seat ?? x.j ?? 0 : Math.floor((x.k - (sq.of !== void 0 ? DR.mech.base : 0)) / sq.veh.length);
+      if (!sq.seats) {
+        sq.seats = /* @__PURE__ */ new Map();
+        const by2 = /* @__PURE__ */ new Map();
+        for (const x of sq.men) {
+          if (x.role === "holder") continue;
+          const i = this.lorryIx(sq, x), l = by2.get(i);
+          if (l) l.push(x);
+          else by2.set(i, [x]);
+        }
+        for (const l of by2.values()) l.map((x, i) => ({ x, o: own(x), i })).sort((a, c) => a.o - c.o || a.i - c.i).forEach(({ x }, n) => sq.seats.set(x, n));
+      }
+      return sq.seats.get(m) ?? own(m);
     }
     /**
      * Where a man mounting runs to: his lorry, or his horse at his holder's side (the holder's string of horses spread
@@ -7482,6 +7499,7 @@
         if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
         const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
           const o = one(m);
+          if (m.pose === "mounted" && m.fell === void 0 && sq.veh.length) o.sv = [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
         });
@@ -12069,6 +12087,7 @@
       const key = keyOf(b, m, fo);
       const p = [r2(t), r12(m.x), r12(m.y), r32(m.f)];
       const ch = [r2(t), m.p, m.c, m.a ? r12(m.a[0]) : null, m.a ? r12(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+      if (m.sv) ch.push(m.sv[0], m.sv[1]);
       let k = this.men.get(key);
       if (!k) {
         k = {
@@ -12090,7 +12109,7 @@
         this.men.set(key, k);
         this.order.push(k);
       } else {
-        if (k.ch.slice(1).some((v, i) => v !== ch[i + 1])) {
+        if (k.ch.length !== ch.length || k.ch.slice(1).some((v, i) => v !== ch[i + 1])) {
           k.ch = ch;
           k.newCh.push(ch);
         }
