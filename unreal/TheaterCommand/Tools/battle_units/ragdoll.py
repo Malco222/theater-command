@@ -583,6 +583,9 @@ class Fall:
         self.hz, self.fps = hz, fps
         self.h = 1.0 / hz
         self.mu_s, self.mu_d = mu_s, mu_d
+        self.mu_limb = (0.9, 0.7)          # (a severed limb's own grip on the ground: it rolls a little and stops, where
+                                            # a body thrown by a blast slides on its cloth)
+        self.limb_parts = set()
         B = len(rd.parts)
         self.joints = [dict(j) for j in rd.joints]
         Ra, Xa = self._pose(local)
@@ -628,6 +631,10 @@ class Fall:
         self.limb_land = {}
         self.touch = set()
         self.touch_at_cut = {}
+        self.weapon_land = None            # (where the rifle first came down after it left his hand: (t, point))
+        # how each limb is flung as it comes away (part -> (velocity, spin), m/s and rad/s, his own axes): the limb set
+        # moving as one body on the step it is cut, after the step's blows (a blast flings what it tears off)
+        self.fling = {}
 
     # -------------------------------------------------------------------------------------------- state
     def _pose(self, local):
@@ -683,6 +690,7 @@ class Fall:
             self.tone[c] = (lambda t: 0.0)
         self.cut_at[k] = self.t
         self.cut_limb[k] = limb
+        self.limb_parts |= limb
         self.touch_at_cut[k] = self.touch & limb
         if self.held and rd.pix["hand_r"] in limb:
             self.release_at = min(self.release_at, self.t)   # (the rifle goes with the hand that held it)
@@ -703,6 +711,16 @@ class Fall:
             add = np.array(add, int).reshape(-1, 2)
             self.pairs = np.concatenate([self.pairs, add])
             self.gap = np.concatenate([self.gap, rd.sp_r[add[:, 0]] + rd.sp_r[add[:, 1]]])
+
+    def _fling(self, k, v, w):
+        """Set the limb cut at part k moving as one body: its centre of mass at v, turning at w about it."""
+        rd = self.rd
+        limb = sorted(self.cut_limb[k])
+        m = rd.mass[limb]
+        c = (m[:, None] * self.x[limb]).sum(0) / m.sum()
+        for p in limb:
+            self.v[p] = np.asarray(v, float) + np.cross(w, self.x[p] - c)
+            self.w[p] = np.asarray(w, float)
 
     # -------------------------------------------------------------------------------------------- corrections
     def _pos(self, k1, r1, k2, r2, d, alpha=0.0):
@@ -811,12 +829,16 @@ class Fall:
             q = self.xp[k] + self.Rp[k] @ rd.sp_off[i]
             dt_ = (p - q)
             dt_[2] = 0.0
-            if np.linalg.norm(dt_) < self.mu_s * pz:
+            mu_s = self.mu_limb[0] if k in self.limb_parts else self.mu_s
+            if np.linalg.norm(dt_) < mu_s * pz:
                 self._pos(k, r, -1, None, -dt_)
             if k not in self.contact_t:
                 self.contact_t[k] = self.t
                 self.contact_v[k] = float(-self.v[k][2])
             self.touch.add(k)
+            if k == rd.pix["weapon"] and not self.held and self.weapon_land is None and self.t > self.release_at:
+                q = self.x[k] + self.R[k] @ rd.sp_off[i]
+                self.weapon_land = (self.t, q - np.array((0.0, 0.0, rd.sp_r[i])))
             # (a severed limb coming down: the first touch after its cut by a part of it that was not already on the
             # ground then, a foot left standing when the leg was cut above it)
             for c, limb in self.cut_limb.items():
@@ -844,12 +866,16 @@ class Fall:
     # -------------------------------------------------------------------------------------------- the step
     def step(self):
         rd, h = self.rd, self.h
-        for (tc, k) in [c for c in self.cuts if c[0] <= self.t]:
+        now = [k for (tc, k) in self.cuts if tc <= self.t]
+        for k in now:
             self._cut(k)
         self.cuts = [c for c in self.cuts if c[0] > self.t]
         for (tp, k, dv) in [p for p in self.push if p[0] <= self.t]:
             self.v[k] += dv
         self.push = [p for p in self.push if p[0] > self.t]
+        for k in now:
+            if k in self.fling:
+                self._fling(k, *self.fling[k])
         if self.held and self.t >= self.release_at and not rd.unarmed:   # (an unarmed man has nothing to let go)
             self.held = False
             wk = rd.pix["weapon"]
@@ -908,7 +934,8 @@ class Fall:
             s = np.linalg.norm(vt)
             if s < 1e-6:
                 continue
-            dv = -vt / s * min(h * self.mu_d * abs(self.lam_n[i]) / (h * h), s)
+            mu_d = self.mu_limb[1] if k in self.limb_parts else self.mu_d
+            dv = -vt / s * min(h * mu_d * abs(self.lam_n[i]) / (h * h), s)
             n = dv / np.linalg.norm(dv)
             I = self._Iinv(k)
             a = np.cross(r, n)
