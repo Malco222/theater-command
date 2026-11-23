@@ -210,6 +210,68 @@ namespace LandFieldPicture
 			return L;
 		}
 
+		/** The air over the field (Tools/land_look/T_LandCloudWind.png, make_sky_textures.py): red the clouds, green the
+		 * gusts, as the game's materials read it (M_LandCloudShade, wind_sheen in build_content.py). */
+		const Leaves& AirPicture()
+		{
+			static const Leaves L = [] {
+				Leaves Out;
+				std::string Path = __FILE__;
+				const size_t Cut = Path.rfind("land_field/");
+				Path = Cut == std::string::npos ? std::string("Tools/land_look/T_LandCloudWind.png") : Path.substr(0, Cut) + "land_look/T_LandCloudWind.png";
+				const std::string Cmd = "convert '" + Path + "' -depth 8 RGBA:- 2>/dev/null";
+				FILE* P = popen(Cmd.c_str(), "r");
+				if (!P) return Out;
+				std::vector<uint8_t> Buf;
+				uint8_t Chunk[65536];
+				size_t Got;
+				while ((Got = std::fread(Chunk, 1, sizeof(Chunk), P)) > 0) Buf.insert(Buf.end(), Chunk, Chunk + Got);
+				pclose(P);
+				const size_t Side = static_cast<size_t>(std::lround(std::sqrt(static_cast<double>(Buf.size() / 4))));
+				if (Side > 0 && Side * Side * 4 == Buf.size())
+				{
+					Out.W = Out.H = static_cast<int>(Side);
+					Out.Px = std::move(Buf);
+				}
+				return Out;
+			}();
+			return L;
+		}
+
+		/** One channel of the air's picture at (U, V) in repeats, wrapping, read between its pixels as a material does. */
+		double AirAt(double U, double V, int Channel)
+		{
+			const Leaves& A = AirPicture();
+			if (!A.Ok()) return 0.5;
+			const double X = (U - std::floor(U)) * A.W - 0.5, Y = (V - std::floor(V)) * A.H - 0.5;
+			const int X0 = static_cast<int>(std::floor(X)), Y0 = static_cast<int>(std::floor(Y));
+			const double FX = X - X0, FY = Y - Y0;
+			auto Px = [&](int I, int J) { return A.Px[(static_cast<size_t>((J % A.H + A.H) % A.H) * A.W + (I % A.W + A.W) % A.W) * 4 + Channel] / 255.0; };
+			return (Px(X0, Y0) * (1 - FX) + Px(X0 + 1, Y0) * FX) * (1 - FY) + (Px(X0, Y0 + 1) * (1 - FX) + Px(X0 + 1, Y0 + 1) * FX) * FY;
+		}
+
+		/** The game's switches for the wind and the clouds' shadows, as the painter shows them in a still (release 2,
+		 * 23 November): LAND_FIELD_CLOUD_SHADE=dark (-TheaterLandCloudShadows: the share of the sun left under a cloud) and
+		 * LAND_FIELD_SHEEN=s (the gusts' sheen over the grass and the corn, the game's 0.07 on the blades and 0.05 on the
+		 * ground at a breeze), each at the battle's start (the clouds not yet carried, the gusts where they stand). */
+		struct Air
+		{
+			double Dark = -1.0, Sheen = 0.0;
+		};
+		const Air& AirAsked()
+		{
+			static const Air A = [] {
+				Air Out;
+				if (const char* E = std::getenv("LAND_FIELD_CLOUD_SHADE")) Out.Dark = std::clamp(std::atof(E), 0.0, 1.0);
+				if (const char* E = std::getenv("LAND_FIELD_SHEEN")) Out.Sheen = std::clamp(std::atof(E), 0.0, 0.5);
+				if (Out.Dark >= 0.0 || Out.Sheen > 0.0)
+					std::printf("  the air (the game's wind and clouds' shadows): clouds' shadows %s, gusts' sheen %.2f%s\n", Out.Dark >= 0.0 ? ("leave " + std::to_string(Out.Dark).substr(0, 4) + " of the sun").c_str() : "off",
+					            Out.Sheen, AirPicture().Ok() ? "" : " (T_LandCloudWind.png not read: nothing shown)");
+				return Out;
+			}();
+			return A;
+		}
+
 		struct Draw
 		{
 			const LandField::Mesh* M = nullptr;
@@ -685,6 +747,26 @@ namespace LandFieldPicture
 									break;
 								}
 							}
+							// (the game's clouds' shadows: where this point's sun ray meets the clouds' base, under four fifths of the
+							// day's cover, as M_LandCloudShade lays them; the field's x is the world's Y)
+							const Air& Ai = AirAsked();
+							if (Ai.Dark >= 0.0 && L.Cover >= 0.05)
+							{
+								const double Climb = (L.Base - P.Z) / std::max(L.Sun.Z, 0.15);
+								const double QX = P.X + L.Sun.X * Climb, QY = P.Y + L.Sun.Y * Climb;
+								const double Low = 1.0 - std::min(0.8 * L.Cover, 0.7) - 0.03;
+								const double Ramp = std::clamp((AirAt(QY / 4000.0, QX / 4000.0, 0) - Low) / 0.06, 0.0, 1.0);
+								Lit *= 1.0 - Ramp * Ramp * (3.0 - 2.0 * Ramp) * (1.0 - Ai.Dark);
+							}
+							double Swept = 1.0;
+							if (Ai.Sheen > 0.0 && (Mat == MatGround || Mat == MatBlades))
+							{
+								// (a plant's paint only, never bare earth, sand or snow: its green well over its blue; on the ground,
+								// 5 of the blades' 7)
+								const double SG = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 1])), 1.0 / 2.2), SB = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 2])), 1.0 / 2.2);
+								const double Plant = std::clamp((SG - SB) / (SG + 0.02) * 5.0 - 1.5, 0.0, 1.0) * (Mat == MatGround ? std::clamp((N.Z - 0.55) * 4.0, 0.0, 1.0) * 5.0 / 7.0 : 1.0);
+								Swept = 1.0 + Plant * Ai.Sheen * 2.0 * (AirAt(P.Y / 150.0, P.X / 150.0, 1) - 0.5);
+							}
 							const double NL = Dot(N, L.Sun);
 							// Leaves and blades let light through and scatter it: their lit side wraps round, and their shade is lighter.
 							double Diffuse = Mat == MatGround ? std::max(0.0, NL) : std::clamp((NL + 0.45) / 1.45, 0.0, 1.0) * (Mat == MatLeaves ? 0.9 : 0.95);
@@ -692,7 +774,7 @@ namespace LandFieldPicture
 							const double BounceK = 0.5 - 0.5 * N.Z;
 							for (int C = 0; C < 3; ++C)
 							{
-								const double A = T.Albedo[K * 3 + C];
+								const double A = T.Albedo[K * 3 + C] * Swept;
 								Out[C] = A * (L.SunCol[C] * Diffuse * Lit + L.Sky[C] * SkyK + L.Bounce[C] * BounceK);
 							}
 							if (bHaze)
