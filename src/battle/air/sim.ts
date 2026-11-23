@@ -1652,13 +1652,17 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * The side that gave the battle up: BREAK OFF ALL, or every one of its groups sent home before it met an enemy, one
-   * at a time or together. Its verdict goes against it, and it wins no sky (air.ts fly).
+   * at a time or together. Its verdict goes against it, and it wins no sky (air.ts fly). It needs an enemy to give up to
+   * (the design director, 16:37Z): only where the other side has a group on the field that could have met it, up or
+   * waiting to scramble (the defence rises on the warning, so a raid turned back in its first second still had one).
+   * Going home over an empty sky gives nothing away: a sweep that finds no enemy holds the sky unopposed.
    */
   private quitter(): Side | null {
-    if (this.gaveUp) return this.gaveUp;
+    const foeOn = (side: Side): boolean => this.units.some((u) => u.side !== side && (side === 'def' || u.air === 'ftr'));
+    if (this.gaveUp) return foeOn(this.gaveUp) ? this.gaveUp : null;
     for (const side of ['att', 'def'] as Side[]) {
       const us = this.units.filter((u) => u.side === side);
-      if (us.length && us.every((u) => this.quitUnmet.has(u.id))) return side;
+      if (us.length && foeOn(side) && us.every((u) => this.quitUnmet.has(u.id))) return side;
     }
     return null;
   }
