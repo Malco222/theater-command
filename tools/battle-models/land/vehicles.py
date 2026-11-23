@@ -195,6 +195,19 @@ ABOUT["GAZ67"] = {"nation": "SOV", "role": "light car", "years": "1943-45",
                   "units": "the Red Army's commanders, scouts and signallers, and the tractor of the 45 mm anti-tank gun; before her, Lend-Lease jeeps and the older GAZ-64"}
 FACES["GAZ67"] = [("Screen up, four seats", {})]
 
+BUILDERS["Fiat508"] = light_cars.fiat508
+ABOUT["Fiat508"] = {"nation": "ITA", "role": "light car", "years": "1939-45",
+                    "units": "the Italian army's officers, scouts and liaison, in Africa, the Balkans and Russia"}
+FACES["Fiat508"] = [("Screen up, four seats", {})]
+BUILDERS["Kurogane"] = light_cars.kurogane
+ABOUT["Kurogane"] = {"nation": "JAP", "role": "light car", "years": "1936-44",
+                     "units": "the Japanese army's officers and scouts, in China, Manchuria and the south"}
+FACES["Kurogane"] = [("Screen up", {})]
+BUILDERS["FieldCar"] = light_cars.fieldcar
+ABOUT["FieldCar"] = {"nation": "_", "role": "light car", "years": "1935-45",
+                     "units": "the stand-in for every army without a light car of its own: France, Poland, the small armies, each in its own coat (Britain and the Commonwealth ride the Jeep)"}
+FACES["FieldCar"] = [("Screen up, four seats", {})]
+
 import motorcycles  # noqa: E402
 
 BUILDERS["R75"] = motorcycles.r75

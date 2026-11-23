@@ -645,3 +645,216 @@ def gaz67(fine=True, tag="SOV", paint=None):
     v.worn(**v.worn_kw)
     v.m.info.setdefault("file", {})["swaps"] = {}
     return v
+
+
+# =====================================================================================================================
+def fiat508(fine=True, tag="ITA", paint=None):
+    """Italy's light car (Fiat 508 CM "Coloniale", 1939-45): 3.40 m long, 1.38 m wide, 2.42 m between her axles. A
+    small open tourer on the Balilla's frame: her rounded grille of upright bars, flowing wings joined by running
+    boards, two doors a side, the spare on her tail. Right-hand drive. Four men. Italian khaki, no markings."""
+    return _tourer("fiat", fine, tag, paint)
+
+
+def kurogane(fine=True, tag="JAP", paint=None):
+    """Japan's scout car (Kurogane Type 95, 1936-44): 3.38 m long, 1.52 m wide, 2.00 m between her axles; four-wheel
+    drive and an air-cooled V-twin under a short square bonnet with a slatted face, flat square wings with the lamps on
+    them, one door a side, the spare on her tail. Right-hand drive. Three or four men. Japanese khaki, no markings."""
+    return _tourer("kurogane", fine, tag, paint)
+
+
+def fieldcar(fine=True, tag="_", paint=None):
+    """The plain open field car every army without one of its own drives (France, Poland, the small armies, and the
+    staff cars of the rest): a 1930s four-door tourer on a lorry-maker's frame, upright grille, flowing wings and
+    running boards, the spare on her tail. Each nation's own coat."""
+    return _tourer("plain", fine, tag, paint)
+
+
+def _tourer(kind, fine, tag, paint):
+    P = {"fiat":     dict(name=("Fiat508", "Light car (Fiat 508 CM)"), R=0.31, W=0.13, RR=0.215, xf=1.21, xr=-1.21, yw=0.60, yb=0.64, zt=1.00, zfl=0.46,
+                          xg=1.58, xc=0.50, xb=-1.55, bw=0.34, grille="heart", wings="flow", doors=2, drive=-1.0, four=False, gz=(0.58, 1.10)),
+         "kurogane": dict(name=("Kurogane", "Scout car (Kurogane Type 95)"), R=0.34, W=0.15, RR=0.23, xf=1.00, xr=-1.00, yw=0.62, yb=0.68, zt=1.02, zfl=0.52,
+                          xg=1.50, xc=0.48, xb=-1.50, bw=0.36, grille="slats", wings="square", doors=1, drive=-1.0, four=True, gz=(0.62, 1.06)),
+         "plain":    dict(name=("FieldCar", "Field car (any army)"), R=0.33, W=0.14, RR=0.21, xf=1.20, xr=-1.20, yw=0.62, yb=0.68, zt=1.00, zfl=0.48,
+                          xg=1.58, xc=0.50, xb=-1.58, bw=0.37, grille="flat", wings="flow", doors=2, drive=1.0, four=False, gz=(0.60, 1.10))}[kind]
+    v = LightWorks(*P["name"], "car", tag, fine, paint=paint)
+    v.dice = 0.2
+    v.worn_kw = dict(LIGHT_WORN, ground="field")
+    v.root(hull_pivot=(0.0, 0.0, 0.55), rock=(-5.0, 5.0))
+    R, W, RR, xf, xr, yw = P["R"], P["W"], P["RR"], P["xf"], P["xr"], P["yw"]
+    yb, zt, zfl, xg, xc, xb, bw = P["yb"], P["zt"], P["zfl"], P["xg"], P["xc"], P["xb"], P["bw"]
+    yo = yw + W / 2 + 0.04                               # the wings' outer edge
+    dy = P["drive"] * 0.30                               # the driver's side
+    gz0, gz1 = P["gz"]
+
+    # ---- under her: the axles on leaf springs, the shafts, the wheels ---------------------------------------------
+    v.use("vehicle")
+    for x in (xf, xr) if P["four"] else (xr,):
+        v.ball((x, 0.0, R), 0.11, "shade", 12, 8, squash=0.8)                                       # the differentials
+    for x in (xf, xr):
+        v.rod((x, -yw + 0.1, R), (x, yw - 0.1, R), 0.034, "shade", 10)
+    v.rod((xf - 0.14, -yw + 0.12, R - 0.03), (xf - 0.14, yw - 0.12, R - 0.03), 0.011, "steel", 6)   # the track rod
+    v.rod((xr + 0.08, 0.0, R), (xc - 0.30, 0.0, zfl - 0.06), 0.024, "steel", 8)                    # the shaft back to her axle
+    if P["four"]:
+        v.rod((xf - 0.08, 0.0, R), (xc - 0.10, 0.0, zfl - 0.06), 0.022, "steel", 8)
+    for s in (LEFT, RIGHT):
+        v.leaf_spring(xf, s * 0.38, zfl - 0.02, R + 0.05, 0.42, leaves=5, wide=0.045)
+        v.leaf_spring(xr, s * 0.38, zfl - 0.02, R + 0.05, 0.50, leaves=6, wide=0.045)
+    for letter, s in SIDES:
+        v.steered_wheel(letter, s, xf, yw, R, W, RR, lock=32.0, bolts=5)
+        v.lorry_wheel(f"wheel_back_{letter}", "vehicle", (xr, s * yw, R), s, R, W, RR, bolts=5)
+        v.use("vehicle")
+        v.socket("dust." + ("left" if s > 0 else "right"), (xr - R - 0.05, s * yw, 0.05), (-1, 0, 0.3), part="vehicle")
+
+    # ---- the frame, the bumper, the engine under its bonnet --------------------------------------------------------
+    v.use("hull")
+    for s in (LEFT, RIGHT):
+        v.slab((xb + 0.04, s * 0.38 - 0.03, zfl - 0.13), (xg + 0.06, s * 0.38 + 0.03, zfl - 0.03), "shade", 0.005)
+    v.slab((xg + 0.07, -yo + 0.04, R + 0.06), (xg + 0.13, yo - 0.04, R + 0.16), "upper", 0.012, 2)              # the bumper
+    for s in (LEFT, RIGHT):
+        v.rod((xg + 0.07, s * 0.38, R + 0.11), (xg - 0.02, s * 0.38, zfl - 0.08), 0.016, "shade", 6)
+        v.hook((xg + 0.12, s * 0.30, R + 0.06), X, 0.045)
+    # the grille
+    if P["grille"] == "heart":
+        outline = [(0.0, gz0 - 0.05), (0.10, gz0), (0.20, gz0 + 0.12), (0.24, gz1 - 0.18), (0.22, gz1 - 0.06), (0.14, gz1), (-0.14, gz1), (-0.22, gz1 - 0.06),
+                   (-0.24, gz1 - 0.18), (-0.20, gz0 + 0.12), (-0.10, gz0)]
+        ow, oz0, oz1 = 0.17, gz0 + 0.10, gz1 - 0.07
+    else:
+        gy = 0.27 if P["grille"] == "flat" else 0.25
+        outline = [(gy, gz0), (gy, gz1 - 0.06), (gy - 0.04, gz1), (-(gy - 0.04), gz1), (-gy, gz1 - 0.06), (-gy, gz0)]
+        ow, oz0, oz1 = gy - 0.04, gz0 + 0.04, gz1 - 0.04
+    v.hull([(xg - 0.03, y, z) for y, z in outline] + [(xg + 0.01, y, z) for y, z in outline], "upper", 0.008, both=False)
+    v.slab((xg - 0.02, -ow, oz0), (xg + 0.012, ow, oz1), "black")                                          # the opening
+    n = (11 if P["grille"] != "slats" else 0) if fine else 5
+    for k in range(n):
+        y = -ow + 0.02 + (2 * ow - 0.04) * k / max(1, n - 1)
+        v.slab((xg + 0.004, y - 0.007, oz0), (xg + 0.02, y + 0.007, oz1), "upper")                       # an upright bar
+    if P["grille"] == "slats":
+        for k in range(9 if fine else 4):
+            z = oz0 + 0.02 + (oz1 - oz0 - 0.04) * k / (8 if fine else 3)
+            v.slab((xg + 0.004, -ow, z - 0.012), (xg + 0.02, ow, z + 0.012), "upper")                    # a level slat
+    zbt = zt + 0.07                                       # the bonnet's top at the cowl
+    hood = [(xg - 0.02, bw - 0.06, gz1 - 0.12), (xg - 0.02, bw - 0.10, gz1 - 0.01), (xg - 0.02, 0.10, gz1 + 0.005),
+            (xc + 0.16, bw, zfl + 0.20), (xc + 0.16, bw, zbt - 0.06), (xc + 0.16, bw - 0.04, zbt), (xc + 0.16, 0.12, zbt + 0.012)]
+    v.hull(hood + [(xg - 0.02, bw - 0.06, zfl + 0.22)], "upper", 0.012)
+    for s in (LEFT, RIGHT):
+        v.louvres(((xg + xc) / 2 + 0.05, s * (bw - 0.035), zbt - 0.12), (0.30, 0.09), Y * s, count=6)
+
+    # ---- the wings: flowing with a running board between, or flat and square -------------------------------------
+    if P["wings"] == "flow":
+        fw = [(xg + 0.06, R + 0.22), (xg - 0.02, R + 0.38), (xf + 0.22, R + 0.50), (xf, R + 0.53), (xf - 0.22, R + 0.49), (xf - 0.38, R + 0.38),
+              (xf - 0.50, R + 0.22), (xf - 0.58, R + 0.13)]
+        cw = yo - bw
+        cross = [(0.0, 0.0), (cw * 0.55, 0.0), (cw * 0.78, 0.016), (cw * 0.93, 0.045), (cw, 0.10)]
+        for s in (LEFT, RIGHT):
+            v.crown_wing(fw, s * bw, cross)
+            v.slab((xr + 0.50, s * (yb - 0.01), R + 0.10), (xf - 0.58, s * yo, R + 0.125), "upper", 0.006)    # the running board
+            if fine:
+                for k in range(4):
+                    x0 = xr + 0.60 + (xf - xr - 1.25) * k / 3
+                    v.slab((x0, s * (yb + 0.01), R + 0.125), (x0 + 0.12, s * (yo - 0.02), R + 0.132), "rubber")
+            v.slab((xc + 0.17, s * (bw - 0.006), zfl - 0.04), (xg - 0.03, s * (bw + 0.006), R + 0.40), "shade")   # the apron inside the wing
+    else:
+        wing = [(xg + 0.10, R + 0.20), (xg + 0.08, R + 0.36), (xg - 0.02, R + 0.47), (xf - 0.40, R + 0.47), (xf - 0.52, R + 0.40), (xf - 0.58, R + 0.16)]
+        for s in (LEFT, RIGHT):
+            v.guard(wing, s * bw, s * yo, thick=0.012, lip=0.04)
+            v.slab((xc + 0.17, s * (bw - 0.006), zfl - 0.04), (xg - 0.03, s * (bw + 0.006), R + 0.47), "shade")
+            v.slab((xr + 0.50, s * (yb - 0.01), R + 0.12), (xf - 0.58, s * (yb + 0.10), R + 0.14), "upper", 0.006)   # the step
+    lamp_z = (R + 0.53 if P["wings"] == "flow" else R + 0.47)
+    for s in (LEFT, RIGHT):
+        if P["wings"] == "flow":
+            v.rod((xg - 0.08, s * (bw + 0.02), gz1 - 0.20), (xg - 0.02, s * (bw + 0.10), gz1 - 0.14), 0.014, "upper", 6)   # the lamp's bracket off the bonnet's side
+            v.headlamp((xg + 0.02, s * (bw + 0.10), gz1 - 0.12), X, 0.085, stalk=0.0, cover=True)
+        else:
+            v.rod((xf + 0.10, s * (bw + 0.12), lamp_z), (xf + 0.10, s * (bw + 0.12), lamp_z + 0.06), 0.018, "upper", 6)
+            v.headlamp((xf + 0.12, s * (bw + 0.12), lamp_z + 0.12), X, 0.08, stalk=0.0, cover=True)
+
+    # ---- the body: sides with the doors and the back arch, the rolled top, the cowl, the floor, the back -----------
+    v.hull([(xc, yb, zfl + 0.30), (xc, yb, zt + 0.01), (xc, yb - 0.04, zt + 0.05), (xc, 0.30, zt + 0.07),
+            (xc + 0.16, bw, zfl + 0.30), (xc + 0.16, bw, zbt - 0.06), (xc + 0.16, bw - 0.04, zbt), (xc + 0.16, 0.12, zbt + 0.012)], "upper", 0.012)   # the cowl
+    v.slab((xc + 0.14, -yb + 0.02, zfl), (xc + 0.16, yb - 0.02, zfl + 0.36), "upper")                        # the firewall
+    ar = R + 0.10
+    arch = [(xr + ar * math.cos(math.radians(a)), R + ar * math.sin(math.radians(a))) for a in range(165, 14, -15)]
+    zb = zfl - 0.06
+    side = [(xc, zb), (xc, zt), (xb + 0.03, zt), (xb, zt - 0.03), (xb, zb), (arch[0][0], zb)] + arch + [(arch[-1][0], zb)]
+    top_edge = [Vector((x, 0.0, z)) for x, z in ((xc, zt), (xb + 0.03, zt))]
+    for s in (LEFT, RIGHT):
+        v.extrude(side, s * (yb - 0.02), s * yb, "upper", 0.004)
+        if fine:
+            v.tube([p + Y * s * (yb - 0.008) + Z * 0.004 for p in top_edge], 0.014, "upper", 6)
+            seams = [xc - 0.03, xc - 0.70] if P["doors"] == 1 else [xc - 0.03, xc - 0.68, xc - 0.72, xr + ar + 0.04]
+            for x in seams:
+                v.slab((x - 0.004, s * (yb + 0.0005), zb + 0.04), (x + 0.004, s * (yb + 0.003), zt - 0.03), "black")
+            for x in ([xc - 0.62] if P["doors"] == 1 else [xc - 0.62, xr + ar - 0.04]):
+                v.rod((x, s * (yb + 0.012), zt - 0.12), (x + 0.07, s * (yb + 0.012), zt - 0.12), 0.007, "steel", 5)   # the handles
+        a_ = [(xr + (ar + 0.04) * math.cos(math.radians(a)), R + (ar + 0.04) * math.sin(math.radians(a))) for a in range(168, 11, -12)]
+        v.crown_wing(a_, s * (yb - 0.01), [(0.0, 0.0), (0.04, 0.0), (yo - yb - 0.02, 0.02), (yo - yb + 0.01, 0.07)])   # the back wing's flare
+        hump = [(xr + (ar - 0.02) * math.cos(math.radians(a)), R + (ar - 0.02) * math.sin(math.radians(a))) for a in range(180, -1, -20)]
+        v.extrude([(hump[0][0], zfl)] + hump + [(hump[-1][0], zfl)], s * (yw - W / 2 - 0.05), s * (yb - 0.02), "upper", 0.01)   # the housing over the wheel
+    v.slab((xb - 0.02, -yb, zb), (xb, yb, zt - 0.02), "upper", 0.008)                                          # the back
+    v.slab((xb, -yb + 0.02, zfl - 0.02), (xc + 0.14, yb - 0.02, zfl), "upper")                                 # the floor
+    v.slab((xc - 0.02, -yb + 0.02, zt - 0.20), (xc, yb - 0.02, zt), "upper")                                   # the dash
+    if fine:
+        for y in (dy - 0.10, dy + 0.10, -dy * 0.3):
+            v.lathe((xc - 0.021, y, zt - 0.10), -X, [(0.0, 0.0), (0.0, 0.03), (0.008, 0.03), (0.008, 0.0)], "black", 10)
+
+    # ---- the seats, the wheel, the levers ---------------------------------------------------------------------------
+    xs0 = xc - 0.95
+    for s in (LEFT, RIGHT):
+        v.slab((xs0, s * 0.10, zfl), (xs0 + 0.42, s * (yb - 0.06), zfl + 0.25), "upper", 0.01)
+        v.seat(xs0 - 0.02, xs0 + 0.42, *sorted((s * 0.08, s * (yb - 0.05))), zfl + 0.34, back=0.36, lean=0.07, paint="leather")
+    xr0 = xs0 - 0.90
+    v.slab((xr0, -(yb - 0.04), zfl), (xr0 + 0.40, yb - 0.04, zfl + 0.28), "upper", 0.01)
+    v.seat(xr0 - 0.02, xr0 + 0.40, -(yb - 0.04), yb - 0.04, zfl + 0.38, back=0.34, lean=0.05, paint="leather")    # the bench behind
+    grip_l, grip_r = v.steering_wheel((xc - 0.02, dy, zfl + 0.18), (xs0 + 0.62, dy, zt + 0.13), r=0.20)
+    if fine:
+        v.rod((xc - 0.30, -dy * 0.3, zfl), (xc - 0.42, -dy * 0.3, zfl + 0.40), 0.008, "black", 5)            # the gear lever
+        v.ball((xc - 0.42, -dy * 0.3, zfl + 0.40), 0.02, "black", 8, 6)
+
+    # ---- the screen, standing (it folds forward on the bonnet) ------------------------------------------------------
+    v.part("screen", "hull", (xc + 0.02, 0.0, zt + 0.08), axis=(0, 1, 0), limits=[0.0, 80.0], kind="turn",
+           note="the windscreen on its hinges at the cowl: built standing; + folds it forward on the bonnet")
+    lean = 0.10
+    p = lambda y, z: Vector((xc + 0.02 - lean * (z - zt), y, z))                                           # noqa: E731
+    fy, z0, z1 = yb - 0.05, zt + 0.08, zt + 0.46
+    for a, b in ((p(-fy, z0), p(fy, z0)), (p(-fy, z1), p(fy, z1)), (p(-fy, z0), p(-fy, z1)), (p(fy, z0), p(fy, z1))):
+        v.rod(a, b, 0.016, "upper", 6)
+    if kind != "kurogane":
+        v.rod(p(0.0, z0), p(0.0, z1), 0.012, "upper", 6)                                                    # (two panes)
+    v.plate([p(fy - 0.02, z0 + 0.02), p(-fy + 0.02, z0 + 0.02), p(-fy + 0.02, z1 - 0.02), p(fy - 0.02, z1 - 0.02)], 0.006, "glass")
+    v.use("hull")
+
+    # ---- her back: the spare, the lamp, the hook, the folded top; the silencer --------------------------------------
+    sc = Vector((xb - 0.13, 0.0, R + 0.42))
+    v.slab((xb - 0.05, -0.10, sc.z - 0.06), (xb, 0.10, sc.z + 0.06), "shade", 0.006)
+    v.tyre(sc, -X, R, RR, W, lugs=18)
+    v.wheel_disc(sc - X * (W * 0.1), -X, RR * 1.05, W * 0.6, tyre=0.0, kind="dish", hub=0.42, bolts=5, dish=0.2, cap=0.75, sides=v.n(28, 10))
+    for s in (LEFT, RIGHT):
+        v.lathe((xb - 0.002, s * (yb - 0.10), zt - 0.22), -X, [(0.028, 0.0), (0.028, 0.03), (0.0, 0.035), (0.0, 0.0)], "red", 10)
+    v.slab((xb - 0.05, -0.08, zb + 0.02), (xb, 0.08, zb + 0.12), "shade", 0.006)
+    v.hook((xb - 0.06, 0.0, zb + 0.06), -X, 0.06)
+    v.socket("hook", (xb - 0.12, 0.0, zb + 0.06), -X, part="hull", note="the pintle: a light gun's or a trailer's eye goes on it")
+    v.roll((xb + 0.16, -(yb - 0.04), zt + 0.09), (xb + 0.16, yb - 0.04, zt + 0.09), r=0.08, paint="canvas", straps=3)   # the top, folded on its bows
+    v.silencer((xc - 0.80, -0.30, zb - 0.02), (xr - 0.10, -0.30, zb - 0.02), 0.055, bands=2,
+               pipe=[(xg - 0.40, -0.20, zfl), (xc - 0.20, -0.28, zb - 0.02), (xc - 0.80, -0.30, zb - 0.02)], tail=((xr - 0.10, -0.30, zb - 0.02), (-1, 0, 0)))
+    v.rod((xr - 0.10, -0.30, zb - 0.02), (xb - 0.02, -0.30, zb), 0.02, "rust", 8)
+    v.socket("exhaust.1", (xb - 0.04, -0.30, zb), (-1, 0, 0))
+
+    # ---- the men, what happens to her -------------------------------------------------------------------------------
+    hand = "right-hand drive: he sits on her right" if dy < 0 else "he sits on her left"
+    v.socket("driver", (xs0 + 0.20, dy, zfl + 0.34), X, part="hull", note=f"the driver, seated ({hand}): the top of his seat, 0.34 over the floor his boots are on; his hands on grip.driver.l and grip.driver.r")
+    v.socket("grip.driver.l", grip_l, Z, part="hull", note="the driver's left hand on the wheel's rim")
+    v.socket("grip.driver.r", grip_r, Z, part="hull", note="the driver's right hand on the wheel's rim")
+    v.socket("rider.1", (xs0 + 0.20, -dy, zfl + 0.34), X, part="hull", note="the man beside the driver, seated (the top of his seat)")
+    v.socket("rider.2", (xr0 + 0.20, 0.30, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.38 over the floor")
+    v.socket("rider.3", (xr0 + 0.20, -0.30, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead")
+    v.socket("engine", ((xg + xc) / 2, 0.0, zbt + 0.02), Z, part="hull", note="the bonnet: smoke and the first fire")
+    v.socket("fire.1", (xs0 + 0.20, 0.0, zfl + 0.30), Z, part="hull", note="in the seats")
+    v.socket("fire.2", (xr0 + 0.20, 0.0, zfl + 0.30), Z, part="hull", note="her fuel tank, under the bench behind")
+    v.socket("hit.front", (xg + 0.02, 0.0, (gz0 + gz1) / 2), X, part="hull")
+    v.socket("hit.left", (xs0, yb, zt - 0.20), Y, part="hull")
+    v.socket("hit.right", (xs0, -yb, zt - 0.20), -Y, part="hull")
+    v.socket("hit.rear", (xb, 0.0, zt - 0.15), -X, part="hull")
+    v.carrier_clips("lorry_idle_loop", "lorry_drive_loop", soft=1.5)
+    v.worn(**v.worn_kw)
+    v.m.info.setdefault("file", {})["swaps"] = {}
+    return v
