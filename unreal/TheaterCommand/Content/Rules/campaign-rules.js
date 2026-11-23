@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a9517fda 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 54ba0d13 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31248,6 +31248,7 @@
     const zone = m === "fleet" ? a.ships[0].zone : target;
     const rng = airRng(g2, `${m}:${target}:${nat}${salt}`);
     const staff = battle?.staff;
+    const quit = battle && !staff ? battle.gaveUp ?? null : null;
     const luck = () => battle && !staff ? 1 : rng.range(1 - C3.luck, 1 + C3.luck);
     const before = (f) => {
       const side3 = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
@@ -31447,7 +31448,7 @@
         Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth2(g2, x.f) * techMul(g2, x.f.nat, "radar");
       });
       hold2 = Dnext > 0 ? EpowAfter / Dnext : 99;
-      sky = Eafter >= AIR.sky.least && hold2 >= AIR.sky.win;
+      sky = Eafter >= AIR.sky.least && hold2 >= AIR.sky.win && quit !== "att";
       if (sky) g2.sky[target] = { nat, turn: g2.turn };
       if (acOn(g2)) held2 = skyFought(g2, nat, target, sky) === "held";
     }
@@ -31456,7 +31457,7 @@
     const ratio = (dLost + value + 10) / (aLost + 10);
     const rolled = sky || ratio >= 1;
     const seen2 = (rows) => rows.reduce((t, x) => t + (battle.lost[x.f.id]?.ftr ?? 0) + (battle.lost[x.f.id]?.bmr ?? 0), 0);
-    const fieldWon = battle && !staff ? battle.gaveUp ? battle.gaveUp === "def" : sky || (seen2(a.def) + value + 10) / (seen2(a.att) + 10) >= 1 : null;
+    const fieldWon = battle && !staff ? quit ? quit === "def" : sky || (seen2(a.def) + value + 10) / (seen2(a.att) + 10) >= 1 && seen2(a.def) + value + seen2(a.att) > 0 : null;
     const won = fieldWon ?? rolled;
     for (const x of a.att) {
       x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie));
@@ -31467,6 +31468,7 @@
       gainXp2(x.f, !won);
     }
     const level = fieldWon !== null && fieldWon !== rolled ? won ? "Close victory" : "Close defeat" : sky || ratio >= 2 ? "Decisive victory" : ratio >= 1 ? "Close victory" : ratio >= 0.5 ? "Close defeat" : "Decisive defeat";
+    if (quit === "att") result = m === "superiority" ? "The fighters broke off and turned for home before they met the enemy." : `The raid broke off and turned for home before it met the enemy${bombed > 0 ? "" : ", its bombs jettisoned"}.`;
     g2.flags.airBattles = (g2.flags.airBattles ?? 0) + 1;
     const troops = m === "ground" || m === "line" ? g2.regions[target].units.find((u) => !u.dead && atWar(g2, nat, u.nat))?.nat : void 0;
     const defNat = troops ?? struck?.[0]?.nat ?? def[0]?.nat ?? (sea ? "" : g2.regions[target].ctrl);
@@ -31505,7 +31507,10 @@
     const adj = defNat ? g2.nations[defNat].adj : "enemy";
     const together = !!defNat && (nat === "UK" || nat === "USA") && ["UK", "USA"].every((x) => g2.nations[x]?.alive && g2.nations[x].atWar.includes(defNat));
     let text;
-    if (m === "superiority") text = `${who} ${a.att.length === 1 ? "fights" : "fight"} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? together ? "The Allied air forces now hold the sky there." : `The ${g2.nations[nat].adj} air force now holds the sky there.` : held2 ? nat === g2.human ? "The sky there is still yours." : `The ${g2.nations[nat].adj} air force still holds the sky there.` : df(def) ? "The defenders still hold their sky." : "No fighters came up to meet them."}`;
+    const one = a.att.length === 1;
+    if (quit === "att" && m === "superiority") text = `${who} ${one ? "breaks" : "break"} off the fight for the sky over ${a.place} and ${one ? "turns" : "turn"} for home before meeting the enemy${aLost ? `: ${cost}` : ""}. ${df(def) ? "The defenders still hold their sky." : "The sky there is not won."}`;
+    else if (quit === "att") text = `${who} ${one ? "breaks" : "break"} off the raid on ${a.place} and ${one ? "turns" : "turn"} for home before meeting the enemy, ${bombed > 0 ? `${one ? "its" : "their"} bombs dropped` : `${one ? "its" : "their"} bombs jettisoned`}${aLost ? `: ${cost}` : ""}.`;
+    else if (m === "superiority") text = `${who} ${a.att.length === 1 ? "fights" : "fight"} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? together ? "The Allied air forces now hold the sky there." : `The ${g2.nations[nat].adj} air force now holds the sky there.` : held2 ? nat === g2.human ? "The sky there is still yours." : `The ${g2.nations[nat].adj} air force still holds the sky there.` : df(def) ? "The defenders still hold their sky." : "No fighters came up to meet them."}`;
     else if (m === "fleet") text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} the ${a.ships[0].name} in ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "harbour") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} ${harbourOf(a.place)}${a.surprise ? " without warning" : ""}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "town") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the defences of ${townName(g2.regions[target])}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
@@ -31513,7 +31518,7 @@
     else if (m === "line") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the ${adj} fieldworks at ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "ground") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} the ${adj} troops at ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} ${a.place}${night ? " by night" : ""}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
-    if (g2.flags.open === 1 && m === "superiority" && !sky && aLost + dLost === 0) return rep;
+    if (g2.flags.open === 1 && m === "superiority" && !sky && aLost + dLost === 0 && !(battle && !staff)) return rep;
     const full = sky || notable2 || shipsSunk > 0 || m === "fleet" || m === "harbour";
     const brief2 = m === "superiority" ? `a fight for the sky over ${a.place}` : m === "town" ? `the defences of ${townName(g2.regions[target])} bombed` : sea ? `shipping struck in ${a.place}` : m === "line" ? `the ${adj} fieldworks at ${a.place} bombed` : m === "ground" ? `the ${adj} troops at ${a.place} raided` : `${a.place} bombed${night ? " by night" : ""}`;
     const fought = { arm: "air", ...defNat ? won ? { won: nat, lost: defNat } : { won: defNat, lost: nat } : {} };
@@ -51614,6 +51619,13 @@
       __publicField(this, "quietFor", 0);
       __publicField(this, "scrambled", false);
       __publicField(this, "gaveUp", null);
+      /**
+       * Groups that have met an enemy, and groups sent home by an order before they ever met one (bombers that had not yet
+       * bombed). A side whose every group went home unmet gave the battle up, as BREAK OFF ALL does (the playtester's
+       * break-off test, 23 Nov: breaking off before contact must not win). Sets only: no draw is moved.
+       */
+      __publicField(this, "met", /* @__PURE__ */ new Set());
+      __publicField(this, "quitUnmet", /* @__PURE__ */ new Set());
       __publicField(this, "toStaff", false);
       /** Each side's losses when the player handed the rest to the staff, for the after card. */
       __publicField(this, "before", null);
@@ -52310,6 +52322,8 @@
           if (Math.abs(a.band - d.band) > 1 || dist(a.x, a.y, d.x, d.y) > r) continue;
           a.contacts.push(d.id);
           d.contacts.push(a.id);
+          this.met.add(a.id);
+          this.met.add(d.id);
           this.fired = true;
           if (before.get(a.id)?.has(d.id)) continue;
           if (a.air === "bmr") this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
@@ -53110,7 +53124,7 @@
     end(dt) {
       const att = this.units.filter((u) => u.side === "att");
       if (att.every(off)) return this.finish("rout");
-      if (this.gaveUp) return this.finish("withdrew");
+      if (this.gaveUp || this.quitter() === "att") return this.finish("withdrew");
       if (this.t >= this.ticket.limit) return this.finish("time");
       this.quietFor = this.winding() ? this.quietFor + dt : 0;
       if (this.quietFor >= SKY.quiet) this.finish("objective");
@@ -53133,13 +53147,20 @@
         case "withdrawAll": {
           if (c.side !== by) return false;
           this.gaveUp = by;
-          for (const u of this.units) if (u.side === by && !off(u)) this.goHome(u);
+          for (const u of this.units) if (u.side === by && !off(u)) {
+            this.markQuit(u);
+            this.goHome(u);
+          }
           this.end(0);
           return true;
         }
         case "withdraw": {
           const us = mine4(c.units);
-          us.forEach((u) => this.goHome(u));
+          us.forEach((u) => {
+            this.markQuit(u);
+            this.goHome(u);
+          });
+          if (this.quitter() === "att") this.end(0);
           return us.length > 0;
         }
         case "move":
@@ -53195,6 +53216,22 @@
         default:
           return false;
       }
+    }
+    /** A group sent home by an order before it ever met an enemy (a bomber group before it bombed). */
+    markQuit(u) {
+      if (!this.met.has(u.id) && !(u.air === "bmr" && u.dropped > 0)) this.quitUnmet.add(u.id);
+    }
+    /**
+     * The side that gave the battle up: BREAK OFF ALL, or every one of its groups sent home before it met an enemy, one
+     * at a time or together. Its verdict goes against it, and it wins no sky (air.ts fly).
+     */
+    quitter() {
+      if (this.gaveUp) return this.gaveUp;
+      for (const side3 of ["att", "def"]) {
+        const us = this.units.filter((u) => u.side === side3);
+        if (us.length && us.every((u) => this.quitUnmet.has(u.id))) return side3;
+      }
+      return null;
     }
     goHome(u) {
       if (u.air === "bmr" && !u.dropped && !u.jettisoned && u.side === "att") {
@@ -53389,7 +53426,7 @@
         jettisoned: att.reduce((s, u) => s + (u.jettisoned ? u.n : 0), 0),
         lostBefore: att.reduce((s, u) => s + u.n0 - u.n, 0) - after,
         lostAfter: after,
-        ...this.gaveUp ? { gaveUp: this.gaveUp } : {},
+        ...this.quitter() ? { gaveUp: this.quitter() } : {},
         ...this.staff ? { staff: this.staff } : {},
         // Fought to the end, the field's throws decide the railway and the factory in the campaign too. Handed to the staff,
         // what the bombs had done stands (a throw of 0 cuts it) and the staff's own dice decide the rest (b368).
@@ -53408,8 +53445,9 @@
      * off everything lost; where its losses say otherwise, it is a close defeat. As the raider reads it.
      */
     judge() {
-      const { ratio } = this.score();
-      const won = this.gaveUp ? this.gaveUp === "def" : ratio >= 1;
+      const { ratio, lost, worth: worth3 } = this.score();
+      const quit = this.quitter();
+      const won = quit ? quit === "def" : ratio >= 1 && lost.att + lost.def + worth3 > 0;
       const level = won ? ratio >= 2 ? "Decisive victory" : "Close victory" : ratio < 0.5 ? "Decisive defeat" : "Close defeat";
       return { won, level, ratio };
     }
@@ -56136,7 +56174,9 @@
       },
       airLook(kind, target, ids2) {
         const t = airTicket(h.game(), kind, target, ids2);
-        return t.ticket ? { ticket: t.ticket } : { ticket: null, why: t.why };
+        if (!t.ticket) return { ticket: null, why: t.why };
+        const { ground: _ground, ...place2 } = t.ticket.place;
+        return { ticket: { ...t.ticket, place: place2 } };
       },
       airStart(kind, target, ids2) {
         const raid2 = h.raid;

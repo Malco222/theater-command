@@ -75,6 +75,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private quietFor = 0;
   private scrambled = false;
   private gaveUp: Side | null = null;
+  /**
+   * Groups that have met an enemy, and groups sent home by an order before they ever met one (bombers that had not yet
+   * bombed). A side whose every group went home unmet gave the battle up, as BREAK OFF ALL does (the playtester's
+   * break-off test, 23 Nov: breaking off before contact must not win). Sets only: no draw is moved.
+   */
+  private met = new Set<number>();
+  private quitUnmet = new Set<number>();
   private toStaff = false;
   /** Each side's losses when the player handed the rest to the staff, for the after card. */
   private before: { att: { ftr: number; bmr: number }; def: { ftr: number; bmr: number } } | null = null;
@@ -750,6 +757,7 @@ export class AirSim implements BattleSim<AirUnit> {
         }
         if (Math.abs(a.band - d.band) > 1 || dist(a.x, a.y, d.x, d.y) > r) continue;
         a.contacts.push(d.id); d.contacts.push(a.id);
+        this.met.add(a.id); this.met.add(d.id);
         this.fired = true;
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
@@ -1575,7 +1583,7 @@ export class AirSim implements BattleSim<AirUnit> {
   private end(dt: number): void {
     const att = this.units.filter((u) => u.side === 'att');
     if (att.every(off)) return this.finish('rout');
-    if (this.gaveUp) return this.finish('withdrew');
+    if (this.gaveUp || this.quitter() === 'att') return this.finish('withdrew');
     if (this.t >= this.ticket.limit) return this.finish('time');
     this.quietFor = this.winding() ? this.quietFor + dt : 0;
     if (this.quietFor >= SKY.quiet) this.finish('objective');
@@ -1595,11 +1603,11 @@ export class AirSim implements BattleSim<AirUnit> {
       case 'withdrawAll': {
         if (c.side !== by) return false;
         this.gaveUp = by;
-        for (const u of this.units) if (u.side === by && !off(u)) this.goHome(u);
+        for (const u of this.units) if (u.side === by && !off(u)) { this.markQuit(u); this.goHome(u); }
         this.end(0);
         return true;
       }
-      case 'withdraw': { const us = mine(c.units); us.forEach((u) => this.goHome(u)); return us.length > 0; }
+      case 'withdraw': { const us = mine(c.units); us.forEach((u) => { this.markQuit(u); this.goHome(u); }); if (this.quitter() === 'att') this.end(0); return us.length > 0; }
       case 'move': case 'hold': {
         const us = fighters(c.units);
         for (const u of us) u.job = c.do === 'move' ? { do: 'patrol', x: c.x, y: c.y } : { do: 'patrol', x: u.x, y: u.y };
@@ -1635,6 +1643,24 @@ export class AirSim implements BattleSim<AirUnit> {
       }
       default: return false;
     }
+  }
+
+  /** A group sent home by an order before it ever met an enemy (a bomber group before it bombed). */
+  private markQuit(u: AirUnit): void {
+    if (!this.met.has(u.id) && !(u.air === 'bmr' && u.dropped > 0)) this.quitUnmet.add(u.id);
+  }
+
+  /**
+   * The side that gave the battle up: BREAK OFF ALL, or every one of its groups sent home before it met an enemy, one
+   * at a time or together. Its verdict goes against it, and it wins no sky (air.ts fly).
+   */
+  private quitter(): Side | null {
+    if (this.gaveUp) return this.gaveUp;
+    for (const side of ['att', 'def'] as Side[]) {
+      const us = this.units.filter((u) => u.side === side);
+      if (us.length && us.every((u) => this.quitUnmet.has(u.id))) return side;
+    }
+    return null;
   }
 
   private goHome(u: AirUnit): void {
@@ -1837,7 +1863,7 @@ export class AirSim implements BattleSim<AirUnit> {
       groups: [...groups.values()], chance: this.place.chance,
       dropped: att.reduce((s, u) => s + u.dropped, 0), jettisoned: att.reduce((s, u) => s + (u.jettisoned ? u.n : 0), 0),
       lostBefore: att.reduce((s, u) => s + u.n0 - u.n, 0) - after, lostAfter: after,
-      ...(this.gaveUp ? { gaveUp: this.gaveUp } : {}),
+      ...(this.quitter() ? { gaveUp: this.quitter()! } : {}),
       ...(this.staff ? { staff: this.staff } : {}),
       // Fought to the end, the field's throws decide the railway and the factory in the campaign too. Handed to the staff,
       // what the bombs had done stands (a throw of 0 cuts it) and the staff's own dice decide the rest (b368).
@@ -1857,8 +1883,10 @@ export class AirSim implements BattleSim<AirUnit> {
    * off everything lost; where its losses say otherwise, it is a close defeat. As the raider reads it.
    */
   private judge(): { won: boolean; level: VictoryLevel; ratio: number } {
-    const { ratio } = this.score();
-    const won = this.gaveUp ? this.gaveUp === 'def' : ratio >= 1;
+    const { ratio, lost, worth } = this.score();
+    // A side that gave up lost. A tie with nothing lost on either side and nothing hit is not a win (the break-off test).
+    const quit = this.quitter();
+    const won = quit ? quit === 'def' : ratio >= 1 && lost.att + lost.def + worth > 0;
     const level: VictoryLevel = won ? (ratio >= 2 ? 'Decisive victory' : 'Close victory') : ratio < 0.5 ? 'Decisive defeat' : 'Close defeat';
     return { won, level, ratio };
   }

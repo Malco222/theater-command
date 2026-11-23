@@ -1671,6 +1671,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // A raid fought out as an air battle (airfought.ts; release 1.6) books the field's own losses; otherwise the dice roll.
   // Handed to the staff partway, the dice roll as for any raid, and the battle's part is added to what they give the rest.
   const staff = battle?.staff;
+  // Flown to the end, a side that gave the battle up: BREAK OFF ALL, or every one of its groups sent home before it met
+  // an enemy (AirSim.quitter; the playtester's break-off test, 23 Nov). It loses, and wins no sky. Never with the dice.
+  const quit = battle && !staff ? battle.gaveUp ?? null : null;
   const luck = (): number => (battle && !staff ? 1 : rng.range(1 - C.luck, 1 + C.luck));
   const before = (f: AirFleet): AirSide => {
     const side: AirSide = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
@@ -1879,7 +1882,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * techMul(g, x.f.nat, 'radar');
     });
     hold = Dnext > 0 ? EpowAfter / Dnext : 99;
-    sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
+    sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win && quit !== 'att';
     if (sky) g.sky[target] = { nat, turn: g.turn };
     // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
     if (acOn(g)) held = skyFought(g, nat, target, sky) === 'held';
@@ -1895,13 +1898,16 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // field's way, never the opposite.
   const rolled = sky || ratio >= 1;
   const seen = (rows: { f: AirFleet }[]): number => rows.reduce((t, x) => t + (battle!.lost[x.f.id]?.ftr ?? 0) + (battle!.lost[x.f.id]?.bmr ?? 0), 0);
-  const fieldWon = battle && !staff ? (battle.gaveUp ? battle.gaveUp === 'def' : sky || (seen(a.def) + value + 10) / (seen(a.att) + 10) >= 1) : null;
+  // A tie with nothing lost on either side and nothing hit is not a win.
+  const fieldWon = battle && !staff ? (quit ? quit === 'def' : sky || ((seen(a.def) + value + 10) / (seen(a.att) + 10) >= 1 && seen(a.def) + value + seen(a.att) > 0)) : null;
   const won = fieldWon ?? rolled;
   for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); }
   for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); }
   const level: VictoryLevel = fieldWon !== null && fieldWon !== rolled ? (won ? 'Close victory' : 'Close defeat')
     : sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
+  // The report's own words for a battle given up, which the map's note shows first (campaign-bridge act).
+  if (quit === 'att') result = m === 'superiority' ? 'The fighters broke off and turned for home before they met the enemy.' : `The raid broke off and turned for home before it met the enemy${bombed > 0 ? '' : ', its bombs jettisoned'}.`;
   g.flags.airBattles = (g.flags.airBattles ?? 0) + 1;
   const troops = m === 'ground' || m === 'line' ? g.regions[target].units.find((u) => !u.dead && atWar(g, nat, u.nat))?.nat : undefined;
   const defNat = troops ?? struck?.[0]?.nat ?? def[0]?.nat ?? (sea ? '' : g.regions[target].ctrl);
@@ -1928,7 +1934,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
-  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
+  const one = a.att.length === 1;
+  if (quit === 'att' && m === 'superiority') text = `${who} ${one ? 'breaks' : 'break'} off the fight for the sky over ${a.place} and ${one ? 'turns' : 'turn'} for home before meeting the enemy${aLost ? `: ${cost}` : ''}. ${df(def) ? 'The defenders still hold their sky.' : 'The sky there is not won.'}`;
+  else if (quit === 'att') text = `${who} ${one ? 'breaks' : 'break'} off the raid on ${a.place} and ${one ? 'turns' : 'turn'} for home before meeting the enemy, ${bombed > 0 ? `${one ? 'its' : 'their'} bombs dropped` : `${one ? 'its' : 'their'} bombs jettisoned`}${aLost ? `: ${cost}` : ''}.`;
+  else if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
   else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} in ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} ${harbourOf(a.place)}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'town') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the defences of ${townName(g.regions[target])}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
@@ -1937,7 +1946,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   // A fight for the sky in which nobody met anybody is not news (the grand campaign).
-  if (g.flags.open === 1 && m === 'superiority' && !sky && aLost + dLost === 0) return rep;
+  // Flown, it always is: the player's own battle leaves its note on the map.
+  if (g.flags.open === 1 && m === 'superiority' && !sky && aLost + dLost === 0 && !(battle && !staff)) return rep;
   // What changes something is told in full: the sky won, a ship sunk, a factory wrecked, a railway cut, a fleet or
   // a harbour struck. The same raid on the same place month after month goes into the month's summary line.
   const full = sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
