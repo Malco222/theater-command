@@ -3,11 +3,13 @@
 #include "Battle/Fates.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <unordered_map>
 
 namespace LandKit
@@ -2059,11 +2061,14 @@ namespace LandKit
 
 			// Captured kit: her captor's mark, big (the art director, 23 November: crews painted them oversize so their
 			// own side would hold its fire, and the player must see whose she is at a glance): half as big again at each
-			// place her file gives for her maker's marks, and once on her roof. The Germans' cross, black edged white, and
-			// the Americans' white star, as the cloud's pictures draw them; a captor with no mark in the game, none.
-			if (bCaptured && (D.Nation == "GER" || D.Nation == "USA"))
+			// place her file gives for her maker's marks, once on her roof and once on her hull's back plate. The Germans'
+			// cross, black edged white, and the Americans' white star, as the cloud's pictures draw them; the Soviets' plain
+			// red star (the tank files' own red, A82020; the art director's carry, 23 November: a captor with no mark leaves
+			// the player guessing); a captor with no mark drawn yet (British, Italian), none.
+			if (bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV"))
 			{
-				const bool bStar = D.Nation == "USA";
+				const bool bStar = D.Nation == "USA" || D.Nation == "SOV";
+				const uint8_t StarR = D.Nation == "SOV" ? 168 : 214, StarG = D.Nation == "SOV" ? 32 : 211, StarB = D.Nation == "SOV" ? 32 : 196;
 				auto AddMark = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, const V3& UpHint) {
 					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size()) return;
 					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
@@ -2088,12 +2093,12 @@ namespace LandKit
 					};
 					if (bStar)
 					{
-						const uint32_t Mid = Point(0.0, 0.0, 0.012, 214, 211, 196);
+						const uint32_t Mid = Point(0.0, 0.0, 0.012, StarR, StarG, StarB);
 						std::vector<uint32_t> Rim;
 						for (int I = 0; I < 10; ++I)
 						{
 							const double A = I * 36.0 * 3.14159265358979 / 180.0, Rr = I % 2 == 0 ? Size : Size * 0.382;
-							Rim.push_back(Point(Rr * std::sin(A), Rr * std::cos(A), 0.012, 214, 211, 196));
+							Rim.push_back(Point(Rr * std::sin(A), Rr * std::cos(A), 0.012, StarR, StarG, StarB));
 						}
 						for (int I = 0; I < 10; ++I) Out.Triangles.insert(Out.Triangles.end(), { Mid, Rim[static_cast<size_t>((I + 1) % 10)], Rim[static_cast<size_t>(I)] });
 					}
@@ -2110,24 +2115,76 @@ namespace LandKit
 				{
 					AddMark(Parts[static_cast<size_t>(Mk.Part)].Body, Mk.At, Mk.Facing, Mk.Radius * 1.5, V3(0.0, 0.0, 1.0));
 				}
-				// (her roof: the top of her turret, else of her hull, where the most of her points are highest)
-				int RoofPart = PartIndex("turret");
-				if (RoofPart < 0 || Parts[static_cast<size_t>(RoofPart)].Body < 0) RoofPart = PartIndex("hull");
-				if (RoofPart >= 0 && Parts[static_cast<size_t>(RoofPart)].Body >= 0)
-				{
+				// (her roof and her back: the biggest flat plate of her turret's top (else her hull's) and of her hull's
+				// back, by area, among those within half a metre of the very top or back, her files' fore being +X; only
+				// where nothing of hers (any part: a hatch, a cupola, an exhaust) stands proud of the plate within the
+				// mark's reach)
+				auto Plate = [&](int PartIx, int Axis, double Sign, double Size, V3& OutAt) {
+					if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0) return false;
+					auto Along = [Axis, Sign](const V3& P) { return Sign * (Axis == 0 ? P.X : P.Z); };
+					auto Apart2 = [Axis](const V3& P, const V3& Q) {
+						const double D1 = Axis == 0 ? P.Z - Q.Z : P.X - Q.X, D2 = P.Y - Q.Y;
+						return D1 * D1 + D2 * D2;
+					};
+					struct Bit { V3 Mid; double Area, Height; };
+					std::vector<Bit> Bits;
 					double Top = -1e9;
-					for (size_t K = 0; K < N; ++K)
-						if (Raw.Parts[K] == RoofPart) Top = std::max(Top, static_cast<double>(Raw.Points[K * 3 + 2]));
-					double SX = 0.0, SY = 0.0, Count = 0.0;
+					for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+					{
+						const uint32_t I0 = Raw.Triangles[T], I1 = Raw.Triangles[T + 1], I2 = Raw.Triangles[T + 2];
+						if (Raw.Parts[I0] != PartIx || Raw.Parts[I1] != PartIx || Raw.Parts[I2] != PartIx) continue;
+						const V3 A(Raw.Points[I0 * 3], Raw.Points[I0 * 3 + 1], Raw.Points[I0 * 3 + 2]);
+						const V3 B(Raw.Points[I1 * 3], Raw.Points[I1 * 3 + 1], Raw.Points[I1 * 3 + 2]);
+						const V3 C(Raw.Points[I2 * 3], Raw.Points[I2 * 3 + 1], Raw.Points[I2 * 3 + 2]);
+						const V3 Cr = (B - A).Cross(C - A);
+						const double Area = 0.5 * Cr.Length();
+						if (Area < 1e-7) continue;
+						const V3 Nm = Cr * (0.5 / Area);
+						if (Sign * (Axis == 0 ? Nm.X : Nm.Z) < 0.8) continue;
+						const V3 Mid = (A + B + C) * (1.0 / 3.0);
+						Bits.push_back({ Mid, Area, Along(Mid) });
+						Top = std::max(Top, Along(Mid));
+					}
+					Bits.erase(std::remove_if(Bits.begin(), Bits.end(), [Top](const Bit& Bt) { return Bt.Height < Top - 0.5; }), Bits.end());
+					std::vector<V3> Proud;
 					for (size_t K = 0; K < N; ++K)
 					{
-						if (Raw.Parts[K] != RoofPart || Raw.Points[K * 3 + 2] < Top - 0.04 || Raw.Facings[K * 3 + 2] < 0.8) continue;
-						SX += Raw.Points[K * 3];
-						SY += Raw.Points[K * 3 + 1];
-						Count += 1.0;
+						const V3 P(Raw.Points[K * 3], Raw.Points[K * 3 + 1], Raw.Points[K * 3 + 2]);
+						if (Along(P) > Top - 0.44) Proud.push_back(P);
 					}
-					if (Count > 0.0) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, V3(SX / Count, SY / Count, Top), V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
-				}
+					const double Reach2 = (Size + 0.03) * (Size + 0.03);
+					std::map<long, std::array<double, 4>> Bins; // (area, then the area-weighted sums of x, y, z)
+					for (const Bit& Bt : Bits)
+					{
+						bool bClear = true;
+						for (const V3& P : Proud)
+						{
+							if (Along(P) > Bt.Height + 0.06 && Apart2(P, Bt.Mid) < Reach2)
+							{
+								bClear = false;
+								break;
+							}
+						}
+						if (!bClear) continue;
+						std::array<double, 4>& Bin = Bins[static_cast<long>(std::floor(Bt.Height / 0.06))];
+						Bin[0] += Bt.Area;
+						Bin[1] += Bt.Area * Bt.Mid.X;
+						Bin[2] += Bt.Area * Bt.Mid.Y;
+						Bin[3] += Bt.Area * Bt.Mid.Z;
+					}
+					const std::array<double, 4>* Best = nullptr;
+					for (const auto& Bin : Bins)
+						if (!Best || Bin.second[0] > (*Best)[0]) Best = &Bin.second;
+					if (!Best || (*Best)[0] < 0.02) return false;
+					OutAt = V3((*Best)[1] / (*Best)[0], (*Best)[2] / (*Best)[0], (*Best)[3] / (*Best)[0]);
+					return true;
+				};
+				int RoofPart = PartIndex("turret");
+				if (RoofPart < 0 || Parts[static_cast<size_t>(RoofPart)].Body < 0) RoofPart = PartIndex("hull");
+				V3 At;
+				if (Plate(RoofPart, 2, 1.0, 0.3, At)) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, At, V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
+				const int BackPart = PartIndex("hull");
+				if (Plate(BackPart, 0, -1.0, 0.25, At)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
 			}
 		}
 
