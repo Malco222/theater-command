@@ -181,6 +181,12 @@ private:
 		double WayList = 0.0, WayTrim = 0.0;
 		double WayHeave = 0.0; // metres the swell lifts her from her waterline (minus: lets her fall)
 		double NextChurn = -1.0; // when the sea next boils round her as she goes (MoveShip)
+		// The battle modeller's model she is drawn with ("Ships/Destroyer_GER"; empty: the kit's code-built one), the
+		// stretch fitting it took, and whether her hull holds its far model too (section 1) and which is shown.
+		FString File;
+		FVector Stretch = FVector::OneVector;
+		bool bTwoMeshes = false;
+		bool bNearShown = true;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
@@ -270,6 +276,8 @@ private:
 	FVector2D ShoreAt(double East, double North) const;
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
+	/** Each ship's near or far model by how far the camera is from her (Advance). */
+	void ShowNearOrFar();
 	void Blast(FShip& Ship, bool bBig);
 
 	FVector2D StageToBoard(const FVector2D& Stage) const;

@@ -6,6 +6,7 @@
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignMapActor.h"
@@ -57,17 +58,30 @@ namespace StageParts
 			: Class == TEXT("ss") ? TEXT("Submarine") : TEXT("Cruiser");
 	}
 
+	/** A model stretched along, across and up; the normals follow. */
+	static void Stretched(FMiniatureMesh& Model, const FVector& Stretch)
+	{
+		for (FVector& Point : Model.Vertices)
+		{
+			Point *= Stretch;
+		}
+		for (FVector& Normal : Model.Normals)
+		{
+			Normal = (Normal / Stretch).GetSafeNormal();
+		}
+	}
+
 	/**
 	 * The kit's model of her class stretched to her own size (AirFeed::HullOf): along her length, across her beam, and
 	 * up by the beam's share, so that her upperworks keep their look; the normals follow. The kit has one model a class
 	 * and navy (the American battleship an Iowa, 270 m), and Battleship Row's 1941 berths are laid for ships of 178 to
 	 * 190 m: Brian on the film of build 1768 saw them on top of each other.
 	 */
-	static void FitHull(FMiniatureMesh& Model, const FStageShip& Given, double U)
+	static FVector FitHull(FMiniatureMesh& Model, const FStageShip& Given, double U)
 	{
 		if (Model.Vertices.Num() == 0)
 		{
-			return;
+			return FVector::OneVector;
 		}
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
@@ -78,16 +92,161 @@ namespace StageParts
 		const AirFeed::HullSize Want = AirFeed::HullOf(std::string(TCHAR_TO_UTF8(*Given.Class)), std::string(TCHAR_TO_UTF8(*Given.Name)), std::string(TCHAR_TO_UTF8(*Given.Nation)));
 		if (Size.X < 1.0 || Size.Y < 1.0 || Want.Long <= 0.0 || Want.Beam <= 0.0)
 		{
-			return;
+			return FVector::OneVector;
 		}
 		const FVector Stretch(Want.Long / Size.X, Want.Beam / Size.Y, Want.Beam / Size.Y);
-		for (FVector& Point : Model.Vertices)
+		Stretched(Model, Stretch);
+		return Stretch;
+	}
+
+	/**
+	 * The battle modeller's own model of her (tools/battle-models, the same bar as the B-17: Brian, 23 November 2026,
+	 * "i want all navy graphics to be as good as the air planes bench mark"), if the game has it: Content/Models/Ships/
+	 * <Kind>_<navy>.json, else <Kind>.json; empty where there is none, and the kit's code-built miniature stands in.
+	 * A merchant (mv) is a freighter, a tanker or a troopship by her number, about 13, 5 and 2 in 20 as convoys sailed.
+	 * "-TheaterOldShips" (or the map's "-TheaterCodeBuilt") keeps every ship code-built: to set the two side by side and to time them.
+	 */
+	static FString ShipFileOf(const FStageShip& Given)
+	{
+		static const bool bOld = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldShips"));
+		if (bOld || FMiniatureMesh::bCodeBuilt)
 		{
-			Point *= Stretch;
+			return FString();
 		}
-		for (FVector& Normal : Model.Normals)
+		const FString& C = Given.Class;
+		FString Kind;
+		if (C == TEXT("bb") || C == TEXT("bc") || C == TEXT("ag"))
 		{
-			Normal = (Normal / Stretch).GetSafeNormal();
+			Kind = TEXT("Battleship");
+		}
+		else if (C == TEXT("cv") || C == TEXT("cvl") || C == TEXT("cve"))
+		{
+			Kind = TEXT("Carrier");
+		}
+		else if (C == TEXT("dd") || C == TEXT("de") || C == TEXT("tb"))
+		{
+			Kind = TEXT("Destroyer");
+		}
+		else if (C == TEXT("ss"))
+		{
+			Kind = TEXT("Submarine");
+		}
+		else if (C == TEXT("mv"))
+		{
+			const uint32 Roll = (static_cast<uint32>(Given.Id) * 2654435761u >> 16) % 20u;
+			Kind = Roll < 13u ? TEXT("Freighter") : Roll < 18u ? TEXT("Tanker") : TEXT("Troopship");
+		}
+		else
+		{
+			Kind = TEXT("Cruiser");
+		}
+		const FString Navy = Given.Nation == TEXT("JPN") ? FString(TEXT("JAP")) : Given.Nation == TEXT("GBR") ? FString(TEXT("UK")) : Given.Nation;
+		static TMap<FString, FString> Found;
+		const FString Asked = Kind + TEXT("_") + Navy;
+		if (const FString* Known = Found.Find(Asked))
+		{
+			return *Known;
+		}
+		const FString Dir = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Ships");
+		const FString Out = FPaths::FileExists(Dir / (Asked + TEXT(".json"))) ? TEXT("Ships/") + Asked
+			: FPaths::FileExists(Dir / (Kind + TEXT(".json"))) ? TEXT("Ships/") + Kind : FString();
+		Found.Add(Asked, Out);
+		return Out;
+	}
+
+	/**
+	 * Whether she is fitted to a size of her own (a named ship of AirFeed::HullOf, such as Battleship Row's 1941 ships):
+	 * the battle modeller's models are drawn to their own class's size, and only a named ship is stretched to hers.
+	 */
+	static bool NamedHull(const FStageShip& Given)
+	{
+		if (Given.Name.IsEmpty())
+		{
+			return false;
+		}
+		const std::string Class(TCHAR_TO_UTF8(*Given.Class)), Nation(TCHAR_TO_UTF8(*Given.Nation));
+		const AirFeed::HullSize Hers = AirFeed::HullOf(Class, std::string(TCHAR_TO_UTF8(*Given.Name)), Nation), Any = AirFeed::HullOf(Class, std::string(), Nation);
+		return Hers.Long != Any.Long || Hers.Beam != Any.Beam;
+	}
+
+	/**
+	 * A model file's sockets (its "sockets": funnel mouths, periscope heads, gun muzzles, depth-charge racks), each at
+	 * its place in the game's frame (nose toward -X, right hand at -Y, metres), read once a file.
+	 */
+	static const TMap<FString, FVector>& SocketsOf(const FString& File)
+	{
+		static TMap<FString, TMap<FString, FVector>> Read;
+		if (const TMap<FString, FVector>* Known = Read.Find(File))
+		{
+			return *Known;
+		}
+		TMap<FString, FVector>& Out = Read.Add(File);
+		FString Text;
+		TSharedPtr<FJsonObject> Json;
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (File + TEXT(".json"))))
+			&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) && Json.IsValid() && Json->TryGetArrayField(TEXT("sockets"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Socket = Value.IsValid() ? Value->AsObject() : nullptr;
+				const TArray<TSharedPtr<FJsonValue>>* At = nullptr;
+				FString Name;
+				if (Socket.IsValid() && Socket->TryGetStringField(TEXT("name"), Name) && Socket->TryGetArrayField(TEXT("at"), At) && At->Num() >= 3)
+				{
+					Out.Add(Name, FVector(-(*At)[0]->AsNumber(), -(*At)[1]->AsNumber(), (*At)[2]->AsNumber()));
+				}
+			}
+		}
+		return Out;
+	}
+
+	/**
+	 * Her model, near (all its detail) or far (the modeller's lighter one, for a ship well off): the battle modeller's
+	 * where the game has it, else the kit's code-built miniature (near only), fitted to her size where it is to be
+	 * (FitHull, NamedHull), and the stretch that took. False where there is none, or no far one.
+	 */
+	static bool HullModel(const FStageShip& Given, bool bFar, double U, FMiniatureMesh& Model, FString& OutFile, FVector& OutStretch)
+	{
+		OutFile = ShipFileOf(Given);
+		OutStretch = FVector::OneVector;
+		{
+			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal: the kit's; the modeller's say so point by point)
+			if (!OutFile.IsEmpty() && !Model.Sculpted(OutFile, Given.Nation, FVector::ZeroVector, U, 0.0, bFar))
+			{
+				OutFile.Empty();
+			}
+			if (OutFile.IsEmpty() && (bFar || !Model.Vehicle(FString(KindOf(Given.Class)) + TEXT(":") + Given.Nation, FVector::ZeroVector, U, 0.0)))
+			{
+				return false;
+			}
+		}
+		if (Model.Vertices.Num() == 0)
+		{
+			return false;
+		}
+		if (OutFile.IsEmpty() || NamedHull(Given))
+		{
+			OutStretch = FitHull(Model, Given, U);
+		}
+		return true;
+	}
+
+	/** Her funnels' mouths from her model's sockets ("funnel.1", "funnel.2"...), fitted as her model is; W as FindFunnels gives it. */
+	static void SocketFunnels(const FString& File, const FString& Class, const FVector& Stretch, double U, TArray<FVector4>& Out)
+	{
+		Out.Reset();
+		const double Width = Class == TEXT("dd") || Class == TEXT("de") ? 3.2 : Class == TEXT("mv") ? 5.5 : Class == TEXT("bb") ? 8.0 : Class == TEXT("cv") ? 6.0 : 5.0;
+		const TMap<FString, FVector>& Sockets = SocketsOf(File);
+		for (int32 N = 1; N <= 6; ++N)
+		{
+			const FVector* At = Sockets.Find(FString::Printf(TEXT("funnel.%d"), N));
+			if (!At)
+			{
+				break;
+			}
+			const FVector Top = *At * Stretch * U;
+			Out.Add(FVector4(Top.X, Top.Y, Top.Z, Width));
 		}
 	}
 
@@ -1394,19 +1553,22 @@ void AAirStage::LayShip(const FStageShip& Given)
 	if (!Ship.Hull)
 	{
 		FMiniatureMesh Model;
+		if (!StageParts::HullModel(Given, false, UnitsPerMetre, Model, Ship.File, Ship.Stretch))
 		{
-			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal)
-			const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
-			if (!Model.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0) || Model.Vertices.Num() == 0)
-			{
-				UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
-				Ships.Remove(Given.Id);
-				return;
-			}
+			UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s:%s; ship %d is not drawn."), *Given.Class, *Given.Nation, Given.Id);
+			Ships.Remove(Given.Id);
+			return;
 		}
-		StageParts::FitHull(Model, Given, UnitsPerMetre);
-		StageParts::FindFunnels(Model, UnitsPerMetre, FunnelsOf.FindOrAdd(Given.Id));
-		UE_LOG(LogTheater, Log, TEXT("Stage: ship %d (%s:%s) has %d funnels on her model."), Given.Id, *Given.Class, *Given.Nation, FunnelsOf[Given.Id].Num());
+		if (Ship.File.IsEmpty())
+		{
+			StageParts::FindFunnels(Model, UnitsPerMetre, FunnelsOf.FindOrAdd(Given.Id));
+		}
+		else
+		{
+			StageParts::SocketFunnels(Ship.File, Given.Class, Ship.Stretch, UnitsPerMetre, FunnelsOf.FindOrAdd(Given.Id));
+		}
+		UE_LOG(LogTheater, Log, TEXT("Stage: ship %d (%s:%s) drawn as %s, %d funnels."), Given.Id, *Given.Class, *Given.Nation,
+			Ship.File.IsEmpty() ? TEXT("the kit's miniature") : *Ship.File, FunnelsOf[Given.Id].Num());
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
 		{
@@ -1423,6 +1585,23 @@ void AAirStage::LayShip(const FStageShip& Given)
 		Hull->RegisterComponent();
 		Hull->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		Hull->SetMaterial(0, SteelInk);
+		// The modeller's lighter model of her beside it (section 1), shown in its place while she is well off (Advance):
+		// a destroyer's 18,000 triangles near and 6,000 far, a submarine's 22,000 and 2,300, as the B-17's 23,000 and 7,000.
+		Ship.bTwoMeshes = false;
+		if (!Ship.File.IsEmpty())
+		{
+			FMiniatureMesh Far;
+			FString FarFile;
+			FVector FarStretch;
+			if (StageParts::HullModel(Given, true, UnitsPerMetre, Far, FarFile, FarStretch) && FarFile == Ship.File)
+			{
+				Hull->CreateMeshSection(1, Far.Vertices, Far.Triangles, Far.Normals, TArray<FVector2D>(), Far.Colors, TArray<FProcMeshTangent>(), false);
+				Hull->SetMaterial(1, SteelInk);
+				Hull->SetMeshSectionVisible(1, false);
+				Ship.bTwoMeshes = true;
+				Ship.bNearShown = true;
+			}
+		}
 		Ship.Hull = Hull;
 		ShipMeshes.Add(Hull);
 	}
@@ -1546,11 +1725,9 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 	{
 		// Broken in two amidships: her model cut in halves, bow and stern, each going its own way.
 		FMiniatureMesh Model;
-		{
-			TGuardValue<uint8> Painted(Model.Finish, 128);
-			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
-		}
-		StageParts::FitHull(Model, Ship->Given, UnitsPerMetre);
+		FString File;
+		FVector Stretch;
+		StageParts::HullModel(Ship->Given, false, UnitsPerMetre, Model, File, Stretch);
 		TArray<int32> Stern, Bow;
 		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)
 		{
@@ -1560,6 +1737,13 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		if (Bow.Num() > 0 && Stern.Num() > 0 && Ship->Hull)
 		{
 			Ship->Hull->CreateMeshSection(0, Model.Vertices, Stern, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			if (Ship->bTwoMeshes)
+			{
+				// (her halves are cut from her near model: the far one goes, and the halves are drawn however far off she is)
+				Ship->Hull->ClearMeshSection(1);
+				Ship->Hull->SetMeshSectionVisible(0, true);
+				Ship->bTwoMeshes = false;
+			}
 			UProceduralMeshComponent* Fore = NewObject<UProceduralMeshComponent>(this);
 			Fore->SetupAttachment(Root);
 			Fore->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -1766,6 +1950,38 @@ void AAirStage::Advance(double Now)
 	for (TPair<int32, FShip>& Pair : Ships)
 	{
 		MoveShip(Pair.Value, Now);
+	}
+	ShowNearOrFar();
+}
+
+void AAirStage::ShowNearOrFar()
+{
+	// Each ship with the modeller's two models shows the near one while the camera is within about 15 of her lengths
+	// (a destroyer 1.7 km, a submarine 1 km), the far one past it, with a tenth either way so that she does not flicker
+	// between them at the edge.
+	const UWorld* Here = GetWorld();
+	const APlayerController* Player = Here ? Here->GetFirstPlayerController() : nullptr;
+	if (!Player || !Player->PlayerCameraManager)
+	{
+		return;
+	}
+	const FVector Eye = Player->PlayerCameraManager->GetCameraLocation();
+	for (TPair<int32, FShip>& Pair : Ships)
+	{
+		FShip& Ship = Pair.Value;
+		if (!Ship.bTwoMeshes || !Ship.Hull || Ship.bGone)
+		{
+			continue;
+		}
+		const double Off = FVector::Dist(Eye, Ship.Hull->GetComponentLocation()) / UnitsPerMetre;
+		const double Edge = FMath::Clamp(Ship.Long * 15.0, 800.0, 3500.0);
+		const bool bNear = Ship.bNearShown ? Off < Edge * 1.1 : Off < Edge * 0.9;
+		if (bNear != Ship.bNearShown)
+		{
+			Ship.Hull->SetMeshSectionVisible(0, bNear);
+			Ship.Hull->SetMeshSectionVisible(1, !bNear);
+			Ship.bNearShown = bNear;
+		}
 	}
 }
 
