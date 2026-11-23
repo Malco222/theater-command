@@ -46,12 +46,14 @@ type Ch = (number | string | null)[];
 /** One man's track as the scene reads it (the recording's men[]). */
 export interface TrackOut {
   b: number; k: number; j?: number; r: string; at: Pt[]; ch: Ch[]; s: number[]; d?: number; mk?: unknown[]; out?: number; fo?: 1;
+  /** A carrier of armoured infantry (release 2, sim.mech): the model the 3D game draws her with (absent: the lorry). */
+  ml?: string;
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
 export interface TrackDelta {
   n: number;
-  b?: number; k?: number; j?: number; r?: string; fo?: 1;
+  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string;
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
@@ -92,7 +94,7 @@ const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' :
 
 interface Kept {
   n: number;
-  who: { b: number; k: number; j?: number; r: string; fo?: 1 };
+  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string };
   /** The last kept point (the line test's start), and the points seen since. */
   last: Pt;
   pend: Pt[];
@@ -120,7 +122,7 @@ export class LiveKeeper {
     let k = this.men.get(key);
     if (!k) {
       k = {
-        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}) },
+        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}) },
         last: p, pend: [], ch, shot: undefined, newAt: [p], newCh: [ch], newS: [], sentWho: false, sentD: false, sentMk: false, sentOut: undefined, sentTail: null,
       };
       this.men.set(key, k);
@@ -206,7 +208,7 @@ export class LiveKeeper {
       if (dl.reset) tracks.length = 0;
       for (const d of dl.men) {
         let tr = tracks[d.n];
-        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}) }; }
+        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}) }; }
         if (d.at) tr.at.push(...d.at);
         if (d.ch) tr.ch.push(...d.ch);
         if (d.s) tr.s.push(...d.s);
@@ -343,6 +345,8 @@ export interface LiveOpts {
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
   escort?: boolean;
+  /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
+  mech?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -444,6 +448,8 @@ export class LiveBattle {
     for (const s of ['att', 'def'] as Side[]) sim.command({ do: 'auto', side: s, on: true }, s);
     if (this.me && opts.staff !== false) sim.perUnit = true;
     if (this.me && opts.radio !== false) sim.radio = true;
+    // (armoured infantry: before the drill is made, which draws them with their blocks)
+    if (opts.mech === true) sim.mech = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);

@@ -413,6 +413,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
    */
   escort = false;
+  /**
+   * Armoured infantry (release 2; Brian, 23 November 07:01Z): an armoured block draws its division's riflemen riding
+   * behind its tanks in their army's carriers, half-tracks or lorries, who get down near the enemy (Drill.addMech;
+   * DRILL.mech). Looks only: the drill reads it, the fight never. Off unless turned on (the bridge's { mech: true }, the
+   * Battle rules card's Armoured infantry row).
+   */
+  mech = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
@@ -2733,6 +2740,8 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** Whether a block's foot carries its own anti-tank weapon in the battle's month (LAND.overrun.at, by its army). */
   private ownAntiTank(u: LandUnit): boolean {
+    // ("Units decide": what its corps carries, where the campaign says; else the history start's, by its army and month)
+    if (u.kit?.at !== undefined) return u.kit.at;
     const O = LAND.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
     const nat = O.commonwealth.includes(u.nat) ? 'UK' : u.nat;
     return (O.at[nat] ?? []).some(([from, to]) => when >= from && when < to);

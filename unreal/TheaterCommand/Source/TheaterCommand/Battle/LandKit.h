@@ -396,6 +396,7 @@ namespace LandKit
 		int Block = 0, K = 0;
 		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
+		std::string Model;                   // a carrier of armoured infantry: her model (ml); empty, the lorry
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;
 		std::vector<double> Shots;
@@ -754,7 +755,7 @@ namespace LandKit
 
 		const Block* BlockOf(int Id) const;
 		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
-		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
+		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier = std::string());
 		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
 		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
 		 * Rounds: those that struck her, the killing one among them. */

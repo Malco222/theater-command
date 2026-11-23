@@ -128,5 +128,28 @@
     "moving": 0.4,
     "pace": [1.2, 4.5],
     "clear": {"ahead": 10, "behind": 3, "half": 2.3, "out": 3.6, "enemyAhead": 2.5, "crush": 4, "crushHalf": 1.4, "dodge": 1.5, "within": 60}
+  },
+  "mech": {
+    "_about": "Armoured infantry (release 2; Brian, 23 November 07:01Z, yes to 'half-tracks carrying armoured infantry'; LandBattle.mech, off unless turned on; looks only). An armoured block draws the riflemen of its division riding behind its tanks, a section to each carrier, who get down near the enemy as lorried infantry do. 'rows': the historian's (23 November 07:05Z, historian/halftracks-td-spg-movers-1123.md, M unless said), each army's carriers to a block of four tanks, [from, until, models] by the battle's year (a fraction for the month), drawn in that order and as many as the block's tray over four of them (one at least); an army with no row draws none. Britain's Universal Carrier is not modelled: its row draws the lorries beside it (the known list). The Soviet tank riders and the minor armies wait for their own rows. Units decide (the design director, 07:19Z): these rows are only the history start's mix; where the campaign says what a corps carries, 'kit' draws it. 'commonwealth': drawn as Britain's. 'armoured': carriers whose riders a bullet cannot reach while they are aboard (the design director, 07:06Z(2): struck through the vehicle's armour; a man aboard is not the next to fall to small arms). 'share': the riflemen's share of an armoured block's men, so a scaled battle draws as many as its men at that scale (an armoured division about 0.3, M). 'back': metres behind the block's tray their middle keeps. 'base': their k from this up (the 3D game tells a man by block, k and j).",
+    "rows": {
+      "USA": [[1942, 9999, ["M3Halftrack", "M3Halftrack", "M3Halftrack"]]],
+      "GER": [[1940, 9999, ["Hanomag", "Truck", "Hanomag", "Truck"]]],
+      "UK": [[1940, 1943, ["Truck", "Truck"]], [1943, 9999, ["M3Halftrack", "Truck", "Truck"]]],
+      "ITA": [[1940, 9999, ["Truck", "Truck"]]],
+      "JAP": [[1937, 9999, ["Truck", "Truck"]]]
+    },
+    "commonwealth": ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"],
+    "kit": {
+      "_about": "Units decide (the design director, 23 November 07:19Z): where the campaign says what a corps carries (ForceKit.halftracks, its share of half-tracks), the rows above set only the history start's mix. 'per': carriers to four tanks; 'models': an army's own half-track; an army with none of its own draws the stand-in in its own coat (the Axis' the Sd.Kfz. 251, the rest the M3), said on the known list.",
+      "per": 3,
+      "models": {"GER": "Hanomag", "USA": "M3Halftrack", "UK": "M3Halftrack"},
+      "axis": ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"],
+      "axisStand": "Hanomag",
+      "stand": "M3Halftrack"
+    },
+    "armoured": ["Hanomag", "M3Halftrack"],
+    "share": 0.3,
+    "back": 24,
+    "base": 500
   }
 }

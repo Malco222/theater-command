@@ -43,6 +43,7 @@ import type { LandUnit } from './units';
 import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
 import { REACH } from './shells';
+import { turnToDate } from '../../core/ticket';
 import type { Calibre } from '../core/types';
 
 /**
@@ -111,6 +112,8 @@ export interface Man {
   /** Lorried foot drawn as platoons: his lorry (one to each squad and to the headquarters) and his place on its benches. */
   lor?: number;
   seat?: number;
+  /** A carrier of armoured infantry (release 2, LandBattle.mech): the model the 3D game draws her with (absent: the lorry). */
+  ml?: string;
   /** A tank's firing post (0 her own place, then one side and the other), the shots she has fired from it, and where she is
    * in her move to the next: backing out of sight, crossing behind the line, coming up to it. */
   post?: number;
@@ -294,6 +297,8 @@ export interface MenOut {
    * up again; br, one of the block's stretcher bearers.
    */
   wd?: number; cy?: [number, number, number, number][]; gone?: number; back?: number; br?: 1;
+  /** A carrier of armoured infantry (release 2, LandBattle.mech): the model the 3D game draws her with (absent: the lorry). */
+  ml?: string;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -321,6 +326,10 @@ const DR = data as unknown as {
   escort: {
     near: number; men: number; reach: number; gap: number; file: number; side: number; moving: number; pace: [number, number];
     clear: { ahead: number; behind: number; half: number; out: number; enemyAhead: number; crush: number; crushHalf: number; dodge: number; within: number };
+  };
+  mech: {
+    rows: Record<string, [number, number, string[]][]>; commonwealth: string[]; armoured: string[]; share: number; back: number; base: number;
+    kit: { per: number; models: Record<string, string>; axis: string[]; axisStand: string; stand: string };
   };
 };
 export const DRILL = DR;
@@ -433,8 +442,10 @@ interface Squad {
    */
   tier: 0 | 1 | 2;
   men: Man[];
-  /** Lorries (lorried infantry, a battery's tractor). */
+  /** Lorries (lorried infantry, a battery's tractor; armoured infantry's carriers). */
   veh: Man[];
+  /** Armoured infantry (release 2, LandBattle.mech): the armoured block whose riflemen these are (Drill.mechOf). */
+  of?: number;
   fo: Man[] | null;
   foWith?: number;
   foOn?: number;
@@ -608,30 +619,86 @@ export class Drill {
     this.platoons = !!opts.platoons;
     this.byBook = opts.book ?? this.platoons;
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
-    for (const u of b.units) this.squads.set(u.id, this.make(u));
+    for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); }
   }
 
   /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
   relay(u: LandUnit): void {
     if (this.b.t > 0 || !this.squads.has(u.id)) return;
     this.squads.set(u.id, this.make(u));
+    this.addMech(u);
   }
 
   /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
   join(u: LandUnit): void {
-    if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+    if (!this.squads.has(u.id)) { this.squads.set(u.id, this.make(u)); this.addMech(u); }
+  }
+
+  /**
+   * Armoured infantry (release 2; Brian, 23 November 07:01Z, yes to "half-tracks carrying armoured infantry"; the
+   * historian's rows and the design director's rulings, 07:05Z and 07:06Z; LandBattle.mech, off unless turned on; looks
+   * only). An armoured block's riflemen, drawn as lorried foot of their own: a section to each carrier of its army's row
+   * (mechOf), riding DR.mech.back metres behind its tray and getting down near the enemy as lorried foot do. They are a
+   * view of the block (kind 'mot'): its place (behind its tray, on its facing), its order, state, strength and harm are
+   * the block's, read live, so the rules' counts and places are untouched. Their key men are numbered k from DR.mech.base
+   * and fall in step with its tanks (its figures over its figures0); the rest of their sections fall as its strength goes
+   * (thin). They are kept under the block's id less one, negative, so no lookup by a block's id finds them, and the 3D
+   * game draws them with the block's own men (view).
+   */
+  private addMech(u: LandUnit): void {
+    const key = -(u.id + 1);
+    this.squads.delete(key);
+    if (!this.b.mech || u.kind !== 'arm') return;
+    const carriers = this.mechOf(u);
+    if (!carriers.length) return;
+    const M = DR.mech, c = carriers.length, base = M.base, back = (): number => u.d / 2 + M.back;
+    const v = Object.create(u) as LandUnit;
+    Object.defineProperties(v, {
+      kind: { value: 'mot', enumerable: true },
+      x: { get: () => u.x - Math.sin(u.face) * back(), enumerable: true },
+      y: { get: () => u.y - Math.cos(u.face) * back(), enumerable: true },
+      figures0: { value: base + c, enumerable: true },
+      figures: { get: () => (u.figures <= 0 ? 0 : base + Math.min(c, Math.ceil((c * u.figures) / Math.max(1, u.figures0)))), enumerable: true },
+      tray: { value: c, enumerable: true },
+      men0: { value: Math.round(u.men0 * M.share), enumerable: true },
+    });
+    this.squads.set(key, this.make(v, { base, n: c, carriers, of: u.id }));
+  }
+
+  /**
+   * An armoured block's carriers, its tray over four of them (one at least). What its corps carries where the campaign
+   * says ("Units decide", ForceKit.halftracks; the design director, 23 November 07:19Z): DR.mech.kit.per to four tanks,
+   * its share of them half-tracks (first), each its army's own model or the stand-in in its coat, the rest lorries. Else
+   * the history start's mix: its army's row in the battle's month (DR.mech.rows).
+   */
+  private mechOf(u: LandUnit): string[] {
+    const M = DR.mech, nat = M.commonwealth.includes(u.nat) ? 'UK' : u.nat;
+    const share = u.kit?.halftracks;
+    if (share !== undefined) {
+      const n = Math.max(1, Math.round((M.kit.per * u.tray) / 4)), h = Math.round(n * clamp(share, 0, 1));
+      const own = M.kit.models[nat] ?? (M.kit.axis.includes(nat) ? M.kit.axisStand : M.kit.stand);
+      return Array.from({ length: n }, (_, i) => (i < h ? own : 'Truck'));
+    }
+    const d = turnToDate(this.b.ticket.turn), when = d.year + d.month / 12;
+    const row = (M.rows[nat] ?? []).find(([from, to]) => when >= from && when < to);
+    if (!row) return [];
+    const list = row[2], n = Math.max(1, Math.round((list.length * u.tray) / 4));
+    return Array.from({ length: n }, (_, i) => list[i % list.length]);
   }
 
   // ---- Who is in a block ------------------------------------------------------------------------------------------
 
-  private make(u: LandUnit): Squad {
+  private make(u: LandUnit, mech?: { base: number; n: number; carriers: string[]; of: number }): Squad {
     const men: Man[] = [], veh: Man[] = [];
-    const n = Math.max(0, u.figures0);
+    const n = mech ? mech.n : Math.max(0, u.figures0);
     const roles = rolesFor(u.kind, u.tray, n, u.team);
-    const fill = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = fill.tier;
+    // (armoured infantry: as sections at most, a section to a carrier; their k and their dice from DR.mech.base up)
+    const fill = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = mech ? (Math.min(1, fill.tier) as 0 | 1) : fill.tier;
+    const B = mech?.base ?? 0;
     const man = (k: number, nn: number, role: Role, team: 0 | 1 | 2): Man => {
+      nn += B * 100;
       const jx = (roll(this.seed, u.id, nn, 1) - 0.5) * 6, jy = (roll(this.seed, u.id, nn, 2) - 0.5) * 5;
-      return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: 'idle', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx, jy };
+      return { k: k + B, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: 'idle', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx, jy };
     };
     for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
     // The rest of each model's section, after the key men (so a key man is always first of his k); drawn as platoons, a
@@ -644,7 +711,7 @@ export class Drill {
       const sec = sectionOf(u.nat, key.role);
       sec.slice(0, fill.sec[k]).forEach(([role, pr, scout], i) => {
         const m = man(k, 1000 + k * 32 + i + 1, role, key.team);
-        m.j = i + 1; m.sec = k;
+        m.j = i + 1; m.sec = k + B;
         if (pr) m.pr = true;
         if (scout) m.scout = true;
         if (mot) { m.lor = lor; m.seat = i + 1; }
@@ -659,7 +726,7 @@ export class Drill {
       const add = (sub: number, role: Role, seat: number, opts: { pr?: boolean; lead?: boolean } = {}): boolean => {
         if (x >= most) return false;
         const m = man(k, 20000 + k * 128 + x++, role, key.team);
-        m.j = ++j; m.sec = k; m.sub = sub;
+        m.j = ++j; m.sec = k + B; m.sub = sub;
         if (opts.pr) m.pr = true;
         if (opts.lead) m.lead = true;
         if (mot) { m.lor = lor; m.seat = seat; }
@@ -680,12 +747,13 @@ export class Drill {
     }
     // Lorried foot's lorries (drawn as sections, one to each section; as platoons, one to each group) and a battery's
     // tractor (one to each gun).
-    const lorries = u.kind === 'mot' ? (tier >= 1 ? lor : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (tier >= 1 ? n : 1) : 0; // a team's crews carry their weapons
-    for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: 'lorry', team: 0, x: u.x, y: u.y, face: u.face, pose: 'parked', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
+    // (armoured infantry: each section its carrier, of its army's row)
+    const lorries = mech ? n : u.kind === 'mot' ? (tier >= 1 ? lor : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (tier >= 1 ? n : 1) : 0; // a team's crews carry their weapons
+    for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i + B * 100, role: 'lorry', team: 0, x: u.x, y: u.y, face: u.face, pose: 'parked', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0, ...(mech ? { ml: mech.carriers[i % mech.carriers.length] } : {}) });
     const sq: Squad = {
       u, tier, men, veh, fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 3) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
       lastX: u.x, lastY: u.y, heading: u.face, speed: 0, track: [], wx: 0, wy: 0, net: 0, down: u.kind !== 'mot' && u.kind !== 'cav', fast: 0, slow: 0, close: false, ran: false, salvoAt: 0, ripple: 0, flank: 0, officerAt: 0, leap: true,
-      m0: men.length, lost: 0,
+      m0: men.length, lost: 0, ...(mech ? { of: mech.of } : {}),
     };
     // Drawn up where the battle opens: each man at his place in the line, in the best cover near it.
     this.layStart(sq);
@@ -1104,6 +1172,13 @@ export class Drill {
     for (const id of Object.keys(owed).map(Number)) { const e = b.unit(id); if (e && live(e) && e.side !== u.side && (!by || owed[id] > owed[by.id])) by = e; }
     by ??= this.threat(u) ?? undefined;
     const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg'));
+    // Armoured infantry aboard an armoured carrier (DR.mech.armoured; the design director, 23 November 07:06Z(2): struck
+    // through her armour, which a bullet does not pierce): small arms take none of them. They fall to a shell, or once
+    // they are down; till then the block's count of men waits for them (it is never changed).
+    if (sq.of !== undefined && !shell) {
+      for (let i = cand.length - 1; i >= 0; i--) if (cand[i].pose === 'mounted' && DR.mech.armoured.includes(this.lorryOf(sq, cand[i]).ml ?? '')) cand.splice(i, 1);
+      if (!cand.length) return;
+    }
     const from: [number, number] = by ? [by.x, by.y] : [u.x, u.y];
     let burst: [number, number] | undefined;
     // Shell blasts (release 2; Brian, 23 November 05:04Z: "explosions on the ground should be able to take out multiple
@@ -2623,7 +2698,7 @@ export class Drill {
     const v = this.lorryOf(sq, m);
     // Drawn as sections, a section to a lorry (a gun's crew to its tractor): its key man first, close benches.
     if (sq.tier >= 1) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
-    const j = Math.floor(m.k / sq.veh.length);
+    const j = Math.floor((m.k - (sq.of !== undefined ? DR.mech.base : 0)) / sq.veh.length);
     return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
   }
 
@@ -3577,6 +3652,8 @@ export class Drill {
       if (m.call !== undefined && m.callAt) o.cs = [r1(m.callAt[0]), r1(m.callAt[1])];
       return o;
     };
+    // (armoured infantry, LandBattle.mech: drawn with their armoured block's own men, under its id)
+    const byId = new Map<number, MenBlock>();
     for (const sq of this.squads.values()) {
       const u = sq.u;
       const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : undefined;
@@ -3587,8 +3664,10 @@ export class Drill {
         if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
         return o;
       });
-      for (const v of sq.veh) if (live(u)) men.push(one(v));
+      for (const v of sq.veh) if (live(u)) { const o = one(v); if (v.ml) o.ml = v.ml; men.push(o); }
+      if (sq.of !== undefined) { const own = byId.get(sq.of); if (own) own.men.push(...men); continue; }
       const blk: MenBlock = { id: u.id, ph: sq.phase, men };
+      byId.set(u.id, blk);
       if (sq.fo && live(u)) { blk.fo = sq.fo.map(one); blk.foWith = sq.foWith; blk.foOn = sq.foOn; }
       if (b.phones && b.phonesSeen(as)) { const ln = this.linemen(u.id); if (ln.length) blk.ln = ln; }
       out.push(blk);

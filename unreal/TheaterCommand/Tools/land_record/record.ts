@@ -215,6 +215,8 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 interface Track {
   /** Block, figure, and his place in the figure's section (absent for the key man). */
   b: number; k: number; j?: number; r: string;
+  /** A carrier of armoured infantry (release 2, sim.mech): the model the 3D game draws her with (absent: the lorry). */
+  ml?: string;
   /** Kept points: [t, x, y, f]. */
   at: number[][];
   /** Changes: [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1]. */
@@ -254,7 +256,7 @@ class TrackKeeper {
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
     const ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
     if (!tr) {
-      tr = { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}) };
+      tr = { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}) };
       this.tracks.set(key, tr);
       this.pending.set(key, []);
     } else {

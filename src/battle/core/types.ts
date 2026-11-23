@@ -53,6 +53,19 @@ export interface Reckoning {
 }
 
 /** One corps (or ship group) as the campaign hands it to the field. */
+/**
+ * What a land corps carries, as its nation has built and researched it (release 2, "Units decide"; Brian, 23 November
+ * 07:13Z: "It's about the units and you build and attack with not historical handcuffs that determine battles"; the
+ * design director, 07:19Z: a block carries what its nation built and researched, the historian's rows by nation and month
+ * setting only the history start's mix). Each field absent: that mix, by its army and the battle's month.
+ */
+export interface ForceKit {
+  /** Of its armoured infantry's carriers, the share that are half-tracks, 0..1, the rest lorries (looks only: Drill.mechOf). */
+  halftracks?: number;
+  /** Its foot carries its own anti-tank weapons, bazookas or Panzerfausts (the overrun's test, LAND.overrun; sim ownAntiTank). */
+  at?: boolean;
+}
+
 export interface ForceTicket {
   /** The corps' id in the campaign: results are reported back against it. */
   corps: number;
@@ -91,6 +104,8 @@ export interface ForceTicket {
   wear?: number;
   /** Land, looks only: its share of men who joined it this month, in new kit (Corps.fresh). Absent, none. */
   fresh?: number;
+  /** Land (release 2, "Units decide"): what it carries, as its nation has built and researched it (ForceKit). Absent, the history start's mix. */
+  kit?: ForceKit;
   /**
    * Neighbours join the fight (release 2; the design director's ruling of 22 November 03:15Z): set only on a corps that
    * comes up from a province next door, which its side ticket carries in 'joiners', never in 'forces'. As the battle

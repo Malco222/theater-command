@@ -4941,6 +4941,7 @@ namespace LandKit
 			W.K = Man["k"].Int();
 			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
+			W.Model = Man["ml"].Str("");
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
 			{
@@ -4989,11 +4990,12 @@ namespace LandKit
 		return FindBlock(BlockList, Id);
 	}
 
-	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError)
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
-		// she wears her owner's coat)
-		const std::string ModelName = Role == "lorry" ? "Truck" : B.Model;
+		// she wears her owner's coat. Armoured infantry's carriers, release 2: the recording names each one's model, a
+		// half-track of her army's or the lorry)
+		const std::string ModelName = Role == "lorry" ? (Carrier.empty() ? std::string("Truck") : Carrier) : B.Model;
 		if (ModelName.empty())
 		{
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
@@ -5021,7 +5023,8 @@ namespace LandKit
 				bLight = bLight || ModelName.find(L) != std::string::npos;
 			}
 			std::vector<std::string> Near;
-			if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			if (Role == "lorry") Near = { "Truck" }; // (a carrier not in the game yet: the lorry)
+			else if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
 			else if (bLight || N == "JAP") Near = { "LightTank" };
 			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
 			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
@@ -5235,7 +5238,7 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError))
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model))
 			{
 				return false;
 			}
@@ -5357,6 +5360,7 @@ namespace LandKit
 					W.K = Man["k"].Int();
 					W.J = std::max(0, Man["j"].Int(0));
 					W.Role = Role;
+					W.Model = Man["ml"].Str("");
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
@@ -5364,7 +5368,7 @@ namespace LandKit
 						return false;
 					}
 					std::string Key;
-					if (!LoadLook(*B, Role, Key, OutError))
+					if (!LoadLook(*B, Role, Key, OutError, W.Model))
 					{
 						return false;
 					}
