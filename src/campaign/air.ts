@@ -17,11 +17,13 @@ import carrierData from '../../data/campaign/carriers.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import qualityData from '../../data/campaign/air-quality.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
+import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -168,7 +170,19 @@ const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.int
 export const isOffensive = (m: AirMission): boolean => OFFENSIVE.includes(m);
 
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
-const spec = (nat: string): NatSpec => AIR.nations[nat] ?? AIR.nations._default;
+/**
+ * The stage switch 'airQuality' (the design director, 22 Nov 2026, 06:26Z): an air force's quality from the record where
+ * air.json's default sells it short, one row a nation with its facts and source (data/campaign/air-quality.json).
+ * Off as shipped, and then air.json's quality stands exactly as in release 1; a harness turns it on (TC_AIRQ=1) by
+ * setting `on`. Not behind the switch 'Fighter types'.
+ */
+const AIRQ = { on: false, ...(qualityData as unknown as { rows: Record<string, { quality: number; mark: string; facts: string; source: string }> }) };
+export const AIR_QUALITY = (): typeof AIRQ => AIRQ;
+const spec = (nat: string): NatSpec => {
+  const s = AIR.nations[nat] ?? AIR.nations._default;
+  const q = AIRQ.on ? AIRQ.rows[nat] : undefined;
+  return q ? { ...s, quality: q.quality } : s;
+};
 /** The air war has its own dice, so that it never changes how a land or sea battle falls out. */
 const airRng = (g: Game, key: string): Rng => new Rng(hashString(`air:${g.seed}:${g.turn}:${key}`));
 const row = <T extends number[]>(rows: T[] | undefined, turn: number): T | null => {
@@ -1289,6 +1303,8 @@ export function airUpkeep(g: Game, nat: string): void {
   p.ftr = Math.min(p.ftr, most.ftr);
   p.bmr = Math.min(p.bmr, most.bmr);
   p.pilots = Math.min(p.pilots, most.pilots);
+  // Fighter types (the switch 'Fighter types'): the month the nation reached its fighter stage, and new types as news.
+  fighterMonth(g, nat);
 }
 
 /**
@@ -1409,6 +1425,11 @@ export interface AirAssess {
   ships: Fleet[];
   flak: number;
   spoil: number;
+  /**
+   * The fighters' own types (fighters.ts, the switch 'Fighter types'): the escort's edge over the defenders from the
+   * aircraft's measured performance at the mission's height, in log units. Absent when the switch is off.
+   */
+  typeEdge?: number;
   /** What the bombers that go are worth against ships, beside carrier crews trained for it (1). */
   naval: number;
   /** What is left of a strike on a fleet already struck this month: it is scattered and warned. */
@@ -1587,6 +1608,13 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.D += f.ftr * w;
     // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid.
     out.Dpow += f.ftr * w * worth(g, f) * techMul(g, f.nat, 'radar');
+  }
+  // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
+  if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0) {
+    const E = typeEdge(g, out.att.map((x) => ({ f: x.f, w: x.ftr * worth(g, x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth(g, x.f) })), m);
+    out.typeEdge = E;
+    out.Epow *= Math.exp(E / 2);
+    out.Dpow *= Math.exp(-E / 2);
   }
   // The bombers' own defence: formation, guns and turrets. In the air war a day raid's is the nation's of the month (ruling 227).
   out.defence = bomberDefence(g, nat, night);
@@ -2095,7 +2123,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const back = lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
       Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * techMul(g, x.f.nat, 'radar');
     });
-    hold = Dnext > 0 ? EpowAfter / Dnext : 99;
+    // The same type edge as the fight (fighters.ts), not a new reading; absent when the switch is off.
+    const te = a.typeEdge;
+    hold = Dnext > 0 ? (te ? (EpowAfter * Math.exp(te / 2)) / (Dnext * Math.exp(-te / 2)) : EpowAfter / Dnext) : 99;
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
     if (sky) g.sky[target] = { nat, turn: g.turn };
     // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
