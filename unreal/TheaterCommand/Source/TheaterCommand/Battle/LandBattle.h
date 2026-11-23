@@ -782,6 +782,11 @@ private:
 	void MakeRiders();
 	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
 	void RideTanks();
+	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
+	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
+	void SeatLight(int32 FromVehicle);
+	/** Each of them seated and posed for this frame (with RideTanks). */
+	void RideLight();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

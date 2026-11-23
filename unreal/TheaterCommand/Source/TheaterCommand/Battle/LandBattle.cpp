@@ -1489,6 +1489,7 @@ bool ALandBattle::Open()
 	}
 	S.Play.Begin(Rec, PlayWorld);
 	MakeRiders();
+	SeatLight(0);
 
 	// The camera's world: the ground drawn, where it can stand, what it can see through, where each man and tank is.
 	{
@@ -3917,6 +3918,201 @@ void ALandBattle::RideTanks()
 	}
 }
 
+void ALandBattle::SeatLight(int32 FromVehicle)
+{
+	FLandBattleState& S = *State;
+	using FSeated = FLandBattleState::FSeated;
+	if (!S.Men || !S.Armour || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRiders")))
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	if (S.SeatedDone.size() < All.size())
+	{
+		S.SeatedDone.resize(All.size(), 0);
+	}
+	int32 Machines = 0, Empty = 0, Seats = 0;
+	for (size_t V = static_cast<size_t>(FMath::Max(0, FromVehicle)); V < All.size(); ++V)
+	{
+		if (S.SeatedDone[V])
+		{
+			continue;
+		}
+		S.SeatedDone[V] = 1;
+		const LandKit::Vehicle& Veh = All[V];
+		const LandKit::Model& Look = Veh.Look();
+		if (Look.Kind != "car" && Look.Kind != "bike")
+		{
+			continue;
+		}
+		// (his clips' places name her by her model's file, her own where the rules gave her one: "Jeep", "R75")
+		const LandKit::TrackWords& W = Veh.Words();
+		const LandFeed::Block* B = S.Rec.BlockOf(W.Block);
+		const std::string Piece = !W.Model.empty() ? W.Model : B ? B->Model : std::string();
+		std::string Row;
+		const std::string File = S.Men->RiderFileOf(Veh.Nation, Row);
+		const LandMen::Soldier* Rider = File.empty() || Piece.empty() ? nullptr : S.Men->SoldierFile(File);
+		++Machines;
+		if (!Rider)
+		{
+			++Empty;
+			continue;
+		}
+		// Her seats: the driver's always; a car's front passenger, and her gunner where her gun is drawn (a staff car's
+		// put away: none); a sidecar's own seat where the sidecar is drawn (its gunner, or the plain sidecar's rider); a
+		// pillion where the machine has no sidecar seat at all (the Alce's second man). The solo machines carry one.
+		const auto Shown = [&Look](const char* Socket)
+		{
+			const int I = Look.SocketIndex(Socket);
+			if (I < 0)
+			{
+				return false;
+			}
+			const int P = Look.Sockets[static_cast<size_t>(I)].Part;
+			return P < 0 || static_cast<size_t>(P) >= Look.Parts.size() || Look.Parts[static_cast<size_t>(P)].bShown;
+		};
+		std::vector<const char*> Want = { "driver" };
+		if (Look.Kind == "car")
+		{
+			Want.push_back("rider.1");
+			if (Shown("gunner") && (Look.SocketIndex("mg") < 0 || Shown("mg")))
+			{
+				Want.push_back("gunner");
+			}
+		}
+		else if (Shown("gunner"))
+		{
+			Want.push_back("gunner");
+		}
+		else if (Shown("rider.2"))
+		{
+			Want.push_back("rider.2");
+		}
+		else if (Look.SocketIndex("gunner") < 0 && Look.SocketIndex("rider.2") < 0 && Shown("rider.1"))
+		{
+			Want.push_back("rider.1");
+		}
+		// (a seat's loop and its death: his file's clips whose places name her model and that socket)
+		const auto ClipAt = [Rider, &Piece](const char* Socket, bool bLoop, LandMen::Vec3& OutOffset)
+		{
+			for (size_t C = 0; C < Rider->Clips.size(); ++C)
+			{
+				const LandMen::Clip& Cl = Rider->Clips[C];
+				if (Cl.bLoop != bLoop)
+				{
+					continue;
+				}
+				for (const LandMen::Clip::Seat& St : Cl.Seats)
+				{
+					if (St.Piece == Piece && St.Socket == Socket)
+					{
+						OutOffset = St.Offset;
+						return static_cast<int>(C);
+					}
+				}
+			}
+			return -1;
+		};
+		int32 Here = 0;
+		for (size_t K = 0; K < Want.size(); ++K)
+		{
+			FSeated R;
+			R.Vehicle = static_cast<int>(V);
+			R.Socket = Want[K];
+			R.Clip = ClipAt(Want[K], true, R.Offset);
+			if (R.Clip < 0)
+			{
+				// (no clip for her driver: none seated on her, never a passenger driving himself)
+				if (K == 0)
+				{
+					break;
+				}
+				continue;
+			}
+			R.Death = ClipAt(Want[K], false, R.DeathOffset);
+			// (his own face and his own offset into the loop, by her block and number: the same each run, and after the
+			// setup step places her again)
+			const uint64_t Who = (static_cast<uint64_t>(static_cast<uint32_t>(W.Block)) << 32) ^ (static_cast<uint64_t>(static_cast<uint32_t>(W.K)) << 12)
+				^ static_cast<uint64_t>(static_cast<uint32_t>(W.J)) ^ ((static_cast<uint64_t>(K) + 1) << 56);
+			const uint64_t Seed = (S.Rec.Seed ? S.Rec.Seed : 1) * 0x9E3779B97F4A7C15ull ^ (Who + 1) * 0xC2B2AE3D27D4EB4Full;
+			R.Phase = static_cast<float>((Seed >> 20) % 1000) * 0.004f;
+			R.Man = S.Men->AddRider(File, Veh.Nation, Seed, Row);
+			if (R.Man < 0)
+			{
+				continue;
+			}
+			S.Seated.push_back(R);
+			++Here;
+		}
+		Empty += Here == 0;
+		Seats += Here;
+	}
+	if (Machines > 0)
+	{
+		MenDrawn.SetNum(S.Men->Count());
+		UE_LOG(LogTheater, Display, TEXT("Land battle: %d men seated on %d light cars and motorcycles (%d with none: no seat clips for her in her army's file); %d riding in all"),
+			Seats, Machines, Empty, static_cast<int32>(S.Seated.size()));
+	}
+}
+
+void ALandBattle::RideLight()
+{
+	LAND_SCOPE(RideLight);
+	FLandBattleState& S = *State;
+	using FSeated = FLandBattleState::FSeated;
+	if (!S.Men || !S.Armour || S.Seated.empty())
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	const double Now = S.Battle;
+	const double Life = S.Life;
+	// (his loop blended into his death over a tenth of a second and more, as a tank commander's)
+	const float Blend = 0.12f;
+	for (const FSeated& R : S.Seated)
+	{
+		if (R.Man < 0 || !S.Men->IsRider(R.Man) || R.Vehicle < 0 || static_cast<size_t>(R.Vehicle) >= All.size())
+		{
+			continue;
+		}
+		const LandKit::Vehicle& V = All[static_cast<size_t>(R.Vehicle)];
+		const double Died = V.Died >= 0.0 ? V.Died : V.Words().Died;
+		const bool bDead = Died >= 0.0 && Now >= Died;
+		LandMen::Crowd::Ride Ride;
+		LandKit::V3 At, Facing;
+		// (not drawn while she is not: gone from the field, hidden in the woods; and never alive in a wreck)
+		if (V.Fade < 0.5 || HiddenVehicle(R.Vehicle) || (bDead && R.Death < 0) || !V.SocketNow(R.Socket, At, Facing))
+		{
+			S.Men->SetRide(R.Man, Ride);
+			continue;
+		}
+		const float Since = bDead ? static_cast<float>((Now - Died) * Life) : 0.f;
+		Ride.Clip = bDead ? R.Death : R.Clip;
+		Ride.Time = bDead ? Since : static_cast<float>(Now * Life) + R.Phase;
+		if (bDead && Since < Blend)
+		{
+			Ride.FromClip = R.Clip;
+			Ride.FromTime = static_cast<float>(Died * Life) + R.Phase + Since;
+			Ride.W = Since / Blend;
+		}
+		// His seat: her socket, its facing along her floor, her up; his root the socket moved by the clip's offset.
+		const LandMen::Vec3& Off = bDead ? R.DeathOffset : R.Offset;
+		const LandKit::V3 Up = V.Root.Way(LandKit::V3(0.0, 0.0, 1.0)).Unit();
+		const LandKit::V3 Forward = (Facing - Up * Facing.Dot(Up)).Unit(LandKit::V3(0.0, 1.0, 0.0));
+		const LandKit::V3 Right = Forward.Cross(Up);
+		const LandKit::V3 Feet = At + Forward * Off.X + Right * Off.Y + Up * Off.Z;
+		float* M = Ride.Seat.R;
+		M[0] = static_cast<float>(Forward.X); M[1] = static_cast<float>(Right.X); M[2] = static_cast<float>(Up.X);
+		M[3] = static_cast<float>(Forward.Y); M[4] = static_cast<float>(Right.Y); M[5] = static_cast<float>(Up.Y);
+		M[6] = static_cast<float>(Forward.Z); M[7] = static_cast<float>(Right.Z); M[8] = static_cast<float>(Up.Z);
+		Ride.Seat.T[0] = static_cast<float>(Feet.X);
+		Ride.Seat.T[1] = static_cast<float>(Feet.Y);
+		Ride.Seat.T[2] = static_cast<float>(Feet.Z);
+		Ride.bShown = true;
+		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
 void ALandBattle::MakeBodies(int32 FromVehicle)
 {
 	FLandBattleState& S = *State;
@@ -5584,8 +5780,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
-		// (the tank commanders on their tanks as just posed)
+		// (the tank commanders on their tanks as just posed, and the light cars' and motorcycles' men in their seats)
 		RideTanks();
+		RideLight();
 		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;

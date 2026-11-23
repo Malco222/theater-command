@@ -91,6 +91,26 @@ struct FLandBattleState
 	 * where she has no commander drawn. */
 	std::vector<uint8_t> RoofManned;
 
+	/**
+	 * The men who ride the light cars and motorcycles (release 2: the art director's rule, none moves empty): her driver,
+	 * and the seats her kind fills (a car's front passenger, a jeep's gunner at her gun, a sidecar's gunner or rider, a
+	 * pillion where the machine has no sidecar seat), each from his army's infantry file's seat clips (the soldiers
+	 * thread's ride_clips: a clip whose places name her model and that socket). He sits his seat's loop and slumps by its
+	 * death clip from the moment she is knocked out (SeatLight, RideLight).
+	 */
+	struct FSeated
+	{
+		int Vehicle = -1, Man = -1;
+		std::string Socket;
+		/** His seat's loop and his death in it (-1: none), and each one's root offset from the socket. */
+		int Clip = -1, Death = -1;
+		LandMen::Vec3 Offset, DeathOffset;
+		float Phase = 0.f;              // his own offset into the loop (life seconds)
+	};
+	std::vector<FSeated> Seated;
+	/** Each vehicle looked at for seats yet (her men seated, or none to seat). */
+	std::vector<uint8_t> SeatedDone;
+
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
 	/** The camera's world as the film has it (Open), kept for the general's view. */

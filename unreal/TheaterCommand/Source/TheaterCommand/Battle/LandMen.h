@@ -389,10 +389,18 @@ namespace LandMen
 		 * root_offset) and which clip he plays how far in (SetRide); he is drawn, skinned and given his level of detail
 		 * as every man is, never banked, never fades, fires no shot and sends no event. While a clip whose weapon is
 		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
-		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Appended after the men there are
-		 * (call after Build); -1 where the file was not added.
+		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Row: armies.json's row he is painted
+		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
+		 * after Build); -1 where the file was not added.
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed);
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string());
+		/**
+		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
+		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert
+		 * or winter dress where made; the front's row ("UK@desert") or the dress's own ("ITA_desert"). Empty where no file
+		 * draws him. Release 2's light cars and motorcycles: their drivers and riders, from the army's infantry file.
+		 */
+		std::string RiderFileOf(const std::string& Army, std::string& OutRow) const;
 		struct Ride
 		{
 			bool bShown = false;

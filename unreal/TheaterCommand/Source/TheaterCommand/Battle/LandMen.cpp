@@ -4891,13 +4891,36 @@ namespace LandMen
 		return true;
 	}
 
-	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed)
+	std::string Crowd::RiderFileOf(const std::string& Army, std::string& OutRow) const
+	{
+		const Impl& I = *Inner;
+		const auto Has = [&I](const std::string& F) { return I.Soldiers.find(F) != I.Soldiers.end(); };
+		auto Colours = I.Armies.find(Army + "@" + I.Front);
+		if (Colours == I.Armies.end()) Colours = I.Armies.find(Army);
+		OutRow = Colours != I.Armies.end() ? Colours->first : std::string();
+		std::string File = Army;
+		if (!Has(File))
+		{
+			const auto Row = I.Armies.find(Army);
+			File = Row != I.Armies.end() && !Row->second.StandIn.empty() && Has(Row->second.StandIn) ? Row->second.StandIn : std::string("POL");
+		}
+		if (!Has(File)) return std::string();
+		// (his dress for the front and the season, as MakeMan's; in its own colours where armies.json has a row for it)
+		const std::string Plain = File;
+		if (I.Front == "desert" && Has(File + "_desert")) File += "_desert";
+		else if (I.SeasonName == "winter" && Has(File + "_winter")) File += "_winter";
+		else if (I.SeasonName == "winter" && Has(File + "_snow")) File += "_snow";
+		if (File != Plain && I.Armies.find(File) != I.Armies.end()) OutRow = File;
+		return File;
+	}
+
+	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row)
 	{
 		Impl& I = *Inner;
 		const auto Sol = I.Soldiers.find(FileArmy);
 		if (!I.bBuilt || Sol == I.Soldiers.end() || !Sol->second) return -1;
 		static const ArmyColours Plain;
-		auto Colours = I.Armies.find(Army);
+		auto Colours = I.Armies.find(Row.empty() ? Army : Row);
 		if (Colours == I.Armies.end()) Colours = I.Armies.find("_default"); // (never unpainted: MakeMan)
 		// (made in place: a man is some 9 KB)
 		Impl::Man& Mn = I.Men.emplace_back();
