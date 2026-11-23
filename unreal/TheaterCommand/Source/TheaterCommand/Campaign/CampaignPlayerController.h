@@ -1080,6 +1080,16 @@ public:
 	 */
 	bool CanFightLive() const;
 	void FightLive();
+	/**
+	 * (Release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D air battles) FLY IT YOURSELF on the raid
+	 * card, beside FLY THE RAID BY DAY, on a bombing raid by day and a fight for the sky only: the raid the card shows, with
+	 * the groups picked, is flown by him in the 3D sky (TC.airStart), and at CONTINUE on its after card the campaign takes
+	 * what the rules booked (TC.battleEnd books the raid as FLY THE RAID does, with the battle's losses) and the map shows
+	 * it. Behind the Battle rules card's "Fly raids yourself" (AAirBattle::CampaignLiveOn), off until it passes; offered
+	 * only where TC.airLook has a ticket for the raid as picked.
+	 */
+	bool CanFlyLive() const;
+	void FlyLive();
 	/** (Release 1.5) The look of the land a battle for this region is fought on, this month, as LandScape::Pick lays it,
 	 * with "+snow" where snow lies (LandScape::SnowOf a quarter or more). */
 	static FString FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn);
@@ -1087,7 +1097,7 @@ public:
 	 * where the file is missing). -TheaterFightEveryLook offers every look (the Mac's per-theatre runs). */
 	static bool FieldLookPassed(const FString& Look);
 	/** True while his own battle is open: the map takes no order, key or month's end until it is handed back. */
-	bool IsFightingLive() const { return LiveBattle.IsValid(); }
+	bool IsFightingLive() const { return LiveBattle.IsValid() || LiveRaid.IsValid(); }
 	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
 	void ConfirmMarch(bool bAssault);
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
@@ -1195,6 +1205,13 @@ private:
 	void LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson);
 	/** The field of his own battle while it is open (FightLive). */
 	TWeakObjectPtr<class ALandBattle> LiveBattle;
+	/** (Release 1.6) His own raid handed back (FlyLive): TC.battleEnd's answer taken as the raid's act, the map brought up to date. */
+	void AirHandBack(const FString& Kind, int32 Target, const FString& EndJson);
+	/** (Release 1.6) The sky of his own raid while it is open (FlyLive). */
+	TWeakObjectPtr<class AAirBattle> LiveRaid;
+	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
+	mutable FString FlyOfferAct;
+	mutable int32 FlyOffer = -1;
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);

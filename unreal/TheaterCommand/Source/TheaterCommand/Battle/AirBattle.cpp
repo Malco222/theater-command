@@ -11,6 +11,7 @@
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
+#include "Battle/LandLive.h"
 #include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -3652,7 +3653,16 @@ void AAirBattle::Tick(float DeltaSeconds)
 				AirFeed::Json Ended;
 				std::string Why;
 				AirFeed::After After;
-				if (Session->CallBattle(TEXT("battleEnd"), TEXT("[]"), Reply, Error) && AirFeed::Parse(AirParts::Narrow(Reply), Ended, Why) && AirFeed::ReadAfter(Ended["after"], After))
+				const bool bEnded = Session->CallBattle(TEXT("battleEnd"), TEXT("[]"), Reply, Error);
+				if (bEnded)
+				{
+					EndReply = Reply; // (release 1.6: for HandBack at CONTINUE, the raid booked as the rules answered it)
+				}
+				else
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.battleEnd failed: %s"), *Error);
+				}
+				if (bEnded && AirFeed::Parse(AirParts::Narrow(Reply), Ended, Why) && AirFeed::ReadAfter(Ended["after"], After))
 				{
 					S.Card = S.Desk.CardOf(After);
 				}
@@ -7000,6 +7010,10 @@ void AAirBattle::Answer(bool bYes)
 void AAirBattle::Finish()
 {
 	// CONTINUE: the scene is taken down, the table shown again; the campaign's own after-battle steps are the HUD's.
+	// (release 1.6: a raid he flew himself is handed back once the table is up, with what the rules booked)
+	TFunction<void(const FString&)> Hand = MoveTemp(HandBack);
+	HandBack = nullptr;
+	const FString Handed = EndReply;
 	HideScreen();
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
@@ -7008,7 +7022,16 @@ void AAirBattle::Finish()
 		AirParts::TellCut(GetWorld());
 	}
 	ShowTheTable();
+	if (Hand)
+	{
+		Hand(Handed); // (the campaign takes the raid's answer and the map shows what came of it)
+	}
 	Destroy();
+}
+
+bool AAirBattle::CampaignLiveOn()
+{
+	return FLandLive::RuleNow(TEXT("flyLive"));
 }
 
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)

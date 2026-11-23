@@ -91,6 +91,11 @@ namespace
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), true, nullptr },
 		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), false, TEXT("TheaterLandRuleOldRuts") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
+		// (release 1.6, the air battles: Brian, 23 November 06:52Z, the campaign's air fights opened as 3D air battles. FLY IT
+		// YOURSELF on the raid card of a bombing raid by day or a fight for the sky. Off until the playtester passes it (ruling
+		// 217) and the Mac holds 45 fps, then this row flips to on in one line; -TheaterAirCampaignLive turns it on for a run.
+		// The campaign reads it (AAirBattle::CampaignLiveOn); it is never sent to the land rules.)
+		{ TEXT("flyLive"), TEXT("Fly raids yourself"), TEXT("On a bombing raid by day or a fight for the sky, FLY IT YOURSELF takes you into the battle in the air, where you give your groups their orders. Off: your crews fly every raid."), TEXT("TheaterAirNoCampaignLive"), false, TEXT("TheaterAirCampaignLive") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
@@ -196,6 +201,10 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
+		if (FCString::Strcmp(LandRuleTable[R].Key, TEXT("flyLive")) == 0)
+		{
+			continue; // (the air battles' own switch, on the same card: the campaign reads it, the land rules never do)
+		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));
 	}

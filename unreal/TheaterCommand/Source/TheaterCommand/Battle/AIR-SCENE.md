@@ -788,7 +788,7 @@ The lines already made on this branch:
 
 **The live battle.** For a raid from the campaign, call `GetWorld()->SpawnActor<AAirBattle>()->BeginLive(Session, Kind, Target, Ids)`. Kind is "bomb", "superiority" or "ship". This needs land's `battle-bridge.ts` and the air diff (`/mnt/project-files/air-battles/battle-bridge-air.diff`) in the rules bundle.
 
-Under ruling 217 there is no campaign-screen button until the playtester passes the battle, so nothing calls this yet.
+Under ruling 217 there is no campaign-screen button until the playtester passes the battle. Release 1.6 adds that button, switched off (item 48).
 
 ## Packaging
 
@@ -1146,3 +1146,19 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    also stands the plain machine for the C.202, Nell and Betty, so that the map's timing runs differ only by the new.
    Look for: a level Kate at Pearl with her bomb and no torpedo, a torpedo Kate with her torpedo and no bomb; a Nell
    with her bombs under her and no torpedo; fire from a Betty's nacelle, not from her wing root.
+48. **FLY IT YOURSELF on the raid card** (release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D
+   air battles). On the raid card of a bombing raid by day (`bomb`) or a fight for the sky (`superiority`), FLY IT
+   YOURSELF stands beside FLY THE RAID, as FIGHT IT YOURSELF stands beside SEND THEM IN. It is shown only when the Battle
+   rules card's **Fly raids yourself** is on (`AAirBattle::CampaignLiveOn`, the rule `flyLive` in FLandLive's table,
+   never sent to the land rules) and TC.airLook has a ticket for the raid as picked (weighed once a pick). The switch
+   is OFF until the playtester passes it (ruling 217) and the Mac holds 45 fps; `-TheaterAirCampaignLive` turns it on
+   for one run, `-TheaterAirNoCampaignLive` off, `-TheaterRulesFlip=flyLive` clicks the card's switch. Pressed, it opens
+   `BeginLive(Session, Kind, Target, Ids)` with the card's own fly act (`raid:kind:target:id.id`) and puts the card
+   away. At CONTINUE on the after card, `Finish` shows the table and runs `HandBack` with TC.battleEnd's answer, which
+   is what TC.act answers for the raid (the rules booked it there, with the battle's losses); the controller reads it
+   as `Act` does (`FCampaignSession::SettleAirLive`: ok, note, flies, view), brings the map up to date, gives the note
+   and takes the eye to the target. Needs the rules bundle with TC.airLook, TC.airStart and TC.battleEnd's raid
+   (battle-bridge.ts on the map branch); without them the button is simply never offered.
+   Look for: the button on a day raid and on a fight for the sky, never on a night raid or a strike on shipping; the
+   battle opens on the raid's own groups; after CONTINUE the map's month shows the raid flown (the groups away, the
+   target's damage) and the note says what came of it; the month cannot be ended while the battle is up.

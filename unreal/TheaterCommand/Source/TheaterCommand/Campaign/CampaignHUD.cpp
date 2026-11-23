@@ -11532,6 +11532,20 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("ANOTHER KIND OF RAID"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
 					])
 				]
+				// (release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D air battles) FLY IT YOURSELF beside
+				// FLY THE RAID, as FIGHT IT YOURSELF stands beside SEND THEM IN: a bombing raid by day or a fight for the sky, flown
+				// by him in the air battle; only where the Battle rules card's "Fly raids yourself" is on and the rules have a
+				// battle in the air for the raid as picked (CanFlyLive)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+					.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanFlyLive() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.ToolTipText(FText::FromString(TEXT("Fly this raid yourself: give your groups their orders in the battle in the air. FLY THE RAID lets your crews fly it.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FlyLive(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("FLY IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
+					]
+				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
 					Aimed(TEXT("fly"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)

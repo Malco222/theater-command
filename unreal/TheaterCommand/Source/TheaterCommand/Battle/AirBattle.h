@@ -104,6 +104,18 @@ public:
 	void ReplayWhenReady(const FString& Key);
 	/** Opens the live battle for a raid (TC.airStart(kind, target, ids)): Kind "bomb", "superiority" or "ship". */
 	bool BeginLive(FCampaignSession* InSession, const FString& Kind, int32 Target, const TArray<int32>& Ids);
+	/**
+	 * (Release 1.6) His own raid handed back to the campaign (the controller's FlyLive sets it before BeginLive): run once
+	 * at CONTINUE on the after card, with the table shown again, given TC.battleEnd's answer as the rules gave it (what
+	 * TC.act answers for the raid, its after card beside it), or empty where the battle closed without one.
+	 */
+	TFunction<void(const FString&)> HandBack;
+	/**
+	 * (Release 1.6) The switch for a campaign's day raids and fights for the sky flown by him (FLY IT YOURSELF on the raid
+	 * card): the Battle rules card's "Fly raids yourself" (FLandLive's rule "flyLive"), off until he switches it on;
+	 * "-TheaterAirCampaignLive" turns it on for one run, "-TheaterAirNoCampaignLive" off. Off: FLY THE RAID only.
+	 */
+	static bool CampaignLiveOn();
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -136,6 +148,8 @@ public:
 private:
 	TSharedPtr<FAirBattleState> State;
 	FCampaignSession* Session = nullptr;
+	/** (Release 1.6) TC.battleEnd's answer for a live battle, as given, for HandBack. */
+	FString EndReply;
 	TUniquePtr<FBattleEffects> Effects;
 	/** The effects on the ground and the sea (bomb bursts, crashes, splashes, fires, the stage's oil): a kit of their
 	 * own, so that seen from above the clouds they are drawn under them, and the air fight over them. */
