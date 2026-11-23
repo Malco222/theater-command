@@ -351,6 +351,10 @@ export interface LiveOpts {
   spg?: boolean;
   /** Tank destroyers (release 2, looks only; sim.td): one model in an armoured block's mix a tank destroyer. A campaign battle's only; off unless true. */
   td?: boolean;
+  /** Armoured cars (release 2, looks only; sim.cars): out ahead of a block on its flanks till it meets the enemy. A campaign battle's only; off unless true. */
+  cars?: boolean;
+  /** AA vehicles (release 2, looks only; sim.aa): behind a block, moving with it. A campaign battle's only; off unless true. */
+  aa?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -457,6 +461,8 @@ export class LiveBattle {
     // (self-propelled guns and tank destroyers: a campaign battle's, set pieces stay as the historian drew them)
     if (opts.spg === true && !piece) sim.spg = true;
     if (opts.td === true && !piece) sim.td = true;
+    if (opts.cars === true && !piece) sim.cars = true;
+    if (opts.aa === true && !piece) sim.aa = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
@@ -501,6 +507,9 @@ export class LiveBattle {
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
         ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
+        // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
+        // read before the battle opens)
+        ...((mls) => (mls.length ? { mls } : {}))(this.drill.modelsFor(u)),
       };
     });
     this.look();

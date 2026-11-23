@@ -4924,6 +4924,11 @@ namespace LandKit
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
 			B.Captured = V["captured"].Str("");
+			const Json::Value Mls = V["mls"];
+			for (size_t J = 0; Mls.IsArray() && J < Mls.Count(); ++J)
+			{
+				B.Extra.push_back(Mls.At(J).Str(""));
+			}
 			OutBlocks.push_back(B);
 		}
 		const Json::Value Men = R["men"];
@@ -5250,13 +5255,21 @@ namespace LandKit
 		if (bLive)
 		{
 			// A live battle's header has no men yet: the models its blocks name are read now (and the lorry of a side
-			// with guns to tow), so its first pieces do not wait on them.
+			// with guns to tow; release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn
+			// with, "mls"), so its first pieces do not wait on them.
 			for (const Block& B : BlockList)
 			{
 				std::string Key;
 				if (!B.Model.empty() && (!LoadLook(B, "tank", Key, OutError) || (B.Kind == "art" && !LoadLook(B, "lorry", Key, OutError))))
 				{
 					return false;
+				}
+				for (const std::string& Ml : B.Extra)
+				{
+					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml))
+					{
+						return false;
+					}
 				}
 			}
 		}

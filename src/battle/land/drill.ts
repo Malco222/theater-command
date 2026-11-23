@@ -340,6 +340,8 @@ const DR = data as unknown as {
   };
   spg: { rows: Record<string, [number, number, string[], number, Kind[]][]>; kit: { models: Record<string, string>; axisStand: string; stand: string } };
   td: { rows: Record<string, [number, number, string[], number][]>; kit: { models: Record<string, string>; axisStand: string; stand: string } };
+  cars: { rows: Record<string, [number, number, string, Record<string, number>][]>; kit: { models: Record<string, string>; axisStand: string; stand: string }; ahead: number; side: number; back: number; contact: number };
+  aa: { rows: Record<string, [number, number, string, Record<string, number>][]>; kit: { models: Record<string, string>; axisStand: string; stand: string }; back: number; battery: number };
 };
 export const DRILL = DR;
 
@@ -453,8 +455,10 @@ interface Squad {
   men: Man[];
   /** Lorries (lorried infantry, a battery's tractor; armoured infantry's carriers). */
   veh: Man[];
-  /** Armoured infantry (release 2, LandBattle.mech): the armoured block whose riflemen these are (Drill.mechOf). */
+  /** Armoured infantry (release 2, LandBattle.mech): the armoured block whose riflemen these are (Drill.mechOf); a block's armoured cars' or AA vehicles' (esc). */
   of?: number;
+  /** A block's armoured cars or its AA vehicles (release 2, LandBattle.cars and aa; Drill.addEscorts): vehicles only, drawn with it. */
+  esc?: 'cars' | 'aa';
   fo: Man[] | null;
   foWith?: number;
   foOn?: number;
@@ -628,7 +632,7 @@ export class Drill {
     this.platoons = !!opts.platoons;
     this.byBook = opts.book ?? this.platoons;
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
-    for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); }
+    for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
   }
 
   /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
@@ -636,11 +640,12 @@ export class Drill {
     if (this.b.t > 0 || !this.squads.has(u.id)) return;
     this.squads.set(u.id, this.make(u));
     this.addMech(u);
+    this.addEscorts(u);
   }
 
   /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
   join(u: LandUnit): void {
-    if (!this.squads.has(u.id)) { this.squads.set(u.id, this.make(u)); this.addMech(u); }
+    if (!this.squads.has(u.id)) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
   }
 
   /**
@@ -693,6 +698,21 @@ export class Drill {
     if (!row) return [];
     const list = row[2], n = Math.max(1, Math.round((list.length * u.tray) / 4));
     return Array.from({ length: n }, (_, i) => list[i % list.length]);
+  }
+
+  /**
+   * The models a block's vehicles are drawn with besides its own (release 2, looks only): its armoured infantry's
+   * carriers, its self-propelled guns, its tank destroyers, as the switches stand. For the 3D game to read them before the
+   * battle opens (the header's "mls"); worked out from the block alone, so a block still coming up from next door has its
+   * own too.
+   */
+  modelsFor(u: LandUnit): string[] {
+    const n = Math.max(0, u.figures0), out = new Set<string>();
+    if (this.b.mech && u.kind === 'arm') for (const m of this.mechOf(u)) out.add(m);
+    for (const m of this.spgOf(u, n)) if (m) out.add(m);
+    for (const m of this.tdOf(u, n)) if (m) out.add(m);
+    for (const m of [...this.escortOf(u, 'cars'), ...this.escortOf(u, 'aa')]) out.add(m);
+    return [...out];
   }
 
   /** The army whose rows a block's nation reads (the Commonwealth's as Britain's), and the battle's year with its month. */
@@ -755,6 +775,108 @@ export class Drill {
     }
     let c = 0;
     return none.map((_, k) => (Math.floor((k + 1) * share + 1e-9) > Math.floor(k * share + 1e-9) ? list[c++ % list.length] : ''));
+  }
+
+  /**
+   * Armoured cars and AA vehicles (release 2, LandBattle.cars and aa; looks only; the historian's rows, 23 November
+   * 07:47Z; the design director, 07:47Z): the models of a block's cars or AA vehicles, none where it brings none. Where
+   * the campaign says what the corps has (ForceKit.cars, ForceKit.aa: so many to each of its blocks, 1 in so many below
+   * one), that many, its army's own model or the stand-in in its coat; else every row of its army in the battle's month
+   * that names its kind (a battery is 'art'; a support team none). Below one a block, 1 in so many in the order of the
+   * blocks of its kind (its corps' by the kit, its army's on its side by the rows): every other one at a half.
+   */
+  private escortOf(u: LandUnit, what: 'cars' | 'aa'): string[] {
+    if (!(what === 'cars' ? this.b.cars : this.b.aa) || u.team || u.kind === 'fort') return [];
+    const E = DR[what], army = this.armyOf(u.nat);
+    const many = (per: number, i: number): number => Math.max(0, Math.floor((i + 1) * per + 1e-9) - Math.floor(i * per + 1e-9));
+    const before = (same: (x: LandUnit) => boolean): number => this.b.allBlocks().filter((x) => x.side === u.side && x.kind === u.kind && !x.team && x.id < u.id && same(x)).length;
+    const kit = u.kit?.[what];
+    if (kit !== undefined) return Array.from({ length: many(kit, before((x) => x.corps === u.corps)) }, () => this.kitModel(E.kit, army));
+    const when = this.when(), i = before((x) => this.armyOf(x.nat) === army), out: string[] = [];
+    for (const [from, to, model, per] of E.rows[army] ?? []) {
+      if (when < from || when >= to || per[u.kind] === undefined) continue;
+      for (let c = many(per[u.kind], i); c > 0; c--) out.push(model);
+    }
+    return out;
+  }
+
+  /**
+   * A block's armoured cars and its AA vehicles (escortOf), each a squad of vehicles only, drawn as tanks of their own
+   * models (ml) with the block's men (view). Like armoured infantry they are a view of the block: its place, facing,
+   * order, state and strength are its own, read live, and its box is grown to hold where they keep (outriders), so the
+   * rules' counts and places are untouched. Kept under the block's id less one, less a million for the cars and two for
+   * the AA, numbered k from DR.mech.base and 100 or 200 on; they fall as the block's figures go, in that share (the last
+   * at half its figures), each to a round from the enemy owed most for its harm.
+   */
+  private addEscorts(u: LandUnit): void {
+    for (const what of ['cars', 'aa'] as const) {
+      const key = -(u.id + 1) - (what === 'cars' ? 1e6 : 2e6);
+      this.squads.delete(key);
+      const models = this.escortOf(u, what);
+      if (!models.length) continue;
+      const c = models.length, base = DR.mech.base + (what === 'cars' ? 100 : 200);
+      const reach = what === 'cars' ? DR.cars.ahead + DR.cars.side + 40 : DR.aa.back + DR.aa.battery + 40;
+      const v = Object.create(u) as LandUnit;
+      Object.defineProperties(v, {
+        // (no foot's drill nor a tank block's reads them: a battery's kind, with no guns)
+        kind: { value: 'art', enumerable: true },
+        team: { value: undefined, enumerable: true },
+        figures0: { value: base + c, enumerable: true },
+        figures: { get: () => (u.figures <= 0 ? 0 : base + Math.min(c, Math.round((c * u.figures) / Math.max(1, u.figures0)))), enumerable: true },
+        tray: { value: c, enumerable: true },
+        w: { get: () => u.w + 2 * reach, enumerable: true },
+        d: { get: () => u.d + 2 * reach, enumerable: true },
+      });
+      const men: Man[] = models.map((ml, i) => ({
+        k: base + i, n: (base + i) * 100, role: 'tank', team: 0, x: u.x, y: u.y, face: u.face, pose: 'halt', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0, ml,
+      }));
+      const sq: Squad = {
+        u: v, tier: 0, men, veh: [], fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 5, base) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
+        lastX: u.x, lastY: u.y, heading: u.face, speed: 0, track: [], wx: 0, wy: 0, net: 0, down: true, fast: 0, slow: 0, close: false, ran: false, salvoAt: 0, ripple: 0, flank: 0, officerAt: 0, leap: true,
+        m0: c, lost: 0, of: u.id, esc: what,
+      };
+      // Drawn up where the battle opens: in their places already.
+      const ahead = what === 'cars' && this.screening(sq, u);
+      men.forEach((m, i) => { const s = this.escortSpot(sq, i, u, ahead); m.x = s[0]; m.y = s[1]; m.spot = s; m.slotAt = s; });
+      this.squads.set(key, sq);
+    }
+  }
+
+  /** Whether a block's armoured cars are out ahead as its screen: it has not met the enemy (DR.cars.contact), nor fights, holds or goes back. */
+  private screening(sq: Squad, own: LandUnit): boolean {
+    const ph = this.squads.get(own.id)?.phase ?? 'rest', e = this.threat(own);
+    return own.engaged === undefined && fighting(own) && (!e || this.b.gap(own, e) > DR.cars.contact) && !['fight', 'pinned', 'hold', 'fallback', 'flee', 'battery', 'gone'].includes(ph) && sq.harm <= 0;
+  }
+
+  /** Where a block's i-th car or AA vehicle keeps: cars on its flanks, out ahead or back behind; AA in a row behind it (a battery's behind its tractors). */
+  private escortSpot(sq: Squad, i: number, own: LandUnit, ahead: boolean): [number, number] {
+    if (sq.esc === 'cars') {
+      const C = DR.cars, s = i % 2 ? 1 : -1, row = Math.floor(i / 2);
+      return toWorld(own, own.face, s * (own.w / 2 + C.side + row * 20), ahead ? own.d / 2 + C.ahead + row * 25 : -own.d / 2 - C.back - row * 20);
+    }
+    const A = DR.aa, n = sq.men.length;
+    return toWorld(own, own.face, (i - (n - 1) / 2) * 22, -own.d / 2 - A.back - (own.kind === 'art' ? A.battery : 0));
+  }
+
+  /**
+   * A block's armoured cars or AA vehicles, each half second: each drives to her place (escortSpot) at the block's pace
+   * and a little more, and halts there. A car's turret is on the enemy once he is within sight of the block; buttoned
+   * up close to him. None fires (looks only: the design director, 23 November 07:47Z).
+   */
+  private outriders(sq: Squad): void {
+    const own = Object.getPrototypeOf(sq.u) as LandUnit, t = this.b.t;
+    sq.phase = this.squads.get(own.id)?.phase ?? 'rest';
+    if (sq.phase === 'gone') return;
+    const e = this.threat(own), near = e ? this.b.gap(own, e) : Infinity;
+    const ahead = sq.esc === 'cars' && this.screening(sq, own);
+    sq.men.forEach((m, i) => {
+      if (!this.stands(sq, m)) return;
+      const s = this.escortSpot(sq, i, own, ahead), d = Math.hypot(s[0] - m.x, s[1] - m.y);
+      m.aim = sq.esc === 'cars' && e && near < 1200 ? [e.x, e.y] : undefined;
+      m.buttoned = (sq.esc === 'cars' && near < 400) || undefined;
+      if (d > 5) { m.spot = s; m.slotAt = s; m.pose = 'drive'; m.v = clamp(sq.speed * 1.2 + d * 0.25, 3, 12); m.until = t + 1; }
+      else if (m.pose === 'drive' || m.pose === 'reverse') { m.spot = [m.x, m.y]; m.slotAt = s; m.v = 0; m.pose = 'halt'; }
+    });
   }
 
   // ---- Who is in a block ------------------------------------------------------------------------------------------
@@ -926,8 +1048,10 @@ export class Drill {
       sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
       this.falls(sq);
       // Stretcher bearers (release 2): the bearers fetch, carry and come home (off the block's drill while they do).
-      if (b.bearers) this.litters(sq);
-      if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (b.escort) this.escort(sq); if (sq.screenQ) this.screenRound(sq); }
+      if (b.bearers && !sq.esc) this.litters(sq);
+      // (a block's armoured cars and AA vehicles: their own drive, outriders)
+      if (t >= sq.nextThink && sq.esc) { sq.nextThink = t + 0.5; this.outriders(sq); }
+      else if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (b.escort) this.escort(sq); if (sq.screenQ) this.screenRound(sq); }
       this.walk(sq);
       this.fire(sq);
     }
@@ -1045,7 +1169,7 @@ export class Drill {
       this.byOf.delete(key);
       m.fell = t; m.v = 0; m.aim = undefined; m.hidden = undefined;
       sq.memo = undefined;
-      if (m.role === 'tank') {
+      if (m.role === 'tank' && !sq.esc) {
         // The rules lay a block's wrecks in the order its tanks fall (the lower place first within a tick), as here.
         const nth = sq.men.filter((x) => x.role === 'tank' && x.fell !== undefined && x !== m).length;
         const w = this.b.wrecks.filter((z) => z.unit === u.id)[nth];
@@ -1055,9 +1179,11 @@ export class Drill {
       // a launcher, or a grenade, on a tank) from the enemy block the rules say struck him (Drill.struckBy). A model the
       // rules took before the drill was turned on falls with no round.
       if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
+      // (a block's armoured car or AA vehicle: to the enemy owed most for its harm, a shell from tanks or guns)
+      else if (!shell && sq.esc) { const st = this.strikerOf(u); if (st) this.killRound(st, sq, m, st.kind === 'arm' || (st.kind === 'art' && st.team !== 'mg') ? [m.x, m.y] : undefined); }
       m.pose = 'down';
       m.spot = [m.x, m.y];
-      if (this.b.bearers) this.hurt(sq, m);
+      if (this.b.bearers && !sq.esc) this.hurt(sq, m);
       this.aid(sq, m);
       if (sq.tier >= 1) this.regroup(sq, m);
     }
@@ -1235,6 +1361,14 @@ export class Drill {
     return 1;
   }
 
+  /** Who struck a block: the enemy block owed most for its harm (sim.ts suffer), else the one it faces. */
+  private strikerOf(u: LandUnit): LandUnit | undefined {
+    const b = this.b, owed = u.owed ?? {};
+    let by: LandUnit | undefined;
+    for (const id of Object.keys(owed).map(Number)) { const e = b.unit(id); if (e && live(e) && e.side !== u.side && (!by || owed[id] > owed[by.id])) by = e; }
+    return by ?? this.threat(u) ?? undefined;
+  }
+
   private thin(sq: Squad): void {
     const u = sq.u, b = this.b;
     if (u.state === 'withdrawn' || (u.state === 'gone' && (u.figures > 0 || u.y < 0 || u.y > b.field.h))) return;
@@ -1249,10 +1383,7 @@ export class Drill {
     const cand = sq.men.filter((m) => m.j !== undefined && m.fell === undefined && !m.job);
     if (!cand.length) return;
     // Who struck: the enemy block owed most for the harm, else the one it faces.
-    let by: LandUnit | undefined;
-    const owed = u.owed ?? {};
-    for (const id of Object.keys(owed).map(Number)) { const e = b.unit(id); if (e && live(e) && e.side !== u.side && (!by || owed[id] > owed[by.id])) by = e; }
-    by ??= this.threat(u) ?? undefined;
+    const by = this.strikerOf(u);
     const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg'));
     // Armoured infantry aboard an armoured carrier (DR.mech.armoured; the design director, 23 November 07:06Z(2): struck
     // through her armour, which a bullet does not pierce): small arms take none of them. They fall to a shell, or once
@@ -3712,7 +3843,7 @@ export class Drill {
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
       // A tank's end, by her measured armour: a rear hit burns more often (Brian, 22 November 04:16Z).
-      if (v.role === 'tank') r.fate = fateOf(this.b.vehicle(vq.u), fc === 'front' ? 'front' : fc === 'rear' ? 'rear' : 'side', roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
+      if (v.role === 'tank') r.fate = fateOf(vq.esc ? null : this.b.vehicle(vq.u), fc === 'front' ? 'front' : fc === 'rear' ? 'rear' : 'side', roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
       this.book({ ...r, fc, u: a, h }, v, 'hole');
     } else this.book(r);
   }

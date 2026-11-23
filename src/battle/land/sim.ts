@@ -434,6 +434,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    * destroyers row); a campaign battle's only.
    */
   td = false;
+  /**
+   * Armoured cars and AA vehicles (release 2; Brian, 23 November 07:01Z, item 3; the design director, 07:47Z): a block's
+   * armoured cars out ahead on its flanks till it meets the enemy, then behind it; its AA vehicles behind it (Drill.addEscorts;
+   * DRILL.cars, DRILL.aa). Looks only. Off unless turned on (the bridge's { cars: true } and { aa: true }, the Battle rules
+   * card's Armoured cars and AA vehicles rows); a campaign battle's only.
+   */
+  cars = false;
+  aa = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */

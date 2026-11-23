@@ -634,6 +634,7 @@ namespace LandKit
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
 		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come
 	};
 
 	/**

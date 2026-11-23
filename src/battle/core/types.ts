@@ -68,6 +68,10 @@ export interface ForceKit {
   spg?: number;
   /** An armoured corps: the share of its tanks that are tank destroyers or assault guns, 0..1 (looks only: Drill.tdOf). */
   td?: number;
+  /** Its armoured cars to each of its blocks (1 in so many below one; looks only: Drill.escortOf). */
+  cars?: number;
+  /** Its AA vehicles to each of its blocks (1 in so many below one; looks only: Drill.escortOf). */
+  aa?: number;
 }
 
 export interface ForceTicket {

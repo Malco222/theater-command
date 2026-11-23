@@ -169,5 +169,31 @@
       "ITA": [[1941, 1943.75, ["Semovente"], 0.25]]
     },
     "kit": {"models": {"USA": "M10", "UK": "M10", "GER": "StuG3", "SOV": "SU85", "ITA": "Semovente"}, "axisStand": "StuG3", "stand": "M10"}
+  },
+  "cars": {
+    "_about": "Armoured cars (release 2; Brian, 23 November 07:01Z, yes to armoured cars, jeeps, motorcycles and AA; LandBattle.cars, off unless turned on; looks only; a campaign battle's only; the design director, 07:47Z, accepted as proposed). A block's cars are a view of it: out 'ahead' metres before its front, 'side' metres beyond each flank, while it has not met the enemy ('contact' metres) and is not fighting; then back 'back' metres behind its tray. They see nothing the block does not (no ticket words say they scout), fire never, and are lost as the block's strength goes. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md, H for where, M for the counts): [from, until, model, {kind: per block}] by the battle's year; 'per' below one is 1 in so many of the side's blocks of that army and kind, in the order of their blocks (a half: every other one). Every row of the month counts. Units decide: ForceKit.cars (its corps' cars per block) reads first, its army's own model or the stand-in; the rows are only the history start's.",
+    "rows": {
+      "GER": [[1939, 1943, "SdKfz222", {"arm": 0.5, "mot": 1}], [1943, 9999, "SdKfz222", {"arm": 0.5, "mot": 0.5}]],
+      "USA": [[1943.75, 9999, "M8", {"arm": 1, "inf": 0.3334}]],
+      "UK": [[1940, 1941, "ArmouredCar", {"arm": 1, "mot": 0.5}], [1941, 9999, "ArmouredCar", {"arm": 1, "mot": 0.5, "inf": 0.3334}]],
+      "FRA": [[1939, 1940.75, "ArmouredCar", {"arm": 1, "mot": 1}]],
+      "SOV": [[1939, 1942, "ArmouredCar", {"arm": 0.5, "inf": 0.25}], [1942, 9999, "ArmouredCar", {"arm": 0.5}]],
+      "ITA": [[1941, 9999, "ArmouredCar", {"arm": 0.5, "mot": 0.5}]]
+    },
+    "kit": {"models": {"GER": "SdKfz222", "USA": "M8"}, "axisStand": "SdKfz222", "stand": "ArmouredCar"},
+    "ahead": 160, "side": 18, "back": 30, "contact": 700
+  },
+  "aa": {
+    "_about": "AA vehicles (release 2, the same yes; LandBattle.aa, off unless turned on; looks only; a campaign battle's only). A block's AA vehicles are a view of it, kept 'back' metres behind its tray (a battery's behind its tractors, 'battery' more), moving with it; lost as its strength goes. They hit nothing the rules do not take, and a strike's losses stay the rules'; until the 3D game aims them upward they ride and park. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md), read as the cars' are ('art': a battery, not a support team). Units decide: ForceKit.aa (its corps' AA vehicles per block) reads first.",
+    "rows": {
+      "USA": [[1943, 9999, "M16", {"arm": 1, "inf": 0.3334}]],
+      "GER": [[1939, 9999, "FlakHalftrack", {"arm": 1, "mot": 0.5}], [1939, 9999, "FlakTruck", {"inf": 0.3334}]],
+      "UK": [[1941, 9999, "FlakTruck", {"art": 1, "arm": 0.5}]],
+      "SOV": [[1939, 9999, "FlakTruck", {"art": 1}], [1944, 9999, "M16", {"arm": 0.3334}]],
+      "ITA": [[1939, 9999, "FlakTruck", {"art": 1, "arm": 0.5}]],
+      "JAP": [[1937, 9999, "FlakTruck", {"art": 0.5}]]
+    },
+    "kit": {"models": {"USA": "M16", "GER": "FlakHalftrack"}, "axisStand": "FlakHalftrack", "stand": "FlakTruck"},
+    "back": 40, "battery": 40
   }
 }

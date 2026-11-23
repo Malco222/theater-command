@@ -99,6 +99,10 @@ namespace
 		// director pass them)
 		{ TEXT("spg"), TEXT("Self-propelled guns"), TEXT("Some of an army's field guns are drawn as its self-propelled howitzers (the American M7, the British Sexton, the German Hummel, the Soviet SU-76), driving with the battery instead of towed. Campaign battles only. Off: every gun is towed."), TEXT("TheaterLandNoSpg"), false, TEXT("TheaterLandRuleSpg") },
 		{ TEXT("td"), TEXT("Tank destroyers"), TEXT("One vehicle in some armoured units is drawn as its army's tank destroyer or assault gun (the M10, the SU-85, the Semovente), fighting as its unit does. Campaign battles only. Off: the tanks alone."), TEXT("TheaterLandNoTd"), false, TEXT("TheaterLandRuleTd") },
+		// (Armoured cars and AA vehicles, release 2: the same yes, item 3; looks only, a campaign battle's only, off until the
+		// Mac and the art director pass them)
+		{ TEXT("cars"), TEXT("Armoured cars"), TEXT("Some units bring their army's armoured cars (the German Sd.Kfz. 222, the American M8, the rest a generic car), out ahead on the flanks until the enemy is near, then back behind the unit. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoCars"), false, TEXT("TheaterLandRuleCars") },
+		{ TEXT("aa"), TEXT("AA vehicles"), TEXT("Some units and batteries bring their army's anti-aircraft vehicles (the American M16, the German flak half-track, the rest a flak lorry), kept behind them. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoAa"), false, TEXT("TheaterLandRuleAa") },
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 	};
