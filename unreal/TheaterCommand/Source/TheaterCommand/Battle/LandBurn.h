@@ -77,7 +77,8 @@ namespace LandBurn
 			size_t Next = 0;
 		};
 		std::vector<Her> All;
-		/** -TheaterLandFilmFire (release 2, off by default until the art director and a 45 fps reading pass). */
+		/** -TheaterLandFilmFire (release 2, off by default until the art director and a 45 fps reading pass), read as
+		 * the scene opens (its look, battle-fx-film.json, is laid over the effects recipe then). */
 		bool bOn = false, bAsked = false;
 		Her& Of(size_t Vehicle)
 		{

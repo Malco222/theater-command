@@ -31,7 +31,9 @@ struct FBattleJolt
 class FBattleFxRecipe final : public TheaterFx::Recipe
 {
 public:
-	bool Load(const FString& Path);
+	/** Over: further recipe files (full paths) whose numbers are laid over the file's, in order, before the launch
+	 * line's (a scene's own look behind a switch: the land battle's -TheaterLandFilmFire lays battle-fx-film.json). */
+	bool Load(const FString& Path, const TArray<FString>& Over = TArray<FString>());
 	virtual bool Find(const char* Path, double& Out) const override;
 	virtual bool FindWord(const char* Path, std::string& Out) const override;
 
@@ -72,6 +74,9 @@ public:
 	/** Reads the recipe and makes the mesh and lamps under Parent (its owner holds them). GroundUnder gives the
 	 * world point on the ground under a world point. False, with a warning, if the recipe or material is missing. */
 	bool Begin(USceneComponent* Parent, double InUnitsPerMetre, TFunction<FVector(const FVector&)> InGroundUnder);
+	/** A further recipe file in Content/Effects laid over battle-fx.json at Begin (call it before Begin): its numbers
+	 * replace the file's for this kit alone (release 2: the land battle's film fire). */
+	void LayOver(const FString& FileName) { Over.Add(FileName); }
 	bool IsReady() const;
 	/** Takes the mesh and lamps away (the owner's EndPlay). Begin may be called again after. */
 	void End();
@@ -366,6 +371,7 @@ public:
 
 private:
 	FBattleFxRecipe Book;
+	TArray<FString> Over; // (LayOver's files, by name in Content/Effects)
 	TheaterFx::Battle Core;
 	TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;

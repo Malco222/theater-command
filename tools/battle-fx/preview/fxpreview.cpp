@@ -1590,9 +1590,19 @@ namespace
 			const Vec Ring(0.12, 0.0, G + 1.8);
 			if (Wk.bBrewUp)
 			{
+				// (the clip's flame jets, as the film fire plays them: a flash jetting up out of each hatch for half a second)
 				for (const Vec& J : { Fire2, Fire1, Fire3 })
 				{
-					Script.push_back({ 0.05, 2, J, 1.0, 0.0, -1 });
+					Due Jt;
+					Jt.At = 0.05;
+					Jt.What = 6;
+					Jt.Where = J;
+					Jt.Across = 0.8;
+					Jt.Pops = 1;
+					Jt.Over = 0.2;
+					Jt.Jet = 0.5;
+					Jt.Key = -1;
+					Script.push_back(Jt);
 				}
 				Script.push_back({ 0.55, 3, Engine, 8.0, 0.0, -1 });
 			}

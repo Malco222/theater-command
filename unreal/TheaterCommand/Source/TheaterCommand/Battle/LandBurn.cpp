@@ -159,27 +159,38 @@ namespace LandBurn
 		else if (bBlown)
 		{
 			// Her ammunition went: the clip's jets and the fuel ball are the scene's at once. Then the open ring (or the
-			// commander's hatch) roars like a blowtorch for a minute or two, the deck burns under a black column, the
-			// rest of her rounds cook off in pops for minutes, and she burns down and smoulders.
-			const double Deck = std::min(Left, D.U(360.0, 720.0) * K);
+			// commander's hatch) roars like a blowtorch for a minute or two, and her rounds cook off in pops for minutes,
+			// one or two of them jetting high. Her deck burns under a black column to the battle's end: at its height
+			// for 6 to 12 minutes, then low (the kit's fire.late), with small flames in her hatches and a grey stream
+			// from them (the art director, 15:26Z 23 November: "a brew-up should not go out").
 			const double Roar = std::min(Left, D.U(90.0, 220.0) * K);
-			Add(Out, 0.7, Do::Fire, "engine", 1.7 * K, Deck, 1);
-			Add(Out, 1.0, Do::Vent, Top, (Top == "ring" ? 0.9 : 0.6) * K, Roar, 2);
+			Add(Out, 0.7, Do::Fire, "engine", 1.7 * K, Left, 1);
+			// (the roar 2 to 3 m high on the average, 4 to 5 on a surge: the art director, 15:26Z 23 November)
+			Add(Out, 1.0, Do::Vent, Top, (Top == "ring" ? 0.75 : 0.6) * K, Roar, 2);
 			if (W.bDriver && D.P(0.7))
 			{
 				Add(Out, D.U(2.0, 8.0), Do::Vent, "fire.3", 0.5, std::min(Left, D.U(50.0, 160.0)), 3);
 			}
-			Cook(Out, D.U(2.0, 5.0), Top, 0.9, D.Whole(9, 16), D.U(90.0, 200.0), 0.0, 4);
+			const double PopsOver = D.U(90.0, 200.0);
+			Cook(Out, D.U(2.0, 5.0), Top, 0.9, D.Whole(9, 16), PopsOver, 0.0, 4);
+			const int Big = D.P(0.5) ? 2 : 1;
+			for (int J = 0; J < Big; ++J)
+			{
+				Cook(Out, D.U(8.0, std::max(9.0, PopsOver * 0.8)), Top, 1.0, 1, 0.3, D.U(1.0, 2.2), 10 + J);
+			}
 			if (D.P(0.5))
 			{
 				Cook(Out, D.U(150.0, 260.0), Top, 0.7, D.Whole(3, 6), D.U(15.0, 40.0), D.P(0.4) ? D.U(2.0, 4.0) : 0.0, 5);
 			}
+			if (Left - 1.0 - Roar > 5.0)
+			{
+				Add(Out, 1.0 + Roar, Do::Vent, Top, (Top == "ring" ? 0.4 : 0.3) * K, Left - 1.0 - Roar, 9);
+			}
 			Wisps(Out, Top, "smoulder", 0.8, 1.0 + Roar, Left, 6);
-			Wisps(Out, "engine", "smoulder", 1.1, 0.7 + Deck, Left, 7);
 			Out.bBurns = true;
 			Out.FlamesFrom = 0.7;
-			Out.FlamesUntil = 0.7 + Deck;
-			Out.Story = "brew-up: " + Top + " roars " + std::to_string(static_cast<int>(Roar)) + " s, deck " + std::to_string(static_cast<int>(Deck)) + " s";
+			Out.FlamesUntil = Left;
+			Out.Story = "brew-up: " + Top + " roars " + std::to_string(static_cast<int>(Roar)) + " s, burns to the end";
 		}
 		else if (F == "tank.small_fire_out")
 		{
@@ -205,7 +216,8 @@ namespace LandBurn
 				Wisps(Out, "engine", "smoke", 0.9, 1.5, std::min(Left, Catch + 3.0), 1);
 				Wisps(Out, Hatch, "smoke", 0.5, D.U(2.0, 6.0), std::min(Left, Catch + 3.0), 2);
 			}
-			const double Deck = std::min(Left, D.U(420.0, 900.0) * K);
+			// (an engine fire may go out after 10 to 20 minutes: the art director, 15:26Z 23 November)
+			const double Deck = std::min(Left, D.U(600.0, 1200.0));
 			Add(Out, Catch, Do::Fire, "engine", 1.6 * K, Deck, 3);
 			const double Spread = Catch + D.U(40.0, 120.0);
 			double Through = Catch + Deck;

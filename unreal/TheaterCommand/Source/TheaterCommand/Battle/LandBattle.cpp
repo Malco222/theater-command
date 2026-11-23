@@ -1824,6 +1824,16 @@ bool ALandBattle::Open()
 
 	// The effects kit: shells, guns, tracer, fires, the camera's jolt; the ground under a point is the ground drawn.
 	Effects = MakeUnique<FBattleEffects>();
+	// Effects (R2): the film fire (-TheaterLandFilmFire, LandBurn; Brian, 23 November: "the tank on fire doesnt look
+	// realistic"): each wreck's own story, and its look (battle-fx-film.json) laid over the recipe for this battle.
+	S.Burns = LandBurn::Director();
+	S.Burns.bAsked = true;
+	S.Burns.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFilmFire"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: wrecks' fire %s"), S.Burns.bOn ? TEXT("as a film shows it (-TheaterLandFilmFire, release 2)") : TEXT("as before"));
+	if (S.Burns.bOn)
+	{
+		Effects->LayOver(TEXT("battle-fx-film.json"));
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);
@@ -8215,14 +8225,8 @@ void ALandBattle::PlayArmourEvents()
 	// The tanks' own beats: what the fire (LandPlay) does not already draw and sound. Her gun's flash and its shot are
 	// the round's, the strike's sparks the round's landing, the spent case the mix's: those are left out here.
 	static TSet<FString> Unknown;
-	// Effects (R2): the film fire (-TheaterLandFilmFire, LandBurn; Brian, 23 November: "the tank on fire doesnt look
-	// realistic"). A wreck's fire and smoke loops are left out below and her own plan is played after the loop instead.
-	if (!S.Burns.bAsked)
-	{
-		S.Burns.bAsked = true;
-		S.Burns.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandFilmFire"));
-		UE_LOG(LogTheater, Log, TEXT("Land battle: wrecks' fire %s"), S.Burns.bOn ? TEXT("as a film shows it (-TheaterLandFilmFire, release 2)") : TEXT("as before"));
-	}
+	// Effects (R2): the film fire (-TheaterLandFilmFire, read in Open). A wreck's fire and smoke loops are left out
+	// below and her own plan is played after the loop instead.
 	// (her story, made once at her kill from how the fates table says she ended, her size and her own dice)
 	auto PlanOf = [&S](size_t I) -> LandBurn::Director::Her&
 	{
@@ -8275,8 +8279,14 @@ void ALandBattle::PlayArmourEvents()
 			Effects->FuelBall(BallAt, V.Look().Kind == "carrier" ? 6.0f : 8.0f, Rolling);
 		}
 		// Effects (R2), the film fire: her fire and smoke loops are her plan's (below); the puff of smoke as she is
-		// struck is a grey push of smoke, not a small fire. The brew-up's jets, the magazine's blast and the hatch blown
-		// open stay as they were.
+		// struck is a grey push of smoke, not a small fire; the brew-up's jets a flash jetting up out of each hatch for
+		// half a second (the art director, 15:26Z 23 November), the fuel ball rolling on into black smoke. The
+		// magazine's blast and the hatch blown open stay as they were.
+		if (S.Burns.bOn && Effects && Fx.Contains(TEXT("flame_jet")))
+		{
+			Effects->CookOff(At, Up, 0.8f, 1, 0.2f, 0.5f, -1.0f, E.Key);
+			Fx.Reset();
+		}
 		if (S.Burns.bOn && Effects && !Fx.IsEmpty() && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
 			&& !Fx.Contains(TEXT("flame_jet")) && !Fx.Contains(TEXT("magazine")) && !Fx.Contains(TEXT("brew")) && !Fx.Contains(TEXT("cook"))
 			&& (Fx.Contains(TEXT("fire")) || Fx.Contains(TEXT("burn")) || Fx.Contains(TEXT("smoke"))))

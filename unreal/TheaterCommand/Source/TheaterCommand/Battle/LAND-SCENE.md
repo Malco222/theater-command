@@ -463,11 +463,14 @@ Brian, 23 November: "the tank on fire doesnt look realistic". Before this, every
 3 m across, that roared unchanged until the battle's end. `-TheaterLandFilmFire` gives each wreck its own story instead
 (`LandBurn`), chosen by how the fates table says she ended, her size, and her own dice:
 
-- **A brew-up** (or her turret thrown): the fuel ball, then the open turret ring (or the commander's hatch) roars like a
-  blowtorch for one to two minutes. Her deck burns under a black column for six to twelve minutes, then dies down.
-  Her rounds cook off in pops for minutes, and she smoulders in grey wisps afterwards.
+- **A brew-up** (or her turret thrown): flame jets out of her hatches for half a second and the fuel ball rolls into
+  black smoke. Then the open turret ring (or the commander's hatch) roars like a blowtorch for one to two minutes. Her
+  rounds cook off in pops for minutes, one or two of them jetting 4 to 6 m. Her deck burns under a black column to the
+  battle's end: at its height for six to twelve minutes, then low, with small flames in her hatches and a grey stream
+  of smoke from them.
 - **An engine fire:** the deck catches at once, or after a minute of thickening smoke if she "burns later". The flames
-  reach her hatches a minute or two on, and some rounds cook off. A table that picked no fate burns this way.
+  reach her hatches a minute or two on, and some rounds cook off. It goes out after 10 to 20 minutes and smoulders. A
+  table that picked no fate burns this way.
 - **A small fire put out:** low flames for a minute or two, then grey smoke.
 - **Not burning** (her crew bailed out or were killed, a track off): grey smoke from a hatch or the engine for one to
   three minutes, or none.
@@ -475,16 +478,20 @@ Brian, 23 November: "the tank on fire doesnt look realistic". Before this, every
   smoke. **Guns:** a gun whose ready rounds were hit pops them off.
 
 The kit gains `Vent`: flame forced out of an opening, which never melts into the deck's fire and lays no column of its
-own. There are two new steam rows, `smoulder` and `smoke`. Effects (R2) blocks in `PlayArmourEvents` play each plan
+own. There are two new steam rows, `smoulder` and `smoke`. The switch also lays `Content/Effects/battle-fx-film.json`
+over the recipe for that battle (`FBattleEffects::LayOver`): the art director's round 1 for the deck's flames, the
+column, the burn-down (`fire.late`), the lamp's flicker, the fuel ball and the cook-offs. With the switch off the
+recipe is as it was. Keep `tools/battle-fx/fx-film.json` and that file the same. Effects (R2) blocks in `PlayArmourEvents` play each plan
 and leave out the clip's own fire and smoke loops; the clip's brew-up jets, magazine blast and hatch blown open stay.
 The log names each wreck's story ("Land battle: Tiger's wreck (tank.brew_up, heavy): ..."). The effects preview plays
-the same plan: `FX_SCRIPT=film FX_FATE=tank.engine_fire FX_CLASS=heavy`.
+the same plan: `FX_SCRIPT=film FX_FATE=tank.engine_fire FX_CLASS=heavy`, with `flatten.py fx-film.json` appended to
+its recipe.
 
 Not yet: the scorch spreading from the vents (her soot still blackens every kill over 30 s), heat shimmer, embers.
 
-The art director's Mac shots: one brew-up and one engine fire, from 30 m, at 5 s, 90 s, 4 min and 10 min, with
-`-TheaterLandFilmFire` against without. Also the frame rate in a battle with eight wrecks or more, against the 45 fps
-gate.
+The art director's Mac shots, with `-TheaterLandFilmFire` against without: a brew-up at 1 s, 90 s, 5 min and 15 min,
+from 50 m and from 300 m, plus a frame at dusk; an engine fire at the same times. Also the frame rate in a battle with
+eight wrecks or more, against the 45 fps gate.
 
 ## Packaging
 

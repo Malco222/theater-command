@@ -23,7 +23,7 @@
 // ---------------------------------------------------------------------------------------------------------------------
 // The recipe
 
-bool FBattleFxRecipe::Load(const FString& Path)
+bool FBattleFxRecipe::Load(const FString& Path, const TArray<FString>& Over)
 {
 	FString Text;
 	TSharedPtr<FJsonObject> File;
@@ -34,6 +34,20 @@ bool FBattleFxRecipe::Load(const FString& Path)
 	Numbers.clear();
 	Words.clear();
 	Walk(MakeShared<FJsonValueObject>(File), std::string());
+	// (a scene's own look laid over, file by file: the numbers it names replace the file's, the rest stay)
+	for (const FString& OverPath : Over)
+	{
+		FString OverText;
+		TSharedPtr<FJsonObject> OverFile;
+		if (!FFileHelper::LoadFileToString(OverText, *OverPath) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(OverText), OverFile) || !OverFile.IsValid())
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Battle effects: %s is missing or unreadable; the recipe stays as it is"), *OverPath);
+			continue;
+		}
+		const size_t Before = Numbers.size();
+		Walk(MakeShared<FJsonValueObject>(OverFile), std::string());
+		UE_LOG(LogTheater, Display, TEXT("Battle effects: %s laid over the recipe (%d numbers added to the file's)"), *FPaths::GetCleanFilename(OverPath), static_cast<int32>(Numbers.size() - Before));
+	}
 	// (-TheaterFxSet=path=number,path=number: numbers set over the file's, for a switch flipped at launch)
 	FString Sets;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFxSet="), Sets, false))
@@ -260,7 +274,12 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 		return false;
 	}
 	const FString Path = FPaths::ProjectContentDir() / TEXT("Effects") / TEXT("battle-fx.json");
-	if (!Book.Load(Path))
+	TArray<FString> OverPaths;
+	for (const FString& Name : Over)
+	{
+		OverPaths.Add(FPaths::ProjectContentDir() / TEXT("Effects") / Name);
+	}
+	if (!Book.Load(Path, OverPaths))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the recipe is missing or unreadable (%s); nothing will be drawn"), *Path);
 		return false;
