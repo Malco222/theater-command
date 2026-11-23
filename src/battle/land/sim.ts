@@ -400,6 +400,21 @@ export class LandBattle implements BattleSim<LandUnit> {
    * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
    */
   bearers = false;
+  /**
+   * Shell blasts (release 2; Brian, 23 November 05:04Z): the men a block loses to shells fall together, the men near one
+   * burst, as one shell takes them (Drill.thin, DRILL.blast). Looks only: the drill reads it, the fight never. Off unless
+   * whoever opens the field turns it on (the bridge's { blast: true }, the Battle rules card's Shell blasts row).
+   */
+  blast = false;
+  /**
+   * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
+   * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
+   * clearOfVehicles, thin; DRILL.escort). Off unless turned on (the bridge's { escort: true }, the Battle rules card's
+   * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
+   */
+  escort = false;
+  /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
+  readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
   private readonly litters = new Map<number, Litter>();
   /**
@@ -2519,6 +2534,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const before = this.cutters && this.hedges.length ? at() : null;
     // Field telephone lines (release 2): where each enemy tank block stood before it moved, to find a wire its way crossed.
     const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === 'att' && u.kind === 'arm' && live(u)).map((u): [LandUnit, number, number] => [u, u.x, u.y]) : null;
+    if (this.escort) this.overruns();
     for (const u of this.units) if (live(u)) this.move(u);
     // And where its own move took it, before the blocks are eased apart: a shove is no way of its own.
     const moved = before ? at() : null;
@@ -2566,6 +2582,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
       const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
       if (pl <= 0 || pd <= 0) continue;
+      // A tank block driving through a foot block's ground (overrun) is not eased off it.
+      if (a.side !== b.side && this.inOverrun(a, b)) continue;
       // A queue, not a pile (the art director, b418, b439): a block marching into a friend's ground has it make way,
       // away from it by whichever way the ground lets it, so the one goes on and the other gives ground and comes on
       // behind, each on its own ground; at a bridge or a pass as everywhere. Two marching into each other: the one with
@@ -2701,6 +2719,116 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.say({ what: 'land:reserve', unit: toward.id, side: toward.side, text: `Your ${this.named(toward)} reports movement behind the enemy line, shifting toward it.`, x: toward.x, y: toward.y });
   }
 
+  // ---- Overrun (release 2) -------------------------------------------------------------------------------------------
+  //
+  // Brian, 23 November 05:05Z: "vechiles can run over enemy soldiers though which would kill them"; the design director,
+  // 05:48Z: through the block's ground to its far edge and back, once per foot block per contact, open ground only, no
+  // enemy weapon that can hurt a tank in its own direct-fire reach of the way, the foot's own anti-tank weapon counted,
+  // harm unchanged. LAND.overrun.
+
+  /** Whether one of the two is driving through the other's ground. */
+  inOverrun(a: LandUnit, b: LandUnit): boolean {
+    return a.ovr?.on === b.id || b.ovr?.on === a.id;
+  }
+
+  /** Whether a block's foot carries its own anti-tank weapon in the battle's month (LAND.overrun.at, by its army). */
+  private ownAntiTank(u: LandUnit): boolean {
+    const O = LAND.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
+    const nat = O.commonwealth.includes(u.nat) ? 'UK' : u.nat;
+    return (O.at[nat] ?? []).some(([from, to]) => when >= from && when < to);
+  }
+
+  /**
+   * How far an enemy block's weapons that can hurt a tank reach by direct fire (null: none): a tank block's reach, a
+   * gun's over open sights, a fort's, foot with its own anti-tank weapon its reach. Support teams' bullets and bombs: none.
+   */
+  private tankReach(e: LandUnit): number | null {
+    if (e.team) return null;
+    if (e.kind === 'arm' || e.kind === 'fort') return reachOf(e);
+    if (e.kind === 'art') return gunsOf(e).closeAt;
+    if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
+    return null;
+  }
+
+  /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */
+  private overruns(): void {
+    const foot = (f: LandUnit): boolean => fighting(f) && LAND.alone.foot.includes(f.kind);
+    // A foot block overrun in this contact may be overrun again once the contact is over: broken, or no enemy tank in reach.
+    for (const [id] of this.overrun) {
+      const f = this.unit(id);
+      if (!f || !fighting(f) || !this.units.some((e) => e.side !== f.side && e.kind === 'arm' && fighting(e) && this.gap(e, f) <= reachOf(e))) this.overrun.delete(id);
+    }
+    for (const u of this.units) {
+      if (u.ovr || u.kind !== 'arm' || u.team || !fighting(u) || u.state === 'wavering' || u.gives || u.fellBack || u.engaged === undefined) continue;
+      if (u.order && u.order.kind !== 'attack') continue;
+      const f = this.unit(u.engaged);
+      if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
+      // The foot in the open: not dug in where it began (fieldworks), nor on a hedge; its own anti-tank weapon none.
+      if ((f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep) || this.ownAntiTank(f)) continue;
+      // Its own foot beside it (LAND.alone.near): tanks never go in alone.
+      if (!this.units.some((g) => g.side === u.side && foot(g) && this.gap(u, g) <= LAND.alone.near)) continue;
+      // The way: from where it stands through to the foot's far edge, every step of it open ground its tracks can take.
+      const dx = f.x - u.x, dy = f.y - u.y, len = Math.hypot(dx, dy) || 1;
+      const to: [number, number] = [clamp(f.x + (dx / len) * (f.d / 2), 5, this.field.w - 5), clamp(f.y + (dy / len) * (f.d / 2), 5, this.field.h - 5)];
+      const run = dist(u.x, u.y, to[0], to[1]);
+      let open = true;
+      for (let s = 0; s <= run && open; s += 10) {
+        const x = u.x + ((to[0] - u.x) * s) / Math.max(1, run), y = u.y + ((to[1] - u.y) * s) / Math.max(1, run), g = groundAt(this.field, x, y);
+        if (!OPEN_GROUND.includes(coverAt(this.field, x, y)) || inRiver(g) || this.onHedge(x, y) || LAND.pace.tracks[g] <= LAND.queue.hard) open = false;
+      }
+      if (!open || (this.bocage && this.barredCross(u.x, u.y, to[0], to[1]))) continue;
+      // No enemy weapon that can hurt a tank by direct fire with the way in its own reach (edge to edge).
+      const threat = this.units.some((e) => {
+        if (e.side === u.side || e.id === f.id || !fighting(e)) return false;
+        const r = this.tankReach(e);
+        if (r === null) return false;
+        const ex = e.x - u.x, ey = e.y - u.y, k = clamp((ex * (to[0] - u.x) + ey * (to[1] - u.y)) / Math.max(1, run * run), 0, 1);
+        const near = dist(e.x, e.y, u.x + (to[0] - u.x) * k, u.y + (to[1] - u.y) * k) - (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 4;
+        return near <= r;
+      });
+      if (threat) continue;
+      u.ovr = { on: f.id, to, back: [u.x, u.y], leg: 'in' };
+      u.path = [];
+      this.overrun.set(f.id, u.id);
+      const mine = this.ticket[u.side].human, theirs = this.ticket[f.side].human;
+      if (mine || theirs) this.say({ what: 'land:overrun', unit: mine ? u.id : f.id, side: mine ? u.side : f.side, text: mine ? `${this.named(u)} drives through the enemy's line.` : `Enemy tanks drive through ${this.named(f)}'s line.`, x: f.x, y: f.y });
+    }
+  }
+
+  /**
+   * A tank block on its overrun this tick: on through the foot's ground to its far edge, then backing out, facing the
+   * enemy, to where it stood. False when the overrun is over or called off (it broke, wavered, or was ordered away).
+   */
+  private drive(u: LandUnit): boolean {
+    const O = u.ovr!;
+    if (!fighting(u) || u.state === 'wavering' || u.gives || u.fellBack || (u.order && u.order.kind !== 'attack')) { u.ovr = undefined; return false; }
+    const f = this.unit(O.on);
+    if (O.leg === 'in' && (!f || !fighting(f))) O.leg = 'back';
+    const to = O.leg === 'in' ? O.to : O.back;
+    const d = dist(u.x, u.y, to[0], to[1]);
+    if (d < 1) {
+      if (O.leg === 'back') { u.ovr = undefined; return false; }
+      O.leg = 'back';
+      u.speed = 0; u.act = 'fight';
+      return true;
+    }
+    const head = bearing(u.x, u.y, to[0], to[1]), on = O.leg === 'in';
+    if (on) {
+      if (Math.abs(turn(u.face, head)) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return true; }
+      this.turnTo(u, head);
+    }
+    const g = groundAt(this.field, u.x, u.y);
+    const v = LAND.speed.arm * Math.max(0.12, LAND.pace.tracks[g]) * (on ? 1 : LAND.overrun.reverse);
+    const step = Math.min(d, v * DT), [ax, ay] = ahead(head);
+    u.x = clamp(u.x + ax * step, 5, this.field.w - 5);
+    u.y = clamp(u.y + ay * step, 5, this.field.h - 5);
+    u.speed = step / DT;
+    if (on) u.pressing = head;
+    u.act = 'march';
+    u.cover = groundAt(this.field, u.x, u.y);
+    return true;
+  }
+
   /** Metres between two blocks' edges, roughly. */
   gap(a: LandUnit, b: LandUnit): number {
     return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
@@ -2710,8 +2838,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
    * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
    */
-  private groundTake(t: LandUnit): number {
-    const gt = coverAt(this.field, t.x, t.y);
+  private groundTake(t: LandUnit, at: [number, number] = [t.x, t.y]): number {
+    const gt = coverAt(this.field, at[0], at[1]);
     let take = LAND.cover[gt];
     // Men on foot beside a wreck take light cover, either army's (b477).
     const ws = this.wreckShare(t);
@@ -2726,7 +2854,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
    */
   private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number } {
-    const gu = coverAt(this.field, u.x, u.y);
+    // An overrun's tank strikes and is struck as from where it stood before the drive (its height and its own ground
+    // there), face to face: harm unchanged (b418; the design director, 06:02Z).
+    const pair = this.inOverrun(u, t);
+    const uAt: [number, number] = pair && u.ovr ? u.ovr.back : [u.x, u.y], tAt: [number, number] = pair && t.ovr ? t.ovr.back : [t.x, t.y];
+    const gu = coverAt(this.field, uAt[0], uAt[1]);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     // Stretcher bearers (release 2): the men out carrying the wounded back strike nothing.
     if (this.bearers) p *= this.atHand(u);
@@ -2764,14 +2896,14 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
     }
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
-    const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
+    const rise = heightAt(this.field, uAt[0], uAt[1]) - heightAt(this.field, tAt[0], tAt[1]);
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
-    const aspect = rearguard ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
+    const aspect = rearguard || pair ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
     // Measured armour (release 2): a tank's blow on a tank, or a gun's over open sights, by the face and the range.
     let amx = 1;
     if (this.measured && t.kind === 'arm' && (u.kind === 'arm' || (u.kind === 'art' && !u.team && this.gap(u, t) < gunsOf(u).closeAt))) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
-    const ground = this.groundTake(t);
+    const ground = this.groundTake(t, tAt);
     let take = ground;
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
     if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
@@ -2919,6 +3051,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   private move(u: LandUnit): void {
     const k = u.kind;
     u.pressing = undefined;
+    if (u.ovr && this.drive(u)) return;
     const gave = u.yieldTo !== undefined ? this.unit(u.yieldTo) : undefined;
     u.yieldTo = undefined;
     let to: [number, number] | null = null, run = false;

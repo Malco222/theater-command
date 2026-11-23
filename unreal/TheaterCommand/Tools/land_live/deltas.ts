@@ -12,8 +12,11 @@ import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
 const me: Side | null = meArg === 'none' ? null : (meArg as Side);
-// (LAND_LIVE_BEARERS=0: stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them)
-const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}) });
+// (LAND_LIVE_SWITCHES=blast,escort turns those Battle rules card rows on for the run (release 2). LAND_LIVE_BEARERS=0:
+// stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
+// run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
+const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
+const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}) });
 const header = L.header();
 const deltas: LiveDelta[] = [];
 const lines: string[] = [];

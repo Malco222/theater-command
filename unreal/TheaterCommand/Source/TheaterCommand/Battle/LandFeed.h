@@ -164,6 +164,9 @@ namespace LandFeed
 		std::string G;
 		/** It struck the tank's commander up in his hatch (the rules' cm: 1): he drops inside, and she fights buttoned up. */
 		bool bCm = false;
+		/** Shell blasts (release 2): a man struck by the burst of the round before it, or of the 'shell' event that burst
+		 * there (the rules' m: 1). No shot and no burst of its own: the one burst is drawn once. */
+		bool bMate = false;
 		/** A smoke round the player called (release 2, the general's smoke on call): how long its screen hangs once it
 		 * lands, battle seconds, as the rules' sight block holds it (the rules' "hang"); -1 where the round does not say
 		 * (the calibre's own time). */

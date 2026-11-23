@@ -64,6 +64,11 @@ export interface LandUnit extends UnitBase {
   hid?: boolean;
   /** When it sprang its ambush (opened fire while hidden): its first fire strikes harder (LAND.hide.surprise). */
   sprung?: number;
+  /**
+   * Overrun (release 2, LAND.overrun, LandBattle.escort): a tank block driving through the foot block 'on' to its far
+   * edge ('to'), then backing out to where it stood ('back').
+   */
+  ovr?: { on: number; to: [number, number]; back: [number, number]; leg: 'in' | 'back' };
   /** Found by its fire but not yet located, till this battle time: fire back at it strikes softer (LAND.hide.locate). */
   unloc?: number;
   /**

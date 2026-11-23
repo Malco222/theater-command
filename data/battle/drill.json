@@ -108,5 +108,25 @@
     "counter": {"at": 45, "ahead": 12, "xp": [2, 1, 0.6]},
     "flank": {"rush": [14, 26], "out": 45},
     "smoke": {"on": true, "every": 60, "spread": 10, "per": 15, "most": 12}
+  },
+  "blast": {
+    "_about": "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
+    "hold": 6,
+    "anchor": 1,
+    "most": {"light": 2, "mortar": 3, "field": 4, "howitzer": 5, "heavy": 7, "bomb": 10},
+    "lying": 0.45,
+    "kneeling": 0.75
+  },
+  "escort": {
+    "_about": "Infantry with tanks (release 2; Brian, 23 November 05:05Z: 'have them advance behind the tank using it as cover like they would in real life ... make sure their players cant be run over by their own vechiles and they get out of the way. vechiles can run over enemy soldiers though which would kill them'). Looks only (LandBattle.escort, Drill.escort and clearOfVehicles): a foot block deploying or bounding forward with a friendly tank within 'near' metres sends up to 'men' riflemen within 'reach' of her to file in behind her, 'gap' metres back, 'file' apart, 'side' either side of her tracks, at her pace plus a little ('pace' its least and most, m/s); a tank or lorry is moving over 'moving' m/s. 'clear': a man of her side within 'ahead' metres of her nose (or 'behind' of her middle) and 'half' of her middle line steps out to 'out' metres of it at a run, not again for 'dodge' seconds; an enemy only once within 'enemyAhead', and never while lying pinned; a man the rules take from his block while within 'crush' ahead and 'crushHalf' aside of an enemy tank's middle on the move is run over. 'within': blocks this far beyond a vehicle are not looked at.",
+    "near": 60,
+    "men": 6,
+    "reach": 45,
+    "gap": 7,
+    "file": 2.6,
+    "side": 1.4,
+    "moving": 0.4,
+    "pace": [1.2, 4.5],
+    "clear": {"ahead": 10, "behind": 3, "half": 2.3, "out": 3.6, "enemyAhead": 2.5, "crush": 4, "crushHalf": 1.4, "dodge": 1.5, "within": 60}
   }
 }
