@@ -1538,6 +1538,10 @@ namespace LandMen
 			int Track = -1;
 			const Soldier* S = nullptr;
 			const ArmyColours* Colours = nullptr;
+			// (uniforms that age: his army's row before the fading, and how worn his side is, 0 fresh to 1 after a year
+			// and a half in the line; his patches and mismatched kit drawn where his own look is made, LookOf)
+			const ArmyColours* Fresh = nullptr;
+			float WornA = 0.f;
 			std::vector<Stance> Stances;    // one per change of the track
 			std::vector<Shot> Shots;
 			bool bShotsDirty = false;
@@ -1653,6 +1657,13 @@ namespace LandMen
 		std::vector<double> TailsRead;
 		std::vector<RoundRow> RoundsRead;
 		std::map<int, std::pair<std::string, std::string>> BlockArmy; // block id -> (army, file army)
+		/** Uniforms that age (release 2, behind its switch, SetWorn): each block's side's months in the line (the
+		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
+		 * men alike), and whether the look is on. */
+		std::map<int, double> BlockWorn;
+		std::map<std::pair<const ArmyColours*, int>, ArmyColours> AgedRows;
+		bool bWornLook = false;
+		double WornForced = -1.0;
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
 		uint64_t Seed = 1;
@@ -1964,6 +1975,94 @@ namespace LandMen
 				if (D < BestD) { BestD = D; Best = K; }
 			}
 			return Best;
+		}
+
+		/** Uniforms that age: the army's row with its cloth faded by the sun and the wash, Step twentieths of the way to a
+		 * year and a half in the line: greyer (some 28 in 100 of the colour gone at the most) and paler (a twelfth
+		 * lighter); the webbing and pack half that (canvas, already pale). Cloth only: tunic, trousers, coat and blanket,
+		 * webbing and pack; boots, leather, helmet, skin and steel as they were. Made once a row and step (AgedRows), so
+		 * the men of a side stay one set alike. */
+		const ArmyColours& AgedRow(const ArmyColours& Row, int Step)
+		{
+			const auto Key = std::make_pair(&Row, Step);
+			const auto Found = AgedRows.find(Key);
+			if (Found != AgedRows.end()) return Found->second;
+			ArmyColours Out = Row;
+			for (const int Pa : { 0, 1, 3, 4, 6, 10, 11, 13 })
+			{
+				const double A = (Pa == 3 || Pa == 4 || Pa == 6 ? 0.5 : 1.0) * Step / 20.0;
+				const uint32_t C = Row.Paint[Pa];
+				double Ch[3] = { static_cast<double>((C >> 16) & 0xFF), static_cast<double>((C >> 8) & 0xFF), static_cast<double>(C & 0xFF) };
+				const double Grey = 0.2126 * Ch[0] + 0.7152 * Ch[1] + 0.0722 * Ch[2];
+				uint32_t Faded = 0;
+				for (int K = 0; K < 3; ++K)
+				{
+					const double V = (Ch[K] + (Grey - Ch[K]) * 0.28 * A) * (1.0 + 0.08 * A);
+					Faded = (Faded << 8) | static_cast<uint32_t>(std::clamp(std::lround(V), 0L, 255L));
+				}
+				Out.Paint[Pa] = Faded;
+			}
+			return AgedRows.emplace(Key, Out).first->second;
+		}
+
+		/** His own look's wear on top of the faded row (the near men, whose looks are their own): with his side's wear,
+		 * up to some 45 in 100 men in a newer tunic or trousers than the rest of his kit (the row's colour before the
+		 * fading, a little darker or lighter: another issue), and up to some 55 in 100 with a patch or two of newer cloth
+		 * at an elbow or a knee. Each point's baked colour scaled by the cloth it now is over the cloth it was. */
+		void AgeLook(const Man& Mn, Lod L, Look& Lk) const
+		{
+			if (!Mn.Fresh || Mn.WornA <= 0.f) return;
+			const Soldier& S = *Mn.S;
+			const Variant& V = *Mn.Var[L];
+			const double A = Mn.WornA;
+			const uint64_t Who = (static_cast<uint64_t>(static_cast<uint32_t>(Mn.Track)) << 20) ^ 0xA6EDull;
+			auto Ratio = [](uint32_t To, uint32_t From, double Value, float* Out) {
+				for (int K = 0; K < 3; ++K)
+				{
+					const double F = static_cast<double>((From >> (16 - 8 * K)) & 0xFF), T = static_cast<double>((To >> (16 - 8 * K)) & 0xFF);
+					Out[K] = static_cast<float>(F > 0.5 ? T * Value / F : 1.0);
+				}
+			};
+			auto Scale = [&](size_t P, const float* R) {
+				for (size_t K = 0; K < 3; ++K)
+				{
+					const float C = static_cast<float>(Lk.Rgb[P * 3 + K]) * R[K];
+					Lk.Rgb[P * 3 + K] = static_cast<uint8_t>(std::min(255.f, std::max(0.f, C + 0.5f)));
+				}
+			};
+			const size_t Body = static_cast<size_t>(V.M.Points);
+			// (a newer tunic or newer trousers: another issue, its own value a little off the first)
+			if (Unit01(Who ^ 0x1ull) < 0.45 * A)
+			{
+				const int Garment = Unit01(Who ^ 0x2ull) < 0.65 ? 1 : 0;
+				float R[3];
+				Ratio(Mn.Fresh->Paint[Garment], Mn.Colours->Paint[Garment], 0.9 + 0.12 * Unit01(Who ^ 0x3ull), R);
+				for (size_t P = 0; P < Body && P < Lk.Paint.size(); ++P)
+					if (Lk.Paint[P] == Garment) Scale(P, R);
+			}
+			// (a patch or two of newer cloth, a darker square at an elbow or a knee)
+			if (Unit01(Who ^ 0x4ull) < 0.55 * A)
+			{
+				static const char* const Joints[] = { "lowerarm_l", "lowerarm_r", "calf_l", "calf_r" };
+				const int Count = Unit01(Who ^ 0x5ull) < 0.4 * A ? 2 : 1;
+				const int First = static_cast<int>(Unit01(Who ^ 0x6ull) * 4.0) % 4;
+				for (int N = 0; N < Count; ++N)
+				{
+					const int Bi = S.BoneIndex(Joints[(First + N * 2 + N) % 4]);
+					if (Bi < 0) continue;
+					const Vec3& H = S.Bones[static_cast<size_t>(Bi)].Head;
+					for (size_t P = 0; P < Body && P < Lk.Paint.size(); ++P)
+					{
+						const int Pa = Lk.Paint[P];
+						if (Pa != 0 && Pa != 1) continue;
+						const double DX = V.M.At[P * 3] - H.X, DY = V.M.At[P * 3 + 1] - H.Y, DZ = V.M.At[P * 3 + 2] - H.Z;
+						if (DX * DX + DY * DY + DZ * DZ > 0.09 * 0.09) continue;
+						float R[3];
+						Ratio(Mn.Fresh->Paint[Pa], Mn.Colours->Paint[Pa], 0.86, R);
+						Scale(P, R);
+					}
+				}
+			}
 		}
 
 		/** His body set (BodyKey): made the first time a man of it is met, each banked level's bake and look. */
@@ -3546,6 +3645,18 @@ namespace LandMen
 			Mn.S = Sol->second.get();
 			static const ArmyColours Plain;
 			Mn.Colours = Colours != Armies.end() ? &Colours->second : &Plain;
+			// (uniforms that age: his side's months in the line fade his army's cloth, a row made once a wear)
+			if (bWornLook)
+			{
+				const auto Worn = BlockWorn.find(Tr.B);
+				const double Months = WornForced >= 0.0 ? WornForced : Worn != BlockWorn.end() ? Worn->second : 0.0;
+				if (Months > 0.0)
+				{
+					Mn.Fresh = Mn.Colours;
+					Mn.WornA = static_cast<float>(std::clamp(Months / 18.0, 0.0, 1.0));
+					Mn.Colours = &AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)));
+				}
+			}
 			Mn.Info.Block = Tr.B;
 			Mn.Info.K = Tr.K;
 			Mn.Info.J = Tr.J;
@@ -3813,6 +3924,8 @@ namespace LandMen
 
 		// Each block's army and the soldier file its men are drawn from.
 		I.BlockArmy.clear();
+		I.BlockWorn.clear();
+		I.AgedRows.clear();
 		const J& Bs = Root["blocks"];
 		for (size_t K = 0; K < Bs.Size(); ++K)
 		{
@@ -3820,6 +3933,9 @@ namespace LandMen
 			const std::string Army = B["army"].Text(B["nat"].Text("GER").c_str());
 			std::string File = B["standIn"].Text(Army.c_str());
 			I.BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
+			// (uniforms that age: his side's months in the line, the campaign's, where the recording has them)
+			const std::string Side = B["side"].Text();
+			if (!Side.empty()) I.BlockWorn[static_cast<int>(B["id"].Num0())] = std::max(0.0, Root["sides"][Side.c_str()]["worn"].Num0(0.0));
 		}
 
 		// The tracks (a live battle's header has none: Extend brings them), then their men.
@@ -4255,6 +4371,11 @@ namespace LandMen
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
 	void Crowd::SetRun(RunFn Run) { Inner->Run = std::move(Run); }
 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
+	void Crowd::SetWorn(bool bOn, double ForcedMonths)
+	{
+		Inner->bWornLook = bOn;
+		Inner->WornForced = ForcedMonths;
+	}
 	void Crowd::SetLevels(double NearTo, double MidTo)
 	{
 		Inner->NearTo = std::clamp(NearTo, 1.0, 400.0);
@@ -4615,6 +4736,7 @@ namespace LandMen
 		const Finish* Fi = Mn.Info.Finish >= 0 ? &S.Finishes[static_cast<size_t>(Mn.Info.Finish)] : nullptr;
 		const Face* Fc = Mn.Info.Face >= 0 && Mn.Info.Face < static_cast<int>(S.Faces.size()) ? &S.Faces[static_cast<size_t>(Mn.Info.Face)] : nullptr;
 		Impl::MakeLook(S, *Mn.Var[L], Fi, *Mn.Colours, Fc, L, Lk);
+		I.AgeLook(Mn, L, Lk);
 		return Lk;
 	}
 

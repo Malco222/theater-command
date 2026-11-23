@@ -1427,6 +1427,37 @@ namespace LandKit
 			// (a coat with no third colour of its own: the second's, so blend2 changes nothing)
 			Paint[static_cast<size_t>(Upper3)] = !CoatUpper3.empty() ? FromHex(CoatUpper3) : !CoatUpper2.empty() ? FromHex(CoatUpper2) : Paint[static_cast<size_t>(Upper3)];
 		}
+		// Captured kit (release 2, on its switch): her maker's coat as above kept for the wear, then her captor's put over
+		// it, one colour brushed on in the field (no sprayed blotches): the captor's coat where the game has one already
+		// (NationCoat: the Germans' grey or dark yellow, the Americans' olive drab, the British and Italian desert
+		// coats), the Soviets' the T-34's own green (the tanks thread's file); any other captor keeps her maker's coat.
+		Lin OldCoat[3] = { Paint[static_cast<size_t>(Upper)], Paint[static_cast<size_t>(Upper2)], Paint[static_cast<size_t>(Shade)] };
+		bool bCaptured = false;
+		if (!D.Captured.empty())
+		{
+			std::string New, NewUpper, NewUpper2, NewShade;
+			if (D.Nation == "SOV")
+			{
+				New = "the T-34's green";
+				NewUpper = "4F5E3E";
+				NewUpper2 = "3F4B31";
+				NewShade = "303A26";
+			}
+			else if (!NationCoat(D, New, NewUpper, NewUpper2, NewShade))
+			{
+				New.clear();
+			}
+			if (!New.empty())
+			{
+				bCaptured = true;
+				bCamouflage = false;
+				Coat = "captured from " + D.Captured + ", " + New;
+				Paint[static_cast<size_t>(Upper)] = FromHex(NewUpper);
+				Paint[static_cast<size_t>(Upper2)] = FromHex(NewUpper);
+				Paint[static_cast<size_t>(Shade)] = FromHex(NewShade);
+				if (Upper3 >= 0 && static_cast<size_t>(Upper3) < Paint.size()) Paint[static_cast<size_t>(Upper3)] = FromHex(NewUpper);
+			}
+		}
 		const bool bAmerican = D.Nation == "USA";
 
 		// The month's swaps of parts (the Panzer IV's long gun and her skirts, the lorry's tilt): parts named only by a
@@ -1869,17 +1900,26 @@ namespace LandKit
 				}
 				// Worn edges: the paint chipped back toward a pale primer and bright steel along the plates' edges (a file
 				// with its own dirt says where with its wear: chipped to the metal that far).
+				// (captured: her maker's coat, where the captor's brush missed it, in strokes and patches, most low down
+				// on the running gear and the lower hull, and at the edges where the new paint has chipped)
+				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
+				if (bCaptured && bCoat)
+				{
+					const double Low = Clamp(1.0 - At.Z / 1.2, 0.0, 1.0);
+					const double Miss = Smooth(0.6 - 0.22 * Low, 0.66 - 0.22 * Low, Noise(V3(Here.X * 1.1, Here.Y * 1.1, Here.Z * 3.2), Seed + 77));
+					C = Mix(C, Old, 0.85 * Miss);
+				}
 				if (bFileDust)
 				{
 					if (bCoat && Raw.Wear[K] > 0)
 					{
-						C = Mix(C, Paint[static_cast<size_t>(Steel)], Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
 					}
 				}
 				else if (bCoat && Edge[K] > 0.0f)
 				{
 					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
-					C = Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					C = bCaptured ? Mix(C, Old, 0.7 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
 				}
 				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
 				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
@@ -4741,6 +4781,7 @@ namespace LandKit
 			B.Kind = V["kind"].Str();
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
+			B.Captured = V["captured"].Str("");
 			OutBlocks.push_back(B);
 		}
 		const Json::Value Men = R["men"];
@@ -4816,7 +4857,9 @@ namespace LandKit
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
 			return false;
 		}
-		OutKey = ModelName + "|" + B.Nation;
+		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
+		const std::string Captured = Role != "lorry" && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
+		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
 		if (Looks.count(OutKey))
 		{
 			return true;
@@ -4864,6 +4907,7 @@ namespace LandKit
 		D.Year = Year;
 		D.Month = Month;
 		D.Terrain = Terrain;
+		D.Captured = Captured;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -5021,6 +5065,23 @@ namespace LandKit
 		Terrain = Doc.Root()["field"]["place"]["terrain"].Str("plains");
 		bLive = Doc.Root()["live"].Truth(false);
 		Limit = Doc.Root()["limit"].Num(0.0);
+		// (captured kit's off/on line on the Mac: every other tank block of the attacker drawn as the defender's first
+		// tank, taken from them, in the attacker's coat; the recording's own fight, only the look changed)
+		if (bCapturedTest)
+		{
+			const Block* Theirs = nullptr;
+			for (const Block& B : BlockList)
+			{
+				if (B.Side == "def" && B.Kind == "arm" && !B.Model.empty() && B.Model != "LightTank") { Theirs = &B; break; }
+			}
+			int Nth = 0;
+			for (Block& B : BlockList)
+			{
+				if (!Theirs || B.Side != "att" || B.Kind != "arm" || B.Model.empty() || B.Model == "LightTank" || Nth++ % 2) continue;
+				B.Model = Theirs->Model;
+				B.Captured = Theirs->Nation;
+			}
+		}
 
 		// The models, each once a nation (the lorry stands in for both sides').
 		KeyOf.resize(Tracks.size());

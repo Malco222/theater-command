@@ -447,6 +447,13 @@ namespace LandMen
 		 * 1, the default, is as before. Set before Build (the shots are planned there).
 		 */
 		void SetLife(double LifePerBattleSecond);
+		/**
+		 * Uniforms that age (release 2, Brian's 23 Nov "Do all of these"; before Build): on, each side's cloth faded by its
+		 * months in the line (the recording's sides.att.worn and sides.def.worn, the campaign's count; a year and a half
+		 * the most), and some of its near men in a newer tunic or trousers or with a patch at an elbow or a knee.
+		 * ForcedMonths at 0 or more stands in for both sides' (the Mac's off/on line). Off unless set.
+		 */
+		void SetWorn(bool bOn, double ForcedMonths = -1.0);
 		/** The detail levels' bounds, in metres as the picture sees him (SeenDistance, a 50 degree lens's): Near under
 		 * NearTo, Mid under MidTo, Far beyond, each crossed back with a twentieth's give. 25 and 120 unless set; the scene
 		 * sets them by his height on the screen (the battle-scale plan's GS3). */

@@ -180,6 +180,26 @@ namespace LandParts
 		return std::string(Utf8.Get(), static_cast<size_t>(Utf8.Length()));
 	}
 
+	/** The looks on trial ("-TheaterLandTrial=church,walltop,..." or "=all"), taken loosely as the weather word is:
+	 * "Church, Walltop" reads as "church,walltop". Empty: none asked. */
+	static std::string TrialWords()
+	{
+		FString Trial;
+		if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTrial="), Trial, false))
+		{
+			return std::string();
+		}
+		return Narrow(Trial.Replace(TEXT(" "), TEXT("")).Replace(TEXT("\t"), TEXT("")).ToLower());
+	}
+
+	/** Whether that look is on trial (LandField::Field::Tried's reading of the words). */
+	static bool OnTrial(const char* Word)
+	{
+		LandField::Field F;
+		F.Trial = TrialWords();
+		return !F.Trial.empty() && F.Tried(Word);
+	}
+
 	static double Seconds()
 	{
 		return FPlatformTime::Seconds();
@@ -1276,16 +1296,11 @@ bool ALandBattle::Open()
 		// (the looks on trial, each behind its switch until the art director passes it and the Mac holds its frame rate:
 		// "-TheaterLandTrial=church,walltop,spruce,edge,kunai" or "=all"; LandField::Field::Trial)
 		{
-			FString Trial;
 			// (taken loosely, as the weather word is: "Church, Walltop" reads as "church,walltop")
-			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTrial="), Trial, false))
+			Lay.Trial = LandParts::TrialWords();
+			if (!Lay.Trial.empty())
 			{
-				Trial = Trial.Replace(TEXT(" "), TEXT("")).Replace(TEXT("\t"), TEXT("")).ToLower();
-			}
-			if (!Trial.IsEmpty())
-			{
-				Lay.Trial = LandParts::Narrow(Trial);
-				UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *Trial);
+				UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *LandParts::Wide(Lay.Trial));
 			}
 		}
 		if (Lay.Steppe.bOn)
@@ -2828,6 +2843,19 @@ void ALandBattle::MakeMen()
 	}
 	auto Crowd = std::make_unique<LandMen::Crowd>();
 	Crowd->SetLife(S.Life);
+	// Uniforms that age (release 2, on trial: "-TheaterLandTrial=worn"): each side's cloth faded by its months in the line,
+	// the recording's sides.<side>.worn (the campaign's); "-TheaterLandNoWorn" off whatever the trial (the player's switch
+	// on the Battle rules card); "-TheaterLandWorn=12" stands in for both sides' (the Mac's off/on line).
+	{
+		double Months = -1.0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWorn="), Months);
+		const bool bWorn = LandParts::OnTrial("worn") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoWorn"));
+		Crowd->SetWorn(bWorn, Months);
+		if (bWorn)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: uniforms that age ON (%s)"), Months >= 0.0 ? *FString::Printf(TEXT("%.0f months in the line, both sides"), Months) : TEXT("each side's months in the line from the recording"));
+		}
+	}
 	// The armies' colours and stand-ins (armies.json), read first: an army with no soldier file of its own is drawn with
 	// the file its row names, else the Pole's (LandMen's MakeMan; never a side left blank).
 	{
@@ -3528,6 +3556,16 @@ void ALandBattle::MakeArmour()
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
+	// Captured kit (release 2, on trial: "-TheaterLandTrial=captured"): a block the recording marks captured (the
+	// campaign's, blocks[].captured) in her captor's coat over her maker's; "-TheaterLandNoCaptured" off whatever the
+	// trial (the player's switch on the Battle rules card); "-TheaterLandCapturedTest" every other attacker tank block drawn
+	// as the defender's tank, taken from them (the Mac's off/on line).
+	Armour->bCapturedLook = LandParts::OnTrial("captured") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCaptured"));
+	Armour->bCapturedTest = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCapturedTest"));
+	if (Armour->bCapturedLook || Armour->bCapturedTest)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: captured kit ON%s"), Armour->bCapturedTest ? TEXT(" (test: every other attacker tank block taken from the defender)") : TEXT(""));
+	}
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther

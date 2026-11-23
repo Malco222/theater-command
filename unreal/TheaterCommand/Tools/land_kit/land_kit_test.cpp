@@ -430,6 +430,8 @@ int main(int argc, char** argv)
 		}
 	}
 	B.Fires = Fires;
+	// (captured kit: LAND_KIT_CAPTURED=1 every other attacker tank block drawn as the defender's tank, taken from them)
+	B.bCapturedTest = std::getenv("LAND_KIT_CAPTURED") != nullptr;
 	const auto L0 = Clock::now();
 	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
 	{
@@ -437,6 +439,13 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	for (const std::string& Line : B.StandIns()) std::printf("  stand-in: %s\n", Line.c_str()); // (a model not here: the nearest generic)
+	if (B.bCapturedTest)
+	{
+		std::map<std::string, int> Coats;
+		for (const Vehicle& V : B.Vehicles())
+			++Coats[V.Look().Name + ": " + V.Look().Coat];
+		for (const auto& KV : Coats) std::printf("  coat: %s (%d)\n", KV.first.c_str(), KV.second);
+	}
 	const auto L1 = Clock::now();
 	{
 		Json Doc;
