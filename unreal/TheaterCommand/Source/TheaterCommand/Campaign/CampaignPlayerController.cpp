@@ -10282,6 +10282,8 @@ void ACampaignPlayerController::FlyLive()
 	}
 	LiveRaid = Sky;
 	UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF, %s on %d by [%s] opened live"), *Kind, Target, *FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); }));
+	FlyLivePage = Page.Id;
+	FlyLiveAct = Page.Card.Fly.Act;
 	ClosePage();
 }
 
@@ -10290,6 +10292,9 @@ void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, c
 	LiveRaid.Reset();
 	FlyOfferAct.Reset();
 	FlyOffer = -1;
+	const FString FlownPage = FlyLivePage, FlownAct = FlyLiveAct;
+	FlyLivePage.Reset();
+	FlyLiveAct.Reset();
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid())
 	{
@@ -10304,7 +10309,18 @@ void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, c
 	if (EndJson.IsEmpty())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Campaign: the raid (%s on %d) closed with no result; nothing booked"), *Kind, Target);
-		Notify(TEXT("The raid ended without a result: nothing was booked."), 6.0);
+		// (release 1.5: nothing booked, so the raid card comes back as he left it, FLY THE RAID on it; FLY IT YOURSELF is not
+		// offered again for that pick, whose rules have just failed, as when BeginLive cannot open it)
+		if (!FlownPage.IsEmpty())
+		{
+			OpenPage(FlownPage);
+			if (bPageOpen)
+			{
+				FlyOfferAct = FlownAct;
+				FlyOffer = 0;
+			}
+		}
+		Notify(TEXT("The raid could not be flown to its end, so nothing was booked: FLY THE RAID on its card still sends your crews."), 7.0);
 		return;
 	}
 	UE_LOG(LogTheater, Display, TEXT("Campaign: the raid (%s on %d) flown live, booked: %s"), *Kind, Target, bBooked ? TEXT("yes") : TEXT("no"));

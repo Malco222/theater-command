@@ -150,6 +150,13 @@ private:
 	FCampaignSession* Session = nullptr;
 	/** (Release 1.6) TC.battleEnd's answer for a live battle, as given, for HandBack. */
 	FString EndReply;
+	/** (Release 1.5) TC.battleTick's failures in a row (a throw, or an answer with no view the scene can read), and the
+	 * wall-clock second of the first of them: 0 and -1 while it answers. */
+	int32 TickFailures = 0;
+	double TickFailingSince = -1.0;
+	/** (Release 1.5) The wall-clock second the raid was stopped because its rules kept failing: the note is up, and a few
+	 * seconds on the scene closes with no result (WayOut). -1 while it flies. */
+	double BrokenAt = -1.0;
 	TUniquePtr<FBattleEffects> Effects;
 	/** The effects on the ground and the sea (bomb bursts, crashes, splashes, fires, the stage's oil): a kit of their
 	 * own, so that seen from above the clouds they are drawn under them, and the air fight over them. */
@@ -817,4 +824,11 @@ private:
 	void ShowScreen();
 	void HideScreen();
 	void Finish();
+	/**
+	 * (Release 1.5: never a raid with no way out) His live raid's rules kept failing: the scene closes as CONTINUE closes
+	 * it (Finish), with no result, so the campaign books nothing and its raid card comes back with FLY THE RAID on it.
+	 * Before this the battle never reached its end, no after card and no CONTINUE came, and the campaign took no order,
+	 * key or month's end behind it: the game had to be quit.
+	 */
+	void WayOut(const TCHAR* Why);
 };

@@ -3531,6 +3531,30 @@ void AAirBattle::Tick(float DeltaSeconds)
 	{
 		S.BattleT = FMath::Min(S.BattleT, S.FedT);
 	}
+	// (release 1.5: never a raid with no way out) The rules failing every tick for 2 s: the raid stops where it stands and
+	// the note says so; 4 s on, the scene closes as CONTINUE closes it, with nothing booked (WayOut). Wall-clock seconds,
+	// so a slow failing call cannot stretch them. A raid whose end has come keeps its after card and CONTINUE.
+	if (!S.bReplay && !S.bOver)
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (BrokenAt < 0.0 && TickFailures >= 3 && TickFailingSince >= 0.0 && Now - TickFailingSince > 2.0)
+		{
+			BrokenAt = Now;
+			UE_LOG(LogTheater, Warning, TEXT("Air battle (live): TC.battleTick failed %d times in a row over %.1f s: the raid is stopped"),
+				TickFailures, Now - TickFailingSince);
+		}
+		if (BrokenAt >= 0.0)
+		{
+			S.Note = "THE RAID STOPPED HERE: ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT";
+			S.NoteAge = -1.0; // (held, and put back each frame: no other note takes its place)
+			if (Now - BrokenAt > 4.0)
+			{
+				BrokenAt = -1.0;
+				WayOut(TEXT("its rules failed mid-raid"));
+				return; // (the scene is destroyed: nothing more of this frame is run)
+			}
+		}
+	}
 	if (Eye)
 	{
 		const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
@@ -3653,18 +3677,39 @@ void AAirBattle::Tick(float DeltaSeconds)
 				AirFeed::Json Ended;
 				std::string Why;
 				AirFeed::After After;
-				const bool bEnded = Session->CallBattle(TEXT("battleEnd"), TEXT("[]"), Reply, Error);
+				// (release 1.5: an answer of null is the rules saying the battle is not over: nothing to book, as a failure;
+				// "-TheaterAirRulesFailEnd" fails it on purpose, for the Mac's check of the card that says so)
+				const bool bFailEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirRulesFailEnd"));
+				if (bFailEnd)
+				{
+					Error = TEXT("failed on purpose (-TheaterAirRulesFailEnd)");
+				}
+				const bool bEnded = !bFailEnd && Session->CallBattle(TEXT("battleEnd"), TEXT("[]"), Reply, Error) && !Reply.TrimStartAndEnd().Equals(TEXT("null"));
 				if (bEnded)
 				{
 					EndReply = Reply; // (release 1.6: for HandBack at CONTINUE, the raid booked as the rules answered it)
 				}
 				else
 				{
-					UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.battleEnd failed: %s"), *Error);
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.battleEnd failed: %s"), Error.IsEmpty() ? TEXT("it answered null") : *Error);
 				}
 				if (bEnded && AirFeed::Parse(AirParts::Narrow(Reply), Ended, Why) && AirFeed::ReadAfter(Ended["after"], After))
 				{
 					S.Card = S.Desk.CardOf(After);
+				}
+				else
+				{
+					// (release 1.5: an end the rules failed, or answered with no card the scene can read: the after card all
+					// the same, saying so, with CONTINUE on it as ever; handed back, a failed end books nothing)
+					S.Card = AirDesk::Card();
+					S.Card.Kicker = "THE RAID";
+					S.Card.Level = bEnded ? "OVER" : "NOT BOOKED";
+					S.Card.Title = bEnded ? "The raid is over" : "The raid's end could not be booked";
+					S.Card.Lines.push_back(bEnded ? "What came of it is on the map." : "Its rules failed at its end, so nothing is booked.");
+					if (!bEnded)
+					{
+						S.Card.Lines.push_back("FLY THE RAID on its card still sends your crews.");
+					}
 				}
 			}
 		}
@@ -3710,16 +3755,48 @@ void AAirBattle::Feed()
 	{
 		return;
 	}
+	// (release 1.5: a tick the rules fail, or answer with no view the scene can read, is counted; a run of them is the
+	// raid's way out, in Tick. Logged at the first and every 60th, not every frame.)
+	auto Failed = [this](const FString& What)
+	{
+		if (TickFailures++ == 0)
+		{
+			TickFailingSince = FPlatformTime::Seconds();
+		}
+		if (TickFailures == 1 || TickFailures % 60 == 0)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.battleTick failed (%d in a row): %s"), TickFailures, *What);
+		}
+	};
+	// (release 1.5, for the Mac's check of the way out: "-TheaterAirRulesFailAt=40" fails every tick from battle second 40)
+	static const double FailAt = []
+	{
+		double At = -1.0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirRulesFailAt="), At);
+		return At;
+	}();
+	if (FailAt >= 0.0 && S.FedT >= FailAt)
+	{
+		Failed(TEXT("failed on purpose (-TheaterAirRulesFailAt)"));
+		return;
+	}
 	FString Reply, Error;
 	if (!Session->CallBattle(TEXT("battleTick"), FString::Printf(TEXT("[%.4f]"), Owed), Reply, Error))
 	{
-		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.battleTick failed: %s"), *Error);
+		Failed(Error);
 		return;
 	}
 	AirFeed::Json Ticked;
 	std::string Why;
 	AirFeed::Frame View;
-	if (AirFeed::Parse(AirParts::Narrow(Reply), Ticked, Why) && AirFeed::ReadView(Ticked, S.Board, View) && View.Head.T > S.FedT + 1e-9)
+	if (!AirFeed::Parse(AirParts::Narrow(Reply), Ticked, Why) || !AirFeed::ReadView(Ticked, S.Board, View))
+	{
+		Failed(TEXT("its view could not be read ") + AirParts::Wide(Why));
+		return;
+	}
+	TickFailures = 0;
+	TickFailingSince = -1.0;
+	if (View.Head.T > S.FedT + 1e-9)
 	{
 		Take(View);
 	}
@@ -7040,6 +7117,14 @@ void AAirBattle::Finish()
 		Hand(Handed); // (the campaign takes the raid's answer and the map shows what came of it)
 	}
 	Destroy();
+}
+
+void AAirBattle::WayOut(const TCHAR* Why)
+{
+	UE_LOG(LogTheater, Warning, TEXT("Air battle (live): %s: the raid closes with no result%s"), Why,
+		HandBack ? TEXT(", the campaign's raid card back as he left it") : TEXT(""));
+	EndReply.Empty(); // (TC.battleEnd was never reached: nothing is booked)
+	Finish(); // (as CONTINUE: the screen down, the table up, an empty result handed back, and the scene destroyed)
 }
 
 bool AAirBattle::CampaignLiveOn()

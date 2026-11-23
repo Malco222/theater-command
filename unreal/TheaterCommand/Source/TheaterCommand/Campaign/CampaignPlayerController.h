@@ -1212,6 +1212,10 @@ private:
 	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
 	mutable FString FlyOfferAct;
 	mutable int32 FlyOffer = -1;
+	/** (Release 1.5) The raid card his raid was flown from (its page and its fly act), for the card to come back as he left
+	 * it when the raid closes with no result (AirHandBack). */
+	FString FlyLivePage;
+	FString FlyLiveAct;
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
