@@ -1845,6 +1845,22 @@ bool ALandBattle::Open()
 			KeptTrims.Add(TPair<FString, FString>(TEXT("r.DepthOfFieldQuality"), Variable->GetString()));
 		}
 	}
+	// No occlusion queries while the battle is on (release 1.5's 45 fps gate; the Mac's diagnostic sitting, 23 November
+	// 06:20Z, Normandy seed 11). The render thread's visibility pass took 15 to 18 ms of a 21 ms frame, much of it asking
+	// which of the battle's thousands of men, props and hedges were hidden; with the queries off the Mac ran about 4 fps
+	// faster (48 and 49 at 60 s against 43 and 45), and nothing on screen changes: a query only spares drawing what is
+	// hidden. The map's own setting again as the battle ends (KeptTrims). "-TheaterLandOcclusion=1" keeps the queries.
+	{
+		int32 Occlusion = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOcclusion="), Occlusion);
+		IConsoleVariable* Variable = Occlusion == 0 ? IConsoleManager::Get().FindConsoleVariable(TEXT("r.AllowOcclusionQueries")) : nullptr;
+		if (Variable)
+		{
+			KeptTrims.Add(TPair<FString, FString>(TEXT("r.AllowOcclusionQueries"), Variable->GetString()));
+			Variable->Set(TEXT("0"), ECVF_SetByCode);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle: occlusion queries %s"), Variable ? TEXT("off (-TheaterLandOcclusion=1 keeps them)") : TEXT("as the map has them"));
+	}
 	int32 LandSize = 0;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSize="), LandSize) && LandSize >= 40 && LandSize <= 100)
 	{
