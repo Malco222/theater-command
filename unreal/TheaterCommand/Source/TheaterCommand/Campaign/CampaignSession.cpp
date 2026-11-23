@@ -2243,6 +2243,28 @@ FAttackResult FCampaignSession::SettleLandLive(const TArray<int32>& CorpsIds, in
 	return Fight(TEXT("battleSettleLand"), FString::Printf(TEXT("[[%s],%d,%s,%.0f]"), *IdList(CorpsIds), RegionId, *ResultJson, TicketSeed));
 }
 
+bool FCampaignSession::SettleAirLive(const FString& EndJson, FString& OutNote, TArray<FSortie>* OutSorties)
+{
+	Settle(); // (an order still being answered on the rules' thread comes first)
+	TSharedPtr<FJsonObject> Object;
+	if (EndJson.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(EndJson), Object) || !Object.IsValid())
+	{
+		return false;
+	}
+	// (the war has changed: the kept answers to questions are forgotten, as after any order)
+	RulesMemo.Reset();
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	const TArray<TSharedPtr<FJsonValue>>* Flies = nullptr;
+	if (OutSorties && Object->TryGetArrayField(TEXT("flies"), Flies))
+	{
+		ReadSorties(*Flies, *OutSorties);
+	}
+	TakeView(Object);
+	return bOk;
+}
+
 FString FCampaignSession::StepDigest(int32 RegionId, const TArray<int32>& CorpsIds, int32 FleetId, int64& OutStamp, FString& OutHolder)
 {
 	TSharedPtr<FJsonObject> Object;

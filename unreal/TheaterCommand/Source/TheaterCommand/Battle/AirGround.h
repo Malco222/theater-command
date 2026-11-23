@@ -70,6 +70,7 @@ namespace AirGround
 		int Sheltered = 0;    // shore points in sheltered water, painted the grass and not sand
 		int Worn = 0;         // concrete points worn
 		int Walled = 0;       // shallows points by a quay, pier or seawall, painted the deep sea's
+		int Slabs = 0;        // slabs the works' flat concrete tops were cut into
 	};
 
 	/** Where the battle is, and how fine the ground is split round it (no splitting with no radius). */

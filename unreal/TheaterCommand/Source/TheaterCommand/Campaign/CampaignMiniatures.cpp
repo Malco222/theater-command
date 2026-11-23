@@ -26,6 +26,41 @@ namespace
 		return FLinearColor(Nation.R * Depth, Nation.G * Depth, Nation.B * Depth, 1.0f);
 	}
 
+	/** A dated paint's first month, "1944-04" as the aircraft modeller writes it, in months from the year 0 as
+	 * UnitTable::Month counts them: INDEX_NONE where it is not one. */
+	int32 SchemeMonth(const FString& From)
+	{
+		FString YearText, MonthText;
+		if (!From.Split(TEXT("-"), &YearText, &MonthText) || FCString::Atoi(*YearText) <= 0)
+		{
+			return INDEX_NONE;
+		}
+		return FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1;
+	}
+
+	/** Which of a model's dated paints stands in the painter's month: 0 for none (the file's own colours stand), else
+	 * one more than its place in the list. Of those begun, the latest stands. */
+	int32 SchemeStanding(const TArray<int32>& Froms)
+	{
+		int32 Standing = 0, Since = INDEX_NONE;
+		for (int32 K = 0; K < Froms.Num(); ++K)
+		{
+			if (Froms[K] != INDEX_NONE && Froms[K] <= UnitTable::Month() && Froms[K] >= Since)
+			{
+				Standing = K + 1;
+				Since = Froms[K];
+			}
+		}
+		return Standing;
+	}
+
+	/** Each sculpted aircraft's schemes' first months, by its model's name, as Sculpted reads them (none: an empty list). */
+	TMap<FString, TArray<int32>>& SchemeMonths()
+	{
+		static TMap<FString, TArray<int32>> Months;
+		return Months;
+	}
+
 	using FPlacing = MiniatureParts::FPlacing;
 }
 
@@ -607,6 +642,21 @@ void FMiniatureMesh::PaintedNumerals(const FVector& Where, double High, int32 Nu
 bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
+bool FMiniatureMesh::bTorpedoLoad = false;
+
+int32 FMiniatureMesh::SchemeOf(const FString& Name)
+{
+	FString Kind = Name, Whose;
+	Name.Split(TEXT(":"), &Kind, &Whose);
+	if (!SchemeMonths().Contains(Kind))
+	{
+		// (not read yet: read and painted in its far form, as the air battle's first look at a model reads it)
+		FMiniatureMesh Probe;
+		Probe.Sculpted(Kind, Whose, FVector::ZeroVector, 1.0, 0.0, true);
+	}
+	const TArray<int32>* Froms = SchemeMonths().Find(Kind);
+	return Froms ? SchemeStanding(*Froms) : 0;
+}
 
 bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar, const TArray<FLinearColor>* Kit)
 {
@@ -636,6 +686,17 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		bool bPiece = false;
 		TArray<FLinearColor> PaintColours;
 		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
+		// (An aircraft's paint by date, the aircraft modeller's "schemes" (the Mustang's, 22 November 2026): each stands
+		// from its first month until the next begins, laid over the file's own colours paint by paint, and may give the
+		// side number its own ink. Before the first, the file's own colours stand.)
+		struct FScheme
+		{
+			TMap<int32, FLinearColor> Colours;
+			bool bInk = false;
+			FLinearColor Ink = FLinearColor::Black;
+		};
+		TArray<FScheme> Schemes;
+		TArray<int32> SchemeFrom; // (each one's first month, as SchemeMonth counts it)
 		// (A vehicle with a camouflage in fields: each point of its paint says how far it is into a field of the second
 		// colour and of the third, and the thin lines that part the fields are a paint of their own.)
 		bool bFields = false;
@@ -662,7 +723,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
-	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near"));
+	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near")) + (bTorpedoLoad ? TEXT("|torpedo") : TEXT(""));
 	if (!Read.Contains(Which))
 	{
 		TSharedPtr<FRaw> Raw;
@@ -705,9 +766,34 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
 					}
 				}
-				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
+				// (A model that carries a torpedo or bombs, never both (its "loads"; the aircraft modeller, 20 November
+				// 2026): the load it does not fly with is left out, a triangle at a time, so that every point keeps its
+				// place for the bay, the airscrews and the marks the air battle finds by point. Bombs unless asked.)
+				TSet<int32> Unflown;
+				const TArray<TSharedPtr<FJsonValue>> *Loads = nullptr, *PartNames = nullptr, *PartOf = nullptr;
+				if (File->TryGetArrayField(TEXT("loads"), Loads) && Loads->Num() >= 2 && File->TryGetArrayField(TEXT("parts"), PartNames)
+					&& (*Part)->TryGetArrayField(TEXT("part"), PartOf) && PartOf->Num() == PaintList->Num())
 				{
-					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
+					for (int32 K = 0; K < PartNames->Num(); ++K)
+					{
+						const TSharedPtr<FJsonObject> Named = (*PartNames)[K]->AsObject();
+						FString PartName;
+						if (Named.IsValid() && Named->TryGetStringField(TEXT("name"), PartName) && PartName == (bTorpedoLoad ? TEXT("bombs") : TEXT("torpedo")))
+						{
+							Unflown.Add(K);
+						}
+					}
+				}
+				for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
+				{
+					const int32 A = static_cast<int32>((*TriangleList)[K]->AsNumber()), B = static_cast<int32>((*TriangleList)[K + 1]->AsNumber()), C = static_cast<int32>((*TriangleList)[K + 2]->AsNumber());
+					if (Unflown.Num() > 0 && PartOf->IsValidIndex(A) && PartOf->IsValidIndex(B) && PartOf->IsValidIndex(C)
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[A]->AsNumber())) && Unflown.Contains(static_cast<int32>((*PartOf)[B]->AsNumber()))
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[C]->AsNumber())))
+					{
+						continue;
+					}
+					Raw->Triangles.Append({ A, B, C });
 				}
 				const TSharedPtr<FJsonObject>* Marks = nullptr;
 				if (File->TryGetObjectField(TEXT("marks"), Marks))
@@ -841,6 +927,52 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					{
 						Raw->NumberInk = FLinearColor(FColor::FromHex(Ink));
 					}
+					// (Its paint by date: "schemes", each {"from": "1944-04", "colours": {"upper": "B0B6BA", ...}, "number_ink": ...},
+					// its paints named as the file's "paint_names" name them, or where it has none as the plain build's
+					// eighteen. A name this model does not paint, such as the battle model's rivets and bands, is passed over.)
+					const TArray<TSharedPtr<FJsonValue>>* SchemeList = nullptr;
+					if (File->TryGetArrayField(TEXT("schemes"), SchemeList))
+					{
+						static const TArray<FString> PlainPaints = { TEXT("upper"), TEXT("upper2"), TEXT("under"), TEXT("nose"), TEXT("boss"), TEXT("glass"),
+							TEXT("frame"), TEXT("steel"), TEXT("tyre"), TEXT("blade"), TEXT("line"), TEXT("soot"), TEXT("engine"), TEXT("leg"), TEXT("bomb"),
+							TEXT("stain"), TEXT("glare"), TEXT("glint") };
+						TArray<FString> PaintNames;
+						if (!File->TryGetStringArrayField(TEXT("paint_names"), PaintNames))
+						{
+							PaintNames = PlainPaints;
+						}
+						for (const TSharedPtr<FJsonValue>& Value : *SchemeList)
+						{
+							const TSharedPtr<FJsonObject>* Entry = nullptr;
+							FString From;
+							if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("from"), From) || SchemeMonth(From) == INDEX_NONE)
+							{
+								continue;
+							}
+							FRaw::FScheme& Scheme = Raw->Schemes.AddDefaulted_GetRef();
+							Raw->SchemeFrom.Add(SchemeMonth(From));
+							const TSharedPtr<FJsonObject>* Named = nullptr;
+							if ((*Entry)->TryGetObjectField(TEXT("colours"), Named))
+							{
+								for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Named)->Values)
+								{
+									const int32 Index = PaintNames.IndexOfByKey(Each.Key);
+									FString Hexed;
+									if (Index != INDEX_NONE && Each.Value.IsValid() && Each.Value->TryGetString(Hexed))
+									{
+										Scheme.Colours.Add(Index, FLinearColor(FColor::FromHex(Hexed)));
+									}
+								}
+							}
+							FString SchemeInk;
+							if ((*Entry)->TryGetStringField(TEXT("number_ink"), SchemeInk))
+							{
+								Scheme.bInk = true;
+								Scheme.Ink = FLinearColor(FColor::FromHex(SchemeInk));
+							}
+						}
+					}
+					SchemeMonths().Add(Name, Raw->SchemeFrom);
 					if (File->TryGetArrayField(TEXT("marks"), MarkList))
 					{
 						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
@@ -893,8 +1025,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	const int32 Era = UnitTable::MarkEra(Tag);
 	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
 	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
+	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
+	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
-		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT(""));
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString());
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -924,6 +1058,17 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		if (Raw->bAircraft)
 		{
 			Fresh.DustAmount = 0.0f; // (no dust of the road on a machine in the air)
+			// (its paint by date, where one of its schemes stands: laid over its own colours, paint by paint)
+			if (Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1))
+			{
+				for (const TPair<int32, FLinearColor>& Each : Raw->Schemes[Livery - 1].Colours)
+				{
+					if (PlanePaints.IsValidIndex(Each.Key))
+					{
+						PlanePaints[Each.Key] = Each.Value;
+					}
+				}
+			}
 			if (Raw->bNationPaint && PlanePaints.Num() > 15)
 			{
 				// (Brian, 18 November 2026: "make the camoflage reflect their terrian". The table's paint is now the colour of
@@ -1095,6 +1240,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		if (Raw->bAircraft)
 		{
 			const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);
+			// (its number in its scheme's ink where the standing scheme gives one: white on olive drab, black on bare metal)
+			const FLinearColor NumberInk = Livery > 0 && Raw->Schemes.IsValidIndex(Livery - 1) && Raw->Schemes[Livery - 1].bInk ? Raw->Schemes[Livery - 1].Ink : Raw->NumberInk;
 			for (const FRaw::FMark& Mark : Raw->PlaneMarks)
 			{
 				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
@@ -1154,7 +1301,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, Raw->NumberInk);
+						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, NumberInk);
 					}
 					else
 					{

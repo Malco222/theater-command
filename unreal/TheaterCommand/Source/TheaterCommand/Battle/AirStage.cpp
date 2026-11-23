@@ -2,6 +2,7 @@
 
 #include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
+#include "Battle/SeaFace.h"
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -9,11 +10,13 @@
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignTextures.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/HUD.h"
@@ -55,6 +58,47 @@ namespace StageParts
 	}
 
 	/**
+	 * An American ship in the stage's paint, Measure 1 of 1941: the miniature kit's navy grey (the unit table's 5F6E80,
+	 * a light blue-grey) to Dark Gray 5-D, and her wooden decks (the kit's B79E74) stained Deck Blue 20-B, as the
+	 * battleships at Pearl Harbor wore them. From above, her planks were most of what showed, and Battleship Row read
+	 * tan (the art director on 2b177386's Pearl 06, 22 November 04:16Z: "Measure 1 is a cool dark grey"). Each colour
+	 * within a few levels of the kit's is moved by the same step, so any shading the kit laid on it stays; the map's
+	 * own miniatures keep the kit's paint. Returns how many points were repainted.
+	 */
+	static int32 InStagePaint(FMiniatureMesh& Model, const FString& Nation)
+	{
+		if (Nation != TEXT("USA"))
+		{
+			return 0;
+		}
+		struct FRepaint
+		{
+			FColor From, To;
+		};
+		static const FRepaint Repaints[] = {
+			{ FColor(0x5F, 0x6E, 0x80), FColor(0x4E, 0x54, 0x5A) }, // (navy grey to Dark Gray 5-D)
+			{ FColor(0xB7, 0x9E, 0x74), FColor(0x3E, 0x47, 0x55) }, // (teak planks to Deck Blue 20-B)
+		};
+		int32 Count = 0;
+		for (FColor& C : Model.Colors)
+		{
+			for (const FRepaint& R : Repaints)
+			{
+				const int32 DR = static_cast<int32>(C.R) - R.From.R, DG = static_cast<int32>(C.G) - R.From.G, DB = static_cast<int32>(C.B) - R.From.B;
+				if (FMath::Abs(DR) <= 14 && FMath::Abs(DG) <= 14 && FMath::Abs(DB) <= 14)
+				{
+					C.R = static_cast<uint8>(FMath::Clamp(R.To.R + DR, 0, 255));
+					C.G = static_cast<uint8>(FMath::Clamp(R.To.G + DG, 0, 255));
+					C.B = static_cast<uint8>(FMath::Clamp(R.To.B + DB, 0, 255));
+					++Count;
+					break;
+				}
+			}
+		}
+		return Count;
+	}
+
+	/**
 	 * The kit's model of her class stretched to her own size (AirFeed::HullOf): along her length, across her beam, and
 	 * up by the beam's share, so that her upperworks keep their look; the normals follow. The kit has one model a class
 	 * and navy (the American battleship an Iowa, 270 m), and Battleship Row's 1941 berths are laid for ships of 178 to
@@ -92,15 +136,16 @@ namespace StageParts
 	 * (The effects thread's oil fires at sea, passed by the art director 19 November 04:48Z, kit 5cd0115.) Oil burning
 	 * where a ship went down, or on a burning ship's deck: one column for each ship lost, until the scene ends. Written
 	 * so that it builds before the kit's OilFire reaches unreal and after: the call is made only where the kit has it.
+	 * SinceSeconds: how long the fire has burned already, so the kit stands its column grown (the effects kit's 01f2dfc7).
 	 */
 	template <typename TKit>
-	static bool OilFire(TKit* Kit, int32 Id, const FVector& WorldAt, float ReachMetres, const TCHAR* Kind)
+	static bool OilFire(TKit* Kit, int32 Id, const FVector& WorldAt, float ReachMetres, const TCHAR* Kind, float SinceSeconds = 0.0f)
 	{
 		if constexpr (requires(TKit* K, int32 I, const FVector& At, float R, const FString& W, double Until, float Since) { K->OilFire(I, At, R, W, Until, Since); })
 		{
 			if (Kit)
 			{
-				Kit->OilFire(Id, WorldAt, ReachMetres, FString(Kind), 0.0, 0.0f);
+				Kit->OilFire(Id, WorldAt, ReachMetres, FString(Kind), 0.0, SinceSeconds);
 				return true;
 			}
 		}
@@ -145,7 +190,10 @@ namespace StageParts
 	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
 	// The yard's (the historian's 1941 blocks): the pads, the apron and the docks' coping a weathered concrete, a
 	// drained dock's floor dark, the floating dock's steel the grey of the ships beside it.
-	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("8F8B83"))); // (about 140 luma: the art director, 17:45Z)
+	// (about 140 luma: the art director, 17:45Z; a cool grey, 22 November: the warm 8F8B83 read tan under the morning
+	// sun, "the quays should be grey, not tan", the art director on 2b177386's frames, 04:16Z; Oahu's stage paints its
+	// quays the same)
+	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("8A8D90")));
 	static const FLinearColor DockFloorPaint = FLinearColor(FColor::FromHex(TEXT("4A4844")));
 	static const FLinearColor DockSteelPaint = FLinearColor(FColor::FromHex(TEXT("5C6062")));
 	static constexpr double YardSkirt = -4.5; // metres under a yard block's ground its sides reach down to
@@ -512,6 +560,7 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	ShipMeshes.Reset();
 	Ships.Reset();
 	OilLit.Reset();
+	TanksAlight.Reset();
 	// (each stage its own run of looks: the same strike on the same stage looks the same each time it is played)
 	Looks.Begin(Fates::NameKey(std::string(TCHAR_TO_UTF8(*Key))) ^ 238u);
 	bRaised = false;
@@ -567,6 +616,12 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 		}
 	}
 	const bool bLand = LandOut <= LandReach;
+	// (the moving sea where it has been built: the open sea and the painted shallows and reef over it alike)
+	if (UMaterialInstanceDynamic* Moving = MovingSea(bLand))
+	{
+		SeaInk = Moving;
+		WaterInk = Moving;
+	}
 	BuildSea();
 	if (bLand)
 	{
@@ -583,6 +638,165 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d yard blocks, %d palms, the ground on a %d by %d grid%s."),
 		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Yard.Num(), Palms.Num(), GridCols, GridRows, *LeftOut);
 	return true;
+}
+
+FVector2D AAirStage::ShoreAt(double East, double North) const
+{
+	return FVector2D((East - ShoreWest) / ShoreSpan, (North - ShoreSouth) / ShoreSpan);
+}
+
+UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
+{
+	// THE MOVING SEA (Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene").
+	// M_StageSea keeps the mesh's colours and lays over them six reads of the ripples picture, at three sizes (a swell,
+	// a chop, ripples), each twice at its own heading off the trade wind, travelling downwind at the speed of its waves,
+	// so the sun's path breaks into moving glitter; over them the wind's gusts in broad patches, whitecaps on the open
+	// sea, and the harbour calm (Tools/build_content.py, build_stage_sea).
+	static const bool bFlat = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlatSea"));
+	if (bFlat)
+	{
+		return nullptr;
+	}
+	UMaterialInterface* Moving = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_StageSea.M_StageSea"));
+	if (!Moving)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Stage: M_StageSea is missing (run Tools/build_content.sh once to make it); the sea is drawn still."));
+		return nullptr;
+	}
+	if (!SeaRipples)
+	{
+		TArray<FColor> Pixels;
+		CampaignTextures::MakeWaterBumps(Pixels);
+		SeaRipples = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaRipples")));
+	}
+	UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Moving, this);
+	Made->SetTextureParameterValue(TEXT("Ripples"), SeaRipples);
+	// (-TheaterSeaWaves= scales how much the waves lean the water: 0 is a still sheet, 1 as made)
+	float Strength = 1.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaWaves="), Strength);
+	const double WorldPerMetre = UnitsPerMetre * FMath::Max(GetActorScale3D().X, 0.0001);
+	// (downwind, as BuildSea lays the trade wind's streaks, turned into the world's frame)
+	const double Downwind = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(250.0) - StageTurn));
+	const FVector Way = GetActorTransform().TransformVectorNoScale(FVector(FMath::Cos(Downwind), FMath::Sin(Downwind), 0.0)).GetSafeNormal2D();
+	const double Base = FMath::Atan2(Way.Y, Way.X);
+	// Each read: the picture's length in metres (its slopes run from a seventh of it down to a fifty-sixth); its
+	// heading off the wind, degrees; how fast it travels, metres a second, about the speed of waves a seventh of its
+	// length long (the square root of g L over two pi); how much it leans the water. The trade wind's sea in the lee
+	// of Oahu: a low swell, a lively chop, and ripples over all.
+	struct FRead
+	{
+		const TCHAR* Name;
+		double Length, Off, Speed, Lean;
+	};
+	static const FRead Reads[] = {
+		{ TEXT("SwellA"), 320.0, 0.0, 8.4, 0.10 }, { TEXT("SwellB"), 410.0, 14.0, 9.5, 0.08 },
+		{ TEXT("ChopA"), 64.0, 25.0, 3.8, 0.11 }, { TEXT("ChopB"), 80.0, -18.0, 4.2, 0.09 },
+		{ TEXT("RippleA"), 13.0, -40.0, 1.7, 0.08 }, { TEXT("RippleB"), 17.0, 55.0, 1.9, 0.07 },
+	};
+	for (const FRead& Read : Reads)
+	{
+		const double Heading = Base + FMath::DegreesToRadians(Read.Off);
+		const double Across = Read.Length * WorldPerMetre;
+		Made->SetVectorParameterValue(Read.Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
+			static_cast<float>(Read.Speed / Read.Length), static_cast<float>(Read.Lean * FMath::Max(Strength, 0.0f))));
+	}
+	// (past about 6 km the waves are finer than the picture's pixels: they fold into a rougher, broader sun path)
+	Made->SetScalarParameterValue(TEXT("FarDepth"), static_cast<float>(6000.0 * WorldPerMetre));
+	if (!SeaWaves)
+	{
+		TArray<FColor> Pixels;
+		CampaignTextures::MakeWaves(Pixels);
+		SeaWaves = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaWaves")));
+	}
+	Made->SetTextureParameterValue(TEXT("Waves"), SeaWaves);
+	// A read of a picture laid along the wind: its length in metres, its heading off the wind, how fast it slides
+	// downwind (metres a second) and how much it does.
+	auto Slid = [&](const TCHAR* Name, double Length, double Off, double Speed, double Amount)
+	{
+		const double Heading = Base + FMath::DegreesToRadians(Off);
+		const double Across = Length * WorldPerMetre;
+		Made->SetVectorParameterValue(Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
+			static_cast<float>(Speed / Length), static_cast<float>(Amount)));
+	};
+	// Cat's-paws and slicks: patches some hundreds of metres across the wind and four times as long along it, riding
+	// the trade wind at about its own speed (15 knots). (The art director, 07:20Z: drawn out 3 to 5 times along the wind.)
+	const double GustAcross = 2400.0, GustAlong = GustAcross * 4.0;
+	Slid(TEXT("Gusts"), GustAlong, 0.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
+	Made->SetVectorParameterValue(TEXT("GustsAcross"), FLinearColor(static_cast<float>(-FMath::Sin(Base) / (GustAcross * WorldPerMetre)),
+		static_cast<float>(FMath::Cos(Base) / (GustAcross * WorldPerMetre)), 0.0f, 0.0f));
+	// (their edges broken into fingers some 50 to 200 m across, riding with them; the art director on v3, 08:07Z)
+	Slid(TEXT("GustFingers"), 600.0, 0.0, 7.5, 0.6 * FMath::Clamp(Strength, 0.0f, 1.0f));
+	// Whitecaps: the whitecaps' picture read twice, 160 and 190 m to it, drifting downwind with the water at about a
+	// metre a second while each crest runs on through its foam (the art director's notes, 07:20Z); put out of step
+	// from place to place by the waves picture's slow unevenness, 640 m to it, so its repeats do not break together;
+	// from 400 m out drawn as specks, fully so 1.1 km further, and gone between 4 and 10 km.
+	if (!SeaFoam)
+	{
+		const std::vector<uint8_t> Foam = SeaFace::MakeFoam(512, 160.0);
+		TArray<FColor> Pixels;
+		Pixels.SetNumUninitialized(512 * 512);
+		for (int32 K = 0; K < Pixels.Num(); ++K)
+		{
+			Pixels[K] = FColor(Foam[K * 4], Foam[K * 4 + 1], Foam[K * 4 + 2], Foam[K * 4 + 3]);
+		}
+		SeaFoam = CampaignTextures::Create(512, 512, Pixels, false, true, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaFoam")));
+	}
+	Made->SetTextureParameterValue(TEXT("Foam"), SeaFoam);
+	const double Caps = FMath::Clamp(Strength, 0.0f, 1.5f);
+	Slid(TEXT("FoamA"), 160.0, 0.0, 0.8, Caps);
+	Slid(TEXT("FoamB"), 190.0, 5.0, 1.0, Caps);
+	Slid(TEXT("FoamShift"), 640.0, 30.0, 0.3, 4.0);
+	Made->SetScalarParameterValue(TEXT("FoamNear"), static_cast<float>(400.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamSpan"), static_cast<float>(1100.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamFadeFrom"), static_cast<float>(4000.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamFadeSpan"), static_cast<float>(6000.0 * WorldPerMetre));
+	// The surf's sections: the waves picture's slow unevenness and swell, 520 m to it, coming in at 2 m a second.
+	Slid(TEXT("SurfRead"), 520.0, 0.0, 2.0, 0.9 * FMath::Min(Caps, 1.2));
+	// The coral heads on a reef flat or in a lagoon: the waves picture's slow unevenness, 900 m to it, lying still.
+	Slid(TEXT("CoralRead"), 900.0, 0.0, 0.0, 1.0);
+	// The shore (SeaFace::MakeShore), from the stage's land, reef and works, worked out once each time the stage is
+	// raised (half a second or so). Where the land is not drawn, the open sea everywhere. Where each point of the sea
+	// and the shallows falls on it goes with the point itself (ShoreAt, their first texture coordinate, laid in
+	// BuildSea and BuildGround), worked out here in doubles: on the Mac the material's own reckoning from the world's
+	// position put Pearl Harbor's lochs on the open sea.
+	std::vector<SeaFace::Part> Hard;
+	if (bShore)
+	{
+		for (const FMeshPart& Part : Parts)
+		{
+			if (Part.Name != TEXT("land") && Part.Name != TEXT("reef") && Part.Name != TEXT("works"))
+			{
+				continue;
+			}
+			SeaFace::Part& Into = Hard.emplace_back();
+			Into.X.reserve(Part.Points.Num());
+			Into.Y.reserve(Part.Points.Num());
+			for (const FVector& Point : Part.Points)
+			{
+				Into.X.push_back(Point.X);
+				Into.Y.push_back(Point.Y);
+			}
+			Into.Triangles.assign(Part.Triangles.GetData(), Part.Triangles.GetData() + Part.Triangles.Num());
+		}
+	}
+	const double Began = FPlatformTime::Seconds();
+	const SeaFace::Shore Shore = SeaFace::MakeShore(Hard, 70.0);
+	TArray<FColor> ShorePixels;
+	ShorePixels.SetNumUninitialized(Shore.Size * Shore.Size);
+	for (int32 K = 0; K < ShorePixels.Num(); ++K)
+	{
+		ShorePixels[K] = FColor(Shore.Pixels[K * 4], Shore.Pixels[K * 4 + 1], Shore.Pixels[K * 4 + 2], Shore.Pixels[K * 4 + 3]);
+	}
+	SeaShore = CampaignTextures::Create(Shore.Size, Shore.Size, ShorePixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaShore")));
+	Made->SetTextureParameterValue(TEXT("Shore"), SeaShore);
+	ShoreWest = Shore.West;
+	ShoreSouth = Shore.South;
+	ShoreSpan = FMath::Max(Shore.Span, 1.0);
+	UE_LOG(LogTheater, Display, TEXT("Stage: the sea's shore picture, %d a side over %.1f km, worked out in %.0f ms."), Shore.Size, Shore.Span / 1000.0,
+		(FPlatformTime::Seconds() - Began) * 1000.0);
+	return Made;
 }
 
 void AAirStage::BuildSea()
@@ -617,7 +831,14 @@ void AAirStage::BuildSea()
 	TArray<FVector> V;
 	TArray<FVector> N;
 	TArray<FColor> C;
+	TArray<FVector2D> OnShore;
 	TArray<int32> T;
+	// (where a point of the sea, in this actor's frame, falls on the shore picture)
+	auto Shored = [this](const FVector& Local)
+	{
+		const FVector2D Stage = BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+		return ShoreAt(Stage.X, Stage.Y);
+	};
 	auto Lay = [&V, &T](int32 A, int32 B, int32 D)
 	{
 		// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
@@ -640,6 +861,7 @@ void AAirStage::BuildSea()
 			// (a tilt of up to some 5 degrees, as before the smaller patches were made broader and their slopes gentler)
 			const double Tilt = 60.0;
 			V.Add(Middle + FVector(X, Y, 0.0));
+			OnShore.Add(Shored(V.Last()));
 			N.Add(FVector(-Dx * Tilt, -Dy * Tilt, 1.0).GetSafeNormal());
 			const float Shade = static_cast<float>(1.0 + 0.11 * H);
 			C.Add(FLinearColor(Deep.R * Shade, Deep.G * Shade, Deep.B * Shade * 1.02f).ToFColor(true));
@@ -667,13 +889,14 @@ void AAirStage::BuildSea()
 		for (const FVector2D& Corner : { Band[0], FVector2D(Band[1].X, Band[0].Y), Band[1], FVector2D(Band[0].X, Band[1].Y) })
 		{
 			V.Add(Middle + FVector(Corner.X, Corner.Y, 0.0));
+			OnShore.Add(Shored(V.Last()));
 			N.Add(FVector::UpVector);
 			C.Add(Paint);
 		}
 		Lay(First, First + 1, First + 2);
 		Lay(First, First + 2, First + 3);
 	}
-	Sea->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+	Sea->CreateMeshSection(0, V, T, N, OnShore, C, TArray<FProcMeshTangent>(), false);
 	Sea->SetMaterial(0, SeaInk);
 	StillMeshes.Add(Sea);
 }
@@ -740,8 +963,11 @@ void AAirStage::BuildGround()
 		Mesh->SetCastShadow(PartName == TEXT("land") || PartName == TEXT("works"));
 		Mesh->RegisterComponent();
 		const int32 Points = static_cast<int32>(FMath::Min(Part.X.size(), Part.Colours.size()));
+		// (the shallows and the reef wear the moving sea, which reads the shore picture where each point falls on it)
+		const bool bWater = PartName == TEXT("shallows") || PartName == TEXT("reef");
 		TArray<FVector> V;
 		TArray<FColor> C;
+		TArray<FVector2D> OnShore;
 		V.Reserve(Points);
 		C.Reserve(Points);
 		for (int32 K = 0; K < Points; ++K)
@@ -749,6 +975,10 @@ void AAirStage::BuildGround()
 			const size_t I = static_cast<size_t>(K);
 			V.Add(StageToLocal(FVector(Part.X[I], Part.Y[I], Part.Z[I])));
 			C.Add(FColor(Part.Colours[I].R, Part.Colours[I].G, Part.Colours[I].B));
+			if (bWater)
+			{
+				OnShore.Add(ShoreAt(Part.X[I], Part.Y[I]));
+			}
 		}
 		TArray<FVector> N;
 		N.Init(FVector::ZeroVector, V.Num());
@@ -784,8 +1014,8 @@ void AAirStage::BuildGround()
 		{
 			Normal = Normal.IsNearlyZero() ? FVector::UpVector : Normal.GetSafeNormal();
 		}
-		Mesh->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, PartName == TEXT("shallows") || PartName == TEXT("reef") ? WaterInk : GroundInk);
+		Mesh->CreateMeshSection(0, V, T, N, OnShore, C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, bWater ? WaterInk : GroundInk);
 		StillMeshes.Add(Mesh);
 	}
 }
@@ -1003,15 +1233,22 @@ void AAirStage::LayShip(const FStageShip& Given)
 	if (!Ship.Hull)
 	{
 		FMiniatureMesh Model;
+		const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
 		{
 			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal)
-			const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
 			if (!Model.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0) || Model.Vertices.Num() == 0)
 			{
 				UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
 				Ships.Remove(Given.Id);
 				return;
 			}
+		}
+		const int32 Repainted = StageParts::InStagePaint(Model, Given.Nation);
+		static bool bRepaintTold = false;
+		if (Repainted > 0 && !bRepaintTold)
+		{
+			bRepaintTold = true;
+			UE_LOG(LogTheater, Display, TEXT("Stage: %s in Measure 1, Dark Gray 5-D with her decks Deck Blue 20-B (%d of %d points repainted)."), *Name, Repainted, Model.Colors.Num());
 		}
 		StageParts::FitHull(Model, Given, UnitsPerMetre);
 		FBox Bounds(ForceInit);
@@ -1044,6 +1281,10 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 		return;
 	}
 	Ship->Hits++;
+	if (Ship->FirstHitAt < 0.0)
+	{
+		Ship->FirstHitAt = Now;
+	}
 	if (!Effects)
 	{
 		return;
@@ -1061,9 +1302,10 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 	FVector Local = Ship->Base + Along * (Shown.FRandRange(-0.35f, 0.35f) * Ship->Long * U);
 	if (Strike == TEXT("torpedo"))
 	{
-		// A torpedo: the column of water at her side, the side the run came from.
+		// A torpedo: the column of water at her side, the side the run came from (the effects kit's torpedo, 22:59Z: the
+		// tallest, narrowest column, over her mast, dark for its lower third).
 		Local += Abeam * ((Ship->Beam * 0.5 + 3.0) * U * (Shown.FRand() < 0.5f ? 1.0 : -1.0));
-		Effects->ShellOfSize(GetActorTransform().TransformPosition(Local), TEXT("bomb500"), TEXT("water"));
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Local), TEXT("torpedo"), TEXT("water"));
 		return;
 	}
 	// A bomb on her deck: the dive bombers' 250 kg, the level bombers' heavier armour-piercing bombs.
@@ -1073,7 +1315,9 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 	Effects->ShellOfSize(Struck, Strike == TEXT("dive") ? TEXT("bomb250") : TEXT("bomb500"), TEXT("town"), true);
 	if (Shown.FRand() < (Strike == TEXT("dive") ? 0.5f : 0.3f))
 	{
-		Effects->Burn(Struck, static_cast<float>(Ship->Beam * 0.5), 240.0f);
+		// (-1, true, here and at every fire on a ship: no id, and afloat, so the kit burns it as a ship's fire, never
+		// as a burning tank's however small or low it is: the effects kit's Burn bOnShip, 08a18f21)
+		Effects->Burn(Struck, static_cast<float>(Ship->Beam * 0.5), 240.0f, -1, true);
 	}
 }
 
@@ -1086,7 +1330,7 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 	// The magazine forward: one blast on another, the biggest of the battle bigger again (ruling 238(5)).
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship.Yaw, 0.0);
-	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
 	// (her bow is toward the model's -X; her look may name the after magazine)
 	const FVector Forward = Ship.Base - Along * (Ship.Long * (Ship.End == TEXT("aft") ? -0.25 : 0.25) * U);
 	const int32 Blasts = bBig ? 7 : 3;
@@ -1095,9 +1339,11 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 		const FVector Spot = Forward + FVector(Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, (Ship.High * 0.2 + K * 3.0) * U);
 		Effects->ShellOfSize(GetActorTransform().TransformPosition(Spot), TEXT("bomb500"), TEXT("water"), true);
 	}
+	// (and the sea thrown up beside the magazine: off armour, the effects kit draws a column of white water)
+	Effects->ShellOfSize(GetActorTransform().TransformPosition(Forward + Abeam * ((Ship.Beam * 0.5 + 2.0) * (Shown.FRand() < 0.5f ? 1.0 : -1.0) * U)), TEXT("bomb500"), TEXT("water"), false);
 	// (in harbour she settles on the mud and burns on; at sea she is under in about 30 s, and her fire goes with her,
 	// her oil's column on the water burning on where she went down: the ship looks thread, 15:25Z)
-	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f);
+	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f, -1, true);
 }
 
 void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
@@ -1142,7 +1388,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 				break;
 			}
 			const FVector Spot = Ship->Base + Along * (Share * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
-			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f, -1, true);
 			Looks.AddFire(Id, Now + 1800.0);
 		}
 	}
@@ -1154,6 +1400,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			TGuardValue<uint8> Painted(Model.Finish, 128);
 			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
 		}
+		StageParts::InStagePaint(Model, Ship->Given.Nation);
 		StageParts::FitHull(Model, Ship->Given, UnitsPerMetre);
 		TArray<int32> Stern, Bow;
 		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)
@@ -1178,16 +1425,17 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		if (Effects)
 		{
 			Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, 3.0 * U)), TEXT("bomb500"), TEXT("water"), true);
-			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Beam), 400.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Beam), 400.0f, -1, true);
 		}
 	}
 	else if (Effects)
 	{
-		// Settling, going down, rolling over: the water boiling white round her, and a little smoke.
-		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("bomb250"), TEXT("water"));
+		// Settling, going down, rolling over: the water boiling white round her (the effects kit's churn: a low boil,
+		// no flash; MoveShip keeps it going along her waterline), and a little smoke.
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("churn"), TEXT("water"));
 		if (Shown.FRand() < 0.5f)
 		{
-			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f, -1, true);
 		}
 	}
 	// Her oil burning on the water where she lies: a fat black column off the slick, one fire a ship, its reach 0.6 of
@@ -1219,7 +1467,13 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		}
 		if (bLight)
 		{
-			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Long * 0.6), TEXT("sunk")))
+			// A ship lost to fire stands under her own column, leaning downwind and paling as it climbs (the effects kit's
+			// "ablaze" row, 01f2dfc7; the art director on Midway 06: a soft black ball, not a column), grown as a fire
+			// burning since her first hit and three minutes at least (Akagi burned for hours). One that goes down leaves
+			// her burning oil, as before. A kit without the ablaze row draws "sunk".
+			const bool bAblaze = How == TEXT("burn");
+			const float Since = bAblaze ? static_cast<float>(FMath::Max(180.0, Ship->FirstHitAt >= 0.0 ? Now - Ship->FirstHitAt : 0.0)) : 0.0f;
+			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Long * 0.6), bAblaze ? TEXT("ablaze") : TEXT("sunk"), Since))
 			{
 				OilLit.Add(Id, Rank);
 			}
@@ -1315,6 +1569,23 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 		// (a positive pitch lifts the model's +X, her stern: the bow goes down)
 		Ship.Hull->SetRelativeLocationAndRotation(At, FRotator(Pitch, Ship.Yaw, Roll));
 	}
+	// The sea boiling round her while she settles, goes down, rolls over or breaks: the effects kit's churn, one to every
+	// 25 to 30 m of her waterline, every 4 to 6 s (the effects kit, 22:59Z), for her first minute or so, off both sides.
+	// (not on a dock's floor, and not for a ship burning on the water; a clock run back starts it again)
+	if (Effects && Ship.How != TEXT("burn") && !Ship.bDocked && T < (Ship.bHarbour ? 50.0 : 80.0) && Depth < Ship.High
+		&& (Now >= Ship.NextChurn || Now < Ship.NextChurn - 10.0))
+	{
+		Ship.NextChurn = Now + Shown.FRandRange(4.0f, 6.0f);
+		const FRotator Turned(0.0, Ship.Yaw, 0.0);
+		const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+		const int32 Churns = FMath::Clamp(FMath::RoundToInt(Ship.Long / Shown.FRandRange(25.0f, 30.0f)), 1, 7);
+		for (int32 K = 0; K < Churns; ++K)
+		{
+			const double Share = (K + Shown.FRandRange(0.2f, 0.8f)) / Churns - 0.5;
+			const double Off = (Ship.Beam * 0.5 + Shown.FRandRange(0.5f, 3.0f)) * (K % 2 ? 1.0 : -1.0);
+			Effects->ShellOfSize(GetActorTransform().TransformPosition(At + (Along * (Share * Ship.Long) + Abeam * Off) * UnitsPerMetre), TEXT("churn"), TEXT("water"));
+		}
+	}
 	if (Depth >= Ship.High + 25.0)
 	{
 		Ship.bGone = true;
@@ -1324,6 +1595,40 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 			Ship.Fore->SetVisibility(false);
 		}
 	}
+}
+
+int32 AAirStage::BombOnOil(const FVector& WorldAt, TArray<TPair<FVector, float>>& OutBalls)
+{
+	if (!bRaised || !Effects)
+	{
+		return 0;
+	}
+	const double U = UnitsPerMetre;
+	int32 Up = 0;
+	for (int32 K = 0; K < Tanks.Num(); ++K)
+	{
+		const TArray<double>& Tank = Tanks[K];
+		if (Tank.Num() < 5 || TanksAlight.Contains(K))
+		{
+			continue;
+		}
+		// (its roof's middle; the burst within its wall or 6 m of it: a 250 kg bomb's blast and splinters open a tank's
+		// thin steel at that, and its oil goes up)
+		const FVector Roof = StageToWorld(FVector(Tank[0], Tank[1], Tank[2] + Tank[4]));
+		if (FVector::Dist2D(Roof, WorldAt) > (Tank[3] + 6.0) * U)
+		{
+			continue;
+		}
+		TanksAlight.Add(K);
+		const float Across = static_cast<float>(FMath::Clamp(Tank[3] * 2.0, 15.0, 25.0));
+		Effects->FuelBall(Roof, Across);
+		Effects->Burn(Roof, static_cast<float>(Tank[3] * 2.0), 1800.0f);
+		OutBalls.Add(TPair<FVector, float>(Roof, Across));
+		++Up;
+		UE_LOG(LogTheater, Display, TEXT("Air battle: an oil tank goes up (%d of %d alight), a fuel ball %.0f m across, %.0f m from the bomb."),
+			TanksAlight.Num(), Tanks.Num(), Across, FVector::Dist2D(Roof, WorldAt) / U);
+	}
+	return Up;
 }
 
 void AAirStage::Advance(double Now)
@@ -1736,6 +2041,8 @@ void AAirStage::TestTick()
 		{
 			const FVector Spot = StageToWorld(FVector(Tank[0], Tank[1], Tank[2] + Tank[4]));
 			Effects->ShellOfSize(Spot, TEXT("bomb250"), TEXT("sand"));
+			// (the fuel going up off its roof, as BombOnOil has it in the battle)
+			Effects->FuelBall(Spot, static_cast<float>(FMath::Clamp(Tank[3] * 2.0, 15.0, 25.0)));
 			Effects->Burn(Spot, static_cast<float>(Tank[3] * 2.0), 1800.0f);
 		}
 		for (int32 K = 0; K < Hangars.Num(); K += 2)

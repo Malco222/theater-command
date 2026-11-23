@@ -18,6 +18,7 @@ A second, plainer mesh is written for the table, where an airfield carries sever
 """
 
 import json
+import os
 import math
 import sys
 
@@ -811,6 +812,7 @@ def write(name, s, out, look=None):
 
 PLANES = {}
 exec(open(__file__.replace("build_plane.py", "plane_numbers.py")).read())
+BATTLE_MODELS = {"Spitfire", "Hurricane", "Bf109", "Fw190", "Zero", "Yak", "Warhawk", "Fighter", "Mustang"}
 
 
 def main():
@@ -821,7 +823,13 @@ def main():
     for name, spec in PLANES.items():
         if only and name not in only:
             continue
-        write(name, spec, folder.rstrip("/") + "/" + name + ".json", look)
+        # (the machines whose game file is now the air modeller's battle model, battle-models/air: Brian's yes of
+        #  22 November 20:12Z for the fighters, the Mustang's of 21 November. This sculpt goes beside it in Old/, which
+        #  the game reads only with -TheaterOldVehicles, to compare and time the two; it never overwrites the new one.)
+        kept = "/Old/" if name in BATTLE_MODELS else "/"
+        if kept != "/":
+            os.makedirs(folder.rstrip("/") + "/Old", exist_ok=True)
+        write(name, spec, folder.rstrip("/") + kept + name + ".json", look)
 
 
 main()

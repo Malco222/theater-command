@@ -43,6 +43,8 @@ namespace AirDesk
 	double Clock::Step(double Real, const AirFeed::Top& Head, double Scale, std::string& Tag)
 	{
 		Tag.clear();
+		bFast = false;
+		SinceStrike = bStrike ? 0.0 : SinceStrike + std::max(0.0, Real);
 		if (Head.bOver) return 0.0;
 		if (bQuestion)
 		{
@@ -59,20 +61,20 @@ namespace AirDesk
 			Tag = "HELD";
 			return 0.0;
 		}
-		// Fast until the formations meet, and once the fight has wound down (the play version's mark 1).
-		if (Head.Contact < 0.0)
-		{
-			Tag = "\xC3\x97" "10 UNTIL THE FORMATIONS MEET";
-			return Real * 10.0;
-		}
+		const double Pace = Real * Speed / std::max(Scale, 0.1);
+		// Fast until the formations meet, and once the fight has wound down (the play version's mark 1); but never while
+		// the strike is on, nor StrikeHoldS after it: the bombs and the dives are seen at the player's pace, then the
+		// clock eases into the fast run over StrikeEaseS.
+		const auto RunFast = [&](const char* Words) {
+			const double Share = std::min(1.0, std::max(0.0, (SinceStrike - StrikeHoldS) / std::max(StrikeEaseS, 0.01)));
+			bFast = Share > 0.5;
+			Tag = Share <= 0.0 ? std::string("THE STRIKE \xC2\xB7 RUNNING \xC3\x97") + (Speed == 0.5 ? "\xC2\xBD" : std::to_string(static_cast<int>(Speed))) : std::string(Words);
+			return Pace + (Real * 10.0 - Pace) * Share;
+		};
+		if (Head.Contact < 0.0) return RunFast("\xC3\x97" "10 UNTIL THE FORMATIONS MEET");
 		if (SinceMet < 0.0) SinceMet = 0.0;
 		SinceMet += Real;
-		if (Head.bWinding)
-		{
-			Tag = "\xC3\x97" "10 UNTIL THE LAST ARE HOME";
-			return Real * 10.0;
-		}
-		const double Pace = Real * Speed / std::max(Scale, 0.1);
+		if (Head.bWinding) return RunFast("\xC3\x97" "10 UNTIL THE LAST ARE HOME");
 		if (SinceMet < 3.0) Tag = "THE FORMATIONS MEET \xC2\xB7 RUNNING \xC3\x97" "1";
 		else if (Speed == 0.5) Tag = "RUNNING \xC3\x97\xC2\xBD";
 		else if (Speed != 1.0) Tag = "RUNNING \xC3\x97" + std::to_string(static_cast<int>(Speed));
@@ -85,6 +87,7 @@ namespace AirDesk
 		Me = InMe == "def" ? "def" : "att";
 		MyIndex = Me == "att" ? 0 : 1;
 		bStarted = false;
+		KnotShown = 0.5;
 		Called.clear();
 		LabelsNow.clear();
 		Said.clear();
@@ -113,11 +116,7 @@ namespace AirDesk
 	void Desk::Read(const AirFeed::Frame& View)
 	{
 		HeadNow = View.Head;
-		if (!bStarted)
-		{
-			bStarted = true;
-			BalanceAtStart = View.Head.BalanceAtt;
-		}
+		bStarted = true;
 		for (const auto& Pair : View.Head.Called) Called[Pair.first] = Pair.second;
 		for (const AirFeed::Label& L : View.Labels) LabelsNow[L.Id] = L;
 	}
@@ -132,6 +131,12 @@ namespace AirDesk
 			EngagedOnce[Unit] = true;
 		}
 		if (What == "air:near" && Side == MyIndex) return; // (his own side's is the near line that stays, not a dispatch)
+		// (a line still on the screen is not said again: Oahu 02 showed one twice, word for word, on the Mac's release 2
+		// check; the screen lets a dispatch go 14 s after it is said)
+		for (const Dispatch& Was : Said)
+		{
+			if (Was.Text == Text && Was.Age < 14.0) return;
+		}
 		Dispatch D;
 		D.Text = Text;
 		D.Side = Side;
@@ -158,8 +163,11 @@ namespace AirDesk
 		// The top bar (b384, land's form): the card's chance and the staff's now, his side's.
 		const double Card = MyIndex == 0 ? Sky.CardChance : 1.0 - Sky.CardChance;
 		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(H.Chance);
-		Out.Balance = MyIndex == 0 ? H.BalanceAtt : 1.0 - H.BalanceAtt;
-		Out.BalanceStart = MyIndex == 0 ? BalanceAtStart : 1.0 - BalanceAtStart;
+		// The tug-of-war bar (it took the place of the strength fill and its start mark: the UI director, 14:47Z).
+		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex), Real);
+		Out.Knot = KnotShown;
+		Out.MyNat = MyIndex == 0 ? Sky.AttNat : Sky.DefNat;
+		Out.TheirNat = MyIndex == 0 ? Sky.DefNat : Sky.AttNat;
 		const AirFeed::Near& Mine = MyIndex == 0 ? H.NearAtt : H.NearDef;
 		const AirFeed::Near& Theirs = MyIndex == 0 ? H.NearDef : H.NearAtt;
 		Out.MyBar = Mine.At;
@@ -427,6 +435,128 @@ namespace AirDesk
 		return Best.Plane >= 0 ? Best : Choose(Planes, std::vector<int>(), Near, Avoid);
 	}
 
+	std::vector<int> RideLine(const std::vector<AirShow::PlaneOut>& Planes, int Group)
+	{
+		std::vector<int> Line;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (P.Group == Group && P.bShown && !P.bOnGround && !P.bFalling) Line.push_back(P.Key);
+		}
+		std::sort(Line.begin(), Line.end());
+		return Line;
+	}
+
+	int RideStep(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current, int Step)
+	{
+		const std::vector<int> Line = RideLine(Planes, Group);
+		if (Line.empty()) return -1;
+		if (Step == 0)
+		{
+			return std::binary_search(Line.begin(), Line.end(), Current) ? Current : Line.front();
+		}
+		if (Step > 0)
+		{
+			const auto After = std::upper_bound(Line.begin(), Line.end(), Current);
+			return After == Line.end() ? Line.front() : *After;
+		}
+		const auto Before = std::lower_bound(Line.begin(), Line.end(), Current);
+		return Before == Line.begin() ? Line.back() : *(Before - 1);
+	}
+
+	std::vector<int> RideSquadrons(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes)
+	{
+		std::vector<int> Out;
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			for (const Tag& T : Tags)
+			{
+				if (T.bMine != (Pass == 0) || T.bGone) continue;
+				if (!RideLine(Planes, T.Id).empty()) Out.push_back(T.Id);
+			}
+		}
+		return Out;
+	}
+
+	int RideSquadronStep(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes, int Current, int Step)
+	{
+		const std::vector<int> Ones = RideSquadrons(Tags, Planes);
+		if (Ones.empty()) return -1;
+		const auto At = std::find(Ones.begin(), Ones.end(), Current);
+		if (At == Ones.end()) return Step < 0 ? Ones.back() : Ones.front();
+		const int N = static_cast<int>(Ones.size());
+		const int Here = static_cast<int>(At - Ones.begin());
+		return Ones[static_cast<size_t>(((Here + (Step < 0 ? -1 : 1)) % N + N) % N)];
+	}
+
+	std::string RideCount(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current)
+	{
+		const std::vector<int> Line = RideLine(Planes, Group);
+		const auto At = std::find(Line.begin(), Line.end(), Current);
+		if (At == Line.end()) return std::string();
+		return "Aircraft " + std::to_string(At - Line.begin() + 1) + " of " + std::to_string(Line.size());
+	}
+
+	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle)
+	{
+		std::vector<const AirShow::PlaneOut*> In;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (P.bShown && !P.bFalling && !P.bOnGround && std::find(Groups.begin(), Groups.end(), P.Group) != Groups.end())
+			{
+				In.push_back(&P);
+			}
+		}
+		if (In.empty())
+		{
+			Anchor = -1;
+			return false;
+		}
+		const double Reach2 = Reach * Reach;
+		auto Near = [Reach2](const AirShow::PlaneOut& A, const AirShow::PlaneOut& B)
+		{
+			const AirShow::Vec Off = B.At - A.At;
+			return Off.Dot(Off) <= Reach2;
+		};
+		const AirShow::PlaneOut* Best = nullptr;
+		const AirShow::PlaneOut* Held = nullptr;
+		int Most = -1, HeldCount = 0;
+		for (const AirShow::PlaneOut* A : In)
+		{
+			int Around = 0;
+			for (const AirShow::PlaneOut* B : In)
+			{
+				Around += Near(*A, *B) ? 1 : 0;
+			}
+			if (Around > Most)
+			{
+				Most = Around;
+				Best = A;
+			}
+			if (A->Key == Anchor)
+			{
+				Held = A;
+				HeldCount = Around;
+			}
+		}
+		if (Held && HeldCount * 4 >= Most * 3)
+		{
+			Best = Held;
+		}
+		Anchor = Best->Key;
+		AirShow::Vec Sum;
+		int Count = 0;
+		for (const AirShow::PlaneOut* B : In)
+		{
+			if (Near(*Best, *B))
+			{
+				Sum += B->At;
+				++Count;
+			}
+		}
+		Middle = Sum * (1.0 / std::max(Count, 1));
+		return true;
+	}
+
 	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)
 	{
 		TargetX = InTargetX;
@@ -538,21 +668,40 @@ namespace AirDesk
 			if (Three.empty())
 			{
 				// (the plane furthest ahead, or furthest back, and the two nearest it: its own element, a vic of three,
-				// not three planes strung across the formation's front)
+				// not three planes strung across the formation's front. One whose element is not with it, its second
+				// nearest more than twice as far as the group's own spacing (the middle of every plane's second nearest),
+				// is passed over for the next: a fighter group's last flight may be a pair strung out a kilometre behind
+				// the rest, and three planes taken across two flights put the eye among them, looking at empty sky; the
+				// shakeout of the campaign's fight for the sky, 23 November. The set pieces' first plane always passes.)
 				const double Sense = bTrail ? -1.0 : 1.0;
-				const AirShow::PlaneOut* First = nullptr;
+				std::vector<const AirShow::PlaneOut*> Mine;
 				for (const AirShow::PlaneOut& P : Planes)
 				{
-					if (P.Group == G.Id && P.bShown && !P.bFalling && (!First || Sense * Ahead.Dot(P.At) > Sense * Ahead.Dot(First->At))) First = &P;
+					if (P.Group == G.Id && P.bShown && !P.bFalling) Mine.push_back(&P);
 				}
-				if (First)
+				// (furthest ahead first, or furthest back; the first seen first among equals, as before)
+				std::stable_sort(Mine.begin(), Mine.end(), [&](const AirShow::PlaneOut* A, const AirShow::PlaneOut* B) { return Sense * Ahead.Dot(A->At) > Sense * Ahead.Dot(B->At); });
+				auto Nearest = [&Mine](const AirShow::PlaneOut* Of)
 				{
 					std::vector<std::pair<double, int>> Order;
-					for (const AirShow::PlaneOut& P : Planes)
-					{
-						if (P.Group == G.Id && P.bShown && !P.bFalling) Order.push_back({ (P.At - First->At).Length(), P.Key });
-					}
+					for (const AirShow::PlaneOut* P : Mine) Order.push_back({ (P->At - Of->At).Length(), P->Key });
 					std::sort(Order.begin(), Order.end());
+					return Order;
+				};
+				size_t Pick = 0;
+				if (Mine.size() >= 3)
+				{
+					std::vector<double> Seconds;
+					for (const AirShow::PlaneOut* P : Mine) Seconds.push_back(Nearest(P)[2].first);
+					std::vector<double> Sorted = Seconds;
+					std::nth_element(Sorted.begin(), Sorted.begin() + Sorted.size() / 2, Sorted.end());
+					const double Spacing = Sorted[Sorted.size() / 2];
+					while (Pick < Mine.size() && Seconds[Pick] > 2.0 * Spacing) ++Pick;
+					if (Pick == Mine.size()) Pick = 0;
+				}
+				if (!Mine.empty())
+				{
+					const std::vector<std::pair<double, int>> Order = Nearest(Mine[Pick]);
 					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
 				}
 				if (bTrail)
@@ -637,7 +786,25 @@ namespace AirDesk
 				Lead = (AirShow::SlotOf(G, 0) + AirShow::SlotOf(G, 1) + AirShow::SlotOf(G, 2)) * (1.0 / 3.0);
 				Span = AirShow::ShapeOf(G.Model, G.bFighter).Span;
 			}
-			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * Share);
+			double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * Share);
+			// (the raid's three wider than the picture holds at that size, a fighter sweep's loose flights some 400 m
+			// across against a bomber vic's 100: the eye stands back until each is within RaidAside of the look, so the
+			// raid is framed smaller rather than lost; the shakeout of the campaign's fight for the sky, 23 November.
+			// A bomber raid's three always fit, and its shot is as it was)
+			if (bTrail)
+			{
+				const auto Spread = Trios.find(G.Id);
+				if (Spread != Trios.end())
+				{
+					double Aside = 0.0, Deep = 0.0;
+					for (const AirShow::Vec& Each : Spread->second)
+					{
+						Aside = std::max(Aside, std::fabs(Each.Y));
+						Deep = std::max(Deep, std::fabs(Each.X));
+					}
+					Near = std::max(Near, Aside * 1.15 / std::tan(RaidAside * Pi / 180.0) + Deep);
+				}
+			}
 			const double Pull = Near * (1.2 - 0.3 * S), Down = DownDegrees * Pi / 180.0;
 			Out.Eye = Lead - Ahead * (Pull * std::cos(Down)) + Up * (Pull * std::sin(Down)) + Right * (Side * Near * 0.3 * (1.0 - S));
 			Out.Look = Lead;
@@ -733,5 +900,32 @@ namespace AirDesk
 			Out.Index = -1;
 		}
 		return Out;
+	}
+
+	double KnotOf(const AirFeed::Top& Head, int MyIndex)
+	{
+		double K = 0.5;
+		if (Head.LostAtt + Head.LostDef > 0 || Head.Worth > 0.0)
+		{
+			// (the ratio has the rules' floors of 10 aircraft each way, so the first loss moves it a little, never flings it)
+			const double X = std::isfinite(Head.Ratio) && Head.Ratio > 0.0 ? Head.Ratio : 1.0;
+			K = X / (1.0 + X);
+			if (MyIndex == 1) K = 1.0 - K; // (1 / x) / (1 + 1 / x)
+		}
+		if (Head.bOver)
+		{
+			// The stamp decides the side: a side that held the field won whatever the exchange said, and the knot settles past
+			// the middle on its side (the ruling: "settles on the side the stamp names").
+			const int Won = AirFeed::SideOf(Head.Winner);
+			if (Won == MyIndex) K = std::max(K, 0.5 + KnotSettle);
+			else if (Won == 1 - MyIndex) K = std::min(K, 0.5 - KnotSettle);
+		}
+		return std::min(0.98, std::max(0.02, K));
+	}
+
+	double KnotEase(double Shown, double Want, double Real)
+	{
+		if (!(Real > 0.0) || !std::isfinite(Want)) return Shown;
+		return Shown + (Want - Shown) * (1.0 - std::exp(-std::min(Real, 0.1) / KnotLag));
 	}
 }

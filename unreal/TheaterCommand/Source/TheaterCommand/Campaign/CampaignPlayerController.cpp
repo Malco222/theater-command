@@ -15,6 +15,7 @@
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Battle/AirBattle.h"
 #include "Battle/LandBattle.h"
 #include "Battle/LandField.h"
 #include "Battle/LandScape.h"
@@ -8626,7 +8627,7 @@ bool ACampaignPlayerController::IsTableBusy() const
 
 bool ACampaignPlayerController::IsAnswering() const
 {
-	if (LiveBattle.IsValid())
+	if (LiveBattle.IsValid() || LiveRaid.IsValid())
 	{
 		return true; // (his own battle is open: the map takes no order until it is handed back)
 	}
@@ -10165,6 +10166,164 @@ void ACampaignPlayerController::LiveHandBack(int32 RegionId, const TArray<int32>
 	AfterFight(RegionId, false, false, false, Result);
 }
 
+namespace
+{
+	/** (Release 1.6) The raid card's fly act, "raid:<kind>:<target>:<id>.<id>..." (the rules' raid card), read: false where it is not one. */
+	bool ReadFlyAct(const FString& Act, FString& OutKind, int32& OutTarget, TArray<int32>& OutIds)
+	{
+		TArray<FString> Parts;
+		Act.ParseIntoArray(Parts, TEXT(":"), false);
+		if (Parts.Num() != 4 || Parts[0] != TEXT("raid") || Parts[1].IsEmpty() || !Parts[2].IsNumeric())
+		{
+			return false;
+		}
+		OutKind = Parts[1];
+		OutTarget = FCString::Atoi(*Parts[2]);
+		OutIds.Reset();
+		TArray<FString> Picked;
+		Parts[3].ParseIntoArray(Picked, TEXT("."), true);
+		for (const FString& Id : Picked)
+		{
+			if (!Id.IsNumeric())
+			{
+				return false;
+			}
+			OutIds.Add(FCString::Atoi(*Id));
+		}
+		return OutIds.Num() > 0;
+	}
+
+	/** (Release 1.6) The raids he may fly himself: a bombing raid by day and a fight for the sky (the rules' FOUGHT_KINDS). */
+	bool IsFlownKind(const FString& Kind)
+	{
+		return Kind == TEXT("bomb") || Kind == TEXT("superiority");
+	}
+}
+
+bool ACampaignPlayerController::CanFlyLive() const
+{
+	// (the raid card up, a raid by day or for the sky that can go as picked, and no battle of his already open)
+	if (!AAirBattle::CampaignLiveOn() || bScripted || !bPageOpen || !Page.Card.bValid || !Page.Card.Fly.bOk || LiveRaid.IsValid() || LiveBattle.IsValid())
+	{
+		return false;
+	}
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	TArray<int32> Ids;
+	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids) || !IsFlownKind(Kind))
+	{
+		return false;
+	}
+	if (FlyOfferAct != Page.Card.Fly.Act)
+	{
+		// (weighed once a pick, the first time it is asked: the rules must have a battle in the air for this raid)
+		FlyOfferAct = Page.Card.Fly.Act;
+		FlyOffer = 0;
+		FCampaignSession* Session = GetSession();
+		FString LookText, LookError;
+		TSharedPtr<FJsonObject> LookAnswer;
+		const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+		const FString IdsText = FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+		if (!Session || !Session->CallBattle(TEXT("airLook"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *IdsText), LookText, LookError)
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(LookText), LookAnswer) || !LookAnswer.IsValid()
+			|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+		{
+			FString Why = LookError;
+			if (LookAnswer.IsValid())
+			{
+				LookAnswer->TryGetStringField(TEXT("why"), Why);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF not offered for %s: no battle in the air for it (%s); FLY THE RAID only"), *FlyOfferAct, *Why);
+			return false;
+		}
+		FlyOffer = 1;
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF offered for %s"), *FlyOfferAct);
+	}
+	return FlyOffer > 0;
+}
+
+void ACampaignPlayerController::FlyLive()
+{
+	FCampaignSession* Session = GetSession();
+	UWorld* Here = GetWorld();
+	if (!Session || !Map.IsValid() || !Here || !CanFlyLive() || IsAnswering() || TActorIterator<AAirBattle>(Here) || TActorIterator<ALandBattle>(Here))
+	{
+		return;
+	}
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	TArray<int32> Ids;
+	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids))
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+	AAirBattle* Sky = Here->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (!Sky)
+	{
+		return;
+	}
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Sky->HandBack = [Self, Kind, Target](const FString& EndJson)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->AirHandBack(Kind, Target, EndJson);
+		}
+	};
+	if (!Sky->BeginLive(Session, Kind, Target, Ids))
+	{
+		// (the rules would not open it after all: the card stays, FLY THE RAID with it, and the offer is not made again for this pick)
+		Sky->HandBack = nullptr;
+		Sky->Destroy();
+		FlyOffer = 0;
+		Notify(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."), 6.0);
+		return;
+	}
+	LiveRaid = Sky;
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF, %s on %d by [%s] opened live"), *Kind, Target, *FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); }));
+	ClosePage();
+}
+
+void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, const FString& EndJson)
+{
+	LiveRaid.Reset();
+	FlyOfferAct.Reset();
+	FlyOffer = -1;
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	FString Note;
+	TArray<FSortie> Sorties;
+	const bool bBooked = !EndJson.IsEmpty() && Session->SettleAirLive(EndJson, Note, &Sorties);
+	// (whatever came of it, the table is brought up to the rules' picture of the war: the groups away, the target hit)
+	ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	RefreshOrders();
+	if (EndJson.IsEmpty())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: the raid (%s on %d) closed with no result; nothing booked"), *Kind, Target);
+		Notify(TEXT("The raid ended without a result: nothing was booked."), 6.0);
+		return;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Campaign: the raid (%s on %d) flown live, booked: %s"), *Kind, Target, bBooked ? TEXT("yes") : TEXT("no"));
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 12.0);
+	}
+	// The eye goes to the target, where the map now shows what came of it. (Not in a run that takes pictures.)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	if (Sorties.Num() > 0 && !bPictures)
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Eye->GoTo(Map->MapToWorld(Sorties[0].To.X, Sorties[0].To.Y), FMath::Clamp(Eye->GetZoom(), 0.3f, 0.45f));
+		}
+	}
+}
+
 void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result)
 {
 	FCampaignSession* Session = GetSession();
@@ -10324,7 +10483,7 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
-	if (LiveBattle.IsValid())
+	if (LiveBattle.IsValid() || LiveRaid.IsValid())
 	{
 		return; // (his own battle is open: no key reaches the map behind it)
 	}
