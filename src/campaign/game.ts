@@ -1967,19 +1967,59 @@ export function sendHome(g: Game, c: Corps): void {
 export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Region | null {
   if (c.kind === 'fort') return null;
   let best: Region | null = null, bs = 1e9;
-  const d = g.capDist[c.nat];
   for (const j of from.nb) {
     const r = g.regions[j];
     // (In the grand campaign an army also falls back on the lines of its own side round a town it is besieging.)
-    if (banned.has(j) || !allied(g, c.nat, fieldCtrl(g, r)) || hostileUnits(g, r, c.nat).length) continue;
-    if (placed(g, r, c.nat).length >= STACK + 2 || barred(g, c, r)) continue;
-    const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
-    // In the desert an army falls back along its own supply line, toward the port that feeds it.
-    // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
-    const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g, c.nat, g.regions[k].ctrl)).length : 2;
-    const back = (inDesert(r) ? g.reach[c.nat]?.[j] ?? 0 : abroad ? (r.port ? 0 : 3) : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
-    const s = back + (g.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+    if (!fallsOn(g, c, r, banned)) continue;
+    if (placed(g, r, c.nat).length >= STACK + 2) continue;
+    const s = fallScore(g, c, from, r, banned);
     if (s < bs) { bs = s; best = r; }
+  }
+  return best;
+}
+
+/** True where a beaten corps can fall back onto this ground: its side's, held by nobody against it, open to it. */
+function fallsOn(g: Game, c: Corps, r: Region, banned: Set<number>): boolean {
+  return !banned.has(r.id) && allied(g, c.nat, fieldCtrl(g, r)) && !hostileUnits(g, r, c.nat).length && !barred(g, c, r);
+}
+
+/** How badly this ground serves a corps falling back onto it from there: the lower, the better. */
+function fallScore(g: Game, c: Corps, from: Region, r: Region, banned: Set<number>): number {
+  const d = g.capDist[c.nat];
+  const j = r.id;
+  const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
+  // In the desert an army falls back along its own supply line, toward the port that feeds it.
+  // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
+  const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g, c.nat, g.regions[k].ctrl)).length : 2;
+  const back = (inDesert(r) ? g.reach[c.nat]?.[j] ?? 0 : abroad ? (r.port ? 0 : 3) : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
+  return back + (g.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+}
+
+/**
+ * Where a corps beaten in the field goes when no ground of its side next to the field has room for it (Units decide,
+ * audit #7; the design director's ruling of 23 November 2026 10:20Z). A full rear is not an encirclement:
+ *   1. it falls back through a full friendly neighbour to the next ground of its side with room, as one retreat;
+ *   2. failing that, it stands in the full friendly neighbour over the stack for the month, under the stack's own rules,
+ *      for its staff or its player to clear the next.
+ * Null where no ground of its side touches the field at all: then it is taken whole, as ruling 232 has it. Off (and in
+ * release 1 and 1.5), always null, and the corps is taken as before.
+ */
+function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Region | null {
+  if (!unitsDecide(g) || c.kind === 'fort') return null;
+  const full = from.nb.map((j) => g.regions[j]).filter((r) => fallsOn(g, c, r, banned));
+  let best: Region | null = null, bs = 1e9;
+  for (const n of full) {
+    for (const k of n.nb) {
+      const m = g.regions[k];
+      if (k === from.id || !fallsOn(g, c, m, banned) || placed(g, m, c.nat).length >= STACK + 2) continue;
+      const s = fallScore(g, c, n, m, banned);
+      if (s < bs) { bs = s; best = m; }
+    }
+  }
+  if (best) return best;
+  for (const n of full) {
+    const s = fallScore(g, c, from, n, banned);
+    if (s < bs) { bs = s; best = n; }
   }
   return best;
 }
@@ -2281,6 +2321,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
     let intoWorks = false;
+    let back: Region | null = null;
     defenders.forEach((c, i) => {
       // The fortress rows (06:15Z (b)): a beaten fortress crew stays in its works as the town's garrison, taking no room
       // there, until it is stormed or starves, on its own stores and not the town's. Shattered, at under 15 in 100 of its
@@ -2318,6 +2359,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         liftedOut(c, target, dest);
         defU[i].fate = 'evacuated';
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
+      } else if ((back = !town && !overrun && c.str >= 0.15 ? fallThrough(g, c, target, banned) : null)) {
+        // (Units decide: its side's ground next to the field is full, not lost. It falls back through it, or into it.)
+        place(g, c, back); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = back.id;
       } else {
         const left = men(c);
         // (A fortress crew is read against its own size under the fortress rows: a small one taken whole surrenders.)
