@@ -1884,8 +1884,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     hold = Dnext > 0 ? EpowAfter / Dnext : 99;
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win && quit !== 'att';
     if (sky) g.sky[target] = { nat, turn: g.turn };
-    // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
-    if (acOn(g)) held = skyFought(g, nat, target, sky) === 'held';
+    // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month. A fight
+    // given up before it met the enemy (quit) builds nothing there; it counts only against the side that gave it up.
+    if (acOn(g)) held = skyFought(g, nat, target, sky, quit === 'att') === 'held';
   }
 
   // Wear, and what the commanders learned.

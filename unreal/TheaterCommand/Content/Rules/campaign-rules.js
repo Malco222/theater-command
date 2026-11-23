@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 88b8434b 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b22a4628 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -20432,10 +20432,15 @@
     if (gap <= 1) return { state: s.state, streak: s.streak };
     return { state: s.state === "held" && gap <= AC.sky.idle + 1 ? "held" : "contested", streak: 0 };
   }
-  function skyFought(g2, nat, region, won) {
+  function skyFought(g2, nat, region, won, gaveUp = false) {
     const M2 = mem(g2);
     let s = M2.sky[region];
     const ours = !!s && (s.by === nat || allied(g2, s.by, nat));
+    if (gaveUp) {
+      const { a: a2, d: d2 } = numbers(g2, nat, region);
+      if (!(d2 >= AIR.sky.least && d2 >= AIRWAR.sky.own * a2)) return s && ours ? settled(s, g2.turn).state : "contested";
+      won = false;
+    }
     if (!s || !ours) {
       s = M2.sky[region] = { by: nat, state: "contested", streak: 0, turn: g2.turn, since: g2.turn, best: -2, was: { state: "contested", streak: 0 } };
     } else if (s.turn !== g2.turn) {
@@ -31450,7 +31455,7 @@
       hold2 = Dnext > 0 ? EpowAfter / Dnext : 99;
       sky = Eafter >= AIR.sky.least && hold2 >= AIR.sky.win && quit !== "att";
       if (sky) g2.sky[target] = { nat, turn: g2.turn };
-      if (acOn(g2)) held2 = skyFought(g2, nat, target, sky) === "held";
+      if (acOn(g2)) held2 = skyFought(g2, nat, target, sky, quit === "att") === "held";
     }
     const aLost = att.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
     const dLost = def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
