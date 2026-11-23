@@ -733,7 +733,10 @@ names its drawing, its licence and its scales.
   through her airscrew's hub, its barrel standing this far out of her spinner's tip (it does not turn); socket
   `gun.nose` at its muzzle. `rudder_stripes`: (tag, colours from the rudder's leading edge back), her nation's stripes
   laid where a plain machine's flag goes. Her coat is two of the three colours of 1939-40 (the game's coat has two
-  upper colours; the dark blue-grey is left out), in soft patches over her cowling as over the rest of her.
+  upper colours; the dark blue-grey is left out), in patches over her cowling as over the rest of her, with a tight
+  sprayed edge (the art director, 2026-11-23: 10 to 15 cm, not a metre of haze). Each French module steepens its own
+  coat field (`_EDGE`) and sets a finer `grain` on her wings, tail and fins (and the LeO 451's fuselage), so no other
+  machine changes.
 - Her parts are a single-seat fighter's (`plane`, `wing.port`/`starboard`, `tail`, `prop.1`, `prop.1.blur`, `aileron.*`,
   `flap.*`, `elevator.*`, `rudder`); sockets `engine.1`, `gun.1` to `gun.4` (her wing guns), `gun.nose` (the cannon) and
   the usual others; clips a fighter's.

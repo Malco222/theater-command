@@ -25,7 +25,8 @@ NAME = "LeO451"
 # her fuselage at -10.57, her wing tips 11.26 out.
 #
 # The drawing is of the first LeO 45 of 1938. What the 451 of 1939-40 has that it does not show, and how it is given
-# here: her glazed nose, framed panes all round its tip and its upper half back to her pilot's windscreen (`glazed`);
+# here: her long glazed nose, finely framed panes all round its first 1.4 m and over its upper half back to her
+# pilot's windscreen (`glazed`), within the drawing's outline;
 # her pilot's framed canopy, a glass house standing just proud of the line of her roof (`hoods`); the gunner's glazed
 # position at the back of her cabin with its 20 mm Hispano-Suiza cannon trained aft, where the drawing shows only the
 # step in her roof behind it (a turret of the game's kind, `dome`); and her retractable ventral turret with its MAC
@@ -81,13 +82,17 @@ _FIN = [(0, -9.10, -9.90, 1.15, 0.02), (0, -8.62, -10.20, 1.30, 0.08), (0, -8.33
         (0, -8.97, -10.21, 2.65, 0.08), (0, -9.29, -10.01, 2.79, 0.05), (0, -9.50, -9.80, 2.85, 0.01)]
 _FINS_OUT = 3.40
 
-_PATCH = 3.4                                                # (her camouflage's patches, a bomber's size)
+# (her camouflage's patches, a bomber's size, with a tight sprayed edge, as the D.520's (france_d520._EDGE): the coat
+#  blends over 6 cm in the middle of an edge and 12 cm where it is broadest in nine of ten; her wing's, tail's, fins'
+#  and fuselage's rings stand closer (`grain`) so that her mesh does not blur it again)
+_PATCH = 3.4
+_EDGE = 3.0
 
 
 def coat():
     """Her camouflage field: the game's own noise at her patches' size."""
     def field(p):
-        return noise.noise(Vector(((p.x + 17.3) / _PATCH, (p.y * 1.2 - 8.1) / _PATCH, 0.0))) - 0.02
+        return _EDGE * (noise.noise(Vector(((p.x + 17.3) / _PATCH, (p.y * 1.2 - 8.1) / _PATCH, 0.0))) - 0.02)
     return field
 
 
@@ -95,8 +100,9 @@ NUMBERS = {
     "title": "LeO 451 (our own model)", "year": 1939,
     "hull": _HULL, "square": 3.0, "taper": _TAPER,
     "screw": 1.8, "blades": 3,
-    # (her glass nose: panes all round its tip ahead of 6.0, and over its upper half back to her pilot's windscreen)
-    "glazed": (6.0, 4.6), "glazed_sill": 10.0, "windows_back": True, "nose_frames": ((6.35, 6.0, 5.6, 5.1, 4.62), 10), "nose_cap": 6.45,
+    # (her glass nose, the production 451's long cone: panes all round it for its first 1.4 m, in eight hoops and twelve
+    #  ribs, and over its upper half back to her pilot's windscreen; her outline is the drawing's)
+    "glazed": (5.2, 4.6), "glazed_sill": 10.0, "windows_back": True, "nose_frames": ((6.4, 6.15, 5.9, 5.65, 5.4, 5.2, 4.9, 4.62), 12), "nose_cap": 6.5,
     "nose_bar": 0.5, "nose_frames_paint": "upper", "cabin_ribs": (50.0, 90.0, 130.0),
     "hoods": [(_HOOD, (4.35, 3.9, 3.45), True)],
     "opening": (4.40, 3.10, 50.0), "frames_paint": "upper",
@@ -106,6 +112,7 @@ NUMBERS = {
     "fins": [(_FIN, _FINS_OUT)], "rudder": (0.05, 1.0, 0.66),
     # (khaki and dark earth over light blue-grey, as on her fighters; her scribed lines narrow and soft)
     "patch": 1.0, "colours": {"upper": "4A5236", "upper2": "54463A", "under": "9EA8AA", "nose": "4A5236", "boss": "3A3C34"},
+    "grain": {"wing": 0.13, "tail": 0.12, "fin": 0.12, "hull": 0.15},
     "lines": (0.6, 0.55),
     # (each Gnome-Rhone 14N: its airscrew 2.75 out and 0.34 below her middle line, its nacelle running back under her
     #  wing to its trailing edge)

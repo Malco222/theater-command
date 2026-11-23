@@ -144,15 +144,20 @@ _WING = [(0.0, 1.396, -1.02, -0.69, 0.36), (0.46, 1.33, -1.02, -0.665, 0.341), (
          (5.043, 0.546, 0.156, -0.331, 0.021), (5.07, 0.499, 0.237, -0.329, 0.017), (5.09, 0.371, 0.364, -0.327, 0.01)]
 
 # Her coat: the three-colour camouflage of 1939-40 as two of its colours, the khaki and the dark earth (the game's coat
-# has two upper colours; the dark blue-grey is left out), in large soft-edged patches, over the light blue-grey beneath.
+# has two upper colours; the dark blue-grey is left out), in large patches with a tight sprayed edge, over the light
+# blue-grey beneath. (The art director, 2026-11-23: the edges were a metre of haze; a French spray gun of 1940 left
+# 10 to 15 cm.) _EDGE steepens the field across an edge: the coat blends over 0.09 of it, which is then 3 cm across
+# in the middle of an edge and 11 cm where it is broadest in nine of ten; her wing's and tail's rings stand closer
+# (`grain`) so that her mesh does not blur it again.
 _PATCH = 1.7
+_EDGE = 3.0
 
 
 def coat():
     """Her camouflage field: the game's own noise at her patches' size, on her cowling as on the rest of her (the coat
     of every other machine stops at her nose's own paint)."""
     def field(p):
-        return noise.noise(Vector(((p.x + 31.7) / _PATCH, (p.y * 1.3 + 12.3) / _PATCH, 0.0))) - 0.02
+        return _EDGE * (noise.noise(Vector(((p.x + 31.7) / _PATCH, (p.y * 1.3 + 12.3) / _PATCH, 0.0))) - 0.02)
     return field
 
 
@@ -195,6 +200,7 @@ NUMBERS = {
     # (khaki and a dark earth close in lightness, the earth kept dark so that it reads brown and not tan; her scribed
     #  lines narrow and soft, about a third as strong as the game's)
     "patch": 1.0, "colours": {"upper": "4A5236", "upper2": "54463A", "under": "9EA8AA", "nose": "4A5236", "boss": "3A3C34"},
+    "grain": {"wing": 0.12, "tail": 0.11, "fin": 0.12},
     "lines": (0.6, 0.55),
     # (her guns: two MAC 1934s in each wing, their ports in its leading edge, outside her airscrew's disc)
     "guns": [(1.95, 0.05, 0.03, 0.02), (2.25, 0.05, 0.03, 0.02)], "well": (1.05, 0.40, 0.34), "pitot": 0.95,
