@@ -1661,6 +1661,7 @@ namespace LandMen
 		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
 		 * men alike), and whether the look is on. */
 		std::map<int, double> BlockWorn;
+		std::map<std::string, double> ArmyWorn; // (an army's months, for a rider, who has no block: AddRider)
 		std::map<std::tuple<const ArmyColours*, int, int>, ArmyColours> AgedRows;
 		bool bWornLook = false;
 		double WornForced = -1.0;
@@ -2023,7 +2024,9 @@ namespace LandMen
 			const Soldier& S = *Mn.S;
 			const Variant& V = *Mn.Var[L];
 			const double A = Mn.WornA;
-			const uint64_t Who = (static_cast<uint64_t>(static_cast<uint32_t>(Mn.Track)) << 20) ^ 0xA6EDull;
+			// (a rider has no track: his own seed, PhaseSeed, tells his patches from another rider's)
+			const uint64_t Who = Mn.Track >= 0 ? (static_cast<uint64_t>(static_cast<uint32_t>(Mn.Track)) << 20) ^ 0xA6EDull
+				: static_cast<uint64_t>(static_cast<double>(Mn.PhaseSeed) * 4294967296.0) ^ 0xB1DEull;
 			auto Ratio = [](uint32_t To, uint32_t From, double Value, float* Out) {
 				for (int K = 0; K < 3; ++K)
 				{
@@ -3928,6 +3931,7 @@ namespace LandMen
 		// Each block's army and the soldier file its men are drawn from.
 		I.BlockArmy.clear();
 		I.BlockWorn.clear();
+		I.ArmyWorn.clear();
 		I.AgedRows.clear();
 		const J& Bs = Root["blocks"];
 		for (size_t K = 0; K < Bs.Size(); ++K)
@@ -3938,7 +3942,12 @@ namespace LandMen
 			I.BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
 			// (uniforms that age: his side's months in the line, the campaign's, where the recording has them)
 			const std::string Side = B["side"].Text();
-			if (!Side.empty()) I.BlockWorn[static_cast<int>(B["id"].Num0())] = std::max(0.0, Root["sides"][Side.c_str()]["worn"].Num0(0.0));
+			if (!Side.empty())
+			{
+				const double Months = std::max(0.0, Root["sides"][Side.c_str()]["worn"].Num0(0.0));
+				I.BlockWorn[static_cast<int>(B["id"].Num0())] = Months;
+				I.ArmyWorn[Army] = std::max(I.ArmyWorn[Army], Months);
+			}
 		}
 
 		// The tracks (a live battle's header has none: Extend brings them), then their men.
@@ -4852,6 +4861,19 @@ namespace LandMen
 		Mn.Track = -1;
 		Mn.S = Sol->second.get();
 		Mn.Colours = Colours != I.Armies.end() ? &Colours->second : &Plain;
+		// (uniforms that age: his army's months, as its men in the field wear them; the pre-check, 23 November)
+		if (I.bWornLook)
+		{
+			const auto Worn = I.ArmyWorn.find(Army);
+			const double Months = I.WornForced >= 0.0 ? I.WornForced : Worn != I.ArmyWorn.end() ? Worn->second : 0.0;
+			if (Months > 0.0)
+			{
+				Mn.Fresh = Mn.Colours;
+				Mn.WornA = static_cast<float>(std::clamp(Months / 18.0, 0.0, 1.0));
+				const int Garment = Unit01(Seed ^ 0xA6ED1ull) < 0.45 * Mn.WornA ? (Unit01(Seed ^ 0xA6ED2ull) < 0.65 ? 1 : 0) : -1;
+				Mn.Colours = &I.AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)), Garment);
+			}
+		}
 		Mn.Info.Block = -1;
 		Mn.Info.K = -1;
 		Mn.Info.Role = "commander";
