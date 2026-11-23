@@ -104,12 +104,23 @@ struct FMiniatureMesh
 	 * bFar gives its plainer form for the far zoom. False if there is no such model on this machine.
 	 */
 	bool Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar = false, const TArray<FLinearColor>* Kit = nullptr);
+	/**
+	 * Which of a sculpted aircraft's paints by date (its file's "schemes") stands in the painter's month: 0 for its own
+	 * colours, else one more than the scheme's place in its file. Name as Vehicle() takes it, "Mustang" or
+	 * "Mustang:USA". A model not read yet is read first (its far form). For a cache of shapes that must not hand out
+	 * one painted for another month.
+	 */
+	static int32 SchemeOf(const FString& Name);
 	/** Set from the command line ("-TheaterTrialTank"): armoured pieces show the trial tank in place of the nation's code-built one, to be judged beside it. */
 	static bool bTrialTank;
 	/** Set from the command line ("-TheaterOldPieces"): the pieces as they were before art fix 12 (plain bases, small figures in ranks, unweathered paint), to be photographed beside the new. */
 	static bool bOldPieces;
 	/** Set from the command line ("-TheaterCodeBuilt"): the vehicles built in code are shown even where a sculpted model of the same name exists. */
 	static bool bCodeBuilt;
+	/** Set by the air battle while it builds a torpedo group's aircraft: a model whose file carries both loads (its
+	 * "loads", torpedo and bombs: the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo and without its
+	 * bombs. Otherwise such a model is drawn with its bombs, as every aircraft on the campaign map is. */
+	static bool bTorpedoLoad;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size

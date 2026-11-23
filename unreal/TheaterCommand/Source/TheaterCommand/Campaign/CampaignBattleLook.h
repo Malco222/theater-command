@@ -25,9 +25,10 @@ namespace BattleLook
 	/**
 	 * The haze of an air battle: none near the eye, so that the sea and the land under it keep their darks beneath
 	 * the clouds, and thick toward the horizon. "-TheaterAirHaze=start in metres,density,falloff,most" tries other
-	 * numbers (leave one empty to keep it).
+	 * numbers (leave one empty to keep it). Start is where it begins, in metres from the eye, and Thicker how many times
+	 * the scene's own haze it is.
 	 */
-	void AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre);
+	void AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre, double Start = 15000.0, double Thicker = 2.0);
 	/**
 	 * A sky behind an air battle. The table has none (it is looked down on), and a battle seen from the air showed
 	 * its haze over nothing: black behind it, darker the higher the eye looked, and a straight seam along the horizon

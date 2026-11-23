@@ -79,6 +79,7 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 // (release 1.5) The general's ground battle: the campaign half of FIGHT IT YOURSELF (battle-bridge.ts).
 import { battleCalls } from './battle-bridge';
+import type { FoughtAir } from '../../../src/campaign/airfought';
 import type { FieldBill } from '../../../src/campaign/game';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
@@ -5205,8 +5206,12 @@ function staffPage(s: Game): Page | null {
   };
 }
 
-/** Something pressed in one of those rooms. Says what came of it; the game then draws the room again. */
-function act(action: string, region = -1) {
+/**
+ * Something pressed in one of those rooms. Says what came of it; the game then draws the room again. A raid fought out
+ * as an air battle (battle-bridge.ts battleEnd; release 1.6) comes with 'fought', what the battle reports, paid in place
+ * of the dice, and says its after card ('after').
+ */
+function act(action: string, region = -1, fought?: FoughtAir) {
   const s = game();
   const h0 = s.headlines.length;
   const part = action.split(':');
@@ -5216,7 +5221,7 @@ function act(action: string, region = -1) {
   let flies: Flight[] = [];
   let open = '';
   const air0 = lastAirReport(s);
-  const air = airAct(s, action);
+  const air = airAct(s, action, fought);
   if (air) {
     // The air war as its own game (the grand campaign): a raid is flown the moment it is ordered, by every group picked.
     ok = air.ok; note = air.note; open = air.ok ? air.open ?? '' : '';
@@ -5242,7 +5247,7 @@ function act(action: string, region = -1) {
         }];
       }
     }
-    return { ok, note, fly, flies, open, view: view() };
+    return { ok, note, fly, flies, open, ...(air.after ? { after: air.after } : {}), view: view() };
   }
   if (part[0] === 'probe') {
     // (Version 64) One corps feels out the line: the attack card is read again with what it found.
@@ -6342,4 +6347,4 @@ function find(name: string) {
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
-  ...battleCalls({ game, attack: playerOrder(attack) }) };
+  ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }) };

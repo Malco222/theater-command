@@ -1,6 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
+import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
@@ -1822,8 +1823,8 @@ export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: numbe
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
-export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[], fought?: FoughtAir): AirReport | null {
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human, fought) : null;
 }
 
 /**

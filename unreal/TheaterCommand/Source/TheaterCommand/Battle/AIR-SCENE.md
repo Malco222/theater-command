@@ -13,9 +13,11 @@ battle screen over it.
 | `AirFeed.h/.cpp` | Reads the bridge's JSON (sky, views, after card, recordings) into the flight core's terms. Plain C++. |
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
 | `AirBattleState.h` | The plain state above, kept out of the actor's header. |
+| `AirBattleMarks.cpp` | The strikes on the aircraft (Brian, 22 November): each of the core's hits kept on the aircraft it struck, in its own frame, and laid on its skin as a decal (`M_HitMark`) while it is near the eye. |
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
+| `SeaFace.h/.cpp` | The sea's face, plain C++ (the cloud test makes the same): the shore picture (where the water lies shut in, the trade wind's fetch, how open it lies, how far from the edge) and the whitecaps' picture the moving sea reads. |
 | `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted, the ground split finer near the battle, the yard's paving as worn slabs. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
 | `Content/Data/AirBattles/*.json` | The recorded battles, `oahu` and `midway-fleet` (ruling 238), and `bremen-b17` (a B-17 day raid of December 1943 with its Mustang escort, met by Fw 190s, over the board's own land with no stage; Brian's ask of 20 November to compare with the B-17 clip), written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
@@ -33,8 +35,24 @@ battle screen over it.
    - riding a fighter
    - the thick of it
    - riding again
+   - the chase view (`05c-chase-view`): his first fighter squadron ridden as a double click takes it, then one step
+     along it, the plate reading its second aircraft
    - the ships (the overview cut to the first ship that went down)
+   - the guns fire back (`06b-guns-fire-back`, release 2's item 14): 2.5 s after a ship's light guns are first laid
+     on an attacker within 1.6 km of her (a battleship or a carrier where the battle has one; at Pearl Harbor the
+     first such run fell on a destroyer in a nest), the camera on her, side-on to the line from her to him, the look at
+     two fifths of the way from her to him and 4 degrees down: she low in the frame, he high against the sky, her
+     streams and the heavy bursts between. The log says "Air battle: guns fire back picture on <ship>". The cloud test
+     finds the same moment (Pearl Harbor: Nevada under a Val's dive at 7:03 of the battle; Midway: Kaga under a
+     Dauntless's at 6:59). Every other picture due meanwhile waits until it is taken, as one waits for the ships.
    - the fight going on
+   - the strike marks (`09-strike-marks`, item 19): 105 s after the meeting, riding the aircraft flying that has been
+     struck the most (a cannon shell weighed as three rounds, a heavy shell as six). The log says "Air battle: strike
+     marks picture on <model> (key N): ... strikes on it"
+   - an ace's marks, when the battle has an ace or `-TheaterAceTest=` gives one (item 44; the art director's two frames):
+     `12-ace-close`, 30 s after the meeting, the eye 8 m off his record (his name and first row of marks; a German's
+     name and rudder bars), square to it, two metres above and a metre behind; and `12b-ace-chase`, 36 s after, the chase view behind him. The log says "Air battle: ace picture
+     ... on key N"; with no ace flying, neither is taken and the log says so
    - the after card
 
    Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
@@ -85,8 +103,10 @@ What else the scene draws for the battle:
 - Looking up, the sky is lifted toward a deep blue (the art director: never near black, about 90 to 110 luma graded;
   the Bremen film's zenith read 29, and 43 to 50 with the first lift of 0.3). Light is added on a bowl 9 km round the
   eye, none 12 degrees up and most at the zenith, tinted blue, and its strength grows with the eye's height above the
-  low haze (none below 1,000 m, all of it at 7,500 m). "-TheaterZenith=1.3,12" tries another strength and lowest
-  angle; 0 turns it off.
+  low haze (none below 1,000 m, all of it at 7,500 m). Round 18d (the art director, 23:06Z, on build 1786's 1.3: the
+  zenith still read 41, 56, 93 against her 50, 100, 150): strength 6, a greener blue (12, 110, 255), a third weaker on
+  the sun's side of the sky. "-TheaterZenith=6,12" tries another strength and lowest angle; 0 turns it off. The
+  picture run tries 4, 6 and 9.
 - From high up the sea's flat sheet ends short of the round world's horizon, and its far edge showed as a hard straight
   line across the sky's foot, the hazed sea under it lighter than the thin-aired sky over it (the art director on build
   1778's Bremen 01: the haze should swallow the horizon). A haze band stands round the eye at 0.6 of the way to the
@@ -116,8 +136,11 @@ Mouse and keys:
 - Right click on an enemy tag attacks it. Right click on the sky patrols there.
 - Drag turns the camera. The wheel draws it in and out.
 - H holds, R breaks off, and C switches the close view.
+- A double click on any squadron's tag, his or the enemy's, rides behind its leader (the chase view). In the close
+  view a click on a tag rides that squadron; left and right arrows step from aircraft to aircraft along it, up and
+  down from squadron to squadron (the plate's buttons do the same); Esc goes back to the strategy view.
 - Space holds the clock or lets it run. Keys 1 to 4 set the speed.
-- Esc answers KEEP FIGHTING. Enter presses CONTINUE.
+- Esc answers KEEP FIGHTING (with no question standing, it leaves the close view). Enter presses CONTINUE.
 
 A recorded battle shows the orders strip greyed out: it plays as it was fought.
 
@@ -200,6 +223,38 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   aircraft every frame (never eased toward it, so it cannot fall behind or swing past a turning one); only the way it
   trails is eased, over a third of a second. The horizon rolls a quarter of the bank, never past 15 degrees. A little
   motion blur (0.12). A fall, a straggle or a limp cuts to the next aircraft.
+- **The chase view** (release 2; Brian, 21 November 05:52Z: "click on the squadron and then it goes to a view of one
+  of the planes from behind so you can watch it. you can then move from one plane to the next if you want to see other
+  planes"). A double click on a squadron's tag rides behind its leader, in the close view's camera above; the
+  squadron is then his choice, kept to until he steps (no ten-second move to the fight). Its line is its aircraft
+  still flying and shown, leader first and on down the formation (`AirDesk::RideLine`); left and right step along it
+  and round the end (`RideStep`), up and down step to the last or next squadron's leader, his own squadrons first and
+  then the enemy's (`RideSquadrons`, `RideSquadronStep`). When the aircraft ridden goes down the view cuts to the next
+  of its squadron still flying, never back to the leader; with none left the view picks the fight again. A plate at
+  the top right says RIDING WITH, the squadron's name (the enemy's with its country word), "Aircraft 3 of 12" and
+  what it is about (wavering, heading home), with four buttons (‹ AIRCRAFT, AIRCRAFT ›, ‹ SQUADRON, SQUADRON ›);
+  tags keep clear of it. While the view picks its own, the plate says THE VIEW FOLLOWS THE FIGHT. It is a view, not
+  an order, so it works in a recorded battle too. The cloud test steps every squadron's line round both ways each
+  second and checks a fall steps on (on Oahu, Midway and Bremen: 6,546 lines, 71,155 aircraft, 3,622 falls, 0 wrong).
+- **The tug-of-war bar** (release 2; Brian, 21 November 05:55Z: "have each sides flag on either end of the bar and
+  then have it be like a tug of war in real time so you can see which side is winning the raid/engagement", and
+  14:58Z: "Can we put the country flags instead of country names"; the air thread's rule and the UI director's
+  ruling of 14:47Z, `/mnt/project-files/ui-director/tug-of-war-bar.md`: "the battle bar is the release 1 card's bar,
+  moving"). It takes the place of the strength fill and its start mark at the top middle; HOW NEAR TO BREAKING OFF
+  stays under it. His flag at the left end, the enemy's at the right (the table's own, `CampaignFlags`, as the
+  release 1 card draws them: 27 by 18, 8 clear of the bar; a plain chip where no table is up). His colour, a brass
+  gold (C9A24A), runs from his flag and the enemy's slate (6F7B88) from theirs; they meet at the knot with the
+  card's 3-pixel gap, so the side that is winning holds more of the bar, like a front line pushed toward the loser's
+  flag. The colours never swap and neither is red. A pale mark at the middle; no ticks, no handle, no words.
+  The knot (`AirDesk::KnotOf`) is the running form of the result the battle is judged by: x is the view's
+  `sky.score.ratio` (aircraft the defender lost + what the bombs were worth + 10, over aircraft the raider lost + 10;
+  1 or more a win), the knot x / (1 + x) from the raider's flag, and a defending player's the mirror (1 / x). Level
+  until the first loss; it follows the views as the battle shown reaches them, eased with about 1.5 s of lag on the
+  screen's clock (`KnotEase`); once the battle is over it lies at least 0.05 past the middle on the side the stamp
+  names (a side that held the field won whatever the exchange said). On the recordings it ends at 0.45 on Bremen (a
+  close defeat), 0.91 at Midway and 0.90 at Pearl Harbor. Until the flight core counts the losses the picture has
+  shown (the air thread, after the gunnery), it can move up to a fall or two before the fall is seen. The cloud test
+  checks it level before the first loss, eased, the other side's the exact mirror, and on the winner's side at the end.
 
 **The aircraft.** A sculpted model (`Content/Models`) has two shapes: its far one (a few thousand points) for every
 aircraft, and its near one (tens of thousands) made only for an aircraft within 300 m of the eye, or the one ridden,
@@ -513,6 +568,85 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   target), steeply down from 5 km, and a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
   stood in for there.
 
+**Each day's weather (round 18d; Brian, 21:53Z: "make sure the weather is different and not always cloudy").** The
+recording carries each battle's sky from the rules' weather (kind, base, top and cover in eighths), and the scene lays
+what it says:
+- **Fair, scattered and heavy cumulus differ in character, not only in amount** (the art director, 22:37Z). A fair
+  day (cover about 0.2) is small, flat, even clouds, low and few in streets; a scattered day (0.39) is as before,
+  drawn from the same numbers so it does not change; a heavy day (0.55 and over) is bigger towers in clusters with wide
+  gaps between, darker bases. A clear day has no low cloud.
+- **Cirrus and rain** (`LayCirrus`, `LayRainShafts`). A clear day has thin cirrus 8 to 10 km up: bundles of soft
+  threads along the wind aloft, fanning out and hooking at their downwind ends, round the target out to 45 km (a fair
+  day a little of it, none from 0.32 of cover up). A heavy day (cover 0.45 to 0.55 and over) has up to three grey rain
+  shafts under its biggest clouds, 7 km and more from the target and 5 km apart: four crossed soft sheets from inside
+  the base to a mist at the ground, lagging upwind as they fall, drifting with their clouds. Neither is drawn in the
+  software picture. `-TheaterCirrus=1`, `-TheaterRain=1` ask for them whatever the day; `-TheaterNoCirrus`,
+  `-TheaterNoRain` turn them off.
+- **The winter deck** (Bremen; the art director, 21:48Z): one lid about 1.8 to 2 km up, its tiles sunk under the top
+  so nothing pokes through but the odd cell 100 to 200 m proud; bumps five times wider than tall; finer toward the
+  horizon. The lid's underside is unchanged, so its clearance over high ground holds; a base puff hangs at most 170 m
+  under its tile's foot.
+- **The deck's shade on the ground and sea.** `AirSky::ShadeOf` works out, over the laid square, how much sun each
+  point under the deck gets (a 256-square picture: about 0.16 under a tile, full sun through a hole, blurred at the
+  edges), read along the sun's ray. The key light carries it as a light function (`M_DeckShade`, from
+  `build_content.py`'s `build_deck_shade`; run `TC_REBUILD=M_DeckShade Tools/build_content.sh` once), so the shadow
+  falls about 5 km down-sun at Bremen's 13-degree sun, and fades out over the deck's top so aircraft over it stay in
+  full sun. The picture repeats past the square (the deck's tiles do too). `-TheaterNoDeckShade` turns it off. Without
+  `M_DeckShade` the key light is as before, with a warning in the log.
+- **The far deck.** Past 14 km a flat sheet at the deck's middle, out to 600 km, carries the deck to the horizon as a
+  smooth pale sheet (from below, its base grey; from over it, its sunlit top). `-TheaterDeckSheet=` sets how solid it
+  is (0.4 to 1 by cover); `-TheaterNoDeckSheet` turns it off.
+- **Light bounced off the deck.** Over a deck in sun, the aircraft's bellies take light from below off its sunlit top
+  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=1` scales it (release 2: a sunlit deck under a winter sun throws three times what it did).
+- **The sun through the air by height** (release 2; the olive drab read mustard, about 20 degrees of hue warm, on the
+  Mac's check). The engine lights every surface with the sun as it reaches the sea, through the whole air: at Bremen's
+  13 degrees that is about 1.45 red over green and 0.6 blue over green (the air's scatter and its ozone), which turns a
+  green-brown drab mustard; the white star clips, so it hides the cast. The key light now works out its light through
+  the air above each point (`bPerPixelAtmosphereTransmittance`), so a bomber at 7.5 km takes about 1.25 and 0.9, and the
+  ground keeps its own. `-TheaterAirByHeight=0` lights everything as at sea level, as before. The log line after "the
+  sun a disc" says which.
+- **The haze over the sea** (release 2; the Mac's check: a white wall, the sea unreadable). Over a stage at sea the
+  haze is pale blue (`-TheaterSeaHazeInk=0.44,0.55,0.74`, blue over red by about +15 on the frame) and starts 30 km
+  out at 1.2 times the scene's density, so it whitens only at the horizon; over land (Bremen) it stays as it was
+  (7.5 km, 2.6 times, its own ink).
+- **Land raids' light** (the art director, 23:31Z, on build 1786's tan ground): over land with no stage (Bremen), the
+  sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (red and blue gain 1, in sun and under a deck), so
+  the sunlit ground reads grey-green (her target: saturation 0.10 to 0.18, blue under red by 5 to 12) and the town
+  grey-brown, never orange. `-TheaterKeyWarmth=4900` and `-TheaterLandGrade=red,blue` try others. Pearl Harbor and
+  Midway keep their 4,900 K.
+
+## The ships fire back (release 2)
+
+Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire machine gun fire and flak guns at
+them just like real life". The historian's research is `/mnt/project-files/naval-battles/ship-air-defence.md` (part B
+is for the scenes). The battle still decides every loss; the guns only show the fire those losses and misses came from.
+
+- **`ShipGuns.h/.cpp`** (plain C++, shared with the sea battle scene). It holds each ship's anti-aircraft guns as her
+  navy fitted them that month (`BatteryOf`: USA, Japan, Britain and the Commonwealth, Germany, Italy, the USSR,
+  France, and any other navy's usual small fit, by class bb, cv, ca, dd, ss, ag). The guns change with the war: the
+  American .50 calibre gives way to the 20 mm through 1942, the 40 mm comes from late 1942, and the Japanese 25 mm
+  doubles and doubles again from mid 1943. The Midway carriers have their own fits. `Gunnery::Fire` lays each crew on a
+  plane every frame. The heavy guns (5-inch, 12.7 cm, 4-inch, 10.5 cm and their like) are directed: time-fuzed
+  bursts where the plane was going to be, mostly behind it or off to the side, at most four rounds shown a second
+  (the nearest ships first). Against a torpedo plane low over the sea, they fire into the water ahead of it, and so
+  do the destroyers' and battleships' low-angle main guns. The light guns (.50 calibre, 20 and 25 mm, 1.1-inch,
+  40 mm, pom-pom) fire tracer streams from mounts along her decks. The streams come in bursts with their drums and
+  clips changed, hose about the plane and walk across it now and then (about 1 frame in 100 on it). A few rounds are
+  seen striking. The ships hold fire on a plane their own fighters are going in on.
+- **The kills.** A plane the battle says the ships' guns brought down falls under the nearest ship's light guns
+  (their streams go on it and a few rounds strike home as its fall begins), or, past them, to one burst of her
+  heavy guns. With no ship near, it keeps the one burst it had.
+- **The scene.** Streams are the kit's `AirGun` (new rows `air_guns.aa25` and `aa40`: a tracer in three for the
+  20 to 25 mm; every round a big tracer, a heavy flash and a puff of smoke for the 40 mm, at about 120 a minute). Heavy
+  rounds are `FxKind::ShipGun`: a flash and smoke at her deck (new muzzle rows `ship_aa` and `ship_main`, with no
+  dust ring over the sea), the flak firing take after its flash by distance, then the shell's burst (`AirFlak`,
+  heavy) or a splash. A ship's light guns of one kind are heard as one battery (the cannon take for 20 to 40 mm, the
+  hand-held heavy take for the machine guns). Tracers are in her navy's colours.
+- **Proximity fuzes.** `Hull.bProxFuze` hugs the bursts to the plane (part B2). It stays off until the rules give a
+  side the `proxfuze` research.
+- The cloud test checks every stream is from her own decks and in reach, at most 1 frame in 5 on the plane, some
+  hits and some bursts, and nothing with no ships (Bremen). It prints each ship's guns and the guns that fired.
+
 ## Bomb bays and sticks (release 1)
 
 Brian, 21 November 05:44Z: "add working doors in release 1", "have a realistic number of bombs drop from them as well
@@ -525,8 +659,17 @@ which you see and hear drop to the ground".
   10 air seconds of its run (`BayLead`): a sea raid's view carries the run, and a land
   raid's box is timed from when it comes inside the target ring (`TargetR`, the rules' run is 45 air s there). The
   bombs leave the bay one after another, 0.15 s apart (`StickGap`), from the hinge line, moving as she moves. Doors
-  held open 3 s after the last bomb, then shut over 2.5 s (`BayShutS`), eased. A jettisoned stick opens the doors at once and lets go as
-  they come open. A dive bomber, a torpedo and a fighter's bomb go at once, with no doors.
+  held open 1.5 s after the last bomb (`StickSteady`), then shut over 2.5 s (`BayShutS`), eased, as she rolls into
+  the rally turn. A jettisoned stick opens the doors at once and lets go as they come open. A dive bomber, a torpedo
+  and a fighter's bomb go at once, with no doors.
+- **The run held steady** (release 2; the coordinator, 21 November 13:57Z, from the films of the cut: the bomber
+  banked 50 to 60 degrees as the first bomb left; the art director's figures, 14:01Z). A level bomber with a stick
+  holds her heading at the drop (`RunHdg`), wings level, until 1.5 s after her last bomb: no bank past 2 degrees
+  (`RunBankMost`) from her doors opening to then, in her slot or straggling. Then the box's rally turn: a
+  four-engined bomber (two engines or more, or a span of 20 m or more) in her slot banks at most 20 degrees
+  (`RallyBankMost`), rolling in no faster than 5 degrees a second (`HeavyRollMost`); out of her slot, 30 at most
+  (`HeavyBankMost`). A falling bomber is not held. The flight core's check: "a stick let go wings level, a bomber's
+  turns gentle" (at most 3 degrees on the run, 30 ever).
 - **The model** (the modeller's batch, `battle-models/game-bay`): B17, Lancaster, He111 and Bomber carry `near.part`
   and `parts` (bay.port, bay.starboard: kind turn, pivot, axis, limits 0 to 85; bombs: the racked load). `TakeBay`
   lifts the doors and the load out of the near shape (sections 2, 3 and 4 of the aircraft's mesh); `Draw` turns each
@@ -541,6 +684,67 @@ which you see and hear drop to the ground".
   60 m, middle within 150 m, far past). All after their flash by distance / 343 s (none within 150 m, at most 3 s).
   A falling bomb whose landing is within 400 m of the eye gives its rush, bomb_release (1.76 s, ending at the
   landing; at most one each 0.7 air s), only at the battle's own x1 pace.
+
+## The moving sea (release 2)
+
+Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene".
+
+- **M_StageSea** (`Tools/build_content.py`, `build_stage_sea`; it is new, so `Tools/build_content.sh` makes it on its
+  next run). The stage's sea, and the painted shallows and reef over it, keep their colours (the deep paint, its long
+  patches drawn out along the trade wind, the shallows' paint); over them the water's surface moves. The ripples
+  picture the campaign map's water uses (`CampaignTextures::MakeWaterBumps`, its slopes at four sizes) is read six
+  times: a swell (320 and 410 m pictures, slopes from about 50 m down), a chop (64 and 80 m, from about 10 m) and
+  ripples (13 and 17 m, from about 2 m), each pair at two headings off the wind (0 and 14, 25 and -18, -40 and 55
+  degrees), all travelling downwind at the speed of their waves (8 to 9, about 4, about 2 m/s). The slopes are summed
+  in the world's frame over the mesh's own (the patches' tilt stays). Gloss 0.07 near, 0.22 past about 6 km, where the
+  waves are finer than a pixel and fold into a broader sun path (`FarDepth`, `FarLean`).
+- **Gusts** (cat's-paws and slicks; the art director's notes on v2, 07:20Z): the waves picture the campaign map's sea
+  uses (`CampaignTextures::MakeWaves`, its slow unevenness, alpha) laid 2.4 km to a tile across the wind and four
+  times that along it (patches drawn out 3 to 5 times along the wind), riding it at 7.5 m/s. In a gust the chop and
+  ripples lean up to 1.4 times as much, the water is up to 1.35 times as rough, its paint 0.88 and its specular 0.4;
+  in a slick they lean 0.45 times, the water is glassy (0.3 times as rough), its paint 1.12 and specular 0.7. Off the
+  sun's path a slick is lighter than a gust by about 6 levels at 4 km up (the stand-in); on it the roughness breaks
+  the path into brighter and darker patches (`SlickRough`, `GustRough`, `SlickLight`, `GustDark`, `SlickSpecular`,
+  `GustSpecular`). Their edges are broken into fingers some 50 to 200 m across (`GustFingers`, the same unevenness
+  600 m to a tile, riding with them; the art director on v3, 08:07Z).
+- **The shore picture** (`SeaFace.h/.cpp`, plain C++; `Tools/air_show/sea_face_test.cpp` checks it): worked out when
+  the stage is raised (about 0.5 s on Oahu, 0.8 s on Midway) from the stage's land, reef and works, 1024 pixels a
+  side over their bounds and 10 km of sea round them. Red how far the water lies from their edge; green how much of
+  the whitecaps the trade wind's fetch over open water raises there (under a lee shore few for 2 to 3 km, all past
+  about 6 to 10 km); blue how open the water lies to the ocean; alpha how closely land and reef shut it in (Pearl
+  Harbor's lochs, Midway's lagoon). A battle fought past the land's reach (Midway's carriers) has the open sea.
+- **Whitecaps** (`SeaFace::MakeFoam`, 512 pixels over 160 m, up to 300 whitecaps in rows across the wind about 20 m
+  apart, never overlapping, their edges feathered over half a metre): each a short streak across the wind (most
+  under 2 m, the largest 3 to 5 m, 2 to 4 times as long as it is deep, `HeadColour` 0.79/0.81/0.82) whose crest runs
+  down its length over 1.8 s, only the crest's own line solid white and the foam behind it lacy, with holes
+  (`HeadHold` 0.1 s, `HeadLace` 0.08 s, fading over `HeadFade` 1.2 s), and behind that a see-through, mottled,
+  faintly aqua tail 2 to 4 times as long (`TailColour` 0.50/0.62/0.62, half see-through at first) that is gone 3 to
+  6 s after it. (Two whitecaps that touched in the picture lit a thin white seam where a read between pixels mixed
+  their two times, the art director on v3; so they are kept two pixels apart, and each one's time is carried a metre
+  out round it.) The tail lies upwind of the head: the crest outruns the foam it leaves (the art director agreed). Read twice (160 and 190 m to a tile, 13 and 17 s cycles), put out of step from place to
+  place (`FoamShift`) so the tiles' repeats do not break together. More of them in the gusts, none in a slick, none
+  where the water is shut in, few in a lee. From 400 m out they become specks (`FoamNear`, `FoamSpan`): only a few
+  break (`FarCount`), each as bright as the share of its pixel it covers (`FarShare`), so they are bright by size;
+  none past 4 to 10 km (`FoamFadeFrom`, `FoamFadeSpan`). In the stand-in: low down, 2.7% of the sea more than 10
+  levels lighter for the whitecaps and 1.1% more than 30 (v3 as passed: 2.8% and 1.1%); 27 to 40 specks to 10,000
+  pixels at 1,500 m (v2's 25 to 31), most about 10 levels over the sea and the biggest 60 to 80.
+- **Calm and colour by the shore**: inside a harbour, a loch or the lagoon no swell, the chop at 0.3 (`CalmChop`)
+  and no whitecaps, the cat's-paws and ripples stay; its water greener and greyer away from its edge
+  (`HarbourColour` 0.06/0.11/0.075, `HarbourShare` 0.85). Under a lee shore the swell falls to 0.3 (`LeeSwell`) with
+  the fetch. On a reef flat, within about 300 m of its edge, the chop keeps more than half (`ReefChop`), and a reef
+  flat or lagoon is a clearer, deeper turquoise-green over the stage's shallows paint (`ReefColour`
+  0.021/0.30/0.26, `ReefShare` 0.6) with darker coral heads some tens of metres across (`CoralRead`, the waves
+  picture's slow unevenness 900 m to a tile, still; `CoralDark` 0.45). (The art director on v3: Ewa's reef flat
+  read as pale ice.)
+- **The surf**: on a reef or shore open to the ocean, a band about 90 m wide over its edge (more on the reef than off
+  it), broken into sections some hundreds of metres long that come and go (`SurfRead`: the waves picture's slow
+  unevenness and swell, 520 m to a tile, coming in at 2 m/s), white as the whitecaps' heads; inside the break its
+  whitewater, lacy, fading over the next 60 m toward the shore (`Wash` 0.55), so the line reads from 1,500 m.
+- `AAirStage::MovingSea` sets it up; without the material the sea is drawn still as before, with a warning in the log.
+  `-TheaterSeaWaves=` scales the waves' lean, the gusts and the whitecaps (0 still, 1 as made, 1.5 rougher);
+  `-TheaterFlatSea` uses the old ink.
+- The software stand-in of it (not the engine): `/mnt/project-files/air-battles/scene/round-water/sea-preview.png`
+  and `sea-shore.png` (the lochs, the south shore's reef, Midway, whitecaps close).
 
 ## Hook lines for the 3D builder
 
@@ -584,7 +788,7 @@ The lines already made on this branch:
 
 **The live battle.** For a raid from the campaign, call `GetWorld()->SpawnActor<AAirBattle>()->BeginLive(Session, Kind, Target, Ids)`. Kind is "bomb", "superiority" or "ship". This needs land's `battle-bridge.ts` and the air diff (`/mnt/project-files/air-battles/battle-bridge-air.diff`) in the rules bundle.
 
-Under ruling 217 there is no campaign-screen button until the playtester passes the battle, so nothing calls this yet.
+Under ruling 217 there is no campaign-screen button until the playtester passes the battle. Release 1.6 adds that button, switched off (item 48).
 
 ## Packaging
 
@@ -593,7 +797,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 ## On the first build, look at
 
 1. **Bank direction.** A plane turning right should have its right wing down. If every bank reads backwards, negate `P.Bank` in `AAirBattle::Draw` and in the close camera.
-2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. (On build 1720 the close view's aircraft were far and nearly level with the eye, and read as seen from ahead; the stars on the P-40's wings show it was from behind. The close view now looks down on its back from 22 m.) The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them. Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span, in its navy's paint.
+2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. (On build 1720 the close view's aircraft were far and nearly level with the eye, and read as seen from ahead; the stars on the P-40's wings show it was from behind. The close view now looks down on its back from 22 m.) The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them; so do the Hellcat, the Me 262 and the C.202 wherever a battle names them (by those names, or "F6F", "Me 262", "C.202", "MC.202"). The Me 262 has no airscrew (the airscrew test passes a machine whose every engine is a jet when none is found). Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span, in its navy's paint.
 3. **The tags.** They sit over their formations, his own in cream and the enemy's in muted paper. Tags that would touch join one block: it shows two (the groups in hand, then his own, then the largest) and a "+N more groups" line, never a column. A block moved off its formation keeps a thin line to it. The near line and "x10 UNTIL THE FORMATIONS MEET" are amber on a dark plate; the aim slip and the after card wrap their lines.
 4. **The clouds.** They should be white on their sunlit tops, grey under their flat bases, and soft at the edges,
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
@@ -608,12 +812,403 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat
    card. If the grain shows as a pattern, `-TheaterGroundGrain=0.15` softens it.
 6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
-7. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 10 s before the bombs, both doors swing
+7. **Round 18d's weather.** Bremen: the deck's shadow on the town and fields, about 5 km down-sun of the tiles, its
+   holes' sunlit patches; the deck melting into a pale sheet at the horizon, no bright band under its far edge; the
+   bombers' bellies lit a little from the deck below. The `Air battle` log says if `M_DeckShade` is missing. A clear
+   day (`-TheaterWeather=0.05`): faint cirrus streaks high up, no low cloud. A heavy day (`-TheaterWeather=0.55`):
+   towers in clusters, and two or three grey rain shafts off to the sides.
+8. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 10 s before the bombs, both doors swing
    slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
-   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
-   after the last. If a door turns up into the
-   fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in `Draw`.
-   If a door swings about the wrong line, the pivot's mapping in `TakeBay` (the file's x forward, y right; the
-   shape's nose to -X, right hand at -Y) is off. Then the stick landing: one rolling stick of blasts as it walks
-   across the ground, after its flash by the distance.
+   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; her wings stay level from the
+   doors opening until about 1.5 s after the last bomb, then the doors start to shut slowly as she rolls gently into
+   the rally turn (no more than about 20 degrees, rolling in over 4 s or so; never past 30). Each bomb leaves from
+   inside the bay, between the doors (release 2's Mac check: they fell from the wing), and no bomber banks or twitches
+   from the doors opening to the last bomb gone (the cloud test's "a stick let go wings level"). If a door turns up into
+   the fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in
+   `Draw`. If a door swings about the wrong line, the pivot's mapping in
+   `TakeBay` (the file's x forward, y right; the shape's nose to -X, right hand at -Y) is off. Then the stick landing:
+   one rolling stick of blasts as it walks across the ground, after its flash by the distance.
+9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
+   outside it should glitter where the sun's path lies on them, the glints moving downwind, small waves over larger
+   ones, nothing seen to slide or to repeat in a grid; far off a soft broad sun path, no shimmer. Toward the sun from
+   the flyover, the path broken into brighter and darker patches drawn out along the wind that drift downwind (the
+   gusts); off it, the slicks a little lighter than the gusts. Low down, on the open sea, short white streaks across
+   the wind breaking for a second or two with faint mottled foam left behind them, more in the gusts; from 1,500 m a
+   sparse scatter of specks, none pure white; none in the lochs or Midway's lagoon, few within 2 to 3 km of Oahu's
+   south shore; a broken white surf line along the reef off Ewa and round Midway's rim, whitewater inside it, the
+   reef flats turquoise-green with darker coral heads. Close (40 m): the foam's edges soft, no thin white rims, the
+   heads a narrow bright line with lacy foam behind (the art director's checks on v3). The `Stage:` log line gives
+   the shore picture's time (about 0.5 s on Oahu); if whitecaps show in the lochs or the surf lies off the reef, the
+   shore picture's placing is off: it is now carried on the sea mesh's first texture coordinate (`AAirStage::ShoreAt`,
+   worked out on the CPU in doubles), as the world position on the GPU misplaced it on release 2's Mac check (whitecaps
+   inside Pearl Harbor, the harbour no greener). Far off, a whitecap flashes white only at its head, never as a slab. If the waves read as too rough or too calm,
+   `-TheaterSeaWaves=0.6` or `1.4` (it scales the whitecaps, the surf and the gusts too; 0 is a still sheet). If the
+   glitter crawls the wrong way, the reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the
+   patches do). The `Stage:` log line says if `M_StageSea` is missing.
+10. **The chase view** (release 2). In any battle, double click a tag: the picture cuts (no swoop) to behind that
+   squadron's leader, the plate at the top right with its name and "Aircraft 1 of N". Right arrow: a cut to the next
+   aircraft, "Aircraft 2 of N"; left: back. Down and up: the next squadron's leader, his own first, then the enemy's.
+   Hold right: the steps go round the squadron and back to the leader. Let one ridden go down: the next of its
+   squadron, never back to the leader. Esc: the strategy view. The ‹ and › signs on the buttons come from Courier
+   Prime; if they show as boxes the screen's font lacks them. If arrows turn the camera instead, something before the
+   screen took the keys (the screen must have the keyboard focus, as for H and C). The picture run's
+   `05c-chase-view` shows the plate; tags must not sit on it.
+11. **The undersides** (release 2; the art director, 21 November 14:01Z). Bremen, a B-17 seen from below against the
+   sky: her belly should read 60 to 90 (of 255) on the frame, a neutral grey with a little sky blue in it, not near
+   black (the release 1 cut measures 9 to 19). Round 18d lifts the bellies with the light from the deck below (item
+   7); if they still read under 60 on this base, the belly's fill from the sky is short, not the paint. Release 2's
+   Mac check read 38 to 41: the sea or deck's bounce is now three times as strong, more with the sun higher
+   (`WeatherAt`'s bounce; `-TheaterBounce=` scales it again).
+12. **The olive drab** (release 2; the art director, 14:01Z). The same B-17's sunlit upper side should read as a
+   green-brown drab, not mustard: saturation 0.15 to 0.25, red over blue by 8 to 20 (the cut measures about 110, 100,
+   60, saturation 0.46). If it reads mustard, test in turn: the paint's base colour (the model's drab swatch), the
+   sun's warmth on this day's weather, and the grade (the battle's grade may be missing on this base). The game-wide
+   curve and bloom stay as they are. Release 2's Mac check found the warmth the sun's, through the whole air: the key
+   light now takes the air above each point (`-TheaterAirByHeight=1`, "The sun through the air by height" above); if
+   it still reads warm with that on, the model's drab swatch goes to the planes thread (about #4F583E).
+13. **The tug-of-war bar** (release 2). Any battle, the top middle: his flag at the left end and the enemy's at the
+   right, each about a line of text high, the same flags as on the battle card; gold from his flag, slate from
+   theirs, meeting in the middle at the start with a small dark gap and a pale mark at the middle. As the first
+   aircraft go down the meeting point slides, smoothly, never a jump; on Bremen it drifts toward his flag (the
+   Germans winning) and at Midway and Pearl Harbor it swings well toward the enemy's flag once the bombs land; when
+   the stamp comes it sits on the winner's side. No old strength fill, no start mark, no words beside the bar. If a
+   flag shows as a dark chip, the table was not found (`AAirBattle::FlagPicture`); if the flags read squashed, the
+   brush's size (96 by 64) is off for the picture the table paints.
+14. **The ships fire back** (release 2). Pearl Harbor, the camera on Battleship Row once the dive bombers come down:
+   short red-orange streams of .50 calibre and the 1.1-inch climbing from the ships' decks (never from the water or
+   the land beside them), in bursts with gaps, hosing about the planes and nearly all passing behind them; black
+   bursts of the 5-inch higher up, mostly behind and off to the side of the formations; a flash and a puff of smoke
+   at a ship's side for each heavy round, the boom after it by distance. Midway, near Akagi or Hiryu as the
+   Dauntlesses dive: the Japanese 25 mm in short bursts, its tracer pale yellow-white (Japan's colours in the kit), the
+   12.7 cm bursts among the dive bombers. Now and then a few sparks on a plane; a plane the ships bring down starts
+   its fall under their streams. If a stream starts off a ship's deck, its mounts are laid by `Hull.Long` and `Beam`
+   (the stage's hull sizes, `AirFeed::ReadView`). The cloud test's `ships' guns` lines list what each ship carries.
+   The picture run's `06b-guns-fire-back` is this item's frame (release 2's r2d run had none: its ships picture came
+   after the raid, or on a carrier already ablaze).
+15. **The screen in the close view** (release 2's Mac check: the dispatches covered the ridden aircraft in Bremen,
+   Midway and Oahu 03 and 05, a tag sat on it in Oahu 05). Riding any aircraft, no dispatch line and no tag over it:
+   the dispatches broken to the room left of it, else laid at the bottom right, else raised above it; the tags stepped
+   off it. Their plates darker (the oldest line still reads over white cloud), the tags' and the chase plate's count
+   lines in paper, no tags under the after card, and no line said twice while it is on the screen.
+16. **The quays** (release 2's Mac check: Pearl Harbor's quays and walls flat tan cards). From 1 to 2 km over the navy
+   yard and Ford Island, the quays' and piers' tops paved in slabs about 10 m square, each a little lighter or
+   darker, with the yard's patching and stains, the slabs running along each quay (the cloud test's ground line
+   counts them, and checks no crack opens between them).
+17. **The cuts** (the camera and film director's note, 22 November). At each cut (the flyover's shots, a picture, a
+   ride from one aircraft to the next, the jump of the strategy camera, and back to the table) cloud, flak smoke and
+   the light start clean on the new shot: no smear or pumping for a frame or a few. The film opens on the flyover,
+   with no frame drawn from sea level at the stage's middle first. Each cut calls SetGameCameraCutThisFrame (AirParts::
+   TellCut: DrawSky's cut, the close view's cut, the view taken and given back); the eye is aimed once before it
+   becomes the view.
+18. **Smoke goes into the air** (Brian, 21 November 18:00Z: smoke that fades gradually; the effects kit's 2a200875).
+   A flak burst stays dark to about 8 s, then greys, widens and thins, gone by 25 s; an aircraft's explosion cloud is
+   gone by 30 s, a hit's puff by 6 s. As it thins it pales into the sky behind it, not into a mid grey: the log says
+   "Air battle: the air's smoke pales into the sky behind it, on screen 202, 209, 221" (over the sea; 219, 224, 230
+   over Bremen; greyer under a deck). If old smoke reads as a darker or lighter blot against the sky, measure the sky
+   behind it and try "-TheaterSmokeSky=r,g,b" (0 to 255) with that measure (AirParts::SkyBehind).
+19. **Bullet holes and damage** (Brian, 22 November 04:12Z: "if a plane gets hit make sure the bullet holes and damage
+   shows on the wing or fuselage"). Rebuild the decal first: `TC_REBUILD=M_HitMark Tools/build_content.sh`. Every hit
+   the flight core shows is kept on the aircraft it struck for the rest of its flight: a machine-gun strike as a stitch
+   of three small holes within about a metre, a 20 or 25 mm shell as a plate-sized tear with a hole beside it, a 37 or
+   40 mm as a tear a head could go through. Each hole is black, ringed by a narrow lip of torn bare metal that catches
+   the light, with soot blown back over the paint round it, its edge ragged. They are drawn on the ridden aircraft and
+   any within 400 m (at most 24 an aircraft, 240 in all), and stay put on the skin as it banks and rolls. Look at
+   `09-strike-marks`: the marks on the wings and fuselage, none floating off the skin or lying on the airscrew disc,
+   none showing through on the far side of the fuselage. A shell's tear may show on both faces of a thin wing (it went
+   through). The log's first lines: "Air battle: strike marks: the first kept on ..." and "... the first laid on the
+   skin of ...". If the marks are too faint at the ride's distance, say so; their sizes are in `MarkLooks`
+   (AirBattleMarks.cpp). The cloud check fitted every hit in all three battles to the aircraft it struck (365 at
+   Bremen, 352 at Pearl Harbor, 595 at Midway; ships' hits to the aircraft they name).
+20. **Dead engines' airscrews** (the realism audit of 22 November: every airscrew turned on, dead or not). A B-17 that
+   has lost an engine, seen near: that engine's airscrew either windmills at about half the others' turn, or, once
+   feathered, stands still, its blades edge on to the wind (dark strips from the boss to the tips, the turning disc
+   gone). The right engine: engine 1 is the port outer, as the crews counted, and the flight core's trail of smoke
+   comes from the same nacelle.
+21. **Every parachute** (the audit: only the nearest 16 were drawn). When three B-17s go down together some twenty to
+   thirty canopies hang in the sky at once, all drawn: the near ones with their rigging, past 600 m with fewer sides,
+   past 2.5 km as a plain canopy and its man. Only past 240 are the farthest left out.
+22. **Clouds: a few big ones and many small** (the art director on 2b177386's frames, 22 November 04:16Z: "popcorn:
+   one size, even spacing"). On Pearl Harbor and Midway (three eighths of cumulus) the big ones, 1.5 to 3.5 km across,
+   are laid first and take half the cover, about a hundred of them in the 44 km square; a few hundred middling ones,
+   600 m to 1.5 km, a quarter; and some 1,900 small ones, 200 to 600 m, the rest, most of them gathered round the
+   bigger and a few out in the open sky. A small one is drawn out to 34 times its width (a 200 m one to about 7 km),
+   so the sky draws 5 to 27 per cent fewer puffs than 2b177386's did. Look at Pearl 01, 02 and 07 and the Midway
+   flyover: big heaps with small rags round them and open sky between, not a field of one size. The cloud check's
+   pictures are in /mnt/project-files/air-battles/scene/round-r2e/clouds/. Build-ups over Oahu's mountains are not
+   done yet.
+23. **The paint flat, not shiny.** The aircraft are now painted 0.78 rough with 0.3 specular (was 0.5 and 0.45): the
+   P-40's olive drab on Pearl 05 read sand, (198,180,161), where the low sun ahead glanced off its wing. Look at
+   Pearl 05 and Bremen 02: olive drab reads olive drab near the art director's matte #555A47, no sand or pale sheen.
+   The log says "Air battle: the aircraft's paint 0.78 rough, 0.30 specular." "-TheaterPlaneInk=0.7,0.35" tries
+   others (roughness, then specular). The canopies are in the same paint, so they are duller too; say if they read
+   as painted over.
+24. **Haze over the sea bluer.** Over the sea (Pearl Harbor and Midway) the haze band at the horizon now takes the
+   sea's haze, (0.40,0.53,0.76), not the land's, and the air's white dust is 0.6 of the battle look's. The log says
+   "... the air's dust 0.60 of the battle look's over the sea". Measure the horizon on Midway 01 and Pearl 02: pale
+   blue near (196,212,230), fading over less than a third of the frame, not (215,218,225). If still milky try
+   "-TheaterSeaDust=0.4" and "-TheaterSeaHazeInk=0.36,0.5,0.76"; if the sea's far edge shows a line, say so. Bremen,
+   over land, is unchanged.
+25. **Quays grey; Battleship Row in Measure 1.** Oahu's concrete is a cool grey, 8A8D90 (was the warm 8F8B83 that
+   read tan under the morning sun); the pads and aprons too, on both stages. The American ships on the stage are in
+   Measure 1: Dark Gray 5-D for the kit's navy grey, and their wooden decks stained Deck Blue 20-B. The log says
+   "Stage: Battleship:USA in Measure 1 ...". Look at Pearl 06: the battleships cool dark grey from above, not tan.
+   The map's own miniatures keep the kit's paint.
+26. **The strategy view on the aircraft.** It now follows the crowd it frames as the crowd moves and eases only a
+   jump to another crowd: before, at the clock's x10 it trailed the raid by a kilometre and more, and Pearl 01,
+   Midway 01 and Bremen 01 showed empty sky. It also stands at 800 m and 12 degrees down (was 1,100 m and 14). Look
+   at 01, 04 and 07 in every battle: aircraft in the frame, a B-17 about 70 pixels across at 1920. The guns fire
+   back picture, 06b, frames ship and aircraft with an eighth to spare (was a quarter), 350 m at the nearest.
+27. **The ride's log.** While riding, the dispatches show only the last four, at least 34 characters wide beside
+   the aircraft ridden. Look at 03 and 05.
+28. **The strike at the player's pace** (the realism audit of 22 November, 4.2; the flight core air-r2-core). While
+   bombs or torpedoes are in the air, a bomber's doors are open on its run or a dive is going down, the clock holds
+   his own pace even before the formations meet and on the way home: the tag reads "THE STRIKE · RUNNING ×1". Five
+   seconds after the last of it the clock eases into ×10 over three seconds and the tag goes back to "×10 UNTIL ...".
+   Bremen and Midway: the bomb's rush (bomb_release) is heard as a stick falls near the eye, and not while the clock
+   runs fast. The rally: the lead drops first, the rest of the box on him, then it turns home on him (the flight
+   core's own rally, which replaces the scene's of e01b4c03).
+29. **Akagi's column and far bomb carpets** (the effects kit's 01f2dfc7; the art director on Midway 06 and 06b). Midway
+   06: a carrier lost to fire stands under a column, black and dense at her deck, leaning downwind and paling browner
+   grey as it climbs to some 600 m, never a soft black ball; it is already grown when she is lost. 06b and Pearl 06:
+   the ships' 25 mm and 40 mm read as soft amber hoses with a hot head every third round, thinning past 300 m, out by
+   2 km and 3.5 km, no near-white. Bremen 01 and 07 and the strategy views: bombs landing far off still show (the kit's
+   far form), each where the flight core lands it; near ones as before. Log: none new.
+30. **No aircraft shadows past a kilometre** (AS1 of the production lead's battle-scale plan, 22 November). An aircraft
+   in the air casts its shadow only within 1 km of the eye (1.1 km before one casting stops); one on the ground keeps
+   it to 3 km. Look at the strategy views (01, 04, 07) and the chase: no aircraft should change its shading as it
+   crosses a kilometre; if one does, "-TheaterPlaneShadowM=1500" tries a longer reach (the log then says "Air battle:
+   aircraft cast shadows within ..."). Read stat unit's graphics time at Bremen 07 with and without
+   "-TheaterPlaneShadowM=100000" (every aircraft casting, as before) and give both.
+31. **Small clouds from above: no cotton balls** (the art director on a1acb552's frames, 22 November 08:13Z, her first
+   mend). Each small cloud (100 to 600 m) is now drawn one and a half to twice as long as it is wide (one in seven to
+   2.5; her trim on the r2g sheets, 11:22Z: past 2.5 they read as rice grains), its top two or three bumps, laid along
+   the wind with a ragged edge, and far off its one far shape is long the same way, never a round dot. They gather: after one,
+   one to five more follow downwind in a short street, with open sea between the clumps and streets; the share of the
+   sky they cover is unchanged. Each casts a soft oval shadow on the sea down-sun (out to 10 km, fading over the last
+   quarter). Look at Pearl 01, 04, 05c, 07 and 09 and Midway 01, 02, 04, 05c and 07: clumps and streets with open sea
+   between, the shadows soft and about 0.75 of the sea's value, no hard edge and no stripes; say if any cloud still
+   reads as a round dot. The cloud check's before and after sheets are in the round's `clouds/` folder.
+32. **The paint flatter again** (her third mend: the P-40 read sand from above, the TBD neutral). The aircraft's paint
+   is now 0.9 rough with 0.15 specular (was 0.78 and 0.3), so the sky's sheen at a grazing look no longer washes it.
+   The log says "Air battle: the aircraft's paint 0.90 rough, 0.15 specular." Pearl 05: the P-40's upper wing olive
+   drab about 95 to 120, red no more than green, blue about 0.65 of green; Midway's TBD blue-grey, blue 10 to 20 over
+   red. If still pale, "-TheaterPlaneInk=0.95,0.08".
+33. **Undersides lit by what is below** (her fourth mend: Bremen 09's B-17 wing 20 to 26 over a deck of 227). The
+   aircraft alone now take a light shining straight up, the colour of what lies under them: over a sunlit cloud deck
+   a near white at 0.67 (the sun is about 7); over the open sea a blue-grey at 0.23; over land a grey-green; none at
+   night. It lights only faces turned down and throws no shadow; the sea, ground, ships and smoke keep their own light.
+   The log says "Air battle: the light from below 0.67, (0.95,0.97,1.00), over ... (the view down 0.77 bright)."
+   Bremen 09: the bellies and wing undersides 80 to 110; Pearl and Midway over the sea 40 to 60, never black.
+   "-TheaterUnderLight=1.5" makes it stronger, 0 takes it away.
+34. **The sea's haze bluer still** (her sixth mend: the horizon at 193,201,212). The haze over the sea is now
+   (0.42, 0.60, 0.88), was (0.40, 0.53, 0.76): blue up some 18 levels at the horizon, green some 10. Midway 01 and
+   Pearl 02: the horizon about 196,212,230; the fade still about 29% of the frame. "-TheaterSeaHazeInk=r,g,b" tries
+   others.
+35. **The strategy view framed by type** (her fifth mend: Bremen's B-17s 145 to 290 pixels, Pearl 01 and Midway 04
+   10 to 25 pixel specks). The look settles on the middle of the aircraft near the crowd it follows (those within
+   350 m), not on empty sky between groups, and stands off so the middle aircraft is about 70 pixels across at 1920 for
+   bombers of 25 m span or more and about 45 for fighters, 250 to 1,500 m away. Each strategy picture writes a line:
+   "Air battle: strategy picture <name>: N groups framed, X m off for a middle span of Y m (about Z pixels across at
+   1920); of N aircraft shown the nearest ... m from the look, ... within 600 m of it; the eye ... m up." On the
+   2881-wide frames a B-17 about 105 pixels, a fighter 60 or more. Send these lines with the frames.
+36. **Bullet holes in walking lines** (her seventh mend; Brian, 04:12Z). A burst's first strike on an aircraft lays a
+   line of holes walking across the skin: machine-gun rounds 6 to 14, 0.3 to 0.8 m apart, each a dark dot about 6 cm
+   wide with a bright bare-metal rim; the same burst's later strikes add 2 or 3. A 20 mm hit lays 2, 0.5 to 1.2 m
+   apart, each a 15 to 25 cm star-shaped tear. Flak lays one torn hole with splinter holes round it out to 1.5 m. The
+   ride for 09 looks at the side with the most marks, from below if most are underneath. Rebuild the decal first
+   (`TC_REBUILD=M_HitMark Tools/build_content.sh`: new Star and MetalColour). Look at 09: lines of small holes, not
+   one big tear; none floating or on the airscrew disc.
+37. **Two new pictures: a dead engine and the parachutes** (her eighth mend). `<key>-10-dead-engine.png` rides an
+   aircraft flying on with an engine out (a bomber before a fighter), the eye on that engine's side, 85 s after the
+   formations meet: its airscrew windmilling slowly or stopped edge-on. Log: "Air battle: dead engine picture on ...:
+   engine N of M out, its airscrew windmilling (or stopped); the eye on its right (or left)", or "... no aircraft flew
+   on with an engine out, so none taken." `<key>-11-parachutes.png` is taken 3 s after three or more open canopies
+   first hang within 1.5 km of each other, the eye some 300 m off them: every canopy drawn. Log: "Air battle:
+   parachutes picture: N open canopies within 1.5 km of the look, the eye ... m from their middle."
+38. **Fires on a ship burn as a ship's** (the effects kit's Burn bOnShip, 08a18f21). Every fire the stage and the ship
+   looks light on a ship (a bomb on her deck, her magazine, her end, a look's fire, its beaten-out fire) is told the
+   kit as afloat, so however small or low it is it never takes a burning tank's look. Look at Pearl's and Midway's
+   ships picture (06): deck fires with a ship's column, no squat tank-fire shape on a deck.
+39. **Fuel balls** (the effects kit's FuelBall, the art director's head D). An aircraft flown into the ground (not a
+   belly landing, not a piece of one) throws a rolling ball of burning fuel 15 to 25 m across by its size (a
+   fighter's 15, a heavy's 25), then burns on as before. A bomb that bursts on an oil tank of the stage, or within 6 m of
+   its wall, sends that tank up once: a ball off its roof (24 m) and a fire that burns on 30 minutes. Log: "Air
+   battle: an oil tank goes up (N of M alight), a fuel ball 24 m across, D m from the bomb." The stage test
+   (`-TheaterStage=midway`) throws a ball off each of Midway's six tanks.
+40. **The camera keeps off a fresh fuel ball** (the camera rules' 13, the art director 22 November 08:08Z). No eye
+   stays within twice a ball's width (30 to 50 m) in its first 2 s on the air clock. The close view is cut on the
+   flash to another aircraft whose eye stands clear (a fighter's eye 23 m from it, a heavy's two spans); with none
+   clear, the eye stands off the ball at its reach until the 2 s are out. The overview is drawn back along its own
+   line until clear, the player's zoom with it. Logs: "Air battle: the close view cut on a fuel ball's flash ...
+   (rule 13, cut N)", "Air battle: the overview drawn back off a fuel ball's flash, A m off to B (rule 13, cut N)".
+41. **The effects drawn alongside the sky** (the production lead's FX2, the kit's TickBegin and TickEnd). Each kit's
+   own frame (the air's and the ground's) is drawn on a worker while the scene paints its sky, begun once the
+   frame's shells, fires and trails are given and the eye is set, ended after the sky. The sky behind the smoke
+   (SetSky), asked between, comes a frame later. `-TheaterFxOneTick` puts both back on the game thread after the sky,
+   as before, to compare. In a trace: AirBattle_EffectsBegin, then AirBattle_DrawSky, then AirBattle_EffectsTick (the
+   wait for the workers, short when they finished under the sky).
+42. **Aircraft past 300 m drawn as copies, and a light shape past 1.5 km** (AS1 of the production lead's battle-scale
+   plan, 22 November: "B-17 middle shape (~1,500 triangles); instanced middle and far tiers"). Each aircraft was a
+   mesh of its own, handed to the drawing thread afresh every frame, for the picture, its depth and its shadow: at 150
+   aircraft, 150 of each. Now an aircraft past its near shape (300 m, 450 m going out; never the ridden one, nor one
+   with its bay open) is a copy in one instanced mesh for its model and paint, sent once a frame with where each copy
+   is and where it was the frame before (so the anti-aliasing and the blur see it move). Out to 1.5 km a copy is its
+   far shape, as before; past 1.5 km (the battle's 55 degree lens; a narrower lens moves it out as far as it enlarges)
+   its light shape: its far shape taken down to 500 to 1,500 triangles (Battle/AirLight; a B-17 7,122 to 1,499, a Kate
+   11,002 to 1,500, a fighter some 1,900 to 500), within half a pixel there of the far shape (a pixel is 1.45 m at
+   1.5 km), its paint lines kept. Shadows as item 30: within a kilometre, three on the ground. The near shape, the
+   airscrews, the bay and the strike marks are its own mesh's, as before. Look at the strategy views (01, 04, 07) and
+   the chase: no aircraft should change its paint or its outline as it crosses 300 m or 1.5 km, and none should jump
+   or smear as it does. If one does, `-TheaterPlaneCopies=0` draws every aircraft on its own mesh as before, and
+   `-TheaterPlaneLightM=3000` moves the light shape out. Every 10 s the log says "Air battle: N aircraft drawn as
+   copies, K on their own meshes, and B bombs falling as copies, in M meshes"; the light shapes are logged as they are made ("Air battle: B17:USA's
+   light shape ..."). Read Bremen's game thread and draw thread times with and without `-TheaterPlaneCopies=0`.
+43. **Bombs and torpedoes falling as copies** (AS2 of the battle-scale plan). Each was a six-sided rod laid afresh in
+   the small things' mesh every frame; a raid's carpets were hundreds of them rebuilt and sent each frame. Now each is
+   a copy of one bomb mesh (or one torpedo mesh), the same rod in the same casing, turned along its fall and sent with
+   where it was a frame before (from its speed), with the aircraft's copies. Nothing should look different: Bremen's
+   sticks and Midway's torpedoes as before, no smear on a falling bomb. `-TheaterPlaneCopies=0` lays them as rods again.
+   The 10 s line counts them ("and N bombs falling as copies").
+44. **A named ace's victories on his aircraft** (Brian's named aces, release 2; the air thread's extra.ace, read into
+   AirShow::Group as AceName, AceKills and AceBy). His group's lead aircraft (its first) wears one mark a victory in
+   the victims' symbols (a cross for a German, a roundel for a Briton, a tricolour for an Italian, a red star or a cherry
+   blossom for every kill where his own nation paints its own), laid on its model's kill slots under the cockpit by the
+   modeller's rules (Battle/AirTally: each nation a row of its own, the commonest first, at most thirty; the oldest of a
+   row a little paler), from the modeller's tally sheet as the art director passed it (Content/Data/Tally; M_TallyMark,
+   built by Tools/build_content.sh when missing), the dark or light set by the paint under them. Upright on his side,
+   its right toward the tail. Seen on its own mesh, fading into the paint as a mark falls under 7 pixels across and gone
+   under 4 (the art director, 18:31Z: "rather than shimmer or turn into a grey block"; some 35 to 60 m off on the Mac's
+   screen); soot and holes land on them as on his skin. A model with
+   no kill slots flies unpainted (the log says so): today the Mustang, Hellcat, Wildcat, C.202, Devastator, Dauntless,
+   Kate and Val have them; the modeller's battle-standard fighters bring them to the rest. A German pilot wears his
+   kills as white bars on the rudder instead, and his name and theirs are painted as item 46 says.
+   `-TheaterAces=0` paints none; `-TheaterAceTest=att:6:GER=6` gives the raid's first fighter group a test ace (def for
+   the defence; more nations after a comma, `GER=14,ITA=6,UK=3`), for frames where the recording has none. Look for: the
+   marks square to his side, not mirrored (the Italian tricolour green toward the nose), not floating off the skin or
+   sunk into it, no shimmer as he moves off; and only on his aircraft, never moving to another when he falls.
+   The picture run takes `12-ace-close` and `12b-ace-chase` of him (the art director checks only those two): the marks
+   as matte as his paint and never brighter, taking its light, shade and grime; flags and roundels not sticker-bright;
+   no row running on to the wing-root fillet, and no code letter or name panel over the aft end of a full row.
+   His name (item 46) is painted with them.
+45. **Far trails and far guns** (the battle-scale plan's AS2; the effects kit's far forms, game.air_far in
+   Content/Effects/battle-fx.json, passed by the art director 19:25Z 22 November and turned on here): past 1.2 km a
+   trail is laid as some 40 longer pieces, not about 128, going over by degrees across the last 15% of the range so no
+   length of it changes as the eye closes in; past 1.5 km a gun lays one dash a burst along its aim instead of flying
+   its rounds. With them on the scene lights up to 60 trails at once, not 24 (`-TheaterTrailRoom=` tries another, 10 to
+   120); the log says "Air battle: room for 60 trails at once (the kit's far trails on, far guns on)". Look for: a far
+   trail as dark and lumpy as a near one, never pale at its head, and no jump as a fighter trailing smoke closes from
+   2 km to 1 km; a far gun's dashes reading as fire, not as a line drawn on the screen. To turn either off, set its
+   `trails_on` or `guns_on` to 0 in battle-fx.json (and tools/battle-fx/fx.json, its source).
+46. **A named ace's name under his cockpit, and a German's bars on his rudder** (Brian's named aces, release 2; the
+   modeller's tally.name on every fighter, battle-models/air-next/ACES.md, after the art director's pass of 19:47Z 22
+   November). Over his kill rows, on the line the modeller laid under the port cockpit sill: his rank short as his nation
+   wrote it, his initials and surname, in plain block capitals (`F/LT T. HARLAND`, `OBLT. K. VOSSLER`, `ST. LT. I.
+   VERESOV`; a carrier group's ace his navy's: `ENS.`, `LT.(JG)`, `LCDR.`, the Fleet Air Arm's `S/LT`, `LT CDR`, `CDR`;
+   Japan's and the nations ACES.md gives no short ranks for, initial and surname: `T. KAWANO`). At the
+   file's `cap` (5 cm; 4 on the Bf 109 and Me 262, 7 on the Hurricane, Warhawk and the plain fighters), smaller down to
+   `cap_min` to fit the line, then shortened: rank and surname, then the surname alone (Battle/AirTally NameTries and
+   LayName, the rules of acepanel.py). One small square a letter at its place along the line, upright, facing her skin
+   there, so the name follows her curve; drawn with M_TallyMark from the letters' sheet (Content/Data/Tally/name-letters,
+   Tools/name_letters.py: the modeller's hand, DejaVu Sans Bold narrowed to 0.72, 100 capitals with the accented ones the
+   rules' Polish, Hungarian, Finnish and Romanian names use). One ink for the paint under the middle of the line: yellow
+   D9B43A on an American machine's olive drab (dark, red and green close, both 10 or more and 1.15 times over blue, so
+   the game Mustang's matte 555A47 is one), else black 1A1A1A on paint of L* 50 or more and off-white F2F0E8 under it.
+   The paint under a mark, a bar or the name is the colour with the most of her skin within 2 cm about it, by area,
+   not the nearest point (a rivet's or a seam's under a third of the slots). A German pilot (the painter's nation decides, as the modeller's marks.record does) wears no victims' marks on his
+   side: his kills are white bars (DAD8CE) on his rudder's port face, one a kill, from the modeller's tally.rudder; the
+   scene's rudders do not turn. Each part fades by its own size (a capital, a mark, a bar) from 7 px to 4. A fighter's
+   marks to a row are her file's (`per_row`: the Spitfire's nine, her number covering a tenth column, 27 at most). The
+   test ace without a title takes his nation's sample (`Flight Lieutenant Tom Harland`). The log says "Air battle:
+   aces: "F/LT T. HARLAND" painted under Spitfire's cockpit (key N), capitals 5.0 cm, off-white ink" and "... painted as
+   N bars on Bf109's rudder". The game's fighters are the modeller's battle models with the line (Brian's yes, 20:12Z
+   22 November): the Spitfire, Hurricane, Bf 109, Fw 190, Zero, Yak, Warhawk and the plain fighter replace the old
+   Blender sculpts, which stay in Content/Models/Old (`-TheaterOldVehicles` draws them instead, to compare and time
+   only: the battle's airscrews and marks still read the new files; Tools/build_plane.py now writes there); the Mustang takes the modeller's shape and keeps the game's own paint
+   and paint by date; the Hellcat, Wildcat, C.202 and Me 262 their new files; the carrier fighter the unit table names
+   is new. The two what-if fighters wait for something to name them. A model without the line flies with marks only.
+   Look for: the letters upright and reading from the nose aft (not mirrored), on her skin, not over the sill, the glass
+   or the number; even spacing; the ink as the rule says; no shimmer as he moves off.
+47. **Japan's land bombers, and a torpedo only on a torpedo run** (Brian's yes, 06:14Z 23 November: every nation's own
+   aircraft). The modeller's Nell and Betty are in Content/Models byte for byte from battle-models/air; on the campaign
+   map Japan's bombers are the Nell, and the Betty from 1941 (the rules' years), with rows in the map's aircraft table
+   (far shape aloft, a bomber's framing, their titles). In the battle the record's G3M and G4M find them; their engines
+   (AirShow ShapeOf) are where their files' sockets say fire and smoke start, about the box's middle the scene draws
+   them by (the G4M's were 0.6 m outboard and 1.3 m high of the Betty's nacelles). A model whose file carries both
+   loads (the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo in a torpedo group and with its
+   bombs everywhere else, the map included (FMiniatureMesh::bTorpedoLoad; the loader leaves the other load's triangles
+   out, every point kept for the bay, airscrews and marks); before, both hung under her at once. The SM.79 has her
+   shape (three engines, the nose her second), her name SM.79 and her engine sound, but her file waits for the
+   modeller's rebuild (bay, damage layers, a lighter far shape): until then Italy flies the plain bomber in her paint.
+   The airscrew test takes as many screws as a file says she has engines (the SM.79's three). The twins' drone
+   (EngineLoop) now also takes the Nell, the SM.79, the Wellington, the Pe-2, the LeO 451 and the plain bomber in any
+   paint ("Bomber:UK"), which flew with a fighter's engine before. `-TheaterOldVehicles`
+   also stands the plain machine for the C.202, Nell and Betty, so that the map's timing runs differ only by the new.
+   Look for: a level Kate at Pearl with her bomb and no torpedo, a torpedo Kate with her torpedo and no bomb; a Nell
+   with her bombs under her and no torpedo; fire from a Betty's nacelle, not from her wing root.
+48. **FLY IT YOURSELF on the raid card** (release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D
+   air battles). On the raid card of a bombing raid by day (`bomb`) or a fight for the sky (`superiority`), FLY IT
+   YOURSELF stands beside FLY THE RAID, as FIGHT IT YOURSELF stands beside SEND THEM IN. It is shown only when the Battle
+   rules card's **Fly raids yourself** is on (`AAirBattle::CampaignLiveOn`, the rule `flyLive` in FLandLive's table,
+   never sent to the land rules) and TC.airLook has a ticket for the raid as picked (weighed once a pick). The switch
+   is OFF until the playtester passes it (ruling 217) and the Mac holds 45 fps; `-TheaterAirCampaignLive` turns it on
+   for one run, `-TheaterAirNoCampaignLive` off, `-TheaterRulesFlip=flyLive` clicks the card's switch. Pressed, it opens
+   `BeginLive(Session, Kind, Target, Ids)` with the card's own fly act (`raid:kind:target:id.id`) and puts the card
+   away. At CONTINUE on the after card, `Finish` shows the table and runs `HandBack` with TC.battleEnd's answer, which
+   is what TC.act answers for the raid (the rules booked it there, with the battle's losses); the controller reads it
+   as `Act` does (`FCampaignSession::SettleAirLive`: ok, note, flies, view), brings the map up to date, gives the note
+   and takes the eye to the target. Needs the rules bundle with TC.airLook, TC.airStart and TC.battleEnd's raid
+   (battle-bridge.ts on the map branch); without them the button is simply never offered.
+   Look for: the button on a day raid and on a fight for the sky, never on a night raid or a strike on shipping; the
+   battle opens on the raid's own groups; after CONTINUE the map's month shows the raid flown (the groups away, the
+   target's damage) and the note says what came of it; the month cannot be ended while the battle is up.
+
+49. **The modeller's planes of 23 November in the game: the Wellington, the Pe-2, the LeO 451, the D.520, the rebuilt
+   SM.79 and the rebuilt Betty** (Brian's yes, 06:14Z 23 November: every nation's own aircraft; item 48 is FLY IT
+   YOURSELF, on release 1.6's line). Their files are in Content/Models byte for byte from battle-models/air, each passed
+   by the art director. On the campaign map, as the rules' fighterOf and bomberOf (doctrine.ts; the air rules thread's
+   4e164552 and 78e334bf): the Commonwealth's bombers are the Wellington until the Lancaster of 1942; the Soviet
+   bombers the Pe-2 from 1941 (a light bomber: it waits on no heavy bomber research; the SB, the plain bomber, before);
+   France's fighters the D.520 and her bombers the LeO 451 from 1940 (the MS.406 and the Amiot and Bloch, the plain
+   machines, before); Italy's bombers the SM.79 from the first. Each has a row in the map's aircraft table (far shape
+   aloft, its framing, its title). In the battle the rules name them by their files; the record's marks Pe-2, LeO 451
+   and D.520 find them too (ModelFor). Their engines (AirShow ShapeOf) are where their files' sockets say fire and
+   smoke start, about the box's middle the scene draws them by (the SM.79's three moved to her new file's: the wings'
+   1.3 m inboard). The twins' drone already took them (item 47).
+   - **Airscrews:** the finder (AirScrew::Find) now also takes a piece painted blade that is no blade to read on its
+     own, made apart from the blade it wraps, with the screw whose disc holds all of it (a quarter of the radius either
+     side of the disc): the Wellington's painted tip bands, 300 of her 876 blade triangles, were left standing still in
+     the turning disc. Every other model's screws are as before.
+   - **The Betty's torpedo run:** her rebuilt file hangs her torpedo half out of her belly with her bay's doors off.
+     The loader (FMiniatureMesh::Sculpted) now also leaves out whatever her file's own load clip hides (load.torpedo
+     or load.bombs, each track's part scaled to nothing): on a torpedo run her bombs and both doors, on a bombing run
+     her torpedo. The Kate, the Devastator and the Nell leave out exactly what they did (their clips hide only the
+     other load).
+   - **The Pe-2's bombs and her bank:** a span under 18 m gave her a stick of one (Show::BombsOf), and a stick of one
+     has no bay: her doors never opened and her one bomb left through them. Her load is now four from her fuselage bay
+     (her nacelles' two are not drawn), the Wellington's nine 500 lb bombs (ten by her span before), the LeO 451's six
+     by her span. And a bomber now keeps her wings level on her run and her rally turn gentle by her engines, two or
+     more, not only by a span of 20 m: the Pe-2 (17.2 m) banked 21 degrees with her doors open, and so would the plain
+     bomber (19.8 m). Every other bomber flies as before.
+   - **Light shapes the maker cannot make:** the SM.79's first far shape had its cabin's glass and skin doubled over
+     the same points (699 edges shared by more than two faces), and the light-shape maker (item 42) stopped short of its
+     1,500 triangles (1,524) with the shape torn. The modeller rebuilt her far shape (09:41Z; her near shape, parts,
+     sockets and clips unchanged): it now comes to 1,499 of 1,500, as clean as the others. The maker now also makes none
+     for any shape it cannot take down to what was asked: that aircraft's copies past 1.5 km keep their far shape, and
+     the log says so ("Air battle: <shape>'s light shape left unmade ...").
+   - `-TheaterOldVehicles` stands the plain machine for all of them on the map, as for the C.202, Nell and Betty.
+   - The Wellington's near shape is the heaviest in the game (113k triangles: her fabric's ridges are real shape; the
+     B-17's is 23k, the Betty's 85k); it is drawn only within 300 m of the eye, as every near shape is.
+   Look for: an RAF raid of 1940 or 1941 in Wellingtons, not the plain twin, her airscrews' yellow tips turning with
+   them; fire from a nacelle, not a wing root; her bay doors opening and her stick falling from the bay; a Pe-2 box
+   opening its doors before its stick of four, wings level; a French escort of D.520s over LeO 451s; Italy's SM.79s
+   with three turning airscrews; a Betty on a torpedo run with no doors and her torpedo half out; the frame rate with a
+   box of Wellingtons close to the eye.
+   Not yet: a torpedo aircraft keeps her torpedo drawn after she drops it (the Kate, Devastator, Nell and Betty, as
+   before this item); the racked bombs are taken away when they fall, the slung torpedo is not. And the air test, run
+   on the raids recorded for this item (none is among its own), fails a few checks set for the set pieces: the rally
+   check on the
+   Pe-2s over Tula in June 1943 (a box 91 m across at its first bomb, 203 at most after, against 1.5 times and 30 m;
+   1941's boxes pass with the same spread after) and on the SM.79s (the LeO 451's raid renamed: 151 m, 382 at most;
+   the LeO 451's own, 234 and 333, passes); the cloud checks on the clearer skies of the Wellington's and 1943's
+   raids; the deck checks over high ground; and, in the D.520's fight for the sky, the checks that look for a raid.

@@ -1,6 +1,8 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignMiniatureParts.h"
 #include "TheaterCommand.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 /**
  * The aircraft, each built in code from the measurements of the real machine, in metres, flying level with
@@ -939,7 +941,15 @@ namespace AircraftParts
 		{ TEXT("Sturmovik"), &Sturmovik, TEXT("Il-2 Sturmovik  -  span 14.6 m, length 11.6 m"), TEXT("SOV"), false, 19.0, 4.0 },
 		{ TEXT("Zero"), &Zero, TEXT("A6M2 Zero  -  span 12.0 m, length 9.1 m"), TEXT("JAP"), false, 15.0, 3.0 },
 		{ TEXT("Yak"), &Yak, TEXT("Yak-1  -  span 10.0 m, length 8.5 m"), TEXT("SOV"), false, 14.0, 3.0 },
+		{ TEXT("C202"), &PlainFighter, TEXT("Macchi C.202 Folgore  -  span 10.6 m, length 8.9 m"), TEXT("ITA"), false, 14.0, 3.0 },
 		{ TEXT("He111"), &He111, TEXT("Heinkel He 111  -  span 22.6 m, length 16.4 m"), TEXT("GER"), false, 28.0, 4.0 },
+		{ TEXT("Nell"), &PlainBomber, TEXT("Mitsubishi G3M Nell  -  span 25.0 m, length 16.5 m"), TEXT("JAP"), false, 31.0, 4.0 },
+		{ TEXT("Betty"), &PlainBomber, TEXT("Mitsubishi G4M Betty  -  span 25.0 m, length 20.0 m"), TEXT("JAP"), false, 31.0, 4.0 },
+		{ TEXT("D520"), &PlainFighter, TEXT("Dewoitine D.520  -  span 10.2 m, length 8.8 m"), TEXT("FRA"), false, 14.0, 3.0 },
+		{ TEXT("LeO451"), &PlainBomber, TEXT("LeO 451  -  span 22.5 m, length 17.2 m"), TEXT("FRA"), false, 28.0, 4.0 },
+		{ TEXT("Wellington"), &PlainBomber, TEXT("Vickers Wellington Mk IC  -  span 26.3 m, length 19.7 m"), TEXT("UK"), false, 32.0, 4.0 },
+		{ TEXT("Pe2"), &PlainBomber, TEXT("Petlyakov Pe-2  -  span 17.2 m, length 12.7 m"), TEXT("SOV"), false, 22.0, 4.0 },
+		{ TEXT("SM79"), &PlainBomber, TEXT("Savoia-Marchetti SM.79 Sparviero  -  span 21.2 m, length 16.2 m"), TEXT("ITA"), false, 27.0, 4.0 },
 		{ TEXT("Lancaster"), &Lancaster, TEXT("Avro Lancaster  -  span 31.1 m, length 21.2 m"), TEXT("UK"), false, 38.0, 4.5 },
 		{ TEXT("Fighter"), &PlainFighter, TEXT("Fighter  -  span 10.6 m"), TEXT("ITA"), true, 14.0, 3.0 },
 		{ TEXT("Bomber"), &PlainBomber, TEXT("Twin-engined bomber  -  span 19.8 m"), TEXT("ITA"), true, 26.0, 4.0 },
@@ -949,6 +959,17 @@ namespace AircraftParts
 TConstArrayView<MiniatureParts::FModel> MiniatureParts::AircraftModels()
 {
 	return AircraftParts::Models;
+}
+
+namespace
+{
+	// ("-TheaterOldVehicles", the campaign's older miniatures to time against the new: a nation's own model that the
+	// campaign never had before stands as the plain machine it replaced, so that the two runs differ only by the new.)
+	bool OldVehicles()
+	{
+		static const bool bOld = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		return bOld;
+	}
 }
 
 FString FMiniatureMesh::MainFighterOf(const FString& Tag)
@@ -961,6 +982,10 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1940 ? TEXT("Spitfire") : TEXT("Hurricane");
 	if (Tag == TEXT("USA")) return Reached >= 1944 ? TEXT("Mustang") : TEXT("Warhawk");
 	if (Tag == TEXT("SOV")) return Reached >= 1942 ? FString(TEXT("Yak")) : TEXT("Fighter:") + Tag;
+	// (France's D.520 from 1940, the MS.406 (the plain fighter) before it, as the rules' fighterOf; the modeller's, 23 Nov)
+	if (Tag == TEXT("FRA")) return Reached >= 1940 && !OldVehicles() ? FString(TEXT("D520")) : TEXT("Fighter:") + Tag;
+	// Italy's C.202 from 1942, as the rules' fighterOf (doctrine.ts; Brian 23 Nov: every nation's own aircraft).
+	if (Tag == TEXT("ITA")) return Reached >= 1942 && !OldVehicles() ? FString(TEXT("C202")) : TEXT("Fighter:") + Tag;
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Zero");
 	return TEXT("Fighter:") + Tag;
 }
@@ -974,6 +999,16 @@ FString FMiniatureMesh::MainBomberOf(const FString& Tag)
 	const int32 Reached = YearOf(Tag, 2);
 	if (Tag == TEXT("USA")) return TEXT("B17");
 	if (Tag == TEXT("GER")) return TEXT("He111");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1942 ? TEXT("Lancaster") : TEXT("Bomber:UK");
+	// (Japan's land bombers, the rules' years: the Nell, the Betty from 1941; the air rules thread, 23 November)
+	if ((Tag == TEXT("JAP") || Tag == TEXT("JPN")) && !OldVehicles()) return Reached >= 1941 ? TEXT("Betty") : TEXT("Nell");
+	// (the Commonwealth's Wellington before the Lancaster of 1942; the Soviet Pe-2 from 1941, a light bomber that waits
+	// on no heavy bomber research, the SB (the plain bomber) before it; France's LeO 451 from 1940, the Amiot and Bloch
+	// of 1939 (the plain bomber) before it: the rules' bomberOf (doctrine.ts, the air rules thread's 4e164552), the
+	// modeller's four of 23 November)
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1942 ? TEXT("Lancaster") : OldVehicles() ? TEXT("Bomber:UK") : TEXT("Wellington");
+	if (Tag == TEXT("SOV") && Reached >= 1941 && !OldVehicles()) return TEXT("Pe2");
+	if (Tag == TEXT("FRA") && Reached >= 1940 && !OldVehicles()) return TEXT("LeO451");
+	// (Italy's SM.79 from the first, her rebuilt file in: the rules' bomberOf, the air rules thread's 78e334bf, 08:58Z)
+	if (Tag == TEXT("ITA") && !OldVehicles()) return TEXT("SM79");
 	return TEXT("Bomber:") + Tag;
 }

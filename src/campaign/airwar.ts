@@ -15,6 +15,7 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import type { FoughtAir } from './airfought';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
@@ -1008,13 +1009,13 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
  * away for the rest of the month (it flies no second raid and meets no raid on its own sky) and is back at its airfield,
  * on patrol or on escort as it was, when the nation's next month begins. Null if the raid cannot be flown as picked.
  */
-export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[], nat: string | null = g.human): AirReport | null {
+export function launchRaid(g: Game, kind: RaidKind, target: number, ids: number[], nat: string | null = g.human, fought?: FoughtAir): AirReport | null {
   if (kind === 'recon' || nat === null) return null;
   const plan = planRaid(g, kind, target, ids, nat);
   if (plan.why) return null;
   const fleets = plan.picked.map((id) => g.airFleets.find((f) => f.id === id)!);
   const m = missionOf(kind);
-  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`);
+  const rep = fly(g, nat, m, target, fleets, `:${(g.flags.airBattles ?? 0) + 1}`, fought);
   if (!rep) return null;
   for (const f of fleets) { f.mission = m; f.target = target; f.flew = g.turn; }
   return rep;
