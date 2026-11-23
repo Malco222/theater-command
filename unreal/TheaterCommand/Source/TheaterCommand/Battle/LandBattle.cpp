@@ -1855,6 +1855,43 @@ bool ALandBattle::Open()
 			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
 			return Pinned.IsValid() && Pinned->General.Hides(Block);
 		};
+		// (Effects (R2): the crews' bail-out, -TheaterLandBailOut: whether a vehicle's crew may get out at her end, a tank
+		// or an armoured car with a fates row, as BailOut makes her crew. The camera asks it before her kill, so the film's
+		// first bail-out is watched for (LandEye Settings::BailNear) and held when BailOut tells it her crew is out. Off:
+		// never, and the film is as it was)
+		EyeWorld.Bails = [Weak](int Track)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || !Pinned->Bails.bOn || !Pinned->Armour)
+			{
+				return false;
+			}
+			const FLandBattleState& P = *Pinned;
+			const std::vector<LandKit::Vehicle>& All = P.Armour->Vehicles();
+			for (size_t V = 0; V < P.TrackOfVehicle.size() && V < All.size(); ++V)
+			{
+				if (P.TrackOfVehicle[V] != Track)
+				{
+					continue;
+				}
+				const LandKit::Vehicle& Veh = All[V];
+				const LandKit::Model& Look = Veh.Look();
+				const bool bHatches = Look.Kind == "tank" || (Look.Kind == "car" && (Look.Name.find("rmoured") != std::string::npos || Look.Name.find("rmored") != std::string::npos));
+				if (!bHatches)
+				{
+					return false;
+				}
+				for (const Fates::Way& Each : P.FatesTable.Ways())
+				{
+					if (Each.Key == Veh.FateKey)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+			return false;
+		};
 		LandEye::Settings Set;
 		Set.Own = 0;
 		Set.Seed = Rec.Seed ? Rec.Seed : 1;
@@ -4516,6 +4553,17 @@ void ALandBattle::BailOut()
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
 		S.Bails.Crews[V] = LandBail::Make(W);
+		// (the camera's first bail-out: her crew's first man up and her ammunition going, battle seconds after her kill;
+		// nobody out, -1, and the film holds her end as any other)
+		{
+			double FirstOut = -1.0;
+			for (const LandBail::Man& M : S.Bails.Crews[V].Men)
+			{
+				FirstOut = FirstOut < 0.0 ? M.Out : FMath::Min(FirstOut, M.Out);
+			}
+			const int Track = V < S.TrackOfVehicle.size() ? S.TrackOfVehicle[V] : -1;
+			S.Eye.BailOut(Track, FirstOut >= 0.0 ? FirstOut / S.Life : -1.0, W.Blast >= 0.0 ? W.Blast / S.Life : -1.0);
+		}
 		for (size_t K = 0; K < S.Bails.Crews[V].Men.size(); ++K)
 		{
 			LandBail::Book::Him H;
