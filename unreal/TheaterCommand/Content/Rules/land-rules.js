@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of aaf1b11f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f87109ac 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3151,6 +3151,24 @@
       share: 0.3,
       back: 24,
       base: 500
+    },
+    spg: {
+      _about: "Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to 'a tank destroyer and a self-propelled gun for each major army'; LandBattle.spg, off unless turned on; looks only; a campaign battle's only, set pieces stay as the historian drew them). Some of a battery's guns are drawn as its army's self-propelled howitzer: no tractor, no crew on foot, firing when the battery fires and moving with it. 'rows': the historian's (23 November 07:05Z, historian/halftracks-td-spg-movers-1123.md, H): [from, until, models, per, with] by the battle's year (a fraction for the month): its side's blocks of that army of a kind in 'with' each bring 'per' of them (the US an M7 battery behind each armoured block; Britain's Priests, then Sextons, behind theirs; Germany's Hummel battery of six in a panzer division; the Soviet SU-76 regiment of each rifle division), taken from that army's batteries in the order of their blocks, a battery's first guns first (they stand longest), the models in turn. An army with no row draws none (Italy's Semovente is drawn as a tank destroyer; Japan had none worth drawing). Units decide (the design director, 23 November 07:19Z): these rows are only the history start's mix; where the campaign says what a corps has (ForceKit.spg, its share of its guns self-propelled), 'kit' draws it, its army's own model or the stand-in in its coat.",
+      rows: {
+        USA: [[1943, 9999, ["M7"], 3, ["arm"]]],
+        UK: [[1942.75, 1943.75, ["M7"], 1.5, ["arm"]], [1943.75, 1944.67, ["Sexton", "M7"], 1.5, ["arm"]], [1944.67, 9999, ["Sexton"], 1.5, ["arm"]]],
+        GER: [[1943.5, 9999, ["Hummel"], 0.5, ["arm"]]],
+        SOV: [[1943, 9999, ["SU76"], 0.5, ["inf"]]]
+      },
+      kit: { models: { USA: "M7", UK: "Sexton", GER: "Hummel", SOV: "SU76" }, axisStand: "Hummel", stand: "M7" }
+    },
+    td: {
+      _about: "Tank destroyers (release 2, the same yes; LandBattle.td, off unless turned on; looks only; a campaign battle's only). The design director, 23 November 07:28Z, (a): a tank destroyer may be one model in an armoured block's mix, as the StuG is; the block keeps its own figures and fights as ever; a whole block of them waits for Units decide to give corps tank-destroyer battalions with figures of their own. ForceKit.td reads first (its share of the block's tanks), its army's own model ('kit') or the stand-in in its coat; else the historian's rows (23 November 07:05Z, H), [from, until, models, share] by the battle's year: the Soviet SU-85 with the tank blocks from August 1943, Italy's Semovente with the armoured blocks to its armistice. The tanks drawn so are spread through the block (a share of a quarter: its fourth tank of each four). Germany's StuG is in its stand-in mix already; the American and British M10 went with the infantry, so they come by the kit.",
+      rows: {
+        SOV: [[1943.58, 1945, ["SU85"], 0.25]],
+        ITA: [[1941, 1943.75, ["Semovente"], 0.25]]
+      },
+      kit: { models: { USA: "M10", UK: "M10", GER: "StuG3", SOV: "SU85", ITA: "Semovente" }, axisStand: "StuG3", stand: "M10" }
     }
   };
 
@@ -3449,6 +3467,72 @@
       const list = row[2], n = Math.max(1, Math.round(list.length * u.tray / 4));
       return Array.from({ length: n }, (_, i) => list[i % list.length]);
     }
+    /** The army whose rows a block's nation reads (the Commonwealth's as Britain's), and the battle's year with its month. */
+    armyOf(nat) {
+      return DR.mech.commonwealth.includes(nat) ? "UK" : nat;
+    }
+    when() {
+      const d = turnToDate(this.b.ticket.turn);
+      return d.year + d.month / 12;
+    }
+    /** A kit's own model for an army, or the stand-in in its coat (the Axis' or the rest's). */
+    kitModel(K, army2) {
+      return K.models[army2] ?? (DR.mech.kit.axis.includes(army2) ? K.axisStand : K.stand);
+    }
+    /**
+     * Self-propelled guns (release 2, LandBattle.spg; looks only): each of a battery's n guns, its model drawn
+     * self-propelled or '' towed. Where the campaign says what the corps has (ForceKit.spg, "Units decide"), that share
+     * of its guns, its army's own model; else the history start's (DR.spg.rows): its side's blocks of that army of the
+     * row's kinds bring 'per' each, taken from that army's batteries in the order of their blocks. A battery's first guns
+     * first (the rules lift the last first, so they stand longest).
+     */
+    spgOf(u, n) {
+      const none2 = Array.from({ length: n }, () => "");
+      if (!this.b.spg || u.kind !== "art" || u.team || n <= 0) return none2;
+      const army2 = this.armyOf(u.nat), share = u.kit?.spg;
+      if (share !== void 0) {
+        const s2 = Math.round(n * clamp2(share, 0, 1)), own = this.kitModel(DR.spg.kit, army2);
+        return none2.map((_, k) => k < s2 ? own : "");
+      }
+      const when = this.when();
+      const row = (DR.spg.rows[army2] ?? []).find(([from, to]) => when >= from && when < to);
+      if (!row) return none2;
+      const [, , list, per, kinds] = row;
+      const mine = this.b.allBlocks().filter((x) => x.side === u.side && this.armyOf(x.nat) === army2);
+      let left = Math.round(mine.filter((x) => kinds.includes(x.kind)).length * per);
+      let before = 0;
+      for (const x of mine) {
+        if (x.id === u.id) break;
+        if (x.kind === "art" && !x.team && x.kit?.spg === void 0) before += Math.max(0, x.figures0);
+      }
+      left = Math.max(0, left - before);
+      const s = Math.min(n, left);
+      return none2.map((_, k) => k < s ? list[(before + k) % list.length] : "");
+    }
+    /**
+     * Tank destroyers (release 2, LandBattle.td; looks only; the design director, 23 November 07:28Z, (a)): each of an
+     * armoured block's n tanks, its model drawn as a tank destroyer or '' its block's own. The corps' share where the
+     * campaign says it (ForceKit.td), its army's own model; else its army's row in the battle's month (DR.td.rows). Spread
+     * through the block: the k-th is one where the share's count steps up (a quarter: the fourth of each four).
+     */
+    tdOf(u, n) {
+      const none2 = Array.from({ length: n }, () => "");
+      if (!this.b.td || u.kind !== "arm" || n <= 0) return none2;
+      const army2 = this.armyOf(u.nat), kit = u.kit?.td;
+      let share, list;
+      if (kit !== void 0) {
+        share = clamp2(kit, 0, 1);
+        list = [this.kitModel(DR.td.kit, army2)];
+      } else {
+        const when = this.when();
+        const row = (DR.td.rows[army2] ?? []).find(([from, to]) => when >= from && when < to);
+        if (!row) return none2;
+        share = row[3];
+        list = row[2];
+      }
+      let c = 0;
+      return none2.map((_, k) => Math.floor((k + 1) * share + 1e-9) > Math.floor(k * share + 1e-9) ? list[c++ % list.length] : "");
+    }
     // ---- Who is in a block ------------------------------------------------------------------------------------------
     make(u, mech) {
       const men = [], veh = [];
@@ -3462,6 +3546,18 @@
         return { k: k + B, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: "idle", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx, jy };
       };
       for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
+      const sp = mech ? [] : this.spgOf(u, n), td = mech ? [] : this.tdOf(u, n);
+      let selfPropelled = 0;
+      for (let k = 0; k < n; k++) {
+        const ml = sp[k] || td[k];
+        if (!ml) continue;
+        men[k].ml = ml;
+        if (sp[k]) {
+          fill.sec[k] = 0;
+          fill.plat[k] = 0;
+          selfPropelled++;
+        }
+      }
       let lor = 0;
       if (tier >= 1) for (let k = 0; k < n; k++) {
         const key = men[k], mot = u.kind === "mot" && tier === 2;
@@ -3513,7 +3609,8 @@
           lor++;
         }
       }
-      const lorries = mech ? n : u.kind === "mot" ? tier >= 1 ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? tier >= 1 ? n : 1 : 0;
+      const towed = n - selfPropelled;
+      const lorries = mech ? n : u.kind === "mot" ? tier >= 1 ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? tier >= 1 ? towed : towed > 0 ? 1 : 0 : 0;
       for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i + B * 100, role: "lorry", team: 0, x: u.x, y: u.y, face: u.face, pose: "parked", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0, ...mech ? { ml: mech.carriers[i % mech.carriers.length] } : {} });
       const sq = {
         u,
@@ -6311,6 +6408,7 @@
           if (g.v === 0) g.pose = "towed";
         });
         if (own) guns.forEach((g) => {
+          if (g.ml) return;
           const v = this.lorryOf(sq, g);
           this.follow(sq, v, toWorld(g, g.face, 0, 7), "drive");
         });
@@ -7048,6 +7146,14 @@
         if (m.back !== void 0) o.back = r13(m.back);
         if (m.br) o.br = 1;
         if (m.call !== void 0 && m.callAt) o.cs = [r13(m.callAt[0]), r13(m.callAt[1])];
+        if (m.ml) {
+          o.ml = m.ml;
+          if (m.role === "gun") {
+            o.r = "tank";
+            o.p = m.pose === "towed" ? o.v > 0 ? "drive" : "halt" : m.pose === "deployed" || m.pose === "parked" || m.pose === "idle" ? "halt" : m.pose;
+            delete o.h;
+          }
+        }
         return o;
       };
       const byId = /* @__PURE__ */ new Map();
@@ -7061,11 +7167,7 @@
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
         });
-        for (const v of sq.veh) if (live(u)) {
-          const o = one(v);
-          if (v.ml) o.ml = v.ml;
-          men.push(o);
-        }
+        for (const v of sq.veh) if (live(u)) men.push(one(v));
         if (sq.of !== void 0) {
           const own = byId.get(sq.of);
           if (own) own.men.push(...men);
@@ -7485,6 +7587,20 @@
        * Battle rules card's Armoured infantry row).
        */
       __publicField(this, "mech", false);
+      /**
+       * Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to "a tank destroyer and a self-propelled gun for each
+       * major army"): some of a battery's guns are drawn as its army's self-propelled howitzer, with no tractor and no crew
+       * on foot (Drill.spgOf; DRILL.spg). Looks only. Off unless turned on (the bridge's { spg: true }, the Battle rules
+       * card's Self-propelled guns row); a campaign battle's only (set pieces stay as the historian drew them).
+       */
+      __publicField(this, "spg", false);
+      /**
+       * Tank destroyers (release 2, the same yes; the design director, 23 November 07:28Z, (a)): one model in an armoured
+       * block's mix is drawn as its army's tank destroyer or assault gun, the block's own figures and fight unchanged
+       * (Drill.tdOf; DRILL.td). Looks only. Off unless turned on (the bridge's { td: true }, the Battle rules card's Tank
+       * destroyers row); a campaign battle's only.
+       */
+      __publicField(this, "td", false);
       /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
       __publicField(this, "overrun", /* @__PURE__ */ new Map());
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
@@ -11896,6 +12012,8 @@
       if (this.me && opts.staff !== false) sim.perUnit = true;
       if (this.me && opts.radio !== false) sim.radio = true;
       if (opts.mech === true) sim.mech = true;
+      if (opts.spg === true && !piece) sim.spg = true;
+      if (opts.td === true && !piece) sim.td = true;
       this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
       if (opts.setup && this.me) sim.setupOn(this.me, true);
       if (opts.hide !== false) sim.hideOn();
@@ -12245,7 +12363,9 @@
         scars: opts?.scars !== false,
         blast: opts?.blast === true,
         escort: opts?.escort === true,
-        mech: opts?.mech === true
+        mech: opts?.mech === true,
+        spg: opts?.spg === true,
+        td: opts?.td === true
       });
       return live3.header();
     },
@@ -12282,6 +12402,8 @@
         blast: o.blast === true,
         escort: o.escort === true,
         mech: o.mech === true,
+        spg: o.spg === true,
+        td: o.td === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
