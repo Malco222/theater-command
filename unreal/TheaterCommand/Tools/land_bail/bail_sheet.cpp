@@ -11,11 +11,11 @@
 
 namespace
 {
-	// (her hull 3.0 m wide, 5.9 m long, 1.9 m high, facing north; her turret's roof 2.85 m up, 2.3 m square, a little
-	// back of her middle)
+	// (her hull 3.0 m wide, 5.9 m long, 1.9 m high, facing north; her turret's roof 2.85 m up, 2.0 m wide and 2.3 m
+	// long, a little back of her middle)
 	double HullAt(double X, double Y)
 	{
-		if (std::abs(X) <= 1.2 && Y >= -1.45 && Y <= 0.85) return 2.85;
+		if (std::abs(X) <= 1.0 && Y >= -1.45 && Y <= 0.85) return 2.85;
 		if (std::abs(X) <= 1.5 && std::abs(Y) <= 2.95) return 1.9;
 		return 0.0;
 	}
@@ -32,7 +32,7 @@ int main(int Argc, char** Argv)
 	auto Inf = std::make_shared<Soldier>(), Tk = std::make_shared<Soldier>();
 	if (!Inf->Load(ReadFile(std::string(Argv[1]) + "/soldier_USA.json"), Err)) { std::printf("soldier_USA: %s\n", Err.c_str()); return 1; }
 	if (!Tk->Load(ReadFile(std::string(Argv[1]) + "/soldier_USA_tanker.json"), Err)) { std::printf("soldier_USA_tanker: %s\n", Err.c_str()); return 1; }
-	for (const char* Name : { "bail_climb_out", "bail_jump_down", "burning_run", "burning_fall_roll" })
+	for (const char* Name : { "bail_climb_out", "bail_step_down", "bail_jump_down", "burning_run", "burning_fall_roll" })
 	{
 		if (Tk->ClipIndex(Name) < 0) { std::printf("FAIL: soldier_USA_tanker has no %s\n", Name); return 1; }
 	}
@@ -58,20 +58,23 @@ int main(int Argc, char** Argv)
 	W.Exits.push_back(LandBail::V3{ 0.5, -0.3, 2.85 });
 	W.Away = 3.14159265358979;
 	W.bClips = true;
+	W.bStep = true;
+	W.TurretHalf = 1.0;
 	W.bUnderFire = false;
 	W.Ground = [](double, double) { return 0.0; };
 	LandBail::Man M;
-	M.bClips = true;
 	M.Side = 1;
-	M.Face = 0.0;
 	M.Out = 0.0;
 	M.Hatch = W.Exits[0];
-	M.Deck = LandBail::V3{ 1.3, -0.3, 1.9 };
-	M.Down = LandBail::V3{ 1.3 + 1.70, -0.3, 0.0 };
+	LandBail::LayWayOff(W, M); // (over her turret's roof, down onto her deck, off her hull, as the scene lays him)
+	std::printf("  his way: walks %.2f s over her roof to (%.2f, %.2f), steps down to (%.2f, %.2f, %.2f), walks %.2f s, jumps from (%.2f, %.2f, %.2f) to (%.2f, %.2f); %.2f s to the ground\n",
+		M.RoofS, M.Brink.X, M.Brink.Y, M.Step.X, M.Step.Y, M.Step.Z, M.DeckS, M.Deck.X, M.Deck.Y, M.Deck.Z, M.Down.X, M.Down.Y, LandBail::OnGroundOf(M));
+	if (!M.bStep) { std::printf("FAIL: he does not step down off her turret\n"); return 1; }
 	M.Lee = LandBail::V3{ 3.6, -9.0, 0.0 };
 	M.Goal = LandBail::V3{ 6.0, -22.0, 0.0 };
 	M.Speed = 3.8;
 	const double OnGround = LandBail::OnGroundOf(M);
+	const double OnRoof = 1.5 + M.RoofS, Jump = OnRoof + 0.7333 + M.DeckS;
 	// (a man on fire: out the same way, running 2.5 s, then the roll)
 	LandBail::Man F = M;
 	F.How = LandBail::End::Burning;
@@ -79,10 +82,11 @@ int main(int Argc, char** Argv)
 	F.FireOut = F.FallAt + 3.0;
 	F.bLives = true;
 	const std::vector<std::pair<const LandBail::Man*, std::vector<double>>> Rows = {
-		{ &M, { 0.2, 0.7, 1.1, 1.45, 1.8, 2.2, 2.7, 3.05, OnGround + 0.4 } },
-		{ &F, { OnGround + 0.6, OnGround + 1.4, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
+		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
+		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
+		{ &F, { OnGround + 0.6, OnGround + 1.0, OnGround + 1.4, OnGround + 1.8, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
 	};
-	const int Cols = 9, CellH = 240, SheetW = 2160;
+	const int Cols = 11, CellH = 240, SheetW = 2640;
 	std::vector<uint8_t> Sheet(static_cast<size_t>(SheetW) * static_cast<size_t>(CellH * static_cast<int>(Rows.size())) * 3, 236);
 	Light Lt = Daylight(215.0, 24.0);
 	Lt.EarthA = Lin(118, 98, 76);
@@ -133,8 +137,10 @@ int main(int Argc, char** Argv)
 			Sc.AddGround(-5.0, -10.0, 9.0, 5.0, 0.1, Hull);
 			const int OX = (SheetW * Col) / Cols, OX1 = (SheetW * (Col + 1)) / Cols;
 			const int CW = OX1 - OX - 4, CH = CellH - 4;
-			// (side-on from the side he drops from; the man on fire followed off along his way, her hull behind him)
-			const Camera Cam = Row == 0 ? Camera({ 13.0, -1.5, 2.6 }, { 1.8, -1.0, 1.4 }, 30.0, CW * 2, CH * 2)
+			// (from the side he drops from, three-quarters on; then from her front, her turret, deck and hull's edge
+			// as steps; the man on fire followed off along his way, her hull behind him)
+			const Camera Cam = Row == 0 ? Camera({ 9.5, 7.5, 3.6 }, { 1.6, -0.3, 1.7 }, 26.0, CW * 2, CH * 2)
+				: Row == 1 ? Camera({ 1.9, 11.0, 2.2 }, { 1.9, -0.3, 1.7 }, 24.0, CW * 2, CH * 2)
 				: Camera({ 13.0, -5.0, 2.2 }, { 2.6, -6.5, 0.7 }, 34.0, CW * 2, CH * 2);
 			ShadowMap Sh;
 			Sh.Build(Sc, Lt.ToSun, { -4.0, -9.0, -0.1 }, { 8.0, 4.0, 4.0 }, 1536);

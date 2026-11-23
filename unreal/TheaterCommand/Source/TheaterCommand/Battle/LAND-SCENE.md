@@ -530,17 +530,24 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   asked of the soldiers' thread; until they come these stand in.
 - **The soldiers' bail clips** (labtrr 42bb946f, in all 19 files with a `bail_clips` block). Where a crew's file has all
   four (`LandBail::Wreck::bClips`), he climbs out in `bail_climb_out` (1.5 s, his boots 0.92 m under the hatch's point,
-  facing so the clip's step to his right is the side he drops from), runs along her deck to its edge, and drops in
-  `bail_jump_down` (off at 0.40 s, 1.70 m out and 1.5 m down, her own height made up between 0.40 and 1.05 s); a man on
+  facing so the clip's step to his right is the side he drops from; her roof's own height over the clip's 0.95 m, a
+  Panzer IV 0.82, a Tiger 0.97, a Sherman 1.07, made up from 0.8 s). Then (the soldiers' 18:52Z, ea211cc5) he turns out
+  and walks (the ground battle's `walk`, 1.26 m a second) over her turret's roof to its edge (`Wreck::TurretHalf`, else
+  a third of her width), steps down onto her deck in `bail_step_down` (0.73 s, off at 0.10 s, 0.42 m out and 0.95 m
+  down, her own drop made up between 0.10 and 0.55 s), walks to her hull's edge and drops in `bail_jump_down` (1.60 s,
+  off at 0.44 s, 1.71 m out and 1.5 m down, her own height made up between 0.44 and 1.09 s). The step is only where
+  her roof stands 0.45 m or more over her deck and his file has the clip (`Wreck::bStep`); a man out of a hatch on her
+  deck walks straight to its edge. Where her deck beside her turret is narrower than the step he jumps from where he
+  lands (at most 0.05 m past where the jump stands), and steps from nearer her middle if he must. His way over her is
+  laid by `LandBail::LayWayOff`. A man on
   fire runs in `burning_run` (its stride, 7.35 m a loop, by the ground he covers) and falls in `burning_fall_roll`,
   living or not. The clips' roots move him: his seat is moved on where each ends, `Crowd::Ride::bOwnRoot` keeps the
-  root the new clip's through the blend, and `Pose::Root` is where his body is (a burning man's flames go with it). The
-  clips take 1.48 s longer to the ground, so each man starts up that much sooner (not before 0.3 s after her kill) and
-  every man goes as he did without them (the test, run both ways: the same tallies). Without the clips, the same crew
-  to the last number. Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
-  `/mnt/project-files/battle-fx/bail-out/bail-clips-r1.jpg`). Not yet: the step down from her turret's roof to her
-  deck is the run's (it floats about 1 m down over 0.5 s); her roof's own height over the clip's 0.95 m (the soldiers'
-  note: a Panzer IV 0.82, a Sherman 1.07) is not made up.
+  root the new clip's through the blend, and `Pose::Root` is where his body is (a burning man's flames go with it,
+  each clip's root as the soldiers' tracks run). The clips take longer to the ground (3.6 to 5.2 s against 2.05 s:
+  `Man::ClipsS`), so each man starts up that much sooner (not before 0.3 s after her kill) and every man goes as he did
+  without them (the test, run both ways: the same tallies). Without the clips, the same crew to the last number.
+  Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
+  `/mnt/project-files/battle-fx/bail-out/bail-clips-r3.jpg`: three-quarters on, from her front, and the man on fire).
 
 None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
 own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
