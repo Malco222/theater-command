@@ -1,7 +1,7 @@
 // Release 1.5: FIGHT IT YOURSELF on release 1's campaign. The campaign half (Rules/battle-bridge.ts, ported from release 2)
 // gives the card's battle as a ticket, the 3D game's own land rules fight it, and the result comes back through the
-// campaign's own attack order with the field's R in place of the dice and the field's bill. Release 2's looks are not
-// on the ticket. Without a fought battle the attack rolls the dice as release 1 always has.
+// campaign's own attack order with the field's R in place of the dice and the field's bill. Release 2's looks ride
+// on the ticket only as the campaign remembers them (tests/r15-looks.test.ts). Without a fought battle the attack rolls the dice as release 1 always has.
 import { describe, expect, it } from 'vitest';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { liveTicket } from '../src/battle/land/live';
@@ -24,13 +24,13 @@ function fight(look: NonNullable<Look>): FieldResult {
 }
 
 describe('release 1.5: FIGHT IT YOURSELF on release 1', () => {
-  it('the card\'s battle comes as a ticket the land rules fight, with no release 2 looks on it', () => {
+  it('the card\'s battle comes as a ticket the land rules fight, with no memory of earlier battles on it', () => {
     fresh();
     const look = TC.battleLook([1], 39) as Look;
     expect(look?.ticket).toBeTruthy();
     expect(look!.ticket!.place.name).toBe('Pomorze');
     expect(look!.ticket!.att.nat).toBe('GER');
-    for (const k of ['scars', 'oldRuts', 'captured', 'weather']) expect(look!.ticket![k]).toBeUndefined();
+    for (const k of ['scars', 'oldRuts', 'captured']) expect(look!.ticket![k]).toBeUndefined(); // (a war's first month: no field fought over yet, nothing taken; the weather word may ride, tests/r15-looks.test.ts)
     for (const s of ['att', 'def']) expect(look!.ticket![s].worn).toBeUndefined();
     expect(look!.live?.designYears?.GER).toBeGreaterThanOrEqual(1939);
     const header = liveTicket(structuredClone(look!.ticket) as never, { ...(look!.live ?? {}), me: 'att' } as never).header() as Record<string, any>;
