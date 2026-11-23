@@ -2262,12 +2262,13 @@ namespace LandKit
 		}
 		else
 		{
-			// Wheels on the ground (their lowest point at the ground), and a gun's spades.
+			// Wheels on the ground (their lowest point at the ground), and a gun's spades. (Not a wheel her swaps leave off: a
+			// solo motorcycle's sidecar wheel.)
 			std::vector<V3> Contacts;
 			for (int P : Wheels)
 			{
 				const Part& W = Parts[static_cast<size_t>(P)];
-				if (W.Pivot.Z - W.Radius < 0.05)
+				if (W.bShown && W.Pivot.Z - W.Radius < 0.05)
 				{
 					Contacts.emplace_back(W.Pivot.X, W.Pivot.Y, 0.0);
 				}
