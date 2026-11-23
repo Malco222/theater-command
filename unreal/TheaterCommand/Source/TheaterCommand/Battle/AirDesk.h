@@ -130,6 +130,19 @@ namespace AirDesk
 		int MySideIndex() const { return MyIndex; }
 		const std::map<int, AirFeed::Label>& Labels() const { return LabelsNow; }
 		const AirFeed::Top& Head() const { return HeadNow; }
+		/**
+		 * (Release 1.5; the playtester's finding 2 on FLY IT YOURSELF, 23 November) The battle's end as its after card
+		 * books it. The view's stamp (over.winner) is the battle's own judgement, but the card is the campaign's: a raid
+		 * handed to the staff is settled by the staff's dice, and an unopposed fight for the sky is booked a victory the
+		 * stamp may not give. So once the card is read, the side its verdict names (his own on a victory, the other on a
+		 * defeat) is the winner the bar settles on and the music plays for. A card with no verdict (OVER, NOT BOOKED)
+		 * leaves the stamp standing.
+		 */
+		void SettleFrom(const AirFeed::After& After);
+		/** The same, by side ("att" or "def"): the other side's desk of a test reads the one card as its mirror. */
+		void Settle(const std::string& Winner) { Settled = Winner == "att" || Winner == "def" ? Winner : std::string(); }
+		/** The winner the end shows: the after card's once it is settled, else the view's stamp ("att", "def" or ""). */
+		const std::string& Winner() const { return Settled.empty() ? HeadNow.Winner : Settled; }
 		const AirFeed::Sky& Board() const { return Sky; }
 
 	private:
@@ -137,6 +150,7 @@ namespace AirDesk
 		AirFeed::Top HeadNow;
 		std::string Me = "att";
 		int MyIndex = 0;
+		std::string Settled;                   // the after card's winner, once read (SettleFrom)
 		bool bStarted = false;
 		double KnotShown = 0.5;                // the bar's knot as drawn, eased toward KnotOf
 		std::map<int, std::string> Called;     // sim.called: kept, as the view sends only what changed
@@ -213,6 +227,8 @@ namespace AirDesk
 	constexpr double KnotSettle = 0.05;
 	constexpr double KnotLag = 1.5;
 	double KnotOf(const AirFeed::Top& Head, int MyIndex);
+	/** The same, with the winner the end shows given (Desk::Winner: the after card's where it is settled). */
+	double KnotOf(const AirFeed::Top& Head, int MyIndex, const std::string& Winner);
 	/** The knot as drawn follows KnotOf with about KnotLag real seconds of lag, never a step (a long frame counts as 0.1 s). */
 	double KnotEase(double Shown, double Want, double Real);
 

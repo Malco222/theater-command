@@ -3671,6 +3671,10 @@ void AAirBattle::Tick(float DeltaSeconds)
 		{
 			S.bOver = true;
 			S.OverRealT = 0.0;
+			if (S.bReplay)
+			{
+				S.Desk.SettleFrom(S.Recording.Card); // (a set piece's end as its recorded card books it, as a live raid's)
+			}
 			if (!S.bReplay && Session)
 			{
 				FString Reply, Error;
@@ -3696,6 +3700,14 @@ void AAirBattle::Tick(float DeltaSeconds)
 				if (bEnded && AirFeed::Parse(AirParts::Narrow(Reply), Ended, Why) && AirFeed::ReadAfter(Ended["after"], After))
 				{
 					S.Card = S.Desk.CardOf(After);
+					// (release 1.5, the playtester's finding 2: the bar and the music end on the side the card books, not on
+					// the view's stamp, which a raid handed to the staff or an unopposed sky fight can contradict)
+					S.Desk.SettleFrom(After);
+					if (S.Desk.Winner() != S.Desk.Head().Winner)
+					{
+						UE_LOG(LogTheater, Display, TEXT("Air battle: the after card (%s) books the other side from the view's stamp (%s): the bar and the music follow the card"),
+							*AirParts::Wide(After.Level), *AirParts::Wide(S.Desk.Head().Winner.empty() ? std::string("none") : S.Desk.Head().Winner));
+					}
 				}
 				else
 				{
@@ -7850,7 +7862,7 @@ void AAirBattle::BattleScore(double Real)
 	if (S.bOver && !bScoreEnded && S.OverRealT >= AirParts::MixNumber(Mix, TEXT("music.end.stingerAfter"), 1.0))
 	{
 		bScoreEnded = true;
-		const int32 Won = AirFeed::SideOf(S.Desk.Head().Winner);
+		const int32 Won = AirFeed::SideOf(S.Desk.Winner()); // (release 1.5: the after card's side once it is read)
 		Mode->EndBattleScore(Won < 0 ? -1 : Won == S.Desk.MySideIndex() ? 1 : 0);
 	}
 }

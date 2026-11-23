@@ -1,6 +1,7 @@
 #include "Battle/AirDesk.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 
@@ -88,6 +89,7 @@ namespace AirDesk
 		MyIndex = Me == "att" ? 0 : 1;
 		bStarted = false;
 		KnotShown = 0.5;
+		Settled.clear();
 		Called.clear();
 		LabelsNow.clear();
 		Said.clear();
@@ -164,7 +166,7 @@ namespace AirDesk
 		const double Card = MyIndex == 0 ? Sky.CardChance : 1.0 - Sky.CardChance;
 		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(H.Chance);
 		// The tug-of-war bar (it took the place of the strength fill and its start mark: the UI director, 14:47Z).
-		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex), Real);
+		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex, Winner()), Real);
 		Out.Knot = KnotShown;
 		Out.MyNat = MyIndex == 0 ? Sky.AttNat : Sky.DefNat;
 		Out.TheirNat = MyIndex == 0 ? Sky.DefNat : Sky.AttNat;
@@ -242,6 +244,16 @@ namespace AirDesk
 
 		for (Dispatch& D : Said) D.Age += Real;
 		Out.Dispatches = Said;
+	}
+
+	void Desk::SettleFrom(const AirFeed::After& After)
+	{
+		// (the card's level is the verdict as the player reads it: "Close victory", "Decisive defeat", "Crushing defeat")
+		std::string Level = After.Level;
+		for (char& Ch : Level) Ch = static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
+		const std::string Other = Me == "att" ? "def" : "att";
+		if (Level.find("victory") != std::string::npos) Settled = Me;
+		else if (Level.find("defeat") != std::string::npos) Settled = Other;
 	}
 
 	Card Desk::CardOf(const AirFeed::After& After) const
@@ -904,6 +916,11 @@ namespace AirDesk
 
 	double KnotOf(const AirFeed::Top& Head, int MyIndex)
 	{
+		return KnotOf(Head, MyIndex, Head.Winner);
+	}
+
+	double KnotOf(const AirFeed::Top& Head, int MyIndex, const std::string& Winner)
+	{
 		double K = 0.5;
 		if (Head.LostAtt + Head.LostDef > 0 || Head.Worth > 0.0)
 		{
@@ -915,8 +932,9 @@ namespace AirDesk
 		if (Head.bOver)
 		{
 			// The stamp decides the side: a side that held the field won whatever the exchange said, and the knot settles past
-			// the middle on its side (the ruling: "settles on the side the stamp names").
-			const int Won = AirFeed::SideOf(Head.Winner);
+			// the middle on its side (the ruling: "settles on the side the stamp names"). Since release 1.5 the stamp is the
+			// after card's once it is read (Desk::Winner), so the bar never ends on the side the card then calls beaten.
+			const int Won = AirFeed::SideOf(Winner);
 			if (Won == MyIndex) K = std::max(K, 0.5 + KnotSettle);
 			else if (Won == 1 - MyIndex) K = std::min(K, 0.5 - KnotSettle);
 		}
