@@ -193,9 +193,8 @@
       }
     },
     "FRA": {
-      "about": "French infantry, 1940: khaki wool. STAND-IN: no soldier file of its own yet, so the Polish body (soldier_POL) in this army's cloth from the art director's unit table; its own plain helmet painted \"helmet\" (no other army's badges). Every other paint stands in from the American row.",
-      "standIn": "POL",
-      "helmets": "own",
+      "about": "French infantry, 1940: khaki wool. Its own soldier file (soldier_FRA, the soldiers thread 23 Nov 00:11Z: the Polish body in the Adrian M26 helmet, with its finishes by date, season and front: plain, road dust May-June 1940, horizon blue to June 1940, mud, desert sand), in this army's cloth from the art director's unit table. Every other paint stands in from the American row.",
+      "helmets": "file",
       "paints": {
         "tunic": { "rgb": "7A7250", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
         "trousers": { "rgb": "7A7250", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
@@ -215,9 +214,8 @@
       }
     },
     "UK": {
-      "about": "British infantry: khaki serge battledress. STAND-IN: no soldier file of its own yet, so the Polish body (soldier_POL) in this army's cloth from the art director's unit table; its own plain helmet painted \"helmet\" (no other army's badges). Every other paint stands in from the American row.",
-      "standIn": "POL",
-      "helmets": "own",
+      "about": "British infantry: khaki serge battledress. Its own soldier file (soldier_UK, the soldiers thread 23 Nov 00:11Z: the Polish body in the Brodie Mk II helmet, with its finishes by date, season and front: plain, net, net and scrim, net and leaves in the west's summer 1944, desert sand and dust, mud, whitewash in the winter of 1944-45), in this army's cloth from the art director's unit table. Every other paint stands in from the American row.",
+      "helmets": "file",
       "paints": {
         "tunic": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
         "trousers": { "rgb": "8B7B52", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\")" },
@@ -237,9 +235,8 @@
       }
     },
     "UK@desert": {
-      "about": "British infantry on the desert front (\"UK@desert\": LandMen takes army@front first): khaki drill shirt and shorts. STAND-IN: the Polish body (soldier_POL); the drill colour the art director's (23:42Z); every other paint stands in from the American row.",
-      "standIn": "POL",
-      "helmets": "own",
+      "about": "British infantry on the desert front (\"UK@desert\": LandMen takes army@front first): khaki drill shirt and shorts. The British soldier file (soldier_UK, its Brodie helmet in desert sand or dust; no soldier_UK_desert yet, so the drill is painted on the battledress body); the drill colour the art director's (23:42Z); every other paint stands in from the American row.",
+      "helmets": "file",
       "paints": {
         "tunic": { "rgb": "B8A37A", "about": "Art director 22 Nov 23:42Z: sandy khaki drill, a touch paler than the first A8946A; written with extra colour for the grade, so checked in the first game stills." },
         "trousers": { "rgb": "B8A37A", "about": "As the shirt (art director 23:42Z)." },

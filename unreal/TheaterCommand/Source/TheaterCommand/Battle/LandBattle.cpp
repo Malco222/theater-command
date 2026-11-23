@@ -1276,10 +1276,15 @@ bool ALandBattle::Open()
 		// "-TheaterLandTrial=church,walltop,spruce,edge,kunai" or "=all"; LandField::Field::Trial)
 		{
 			FString Trial;
-			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTrial="), Trial, false) && !Trial.IsEmpty())
+			// (taken loosely, as the weather word is: "Church, Walltop" reads as "church,walltop")
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTrial="), Trial, false))
+			{
+				Trial = Trial.Replace(TEXT(" "), TEXT("")).Replace(TEXT("\t"), TEXT("")).ToLower();
+			}
+			if (!Trial.IsEmpty())
 			{
 				Lay.Trial = LandParts::Narrow(Trial);
-				UE_LOG(LogTheater, Log, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *Trial);
+				UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *Trial);
 			}
 		}
 		if (Lay.Steppe.bOn)

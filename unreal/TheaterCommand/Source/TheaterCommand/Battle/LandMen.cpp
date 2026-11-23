@@ -3477,9 +3477,12 @@ namespace LandMen
 			// army's own row)
 			auto Colours = Armies.find(Army + "@" + Front);
 			if (Colours == Armies.end()) Colours = Armies.find(Army);
-			// (an army with no row at all: armies.json's "_default", plain khaki on the Pole's body, never unpainted)
-			if (Colours == Armies.end()) Colours = Armies.find("_default");
-			if (Colours != Armies.end() && !Colours->second.StandIn.empty() && Soldiers.find(Army) == Soldiers.end())
+			// (an army with no row at all: armies.json's "_default", plain khaki on the Pole's body, never unpainted; its
+			// stand-in body only where the recording's block named none of its own that was read)
+			bool bDefaultRow = false;
+			if (Colours == Armies.end()) { Colours = Armies.find("_default"); bDefaultRow = true; }
+			const bool bBlockOwn = bDefaultRow && File != Army && Soldiers.find(File) != Soldiers.end();
+			if (Colours != Armies.end() && !Colours->second.StandIn.empty() && Soldiers.find(Army) == Soldiers.end() && !bBlockOwn)
 			{
 				File = Colours->second.StandIn;
 				if (Soldiers.find(File) != Soldiers.end() && StandInSaid.insert(Army).second)
