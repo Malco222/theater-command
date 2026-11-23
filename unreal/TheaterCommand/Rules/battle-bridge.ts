@@ -89,6 +89,10 @@ export function battleCalls(h: BattleHooks) {
       // rules send it to the 3D game only with the Battle rules card's "Wet mud" row on.
       const wx = groundWeather(g, g.regions[to]);
       if (wx && !ticket.weather) ticket.weather = wx;
+      // Captured kit: each side's latest capture of the last six months, whose tanks and how many blocks.
+      const took = (nat: string) => (g.captured?.[nat] ?? []).filter((k) => g.turn - k.turn < 6).slice(-1)[0];
+      const ca = took(t.att.nat), cd = took(t.def.nat);
+      if (ca || cd) ticket.captured = { ...(ca ? { att: { from: ca.from, n: ca.n } } : {}), ...(cd ? { def: { from: cd.from, n: cd.n } } : {}) };
       return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
     },
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {

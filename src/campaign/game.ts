@@ -622,6 +622,27 @@ export function groundWeather(g: Game, r: Region): string {
 }
 
 /**
+ * Captured kit (release 2, in release 1.5 for its looks): after a fought battle won heavily over an army with tanks, the
+ * winner keeps a few of them (1 to 3 tank blocks to be drawn as the loser's model in the 3D game), at even odds for a
+ * heroic win or a rout of the attack, and a third for a decisive win; kept six months, the three latest for each nation.
+ */
+function capturedKit(g: Game, rep: BattleReport, target: Region): void {
+  const attWon = rep.level.endsWith('victory');
+  const heavy = rep.level === 'Heroic victory' || rep.level === 'Decisive defeat' ? 50 : rep.level === 'Decisive victory' ? 33 : 0;
+  if (!heavy) return;
+  const losers = (attWon ? rep.defenders : rep.attackers).filter((u) => u.kind === 'arm' && u.divs > 0);
+  if (!losers.length) return;
+  const throwOf = (rep.id * 7919 + target.id * 104729 + g.turn * 31) % 100;
+  if (throwOf >= heavy) return;
+  const winner = attWon ? rep.attNat : rep.defNat;
+  const from = losers.reduce((a, b) => (b.divs > a.divs ? b : a)).nat;
+  if (from === winner) return;
+  const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
+  const book = (g.captured ??= {});
+  book[winner] = [...(book[winner] ?? []).filter((k) => g.turn - k.turn < 6).slice(-2), { from, n, turn: g.turn }];
+}
+
+/**
  * Whose ground takes the long line in this war: the Soviet Union's at every stop, and that of the owners in east.json
  * 'lineOwners' at the dial's stops in 'lineStops' (ruling 221, L). The Russian winter stays the Soviet Union's alone.
  */
@@ -2239,6 +2260,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
   // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
   if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
+  // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
+  capturedKit(g, rep, target);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
