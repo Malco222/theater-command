@@ -42,6 +42,8 @@ import type { LandBattle, Screen } from './sim';
 import type { LandUnit } from './units';
 import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
+import { REACH } from './shells';
+import type { Calibre } from '../core/types';
 
 /**
  * What a man, tank, gun or lorry is in his block. 'hmg' and 'mortar' (release 2: a support team's, Drill.teams) are a
@@ -237,6 +239,11 @@ export interface Round {
   g?: 'coax' | 'hull' | 'roof';
   /** It struck the tank's commander, up in his hatch: he drops inside, and she fights buttoned up from then. */
   cm?: 1;
+  /**
+   * Shell blasts (release 2, LandBattle.blast): a man struck by the burst of the round before it (the same t, x and y),
+   * or of the 'shell' event that burst there. No shot and no burst of its own: the 3D game draws the one burst once.
+   */
+  m?: 1;
   /** A tank knocked out ('kill'): how she ends, out of the fight, burning, or blown up (armour.ts fateOf: by her model and the face struck). */
   fate?: 'out' | 'burn' | 'blow';
   /**
@@ -304,6 +311,7 @@ const DR = data as unknown as {
     platoon: Record<string, { squads: number; hq: number }> & { step: number; rows: number };
   };
   tanks: { post: number; back: number; shots: [number, number] };
+  blast: { hold: number; anchor: number; most: Record<Calibre, number>; lying: number; kneeling: number };
 };
 export const DRILL = DR;
 
@@ -427,6 +435,12 @@ interface Squad {
   lastStr: number;
   harm: number;
   shelledAt: number;
+  /**
+   * Shell blasts (release 2, LandBattle.blast): the battle time its first loss to a shell became due while held for the
+   * next burst (thin), and where and when the last 'shell' event that took one of its key men burst (Drill.shelled).
+   */
+  held?: number;
+  anchor?: { x: number; y: number; t: number };
   /** Where the block stood last step, and its heading over the ground. */
   lastX: number;
   lastY: number;
@@ -825,6 +839,8 @@ export class Drill {
     this.shellKills.add(on + ':' + k);
     const vq = this.squads.get(on), v = vq?.men.find((x) => x.k === k);
     if (vq && v) this.killRound(by !== undefined ? this.b.unit(by) : undefined, vq, v, [x, y]);
+    // (shell blasts: the men of his block the rules take next fall to this burst too, if they stand near it; thin)
+    if (vq && this.b.blast) vq.anchor = { x, y, t: this.b.t };
   }
 
   /** A model the rules took with no striker on the field (the air's bombs and guns): no round of the field's for him. */
@@ -921,6 +937,13 @@ export class Drill {
    * takes the men round its burst together, one round each at the one burst (the same t, x and y); small arms one by one.
    * A block that ran off the field, or left it in order, takes its men with it.
    */
+  /** How much of him a burst finds (shell blasts): a man lying down DR.blast.lying, kneeling DR.blast.kneeling, else 1. */
+  private exposed(m: Man): number {
+    if (m.pose === 'fire_prone' || m.pose === 'hide' || m.pose === 'crawl' || m.pose === 'observe' || m.pose === 'cower' || m.pose === 'lmg_burst') return DR.blast.lying;
+    if (m.pose === 'fire_kneel' || m.pose === 'wait' || m.pose === 'creep') return DR.blast.kneeling;
+    return 1;
+  }
+
   private thin(sq: Squad): void {
     const u = sq.u, b = this.b;
     if (u.state === 'withdrawn' || (u.state === 'gone' && (u.figures > 0 || u.y < 0 || u.y > b.field.h))) return;
@@ -942,19 +965,38 @@ export class Drill {
     const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg'));
     const from: [number, number] = by ? [by.x, by.y] : [u.x, u.y];
     let burst: [number, number] | undefined;
+    // Shell blasts (release 2; Brian, 23 November 05:04Z: "explosions on the ground should be able to take out multiple
+    // people if they are close to it"; LandBattle.blast, off unless turned on): the men a block loses to shells are taken
+    // together, as one burst takes them. Its losses to a gun or a tank's high explosive wait for a burst (DR.blast.hold
+    // seconds at most, or until as many are due as one shell of its class takes), and a 'shell' event that took one of
+    // its key men a moment ago is that burst (Drill.shelled). The men nearest the burst fall to it, within its reach
+    // (shells.ts REACH, by the shell's class), a man lying down or in cover taken less often; beyond it, another shell.
+    // The rules' count of the block's men is never changed: they fall up to DR.blast.hold seconds later, and together.
+    const blast = shell && b.blast && !!by;
+    const cal: Calibre = by?.cal ?? 'field';
+    if (blast) {
+      const a = sq.anchor && b.t - sq.anchor.t <= DR.blast.anchor ? sq.anchor : undefined;
+      if (a) burst = [a.x, a.y];
+      else if (fighting(u) && !b.over && n < DR.blast.most[cal] && b.t - (sq.held ??= b.t) < DR.blast.hold) return;
+      sq.held = undefined;
+    }
+    const reach = blast ? REACH[cal] : 12;
     while (n-- > 0 && cand.length) {
       let best = 0, score = Infinity;
       cand.forEach((m, i) => {
         const p = burst ?? from;
-        const sc = Math.hypot(m.x - p[0], m.y - p[1]) * (2 - (DR.rounds.cover[m.cover] ?? 1)) + (burst ? 6 : 40) * roll(this.seed, u.id, m.n, sq.lost, 81);
+        const sc = (Math.hypot(m.x - p[0], m.y - p[1]) * (2 - (DR.rounds.cover[m.cover] ?? 1))) / (blast ? this.exposed(m) : 1) + (burst ? 6 : 40) * roll(this.seed, u.id, m.n, sq.lost, 81);
         if (sc < score) { score = sc; best = i; }
       });
       const m = cand.splice(best, 1)[0];
       sq.lost++;
-      // A shell's burst: the first man's place, and the men near it after him (beyond 12 m of it, another shell).
-      if (shell && (!burst || Math.hypot(m.x - burst[0], m.y - burst[1]) > 12)) { burst = [m.x, m.y]; this.duck(m.x, m.y); }
+      // A shell's burst: the first man's place, and the men near it after him (beyond 12 m of it, another shell; with
+      // shell blasts on, beyond its class's reach). With them on, a man the burst before took too is its mate (m: 1).
+      let mate = false;
+      if (shell && (!burst || Math.hypot(m.x - burst[0], m.y - burst[1]) > reach)) { burst = [m.x, m.y]; this.duck(m.x, m.y); }
+      else if (blast) mate = true;
       m.fell = b.t; m.v = 0; m.aim = undefined; m.hidden = undefined;
-      if (by) this.killRound(by, sq, m, shell ? burst : undefined);
+      if (by) this.killRound(by, sq, m, shell ? burst : undefined, mate);
       m.pose = 'down';
       m.spot = [m.x, m.y];
       if (b.bearers) this.hurt(sq, m);
@@ -3320,7 +3362,7 @@ export class Drill {
    * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
    * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
    */
-  private killRound(by: LandUnit | undefined, vq: Squad, v: Man, p?: [number, number]): void {
+  private killRound(by: LandUnit | undefined, vq: Squad, v: Man, p?: [number, number], mate = false): void {
     const t = this.b.t, tq = by ? this.squads.get(by.id) : undefined;
     const at: [number, number] = p ?? [v.x, v.y];
     let s: Man | undefined, w: Weapon = p ? (by?.kind === 'arm' ? 'tank' : by?.team === 'mor' ? 'mortar' : 'gun') : 'rifle';
@@ -3338,12 +3380,13 @@ export class Drill {
     const r: Round = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: 'kill' };
     if (v.j !== undefined) r.oj = v.j;
     if (by) r.by = by.id;
+    if (mate) r.m = 1;
     if (s) {
       r.k = s.k;
       if (s.j !== undefined) r.j = s.j;
       if (w === 'mg' && s.role === 'tank' && by) r.g = this.tankGun(by, s, at, Math.round(t * 10));
       // Its shot is seen: a tank's, a gun's, a launcher's or a grenade's stamp (small arms are in the firing already).
-      if (w !== 'rifle' && w !== 'mg') { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
+      if (w !== 'rifle' && w !== 'mg' && !mate) { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
     }
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);

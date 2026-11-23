@@ -12,7 +12,9 @@ import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
 const me: Side | null = meArg === 'none' ? null : (meArg as Side);
-const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false });
+// (LAND_LIVE_SWITCHES=blast,... turns those Battle rules card rows on for the run: shell blasts, release 2)
+const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
+const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(on.has('blast') ? { blast: true } : {}) });
 const header = L.header();
 const deltas: LiveDelta[] = [];
 const lines: string[] = [];

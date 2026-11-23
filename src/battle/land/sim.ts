@@ -400,6 +400,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
    */
   bearers = false;
+  /**
+   * Shell blasts (release 2; Brian, 23 November 05:04Z): the men a block loses to shells fall together, the men near one
+   * burst, as one shell takes them (Drill.thin, DRILL.blast). Looks only: the drill reads it, the fight never. Off unless
+   * whoever opens the field turns it on (the bridge's { blast: true }, the Battle rules card's Shell blasts row).
+   */
+  blast = false;
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
   private readonly litters = new Map<number, Litter>();
   /**

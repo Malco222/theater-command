@@ -488,6 +488,7 @@ namespace LandFeed
 			Row.H = R["h"].Num(0.0);
 			Row.G = R["g"].Str("");
 			Row.bCm = R["cm"].Int(0) != 0;
+			Row.bMate = R["m"].Int(0) != 0;
 			Row.Hang = R["hang"].IsNumber() ? R["hang"].Num() : -1.0;
 		}
 

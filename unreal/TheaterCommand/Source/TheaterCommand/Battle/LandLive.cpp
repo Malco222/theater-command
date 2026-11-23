@@ -87,6 +87,10 @@ namespace
 		{ TEXT("captured"), TEXT("Captured tanks"), TEXT("An army that lately beat one with tanks fields a few of them in its own paint. Off: every tank is its own side's."), TEXT("TheaterLandNoCaptured"), false, TEXT("TheaterLandRuleCaptured") },
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), true, nullptr },
 		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), false, TEXT("TheaterLandRuleOldRuts") },
+		// (Shell blasts, release 2: Brian, 23 November 05:04Z, "explosions on the ground should be able to take out multiple
+		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
+		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
+		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");

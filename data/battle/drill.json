@@ -108,5 +108,13 @@
     "counter": {"at": 45, "ahead": 12, "xp": [2, 1, 0.6]},
     "flank": {"rush": [14, 26], "out": 45},
     "smoke": {"on": true, "every": 60, "spread": 10, "per": 15, "most": 12}
+  },
+  "blast": {
+    "_about": "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
+    "hold": 6,
+    "anchor": 1,
+    "most": {"light": 2, "mortar": 3, "field": 4, "howitzer": 5, "heavy": 7, "bomb": 10},
+    "lying": 0.45,
+    "kneeling": 0.75
   }
 }
