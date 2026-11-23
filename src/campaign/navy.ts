@@ -2026,7 +2026,7 @@ export function placeBoats(g: Game, nat: string): void {
 
 export const CAUSE = causeData as unknown as {
   cover: number; asv: string; find: number; radar: number; seaLoss: string[];
-  incident: { group: number; lone: number; groupKit: number; loneKit: number };
+  incident: { group: number; lone: number; groupKit: number; loneKit: number; atw: number };
 };
 
 /** A navy's anti-submarine kit: sonar and depth charges, sea-search radar, ahead-throwing weapons, escort-group training, long-range patrol aircraft. */
@@ -2044,11 +2044,13 @@ export const airKit = (k: AswKit): boolean => k.asdic && k.radar;
 
 /** The chance that one attack on a convoy ends with the boat sunk, by a support group or by the convoy's close escort, with this kit (OEG T10). */
 export function incidentRate(k: AswKit, group: boolean): number {
-  const I = CAUSE.incident, kit = k.hedgehog && k.groups;
-  return group ? (kit ? I.groupKit : I.group) : kit ? I.loneKit : I.lone;
+  const I = CAUSE.incident;
+  if (k.hedgehog && k.groups) return group ? I.groupKit : I.loneKit;
+  // Ahead-throwing weapons alone: the depth-charge rate times OEG T9's first half-year edge.
+  return (group ? I.group : I.lone) * (k.hedgehog ? I.atw : 1);
 }
 
-/** What a ship's kit makes of each attack against depth charges alone: 1 without ahead-throwing weapons and escort-group training. */
+/** What a ship's kit makes of each attack against depth charges alone: 1 without ahead-throwing weapons. */
 const kitEdge = (k: AswKit, group: boolean): number => incidentRate(k, group) / incidentRate({ ...k, hedgehog: false }, group);
 
 /** Radar on escorts: what sea-search radar adds (not laid: 1 until the historian's figure is read). */
