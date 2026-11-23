@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0f05bef2 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 78b1658e 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3090,6 +3090,18 @@
       most: { light: 2, mortar: 3, field: 4, howitzer: 5, heavy: 7, bomb: 10 },
       lying: 0.45,
       kneeling: 0.75
+    },
+    escort: {
+      _about: "Infantry with tanks (release 2; Brian, 23 November 05:05Z: 'have them advance behind the tank using it as cover like they would in real life ... make sure their players cant be run over by their own vechiles and they get out of the way. vechiles can run over enemy soldiers though which would kill them'). Looks only (LandBattle.escort, Drill.escort and clearOfVehicles): a foot block deploying or bounding forward with a friendly tank within 'near' metres sends up to 'men' riflemen within 'reach' of her to file in behind her, 'gap' metres back, 'file' apart, 'side' either side of her tracks, at her pace plus a little ('pace' its least and most, m/s); a tank or lorry is moving over 'moving' m/s. 'clear': a man of her side within 'ahead' metres of her nose (or 'behind' of her middle) and 'half' of her middle line steps out to 'out' metres of it at a run, not again for 'dodge' seconds; an enemy only once within 'enemyAhead', and never while lying pinned; a man the rules take from his block while within 'crush' ahead and 'crushHalf' aside of an enemy tank's middle on the move is run over. 'within': blocks this far beyond a vehicle are not looked at.",
+      near: 60,
+      men: 6,
+      reach: 45,
+      gap: 7,
+      file: 2.6,
+      side: 1.4,
+      moving: 0.4,
+      pace: [1.2, 4.5],
+      clear: { ahead: 10, behind: 3, half: 2.3, out: 3.6, enemyAhead: 2.5, crush: 4, crushHalf: 1.4, dodge: 1.5, within: 60 }
     }
   };
 
@@ -3214,6 +3226,7 @@
   var BUILT = ["buildings", "industry", "suburb"];
   var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed", "stretcher_front", "stretcher_rear"]);
   var CARRIED = /* @__PURE__ */ new Set(["ride", "mounted", "horses"]);
+  var LYING = /* @__PURE__ */ new Set(["fire_prone", "hide", "crawl", "observe", "cower", "lmg_burst"]);
   var SMALL_ARMS = /* @__PURE__ */ new Set(["fire_stand", "fire_kneel", "fire_prone", "lmg_burst"]);
   var VEHICLE = /* @__PURE__ */ new Set(["tank", "gun", "lorry"]);
   var CREWED = /* @__PURE__ */ new Set(["hmg", "mortar"]);
@@ -3272,6 +3285,8 @@
        * the field's (the air's: Drill.fromAir). And the block whose small arms took each other one (Drill.struckBy).
        */
       __publicField(this, "shellKills", /* @__PURE__ */ new Set());
+      /** Infantry with tanks (release 2): each tank's followers (her block's id x 1000 + her k), and where each tank is. */
+      __publicField(this, "escorts", /* @__PURE__ */ new Map());
       __publicField(this, "byOf", /* @__PURE__ */ new Map());
       /** Where each wreck lies as drawn (the rules' wreck id to where her tank fell): she burns where she stood. */
       __publicField(this, "wreckAt", /* @__PURE__ */ new Map());
@@ -3535,6 +3550,7 @@
           if (this.byBook) this.feel(sq);
           this.think(sq);
           this.pairs(sq, this.space(sq));
+          if (b.escort) this.escort(sq);
           if (sq.screenQ) this.screenRound(sq);
         }
         this.walk(sq);
@@ -3542,6 +3558,7 @@
       }
       this.shellKills.clear();
       this.byOf.clear();
+      if (b.escort) this.clearOfVehicles();
       if (t >= this.leadAt) {
         this.leadAt = t + 0.5;
         this.pickLeads();
@@ -3718,9 +3735,139 @@
      * takes the men round its burst together, one round each at the one burst (the same t, x and y); small arms one by one.
      * A block that ran off the field, or left it in order, takes its men with it.
      */
+    // ---- Infantry with tanks (release 2) -----------------------------------------------------------------------------
+    //
+    // Brian, 23 November 05:05Z: "if the troops are with tanks, have them advance behind the tank using it as cover like
+    // they would in real life for the units near the tank and make sure their players cant be run over by their own
+    // vechiles and they get out of the way. vechiles can run over enemy soldiers though which would kill them".
+    // LandBattle.escort, looks only (the drill's, DRILL.escort): the rules' counts and places are untouched.
+    /** A tank's key (her block's id x 1000 + her k), and the tanks of a side standing, each with her key. */
+    tanksStanding(side, x, y, within) {
+      const out = [];
+      for (const tq of this.squads.values()) {
+        if (tq.u.side !== side || tq.u.kind !== "arm" || !live(tq.u)) continue;
+        if (Math.hypot(tq.u.x - x, tq.u.y - y) > within + Math.max(tq.u.w, tq.u.d) / 2) continue;
+        for (const v of tq.men) if (v.role === "tank" && this.stands(tq, v)) out.push([v, tq.u.id * 1e3 + v.k]);
+      }
+      return out;
+    }
+    /**
+     * A foot block on the advance with friendly tanks near: up to DRILL.escort.men of its riflemen nearest each tank file
+     * in behind her, a few metres back and a stride to either side of her tracks, at her pace (she is their cover); when
+     * she halts, they kneel behind her. Not while riding, mounting or carrying; the rest of the block keeps its drill.
+     */
+    escort(sq) {
+      const u = sq.u, E = DR.escort, t = this.b.t;
+      const on = isFoot2(u) && sq.tier >= 1 && (sq.phase === "deploy" || sq.phase === "bound") && sq.boarding === void 0 && (u.kind !== "mot" || !!sq.down) && fighting(u);
+      const tanks = on ? this.tanksStanding(u.side, u.x, u.y, E.near + Math.max(u.w, u.d) / 2) : [];
+      const keys = new Set(tanks.map(([, k]) => k));
+      for (const m of sq.men) if (m.esc !== void 0 && (!keys.has(m.esc) || !this.stands(sq, m))) m.esc = void 0;
+      for (const [k, list] of this.escorts) this.escorts.set(k, list.filter((m) => m.esc === k && m.fell === void 0));
+      if (!tanks.length) return;
+      const free = (m) => this.stands(sq, m) && m.esc === void 0 && !m.pr && !m.aid && !m.scout && m.role === "rifle" && !CARRIED.has(m.pose);
+      for (const [v, k] of tanks) {
+        const list = this.escorts.get(k) ?? [];
+        if (list.length < E.men) {
+          const [bx, by2] = fwd(v.face), back = [v.x - bx * E.gap, v.y - by2 * E.gap];
+          const cand = sq.men.filter((m) => free(m) && Math.hypot(m.x - back[0], m.y - back[1]) < E.reach).sort((a, c) => Math.hypot(a.x - back[0], a.y - back[1]) - Math.hypot(c.x - back[0], c.y - back[1]) || a.n - c.n);
+          for (const m of cand.slice(0, E.men - list.length)) {
+            m.esc = k;
+            list.push(m);
+          }
+          this.escorts.set(k, list);
+        }
+        const [fx, fy] = fwd(v.face), [rx, ry] = right(v.face), moving = (v.went ?? 0) > E.moving;
+        list.forEach((m, i) => {
+          if (m.esc !== k || !sq.men.includes(m)) return;
+          const back = E.gap + E.file * Math.floor(i / 2), side = (i % 2 ? 1 : -1) * E.side;
+          const p = [v.x - fx * back + rx * side, v.y - fy * back + ry * side];
+          m.spot = p;
+          m.slotAt = p;
+          m.cover = "wreck";
+          m.aim = void 0;
+          if (moving || Math.hypot(m.x - p[0], m.y - p[1]) > 1.5) {
+            m.pose = "advance";
+            m.v = clamp2((v.went ?? 0) + 0.8, E.pace[0], E.pace[1]);
+            m.until = t + 1;
+          }
+        });
+      }
+    }
+    /**
+     * Every man on his feet gets out of a vehicle's way: a man of her own side in front of a tank or a lorry on the move
+     * (within DRILL.escort.clear.ahead of her nose and a little to either side of her tracks) steps out to the side he is
+     * nearer, at a run, and his place is moved off her way; an enemy only once she is almost on him (clear.enemyAhead), so
+     * she can catch one the rules take then (Drill.thin: a tank crushes him). Fallen and wounded men are not moved.
+     */
+    clearOfVehicles() {
+      const C = DR.escort.clear, t = this.b.t;
+      const movers = [];
+      for (const vq of this.squads.values()) {
+        if (!live(vq.u)) continue;
+        for (const v of vq.men) {
+          if (v.role !== "tank" && v.role !== "lorry" || v.fell !== void 0 || (v.went ?? 0) <= DR.escort.moving) continue;
+          const f = v.pose === "reverse" ? v.face + Math.PI : v.face;
+          const [fx, fy] = fwd(f), [rx, ry] = right(f);
+          movers.push({ v, side: vq.u.side, fx, fy, rx, ry });
+        }
+      }
+      if (!movers.length) return;
+      for (const sq of this.squads.values()) {
+        const u = sq.u;
+        if (!live(u) || u.kind === "arm" || u.kind === "art") continue;
+        const near = movers.filter((o) => Math.hypot(o.v.x - u.x, o.v.y - u.y) < C.within + Math.max(u.w, u.d) / 2);
+        if (!near.length) continue;
+        for (const m of sq.men) {
+          if (!this.stands(sq, m) || VEHICLE.has(m.role) || CARRIED.has(m.pose) || m.pose === "wounded") continue;
+          if (m.dodged !== void 0 && t - m.dodged < C.dodge) continue;
+          for (const o of near) {
+            const dx = m.x - o.v.x, dy = m.y - o.v.y;
+            const a = dx * o.fx + dy * o.fy, l = dx * o.rx + dy * o.ry;
+            if (o.side !== u.side && LYING.has(m.pose)) continue;
+            const ahead2 = o.side === u.side ? C.ahead : C.enemyAhead;
+            if (a < -C.behind || a > ahead2 || Math.abs(l) >= C.half) continue;
+            const s = l >= 0 ? 1 : -1, go = C.out - Math.abs(l);
+            const out = [m.x + o.rx * s * go, m.y + o.ry * s * go];
+            const sa = (m.spot[0] - o.v.x) * o.fx + (m.spot[1] - o.v.y) * o.fy, sl = (m.spot[0] - o.v.x) * o.rx + (m.spot[1] - o.v.y) * o.ry;
+            m.spot = sa > -C.behind && sa < 30 && Math.abs(sl) < C.out ? [m.spot[0] + o.rx * (s * C.out - sl), m.spot[1] + o.ry * (s * C.out - sl)] : m.spot;
+            m.slotAt = m.spot;
+            m.pose = "run";
+            m.v = Math.max(m.v, 4.5);
+            m.until = t + C.dodge;
+            m.aim = void 0;
+            m.dodged = t;
+            m.spot = Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) < 0.5 ? out : m.spot;
+            if (m.esc === void 0) m.spot = out;
+            break;
+          }
+        }
+      }
+    }
+    /**
+     * A man the rules take from sq lying in the path of an enemy tank on the move, close under her nose (Drill.thin): her,
+     * him and her block. Any enemy tank near the block will do: which enemy took the man is the drill's to choose.
+     */
+    crushOf(sq, cand) {
+      const C = DR.escort.clear, u = sq.u;
+      for (const bq of this.squads.values()) {
+        if (bq.u.side === u.side || bq.u.kind !== "arm" || !live(bq.u)) continue;
+        if (Math.hypot(bq.u.x - u.x, bq.u.y - u.y) > C.within + (Math.max(u.w, u.d) + Math.max(bq.u.w, bq.u.d)) / 2) continue;
+        for (const v of bq.men) {
+          if (v.role !== "tank" || !this.stands(bq, v) || (v.went ?? 0) <= DR.escort.moving) continue;
+          const f = v.pose === "reverse" ? v.face + Math.PI : v.face;
+          const [fx, fy] = fwd(f), [rx, ry] = right(f);
+          for (const m of cand) {
+            if (!this.stands(sq, m)) continue;
+            const dx = m.x - v.x, dy = m.y - v.y, a = dx * fx + dy * fy, l = dx * rx + dy * ry;
+            if (a > -1 && a < C.crush && Math.abs(l) < C.crushHalf) return [v, m, bq.u];
+          }
+        }
+      }
+      return void 0;
+    }
     /** How much of him a burst finds (shell blasts): a man lying down DR.blast.lying, kneeling DR.blast.kneeling, else 1. */
     exposed(m) {
-      if (m.pose === "fire_prone" || m.pose === "hide" || m.pose === "crawl" || m.pose === "observe" || m.pose === "cower" || m.pose === "lmg_burst") return DR.blast.lying;
+      if (LYING.has(m.pose)) return DR.blast.lying;
       if (m.pose === "fire_kneel" || m.pose === "wait" || m.pose === "creep") return DR.blast.kneeling;
       return 1;
     }
@@ -3748,6 +3895,24 @@
       const shell = !!by2 && (by2.kind === "arm" && !this.mgKill(by2, u, sq.lost) || by2.kind === "art" && by2.team !== "mg");
       const from = by2 ? [by2.x, by2.y] : [u.x, u.y];
       let burst;
+      if (b.escort) {
+        const crushed = this.crushOf(sq, cand);
+        if (crushed) {
+          const [v, m, tu] = crushed;
+          cand.splice(cand.indexOf(m), 1);
+          sq.lost++;
+          n--;
+          m.fell = b.t;
+          m.v = 0;
+          m.aim = void 0;
+          m.hidden = void 0;
+          this.killRound(tu, sq, m, void 0, false, v);
+          m.pose = "down";
+          m.spot = [m.x, m.y];
+          this.aid(sq, m);
+          if (n <= 0 || !cand.length) return;
+        }
+      }
       const blast = shell && b.blast && !!by2;
       const cal = by2?.cal ?? "field";
       if (blast) {
@@ -6703,7 +6868,7 @@
      * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
      * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
      */
-    killRound(by2, vq, v, p, mate = false) {
+    killRound(by2, vq, v, p, mate = false, crush) {
       const t = this.b.t, tq = by2 ? this.squads.get(by2.id) : void 0;
       const at = p ?? [v.x, v.y];
       let s, w = p ? by2?.kind === "arm" ? "tank" : by2?.team === "mor" ? "mortar" : "gun" : "rifle";
@@ -6723,6 +6888,10 @@
         }
       }
       if (!p && s) w = s.role === "hmg" || s.role === "tank" ? "mg" : v.role === "tank" ? s.role === "at" ? "at" : "grenade" : s.role === "mg" ? "mg" : "rifle";
+      if (crush) {
+        s = crush;
+        w = "track";
+      }
       const r = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: "kill" };
       if (v.j !== void 0) r.oj = v.j;
       if (by2) r.by = by2.id;
@@ -6731,7 +6900,7 @@
         r.k = s.k;
         if (s.j !== void 0) r.j = s.j;
         if (w === "mg" && s.role === "tank" && by2) r.g = this.tankGun(by2, s, at, Math.round(t * 10));
-        if (w !== "rifle" && w !== "mg" && !mate) {
+        if (w !== "rifle" && w !== "mg" && w !== "track" && !mate) {
           s.shot = t;
           s.fired = t;
           s.aim = [v.x, v.y];
@@ -7176,6 +7345,13 @@
        * whoever opens the field turns it on (the bridge's { blast: true }, the Battle rules card's Shell blasts row).
        */
       __publicField(this, "blast", false);
+      /**
+       * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
+       * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
+       * clearOfVehicles, thin; DRILL.escort). Looks only: the drill reads it, the fight never. Off unless turned on (the
+       * bridge's { escort: true }, the Battle rules card's Infantry with tanks row).
+       */
+      __publicField(this, "escort", false);
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
       __publicField(this, "litters", /* @__PURE__ */ new Map());
       /**
@@ -11467,6 +11643,7 @@
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.blast === true) sim.blast = true;
+      if (opts.escort === true) sim.escort = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
@@ -11800,7 +11977,8 @@
         worn: opts?.worn !== false,
         mud: opts?.mud !== false,
         scars: opts?.scars !== false,
-        blast: opts?.blast === true
+        blast: opts?.blast === true,
+        escort: opts?.escort === true
       });
       return live3.header();
     },
@@ -11835,6 +12013,7 @@
         mud: o.mud !== false,
         scars: o.scars !== false,
         blast: o.blast === true,
+        escort: o.escort === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
