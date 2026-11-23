@@ -31,6 +31,9 @@
  *   America  the farm country of North America (Iowa, Kansas, Ohio, Pennsylvania): fields on the survey's square mile,
  *            corn, wheat, oats and hay, red barns and silos, wire and rail fences, a main street and its grain elevator
  *            (release 2, on trial "america")
+ *   Plain    the dry plains of north China, Manchuria and India: the loess, gaoliang, millet, wheat and soybeans in their
+ *            strips, poplar-lined cart tracks sunk in the earth, flat-roofed villages in rows, grave mounds, the towns'
+ *            rammed-earth walls; India's monsoon crops and its winter wheat and mustard (release 2, on trial "plain")
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -54,6 +57,7 @@ namespace LandScape
 		Dry,      // LandDry: the dry steppe (Khalkhin Gol, 1939)
 		Rice,     // LandAsia: rice country (China, Korea, Japan; release 2, on trial "rice")
 		America,  // LandAmerica: North America's farm country (release 2, on trial "america")
+		Plain,    // LandPlain: the dry plains of north China, Manchuria and India (release 2, on trial "plain")
 		Count
 	};
 	const char* NameOf(Look L);
@@ -413,7 +417,7 @@ namespace LandScape
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
 	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
-	// LandAmerica.cpp, LandSnow.cpp).
+	// LandAmerica.cpp, LandPlain.cpp, LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
@@ -421,6 +425,7 @@ namespace LandScape
 	std::unique_ptr<Region> MakeDry(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeAmerica(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakePlain(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
