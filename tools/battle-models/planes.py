@@ -35,6 +35,7 @@ import bmesh
 import bpy
 from mathutils import Quaternion, Vector, noise
 
+import bomber_pe2
 import bomber_wellington
 import carrier_avenger
 import carrier_dauntless
@@ -517,7 +518,7 @@ carrier(carrier_wildcat)
 
 
 # ---- the twin-engined bombers of release 2 (Brian, 2026-11-23: "do 1 and 3"), each in a module of her own:
-# bomber_wellington.py. ----
+# bomber_wellington.py, bomber_pe2.py. ----
 def bomber(module):
     """Takes in a bomber from her module: her NAME, her NUMBERS (her coat is in them), who sits under her glass (SEATS),
     and any table of her own the module gives, put where the others' are: BAY (BAYS), WAIST, TAIL_CUT, TURRET (her
@@ -531,6 +532,7 @@ def bomber(module):
 
 
 bomber(bomber_wellington)
+bomber(bomber_pe2)
 
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
@@ -1830,8 +1832,8 @@ def names():
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
 CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
-        "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5, "Wellington": 6}
-ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber", "Wellington": "bomber"}
+        "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5, "Wellington": 6, "Pe2": 3}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber", "Wellington": "bomber", "Pe2": "bomber"}
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -3117,4 +3119,4 @@ def torpedo(fine=True):
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
-                                                                  "Amerikabomber", "B29", "Bomber", "Wellington")}
+                                                                  "Amerikabomber", "B29", "Bomber", "Wellington", "Pe2")}

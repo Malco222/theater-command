@@ -516,6 +516,7 @@ design director gave her.
 | `Amerikabomber` | Germany's very long range heavy: four engines, two fins | `verylongrange`, tag `amerikabomber` | 8 | bombs |
 | `B29` | America's very long range heavy: four engines, bare metal | `verylongrange`, tag `b29` | 11 | bombs |
 | `Wellington` | Britain's twin of 1939-41 (the Mk IC): fabric over a geodetic frame, FN5 turrets in her nose and tail, a gun at each beam hatch, night colours | 1940 | 6 | bombs, in her bay |
+| `Pe2` | the Soviet Union's dive bomber of 1941-42: a glazed nose, a long greenhouse over her pilot and navigator, two inline engines, twin oval fins, slatted dive brakes under her outer wings, green and black over light blue | 1941 | 3 | bombs, in her bay |
 
 What they add to the form:
 
@@ -554,7 +555,10 @@ What they add to the form:
   crossing at 45 degrees to her length (as many round her tail as round her widest), each her coat's own colour a
   shade darker, a hair paler than black on her black, and none within a few degrees of the line where her coat
   changes (the art director's ask: "a quiet lattice in the skin, not a cage"). On the fine model only; a machine
-  without the key is built as before.
+  without the key is built as before. `bomber_pe2.py`: the Pe-2 of 1941-42, measured from "Petljakov Pe-2.svg"
+  (Wikimedia Commons, Kaboldy, CC BY-SA 3.0; 113.4 px to the metre, set by her span); that sheet draws the
+  radial-engined Pe-2K, so her M-105s' nacelles are from the public-domain "Petlyakov Pe-2 3-view silhouette". No key
+  of her own; her tally panel is drawn at 0.65 (`tallies.SCALE`), her side being slim and round.
 - **The Devastator's own keys** (`carrier_devastator.py`; no other machine has them, and none changes another):
   `squares` (how square her section is, station by station: a round cowling, slab sides under her greenhouse;
   `fitout.squared_hull`); `corrugated` (ridges in the skin of her outer wings and tailplane, on the fine model only,
