@@ -77,6 +77,9 @@ import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
+// (release 1.5) The general's ground battle: the campaign half of FIGHT IT YOURSELF (battle-bridge.ts).
+import { battleCalls } from './battle-bridge';
+import type { FieldBill } from '../../../src/campaign/game';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
@@ -2571,11 +2574,16 @@ function gateOrder(gate: number, shut: boolean) {
   return { ok, note, view: view() };
 }
 
-function attack(ids: number[], to: number) {
+/**
+ * The player's attack. Fought out on the field (release 1.5: the land rules' battle, battle-bridge.ts battleSettleLand),
+ * 'fought' is the field's R in place of the dice and 'field' what the field cost each corps and side (ruling 226(6));
+ * without them the dice roll as always.
+ */
+function attack(ids: number[], to: number, fought?: number, field?: FieldBill) {
   const s = game();
   const before = new Map(s.corps.map((c) => [c.id, c.reg]));
   const sent = attackers(s, ids, to);
-  const report = orderAttack(s, sent, s.regions[to]);
+  const report = orderAttack(s, sent, s.regions[to], fought, field);
   if (report) forgetMarch(s, sent.map((c) => c.id)); // (an order carried out ends a standing march; one refused leaves it standing)
   // Corps that followed up into the ground they won, for the game to march across.
   const moved = report
@@ -6321,4 +6329,6 @@ function find(name: string) {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
-  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };
+  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
+  // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
+  ...battleCalls({ game, attack: playerOrder(attack) }) };

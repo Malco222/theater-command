@@ -18,6 +18,7 @@ import {
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
   worksMonth,
+  type FieldBill,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -567,11 +568,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, field?: FieldBill): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
-  return resolveBattle(g, ok, target);
+  // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(field ? { field } : {}) });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------

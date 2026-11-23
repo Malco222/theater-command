@@ -296,10 +296,12 @@ export interface Paid { foot: number; tanks: number; guns: number }
  * The result's line (ruling 149 as settled at 21:14Z): who paid most and to what, then the tanks' shock if tanks went
  * in. Two sentences at most, shares in words. 'mine' is true when the reader attacked, false when he defended.
  */
-export function whoPaid(f: Faced, lost: Paid, mine: boolean): { text: string; sign: FaceSign | null } {
+export function whoPaid(f: Faced, lost: Paid, mine: boolean, most?: string, quiet = false): { text: string; sign: FaceSign | null } {
   const all = lost.foot + lost.tanks + lost.guns;
   const who = mine ? 'Your' : 'Their', whose = mine ? 'their' : 'your';
-  let first = `The cost fell evenly on ${mine ? 'your' : 'their'} corps.`;
+  // A battle fought on the field whose cost fell unevenly names the corps that paid most (ruling 226(6)); fought with
+  // one corps, or uneven with no one corps to name (b464(6)), the line goes.
+  let first = most ? `${most} paid most of it.` : quiet ? '' : `The cost fell evenly on ${mine ? 'your' : 'their'} corps.`;
   let sign: FaceSign | null = null;
   if (all > 0) {
     const w = f.toll.why;
@@ -311,7 +313,7 @@ export function whoPaid(f: Faced, lost: Paid, mine: boolean): { text: string; si
       if (causes.length) { first = `${who} tanks paid most of it, to ${whose} ${listAnd(causes).replace('tanks of their own', 'tanks')}.`; sign = 'anti-tank'; }
     }
   }
-  return { text: f.shock === null ? first : `${first} ${mine ? 'The' : 'Their'} tanks' shock counted ${shareWords(f.shock)}.`, sign };
+  return { text: f.shock === null ? first : `${first} ${mine ? 'The' : 'Their'} tanks' shock counted ${shareWords(f.shock)}.`.trim(), sign };
 }
 
 /** The weapons a corps carries, for the row of signs on its card: null for a corps the rule counts none for, and outside the grand campaign. */

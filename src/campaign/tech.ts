@@ -86,6 +86,21 @@ for (const t of TECH.techs) {
 /** The technology tree is part of the grand campaign only. */
 export const techRules = (g: Game): boolean => g.flags.open === 1;
 
+/**
+ * The year of the armour a nation's tanks are built to (looks only: the 3D game's model and the shells a tank is drawn
+ * firing). Under the grand campaign's technology, read from the tank designs it has done; otherwise from history's clock.
+ */
+export function armourYear(g: Game, nat: string): number | null {
+  const n = g.nations[nat];
+  if (!n?.alive) return null;
+  if (techRules(g)) {
+    const done = n.tech?.done ?? TECH.start[nat] ?? [];
+    return !done.includes('mediums') ? 1939 : !done.includes('heavies') ? 1942 : Math.max(1939 + Math.floor((Math.max(1, g.turn) + 7) / 12), 1943);
+  }
+  if (!n.lab) return null;
+  return 1939 + Math.floor((Math.max(1, g.turn + Math.round(n.lab.clock.armour - n.lab.months)) + 7) / 12);
+}
+
 export const techById = (id: string): Tech | undefined => BY_ID[id];
 
 /** The technology an order waits on, whoever is asking: 'corps:arm' waits on the tank arm. */
