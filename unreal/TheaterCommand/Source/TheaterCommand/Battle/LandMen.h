@@ -250,6 +250,25 @@ namespace LandMen
 	using GroundFn = std::function<Ground(double X, double Y)>;
 
 	/**
+	 * A seat in a vehicle's bed: a lorried man aboard (the rules' pose "mounted") was drawn kneeling on the ground where
+	 * the rules seat him, so under his lorry (Brian, 23 November 14:10Z: "troops are stuck under the truck"). The scene
+	 * says where his bench is: its top (field metres, its height the field's), the bed's floor beside it, and the way he
+	 * faces on it (radians clockwise from north, as a man's heading). Inboard: the bench faces the bed's middle; a man
+	 * past the benches kneels in the bed's middle at its front, facing aft.
+	 */
+	struct SeatPlace
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		double Floor = 0.0;
+		float Facing = 0.f;
+		bool bBench = true;   // false: no bench left for him (the bed's middle)
+	};
+	/** The seat for a man aboard: his place (the rules', on his vehicle's bed), his block, and the rules' vehicle (her k in
+	 * that block) and seat in her bed (two abreast, the odd ones on her right, front to back), each -1 where the rules
+	 * did not say; false where no vehicle carries him. Asked from several threads at once, as GroundFn is. */
+	using SeatFn = std::function<bool(double X, double Y, int Block, int SeatOn, int Seat, SeatPlace& Out)>;
+
+	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
 	 * (0 upright, as a man stands on a hillside; 1 lying, his body laid on the slope). The pivot (his own axes, on z = 0)
 	 * is where the turn onto the slope is made: his root, or where a dead man's pelvis came to rest.
@@ -433,6 +452,13 @@ namespace LandMen
 		 * man than the usual one does (tan of half the usual 50 deg over tan of half this lens's, both vertical): the
 		 * levels go by his distance over Zoom, so a long lens's men 120 m off are drawn at the middle level. */
 		void SetEye(double X, double Y, double Z, double Zoom = 1.0);
+		/** Where the men aboard vehicles sit (SeatFn): set once; without it a man aboard kneels where the rules have him. A
+		 * file with a seated clip (car_ride_back, release 2's riders) sits him on the bench; one without kneels him on the
+		 * bed's floor beside it. */
+		void SetSeats(SeatFn Fn);
+		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
+		 * and his seat in her bed (each -1 where the rules did not say). */
+		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
 		/**

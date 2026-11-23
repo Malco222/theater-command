@@ -111,6 +111,14 @@ struct FLandBattleState
 	/** Each vehicle looked at for seats yet (her men seated, or none to seat). */
 	std::vector<uint8_t> SeatedDone;
 
+	/**
+	 * The carriers' benches as they stand this frame (the lorries and half-tracks whose models have bench seats,
+	 * rider.1 to rider.10: LandKit::BenchesNow), for the lorried men aboard (LandMen's SeatFn, LandKit::BenchFor; Brian,
+	 * 23 November 14:10Z: "troops are stuck under the truck"). Made before the men are posed (SeatCarriers); read by the
+	 * men's posing threads at once, never written then.
+	 */
+	std::vector<LandKit::Benches> Carriers;
+
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
 	/** The camera's world as the film has it (Open), kept for the general's view. */

@@ -4382,6 +4382,131 @@ namespace LandKit
 		return true;
 	}
 
+	bool BenchesNow(const Vehicle& V, Benches& Out)
+	{
+		const Model& M = V.Look();
+		if (M.Kind != "carrier" || M.SocketIndex("rider.1") < 0)
+		{
+			return false;
+		}
+		Out = Benches();
+		Out.Block = V.Words().Block;
+		Out.K = V.Words().K;
+		Out.At = V.Root.At;
+		const V3 Up = V.Root.Way(V3(0.0, 0.0, 1.0)).Unit();
+		const V3 Ahead = V.Root.Way(V3(1.0, 0.0, 0.0));
+		Out.Forward = (Ahead - Up * Ahead.Dot(Up)).Unit(V3(std::sin(V.Heading), std::cos(V.Heading), 0.0));
+		Out.Right = Out.Forward.Cross(Up);
+		// (each side's seats front to back, whatever her model's numbering)
+		struct One { double Along; V3 At, Way; };
+		std::vector<One> Left, Right;
+		static const char* const Names[10] = { "rider.1", "rider.2", "rider.3", "rider.4", "rider.5", "rider.6", "rider.7", "rider.8", "rider.9", "rider.10" };
+		for (const char* Name : Names)
+		{
+			One S;
+			if (!V.SocketNow(Name, S.At, S.Way))
+			{
+				continue;
+			}
+			const V3 D = S.At - Out.At;
+			S.Along = D.Dot(Out.Forward);
+			(D.Dot(Out.Right) >= 0.0 ? Right : Left).push_back(S);
+		}
+		const auto Front = [](const One& A, const One& B) { return A.Along > B.Along; };
+		std::sort(Left.begin(), Left.end(), Front);
+		std::sort(Right.begin(), Right.end(), Front);
+		for (const One& S : Left)
+		{
+			Out.Seat[Out.Left] = S.At;
+			Out.Way[Out.Left] = S.Way;
+			++Out.Left;
+		}
+		for (const One& S : Right)
+		{
+			Out.Seat[Out.Left + Out.Righted] = S.At;
+			Out.Way[Out.Left + Out.Righted] = S.Way;
+			++Out.Righted;
+		}
+		return Out.Left + Out.Righted > 0;
+	}
+
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out)
+	{
+		const Benches* Best = nullptr;
+		double BestD = 1e18, Along = 0.0, Across = 0.0;
+		int Row = -1;
+		bool bRightSide = false;
+		// (the rules' own word: her, and his seat)
+		if (SeatOn >= 0 && Seat >= 0)
+		{
+			for (const Benches& B : All)
+			{
+				if (B.Block == Block && B.K == SeatOn)
+				{
+					Best = &B;
+					break;
+				}
+			}
+			if (Best)
+			{
+				Row = Seat / 2;
+				bRightSide = Seat % 2 == 1;
+				const double Dx = X - Best->At.X, Dy = Y - Best->At.Y;
+				Across = Dx * Best->Right.X + Dy * Best->Right.Y;
+			}
+		}
+		if (!Best) for (const Benches& B : All)
+		{
+			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
+			if (D > 36.0 || D >= BestD)
+			{
+				continue;
+			}
+			const double A = Dx * B.Forward.X + Dy * B.Forward.Y, R = Dx * B.Right.X + Dy * B.Right.Y;
+			if (std::fabs(R) > 1.6 || A < -5.0 || A > 3.0)
+			{
+				continue;
+			}
+			Best = &B;
+			BestD = D;
+			Along = A;
+			Across = R;
+		}
+		if (!Best)
+		{
+			return false;
+		}
+		// (by his place: the drill's seat, two abreast 0.55 m either side, rows 0.6 m apart from 1.4 m forward of her root;
+		// a far block's men a row each 1.1 m from 0.5 m sit as near their rows as these give)
+		if (Row < 0)
+		{
+			Row = std::max(0, static_cast<int>(std::lround((1.4 - Along) / 0.6)));
+			bRightSide = Across >= 0.0;
+		}
+		const bool bRight = bRightSide ? Best->Righted > 0 : Best->Left == 0;
+		const int First = bRight ? Best->Left : 0, Count = bRight ? Best->Righted : Best->Left;
+		if (Row < Count)
+		{
+			const V3& At = Best->Seat[First + Row];
+			const V3& Way = Best->Way[First + Row];
+			Out.At = At;
+			Out.Floor = At.Z - 0.5;
+			Out.Heading = std::atan2(Way.X, Way.Y);
+			Out.bBench = true;
+			return true;
+		}
+		// (no bench left for him: kneeling in the bed's middle at her front, facing aft, a little to his own side)
+		const V3& Front = Best->Seat[0];
+		const double FrontAlong = (Front - Best->At).Dot(Best->Forward);
+		const double Back = 0.55 * static_cast<double>(Row - Count);
+		const V3 At = Best->At + Best->Forward * (FrontAlong - Back) + Best->Right * (bRightSide ? 0.22 : -0.22);
+		Out.Floor = Front.Z - 0.5;
+		Out.At = V3(At.X, At.Y, Out.Floor);
+		Out.Heading = std::atan2(-Best->Forward.X, -Best->Forward.Y);
+		Out.bBench = false;
+		return true;
+	}
+
 	bool Vehicle::SocketAt(const std::string& Name, double T, V3& OutAt, V3& OutFacing) const
 	{
 		if (!Shape)

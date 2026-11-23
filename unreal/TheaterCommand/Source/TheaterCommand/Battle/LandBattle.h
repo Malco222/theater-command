@@ -787,6 +787,8 @@ private:
 	void SeatLight(int32 FromVehicle);
 	/** Each of them seated and posed for this frame (with RideTanks). */
 	void RideLight();
+	/** The lorries' and half-tracks' benches as they stand now, for the men aboard (FLandBattleState::Carriers). */
+	void SeatCarriers();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

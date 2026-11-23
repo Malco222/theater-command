@@ -3132,6 +3132,26 @@ void ALandBattle::MakeMen()
 		}
 	}
 	S.Men = std::move(Crowd);
+	// (the men aboard on their carriers' benches: read from the carriers as SeatCarriers left them this frame; the men's
+	// posing threads only read them)
+	{
+		const std::vector<LandKit::Benches>* Carriers = &S.Carriers;
+		S.Men->SetSeats([Carriers](double X, double Y, int Block, int SeatOn, int Seat, LandMen::SeatPlace& Out)
+		{
+			LandKit::BenchSeat B;
+			if (Carriers->empty() || !LandKit::BenchFor(*Carriers, X, Y, Block, SeatOn, Seat, B))
+			{
+				return false;
+			}
+			Out.X = B.At.X;
+			Out.Y = B.At.Y;
+			Out.Z = B.At.Z;
+			Out.Floor = B.Floor;
+			Out.Facing = static_cast<float>(B.Heading);
+			Out.bBench = B.bBench;
+			return true;
+		});
+	}
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);
 	for (size_t K = 0; K < S.Rec.Tracks.size(); ++K)
@@ -4129,6 +4149,32 @@ void ALandBattle::RideLight()
 		Ride.Seat.T[2] = static_cast<float>(Feet.Z);
 		Ride.bShown = true;
 		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
+void ALandBattle::SeatCarriers()
+{
+	LAND_SCOPE(SeatCarriers);
+	FLandBattleState& S = *State;
+	S.Carriers.clear();
+	if (!S.Armour)
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Vehicle& Veh = All[V];
+		// (not while she is off the field or hidden: her men aboard are hers to hide too)
+		if (Veh.Fade < 0.5 || HiddenVehicle(static_cast<int32>(V)))
+		{
+			continue;
+		}
+		LandKit::Benches B;
+		if (LandKit::BenchesNow(Veh, B))
+		{
+			S.Carriers.push_back(B);
+		}
 	}
 }
 
@@ -5802,6 +5848,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// (the tank commanders on their tanks as just posed, and the light cars' and motorcycles' men in their seats)
 		RideTanks();
 		RideLight();
+		SeatCarriers();
 		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;

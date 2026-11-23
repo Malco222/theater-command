@@ -1300,6 +1300,8 @@ namespace LandMen
 			bool bFiring = false;           // a firing pose: its clip's shots come from the rounds
 			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
 			float Lift = 0.f;               // carried on a stretcher: the canvas's height over the ground, metres
+			uint8_t Aboard = 0;             // in a vehicle's bed (SeatFn): 1 seated on the bench, 2 kneeling on the floor
+			int SeatOn = -1, Seat = -1;     // aboard: the rules' vehicle (her k in his block) and seat (-1: not said)
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -1351,6 +1353,7 @@ namespace LandMen
 				double T = 0.0;
 				std::string Pose, Cover;
 				bool bHidden = false;
+				int SeatOn = -1, Seat = -1;   // aboard: his vehicle's k in his block and his seat in her bed (-1: not said)
 			};
 			std::vector<Change> Ch;
 			double D = -1.0, OutT = -1.0;
@@ -1422,7 +1425,7 @@ namespace LandMen
 				}
 			}
 
-			/** Changes [t, pose, cover, aimX, aimY, hidden, buttoned], appended. */
+			/** Changes [t, pose, cover, aimX, aimY, hidden, buttoned] and, aboard, [..., seatOn, seat], appended. */
 			void ReadChanges(const struct J& Chs)
 			{
 				for (size_t P = 0; P < Chs.Size(); ++P)
@@ -1433,6 +1436,11 @@ namespace LandMen
 					Cg.Pose = C.At(1).Text("idle");
 					Cg.Cover = C.At(2).Text("none");
 					Cg.bHidden = C.At(5).Num0() != 0.0;
+					if (C.Size() >= 9)
+					{
+						Cg.SeatOn = static_cast<int>(C.At(7).Num0());
+						Cg.Seat = static_cast<int>(C.At(8).Num0());
+					}
 					Ch.push_back(Cg);
 				}
 			}
@@ -1684,6 +1692,7 @@ namespace LandMen
 		double WornForced = -1.0;
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
+		SeatFn SeatAt;              // the men aboard vehicles: their benches (SetSeats)
 		uint64_t Seed = 1;
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
@@ -2346,11 +2355,19 @@ namespace LandMen
 				St.bRifleDown = Role == "crew";
 			}
 			else if (Pose == "fire" || Pose == "deployed") { Use("fire_kneel", Stance::Hold, Kneel); St.bFiring = true; }
+			else if (Pose == "mounted" && S.ClipIndex("car_ride_back") >= 0)
+			{
+				// Aboard a lorry or a half-track, his file with release 2's seated clips: sitting on her bench as a car's
+				// back seat holds him (the scene's SeatFn puts him there, facing inboard), until the bench's own clips come.
+				Use("car_ride_back", Stance::Loop, Kneel);
+				St.Aboard = 1;
+			}
 			else if (Pose == "mounted" || Pose == "ride")
 			{
-				// Sitting in a lorry or on a horse: the soldier has no seated clip yet, so he kneels where his seat is
-				// (the rules put him there), which at least keeps him low in the lorry's bed. A seated clip is wanted.
+				// Aboard a lorry with no seated clip in his file: kneeling on her bed's floor by his bench (SeatFn). On a
+				// horse: kneeling where the rules have him (no rider's clip yet).
 				Use("fire_kneel", Stance::Hold, Kneel);
+				if (Pose == "mounted") St.Aboard = 2;
 			}
 			else if (Pose == "horses") Use(bMoving ? "walk" : "idle", bMoving ? Stance::Gait : Stance::Loop, Up);
 			// Release 2's stretcher bearers and linemen (the tactics thread's poses; the soldiers thread's field clips,
@@ -3518,6 +3535,26 @@ namespace LandMen
 				const Stance& Lifted = M.Stances[static_cast<size_t>(M.Shown)];
 				Pl.Lift = Lifted.Lift * static_cast<float>(std::clamp(Now - Lifted.T, 0.0, 1.0));
 			}
+			// (aboard: on his vehicle's bench, or kneeling on her floor by it, as the scene says she stands now; where no
+			// vehicle carries him there, where the rules have him)
+			if (M.State == Man::Alive && SeatAt && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size() && M.Stances[static_cast<size_t>(M.Shown)].Aboard)
+			{
+				SeatPlace Seat;
+				const Stance& On = M.Stances[static_cast<size_t>(M.Shown)];
+				if (SeatAt(M.X, M.Y, M.Info.Block, On.SeatOn, On.Seat, Seat))
+				{
+					const bool bSits = On.Aboard == 1 && Seat.bBench;
+					// (kneeling: a step in off his bench, his knees toward the bed's middle)
+					const double In = bSits || !Seat.bBench ? 0.0 : 0.25;
+					Pl.X = Seat.X + std::sin(Seat.Facing) * In;
+					Pl.Y = Seat.Y + std::cos(Seat.Facing) * In;
+					Pl.Facing = Seat.Facing;
+					Pl.Lie = 0.f;
+					Pl.Pivot = Vec3();
+					const float Under = GroundAt ? GroundAt(Pl.X, Pl.Y).Height : 0.f;
+					Pl.Lift = static_cast<float>((bSits ? Seat.Z : Seat.Floor) - static_cast<double>(Under));
+				}
+			}
 			M.Place = Pl;
 			M.World = WorldOf(Pl, GroundAt, &M.Footing);
 			M.bFooting = true;
@@ -3798,6 +3835,8 @@ namespace LandMen
 				}
 				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving);
 				St.T = Cg.T;
+				St.SeatOn = Cg.SeatOn;
+				St.Seat = Cg.Seat;
 				St.Cover = Cg.Cover;
 				St.bMoving = bMoving;
 				if (C < Mn.Stances.size()) Mn.Stances[C] = std::move(St);
@@ -4315,6 +4354,24 @@ namespace LandMen
 		Inner->EyeY = Y;
 		Inner->EyeZ = Z;
 		Inner->EyeZoom = Zoom > 0.05 && Zoom < 20.0 ? Zoom : 1.0;
+	}
+
+	void Crowd::SetSeats(SeatFn Fn)
+	{
+		Inner->SeatAt = std::move(Fn);
+	}
+
+	bool Crowd::AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const
+	{
+		if (Man < 0 || Man >= Count()) return false;
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (Mn.bRider || Mn.State != Impl::Man::Alive || Mn.Shown < 0 || static_cast<size_t>(Mn.Shown) >= Mn.Stances.size()) return false;
+		const Stance& St = Mn.Stances[static_cast<size_t>(Mn.Shown)];
+		if (!St.Aboard) return false;
+		OutBlock = Mn.Info.Block;
+		OutSeatOn = St.SeatOn;
+		OutSeat = St.Seat;
+		return true;
 	}
 
 	void Crowd::Update(double BattleTime)

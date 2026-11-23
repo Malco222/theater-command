@@ -665,6 +665,40 @@ namespace LandKit
 	 */
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2);
 
+	/**
+	 * A carrier's bench seats as she stands now: a lorry's or a half-track's rider.1 to rider.10, where the lorried men
+	 * aboard sit (they were drawn kneeling on the ground where the rules seat them, so under the lorry: Brian, 23
+	 * November 14:10Z, "troops are stuck under the truck"). Her root and axes on the field, and her seats each side front
+	 * to back, each its top and its inboard way (field metres; x east, y north, z up).
+	 */
+	struct Benches
+	{
+		int Block = -1, K = -1;      // whose: her block and her number in it (the rules' vehicle)
+		V3 At, Forward, Right;
+		int Left = 0, Righted = 0;   // Seat[0, Left) down her left side, Seat[Left, Left + Righted) down her right
+		V3 Seat[10], Way[10];
+	};
+	/** Her benches now (after her Update): false where her model is no carrier with bench seats (a lorry or a
+	 * half-track, "carrier", with rider.1 and on). */
+	bool BenchesNow(const Vehicle& V, Benches& Out);
+	/** A man aboard's seat: its top, the bed's floor beside it (0.5 m under it), his heading on it (radians clockwise
+	 * from north: inboard), and bBench false where the benches are full (he kneels in the bed's middle at her front,
+	 * facing aft; At the floor there). */
+	struct BenchSeat
+	{
+		V3 At;
+		double Floor = 0.0, Heading = 0.0;
+		bool bBench = true;
+	};
+	/**
+	 * The seat of a man aboard. Where the rules say his vehicle and seat (Block, SeatOn: her k; Seat: two abreast, the odd
+	 * ones on her right, front to back): that seat of hers, or the bed's middle past her benches. Else by his field place
+	 * (the rules' place for him): the nearest carrier whose bed he is on (within 1.6 m of her middle line, 5 m aft to 3 m
+	 * forward of her root), and his bench by where the drill seats him (a row each 0.6 m aft from 1.4 m forward of her
+	 * root, his side his bench's). False where he is on none.
+	 */
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out);
+
 	class Battle
 	{
 	public:

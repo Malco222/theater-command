@@ -312,6 +312,13 @@ export interface MenOut {
   ml?: string;
   /** Her model's swaps the drill picks (Man.sw): {swap: choice}. */
   sw?: Record<string, string>;
+  /**
+   * Aboard (p 'mounted'): his lorry's or carrier's number in the block (her k) and his seat in her bed (seatNo: two
+   * abreast, the odd ones on her right, front to back), so the 3D game sits him on that bench of the vehicle it draws
+   * (a man drawn where the rules seat him knelt on the ground under her: Brian, 23 November 14:10Z, "troops are stuck
+   * under the truck").
+   */
+  sv?: [number, number];
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -510,6 +517,8 @@ interface Squad {
   slow: number;
   /** Battle time the block, down, began to mount again (its lorries coming up for the men, the holders with the horses). */
   boarding?: number;
+  /** Each lorried man's seat in his lorry's bed, numbered once a lorry (seatNo): no two of her men on one seat. */
+  seats?: Map<Man, number>;
   /**
    * Down and on the move: its lorries (its horse holders) keep close behind it, ready to take the men up again, from its
    * first second at a pace faster than men on foot keep until it has stood three seconds; else they wait back in cover.
@@ -3000,11 +3009,31 @@ export class Drill {
   private lorryIx(sq: Squad, m: Man): number { return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length; }
   /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
   private seat(sq: Squad, m: Man): [number, number] {
-    const v = this.lorryOf(sq, m);
+    const v = this.lorryOf(sq, m), j = this.seatNo(sq, m);
     // Drawn as sections, a section to a lorry (a gun's crew to its tractor): its key man first, close benches.
-    if (sq.tier >= 1) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
-    const j = Math.floor((m.k - (sq.of !== undefined ? DR.mech.base : 0)) / sq.veh.length);
+    if (sq.tier >= 1) return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2));
     return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+  }
+
+  /**
+   * His seat's number in his lorry's bed (seat): two abreast, the odd ones on her right, front to back. Each lorry's men
+   * are numbered once, in their sections' own order (a section to a lorry keeps its seats: its key man first); where
+   * sections share a lorry (more sections than lorries) they sit turn about, so no two men have one seat (they sat on
+   * one another: the seats' cloud test, 23 November).
+   */
+  private seatNo(sq: Squad, m: Man): number {
+    const own = (x: Man): number => (sq.tier >= 1 ? x.seat ?? x.j ?? 0 : Math.floor((x.k - (sq.of !== undefined ? DR.mech.base : 0)) / sq.veh.length));
+    if (!sq.seats) {
+      sq.seats = new Map();
+      const by = new Map<number, Man[]>();
+      for (const x of sq.men) {
+        if (x.role === 'holder') continue;
+        const i = this.lorryIx(sq, x), l = by.get(i);
+        if (l) l.push(x); else by.set(i, [x]);
+      }
+      for (const l of by.values()) l.map((x, i) => ({ x, o: own(x), i })).sort((a, c) => a.o - c.o || a.i - c.i).forEach(({ x }, n) => sq.seats!.set(x, n));
+    }
+    return sq.seats.get(m) ?? own(m);
   }
 
   /**
@@ -3977,6 +4006,7 @@ export class Drill {
       if (u.state === 'withdrawn' && !sq.men.some((m) => m.fell !== undefined)) continue;
       const men = sq.men.filter((m) => m.fell !== undefined || m.job !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
         const o = one(m);
+        if (m.pose === 'mounted' && m.fell === undefined && sq.veh.length) o.sv = [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
         if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
         return o;
       });
