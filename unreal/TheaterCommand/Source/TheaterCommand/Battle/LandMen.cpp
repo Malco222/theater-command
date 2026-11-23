@@ -1661,7 +1661,7 @@ namespace LandMen
 		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
 		 * men alike), and whether the look is on. */
 		std::map<int, double> BlockWorn;
-		std::map<std::pair<const ArmyColours*, int>, ArmyColours> AgedRows;
+		std::map<std::tuple<const ArmyColours*, int, int>, ArmyColours> AgedRows;
 		bool bWornLook = false;
 		double WornForced = -1.0;
 		bool bSections = false;     // the recording has followers (the drill's sections)
@@ -1982,9 +1982,9 @@ namespace LandMen
 		 * lighter); the webbing and pack half that (canvas, already pale). Cloth only: tunic, trousers, coat and blanket,
 		 * webbing and pack; boots, leather, helmet, skin and steel as they were. Made once a row and step (AgedRows), so
 		 * the men of a side stay one set alike. */
-		const ArmyColours& AgedRow(const ArmyColours& Row, int Step)
+		const ArmyColours& AgedRow(const ArmyColours& Row, int Step, int Garment)
 		{
-			const auto Key = std::make_pair(&Row, Step);
+			const auto Key = std::make_tuple(&Row, Step, Garment);
 			const auto Found = AgedRows.find(Key);
 			if (Found != AgedRows.end()) return Found->second;
 			ArmyColours Out = Row;
@@ -2002,13 +2002,21 @@ namespace LandMen
 				}
 				Out.Paint[Pa] = Faded;
 			}
+			// (a newer tunic (0) or trousers (1): the row's own colour before the fading, a twentieth darker)
+			if (Garment == 0 || Garment == 1)
+			{
+				const uint32_t C = Row.Paint[Garment];
+				uint32_t Newer = 0;
+				for (int K = 0; K < 3; ++K) Newer = (Newer << 8) | static_cast<uint32_t>(std::lround(((C >> (16 - 8 * K)) & 0xFF) * 0.95));
+				Out.Paint[Garment] = Newer;
+			}
 			return AgedRows.emplace(Key, Out).first->second;
 		}
 
-		/** His own look's wear on top of the faded row (the near men, whose looks are their own): with his side's wear,
-		 * up to some 45 in 100 men in a newer tunic or trousers than the rest of his kit (the row's colour before the
-		 * fading, a little darker or lighter: another issue), and up to some 55 in 100 with a patch or two of newer cloth
-		 * at an elbow or a knee. Each point's baked colour scaled by the cloth it now is over the cloth it was. */
+		/** His own look's wear on top of his faded row (the near men, whose looks are their own; too small to see past
+		 * them): with his side's wear, up to some 55 in 100 men with a patch or two of newer cloth at an elbow or a knee,
+		 * each point's baked colour scaled by the cloth it now is over the cloth it was. (His newer tunic or trousers is
+		 * his row's, AgedRow, so the same at every range.) */
 		void AgeLook(const Man& Mn, Lod L, Look& Lk) const
 		{
 			if (!Mn.Fresh || Mn.WornA <= 0.f) return;
@@ -2031,15 +2039,6 @@ namespace LandMen
 				}
 			};
 			const size_t Body = static_cast<size_t>(V.M.Points);
-			// (a newer tunic or newer trousers: another issue, its own value a little off the first)
-			if (Unit01(Who ^ 0x1ull) < 0.45 * A)
-			{
-				const int Garment = Unit01(Who ^ 0x2ull) < 0.65 ? 1 : 0;
-				float R[3];
-				Ratio(Mn.Fresh->Paint[Garment], Mn.Colours->Paint[Garment], 0.9 + 0.12 * Unit01(Who ^ 0x3ull), R);
-				for (size_t P = 0; P < Body && P < Lk.Paint.size(); ++P)
-					if (Lk.Paint[P] == Garment) Scale(P, R);
-			}
 			// (a patch or two of newer cloth, a darker square at an elbow or a knee)
 			if (Unit01(Who ^ 0x4ull) < 0.55 * A)
 			{
@@ -3654,7 +3653,11 @@ namespace LandMen
 				{
 					Mn.Fresh = Mn.Colours;
 					Mn.WornA = static_cast<float>(std::clamp(Months / 18.0, 0.0, 1.0));
-					Mn.Colours = &AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)));
+					// (up to some 45 in 100 men in a newer tunic or trousers than the rest of their kit, drawn piecemeal:
+					// his own colour at every range, so a row of its own, one of three a side)
+					const uint64_t Who = (static_cast<uint64_t>(static_cast<uint32_t>(TrackIx)) << 20) ^ 0xA6EDull;
+					const int Garment = Unit01(Who ^ 0x1ull) < 0.45 * Mn.WornA ? (Unit01(Who ^ 0x2ull) < 0.65 ? 1 : 0) : -1;
+					Mn.Colours = &AgedRow(*Mn.Fresh, static_cast<int>(std::lround(Mn.WornA * 20.f)), Garment);
 				}
 			}
 			Mn.Info.Block = Tr.B;
