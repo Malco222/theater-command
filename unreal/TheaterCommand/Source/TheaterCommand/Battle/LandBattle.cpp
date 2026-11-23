@@ -4463,6 +4463,12 @@ void ALandBattle::BailOut()
 			W.Threat = Nearest <= 150.0 ? 1.0 : Nearest >= 600.0 ? 0.1 : 1.0 - 0.9 * (Nearest - 150.0) / 450.0;
 		}
 		W.MostMen = Look.Kind == "car" ? 3 : Look.Long < 5.3 ? 3 : Look.Long < 6.0 ? 4 : 5;
+		// (the soldiers' bail clips, where his file has all four: out of the hatch, off her hull, on fire)
+		{
+			const LandMen::Soldier* Sol = S.Men->SoldierFile(File);
+			W.bClips = Sol && Sol->ClipIndex("bail_climb_out") >= 0 && Sol->ClipIndex("bail_jump_down") >= 0
+				&& Sol->ClipIndex("burning_run") >= 0 && Sol->ClipIndex("burning_fall_roll") >= 0;
+		}
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
 		S.Bails.Crews[V] = LandBail::Make(W);
@@ -4499,7 +4505,7 @@ void ALandBattle::BailOut()
 		if (Effects && P.bShown && P.bOnFire)
 		{
 			const int32 Id = LandBail::Book::FireIdOf(I);
-			const FVector Chest = World(P.At.X, P.At.Y, P.At.Z + (P.bMoving ? 0.9 : 0.3));
+			const FVector Chest = World(P.Root.X, P.Root.Y, P.Root.Z + (P.bMoving ? 0.9 : 0.3));
 			if (!H.bLit)
 			{
 				H.bLit = true;
@@ -4510,7 +4516,7 @@ void ALandBattle::BailOut()
 			else
 			{
 				const LandBail::Pose Next = LandBail::PoseAt(M, Since + 0.1, Ground);
-				const FVector Velocity = WorldWay((Next.At.X - P.At.X) * 10.0, (Next.At.Y - P.At.Y) * 10.0, 0.0) * UnitsPerMetre;
+				const FVector Velocity = WorldWay((Next.Root.X - P.Root.X) * 10.0, (Next.Root.Y - P.Root.Y) * 10.0, 0.0) * UnitsPerMetre;
 				Effects->BurnMove(Id, Chest, Velocity);
 			}
 		}
@@ -4549,6 +4555,7 @@ void ALandBattle::BailOut()
 		Ride.Clip = Clip;
 		Ride.Time = static_cast<float>(P.Time);
 		Ride.bUnarmed = true; // (a crewman out of his tank: his file's infantry clips carry a rifle he has not got)
+		Ride.bOwnRoot = M.bClips; // (the bail clips move his root, and PoseAt moves his seat on where each ends)
 		S.Men->SetRide(H.Man, Ride);
 	}
 }

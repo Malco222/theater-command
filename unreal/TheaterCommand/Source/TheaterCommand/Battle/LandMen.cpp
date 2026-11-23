@@ -3191,7 +3191,9 @@ namespace LandMen
 			{
 				// (the clip he leaves, blended out: a rider never falls, so the fall's pose is free to hold it)
 				Sample(S.Clips[static_cast<size_t>(R.FromClip)], R.FromTime, M.FallFrom);
+				const Vec3 Root = M.Now.Move[0];
 				Blend(M.FallFrom, M.Now, std::max(0.f, R.W), M.Now);
+				if (R.bOwnRoot) M.Now.Move[0] = Root; // (Effects (R2): a bailing crewman's root the clip's own, his seat moved on)
 			}
 			BoneFrames(S, M.Now, M.Model);
 			M.World = R.Seat;

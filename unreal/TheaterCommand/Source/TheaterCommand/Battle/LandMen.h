@@ -460,6 +460,9 @@ namespace LandMen
 			/** Effects (R2): his gun never drawn, whatever his clip holds (a tank's crew bailing out in the tankers'
 			 * infantry clips, which carry a rifle; the art director, 23 November). False: as before. */
 			bool bUnarmed = false;
+			/** Effects (R2): his root (bone 0) Clip's alone while FromClip blends out: the soldiers' bail clips move
+			 * it, and his seat moves on with them where each ends (a crewman bailing out). False: as before. */
+			bool bOwnRoot = false;
 		};
 		void SetRide(int Man, const Ride& R);
 		bool IsRider(int Man) const;

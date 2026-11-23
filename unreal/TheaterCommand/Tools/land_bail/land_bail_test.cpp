@@ -6,12 +6,15 @@
 // hull between him and the enemy; a man caught by her blast is thrown 2 to 5 m; every man on the ground within 15 m
 // flinches flat at it; a man on fire out of at most about one burning wreck in eight, a third of them living; the odds
 // in the open by the enemy in sight (about 1 in 6 running with the enemy close, much less with none). Prints how the
-// crews went, for the log.
+// crews went, for the log. With LAND_BAIL_CLIPS=1 the same with the soldiers' bail clips (Wreck::bClips): he climbs out
+// in bail_climb_out and jumps down in bail_jump_down, their roots landing him where the ground game takes him on; a man
+// on fire runs in burning_run, his stride the clip's, and falls in burning_fall_roll.
 #include "Battle/Fates.h"
 #include "Battle/LandBail.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -31,6 +34,12 @@ int main(int Argc, char** Argv)
 		return 1;
 	}
 	auto Ground = [](double X, double Y) { return 0.3 * std::sin(X * 0.07) + 0.2 * std::cos(Y * 0.11); };
+	const char* ClipsEnv = std::getenv("LAND_BAIL_CLIPS");
+	const bool bClips = ClipsEnv && std::string(ClipsEnv) == "1";
+	if (bClips)
+	{
+		std::printf("with the soldiers' bail clips (bail_climb_out, bail_jump_down, burning_run, burning_fall_roll)\n");
+	}
 	int Bad = 0, Wrecks = 0, Men = 0;
 	int BurnWrecks = 0, OnFire = 0, Lives = 0, Flinched = 0;
 	int RunNear = 0, HitNear = 0, RunFar = 0, HitFar = 0;
@@ -81,6 +90,7 @@ int main(int Argc, char** Argv)
 			}
 			W.Seed = Seed * 7919u ^ KeyHash;
 			W.Ground = Ground;
+			W.bClips = bClips;
 			const LandBail::Crew Cr = LandBail::Make(W);
 			const LandBail::Crew Again = LandBail::Make(W);
 			++Wrecks;
@@ -104,7 +114,7 @@ int main(int Argc, char** Argv)
 					std::printf("FAIL %s: a man starts out after the blast\n", Way.Key.c_str());
 					++Bad;
 				}
-				if (bBrew && M.How != LandBail::End::Caught && M.Out + 2.05 > W.Blast + 1e-9)
+				if (bBrew && M.How != LandBail::End::Caught && M.Out + LandBail::OnGroundOf(M) > W.Blast + 1e-9)
 				{
 					std::printf("FAIL %s: a man still climbing at the blast is not caught\n", Way.Key.c_str());
 					++Bad;
@@ -154,7 +164,7 @@ int main(int Argc, char** Argv)
 					}
 				}
 				// (on the ground within 15 m of her as her ammunition goes, and not down: flat for a second or two)
-				if (bBrew && M.How != LandBail::End::Caught && M.How != LandBail::End::Burning && M.Out + 2.05 <= W.Blast && !(M.FallAt >= 0.0 && M.FallAt <= W.Blast))
+				if (bBrew && M.How != LandBail::End::Caught && M.How != LandBail::End::Burning && M.Out + LandBail::OnGroundOf(M) <= W.Blast && !(M.FallAt >= 0.0 && M.FallAt <= W.Blast))
 				{
 					const LandBail::Pose A = LandBail::PoseAt(M, W.Blast - 0.01, Ground);
 					const bool bNear = std::hypot(A.At.X - W.Middle.X, A.At.Y - W.Middle.Y) <= 14.5;
@@ -165,6 +175,31 @@ int main(int Argc, char** Argv)
 						++Bad;
 					}
 					Flinched += M.FlinchAt >= 0.0;
+				}
+				// (the clips: out of the hatch and off her hull in the soldiers' clips, their roots landing him where his
+				// way on begins; on fire, burning_run and the roll)
+				if (bClips && M.How != LandBail::End::Caught)
+				{
+					const LandBail::Pose Up = LandBail::PoseAt(M, M.Out + 0.75, Ground), Off = LandBail::PoseAt(M, M.Out + 3.0, Ground);
+					const LandBail::Pose Landed = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) - 1e-6, Ground);
+					const LandBail::Pose On = LandBail::PoseAt(M, M.Out + LandBail::OnGroundOf(M) + 1e-6, Ground);
+					const double Gap = std::hypot(Landed.Root.X - On.Root.X, Landed.Root.Y - On.Root.Y);
+					const double Rise = Landed.Root.Z - On.Root.Z;
+					if (Up.Clip != "bail_climb_out" || Off.Clip != "bail_jump_down" || Gap > 0.05 || std::abs(Rise) > 0.05 || std::abs(On.At.Z - Ground(On.At.X, On.At.Y)) > 0.01)
+					{
+						std::printf("FAIL %s: the clips' way out (%s, %s; lands %.2f m off and %.2f m up from his way on)\n", Way.Key.c_str(), Up.Clip.c_str(), Off.Clip.c_str(), Gap, Rise);
+						++Bad;
+					}
+					if (M.How == LandBail::End::Burning)
+					{
+						const LandBail::Pose Run = LandBail::PoseAt(M, 0.5 * (M.Out + LandBail::OnGroundOf(M) + M.FallAt), Ground), Fell = LandBail::PoseAt(M, M.FallAt + 5.0, Ground);
+						const double Rolled = std::hypot(Fell.Root.X - Fell.At.X, Fell.Root.Y - Fell.At.Y);
+						if (Run.Clip != "burning_run" || Fell.Clip != "burning_fall_roll" || Rolled < 1.4 || Rolled > 1.65)
+						{
+							std::printf("FAIL %s: on fire in %s, then %s (rolled %.2f m)\n", Way.Key.c_str(), Run.Clip.c_str(), Fell.Clip.c_str(), Rolled);
+							++Bad;
+						}
+					}
 				}
 				bool bWasIn = false;
 				for (double T = 0.0; T <= 180.0; T += 0.1)
@@ -187,7 +222,7 @@ int main(int Argc, char** Argv)
 						++Bad;
 						break;
 					}
-					const bool bDown = T > M.Out + 2.1 && (M.BackAt < 0.0 || T < M.BackAt) && !(M.How == LandBail::End::Caught && T < M.FallAt + 0.95);
+					const bool bDown = T > M.Out + LandBail::OnGroundOf(M) + 0.05 && (M.BackAt < 0.0 || T < M.BackAt) && !(M.How == LandBail::End::Caught && T < M.FallAt + 0.95);
 					if (bDown && std::abs(P.At.Z - Ground(P.At.X, P.At.Y)) > 0.01)
 					{
 						std::printf("FAIL %s: off the ground by %.2f m at %.1f s (%s)\n", Way.Key.c_str(), P.At.Z - Ground(P.At.X, P.At.Y), T, P.Clip.c_str());
