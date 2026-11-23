@@ -2834,6 +2834,12 @@ namespace LandMen
 			// Where the round that killed him came from, against his facing: front, back or side. A shell from the gun's
 			// side; with no shooter known, the front (a man faces what he fights).
 			if (M.KillT < 0.0) return "front";
+			// (Effects (R2): a gored man is thrown away from the burst, so its side, where it fell 1.5 m or more off)
+			if (M.bGore && std::hypot(M.KillX - M.X, M.KillY - M.Y) >= 1.5)
+			{
+				const double Off = std::fabs(Turn(M.F, std::atan2(M.KillX - M.X, M.KillY - M.Y)));
+				return Off < 1.22 ? "front" : Off > 1.92 ? "back" : "side";
+			}
 			double SX = 0.0, SY = 0.0;
 			bool bKnown = false;
 			auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
@@ -2906,7 +2912,9 @@ namespace LandMen
 						if (St == "run") W *= Kind == "forward" ? 2.0 : Kind == "spin" ? 1.3 : 1.0;
 						if (St == "kneel" || St == "cover") W *= Kind == "knees" ? 2.5 : Kind == "side" ? 1.5 : 1.0;
 						if (St == "prone") W *= Kind == "crawl" ? 3.0 : 1.0;
-						if (bShell) W *= Kind == "thrown" ? 40.0 : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
+						// (a gored man: the big throw for a field gun's or a howitzer's shell; a tank's, a mortar's or a
+						// grenade's mostly knocks him down, an arm or a leg off, by where it burst)
+						if (bShell) W *= Kind == "thrown" ? (M.bGore && M.KillWeapon != "gun" ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
 						if (bCrushed) W *= Kind == "back" || Kind == "forward" ? 6.0 : Kind == "thrown" || Kind == "spin" ? 0.05 : 1.0;
 						if (!M.FallKindWanted.empty() && Kind == M.FallKindWanted) W *= 50.0;
 						for (const std::string& Clip : KV.second)
@@ -3657,13 +3665,17 @@ namespace LandMen
 			if (M.bRider || M.KillT < 0.0) return nullptr;
 			const auto Found = Gores.find(M.Info.FileArmy);
 			if (Found == Gores.end() || !Found->second) return nullptr;
-			// (at the burst AtBurst of the men it kills, falling away to none at Reach metres: a field gun's or a
-			// howitzer's shell, a tank's, a mortar's bomb, a grenade)
-			double AtBurst = 0.0, Reach = 0.0;
-			if (M.KillWeapon == "gun") AtBurst = 0.55, Reach = 12.0;
-			else if (M.KillWeapon == "tank") AtBurst = 0.5, Reach = 10.0;
-			else if (M.KillW == Weapon::Mortar) AtBurst = 0.45, Reach = 8.0;
-			else if (M.KillW == Weapon::Grenade) AtBurst = 0.3, Reach = 4.0;
+			// How often (the art director, 23 Nov 17:52Z: about 1 shell kill in 8 to 10 a gore fall, rarer and stronger,
+			// grenades only close): a man within 2 m of the burst Near (a field gun's or a howitzer's shell 0.55, a tank's
+			// or a mortar's 0.35, a grenade's 0.25), falling away steeply past 2 m (by e every 1.5 m) to none past Reach.
+			// The rules lay most bursts on the man they kill (8 in 10 shell kills, his own spot), which says nothing of
+			// how close the shell truly fell: such a man OnHim (a gun's 0.2, the others 0.12). Measured on the rules'
+			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall.
+			double Near = 0.0, OnHim = 0.0, Reach = 0.0;
+			if (M.KillWeapon == "gun") Near = 0.55, OnHim = 0.2, Reach = 8.0;
+			else if (M.KillWeapon == "tank") Near = 0.35, OnHim = 0.12, Reach = 6.0;
+			else if (M.KillW == Weapon::Mortar) Near = 0.35, OnHim = 0.12, Reach = 6.0;
+			else if (M.KillW == Weapon::Grenade) Near = 0.25, OnHim = 0.12, Reach = 2.0;
 			else return nullptr;
 			// (where he stood when it struck him, by his track: the same whatever frame his fall is first played on)
 			double X = M.X, Y = M.Y;
@@ -3672,8 +3684,7 @@ namespace LandMen
 			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
 			if (!Tr.T.empty()) Tr.At(M.Info.Dead - M.Info.Delay, Cursor, X, Y, F, V);
 			const double Far = std::hypot(M.KillX - X, M.KillY - Y);
-			const double Near = std::clamp(1.0 - Far / Reach, 0.0, 1.0);
-			double Odds = AtBurst * Near * std::sqrt(Near);
+			double Odds = Far < 0.25 ? OnHim : Far > Reach ? 0.0 : Far <= 2.0 ? Near : Near * std::exp(-(Far - 2.0) / 1.5);
 			if (St == "prone" || St == "cover") Odds *= 0.5; // (lying, or behind cover: his body under the blast)
 			Dice D(Seed ^ Mix(0x60AEull + static_cast<uint64_t>(M.Info.Block) * 1000003ull + static_cast<uint64_t>(M.Info.K))
 				^ (M.Info.J > 0 ? Mix(0x60AE5ull + static_cast<uint64_t>(M.Info.J)) : 0ull));

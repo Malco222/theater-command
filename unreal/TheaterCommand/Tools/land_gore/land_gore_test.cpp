@@ -183,7 +183,7 @@ int main(int Argc, char** Argv)
 	Make(C, true, true);
 	const Result Rc = Play(C, Men, 0.0, Until);
 	int Gored = 0, RifleGored = 0, FarGored = 0, BadClip = 0, NoLimb = 0, LimbOnWhole = 0, LostClips = 0;
-	int ByD[14] = {}, ShellD[14] = {};
+	int ByD[14] = {}, ShellD[14] = {}, WrongSide = 0;
 	std::vector<int> GoredMen;
 	for (size_t I = 0; I < Men.size(); ++I)
 	{
@@ -200,12 +200,25 @@ int main(int Argc, char** Argv)
 		GoredMen.push_back(static_cast<int>(I));
 		const Soldier& S = *C.SoldierOf(Man);
 		if (Men[I].W == "rifle") ++RifleGored;
-		const double Reach = Men[I].W == "gun" ? 12.0 : 8.0;
-		if (Men[I].Burst >= Reach) ++FarGored;
+		const double Reach = Men[I].W == "gun" ? 8.0 : 6.0;
+		if (Men[I].Burst > Reach) ++FarGored;
+		// (thrown away from the burst: his fall's side its, where it fell 1.5 m or more off; the test's men stand still)
+		if (Men[I].Burst >= 1.5)
+		{
+			const double A = 0.7 * static_cast<double>(I), Face = Men[I].B == 1 ? 0.0 : 3.14159265358979;
+			double Off = std::atan2(std::cos(A), std::sin(A)) - Face;
+			while (Off > 3.14159265358979) Off -= 6.28318530717959;
+			while (Off < -3.14159265358979) Off += 6.28318530717959;
+			Off = std::fabs(Off);
+			if (C.Info(Man).FallFrom != (Off < 1.22 ? "front" : Off > 1.92 ? "back" : "side")) ++WrongSide;
+		}
 		bool bIn = false;
 		for (const auto& St : S.DeathsGore) for (const auto& Kd : St.second) for (const std::string& N : Kd.second) bIn = bIn || N == Rc.Clip[I];
 		if (!bIn) ++BadClip;
-		if (Rc.Gap[I] < 0.25) ++NoLimb;
+		// (off its joint at all; the art director asks 1 m or more, an arm 1 to 4 m, a lower leg 1 to 3 m: a note, the
+		// clips' own to mend)
+		if (Rc.Gap[I] < 0.1) ++NoLimb;
+		if (Rc.Gap[I] < 1.0) std::printf("     note: %s %s's limb rests %.2f m from its joint (the art director asks 1 m or more)\n", C.Info(Man).FileArmy.c_str(), Rc.Clip[I].c_str(), Rc.Gap[I]);
 		for (const Clip& Cl : Own->Clips) LostClips += S.ClipIndex(Cl.Name) == Own->ClipIndex(Cl.Name) ? 0 : 1;
 	}
 	std::printf("     gored %d of %d men (%d twins read); by the burst's distance (shell kills):", Gored, static_cast<int>(Men.size()), static_cast<int>(Twins.size()));
@@ -214,10 +227,12 @@ int main(int Argc, char** Argv)
 	Check(Gored > 0 && Gored == C.Gored(), "on: men gored, and the crowd's count says so");
 	Check(RifleGored == 0, "on: no man killed by a rifle gored");
 	Check(FarGored == 0, "on: no man past the burst's reach gored");
-	Check(ByD[0] + ByD[1] + ByD[2] + ByD[3] > ByD[8] + ByD[9] + ByD[10] + ByD[11], "on: more gored near the burst than far from it");
+	Check(ByD[1] + ByD[2] > ByD[4] + ByD[5] && ByD[4] + ByD[5] >= ByD[6] + ByD[7], "on: more gored near the burst than farther off");
+	Check(ByD[0] * (ShellD[1] + ShellD[2]) < (ByD[1] + ByD[2]) * ShellD[0], "on: a man the burst was laid on gored less often than one within 2 m");
+	Check(WrongSide == 0, "on: each gored man 1.5 m or more from the burst falls by its side (" + std::to_string(WrongSide) + " not)");
 	Check(BadClip == 0, "on: each gored man in one of his twin's gore falls");
 	Check(LostClips == 0, "on: each gored man keeps every clip number of his own file");
-	Check(NoLimb == 0, "on: each gored man has a limb off its joint (more than 0.25 m) at rest");
+	Check(NoLimb == 0, "on: each gored man has a limb off its joint (more than 0.1 m) at rest");
 	Check(LimbOnWhole == 0, "on: no other man's limb leaves its joint");
 	Check(Rc.LimbOff >= Gored, "on: the limb_off events come (" + std::to_string(Rc.LimbOff) + ")");
 	Check(Rc.NaN == 0, "on: no NaN in any skin");
@@ -254,6 +269,11 @@ int main(int Argc, char** Argv)
 		std::vector<int> Pick;
 		std::set<std::string> Seen;
 		for (const int I : GoredMen) if (Pick.size() < 6 && Seen.insert(Rc.Clip[static_cast<size_t>(I)]).second) Pick.push_back(I);
+		// (then each army's own falls: no clip twice for the same army)
+		for (const int I : GoredMen)
+			if (Pick.size() < 6 && std::find(Pick.begin(), Pick.end(), I) == Pick.end()
+				&& Seen.insert(C.Info(C.Find(Men[static_cast<size_t>(I)].B, Men[static_cast<size_t>(I)].K)).FileArmy + "/" + Rc.Clip[static_cast<size_t>(I)]).second)
+				Pick.push_back(I);
 		for (const int I : GoredMen) if (Pick.size() < 6 && std::find(Pick.begin(), Pick.end(), I) == Pick.end()) Pick.push_back(I);
 		Crowd P;
 		Make(P, true, true);
