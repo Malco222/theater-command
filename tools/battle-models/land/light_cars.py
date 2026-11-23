@@ -142,6 +142,17 @@ class LightWorks(CarWorks):
         up_ = -w if (-w).z > 0 else w
         return [c + (u * math.cos(math.radians(a)) + up_ * math.sin(math.radians(a))) * r for a in (150.0, 30.0)]
 
+    def crown_wing(self, line, y0, cross, paint="upper", thick=0.012):
+        """A pressed wing whose crown rolls down to its outer edge: `line` is its (x, z) top along the inner edge, front
+        to back; `cross` the (out from y0, drop) points across it, inner first; y0 is signed, and the wing goes outward."""
+        s = 1.0 if y0 >= 0 else -1.0
+        for i in range(len(line) - 1):
+            (xa, za), (xb, zb) = line[i], line[i + 1]
+            for j in range(len(cross) - 1):
+                (ua, da), (ub, db) = cross[j], cross[j + 1]
+                ya, yb = y0 + s * ua, y0 + s * ub
+                self.plate([(xa, ya, za - da), (xb, ya, zb - da), (xb, yb, zb - db), (xa, yb, za - db)], thick, paint)
+
     def seat(self, x0, x1, y0, y1, z, back=0.36, lean=0.06, thick=0.09, paint="canvas"):
         """A cushion from x0 (back) to x1 (front) at height z (its top), and its back rising `back` behind it."""
         self.slab((x0, y0, z - thick), (x1, y1, z), paint, 0.03 if self.fine else 0.0)
@@ -481,4 +492,156 @@ def kubelwagen(fine=True, tag="GER", paint=None):
     v.carrier_clips("lorry_idle_loop", "lorry_drive_loop", soft=1.5)
     v.worn(**v.worn_kw)
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
+    return v
+
+
+# =====================================================================================================================
+def gaz67(fine=True, tag="SOV", paint=None):
+    """The Soviet field car (GAZ-67, 1943; the 67B from 1944): 3.35 m long, 1.69 m wide over her front wings, 1.70 m
+    to the top of her screen. A narrow open tub on a wide track (1.45 m), so her wings stand out from the bonnet and her
+    back wheels from the tub, each under a wing of its own; a tall grille of upright bars, the lamps on the wings, a
+    single-pane screen, the spare on her back. Four men: the driver, one beside him, two on the bench behind. She
+    towed the 45 mm anti-tank gun. Soviet green, no markings."""
+    v = LightWorks("GAZ67", "Field car (GAZ-67)", "car", tag, fine, paint=paint)
+    v.dice = 0.2
+    v.worn_kw = dict(LIGHT_WORN, ground="field")
+    v.root(hull_pivot=(0.0, 0.0, 0.60), rock=(-5.0, 5.0))
+    R, W, RR = 0.368, 0.165, 0.203                      # 6.50-16
+    xf, xr, yw = 1.00, -0.85, 0.723
+    yb, zt, zfl = 0.56, 1.06, 0.56                      # the tub's sides, their top edge, the floor
+    xg, xc, xb = 1.50, 0.44, -1.52                      # the grille's face, the cowl's back, the tub's back
+
+    # ---- under her: two driven axles on springs, the shafts, the wheels -------------------------------------------
+    v.use("vehicle")
+    for x in (xf, xr):
+        v.rod((x, -yw + 0.1, R), (x, yw - 0.1, R), 0.038, "shade", 10)
+        v.ball((x, 0.10, R), 0.12, "shade", 12, 8, squash=0.8)                                      # the differential, to her left
+    v.rod((xf - 0.15, -yw + 0.12, R - 0.03), (xf - 0.15, yw - 0.12, R - 0.03), 0.012, "steel", 6)   # the track rod
+    v.rod((xf - 0.08, 0.10, R), (0.10, 0.10, 0.44), 0.024, "steel", 8)
+    v.rod((xr + 0.08, 0.10, R), (-0.15, 0.10, 0.44), 0.024, "steel", 8)
+    v.slab((-0.20, 0.0, 0.38), (0.12, 0.20, 0.52), "shade", 0.012)                                  # the transfer box
+    for s in (LEFT, RIGHT):
+        v.leaf_spring(xf, s * 0.40, 0.58, R + 0.05, 0.40, leaves=6, wide=0.05)                     # (the front's quarter springs, read as halves)
+        v.leaf_spring(xr, s * 0.40, 0.58, R + 0.05, 0.50, leaves=7, wide=0.05)
+        v.rod((xf - 0.05, s * 0.48, R + 0.02), (xf - 0.12, s * 0.46, 0.70), 0.02, "shade", 6)       # the shock absorbers
+        v.rod((xr + 0.05, s * 0.48, R + 0.02), (xr + 0.12, s * 0.46, 0.70), 0.02, "shade", 6)
+    for letter, s in SIDES:
+        v.steered_wheel(letter, s, xf, yw, R, W, RR, lock=30.0, bolts=5)
+        v.lorry_wheel(f"wheel_back_{letter}", "vehicle", (xr, s * yw, R), s, R, W, RR, bolts=5)
+        v.use("vehicle")
+        v.socket("dust." + ("left" if s > 0 else "right"), (xr - R - 0.05, s * yw, 0.05), (-1, 0, 0.3), part="vehicle")
+
+    # ---- the frame, the bumper ------------------------------------------------------------------------------------
+    v.use("hull")
+    for s in (LEFT, RIGHT):
+        v.slab((-1.50, s * 0.40 - 0.03, 0.50), (1.60, s * 0.40 + 0.03, 0.62), "shade", 0.005)
+    for x in (1.52, 0.42, -0.60, -1.46):
+        v.slab((x - 0.03, -0.40, 0.51), (x + 0.03, 0.40, 0.61), "shade")
+    v.slab((1.60, -0.74, 0.50), (1.67, 0.74, 0.62), "upper", 0.012, 2)                                   # the bumper
+    for s in (LEFT, RIGHT):
+        v.hook((1.67, s * 0.32, 0.53), X, 0.05)
+
+    # ---- the grille of upright bars, the narrow bonnet, the wings with the lamps on them ---------------------------
+    gy, gz0, gz1 = 0.30, 0.62, 1.12
+    outline = [(gy, gz0), (gy, 1.04), (gy - 0.05, 1.10), (gy - 0.12, gz1), (-(gy - 0.12), gz1), (-(gy - 0.05), 1.10), (-gy, 1.04), (-gy, gz0)]
+    v.hull([(xg - 0.03, y, z) for y, z in outline] + [(xg, y, z) for y, z in outline], "upper", 0.006, both=False)
+    v.slab((xg - 0.10, -0.24, 0.66), (xg - 0.07, 0.24, 1.06), "black")                                  # the radiator, behind the bars
+    v.slab((xg - 0.032, -0.25, 0.68), (xg + 0.001, 0.25, 1.06), "black")                                 # the opening
+    for k in range(13 if fine else 7):
+        n = 13 if fine else 7
+        y = -0.24 + 0.48 * k / (n - 1)
+        v.slab((xg - 0.012, y - 0.008, 0.68), (xg + 0.006, y + 0.008, 1.06), "upper")                    # an upright bar
+    hood = [(xg - 0.03, 0.30, 0.86), (xg - 0.03, 0.27, 1.11), (xg - 0.03, 0.18, 1.125), (xc + 0.16, 0.31, 0.86), (xc + 0.16, 0.29, 1.14), (xc + 0.16, 0.20, 1.155)]
+    v.hull(hood, "upper", 0.01)
+    for s in (LEFT, RIGHT):
+        v.louvres((0.95, s * 0.302, 0.98), (0.30, 0.10), Y * s, count=6)
+    wing = [(1.64, 0.66), (1.61, 0.80), (1.54, 0.89), (1.44, 0.925), (0.72, 0.925), (0.58, 0.90), (0.48, 0.80), (0.44, 0.64)]
+    for s in (LEFT, RIGHT):                                                                              # (her wing's crown rolls down to its outer edge)
+        v.crown_wing(wing, s * 0.30, [(0.0, 0.0), (0.34, 0.0), (0.42, 0.012), (0.48, 0.035), (0.52, 0.07), (0.545, 0.13)])
+        v.slab((0.50, s * 0.30 - 0.006, 0.62), (xg - 0.03, s * 0.30 + 0.006, 0.925), "shade")          # the apron inside the wing
+        v.rod((1.36, s * 0.47, 0.93), (1.36, s * 0.47, 0.99), 0.018, "upper", 6)                       # the lamp's stalk on the wing
+        v.headlamp((1.38, s * 0.47, 1.04), X, 0.095, stalk=0.0, cover=True)
+    v.headlamp((1.30, -0.70, 0.93), X, 0.035, stalk=0.03)                                                # the marker lamp
+    v.hull([(xc, yb, 0.92), (xc, yb, zt + 0.02), (xc, yb - 0.04, zt + 0.06), (xc, 0.30, zt + 0.08),
+            (xc + 0.16, 0.31, 0.92), (xc + 0.16, 0.31, 1.10), (xc + 0.16, 0.29, 1.14), (xc + 0.16, 0.20, 1.155)], "upper", 0.01)      # the cowl, out to the tub
+    v.slab((xc + 0.14, -yb + 0.02, zfl), (xc + 0.16, yb - 0.02, 0.94), "upper")                            # the firewall
+
+    # ---- the tub: flat sides with the two cuts, the rolled top, the back; the back wheels' wings out from it --------
+    side = [(xc, zfl - 0.06), (xc, zt), (0.30, zt), (0.26, 0.98), (0.22, 0.86), (0.18, 0.80), (-0.26, 0.80), (-0.30, 0.86),
+            (-0.34, 0.98), (-0.38, zt), (-0.48, zt), (-0.52, 0.99), (-0.56, 0.90), (-0.60, 0.86), (-1.04, 0.86), (-1.08, 0.94), (-1.12, zt),
+            (xb + 0.02, zt), (xb, zt - 0.02), (xb, zfl - 0.06)]
+    top_edge = [Vector((x, 0.0, z)) for x, z in side[1:-2]]
+    for s in (LEFT, RIGHT):
+        v.extrude(side, s * (yb - 0.02), s * yb, "upper", 0.004)
+        if fine:
+            v.tube([p + Y * s * (yb - 0.008) + Z * 0.004 for p in top_edge], 0.013, "upper", 6)
+    v.slab((xb - 0.02, -yb, zfl - 0.06), (xb, yb, zt - 0.02), "upper", 0.008)                                # the back
+    v.slab((xb, -yb + 0.02, zfl - 0.02), (xc + 0.14, yb - 0.02, zfl), "upper")                               # the floor
+    v.slab((xc - 0.02, -yb + 0.02, 0.84), (xc, yb - 0.02, zt), "upper")                                      # the dash
+    arch = [(xr + (R + 0.09) * math.cos(math.radians(a)), R + (R + 0.09) * math.sin(math.radians(a))) for a in range(165, 10, -15)]
+    for s in (LEFT, RIGHT):
+        v.crown_wing(arch, s * yb, [(0.0, 0.0), (0.16, 0.0), (0.23, 0.02), (0.265, 0.05), (0.285, 0.10)])         # the back wing, out from the tub
+        v.slab((xr - 0.30, s * yb, 0.62), (xr + 0.30, s * (yb + 0.02), 0.64), "shade")                     # its stay
+    if fine:
+        for k, y in enumerate((0.36, 0.24, 0.12)):
+            v.lathe((xc - 0.021, y, 0.95), -X, [(0.0, 0.0), (0.0, 0.032), (0.008, 0.032), (0.008, 0.0)], "black", 10)
+
+    # ---- the seats, the wheel, the levers ---------------------------------------------------------------------------
+    for s in (LEFT, RIGHT):
+        v.slab((-0.42, s * 0.08, zfl), (-0.04, s * 0.50, 0.78), "upper", 0.01)
+        v.seat(-0.44, -0.02, *sorted((s * 0.07, s * 0.51)), 0.88, back=0.36, lean=0.07, paint="leather")
+    v.slab((-1.40, -0.52, zfl), (-1.02, 0.52, 0.80), "upper", 0.01)
+    v.seat(-1.42, -0.98, -0.52, 0.52, 0.90, back=0.32, lean=0.04, paint="leather")                          # the bench behind
+    grip_l, grip_r = v.steering_wheel((0.42, 0.28, 0.74), (0.04, 0.28, 1.18), r=0.21)
+    if fine:
+        for k, (y, lean) in enumerate(((0.10, 0.10), (0.02, 0.06))):
+            v.rod((0.18 - 0.02 * k, y, zfl), (0.10 - lean, y, 0.94 - 0.04 * k), 0.008, "black", 5)
+            v.ball((0.10 - lean, y, 0.94 - 0.04 * k), 0.02, "black", 8, 6)
+
+    # ---- the screen: one pane in its frame, standing (it folds forward on the bonnet) -------------------------------
+    v.part("screen", "hull", (xc + 0.02, 0.0, zt + 0.10), axis=(0, 1, 0), limits=[0.0, 85.0], kind="turn",
+           note="the windscreen on its hinges at the cowl: built standing; + folds it forward on the bonnet")
+    lean = 0.12
+    p = lambda y, z: Vector((xc + 0.02 - lean * (z - zt), y, z))                                           # noqa: E731
+    fy, z0, z1 = 0.54, zt + 0.10, zt + 0.52
+    for a, b in ((p(-fy, z0), p(fy, z0)), (p(-fy, z1), p(fy, z1)), (p(-fy, z0), p(-fy, z1)), (p(fy, z0), p(fy, z1))):
+        v.rod(a, b, 0.018, "upper", 6)
+    v.plate([p(fy - 0.02, z0 + 0.02), p(-fy + 0.02, z0 + 0.02), p(-fy + 0.02, z1 - 0.02), p(fy - 0.02, z1 - 0.02)], 0.006, "glass")
+    if fine:
+        v.rod(p(0.30, z1 - 0.01), p(0.10, z1 - 0.20), 0.005, "black", 4)                                    # the wiper
+    v.use("hull")
+
+    # ---- her back: the spare, the lamp, the hook, the folded top; the can, the tools --------------------------------
+    sc = Vector((xb - 0.12, 0.0, 0.84))
+    v.slab((xb - 0.04, -0.10, 0.78), (xb, 0.10, 0.90), "shade", 0.006)
+    v.tyre(sc, -X, R, RR, W, lugs=18)
+    v.wheel_disc(sc - X * (W * 0.1), -X, RR * 1.05, W * 0.6, tyre=0.0, kind="dish", hub=0.42, bolts=5, dish=0.2, cap=0.75, sides=v.n(28, 10))
+    v.lathe((xb - 0.002, 0.42, 0.74), -X, [(0.03, 0.0), (0.03, 0.035), (0.0, 0.04), (0.0, 0.0)], "red", 10)       # the tail lamp
+    v.slab((xb - 0.06, -0.10, 0.50), (xb, 0.10, 0.62), "shade", 0.006)
+    v.hook((xb - 0.07, 0.0, 0.54), -X, 0.07)
+    v.socket("hook", (xb - 0.14, 0.0, 0.54), -X, part="hull", note="the pintle: the 45 mm anti-tank gun's eye goes on it")
+    v.roll((-1.36, -0.54, zt + 0.10), (-1.36, 0.54, zt + 0.10), r=0.085, paint="canvas", straps=3)
+    v.shovel((-0.10, yb + 0.02, 0.66), yaw=180.0, long=0.86, roll=90.0)
+    v.silencer((-0.30, -0.36, 0.44), (-0.95, -0.36, 0.44), 0.065, bands=2, pipe=[(0.7, -0.22, 0.52), (0.0, -0.32, 0.46), (-0.30, -0.36, 0.44)],
+               tail=((-0.95, -0.36, 0.44), (-1, 0, 0)))
+    v.rod((-0.95, -0.36, 0.44), (-1.50, -0.34, 0.46), 0.022, "rust", 8)
+    v.socket("exhaust.1", (-1.52, -0.34, 0.46), (-1, 0, 0))
+
+    # ---- the men, what happens to her -------------------------------------------------------------------------------
+    v.socket("driver", (-0.23, 0.28, 0.88), X, part="hull", note="the driver, seated: the top of his seat, 0.32 over the floor his boots are on (the footwell runs on to the firewall 0.80 ahead); his hands on grip.driver.l and grip.driver.r")
+    v.socket("grip.driver.l", grip_l, Z, part="hull", note="the driver's left hand on the wheel's rim")
+    v.socket("grip.driver.r", grip_r, Z, part="hull", note="the driver's right hand on the wheel's rim")
+    v.socket("rider.1", (-0.23, -0.28, 0.88), X, part="hull", note="the man beside the driver, seated (the top of his seat)")
+    v.socket("rider.2", (-1.20, 0.28, 0.90), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.34 over the floor")
+    v.socket("rider.3", (-1.20, -0.28, 0.90), X, part="hull", note="a man on the bench behind, seated facing ahead")
+    v.socket("engine", (1.00, 0.0, 1.14), Z, part="hull", note="the bonnet: smoke and the first fire")
+    v.socket("fire.1", (-0.30, 0.0, 0.78), Z, part="hull", note="in the seats (her fuel tank is under them)")
+    v.socket("fire.2", (-1.20, 0.0, 0.88), Z, part="hull")
+    v.socket("hit.front", (xg + 0.02, 0.0, 0.85), X, part="hull")
+    v.socket("hit.left", (-0.20, yb, 0.75), Y, part="hull")
+    v.socket("hit.right", (-0.20, -yb, 0.75), -Y, part="hull")
+    v.socket("hit.rear", (xb, 0.0, 0.85), -X, part="hull")
+    v.carrier_clips("lorry_idle_loop", "lorry_drive_loop", soft=1.5)
+    v.worn(**v.worn_kw)
+    v.m.info.setdefault("file", {})["swaps"] = {}
     return v

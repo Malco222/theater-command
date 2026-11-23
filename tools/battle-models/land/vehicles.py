@@ -190,6 +190,11 @@ BUILDERS["Kubelwagen"] = light_cars.kubelwagen
 ABOUT["Kubelwagen"] = {"nation": "GER", "role": "light car", "years": "1940-45",
                        "units": "staffs, scouts, messengers and every German unit's light car, in Europe, Russia and Africa (Italy had some too)"}
 FACES["Kubelwagen"] = [("1940 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})]
+BUILDERS["GAZ67"] = light_cars.gaz67
+ABOUT["GAZ67"] = {"nation": "SOV", "role": "light car", "years": "1943-45",
+                  "units": "the Red Army's commanders, scouts and signallers, and the tractor of the 45 mm anti-tank gun; before her, Lend-Lease jeeps and the older GAZ-64"}
+FACES["GAZ67"] = [("Screen up, four seats", {})]
+
 import motorcycles  # noqa: E402
 
 BUILDERS["R75"] = motorcycles.r75
@@ -200,3 +205,19 @@ BUILDERS["M72"] = motorcycles.m72
 ABOUT["M72"] = {"nation": "SOV", "role": "motorcycle with sidecar", "years": "1942-45",
                 "units": "the motorcycle battalions and the scouts of the Red Army's tank and mechanized corps; solo (the sidecar off), the despatch riders. Lend-Lease Harleys and captured BMWs rode beside her"}
 FACES["M72"] = [("With her sidecar and its DT", {}), ("Solo: a despatch rider", {"sidecar": False})]
+BUILDERS["WLA"] = motorcycles.wla
+ABOUT["WLA"] = {"nation": "USA", "role": "motorcycle", "years": "1940-45",
+                "units": "the American army's despatch riders, military police and scouts; Lend-Lease sent the Red Army thousands (and Britain and Canada rode its cousin)"}
+FACES["WLA"] = [("Solo, the Thompson in its scabbard", {})]
+BUILDERS["M20"] = motorcycles.m20
+ABOUT["M20"] = {"nation": "UK", "role": "motorcycle", "years": "1937-45",
+                "units": "the British and Commonwealth despatch riders, military police and signallers, in every theatre"}
+FACES["M20"] = [("Khaki green", {}), ("Light Stone, the desert", {"paint": "stone"})]
+BUILDERS["Alce"] = motorcycles.alce
+ABOUT["Alce"] = {"nation": "ITA", "role": "motorcycle", "years": "1939-45",
+                 "units": "the Italian army's motorcycle troops (the Bersaglieri), despatch riders and scouts, in Africa, the Balkans and Russia"}
+FACES["Alce"] = [("Two saddles, Italian khaki", {})]
+BUILDERS["Motorcycle"] = motorcycles.motorcycle
+ABOUT["Motorcycle"] = {"nation": "_", "role": "motorcycle", "years": "1935-45",
+                       "units": "the stand-in for every army without a machine of its own: France, Poland, Japan, the small armies, each in its own coat"}
+FACES["Motorcycle"] = [("Solo", {}), ("With the plain sidecar", {})]
