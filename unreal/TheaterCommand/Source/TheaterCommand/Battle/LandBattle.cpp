@@ -3328,6 +3328,32 @@ void ALandBattle::MakeMen()
 		Crowd->AddSoldier(LandParts::Narrow(Army), One);
 		++Files;
 	}
+	// Effects (R2): shell and tank hits throw men and take limbs off (-TheaterLandGore; Brian, 22 November: "make more
+	// graphic animations if a guy gets shot or blown up", "with limbs coming off"): each file's gore twin, where the
+	// soldiers thread has made one with its gore falls (soldier_<ARMY>_gore.json), kept beside it; a man killed near a
+	// shell's burst may fall as it (LandMen::Crowd::SetGore). Off: no twin read, every man falls as before.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandGore")))
+	{
+		int32 Twins = 0;
+		for (const FString& Army : Armies)
+		{
+			FString Text;
+			if (!Crowd->SoldierFile(LandParts::Narrow(Army)) || !FFileHelper::LoadFileToString(Text, *(Folder / (TEXT("soldier_") + Army + TEXT("_gore.json")))))
+			{
+				continue;
+			}
+			LandMen::Soldier Twin;
+			std::string Why;
+			if (!Twin.Load(LandParts::Narrow(Text), Why) || !Crowd->AddGore(LandParts::Narrow(Army), Twin, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: soldier_%s_gore.json not used (gore): %s"), *Army, *LandParts::Wide(Why));
+				continue;
+			}
+			++Twins;
+		}
+		Crowd->SetGore(true);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: shell and tank hits take limbs off ON (gore twins of %d soldier files)"), Twins);
+	}
 	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
 	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)
@@ -3679,6 +3705,13 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 				D.Stamp = 0xFFFFFFFFu;
 				continue;
 			}
+		}
+		// Effects (R2): his mesh another's now (-TheaterLandGore: fallen as his file's gore twin, or back at a replay from
+		// the start): his triangles and colours made again, as at a new level
+		if (D.MeshNo != Crowd.MeshNo(Man))
+		{
+			D.MeshNo = Crowd.MeshNo(Man);
+			D.Lod = -1;
 		}
 		LandMen::Lod Level = Crowd.LodOf(Man);
 		if (!D.Mesh.IsValid() || D.Lod != static_cast<int32>(Level))

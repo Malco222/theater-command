@@ -207,6 +207,10 @@ namespace LandMen
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
+		/** deaths_gore[stance][kind] = clip names: a gore twin's falls (soldier_<ARMY>_gore.json: the same bones, its skin
+		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
+		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
+		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
 		/** Per clip, the clip and its styles (its own first, then each clip whose StyleOf names it, in the file's order):
 		 * run, run_b, run_c, run_d. Empty for a clip with no styles. */
 		std::vector<std::vector<int>> Styles;
@@ -370,6 +374,28 @@ namespace LandMen
 
 		/** The soldier file drawn for an army's men (by the file's army: "GER", "POL" for the Americans until theirs). */
 		void AddSoldier(const std::string& FileArmy, std::shared_ptr<const Soldier> S);
+		/**
+		 * Effects (R2): the gore twin (soldier_<ARMY>_gore.json) of the file added under that name, after it (AddSoldier).
+		 * The crowd keeps the twin's mesh, faces, helmets and gore falls with the file's own clips and sockets, so a man
+		 * swapped to it mid-battle keeps every clip he had. False, and why: no such file, its bones not the file's, or no
+		 * gore falls in it (deaths_gore).
+		 */
+		bool AddGore(const std::string& FileArmy, const Soldier& Twin, std::string& OutWhy);
+		/**
+		 * Shell and tank hits throw men and take limbs off (release 2, behind -TheaterLandGore; Brian, 22 November: "make
+		 * more graphic animations if a guy gets shot or blown up", "with limbs coming off"). On: a man killed by a shell,
+		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
+		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (a field gun's 0.55 at
+		 * the burst, a tank's 0.5, a mortar's 0.45, a grenade's 0.3) and fall away to none at its reach (12, 10, 8 and 4
+		 * m); a man lying or in cover half that. The same battle gores the same men every time (his own dice). Who dies
+		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 */
+		void SetGore(bool bOn);
+		/** Men who fell as their file's gore twin so far in this play. */
+		int Gored() const;
+		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and
+		 * colours are made again (LookOf), so a drawn man's must be too. */
+		uint32_t MeshNo(int Man) const;
 		/** Content/Data/LandBattles/armies.json: each army's colours and its helmet rule. */
 		bool ReadArmies(const std::string& Text, std::string& OutError);
 
@@ -535,7 +561,7 @@ namespace LandMen
 		float SeenDistance(int Man) const;
 		/** Points a skin of him writes at that level (the body, then his helmet's finish). */
 		int PointsOf(int Man, Lod L) const;
-		/** His triangles and colours at that level (the same all battle: read once). */
+		/** His triangles and colours at that level (the same all battle, read once, unless his MeshNo changes). */
 		const Look& LookOf(int Man, Lod L);
 		/**
 		 * Skins him at that level: PointsOf * 3 floats each into OutAt and OutFacing (Facing may be null). Different men

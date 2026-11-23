@@ -987,18 +987,23 @@ namespace LandMen
 
 		// The physics-baked falls, when the soldiers thread has added them: deaths[stance][kind] = clip names. Names the
 		// file does not have as clips are left out here, so the picker never chooses a fall it cannot play.
+		// (and a gore twin's, deaths_gore, the same way: Effects (R2), Crowd::AddGore)
 		Deaths.clear();
-		const J& Ds = Root["deaths"];
-		for (size_t I = 0; I < Ds.Size() && Ds.K == J::Obj; ++I)
+		DeathsGore.clear();
+		for (const auto& [Key, Out] : { std::make_pair("deaths", &Deaths), std::make_pair("deaths_gore", &DeathsGore) })
 		{
-			const J& ByKind = Ds.Vals[I];
-			for (size_t K = 0; K < ByKind.Size() && ByKind.K == J::Obj; ++K)
+			const J& Ds = Root[Key];
+			for (size_t I = 0; I < Ds.Size() && Ds.K == J::Obj; ++I)
 			{
-				const J& List = ByKind.Vals[K];
-				for (size_t N = 0; N < List.Size(); ++N)
+				const J& ByKind = Ds.Vals[I];
+				for (size_t K = 0; K < ByKind.Size() && ByKind.K == J::Obj; ++K)
 				{
-					const std::string Clip = List.At(N).Text();
-					if (ClipIndex(Clip) >= 0) Deaths[Ds.Keys[I]][ByKind.Keys[K]].push_back(Clip);
+					const J& List = ByKind.Vals[K];
+					for (size_t N = 0; N < List.Size(); ++N)
+					{
+						const std::string Clip = List.At(N).Text();
+						if (ClipIndex(Clip) >= 0) (*Out)[Ds.Keys[I]][ByKind.Keys[K]].push_back(Clip);
+					}
 				}
 			}
 		}
@@ -1652,9 +1657,19 @@ namespace LandMen
 			// says (SetRide).
 			bool bRider = false;
 			Crowd::Ride RideNow;
+			// Effects (R2): fallen as his file's gore twin (S the twin, OwnS his own file till a replay from the start
+			// gives it back); MeshNo counts the swaps, so the scene makes his triangles again.
+			const Soldier* OwnS = nullptr;
+			bool bGore = false;
+			uint32_t MeshNo = 0;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
+		// Effects (R2): each file's gore twin as the crowd keeps it (AddGore: the twin's mesh with the file's clips), on
+		// or off (SetGore), and the men gored this play.
+		std::map<std::string, std::shared_ptr<const Soldier>> Gores;
+		bool bGore = false;
+		int GoredN = 0;
 		std::map<std::string, ArmyColours> Armies;
 		std::vector<TrackData> Tracks;
 		std::map<std::tuple<int, int, int>, int> TrackOf;   // (block, k, j)
@@ -2848,7 +2863,9 @@ namespace LandMen
 			const bool bShell = M.KillW == Weapon::Mortar || M.KillWeapon == "gun" || M.KillWeapon == "tank" || M.KillW == Weapon::Grenade;
 			// Run over (infantry with tanks: an enemy tank's tracks): knocked flat under her, never thrown or spun.
 			const bool bCrushed = M.KillWeapon == "track";
-			if (!S.Deaths.empty())
+			// (Effects (R2): fallen as his file's gore twin, from its gore falls, weighed alike)
+			const std::map<std::string, std::map<std::string, std::vector<std::string>>>& Table = M.bGore ? S.DeathsGore : S.Deaths;
+			if (!Table.empty())
 			{
 				// The physics-baked falls: weigh each kind by how he was struck and how he stood, then each clip of the
 				// kind by the Fates rule (never the last fall again unless it is the only one; the 2nd to 4th last
@@ -2857,11 +2874,11 @@ namespace LandMen
 				const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
 				for (const char* Name : Order)
 				{
-					auto Found = S.Deaths.find(Name);
-					if (Found != S.Deaths.end() && !Found->second.empty()) { Kinds = &Found->second; break; }
+					auto Found = Table.find(Name);
+					if (Found != Table.end() && !Found->second.empty()) { Kinds = &Found->second; break; }
 				}
-				if (!Kinds && !S.Deaths.empty()) Kinds = &S.Deaths.begin()->second;
-				if (Kinds && !(St == "prone" && S.Deaths.find("prone") == S.Deaths.end()))
+				if (!Kinds && !Table.empty()) Kinds = &Table.begin()->second;
+				if (Kinds && !(St == "prone" && Table.find("prone") == Table.end()))
 				{
 					std::vector<std::pair<std::string, double>> Odds;
 					std::vector<std::string> KindOfPick;
@@ -3200,6 +3217,12 @@ namespace LandMen
 				return;
 			}
 			if (M.State == Man::Rest || !M.bVisible) return;
+			// Effects (R2): his fall a gore one (SetGore): drawn as his file's twin from the frame he is struck, swapped
+			// before his file is read here, so the fall StartFall picks below is the twin's
+			if (bGore && !M.bGore && M.State == Man::Alive && M.Info.Dead >= 0.0 && Now >= M.Info.Dead)
+			{
+				if (const Soldier* Twin = GoreTwinFor(M, StanceForFall(M, M.Info.Dead))) ToTwin(M, Twin);
+			}
 			const Soldier& S = *M.S;
 			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
 			const double Tl = Now - M.Info.Delay;
@@ -3613,9 +3636,93 @@ namespace LandMen
 
 		void Reset()
 		{
-			for (Man& M : Men) ResetMan(M);
+			for (Man& M : Men)
+			{
+				if (M.bGore) FromTwin(M); // (Effects (R2): his own file again, to fall afresh)
+				ResetMan(M);
+			}
+			GoredN = 0;
 			Falls = FallMemory();
 			Clock = -1.0;
+		}
+
+		// ---------------------------------------------------------------------------------------------------------
+		// Effects (R2): the gore falls (SetGore). A man killed by a shell, a tank's gun or a grenade near its burst may
+		// fall as his file's gore twin: the same man, his mesh the twin's (split at the eight cuts, its caps hidden in him
+		// till a limb goes), his fall one of the twin's, in which an arm or a leg is taken off and flies on its own bone.
+		// ---------------------------------------------------------------------------------------------------------
+		/** His file's twin when his fall is to be a gore one (the burst's odds by how far he stood from it), or null. */
+		const Soldier* GoreTwinFor(const Man& M, const std::string& St) const
+		{
+			if (M.bRider || M.KillT < 0.0) return nullptr;
+			const auto Found = Gores.find(M.Info.FileArmy);
+			if (Found == Gores.end() || !Found->second) return nullptr;
+			// (at the burst AtBurst of the men it kills, falling away to none at Reach metres: a field gun's or a
+			// howitzer's shell, a tank's, a mortar's bomb, a grenade)
+			double AtBurst = 0.0, Reach = 0.0;
+			if (M.KillWeapon == "gun") AtBurst = 0.55, Reach = 12.0;
+			else if (M.KillWeapon == "tank") AtBurst = 0.5, Reach = 10.0;
+			else if (M.KillW == Weapon::Mortar) AtBurst = 0.45, Reach = 8.0;
+			else if (M.KillW == Weapon::Grenade) AtBurst = 0.3, Reach = 4.0;
+			else return nullptr;
+			// (where he stood when it struck him, by his track: the same whatever frame his fall is first played on)
+			double X = M.X, Y = M.Y;
+			float F = 0.f, V = 0.f;
+			size_t Cursor = 0;
+			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
+			if (!Tr.T.empty()) Tr.At(M.Info.Dead - M.Info.Delay, Cursor, X, Y, F, V);
+			const double Far = std::hypot(M.KillX - X, M.KillY - Y);
+			const double Near = std::clamp(1.0 - Far / Reach, 0.0, 1.0);
+			double Odds = AtBurst * Near * std::sqrt(Near);
+			if (St == "prone" || St == "cover") Odds *= 0.5; // (lying, or behind cover: his body under the blast)
+			Dice D(Seed ^ Mix(0x60AEull + static_cast<uint64_t>(M.Info.Block) * 1000003ull + static_cast<uint64_t>(M.Info.K))
+				^ (M.Info.J > 0 ? Mix(0x60AE5ull + static_cast<uint64_t>(M.Info.J)) : 0ull));
+			return D.U() < Odds ? Found->second.get() : nullptr;
+		}
+
+		/** His mesh at each level and its face's rest points for the file he is drawn with now; his triangles and
+		 * colours made again, his bank's bake his own file's or (a gore twin) none, so he is posed and skinned. */
+		void Remesh(Man& M)
+		{
+			for (int L = 0; L < LodCount; ++L)
+			{
+				M.FaceAt[L] = &FaceRestOf(M.S, OwnHelmet(M), L, M.Info.Face);
+				M.Var[L] = &VariantOf(M.S, OwnHelmet(M), L);
+				M.bLook[L] = false;
+				M.bSkinned[L] = false;
+				M.RestAt[L].clear();
+				M.RestFacing[L].clear();
+			}
+			if (M.bGore)
+			{
+				M.Banked = nullptr;
+				for (int L = 0; L < LodCount; ++L) { M.BankAt[L] = nullptr; M.FaceMoved[L] = nullptr; }
+				M.BankK = -1;
+				M.ShowA = M.ShowB = M.WasA = M.WasB = -1;
+				M.ShowW = M.WasW = 0.f;
+				M.BankKey = M.BodyKey = -1;
+			}
+			else AttachBank(M);
+			++M.MeshNo;
+			++M.Stamp;
+		}
+
+		void ToTwin(Man& M, const Soldier* Twin)
+		{
+			M.OwnS = M.S;
+			M.S = Twin;
+			M.bGore = true;
+			Remesh(M);
+			++GoredN;
+		}
+
+		void FromTwin(Man& M)
+		{
+			if (!M.OwnS) return;
+			M.S = M.OwnS;
+			M.OwnS = nullptr;
+			M.bGore = false;
+			Remesh(M);
 		}
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -3928,6 +4035,66 @@ namespace LandMen
 	{
 		Inner->Soldiers[FileArmy] = std::move(S);
 	}
+
+	bool Crowd::AddGore(const std::string& FileArmy, const Soldier& Twin, std::string& OutWhy)
+	{
+		Impl& I = *Inner;
+		const auto Base = I.Soldiers.find(FileArmy);
+		if (Base == I.Soldiers.end() || !Base->second)
+		{
+			OutWhy = "no soldier file of that name added to be its twin";
+			return false;
+		}
+		const Soldier& B = *Base->second;
+		if (Twin.DeathsGore.empty())
+		{
+			OutWhy = "it has no gore falls (deaths_gore)";
+			return false;
+		}
+		bool bSame = Twin.Bones.size() == B.Bones.size();
+		for (size_t K = 0; bSame && K < B.Bones.size(); ++K)
+		{
+			bSame = Twin.Bones[K].Name == B.Bones[K].Name && Twin.Bones[K].Parent == B.Bones[K].Parent;
+		}
+		if (!bSame)
+		{
+			OutWhy = "its bones are not its file's";
+			return false;
+		}
+		// The twin's mesh, faces, helmets and paints (wound, bone, blood) with the file's own clips, sockets and falls,
+		// its gore falls and their sockets (wound_<bone>, end_<bone>) after them: every clip number a man of the file
+		// holds stays his when he is swapped to it.
+		auto M = std::make_shared<Soldier>(Twin);
+		M->Weapon = B.Weapon;
+		M->Clips = B.Clips;
+		M->Deaths = B.Deaths;
+		for (const Clip& C : Twin.Clips)
+		{
+			if (B.ClipIndex(C.Name) < 0) M->Clips.push_back(C);
+		}
+		M->Sockets = B.Sockets;
+		for (const Socket& So : Twin.Sockets)
+		{
+			if (B.SocketIndex(So.Name) < 0) M->Sockets.push_back(So);
+		}
+		for (Clip& C : M->Clips)
+		{
+			for (ClipEvent& E : C.Events)
+			{
+				E.Socket = E.SocketName.empty() ? -1 : M->SocketIndex(E.SocketName);
+				E.Bone = E.BoneName.empty() ? -1 : M->BoneIndex(E.BoneName);
+			}
+		}
+		M->Styles = B.Styles;
+		M->Styles.resize(M->Clips.size());
+		for (const auto& P : B.OwnPaints) M->OwnPaints.insert(P);
+		I.Gores[FileArmy] = std::move(M);
+		return true;
+	}
+
+	void Crowd::SetGore(bool bOn) { Inner->bGore = bOn; }
+	int Crowd::Gored() const { return Inner->GoredN; }
+	uint32_t Crowd::MeshNo(int Man) const { return Inner->Men[static_cast<size_t>(Man)].MeshNo; }
 
 	bool Crowd::ReadArmies(const std::string& Text, std::string& OutError)
 	{
