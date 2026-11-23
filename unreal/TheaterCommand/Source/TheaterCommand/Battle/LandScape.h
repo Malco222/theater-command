@@ -26,6 +26,8 @@
  *   Farmland the open fields of central and eastern Europe (the steppe's country where no recording lays it)
  *   Dry      the dry steppe east of the Volga: Mongolia and Khalkhin Gol, Kazakhstan, Iran, the Horn of Africa: short dry
  *            grass, sand, no farms, yurts
+ *   Rice     central and southern China, Korea, Japan, the Ryukyus: paddies by the season behind their bunds, terraces,
+ *            tile-roofed villages facing south, bamboo, pine hills, grave mounds (release 2, on trial "rice")
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -47,6 +49,7 @@ namespace LandScape
 		Island,
 		Farmland,
 		Dry,      // LandDry: the dry steppe (Khalkhin Gol, 1939)
+		Rice,     // LandAsia: rice country (China, Korea, Japan; release 2, on trial "rice")
 		Count
 	};
 	const char* NameOf(Look L);
@@ -401,12 +404,14 @@ namespace LandScape
 	std::unique_ptr<Region> Make(Look L, const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
-	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandSnow.cpp).
+	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
+	// LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
 	std::unique_ptr<Region> MakeFarm(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeDry(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
