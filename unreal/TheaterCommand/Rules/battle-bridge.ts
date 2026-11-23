@@ -222,7 +222,12 @@ export function battleCalls(h: BattleHooks) {
     },
     airLook(kind: string, target: number, ids: number[]) {
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
-      return t.ticket ? { ticket: t.ticket } : { ticket: null, why: t.why };
+      if (!t.ticket) return { ticket: null, why: t.why };
+      // The raid card only asks whether there is a battle in the air for the pick, each time the pick changes, so the
+      // ground's outlines (about 154 KB of the 160 KB ticket) stay out of its answer: the battle's own board (airStart)
+      // carries them (the playtester's finding 3, 23 Nov: about 52 ms a pick change against the 33 ms order).
+      const { ground: _ground, ...place } = t.ticket.place as typeof t.ticket.place & { ground?: unknown };
+      return { ticket: { ...t.ticket, place } };
     },
     airStart(kind: string, target: number, ids: number[]) {
       const raid = h.raid;
