@@ -642,6 +642,7 @@ void FMiniatureMesh::PaintedNumerals(const FVector& Where, double High, int32 Nu
 bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
+bool FMiniatureMesh::bTorpedoLoad = false;
 
 int32 FMiniatureMesh::SchemeOf(const FString& Name)
 {
@@ -722,7 +723,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
-	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near"));
+	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near")) + (bTorpedoLoad ? TEXT("|torpedo") : TEXT(""));
 	if (!Read.Contains(Which))
 	{
 		TSharedPtr<FRaw> Raw;
@@ -765,9 +766,34 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
 					}
 				}
-				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
+				// (A model that carries a torpedo or bombs, never both (its "loads"; the aircraft modeller, 20 November
+				// 2026): the load it does not fly with is left out, a triangle at a time, so that every point keeps its
+				// place for the bay, the airscrews and the marks the air battle finds by point. Bombs unless asked.)
+				TSet<int32> Unflown;
+				const TArray<TSharedPtr<FJsonValue>> *Loads = nullptr, *PartNames = nullptr, *PartOf = nullptr;
+				if (File->TryGetArrayField(TEXT("loads"), Loads) && Loads->Num() >= 2 && File->TryGetArrayField(TEXT("parts"), PartNames)
+					&& (*Part)->TryGetArrayField(TEXT("part"), PartOf) && PartOf->Num() == PaintList->Num())
 				{
-					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
+					for (int32 K = 0; K < PartNames->Num(); ++K)
+					{
+						const TSharedPtr<FJsonObject> Named = (*PartNames)[K]->AsObject();
+						FString PartName;
+						if (Named.IsValid() && Named->TryGetStringField(TEXT("name"), PartName) && PartName == (bTorpedoLoad ? TEXT("bombs") : TEXT("torpedo")))
+						{
+							Unflown.Add(K);
+						}
+					}
+				}
+				for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
+				{
+					const int32 A = static_cast<int32>((*TriangleList)[K]->AsNumber()), B = static_cast<int32>((*TriangleList)[K + 1]->AsNumber()), C = static_cast<int32>((*TriangleList)[K + 2]->AsNumber());
+					if (Unflown.Num() > 0 && PartOf->IsValidIndex(A) && PartOf->IsValidIndex(B) && PartOf->IsValidIndex(C)
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[A]->AsNumber())) && Unflown.Contains(static_cast<int32>((*PartOf)[B]->AsNumber()))
+						&& Unflown.Contains(static_cast<int32>((*PartOf)[C]->AsNumber())))
+					{
+						continue;
+					}
+					Raw->Triangles.Append({ A, B, C });
 				}
 				const TSharedPtr<FJsonObject>* Marks = nullptr;
 				if (File->TryGetObjectField(TEXT("marks"), Marks))

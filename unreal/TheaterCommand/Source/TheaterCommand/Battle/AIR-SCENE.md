@@ -1129,3 +1129,20 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    is new. The two what-if fighters wait for something to name them. A model without the line flies with marks only.
    Look for: the letters upright and reading from the nose aft (not mirrored), on her skin, not over the sill, the glass
    or the number; even spacing; the ink as the rule says; no shimmer as he moves off.
+47. **Japan's land bombers, and a torpedo only on a torpedo run** (Brian's yes, 06:14Z 23 November: every nation's own
+   aircraft). The modeller's Nell and Betty are in Content/Models byte for byte from battle-models/air; on the campaign
+   map Japan's bombers are the Nell, and the Betty from 1941 (the rules' years), with rows in the map's aircraft table
+   (far shape aloft, a bomber's framing, their titles). In the battle the record's G3M and G4M find them; their engines
+   (AirShow ShapeOf) are where their files' sockets say fire and smoke start, about the box's middle the scene draws
+   them by (the G4M's were 0.6 m outboard and 1.3 m high of the Betty's nacelles). A model whose file carries both
+   loads (the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo in a torpedo group and with its
+   bombs everywhere else, the map included (FMiniatureMesh::bTorpedoLoad; the loader leaves the other load's triangles
+   out, every point kept for the bay, airscrews and marks); before, both hung under her at once. The SM.79 has her
+   shape (three engines, the nose her second), her name SM.79 and her engine sound, but her file waits for the
+   modeller's rebuild (bay, damage layers, a lighter far shape): until then Italy flies the plain bomber in her paint.
+   The airscrew test takes as many screws as a file says she has engines (the SM.79's three). The twins' drone
+   (EngineLoop) now also takes the Nell, the SM.79, the Wellington, the Pe-2, the LeO 451 and the plain bomber in any
+   paint ("Bomber:UK"), which flew with a fighter's engine before. `-TheaterOldVehicles`
+   also stands the plain machine for the C.202, Nell and Betty, so that the map's timing runs differ only by the new.
+   Look for: a level Kate at Pearl with her bomb and no torpedo, a torpedo Kate with her torpedo and no bomb; a Nell
+   with her bombs under her and no torpedo; fire from a Betty's nacelle, not from her wing root.

@@ -92,7 +92,9 @@ int main(int Argc, char** Argv)
 			// (a shaft along the machine, x forward in the file; a hub on the machine's middle line or paired across it)
 			if (std::fabs(S.Axis.X) < 0.98 || S.Blades < 2 || S.Blades > 4 || S.Radius < 0.9 || S.Radius > 2.4) bOk = false;
 		}
-		if (!bJet && F.Screws.size() != 1 && F.Screws.size() != 2 && F.Screws.size() != 4) bOk = false;
+		// (one, two or four; or as many as her file says she has engines: the SM.79's three, her nose and a pair)
+		const int Engines = TopNumber(Text, "\"engines\"");
+		if (!bJet && (Engines > 0 ? static_cast<int>(F.Screws.size()) != Engines : F.Screws.size() != 1 && F.Screws.size() != 2 && F.Screws.size() != 4)) bOk = false;
 		if (!bOk) { ++Bad; std::printf("  FAIL\n"); }
 	}
 	std::printf("%d aircraft, %d failed\n", Models, Bad);

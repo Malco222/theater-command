@@ -117,6 +117,10 @@ struct FMiniatureMesh
 	static bool bOldPieces;
 	/** Set from the command line ("-TheaterCodeBuilt"): the vehicles built in code are shown even where a sculpted model of the same name exists. */
 	static bool bCodeBuilt;
+	/** Set by the air battle while it builds a torpedo group's aircraft: a model whose file carries both loads (its
+	 * "loads", torpedo and bombs: the Kate, the Devastator, the Nell, the Betty) is drawn with its torpedo and without its
+	 * bombs. Otherwise such a model is drawn with its bombs, as every aircraft on the campaign map is. */
+	static bool bTorpedoLoad;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size

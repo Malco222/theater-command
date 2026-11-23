@@ -796,7 +796,8 @@ private:
 	/** The close view on, riding aircraft Key of squadron Group, chosen by him (kept until he steps or it is gone). */
 	void RideOn(int32 Group, int32 Key);
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
-	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span);
+	/** Aircraft Key's mesh, made the first time; bTorpedo for one of a torpedo group (a model with both loads carries its torpedo). */
+	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo);
 	/** Shows aircraft Key's near shape (made the first time) or its far one. */
 	void PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear);
 	void ShowScreen();

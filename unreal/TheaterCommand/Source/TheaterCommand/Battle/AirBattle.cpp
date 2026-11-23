@@ -3725,6 +3725,8 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 		{ TEXT("P40"), TEXT("Warhawk") }, { TEXT("B-17"), TEXT("B17") }, { TEXT("P-40"), TEXT("Warhawk") },
 		// (the three fighters the modeller had made that the battle could not find by the names a record gives them)
 		{ TEXT("F6F"), TEXT("Hellcat") }, { TEXT("Me 262"), TEXT("Me262") }, { TEXT("C.202"), TEXT("C202") }, { TEXT("MC.202"), TEXT("C202") },
+		// (the land bombers: Japan's two, and Italy's, which stands in as the plain bomber until her file is in)
+		{ TEXT("G3M"), TEXT("Nell") }, { TEXT("SM.79"), TEXT("SM79") },
 	};
 	static TMap<FString, FString> Found;
 	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b"));
@@ -4577,7 +4579,7 @@ namespace AirParts
 	}
 }
 
-UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span)
+UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
 {
 	TArray<FPlaneMade::FMark> Struck; // (an aircraft made again keeps the strikes it took, laid again on its new skin)
 	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
@@ -4624,10 +4626,14 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	// (a model with paint by date is a shape of its own in each of its schemes: a battle of 1944 does not take the shape
 	// painted for one of 1943)
 	const int32 Scheme = FMiniatureMesh::SchemeOf(Name);
-	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString());
+	// (and one of a torpedo group a shape of its own: a model with both loads in its file carries its torpedo there,
+	// its bombs anywhere else; FMiniatureMesh::bTorpedoLoad)
+	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
+		+ (bTorpedo ? TEXT("|torpedo") : TEXT(""));
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
+		FMiniatureMesh::bTorpedoLoad = bTorpedo;
 		FMiniatureMesh Made;
 		Made.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0, true);
 		AirParts::FShape Near;
@@ -4671,6 +4677,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 				Shapes.Add(ShapeKey + TEXT("|far"), MoveTemp(Away));
 			}
 		}
+		FMiniatureMesh::bTorpedoLoad = false;
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
 	// (her bay's racked load, for where her stick's bombs leave her: the flight core's BaysOf, in metres forward, to the
@@ -5013,7 +5020,9 @@ void AAirBattle::Draw(double Real)
 			}
 			continue;
 		}
-		UProceduralMeshComponent* Mesh = PlaneMesh(P.Key, AirParts::Wide(P.Model), AirParts::Wide(P.Nation), P.bFighter, P.Span);
+		const auto Flown = S.Show.Groups().find(P.Group);
+		const bool bTorpedo = !P.bFighter && Flown != S.Show.Groups().end() && Flown->second.Strike == "torpedo";
+		UProceduralMeshComponent* Mesh = PlaneMesh(P.Key, AirParts::Wide(P.Model), AirParts::Wide(P.Nation), P.bFighter, P.Span, bTorpedo);
 		if (!Mesh)
 		{
 			continue;
@@ -7728,7 +7737,11 @@ FString AAirBattle::EngineLoop(const FString& Model)
 		return FString();
 	}
 	const bool bFour = Model == TEXT("Lancaster") || Model == TEXT("Halifax") || Model == TEXT("B24");
-	const bool bTwin = Model == TEXT("He111") || Model == TEXT("Betty") || Model == TEXT("G4M") || Model == TEXT("Bomber");
+	// (the SM.79's three engines among the twins, as mix.json's note has her; the plain bomber in any nation's paint,
+	// "Bomber:UK", and the rules' new bombers, 23 November, before or after their models are in)
+	const bool bTwin = Model == TEXT("He111") || Model == TEXT("Betty") || Model == TEXT("G4M") || Model == TEXT("Nell") || Model == TEXT("G3M")
+		|| Model == TEXT("SM79") || Model == TEXT("SM.79") || Model == TEXT("Wellington") || Model == TEXT("Pe2") || Model == TEXT("Pe-2")
+		|| Model == TEXT("LeO451") || Model == TEXT("LeO 451") || Model.StartsWith(TEXT("Bomber"));
 	const TCHAR* Kind = bFour ? TEXT("fourEngined") : bTwin ? TEXT("twinEngined") : TEXT("fighter");
 	const TCHAR* Own = Model == TEXT("B17") ? TEXT("B-17") : Model == TEXT("B24") ? TEXT("B-24") : Model == TEXT("Stuka") ? TEXT("Ju 87") : nullptr;
 	FString Loop;

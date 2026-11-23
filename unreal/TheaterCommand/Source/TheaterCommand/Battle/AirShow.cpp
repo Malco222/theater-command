@@ -65,7 +65,11 @@ namespace AirShow
 		if (Model == "B17") { S.Span = 31.6; S.Long = 22.7; Engines({ -9.2, -4.9, 4.9, 9.2 }, 1.6, 0.2); Bomber(22.7, 2.2); }
 		else if (Model == "Lancaster") { S.Span = 31.1; S.Long = 21.2; Engines({ -8.9, -4.2, 4.2, 8.9 }, 1.8, 0.3); Bomber(21.2, 2.1); }
 		else if (Model == "He111") { S.Span = 22.6; S.Long = 16.4; Engines({ -3.4, 3.4 }, 1.6, 0.0); Bomber(16.4, 1.7); }
-		else if (Model == "G4M") { S.Span = 25.0; S.Long = 20.0; Engines({ -3.9, 3.9 }, 1.8, 0.1); Bomber(20.0, 1.8); }
+		// (the land bombers the modeller built, their engines where her files' sockets say fire and smoke start, about the
+		// middle of her box as the scene draws her: the Betty, the Nell, and the SM.79's three, the nose her second)
+		else if (Model == "G4M" || Model == "Betty") { S.Span = 25.0; S.Long = 20.0; Engines({ -3.3, 3.3 }, 5.2, -1.2); Bomber(20.0, 1.8); }
+		else if (Model == "G3M" || Model == "Nell") { S.Span = 25.0; S.Long = 16.5; Engines({ -3.0, 3.0 }, 4.4, -0.3); Bomber(16.5, 1.6); }
+		else if (Model == "SM79" || Model == "SM.79") { S.Span = 21.2; S.Long = 16.2; S.Engines = { Vec(4.0, -3.9, -0.6), Vec(7.6, 0.0, -0.2), Vec(4.0, 3.9, -0.6) }; Bomber(16.2, 1.8); }
 		else if (Model == "B5N" || Model == "B6N") { S.Span = 15.5; S.Long = 10.3; Engines({ 0.0 }, 4.4, 0.0); Bomber(10.3, 1.2); }
 		else if (Model == "D3A" || Model == "D4Y") { S.Span = 14.4; S.Long = 10.2; Engines({ 0.0 }, 4.4, 0.0); Bomber(10.2, 1.2); S.bDive = true; }
 		else if (Model == "SBD" || Model == "SB2C" || Model == "Skua") { S.Span = 12.7; S.Long = 10.1; Engines({ 0.0 }, 4.3, 0.0); Bomber(10.1, 1.2); S.bDive = true; }
