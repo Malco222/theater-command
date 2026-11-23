@@ -2966,9 +2966,12 @@ int main(int Argc, char** Argv)
 		{
 			// (=flash: square to the line of fire FX_FLASH_OFF m (3.5) off the muzzle and a little above it, looking just
 			// ahead of it: the flash's own shape, its spikes, cone or tongue, and the dust under it)
+			// (FX_FLASH_AHEAD m (0.5) along the line of fire: 2.5 with FX_FLASH_OFF=2.5 is a three-quarter view from ahead,
+			// where the MG 42's star shows as a star)
 			const double Off = EnvNum("FX_FLASH_OFF", 3.5);
-			Cam.Eye = MgGun + Fire * 0.5 - Square * Off + Vec(0, 0, EnvNum("FX_FLASH_UP", 0.35)); // (FX_FLASH_UP: the eye that much above the muzzle)
-			Cam.Forward = (MgGun + Fire * 0.55 - Cam.Eye).Unit();
+			const double Ahead = EnvNum("FX_FLASH_AHEAD", 0.5);
+			Cam.Eye = MgGun + Fire * Ahead - Square * Off + Vec(0, 0, EnvNum("FX_FLASH_UP", 0.35)); // (FX_FLASH_UP: the eye that much above the muzzle)
+			Cam.Forward = (MgGun + Fire * (Ahead > 1.0 ? 0.25 : 0.55) - Cam.Eye).Unit();
 		}
 		if (std::string(MgView) == "game")
 		{

@@ -612,10 +612,17 @@ for byte, with the switch off).
   laid over the recipe for that battle only. Each can narrow or lengthen the flame, add a star of spikes round the bore,
   a brake's two side jets and the dust they blow aside, a pale haze that hangs, a kick of the ground's dust under a
   muzzle lower than `prone_under_m`, and a small lamp on the firer's face at dusk and night (`bNightOnly`).
-- **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 5 spikes or 4 jets, 10 brake dust puffs and one lamp; a
+- **The art director's round 1** (23 November, 17:06Z; the cone, tongue, SMG, tank MG and brake passed): the MG 42's
+  star is 4 to 6 short straight tapered spikes, yellow-white, leaning 70 degrees off the bore, rolled anew each round
+  (one star a round: a burst's first round is the Shots', so `Muzzle` drops its own); by day a look is drawn at `day_k`
+  of its size and `day_pale` toward pale yellow-white (`View.SmokeLight`); the rifle's haze is a thin puff gone in 1 to
+  2 s; the prone kick is tan on dry ground (half to full by the ground's dust share), white on snow, none on mud, water
+  or marsh; rifles and sub-machine guns draw no tracer (`tracer 0`); machine-gun tracer is a short travelling streak even
+  close in (`streak 1`); the face lamp is 2 to 3 m and lit on the flash's own frame alone (`Flash::bOneFrame`).
+- **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 6 spikes or 4 jets, 10 brake dust puffs and one lamp; a
   burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
 - **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
-  `FX_DIM` for dusk, `FX_GUN_ROW=at_gun:brake`).
+  `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
 
 ## Packaging
 

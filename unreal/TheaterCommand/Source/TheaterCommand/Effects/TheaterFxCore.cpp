@@ -3783,6 +3783,10 @@ namespace TheaterFx
 		GunIn = LookSplit(GunIn, GunBase, LookName);
 		GunLook GL;
 		const bool bLook = GunLookOf(LookName, GL);
+		if (bLook && GL.bFlicker)
+		{
+			GL.Star = 0; // (a machine gun's burst: its rounds (Shots, the first at this same moment) lay its star, one a round)
+		}
 		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
 		const size_t First = Bits.size();
 		MuzzleLaid(Now, At, Facing, GunIn, GroundIn, bLook ? &GL : nullptr);
@@ -3825,7 +3829,9 @@ namespace TheaterFx
 			H.Licks.A *= Look->LicksK;
 			H.Licks.B *= Look->LicksK;
 			H.Look = *Look;
+			PaleHot(H, Look->DayPale * LookDay); // (by day paler, and smaller below)
 		}
+		const double LookK = Look ? LookDayK(*Look) : 1.0;
 		// the flame: a ragged tongue along the bore with licks thrown sideways, under one frame
 		{
 			Bit B;
@@ -3864,14 +3870,21 @@ namespace TheaterFx
 			}
 			if (Look)
 			{
-				B.R0 *= Look->Narrow;
-				B.R1 *= Look->Narrow;
+				B.R0 *= Look->Narrow * LookK;
+				B.R1 *= Look->Narrow * LookK;
+				B.From = At + (B.From - At) * LookK;
+				const double Pale_ = Look->DayPale * LookDay;
+				if (Pale_ > 0.0)
+				{
+					B.Col = B.Col.Mix(Rgb::FromPicture(250, 238, 200), Pale_);
+					B.Col2 = B.Col2.Mix(Rgb::FromPicture(250, 238, 200), Pale_);
+				}
 			}
 			if (bRagged)
 			{
 				// (art director 13:54Z: graded from its root out and ragged, new every shot; the same dice go on as before)
 				Dice DF(PlaceKey(At) * 0xD6E8FEB86659FD93ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x52ull));
-				HotFlame(Now, At, Fw, Len * 1.4, B.Life, H, DF);
+				HotFlame(Now, At, Fw, Len * 1.4 * LookK, B.Life, H, DF); // (LookK: a look by day, smaller; 1 otherwise)
 			}
 			else
 			{
@@ -4779,6 +4792,9 @@ namespace TheaterFx
 		L.LampBackM = SafeNum(Num(P + "lamp_back_m", 0.4), 0.0, 1.5, 0.4);
 		L.LampR = SafeNum(Num(P + "lamp_r", 3.0), 0.5, 10.0, 3.0);
 		L.LampWithinM = SafeNum(Num(P + "lamp_within_m", 150.0), 0.0, 1000.0, 150.0);
+		L.DayK = SafeNum(Num(P + "day_k", 1.0), 0.1, 1.0, 1.0);
+		L.DayPale = SafeNum(Num(P + "day_pale", 0.0), 0.0, 1.0, 0.0);
+		L.bStreak = Num(P + "streak", 0.0) > 0.0;
 		return true;
 	}
 
@@ -4792,7 +4808,8 @@ namespace TheaterFx
 		const Vec Over_ = Side.Cross(Fw).Unit(ZUp);
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		// (one spike or jet: a thin tongue from its root at From_ out along Way, hot near its root and red-orange at its end)
-		auto Tongue = [&](const Vec& From_, const Vec& Way, double Long, double HalfWide)
+		const double Pale = L.DayPale * LookDay; // (by day: paler, toward yellow-white)
+		auto Tongue = [&](const Vec& From_, const Vec& Way, double Long, double HalfWide, bool bSpike)
 		{
 			Bit B;
 			B.Born = Born;
@@ -4809,7 +4826,26 @@ namespace TheaterFx
 			B.Hold = H ? 0.8 : 0.5;
 			B.bLight = true;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
-			if (H)
+			if (bSpike)
+			{
+				// (the art director's round 1, 17:06Z: a short straight spike tapering to its tip, yellow-white, never a
+				// curved petal: no lumps, no hub, drawn straight out from the muzzle)
+				B.Point = 0.85;
+				B.Tail = 0.0;
+				B.Col = H ? H->Root2.Mix(H->Yellow, 0.35) : Flame.Mix(Rgb::FromPicture(250, 226, 150), 0.6);
+				B.Col2 = B.Col;
+				B.Heart = 1.0;
+				B.Rim = 0.5;
+				B.Inner = 0.7;
+				if (H)
+				{
+					B.Edge = H->Yellow;
+					B.EdgeK = 0.6;
+					B.EdgeIn = 0.3;
+					B.Over = 1.0 + (H->Over - 1.0) * 0.5;
+				}
+			}
+			else if (H)
 			{
 				// (yellow at its root, running out to orange and red-orange at its end and edge)
 				B.Col = H->Yellow.Mix(H->Orange, 0.25);
@@ -4831,20 +4867,31 @@ namespace TheaterFx
 				B.Heart = 0.8;
 				B.Rim = 0.1;
 			}
+			if (Pale > 0.0)
+			{
+				const Rgb Day_ = Rgb::FromPicture(250, 238, 200);
+				B.Col = B.Col.Mix(Day_, Pale);
+				B.Col2 = B.Col2.Mix(Day_, Pale);
+				B.Edge = B.Edge.Mix(Day_, Pale * 0.7);
+			}
 			Bits.push_back(B);
 		};
 		if (L.Star > 0 && L.StarM > 0.0)
 		{
 			// (the MG 42's star: its muzzle booster's cone throws the gas out round the bore in a few bright spikes, near
 			// square to it, so a burst at night is a flickering star and not a tongue; each round's spikes are new)
+			// (the art director's round 1: 4 to 6 short straight spikes evenly round the muzzle, each shot rolled anew so
+			// no two show the same pair; by day shorter, with the rest of the flash)
+			const int N = D.Whole(std::max(1, L.Star - 2), L.Star);
 			const double Round0 = D.U(0.0, 2.0 * Pi);
-			for (int I = 0; I < L.Star; ++I)
+			const double DayK = LookDayK(L);
+			for (int I = 0; I < N; ++I)
 			{
-				const double Round_ = Round0 + (I + D.U(-0.25, 0.25)) * 2.0 * Pi / L.Star;
-				const double Lean = Radians(L.StarLean + D.U(-12.0, 12.0));
+				const double Round_ = Round0 + (I + D.U(-0.1, 0.1)) * 2.0 * Pi / N;
+				const double Lean = Radians(L.StarLean + D.U(-5.0, 5.0));
 				const Vec Way = (Fw * std::cos(Lean) + (Side * std::cos(Round_) + Over_ * std::sin(Round_)) * std::sin(Lean)).Unit(Side);
-				const double Long = L.StarM * D.U(0.55, 1.1);
-				Tongue(At + Fw * (Len * 0.06), Way, Long, Long * L.StarWide * D.U(0.8, 1.2));
+				const double Long = L.StarM * D.U(0.75, 1.25) * DayK;
+				Tongue(At + Fw * (Len * 0.04), Way, Long, Long * L.StarWide * D.U(0.85, 1.15), true);
 			}
 		}
 		if (L.Jets > 0 && L.JetM > 0.0)
@@ -4858,12 +4905,27 @@ namespace TheaterFx
 				const Vec Way = (Side * (Sign * std::cos(Back)) - Fw * std::sin(Back) + Over_ * D.U(-0.08, 0.12)).Unit(Side * Sign);
 				const double Long = L.JetM * D.U(0.8, 1.15);
 				const Vec Root = At - Fw * L.JetBackM;
-				Tongue(Root, Way, Long, Long * L.JetWide * D.U(0.85, 1.15));
+				Tongue(Root, Way, Long, Long * L.JetWide * D.U(0.85, 1.15), false);
 				// (and a shorter second tongue off each, the brake's other baffle)
 				const double Long2 = Long * D.U(0.45, 0.7);
-				Tongue(Root - Fw * (L.JetBackM * 0.6), (Way - Fw * 0.25).Unit(Way), Long2, Long2 * L.JetWide * 0.9);
+				Tongue(Root - Fw * (L.JetBackM * 0.6), (Way - Fw * 0.25).Unit(Way), Long2, Long2 * L.JetWide * 0.9, false);
 			}
 		}
+	}
+
+	void Battle::PaleHot(HotFlash& H, double Pale)
+	{
+		if (!(Pale > 0.0))
+		{
+			return;
+		}
+		const Rgb Day_ = Rgb::FromPicture(250, 238, 200);
+		const double P = std::min(1.0, Pale);
+		H.Orange = H.Orange.Mix(Day_, P);
+		H.Rim = H.Rim.Mix(Day_, P * 0.8);
+		H.Red = H.Red.Mix(Day_, P * 0.8);
+		H.Yellow = H.Yellow.Mix(Day_, P * 0.6);
+		H.Hot = H.Hot.Mix(Day_, P * 0.5);
 	}
 
 	void Battle::LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L)
@@ -4882,6 +4944,7 @@ namespace TheaterFx
 		F.Strength = L.LampW / 8500.0;
 		F.Radius = L.LampR;
 		F.bNightOnly = true;
+		F.bOneFrame = true; // (the art director's round 1: lit on the flash's frame alone)
 		Flashes.push_back(F);
 	}
 
@@ -4930,7 +4993,14 @@ namespace TheaterFx
 		const double Up = At.Z - Foot;
 		const double Share = Clamp01(DustRowOf(Ground).Share);
 		const Rgb Dust = PaintOf(Ground).Dust;
-		if (L.ProneDust > 0.0 && Up < L.ProneUnderM && Far <= L.DustWithinM && Share > 0.0)
+		// (the art director's round 1, 17:06Z: the kick is the real giveaway: a tan puff 0.5 to 1 m at the muzzle on dry
+		// ground, white powder on snow, none on wet ground; the ground's dust share only between half and full)
+		const std::string GroundIs = GroundIn ? GroundIn : "";
+		const bool bWet = GroundIs == "mud" || GroundIs == "water" || GroundIs == "marsh";
+		const bool bSnowKick = GroundIs == "snow";
+		const double KickK = bWet ? 0.0 : bSnowKick ? 0.85 : 0.5 + 0.5 * Share;
+		const Rgb KickCol = bSnowKick ? Picture("muzzle.look.snow_kick", Rgb::FromPicture(232, 235, 240)) : Dust;
+		if (L.ProneDust > 0.0 && Up < L.ProneUnderM && Far <= L.DustWithinM && KickK > 0.0)
 		{
 			// (a man firing prone, or a gun on its bipod: the blast blows the ground's dust up from under and in front of
 			// the muzzle, a low brown puff that gives him away; more on dry ground, little on mud, none on water)
@@ -4943,19 +5013,19 @@ namespace TheaterFx
 				B.Born = Now + D.U(0.0, 0.03);
 				const Vec P = At + FwFlat * D.U(0.2, 0.7) + Across * (D.Bell() * 0.15);
 				B.From = Vec(P.X, P.Y, Height(P.X, P.Y) + 0.05);
-				B.Vel = (FwFlat * D.U(1.5, 3.0) + Across * (D.Bell() * 0.8)) + ZUp * D.U(0.3, 0.8);
-				B.Drag = 3.0;
+				B.Vel = (FwFlat * D.U(1.0, 2.2) + Across * (D.Bell() * 0.6)) + ZUp * D.U(0.3, 0.7);
+				B.Drag = 3.5;
 				B.Windage = 0.8;
-				B.Life = D.U(1.5, 2.5);
-				B.R0 = 0.1;
-				B.R1 = D.U(0.5, 0.9);
-				B.Grow = 0.4;
-				B.Flatten = 0.6;
-				B.Col = Dust * D.U(0.92, 1.05);
+				B.Life = D.U(1.2, 2.0);
+				B.R0 = 0.12;
+				B.R1 = D.U(0.28, 0.5);
+				B.Grow = 0.3;
+				B.Flatten = 0.75;
+				B.Col = KickCol * D.U(0.94, 1.04);
 				B.Col2 = B.Col;
-				B.Alpha = L.ProneDust * Share * (I == 0 ? 1.0 : 0.7);
+				B.Alpha = std::min(0.9, L.ProneDust * KickK * (I == 0 ? 1.0 : 0.75));
 				B.FadeIn = 0.02;
-				B.Hold = 0.2;
+				B.Hold = 0.35;
 				B.Heart = 0.7;
 				B.Rim = 0.0;
 				B.Rough = 0.35;
@@ -5347,7 +5417,9 @@ namespace TheaterFx
 			HotMg.Licks.B *= GL.LicksK;
 			HotMg.Look = GL;
 			HotMg.Look.Jets = 0;
+			PaleHot(HotMg, GL.DayPale * LookDay); // (by day paler, and smaller below)
 		}
+		const double LookK = bLook ? LookDayK(GL) : 1.0;
 		const double Gap = 1.0 / std::max(PerSecond, 0.1);
 		auto Streak = [&](double Born, const Vec& Start, const Vec& Way, double Fast, double For)
 		{
@@ -5373,7 +5445,7 @@ namespace TheaterFx
 		const Vec CaseOut = (Dir.Cross(ZUp).Unit(Vec(0.0, -1.0, 0.0)) * Cases.Side - Dir * 0.3).Unit(Vec(0.0, -1.0, 0.0));
 		// (the close flame and the burst's smoke have dice of their own too)
 		Dice DF(PlaceKey(From) * 0xD6E8FEB86659FD93ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x51ull));
-		const double MgFlame = bLook && GL.HotM > 0.0 ? GL.HotM : Num("muzzle.hot.mg_flame_m", 0.5);
+		const double MgFlame = (bLook && GL.HotM > 0.0 ? GL.HotM : Num("muzzle.hot.mg_flame_m", 0.5)) * LookK;
 		// (Effects (R2): the look's far star and its kicks of dust through a long burst have dice of their own)
 		Dice DL(PlaceKey(From) * 0x8EBC6AF09C88C6E3ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x6A3ull));
 		GunLook Kick = GL;
@@ -5498,7 +5570,7 @@ namespace TheaterFx
 				B.Born = T;
 				B.From = From + Dir * 0.15;
 				B.Life = 0.025;
-				B.R0 = B.R1 = 0.12 * (bLook && !bHotMg ? GL.FarK : 1.0); // (Effects (R2): the look's far flicker)
+				B.R0 = B.R1 = 0.12 * (bLook && !bHotMg ? GL.FarK * LookK : 1.0); // (Effects (R2): the look's far flicker, by day smaller)
 				if (bLook && !bHotMg && GL.Star > 0 && (LastEye - From).Length() <= GL.StarFarM)
 				{
 					GunLook Far_ = GL;
@@ -5510,6 +5582,12 @@ namespace TheaterFx
 				B.Point = 0.8;
 				B.Col = Flame;
 				B.Col2 = Flame;
+				if (bLook && !bHotMg && GL.DayPale * LookDay > 0.0)
+				{
+					// (Effects (R2): by day the far flicker paler too)
+					B.Col = B.Col.Mix(Rgb::FromPicture(250, 238, 200), GL.DayPale * LookDay);
+					B.Col2 = B.Col;
+				}
 				B.Alpha = 0.9;
 				B.FadeIn = 0.002;
 				B.Hold = 0.5;
@@ -5557,7 +5635,7 @@ namespace TheaterFx
 				continue;
 			}
 			const Vec Aim = (Dir + Vec(D.Bell(), D.Bell(), D.Bell()) * 0.006).Unit();
-			if (Dist < WholePathBelow)
+			if (Dist < WholePathBelow && !(bLook && GL.bStreak)) // (Effects (R2): a look's tracer a travelling streak even close in)
 			{
 				// (close in, a tracer crosses in under a frame or two: its whole path is drawn at once, muzzle to strike,
 				// fading toward the muzzle, for one frame (whole_path_s, under a frame at 60 a second; a frame is never
@@ -16134,6 +16212,7 @@ namespace TheaterFx
 	{
 		LayStrikes(Now); // (the bombs of a stick due by now, by the eye of the last frame: BombStick)
 		LastEye = Eye.Eye;
+		LookDay = DayOf(Eye.SmokeLight); // (Effects (R2): a gun's own look by day)
 		LastSun = Eye.Sun;
 		LastPpr = Eye.PixelsPerRadian;
 		bEyeKnown = true;
@@ -16821,7 +16900,7 @@ namespace TheaterFx
 			{
 				continue;
 			}
-			const double Strength = F.Strength * (Frames == 0 ? 1.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
+			const double Strength = F.Strength * (Frames == 0 ? 1.0 : F.bOneFrame ? 0.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
 			if (Strength <= 1e-4)
 			{
 				continue;
@@ -16955,7 +17034,7 @@ namespace TheaterFx
 			{
 				continue;
 			}
-			const double Strength = F.Strength * (Frames == 0 ? 1.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
+			const double Strength = F.Strength * (Frames == 0 ? 1.0 : F.bOneFrame ? 0.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
 			if (Strength <= 1e-4)
 			{
 				continue;

@@ -789,8 +789,15 @@ namespace TheaterFx
 			Span HazeS{ 2.5, 4.0 };         // haze_s
 			double ProneUnderM = 0.0, ProneDust = 0.0, DustWithinM = 150.0; // prone_under_m, prone_dust, dust_within_m
 			double LampW = 0.0, LampBackM = 0.4, LampR = 3.0, LampWithinM = 150.0; // lamp_w, lamp_back_m, lamp_r, lamp_within_m: its glow on the firer, dusk and night only
+			// (the art director's round 1, 17:06Z: by day a flash barely shows: day_k its size in full day as a share of
+			// dusk's, day_pale how far its colours go toward a pale yellow-white; streak 1, its tracer a short travelling
+			// streak even close in, never the whole path at once)
+			double DayK = 1.0, DayPale = 0.0;
+			bool bStreak = false;
 		};
 		bool GunLookOf(const std::string& Look, GunLook& Out_) const; // (false: no muzzle.look.<look>.on in the recipe)
+		double LookDay = 0.0; // (how much the last Draw's hour was day, DayOf its SmokeLight: a look's flash by day)
+		double LookDayK(const GunLook& L) const { return 1.0 - (1.0 - L.DayK) * LookDay; }
 		/** A look's own after-pieces: the haze that hangs, the dust a low muzzle or a brake kicks up, its lamp. */
 		void LookLaid(double Now, const Vec& At, const Vec& Fw, const GunLook& L, const char* Ground);
 		void LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L);
@@ -814,6 +821,9 @@ namespace TheaterFx
 		/** Effects (R2): a look's own flame pieces, its star's spikes and its brake's side jets, lit as the close flash (H)
 		 *  or, H null, as the far one. */
 		void LookFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const GunLook& L, const HotFlash* H, Dice& D);
+		/** Effects (R2): a look's close flash by day (the art director's round 1): its colours Pale of the way toward a
+		 *  pale yellow-white, the root kept. */
+		static void PaleHot(HotFlash& H, double Pale);
 		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
 		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
 		 *  tongues, red-orange only at their ends, with short licks thrown sideways and a thin glow round it. Its length
@@ -983,6 +993,7 @@ namespace TheaterFx
 			Rgb Col;
 			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
 			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
+			bool bOneFrame = false; // (Effects (R2): lit on the flash's own frame alone, not half the next)
 			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 		};
 		struct Knock
