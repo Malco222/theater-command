@@ -22,6 +22,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
 | `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. A man is (block, k, j): j is a follower of key man k in the drill's sections (0 the key man), with the roles leader, loader and crew besides the key men's. The scene plays the crowd thrifty (`SetThrift`: a man away from the eye posed every 2nd to 4th frame by distance, his place, shots and falls every frame) and skins the men who moved over all the cores (`ParallelFor`; a body's first skin, which reads the ground, on the game thread). 698 men: about 1 ms a frame on 4 cores. |
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
+| `LandAir.h/.cpp` | The fighters on call (release 2, `-TheaterLandAirSupport`): each leg's planes down their run, the ground's guns and the lost plane's fall, from the rules' air notes. Plain C++; drawn by `LandBattleAir.cpp`. |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
 | `LandBattleScreen.h/.cpp` | `SLandBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
@@ -688,6 +689,46 @@ for fall and skin for skin the same as with none).
 - **Owed.** The deaths thread's re-runs of the falls (USA and GER `die_leg_off_a`, GER `die_arm_off_b` rest under 1 m
   from the joint; USA and GER `die_blast_a` throw a limb 3.6 to 3.7 m up), gore falls in every army's twin, and the Mac
   shots behind the switch.
+
+## The fighters on call over the field (release 2, off until passed)
+
+The effects brief of 23 November (Brian's ask through the coordinator): the ground-attack fighters on call "fired on"
+from the ground, "rarely shot down", and they "crash". Behind `-TheaterLandAirSupport`. Off: nothing of them is read
+past the feed or drawn (the feed keeps the notes in `Recording::Air` either way; nothing else reads them).
+
+- **The rules decide.** Which side calls a strike and when, each leg's run down a strip (`land:air-in`, then
+  `land:strafe`: from, to, width, its time in battle seconds), its bombs (`land:bomb-drop`: each burst a shell of
+  calibre bomb, drawn by the scene as ever) and the planes it cost (`air:lost`: explode, burn or spin) as the run
+  ends. `LandFeed::AirNote` reads the four; nothing here changes any of them.
+- **The plan** (`LandAir.h/.cpp`, plain C++). A leg's planes come in one behind another down the run's line, high, dive
+  onto it, their guns walking from its start to its end down a lane each, pull out low over its far end, climb away and
+  break left and right in turn, at a real fighter's speed (105 to 140 m/s); the trail is spaced so that the leg's guns
+  rake the strip for the rules' time. The machine by nation and year (`MachineOf`): Mustang or Warhawk, Stuka (steep,
+  from 700 m) or Fw 190, Spitfire or Hurricane, the Il-2 (low and shallow, from 160 m), Zero, else a plain fighter in
+  the nation's paint. The ground's guns: the other side's four blocks nearest the run, two guns a block, ragged bursts,
+  aimed short of the lead so that the tracers fall behind. A plane lost is the last of its leg not yet lost: blown apart
+  in its pass, or hit climbing away and going down on fire in a long shallow dive, or spinning in; it burns where it
+  struck the rest of the battle.
+- **The scene** (`LandBattleAir.cpp`, `ALandBattle::FlyOver`, each frame after `PlayEffects`). Each plane a mesh of its
+  model's far form (`FMiniatureMesh`; the plain fighter sized to its span where there is none), on `SteelInk`. Its wing
+  guns on the kit's `AirGun` (flash, smoke, the nation's tracer, carried with the plane), and `Shots`' dust spurts over
+  the last 6 m where the rounds go in (no tracer of its own seen). The ground's guns on `AirGun` from where they stand
+  (the defender's tracer; `hmg` for American guns, `rifle` for the rest). A hit: `AirHit`, `AirFall` (explode, burn,
+  spin) and a `fire` or `smoke` trail moved with it; into the ground: `FuelBall` 18 m, `ShellOfSize` `gun75` (an
+  exploded one's pieces `mortar`) and a fire (`Burn` 5 m, 2.5 for the pieces) for the rest of the battle. Ids: the
+  planes' guns 90000 on, the ground's 95000 on (`GunIdOf`, `GunnerIdOf`), a plane's fall, trail and fire `1 << 25` on.
+  A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
+  was hit begins where it is. A replay from the start tells it all again.
+- **Not yet.** Parachutes (the rules' chutes), the engines' and guns' sound (the sound director's), the bombs seen
+  falling, light flak's puffs (the kit has only its heavy row).
+- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
+  from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
+  while firing), the guns (each lane from the strip's start to its end, aimed on the ground, raking for the rules'
+  time), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
+  other side's blocks, each stream ending in the air near a plane), the same (built twice, grown note by note, rounds
+  the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
+  (`paths.py`). Picture: `/mnt/project-files/battle-fx/air-support/`.
+- **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
 
 ## Packaging
 

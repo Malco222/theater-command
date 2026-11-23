@@ -3,6 +3,7 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandAir.h"
 #include "Battle/LandBail.h"
 #include "Battle/LandBurn.h"
 #include "Battle/LandCrater.h"
@@ -22,6 +23,7 @@
 #include "Battle/Fates.h"
 
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,6 +59,21 @@ struct FLandBattleState
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
 	LandBail::Book Bails;
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
+	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
+	struct FAirSupport
+	{
+		bool bAsked = false, bOn = false, bMade = false;
+		LandAir::Sky Sky;
+		size_t Built = 0;                // the recording's air notes the plan was made from
+		double Told = -1.0;              // the battle time the kit was last told up to (under 0: not yet)
+		std::vector<LandAir::Plane> Planes;
+		std::vector<LandAir::Gunner> Guns;
+		std::vector<LandAir::Happen> Happens;
+		std::set<int> Firing, Gunning;   // the kit's guns firing now: the planes' (GunIdOf) and the ground's (GunnerIdOf)
+		std::set<int> Falling, Hit, Struck; // planes by key: going down with a trail, hit, into the ground
+	};
+	FAirSupport AirSupport;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
