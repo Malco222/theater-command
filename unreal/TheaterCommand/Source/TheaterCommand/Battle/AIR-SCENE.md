@@ -1212,3 +1212,19 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    1941's boxes pass with the same spread after) and on the SM.79s (the LeO 451's raid renamed: 151 m, 382 at most;
    the LeO 451's own, 234 and 333, passes); the cloud checks on the clearer skies of the Wellington's and 1943's
    raids; the deck checks over high ground; and, in the D.520's fight for the sky, the checks that look for a raid.
+
+50. **A raid he flies himself always has a way out** (release 1.5, which takes FLY IT YOURSELF; the release lead's bug
+   hunt, 23 November, the air twin of the ground's 039ab38c). Before, a TC.battleTick that failed was only logged: rules
+   that failed on every tick never brought the battle to its end, so no after card and no CONTINUE came, and the
+   campaign behind it (LiveRaid still set) took no order, key or month's end: the game had to be quit. Now Feed counts
+   the ticks the rules fail, or answer with no view the scene can read, and any good one resets the count. Three or more
+   in a row over 2 s (the wall clock's seconds) stop the raid where it stands, with the held note "THE RAID STOPPED HERE:
+   ITS RULES FAILED. NOTHING IS BOOKED; BACK TO THE MAP IN A MOMENT"; 4 s on, WayOut closes the scene as CONTINUE does
+   (Finish), with an empty result. The campaign (AirHandBack) books nothing, brings the raid card back as he left it,
+   with FLY THE RAID on it and FLY IT YOURSELF not offered again for that pick, and says so. A raid whose end has come
+   keeps its after card. And an end the rules fail (TC.battleEnd throws, or answers null) still gives an after card with
+   CONTINUE, now one that says so ("The raid's end could not be booked"), where it was a blank card before; handed back,
+   it books nothing, the same way. To see both on the Mac: `-TheaterAirRulesFailAt=40` fails every tick from battle
+   second 40; `-TheaterAirRulesFailEnd` fails the end.
+   Look for: the note after about 2 s of a frozen raid, the map 4 s later with the raid card up and a note under it;
+   the month can be ended and the raid sent with FLY THE RAID.
