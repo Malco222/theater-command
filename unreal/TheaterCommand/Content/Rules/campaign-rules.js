@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 903b1b17 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1793d6ef 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -16473,6 +16473,8141 @@
     never: [["UK", "VIC"]]
   };
 
+  // ../../data/campaign/fighters.json
+  var fighters_default = {
+    _about: "Fighter types (switch 'Fighter types', g.flags.ftrtypes, set at setup only; off as shipped). Written by the fighters research's emit.py from fighters-table.json: the count's matchup rows, the ladders, the weights, bands and words. The measured figures and their sources stay in the research table.",
+    words: {
+      setting: "Fighter types",
+      help: "Each nation flies its real fighters, which change as its research moves on. Better aircraft for the height give a small edge; pilots still count for more. Off: every nation's fighters alike, as before.",
+      tooltip: "Measured performance at this height: speed, climb, dive and roll, turn, toughness and guns. Pilots, numbers and radar count for more.",
+      realWar: "In the real war"
+    },
+    w: {
+      speed: 0.12,
+      speedScale: 100,
+      climb: 0.06,
+      climbScale: 5,
+      dive: 0.06,
+      turn: 0.07,
+      turnScale: 0.3,
+      refuse: 80,
+      punch: 0.05,
+      fireScale: 2.5,
+      cap: 0.3
+    },
+    bands: {
+      low: 1e3,
+      mid: 4500,
+      high: 7500
+    },
+    byMission: {
+      ground: "low",
+      line: "low",
+      strike: "low",
+      fleet: "low",
+      harbour: "low",
+      superiority: "mid",
+      town: "mid",
+      bomb: "high",
+      night: null
+    },
+    swap: {
+      spitfire_v: "spitfire_v_trop"
+    },
+    types: {
+      a5m4: {
+        short: "A5M",
+        name: "Mitsubishi A5M4 (Type 96 carrier fighter, 'Claude')",
+        v: [
+          404,
+          422,
+          396
+        ],
+        c: [
+          14.9,
+          9.9,
+          4.9
+        ],
+        r: 165,
+        roll: 55,
+        dive: 600,
+        acc: 1.5,
+        tough: 0,
+        fire: 0.34,
+        plain: "It is light, agile and flies far with a drop tank. It is slow, has an open cockpit and carries only two machine guns.",
+        history: "It won Japan control of the air over China from 1937.",
+        top: 435,
+        wl: 93.9,
+        climb: 14.9,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1937
+      },
+      a6m2_21: {
+        short: "Zero 21",
+        name: "Mitsubishi A6M2 Zero model 21 ('Zeke')",
+        v: [
+          457,
+          532,
+          508
+        ],
+        c: [
+          14,
+          11.3,
+          5.7
+        ],
+        r: 196,
+        roll: 55,
+        dive: 600,
+        acc: 1.5,
+        tough: 0,
+        fire: 2.56,
+        plain: "It out-turns and out-climbs every Allied fighter below 5,000 m and flies twice as far. It is slow in a dive, stiff on the ailerons at speed and unarmoured, and its engine cuts out if the pilot pushes the nose down.",
+        history: "In 1940-42 it won almost every turning fight it was drawn into.",
+        top: 533,
+        wl: 107.4,
+        climb: 14,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1940
+      },
+      a6m3_32: {
+        short: "Zero 32",
+        name: "Mitsubishi A6M3 Zero model 32 ('Hamp')",
+        v: [
+          468,
+          496,
+          484
+        ],
+        c: [
+          16.6,
+          11.3,
+          6.2
+        ],
+        r: 224,
+        roll: 55,
+        dive: 670,
+        acc: 1.5,
+        tough: 0,
+        fire: 2.56,
+        plain: "It has more power and a little more speed and roll than the Zero 21. It has less range and keeps every weakness: heavy controls at speed, a slow dive and no protection.",
+        history: "Its shorter range told in the long flights to Guadalcanal in 1942.",
+        top: 499,
+        wl: 122.9,
+        climb: 16.6,
+        diveLimit: 670,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      a6m5_52: {
+        short: "Zero 52",
+        name: "Mitsubishi A6M5 Zero model 52 ('Zeke 52')",
+        v: [
+          481,
+          526,
+          548
+        ],
+        c: [
+          16.4,
+          16.4,
+          8.3
+        ],
+        r: 236,
+        roll: 55,
+        dive: 657,
+        acc: 1.5,
+        tough: 0,
+        fire: 2.43,
+        plain: "It still turns tighter than anything at low speed and climbs well down low. A Hellcat or Corsair is faster, tougher and better in a dive.",
+        history: "By 1944 it was outclassed, and most of the pilots who had made its name were gone.",
+        top: 565,
+        wl: 129.8,
+        climb: 16.4,
+        diveLimit: 657,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      b239: {
+        short: "Brewster",
+        name: "Brewster B-239 (Finnish Buffalo)",
+        v: [
+          432,
+          474,
+          452
+        ],
+        c: [
+          15.5,
+          13,
+          6.7
+        ],
+        r: 248,
+        roll: 80,
+        dive: 650,
+        acc: 2,
+        tough: 1,
+        fire: 1.89,
+        plain: "It is light, pleasant to fly and well armed, with armour added. It is slower than the newer Soviet monoplanes and weak high up.",
+        history: "Finnish pilots claimed about 26 Soviet aircraft for each one they lost in it (claims): a record that belonged to the pilots.",
+        top: 478,
+        wl: 136.1,
+        climb: 15.5,
+        diveLimit: 650,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      b534: {
+        short: "B-534",
+        name: "Avia B-534 IV",
+        v: [
+          355,
+          404,
+          380
+        ],
+        c: [
+          13,
+          10.5,
+          5.8
+        ],
+        r: 137,
+        roll: 65,
+        dive: 550,
+        acc: 1,
+        tough: 0.5,
+        fire: 0.7,
+        plain: "It is the best of the last biplanes, quick to climb and tight in the turn. It is far slower than any monoplane fighter and carries only rifle-calibre guns.",
+        history: "Slovak pilots flew it against Poland in 1939 and the Soviet Union in 1941.",
+        top: 405,
+        wl: 84,
+        climb: 13,
+        diveLimit: 550,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1935
+      },
+      bf109_e: {
+        short: "Bf 109 E",
+        name: "Messerschmitt Bf 109 E-3 / E-4 (DB 601 A)",
+        v: [
+          485,
+          550,
+          522
+        ],
+        c: [
+          15.2,
+          13.1,
+          7
+        ],
+        r: 282,
+        roll: 75,
+        dive: 750,
+        acc: 3,
+        tough: 1,
+        fire: 2.75,
+        plain: "It climbs faster than anything it meets and fights by diving, firing and climbing away, with fuel injection and cannon. It cannot turn with any opponent, grows heavy on the controls at speed and has little fuel.",
+        history: "Over England in 1940 it had only minutes over the target before it had to turn for home.",
+        top: 560,
+        wl: 161,
+        climb: 15.2,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1939
+      },
+      bf109_f4: {
+        short: "Bf 109 F",
+        name: "Messerschmitt Bf 109 F-4 (DB 601 E)",
+        v: [
+          533,
+          604,
+          642
+        ],
+        c: [
+          19,
+          19,
+          12.3
+        ],
+        r: 328,
+        roll: 80,
+        dive: 750,
+        acc: 3,
+        tough: 2,
+        fire: 1.64,
+        plain: "It is the best-balanced Bf 109 and out-climbs and out-runs a Hurricane or Spitfire V at height. It carries only one cannon and two machine guns and cannot turn with a Spitfire or Hurricane.",
+        history: "It was the Luftwaffe's main fighter in the East in 1941 and in the desert in 1942.",
+        top: 659,
+        wl: 180.1,
+        climb: 19,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: false,
+          dive: true
+        },
+        year: 1941
+      },
+      bf109_g2: {
+        short: "Bf 109 G",
+        name: "Messerschmitt Bf 109 G-2 (DB 605 A)",
+        v: [
+          551,
+          613,
+          659
+        ],
+        c: [
+          18.9,
+          18.9,
+          14
+        ],
+        r: 368,
+        roll: 75,
+        dive: 750,
+        acc: 3,
+        tough: 2,
+        fire: 1.64,
+        plain: "It climbs better than anything it meets and is fast at height: 666 km/h at 7,000 m. It is lightly armed, heavy on the controls at speed and out-turned by Spitfires and Soviet fighters.",
+        history: "It was the main German fighter on every front in 1942-43.",
+        top: 666,
+        wl: 186.6,
+        climb: 18.9,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      bf109_g6: {
+        short: "Bf 109 G-6",
+        name: "Messerschmitt Bf 109 G-6 (DB 605 A)",
+        v: [
+          527,
+          598,
+          628
+        ],
+        c: [
+          15.8,
+          15.8,
+          8.9
+        ],
+        r: 404,
+        roll: 75,
+        dive: 750,
+        acc: 3,
+        tough: 2,
+        fire: 2.16,
+        plain: "It climbs well, is quick into a dive, and with a 30 mm cannon it kills a bomber in a few hits. It is 50 to 80 km/h slower than a Mustang and out-turned by every Allied fighter it meets.",
+        history: "It was the most-built Bf 109, and it met the American day raids of 1943-44.",
+        top: 640,
+        wl: 196.3,
+        climb: 15.8,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      bf109_k4: {
+        short: "Bf 109 K",
+        name: "Messerschmitt Bf 109 K-4 and G-10 (DB 605 D with MW 50)",
+        v: [
+          596,
+          658,
+          710
+        ],
+        c: [
+          18,
+          18,
+          12.1
+        ],
+        r: 456,
+        roll: 70,
+        dive: 750,
+        acc: 3,
+        tough: 2,
+        fire: 4.31,
+        plain: "It is the fastest Bf 109, 710 km/h at 7,500 m, with a climb to match the best Allied fighters. It is hard to fly well and short-ranged, and its one big cannon suits bombers, not fighters.",
+        history: "It reached the units from October 1944 and fought to the end of the war.",
+        top: 710,
+        wl: 211.8,
+        climb: 18,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      bf110_c: {
+        short: "Bf 110",
+        name: "Messerschmitt Bf 110 C (as a day fighter)",
+        v: [
+          488,
+          529,
+          525
+        ],
+        c: [
+          11,
+          11,
+          5.6
+        ],
+        r: 265,
+        roll: 50,
+        dive: 700,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.29,
+        plain: "It has range, speed enough to outrun a Hurricane I and the heaviest nose guns of any fighter, deadly in one diving pass. It cannot turn or accelerate with single-seat fighters and needs an escort of its own against them.",
+        history: "Over Britain in 1940 it needed single-seat fighters to escort it.",
+        top: 541,
+        wl: 157,
+        climb: 11,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      bulldog: {
+        short: "Bulldog",
+        name: "Bristol Bulldog IIA",
+        v: [
+          262,
+          278,
+          261
+        ],
+        c: [
+          7.5,
+          4.4,
+          1.3
+        ],
+        r: 91,
+        roll: 55,
+        dive: 450,
+        acc: 1,
+        tough: 0,
+        fire: 0.27,
+        plain: "It is a sturdy biplane that is easy to fly. It is slower than any monoplane fighter and carries only two rifle-calibre guns.",
+        history: "It was Estonia's fighter of the 1930s, and the Spitfires Estonia ordered in 1939 never came.",
+        top: 287,
+        wl: 55.8,
+        climb: 7.5,
+        diveLimit: 450,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1930
+      },
+      cr32: {
+        short: "CR.32",
+        name: "Fiat CR.32",
+        v: [
+          333,
+          349,
+          328
+        ],
+        c: [
+          11,
+          6.8,
+          2.6
+        ],
+        r: 137,
+        roll: 60,
+        dive: 500,
+        acc: 1,
+        tough: 0.5,
+        fire: 0.61,
+        plain: "It is a tough, agile biplane with two heavy machine guns. It is slow beside any monoplane and can neither catch nor escape one.",
+        history: "It was the best Nationalist fighter of the Spanish Civil War, and Hungary's in 1939-41.",
+        top: 360,
+        wl: 83.7,
+        climb: 11,
+        diveLimit: 500,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1934
+      },
+      cr42: {
+        short: "CR.42",
+        name: "Fiat CR.42 Falco",
+        v: [
+          365,
+          433,
+          429
+        ],
+        c: [
+          11.8,
+          11.8,
+          6.3
+        ],
+        r: 167,
+        roll: 60,
+        dive: 520,
+        acc: 1,
+        tough: 0,
+        fire: 0.61,
+        plain: "It out-turns anything in the sky and is fast for a biplane. It is 60 to 80 km/h slower than a Hurricane I, lightly armed and unarmoured, so a monoplane pilot who will not turn with it is safe.",
+        history: "It was Italy's most numerous fighter into 1941.",
+        top: 441,
+        wl: 102.5,
+        climb: 11.8,
+        diveLimit: 520,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      d21: {
+        short: "D.XXI",
+        name: "Fokker D.XXI (Mercury)",
+        v: [
+          396,
+          452,
+          437
+        ],
+        c: [
+          13.5,
+          11.9,
+          7.1
+        ],
+        r: 230,
+        roll: 65,
+        dive: 650,
+        acc: 1.5,
+        tough: 1,
+        fire: 0.84,
+        plain: "It is sturdy, easy to fly and quick to climb. It has fixed wheels, is slower than any fighter with retracting wheels and carries only rifle-calibre guns.",
+        history: "It was Finland's main fighter in the Winter War.",
+        top: 460,
+        wl: 126.5,
+        climb: 13.5,
+        diveLimit: 650,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1938
+      },
+      d3801: {
+        short: "D-3801",
+        name: "EKW D-3801 (Swiss MS.406)",
+        v: [
+          467,
+          526,
+          508
+        ],
+        c: [
+          15,
+          12.9,
+          6.5
+        ],
+        r: 307,
+        roll: 65,
+        dive: 730,
+        acc: 2,
+        tough: 1.5,
+        fire: 1.91,
+        plain: "It is the MS.406 rebuilt with a stronger engine: handy and sturdy, with a cannon. It is slower than a Bf 109 E and turns wider.",
+        history: "Switzerland built it at home through the war.",
+        top: 535,
+        wl: 168.8,
+        climb: 15,
+        diveLimit: 730,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      d501: {
+        short: "D.501",
+        name: "Dewoitine D.501",
+        v: [
+          336,
+          357,
+          342
+        ],
+        c: [
+          10,
+          8.6,
+          4.4
+        ],
+        r: 188,
+        roll: 60,
+        dive: 550,
+        acc: 1.5,
+        tough: 0,
+        fire: 1.26,
+        plain: "It is a light monoplane with a cannon firing through the propeller hub. It has fixed wheels and an open cockpit and is slower than any modern fighter.",
+        history: "Lithuania flew it from the mid-1930s.",
+        top: 360,
+        wl: 103,
+        climb: 10,
+        diveLimit: 550,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1935
+      },
+      d520: {
+        short: "D.520",
+        name: "Dewoitine D.520",
+        v: [
+          447,
+          511,
+          509
+        ],
+        c: [
+          14.3,
+          13.2,
+          6.7
+        ],
+        r: 307,
+        roll: 75,
+        dive: 830,
+        acc: 2,
+        tough: 2,
+        fire: 2.3,
+        plain: "It turns with a Bf 109 E and dives well, the only French fighter that can meet it on near-equal terms. It is 30 to 40 km/h slower and climbs less well.",
+        history: "Only one group had it when the Germans attacked in May 1940, and five by June.",
+        top: 530,
+        wl: 168.7,
+        climb: 14.3,
+        diveLimit: 830,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      d551: {
+        short: "D.551",
+        name: "Dewoitine D.551 (what-if)",
+        v: [
+          524,
+          609,
+          626
+        ],
+        c: [
+          17,
+          17,
+          9.8
+        ],
+        r: 364,
+        roll: 80,
+        dive: 850,
+        acc: 2.5,
+        tough: 1.5,
+        fire: 2.3,
+        plain: "It is a lighter, faster D.520.",
+        history: "It was still on the drawing board when France fell in 1940.",
+        top: 645,
+        wl: 200,
+        climb: 17,
+        diveLimit: 850,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      f2a3: {
+        short: "Buffalo",
+        name: "Brewster F2A-3 Buffalo",
+        v: [
+          444,
+          507,
+          491
+        ],
+        c: [
+          12.4,
+          10.7,
+          5.6
+        ],
+        r: 304,
+        roll: 80,
+        dive: 650,
+        acc: 2,
+        tough: 2,
+        fire: 2.29,
+        plain: "It is sturdy and can dive away from a Zero. It is too heavy for its wing and engine, and slow to climb and turn.",
+        history: "At Midway in June 1942 the Marine Buffalo squadron lost most of its aircraft.",
+        top: 517,
+        wl: 167.2,
+        climb: 12.4,
+        diveLimit: 650,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      f4b4: {
+        short: "F4B",
+        name: "Boeing 256 (F4B-4)",
+        v: [
+          298,
+          288,
+          269
+        ],
+        c: [
+          9.2,
+          5.1,
+          1.5
+        ],
+        r: 127,
+        roll: 70,
+        dive: 480,
+        acc: 1,
+        tough: 0,
+        fire: 0.33,
+        plain: "It is a nimble, sturdy biplane. It is far slower than any monoplane and carries only two machine guns.",
+        history: "It was Brazil's fighter before the war came.",
+        top: 304,
+        wl: 77.7,
+        climb: 10,
+        diveLimit: 480,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1932
+      },
+      f4f3: {
+        short: "Wildcat F4F-3",
+        name: "Grumman F4F-3 Wildcat",
+        v: [
+          462,
+          512,
+          522
+        ],
+        c: [
+          16.8,
+          16.3,
+          9.7
+        ],
+        r: 236,
+        roll: 69,
+        dive: 741,
+        acc: 3,
+        tough: 2.5,
+        fire: 2.29,
+        plain: "It is sturdy, well armed and as fast as a Zero at 6,000 m. It cannot climb or turn with a Zero and has half its range.",
+        history: "It was the US Navy's fighter at Pearl Harbor and Wake Island.",
+        top: 531,
+        wl: 129.5,
+        climb: 16.8,
+        diveLimit: 741,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1940
+      },
+      f4f4: {
+        short: "Wildcat F4F-4",
+        name: "Grumman F4F-4 Wildcat",
+        v: [
+          455,
+          496,
+          506
+        ],
+        c: [
+          9.4,
+          9.3,
+          5.1
+        ],
+        r: 254,
+        roll: 69,
+        dive: 741,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It is tough, hard-hitting and safe in a dive. It climbs slower than any fighter it meets and lives by teamwork, armour and deflection shooting.",
+        history: "It held the line at Midway and Guadalcanal in 1942 with the Thach weave.",
+        top: 513,
+        wl: 139.5,
+        climb: 9.4,
+        diveLimit: 741,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      f4u1: {
+        short: "Corsair F4U-1",
+        name: "Vought F4U-1 / F4U-1A Corsair",
+        v: [
+          582,
+          657,
+          633
+        ],
+        c: [
+          14.7,
+          14.7,
+          9.2
+        ],
+        r: 317,
+        roll: 90,
+        dive: 713,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It is the fastest carrier fighter, about 100 km/h quicker than a Zero and superb in a dive. It turns poorly and is a handful to land on a deck.",
+        history: "In 1943 it flew from land in the Solomons, and US squadrons took it to sea only in 1945.",
+        top: 694,
+        wl: 174.1,
+        climb: 14.7,
+        diveLimit: 713,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      f4u1d: {
+        short: "Corsair F4U-1D",
+        name: "Vought F4U-1D Corsair",
+        v: [
+          566,
+          637,
+          638
+        ],
+        c: [
+          15.2,
+          15.2,
+          9.2
+        ],
+        r: 342,
+        roll: 90,
+        dive: 713,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It reaches about 670 km/h with water injection and can carry a ton of bombs. It turns wide and is tricky to land on a deck.",
+        history: "Navy and Marine Corsairs went aboard the fast carriers from January 1945.",
+        top: 669,
+        wl: 187.9,
+        climb: 15.2,
+        diveLimit: 713,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      f6f3: {
+        short: "Hellcat F6F-3",
+        name: "Grumman F6F-3 Hellcat",
+        v: [
+          522,
+          593,
+          602
+        ],
+        c: [
+          14.7,
+          13.7,
+          8.2
+        ],
+        r: 326,
+        roll: 75,
+        dive: 778,
+        acc: 3,
+        tough: 3,
+        fire: 3.44,
+        plain: "It is fast enough, tough, hard-hitting and the easiest of the big fighters to fly from a carrier. It cannot turn or climb with a Zero at low speed.",
+        history: "It took over the carrier war from the Wildcat in 1943.",
+        top: 613,
+        wl: 179,
+        climb: 14.7,
+        diveLimit: 778,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      f6f5: {
+        short: "Hellcat F6F-5",
+        name: "Grumman F6F-5 Hellcat",
+        v: [
+          547,
+          592,
+          627
+        ],
+        c: [
+          14.8,
+          14.8,
+          9.6
+        ],
+        r: 331,
+        roll: 80,
+        dive: 843,
+        acc: 3,
+        tough: 3,
+        fire: 3.44,
+        plain: "It is fast with water injection, about 630 to 660 km/h, and tough, steady and deadly against lightly built fighters. It still cannot turn with a Zero.",
+        history: "Its pilots claimed about 19 Japanese aircraft for each Hellcat lost in combat (claims), most of it the pilots' edge.",
+        top: 658,
+        wl: 181.6,
+        climb: 14.8,
+        diveLimit: 843,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      fm2: {
+        short: "Wildcat FM-2",
+        name: "General Motors FM-2 Wildcat",
+        v: [
+          501,
+          529,
+          518
+        ],
+        c: [
+          18.3,
+          15.3,
+          8.5
+        ],
+        r: 254,
+        roll: 75,
+        dive: 741,
+        acc: 3,
+        tough: 2.5,
+        fire: 2.29,
+        plain: "It is a light, quick-climbing Wildcat that nearly turns with a Zero. It is slow beside the newer fighters.",
+        history: "It flew from the small escort carriers in 1944-45.",
+        top: 530,
+        wl: 139.6,
+        climb: 18.3,
+        diveLimit: 741,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      fokker_g1: {
+        short: "G.I",
+        name: "Fokker G.I (twin-boom heavy fighter)",
+        v: [
+          419,
+          470,
+          442
+        ],
+        c: [
+          13,
+          9.5,
+          4.2
+        ],
+        r: 220,
+        roll: 55,
+        dive: 650,
+        acc: 2,
+        tough: 1.5,
+        fire: 1.69,
+        plain: "It is a twin-boom heavy fighter with eight guns in the nose. It turns and climbs worse than a single-seat fighter.",
+        history: "It fought for five days in May 1940 before the Netherlands fell.",
+        top: 475,
+        wl: 125.3,
+        climb: 13,
+        diveLimit: 650,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1939
+      },
+      fulmar_ii: {
+        short: "Fulmar",
+        name: "Fairey Fulmar Mk II",
+        v: [
+          419,
+          418,
+          392
+        ],
+        c: [
+          5.9,
+          3.3,
+          1
+        ],
+        r: 251,
+        roll: 50,
+        dive: 600,
+        acc: 1.5,
+        tough: 0.5,
+        fire: 1.73,
+        plain: "It is a long-ranged, steady two-seater with eight guns, good against bombers and shadowers far from land. Any single-seat fighter is 100 km/h faster and climbs twice as fast.",
+        history: "It covered the Malta convoys in 1941-42.",
+        top: 438,
+        wl: 138,
+        climb: 6.1,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1940
+      },
+      fury: {
+        short: "Fury",
+        name: "Hawker Fury II / Persian Fury",
+        v: [
+          328,
+          355,
+          341
+        ],
+        c: [
+          11.7,
+          9.8,
+          4
+        ],
+        r: 114,
+        roll: 60,
+        dive: 500,
+        acc: 1,
+        tough: 0,
+        fire: 0.27,
+        plain: "It is a quick-climbing, agile biplane interceptor. It is far slower than a monoplane fighter and carries two rifle-calibre guns.",
+        history: "Yugoslavia flew it against the German attack of April 1941.",
+        top: 359,
+        wl: 70.1,
+        climb: 11.7,
+        diveLimit: 500,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1932
+      },
+      fw190_a3: {
+        short: "Fw 190 A",
+        name: "Focke-Wulf Fw 190 A-3 / A-4 (BMW 801 D)",
+        v: [
+          560,
+          605,
+          634
+        ],
+        c: [
+          16.6,
+          16.6,
+          12.1
+        ],
+        r: 356,
+        roll: 160,
+        dive: 750,
+        acc: 3,
+        tough: 2.5,
+        fire: 4.25,
+        plain: "It is faster than a Spitfire V, climbs, dives and rolls better, and nothing can follow it when it changes direction. It turns wide, and above about 6,700 m it loses its edge.",
+        history: "From late 1941 it beat the Spitfire V over the Channel until the Spitfire IX came.",
+        top: 635,
+        wl: 210.4,
+        climb: 16.6,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      fw190_a8: {
+        short: "Fw 190 A-8",
+        name: "Focke-Wulf Fw 190 A-8 (BMW 801 D-2)",
+        v: [
+          566,
+          627,
+          631
+        ],
+        c: [
+          15,
+          14.8,
+          7.9
+        ],
+        r: 408,
+        roll: 160,
+        dive: 750,
+        acc: 3,
+        tough: 3,
+        fire: 5.52,
+        plain: "It carries the heaviest guns of any single-engined fighter and rolls better than anything. It is 50 to 80 km/h slower than a Mustang at every height and poor above 7,000 m.",
+        history: "It led the attacks on the American bomber streams in 1944.",
+        top: 652,
+        wl: 241.4,
+        climb: 15,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      fw190_d9: {
+        short: "Fw 190 D",
+        name: "Focke-Wulf Fw 190 D-9 (Jumo 213 A)",
+        v: [
+          612,
+          652,
+          657
+        ],
+        c: [
+          17,
+          17,
+          9.3
+        ],
+        r: 412,
+        roll: 140,
+        dive: 800,
+        acc: 3,
+        tough: 2.5,
+        fire: 3,
+        plain: "It is faster, climbs better and dives better than the Fw 190 A-8, and it is good at height. It gives up some of the A's roll and turn and is a little slower than a Mustang or Tempest.",
+        history: "It reached the units from October 1944.",
+        top: 665,
+        wl: 235,
+        climb: 17,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      g50: {
+        short: "Freccia",
+        name: "Fiat G.50 Freccia",
+        v: [
+          404,
+          462,
+          446
+        ],
+        c: [
+          13.8,
+          12,
+          6.7
+        ],
+        r: 240,
+        roll: 80,
+        dive: 700,
+        acc: 1.5,
+        tough: 0,
+        fire: 0.61,
+        plain: "It is agile and pleasant to fly. It is slower than a Hurricane I, short-ranged and armed with two machine guns.",
+        history: "It was Italy's first monoplane fighter, and Finland flew it against the Soviets.",
+        top: 470,
+        wl: 131.6,
+        climb: 13.8,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1940
+      },
+      g55: {
+        short: "Centauro",
+        name: "Fiat G.55 Centauro",
+        v: [
+          492,
+          568,
+          617
+        ],
+        c: [
+          17.1,
+          17.1,
+          12.7
+        ],
+        r: 304,
+        roll: 85,
+        dive: 800,
+        acc: 2,
+        tough: 2,
+        fire: 4.39,
+        plain: "It is big-winged and heavily armed, and it keeps its handling at heights where the Bf 109 G and Fw 190 A lose theirs. It is a little slower than the best Allied fighters.",
+        history: "Only about 30 were in service when Italy surrendered in September 1943.",
+        top: 623,
+        wl: 166.7,
+        climb: 17.1,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      gauntlet: {
+        short: "Gauntlet",
+        name: "Gloster Gauntlet II",
+        v: [
+          330,
+          367,
+          350
+        ],
+        c: [
+          11.5,
+          9.7,
+          5.1
+        ],
+        r: 100,
+        roll: 55,
+        dive: 520,
+        acc: 1,
+        tough: 0,
+        fire: 0.27,
+        plain: "It is a steady biplane that is easy to fly. It is far slower than any monoplane and carries two rifle-calibre guns.",
+        history: "Denmark's army flew it in 1940 beside a handful of Fokker D.XXIs.",
+        top: 370,
+        wl: 61.4,
+        climb: 11.5,
+        diveLimit: 520,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1935
+      },
+      gladiator: {
+        short: "Gladiator",
+        name: "Gloster Gladiator I/II",
+        v: [
+          355,
+          406,
+          382
+        ],
+        c: [
+          11.7,
+          9.3,
+          4.7
+        ],
+        r: 120,
+        roll: 60,
+        dive: 560,
+        acc: 1,
+        tough: 0.5,
+        fire: 0.87,
+        plain: "It turns inside any monoplane. It is about 150 km/h slower than a Bf 109 E.",
+        history: "It was the RAF's last biplane fighter, and it fought over Norway, Malta and Greece.",
+        top: 407,
+        wl: 73.5,
+        climb: 11.7,
+        diveLimit: 560,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1937
+      },
+      hawk3: {
+        short: "Hawk III",
+        name: "Curtiss Hawk III (export biplane)",
+        v: [
+          346,
+          379,
+          356
+        ],
+        c: [
+          11.5,
+          7.1,
+          1.6
+        ],
+        r: 136,
+        roll: 60,
+        dive: 500,
+        acc: 1,
+        tough: 0,
+        fire: 0.33,
+        plain: "It is a robust, handy biplane. It is far slower than a monoplane and lightly armed.",
+        history: "It was the American export biplane of the mid-1930s.",
+        top: 386,
+        wl: 83.3,
+        climb: 11.5,
+        diveLimit: 500,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1935
+      },
+      hawk75a: {
+        short: "Hawk 75A",
+        name: "Curtiss Hawk 75A-1 to A-3 (French service)",
+        v: [
+          439,
+          485,
+          456
+        ],
+        c: [
+          12.8,
+          8.6,
+          4.4
+        ],
+        r: 213,
+        roll: 60,
+        dive: 720,
+        acc: 2,
+        tough: 0,
+        fire: 0.94,
+        plain: "It is light on the controls at any speed and out-turns a Bf 109 E with ease. It is about 60 km/h slower, lightly armed and weak at height.",
+        history: "It was the best dogfighter France had in 1939-40.",
+        top: 504,
+        wl: 116.9,
+        climb: 12.8,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      hawk75m: {
+        short: "Hawk 75M",
+        name: "Curtiss Hawk 75M (fixed undercarriage)",
+        v: [
+          416,
+          440,
+          413
+        ],
+        c: [
+          11.9,
+          8.1,
+          3.9
+        ],
+        r: 200,
+        roll: 60,
+        dive: 720,
+        acc: 2,
+        tough: 0,
+        fire: 1.17,
+        plain: "It is a sound, simple monoplane about as fast as a Ki-27. It has fixed wheels, is slower than the retracting Hawk and is lightly armed.",
+        history: "China flew it in 1938-39, before the Zero came.",
+        top: 451,
+        wl: 109.7,
+        climb: 11.9,
+        diveLimit: 720,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1938
+      },
+      hawk75o: {
+        short: "Hawk 75O",
+        name: "Curtiss Hawk 75O (fixed wheels)",
+        v: [
+          410,
+          436,
+          410
+        ],
+        c: [
+          12.5,
+          8.2,
+          4
+        ],
+        r: 208,
+        roll: 60,
+        dive: 650,
+        acc: 1.5,
+        tough: 0.5,
+        fire: 0.78,
+        plain: "It is a sturdy, simple monoplane. It has fixed wheels, is slower than any fighter with retracting wheels and is lightly armed.",
+        history: "It was Argentina's only modern fighter of the war years.",
+        top: 450,
+        wl: 114.1,
+        climb: 12.5,
+        diveLimit: 650,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1938
+      },
+      hurricane_i: {
+        short: "Hurricane I",
+        name: "Hawker Hurricane Mk I (Merlin III)",
+        v: [
+          431,
+          493,
+          491
+        ],
+        c: [
+          13.3,
+          12.1,
+          6.5
+        ],
+        r: 212,
+        roll: 64,
+        dive: 628,
+        acc: 1.5,
+        tough: 1.5,
+        fire: 1.73,
+        plain: "It shoots steadily, turns tightly and takes punishment. A Bf 109 E is about 60 km/h faster, climbs better and out-dives it, so it can neither catch nor escape one.",
+        history: "It did most of the RAF's bomber killing in the Battle of Britain.",
+        top: 515,
+        wl: 120.8,
+        climb: 13.3,
+        diveLimit: 628,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1937
+      },
+      hurricane_ii: {
+        short: "Hurricane II",
+        name: "Hawker Hurricane Mk IIB / IIC (Merlin XX)",
+        v: [
+          439,
+          487,
+          520
+        ],
+        c: [
+          13.8,
+          13.8,
+          8.7
+        ],
+        r: 255,
+        roll: 64,
+        dive: 628,
+        acc: 1.5,
+        tough: 2,
+        fire: 5.2,
+        plain: "It is tougher and hits harder than the Hurricane I, and it still out-turns German fighters. It is over 100 km/h slower than a Bf 109 F.",
+        history: "From 1941 it was moved to ground attack, the desert and the Far East.",
+        top: 531,
+        wl: 145.6,
+        climb: 13.8,
+        diveLimit: 628,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1940
+      },
+      hurricane_iib_vvs: {
+        short: "Hurricane IIB",
+        name: "Hawker Hurricane Mk IIB (Soviet service)",
+        v: [
+          439,
+          498,
+          531
+        ],
+        c: [
+          13.8,
+          13.8,
+          9.5
+        ],
+        r: 241,
+        roll: 64,
+        dive: 628,
+        acc: 1.5,
+        tough: 2,
+        fire: 2.6,
+        plain: "It is steady and easy to fly. It is slower than every German fighter it meets, and its machine guns are too light.",
+        history: "It was the first Lend-Lease fighter to reach the Soviet Union in numbers, from late 1941.",
+        top: 531,
+        wl: 137.2,
+        climb: 13.8,
+        diveLimit: 628,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      i153: {
+        short: "Chaika",
+        name: "Polikarpov I-153 Chaika (M-62)",
+        v: [
+          376,
+          418,
+          403
+        ],
+        c: [
+          16.4,
+          14.3,
+          8
+        ],
+        r: 130,
+        roll: 60,
+        dive: 520,
+        acc: 1,
+        tough: 1,
+        fire: 1.15,
+        plain: "It turns a full circle in about 13 seconds, faster than any monoplane except the Ki-27. It is 100 to 200 km/h slower than a modern monoplane and can neither catch nor escape one.",
+        history: "About a quarter of the Soviet fighters in the west on 22 June 1941 were I-153s.",
+        top: 424,
+        wl: 79.7,
+        climb: 16.4,
+        diveLimit: 520,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      i15bis: {
+        short: "I-15bis",
+        name: "Polikarpov I-15bis (I-152)",
+        v: [
+          342,
+          371,
+          349
+        ],
+        c: [
+          14.2,
+          9.7,
+          4.3
+        ],
+        r: 123,
+        roll: 60,
+        dive: 520,
+        acc: 1,
+        tough: 1,
+        fire: 0.48,
+        plain: "It is a tough, tight-turning biplane. It is 50 km/h slower than the A5M and helpless against a Zero.",
+        history: "It held its own over China in 1938-39.",
+        top: 379,
+        wl: 75.6,
+        climb: 14.2,
+        diveLimit: 520,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1938
+      },
+      i16_10: {
+        short: "I-16 type 10",
+        name: "Polikarpov I-16 type 10 (M-25V)",
+        v: [
+          414,
+          436,
+          409
+        ],
+        c: [
+          13.6,
+          8.4,
+          2.9
+        ],
+        r: 233,
+        roll: 100,
+        dive: 720,
+        acc: 1.5,
+        tough: 1,
+        fire: 1.15,
+        plain: "It is a fast, hard-hitting little monoplane. It cannot turn with the Japanese fighters, and a Zero outclasses it.",
+        history: "China and the Soviet volunteers flew it in 1938-39.",
+        top: 448,
+        wl: 118,
+        climb: 13.6,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1938
+      },
+      i16_24: {
+        short: "I-16 type 24",
+        name: "Polikarpov I-16 type 24 (M-63)",
+        v: [
+          421,
+          460,
+          436
+        ],
+        c: [
+          15.8,
+          12.9,
+          6.2
+        ],
+        r: 255,
+        roll: 100,
+        dive: 720,
+        acc: 1.5,
+        tough: 1,
+        fire: 1.15,
+        plain: "It still out-turns every other monoplane in Europe. It is 100 km/h too slow and can fight only when the enemy chooses to come down to it.",
+        history: "It was the fastest fighter in the world in 1935, and still the most numerous Soviet fighter in June 1941.",
+        top: 462,
+        wl: 129.4,
+        climb: 15.8,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1940
+      },
+      iar80: {
+        short: "IAR 80",
+        name: "IAR 80A/80B",
+        v: [
+          446,
+          502,
+          484
+        ],
+        c: [
+          15,
+          12.9,
+          6.5
+        ],
+        r: 305,
+        roll: 80,
+        dive: 650,
+        acc: 1.5,
+        tough: 1.5,
+        fire: 1.26,
+        plain: "It is about a match for a Hurricane I or Bf 109 E and carries six machine guns. Its guns are all rifle-calibre, and it is slow beside the newer Allied and Soviet fighters.",
+        history: "It was Romania's own fighter, and it fought over Odessa in 1941.",
+        top: 510,
+        wl: 167.6,
+        climb: 15,
+        diveLimit: 650,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      iar81c: {
+        short: "IAR 81",
+        name: "IAR 81C",
+        v: [
+          441,
+          497,
+          480
+        ],
+        c: [
+          14.5,
+          12.5,
+          6.3
+        ],
+        r: 319,
+        roll: 80,
+        dive: 650,
+        acc: 1.5,
+        tough: 1.5,
+        fire: 2.94,
+        plain: "It is the IAR 80 with two German cannon, deadly to a heavy bomber. A Lightning or Mustang outclasses it.",
+        history: "It fought the American bombers over Ploiești in 1943-44.",
+        top: 505,
+        wl: 175.3,
+        climb: 14.5,
+        diveLimit: 650,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      ik3: {
+        short: "IK-3",
+        name: "Ikarus IK-3",
+        v: [
+          440,
+          509,
+          505
+        ],
+        c: [
+          15.5,
+          14,
+          6.4
+        ],
+        r: 265,
+        roll: 75,
+        dive: 700,
+        acc: 2,
+        tough: 1,
+        fire: 1.87,
+        plain: "It is a clean, agile monoplane with a cannon, as good as a Hurricane I. It is slower than a Bf 109 E.",
+        history: "Only twelve were built, and they fought over Belgrade in April 1941.",
+        top: 527,
+        wl: 145.5,
+        climb: 15.5,
+        diveLimit: 700,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      j22: {
+        short: "J 22",
+        name: "FFVS J 22",
+        v: [
+          500,
+          564,
+          529
+        ],
+        c: [
+          17.5,
+          12,
+          5.3
+        ],
+        r: 323,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 1.5,
+        fire: 1.79,
+        plain: "It is a light, fast fighter that climbs well low down. It loses its edge high up and is lightly built of steel tube and wood.",
+        history: "Sweden built it at home during the war, on a copied Twin Wasp engine.",
+        top: 575,
+        wl: 177.2,
+        climb: 17.5,
+        diveLimit: 700,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1943
+      },
+      j2m3: {
+        short: "Raiden",
+        name: "Mitsubishi J2M3 Raiden ('Jack')",
+        v: [
+          575,
+          657,
+          561
+        ],
+        c: [
+          18.5,
+          16.6,
+          10.2
+        ],
+        r: 292,
+        roll: 70,
+        dive: 800,
+        acc: 3,
+        tough: 0,
+        fire: 4.31,
+        plain: "It climbs fast and carries four cannon to kill bombers. It turns poorly and lacks power at bomber heights.",
+        history: "It was never built in numbers, and it met the B-29 raids on Japan.",
+        top: 671,
+        wl: 160.1,
+        climb: 18.5,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      ki27: {
+        short: "Ki-27",
+        name: "Nakajima Ki-27b (Type 97 fighter, 'Nate')",
+        v: [
+          429,
+          461,
+          432
+        ],
+        c: [
+          17.4,
+          13.4,
+          8.6
+        ],
+        r: 163,
+        roll: 70,
+        dive: 600,
+        acc: 1.5,
+        tough: 0,
+        fire: 0.32,
+        plain: "It is the supreme turning fighter. It is slow, fragile and armed with two light guns, and anything faster can refuse its fight.",
+        history: "It was the Japanese army's main fighter over China and into 1942.",
+        top: 470,
+        wl: 96.4,
+        climb: 17.4,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1938
+      },
+      ki43_i: {
+        short: "Hayabusa I",
+        name: "Nakajima Ki-43-I Hayabusa ('Oscar')",
+        v: [
+          443,
+          490,
+          460
+        ],
+        c: [
+          17,
+          13.5,
+          8.4
+        ],
+        r: 147,
+        roll: 70,
+        dive: 600,
+        acc: 1.5,
+        tough: 0,
+        fire: 1.05,
+        plain: "It is wonderfully agile and long-ranged. It is 70 to 80 km/h slower than a Warhawk E, weakly armed, unprotected and fragile.",
+        history: "Only two army regiments had it when the Pacific war began in December 1941.",
+        top: 495,
+        wl: 93.1,
+        climb: 17,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      ki43_ii: {
+        short: "Hayabusa II",
+        name: "Nakajima Ki-43-II Hayabusa ('Oscar')",
+        v: [
+          474,
+          525,
+          493
+        ],
+        c: [
+          16.2,
+          12.7,
+          7.5
+        ],
+        r: 191,
+        roll: 70,
+        dive: 620,
+        acc: 1.5,
+        tough: 2,
+        fire: 1.05,
+        plain: "It has more power, armour and tank protection, and it keeps its extraordinary turn. It is about 100 km/h slower than the newer Allied fighters and still carries only two machine guns.",
+        history: "It was the Japanese army's most numerous fighter to the end of the war.",
+        top: 530,
+        wl: 121,
+        climb: 16.2,
+        diveLimit: 620,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      ki44_ii: {
+        short: "Shoki",
+        name: "Nakajima Ki-44-II Shoki ('Tojo')",
+        v: [
+          516,
+          590,
+          577
+        ],
+        c: [
+          21.8,
+          19.6,
+          11.6
+        ],
+        r: 336,
+        roll: 85,
+        dive: 800,
+        acc: 3,
+        tough: 0,
+        fire: 2.1,
+        plain: "It is a fast-climbing interceptor, quicker than a Warhawk above 4,000 m. It gives up the Japanese turning edge.",
+        history: "It was built in modest numbers and defended Palembang's oil and the home islands.",
+        top: 605,
+        wl: 184.3,
+        climb: 21.8,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      ki61_i: {
+        short: "Hien",
+        name: "Kawasaki Ki-61-I Hien ('Tony')",
+        v: [
+          498,
+          570,
+          551
+        ],
+        c: [
+          15.2,
+          13.5,
+          8.2
+        ],
+        r: 316,
+        roll: 85,
+        dive: 850,
+        acc: 3,
+        tough: 2,
+        fire: 3.43,
+        plain: "It is fast, strong in a dive, armoured and a good turner, a match for a Warhawk. Its engine is unreliable.",
+        history: "Its licence-built Daimler-Benz engine was its ruin in New Guinea in 1943-44.",
+        top: 580,
+        wl: 173.5,
+        climb: 15.2,
+        diveLimit: 850,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      ki84: {
+        short: "Hayate",
+        name: "Nakajima Ki-84-Ia Hayate ('Frank')",
+        v: [
+          543,
+          627,
+          680
+        ],
+        c: [
+          21.8,
+          21.8,
+          15.5
+        ],
+        r: 312,
+        roll: 85,
+        dive: 800,
+        acc: 3,
+        tough: 2,
+        fire: 3.43,
+        plain: "It is fast, well armed, protected and still agile, the best Japanese army fighter. Its engine and undercarriage are weak, and it seldom flies as well as it tests.",
+        history: "Poor engines and green pilots kept it from its promise in 1944-45.",
+        top: 687,
+        wl: 171.5,
+        climb: 21.84,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      la5: {
+        short: "La-5",
+        name: "Lavochkin La-5 (1942, M-82A)",
+        v: [
+          520,
+          560,
+          566
+        ],
+        c: [
+          15.6,
+          15.6,
+          7.6
+        ],
+        r: 350,
+        roll: 85,
+        dive: 720,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It has a 1,700 hp radial and two cannon in a strong airframe. It is heavier and slower to climb than a Bf 109 G.",
+        history: "It first fought at Stalingrad in 1942.",
+        top: 580,
+        wl: 192,
+        climb: 15.6,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      la5fn: {
+        short: "La-5FN",
+        name: "Lavochkin La-5FN (ASh-82FN)",
+        v: [
+          582,
+          635,
+          642
+        ],
+        c: [
+          16.5,
+          16.5,
+          8.8
+        ],
+        r: 328,
+        roll: 90,
+        dive: 720,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It is faster than a Bf 109 G or Fw 190 A below 3,000 m and turns tighter. Its edge fades above 6,000 m, and it has fuel for only about 40 minutes at combat power.",
+        history: "It came to the front in numbers for Kursk in July 1943.",
+        top: 648,
+        wl: 179.9,
+        climb: 16.5,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      la7: {
+        short: "La-7",
+        name: "Lavochkin La-7 (ASh-82FN)",
+        v: [
+          593,
+          640,
+          641
+        ],
+        c: [
+          20.4,
+          20.4,
+          11.1
+        ],
+        r: 343,
+        roll: 85,
+        dive: 720,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It is fast, quick-climbing and tight-turning below 6,000 m. It is short-ranged, hot in the cockpit and keeps its pilot busy.",
+        history: "It came from autumn 1944 and was the best Soviet fighter of the war below 6,000 m.",
+        top: 661,
+        wl: 188.5,
+        climb: 20.4,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      lagg3: {
+        short: "LaGG-3",
+        name: "Lavochkin-Gorbunov-Gudkov LaGG-3 (1941, M-105P)",
+        v: [
+          489,
+          542,
+          522
+        ],
+        c: [
+          12.7,
+          10.7,
+          4.8
+        ],
+        r: 339,
+        roll: 85,
+        dive: 720,
+        acc: 2,
+        tough: 2,
+        fire: 2.5,
+        plain: "It is strong and well armed. It is too heavy for its engine: slow, slow-climbing and outclassed by a Bf 109 F.",
+        history: "It was lightened in 1942-43 and gave way to the La-5.",
+        top: 549,
+        wl: 186.2,
+        climb: 12.7,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      martlet_ii: {
+        short: "Martlet",
+        name: "Grumman Martlet Mk II (G-36B)",
+        v: [
+          461,
+          469,
+          441
+        ],
+        c: [
+          9,
+          5.5,
+          2.5
+        ],
+        r: 266,
+        roll: 69,
+        dive: 741,
+        acc: 2,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It is a true carrier fighter with folding wings and heavy guns. At about 470 km/h it is too slow to match land fighters.",
+        history: "It gave the Royal Navy its first modern carrier fighter in 1941.",
+        top: 472,
+        wl: 146.3,
+        climb: 9.9,
+        diveLimit: 741,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      mb152: {
+        short: "MB.152",
+        name: "Bloch MB.152 (and MB.151)",
+        v: [
+          440,
+          509,
+          478
+        ],
+        c: [
+          12,
+          9.6,
+          4.9
+        ],
+        r: 284,
+        roll: 60,
+        dive: 700,
+        acc: 2,
+        tough: 1.5,
+        fire: 3.42,
+        plain: "It is rugged and armed with cannon. It is slow to climb and slower than a Bf 109 E.",
+        history: "It was the most numerous French fighter after the MS.406 in May 1940.",
+        top: 509,
+        wl: 155.9,
+        climb: 12,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      mc200: {
+        short: "Saetta",
+        name: "Macchi MC.200 Saetta",
+        v: [
+          446,
+          504,
+          346
+        ],
+        c: [
+          15.3,
+          11.8,
+          4.7
+        ],
+        r: 238,
+        roll: 80,
+        dive: 805,
+        acc: 2,
+        tough: 1,
+        fire: 0.61,
+        plain: "It is strong and agile, dives very well, and out-turns and out-climbs a Hurricane I. Its radial engine keeps it near 500 km/h, and it has only two machine guns.",
+        history: "It fought from Greece to Russia and North Africa in 1940-43.",
+        top: 504,
+        wl: 130.8,
+        climb: 15.3,
+        diveLimit: 805,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1940
+      },
+      mc202: {
+        short: "Folgore",
+        name: "Macchi MC.202 Folgore",
+        v: [
+          503,
+          577,
+          577
+        ],
+        c: [
+          18.1,
+          17.2,
+          10.4
+        ],
+        r: 317,
+        roll: 85,
+        dive: 750,
+        acc: 2,
+        tough: 2,
+        fire: 0.93,
+        plain: "It matches a Spitfire V in speed and climb, dives as well and out-runs a Hurricane. A Spitfire turns tighter, and its two heavy machine guns hit too lightly.",
+        history: "It first fought in late November 1941 and was Italy's best fighter of 1942.",
+        top: 600,
+        wl: 174.2,
+        climb: 18.1,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      mc205v: {
+        short: "Veltro",
+        name: "Macchi MC.205V Veltro",
+        v: [
+          502,
+          581,
+          638
+        ],
+        c: [
+          17.4,
+          17.4,
+          12.5
+        ],
+        r: 369,
+        roll: 85,
+        dive: 800,
+        acc: 2,
+        tough: 2,
+        fire: 3.13,
+        plain: "It is a match for a Spitfire IX or Mustang in speed and turn below 7,000 m. Its small wing lets it down at height.",
+        history: "Only about 66 were in service when Italy surrendered in September 1943.",
+        top: 642,
+        wl: 202.9,
+        climb: 17.4,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      me262_a1a: {
+        short: "Me 262",
+        name: "Messerschmitt Me 262 A-1a (two Jumo 004 B jets)",
+        v: [
+          834,
+          858,
+          859
+        ],
+        c: [
+          20,
+          20,
+          12.2
+        ],
+        r: 537,
+        roll: 60,
+        dive: 1e3,
+        acc: 3,
+        tough: 1.5,
+        fire: 13.64,
+        plain: "It is about 150 km/h faster than the best propeller fighters, and nothing can stop its pass through a bomber formation. It cannot fight slowly, cannot be throttled quickly and is helpless near its own runway.",
+        history: "Never more than about 60 were serviceable at once, against more than 1,000 German piston fighters.",
+        top: 869,
+        wl: 294.9,
+        climb: 20,
+        diveLimit: 1e3,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      meteor3: {
+        short: "Meteor",
+        name: "Gloster Meteor F.3",
+        v: [
+          710,
+          745,
+          774
+        ],
+        c: [
+          20,
+          20,
+          20
+        ],
+        r: 328,
+        roll: 60,
+        dive: 870,
+        acc: 2.5,
+        tough: 2,
+        fire: 5.2,
+        plain: "It is a fast, steady jet with four cannon. It is slow to accelerate and its early engines are weak.",
+        history: "It flew against the flying bombs in 1944 and never met a German fighter.",
+        top: 790,
+        wl: 180.2,
+        climb: 20,
+        diveLimit: 870,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1944
+      },
+      mig3: {
+        short: "MiG-3",
+        name: "Mikoyan-Gurevich MiG-3 (AM-35A)",
+        v: [
+          491,
+          559,
+          616
+        ],
+        c: [
+          16.4,
+          16.4,
+          13
+        ],
+        r: 345,
+        roll: 85,
+        dive: 720,
+        acc: 1.5,
+        tough: 2,
+        fire: 1.22,
+        plain: "It is very fast above 7,000 m. Low down, where it has to fight, it is heavy, slow to turn and under-armed.",
+        history: "It was the most numerous new Soviet fighter in June 1941.",
+        top: 622,
+        wl: 189.2,
+        climb: 16.4,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1941
+      },
+      ms406: {
+        short: "MS.406",
+        name: "Morane-Saulnier MS.406",
+        v: [
+          436,
+          490,
+          449
+        ],
+        c: [
+          13.2,
+          10.4,
+          4.7
+        ],
+        r: 289,
+        roll: 60,
+        dive: 730,
+        acc: 1.5,
+        tough: 0,
+        fire: 1.91,
+        plain: "It is handy and easy, out-turns a Bf 109 and takes punishment. It is 60 to 70 km/h slower, under-powered and under-armed, and its guns freeze at height.",
+        history: "It was France's most numerous fighter in 1939-40.",
+        top: 490,
+        wl: 158.8,
+        climb: 13.2,
+        diveLimit: 730,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1939
+      },
+      n1k2j: {
+        short: "Shiden-Kai",
+        name: "Kawanishi N1K2-J Shiden-Kai ('George 21')",
+        v: [
+          585,
+          634,
+          638
+        ],
+        c: [
+          19.7,
+          19.7,
+          12.6
+        ],
+        r: 262,
+        roll: 82,
+        dive: 780,
+        acc: 3,
+        tough: 0,
+        fire: 4.18,
+        plain: "It matches a Hellcat or Corsair in a dogfight and carries four cannon. Its engine is unreliable and it climbs too slowly to catch a B-29.",
+        history: "It came late and in small numbers, mostly with the 343rd Kokutai in 1945.",
+        top: 656,
+        wl: 166,
+        climb: 19.7,
+        diveLimit: 780,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1945
+      },
+      na50: {
+        short: "Torito",
+        name: "North American NA-50 'Torito'",
+        v: [
+          439,
+          460,
+          431
+        ],
+        c: [
+          12,
+          7.8,
+          3.7
+        ],
+        r: 210,
+        roll: 70,
+        dive: 650,
+        acc: 2,
+        tough: 0.5,
+        fire: 0.33,
+        plain: "It is a sturdy monoplane that climbs well low down. It is slow beside the great powers' fighters and carries only two machine guns.",
+        history: "Seven were built for Peru, and they fought Ecuador in 1941.",
+        top: 475,
+        wl: 115.3,
+        climb: 12,
+        diveLimit: 650,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1939
+      },
+      p11c: {
+        short: "P.11c",
+        name: "PZL P.11c",
+        v: [
+          318,
+          381,
+          370
+        ],
+        c: [
+          13,
+          10.5,
+          2.8
+        ],
+        r: 166,
+        roll: 60,
+        dive: 600,
+        acc: 1.5,
+        tough: 0.5,
+        fire: 0.56,
+        plain: "It is sturdy and handy, with a gull wing and an open cockpit. It is about 170 km/h slower than a Bf 109 E and has about a fifth of its weight of fire.",
+        history: "Polish pilots in P.11cs claimed about as many as they lost in September 1939, in a fighter a generation behind.",
+        top: 390,
+        wl: 91.1,
+        climb: 13,
+        diveLimit: 600,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1935
+      },
+      p24: {
+        short: "P.24",
+        name: "PZL P.24F/G",
+        v: [
+          380,
+          428,
+          402
+        ],
+        c: [
+          14,
+          11.1,
+          6
+        ],
+        r: 203,
+        roll: 60,
+        dive: 600,
+        acc: 1.5,
+        tough: 0.5,
+        fire: 2.34,
+        plain: "It is a sturdy gull-wing fighter with cannon. It is about 120 km/h slower than a Bf 109 E.",
+        history: "It was Greece's main fighter against Italy in 1940-41.",
+        top: 430,
+        wl: 111.7,
+        climb: 14,
+        diveLimit: 600,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1936
+      },
+      p26a: {
+        short: "Peashooter",
+        name: "Boeing P-26A Peashooter",
+        v: [
+          362,
+          360,
+          338
+        ],
+        c: [
+          11.5,
+          6.4,
+          2.1
+        ],
+        r: 180,
+        roll: 70,
+        dive: 600,
+        acc: 2,
+        tough: 0.5,
+        fire: 0.33,
+        plain: "It is a light, nimble monoplane. It has fixed wheels, an open cockpit and two machine guns.",
+        history: "It was America's first all-metal monoplane fighter.",
+        top: 377,
+        wl: 98.6,
+        climb: 11.8,
+        diveLimit: 600,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1934
+      },
+      p36a: {
+        short: "P-36",
+        name: "Curtiss P-36A Hawk",
+        v: [
+          461,
+          489,
+          459
+        ],
+        c: [
+          17,
+          11.4,
+          5.8
+        ],
+        r: 213,
+        roll: 60,
+        dive: 720,
+        acc: 2,
+        tough: 1,
+        fire: 0.51,
+        plain: "It is light, handy and turns well. It is slow and lightly armed beside the newer fighters.",
+        history: "It was the US Army's fighter of 1938-41.",
+        top: 504,
+        wl: 116.9,
+        climb: 17,
+        diveLimit: 720,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1938
+      },
+      p38_fg: {
+        short: "Lightning G",
+        name: "Lockheed P-38F / P-38G Lightning",
+        v: [
+          561,
+          608,
+          646
+        ],
+        c: [
+          18.1,
+          18.1,
+          12.9
+        ],
+        r: 370,
+        roll: 50,
+        dive: 680,
+        acc: 2,
+        tough: 2.5,
+        fire: 3.59,
+        plain: "It climbs fast, flies far and hits hard from the nose. It rolls slowly, cannot follow a German fighter that dives steeply from height, and an Fw 190 out-turns it at most speeds.",
+        history: "It escorted the first long raids from North Africa, and it shot down Admiral Yamamoto in 1943.",
+        top: 650,
+        wl: 218.7,
+        climb: 18.1,
+        diveLimit: 680,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      p38_jl: {
+        short: "Lightning J",
+        name: "Lockheed P-38J / P-38L Lightning",
+        v: [
+          571,
+          625,
+          672
+        ],
+        c: [
+          20.3,
+          20.3,
+          16.7
+        ],
+        r: 351,
+        roll: 90,
+        dive: 750,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.59,
+        plain: "It flies far, out-climbs the German fighters and out-runs them at height. It is costly and demanding to fly, and its engines suffer in the cold.",
+        history: "It was the top-scoring American fighter in the Pacific.",
+        top: 678,
+        wl: 230,
+        climb: 20.3,
+        diveLimit: 750,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      p39d: {
+        short: "Airacobra D",
+        name: "Bell P-39D Airacobra",
+        v: [
+          533,
+          588,
+          553
+        ],
+        c: [
+          15,
+          11.5,
+          5.6
+        ],
+        r: 319,
+        roll: 75,
+        dive: 760,
+        acc: 2.5,
+        tough: 2,
+        fire: 3.01,
+        plain: "It carries a 37 mm cannon in the nose and is good low down. It has no high-altitude supercharger and is poor above 4,500 m.",
+        history: "It fought in New Guinea in 1942 and went to the Soviet Union in numbers.",
+        top: 592,
+        wl: 175.3,
+        climb: 15,
+        diveLimit: 760,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1942
+      },
+      p39n_vvs: {
+        short: "Airacobra N",
+        name: "Bell P-39N/Q Airacobra (Soviet service)",
+        v: [
+          581,
+          630,
+          591
+        ],
+        c: [
+          16.9,
+          12.2,
+          7.5
+        ],
+        r: 304,
+        roll: 75,
+        dive: 760,
+        acc: 2,
+        tough: 2,
+        fire: 2.67,
+        plain: "Flown low and light, it is fast, well armed and a match for a Bf 109 G below 4,500 m. It has no high-altitude power and an unforgiving spin.",
+        history: "Soviet aces such as Pokryshkin made their names in it.",
+        top: 641,
+        wl: 166.7,
+        climb: 16.9,
+        diveLimit: 760,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      p40_bc: {
+        short: "Tomahawk",
+        name: "Curtiss P-40B / P-40C (Tomahawk IIA / IIB)",
+        v: [
+          507,
+          565,
+          533
+        ],
+        c: [
+          13.5,
+          10.5,
+          4.3
+        ],
+        r: 282,
+        roll: 95,
+        dive: 772,
+        acc: 3,
+        tough: 2.5,
+        fire: 1.49,
+        plain: "It is fast in a dive, quick in the roll and tough, and it turns well at speed. It cannot climb or fight high, so its enemies start above it.",
+        history: "The RAF flew it in the desert from mid-1941.",
+        top: 566,
+        wl: 155.1,
+        climb: 13.5,
+        diveLimit: 772,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      p40_e: {
+        short: "Warhawk E",
+        name: "Curtiss P-40E Warhawk (Kittyhawk IA)",
+        v: [
+          515,
+          569,
+          537
+        ],
+        c: [
+          10.7,
+          8.3,
+          3.3
+        ],
+        r: 312,
+        roll: 95,
+        dive: 772,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It is a rugged low-level fighter with six heavy machine guns that out-turns and out-dives a Bf 109. A Bf 109 F climbs away from it and attacks from above, and it is helpless above about 5,000 m.",
+        history: "It was the RAF's Kittyhawk in the desert and the Americans' fighter in the Pacific in 1942.",
+        top: 570,
+        wl: 171.4,
+        climb: 10.7,
+        diveLimit: 772,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      p40b: {
+        short: "Hawk 81",
+        name: "Curtiss Hawk 81-A2 (P-40B/C, Tomahawk) of the AVG",
+        v: [
+          495,
+          565,
+          533
+        ],
+        c: [
+          16.6,
+          13.4,
+          6.7
+        ],
+        r: 276,
+        roll: 95,
+        dive: 772,
+        acc: 3,
+        tough: 2.5,
+        fire: 1.94,
+        plain: "It is fast low down, very fast in a dive, well armed and tough. It climbs poorly, cannot turn with any Japanese fighter and runs out of power above 6,000 m.",
+        history: "The American Volunteer Group flew it over Burma and China in 1941-42.",
+        top: 566,
+        wl: 151.5,
+        climb: 16.6,
+        diveLimit: 772,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      p40n: {
+        short: "Warhawk N",
+        name: "Curtiss P-40N Warhawk (and P-40E/K in China)",
+        v: [
+          483,
+          551,
+          520
+        ],
+        c: [
+          12.7,
+          10.1,
+          4.6
+        ],
+        r: 314,
+        roll: 95,
+        dive: 772,
+        acc: 3,
+        tough: 2.5,
+        fire: 3.44,
+        plain: "It is rugged, well armed and fast in a dive. Everything it meets out-climbs it, and the newer Japanese army fighters outpace it.",
+        history: "It kept the Warhawk useful into 1944, most of all in China and New Guinea.",
+        top: 552,
+        wl: 172.7,
+        climb: 12.7,
+        diveLimit: 772,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1943
+      },
+      p43a: {
+        short: "Lancer",
+        name: "Republic P-43A-1 Lancer",
+        v: [
+          471,
+          541,
+          557
+        ],
+        c: [
+          14.2,
+          14.2,
+          8.3
+        ],
+        r: 296,
+        roll: 75,
+        dive: 760,
+        acc: 2,
+        tough: 0,
+        fire: 2.29,
+        plain: "It is a high-altitude fighter with a turbo-supercharger and four heavy guns. It is unprotected and leaks fuel.",
+        history: "China flew a few from 1942.",
+        top: 573,
+        wl: 162.7,
+        climb: 14.2,
+        diveLimit: 760,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      p47_cd: {
+        short: "Thunderbolt C",
+        name: "Republic P-47C / early P-47D Thunderbolt (razorback)",
+        v: [
+          537,
+          617,
+          656
+        ],
+        c: [
+          14.6,
+          14.6,
+          14.6
+        ],
+        r: 357,
+        roll: 100,
+        dive: 837,
+        acc: 3,
+        tough: 3,
+        fire: 4.59,
+        plain: "Above 7,500 m it is as fast as anything, and it out-dives every opponent. It climbs poorly, turns wide and is at a disadvantage low down.",
+        history: "It first fought on 10 April 1943, with the Eighth Air Force.",
+        top: 697,
+        wl: 211.4,
+        climb: 14.6,
+        diveLimit: 837,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      p47_d25: {
+        short: "Thunderbolt D",
+        name: "Republic P-47D-25 and later (bubble canopy, paddle-blade propeller, water injection)",
+        v: [
+          575,
+          642,
+          703
+        ],
+        c: [
+          16.6,
+          16.6,
+          13.6
+        ],
+        r: 358,
+        roll: 100,
+        dive: 837,
+        acc: 3,
+        tough: 3,
+        fire: 4.59,
+        plain: "It climbs faster than the Thunderbolt C, has a clear view and can fight nearly 1,000 km from its base. It is still the widest-turning Allied fighter and slow to accelerate low down.",
+        history: "It was the most numerous American fighter in Europe to the end of 1944.",
+        top: 707,
+        wl: 211.5,
+        climb: 16.6,
+        diveLimit: 837,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      p51_a: {
+        short: "Mustang A",
+        name: "North American P-51A Mustang (Allison V-1710-81); RAF Mustang I and II",
+        v: [
+          626,
+          661,
+          637
+        ],
+        c: [
+          15.2,
+          10.7,
+          6
+        ],
+        r: 317,
+        roll: 95,
+        dive: 813,
+        acc: 3,
+        tough: 2,
+        fire: 2.29,
+        plain: "It is the fastest fighter low down, with long range. Above 5,000 m it runs out of power, and it rolls and climbs worse than a Spitfire.",
+        history: "The RAF flew it from 1942 as a low-level fighter and reconnaissance aircraft.",
+        top: 668,
+        wl: 167.6,
+        climb: 15.2,
+        diveLimit: 813,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      p51_bc: {
+        short: "Mustang B",
+        name: "North American P-51B / P-51C Mustang (RAF Mustang III), Packard Merlin",
+        v: [
+          616,
+          681,
+          704
+        ],
+        c: [
+          18.3,
+          18.3,
+          18.2
+        ],
+        r: 365,
+        roll: 95,
+        dive: 813,
+        acc: 3,
+        tough: 2,
+        fire: 2.29,
+        plain: "It is 50 to 80 km/h faster than a Bf 109 G or Fw 190 A at height, out-dives them and can fight far from its base. A Spitfire out-climbs and out-turns it, and an Fw 190 out-rolls it.",
+        history: "It could fly to Berlin and back, and only the 354th Group had it in December 1943.",
+        top: 711,
+        wl: 192.8,
+        climb: 18.3,
+        diveLimit: 813,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      p51_d: {
+        short: "Mustang D",
+        name: "North American P-51D Mustang (RAF Mustang IV)",
+        v: [
+          626,
+          683,
+          708
+        ],
+        c: [
+          17.3,
+          17.3,
+          14.6
+        ],
+        r: 384,
+        roll: 95,
+        dive: 813,
+        acc: 3,
+        tough: 2,
+        fire: 3.44,
+        plain: "It is fast at every height, dives fast and can fight 1,200 km from its base. It climbs and turns worse than a Spitfire, and ground fire brings it down easily.",
+        history: "It won the Allies daylight command of the air over Germany.",
+        top: 711,
+        wl: 202.8,
+        climb: 17.3,
+        diveLimit: 813,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      p80a: {
+        short: "Shooting Star",
+        name: "Lockheed P-80A Shooting Star (what-if in combat)",
+        v: [
+          881,
+          879,
+          857
+        ],
+        c: [
+          21.9,
+          16.1,
+          11.2
+        ],
+        r: 437,
+        roll: 90,
+        dive: 950,
+        acc: 3,
+        tough: 2,
+        fire: 3.44,
+        plain: "It is a fast, clean jet fighter with six heavy machine guns. Its early engines are unreliable and it is slow to accelerate.",
+        history: "Four reached Italy in 1945 and none fought.",
+        top: 898,
+        wl: 240.1,
+        climb: 23,
+        diveLimit: 950,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1945
+      },
+      re2000: {
+        short: "Re.2000",
+        name: "Reggiane Re.2000 (Héja, J 20)",
+        v: [
+          457,
+          516,
+          507
+        ],
+        c: [
+          15,
+          13.7,
+          8.1
+        ],
+        r: 254,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 1,
+        fire: 0.61,
+        plain: "It is a light, agile radial fighter. It carries only two guns.",
+        history: "Hungary built its own as the Héja, and Sweden flew it as the J 20.",
+        top: 530,
+        wl: 139.2,
+        climb: 15,
+        diveLimit: 700,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      re2001: {
+        short: "Re.2001",
+        name: "Reggiane Re.2001 Falco II",
+        v: [
+          457,
+          523,
+          520
+        ],
+        c: [
+          13,
+          12.1,
+          7
+        ],
+        r: 293,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 0.93,
+        plain: "It is agile, with a big wing and good range. On the same engine it is much slower than a Folgore, and no better armed.",
+        history: "It flew over Malta in 1942.",
+        top: 542,
+        wl: 160.8,
+        climb: 13,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      re2005: {
+        short: "Sagittario",
+        name: "Reggiane Re.2005 Sagittario",
+        v: [
+          497,
+          574,
+          621
+        ],
+        c: [
+          20,
+          20,
+          13.8
+        ],
+        r: 322,
+        roll: 85,
+        dive: 800,
+        acc: 2,
+        tough: 2,
+        fire: 4.39,
+        plain: "It is perhaps the best-handling Italian fighter, fast and heavily armed. Its tail is suspect in fast dives.",
+        history: "Only 48 were built.",
+        top: 628,
+        wl: 177,
+        climb: 20,
+        diveLimit: 800,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1943
+      },
+      sea_hurricane_ib: {
+        short: "Sea Hurricane",
+        name: "Hawker Sea Hurricane Mk IB",
+        v: [
+          420,
+          481,
+          475
+        ],
+        c: [
+          12.5,
+          11.3,
+          5.7
+        ],
+        r: 243,
+        roll: 64,
+        dive: 628,
+        acc: 1.5,
+        tough: 2,
+        fire: 1.73,
+        plain: "It is handy and tough and climbs well for a carrier fighter. It is slow by land standards and short-ranged, and its wings do not fold.",
+        history: "It gave the Royal Navy a real single-seat fighter in 1941-42, on the Malta and Arctic convoys.",
+        top: 496,
+        wl: 138.4,
+        climb: 12.5,
+        diveLimit: 628,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      seafire_l2c: {
+        short: "Seafire II",
+        name: "Supermarine Seafire L Mk IIC (Merlin 32)",
+        v: [
+          532,
+          527,
+          507
+        ],
+        c: [
+          21.8,
+          14.3,
+          7.8
+        ],
+        r: 257,
+        roll: 90,
+        dive: 724,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It is a fleet interceptor: 507 km/h at sea level and a climb of nearly 24 m/s. It has two hours of fuel, no folding wings and a fragile undercarriage.",
+        history: "It covered the Salerno landings in 1943.",
+        top: 546,
+        wl: 141.1,
+        climb: 23.8,
+        diveLimit: 724,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      seafire_l3: {
+        short: "Seafire III",
+        name: "Supermarine Seafire L Mk III (Merlin 55M)",
+        v: [
+          561,
+          566,
+          552
+        ],
+        c: [
+          15.5,
+          10.4,
+          6
+        ],
+        r: 265,
+        roll: 90,
+        dive: 724,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It is a superb low-level interceptor: 578 km/h at 1,800 m and a climb of 16.5 m/s. It is short-ranged, and its undercarriage is too weak for carrier decks.",
+        history: "It flew with the British Pacific Fleet in 1945.",
+        top: 578,
+        wl: 145.8,
+        climb: 16.5,
+        diveLimit: 724,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      seversky_j9: {
+        short: "Seversky",
+        name: "Seversky EP-106 (J 9)",
+        v: [
+          442,
+          484,
+          457
+        ],
+        c: [
+          12,
+          9.6,
+          4.6
+        ],
+        r: 237,
+        roll: 70,
+        dive: 700,
+        acc: 2,
+        tough: 1,
+        fire: 1.44,
+        plain: "It is a sturdy, long-ranged monoplane, the P-35's cousin. It is slow beside the newer fighters.",
+        history: "Sweden received 60 before the American export ban of 1940 stopped the rest.",
+        top: 485,
+        wl: 129.9,
+        climb: 12,
+        diveLimit: 700,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      spitfire_i: {
+        short: "Spitfire I",
+        name: "Supermarine Spitfire Mk I (Merlin III)",
+        v: [
+          526,
+          574,
+          552
+        ],
+        c: [
+          14.7,
+          10.7,
+          5.9
+        ],
+        r: 223,
+        roll: 70,
+        dive: 724,
+        acc: 2,
+        tough: 1.5,
+        fire: 1.73,
+        plain: "It turns better than any other monoplane and is as fast as a Bf 109 E. Its engine cuts out if it pushes straight over into a dive, it carries only rifle-calibre guns and it has little fuel.",
+        history: "About 19 Spitfire squadrons fought the Battle of Britain beside about 30 of Hurricanes.",
+        top: 578,
+        wl: 122.5,
+        climb: 14.7,
+        diveLimit: 724,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1938
+      },
+      spitfire_ix: {
+        short: "Spitfire IX",
+        name: "Supermarine Spitfire F Mk IX (Merlin 61) and LF Mk IX (Merlin 66)",
+        v: [
+          565,
+          631,
+          654
+        ],
+        c: [
+          19.6,
+          19.6,
+          18.2
+        ],
+        r: 275,
+        roll: 90,
+        dive: 724,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It matches an Fw 190 A and a Bf 109 G for speed, out-climbs them high and out-turns both. It cannot follow them down in a dive or fly far from its base.",
+        history: "It came in July 1942 and put the RAF level with the Fw 190 again.",
+        top: 658,
+        wl: 150.8,
+        climb: 19.6,
+        diveLimit: 724,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      spitfire_v: {
+        short: "Spitfire V",
+        name: "Supermarine Spitfire Mk VB / VC (Merlin 45)",
+        v: [
+          525,
+          577,
+          590
+        ],
+        c: [
+          14.3,
+          14.3,
+          8.8
+        ],
+        r: 241,
+        roll: 90,
+        dive: 724,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It is a Spitfire I with cannon and 40% more power, a match for a Bf 109 F. An Fw 190 A beats it in everything except the turn.",
+        history: "It was the RAF's main fighter of 1941-42, from the Channel to Malta.",
+        top: 604,
+        wl: 132.1,
+        climb: 14.3,
+        diveLimit: 724,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1941
+      },
+      spitfire_v_trop: {
+        short: "Tropical Spitfire V",
+        name: "Supermarine Spitfire V (tropical, Vokes filter)",
+        v: [
+          510,
+          562,
+          575
+        ],
+        c: [
+          13.5,
+          13.5,
+          8.3
+        ],
+        r: 241,
+        roll: 90,
+        dive: 724,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It is a Spitfire V with a dust filter for the desert and the tropics. The filter costs it about 15 km/h and some climb.",
+        history: "It was the Spitfire of Malta, the desert, Burma and Darwin in 1942-43.",
+        top: 589,
+        wl: 132.1,
+        climb: 13.5,
+        diveLimit: 724,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      spitfire_xiv: {
+        short: "Spitfire XIV",
+        name: "Supermarine Spitfire F Mk XIV (Griffon 65)",
+        v: [
+          616,
+          681,
+          716
+        ],
+        c: [
+          23.3,
+          23.3,
+          19.9
+        ],
+        r: 310,
+        roll: 90,
+        dive: 756,
+        acc: 2,
+        tough: 2,
+        fire: 3.47,
+        plain: "It climbs and turns better than any other Allied fighter, with speed to match anything with a propeller. It cannot go far, and it is the slowest Allied fighter in a dive.",
+        history: "It came from January 1944 and hunted flying bombs and jets.",
+        top: 721,
+        wl: 170.1,
+        climb: 23.3,
+        diveLimit: 756,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      tempest_v: {
+        short: "Tempest",
+        name: "Hawker Tempest Mk V (Sabre IIA / IIB)",
+        v: [
+          633,
+          685,
+          667
+        ],
+        c: [
+          22.3,
+          21,
+          11.3
+        ],
+        r: 333,
+        roll: 100,
+        dive: 869,
+        acc: 3,
+        tough: 2.5,
+        fire: 5.2,
+        plain: "It is the fastest propeller fighter low down, with superb dive acceleration and four cannon. Above about 6,000 m it fades, and it cannot out-turn a Spitfire or out-roll an Fw 190.",
+        history: "It came from April 1944 and destroyed more flying bombs than any other fighter.",
+        top: 695,
+        wl: 182.7,
+        climb: 22.3,
+        diveLimit: 869,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1944
+      },
+      typhoon_ib: {
+        short: "Typhoon",
+        name: "Hawker Typhoon Mk IB (Sabre IIA)",
+        v: [
+          591,
+          623,
+          644
+        ],
+        c: [
+          19.5,
+          19.3,
+          10.6
+        ],
+        r: 353,
+        roll: 70,
+        dive: 845,
+        acc: 3,
+        tough: 2.5,
+        fire: 5.2,
+        plain: "It is very fast below 3,000 m and a steady platform for four cannon. It climbs poorly high up, and it turns and rolls worse than a Spitfire.",
+        history: "It ended the war as the RAF's main ground-attack fighter, with about 18 to 20 squadrons by June 1944.",
+        top: 665,
+        wl: 193.9,
+        climb: 19.5,
+        diveLimit: 845,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: true
+        },
+        year: 1942
+      },
+      vg33: {
+        short: "VG-33",
+        name: "Arsenal VG-33",
+        v: [
+          471,
+          543,
+          532
+        ],
+        c: [
+          15,
+          13.5,
+          7.8
+        ],
+        r: 377,
+        roll: 75,
+        dive: 800,
+        acc: 2,
+        tough: 1.5,
+        fire: 2.3,
+        plain: "It is a wooden fighter as fast as a Bf 109 E, with a cannon in the propeller hub. It turns wider than a Bf 109 E.",
+        history: "A handful flew before the armistice of June 1940.",
+        top: 558,
+        wl: 207.1,
+        climb: 15,
+        diveLimit: 800,
+        laid: {
+          speed: false,
+          turn: false,
+          climb: false,
+          dive: false
+        },
+        year: 1940
+      },
+      yak1: {
+        short: "Yak-1",
+        name: "Yakovlev Yak-1 (1941, M-105P)",
+        v: [
+          500,
+          568,
+          548
+        ],
+        c: [
+          15.5,
+          13.2,
+          6.7
+        ],
+        r: 303,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 1.86,
+        plain: "It is light on the controls, a good turner and a match for a Bf 109 E. It never climbs with a Bf 109 F or G.",
+        history: "It was the best Soviet fighter of 1941.",
+        top: 577,
+        wl: 166.6,
+        climb: 15.5,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: false,
+          dive: false
+        },
+        year: 1941
+      },
+      yak3: {
+        short: "Yak-3",
+        name: "Yakovlev Yak-3 (VK-105PF2)",
+        v: [
+          586,
+          641,
+          602
+        ],
+        c: [
+          20.8,
+          16.1,
+          8.7
+        ],
+        r: 331,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It is a superb low-level dogfighter: 646 km/h at 4,100 m, 5,000 m in four and a half minutes and a full circle in about 18 seconds. It has short range, a light structure and little to offer above 5,000 m.",
+        history: "It came to the front in mid-1944.",
+        top: 646,
+        wl: 181.6,
+        climb: 20.8,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      },
+      yak7b: {
+        short: "Yak-7B",
+        name: "Yakovlev Yak-7B (M-105PF)",
+        v: [
+          546,
+          580,
+          545
+        ],
+        c: [
+          14.2,
+          10.6,
+          5.6
+        ],
+        r: 319,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It is a steady, well-armed low-level fighter that matches a Bf 109 G at ground level. Above 4,000 m it falls behind in speed and climb.",
+        history: "It came to the front in 1942.",
+        top: 588,
+        wl: 175.2,
+        climb: 14.2,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      yak9: {
+        short: "Yak-9",
+        name: "Yakovlev Yak-9 (1942-43, M-105PF)",
+        v: [
+          542,
+          597,
+          561
+        ],
+        c: [
+          18.4,
+          14.9,
+          8.7
+        ],
+        r: 305,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 1.92,
+        plain: "It out-turns every German fighter and matches them for speed at ground level. It is lightly armed and loses its edge above 4,000 m.",
+        history: "It became the most-built Soviet fighter of the war.",
+        top: 599,
+        wl: 167.5,
+        climb: 18.4,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1942
+      },
+      yak9d: {
+        short: "Yak-9D",
+        name: "Yakovlev Yak-9D (long range, M-105PF)",
+        v: [
+          550,
+          581,
+          545
+        ],
+        c: [
+          15.4,
+          10.6,
+          4.5
+        ],
+        r: 331,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 1.92,
+        plain: "It trades climb and turn for range and can fly 1,360 km. It is only an even match for a Bf 109 G low down, and worse above 3,500 m.",
+        history: "It escorted Soviet bombers on long raids from 1943.",
+        top: 591,
+        wl: 181.7,
+        climb: 15.4,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1943
+      },
+      yak9u: {
+        short: "Yak-9U",
+        name: "Yakovlev Yak-9U (VK-107A)",
+        v: [
+          594,
+          662,
+          638
+        ],
+        c: [
+          18.8,
+          16.4,
+          9.1
+        ],
+        r: 340,
+        roll: 85,
+        dive: 700,
+        acc: 2,
+        tough: 2,
+        fire: 2.56,
+        plain: "It has a 1,500 hp engine and reaches 672 km/h. Its engine is unreliable, and its test figures come from prepared aircraft.",
+        history: "It came to the front from late 1944.",
+        top: 672,
+        wl: 186.8,
+        climb: 18.8,
+        diveLimit: 700,
+        laid: {
+          speed: true,
+          turn: true,
+          climb: true,
+          dive: false
+        },
+        year: 1944
+      }
+    },
+    ladders: {
+      GER: {
+        clock: "research",
+        history: [
+          [
+            "1939-08",
+            {
+              bf109_e: 0.9,
+              bf110_c: 0.1
+            }
+          ],
+          [
+            "1940-05",
+            {
+              bf109_e: 0.75,
+              bf110_c: 0.25
+            }
+          ],
+          [
+            "1941-03",
+            {
+              bf109_f4: 0.85,
+              bf110_c: 0.15
+            }
+          ],
+          [
+            "1941-09",
+            {
+              bf109_f4: 0.8,
+              fw190_a3: 0.1,
+              bf110_c: 0.1
+            }
+          ],
+          [
+            "1942-01",
+            {
+              bf109_f4: 0.75,
+              fw190_a3: 0.15,
+              bf110_c: 0.1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              bf109_g2: 0.7,
+              fw190_a3: 0.3
+            }
+          ],
+          [
+            "1943-06",
+            {
+              bf109_g6: 0.6,
+              fw190_a8: 0.4
+            }
+          ],
+          [
+            "1944-09",
+            {
+              bf109_g6: 0.55,
+              fw190_a8: 0.4,
+              fw190_d9: 0.03,
+              me262_a1a: 0.02
+            }
+          ],
+          [
+            "1945-01",
+            {
+              bf109_g6: 0.35,
+              bf109_k4: 0.2,
+              fw190_a8: 0.2,
+              fw190_d9: 0.2,
+              me262_a1a: 0.05
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                bf109_e: 0.9,
+                bf110_c: 0.1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                bf109_e: 0.9,
+                bf110_c: 0.1
+              }
+            ],
+            [
+              9,
+              {
+                bf109_e: 0.75,
+                bf110_c: 0.25
+              }
+            ],
+            [
+              19,
+              {
+                bf109_f4: 0.85,
+                bf110_c: 0.15
+              }
+            ],
+            [
+              25,
+              {
+                bf109_f4: 0.8,
+                fw190_a3: 0.1,
+                bf110_c: 0.1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                bf109_g2: 0.7,
+                fw190_a3: 0.3
+              }
+            ],
+            [
+              12,
+              {
+                bf109_g6: 0.6,
+                fw190_a8: 0.4
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.55,
+                fw190_a8: 0.4,
+                fw190_d9: 0.03,
+                me262_a1a: 0.02
+              }
+            ],
+            [
+              4,
+              {
+                bf109_g6: 0.35,
+                bf109_k4: 0.2,
+                fw190_a8: 0.2,
+                fw190_d9: 0.2,
+                me262_a1a: 0.05
+              }
+            ]
+          ]
+        }
+      },
+      UK: {
+        clock: "research",
+        history: [
+          [
+            "1939-08",
+            {
+              hurricane_i: 0.6,
+              spitfire_i: 0.4
+            }
+          ],
+          [
+            "1941-02",
+            {
+              spitfire_v: 0.45,
+              hurricane_ii: 0.45,
+              p40_bc: 0.1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 0.5,
+              spitfire_ix: 0.1,
+              hurricane_ii: 0.2,
+              p40_e: 0.1,
+              typhoon_ib: 0.1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 0.55,
+              spitfire_v: 0.1,
+              typhoon_ib: 0.25,
+              spitfire_xiv: 0.05,
+              tempest_v: 0.05
+            }
+          ],
+          [
+            "1944-07",
+            {
+              spitfire_ix: 0.43,
+              typhoon_ib: 0.25,
+              spitfire_xiv: 0.15,
+              tempest_v: 0.15,
+              meteor3: 0.02
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 0.5,
+                hurricane_i: 0.5
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.6,
+                spitfire_i: 0.4
+              }
+            ],
+            [
+              18,
+              {
+                spitfire_v: 0.45,
+                hurricane_ii: 0.45,
+                p40_bc: 0.1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 0.5,
+                spitfire_ix: 0.1,
+                hurricane_ii: 0.2,
+                p40_e: 0.1,
+                typhoon_ib: 0.1
+              }
+            ],
+            [
+              18,
+              {
+                spitfire_ix: 0.55,
+                spitfire_v: 0.1,
+                typhoon_ib: 0.25,
+                spitfire_xiv: 0.05,
+                tempest_v: 0.05
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.55,
+                spitfire_v: 0.1,
+                typhoon_ib: 0.25,
+                spitfire_xiv: 0.05,
+                tempest_v: 0.05
+              }
+            ],
+            [
+              6,
+              {
+                spitfire_ix: 0.43,
+                typhoon_ib: 0.25,
+                spitfire_xiv: 0.15,
+                tempest_v: 0.15,
+                meteor3: 0.02
+              }
+            ]
+          ]
+        },
+        deck: [
+          [
+            "1939-08",
+            {
+              fulmar_ii: 1
+            }
+          ],
+          [
+            "1941-07",
+            {
+              sea_hurricane_ib: 0.5,
+              martlet_ii: 0.5
+            }
+          ],
+          [
+            "1943-05",
+            {
+              seafire_l2c: 0.5,
+              martlet_ii: 0.5
+            }
+          ],
+          [
+            "1944-01",
+            {
+              seafire_l3: 0.3,
+              f6f5: 0.4,
+              f4u1d: 0.3
+            }
+          ]
+        ]
+      },
+      USA: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              p36a: 0.8,
+              p26a: 0.2
+            }
+          ],
+          [
+            "1940-06",
+            {
+              p36a: 0.6,
+              p40_bc: 0.4
+            }
+          ],
+          [
+            "1942-01",
+            {
+              p40_e: 0.55,
+              p39d: 0.35,
+              p38_fg: 0.1
+            }
+          ],
+          [
+            "1942-10",
+            {
+              p40_e: 0.45,
+              p39d: 0.3,
+              p38_fg: 0.25
+            }
+          ],
+          [
+            "1943-04",
+            {
+              p40_e: 0.35,
+              p39d: 0.15,
+              p38_fg: 0.25,
+              p47_cd: 0.25
+            }
+          ],
+          [
+            "1943-12",
+            {
+              p47_cd: 0.4,
+              p38_jl: 0.25,
+              p40n: 0.15,
+              p39d: 0.1,
+              p51_bc: 0.1
+            }
+          ],
+          [
+            "1944-03",
+            {
+              p47_cd: 0.4,
+              p51_bc: 0.25,
+              p38_jl: 0.2,
+              p40n: 0.1,
+              p39d: 0.05
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p47_d25: 0.4,
+              p51_d: 0.2,
+              p51_bc: 0.15,
+              p38_jl: 0.2,
+              p40n: 0.05
+            }
+          ],
+          [
+            "1945-01",
+            {
+              p51_d: 0.5,
+              p47_d25: 0.35,
+              p38_jl: 0.15
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p36a: 0.6,
+                p26a: 0.4
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 0.8,
+                p26a: 0.2
+              }
+            ],
+            [
+              10,
+              {
+                p36a: 0.6,
+                p40_bc: 0.4
+              }
+            ],
+            [
+              29,
+              {
+                p40_e: 0.55,
+                p39d: 0.35,
+                p38_fg: 0.1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 0.35,
+                p39d: 0.15,
+                p38_fg: 0.25,
+                p47_cd: 0.25
+              }
+            ],
+            [
+              8,
+              {
+                p47_cd: 0.4,
+                p38_jl: 0.25,
+                p40n: 0.15,
+                p39d: 0.1,
+                p51_bc: 0.1
+              }
+            ],
+            [
+              11,
+              {
+                p47_cd: 0.4,
+                p51_bc: 0.25,
+                p38_jl: 0.2,
+                p40n: 0.1,
+                p39d: 0.05
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 0.4,
+                p51_d: 0.2,
+                p51_bc: 0.15,
+                p38_jl: 0.2,
+                p40n: 0.05
+              }
+            ],
+            [
+              7,
+              {
+                p51_d: 0.5,
+                p47_d25: 0.3,
+                p38_jl: 0.15,
+                p80a: 0.05
+              }
+            ]
+          ]
+        },
+        deck: [
+          [
+            "1939-08",
+            {
+              f2a3: 1
+            }
+          ],
+          [
+            "1940-12",
+            {
+              f4f3: 0.7,
+              f2a3: 0.3
+            }
+          ],
+          [
+            "1942-05",
+            {
+              f4f4: 1
+            }
+          ],
+          [
+            "1943-08",
+            {
+              f6f3: 0.8,
+              f4f4: 0.2
+            }
+          ],
+          [
+            "1944-07",
+            {
+              f6f5: 0.8,
+              fm2: 0.2
+            }
+          ],
+          [
+            "1945-01",
+            {
+              f6f5: 0.65,
+              f4u1d: 0.2,
+              fm2: 0.15
+            }
+          ]
+        ]
+      },
+      FRA: {
+        clock: "research",
+        history: [
+          [
+            "1939-08",
+            {
+              ms406: 0.55,
+              hawk75a: 0.25,
+              mb152: 0.2
+            }
+          ],
+          [
+            "1940-05",
+            {
+              ms406: 0.45,
+              mb152: 0.25,
+              hawk75a: 0.2,
+              d520: 0.1
+            }
+          ],
+          [
+            "1940-11",
+            {
+              d520: 0.4,
+              vg33: 0.25,
+              hawk75a: 0.15,
+              p40_bc: 0.2
+            }
+          ],
+          [
+            "1941-09",
+            {
+              d551: 0.45,
+              d520: 0.2,
+              vg33: 0.15,
+              p40_bc: 0.2
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                ms406: 0.55,
+                hawk75a: 0.25,
+                mb152: 0.2
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                ms406: 0.45,
+                mb152: 0.25,
+                hawk75a: 0.2,
+                d520: 0.1
+              }
+            ],
+            [
+              6,
+              {
+                d520: 0.4,
+                vg33: 0.25,
+                hawk75a: 0.15,
+                p40_bc: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                d551: 0.45,
+                d520: 0.2,
+                vg33: 0.15,
+                p40_bc: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                d551: 0.6,
+                vg33: 0.2,
+                p40_e: 0.2
+              }
+            ]
+          ]
+        }
+      },
+      ITA: {
+        clock: "research",
+        history: [
+          [
+            "1939-08",
+            {
+              cr42: 0.6,
+              g50: 0.25,
+              mc200: 0.15
+            }
+          ],
+          [
+            "1940-09",
+            {
+              cr42: 0.5,
+              mc200: 0.25,
+              g50: 0.25
+            }
+          ],
+          [
+            "1941-11",
+            {
+              mc200: 0.45,
+              cr42: 0.25,
+              g50: 0.15,
+              mc202: 0.15
+            }
+          ],
+          [
+            "1942-06",
+            {
+              mc202: 0.4,
+              mc200: 0.4,
+              cr42: 0.2
+            }
+          ],
+          [
+            "1943-04",
+            {
+              mc202: 0.6,
+              mc200: 0.15,
+              mc205v: 0.1,
+              g55: 0.05,
+              bf109_g6: 0.1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                cr42: 0.6,
+                g50: 0.25,
+                mc200: 0.15
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                cr42: 0.5,
+                mc200: 0.25,
+                g50: 0.25
+              }
+            ],
+            [
+              14,
+              {
+                mc200: 0.45,
+                cr42: 0.25,
+                g50: 0.15,
+                mc202: 0.15
+              }
+            ],
+            [
+              21,
+              {
+                mc202: 0.4,
+                mc200: 0.4,
+                cr42: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                mc202: 0.6,
+                mc200: 0.15,
+                mc205v: 0.1,
+                g55: 0.05,
+                bf109_g6: 0.1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                mc205v: 0.35,
+                g55: 0.35,
+                re2005: 0.3
+              }
+            ]
+          ]
+        }
+      },
+      SOV: {
+        clock: "research",
+        history: [
+          [
+            "1939-08",
+            {
+              i16_24: 0.65,
+              i153: 0.35
+            }
+          ],
+          [
+            "1941-06",
+            {
+              i16_24: 0.45,
+              i153: 0.25,
+              mig3: 0.2,
+              yak1: 0.05,
+              lagg3: 0.05
+            }
+          ],
+          [
+            "1942-01",
+            {
+              i16_24: 0.3,
+              lagg3: 0.25,
+              yak1: 0.2,
+              mig3: 0.15,
+              i153: 0.05,
+              hurricane_iib_vvs: 0.05
+            }
+          ],
+          [
+            "1942-10",
+            {
+              yak1: 0.3,
+              lagg3: 0.25,
+              yak7b: 0.15,
+              la5: 0.1,
+              hurricane_iib_vvs: 0.05,
+              p39n_vvs: 0.05,
+              p40_e: 0.05,
+              i16_24: 0.05
+            }
+          ],
+          [
+            "1943-07",
+            {
+              la5fn: 0.25,
+              yak9: 0.3,
+              p39n_vvs: 0.15,
+              yak1: 0.15,
+              yak7b: 0.15
+            }
+          ],
+          [
+            "1944-07",
+            {
+              yak9: 0.4,
+              la5fn: 0.3,
+              p39n_vvs: 0.15,
+              yak1: 0.05,
+              yak7b: 0.05,
+              yak3: 0.05
+            }
+          ],
+          [
+            "1945-01",
+            {
+              yak9: 0.25,
+              yak9u: 0.1,
+              la5fn: 0.2,
+              yak3: 0.15,
+              la7: 0.15,
+              p39n_vvs: 0.15
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                i16_24: 0.65,
+                i153: 0.35
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                i16_24: 0.45,
+                i153: 0.25,
+                mig3: 0.2,
+                yak1: 0.05,
+                lagg3: 0.05
+              }
+            ],
+            [
+              7,
+              {
+                i16_24: 0.3,
+                lagg3: 0.25,
+                yak1: 0.2,
+                mig3: 0.15,
+                i153: 0.05,
+                hurricane_iib_vvs: 0.05
+              }
+            ],
+            [
+              16,
+              {
+                yak1: 0.3,
+                lagg3: 0.25,
+                yak7b: 0.15,
+                la5: 0.1,
+                hurricane_iib_vvs: 0.05,
+                p39n_vvs: 0.05,
+                p40_e: 0.05,
+                i16_24: 0.05
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                la5fn: 0.25,
+                yak9: 0.3,
+                p39n_vvs: 0.15,
+                yak1: 0.15,
+                yak7b: 0.15
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                yak9: 0.4,
+                la5fn: 0.3,
+                p39n_vvs: 0.15,
+                yak1: 0.05,
+                yak7b: 0.05,
+                yak3: 0.05
+              }
+            ],
+            [
+              6,
+              {
+                yak9: 0.25,
+                yak9u: 0.1,
+                la5fn: 0.2,
+                yak3: 0.15,
+                la7: 0.15,
+                p39n_vvs: 0.15
+              }
+            ]
+          ]
+        }
+      },
+      POL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              p11c: 1
+            }
+          ],
+          [
+            "1940-06",
+            {
+              hurricane_i: 0.5,
+              spitfire_i: 0.5
+            }
+          ],
+          [
+            "1941-02",
+            {
+              spitfire_v: 0.7,
+              hurricane_ii: 0.3
+            }
+          ],
+          [
+            "1943-01",
+            {
+              spitfire_ix: 0.5,
+              spitfire_v: 0.5
+            }
+          ],
+          [
+            "1944-03",
+            {
+              spitfire_ix: 0.6,
+              p51_bc: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p11c: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.5,
+                ms406: 0.3,
+                p11c: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 0.6,
+                spitfire_ix: 0.4
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.6,
+                p51_bc: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      BEL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              cr42: 0.45,
+              gladiator: 0.3,
+              hurricane_i: 0.25
+            }
+          ],
+          [
+            "1941-06",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 0.6,
+              tempest_v: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                cr42: 0.45,
+                gladiator: 0.3,
+                hurricane_i: 0.25
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.7,
+                cr42: 0.3
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.6,
+                tempest_v: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      NED: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              d21: 0.6,
+              fokker_g1: 0.4
+            }
+          ],
+          [
+            "1941-06",
+            {
+              hawk75a: 0.5,
+              f2a3: 0.5
+            }
+          ],
+          [
+            "1943-01",
+            {
+              spitfire_v: 0.5,
+              p40n: 0.5
+            }
+          ],
+          [
+            "1944-06",
+            {
+              spitfire_ix: 0.6,
+              p40n: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                d21: 0.6,
+                fokker_g1: 0.4
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hawk75a: 0.5,
+                f2a3: 0.5
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 0.5,
+                p40n: 0.5
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.6,
+                p40n: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      LUX: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1941-01",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      DEN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gauntlet: 0.6,
+              d21: 0.4
+            }
+          ],
+          [
+            "1941-01",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gauntlet: 0.6,
+                d21: 0.4
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.6,
+                d21: 0.4
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      NOR: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1941-06",
+            {
+              hurricane_i: 0.5,
+              spitfire_v: 0.5
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hawk75a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      SWE: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1940-07",
+            {
+              seversky_j9: 0.35,
+              re2000: 0.35,
+              cr42: 0.3
+            }
+          ],
+          [
+            "1943-11",
+            {
+              j22: 0.6,
+              re2000: 0.2,
+              seversky_j9: 0.2
+            }
+          ],
+          [
+            "1945-04",
+            {
+              j22: 0.6,
+              p51_d: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                seversky_j9: 0.35,
+                re2000: 0.35,
+                cr42: 0.3
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                j22: 0.6,
+                re2000: 0.2,
+                seversky_j9: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                j22: 0.6,
+                p51_d: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      FIN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              d21: 0.75,
+              bulldog: 0.25
+            }
+          ],
+          [
+            "1940-02",
+            {
+              d21: 0.6,
+              gladiator: 0.15,
+              bulldog: 0.1,
+              g50: 0.15
+            }
+          ],
+          [
+            "1940-03",
+            {
+              d21: 0.35,
+              g50: 0.25,
+              b239: 0.25,
+              ms406: 0.15
+            }
+          ],
+          [
+            "1941-07",
+            {
+              b239: 0.4,
+              g50: 0.2,
+              hawk75a: 0.2,
+              ms406: 0.2
+            }
+          ],
+          [
+            "1943-03",
+            {
+              b239: 0.35,
+              hawk75a: 0.25,
+              ms406: 0.25,
+              bf109_g2: 0.15
+            }
+          ],
+          [
+            "1944-01",
+            {
+              bf109_g6: 0.4,
+              b239: 0.25,
+              hawk75a: 0.2,
+              ms406: 0.15
+            }
+          ],
+          [
+            "1944-06",
+            {
+              bf109_g6: 0.65,
+              b239: 0.15,
+              hawk75a: 0.2
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                d21: 0.75,
+                bulldog: 0.25
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                b239: 0.45,
+                g50: 0.25,
+                hawk75a: 0.15,
+                ms406: 0.15
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                b239: 0.35,
+                hawk75a: 0.25,
+                ms406: 0.25,
+                bf109_g2: 0.15
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.7,
+                b239: 0.15,
+                hawk75a: 0.15
+              }
+            ]
+          ]
+        }
+      },
+      EST: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              bulldog: 1
+            }
+          ],
+          [
+            "1941-01",
+            {
+              spitfire_i: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                bulldog: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                spitfire_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      LAT: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1941-01",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      LIT: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 0.5,
+              d501: 0.5
+            }
+          ],
+          [
+            "1941-01",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              spitfire_v: 1
+            }
+          ],
+          [
+            "1944-01",
+            {
+              spitfire_ix: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 0.5,
+                d501: 0.5
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      IRL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1941-01",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1943-06",
+            {
+              hurricane_ii: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                hurricane_ii: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                hurricane_ii: 0.6,
+                spitfire_ix: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      SUI: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              bf109_e: 0.55,
+              d3801: 0.45
+            }
+          ],
+          [
+            "1944-05",
+            {
+              bf109_e: 0.3,
+              d3801: 0.5,
+              bf109_g6: 0.2
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                bf109_e: 0.55,
+                d3801: 0.45
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                bf109_e: 0.5,
+                d3801: 0.5
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                bf109_e: 0.4,
+                d3801: 0.4,
+                bf109_g6: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.5,
+                d3801: 0.5
+              }
+            ]
+          ]
+        }
+      },
+      ESP: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              cr32: 0.5,
+              i16_10: 0.25,
+              bf109_e: 0.25
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                cr32: 0.5,
+                i16_10: 0.25,
+                bf109_e: 0.25
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                bf109_e: 0.5,
+                cr32: 0.3,
+                i16_10: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                bf109_f4: 0.5,
+                bf109_e: 0.3,
+                cr32: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.5,
+                fw190_a8: 0.5
+              }
+            ]
+          ]
+        }
+      },
+      POR: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ],
+          [
+            "1943-01",
+            {
+              hurricane_ii: 0.35,
+              spitfire_i: 0.3,
+              hawk75a: 0.15,
+              gladiator: 0.1,
+              p39d: 0.1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              spitfire_v: 0.5,
+              hurricane_ii: 0.5
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.5,
+                hawk75a: 0.5
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                hurricane_ii: 0.5,
+                spitfire_i: 0.5
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_v: 0.6,
+                hurricane_ii: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      HUN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              cr32: 0.5,
+              cr42: 0.5
+            }
+          ],
+          [
+            "1941-06",
+            {
+              re2000: 0.6,
+              cr42: 0.4
+            }
+          ],
+          [
+            "1942-06",
+            {
+              bf109_f4: 0.4,
+              re2000: 0.4,
+              bf109_g2: 0.2
+            }
+          ],
+          [
+            "1944-03",
+            {
+              bf109_g6: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                cr32: 0.5,
+                cr42: 0.5
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                re2000: 0.6,
+                cr42: 0.4
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                bf109_f4: 0.4,
+                bf109_g2: 0.4,
+                re2000: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 1
+              }
+            ]
+          ]
+        }
+      },
+      ROM: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              p24: 0.6,
+              p11c: 0.4
+            }
+          ],
+          [
+            "1941-06",
+            {
+              iar80: 0.3,
+              bf109_e: 0.2,
+              p24: 0.2,
+              p11c: 0.2,
+              hurricane_i: 0.1
+            }
+          ],
+          [
+            "1943-01",
+            {
+              iar81c: 0.5,
+              bf109_g2: 0.5
+            }
+          ],
+          [
+            "1944-07",
+            {
+              bf109_g6: 0.7,
+              iar81c: 0.3
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p24: 0.6,
+                p11c: 0.4
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                iar80: 0.3,
+                bf109_e: 0.2,
+                p24: 0.2,
+                p11c: 0.2,
+                hurricane_i: 0.1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                iar81c: 0.5,
+                bf109_g2: 0.5
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.7,
+                iar81c: 0.3
+              }
+            ]
+          ]
+        }
+      },
+      YUG: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              bf109_e: 0.4,
+              hurricane_i: 0.35,
+              fury: 0.2,
+              ik3: 0.05
+            }
+          ],
+          [
+            "1944-06",
+            {
+              spitfire_v: 0.5,
+              hurricane_ii: 0.5
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                bf109_e: 0.4,
+                hurricane_i: 0.35,
+                fury: 0.2,
+                ik3: 0.05
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                ik3: 0.4,
+                bf109_e: 0.3,
+                hurricane_i: 0.3
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 0.5,
+                hurricane_ii: 0.5
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_v: 0.5,
+                hurricane_ii: 0.5
+              }
+            ]
+          ]
+        }
+      },
+      BUL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              b534: 0.8,
+              p24: 0.2
+            }
+          ],
+          [
+            "1940-10",
+            {
+              b534: 0.75,
+              bf109_e: 0.25
+            }
+          ],
+          [
+            "1943-09",
+            {
+              d520: 0.6,
+              bf109_g2: 0.25,
+              b534: 0.15
+            }
+          ],
+          [
+            "1944-01",
+            {
+              bf109_g6: 0.7,
+              d520: 0.3
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                b534: 0.8,
+                p24: 0.2
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                b534: 0.75,
+                bf109_e: 0.25
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                d520: 0.6,
+                bf109_g2: 0.25,
+                b534: 0.15
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 0.7,
+                d520: 0.3
+              }
+            ]
+          ]
+        }
+      },
+      GRE: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              p24: 0.6,
+              gladiator: 0.25,
+              mb152: 0.15
+            }
+          ],
+          [
+            "1942-01",
+            {
+              hurricane_ii: 1
+            }
+          ],
+          [
+            "1943-06",
+            {
+              spitfire_v: 0.6,
+              hurricane_ii: 0.4
+            }
+          ],
+          [
+            "1944-06",
+            {
+              spitfire_ix: 0.6,
+              spitfire_v: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p24: 0.6,
+                gladiator: 0.25,
+                mb152: 0.15
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.5,
+                gladiator: 0.5
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 0.6,
+                hurricane_ii: 0.4
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.6,
+                spitfire_v: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      TUR: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              p24: 0.5,
+              ms406: 0.3,
+              hurricane_i: 0.2
+            }
+          ],
+          [
+            "1942-10",
+            {
+              fw190_a3: 0.35,
+              hurricane_ii: 0.35,
+              ms406: 0.3
+            }
+          ],
+          [
+            "1944-06",
+            {
+              fw190_a3: 0.4,
+              hurricane_ii: 0.35,
+              spitfire_v: 0.25
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p24: 0.5,
+                ms406: 0.3,
+                hurricane_i: 0.2
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.5,
+                ms406: 0.3,
+                p24: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                fw190_a3: 0.4,
+                hurricane_ii: 0.3,
+                spitfire_v: 0.3
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_v: 0.4,
+                fw190_a3: 0.3,
+                hurricane_ii: 0.3
+              }
+            ]
+          ]
+        }
+      },
+      SVK: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              b534: 1
+            }
+          ],
+          [
+            "1942-07",
+            {
+              b534: 0.5,
+              bf109_e: 0.5
+            }
+          ],
+          [
+            "1943-03",
+            {
+              bf109_g2: 0.6,
+              bf109_e: 0.4
+            }
+          ],
+          [
+            "1944-02",
+            {
+              bf109_g6: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                b534: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                b534: 0.5,
+                bf109_e: 0.5
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                bf109_g2: 0.6,
+                bf109_e: 0.4
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                bf109_g6: 1
+              }
+            ]
+          ]
+        }
+      },
+      IRQ: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              gladiator: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                gladiator: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 1
+              }
+            ]
+          ]
+        }
+      },
+      IRN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              fury: 1
+            }
+          ],
+          [
+            "1941-06",
+            {
+              fury: 0.5,
+              hawk75a: 0.5
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                fury: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hawk75a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                hurricane_ii: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_v: 1
+              }
+            ]
+          ]
+        }
+      },
+      CAN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hurricane_i: 1
+            }
+          ],
+          [
+            "1941-06",
+            {
+              spitfire_v: 0.5,
+              hurricane_ii: 0.3,
+              p40_e: 0.2
+            }
+          ],
+          [
+            "1943-01",
+            {
+              spitfire_ix: 0.6,
+              spitfire_v: 0.2,
+              p40_e: 0.2
+            }
+          ],
+          [
+            "1944-06",
+            {
+              spitfire_ix: 0.8,
+              p51_bc: 0.2
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hurricane_i: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hurricane_i: 0.6,
+                p40_bc: 0.4
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                spitfire_ix: 0.5,
+                spitfire_v: 0.3,
+                p40_e: 0.2
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                spitfire_ix: 0.8,
+                p51_bc: 0.2
+              }
+            ]
+          ]
+        }
+      },
+      MEX: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p40_e: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p47_d25: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      BRA: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              f4b4: 1
+            }
+          ],
+          [
+            "1942-03",
+            {
+              p36a: 0.3,
+              p40_e: 0.7
+            }
+          ],
+          [
+            "1944-09",
+            {
+              p47_d25: 0.6,
+              p40n: 0.4
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                f4b4: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      ARG: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk75o: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk75o: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                hawk75o: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                g55: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                g55: 0.6,
+                meteor3: 0.4
+              }
+            ]
+          ]
+        }
+      },
+      PER: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 0.5,
+              na50: 0.5
+            }
+          ],
+          [
+            "1943-01",
+            {
+              p36a: 0.7,
+              na50: 0.3
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                na50: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 0.7,
+                na50: 0.3
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      CHL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      COL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      VEN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              cr32: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                cr32: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      CUB: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      GUA: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1943-06",
+            {
+              p26a: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                p26a: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      ELS: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      HON: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      NIC: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      COS: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      PAN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      HAI: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      DOM: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      ECU: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      BOL: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      PAR: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              bulldog: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                bulldog: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      URU: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              hawk3: 1
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p36a: 1
+            }
+          ],
+          [
+            "1944-06",
+            {
+              p40_e: 1
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                hawk3: 1
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                p36a: 1
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40_e: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p47_d25: 1
+              }
+            ]
+          ]
+        }
+      },
+      VIC: {
+        clock: "calendar",
+        history: [
+          [
+            "1940-07",
+            {
+              d520: 0.7,
+              hawk75a: 0.3
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                d520: 0.7,
+                hawk75a: 0.3
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                d520: 0.7,
+                hawk75a: 0.3
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                d520: 1
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                d520: 1
+              }
+            ]
+          ]
+        }
+      },
+      JAP: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              ki27: 0.55,
+              a5m4: 0.45
+            }
+          ],
+          [
+            "1941-12",
+            {
+              a6m2_21: 0.45,
+              ki27: 0.35,
+              ki43_i: 0.15,
+              a5m4: 0.05
+            }
+          ],
+          [
+            "1943-06",
+            {
+              a6m2_21: 0.5,
+              ki43_ii: 0.3,
+              ki61_i: 0.1,
+              ki44_ii: 0.05,
+              ki27: 0.05
+            }
+          ],
+          [
+            "1944-08",
+            {
+              a6m5_52: 0.4,
+              ki43_ii: 0.25,
+              ki84: 0.1,
+              ki44_ii: 0.1,
+              ki61_i: 0.1,
+              j2m3: 0.05
+            }
+          ],
+          [
+            "1945-02",
+            {
+              a6m5_52: 0.35,
+              ki43_ii: 0.25,
+              ki84: 0.1,
+              ki44_ii: 0.1,
+              ki61_i: 0.1,
+              n1k2j: 0.05,
+              j2m3: 0.05
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                ki27: 0.55,
+                a5m4: 0.45
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                a6m2_21: 0.45,
+                ki27: 0.35,
+                ki43_i: 0.15,
+                a5m4: 0.05
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                a6m2_21: 0.5,
+                ki43_ii: 0.3,
+                ki61_i: 0.1,
+                ki44_ii: 0.05,
+                ki27: 0.05
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                a6m5_52: 0.4,
+                ki43_ii: 0.25,
+                ki84: 0.1,
+                ki44_ii: 0.1,
+                ki61_i: 0.1,
+                j2m3: 0.05
+              }
+            ],
+            [
+              6,
+              {
+                a6m5_52: 0.35,
+                ki43_ii: 0.25,
+                ki84: 0.1,
+                ki44_ii: 0.1,
+                ki61_i: 0.1,
+                n1k2j: 0.05,
+                j2m3: 0.05
+              }
+            ]
+          ]
+        },
+        deck: [
+          [
+            "1939-08",
+            {
+              a5m4: 1
+            }
+          ],
+          [
+            "1941-06",
+            {
+              a6m2_21: 1
+            }
+          ],
+          [
+            "1943-10",
+            {
+              a6m5_52: 1
+            }
+          ]
+        ]
+      },
+      CHN: {
+        clock: "calendar",
+        history: [
+          [
+            "1939-08",
+            {
+              i16_10: 0.45,
+              i15bis: 0.35,
+              hawk75m: 0.2
+            }
+          ],
+          [
+            "1942-06",
+            {
+              p40b: 0.4,
+              p43a: 0.3,
+              i16_24: 0.3
+            }
+          ],
+          [
+            "1944-03",
+            {
+              p40n: 0.5,
+              p51_bc: 0.5
+            }
+          ]
+        ],
+        rungs: {
+          "0": [
+            [
+              0,
+              {
+                i15bis: 0.4,
+                i16_10: 0.4,
+                hawk75m: 0.2
+              }
+            ]
+          ],
+          "1": [
+            [
+              0,
+              {
+                i16_24: 0.4,
+                p40b: 0.4,
+                p43a: 0.2
+              }
+            ]
+          ],
+          "2": [
+            [
+              0,
+              {
+                p40n: 0.7,
+                p43a: 0.3
+              }
+            ]
+          ],
+          "3": [
+            [
+              0,
+              {
+                p40n: 0.5,
+                p51_bc: 0.5
+              }
+            ]
+          ]
+        }
+      }
+    },
+    law: {
+      _about: "The design director, 23 Nov 2026 06:55Z and 07:00Z (air-battles/dogfight/plan-1123.md): the edge of type A over type B is k times the sum of the log ratios that apply: top speed at rated height always; for a side whose doctrine is the turning fight, wing loading (lower turns tighter; the historian's 14 trial turn times are record tests, never laid); for a side whose doctrine is dive-and-climb, climb and limiting dive speed; pilot training hours. Doctrine only picks the term. A figure not laid makes its term 1. k is one shared power fitted to the historian's fighter-against-fighter exchange anchors from both sides' loss records; until it is fitted it is 0 and no edge is given. No cap but the widest anchor the record gives.",
+      k: 0,
+      fitted: false,
+      widest: null
+    },
+    doctrine: {
+      _about: "Doctrine by nation and month, laid only once read (the historian's held rows are not laid: 07:00Z).",
+      rows: {}
+    },
+    hours: {
+      _about: "Pilot training hours before first combat by nation and month, laid only once read.",
+      rows: {}
+    }
+  };
+
+  // ../../src/battle/air/doctrine.ts
+  var at = (w) => w.year + w.month / 12;
+  var COMMONWEALTH = /* @__PURE__ */ new Set(["UK", "CAN", "AUS", "NZL", "SAF", "IND"]);
+  function designYear(g2, nat, branch) {
+    const year = 1939 + Math.floor((Math.max(1, g2.turn) + 7) / 12);
+    const n = g2.nations[nat];
+    if (n && techRules(g2)) {
+      const done = n.tech?.done ?? TECH.start[nat] ?? [];
+      if (branch === "fighters") return done.includes("escorts") ? Math.max(year, 1943) : Math.min(year, 1941);
+      return done.includes("heavybombers") ? Math.max(year, 1942) : Math.min(year, 1941);
+    }
+    if (n?.lab) return 1939 + Math.floor((Math.max(1, g2.turn + Math.round(n.lab.clock[branch] - n.lab.months)) + 7) / 12);
+    return year;
+  }
+  function fighterOf(nat, design) {
+    if (nat === "GER") return design >= 1942 ? "Fw190" : "Bf109";
+    if (COMMONWEALTH.has(nat)) return design >= 1940 ? "Spitfire" : "Hurricane";
+    if (nat === "USA") return design >= 1944 ? "Mustang" : "Warhawk";
+    if (nat === "SOV") return design >= 1942 ? "Yak" : `Fighter:${nat}`;
+    if (nat === "FRA") return design >= 1940 ? "D520" : `Fighter:${nat}`;
+    if (nat === "ITA") return design >= 1942 ? "C202" : `Fighter:${nat}`;
+    if (nat === "JAP" || nat === "JPN") return "Zero";
+    return `Fighter:${nat}`;
+  }
+  function bomberOf(nat, design) {
+    if (nat === "USA") return "B17";
+    if (nat === "GER") return "He111";
+    if (COMMONWEALTH.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
+    if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
+    if (nat === "SOV") return design >= 1942 ? "Pe2" : `Bomber:${nat}`;
+    if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
+    return `Bomber:${nat}`;
+  }
+  var SINGLE = /* @__PURE__ */ new Set(["B5N", "B6N", "D3A", "D4Y", "TBD", "TBF", "SBD", "SB2C", "Swordfish", "Barracuda", "Skua", "Stuka"]);
+  var enginesOf = (model) => model === "B17" || model === "Lancaster" ? 4 : model === "SM79" ? 3 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
+  function fighterWay(nat, w) {
+    const d = at(w);
+    if (nat === "GER") return { form: "fours", style: "dive" };
+    if (COMMONWEALTH.has(nat)) return { form: d < 1940 + 8 / 12 ? "vic" : d < 1941 + 2 / 12 ? "line" : "fours", style: "turn" };
+    if (nat === "USA") return { form: "fours", style: "dive" };
+    if (nat === "SOV") return { form: d < 1942 + 10 / 12 ? "threes" : "fours", style: "turn" };
+    if (nat === "JAP" || nat === "JPN") return { form: d < 1943 ? "threes" : "fours", style: "turn" };
+    if (nat === "ITA") return { form: d < 1942 ? "threes" : "fours", style: "turn" };
+    return { form: "threes", style: "turn" };
+  }
+  var M = 0.6;
+  var S = 0.3;
+  var R = 0.1;
+  function passesOn(attacker, w, bomber, bomberNat) {
+    const d = at(w);
+    if (attacker === "GER" && bomber === "B17") {
+      if (d < 1942 + 10.75 / 12) return [["astern", M], ["quarter", S], ["below", R]];
+      if (d < 1943 + 3 / 12) return [["headon", M], ["quarter", S], ["astern", R]];
+      if (d < 1944) return [["quarter", M], ["headon", S], ["astern", R]];
+      return [["quarter", 0.4], ["headon", S], ["close", S]];
+    }
+    if (attacker === "GER" && bomber === "Lancaster") return [["quarter", M], ["astern", S], ["below", R]];
+    if (COMMONWEALTH.has(attacker) && bomberNat === "GER" && d < 1942) return [["headon", S], ["beam", S], ["quarter", S], ["below", R]];
+    const four = enginesOf(bomber) === 4;
+    if (attacker === "JAP" || attacker === "JPN") return four ? [["headon", M], ["astern", R], ["beam", R], ["below", R]] : [["astern", S], ["quarter", S], ["beam", S], ["headon", R]];
+    if (attacker === "SOV") return [["quarter", S], ["below", S], ["beam", S], ["headon", R]];
+    if (attacker === "FRA") return [["astern", S], ["quarter", S], ["beam", S], ["headon", R]];
+    if (four) return [["quarter", M], ["astern", S], ["headon", R]];
+    return [["beam", S], ["quarter", S], ["below", S], ["headon", R]];
+  }
+  function pickPass(rng, rows) {
+    const all = rows.reduce((s, [, k]) => s + k, 0);
+    let x = rng.next() * all;
+    for (const [p, k] of rows) {
+      x -= k;
+      if (x < 0) return p;
+    }
+    return rows[rows.length - 1][0];
+  }
+  function escortRoles(nat, w) {
+    const d = at(w);
+    if (nat === "GER") return d < 1940 + 8 / 12 ? ["sweep", "top", "close"] : ["close", "top", "sweep"];
+    if (COMMONWEALTH.has(nat)) return d < 1941 ? ["close", "top"] : ["close", "top", "sweep"];
+    if (nat === "USA") return d < 1944 ? ["close", "top"] : ["sweep", "top", "close"];
+    if (nat === "SOV") return ["close"];
+    if (nat === "ITA") return ["close", "top"];
+    return ["close", "top", "sweep"];
+  }
+
+  // ../../src/campaign/fighters.ts
+  var FIGHTERS = fighters_default;
+  var fighterTypesOn = (g2) => g2.flags.ftrtypes === 1;
+  var bandOf = (m) => m in FIGHTERS.byMission ? FIGHTERS.byMission[m] : "mid";
+  var clip = (x, a = -1, b = 1) => Math.max(a, Math.min(b, x));
+  function edge(a, b, band, docA, docB) {
+    void band;
+    const A = FIGHTERS.types[a], B3 = FIGHTERS.types[b], L2 = FIGHTERS.law;
+    if (!A || !B3 || !L2.k) return 0;
+    const both = (k) => !!(A.laid?.[k] && B3.laid?.[k]);
+    const ln = (x, y) => x && y ? Math.log(x / y) : 0;
+    let t = both("speed") ? ln(A.top, B3.top) : 0;
+    const terms2 = (doc, sign) => {
+      if (doc === "turn") return both("turn") ? sign * ln(B3.wl, A.wl) : 0;
+      if (doc === "dive-zoom") return sign * ((both("climb") ? ln(A.climb, B3.climb) : 0) + (both("dive") ? ln(A.diveLimit, B3.diveLimit) : 0));
+      return 0;
+    };
+    t += terms2(docA, 1) + terms2(docB, 1);
+    const e = L2.k * t;
+    return L2.widest ? clip(e, -L2.widest, L2.widest) : e;
+  }
+  function mixEdge(a, b, band, docA, docB) {
+    let t = 0, s = 0;
+    for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) {
+      t += sx * sy * edge(x, y, band, docA, docB);
+      s += sx * sy;
+    }
+    return s > 0 ? t / s : 0;
+  }
+  var turnOfMonth = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return (y - 1939) * 12 + m - 8;
+  };
+  var rowAt = (rows, t) => {
+    let k = 0;
+    rows.forEach(([w], i) => {
+      if (turnOfMonth(w) <= t) k = i;
+    });
+    return k;
+  };
+  function fighterClock(g2, nat) {
+    const lab = g2.nations[nat]?.lab;
+    return FIGHTERS.ladders[nat]?.clock === "research" && lab ? g2.turn + lab.clock.fighters - lab.months : g2.turn;
+  }
+  var stageOf = (g2, nat, L2) => {
+    const k = String(treeLevel(g2, nat, "fighters"));
+    if (L2.rungs[k]) return k;
+    const keys = Object.keys(L2.rungs).sort();
+    return keys[keys.length - 1];
+  };
+  function landRow(g2, nat) {
+    const L2 = FIGHTERS.ladders[nat];
+    if (!L2) return null;
+    if (g2.flags.open === 1) {
+      const s = stageOf(g2, nat, L2);
+      const since = g2.flags[`ftr:${nat}:${s}`] ?? g2.turn;
+      const rows = L2.rungs[s];
+      let k2 = 0;
+      rows.forEach(([m], i) => {
+        if (m <= g2.turn - since) k2 = i;
+      });
+      return { key: Number(s) * 100 + k2 + 1, mix: rows[k2][1] };
+    }
+    const k = rowAt(L2.history, fighterClock(g2, nat));
+    return { key: k + 1, mix: L2.history[k][1] };
+  }
+  var deckBred = (f) => f.ship !== void 0 || f.ashore !== void 0;
+  function typeMix(g2, f) {
+    const L2 = FIGHTERS.ladders[f.nat];
+    const bought = Object.entries(f.bought ?? {}).filter(([k, s]) => s > 0 && FIGHTERS.types[k]);
+    const stolen = !deckBred(f) ? stolenLead(g2, f.nat, L2 ? landRow(g2, f.nat).mix : {}) : null;
+    if (!L2 && !bought.length && !stolen) return null;
+    let mix4 = {};
+    if (L2 && deckBred(f) && L2.deck) mix4 = L2.deck[rowAt(L2.deck, g2.turn)][1];
+    else if (stolen) mix4 = stolen;
+    else if (L2) mix4 = landRow(g2, f.nat).mix;
+    if (bought.length) {
+      const shareBought = Math.min(1, bought.reduce((a, [, s]) => a + s, 0)), own = L2 ? 1 - shareBought : 0;
+      const out = {};
+      for (const [k, s] of Object.entries(mix4)) out[k] = (out[k] ?? 0) + s * own;
+      for (const [k, s] of bought) out[k] = (out[k] ?? 0) + s / (L2 ? 1 : shareBought);
+      mix4 = out;
+    }
+    const base = g2.regions[f.base];
+    if (!deckBred(f) && base && inDesert(base) && Object.keys(mix4).some((k) => FIGHTERS.swap[k])) {
+      const out = {};
+      for (const [k, s] of Object.entries(mix4)) out[FIGHTERS.swap[k] ?? k] = (out[FIGHTERS.swap[k] ?? k] ?? 0) + s;
+      mix4 = out;
+    }
+    return mix4;
+  }
+  function sellerType(g2, nat) {
+    const row2 = FIGHTERS.ladders[nat] ? landRow(g2, nat) : null;
+    if (!row2) return null;
+    return Object.entries(row2.mix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+  function joinBought(f, mark, had, count4) {
+    const all = had + count4;
+    if (all <= 0) return;
+    const b = f.bought ?? (f.bought = {});
+    for (const k of Object.keys(b)) b[k] = b[k] * had / all;
+    b[mark] = (b[mark] ?? 0) + count4 / all;
+  }
+  var stolenMarks = (g2, nat) => g2.nations[nat]?.stolenMarks ?? [];
+  var hasFighterWorks = (g2, nat) => hasAircraftWorks(g2, nat, "ftr");
+  function stolenLead(g2, nat, mix4) {
+    const got = g2.nations[nat]?.stolenMarks;
+    if (!got?.length || !fighterTypesOn(g2)) return null;
+    const reach3 = designYear(g2, nat, "fighters");
+    const newest = Math.max(0, ...Object.keys(mix4).map((k) => FIGHTERS.types[k]?.year ?? 0));
+    const best = got.map((x) => x.mark).filter((k) => (FIGHTERS.types[k]?.year ?? Infinity) <= reach3 && FIGHTERS.types[k].year > newest).sort((a, b) => FIGHTERS.types[b].year - FIGHTERS.types[a].year)[0];
+    if (!best) return null;
+    const lead2 = Object.entries(mix4).sort((a, b) => b[1] - a[1])[0];
+    if (!lead2) return { [best]: 1 };
+    const out = { ...mix4 };
+    delete out[lead2[0]];
+    out[best] = (out[best] ?? 0) + lead2[1];
+    return out;
+  }
+  function fieldedMark(g2, nat) {
+    const own = FIGHTERS.ladders[nat] ? landRow(g2, nat).mix : {};
+    const mix4 = stolenLead(g2, nat, own) ?? own;
+    return Object.entries(mix4).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+  function holdsMark(g2, nat, mark) {
+    const L2 = FIGHTERS.ladders[nat];
+    const inMix = (rows) => !!rows?.some(([, m]) => m[mark] !== void 0);
+    return !!L2 && (inMix(L2.history) || Object.values(L2.rungs).some(inMix) || inMix(L2.deck)) || stolenMarks(g2, nat).some((x) => x.mark === mark);
+  }
+  function stolenWords(g2, nat, mark) {
+    const y = FIGHTERS.types[mark]?.year ?? 0, short = FIGHTERS.types[mark]?.short ?? mark;
+    return designYear(g2, nat, "fighters") >= y ? `Your aircraft works can build the ${short} now.` : `Your aircraft works can build the ${short} once your designers reach ${y}.`;
+  }
+  function stealMark(g2, nat, from2, mark) {
+    const N = g2.nations[nat];
+    if (!N || !FIGHTERS.types[mark] || holdsMark(g2, nat, mark)) return false;
+    (N.stolenMarks ?? (N.stolenMarks = [])).push({ mark, from: from2, turn: g2.turn });
+    return true;
+  }
+  function doctrineOf(g2, nat) {
+    const rows = FIGHTERS.doctrine.rows[nat];
+    return rows?.length ? rows[rowAt(rows, g2.turn)][1] : void 0;
+  }
+  function hoursEdge(g2, a, b) {
+    const R2 = FIGHTERS.hours.rows, k = FIGHTERS.law.k;
+    if (!k || !R2[a]?.length || !R2[b]?.length) return 0;
+    return k * Math.log(R2[a][rowAt(R2[a], g2.turn)][1] / R2[b][rowAt(R2[b], g2.turn)][1]);
+  }
+  function typeEdge(g2, att, def, m) {
+    const band = bandOf(m);
+    if (!band) return 0;
+    const mixes = /* @__PURE__ */ new Map();
+    const mixOf2 = (f) => {
+      if (!mixes.has(f)) mixes.set(f, typeMix(g2, f));
+      return mixes.get(f);
+    };
+    let t = 0, s = 0;
+    for (const a of att) {
+      if (a.w <= 0) continue;
+      for (const d of def) {
+        if (d.w <= 0) continue;
+        const ma = mixOf2(a.f), md = mixOf2(d.f);
+        const e = ma && md ? mixEdge(ma, md, band, doctrineOf(g2, a.f.nat), doctrineOf(g2, d.f.nat)) + hoursEdge(g2, a.f.nat, d.f.nat) : 0;
+        const lead2 = Math.log(techMul(g2, a.f.nat, "fighters") / techMul(g2, d.f.nat, "fighters"));
+        t += a.w * d.w * (e - lead2);
+        s += a.w * d.w;
+      }
+    }
+    return s > 0 ? t / s : 0;
+  }
+  var firstSentence = (id) => {
+    const p = FIGHTERS.types[id]?.plain ?? "";
+    const k = p.search(/[.!?](\s|$)/);
+    return k >= 0 ? p.slice(0, k + 1) : p;
+  };
+  function serviceNews(g2, nat, id) {
+    const t = FIGHTERS.types[id];
+    return nat === g2.human ? `The ${t.short} enters service. ${firstSentence(id)}` : `${g2.nations[nat].name} puts the ${t.short} into service. ${firstSentence(id)}`;
+  }
+  function fighterMonth(g2, nat) {
+    if (!fighterTypesOn(g2)) return;
+    const L2 = FIGHTERS.ladders[nat];
+    if (!L2) return;
+    if (g2.flags.open === 1) {
+      const s = stageOf(g2, nat, L2);
+      if (g2.flags[`ftr:${nat}:${s}`] === void 0) g2.flags[`ftr:${nat}:${s}`] = g2.turn;
+    }
+    const row2 = landRow(g2, nat);
+    const was = g2.flags[`ftrrow:${nat}`];
+    if (was === row2.key) return;
+    g2.flags[`ftrrow:${nat}`] = row2.key;
+    if (was === void 0) return;
+    const prev = prevMix(g2, nat, was);
+    const fresh5 = Object.keys(row2.mix).filter((k) => !prev || !(k in prev));
+    if (!fresh5.length || !g2.human || nat !== g2.human && !atWar(g2, nat, g2.human)) return;
+    for (const id of fresh5) headline(g2, "info", serviceNews(g2, nat, id), nat);
+  }
+  var prevMix = (g2, nat, key7) => {
+    const L2 = FIGHTERS.ladders[nat];
+    if (key7 >= 100 || g2.flags.open === 1) {
+      const rows = L2.rungs[String(Math.floor(key7 / 100))];
+      return rows?.[key7 % 100 - 1]?.[1] ?? null;
+    }
+    return L2.history[key7 - 1]?.[1] ?? null;
+  };
+  var height = (b) => FIGHTERS.bands[b].toLocaleString("en-US");
+  function namesOf(ids2) {
+    const names = ids2.map((i) => FIGHTERS.types[i]?.short ?? i);
+    const shown2 = names.slice(0, 3), more = names.length - shown2.length;
+    if (more > 0) return `${shown2.join(", ")} and ${more === 1 ? "one" : more} more`;
+    return shown2.length <= 1 ? shown2.join("") : `${shown2.slice(0, -1).join(", ")} and ${shown2[shown2.length - 1]}`;
+  }
+  function sideTypes(g2, side5) {
+    const tot = {};
+    for (const x of side5) {
+      if (x.w <= 0) continue;
+      const mix4 = typeMix(g2, x.f);
+      if (!mix4) continue;
+      for (const [k, s] of Object.entries(mix4)) tot[k] = (tot[k] ?? 0) + s * x.w;
+    }
+    return Object.entries(tot).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([k]) => k);
+  }
+  function raidCardLines(g2, a, m) {
+    if (!fighterTypesOn(g2)) return null;
+    const band = bandOf(m);
+    if (!band) return null;
+    const esc = sideTypes(g2, a.att.map((x2) => ({ f: x2.f, w: x2.ftr })));
+    const def = sideTypes(g2, a.def.map((x2) => ({ f: x2.f, w: x2.f.ftr * x2.w })));
+    if (!def.length) return null;
+    if (!esc.length) return { types: `Defending fighters at ${height(band)} m: ${namesOf(def)}.`, edge: null };
+    const E = a.typeEdge ?? 0, x = Math.exp(Math.abs(E) / 2) - 1;
+    const edge4 = x < 0.02 ? "The aircraft are about even." : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
+    return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge: edge4 };
+  }
+
   // ../../data/campaign/intel.json
   var intel_default = {
     _about: "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
@@ -16554,6 +24689,11 @@
         gain: 3
       },
       bomberPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      fighterPlans: {
         caught: 0.2,
         success: 0.3,
         gain: 3
@@ -16944,21 +25084,21 @@
   }
 
   // ../../src/campaign/secretwar.ts
-  var S = intel_default.secret;
+  var S2 = intel_default.secret;
   var huntersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:hunt"] === 1;
   var ordersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:orders"] === 1;
   var everyoneOn = (g2) => g2.flags.open === 1 && g2.flags["sw:all"] === 1;
   var doublesOn = (g2) => g2.flags.open === 1 && g2.flags["sw:double"] === 1;
   var watchersOn = (g2) => huntersOn(g2) && g2.flags["sw:watch"] === 1;
-  var WATCHERS = () => S.watchers;
-  var DOUBLES = () => S.doubles;
-  var SMALLER = () => S.everyone.smaller;
+  var WATCHERS = () => S2.watchers;
+  var DOUBLES = () => S2.doubles;
+  var SMALLER = () => S2.everyone.smaller;
   function openSecretWar(g2) {
-    if (S.hunters.on) g2.flags["sw:hunt"] = 1;
-    if (S.orders.on) g2.flags["sw:orders"] = 1;
-    if (S.everyone.on) g2.flags["sw:all"] = 1;
-    if (S.doubles.on) g2.flags["sw:double"] = 1;
-    if (S.watchers.on) g2.flags["sw:watch"] = 1;
+    if (S2.hunters.on) g2.flags["sw:hunt"] = 1;
+    if (S2.orders.on) g2.flags["sw:orders"] = 1;
+    if (S2.everyone.on) g2.flags["sw:all"] = 1;
+    if (S2.doubles.on) g2.flags["sw:double"] = 1;
+    if (S2.watchers.on) g2.flags["sw:watch"] = 1;
   }
   var ordersDue = (g2, nat) => ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.nat === nat && o.turn === g2.turn && !o.done) : [];
   var ordersKnown = (g2, viewer = g2.human) => viewer && ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.by === viewer && o.turn >= g2.turn) : [];
@@ -16968,7 +25108,7 @@
     headline(g2, "info", `The order against ${t?.name ?? "the target"} was cancelled: ${why}.`, o.by, o.target);
   }
   var ambushAt = (g2, target) => g2.flags["ord:fly"] === target + 1;
-  var AMBUSH = () => S.orders.ambush;
+  var AMBUSH = () => S2.orders.ambush;
   function flyingOrder(g2, target) {
     if (target === null) delete g2.flags["ord:fly"];
     else g2.flags["ord:fly"] = target + 1;
@@ -17307,13 +25447,13 @@
     note(g2, a, a.reg, "retire", `Agent ${a.name} is retired from the service.`, true);
     return true;
   }
-  var MISSIONS = ["watch", "books", "factory", "rail", "oil", "airfield", "orders", "bbPlans", "cvPlans", "bomberPlans", "jetPlans", "rocketPlans", "guidedPlans", "guard", "hunt"];
+  var MISSIONS = ["watch", "books", "factory", "rail", "oil", "airfield", "orders", "bbPlans", "cvPlans", "bomberPlans", "fighterPlans", "jetPlans", "rocketPlans", "guidedPlans", "guard", "hunt"];
   var SABOTAGE = ["factory", "rail", "oil", "airfield"];
   var AT_HOME2 = ["guard", "hunt"];
-  var missionsIn = (g2) => MISSIONS.filter((m) => (m !== "airfield" || airPiece(g2, "field")) && (m !== "orders" || ordersOn(g2)) && (m !== "hunt" || huntersOn(g2)));
+  var missionsIn = (g2) => MISSIONS.filter((m) => (m !== "airfield" || airPiece(g2, "field")) && (m !== "orders" || ordersOn(g2)) && (m !== "hunt" || huntersOn(g2)) && (m !== "fighterPlans" || fighterTypesOn(g2)));
   var isSabotage = (m) => SABOTAGE.includes(m);
   var THEFT = { bbPlans: "bb", cvPlans: "cv", bomberPlans: "heavybombers", jetPlans: "jets", rocketPlans: "rockets", guidedPlans: "guided" };
-  var isTheft = (m) => THEFT[m] !== void 0;
+  var isTheft = (m) => THEFT[m] !== void 0 || m === "fighterPlans";
   var triedOnce = (m) => isSabotage(m) || isTheft(m);
   function theftText(x) {
     const W2 = PLAN_WORDS[x], war = Math.round((intel_default.caught.war ?? 0) * 10);
@@ -17350,6 +25490,15 @@
     },
     get guidedPlans() {
       return theftText("guided");
+    },
+    // The fighter's plans (the design director, 23 Nov 07:00Z): any nation's fielded mark, with 235's places, odds and war chance.
+    get fighterPlans() {
+      const war = Math.round((intel_default.caught.war ?? 0) * 10);
+      return {
+        label: "Steal the fighter's plans",
+        doing: "preparing to steal the fighter's plans",
+        text: `The plans of the fighter a country builds most are copied and got out of ${PLAN_PLACES.works.got}, and your aircraft works can build it once your designers reach its year. Tried once, next month, and then the agent must lie low. If the agent is caught, a country at peace with you, and not your ally, declares war ${war} times in 10.`
+      };
     },
     guard: { label: "Guard against saboteurs", doing: "on guard", text: "Watches for enemy agents here and in the provinces around, and is some help everywhere at home." }
   };
@@ -17392,6 +25541,7 @@
       if (!groupsOnField(g2, r.id, (n) => atWar(g2, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${placeName(r.name)}.`;
       return null;
     }
+    if (m === "fighterPlans") return whyNoFighterTheft(g2, nat, a, r);
     if (isTheft(m)) return whyNoTheft(g2, nat, a, r, THEFT[m]);
     if (!atWar(g2, nat, r.ctrl)) return peaceWords(host);
     if ((a.rest ?? 0) > g2.turn) {
@@ -17442,6 +25592,23 @@
     const capital3 = g2.regions[host.capital]?.name ?? "its capital";
     if (!keepsPlans(g2, r.ctrl, r, x)) return W2.place === "capital" ? `${host.name} keeps its ${W2.one} plans at ${capital3}, its capital.` : `${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital3} and at ${P.home.replace("its capital and ", "its ")}.`;
     if (!givesPlans(g2, r.ctrl, x)) return hull ? `${host.name} builds no ${W2.many} yet: there are no plans to steal.` : `${host.name} has no ${W2.many} yet: there are no plans to steal.`;
+    if ((a.rest ?? 0) > g2.turn) {
+      const k = a.rest - g2.turn;
+      return `${a.name} is lying low for ${k === 1 ? "another month" : `${countWord2(k)} more months`} after the last attempt.`;
+    }
+    return null;
+  }
+  function whyNoFighterTheft(g2, nat, a, r) {
+    const host = g2.nations[r.ctrl], N = g2.nations[nat], P = PLAN_PLACES.works;
+    if (!fighterTypesOn(g2)) return "Not in this campaign.";
+    if (!hasFighterWorks(g2, nat)) return theWords(`${N.name} has no aircraft works that build fighters: plans would give it nothing to build them in.`);
+    if (!host?.alive) return theWords("There are no plans to steal here.");
+    if (r.owner !== r.ctrl) return theWords(`${host.name} keeps its plans at home, in ${P.home}: ${r.name} is ground it has taken.`);
+    const mark = fieldedMark(g2, r.ctrl);
+    if (!mark) return theWords(`${host.name} builds no fighters of its own: there are no plans to steal.`);
+    const capital3 = g2.regions[host.capital]?.name ?? "its capital";
+    if (host.capital !== r.id && r.fac < ARSENAL.air.ftr.factories) return theWords(`${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital3} and at its great aircraft works.`);
+    if (holdsMark(g2, nat, mark)) return theWords(`${N.name} already has the ${FIGHTERS.types[mark]?.short ?? mark}.`);
     if ((a.rest ?? 0) > g2.turn) {
       const k = a.rest - g2.turn;
       return `${a.name} is lying low for ${k === 1 ? "another month" : `${countWord2(k)} more months`} after the last attempt.`;
@@ -17572,7 +25739,14 @@
     } else if (ok2 && m === "oil" && fireField(g2, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) {
       done = true;
       text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
-    } else if (ok2 && isTheft(m) && grantPlans(g2, a.nat, THEFT[m], r.ctrl, "stolen")) {
+    } else if (ok2 && m === "fighterPlans" && (() => {
+      const mk = fieldedMark(g2, r.ctrl);
+      return !!mk && stealMark(g2, a.nat, r.ctrl, mk);
+    })()) {
+      done = true;
+      const mk = stolenMarks(g2, a.nat).slice(-1)[0].mark;
+      text = `Agent ${a.name} copies the plans of the ${host.adj} ${FIGHTERS.types[mk]?.short ?? mk} at ${r.name} and gets them out. ${stolenWords(g2, a.nat, mk)}`;
+    } else if (ok2 && THEFT[m] && grantPlans(g2, a.nat, THEFT[m], r.ctrl, "stolen")) {
       done = true;
       text = `Agent ${a.name} copies the ${host.adj} ${PLAN_WORDS[THEFT[m]].one} plans at ${r.name} and gets them out. ${canNowWords([THEFT[m]], host.adj)}`;
     } else text = isTheft(m) ? `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.` : m === "factory" ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.` : m === "rail" ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.` : m === "airfield" ? `Agent ${a.name} cannot get past the sentries on the field at ${r.name}.` : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
@@ -21440,7 +29614,7 @@
       if (r && nat === G5.b29.nat && g2.turn >= G5.b29.from && G5.b29.vs.includes(r.ctrl) && G5.b29.regions.includes(r.name)) return G5.b29.ratio;
       return escorted2 ? G5.box.escorted : G5.box.alone;
     }
-    return rowAt(G5.day[nat] ?? G5.day._default, g2.turn);
+    return rowAt2(G5.day[nat] ?? G5.day._default, g2.turn);
   }
   function controlFirst(g2, nat) {
     if (!acOn(g2) || stopDef(g2).book) return null;
@@ -21464,14 +29638,14 @@
     }
     return null;
   }
-  var rowAt = (rows, t) => {
+  var rowAt2 = (rows, t) => {
     let v = rows[0][1];
     for (const [from2, x] of rows) if (from2 <= t) v = x;
     return v;
   };
   function nightFighters(g2, nat) {
     const rows = AC.radar.night[nat] ?? AC.radar.night._default;
-    return stopDef(g2).book || hasTech(g2, nat, AC.radar.control) ? rowAt(rows, g2.turn) : rows[0][1];
+    return stopDef(g2).book || hasTech(g2, nat, AC.radar.control) ? rowAt2(rows, g2.turn) : rows[0][1];
   }
   var missionOf = (c) => c.kind === "sky" ? "superiority" : c.night ? "night" : "bomb";
   function campaignOf(g2, f) {
@@ -21678,7 +29852,7 @@
   function theatreOf2(g2, nat, th) {
     const side5 = th?.split("-")[1];
     const split = AC.split[nat];
-    if (split && side5) return { mine: () => true, part: rowAt(split, g2.turn)[side5] ?? 1 };
+    if (split && side5) return { mine: () => true, part: rowAt2(split, g2.turn)[side5] ?? 1 };
     if (th === "UK-home") return { mine: (f) => {
       const r = g2.regions[f.base];
       return !!r && (r.first ?? r.owner) === "UK" && !r.overseas;
@@ -21735,9 +29909,9 @@
       const kind = kindOf(row2, p);
       const night = kind === "bomb" && (p.night ?? row2.time === "night");
       for (const f of airFleetsOf(g2, row2.nat)) if (f.camp === c?.id) delete f.camp;
-      const share = row2.share ? rowAt(row2.share, g2.turn) : 1;
+      const share = row2.share ? rowAt2(row2.share, g2.turn) : 1;
       const th = theatreOf2(g2, row2.nat, row2.theatre);
-      const bases = (row2.bases ? rowAt(row2.bases, g2.turn) : []).map((nm) => g2.byName[nm]?.id).filter((b) => b !== void 0);
+      const bases = (row2.bases ? rowAt2(row2.bases, g2.turn) : []).map((nm) => g2.byName[nm]?.id).filter((b) => b !== void 0);
       const ftr = strength2(g2, row2.nat, th, false) * th.part, bmr = strength2(g2, row2.nat, th, true) * th.part;
       const main = kind === "sky" ? [...bookGroups(g2, row2.nat, targets2, false, share * ftr, taken2, th, bases), ...p.bombers ? bookGroups(g2, row2.nat, targets2, true, share * bmr, taken2, th, bases) : []] : bookGroups(g2, row2.nat, targets2, true, share * (ftr + bmr), taken2, th, bases);
       for (const f of main) taken2.add(f.id);
@@ -29516,7903 +37690,6 @@
     if (fieldRules(g2)) g2.flags[key3("afc", region)] = 1;
   };
 
-  // ../../data/campaign/fighters.json
-  var fighters_default = {
-    _about: "Fighter types (switch 'Fighter types', g.flags.ftrtypes, set at setup only; off as shipped). Written by the fighters research's emit.py from fighters-table.json: the count's matchup rows, the ladders, the weights, bands and words. The measured figures and their sources stay in the research table.",
-    words: {
-      setting: "Fighter types",
-      help: "Each nation flies its real fighters, which change as its research moves on. Better aircraft for the height give a small edge; pilots still count for more. Off: every nation's fighters alike, as before.",
-      tooltip: "Measured performance at this height: speed, climb, dive and roll, turn, toughness and guns. Pilots, numbers and radar count for more.",
-      realWar: "In the real war"
-    },
-    w: {
-      speed: 0.12,
-      speedScale: 100,
-      climb: 0.06,
-      climbScale: 5,
-      dive: 0.06,
-      turn: 0.07,
-      turnScale: 0.3,
-      refuse: 80,
-      punch: 0.05,
-      fireScale: 2.5,
-      cap: 0.3
-    },
-    bands: {
-      low: 1e3,
-      mid: 4500,
-      high: 7500
-    },
-    byMission: {
-      ground: "low",
-      line: "low",
-      strike: "low",
-      fleet: "low",
-      harbour: "low",
-      superiority: "mid",
-      town: "mid",
-      bomb: "high",
-      night: null
-    },
-    swap: {
-      spitfire_v: "spitfire_v_trop"
-    },
-    types: {
-      a5m4: {
-        short: "A5M",
-        name: "Mitsubishi A5M4 (Type 96 carrier fighter, 'Claude')",
-        v: [
-          404,
-          422,
-          396
-        ],
-        c: [
-          14.9,
-          9.9,
-          4.9
-        ],
-        r: 165,
-        roll: 55,
-        dive: 600,
-        acc: 1.5,
-        tough: 0,
-        fire: 0.34,
-        plain: "It is light, agile and flies far with a drop tank. It is slow, has an open cockpit and carries only two machine guns.",
-        history: "It won Japan control of the air over China from 1937.",
-        top: 435,
-        wl: 93.9,
-        climb: 14.9,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      a6m2_21: {
-        short: "Zero 21",
-        name: "Mitsubishi A6M2 Zero model 21 ('Zeke')",
-        v: [
-          457,
-          532,
-          508
-        ],
-        c: [
-          14,
-          11.3,
-          5.7
-        ],
-        r: 196,
-        roll: 55,
-        dive: 600,
-        acc: 1.5,
-        tough: 0,
-        fire: 2.56,
-        plain: "It out-turns and out-climbs every Allied fighter below 5,000 m and flies twice as far. It is slow in a dive, stiff on the ailerons at speed and unarmoured, and its engine cuts out if the pilot pushes the nose down.",
-        history: "In 1940-42 it won almost every turning fight it was drawn into.",
-        top: 533,
-        wl: 107.4,
-        climb: 14,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      a6m3_32: {
-        short: "Zero 32",
-        name: "Mitsubishi A6M3 Zero model 32 ('Hamp')",
-        v: [
-          468,
-          496,
-          484
-        ],
-        c: [
-          16.6,
-          11.3,
-          6.2
-        ],
-        r: 224,
-        roll: 55,
-        dive: 670,
-        acc: 1.5,
-        tough: 0,
-        fire: 2.56,
-        plain: "It has more power and a little more speed and roll than the Zero 21. It has less range and keeps every weakness: heavy controls at speed, a slow dive and no protection.",
-        history: "Its shorter range told in the long flights to Guadalcanal in 1942.",
-        top: 499,
-        wl: 122.9,
-        climb: 16.6,
-        diveLimit: 670,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      a6m5_52: {
-        short: "Zero 52",
-        name: "Mitsubishi A6M5 Zero model 52 ('Zeke 52')",
-        v: [
-          481,
-          526,
-          548
-        ],
-        c: [
-          16.4,
-          16.4,
-          8.3
-        ],
-        r: 236,
-        roll: 55,
-        dive: 657,
-        acc: 1.5,
-        tough: 0,
-        fire: 2.43,
-        plain: "It still turns tighter than anything at low speed and climbs well down low. A Hellcat or Corsair is faster, tougher and better in a dive.",
-        history: "By 1944 it was outclassed, and most of the pilots who had made its name were gone.",
-        top: 565,
-        wl: 129.8,
-        climb: 16.4,
-        diveLimit: 657,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      b239: {
-        short: "Brewster",
-        name: "Brewster B-239 (Finnish Buffalo)",
-        v: [
-          432,
-          474,
-          452
-        ],
-        c: [
-          15.5,
-          13,
-          6.7
-        ],
-        r: 248,
-        roll: 80,
-        dive: 650,
-        acc: 2,
-        tough: 1,
-        fire: 1.89,
-        plain: "It is light, pleasant to fly and well armed, with armour added. It is slower than the newer Soviet monoplanes and weak high up.",
-        history: "Finnish pilots claimed about 26 Soviet aircraft for each one they lost in it (claims): a record that belonged to the pilots.",
-        top: 478,
-        wl: 136.1,
-        climb: 15.5,
-        diveLimit: 650,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      b534: {
-        short: "B-534",
-        name: "Avia B-534 IV",
-        v: [
-          355,
-          404,
-          380
-        ],
-        c: [
-          13,
-          10.5,
-          5.8
-        ],
-        r: 137,
-        roll: 65,
-        dive: 550,
-        acc: 1,
-        tough: 0.5,
-        fire: 0.7,
-        plain: "It is the best of the last biplanes, quick to climb and tight in the turn. It is far slower than any monoplane fighter and carries only rifle-calibre guns.",
-        history: "Slovak pilots flew it against Poland in 1939 and the Soviet Union in 1941.",
-        top: 405,
-        wl: 84,
-        climb: 13,
-        diveLimit: 550,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      bf109_e: {
-        short: "Bf 109 E",
-        name: "Messerschmitt Bf 109 E-3 / E-4 (DB 601 A)",
-        v: [
-          485,
-          550,
-          522
-        ],
-        c: [
-          15.2,
-          13.1,
-          7
-        ],
-        r: 282,
-        roll: 75,
-        dive: 750,
-        acc: 3,
-        tough: 1,
-        fire: 2.75,
-        plain: "It climbs faster than anything it meets and fights by diving, firing and climbing away, with fuel injection and cannon. It cannot turn with any opponent, grows heavy on the controls at speed and has little fuel.",
-        history: "Over England in 1940 it had only minutes over the target before it had to turn for home.",
-        top: 560,
-        wl: 161,
-        climb: 15.2,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      bf109_f4: {
-        short: "Bf 109 F",
-        name: "Messerschmitt Bf 109 F-4 (DB 601 E)",
-        v: [
-          533,
-          604,
-          642
-        ],
-        c: [
-          19,
-          19,
-          12.3
-        ],
-        r: 328,
-        roll: 80,
-        dive: 750,
-        acc: 3,
-        tough: 2,
-        fire: 1.64,
-        plain: "It is the best-balanced Bf 109 and out-climbs and out-runs a Hurricane or Spitfire V at height. It carries only one cannon and two machine guns and cannot turn with a Spitfire or Hurricane.",
-        history: "It was the Luftwaffe's main fighter in the East in 1941 and in the desert in 1942.",
-        top: 659,
-        wl: 180.1,
-        climb: 19,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: false,
-          dive: true
-        }
-      },
-      bf109_g2: {
-        short: "Bf 109 G",
-        name: "Messerschmitt Bf 109 G-2 (DB 605 A)",
-        v: [
-          551,
-          613,
-          659
-        ],
-        c: [
-          18.9,
-          18.9,
-          14
-        ],
-        r: 368,
-        roll: 75,
-        dive: 750,
-        acc: 3,
-        tough: 2,
-        fire: 1.64,
-        plain: "It climbs better than anything it meets and is fast at height: 666 km/h at 7,000 m. It is lightly armed, heavy on the controls at speed and out-turned by Spitfires and Soviet fighters.",
-        history: "It was the main German fighter on every front in 1942-43.",
-        top: 666,
-        wl: 186.6,
-        climb: 18.9,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      bf109_g6: {
-        short: "Bf 109 G-6",
-        name: "Messerschmitt Bf 109 G-6 (DB 605 A)",
-        v: [
-          527,
-          598,
-          628
-        ],
-        c: [
-          15.8,
-          15.8,
-          8.9
-        ],
-        r: 404,
-        roll: 75,
-        dive: 750,
-        acc: 3,
-        tough: 2,
-        fire: 2.16,
-        plain: "It climbs well, is quick into a dive, and with a 30 mm cannon it kills a bomber in a few hits. It is 50 to 80 km/h slower than a Mustang and out-turned by every Allied fighter it meets.",
-        history: "It was the most-built Bf 109, and it met the American day raids of 1943-44.",
-        top: 640,
-        wl: 196.3,
-        climb: 15.8,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      bf109_k4: {
-        short: "Bf 109 K",
-        name: "Messerschmitt Bf 109 K-4 and G-10 (DB 605 D with MW 50)",
-        v: [
-          596,
-          658,
-          710
-        ],
-        c: [
-          18,
-          18,
-          12.1
-        ],
-        r: 456,
-        roll: 70,
-        dive: 750,
-        acc: 3,
-        tough: 2,
-        fire: 4.31,
-        plain: "It is the fastest Bf 109, 710 km/h at 7,500 m, with a climb to match the best Allied fighters. It is hard to fly well and short-ranged, and its one big cannon suits bombers, not fighters.",
-        history: "It reached the units from October 1944 and fought to the end of the war.",
-        top: 710,
-        wl: 211.8,
-        climb: 18,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      bf110_c: {
-        short: "Bf 110",
-        name: "Messerschmitt Bf 110 C (as a day fighter)",
-        v: [
-          488,
-          529,
-          525
-        ],
-        c: [
-          11,
-          11,
-          5.6
-        ],
-        r: 265,
-        roll: 50,
-        dive: 700,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.29,
-        plain: "It has range, speed enough to outrun a Hurricane I and the heaviest nose guns of any fighter, deadly in one diving pass. It cannot turn or accelerate with single-seat fighters and needs an escort of its own against them.",
-        history: "Over Britain in 1940 it needed single-seat fighters to escort it.",
-        top: 541,
-        wl: 157,
-        climb: 11,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      bulldog: {
-        short: "Bulldog",
-        name: "Bristol Bulldog IIA",
-        v: [
-          262,
-          278,
-          261
-        ],
-        c: [
-          7.5,
-          4.4,
-          1.3
-        ],
-        r: 91,
-        roll: 55,
-        dive: 450,
-        acc: 1,
-        tough: 0,
-        fire: 0.27,
-        plain: "It is a sturdy biplane that is easy to fly. It is slower than any monoplane fighter and carries only two rifle-calibre guns.",
-        history: "It was Estonia's fighter of the 1930s, and the Spitfires Estonia ordered in 1939 never came.",
-        top: 287,
-        wl: 55.8,
-        climb: 7.5,
-        diveLimit: 450,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      cr32: {
-        short: "CR.32",
-        name: "Fiat CR.32",
-        v: [
-          333,
-          349,
-          328
-        ],
-        c: [
-          11,
-          6.8,
-          2.6
-        ],
-        r: 137,
-        roll: 60,
-        dive: 500,
-        acc: 1,
-        tough: 0.5,
-        fire: 0.61,
-        plain: "It is a tough, agile biplane with two heavy machine guns. It is slow beside any monoplane and can neither catch nor escape one.",
-        history: "It was the best Nationalist fighter of the Spanish Civil War, and Hungary's in 1939-41.",
-        top: 360,
-        wl: 83.7,
-        climb: 11,
-        diveLimit: 500,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      cr42: {
-        short: "CR.42",
-        name: "Fiat CR.42 Falco",
-        v: [
-          365,
-          433,
-          429
-        ],
-        c: [
-          11.8,
-          11.8,
-          6.3
-        ],
-        r: 167,
-        roll: 60,
-        dive: 520,
-        acc: 1,
-        tough: 0,
-        fire: 0.61,
-        plain: "It out-turns anything in the sky and is fast for a biplane. It is 60 to 80 km/h slower than a Hurricane I, lightly armed and unarmoured, so a monoplane pilot who will not turn with it is safe.",
-        history: "It was Italy's most numerous fighter into 1941.",
-        top: 441,
-        wl: 102.5,
-        climb: 11.8,
-        diveLimit: 520,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      d21: {
-        short: "D.XXI",
-        name: "Fokker D.XXI (Mercury)",
-        v: [
-          396,
-          452,
-          437
-        ],
-        c: [
-          13.5,
-          11.9,
-          7.1
-        ],
-        r: 230,
-        roll: 65,
-        dive: 650,
-        acc: 1.5,
-        tough: 1,
-        fire: 0.84,
-        plain: "It is sturdy, easy to fly and quick to climb. It has fixed wheels, is slower than any fighter with retracting wheels and carries only rifle-calibre guns.",
-        history: "It was Finland's main fighter in the Winter War.",
-        top: 460,
-        wl: 126.5,
-        climb: 13.5,
-        diveLimit: 650,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      d3801: {
-        short: "D-3801",
-        name: "EKW D-3801 (Swiss MS.406)",
-        v: [
-          467,
-          526,
-          508
-        ],
-        c: [
-          15,
-          12.9,
-          6.5
-        ],
-        r: 307,
-        roll: 65,
-        dive: 730,
-        acc: 2,
-        tough: 1.5,
-        fire: 1.91,
-        plain: "It is the MS.406 rebuilt with a stronger engine: handy and sturdy, with a cannon. It is slower than a Bf 109 E and turns wider.",
-        history: "Switzerland built it at home through the war.",
-        top: 535,
-        wl: 168.8,
-        climb: 15,
-        diveLimit: 730,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      d501: {
-        short: "D.501",
-        name: "Dewoitine D.501",
-        v: [
-          336,
-          357,
-          342
-        ],
-        c: [
-          10,
-          8.6,
-          4.4
-        ],
-        r: 188,
-        roll: 60,
-        dive: 550,
-        acc: 1.5,
-        tough: 0,
-        fire: 1.26,
-        plain: "It is a light monoplane with a cannon firing through the propeller hub. It has fixed wheels and an open cockpit and is slower than any modern fighter.",
-        history: "Lithuania flew it from the mid-1930s.",
-        top: 360,
-        wl: 103,
-        climb: 10,
-        diveLimit: 550,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      d520: {
-        short: "D.520",
-        name: "Dewoitine D.520",
-        v: [
-          447,
-          511,
-          509
-        ],
-        c: [
-          14.3,
-          13.2,
-          6.7
-        ],
-        r: 307,
-        roll: 75,
-        dive: 830,
-        acc: 2,
-        tough: 2,
-        fire: 2.3,
-        plain: "It turns with a Bf 109 E and dives well, the only French fighter that can meet it on near-equal terms. It is 30 to 40 km/h slower and climbs less well.",
-        history: "Only one group had it when the Germans attacked in May 1940, and five by June.",
-        top: 530,
-        wl: 168.7,
-        climb: 14.3,
-        diveLimit: 830,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      d551: {
-        short: "D.551",
-        name: "Dewoitine D.551 (what-if)",
-        v: [
-          524,
-          609,
-          626
-        ],
-        c: [
-          17,
-          17,
-          9.8
-        ],
-        r: 364,
-        roll: 80,
-        dive: 850,
-        acc: 2.5,
-        tough: 1.5,
-        fire: 2.3,
-        plain: "It is a lighter, faster D.520.",
-        history: "It was still on the drawing board when France fell in 1940.",
-        top: 645,
-        wl: 200,
-        climb: 17,
-        diveLimit: 850,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      f2a3: {
-        short: "Buffalo",
-        name: "Brewster F2A-3 Buffalo",
-        v: [
-          444,
-          507,
-          491
-        ],
-        c: [
-          12.4,
-          10.7,
-          5.6
-        ],
-        r: 304,
-        roll: 80,
-        dive: 650,
-        acc: 2,
-        tough: 2,
-        fire: 2.29,
-        plain: "It is sturdy and can dive away from a Zero. It is too heavy for its wing and engine, and slow to climb and turn.",
-        history: "At Midway in June 1942 the Marine Buffalo squadron lost most of its aircraft.",
-        top: 517,
-        wl: 167.2,
-        climb: 12.4,
-        diveLimit: 650,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      f4b4: {
-        short: "F4B",
-        name: "Boeing 256 (F4B-4)",
-        v: [
-          298,
-          288,
-          269
-        ],
-        c: [
-          9.2,
-          5.1,
-          1.5
-        ],
-        r: 127,
-        roll: 70,
-        dive: 480,
-        acc: 1,
-        tough: 0,
-        fire: 0.33,
-        plain: "It is a nimble, sturdy biplane. It is far slower than any monoplane and carries only two machine guns.",
-        history: "It was Brazil's fighter before the war came.",
-        top: 304,
-        wl: 77.7,
-        climb: 10,
-        diveLimit: 480,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      f4f3: {
-        short: "Wildcat F4F-3",
-        name: "Grumman F4F-3 Wildcat",
-        v: [
-          462,
-          512,
-          522
-        ],
-        c: [
-          16.8,
-          16.3,
-          9.7
-        ],
-        r: 236,
-        roll: 69,
-        dive: 741,
-        acc: 3,
-        tough: 2.5,
-        fire: 2.29,
-        plain: "It is sturdy, well armed and as fast as a Zero at 6,000 m. It cannot climb or turn with a Zero and has half its range.",
-        history: "It was the US Navy's fighter at Pearl Harbor and Wake Island.",
-        top: 531,
-        wl: 129.5,
-        climb: 16.8,
-        diveLimit: 741,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      f4f4: {
-        short: "Wildcat F4F-4",
-        name: "Grumman F4F-4 Wildcat",
-        v: [
-          455,
-          496,
-          506
-        ],
-        c: [
-          9.4,
-          9.3,
-          5.1
-        ],
-        r: 254,
-        roll: 69,
-        dive: 741,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It is tough, hard-hitting and safe in a dive. It climbs slower than any fighter it meets and lives by teamwork, armour and deflection shooting.",
-        history: "It held the line at Midway and Guadalcanal in 1942 with the Thach weave.",
-        top: 513,
-        wl: 139.5,
-        climb: 9.4,
-        diveLimit: 741,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      f4u1: {
-        short: "Corsair F4U-1",
-        name: "Vought F4U-1 / F4U-1A Corsair",
-        v: [
-          582,
-          657,
-          633
-        ],
-        c: [
-          14.7,
-          14.7,
-          9.2
-        ],
-        r: 317,
-        roll: 90,
-        dive: 713,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It is the fastest carrier fighter, about 100 km/h quicker than a Zero and superb in a dive. It turns poorly and is a handful to land on a deck.",
-        history: "In 1943 it flew from land in the Solomons, and US squadrons took it to sea only in 1945.",
-        top: 694,
-        wl: 174.1,
-        climb: 14.7,
-        diveLimit: 713,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      f4u1d: {
-        short: "Corsair F4U-1D",
-        name: "Vought F4U-1D Corsair",
-        v: [
-          566,
-          637,
-          638
-        ],
-        c: [
-          15.2,
-          15.2,
-          9.2
-        ],
-        r: 342,
-        roll: 90,
-        dive: 713,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It reaches about 670 km/h with water injection and can carry a ton of bombs. It turns wide and is tricky to land on a deck.",
-        history: "Navy and Marine Corsairs went aboard the fast carriers from January 1945.",
-        top: 669,
-        wl: 187.9,
-        climb: 15.2,
-        diveLimit: 713,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      f6f3: {
-        short: "Hellcat F6F-3",
-        name: "Grumman F6F-3 Hellcat",
-        v: [
-          522,
-          593,
-          602
-        ],
-        c: [
-          14.7,
-          13.7,
-          8.2
-        ],
-        r: 326,
-        roll: 75,
-        dive: 778,
-        acc: 3,
-        tough: 3,
-        fire: 3.44,
-        plain: "It is fast enough, tough, hard-hitting and the easiest of the big fighters to fly from a carrier. It cannot turn or climb with a Zero at low speed.",
-        history: "It took over the carrier war from the Wildcat in 1943.",
-        top: 613,
-        wl: 179,
-        climb: 14.7,
-        diveLimit: 778,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      f6f5: {
-        short: "Hellcat F6F-5",
-        name: "Grumman F6F-5 Hellcat",
-        v: [
-          547,
-          592,
-          627
-        ],
-        c: [
-          14.8,
-          14.8,
-          9.6
-        ],
-        r: 331,
-        roll: 80,
-        dive: 843,
-        acc: 3,
-        tough: 3,
-        fire: 3.44,
-        plain: "It is fast with water injection, about 630 to 660 km/h, and tough, steady and deadly against lightly built fighters. It still cannot turn with a Zero.",
-        history: "Its pilots claimed about 19 Japanese aircraft for each Hellcat lost in combat (claims), most of it the pilots' edge.",
-        top: 658,
-        wl: 181.6,
-        climb: 14.8,
-        diveLimit: 843,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      fm2: {
-        short: "Wildcat FM-2",
-        name: "General Motors FM-2 Wildcat",
-        v: [
-          501,
-          529,
-          518
-        ],
-        c: [
-          18.3,
-          15.3,
-          8.5
-        ],
-        r: 254,
-        roll: 75,
-        dive: 741,
-        acc: 3,
-        tough: 2.5,
-        fire: 2.29,
-        plain: "It is a light, quick-climbing Wildcat that nearly turns with a Zero. It is slow beside the newer fighters.",
-        history: "It flew from the small escort carriers in 1944-45.",
-        top: 530,
-        wl: 139.6,
-        climb: 18.3,
-        diveLimit: 741,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      fokker_g1: {
-        short: "G.I",
-        name: "Fokker G.I (twin-boom heavy fighter)",
-        v: [
-          419,
-          470,
-          442
-        ],
-        c: [
-          13,
-          9.5,
-          4.2
-        ],
-        r: 220,
-        roll: 55,
-        dive: 650,
-        acc: 2,
-        tough: 1.5,
-        fire: 1.69,
-        plain: "It is a twin-boom heavy fighter with eight guns in the nose. It turns and climbs worse than a single-seat fighter.",
-        history: "It fought for five days in May 1940 before the Netherlands fell.",
-        top: 475,
-        wl: 125.3,
-        climb: 13,
-        diveLimit: 650,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      fulmar_ii: {
-        short: "Fulmar",
-        name: "Fairey Fulmar Mk II",
-        v: [
-          419,
-          418,
-          392
-        ],
-        c: [
-          5.9,
-          3.3,
-          1
-        ],
-        r: 251,
-        roll: 50,
-        dive: 600,
-        acc: 1.5,
-        tough: 0.5,
-        fire: 1.73,
-        plain: "It is a long-ranged, steady two-seater with eight guns, good against bombers and shadowers far from land. Any single-seat fighter is 100 km/h faster and climbs twice as fast.",
-        history: "It covered the Malta convoys in 1941-42.",
-        top: 438,
-        wl: 138,
-        climb: 6.1,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      fury: {
-        short: "Fury",
-        name: "Hawker Fury II / Persian Fury",
-        v: [
-          328,
-          355,
-          341
-        ],
-        c: [
-          11.7,
-          9.8,
-          4
-        ],
-        r: 114,
-        roll: 60,
-        dive: 500,
-        acc: 1,
-        tough: 0,
-        fire: 0.27,
-        plain: "It is a quick-climbing, agile biplane interceptor. It is far slower than a monoplane fighter and carries two rifle-calibre guns.",
-        history: "Yugoslavia flew it against the German attack of April 1941.",
-        top: 359,
-        wl: 70.1,
-        climb: 11.7,
-        diveLimit: 500,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      fw190_a3: {
-        short: "Fw 190 A",
-        name: "Focke-Wulf Fw 190 A-3 / A-4 (BMW 801 D)",
-        v: [
-          560,
-          605,
-          634
-        ],
-        c: [
-          16.6,
-          16.6,
-          12.1
-        ],
-        r: 356,
-        roll: 160,
-        dive: 750,
-        acc: 3,
-        tough: 2.5,
-        fire: 4.25,
-        plain: "It is faster than a Spitfire V, climbs, dives and rolls better, and nothing can follow it when it changes direction. It turns wide, and above about 6,700 m it loses its edge.",
-        history: "From late 1941 it beat the Spitfire V over the Channel until the Spitfire IX came.",
-        top: 635,
-        wl: 210.4,
-        climb: 16.6,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: false,
-          dive: false
-        }
-      },
-      fw190_a8: {
-        short: "Fw 190 A-8",
-        name: "Focke-Wulf Fw 190 A-8 (BMW 801 D-2)",
-        v: [
-          566,
-          627,
-          631
-        ],
-        c: [
-          15,
-          14.8,
-          7.9
-        ],
-        r: 408,
-        roll: 160,
-        dive: 750,
-        acc: 3,
-        tough: 3,
-        fire: 5.52,
-        plain: "It carries the heaviest guns of any single-engined fighter and rolls better than anything. It is 50 to 80 km/h slower than a Mustang at every height and poor above 7,000 m.",
-        history: "It led the attacks on the American bomber streams in 1944.",
-        top: 652,
-        wl: 241.4,
-        climb: 15,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      fw190_d9: {
-        short: "Fw 190 D",
-        name: "Focke-Wulf Fw 190 D-9 (Jumo 213 A)",
-        v: [
-          612,
-          652,
-          657
-        ],
-        c: [
-          17,
-          17,
-          9.3
-        ],
-        r: 412,
-        roll: 140,
-        dive: 800,
-        acc: 3,
-        tough: 2.5,
-        fire: 3,
-        plain: "It is faster, climbs better and dives better than the Fw 190 A-8, and it is good at height. It gives up some of the A's roll and turn and is a little slower than a Mustang or Tempest.",
-        history: "It reached the units from October 1944.",
-        top: 665,
-        wl: 235,
-        climb: 17,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      g50: {
-        short: "Freccia",
-        name: "Fiat G.50 Freccia",
-        v: [
-          404,
-          462,
-          446
-        ],
-        c: [
-          13.8,
-          12,
-          6.7
-        ],
-        r: 240,
-        roll: 80,
-        dive: 700,
-        acc: 1.5,
-        tough: 0,
-        fire: 0.61,
-        plain: "It is agile and pleasant to fly. It is slower than a Hurricane I, short-ranged and armed with two machine guns.",
-        history: "It was Italy's first monoplane fighter, and Finland flew it against the Soviets.",
-        top: 470,
-        wl: 131.6,
-        climb: 13.8,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      g55: {
-        short: "Centauro",
-        name: "Fiat G.55 Centauro",
-        v: [
-          492,
-          568,
-          617
-        ],
-        c: [
-          17.1,
-          17.1,
-          12.7
-        ],
-        r: 304,
-        roll: 85,
-        dive: 800,
-        acc: 2,
-        tough: 2,
-        fire: 4.39,
-        plain: "It is big-winged and heavily armed, and it keeps its handling at heights where the Bf 109 G and Fw 190 A lose theirs. It is a little slower than the best Allied fighters.",
-        history: "Only about 30 were in service when Italy surrendered in September 1943.",
-        top: 623,
-        wl: 166.7,
-        climb: 17.1,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      gauntlet: {
-        short: "Gauntlet",
-        name: "Gloster Gauntlet II",
-        v: [
-          330,
-          367,
-          350
-        ],
-        c: [
-          11.5,
-          9.7,
-          5.1
-        ],
-        r: 100,
-        roll: 55,
-        dive: 520,
-        acc: 1,
-        tough: 0,
-        fire: 0.27,
-        plain: "It is a steady biplane that is easy to fly. It is far slower than any monoplane and carries two rifle-calibre guns.",
-        history: "Denmark's army flew it in 1940 beside a handful of Fokker D.XXIs.",
-        top: 370,
-        wl: 61.4,
-        climb: 11.5,
-        diveLimit: 520,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      gladiator: {
-        short: "Gladiator",
-        name: "Gloster Gladiator I/II",
-        v: [
-          355,
-          406,
-          382
-        ],
-        c: [
-          11.7,
-          9.3,
-          4.7
-        ],
-        r: 120,
-        roll: 60,
-        dive: 560,
-        acc: 1,
-        tough: 0.5,
-        fire: 0.87,
-        plain: "It turns inside any monoplane. It is about 150 km/h slower than a Bf 109 E.",
-        history: "It was the RAF's last biplane fighter, and it fought over Norway, Malta and Greece.",
-        top: 407,
-        wl: 73.5,
-        climb: 11.7,
-        diveLimit: 560,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      hawk3: {
-        short: "Hawk III",
-        name: "Curtiss Hawk III (export biplane)",
-        v: [
-          346,
-          379,
-          356
-        ],
-        c: [
-          11.5,
-          7.1,
-          1.6
-        ],
-        r: 136,
-        roll: 60,
-        dive: 500,
-        acc: 1,
-        tough: 0,
-        fire: 0.33,
-        plain: "It is a robust, handy biplane. It is far slower than a monoplane and lightly armed.",
-        history: "It was the American export biplane of the mid-1930s.",
-        top: 386,
-        wl: 83.3,
-        climb: 11.5,
-        diveLimit: 500,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      hawk75a: {
-        short: "Hawk 75A",
-        name: "Curtiss Hawk 75A-1 to A-3 (French service)",
-        v: [
-          439,
-          485,
-          456
-        ],
-        c: [
-          12.8,
-          8.6,
-          4.4
-        ],
-        r: 213,
-        roll: 60,
-        dive: 720,
-        acc: 2,
-        tough: 0,
-        fire: 0.94,
-        plain: "It is light on the controls at any speed and out-turns a Bf 109 E with ease. It is about 60 km/h slower, lightly armed and weak at height.",
-        history: "It was the best dogfighter France had in 1939-40.",
-        top: 504,
-        wl: 116.9,
-        climb: 12.8,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      hawk75m: {
-        short: "Hawk 75M",
-        name: "Curtiss Hawk 75M (fixed undercarriage)",
-        v: [
-          416,
-          440,
-          413
-        ],
-        c: [
-          11.9,
-          8.1,
-          3.9
-        ],
-        r: 200,
-        roll: 60,
-        dive: 720,
-        acc: 2,
-        tough: 0,
-        fire: 1.17,
-        plain: "It is a sound, simple monoplane about as fast as a Ki-27. It has fixed wheels, is slower than the retracting Hawk and is lightly armed.",
-        history: "China flew it in 1938-39, before the Zero came.",
-        top: 451,
-        wl: 109.7,
-        climb: 11.9,
-        diveLimit: 720,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      hawk75o: {
-        short: "Hawk 75O",
-        name: "Curtiss Hawk 75O (fixed wheels)",
-        v: [
-          410,
-          436,
-          410
-        ],
-        c: [
-          12.5,
-          8.2,
-          4
-        ],
-        r: 208,
-        roll: 60,
-        dive: 650,
-        acc: 1.5,
-        tough: 0.5,
-        fire: 0.78,
-        plain: "It is a sturdy, simple monoplane. It has fixed wheels, is slower than any fighter with retracting wheels and is lightly armed.",
-        history: "It was Argentina's only modern fighter of the war years.",
-        top: 450,
-        wl: 114.1,
-        climb: 12.5,
-        diveLimit: 650,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      hurricane_i: {
-        short: "Hurricane I",
-        name: "Hawker Hurricane Mk I (Merlin III)",
-        v: [
-          431,
-          493,
-          491
-        ],
-        c: [
-          13.3,
-          12.1,
-          6.5
-        ],
-        r: 212,
-        roll: 64,
-        dive: 628,
-        acc: 1.5,
-        tough: 1.5,
-        fire: 1.73,
-        plain: "It shoots steadily, turns tightly and takes punishment. A Bf 109 E is about 60 km/h faster, climbs better and out-dives it, so it can neither catch nor escape one.",
-        history: "It did most of the RAF's bomber killing in the Battle of Britain.",
-        top: 515,
-        wl: 120.8,
-        climb: 13.3,
-        diveLimit: 628,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      hurricane_ii: {
-        short: "Hurricane II",
-        name: "Hawker Hurricane Mk IIB / IIC (Merlin XX)",
-        v: [
-          439,
-          487,
-          520
-        ],
-        c: [
-          13.8,
-          13.8,
-          8.7
-        ],
-        r: 255,
-        roll: 64,
-        dive: 628,
-        acc: 1.5,
-        tough: 2,
-        fire: 5.2,
-        plain: "It is tougher and hits harder than the Hurricane I, and it still out-turns German fighters. It is over 100 km/h slower than a Bf 109 F.",
-        history: "From 1941 it was moved to ground attack, the desert and the Far East.",
-        top: 531,
-        wl: 145.6,
-        climb: 13.8,
-        diveLimit: 628,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      hurricane_iib_vvs: {
-        short: "Hurricane IIB",
-        name: "Hawker Hurricane Mk IIB (Soviet service)",
-        v: [
-          439,
-          498,
-          531
-        ],
-        c: [
-          13.8,
-          13.8,
-          9.5
-        ],
-        r: 241,
-        roll: 64,
-        dive: 628,
-        acc: 1.5,
-        tough: 2,
-        fire: 2.6,
-        plain: "It is steady and easy to fly. It is slower than every German fighter it meets, and its machine guns are too light.",
-        history: "It was the first Lend-Lease fighter to reach the Soviet Union in numbers, from late 1941.",
-        top: 531,
-        wl: 137.2,
-        climb: 13.8,
-        diveLimit: 628,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      i153: {
-        short: "Chaika",
-        name: "Polikarpov I-153 Chaika (M-62)",
-        v: [
-          376,
-          418,
-          403
-        ],
-        c: [
-          16.4,
-          14.3,
-          8
-        ],
-        r: 130,
-        roll: 60,
-        dive: 520,
-        acc: 1,
-        tough: 1,
-        fire: 1.15,
-        plain: "It turns a full circle in about 13 seconds, faster than any monoplane except the Ki-27. It is 100 to 200 km/h slower than a modern monoplane and can neither catch nor escape one.",
-        history: "About a quarter of the Soviet fighters in the west on 22 June 1941 were I-153s.",
-        top: 424,
-        wl: 79.7,
-        climb: 16.4,
-        diveLimit: 520,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      i15bis: {
-        short: "I-15bis",
-        name: "Polikarpov I-15bis (I-152)",
-        v: [
-          342,
-          371,
-          349
-        ],
-        c: [
-          14.2,
-          9.7,
-          4.3
-        ],
-        r: 123,
-        roll: 60,
-        dive: 520,
-        acc: 1,
-        tough: 1,
-        fire: 0.48,
-        plain: "It is a tough, tight-turning biplane. It is 50 km/h slower than the A5M and helpless against a Zero.",
-        history: "It held its own over China in 1938-39.",
-        top: 379,
-        wl: 75.6,
-        climb: 14.2,
-        diveLimit: 520,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      i16_10: {
-        short: "I-16 type 10",
-        name: "Polikarpov I-16 type 10 (M-25V)",
-        v: [
-          414,
-          436,
-          409
-        ],
-        c: [
-          13.6,
-          8.4,
-          2.9
-        ],
-        r: 233,
-        roll: 100,
-        dive: 720,
-        acc: 1.5,
-        tough: 1,
-        fire: 1.15,
-        plain: "It is a fast, hard-hitting little monoplane. It cannot turn with the Japanese fighters, and a Zero outclasses it.",
-        history: "China and the Soviet volunteers flew it in 1938-39.",
-        top: 448,
-        wl: 118,
-        climb: 13.6,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      i16_24: {
-        short: "I-16 type 24",
-        name: "Polikarpov I-16 type 24 (M-63)",
-        v: [
-          421,
-          460,
-          436
-        ],
-        c: [
-          15.8,
-          12.9,
-          6.2
-        ],
-        r: 255,
-        roll: 100,
-        dive: 720,
-        acc: 1.5,
-        tough: 1,
-        fire: 1.15,
-        plain: "It still out-turns every other monoplane in Europe. It is 100 km/h too slow and can fight only when the enemy chooses to come down to it.",
-        history: "It was the fastest fighter in the world in 1935, and still the most numerous Soviet fighter in June 1941.",
-        top: 462,
-        wl: 129.4,
-        climb: 15.8,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      iar80: {
-        short: "IAR 80",
-        name: "IAR 80A/80B",
-        v: [
-          446,
-          502,
-          484
-        ],
-        c: [
-          15,
-          12.9,
-          6.5
-        ],
-        r: 305,
-        roll: 80,
-        dive: 650,
-        acc: 1.5,
-        tough: 1.5,
-        fire: 1.26,
-        plain: "It is about a match for a Hurricane I or Bf 109 E and carries six machine guns. Its guns are all rifle-calibre, and it is slow beside the newer Allied and Soviet fighters.",
-        history: "It was Romania's own fighter, and it fought over Odessa in 1941.",
-        top: 510,
-        wl: 167.6,
-        climb: 15,
-        diveLimit: 650,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      iar81c: {
-        short: "IAR 81",
-        name: "IAR 81C",
-        v: [
-          441,
-          497,
-          480
-        ],
-        c: [
-          14.5,
-          12.5,
-          6.3
-        ],
-        r: 319,
-        roll: 80,
-        dive: 650,
-        acc: 1.5,
-        tough: 1.5,
-        fire: 2.94,
-        plain: "It is the IAR 80 with two German cannon, deadly to a heavy bomber. A Lightning or Mustang outclasses it.",
-        history: "It fought the American bombers over Ploiești in 1943-44.",
-        top: 505,
-        wl: 175.3,
-        climb: 14.5,
-        diveLimit: 650,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ik3: {
-        short: "IK-3",
-        name: "Ikarus IK-3",
-        v: [
-          440,
-          509,
-          505
-        ],
-        c: [
-          15.5,
-          14,
-          6.4
-        ],
-        r: 265,
-        roll: 75,
-        dive: 700,
-        acc: 2,
-        tough: 1,
-        fire: 1.87,
-        plain: "It is a clean, agile monoplane with a cannon, as good as a Hurricane I. It is slower than a Bf 109 E.",
-        history: "Only twelve were built, and they fought over Belgrade in April 1941.",
-        top: 527,
-        wl: 145.5,
-        climb: 15.5,
-        diveLimit: 700,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      j22: {
-        short: "J 22",
-        name: "FFVS J 22",
-        v: [
-          500,
-          564,
-          529
-        ],
-        c: [
-          17.5,
-          12,
-          5.3
-        ],
-        r: 323,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 1.5,
-        fire: 1.79,
-        plain: "It is a light, fast fighter that climbs well low down. It loses its edge high up and is lightly built of steel tube and wood.",
-        history: "Sweden built it at home during the war, on a copied Twin Wasp engine.",
-        top: 575,
-        wl: 177.2,
-        climb: 17.5,
-        diveLimit: 700,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      j2m3: {
-        short: "Raiden",
-        name: "Mitsubishi J2M3 Raiden ('Jack')",
-        v: [
-          575,
-          657,
-          561
-        ],
-        c: [
-          18.5,
-          16.6,
-          10.2
-        ],
-        r: 292,
-        roll: 70,
-        dive: 800,
-        acc: 3,
-        tough: 0,
-        fire: 4.31,
-        plain: "It climbs fast and carries four cannon to kill bombers. It turns poorly and lacks power at bomber heights.",
-        history: "It was never built in numbers, and it met the B-29 raids on Japan.",
-        top: 671,
-        wl: 160.1,
-        climb: 18.5,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki27: {
-        short: "Ki-27",
-        name: "Nakajima Ki-27b (Type 97 fighter, 'Nate')",
-        v: [
-          429,
-          461,
-          432
-        ],
-        c: [
-          17.4,
-          13.4,
-          8.6
-        ],
-        r: 163,
-        roll: 70,
-        dive: 600,
-        acc: 1.5,
-        tough: 0,
-        fire: 0.32,
-        plain: "It is the supreme turning fighter. It is slow, fragile and armed with two light guns, and anything faster can refuse its fight.",
-        history: "It was the Japanese army's main fighter over China and into 1942.",
-        top: 470,
-        wl: 96.4,
-        climb: 17.4,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki43_i: {
-        short: "Hayabusa I",
-        name: "Nakajima Ki-43-I Hayabusa ('Oscar')",
-        v: [
-          443,
-          490,
-          460
-        ],
-        c: [
-          17,
-          13.5,
-          8.4
-        ],
-        r: 147,
-        roll: 70,
-        dive: 600,
-        acc: 1.5,
-        tough: 0,
-        fire: 1.05,
-        plain: "It is wonderfully agile and long-ranged. It is 70 to 80 km/h slower than a Warhawk E, weakly armed, unprotected and fragile.",
-        history: "Only two army regiments had it when the Pacific war began in December 1941.",
-        top: 495,
-        wl: 93.1,
-        climb: 17,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki43_ii: {
-        short: "Hayabusa II",
-        name: "Nakajima Ki-43-II Hayabusa ('Oscar')",
-        v: [
-          474,
-          525,
-          493
-        ],
-        c: [
-          16.2,
-          12.7,
-          7.5
-        ],
-        r: 191,
-        roll: 70,
-        dive: 620,
-        acc: 1.5,
-        tough: 2,
-        fire: 1.05,
-        plain: "It has more power, armour and tank protection, and it keeps its extraordinary turn. It is about 100 km/h slower than the newer Allied fighters and still carries only two machine guns.",
-        history: "It was the Japanese army's most numerous fighter to the end of the war.",
-        top: 530,
-        wl: 121,
-        climb: 16.2,
-        diveLimit: 620,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki44_ii: {
-        short: "Shoki",
-        name: "Nakajima Ki-44-II Shoki ('Tojo')",
-        v: [
-          516,
-          590,
-          577
-        ],
-        c: [
-          21.8,
-          19.6,
-          11.6
-        ],
-        r: 336,
-        roll: 85,
-        dive: 800,
-        acc: 3,
-        tough: 0,
-        fire: 2.1,
-        plain: "It is a fast-climbing interceptor, quicker than a Warhawk above 4,000 m. It gives up the Japanese turning edge.",
-        history: "It was built in modest numbers and defended Palembang's oil and the home islands.",
-        top: 605,
-        wl: 184.3,
-        climb: 21.8,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki61_i: {
-        short: "Hien",
-        name: "Kawasaki Ki-61-I Hien ('Tony')",
-        v: [
-          498,
-          570,
-          551
-        ],
-        c: [
-          15.2,
-          13.5,
-          8.2
-        ],
-        r: 316,
-        roll: 85,
-        dive: 850,
-        acc: 3,
-        tough: 2,
-        fire: 3.43,
-        plain: "It is fast, strong in a dive, armoured and a good turner, a match for a Warhawk. Its engine is unreliable.",
-        history: "Its licence-built Daimler-Benz engine was its ruin in New Guinea in 1943-44.",
-        top: 580,
-        wl: 173.5,
-        climb: 15.2,
-        diveLimit: 850,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ki84: {
-        short: "Hayate",
-        name: "Nakajima Ki-84-Ia Hayate ('Frank')",
-        v: [
-          543,
-          627,
-          680
-        ],
-        c: [
-          21.8,
-          21.8,
-          15.5
-        ],
-        r: 312,
-        roll: 85,
-        dive: 800,
-        acc: 3,
-        tough: 2,
-        fire: 3.43,
-        plain: "It is fast, well armed, protected and still agile, the best Japanese army fighter. Its engine and undercarriage are weak, and it seldom flies as well as it tests.",
-        history: "Poor engines and green pilots kept it from its promise in 1944-45.",
-        top: 687,
-        wl: 171.5,
-        climb: 21.84,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      la5: {
-        short: "La-5",
-        name: "Lavochkin La-5 (1942, M-82A)",
-        v: [
-          520,
-          560,
-          566
-        ],
-        c: [
-          15.6,
-          15.6,
-          7.6
-        ],
-        r: 350,
-        roll: 85,
-        dive: 720,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It has a 1,700 hp radial and two cannon in a strong airframe. It is heavier and slower to climb than a Bf 109 G.",
-        history: "It first fought at Stalingrad in 1942.",
-        top: 580,
-        wl: 192,
-        climb: 15.6,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      la5fn: {
-        short: "La-5FN",
-        name: "Lavochkin La-5FN (ASh-82FN)",
-        v: [
-          582,
-          635,
-          642
-        ],
-        c: [
-          16.5,
-          16.5,
-          8.8
-        ],
-        r: 328,
-        roll: 90,
-        dive: 720,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It is faster than a Bf 109 G or Fw 190 A below 3,000 m and turns tighter. Its edge fades above 6,000 m, and it has fuel for only about 40 minutes at combat power.",
-        history: "It came to the front in numbers for Kursk in July 1943.",
-        top: 648,
-        wl: 179.9,
-        climb: 16.5,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      la7: {
-        short: "La-7",
-        name: "Lavochkin La-7 (ASh-82FN)",
-        v: [
-          593,
-          640,
-          641
-        ],
-        c: [
-          20.4,
-          20.4,
-          11.1
-        ],
-        r: 343,
-        roll: 85,
-        dive: 720,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It is fast, quick-climbing and tight-turning below 6,000 m. It is short-ranged, hot in the cockpit and keeps its pilot busy.",
-        history: "It came from autumn 1944 and was the best Soviet fighter of the war below 6,000 m.",
-        top: 661,
-        wl: 188.5,
-        climb: 20.4,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      lagg3: {
-        short: "LaGG-3",
-        name: "Lavochkin-Gorbunov-Gudkov LaGG-3 (1941, M-105P)",
-        v: [
-          489,
-          542,
-          522
-        ],
-        c: [
-          12.7,
-          10.7,
-          4.8
-        ],
-        r: 339,
-        roll: 85,
-        dive: 720,
-        acc: 2,
-        tough: 2,
-        fire: 2.5,
-        plain: "It is strong and well armed. It is too heavy for its engine: slow, slow-climbing and outclassed by a Bf 109 F.",
-        history: "It was lightened in 1942-43 and gave way to the La-5.",
-        top: 549,
-        wl: 186.2,
-        climb: 12.7,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      martlet_ii: {
-        short: "Martlet",
-        name: "Grumman Martlet Mk II (G-36B)",
-        v: [
-          461,
-          469,
-          441
-        ],
-        c: [
-          9,
-          5.5,
-          2.5
-        ],
-        r: 266,
-        roll: 69,
-        dive: 741,
-        acc: 2,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It is a true carrier fighter with folding wings and heavy guns. At about 470 km/h it is too slow to match land fighters.",
-        history: "It gave the Royal Navy its first modern carrier fighter in 1941.",
-        top: 472,
-        wl: 146.3,
-        climb: 9.9,
-        diveLimit: 741,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      mb152: {
-        short: "MB.152",
-        name: "Bloch MB.152 (and MB.151)",
-        v: [
-          440,
-          509,
-          478
-        ],
-        c: [
-          12,
-          9.6,
-          4.9
-        ],
-        r: 284,
-        roll: 60,
-        dive: 700,
-        acc: 2,
-        tough: 1.5,
-        fire: 3.42,
-        plain: "It is rugged and armed with cannon. It is slow to climb and slower than a Bf 109 E.",
-        history: "It was the most numerous French fighter after the MS.406 in May 1940.",
-        top: 509,
-        wl: 155.9,
-        climb: 12,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      mc200: {
-        short: "Saetta",
-        name: "Macchi MC.200 Saetta",
-        v: [
-          446,
-          504,
-          346
-        ],
-        c: [
-          15.3,
-          11.8,
-          4.7
-        ],
-        r: 238,
-        roll: 80,
-        dive: 805,
-        acc: 2,
-        tough: 1,
-        fire: 0.61,
-        plain: "It is strong and agile, dives very well, and out-turns and out-climbs a Hurricane I. Its radial engine keeps it near 500 km/h, and it has only two machine guns.",
-        history: "It fought from Greece to Russia and North Africa in 1940-43.",
-        top: 504,
-        wl: 130.8,
-        climb: 15.3,
-        diveLimit: 805,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      mc202: {
-        short: "Folgore",
-        name: "Macchi MC.202 Folgore",
-        v: [
-          503,
-          577,
-          577
-        ],
-        c: [
-          18.1,
-          17.2,
-          10.4
-        ],
-        r: 317,
-        roll: 85,
-        dive: 750,
-        acc: 2,
-        tough: 2,
-        fire: 0.93,
-        plain: "It matches a Spitfire V in speed and climb, dives as well and out-runs a Hurricane. A Spitfire turns tighter, and its two heavy machine guns hit too lightly.",
-        history: "It first fought in late November 1941 and was Italy's best fighter of 1942.",
-        top: 600,
-        wl: 174.2,
-        climb: 18.1,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      mc205v: {
-        short: "Veltro",
-        name: "Macchi MC.205V Veltro",
-        v: [
-          502,
-          581,
-          638
-        ],
-        c: [
-          17.4,
-          17.4,
-          12.5
-        ],
-        r: 369,
-        roll: 85,
-        dive: 800,
-        acc: 2,
-        tough: 2,
-        fire: 3.13,
-        plain: "It is a match for a Spitfire IX or Mustang in speed and turn below 7,000 m. Its small wing lets it down at height.",
-        history: "Only about 66 were in service when Italy surrendered in September 1943.",
-        top: 642,
-        wl: 202.9,
-        climb: 17.4,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      me262_a1a: {
-        short: "Me 262",
-        name: "Messerschmitt Me 262 A-1a (two Jumo 004 B jets)",
-        v: [
-          834,
-          858,
-          859
-        ],
-        c: [
-          20,
-          20,
-          12.2
-        ],
-        r: 537,
-        roll: 60,
-        dive: 1e3,
-        acc: 3,
-        tough: 1.5,
-        fire: 13.64,
-        plain: "It is about 150 km/h faster than the best propeller fighters, and nothing can stop its pass through a bomber formation. It cannot fight slowly, cannot be throttled quickly and is helpless near its own runway.",
-        history: "Never more than about 60 were serviceable at once, against more than 1,000 German piston fighters.",
-        top: 869,
-        wl: 294.9,
-        climb: 20,
-        diveLimit: 1e3,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      meteor3: {
-        short: "Meteor",
-        name: "Gloster Meteor F.3",
-        v: [
-          710,
-          745,
-          774
-        ],
-        c: [
-          20,
-          20,
-          20
-        ],
-        r: 328,
-        roll: 60,
-        dive: 870,
-        acc: 2.5,
-        tough: 2,
-        fire: 5.2,
-        plain: "It is a fast, steady jet with four cannon. It is slow to accelerate and its early engines are weak.",
-        history: "It flew against the flying bombs in 1944 and never met a German fighter.",
-        top: 790,
-        wl: 180.2,
-        climb: 20,
-        diveLimit: 870,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      mig3: {
-        short: "MiG-3",
-        name: "Mikoyan-Gurevich MiG-3 (AM-35A)",
-        v: [
-          491,
-          559,
-          616
-        ],
-        c: [
-          16.4,
-          16.4,
-          13
-        ],
-        r: 345,
-        roll: 85,
-        dive: 720,
-        acc: 1.5,
-        tough: 2,
-        fire: 1.22,
-        plain: "It is very fast above 7,000 m. Low down, where it has to fight, it is heavy, slow to turn and under-armed.",
-        history: "It was the most numerous new Soviet fighter in June 1941.",
-        top: 622,
-        wl: 189.2,
-        climb: 16.4,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      ms406: {
-        short: "MS.406",
-        name: "Morane-Saulnier MS.406",
-        v: [
-          436,
-          490,
-          449
-        ],
-        c: [
-          13.2,
-          10.4,
-          4.7
-        ],
-        r: 289,
-        roll: 60,
-        dive: 730,
-        acc: 1.5,
-        tough: 0,
-        fire: 1.91,
-        plain: "It is handy and easy, out-turns a Bf 109 and takes punishment. It is 60 to 70 km/h slower, under-powered and under-armed, and its guns freeze at height.",
-        history: "It was France's most numerous fighter in 1939-40.",
-        top: 490,
-        wl: 158.8,
-        climb: 13.2,
-        diveLimit: 730,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      n1k2j: {
-        short: "Shiden-Kai",
-        name: "Kawanishi N1K2-J Shiden-Kai ('George 21')",
-        v: [
-          585,
-          634,
-          638
-        ],
-        c: [
-          19.7,
-          19.7,
-          12.6
-        ],
-        r: 262,
-        roll: 82,
-        dive: 780,
-        acc: 3,
-        tough: 0,
-        fire: 4.18,
-        plain: "It matches a Hellcat or Corsair in a dogfight and carries four cannon. Its engine is unreliable and it climbs too slowly to catch a B-29.",
-        history: "It came late and in small numbers, mostly with the 343rd Kokutai in 1945.",
-        top: 656,
-        wl: 166,
-        climb: 19.7,
-        diveLimit: 780,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      na50: {
-        short: "Torito",
-        name: "North American NA-50 'Torito'",
-        v: [
-          439,
-          460,
-          431
-        ],
-        c: [
-          12,
-          7.8,
-          3.7
-        ],
-        r: 210,
-        roll: 70,
-        dive: 650,
-        acc: 2,
-        tough: 0.5,
-        fire: 0.33,
-        plain: "It is a sturdy monoplane that climbs well low down. It is slow beside the great powers' fighters and carries only two machine guns.",
-        history: "Seven were built for Peru, and they fought Ecuador in 1941.",
-        top: 475,
-        wl: 115.3,
-        climb: 12,
-        diveLimit: 650,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p11c: {
-        short: "P.11c",
-        name: "PZL P.11c",
-        v: [
-          318,
-          381,
-          370
-        ],
-        c: [
-          13,
-          10.5,
-          2.8
-        ],
-        r: 166,
-        roll: 60,
-        dive: 600,
-        acc: 1.5,
-        tough: 0.5,
-        fire: 0.56,
-        plain: "It is sturdy and handy, with a gull wing and an open cockpit. It is about 170 km/h slower than a Bf 109 E and has about a fifth of its weight of fire.",
-        history: "Polish pilots in P.11cs claimed about as many as they lost in September 1939, in a fighter a generation behind.",
-        top: 390,
-        wl: 91.1,
-        climb: 13,
-        diveLimit: 600,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p24: {
-        short: "P.24",
-        name: "PZL P.24F/G",
-        v: [
-          380,
-          428,
-          402
-        ],
-        c: [
-          14,
-          11.1,
-          6
-        ],
-        r: 203,
-        roll: 60,
-        dive: 600,
-        acc: 1.5,
-        tough: 0.5,
-        fire: 2.34,
-        plain: "It is a sturdy gull-wing fighter with cannon. It is about 120 km/h slower than a Bf 109 E.",
-        history: "It was Greece's main fighter against Italy in 1940-41.",
-        top: 430,
-        wl: 111.7,
-        climb: 14,
-        diveLimit: 600,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p26a: {
-        short: "Peashooter",
-        name: "Boeing P-26A Peashooter",
-        v: [
-          362,
-          360,
-          338
-        ],
-        c: [
-          11.5,
-          6.4,
-          2.1
-        ],
-        r: 180,
-        roll: 70,
-        dive: 600,
-        acc: 2,
-        tough: 0.5,
-        fire: 0.33,
-        plain: "It is a light, nimble monoplane. It has fixed wheels, an open cockpit and two machine guns.",
-        history: "It was America's first all-metal monoplane fighter.",
-        top: 377,
-        wl: 98.6,
-        climb: 11.8,
-        diveLimit: 600,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p36a: {
-        short: "P-36",
-        name: "Curtiss P-36A Hawk",
-        v: [
-          461,
-          489,
-          459
-        ],
-        c: [
-          17,
-          11.4,
-          5.8
-        ],
-        r: 213,
-        roll: 60,
-        dive: 720,
-        acc: 2,
-        tough: 1,
-        fire: 0.51,
-        plain: "It is light, handy and turns well. It is slow and lightly armed beside the newer fighters.",
-        history: "It was the US Army's fighter of 1938-41.",
-        top: 504,
-        wl: 116.9,
-        climb: 17,
-        diveLimit: 720,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p38_fg: {
-        short: "Lightning G",
-        name: "Lockheed P-38F / P-38G Lightning",
-        v: [
-          561,
-          608,
-          646
-        ],
-        c: [
-          18.1,
-          18.1,
-          12.9
-        ],
-        r: 370,
-        roll: 50,
-        dive: 680,
-        acc: 2,
-        tough: 2.5,
-        fire: 3.59,
-        plain: "It climbs fast, flies far and hits hard from the nose. It rolls slowly, cannot follow a German fighter that dives steeply from height, and an Fw 190 out-turns it at most speeds.",
-        history: "It escorted the first long raids from North Africa, and it shot down Admiral Yamamoto in 1943.",
-        top: 650,
-        wl: 218.7,
-        climb: 18.1,
-        diveLimit: 680,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p38_jl: {
-        short: "Lightning J",
-        name: "Lockheed P-38J / P-38L Lightning",
-        v: [
-          571,
-          625,
-          672
-        ],
-        c: [
-          20.3,
-          20.3,
-          16.7
-        ],
-        r: 351,
-        roll: 90,
-        dive: 750,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.59,
-        plain: "It flies far, out-climbs the German fighters and out-runs them at height. It is costly and demanding to fly, and its engines suffer in the cold.",
-        history: "It was the top-scoring American fighter in the Pacific.",
-        top: 678,
-        wl: 230,
-        climb: 20.3,
-        diveLimit: 750,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p39d: {
-        short: "Airacobra D",
-        name: "Bell P-39D Airacobra",
-        v: [
-          533,
-          588,
-          553
-        ],
-        c: [
-          15,
-          11.5,
-          5.6
-        ],
-        r: 319,
-        roll: 75,
-        dive: 760,
-        acc: 2.5,
-        tough: 2,
-        fire: 3.01,
-        plain: "It carries a 37 mm cannon in the nose and is good low down. It has no high-altitude supercharger and is poor above 4,500 m.",
-        history: "It fought in New Guinea in 1942 and went to the Soviet Union in numbers.",
-        top: 592,
-        wl: 175.3,
-        climb: 15,
-        diveLimit: 760,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p39n_vvs: {
-        short: "Airacobra N",
-        name: "Bell P-39N/Q Airacobra (Soviet service)",
-        v: [
-          581,
-          630,
-          591
-        ],
-        c: [
-          16.9,
-          12.2,
-          7.5
-        ],
-        r: 304,
-        roll: 75,
-        dive: 760,
-        acc: 2,
-        tough: 2,
-        fire: 2.67,
-        plain: "Flown low and light, it is fast, well armed and a match for a Bf 109 G below 4,500 m. It has no high-altitude power and an unforgiving spin.",
-        history: "Soviet aces such as Pokryshkin made their names in it.",
-        top: 641,
-        wl: 166.7,
-        climb: 16.9,
-        diveLimit: 760,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p40_bc: {
-        short: "Tomahawk",
-        name: "Curtiss P-40B / P-40C (Tomahawk IIA / IIB)",
-        v: [
-          507,
-          565,
-          533
-        ],
-        c: [
-          13.5,
-          10.5,
-          4.3
-        ],
-        r: 282,
-        roll: 95,
-        dive: 772,
-        acc: 3,
-        tough: 2.5,
-        fire: 1.49,
-        plain: "It is fast in a dive, quick in the roll and tough, and it turns well at speed. It cannot climb or fight high, so its enemies start above it.",
-        history: "The RAF flew it in the desert from mid-1941.",
-        top: 566,
-        wl: 155.1,
-        climb: 13.5,
-        diveLimit: 772,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p40_e: {
-        short: "Warhawk E",
-        name: "Curtiss P-40E Warhawk (Kittyhawk IA)",
-        v: [
-          515,
-          569,
-          537
-        ],
-        c: [
-          10.7,
-          8.3,
-          3.3
-        ],
-        r: 312,
-        roll: 95,
-        dive: 772,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It is a rugged low-level fighter with six heavy machine guns that out-turns and out-dives a Bf 109. A Bf 109 F climbs away from it and attacks from above, and it is helpless above about 5,000 m.",
-        history: "It was the RAF's Kittyhawk in the desert and the Americans' fighter in the Pacific in 1942.",
-        top: 570,
-        wl: 171.4,
-        climb: 10.7,
-        diveLimit: 772,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p40b: {
-        short: "Hawk 81",
-        name: "Curtiss Hawk 81-A2 (P-40B/C, Tomahawk) of the AVG",
-        v: [
-          495,
-          565,
-          533
-        ],
-        c: [
-          16.6,
-          13.4,
-          6.7
-        ],
-        r: 276,
-        roll: 95,
-        dive: 772,
-        acc: 3,
-        tough: 2.5,
-        fire: 1.94,
-        plain: "It is fast low down, very fast in a dive, well armed and tough. It climbs poorly, cannot turn with any Japanese fighter and runs out of power above 6,000 m.",
-        history: "The American Volunteer Group flew it over Burma and China in 1941-42.",
-        top: 566,
-        wl: 151.5,
-        climb: 16.6,
-        diveLimit: 772,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p40n: {
-        short: "Warhawk N",
-        name: "Curtiss P-40N Warhawk (and P-40E/K in China)",
-        v: [
-          483,
-          551,
-          520
-        ],
-        c: [
-          12.7,
-          10.1,
-          4.6
-        ],
-        r: 314,
-        roll: 95,
-        dive: 772,
-        acc: 3,
-        tough: 2.5,
-        fire: 3.44,
-        plain: "It is rugged, well armed and fast in a dive. Everything it meets out-climbs it, and the newer Japanese army fighters outpace it.",
-        history: "It kept the Warhawk useful into 1944, most of all in China and New Guinea.",
-        top: 552,
-        wl: 172.7,
-        climb: 12.7,
-        diveLimit: 772,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      p43a: {
-        short: "Lancer",
-        name: "Republic P-43A-1 Lancer",
-        v: [
-          471,
-          541,
-          557
-        ],
-        c: [
-          14.2,
-          14.2,
-          8.3
-        ],
-        r: 296,
-        roll: 75,
-        dive: 760,
-        acc: 2,
-        tough: 0,
-        fire: 2.29,
-        plain: "It is a high-altitude fighter with a turbo-supercharger and four heavy guns. It is unprotected and leaks fuel.",
-        history: "China flew a few from 1942.",
-        top: 573,
-        wl: 162.7,
-        climb: 14.2,
-        diveLimit: 760,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      p47_cd: {
-        short: "Thunderbolt C",
-        name: "Republic P-47C / early P-47D Thunderbolt (razorback)",
-        v: [
-          537,
-          617,
-          656
-        ],
-        c: [
-          14.6,
-          14.6,
-          14.6
-        ],
-        r: 357,
-        roll: 100,
-        dive: 837,
-        acc: 3,
-        tough: 3,
-        fire: 4.59,
-        plain: "Above 7,500 m it is as fast as anything, and it out-dives every opponent. It climbs poorly, turns wide and is at a disadvantage low down.",
-        history: "It first fought on 10 April 1943, with the Eighth Air Force.",
-        top: 697,
-        wl: 211.4,
-        climb: 14.6,
-        diveLimit: 837,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      p47_d25: {
-        short: "Thunderbolt D",
-        name: "Republic P-47D-25 and later (bubble canopy, paddle-blade propeller, water injection)",
-        v: [
-          575,
-          642,
-          703
-        ],
-        c: [
-          16.6,
-          16.6,
-          13.6
-        ],
-        r: 358,
-        roll: 100,
-        dive: 837,
-        acc: 3,
-        tough: 3,
-        fire: 4.59,
-        plain: "It climbs faster than the Thunderbolt C, has a clear view and can fight nearly 1,000 km from its base. It is still the widest-turning Allied fighter and slow to accelerate low down.",
-        history: "It was the most numerous American fighter in Europe to the end of 1944.",
-        top: 707,
-        wl: 211.5,
-        climb: 16.6,
-        diveLimit: 837,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      p51_a: {
-        short: "Mustang A",
-        name: "North American P-51A Mustang (Allison V-1710-81); RAF Mustang I and II",
-        v: [
-          626,
-          661,
-          637
-        ],
-        c: [
-          15.2,
-          10.7,
-          6
-        ],
-        r: 317,
-        roll: 95,
-        dive: 813,
-        acc: 3,
-        tough: 2,
-        fire: 2.29,
-        plain: "It is the fastest fighter low down, with long range. Above 5,000 m it runs out of power, and it rolls and climbs worse than a Spitfire.",
-        history: "The RAF flew it from 1942 as a low-level fighter and reconnaissance aircraft.",
-        top: 668,
-        wl: 167.6,
-        climb: 15.2,
-        diveLimit: 813,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      p51_bc: {
-        short: "Mustang B",
-        name: "North American P-51B / P-51C Mustang (RAF Mustang III), Packard Merlin",
-        v: [
-          616,
-          681,
-          704
-        ],
-        c: [
-          18.3,
-          18.3,
-          18.2
-        ],
-        r: 365,
-        roll: 95,
-        dive: 813,
-        acc: 3,
-        tough: 2,
-        fire: 2.29,
-        plain: "It is 50 to 80 km/h faster than a Bf 109 G or Fw 190 A at height, out-dives them and can fight far from its base. A Spitfire out-climbs and out-turns it, and an Fw 190 out-rolls it.",
-        history: "It could fly to Berlin and back, and only the 354th Group had it in December 1943.",
-        top: 711,
-        wl: 192.8,
-        climb: 18.3,
-        diveLimit: 813,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      p51_d: {
-        short: "Mustang D",
-        name: "North American P-51D Mustang (RAF Mustang IV)",
-        v: [
-          626,
-          683,
-          708
-        ],
-        c: [
-          17.3,
-          17.3,
-          14.6
-        ],
-        r: 384,
-        roll: 95,
-        dive: 813,
-        acc: 3,
-        tough: 2,
-        fire: 3.44,
-        plain: "It is fast at every height, dives fast and can fight 1,200 km from its base. It climbs and turns worse than a Spitfire, and ground fire brings it down easily.",
-        history: "It won the Allies daylight command of the air over Germany.",
-        top: 711,
-        wl: 202.8,
-        climb: 17.3,
-        diveLimit: 813,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      p80a: {
-        short: "Shooting Star",
-        name: "Lockheed P-80A Shooting Star (what-if in combat)",
-        v: [
-          881,
-          879,
-          857
-        ],
-        c: [
-          21.9,
-          16.1,
-          11.2
-        ],
-        r: 437,
-        roll: 90,
-        dive: 950,
-        acc: 3,
-        tough: 2,
-        fire: 3.44,
-        plain: "It is a fast, clean jet fighter with six heavy machine guns. Its early engines are unreliable and it is slow to accelerate.",
-        history: "Four reached Italy in 1945 and none fought.",
-        top: 898,
-        wl: 240.1,
-        climb: 23,
-        diveLimit: 950,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      re2000: {
-        short: "Re.2000",
-        name: "Reggiane Re.2000 (Héja, J 20)",
-        v: [
-          457,
-          516,
-          507
-        ],
-        c: [
-          15,
-          13.7,
-          8.1
-        ],
-        r: 254,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 1,
-        fire: 0.61,
-        plain: "It is a light, agile radial fighter. It carries only two guns.",
-        history: "Hungary built its own as the Héja, and Sweden flew it as the J 20.",
-        top: 530,
-        wl: 139.2,
-        climb: 15,
-        diveLimit: 700,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      re2001: {
-        short: "Re.2001",
-        name: "Reggiane Re.2001 Falco II",
-        v: [
-          457,
-          523,
-          520
-        ],
-        c: [
-          13,
-          12.1,
-          7
-        ],
-        r: 293,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 0.93,
-        plain: "It is agile, with a big wing and good range. On the same engine it is much slower than a Folgore, and no better armed.",
-        history: "It flew over Malta in 1942.",
-        top: 542,
-        wl: 160.8,
-        climb: 13,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      re2005: {
-        short: "Sagittario",
-        name: "Reggiane Re.2005 Sagittario",
-        v: [
-          497,
-          574,
-          621
-        ],
-        c: [
-          20,
-          20,
-          13.8
-        ],
-        r: 322,
-        roll: 85,
-        dive: 800,
-        acc: 2,
-        tough: 2,
-        fire: 4.39,
-        plain: "It is perhaps the best-handling Italian fighter, fast and heavily armed. Its tail is suspect in fast dives.",
-        history: "Only 48 were built.",
-        top: 628,
-        wl: 177,
-        climb: 20,
-        diveLimit: 800,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      sea_hurricane_ib: {
-        short: "Sea Hurricane",
-        name: "Hawker Sea Hurricane Mk IB",
-        v: [
-          420,
-          481,
-          475
-        ],
-        c: [
-          12.5,
-          11.3,
-          5.7
-        ],
-        r: 243,
-        roll: 64,
-        dive: 628,
-        acc: 1.5,
-        tough: 2,
-        fire: 1.73,
-        plain: "It is handy and tough and climbs well for a carrier fighter. It is slow by land standards and short-ranged, and its wings do not fold.",
-        history: "It gave the Royal Navy a real single-seat fighter in 1941-42, on the Malta and Arctic convoys.",
-        top: 496,
-        wl: 138.4,
-        climb: 12.5,
-        diveLimit: 628,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      seafire_l2c: {
-        short: "Seafire II",
-        name: "Supermarine Seafire L Mk IIC (Merlin 32)",
-        v: [
-          532,
-          527,
-          507
-        ],
-        c: [
-          21.8,
-          14.3,
-          7.8
-        ],
-        r: 257,
-        roll: 90,
-        dive: 724,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It is a fleet interceptor: 507 km/h at sea level and a climb of nearly 24 m/s. It has two hours of fuel, no folding wings and a fragile undercarriage.",
-        history: "It covered the Salerno landings in 1943.",
-        top: 546,
-        wl: 141.1,
-        climb: 23.8,
-        diveLimit: 724,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      seafire_l3: {
-        short: "Seafire III",
-        name: "Supermarine Seafire L Mk III (Merlin 55M)",
-        v: [
-          561,
-          566,
-          552
-        ],
-        c: [
-          15.5,
-          10.4,
-          6
-        ],
-        r: 265,
-        roll: 90,
-        dive: 724,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It is a superb low-level interceptor: 578 km/h at 1,800 m and a climb of 16.5 m/s. It is short-ranged, and its undercarriage is too weak for carrier decks.",
-        history: "It flew with the British Pacific Fleet in 1945.",
-        top: 578,
-        wl: 145.8,
-        climb: 16.5,
-        diveLimit: 724,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      seversky_j9: {
-        short: "Seversky",
-        name: "Seversky EP-106 (J 9)",
-        v: [
-          442,
-          484,
-          457
-        ],
-        c: [
-          12,
-          9.6,
-          4.6
-        ],
-        r: 237,
-        roll: 70,
-        dive: 700,
-        acc: 2,
-        tough: 1,
-        fire: 1.44,
-        plain: "It is a sturdy, long-ranged monoplane, the P-35's cousin. It is slow beside the newer fighters.",
-        history: "Sweden received 60 before the American export ban of 1940 stopped the rest.",
-        top: 485,
-        wl: 129.9,
-        climb: 12,
-        diveLimit: 700,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      spitfire_i: {
-        short: "Spitfire I",
-        name: "Supermarine Spitfire Mk I (Merlin III)",
-        v: [
-          526,
-          574,
-          552
-        ],
-        c: [
-          14.7,
-          10.7,
-          5.9
-        ],
-        r: 223,
-        roll: 70,
-        dive: 724,
-        acc: 2,
-        tough: 1.5,
-        fire: 1.73,
-        plain: "It turns better than any other monoplane and is as fast as a Bf 109 E. Its engine cuts out if it pushes straight over into a dive, it carries only rifle-calibre guns and it has little fuel.",
-        history: "About 19 Spitfire squadrons fought the Battle of Britain beside about 30 of Hurricanes.",
-        top: 578,
-        wl: 122.5,
-        climb: 14.7,
-        diveLimit: 724,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      spitfire_ix: {
-        short: "Spitfire IX",
-        name: "Supermarine Spitfire F Mk IX (Merlin 61) and LF Mk IX (Merlin 66)",
-        v: [
-          565,
-          631,
-          654
-        ],
-        c: [
-          19.6,
-          19.6,
-          18.2
-        ],
-        r: 275,
-        roll: 90,
-        dive: 724,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It matches an Fw 190 A and a Bf 109 G for speed, out-climbs them high and out-turns both. It cannot follow them down in a dive or fly far from its base.",
-        history: "It came in July 1942 and put the RAF level with the Fw 190 again.",
-        top: 658,
-        wl: 150.8,
-        climb: 19.6,
-        diveLimit: 724,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      spitfire_v: {
-        short: "Spitfire V",
-        name: "Supermarine Spitfire Mk VB / VC (Merlin 45)",
-        v: [
-          525,
-          577,
-          590
-        ],
-        c: [
-          14.3,
-          14.3,
-          8.8
-        ],
-        r: 241,
-        roll: 90,
-        dive: 724,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It is a Spitfire I with cannon and 40% more power, a match for a Bf 109 F. An Fw 190 A beats it in everything except the turn.",
-        history: "It was the RAF's main fighter of 1941-42, from the Channel to Malta.",
-        top: 604,
-        wl: 132.1,
-        climb: 14.3,
-        diveLimit: 724,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      spitfire_v_trop: {
-        short: "Tropical Spitfire V",
-        name: "Supermarine Spitfire V (tropical, Vokes filter)",
-        v: [
-          510,
-          562,
-          575
-        ],
-        c: [
-          13.5,
-          13.5,
-          8.3
-        ],
-        r: 241,
-        roll: 90,
-        dive: 724,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It is a Spitfire V with a dust filter for the desert and the tropics. The filter costs it about 15 km/h and some climb.",
-        history: "It was the Spitfire of Malta, the desert, Burma and Darwin in 1942-43.",
-        top: 589,
-        wl: 132.1,
-        climb: 13.5,
-        diveLimit: 724,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      spitfire_xiv: {
-        short: "Spitfire XIV",
-        name: "Supermarine Spitfire F Mk XIV (Griffon 65)",
-        v: [
-          616,
-          681,
-          716
-        ],
-        c: [
-          23.3,
-          23.3,
-          19.9
-        ],
-        r: 310,
-        roll: 90,
-        dive: 756,
-        acc: 2,
-        tough: 2,
-        fire: 3.47,
-        plain: "It climbs and turns better than any other Allied fighter, with speed to match anything with a propeller. It cannot go far, and it is the slowest Allied fighter in a dive.",
-        history: "It came from January 1944 and hunted flying bombs and jets.",
-        top: 721,
-        wl: 170.1,
-        climb: 23.3,
-        diveLimit: 756,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      tempest_v: {
-        short: "Tempest",
-        name: "Hawker Tempest Mk V (Sabre IIA / IIB)",
-        v: [
-          633,
-          685,
-          667
-        ],
-        c: [
-          22.3,
-          21,
-          11.3
-        ],
-        r: 333,
-        roll: 100,
-        dive: 869,
-        acc: 3,
-        tough: 2.5,
-        fire: 5.2,
-        plain: "It is the fastest propeller fighter low down, with superb dive acceleration and four cannon. Above about 6,000 m it fades, and it cannot out-turn a Spitfire or out-roll an Fw 190.",
-        history: "It came from April 1944 and destroyed more flying bombs than any other fighter.",
-        top: 695,
-        wl: 182.7,
-        climb: 22.3,
-        diveLimit: 869,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      typhoon_ib: {
-        short: "Typhoon",
-        name: "Hawker Typhoon Mk IB (Sabre IIA)",
-        v: [
-          591,
-          623,
-          644
-        ],
-        c: [
-          19.5,
-          19.3,
-          10.6
-        ],
-        r: 353,
-        roll: 70,
-        dive: 845,
-        acc: 3,
-        tough: 2.5,
-        fire: 5.2,
-        plain: "It is very fast below 3,000 m and a steady platform for four cannon. It climbs poorly high up, and it turns and rolls worse than a Spitfire.",
-        history: "It ended the war as the RAF's main ground-attack fighter, with about 18 to 20 squadrons by June 1944.",
-        top: 665,
-        wl: 193.9,
-        climb: 19.5,
-        diveLimit: 845,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: true
-        }
-      },
-      vg33: {
-        short: "VG-33",
-        name: "Arsenal VG-33",
-        v: [
-          471,
-          543,
-          532
-        ],
-        c: [
-          15,
-          13.5,
-          7.8
-        ],
-        r: 377,
-        roll: 75,
-        dive: 800,
-        acc: 2,
-        tough: 1.5,
-        fire: 2.3,
-        plain: "It is a wooden fighter as fast as a Bf 109 E, with a cannon in the propeller hub. It turns wider than a Bf 109 E.",
-        history: "A handful flew before the armistice of June 1940.",
-        top: 558,
-        wl: 207.1,
-        climb: 15,
-        diveLimit: 800,
-        laid: {
-          speed: false,
-          turn: false,
-          climb: false,
-          dive: false
-        }
-      },
-      yak1: {
-        short: "Yak-1",
-        name: "Yakovlev Yak-1 (1941, M-105P)",
-        v: [
-          500,
-          568,
-          548
-        ],
-        c: [
-          15.5,
-          13.2,
-          6.7
-        ],
-        r: 303,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 1.86,
-        plain: "It is light on the controls, a good turner and a match for a Bf 109 E. It never climbs with a Bf 109 F or G.",
-        history: "It was the best Soviet fighter of 1941.",
-        top: 577,
-        wl: 166.6,
-        climb: 15.5,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: false,
-          dive: false
-        }
-      },
-      yak3: {
-        short: "Yak-3",
-        name: "Yakovlev Yak-3 (VK-105PF2)",
-        v: [
-          586,
-          641,
-          602
-        ],
-        c: [
-          20.8,
-          16.1,
-          8.7
-        ],
-        r: 331,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It is a superb low-level dogfighter: 646 km/h at 4,100 m, 5,000 m in four and a half minutes and a full circle in about 18 seconds. It has short range, a light structure and little to offer above 5,000 m.",
-        history: "It came to the front in mid-1944.",
-        top: 646,
-        wl: 181.6,
-        climb: 20.8,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      yak7b: {
-        short: "Yak-7B",
-        name: "Yakovlev Yak-7B (M-105PF)",
-        v: [
-          546,
-          580,
-          545
-        ],
-        c: [
-          14.2,
-          10.6,
-          5.6
-        ],
-        r: 319,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It is a steady, well-armed low-level fighter that matches a Bf 109 G at ground level. Above 4,000 m it falls behind in speed and climb.",
-        history: "It came to the front in 1942.",
-        top: 588,
-        wl: 175.2,
-        climb: 14.2,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      yak9: {
-        short: "Yak-9",
-        name: "Yakovlev Yak-9 (1942-43, M-105PF)",
-        v: [
-          542,
-          597,
-          561
-        ],
-        c: [
-          18.4,
-          14.9,
-          8.7
-        ],
-        r: 305,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 1.92,
-        plain: "It out-turns every German fighter and matches them for speed at ground level. It is lightly armed and loses its edge above 4,000 m.",
-        history: "It became the most-built Soviet fighter of the war.",
-        top: 599,
-        wl: 167.5,
-        climb: 18.4,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      yak9d: {
-        short: "Yak-9D",
-        name: "Yakovlev Yak-9D (long range, M-105PF)",
-        v: [
-          550,
-          581,
-          545
-        ],
-        c: [
-          15.4,
-          10.6,
-          4.5
-        ],
-        r: 331,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 1.92,
-        plain: "It trades climb and turn for range and can fly 1,360 km. It is only an even match for a Bf 109 G low down, and worse above 3,500 m.",
-        history: "It escorted Soviet bombers on long raids from 1943.",
-        top: 591,
-        wl: 181.7,
-        climb: 15.4,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      },
-      yak9u: {
-        short: "Yak-9U",
-        name: "Yakovlev Yak-9U (VK-107A)",
-        v: [
-          594,
-          662,
-          638
-        ],
-        c: [
-          18.8,
-          16.4,
-          9.1
-        ],
-        r: 340,
-        roll: 85,
-        dive: 700,
-        acc: 2,
-        tough: 2,
-        fire: 2.56,
-        plain: "It has a 1,500 hp engine and reaches 672 km/h. Its engine is unreliable, and its test figures come from prepared aircraft.",
-        history: "It came to the front from late 1944.",
-        top: 672,
-        wl: 186.8,
-        climb: 18.8,
-        diveLimit: 700,
-        laid: {
-          speed: true,
-          turn: true,
-          climb: true,
-          dive: false
-        }
-      }
-    },
-    ladders: {
-      GER: {
-        clock: "research",
-        history: [
-          [
-            "1939-08",
-            {
-              bf109_e: 0.9,
-              bf110_c: 0.1
-            }
-          ],
-          [
-            "1940-05",
-            {
-              bf109_e: 0.75,
-              bf110_c: 0.25
-            }
-          ],
-          [
-            "1941-03",
-            {
-              bf109_f4: 0.85,
-              bf110_c: 0.15
-            }
-          ],
-          [
-            "1941-09",
-            {
-              bf109_f4: 0.8,
-              fw190_a3: 0.1,
-              bf110_c: 0.1
-            }
-          ],
-          [
-            "1942-01",
-            {
-              bf109_f4: 0.75,
-              fw190_a3: 0.15,
-              bf110_c: 0.1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              bf109_g2: 0.7,
-              fw190_a3: 0.3
-            }
-          ],
-          [
-            "1943-06",
-            {
-              bf109_g6: 0.6,
-              fw190_a8: 0.4
-            }
-          ],
-          [
-            "1944-09",
-            {
-              bf109_g6: 0.55,
-              fw190_a8: 0.4,
-              fw190_d9: 0.03,
-              me262_a1a: 0.02
-            }
-          ],
-          [
-            "1945-01",
-            {
-              bf109_g6: 0.35,
-              bf109_k4: 0.2,
-              fw190_a8: 0.2,
-              fw190_d9: 0.2,
-              me262_a1a: 0.05
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                bf109_e: 0.9,
-                bf110_c: 0.1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                bf109_e: 0.9,
-                bf110_c: 0.1
-              }
-            ],
-            [
-              9,
-              {
-                bf109_e: 0.75,
-                bf110_c: 0.25
-              }
-            ],
-            [
-              19,
-              {
-                bf109_f4: 0.85,
-                bf110_c: 0.15
-              }
-            ],
-            [
-              25,
-              {
-                bf109_f4: 0.8,
-                fw190_a3: 0.1,
-                bf110_c: 0.1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                bf109_g2: 0.7,
-                fw190_a3: 0.3
-              }
-            ],
-            [
-              12,
-              {
-                bf109_g6: 0.6,
-                fw190_a8: 0.4
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.55,
-                fw190_a8: 0.4,
-                fw190_d9: 0.03,
-                me262_a1a: 0.02
-              }
-            ],
-            [
-              4,
-              {
-                bf109_g6: 0.35,
-                bf109_k4: 0.2,
-                fw190_a8: 0.2,
-                fw190_d9: 0.2,
-                me262_a1a: 0.05
-              }
-            ]
-          ]
-        }
-      },
-      UK: {
-        clock: "research",
-        history: [
-          [
-            "1939-08",
-            {
-              hurricane_i: 0.6,
-              spitfire_i: 0.4
-            }
-          ],
-          [
-            "1941-02",
-            {
-              spitfire_v: 0.45,
-              hurricane_ii: 0.45,
-              p40_bc: 0.1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 0.5,
-              spitfire_ix: 0.1,
-              hurricane_ii: 0.2,
-              p40_e: 0.1,
-              typhoon_ib: 0.1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 0.55,
-              spitfire_v: 0.1,
-              typhoon_ib: 0.25,
-              spitfire_xiv: 0.05,
-              tempest_v: 0.05
-            }
-          ],
-          [
-            "1944-07",
-            {
-              spitfire_ix: 0.43,
-              typhoon_ib: 0.25,
-              spitfire_xiv: 0.15,
-              tempest_v: 0.15,
-              meteor3: 0.02
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 0.5,
-                hurricane_i: 0.5
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.6,
-                spitfire_i: 0.4
-              }
-            ],
-            [
-              18,
-              {
-                spitfire_v: 0.45,
-                hurricane_ii: 0.45,
-                p40_bc: 0.1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 0.5,
-                spitfire_ix: 0.1,
-                hurricane_ii: 0.2,
-                p40_e: 0.1,
-                typhoon_ib: 0.1
-              }
-            ],
-            [
-              18,
-              {
-                spitfire_ix: 0.55,
-                spitfire_v: 0.1,
-                typhoon_ib: 0.25,
-                spitfire_xiv: 0.05,
-                tempest_v: 0.05
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.55,
-                spitfire_v: 0.1,
-                typhoon_ib: 0.25,
-                spitfire_xiv: 0.05,
-                tempest_v: 0.05
-              }
-            ],
-            [
-              6,
-              {
-                spitfire_ix: 0.43,
-                typhoon_ib: 0.25,
-                spitfire_xiv: 0.15,
-                tempest_v: 0.15,
-                meteor3: 0.02
-              }
-            ]
-          ]
-        },
-        deck: [
-          [
-            "1939-08",
-            {
-              fulmar_ii: 1
-            }
-          ],
-          [
-            "1941-07",
-            {
-              sea_hurricane_ib: 0.5,
-              martlet_ii: 0.5
-            }
-          ],
-          [
-            "1943-05",
-            {
-              seafire_l2c: 0.5,
-              martlet_ii: 0.5
-            }
-          ],
-          [
-            "1944-01",
-            {
-              seafire_l3: 0.3,
-              f6f5: 0.4,
-              f4u1d: 0.3
-            }
-          ]
-        ]
-      },
-      USA: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              p36a: 0.8,
-              p26a: 0.2
-            }
-          ],
-          [
-            "1940-06",
-            {
-              p36a: 0.6,
-              p40_bc: 0.4
-            }
-          ],
-          [
-            "1942-01",
-            {
-              p40_e: 0.55,
-              p39d: 0.35,
-              p38_fg: 0.1
-            }
-          ],
-          [
-            "1942-10",
-            {
-              p40_e: 0.45,
-              p39d: 0.3,
-              p38_fg: 0.25
-            }
-          ],
-          [
-            "1943-04",
-            {
-              p40_e: 0.35,
-              p39d: 0.15,
-              p38_fg: 0.25,
-              p47_cd: 0.25
-            }
-          ],
-          [
-            "1943-12",
-            {
-              p47_cd: 0.4,
-              p38_jl: 0.25,
-              p40n: 0.15,
-              p39d: 0.1,
-              p51_bc: 0.1
-            }
-          ],
-          [
-            "1944-03",
-            {
-              p47_cd: 0.4,
-              p51_bc: 0.25,
-              p38_jl: 0.2,
-              p40n: 0.1,
-              p39d: 0.05
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p47_d25: 0.4,
-              p51_d: 0.2,
-              p51_bc: 0.15,
-              p38_jl: 0.2,
-              p40n: 0.05
-            }
-          ],
-          [
-            "1945-01",
-            {
-              p51_d: 0.5,
-              p47_d25: 0.35,
-              p38_jl: 0.15
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p36a: 0.6,
-                p26a: 0.4
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 0.8,
-                p26a: 0.2
-              }
-            ],
-            [
-              10,
-              {
-                p36a: 0.6,
-                p40_bc: 0.4
-              }
-            ],
-            [
-              29,
-              {
-                p40_e: 0.55,
-                p39d: 0.35,
-                p38_fg: 0.1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 0.35,
-                p39d: 0.15,
-                p38_fg: 0.25,
-                p47_cd: 0.25
-              }
-            ],
-            [
-              8,
-              {
-                p47_cd: 0.4,
-                p38_jl: 0.25,
-                p40n: 0.15,
-                p39d: 0.1,
-                p51_bc: 0.1
-              }
-            ],
-            [
-              11,
-              {
-                p47_cd: 0.4,
-                p51_bc: 0.25,
-                p38_jl: 0.2,
-                p40n: 0.1,
-                p39d: 0.05
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 0.4,
-                p51_d: 0.2,
-                p51_bc: 0.15,
-                p38_jl: 0.2,
-                p40n: 0.05
-              }
-            ],
-            [
-              7,
-              {
-                p51_d: 0.5,
-                p47_d25: 0.3,
-                p38_jl: 0.15,
-                p80a: 0.05
-              }
-            ]
-          ]
-        },
-        deck: [
-          [
-            "1939-08",
-            {
-              f2a3: 1
-            }
-          ],
-          [
-            "1940-12",
-            {
-              f4f3: 0.7,
-              f2a3: 0.3
-            }
-          ],
-          [
-            "1942-05",
-            {
-              f4f4: 1
-            }
-          ],
-          [
-            "1943-08",
-            {
-              f6f3: 0.8,
-              f4f4: 0.2
-            }
-          ],
-          [
-            "1944-07",
-            {
-              f6f5: 0.8,
-              fm2: 0.2
-            }
-          ],
-          [
-            "1945-01",
-            {
-              f6f5: 0.65,
-              f4u1d: 0.2,
-              fm2: 0.15
-            }
-          ]
-        ]
-      },
-      FRA: {
-        clock: "research",
-        history: [
-          [
-            "1939-08",
-            {
-              ms406: 0.55,
-              hawk75a: 0.25,
-              mb152: 0.2
-            }
-          ],
-          [
-            "1940-05",
-            {
-              ms406: 0.45,
-              mb152: 0.25,
-              hawk75a: 0.2,
-              d520: 0.1
-            }
-          ],
-          [
-            "1940-11",
-            {
-              d520: 0.4,
-              vg33: 0.25,
-              hawk75a: 0.15,
-              p40_bc: 0.2
-            }
-          ],
-          [
-            "1941-09",
-            {
-              d551: 0.45,
-              d520: 0.2,
-              vg33: 0.15,
-              p40_bc: 0.2
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                ms406: 0.55,
-                hawk75a: 0.25,
-                mb152: 0.2
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                ms406: 0.45,
-                mb152: 0.25,
-                hawk75a: 0.2,
-                d520: 0.1
-              }
-            ],
-            [
-              6,
-              {
-                d520: 0.4,
-                vg33: 0.25,
-                hawk75a: 0.15,
-                p40_bc: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                d551: 0.45,
-                d520: 0.2,
-                vg33: 0.15,
-                p40_bc: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                d551: 0.6,
-                vg33: 0.2,
-                p40_e: 0.2
-              }
-            ]
-          ]
-        }
-      },
-      ITA: {
-        clock: "research",
-        history: [
-          [
-            "1939-08",
-            {
-              cr42: 0.6,
-              g50: 0.25,
-              mc200: 0.15
-            }
-          ],
-          [
-            "1940-09",
-            {
-              cr42: 0.5,
-              mc200: 0.25,
-              g50: 0.25
-            }
-          ],
-          [
-            "1941-11",
-            {
-              mc200: 0.45,
-              cr42: 0.25,
-              g50: 0.15,
-              mc202: 0.15
-            }
-          ],
-          [
-            "1942-06",
-            {
-              mc202: 0.4,
-              mc200: 0.4,
-              cr42: 0.2
-            }
-          ],
-          [
-            "1943-04",
-            {
-              mc202: 0.6,
-              mc200: 0.15,
-              mc205v: 0.1,
-              g55: 0.05,
-              bf109_g6: 0.1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                cr42: 0.6,
-                g50: 0.25,
-                mc200: 0.15
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                cr42: 0.5,
-                mc200: 0.25,
-                g50: 0.25
-              }
-            ],
-            [
-              14,
-              {
-                mc200: 0.45,
-                cr42: 0.25,
-                g50: 0.15,
-                mc202: 0.15
-              }
-            ],
-            [
-              21,
-              {
-                mc202: 0.4,
-                mc200: 0.4,
-                cr42: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                mc202: 0.6,
-                mc200: 0.15,
-                mc205v: 0.1,
-                g55: 0.05,
-                bf109_g6: 0.1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                mc205v: 0.35,
-                g55: 0.35,
-                re2005: 0.3
-              }
-            ]
-          ]
-        }
-      },
-      SOV: {
-        clock: "research",
-        history: [
-          [
-            "1939-08",
-            {
-              i16_24: 0.65,
-              i153: 0.35
-            }
-          ],
-          [
-            "1941-06",
-            {
-              i16_24: 0.45,
-              i153: 0.25,
-              mig3: 0.2,
-              yak1: 0.05,
-              lagg3: 0.05
-            }
-          ],
-          [
-            "1942-01",
-            {
-              i16_24: 0.3,
-              lagg3: 0.25,
-              yak1: 0.2,
-              mig3: 0.15,
-              i153: 0.05,
-              hurricane_iib_vvs: 0.05
-            }
-          ],
-          [
-            "1942-10",
-            {
-              yak1: 0.3,
-              lagg3: 0.25,
-              yak7b: 0.15,
-              la5: 0.1,
-              hurricane_iib_vvs: 0.05,
-              p39n_vvs: 0.05,
-              p40_e: 0.05,
-              i16_24: 0.05
-            }
-          ],
-          [
-            "1943-07",
-            {
-              la5fn: 0.25,
-              yak9: 0.3,
-              p39n_vvs: 0.15,
-              yak1: 0.15,
-              yak7b: 0.15
-            }
-          ],
-          [
-            "1944-07",
-            {
-              yak9: 0.4,
-              la5fn: 0.3,
-              p39n_vvs: 0.15,
-              yak1: 0.05,
-              yak7b: 0.05,
-              yak3: 0.05
-            }
-          ],
-          [
-            "1945-01",
-            {
-              yak9: 0.25,
-              yak9u: 0.1,
-              la5fn: 0.2,
-              yak3: 0.15,
-              la7: 0.15,
-              p39n_vvs: 0.15
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                i16_24: 0.65,
-                i153: 0.35
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                i16_24: 0.45,
-                i153: 0.25,
-                mig3: 0.2,
-                yak1: 0.05,
-                lagg3: 0.05
-              }
-            ],
-            [
-              7,
-              {
-                i16_24: 0.3,
-                lagg3: 0.25,
-                yak1: 0.2,
-                mig3: 0.15,
-                i153: 0.05,
-                hurricane_iib_vvs: 0.05
-              }
-            ],
-            [
-              16,
-              {
-                yak1: 0.3,
-                lagg3: 0.25,
-                yak7b: 0.15,
-                la5: 0.1,
-                hurricane_iib_vvs: 0.05,
-                p39n_vvs: 0.05,
-                p40_e: 0.05,
-                i16_24: 0.05
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                la5fn: 0.25,
-                yak9: 0.3,
-                p39n_vvs: 0.15,
-                yak1: 0.15,
-                yak7b: 0.15
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                yak9: 0.4,
-                la5fn: 0.3,
-                p39n_vvs: 0.15,
-                yak1: 0.05,
-                yak7b: 0.05,
-                yak3: 0.05
-              }
-            ],
-            [
-              6,
-              {
-                yak9: 0.25,
-                yak9u: 0.1,
-                la5fn: 0.2,
-                yak3: 0.15,
-                la7: 0.15,
-                p39n_vvs: 0.15
-              }
-            ]
-          ]
-        }
-      },
-      POL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              p11c: 1
-            }
-          ],
-          [
-            "1940-06",
-            {
-              hurricane_i: 0.5,
-              spitfire_i: 0.5
-            }
-          ],
-          [
-            "1941-02",
-            {
-              spitfire_v: 0.7,
-              hurricane_ii: 0.3
-            }
-          ],
-          [
-            "1943-01",
-            {
-              spitfire_ix: 0.5,
-              spitfire_v: 0.5
-            }
-          ],
-          [
-            "1944-03",
-            {
-              spitfire_ix: 0.6,
-              p51_bc: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p11c: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.5,
-                ms406: 0.3,
-                p11c: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 0.6,
-                spitfire_ix: 0.4
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.6,
-                p51_bc: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      BEL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              cr42: 0.45,
-              gladiator: 0.3,
-              hurricane_i: 0.25
-            }
-          ],
-          [
-            "1941-06",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 0.6,
-              tempest_v: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                cr42: 0.45,
-                gladiator: 0.3,
-                hurricane_i: 0.25
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.7,
-                cr42: 0.3
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.6,
-                tempest_v: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      NED: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              d21: 0.6,
-              fokker_g1: 0.4
-            }
-          ],
-          [
-            "1941-06",
-            {
-              hawk75a: 0.5,
-              f2a3: 0.5
-            }
-          ],
-          [
-            "1943-01",
-            {
-              spitfire_v: 0.5,
-              p40n: 0.5
-            }
-          ],
-          [
-            "1944-06",
-            {
-              spitfire_ix: 0.6,
-              p40n: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                d21: 0.6,
-                fokker_g1: 0.4
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hawk75a: 0.5,
-                f2a3: 0.5
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 0.5,
-                p40n: 0.5
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.6,
-                p40n: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      LUX: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1941-01",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      DEN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gauntlet: 0.6,
-              d21: 0.4
-            }
-          ],
-          [
-            "1941-01",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gauntlet: 0.6,
-                d21: 0.4
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.6,
-                d21: 0.4
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      NOR: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1941-06",
-            {
-              hurricane_i: 0.5,
-              spitfire_v: 0.5
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hawk75a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      SWE: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1940-07",
-            {
-              seversky_j9: 0.35,
-              re2000: 0.35,
-              cr42: 0.3
-            }
-          ],
-          [
-            "1943-11",
-            {
-              j22: 0.6,
-              re2000: 0.2,
-              seversky_j9: 0.2
-            }
-          ],
-          [
-            "1945-04",
-            {
-              j22: 0.6,
-              p51_d: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                seversky_j9: 0.35,
-                re2000: 0.35,
-                cr42: 0.3
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                j22: 0.6,
-                re2000: 0.2,
-                seversky_j9: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                j22: 0.6,
-                p51_d: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      FIN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              d21: 0.75,
-              bulldog: 0.25
-            }
-          ],
-          [
-            "1940-02",
-            {
-              d21: 0.6,
-              gladiator: 0.15,
-              bulldog: 0.1,
-              g50: 0.15
-            }
-          ],
-          [
-            "1940-03",
-            {
-              d21: 0.35,
-              g50: 0.25,
-              b239: 0.25,
-              ms406: 0.15
-            }
-          ],
-          [
-            "1941-07",
-            {
-              b239: 0.4,
-              g50: 0.2,
-              hawk75a: 0.2,
-              ms406: 0.2
-            }
-          ],
-          [
-            "1943-03",
-            {
-              b239: 0.35,
-              hawk75a: 0.25,
-              ms406: 0.25,
-              bf109_g2: 0.15
-            }
-          ],
-          [
-            "1944-01",
-            {
-              bf109_g6: 0.4,
-              b239: 0.25,
-              hawk75a: 0.2,
-              ms406: 0.15
-            }
-          ],
-          [
-            "1944-06",
-            {
-              bf109_g6: 0.65,
-              b239: 0.15,
-              hawk75a: 0.2
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                d21: 0.75,
-                bulldog: 0.25
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                b239: 0.45,
-                g50: 0.25,
-                hawk75a: 0.15,
-                ms406: 0.15
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                b239: 0.35,
-                hawk75a: 0.25,
-                ms406: 0.25,
-                bf109_g2: 0.15
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.7,
-                b239: 0.15,
-                hawk75a: 0.15
-              }
-            ]
-          ]
-        }
-      },
-      EST: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              bulldog: 1
-            }
-          ],
-          [
-            "1941-01",
-            {
-              spitfire_i: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                bulldog: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                spitfire_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      LAT: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1941-01",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      LIT: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 0.5,
-              d501: 0.5
-            }
-          ],
-          [
-            "1941-01",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              spitfire_v: 1
-            }
-          ],
-          [
-            "1944-01",
-            {
-              spitfire_ix: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 0.5,
-                d501: 0.5
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      IRL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1941-01",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1943-06",
-            {
-              hurricane_ii: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                hurricane_ii: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                hurricane_ii: 0.6,
-                spitfire_ix: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      SUI: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              bf109_e: 0.55,
-              d3801: 0.45
-            }
-          ],
-          [
-            "1944-05",
-            {
-              bf109_e: 0.3,
-              d3801: 0.5,
-              bf109_g6: 0.2
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                bf109_e: 0.55,
-                d3801: 0.45
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                bf109_e: 0.5,
-                d3801: 0.5
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                bf109_e: 0.4,
-                d3801: 0.4,
-                bf109_g6: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.5,
-                d3801: 0.5
-              }
-            ]
-          ]
-        }
-      },
-      ESP: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              cr32: 0.5,
-              i16_10: 0.25,
-              bf109_e: 0.25
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                cr32: 0.5,
-                i16_10: 0.25,
-                bf109_e: 0.25
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                bf109_e: 0.5,
-                cr32: 0.3,
-                i16_10: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                bf109_f4: 0.5,
-                bf109_e: 0.3,
-                cr32: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.5,
-                fw190_a8: 0.5
-              }
-            ]
-          ]
-        }
-      },
-      POR: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ],
-          [
-            "1943-01",
-            {
-              hurricane_ii: 0.35,
-              spitfire_i: 0.3,
-              hawk75a: 0.15,
-              gladiator: 0.1,
-              p39d: 0.1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              spitfire_v: 0.5,
-              hurricane_ii: 0.5
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.5,
-                hawk75a: 0.5
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                hurricane_ii: 0.5,
-                spitfire_i: 0.5
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_v: 0.6,
-                hurricane_ii: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      HUN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              cr32: 0.5,
-              cr42: 0.5
-            }
-          ],
-          [
-            "1941-06",
-            {
-              re2000: 0.6,
-              cr42: 0.4
-            }
-          ],
-          [
-            "1942-06",
-            {
-              bf109_f4: 0.4,
-              re2000: 0.4,
-              bf109_g2: 0.2
-            }
-          ],
-          [
-            "1944-03",
-            {
-              bf109_g6: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                cr32: 0.5,
-                cr42: 0.5
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                re2000: 0.6,
-                cr42: 0.4
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                bf109_f4: 0.4,
-                bf109_g2: 0.4,
-                re2000: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 1
-              }
-            ]
-          ]
-        }
-      },
-      ROM: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              p24: 0.6,
-              p11c: 0.4
-            }
-          ],
-          [
-            "1941-06",
-            {
-              iar80: 0.3,
-              bf109_e: 0.2,
-              p24: 0.2,
-              p11c: 0.2,
-              hurricane_i: 0.1
-            }
-          ],
-          [
-            "1943-01",
-            {
-              iar81c: 0.5,
-              bf109_g2: 0.5
-            }
-          ],
-          [
-            "1944-07",
-            {
-              bf109_g6: 0.7,
-              iar81c: 0.3
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p24: 0.6,
-                p11c: 0.4
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                iar80: 0.3,
-                bf109_e: 0.2,
-                p24: 0.2,
-                p11c: 0.2,
-                hurricane_i: 0.1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                iar81c: 0.5,
-                bf109_g2: 0.5
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.7,
-                iar81c: 0.3
-              }
-            ]
-          ]
-        }
-      },
-      YUG: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              bf109_e: 0.4,
-              hurricane_i: 0.35,
-              fury: 0.2,
-              ik3: 0.05
-            }
-          ],
-          [
-            "1944-06",
-            {
-              spitfire_v: 0.5,
-              hurricane_ii: 0.5
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                bf109_e: 0.4,
-                hurricane_i: 0.35,
-                fury: 0.2,
-                ik3: 0.05
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                ik3: 0.4,
-                bf109_e: 0.3,
-                hurricane_i: 0.3
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 0.5,
-                hurricane_ii: 0.5
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_v: 0.5,
-                hurricane_ii: 0.5
-              }
-            ]
-          ]
-        }
-      },
-      BUL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              b534: 0.8,
-              p24: 0.2
-            }
-          ],
-          [
-            "1940-10",
-            {
-              b534: 0.75,
-              bf109_e: 0.25
-            }
-          ],
-          [
-            "1943-09",
-            {
-              d520: 0.6,
-              bf109_g2: 0.25,
-              b534: 0.15
-            }
-          ],
-          [
-            "1944-01",
-            {
-              bf109_g6: 0.7,
-              d520: 0.3
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                b534: 0.8,
-                p24: 0.2
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                b534: 0.75,
-                bf109_e: 0.25
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                d520: 0.6,
-                bf109_g2: 0.25,
-                b534: 0.15
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 0.7,
-                d520: 0.3
-              }
-            ]
-          ]
-        }
-      },
-      GRE: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              p24: 0.6,
-              gladiator: 0.25,
-              mb152: 0.15
-            }
-          ],
-          [
-            "1942-01",
-            {
-              hurricane_ii: 1
-            }
-          ],
-          [
-            "1943-06",
-            {
-              spitfire_v: 0.6,
-              hurricane_ii: 0.4
-            }
-          ],
-          [
-            "1944-06",
-            {
-              spitfire_ix: 0.6,
-              spitfire_v: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p24: 0.6,
-                gladiator: 0.25,
-                mb152: 0.15
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.5,
-                gladiator: 0.5
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 0.6,
-                hurricane_ii: 0.4
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.6,
-                spitfire_v: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      TUR: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              p24: 0.5,
-              ms406: 0.3,
-              hurricane_i: 0.2
-            }
-          ],
-          [
-            "1942-10",
-            {
-              fw190_a3: 0.35,
-              hurricane_ii: 0.35,
-              ms406: 0.3
-            }
-          ],
-          [
-            "1944-06",
-            {
-              fw190_a3: 0.4,
-              hurricane_ii: 0.35,
-              spitfire_v: 0.25
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p24: 0.5,
-                ms406: 0.3,
-                hurricane_i: 0.2
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.5,
-                ms406: 0.3,
-                p24: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                fw190_a3: 0.4,
-                hurricane_ii: 0.3,
-                spitfire_v: 0.3
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_v: 0.4,
-                fw190_a3: 0.3,
-                hurricane_ii: 0.3
-              }
-            ]
-          ]
-        }
-      },
-      SVK: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              b534: 1
-            }
-          ],
-          [
-            "1942-07",
-            {
-              b534: 0.5,
-              bf109_e: 0.5
-            }
-          ],
-          [
-            "1943-03",
-            {
-              bf109_g2: 0.6,
-              bf109_e: 0.4
-            }
-          ],
-          [
-            "1944-02",
-            {
-              bf109_g6: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                b534: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                b534: 0.5,
-                bf109_e: 0.5
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                bf109_g2: 0.6,
-                bf109_e: 0.4
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                bf109_g6: 1
-              }
-            ]
-          ]
-        }
-      },
-      IRQ: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              gladiator: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                gladiator: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 1
-              }
-            ]
-          ]
-        }
-      },
-      IRN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              fury: 1
-            }
-          ],
-          [
-            "1941-06",
-            {
-              fury: 0.5,
-              hawk75a: 0.5
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                fury: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hawk75a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                hurricane_ii: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_v: 1
-              }
-            ]
-          ]
-        }
-      },
-      CAN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hurricane_i: 1
-            }
-          ],
-          [
-            "1941-06",
-            {
-              spitfire_v: 0.5,
-              hurricane_ii: 0.3,
-              p40_e: 0.2
-            }
-          ],
-          [
-            "1943-01",
-            {
-              spitfire_ix: 0.6,
-              spitfire_v: 0.2,
-              p40_e: 0.2
-            }
-          ],
-          [
-            "1944-06",
-            {
-              spitfire_ix: 0.8,
-              p51_bc: 0.2
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hurricane_i: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hurricane_i: 0.6,
-                p40_bc: 0.4
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                spitfire_ix: 0.5,
-                spitfire_v: 0.3,
-                p40_e: 0.2
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                spitfire_ix: 0.8,
-                p51_bc: 0.2
-              }
-            ]
-          ]
-        }
-      },
-      MEX: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p40_e: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p47_d25: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      BRA: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              f4b4: 1
-            }
-          ],
-          [
-            "1942-03",
-            {
-              p36a: 0.3,
-              p40_e: 0.7
-            }
-          ],
-          [
-            "1944-09",
-            {
-              p47_d25: 0.6,
-              p40n: 0.4
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                f4b4: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      ARG: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk75o: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk75o: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                hawk75o: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                g55: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                g55: 0.6,
-                meteor3: 0.4
-              }
-            ]
-          ]
-        }
-      },
-      PER: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 0.5,
-              na50: 0.5
-            }
-          ],
-          [
-            "1943-01",
-            {
-              p36a: 0.7,
-              na50: 0.3
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                na50: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 0.7,
-                na50: 0.3
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      CHL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      COL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      VEN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              cr32: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                cr32: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      CUB: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      GUA: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1943-06",
-            {
-              p26a: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                p26a: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      ELS: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      HON: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      NIC: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      COS: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      PAN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      HAI: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      DOM: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      ECU: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      BOL: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      PAR: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              bulldog: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                bulldog: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      URU: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              hawk3: 1
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p36a: 1
-            }
-          ],
-          [
-            "1944-06",
-            {
-              p40_e: 1
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                hawk3: 1
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                p36a: 1
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40_e: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p47_d25: 1
-              }
-            ]
-          ]
-        }
-      },
-      VIC: {
-        clock: "calendar",
-        history: [
-          [
-            "1940-07",
-            {
-              d520: 0.7,
-              hawk75a: 0.3
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                d520: 0.7,
-                hawk75a: 0.3
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                d520: 0.7,
-                hawk75a: 0.3
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                d520: 1
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                d520: 1
-              }
-            ]
-          ]
-        }
-      },
-      JAP: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              ki27: 0.55,
-              a5m4: 0.45
-            }
-          ],
-          [
-            "1941-12",
-            {
-              a6m2_21: 0.45,
-              ki27: 0.35,
-              ki43_i: 0.15,
-              a5m4: 0.05
-            }
-          ],
-          [
-            "1943-06",
-            {
-              a6m2_21: 0.5,
-              ki43_ii: 0.3,
-              ki61_i: 0.1,
-              ki44_ii: 0.05,
-              ki27: 0.05
-            }
-          ],
-          [
-            "1944-08",
-            {
-              a6m5_52: 0.4,
-              ki43_ii: 0.25,
-              ki84: 0.1,
-              ki44_ii: 0.1,
-              ki61_i: 0.1,
-              j2m3: 0.05
-            }
-          ],
-          [
-            "1945-02",
-            {
-              a6m5_52: 0.35,
-              ki43_ii: 0.25,
-              ki84: 0.1,
-              ki44_ii: 0.1,
-              ki61_i: 0.1,
-              n1k2j: 0.05,
-              j2m3: 0.05
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                ki27: 0.55,
-                a5m4: 0.45
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                a6m2_21: 0.45,
-                ki27: 0.35,
-                ki43_i: 0.15,
-                a5m4: 0.05
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                a6m2_21: 0.5,
-                ki43_ii: 0.3,
-                ki61_i: 0.1,
-                ki44_ii: 0.05,
-                ki27: 0.05
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                a6m5_52: 0.4,
-                ki43_ii: 0.25,
-                ki84: 0.1,
-                ki44_ii: 0.1,
-                ki61_i: 0.1,
-                j2m3: 0.05
-              }
-            ],
-            [
-              6,
-              {
-                a6m5_52: 0.35,
-                ki43_ii: 0.25,
-                ki84: 0.1,
-                ki44_ii: 0.1,
-                ki61_i: 0.1,
-                n1k2j: 0.05,
-                j2m3: 0.05
-              }
-            ]
-          ]
-        },
-        deck: [
-          [
-            "1939-08",
-            {
-              a5m4: 1
-            }
-          ],
-          [
-            "1941-06",
-            {
-              a6m2_21: 1
-            }
-          ],
-          [
-            "1943-10",
-            {
-              a6m5_52: 1
-            }
-          ]
-        ]
-      },
-      CHN: {
-        clock: "calendar",
-        history: [
-          [
-            "1939-08",
-            {
-              i16_10: 0.45,
-              i15bis: 0.35,
-              hawk75m: 0.2
-            }
-          ],
-          [
-            "1942-06",
-            {
-              p40b: 0.4,
-              p43a: 0.3,
-              i16_24: 0.3
-            }
-          ],
-          [
-            "1944-03",
-            {
-              p40n: 0.5,
-              p51_bc: 0.5
-            }
-          ]
-        ],
-        rungs: {
-          "0": [
-            [
-              0,
-              {
-                i15bis: 0.4,
-                i16_10: 0.4,
-                hawk75m: 0.2
-              }
-            ]
-          ],
-          "1": [
-            [
-              0,
-              {
-                i16_24: 0.4,
-                p40b: 0.4,
-                p43a: 0.2
-              }
-            ]
-          ],
-          "2": [
-            [
-              0,
-              {
-                p40n: 0.7,
-                p43a: 0.3
-              }
-            ]
-          ],
-          "3": [
-            [
-              0,
-              {
-                p40n: 0.5,
-                p51_bc: 0.5
-              }
-            ]
-          ]
-        }
-      }
-    },
-    law: {
-      _about: "The design director, 23 Nov 2026 06:55Z and 07:00Z (air-battles/dogfight/plan-1123.md): the edge of type A over type B is k times the sum of the log ratios that apply: top speed at rated height always; for a side whose doctrine is the turning fight, wing loading (lower turns tighter; the historian's 14 trial turn times are record tests, never laid); for a side whose doctrine is dive-and-climb, climb and limiting dive speed; pilot training hours. Doctrine only picks the term. A figure not laid makes its term 1. k is one shared power fitted to the historian's fighter-against-fighter exchange anchors from both sides' loss records; until it is fitted it is 0 and no edge is given. No cap but the widest anchor the record gives.",
-      k: 0,
-      fitted: false,
-      widest: null
-    },
-    doctrine: {
-      _about: "Doctrine by nation and month, laid only once read (the historian's held rows are not laid: 07:00Z).",
-      rows: {}
-    },
-    hours: {
-      _about: "Pilot training hours before first combat by nation and month, laid only once read.",
-      rows: {}
-    }
-  };
-
-  // ../../src/campaign/fighters.ts
-  var FIGHTERS = fighters_default;
-  var fighterTypesOn = (g2) => g2.flags.ftrtypes === 1;
-  var bandOf = (m) => m in FIGHTERS.byMission ? FIGHTERS.byMission[m] : "mid";
-  var clip = (x, a = -1, b = 1) => Math.max(a, Math.min(b, x));
-  function edge(a, b, band, docA, docB) {
-    void band;
-    const A = FIGHTERS.types[a], B3 = FIGHTERS.types[b], L2 = FIGHTERS.law;
-    if (!A || !B3 || !L2.k) return 0;
-    const both = (k) => !!(A.laid?.[k] && B3.laid?.[k]);
-    const ln = (x, y) => x && y ? Math.log(x / y) : 0;
-    let t = both("speed") ? ln(A.top, B3.top) : 0;
-    const terms2 = (doc, sign) => {
-      if (doc === "turn") return both("turn") ? sign * ln(B3.wl, A.wl) : 0;
-      if (doc === "dive-zoom") return sign * ((both("climb") ? ln(A.climb, B3.climb) : 0) + (both("dive") ? ln(A.diveLimit, B3.diveLimit) : 0));
-      return 0;
-    };
-    t += terms2(docA, 1) + terms2(docB, 1);
-    const e = L2.k * t;
-    return L2.widest ? clip(e, -L2.widest, L2.widest) : e;
-  }
-  function mixEdge(a, b, band, docA, docB) {
-    let t = 0, s = 0;
-    for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) {
-      t += sx * sy * edge(x, y, band, docA, docB);
-      s += sx * sy;
-    }
-    return s > 0 ? t / s : 0;
-  }
-  var turnOfMonth = (ym) => {
-    const [y, m] = ym.split("-").map(Number);
-    return (y - 1939) * 12 + m - 8;
-  };
-  var rowAt2 = (rows, t) => {
-    let k = 0;
-    rows.forEach(([w], i) => {
-      if (turnOfMonth(w) <= t) k = i;
-    });
-    return k;
-  };
-  function fighterClock(g2, nat) {
-    const lab = g2.nations[nat]?.lab;
-    return FIGHTERS.ladders[nat]?.clock === "research" && lab ? g2.turn + lab.clock.fighters - lab.months : g2.turn;
-  }
-  var stageOf = (g2, nat, L2) => {
-    const k = String(treeLevel(g2, nat, "fighters"));
-    if (L2.rungs[k]) return k;
-    const keys = Object.keys(L2.rungs).sort();
-    return keys[keys.length - 1];
-  };
-  function landRow(g2, nat) {
-    const L2 = FIGHTERS.ladders[nat];
-    if (!L2) return null;
-    if (g2.flags.open === 1) {
-      const s = stageOf(g2, nat, L2);
-      const since = g2.flags[`ftr:${nat}:${s}`] ?? g2.turn;
-      const rows = L2.rungs[s];
-      let k2 = 0;
-      rows.forEach(([m], i) => {
-        if (m <= g2.turn - since) k2 = i;
-      });
-      return { key: Number(s) * 100 + k2 + 1, mix: rows[k2][1] };
-    }
-    const k = rowAt2(L2.history, fighterClock(g2, nat));
-    return { key: k + 1, mix: L2.history[k][1] };
-  }
-  var deckBred = (f) => f.ship !== void 0 || f.ashore !== void 0;
-  function typeMix(g2, f) {
-    const L2 = FIGHTERS.ladders[f.nat];
-    const bought = Object.entries(f.bought ?? {}).filter(([k, s]) => s > 0 && FIGHTERS.types[k]);
-    if (!L2 && !bought.length) return null;
-    let mix4 = {};
-    if (L2 && deckBred(f) && L2.deck) mix4 = L2.deck[rowAt2(L2.deck, g2.turn)][1];
-    else if (L2) mix4 = landRow(g2, f.nat).mix;
-    if (bought.length) {
-      const shareBought = Math.min(1, bought.reduce((a, [, s]) => a + s, 0)), own = L2 ? 1 - shareBought : 0;
-      const out = {};
-      for (const [k, s] of Object.entries(mix4)) out[k] = (out[k] ?? 0) + s * own;
-      for (const [k, s] of bought) out[k] = (out[k] ?? 0) + s / (L2 ? 1 : shareBought);
-      mix4 = out;
-    }
-    const base = g2.regions[f.base];
-    if (!deckBred(f) && base && inDesert(base) && Object.keys(mix4).some((k) => FIGHTERS.swap[k])) {
-      const out = {};
-      for (const [k, s] of Object.entries(mix4)) out[FIGHTERS.swap[k] ?? k] = (out[FIGHTERS.swap[k] ?? k] ?? 0) + s;
-      mix4 = out;
-    }
-    return mix4;
-  }
-  function sellerType(g2, nat) {
-    const row2 = FIGHTERS.ladders[nat] ? landRow(g2, nat) : null;
-    if (!row2) return null;
-    return Object.entries(row2.mix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  }
-  function joinBought(f, mark, had, count4) {
-    const all = had + count4;
-    if (all <= 0) return;
-    const b = f.bought ?? (f.bought = {});
-    for (const k of Object.keys(b)) b[k] = b[k] * had / all;
-    b[mark] = (b[mark] ?? 0) + count4 / all;
-  }
-  function doctrineOf(g2, nat) {
-    const rows = FIGHTERS.doctrine.rows[nat];
-    return rows?.length ? rows[rowAt2(rows, g2.turn)][1] : void 0;
-  }
-  function hoursEdge(g2, a, b) {
-    const R2 = FIGHTERS.hours.rows, k = FIGHTERS.law.k;
-    if (!k || !R2[a]?.length || !R2[b]?.length) return 0;
-    return k * Math.log(R2[a][rowAt2(R2[a], g2.turn)][1] / R2[b][rowAt2(R2[b], g2.turn)][1]);
-  }
-  function typeEdge(g2, att, def, m) {
-    const band = bandOf(m);
-    if (!band) return 0;
-    const mixes = /* @__PURE__ */ new Map();
-    const mixOf2 = (f) => {
-      if (!mixes.has(f)) mixes.set(f, typeMix(g2, f));
-      return mixes.get(f);
-    };
-    let t = 0, s = 0;
-    for (const a of att) {
-      if (a.w <= 0) continue;
-      for (const d of def) {
-        if (d.w <= 0) continue;
-        const ma = mixOf2(a.f), md = mixOf2(d.f);
-        const e = ma && md ? mixEdge(ma, md, band, doctrineOf(g2, a.f.nat), doctrineOf(g2, d.f.nat)) + hoursEdge(g2, a.f.nat, d.f.nat) : 0;
-        const lead2 = Math.log(techMul(g2, a.f.nat, "fighters") / techMul(g2, d.f.nat, "fighters"));
-        t += a.w * d.w * (e - lead2);
-        s += a.w * d.w;
-      }
-    }
-    return s > 0 ? t / s : 0;
-  }
-  var firstSentence = (id) => {
-    const p = FIGHTERS.types[id]?.plain ?? "";
-    const k = p.search(/[.!?](\s|$)/);
-    return k >= 0 ? p.slice(0, k + 1) : p;
-  };
-  function serviceNews(g2, nat, id) {
-    const t = FIGHTERS.types[id];
-    return nat === g2.human ? `The ${t.short} enters service. ${firstSentence(id)}` : `${g2.nations[nat].name} puts the ${t.short} into service. ${firstSentence(id)}`;
-  }
-  function fighterMonth(g2, nat) {
-    if (!fighterTypesOn(g2)) return;
-    const L2 = FIGHTERS.ladders[nat];
-    if (!L2) return;
-    if (g2.flags.open === 1) {
-      const s = stageOf(g2, nat, L2);
-      if (g2.flags[`ftr:${nat}:${s}`] === void 0) g2.flags[`ftr:${nat}:${s}`] = g2.turn;
-    }
-    const row2 = landRow(g2, nat);
-    const was = g2.flags[`ftrrow:${nat}`];
-    if (was === row2.key) return;
-    g2.flags[`ftrrow:${nat}`] = row2.key;
-    if (was === void 0) return;
-    const prev = prevMix(g2, nat, was);
-    const fresh5 = Object.keys(row2.mix).filter((k) => !prev || !(k in prev));
-    if (!fresh5.length || !g2.human || nat !== g2.human && !atWar(g2, nat, g2.human)) return;
-    for (const id of fresh5) headline(g2, "info", serviceNews(g2, nat, id), nat);
-  }
-  var prevMix = (g2, nat, key7) => {
-    const L2 = FIGHTERS.ladders[nat];
-    if (key7 >= 100 || g2.flags.open === 1) {
-      const rows = L2.rungs[String(Math.floor(key7 / 100))];
-      return rows?.[key7 % 100 - 1]?.[1] ?? null;
-    }
-    return L2.history[key7 - 1]?.[1] ?? null;
-  };
-  var height = (b) => FIGHTERS.bands[b].toLocaleString("en-US");
-  function namesOf(ids2) {
-    const names = ids2.map((i) => FIGHTERS.types[i]?.short ?? i);
-    const shown2 = names.slice(0, 3), more = names.length - shown2.length;
-    if (more > 0) return `${shown2.join(", ")} and ${more === 1 ? "one" : more} more`;
-    return shown2.length <= 1 ? shown2.join("") : `${shown2.slice(0, -1).join(", ")} and ${shown2[shown2.length - 1]}`;
-  }
-  function sideTypes(g2, side5) {
-    const tot = {};
-    for (const x of side5) {
-      if (x.w <= 0) continue;
-      const mix4 = typeMix(g2, x.f);
-      if (!mix4) continue;
-      for (const [k, s] of Object.entries(mix4)) tot[k] = (tot[k] ?? 0) + s * x.w;
-    }
-    return Object.entries(tot).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([k]) => k);
-  }
-  function raidCardLines(g2, a, m) {
-    if (!fighterTypesOn(g2)) return null;
-    const band = bandOf(m);
-    if (!band) return null;
-    const esc = sideTypes(g2, a.att.map((x2) => ({ f: x2.f, w: x2.ftr })));
-    const def = sideTypes(g2, a.def.map((x2) => ({ f: x2.f, w: x2.f.ftr * x2.w })));
-    if (!def.length) return null;
-    if (!esc.length) return { types: `Defending fighters at ${height(band)} m: ${namesOf(def)}.`, edge: null };
-    const E = a.typeEdge ?? 0, x = Math.exp(Math.abs(E) / 2) - 1;
-    const edge4 = x < 0.02 ? "The aircraft are about even." : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
-    return { types: `Fighters at ${height(band)} m: ${namesOf(esc)} against ${namesOf(def)}.`, edge: edge4 };
-  }
-
   // ../../src/campaign/arsenal.ts
   var ARSENAL = arsenal_default;
   var TOP = 3;
@@ -37471,6 +37748,10 @@
     }
     if (from2 === null) return `${name} builds ${WING_WORD[other4]} at home, but no ${WING_WORD[wing]}: more ${WING_WORD[wing]} come only from abroad.`;
     return null;
+  }
+  function hasAircraftWorks(g2, nat, wing) {
+    if (budgeted(g2) && !greatPower(g2, nat)) return (SMALL2().works[nat]?.[wing] ?? null) !== null;
+    return industry(g2, nat, ARSENAL.air[wing].factories);
   }
   function worksOpensAt(g2, nat, wing) {
     const w = SMALL2().works[nat];
@@ -62548,7 +62829,7 @@
     /** Germany's kill rings: one to five a tank, more with the unit's battles, varying tank to tank (b477(4)). */
     rings: { most: 5, per: 0.5 }
   };
-  var COMMONWEALTH = ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
+  var COMMONWEALTH2 = ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
   function steady(s) {
     let h = 2166136261;
     for (let i = 0; i < s.length; i++) {
@@ -62564,7 +62845,7 @@
   }
   function army(nat) {
     if (nat === "VIC" || nat === "FFR") return "FRA";
-    if (COMMONWEALTH.includes(nat)) return "UK";
+    if (COMMONWEALTH2.includes(nat)) return "UK";
     return nat in CREW_NAMES ? nat : null;
   }
   function crewMarks(nat, kind, battles, tanks, seed) {
@@ -71475,90 +71756,6 @@
       join: { feather: 0.62, windmill: 0.1, close: 3, climb: 1.5 }
     }
   };
-
-  // ../../src/battle/air/doctrine.ts
-  var at = (w) => w.year + w.month / 12;
-  var COMMONWEALTH2 = /* @__PURE__ */ new Set(["UK", "CAN", "AUS", "NZL", "SAF", "IND"]);
-  function designYear(g2, nat, branch) {
-    const year = 1939 + Math.floor((Math.max(1, g2.turn) + 7) / 12);
-    const n = g2.nations[nat];
-    if (n && techRules(g2)) {
-      const done = n.tech?.done ?? TECH.start[nat] ?? [];
-      if (branch === "fighters") return done.includes("escorts") ? Math.max(year, 1943) : Math.min(year, 1941);
-      return done.includes("heavybombers") ? Math.max(year, 1942) : Math.min(year, 1941);
-    }
-    if (n?.lab) return 1939 + Math.floor((Math.max(1, g2.turn + Math.round(n.lab.clock[branch] - n.lab.months)) + 7) / 12);
-    return year;
-  }
-  function fighterOf(nat, design) {
-    if (nat === "GER") return design >= 1942 ? "Fw190" : "Bf109";
-    if (COMMONWEALTH2.has(nat)) return design >= 1940 ? "Spitfire" : "Hurricane";
-    if (nat === "USA") return design >= 1944 ? "Mustang" : "Warhawk";
-    if (nat === "SOV") return design >= 1942 ? "Yak" : `Fighter:${nat}`;
-    if (nat === "FRA") return design >= 1940 ? "D520" : `Fighter:${nat}`;
-    if (nat === "ITA") return design >= 1942 ? "C202" : `Fighter:${nat}`;
-    if (nat === "JAP" || nat === "JPN") return "Zero";
-    return `Fighter:${nat}`;
-  }
-  function bomberOf(nat, design) {
-    if (nat === "USA") return "B17";
-    if (nat === "GER") return "He111";
-    if (COMMONWEALTH2.has(nat)) return design >= 1942 ? "Lancaster" : "Wellington";
-    if (nat === "JAP" || nat === "JPN") return design >= 1941 ? "Betty" : "Nell";
-    if (nat === "SOV") return design >= 1942 ? "Pe2" : `Bomber:${nat}`;
-    if (nat === "FRA") return design >= 1940 ? "LeO451" : `Bomber:${nat}`;
-    return `Bomber:${nat}`;
-  }
-  var SINGLE = /* @__PURE__ */ new Set(["B5N", "B6N", "D3A", "D4Y", "TBD", "TBF", "SBD", "SB2C", "Swordfish", "Barracuda", "Skua", "Stuka"]);
-  var enginesOf = (model) => model === "B17" || model === "Lancaster" ? 4 : model === "SM79" ? 3 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
-  function fighterWay(nat, w) {
-    const d = at(w);
-    if (nat === "GER") return { form: "fours", style: "dive" };
-    if (COMMONWEALTH2.has(nat)) return { form: d < 1940 + 8 / 12 ? "vic" : d < 1941 + 2 / 12 ? "line" : "fours", style: "turn" };
-    if (nat === "USA") return { form: "fours", style: "dive" };
-    if (nat === "SOV") return { form: d < 1942 + 10 / 12 ? "threes" : "fours", style: "turn" };
-    if (nat === "JAP" || nat === "JPN") return { form: d < 1943 ? "threes" : "fours", style: "turn" };
-    if (nat === "ITA") return { form: d < 1942 ? "threes" : "fours", style: "turn" };
-    return { form: "threes", style: "turn" };
-  }
-  var M = 0.6;
-  var S2 = 0.3;
-  var R = 0.1;
-  function passesOn(attacker, w, bomber, bomberNat) {
-    const d = at(w);
-    if (attacker === "GER" && bomber === "B17") {
-      if (d < 1942 + 10.75 / 12) return [["astern", M], ["quarter", S2], ["below", R]];
-      if (d < 1943 + 3 / 12) return [["headon", M], ["quarter", S2], ["astern", R]];
-      if (d < 1944) return [["quarter", M], ["headon", S2], ["astern", R]];
-      return [["quarter", 0.4], ["headon", S2], ["close", S2]];
-    }
-    if (attacker === "GER" && bomber === "Lancaster") return [["quarter", M], ["astern", S2], ["below", R]];
-    if (COMMONWEALTH2.has(attacker) && bomberNat === "GER" && d < 1942) return [["headon", S2], ["beam", S2], ["quarter", S2], ["below", R]];
-    const four = enginesOf(bomber) === 4;
-    if (attacker === "JAP" || attacker === "JPN") return four ? [["headon", M], ["astern", R], ["beam", R], ["below", R]] : [["astern", S2], ["quarter", S2], ["beam", S2], ["headon", R]];
-    if (attacker === "SOV") return [["quarter", S2], ["below", S2], ["beam", S2], ["headon", R]];
-    if (attacker === "FRA") return [["astern", S2], ["quarter", S2], ["beam", S2], ["headon", R]];
-    if (four) return [["quarter", M], ["astern", S2], ["headon", R]];
-    return [["beam", S2], ["quarter", S2], ["below", S2], ["headon", R]];
-  }
-  function pickPass(rng, rows) {
-    const all = rows.reduce((s, [, k]) => s + k, 0);
-    let x = rng.next() * all;
-    for (const [p, k] of rows) {
-      x -= k;
-      if (x < 0) return p;
-    }
-    return rows[rows.length - 1][0];
-  }
-  function escortRoles(nat, w) {
-    const d = at(w);
-    if (nat === "GER") return d < 1940 + 8 / 12 ? ["sweep", "top", "close"] : ["close", "top", "sweep"];
-    if (COMMONWEALTH2.has(nat)) return d < 1941 ? ["close", "top"] : ["close", "top", "sweep"];
-    if (nat === "USA") return d < 1944 ? ["close", "top"] : ["sweep", "top", "close"];
-    if (nat === "SOV") return ["close"];
-    if (nat === "ITA") return ["close", "top"];
-    return ["close", "top", "sweep"];
-  }
 
   // ../../src/battle/air/falls.ts
   var pick2 = (rng, w) => {
