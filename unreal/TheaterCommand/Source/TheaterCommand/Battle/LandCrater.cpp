@@ -762,10 +762,11 @@ namespace LandCrater
 				// triangles at a quarter of its points on a slope's bend, pre-check's probe, 23 November)
 				const double Gz = Rg.bOut && Thin ? Thin(Px, Py) : Height(Px, Py);
 				const double Pz = Gz + (bLip ? (S.Feather > 0.0 ? 0.002 : 0.6 * Base) : Base + Over);
-				if (Pud > 0.0 && !Rg.bOut && Pz > WaterZ - 0.03 && Pz < WaterZ + 0.1 + 0.12 * Deep)
+				if (Pud > 0.0 && !Rg.bOut && Pz > WaterZ - 0.03 && Pz < WaterZ + 0.06 + 0.06 * Deep)
 				{
-					// (the dark wet ring over the water: the soil soaked a hand or two up the bowl's side)
-					Painted = Toned(Mixed(Painted, Paint.Hollow, 0.5), 0.7);
+					// (the wet ring over the water: the soil soaked a hand up the bowl's side, a darkening of it, never
+					// black: the art director's carry, 23 November)
+					Painted = Toned(Painted, 0.82);
 				}
 				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Pz, Painted);
 			}
