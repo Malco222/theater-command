@@ -31,7 +31,9 @@ struct FBattleJolt
 class FBattleFxRecipe final : public TheaterFx::Recipe
 {
 public:
-	bool Load(const FString& Path);
+	/** Over: further recipe files (full paths) whose numbers are laid over the file's, in order, before the launch
+	 * line's (a scene's own look behind a switch: the land battle's -TheaterLandFilmFire lays battle-fx-film.json). */
+	bool Load(const FString& Path, const TArray<FString>& Over = TArray<FString>());
 	virtual bool Find(const char* Path, double& Out) const override;
 	virtual bool FindWord(const char* Path, std::string& Out) const override;
 
@@ -72,6 +74,9 @@ public:
 	/** Reads the recipe and makes the mesh and lamps under Parent (its owner holds them). GroundUnder gives the
 	 * world point on the ground under a world point. False, with a warning, if the recipe or material is missing. */
 	bool Begin(USceneComponent* Parent, double InUnitsPerMetre, TFunction<FVector(const FVector&)> InGroundUnder);
+	/** A further recipe file in Content/Effects laid over battle-fx.json at Begin (call it before Begin): its numbers
+	 * replace the file's for this kit alone (release 2: the land battle's film fire). */
+	void LayOver(const FString& FileName) { Over.Add(FileName); }
 	bool IsReady() const;
 	/** Takes the mesh and lamps away (the owner's EndPlay). Begin may be called again after. */
 	void End();
@@ -179,6 +184,11 @@ public:
 	 * caller's own number for this fire, so BurnOut finds it (under 0: none). bOnShip: true for a fire on a ship's
 	 * deck (anything afloat), so it burns as a ship's fire, never as a burning tank's, however small, low or still. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1, bool bOnShip = false);
+	/** A burning opening (release 2): flame and smoke forced out of a hatch or an engine grille AcrossMetres wide, for
+	 * Seconds, then a thinning grey column. A fire as Burn's (BurnOut and BurnMove find it by Id), but it never joins
+	 * another fire nor founds a column of its own, and its flames are the recipe's fire.vent_tongues: narrow and tall
+	 * out of the hole. A knocked-out tank's hatches so burn as hatches, never melted into one bonfire on her deck. */
+	void Vent(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
 	/** Fuel going up: a ragged ball of burning fuel about AcrossMetres wide that rolls and rises and turns to black
 	 * smoke boiling off its top, lighting the ground while it burns. A vehicle's fuel 6 to 10 m (about 1 to 1.5 s),
 	 * an aircraft's crash or a fuel dump 15 to 25 m (1.5 to 2 s). Velocity: what it was moving at (a crashing
@@ -361,6 +371,7 @@ public:
 
 private:
 	FBattleFxRecipe Book;
+	TArray<FString> Over; // (LayOver's files, by name in Content/Effects)
 	TheaterFx::Battle Core;
 	TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;

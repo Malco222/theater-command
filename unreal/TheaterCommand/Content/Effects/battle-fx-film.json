@@ -1,0 +1,53 @@
+{
+ "what": "The film fire's look (release 2, behind the land battle's -TheaterLandFilmFire; Brian, 23 November: 'the tank on fire doesnt look realistic'). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver): each number here replaces the recipe's, the rest stay. The art director's round 1, 15:26Z 23 November: the story and timing passed; the look mended here. 2: the column darker at its root (35 to 45 near the flame tops), grey-brown 80 to 100 with height and age, the shade side darker than the sun side, tall and leaning, readable from 1 to 2 km. 3: a brew-up burns to the battle's end, at its height 6 to 12 minutes, then low (a quarter of the height) with its column all battle. 5: a bright core, fast flicker, soot tongues, a flickering light on the hull and ground. 6: the fuel ball a 0.3 to 0.6 s flash rolling into black smoke with orange inside. 7: cook-offs a flash, sparks and a puff; the big ones jet 4 to 6 m. The vents' own row (fire.vent_tongues) and the smoulder (steam.smoulder) are the recipe's own, as only the film fire burns them.",
+ "fire": {
+  "land_tongues": {
+   "tips": 0.85,
+   "torn": 0.45,
+   "root_over": 2.2,
+   "tip": [110, 50, 34],
+   "flicker": 0.22,
+   "flicker_hz": [4.0, 8.0],
+   "soot": 3,
+   "soot_colour": [40, 36, 34]
+  },
+  "land_column": {
+   "column_life_s": [55, 75],
+   "alpha": [0.85, 0.98],
+   "colour": [16, 14, 13],
+   "colour_top": [84, 76, 66],
+   "sun_side": 2.8
+  },
+  "late": {
+   "from_s": [360, 720],
+   "by_s": 90,
+   "flames": 0.25,
+   "light": 0.35,
+   "column_alpha": 0.8,
+   "column_colour": [56, 49, 42],
+   "column_top": [98, 90, 80]
+  },
+  "lamp": {
+   "land_strength": 1.0,
+   "flicker": 0.4
+  },
+  "glow": {
+   "flicker": 0.4,
+   "flicker_hz": [3.0, 7.0]
+  }
+ },
+ "fuel_ball": {
+  "small_s": [0.35, 0.6],
+  "lobe_r": [0.07, 0.14],
+  "rough": 0.55,
+  "rise_of_across": 1.5,
+  "smoke_from_s": 0.2,
+  "smoke_colour": [22, 20, 19],
+  "smoke_alpha": 0.95
+ },
+ "cook_off": {
+  "jet_tall_m": [4, 6],
+  "flash": 0.9,
+  "embers": [10, 20]
+ }
+}
