@@ -21,6 +21,13 @@ file's own skeleton, nothing else in the file touched but `clips` (and a line in
     hand for a rifle at the port) exactly as it does there, so it stays in his hands. A man whose run swings free arms
     (the sailors, the medic) takes the new runner's arms too.
 
+  * the feet are then planted on his own legs (plant(); the capture's legs are not his, so a planted foot crept a
+    little on him, about a quarter more than his own run's did): over the keys where a ball of the foot is down, it
+    goes back at exactly the clip's ground speed, the stride fitted to the planted feet (a few per cent shorter than
+    the capture's scaled stride), by sliding the whole body (the pelvis and the weapon with it) about 2 cm at most ahead,
+    back or aside, eased between steps. The game's measure of a planted foot's slide (land_show_test's FeetOf, per
+    metre a second of ground) must come out at or under his own run's (check()).
+
 Each new clip names its own (`style_of`: "run" or "advance"): the game picks one of the four per man by his seed
 (LandMen, behind the run-styles switch), and far men banked in poses play the base clip's poses.
 
@@ -61,6 +68,8 @@ ARMS = tuple(f"{b}_{s}" for s in "lr" for b in ("clavicle", "upperarm", "lowerar
 ANCHORS = ("hand_r", "hand_l", "chest", "pelvis")
 FREE_ARMS_DEG = 4.0          # (his run's arms within this of the capture's: free arms, the new runner's taken)
 HEEL = (-0.061, 0.0, 0.0)    # (soldier.mo_events: the heel behind the ankle)
+PLANT_TOL = (0.035, 0.025)   # (a ball within this of its lowest at a key is down; the second if the first reaches a
+PLANT_MAX = 0.04             #  flight key, which would slide the body more than PLANT_MAX)
 
 
 # ================================================================================================ rotations
@@ -330,6 +339,122 @@ def plan(D, base, src, log=print):
     return P
 
 
+def balls(sk, clip, ts):
+    """The balls of both feet (the bones' heads, as the game measures them) at the times ts: (2, len(ts), 3)."""
+    bl = (sk.ix["ball_l"], sk.ix["ball_r"])
+    out = np.zeros((2, len(ts), 3))
+    for j, t in enumerate(ts):
+        G, X = sk.fk(*clip_pose(clip, t))
+        out[0, j], out[1, j] = X[bl[0]], X[bl[1]]
+    return out
+
+
+def ball_slide(sk, clip, n=120):
+    """land_show_test's FeetOf: the clip played in place at its own rate, the ground going back under him at its
+    stride speed; over the samples where a ball is within 2 cm of its lowest, how fast it moves (all ways, and along
+    his forward), m/s. Returned with the ground speed, so clips of other strides compare per metre a second."""
+    long = float(clip["long"])
+    spd = float(clip["stride"]) / long
+    ts = np.linspace(0.0, long, n + 1)
+    B = balls(sk, clip, ts)
+    B[:, :, 0] += spd * ts
+    dt = long / n
+    s = a = 0.0
+    c = 0
+    for f in range(2):
+        lo = B[f, :, 2].min() + 0.02
+        for i in range(1, n + 1):
+            if B[f, i - 1, 2] < lo and B[f, i, 2] < lo:
+                d = B[f, i] - B[f, i - 1]
+                s += math.hypot(d[0], d[1]) / dt
+                a += abs(d[0]) / dt
+                c += 1
+    return {"slide": s / max(c, 1), "ahead": a / max(c, 1), "speed": spd}
+
+
+def _runs(mask):
+    """The cyclic runs of True in mask, each a list of indices in order (wrapping the loop)."""
+    K = len(mask)
+    if mask.all():
+        return [list(range(K))]
+    start = int(np.argmin(mask))
+    out, cur = [], []
+    for i in range(1, K + 1):
+        j = (start + i) % K
+        if mask[j]:
+            cur.append(j)
+        elif cur:
+            out.append(cur)
+            cur = []
+    if cur:
+        out.append(cur)
+    return out
+
+
+def plant(sk, clip, tol):
+    """Plant the feet on his own legs, in place (the clip's tracks and stride changed; returns what was done, or None
+    when `tol` takes in a flight key). Each step is the keys where that ball is within `tol` of its lowest. The ground
+    speed is the one the planted balls go back at (their pooled slope, each step its own place: the stride is fitted
+    to them); then at each planted key the whole body slides ahead or back (and aside) just so that the ball keeps
+    that speed exactly (and its line), and between steps the slide eases (least second difference, the loop
+    closed). The pelvis and every other child of the root (the weapon) move together, so nothing else changes:
+    the legs' turns, the heights, the footfalls, the hands on the weapon."""
+    long = float(clip["long"])
+    trk = {tr["part_name"]: tr for tr in clip["tracks"]}
+    ts = np.array([k_[0] for k_ in trk["pelvis"]["move"]])
+    K = len(ts) - 1
+    tk = ts[:K]
+    low = balls(sk, clip, np.linspace(0.0, long, 121))[:, :, 2].min(1)
+    B = balls(sk, clip, tk)
+    steps = []
+    for f in range(2):
+        for s in _runs(B[f, :, 2] < low[f] + tol):
+            if len(s) < 2:
+                continue
+            tt = [tk[s[0]]]
+            for j in s[1:]:
+                tt.append(tk[j] + (long if tk[j] < tt[-1] else 0.0))
+            steps.append((f, s, np.array(tt)))
+    if len(steps) < 2:
+        return None
+    num = den = 0.0
+    for f, s, tt in steps:
+        x = B[f, s, 0]
+        num += float(np.sum((tt - tt.mean()) * (x - x.mean())))
+        den += float(np.sum((tt - tt.mean()) ** 2))
+    spd = -num / den
+    E = np.zeros((K, 2))
+    cnt = np.zeros(K)
+    for f, s, tt in steps:
+        w = B[f, s, 0] + spd * tt
+        E[s, 0] += -(w - w.mean())
+        E[s, 1] += -(B[f, s, 1] - B[f, s, 1].mean())
+        cnt[s] += 1
+    held = cnt > 0
+    E[held] /= cnt[held][:, None]
+    D2 = np.zeros((K, K))
+    for j in range(K):
+        D2[j, (j - 1) % K] += 1.0
+        D2[j, j] -= 2.0
+        D2[j, (j + 1) % K] += 1.0
+    free = np.where(~held)[0]
+    S = E.copy()
+    if len(free):
+        for c in range(2):
+            S[free, c] = np.linalg.lstsq(D2[:, free], -D2 @ E[:, c], rcond=None)[0]
+    if np.abs(S).max() > PLANT_MAX:
+        return None
+    for n, tr in trk.items():
+        if tr.get("move") and (n == "pelvis" or sk.pname[sk.ix[n]] == "root"):
+            for j, k_ in enumerate(tr["move"]):
+                k_[1] = round(k_[1] + float(S[j % K, 0]), 4)
+                k_[2] = round(k_[2] + float(S[j % K, 1]), 4)
+    old = float(clip["stride"])
+    clip["stride"] = round(spd * long, 3)
+    return {"tol": tol, "stride": (old, clip["stride"]), "slide_cm": round(100 * float(np.abs(S).max()), 1),
+            "steps": len(steps), "both_down": int((cnt > 1).sum())}
+
+
 def make_clip(P, cap, style, info, log=print):
     """The new clip: the capture `cap`'s body on his skeleton, his own arms and weapon, keyed at 15 a second."""
     sk, C, tracks = P["sk"], P["C"], P["tracks"]
@@ -430,9 +555,25 @@ def make_clip(P, cap, style, info, log=print):
     clip = {"long": long, "loop": True, "stride": round(k * cap.stride, 3), "weapon": C.get("weapon"),
             "tracks": out_tracks, "events": evs, "style_of": P["base"],
             "from": f"motion capture: run_styles.py's {style} (CMU {b['take']} frames {b['a']}-{b['b']}), with this "
-                    f"file's own {'free arms' if P['free_arms'] else 'hold on his weapon'} from his {P['base']}"}
-    log(f"   {style}: {long:.3f} s, stride {clip['stride']} m, {len(ts)} keys, ground {dz * 1000:+.1f} mm, left foot "
-        f"{lf:.3f} (his {P['lf']:.3f}), footfalls l {ft['l']['on']} r {ft['r']['on']}")
+                    f"file's own {'free arms' if P['free_arms'] else 'hold on his weapon'} from his {P['base']}, "
+                    f"the feet planted on his legs"}
+    # the feet planted on his own legs (the capture's legs are not his)
+    before = ball_slide(sk, clip)
+    done = None
+    for tol in PLANT_TOL:
+        trial = json.loads(json.dumps(clip))
+        done = plant(sk, trial, tol)
+        if done:
+            clip = trial
+            break
+    if not done:
+        raise RuntimeError(f"{style}: the feet could not be planted")
+    after = ball_slide(sk, clip)
+    log(f"   {style}: {long:.3f} s, stride {clip['stride']} m (the capture's scaled {done['stride'][0]}), {len(ts)} keys, "
+        f"ground {dz * 1000:+.1f} mm, left foot {lf:.3f} (his {P['lf']:.3f}), footfalls l {ft['l']['on']} r "
+        f"{ft['r']['on']}; planted (within {done['tol'] * 100:.1f} cm, the body slid {done['slide_cm']} cm at most): "
+        f"a planted ball's slide along {before['ahead'] / before['speed']:.4f} -> {after['ahead'] / after['speed']:.4f}"
+        f", all ways {before['slide'] / before['speed']:.4f} -> {after['slide'] / after['speed']:.4f} per m/s")
     return clip
 
 
@@ -501,8 +642,16 @@ def check(D, log=print):
         drift = float(np.abs(rel_n.mean(0) - rel_o.mean(0)).max())
         if C.get("weapon") not in (None, "none") and drift > 0.01:
             bad.append(f"{name}: left hand {drift * 1000:.0f} mm off its place on the weapon")
+        # a planted foot slides no more than in his own clip (the game's measure, per metre a second of ground)
+        so, sn = ball_slide(sk, C), ball_slide(sk, c)
+        ao, an = so["ahead"] / so["speed"], sn["ahead"] / sn["speed"]
+        wo, wn = so["slide"] / so["speed"], sn["slide"] / sn["speed"]
+        if an > ao + 1e-4 or wn > wo + 1e-4:
+            bad.append(f"{name}: a planted foot slides {an:.4f} along, {wn:.4f} all ways per m/s, his {base} "
+                       f"{ao:.4f}, {wo:.4f}")
         log(f"   {name}: ground {1000 * (g_n - g_o):+.1f} mm, lowest sole {1000 * (lo_n - lo_o):+.1f} mm, left hand on "
-            f"the weapon {drift * 1000:.1f} mm")
+            f"the weapon {drift * 1000:.1f} mm, planted slide {an:.4f} along / {wn:.4f} all per m/s (his {base} "
+            f"{ao:.4f} / {wo:.4f})")
     return bad
 
 
@@ -540,8 +689,9 @@ def stage(dir_, names, log=print):
 
 ABOUT = ("run_styles.py (release 2, 23 November 2026): run_b, run_c, run_d and advance_b, advance_c, advance_d, each "
          "another runner's motion capture (CMU 09_02, 16_36, 09_03) with this file's own hold on his weapon; "
-         "style_of names the clip each is a style of. The game gives each man one of the four (LandMen, the "
-         "run-styles switch); far men banked in poses play the base clip's.")
+         "style_of names the clip each is a style of; the feet planted on this file's legs, the stride fitted to "
+         "them (a planted foot slides no more than in his own run). The game gives each man one of the four "
+         "(LandMen, the run-styles switch); far men banked in poses play the base clip's.")
 
 
 def deliver(names, log=print, folder=SHARED, backup=True):
