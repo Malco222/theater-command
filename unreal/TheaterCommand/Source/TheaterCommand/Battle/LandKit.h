@@ -583,7 +583,7 @@ namespace LandKit
 			double Carriage = 0.0;                           // a gun's carriage, and whether her crew are swinging it
 			bool bShifting = false;
 			bool bOn = false;                                // moving off and stopping
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
 			size_t MoveOffs = 0, Stops = 0;
 			double Turret = 0.0, Lay = 0.0, Trav = 0.0, Steer = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 			double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;

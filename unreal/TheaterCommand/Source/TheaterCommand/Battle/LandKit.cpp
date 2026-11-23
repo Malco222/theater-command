@@ -3288,6 +3288,12 @@ namespace LandKit
 
 		// When she moves off and stops (a tenth of a second of going to move off, three tenths of standing to stop, so a
 		// halt of a moment in the recording does not jerk her). Each is dated back to when she began to go or to stand.
+		// A turn on the spot alone must hold TurnHolds to move her off: in a live battle the reader dates a provisional
+		// point at its piece's own time, so a hull wandering inside the keeper's own slack (KEEP_F, 0.05 rad) over the
+		// 0.2 to 0.4 s before the next kept point reads as 0.2 rad/s, over the turning threshold below, and a vehicle
+		// standing still gave an engine note, a brake and a puff of dust she never gave in the battle read whole (the
+		// pre-check's find of 23 November, an M4 at 247.65 s). A real turn on the spot of under half a second is a
+		// twitch nobody sees; one that lasts is still dated back to where it began.
 		// (Worked out again: her moving off and stopping by Given are as the screen showed them, and so is she through
 		// those steps, while the new words still count how long she has been going or standing; one that the new words
 		// date by Given, too late to be shown then, comes at the first step after it.)
@@ -3297,7 +3303,8 @@ namespace LandKit
 			const double Soonest = TimeOf(Seen);
 			auto ShownOf = [Given](const std::vector<double>& L) { return static_cast<size_t>(std::upper_bound(L.begin(), L.end(), Given) - L.begin()); };
 			bool bOn = false;
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
+			constexpr double TurnHolds = 0.45;
 			size_t KeepOffs = ShownOf(MoveOffs), KeepStops = ShownOf(Stops);
 			if (From > 0)
 			{
@@ -3305,6 +3312,7 @@ namespace LandKit
 				bOn = R.bOn;
 				OnFor = R.OnFor;
 				OffFor = R.OffFor;
+				RollFor = R.RollFor;
 				KeepOffs = std::max(KeepOffs, R.MoveOffs);
 				KeepStops = std::max(KeepStops, R.Stops);
 			}
@@ -3321,6 +3329,7 @@ namespace LandKit
 					R.bOn = bOn;
 					R.OnFor = OnFor;
 					R.OffFor = OffFor;
+					R.RollFor = RollFor;
 					R.MoveOffs = MoveOffs.size();
 					R.Stops = Stops.size();
 				}
@@ -3331,7 +3340,8 @@ namespace LandKit
 					continue; // (knocked out for good: nothing moves her again)
 				}
 				const bool bTurning = !bGun && std::fabs(W[I]) > 0.12;
-				const bool bGo = std::fabs(V[I]) > 0.35 || bTurning;
+				const bool bRolling = std::fabs(V[I]) > 0.35;
+				const bool bGo = bRolling || bTurning;
 				const bool bStill = std::fabs(V[I]) < 0.15 && (bGun || std::fabs(W[I]) < 0.06);
 				if (I <= Seen || I == From)
 				{
@@ -3353,18 +3363,22 @@ namespace LandKit
 					{
 						bOn = bNow;
 						OnFor = bOn ? OnFor : 0.0;
+						RollFor = bOn ? RollFor : 0.0;
 						OffFor = bOn ? 0.0 : OffFor;
 					}
 				}
+				// (RollFor: how long of this run of going she has rolled, not only turned; a run that breaks clears it)
 				if (I < Seen)
 				{
 					OnFor = !bOn && bGo ? OnFor + Step : 0.0;
+					RollFor = !bOn && bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
 					OffFor = bOn && bStill ? OffFor + Step : 0.0;
 				}
 				else if (!bOn)
 				{
 					OnFor = bGo ? OnFor + Step : 0.0;
-					if (OnFor > 0.1 - 1e-9)
+					RollFor = bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
+					if (OnFor > 0.1 - 1e-9 && (RollFor > 0.0 || OnFor > TurnHolds - 1e-9))
 					{
 						bOn = true;
 						OffFor = 0.0;
@@ -3378,6 +3392,7 @@ namespace LandKit
 					{
 						bOn = false;
 						OnFor = 0.0;
+						RollFor = 0.0;
 						Stops.push_back(std::max(Soonest, T - OffFor + Step));
 					}
 				}
