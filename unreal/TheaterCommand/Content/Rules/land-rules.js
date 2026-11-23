@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f87109ac 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 45b7994f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3169,6 +3169,36 @@
         ITA: [[1941, 1943.75, ["Semovente"], 0.25]]
       },
       kit: { models: { USA: "M10", UK: "M10", GER: "StuG3", SOV: "SU85", ITA: "Semovente" }, axisStand: "StuG3", stand: "M10" }
+    },
+    cars: {
+      _about: "Armoured cars (release 2; Brian, 23 November 07:01Z, yes to armoured cars, jeeps, motorcycles and AA; LandBattle.cars, off unless turned on; looks only; a campaign battle's only; the design director, 07:47Z, accepted as proposed). A block's cars are a view of it: out 'ahead' metres before its front, 'side' metres beyond each flank, while it has not met the enemy ('contact' metres) and is not fighting; then back 'back' metres behind its tray. They see nothing the block does not (no ticket words say they scout), fire never, and are lost as the block's strength goes. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md, H for where, M for the counts): [from, until, model, {kind: per block}] by the battle's year; 'per' below one is 1 in so many of the side's blocks of that army and kind, in the order of their blocks (a half: every other one). Every row of the month counts. Units decide: ForceKit.cars (its corps' cars per block) reads first, its army's own model or the stand-in; the rows are only the history start's.",
+      rows: {
+        GER: [[1939, 1943, "SdKfz222", { arm: 0.5, mot: 1 }], [1943, 9999, "SdKfz222", { arm: 0.5, mot: 0.5 }]],
+        USA: [[1943.75, 9999, "M8", { arm: 1, inf: 0.3334 }]],
+        UK: [[1940, 1941, "ArmouredCar", { arm: 1, mot: 0.5 }], [1941, 9999, "ArmouredCar", { arm: 1, mot: 0.5, inf: 0.3334 }]],
+        FRA: [[1939, 1940.75, "ArmouredCar", { arm: 1, mot: 1 }]],
+        SOV: [[1939, 1942, "ArmouredCar", { arm: 0.5, inf: 0.25 }], [1942, 9999, "ArmouredCar", { arm: 0.5 }]],
+        ITA: [[1941, 9999, "ArmouredCar", { arm: 0.5, mot: 0.5 }]]
+      },
+      kit: { models: { GER: "SdKfz222", USA: "M8" }, axisStand: "SdKfz222", stand: "ArmouredCar" },
+      ahead: 160,
+      side: 18,
+      back: 30,
+      contact: 700
+    },
+    aa: {
+      _about: "AA vehicles (release 2, the same yes; LandBattle.aa, off unless turned on; looks only; a campaign battle's only). A block's AA vehicles are a view of it, kept 'back' metres behind its tray (a battery's behind its tractors, 'battery' more), moving with it; lost as its strength goes. They hit nothing the rules do not take, and a strike's losses stay the rules'; until the 3D game aims them upward they ride and park. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md), read as the cars' are ('art': a battery, not a support team). Units decide: ForceKit.aa (its corps' AA vehicles per block) reads first.",
+      rows: {
+        USA: [[1943, 9999, "M16", { arm: 1, inf: 0.3334 }]],
+        GER: [[1939, 9999, "FlakHalftrack", { arm: 1, mot: 0.5 }], [1939, 9999, "FlakTruck", { inf: 0.3334 }]],
+        UK: [[1941, 9999, "FlakTruck", { art: 1, arm: 0.5 }]],
+        SOV: [[1939, 9999, "FlakTruck", { art: 1 }], [1944, 9999, "M16", { arm: 0.3334 }]],
+        ITA: [[1939, 9999, "FlakTruck", { art: 1, arm: 0.5 }]],
+        JAP: [[1937, 9999, "FlakTruck", { art: 0.5 }]]
+      },
+      kit: { models: { USA: "M16", GER: "FlakHalftrack" }, axisStand: "FlakHalftrack", stand: "FlakTruck" },
+      back: 40,
+      battery: 40
     }
   };
 
@@ -3402,6 +3432,7 @@
       for (const u of b.units) {
         this.squads.set(u.id, this.make(u));
         this.addMech(u);
+        this.addEscorts(u);
       }
     }
     /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
@@ -3409,12 +3440,14 @@
       if (this.b.t > 0 || !this.squads.has(u.id)) return;
       this.squads.set(u.id, this.make(u));
       this.addMech(u);
+      this.addEscorts(u);
     }
     /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
     join(u) {
       if (!this.squads.has(u.id)) {
         this.squads.set(u.id, this.make(u));
         this.addMech(u);
+        this.addEscorts(u);
       }
     }
     /**
@@ -3466,6 +3499,20 @@
       if (!row) return [];
       const list = row[2], n = Math.max(1, Math.round(list.length * u.tray / 4));
       return Array.from({ length: n }, (_, i) => list[i % list.length]);
+    }
+    /**
+     * The models a block's vehicles are drawn with besides its own (release 2, looks only): its armoured infantry's
+     * carriers, its self-propelled guns, its tank destroyers, as the switches stand. For the 3D game to read them before the
+     * battle opens (the header's "mls"); worked out from the block alone, so a block still coming up from next door has its
+     * own too.
+     */
+    modelsFor(u) {
+      const n = Math.max(0, u.figures0), out = /* @__PURE__ */ new Set();
+      if (this.b.mech && u.kind === "arm") for (const m of this.mechOf(u)) out.add(m);
+      for (const m of this.spgOf(u, n)) if (m) out.add(m);
+      for (const m of this.tdOf(u, n)) if (m) out.add(m);
+      for (const m of [...this.escortOf(u, "cars"), ...this.escortOf(u, "aa")]) out.add(m);
+      return [...out];
     }
     /** The army whose rows a block's nation reads (the Commonwealth's as Britain's), and the battle's year with its month. */
     armyOf(nat) {
@@ -3532,6 +3579,163 @@
       }
       let c = 0;
       return none2.map((_, k) => Math.floor((k + 1) * share + 1e-9) > Math.floor(k * share + 1e-9) ? list[c++ % list.length] : "");
+    }
+    /**
+     * Armoured cars and AA vehicles (release 2, LandBattle.cars and aa; looks only; the historian's rows, 23 November
+     * 07:47Z; the design director, 07:47Z): the models of a block's cars or AA vehicles, none where it brings none. Where
+     * the campaign says what the corps has (ForceKit.cars, ForceKit.aa: so many to each of its blocks, 1 in so many below
+     * one), that many, its army's own model or the stand-in in its coat; else every row of its army in the battle's month
+     * that names its kind (a battery is 'art'; a support team none). Below one a block, 1 in so many in the order of the
+     * blocks of its kind (its corps' by the kit, its army's on its side by the rows): every other one at a half.
+     */
+    escortOf(u, what) {
+      if (!(what === "cars" ? this.b.cars : this.b.aa) || u.team || u.kind === "fort") return [];
+      const E = DR[what], army2 = this.armyOf(u.nat);
+      const many = (per, i2) => Math.max(0, Math.floor((i2 + 1) * per + 1e-9) - Math.floor(i2 * per + 1e-9));
+      const before = (same3) => this.b.allBlocks().filter((x) => x.side === u.side && x.kind === u.kind && !x.team && x.id < u.id && same3(x)).length;
+      const kit = u.kit?.[what];
+      if (kit !== void 0) return Array.from({ length: many(kit, before((x) => x.corps === u.corps)) }, () => this.kitModel(E.kit, army2));
+      const when = this.when(), i = before((x) => this.armyOf(x.nat) === army2), out = [];
+      for (const [from, to, model, per] of E.rows[army2] ?? []) {
+        if (when < from || when >= to || per[u.kind] === void 0) continue;
+        for (let c = many(per[u.kind], i); c > 0; c--) out.push(model);
+      }
+      return out;
+    }
+    /**
+     * A block's armoured cars and its AA vehicles (escortOf), each a squad of vehicles only, drawn as tanks of their own
+     * models (ml) with the block's men (view). Like armoured infantry they are a view of the block: its place, facing,
+     * order, state and strength are its own, read live, and its box is grown to hold where they keep (outriders), so the
+     * rules' counts and places are untouched. Kept under the block's id less one, less a million for the cars and two for
+     * the AA, numbered k from DR.mech.base and 100 or 200 on; they fall as the block's figures go, in that share (the last
+     * at half its figures), each to a round from the enemy owed most for its harm.
+     */
+    addEscorts(u) {
+      for (const what of ["cars", "aa"]) {
+        const key = -(u.id + 1) - (what === "cars" ? 1e6 : 2e6);
+        this.squads.delete(key);
+        const models = this.escortOf(u, what);
+        if (!models.length) continue;
+        const c = models.length, base = DR.mech.base + (what === "cars" ? 100 : 200);
+        const reach = what === "cars" ? DR.cars.ahead + DR.cars.side + 40 : DR.aa.back + DR.aa.battery + 40;
+        const v = Object.create(u);
+        Object.defineProperties(v, {
+          // (no foot's drill nor a tank block's reads them: a battery's kind, with no guns)
+          kind: { value: "art", enumerable: true },
+          team: { value: void 0, enumerable: true },
+          figures0: { value: base + c, enumerable: true },
+          figures: { get: () => u.figures <= 0 ? 0 : base + Math.min(c, Math.round(c * u.figures / Math.max(1, u.figures0))), enumerable: true },
+          tray: { value: c, enumerable: true },
+          w: { get: () => u.w + 2 * reach, enumerable: true },
+          d: { get: () => u.d + 2 * reach, enumerable: true }
+        });
+        const men = models.map((ml, i) => ({
+          k: base + i,
+          n: (base + i) * 100,
+          role: "tank",
+          team: 0,
+          x: u.x,
+          y: u.y,
+          face: u.face,
+          pose: "halt",
+          v: 0,
+          spot: [u.x, u.y],
+          cover: "none",
+          until: 0,
+          slotAt: [u.x, u.y],
+          jx: 0,
+          jy: 0,
+          ml
+        }));
+        const sq = {
+          u: v,
+          tier: 0,
+          men,
+          veh: [],
+          fo: null,
+          phase: "rest",
+          since: 0,
+          nextThink: roll(this.seed, u.id, 5, base) * 0.5,
+          lastStr: u.str,
+          harm: 0,
+          shelledAt: -99,
+          lastX: u.x,
+          lastY: u.y,
+          heading: u.face,
+          speed: 0,
+          track: [],
+          wx: 0,
+          wy: 0,
+          net: 0,
+          down: true,
+          fast: 0,
+          slow: 0,
+          close: false,
+          ran: false,
+          salvoAt: 0,
+          ripple: 0,
+          flank: 0,
+          officerAt: 0,
+          leap: true,
+          m0: c,
+          lost: 0,
+          of: u.id,
+          esc: what
+        };
+        const ahead2 = what === "cars" && this.screening(sq, u);
+        men.forEach((m, i) => {
+          const s = this.escortSpot(sq, i, u, ahead2);
+          m.x = s[0];
+          m.y = s[1];
+          m.spot = s;
+          m.slotAt = s;
+        });
+        this.squads.set(key, sq);
+      }
+    }
+    /** Whether a block's armoured cars are out ahead as its screen: it has not met the enemy (DR.cars.contact), nor fights, holds or goes back. */
+    screening(sq, own) {
+      const ph = this.squads.get(own.id)?.phase ?? "rest", e = this.threat(own);
+      return own.engaged === void 0 && fighting(own) && (!e || this.b.gap(own, e) > DR.cars.contact) && !["fight", "pinned", "hold", "fallback", "flee", "battery", "gone"].includes(ph) && sq.harm <= 0;
+    }
+    /** Where a block's i-th car or AA vehicle keeps: cars on its flanks, out ahead or back behind; AA in a row behind it (a battery's behind its tractors). */
+    escortSpot(sq, i, own, ahead2) {
+      if (sq.esc === "cars") {
+        const C = DR.cars, s = i % 2 ? 1 : -1, row = Math.floor(i / 2);
+        return toWorld(own, own.face, s * (own.w / 2 + C.side + row * 20), ahead2 ? own.d / 2 + C.ahead + row * 25 : -own.d / 2 - C.back - row * 20);
+      }
+      const A = DR.aa, n = sq.men.length;
+      return toWorld(own, own.face, (i - (n - 1) / 2) * 22, -own.d / 2 - A.back - (own.kind === "art" ? A.battery : 0));
+    }
+    /**
+     * A block's armoured cars or AA vehicles, each half second: each drives to her place (escortSpot) at the block's pace
+     * and a little more, and halts there. A car's turret is on the enemy once he is within sight of the block; buttoned
+     * up close to him. None fires (looks only: the design director, 23 November 07:47Z).
+     */
+    outriders(sq) {
+      const own = Object.getPrototypeOf(sq.u), t = this.b.t;
+      sq.phase = this.squads.get(own.id)?.phase ?? "rest";
+      if (sq.phase === "gone") return;
+      const e = this.threat(own), near = e ? this.b.gap(own, e) : Infinity;
+      const ahead2 = sq.esc === "cars" && this.screening(sq, own);
+      sq.men.forEach((m, i) => {
+        if (!this.stands(sq, m)) return;
+        const s = this.escortSpot(sq, i, own, ahead2), d = Math.hypot(s[0] - m.x, s[1] - m.y);
+        m.aim = sq.esc === "cars" && e && near < 1200 ? [e.x, e.y] : void 0;
+        m.buttoned = sq.esc === "cars" && near < 400 || void 0;
+        if (d > 5) {
+          m.spot = s;
+          m.slotAt = s;
+          m.pose = "drive";
+          m.v = clamp2(sq.speed * 1.2 + d * 0.25, 3, 12);
+          m.until = t + 1;
+        } else if (m.pose === "drive" || m.pose === "reverse") {
+          m.spot = [m.x, m.y];
+          m.slotAt = s;
+          m.v = 0;
+          m.pose = "halt";
+        }
+      });
     }
     // ---- Who is in a block ------------------------------------------------------------------------------------------
     make(u, mech) {
@@ -3750,8 +3954,11 @@
         sq.slow = sq.speed < MOUNT.down || sq.net < MOUNT.down ? sq.slow + DT : 0;
         sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
         this.falls(sq);
-        if (b.bearers) this.litters(sq);
-        if (t >= sq.nextThink) {
+        if (b.bearers && !sq.esc) this.litters(sq);
+        if (t >= sq.nextThink && sq.esc) {
+          sq.nextThink = t + 0.5;
+          this.outriders(sq);
+        } else if (t >= sq.nextThink) {
           sq.nextThink = t + 0.5;
           if (this.byBook) this.feel(sq);
           this.think(sq);
@@ -3882,15 +4089,19 @@
         m.aim = void 0;
         m.hidden = void 0;
         sq.memo = void 0;
-        if (m.role === "tank") {
+        if (m.role === "tank" && !sq.esc) {
           const nth = sq.men.filter((x) => x.role === "tank" && x.fell !== void 0 && x !== m).length;
           const w = this.b.wrecks.filter((z) => z.unit === u.id)[nth];
           if (w) this.wreckAt.set(w.id, [m.x, m.y]);
         }
         if (!shell && by2 !== void 0) this.killRound(this.b.unit(by2), sq, m);
+        else if (!shell && sq.esc) {
+          const st = this.strikerOf(u);
+          if (st) this.killRound(st, sq, m, st.kind === "arm" || st.kind === "art" && st.team !== "mg" ? [m.x, m.y] : void 0);
+        }
         m.pose = "down";
         m.spot = [m.x, m.y];
-        if (this.b.bearers) this.hurt(sq, m);
+        if (this.b.bearers && !sq.esc) this.hurt(sq, m);
         this.aid(sq, m);
         if (sq.tier >= 1) this.regroup(sq, m);
       }
@@ -4077,6 +4288,16 @@
       if (m.pose === "fire_kneel" || m.pose === "wait" || m.pose === "creep") return DR.blast.kneeling;
       return 1;
     }
+    /** Who struck a block: the enemy block owed most for its harm (sim.ts suffer), else the one it faces. */
+    strikerOf(u) {
+      const b = this.b, owed = u.owed ?? {};
+      let by2;
+      for (const id of Object.keys(owed).map(Number)) {
+        const e = b.unit(id);
+        if (e && live(e) && e.side !== u.side && (!by2 || owed[id] > owed[by2.id])) by2 = e;
+      }
+      return by2 ?? this.threat(u) ?? void 0;
+    }
     thin(sq) {
       const u = sq.u, b = this.b;
       if (u.state === "withdrawn" || u.state === "gone" && (u.figures > 0 || u.y < 0 || u.y > b.field.h)) return;
@@ -4091,13 +4312,7 @@
       if (n <= 0) return;
       const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0 && !m.job);
       if (!cand.length) return;
-      let by2;
-      const owed = u.owed ?? {};
-      for (const id of Object.keys(owed).map(Number)) {
-        const e = b.unit(id);
-        if (e && live(e) && e.side !== u.side && (!by2 || owed[id] > owed[by2.id])) by2 = e;
-      }
-      by2 ?? (by2 = this.threat(u) ?? void 0);
+      const by2 = this.strikerOf(u);
       const shell = !!by2 && (by2.kind === "arm" && !this.mgKill(by2, u, sq.lost) || by2.kind === "art" && by2.team !== "mg");
       if (sq.of !== void 0 && !shell) {
         for (let i = cand.length - 1; i >= 0; i--) if (cand[i].pose === "mounted" && DR.mech.armoured.includes(this.lorryOf(sq, cand[i]).ml ?? "")) cand.splice(i, 1);
@@ -7122,7 +7337,7 @@
       }
       if (VEHICLE.has(v.role)) {
         const fc = w === "gun" || w === "mortar" ? "top" : s ? this.faceOf(v, s.x, s.y) : "front", [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
-        if (v.role === "tank") r.fate = fateOf(this.b.vehicle(vq.u), fc === "front" ? "front" : fc === "rear" ? "rear" : "side", roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
+        if (v.role === "tank") r.fate = fateOf(vq.esc ? null : this.b.vehicle(vq.u), fc === "front" ? "front" : fc === "rear" ? "rear" : "side", roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
         this.book({ ...r, fc, u: a, h }, v, "hole");
       } else this.book(r);
     }
@@ -7601,6 +7816,14 @@
        * destroyers row); a campaign battle's only.
        */
       __publicField(this, "td", false);
+      /**
+       * Armoured cars and AA vehicles (release 2; Brian, 23 November 07:01Z, item 3; the design director, 07:47Z): a block's
+       * armoured cars out ahead on its flanks till it meets the enemy, then behind it; its AA vehicles behind it (Drill.addEscorts;
+       * DRILL.cars, DRILL.aa). Looks only. Off unless turned on (the bridge's { cars: true } and { aa: true }, the Battle rules
+       * card's Armoured cars and AA vehicles rows); a campaign battle's only.
+       */
+      __publicField(this, "cars", false);
+      __publicField(this, "aa", false);
       /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
       __publicField(this, "overrun", /* @__PURE__ */ new Map());
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
@@ -12014,6 +12237,8 @@
       if (opts.mech === true) sim.mech = true;
       if (opts.spg === true && !piece) sim.spg = true;
       if (opts.td === true && !piece) sim.td = true;
+      if (opts.cars === true && !piece) sim.cars = true;
+      if (opts.aa === true && !piece) sim.aa = true;
       this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
       if (opts.setup && this.me) sim.setupOn(this.me, true);
       if (opts.hide !== false) sim.hideOn();
@@ -12065,7 +12290,10 @@
           model,
           ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
           ...u.joined !== void 0 ? { joins: true } : {},
-          ...took ? { captured: took.from } : {}
+          ...took ? { captured: took.from } : {},
+          // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
+          // read before the battle opens)
+          ...((mls) => mls.length ? { mls } : {})(this.drill.modelsFor(u))
         };
       });
       this.look();
@@ -12365,7 +12593,9 @@
         escort: opts?.escort === true,
         mech: opts?.mech === true,
         spg: opts?.spg === true,
-        td: opts?.td === true
+        td: opts?.td === true,
+        cars: opts?.cars === true,
+        aa: opts?.aa === true
       });
       return live3.header();
     },
@@ -12404,6 +12634,8 @@
         mech: o.mech === true,
         spg: o.spg === true,
         td: o.td === true,
+        cars: o.cars === true,
+        aa: o.aa === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
