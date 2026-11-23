@@ -1046,7 +1046,8 @@ GORE = [
 # (what the art director asked of each, for the checks: a limb's arc and reach by what took it off, the blast's lift
 # and throw)
 GATE = dict(peak=(1.0, 3.0), dist_blast=(2.0, 8.0), dist_arm=(1.0, 4.0), dist_leg=(1.0, 3.0), from_man=1.0,
-            turns=(1.0, 2.0), tilt=30.0, away=0.5, lift=(0.5, 1.5), throw=(2.0, 4.0), slide=0.3, turn=35.0, rifle=0.8)
+            turns=(1.0, 2.0), tilt=30.0, away=0.5, lift=(0.5, 1.5), throw=(2.0, 4.0), slide=0.3, turn=35.0, rifle=0.8,
+            high=2.9, gap=1.1)                  # (the effects thread's test: any bone of it 3 m at most; 1 m off its joint)
 GORE_TABLE = {
     "stand": {"thrown": ["die_blast_a", "die_blast_b", "die_blast_e", "die_blast_f"],
               "back": ["die_arm_off_b", "die_leg_off_a"], "forward": ["die_leg_off_b", "die_arm_off_d"],
@@ -1189,6 +1190,13 @@ def _job(rc):
     if rc["kind"] == "crawl":
         c = crawl_death(m, rd, rc)
         start = list(rc["fall"]["start"])
+    elif rc.get("cut"):
+        c, f, k, rc, tries = fit_gore(m, rd, rc)
+        start = list(rc["start"])
+        if k != 1.0:
+            c["from"] += " (blows x%.1f for this man: the first left him sitting up)" % k
+        if tries > 1:
+            c["from"] += " (fitted to this man's body in %d tries)" % tries
     else:
         c, f, k = simulate_down(m, rd, rc)
         start = list(rc["start"])
@@ -1217,6 +1225,121 @@ def _job(rc):
     return rc["name"], c, g, faults
 
 
+FIT_TRIES = 5                       # (a gore death outside the asks on this man's body: tried again, nudged, this often)
+
+
+def fit_gore(m, rd, rc):
+    """A gore death as the recipe has it; if this man's body takes it outside the art director's asks (his mass, his
+    build and his kit are his own), again with the blows nudged toward them (refit), keeping the try with the fewest
+    misses. Returns (clip, fall, blows scale, the recipe used, tries)."""
+    best, r = None, rc
+    for i in range(FIT_TRIES):
+        c, f, k = simulate_down(m, rd, r)
+        for b, a in limb_arcs(m, c).items():
+            f.flight["limbs"][b].update(a)
+        miss = gate_misses(r, f.flight)
+        if best is None or len(miss) < best[0]:
+            best = (len(miss), c, f, k, r, i + 1)
+        if not miss:
+            break
+        r = refit(r, f.flight)
+    return best[1], best[2], best[3], best[4], best[5]
+
+
+def refit(rc, fl):
+    """The recipe nudged toward the asks by what this try measured: the blast's throw and lift, the ground's grip under
+    him, each limb's reach, arc, tumble and way, his turn, the rifle's throw."""
+    G, r = GATE, dict(rc)
+    blast = rc["name"].startswith("die_blast")
+    away = AWAY.get(rc.get("blast_from"))
+    B = fl["body"]
+    bl = list(rc.get("blast", (0.0, 0.0, 0.0)))
+    if blast:
+        if B["throw"] > G["throw"][1] - 0.1:
+            bl[0], bl[1] = bl[0] * 0.88, bl[1] * 0.88
+        elif B["throw"] < G["throw"][0] + 0.1:
+            bl[0], bl[1] = bl[0] * 1.12, bl[1] * 1.12
+        if B["lift"] > G["lift"][1] - 0.05:
+            bl[2] *= 0.9
+        elif B["lift"] < G["lift"][0] + 0.05:
+            bl[2] *= 1.1
+        if B["slide"] < G["slide"]:
+            r["mu"] = max(0.1, rc.get("mu", 0.7) - 0.08)
+    if away and B["away"] is not None and B["away"] < G["away"]:
+        bl[0], bl[1] = bl[0] + away[0] * 0.8, bl[1] + away[1] * 0.8
+    r["blast"] = tuple(bl)
+    if "arm_off" in rc["name"] and abs(B["turn"]) < G["turn"]:
+        sp = rc.get("spin", (0.0, 0.0, 0.0))
+        r["spin"] = (sp[0], sp[1], sp[2] * 1.35)
+    lo_hi = lambda p: (G["dist_blast"] if blast else G["dist_arm"] if "arm" in p else G["dist_leg"])
+    fl_new = []
+    for (p, v, n) in rc.get("fling", []):
+        L = fl["limbs"].get(p)
+        v = list(v)
+        if L:
+            lo, hi = lo_hi(p)
+            hz = 1.0
+            if L["dist"] > hi - 0.15:
+                hz = 0.85
+            elif L["dist"] < lo + 0.1 or L["from_man"] < G["from_man"] or L.get("gap", 9.0) < G["gap"]:
+                hz = 1.15
+            v[0], v[1] = v[0] * hz, v[1] * hz
+            if L["peak"] > G["peak"][1] - 0.1 or L.get("high", 0.0) > G["high"]:
+                v[2] *= 0.88
+            elif L["peak"] < G["peak"][0] + 0.05:
+                v[2] *= 1.12
+            if L["turns"] < G["turns"][0] + 0.05:
+                n *= 1.25
+            elif L["turns"] > G["turns"][1] - 0.05:
+                n *= 0.85
+            if away and L["away"] is not None and L["away"] < G["away"]:
+                h = math.hypot(v[0], v[1])
+                u = np.array((v[0], v[1])) / max(h, 1e-6) * 0.6 + np.array(away) * 0.4
+                u = u / np.linalg.norm(u) * h
+                v[0], v[1] = float(u[0]), float(u[1])
+        fl_new.append((p, tuple(v), n))
+    if fl_new:
+        r["fling"] = fl_new
+    if "rifle" in fl and fl["rifle"]["from_man"] < G["rifle"]:
+        th = rc.get("throw", (0.0, 0.0, 0.0))
+        r["throw"] = (th[0] * 1.3, th[1] * 1.3, th[2] * 1.1)
+    return r
+
+
+def limb_arcs(man, c, fps=30.0):
+    """The effects thread's two measures of each cut (Tools/land_gore): `high`, the highest any bone of the severed limb
+    stands above the ground over the clip (its fingers and toes too), and `gap`, how far the cut bone's head lies at
+    the end from where its parent would hold it (the stump's joint)."""
+    out = {}
+    cuts = [x["bone"] for x in c.get("cuts", [])]
+    if not cuts:
+        return out
+    sub = {}
+    for b in cuts:
+        s, grew = {man.i(b)}, True
+        while grew:
+            grew = False
+            for k, p in enumerate(man.parent):
+                if p in s and k not in s:
+                    s.add(k)
+                    grew = True
+        sub[b] = sorted(s)
+    high = {b: 0.0 for b in cuts}
+    n = int(c["long"] * fps) + 1
+    for f in range(n + 1):
+        Gw, X = man.fk(man.local_at(c, min(f / fps, c["long"])))
+        for b in cuts:
+            high[b] = max(high[b], float(X[sub[b], 2].max()))
+    loc = man.local_at(c, c["long"] + 1.0)
+    Gw, X = man.fk(loc)
+    for b in cuts:
+        held = dict(loc)
+        held[b] = (loc[b][0], None)
+        Gh, Xh = man.fk(held)
+        out[b] = dict(high=round(high[b], 2), gap=round(float(np.linalg.norm(X[man.i(b)] - Xh[man.i(b)])), 2))
+    return out
+
+
 def gate_misses(rc, fl):
     """What of a gore death is outside the art director's asks (GATE): a list of 'what value (wanted)'."""
     out = []
@@ -1239,6 +1362,10 @@ def gate_misses(rc, fl):
             out.append("%s not away %s" % (p, L["away"]))
         if not L["came_down"]:
             out.append(p + " never came down")
+        if L.get("high", 0.0) > GATE["high"]:
+            out.append("%s flies %s m high (%s at most)" % (p, L["high"], GATE["high"]))
+        if L.get("gap", 9.0) < GATE["gap"]:
+            out.append("%s rests %s m from its joint" % (p, L["gap"]))
     B = fl["body"]
     if blast:
         band("lift", B["lift"], GATE["lift"])
