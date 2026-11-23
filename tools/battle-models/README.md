@@ -515,6 +515,7 @@ design director gave her.
 | `Betty` | Japan's land-based bomber: two engines, a glass cone in her tail | 1941 | 7 | a torpedo or bombs, in her bay |
 | `Amerikabomber` | Germany's very long range heavy: four engines, two fins | `verylongrange`, tag `amerikabomber` | 8 | bombs |
 | `B29` | America's very long range heavy: four engines, bare metal | `verylongrange`, tag `b29` | 11 | bombs |
+| `Wellington` | Britain's twin of 1939-41 (the Mk IC): fabric over a geodetic frame, FN5 turrets in her nose and tail, a gun at each beam hatch, night colours | 1940 | 6 | bombs, in her bay |
 
 What they add to the form:
 
@@ -543,6 +544,17 @@ What they add to the form:
   behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
   fin; the Val has the rounded, elliptical wing; the Wildcat is short and round-bellied, her main wheels drawn up
   into wells in her sides and her wings folding back along a joint. The plain three stay plain and borrow none of these.
+- **The twin-engined bombers of release 2** (Brian, 2026-11-23) are each in a module of her own, taken in by
+  `planes.bomber` as `planes.carrier` takes in a carrier plane (her NAME, NUMBERS and SEATS, and any of BAY, WAIST,
+  TAIL_CUT, TURRET, SEAT_DROP, NOSE_CREW and NOSE_CANNON she gives). `bomber_wellington.py`: the Wellington Mk IC,
+  measured from "Vickers Wellington.svg" (Wikimedia Commons, Emoscopes, CC BY-SA 3.0 and GFDL; 40.44 px to the metre,
+  set by her span; the side view levelled by her thrust line and stretched 0.9% to the plan's length; measured, not
+  traced). Her own key: `geodetic` (pitch, half width, shade): her skin is doped fabric over a geodetic frame, so
+  `fitout.rivets` lays no rivet or joint on her fuselage or flying surfaces but the frame's two sets of members,
+  crossing at 45 degrees to her length (as many round her tail as round her widest), each her coat's own colour a
+  shade darker, a hair paler than black on her black, and none within a few degrees of the line where her coat
+  changes (the art director's ask: "a quiet lattice in the skin, not a cage"). On the fine model only; a machine
+  without the key is built as before.
 - **The Devastator's own keys** (`carrier_devastator.py`; no other machine has them, and none changes another):
   `squares` (how square her section is, station by station: a round cowling, slab sides under her greenhouse;
   `fitout.squared_hull`); `corrugated` (ridges in the skin of her outer wings and tailplane, on the fine model only,

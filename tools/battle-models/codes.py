@@ -101,7 +101,7 @@ SIDES = (("port", 1.0), ("starboard", -1.0))              # (her own axes: y to 
 
 # Which styles each bomber wears (planes.BUILDERS names); the plain Bomber is flown by every small or medium nation,
 # so she carries every style but Germany's.
-MODELS = {"Lancaster": ("letter",), "He111": ("code",), "Amerikabomber": ("code",), "Betty": ("tail",), "Nell": ("tail",),
+MODELS = {"Lancaster": ("letter",), "He111": ("code",), "Amerikabomber": ("code",), "Betty": ("tail",), "Nell": ("tail",), "Wellington": ("letter",),
           "Bomber": ("letter", "tail", "squadron", "tactical", "number")}
 
 # The paints (the layer's own, as livery.PAINTS are the livery's). Each must read by its lightness under the battle
@@ -172,7 +172,7 @@ BLOCK_EDGE = 0.06                                        # (the same edge round 
 # letters are fitted to her fin and come out smaller where it is small. On her fuselage a style is never more than
 # three fifths of her height there.
 SIZE = {"Lancaster": {"letter": 0.75}, "He111": {"code": 0.65}, "Amerikabomber": {"code": 0.65},
-        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45},
+        "Betty": {"tail": 0.45}, "Nell": {"tail": 0.45}, "Wellington": {"letter": 0.65},
         "Bomber": {"letter": 0.6, "tail": 0.45, "squadron": 0.55, "tactical": 0.55, "number": 0.55}}
 TALL = 0.6                                               # (of her fuselage's height where the letters stand, at most)
 CLEAR = 0.18                                             # (between her letters and a window, a gun, anything not her skin: a hand)

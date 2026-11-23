@@ -35,6 +35,7 @@ import bmesh
 import bpy
 from mathutils import Quaternion, Vector, noise
 
+import bomber_wellington
 import carrier_avenger
 import carrier_dauntless
 import carrier_devastator
@@ -513,6 +514,23 @@ def carrier(module):
 carrier(carrier_hellcat)
 # (the Wildcat, the fleet's fighter before her, at Midway in June 1942: her numbers are in carrier_wildcat.py)
 carrier(carrier_wildcat)
+
+
+# ---- the twin-engined bombers of release 2 (Brian, 2026-11-23: "do 1 and 3"), each in a module of her own:
+# bomber_wellington.py. ----
+def bomber(module):
+    """Takes in a bomber from her module: her NAME, her NUMBERS (her coat is in them), who sits under her glass (SEATS),
+    and any table of her own the module gives, put where the others' are: BAY (BAYS), WAIST, TAIL_CUT, TURRET (her
+    TURRET_LIMITS), SEAT_DROP (fitout.SEAT_DROP), NOSE_CREW (fitout.NOSE_CREW) and NOSE_CANNON (fitout.NOSE_CANNON)."""
+    EXTRA_PLANES[module.NAME] = module.NUMBERS
+    fitout.SEATS[module.NAME] = module.SEATS
+    for table, into in (("BAY", BAYS), ("WAIST", WAIST), ("TAIL_CUT", TAIL_CUT), ("TURRET", TURRET_LIMITS), ("SEAT_DROP", fitout.SEAT_DROP),
+                        ("NOSE_CREW", fitout.NOSE_CREW), ("NOSE_CANNON", fitout.NOSE_CANNON)):
+        if hasattr(module, table):
+            into[module.NAME] = getattr(module, table)
+
+
+bomber(bomber_wellington)
 
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
@@ -1812,8 +1830,8 @@ def names():
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
 CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
-        "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
-ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+        "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5, "Wellington": 6}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber", "Wellington": "bomber"}
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -1948,7 +1966,7 @@ def schemes_of(G, name, s, paints, ink):
 #   role: (rows of kills, rows of missions, marks to a row, half a kill mark, half a bomb's height)
 TALLY = {"fighter": (3, 0, 10, 0.05, 0.0), "dive bomber": (1, 2, 12, 0.05, 0.06), "attack": (1, 2, 12, 0.05, 0.06), "torpedo bomber": (1, 2, 12, 0.05, 0.06),
          "bomber": (2, 3, 20, 0.05, 0.06)}
-TALLY_ROW = {"He111": 16, "Bomber": 16, "Betty": 16, "Nell": 16}      # (a medium bomber's nose is shorter)
+TALLY_ROW = {"He111": 16, "Bomber": 16, "Betty": 16, "Nell": 16, "Wellington": 16}      # (a medium bomber's nose is shorter)
 TALLY_AT = {"He111": 3.85, "Amerikabomber": 6.8, "B29": 8.25}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
 LEAD = 0.026                                 # (half the star over a mission flown as leader)
 BAR = 0.045                                  # (half the height of a white bar on a rudder)
@@ -3099,4 +3117,4 @@ def torpedo(fine=True):
 
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "Devastator", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
-                                                                  "Amerikabomber", "B29", "Bomber")}
+                                                                  "Amerikabomber", "B29", "Bomber", "Wellington")}

@@ -1532,6 +1532,58 @@ def rivets(m, f, s, G, hull):
         flush()
 
     bare_under = s.get("rivets_under") is False            # (the art director, 2026-11-19: none at all on the Lancaster's black undersides)
+    # (`geodetic`: (pitch, half width, shade). Doped fabric over a geodetic frame, the Wellington's: no rivet or joint on
+    #  her fuselage or her flying surfaces, but the frame's two sets of members crossing under the fabric, each at 45
+    #  degrees to her length: "a quiet lattice in the skin, not a cage". A member is her coat itself, in whichever of
+    #  its colours lies there, a shade darker (as soot darkens it: `shade` of the way to it), and a hair paler than
+    #  her black on her black. The members round her fuselage are as many at her tail as at her widest, closer
+    #  together as she slims, as they were.)
+    geo = s.get("geodetic")
+    coat_blend = G["coat_of"](s).blend if geo else None
+
+    def member(part, piece):
+        """A member of her geodetic frame along a row of (point, facing, under), laid on her skin a run of one paint at a time."""
+        k = 0
+        while k < len(piece) - 1:
+            j = k
+            while j + 1 < len(piece) and piece[j + 1][2] == piece[k][2]:
+                j += 1
+            run = piece[k:j + 2]
+            pts, nrm = [port(q[0]) for q in run], [port(q[1]).normalized() for q in run]
+            verts, faces = [], []
+            for i, (p, n) in enumerate(zip(pts, nrm)):
+                side = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).cross(n)
+                side = side.normalized() if side.length > 1e-9 else Y.copy()
+                verts += [p + n * 0.001 + side * geo[1], p + n * 0.001 - side * geo[1]]
+            for i in range(len(pts) - 1):
+                q = (2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2)
+                if (verts[q[1]] - verts[q[0]]).cross(verts[q[2]] - verts[q[0]]).dot(nrm[i]) < 0.0:
+                    q = tuple(reversed(q))
+                faces.append(q)
+            if run[0][2]:
+                m.raw(verts, faces, ["rivet_under"] * len(faces), part)
+            else:
+                m.raw(verts, faces, ["upper"] * len(faces), part, blend=[coat_blend(q[0]) for q in run for _ in (0, 1)], soot=[geo[2]] * len(verts))
+            k = j + 1
+
+    def lattice_run(run, dark=False):
+        """Her geodetic frame's members along a row of (part, (point, facing)) or None, broken where its part changes.
+        A member is in her under colour where her skin faces down past `under_from` (or where `dark`), and in her
+        coat's where it faces up past it; within a few degrees of that line, where her coat changes from face to face
+        of her skin, there is none."""
+        under_line = s.get("under_from", -0.3)
+        run = [None if got is None or (not dark and abs(got[1][1].z - under_line) < 0.08) else (got[0], (got[1][0], got[1][1], dark or got[1][1].z < under_line))
+               for got in run]
+        piece, part = [], None
+        for got in run + [None]:
+            if got is None or (piece and got[0] != part):
+                if piece:
+                    member(part, piece)
+                piece = [piece[-1], got[1]] if got is not None and piece else ([got[1]] if got is not None else [])
+                part = got[0] if got is not None else None
+                continue
+            part = got[0]
+            piece.append(got[1])
 
     def dot(part, paint, p, n, t):
         if bare_under and paint == "rivet_under":
@@ -1553,9 +1605,11 @@ def rivets(m, f, s, G, hull):
     cab_ = s.get("cab")
     ramps = [(cab_[0], cab_[1]), (cab_[2], cab_[3])] if cab_ else []     # (fitout.cab_hull: (higher x, lower x) of each)
 
-    def skin_at(x, a):
+    def skin_at(x, a, lattice=False):
         """A point of her fuselage's skin, the way it faces and whether it is her under surface; None where neither a
-        rivet nor a joint belongs."""
+        rivet nor a joint belongs (nor, with `lattice`, a member of her geodetic frame)."""
+        if geo and not lattice:
+            return None                                    # (her fabric: no rivet, no joint)
         deg = math.degrees(a) % 360.0
         if math.sin(a) > 0.0 and any(lo + 1e-4 < x < hi - 1e-4 for hi, lo in ramps):
             return None                                    # (where her tail gunner's box rises out of her, fore and aft: her mesh is twisted there)
@@ -1606,6 +1660,25 @@ def rivets(m, f, s, G, hull):
         xs = sorted([x_front - (x_front - x_back) * k / n_seam for k in range(n_seam + 1)] + creases, reverse=True)
         joint("plane", [skin_at(x, a) for x in xs if x >= f.x_cut - 0.13])
         joint("tail", [skin_at(x, a) for x in xs if x <= f.x_cut + 0.13])
+
+    # -- her geodetic frame under her fabric, round her fuselage: one set of members winding each way
+    if geo:
+        x_hi, x_lo = hull.front - 0.35, hull.back + 0.12
+
+        def girth(x):
+            a_, b_ = hull.w(-x), hull.h(-x)
+            return math.pi * (3.0 * (a_ + b_) - math.sqrt((3.0 * a_ + b_) * (a_ + 3.0 * b_)))
+        n_geo = 2 * max(4, int(round(0.5 * max(girth(x_hi - (x_hi - x_lo) * k / 40.0) for k in range(41)) / geo[0])))
+        n_x = max(8, int((x_hi - x_lo) / 0.08))
+        xs = [x_hi - (x_hi - x_lo) * k / n_x for k in range(n_x + 1)]
+        turn = [0.0]                                       # (how far round her a member has wound, from her front)
+        for x0_, x1_ in zip(xs, xs[1:]):
+            turn.append(turn[-1] + (x0_ - x1_) * math.pi / girth(0.5 * (x0_ + x1_)) * 2.0)
+        for i in range(n_geo):
+            for way in (1.0, -1.0):
+                a0 = 0.5 * math.pi + 2.0 * math.pi * (i + 0.5) / n_geo
+                lattice_run([(("tail" if x < f.x_cut else "plane"), got[:2]) if got else None
+                             for x, w in zip(xs, turn) for got in [skin_at(x, a0 + way * w, True)]])
 
     # -- a raised cabin and the deck behind it: frames over its roof, and rows along it
     cab = s.get("cabin")
@@ -1740,6 +1813,9 @@ def rivets(m, f, s, G, hull):
                     p, n = W.at(u, c, upper, 0.003), W.out(u, c, upper)
                     dot(part_of(u), "rivet" if (upper or upright) and not (upright and bare_under and s.get("fins_under")) else "rivet_under", p, n, t_of(u, c, upper))
             chordwise = lambda u, c, up: W.at(u, min(c + 0.02, 1.0), up) - W.at(u, max(c - 0.02, 0.0), up)
+            if geo:                                        # (her fabric: the members of her geodetic frame, ahead of any hinge)
+                lattice_on(W, u0, u1, lambda u: own[2] if on(u) else c_max, part_of, upright and s.get("fins_under"))
+                continue
             spanwise = lambda u, c, up: W.at(min(u + 0.05, W.tip), c, up) - W.at(max(u - 0.05, W.root), c, up)
             n_ribs = max(1, int((u1 - u0) / rib_gap))
             for k in range(n_ribs):
@@ -1781,6 +1857,23 @@ def rivets(m, f, s, G, hull):
             return None
         cut = f.hinges[key]
         return (s[key][0], s[key][1], min(c_max, cut - 0.06), tuple(c for c in spars if c < cut - 0.04), tuple(c for c in joints if c < cut - 0.04))
+
+    def lattice_on(W, u0, u1, c_top, part_of, dark):
+        """Her geodetic frame under the fabric of a flying surface: two sets of members, each at 45 degrees to her
+        length, on both its faces (`dark`: a fin in her under colour), from just behind its leading edge to `c_top`
+        along its chord."""
+        n_u = max(4, int((u1 - u0) / 0.08))
+        us = [u0 + (u1 - u0) * i / n_u for i in range(n_u + 1)]
+        gap_x = geo[0] * math.sqrt(2.0)
+        for way in (1.0, -1.0):
+            ends = [x - way * u for u in us for x in (W.lead(u), W.trail(u))]
+            for k in range(int(math.floor(min(ends) / gap_x)), int(math.ceil(max(ends) / gap_x)) + 1):
+                for upper in (True, False):
+                    run = []
+                    for u in us:
+                        c = ((k + 0.5) * gap_x + way * u - W.lead(u)) / (W.trail(u) - W.lead(u))
+                        run.append((part_of(u), (W.at(u, c, upper, 0.003), W.out(u, c, upper))) if 0.04 <= c <= c_top(u) else None)
+                    lattice_run(run, bool(dark))
 
     rib = min(max(f.half / 26.0, 0.45), 0.62)              # (a rib every half metre or so)
     rows(s["wing"], "wing", 0.66, (0.1, 0.24, 0.4, 0.56), rib, joints=(0.24, 0.56))
