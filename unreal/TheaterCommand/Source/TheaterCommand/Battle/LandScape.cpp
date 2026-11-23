@@ -173,6 +173,7 @@ namespace LandScape
 		case Look::Dry: return "drysteppe";
 		case Look::Rice: return "rice";
 		case Look::America: return "america";
+		case Look::Plain: return "plain";
 		default: return "";
 		}
 	}
@@ -186,6 +187,7 @@ namespace LandScape
 		if (Word == "dry" || Word == "mongolia" || Word == "khalkhin") return Look::Dry;
 		if (Word == "paddy" || Word == "paddies" || Word == "china" || Word == "monsoon") return Look::Rice;
 		if (Word == "usa" || Word == "midwest" || Word == "cornbelt" || Word == "northamerica") return Look::America;
+		if (Word == "dryplain" || Word == "manchuria" || Word == "northchina" || Word == "india") return Look::Plain;
 		return Look::Count;
 	}
 
@@ -220,6 +222,11 @@ namespace LandScape
 		if (F.Tried("rice") && F.Terrain != "island" && F.Terrain != "beach" &&
 			((Is(C, "monsoon") && F.Lat >= 22.0 && F.Lon >= 98.0) || (Is(C, "temperate") && F.Lon > 124.0 && F.Lon < 131.5 && F.Lat > 33.0 && F.Lat < 42.0)))
 			return Look::Rice;
+		// The dry plains (release 2, on trial "plain"): the North China plain, the Indus and the plains of India (the
+		// climate's dry plain) and Manchuria's prairie; a beach or an islet keeps the island's.
+		if (F.Tried("plain") && F.Terrain != "island" && F.Terrain != "beach" &&
+			(Is(C, "dryplain") || (Is(C, "prairie") && F.Lon > 118.0 && F.Lon < 132.0 && F.Lat > 40.0 && F.Lat < 50.0)))
+			return Look::Plain;
 		// North America's farm country (release 2, on trial "america"): the temperate belt from the Pacific coast to
 		// Newfoundland; a beach or an islet keeps the island's.
 		if (F.Tried("america") && F.Lon > -125.0 && F.Lon < -52.0 && F.Lat > 28.0 && F.Lat < 56.0 &&
@@ -252,7 +259,7 @@ namespace LandScape
 
 	bool LeaflessOf(const LandField::Field& F, Look L)
 	{
-		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland && L != Look::Rice && L != Look::America) return false;
+		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland && L != Look::Rice && L != Look::America && L != Look::Plain) return false;
 		if (F.Month < 1 || F.Month > 12) return false;
 		const double Lat = std::fabs(F.Lat);
 		if (Lat < 28.0) return false;
@@ -284,6 +291,8 @@ namespace LandScape
 		// (the American farm belt's winter: continental, snow from Iowa and Ohio north, thinner and blown on the plains)
 		if (L == Look::America)
 			W = Smooth(35.0, 45.0, Lat) * (Lon < -96.5 ? 0.85 : 1.0) + (F.Terrain == "mountain" ? 0.3 : F.Terrain == "hills" ? 0.1 : 0.0);
+		// (the dry plains: Manchuria's long hard winter; the North China plain's dry and mostly bare; none in India)
+		if (L == Look::Plain) W = (Lon < 95.0 ? 0.0 : Smooth(37.0, 47.0, Lat)) + (F.Terrain == "mountain" ? 0.3 : F.Terrain == "hills" ? 0.1 : 0.0);
 		const int M = F.Month;
 		const double ByMonth = (M == 12 || M == 1 || M == 2) ? 1.0 : (M == 11 || M == 3) ? (W > 0.85 ? 0.9 : 0.5) : (M == 10 || M == 4) ? (W > 0.95 ? 0.4 : 0.0) : 0.0;
 		const double Cold = W * ByMonth;
@@ -375,6 +384,16 @@ namespace LandScape
 			A.SkyDust = 0.7;
 			Grade(0.52, 0.60, 1.3, -0.45, 0.55, 1.01, 0.98);
 			break;
+		case Look::Plain:
+			// (dryplain.json's C4B898 at 4,000 m: the loess's dust in the air, a warm yellow haze over the plain; a grade
+			// a little warm, more contrast than the rice country's)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.77, 0.72, 0.60);
+			Ink(A.HazeOvercast, 0.62, 0.60, 0.55);
+			A.HazeDensity = 0.006;
+			A.SkyDust = 1.0;
+			Grade(0.53, 0.62, 1.28, -0.5, 0.55, 1.02, 0.97);
+			break;
 		case Look::Dry:
 			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
 			// sight long, some 8,500 m (the art director's Khalkhin Gol read: a third less haze, so the Khalkha bluffs carry);
@@ -432,6 +451,7 @@ namespace LandScape
 		case Look::Jungle: return 1;
 		case Look::Rice: return 1;
 		case Look::America: return 2;
+		case Look::Plain: return 1;
 		case Look::Farmland: return Fd.Lat > 55.0 ? 3 : 2;
 		case Look::Med: return Fd.Terrain.find("mount") != std::string::npos ? 4 : 0;
 		default: return 0;
@@ -513,6 +533,7 @@ namespace LandScape
 		case Look::Dry: return MakeDry(F, S);
 		case Look::Rice: return MakeAsia(F, S);
 		case Look::America: return MakeAmerica(F, S);
+		case Look::Plain: return MakePlain(F, S);
 		default: return nullptr;
 		}
 	}
