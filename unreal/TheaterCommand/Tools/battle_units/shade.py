@@ -583,12 +583,32 @@ def deliver(name, log=print):
     raise SystemExit(f"{name}: kept changing; not written")
 
 
+WEAR_KEYS = ("shade", "shade_clean", "dirt", "dirt_wet", "wet", "snow", "tint")
+
+
+def file_arrays(X):
+    """X's wear arrays as his file carries them now (after face_mesh.py split his face and face_detail.py coloured it),
+    in the stage's form: {near/mid/far or h<i>_<lod>: {array: values}}."""
+    res = {}
+    meshes = [(lod, X[lod]) for lod in ("near", "mid", "far")]
+    meshes += [(f"h{i}_{lod}", h[lod]) for i, h in enumerate(X.get("helmets") or []) for lod in ("near", "mid", "far") if lod in h]
+    for m, M in meshes:
+        if all(k in M for k in WEAR_KEYS):
+            res[m] = {k: (np.array(M[k], float).reshape(-1, 3) if k == "tint" else np.array(M[k], float)) for k in WEAR_KEYS}
+    return res
+
+
 def stage_twin(name, log=print):
     """X_gore.json from X's staged arrays (stage X first): his points keep theirs, the appended ones take the nearest;
-    the helmet finishes are his own, so they take his finishes' arrays as they are."""
+    the helmet finishes are his own, so they take his finishes' arrays as they are. Where X's file has moved on since
+    he was staged (more points: face_mesh.py), his arrays are taken from his file as it is now."""
     X = json.load(open(os.path.join(SHARED, name + ".json")))
     Y = json.load(open(os.path.join(SHARED, name + "_gore.json")))
-    xr = unflat(np.load(os.path.join(STAGE, name + "_wear.npz")))
+    npz = os.path.join(STAGE, name + "_wear.npz")
+    xr = unflat(np.load(npz)) if os.path.exists(npz) else {}
+    if not xr or any(len(arrs["shade"]) != len(mesh_of(X, m)["paints"]) for m, arrs in xr.items()):
+        xr = file_arrays(X)
+        log(f"{name}: the stage is older than his file; his arrays taken from the file ({len(xr)} meshes)")
     res = shade_twin(Y, xr, X, log)
     for m, arrs in xr.items():
         if m.startswith("h") and len(mesh_of(Y, m)["paints"]) == len(arrs["shade"]):

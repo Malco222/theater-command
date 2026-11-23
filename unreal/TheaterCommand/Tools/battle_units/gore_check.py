@@ -508,12 +508,12 @@ def picture(name, X, Y, samples=36, log=print, test=False):
     d = ImageDraw.Draw(sheet)
     font = kit._font(22)
     small = kit._font(17)
-    d.text((16, 10), f"{name}_gore: the gore twin (gore.py). Top: joined in {clip} (his own file left, the twin right); "
+    d.text((16, 10), f"{name}_gore: the gore twin (gore.py). Top: joined in {clip} (the twin left, his own file right); "
                      f"a stump and its limb end (thigh_r, pulled 0.45 m). Below: the eight cuts pulled 0.4 m apart.",
            fill=(30, 30, 30), font=font)
     sheet.paste(Image.open(joined), (0, 44))
     sheet.paste(Image.open(close), (900, 44))
-    d.text((12, 50), f"{clip}: X.json (left) and X_gore.json (right)", fill=(30, 30, 30), font=small)
+    d.text((12, 50), f"{clip}: X_gore.json (left) and X.json (right)", fill=(30, 30, 30), font=small)
     d.text((912, 50), "close: right leg off at the hip; stump (left) and limb end", fill=(30, 30, 30), font=small)
     for k, f in enumerate(panels):
         x, y = 450 * (k % 4), 44 + 600 + 6 + 300 * (k // 4)

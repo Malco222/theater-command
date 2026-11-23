@@ -3,6 +3,7 @@
     python gore.py soldier_USA [soldier_GER ...]        (numpy only: reads X.json from the shared soldier folder,
                                                          writes X_gore.json to the stage, /home/user/art/gore/out/)
     python gore.py --deliver soldier_USA                (copies a staged twin into the shared folder, new files only)
+    python gore.py --replace soldier_USA                (over the twin there: backed up, its gore deaths kept)
     /home/user/bpyenv/bin/python gore_check.py soldier_USA   (the checks and the picture: Blender as a module)
 
 Nothing of the man is rebuilt: the delivered json is post-processed, every array keeping its order.
@@ -1239,14 +1240,36 @@ def stage_twin(name, log=print, per_clip=6):
     return out
 
 
-def deliver(name):
-    """Copy a staged twin into the shared folder: a new file only, never over an existing one; read back after 10 s."""
+REPLACE_BACKUP = "/home/user/art/gore/backup/"
+KEPT_ON_REPLACE = ("clips", "deaths_gore", "about_gore")    # (the deaths thread's: falls.py --gore on the twin)
+
+
+def deliver(name, replace=False):
+    """Copy a staged twin into the shared folder: a new file only, never over an existing one; read back after 10 s.
+    replace: over the one there (a twin re-made from its file as it is now), backed up first, keeping the gore
+    deaths falls.py --gore put in it (the same bones and cuts: run falls.py --gore again to fit them to the new mesh),
+    and without its wear arrays (shade.py --twin, then --deliver, after)."""
     local = os.path.join(STAGE, name + "_gore.json")
     dest = os.path.join(SHARED, name + "_gore.json")
-    if os.path.exists(dest):
+    if os.path.exists(dest) and not replace:
         raise SystemExit(f"{dest} exists: not overwritten")
+    if os.path.exists(dest):
+        os.makedirs(REPLACE_BACKUP, exist_ok=True)
+        bk = os.path.join(REPLACE_BACKUP, f"{name}_gore.{time.strftime('%Y%m%dT%H%M%S')}.json")
+        shutil.copy2(dest, bk)
+        old, new = json.load(open(dest)), json.load(open(local))
+        kept = [k for k in KEPT_ON_REPLACE if old.get(k)]
+        for k in kept:
+            new[k] = old[k]
+        tmp = local + ".replace"
+        with open(tmp, "w") as f:
+            json.dump(new, f, separators=(",", ":"))
+        os.replace(tmp, local)
+        print(f"{name}: backed up the twin there to {bk}; kept {kept} ({len(old.get('clips') or {})} clips)")
     h = hashlib.sha256(open(local, "rb").read()).hexdigest()
-    shutil.copyfile(local, dest)
+    tmp = dest + ".part"
+    shutil.copyfile(local, tmp)
+    os.replace(tmp, dest)
     time.sleep(10)
     h2 = hashlib.sha256(open(dest, "rb").read()).hexdigest()
     ok = h == h2 and os.path.getsize(dest) == os.path.getsize(local)
@@ -1256,9 +1279,9 @@ def deliver(name):
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    if a and a[0] == "--deliver":
+    if a and a[0] in ("--deliver", "--replace"):
         for nm in a[1:]:
-            deliver(nm)
+            deliver(nm, replace=a[0] == "--replace")
     else:
         for nm in a or ["soldier_USA"]:
             stage_twin(nm)
