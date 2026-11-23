@@ -203,6 +203,14 @@ function ticketOf(p: SetPiece, seed: number): FieldTicket<LandPlace> {
     reckoning: { A, D: A / p.odds, odds: p.odds, dice: [0.8, 1.2], even: 1.2 },
     lines: [], limit: LAND.limit,
   };
+  // Effects (R2): the fighters on call (LAND_RECORD_AIR=1, for the scene's -TheaterLandAirSupport): the attacker's two
+  // strikes of four, the first losing one; the defender's one strike of four, losing one. Off: the ticket as before.
+  if (process.env.LAND_RECORD_AIR) {
+    t.att.air = { share: 0.12, strikes: 2, groups: [
+      { id: 901, name: `${p.att.adj} fighter group`, nat: p.att.nat, planes: 4, lose: 1 },
+      { id: 902, name: `${p.att.adj} fighter group, second`, nat: p.att.nat, planes: 4, lose: 0 }] };
+    t.def.air = { share: 0.08, strikes: 1, groups: [{ id: 911, name: `${p.def.adj} fighter group`, nat: p.def.nat, planes: 4, lose: 1 }] };
+  }
   return withTeams(t);
 }
 
