@@ -69,6 +69,11 @@ namespace LandCrater
 	struct Soil
 	{
 		Rgb8 Hollow, Wall, Crest, Thrown, Edge, Clod, Turf;
+		/** An old hole grown over (Field::AddOld): the share of its sides' points still showing bare soil, and that soil. */
+		double Bared = 0.0;
+		Rgb8 Bare;
+		/** How much each point's tone wanders: 1 for torn soil, less for grass grown over it. */
+		double Mottle = 1.0;
 	};
 	/** By the effects kit's ground word: "earth" (the bocage's brown loam), "woods" (darker, with leaf mould), "mud",
 	 * "town" (grey with stone and plaster), "sand", "snow" (brown-black earth thrown on the white). Any other: earth. */
@@ -440,15 +445,32 @@ namespace LandCrater
 	};
 
 	/**
+	 * Where an earlier battle's fight lay along (LayScars): the hedgerows', walls' and lanes' middle lines (each a line of
+	 * points, the field's metres), and the places a fight gathers at (the lanes' junctions, the village's edge).
+	 */
+	struct OldLines
+	{
+		std::vector<std::vector<std::pair<double, double>>> Lines;
+		std::vector<std::pair<double, double>> Spots;
+	};
+
+	/**
 	 * Scarred ground (release 2; Brian 21:21Z, "a field fought over keeps its craters next time"; the design director:
 	 * looks only, nothing drawn by the rules reads it): the old holes of Battles fought here before, the last of them
 	 * Months ago, laid into Holes before the battle opens (Field::AddOld, weathered by their age). In clusters, a
 	 * barrage's or a mortar's few, over the middle of where this battle's men and machines go (Fought: points of their
 	 * tracks; its middle four fifths each way, at least 300 m); some 150 for each battle before, at most a sixth of
-	 * Field::Most so the battle's own rounds keep their room. GroundWord: the effects kit's word for the ground at a
+	 * Field::Most so the battle's own rounds keep their room. Where Lines are given, most of the clusters lie along a
+	 * few old lines (the art director, 23 November: found from 300 m up in two seconds, not strewn evenly): each old
+	 * line a run of hedges or lanes across the fought-over ground in one heading, its holes mostly on one side of it;
+	 * some at the Spots; a few strewn. GroundWord: the effects kit's word for the ground at a
 	 * place, empty where no old hole is left (a floor, a wall, water, a lane or a yard mended since: the scene's). An
 	 * earlier battle's holes are older still. Seeded: the same field and seed, the same holes. Returns how many.
 	 */
 	int LayScars(Field& Holes, const std::vector<std::pair<double, double>>& Fought, int Battles, double Months, uint64_t Seed,
-		const std::function<std::string(double X, double Y)>& GroundWord);
+		const std::function<std::string(double X, double Y)>& GroundWord, const OldLines& Lines = OldLines());
+
+	/** A field's old lines for LayScars: its hedgerows, walls and lanes; its lanes' junctions (a lane's end within 8 m
+	 * of another lane); the village's edge, ten places round it (TownR 0: none). */
+	OldLines OldLinesOf(const LandField::Ground& G, double TownX, double TownY, double TownR);
 }

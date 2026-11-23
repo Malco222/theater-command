@@ -1030,7 +1030,8 @@ int main(int argc, char** argv)
 				if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water || Under.What == LandField::Drawn::Marsh) return std::string();
 				if (OldPtr->Dig && !OldPtr->Dig(X, Y)) return std::string();
 				return std::string(Under.Fx);
-			});
+			},
+			LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR));
 		const double ScarMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ScarT0).count();
 		const int ScarWanted = std::min(LandCrater::Field::Most / 6, 150 * 2);
 		int NotDig = 0, NotBare = 0, NoBareR = 0, TooDeep = 0;
@@ -1041,7 +1042,57 @@ int main(int argc, char** argv)
 			if (!Old.Bare(H.X, H.Y)) ++NotBare;
 			if (H.BareR <= 0.0) ++NoBareR;
 			DeepestOld = std::max(DeepestOld, H.Deep);
-			if (H.Deep > 0.75) ++TooDeep;
+			if (H.Deep > 0.81) ++TooDeep;
+		}
+		// (along the old lines, the art director's 23 November: most within 25 m of a hedge, a wall or a lane, or 30 m of
+		// a junction or the village's edge, where the field has any over the fought-over ground)
+		const LandCrater::OldLines OldOnes = LandCrater::OldLinesOf(Field, Rec.Ground.TownX, Rec.Ground.TownY, Rec.Ground.TownR);
+		const auto OnOld = [&OldOnes](double Px, double Py)
+		{
+			for (const auto& Sp : OldOnes.Spots)
+				if (std::hypot(Px - Sp.first, Py - Sp.second) <= 30.0) return true;
+			for (const auto& Ln : OldOnes.Lines)
+			{
+				for (size_t K = 0; K + 1 < Ln.size(); ++K)
+				{
+					const double Ax = Ln[K].first, Ay = Ln[K].second, Bx = Ln[K + 1].first, By = Ln[K + 1].second;
+					const double L2 = (Bx - Ax) * (Bx - Ax) + (By - Ay) * (By - Ay);
+					const double T = L2 > 0.0 ? std::clamp(((Px - Ax) * (Bx - Ax) + (Py - Ay) * (By - Ay)) / L2, 0.0, 1.0) : 0.0;
+					if (std::hypot(Px - (Ax + (Bx - Ax) * T), Py - (Ay + (By - Ay) * T)) <= 25.0) return true;
+				}
+			}
+			return false;
+		};
+		int OnLine = 0, FoughtOn = 0, FoughtSeen = 0;
+		for (const LandCrater::Field::Hole& H : Old.All())
+			if (OnOld(H.X, H.Y)) ++OnLine;
+		const double OnShare = ScarsLaid > 0 ? static_cast<double>(OnLine) / ScarsLaid : 0.0;
+		// (against the fought-over ground itself: as many of its points, read the same way, for the share strewn holes would have)
+		for (size_t K = 0; K < Fought.size(); K += std::max<size_t>(1, Fought.size() / 300), ++FoughtSeen)
+			if (OnOld(Fought[K].first, Fought[K].second)) ++FoughtOn;
+		const double StrewnShare = FoughtSeen > 0 ? static_cast<double>(FoughtOn) / FoughtSeen : 0.0;
+		// (its age: a 150's bowl at 6, 12 and 24 months against a fresh one's, laid where nothing stops the dig)
+		double AgedDeep[4] = { 0.0, 0.0, 0.0, 0.0 };
+		if (!Fought.empty())
+		{
+			LandCrater::Field Ages;
+			Ages.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, 7);
+			const double AgeMonths[4] = { -1.0, 6.0, 12.0, 24.0 };
+			for (int K = 0; K < 4; ++K)
+			{
+				const double Ax = Fought[0].first + 40.0 * K, Ay = Fought[0].second;
+				if (AgeMonths[K] < 0.0 ? Ages.Add(Ax, Ay, "heavy", 0.0, "earth") : Ages.AddOld(Ax, Ay, "heavy", 0.0, "earth", AgeMonths[K]))
+					AgedDeep[K] = Ages.All().back().Deep;
+			}
+		}
+		std::printf("scars: %.0f%% of the old holes on an old line (the fought-over ground's own points %.0f%%; %zu lines, %zu junctions and village edge); a 150's bowl %.2f m fresh, %.2f at 6 months, %.2f at 12, %.2f at 24\n",
+			100.0 * OnShare, 100.0 * StrewnShare, OldOnes.Lines.size(), OldOnes.Spots.size(), AgedDeep[0], AgedDeep[1], AgedDeep[2], AgedDeep[3]);
+		if (!OldOnes.Lines.empty() && ScarsLaid >= 50 && OnShare < 0.55) Fault("scars: the old holes strewn, not along the old lines");
+		if (AgedDeep[0] > 0.0)
+		{
+			const double Mark[3] = { 0.8, 0.65, 0.5 };
+			for (int K = 0; K < 3; ++K)
+				if (std::fabs(AgedDeep[K + 1] / AgedDeep[0] - Mark[K]) > 0.01) Fault("scars: an old bowl's depth off the art director's mark for its age");
 		}
 		// (a fresh 105 after them, on the first open ground of the fought-over ground with no old hole's cut on it)
 		bool bFreshLaid = false, bFreshTried = false;
@@ -1060,7 +1111,7 @@ int main(int argc, char** argv)
 		if (NotDig > 0) Fault("scars: an old hole on ground Dig keeps (a lane, a yard, a floor, water)");
 		if (NotBare > 0) Fault("scars: the grass not kept off an old hole's middle");
 		if (NoBareR > 0) Fault("scars: an old hole without its own bare patch");
-		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.75 m (not silted)");
+		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.81 m (a 150's at six months is 0.8)");
 		if (bFreshTried && !bFreshLaid) Fault("scars: a fresh round's hole not laid after the old ones");
 	}
 	if (std::getenv("LAND_PLAY_ONLY_SCARS"))

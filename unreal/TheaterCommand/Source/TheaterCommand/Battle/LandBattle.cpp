@@ -3324,6 +3324,13 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
+	// (a near man's points laid about his own place and his mesh moved there each frame, so its move is his motion
+	// vector and the temporal anti-aliasing keeps him whole in a shot that follows him: with his mesh left at the field's
+	// corner and only its points moved the engine saw him as standing still, threw his history away every frame and drew
+	// him from the low resolution, his back and pack in blocks (the art director's stills, 36 s, 23 November). The mid and
+	// far men, small in the picture, stay laid in the field's frame. -TheaterLandMenFieldFrame lays the near ones so too,
+	// for the A/B.)
+	static const bool bFieldFrame = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMenFieldFrame"));
 	for (const FSkinJob& Job : Jobs)
 	{
 		const int32 Man = Job.Man;
@@ -3332,11 +3339,19 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		FManDrawn& D = MenDrawn[Man];
 		const float* Skinned = SkinAt.GetData() + Job.Offset;
 		const float* Faced = SkinFacing.GetData() + Job.Offset;
+		FVector Origin = FVector::ZeroVector;
+		if (Level == LandMen::Near && !bFieldFrame)
+		{
+			double Ox = 0.0, Oy = 0.0, Oz = 0.0;
+			float Of = 0.0f;
+			Crowd.PlaceAsPosed(Man, Ox, Oy, Oz, Of);
+			Origin = FVector(Oy * UnitsPerMetre, Ox * UnitsPerMetre, Oz * UnitsPerMetre);
+		}
 		P.SetNumUninitialized(Points);
 		N.SetNumUninitialized(Points);
 		for (int32 I = 0; I < Points; ++I)
 		{
-			P[I] = FVector(Skinned[I * 3 + 1] * UnitsPerMetre, Skinned[I * 3] * UnitsPerMetre, Skinned[I * 3 + 2] * UnitsPerMetre);
+			P[I] = FVector(Skinned[I * 3 + 1] * UnitsPerMetre, Skinned[I * 3] * UnitsPerMetre, Skinned[I * 3 + 2] * UnitsPerMetre) - Origin;
 			N[I] = FVector(Faced[I * 3 + 1], Faced[I * 3], Faced[I * 3 + 2]);
 		}
 		if (!D.Mesh.IsValid())
@@ -3377,6 +3392,10 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		else
 		{
 			D.Mesh->UpdateMeshSection(0, P, N, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+		}
+		if (!D.Mesh->GetRelativeLocation().Equals(Origin, 0.01))
+		{
+			D.Mesh->SetRelativeLocation(Origin);
 		}
 		D.Stamp = Crowd.Stamp(Man);
 		D.Mesh->SetVisibility(true);
@@ -7084,7 +7103,9 @@ void ALandBattle::LayScars()
 				return std::string();
 			}
 			return std::string(Under.Fx);
-		});
+		},
+		// (the old lines they lie along: the hedges, walls and lanes, the lanes' junctions, the village's edge)
+		LandCrater::OldLinesOf(*FieldPtr, S.Rec.Ground.TownX, S.Rec.Ground.TownY, S.Rec.Ground.TownR));
 	// (their meshes and the ground's cuts made now, before the first frame; the grass and corn already laid round the
 	// eye laid again without what stands over an old bowl)
 	MakeCraters();
