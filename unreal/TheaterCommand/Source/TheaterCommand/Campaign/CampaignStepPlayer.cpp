@@ -4,8 +4,11 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Battle/AirBattle.h"
+#include "Battle/AirBattleState.h"
 #include "TheaterCommand.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Input/HittestGrid.h"
@@ -44,6 +47,22 @@ namespace
 		FString Out = Text.ToUpper().Replace(TEXT("·"), TEXT(" ")).Replace(TEXT("\n"), TEXT(" "));
 		while (Out.ReplaceInline(TEXT("  "), TEXT(" ")) > 0) { }
 		return Out.TrimStartAndEnd();
+	}
+
+	/** The air battle he flies himself, where one is up: it stands in the map's world while it is (FlyLive spawns it there). */
+	AAirBattle* OpenAirBattle(const ACampaignPlayerController& Player)
+	{
+		if (UWorld* World = Player.GetWorld())
+		{
+			for (TActorIterator<AAirBattle> It(World); It; ++It)
+			{
+				if (IsValid(*It) && It->GetState())
+				{
+					return *It;
+				}
+			}
+		}
+		return nullptr;
 	}
 
 	struct FFoundButton
@@ -378,6 +397,8 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	FCampaignSession* Session = Player.GetSession();
 	const ACampaignMapActor* Map = Player.GetMap();
 	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = bLook = false;
+	bAir = bAirDid = bAirHandBack = false;
+	AirWait.Reset();
 	OnScreen = -1;
 	Note.Reset();
 	TargetRegion = INDEX_NONE;
@@ -749,10 +770,22 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		Player.EndMonth();
 		Context.Reset();
 	}
+	else if (Verb == TEXT("air-key") || Verb == TEXT("air-wait"))
+	{
+		ActAir(Player, Step);
+	}
 	else
 	{
 		bMissing = true;
 		Note = TEXT("the 3D table does not know this verb");
+	}
+	// (a press that opened his own air battle, FLY IT YOURSELF, is settled as an air step: the raid keeps the table busy
+	// until it is handed back, so the picture is taken a second in, in the opening flyover, and the next line follows)
+	if (Verb == TEXT("press") && !bAir && Player.IsFightingLive())
+	{
+		AirOpen = OpenAirBattle(Player);
+		bAir = AirOpen.IsValid();
+		AirSettle = 1.1f;
 	}
 	// The steps that open a card or put something in hand are remembered: a sweep plays them again after it restores.
 	if (!Step.bReplay && !Step.bSweep)
@@ -774,10 +807,187 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	}
 }
 
+void FStepPlayer::ActAir(ACampaignPlayerController& Player, const FStep& Step)
+{
+	// The screen's keys are played on the battle as SAirBattleScreen::OnKeyDown plays them.
+	bAir = true;
+	AirSettle = 0.3f;
+	AirOpen = OpenAirBattle(Player);
+	AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	const FString What = Step.Target.TrimStartAndEnd().ToLower();
+	if (!S)
+	{
+		Note = TEXT("no air battle is up");
+		return;
+	}
+	if (Step.Verb == TEXT("air-wait"))
+	{
+		const bool bReal = What.EndsWith(TEXT("s")) && What.LeftChop(1).IsNumeric();
+		if (What == TEXT("flyover") || What == TEXT("card") || (What.IsNumeric() && FCString::Atod(*What) >= 0.0) || bReal)
+		{
+			AirWait = What;
+		}
+		else
+		{
+			bMissing = true;
+			Note = TEXT("air-wait takes battle seconds (212), real seconds (20s), flyover or card");
+		}
+		return;
+	}
+	if (S->bFlying)
+	{
+		// (as on the keyboard: any key during the flyover takes command, and does nothing else)
+		Battle->Press(TEXT("skip"));
+		bAirDid = true;
+		AirSettle = 1.5f;
+		Note = What == TEXT("skip") ? FString(TEXT("the flyover skipped")) : FString(TEXT("pressed during the flyover: it only skips it, as any key does"));
+		return;
+	}
+	if (What == TEXT("skip"))
+	{
+		Note = TEXT("no flyover is running");
+		return;
+	}
+	const bool bClose = S->bClose;
+	const int32 Plane = S->Subject.Plane, Group = S->RideGroup;
+	const double Speed = S->Clock.Speed;
+	if (What == TEXT("continue") || What == TEXT("return") || What == TEXT("enter"))
+	{
+		if (S->bCard)
+		{
+			Battle->Press(TEXT("continue"));
+			bAirDid = true;
+			bAirHandBack = true; // (the battle is handed back to the map: the step waits, as any, for the table to be still)
+			AirSettle = 1.1f;
+		}
+		else if (S->Question != 0)
+		{
+			Battle->Answer(false);
+			bAirDid = true;
+			Note = TEXT("KEEP FIGHTING (the question's default)");
+		}
+		else
+		{
+			Note = TEXT("no after card is up");
+		}
+	}
+	else if (What == TEXT("escape") || What == TEXT("esc"))
+	{
+		if (S->Question != 0) { Battle->Answer(false); bAirDid = true; }
+		else if (S->bClose && !S->bCard) { Battle->Press(TEXT("ride")); bAirDid = true; AirSettle = 1.5f; }
+		else { Note = TEXT("nothing for Esc to close"); }
+	}
+	else if (What == TEXT("chase") || What == TEXT("c"))
+	{
+		Battle->Press(TEXT("ride"));
+		bAirDid = S->bClose != bClose;
+		AirSettle = 1.5f; // (the eye glides to the squadron's leader)
+		Note = S->bClose ? TEXT("the chase view") : TEXT("the strategy view");
+	}
+	else if (What == TEXT("next") || What == TEXT("prev") || What == TEXT("up") || What == TEXT("down")
+		|| What == TEXT("right") || What == TEXT("left"))
+	{
+		if (!S->bClose || S->bCard)
+		{
+			Note = TEXT("the arrows step only in the chase view");
+		}
+		else
+		{
+			const FString Way = What == TEXT("right") ? FString(TEXT("next")) : What == TEXT("left") ? FString(TEXT("prev")) : What;
+			Battle->Press(TEXT("ride:") + Way);
+			bAirDid = S->Subject.Plane != Plane || S->RideGroup != Group;
+			AirSettle = 1.5f;
+			if (!bAirDid)
+			{
+				Note = TEXT("no other aircraft or squadron that way");
+			}
+		}
+	}
+	else if (What == TEXT("pause") || What == TEXT("play") || What == TEXT("space"))
+	{
+		const bool bHold = What == TEXT("pause") || (What == TEXT("space") && Speed > 0.0);
+		if (bHold && Speed > 0.0)
+		{
+			AirSpeedBefore = Speed;
+			Battle->SetSpeed(0.0);
+		}
+		else if (!bHold && Speed <= 0.0)
+		{
+			Battle->SetSpeed(AirSpeedBefore > 0.0 ? AirSpeedBefore : 1.0);
+		}
+		bAirDid = S->Clock.Speed != Speed;
+		if (!bAirDid)
+		{
+			Note = bHold ? TEXT("already held") : TEXT("already running");
+		}
+	}
+	else if (What.StartsWith(TEXT("x")) && What.Mid(1).IsNumeric())
+	{
+		const double Want = FCString::Atod(*What.Mid(1));
+		if (Want == 0.5 || Want == 1.0 || Want == 2.0 || Want == 4.0)
+		{
+			AirSpeedBefore = Want;
+			Battle->SetSpeed(Want);
+			bAirDid = S->Clock.Speed != Speed;
+			if (!bAirDid)
+			{
+				Note = TEXT("already at that speed");
+			}
+		}
+		else
+		{
+			bMissing = true;
+			Note = TEXT("the battle runs at x0.5, x1, x2 or x4");
+		}
+	}
+	else
+	{
+		bMissing = true;
+		Note = TEXT("the hook does not press this key of the air battle yet");
+	}
+}
+
+bool FStepPlayer::AirWaiting() const
+{
+	const AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S || AirWait.IsEmpty())
+	{
+		return false; // (handed back, or nothing asked: nothing left to wait for)
+	}
+	if (AirWait == TEXT("card"))
+	{
+		return !S->bCard;
+	}
+	if (AirWait == TEXT("flyover"))
+	{
+		return S->bFlying || !S->bFlyTried;
+	}
+	if (AirWait.EndsWith(TEXT("s")))
+	{
+		return !S->bCard && Clock < FCString::Atof(*AirWait.LeftChop(1)); // (real seconds from this step)
+	}
+	return !S->bCard && S->BattleT < FCString::Atod(*AirWait);
+}
+
+FString FStepPlayer::AirNow() const
+{
+	const AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S)
+	{
+		return TEXT("the air battle handed back");
+	}
+	return FString::Printf(TEXT("battle %.0f s, x%g%s%s%s%s"), S->BattleT, S->Clock.Speed, S->bFlying ? TEXT(", the flyover") : TEXT(""),
+		S->bClose ? TEXT(", the chase view") : TEXT(""), S->bOver ? TEXT(", over") : TEXT(""), S->bCard ? TEXT(", the after card up") : TEXT(""));
+}
+
 void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 {
 	const FSeen After = Look(Player, TargetRegion);
-	const bool bChanged = After.Bare != Before.Bare || After.Open != Before.Open || After.Hand != Before.Hand;
+	// (an air step is judged on the battle it was given to, which the table's reading does not see)
+	const bool bChanged = bAirDid || After.Bare != Before.Bare || After.Open != Before.Open || After.Hand != Before.Hand;
 	// (the pointer's slip counts as an answer only for a step that points: for a click it only names what is under the pointer)
 	const bool bPointing = Step.Verb == TEXT("point-at");
 	FString Words = After.Words;
@@ -851,8 +1061,10 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 	const FStep Step = Steps[At]; // (a copy: a sweep adds its presses to the list)
 	if (Phase == 0)
 	{
-		// Wait for the table to be still: a month's replay, a newsreel.
-		if (Clock < 0.25f || (Player.IsBusyForSteps() && Clock < 45.0f))
+		// Wait for the table to be still: a month's replay, a newsreel. (An air step is played in the raid, which keeps
+		// the table busy until it is handed back: it does not wait.)
+		const bool bAirStep = Step.Verb.StartsWith(TEXT("air-"));
+		if (Clock < 0.25f || (!bAirStep && Player.IsBusyForSteps() && Clock < 45.0f))
 		{
 			return true;
 		}
@@ -882,7 +1094,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 			const bool bOfUnit = Step.Verb == TEXT("select-unit") || Step.Verb == TEXT("order-unit");
 			bFound = false;
-			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
+			if (!Name.IsEmpty() && !Step.bReplay && !bAirStep && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
 				&& Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group))
 			{
 				Named = bOfUnit ? CorpsRegion : Region;
@@ -991,15 +1203,27 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 				return true;
 			}
 		}
-		// Let it happen: a march is flown across the table, a month is played through, a card opens.
-		const float Settle = bMonth ? 2.5f : 1.1f;
-		if (Clock < Settle || (Player.IsBusyForSteps() && Clock < (bMonth ? 120.0f : 20.0f)))
+		// Let it happen: a march is flown across the table, a month is played through, a card opens. (An air step: the
+		// battle's own clock is waited on, and the table only once the battle is handed back.)
+		const float Settle = bMonth ? 2.5f : bAir ? AirSettle : 1.1f;
+		const bool bBusy = Player.IsBusyForSteps() && (!bAir || bAirHandBack);
+		if (Clock < Settle || (bBusy && Clock < (bMonth ? 120.0f : 20.0f)) || (!AirWait.IsEmpty() && Clock < 900.0f && AirWaiting()))
 		{
 			if (bMonth && Clock > 1.0f)
 			{
 				Player.StepThroughMonth(); // (the questions and the screens a month's end brings are answered as a player in a hurry would)
 			}
 			return true;
+		}
+		if (bAir)
+		{
+			if (!AirWait.IsEmpty())
+			{
+				const bool bCame = !AirWaiting() && AirOpen.IsValid();
+				bAirDid = bCame;
+				Note = bCame ? FString() : AirOpen.IsValid() ? FString(TEXT("waited 15 minutes: ")) : FString(TEXT("the battle ended before it came: "));
+			}
+			Note = Note.IsEmpty() ? AirNow() : Note + (Note.EndsWith(TEXT(": ")) ? TEXT("") : TEXT("; ")) + AirNow();
 		}
 		if (!Step.bReplay)
 		{

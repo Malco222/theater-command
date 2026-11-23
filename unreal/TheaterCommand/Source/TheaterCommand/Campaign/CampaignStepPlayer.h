@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 class ACampaignPlayerController;
+class AAirBattle;
 
 /**
  * A development tool, not part of the game. Started with "-TheaterSteps=<file>" beside "-TheaterShots=<folder>", it
@@ -13,6 +14,19 @@ class ACampaignPlayerController;
  *
  * (Brian, 17 November 2026: "i want the playtester to really click everything to make sure it works in the 3d game
  * too". The rule every step is held to: a click does something, or the game says why not.)
+ *
+ * An air battle he flies himself covers the map, and the map's keys do not reach it. Two verbs play it as his hand on
+ * the battle screen does (release 1.5's Mac runs, Part B):
+ * - "air-key WHAT": a key of the air battle screen. continue (Return on the after card; KEEP FIGHTING on a question),
+ *   chase (C: the chase view on or off), next / prev / up / down (the arrows in the chase view: along the squadron, or
+ *   to the last or next squadron), pause / play / space (Space), x0.5 / x1 / x2 / x4 (1 to 4), skip, escape. As on the
+ *   keyboard, any key pressed during the opening flyover only skips it.
+ * - "air-wait WHEN": the picture waits on the battle. A number is the battle's clock (212: battle second 212); a number
+ *   and s is real seconds from the line (20s); flyover waits for the opening flyover to end; card for the after card. A
+ *   wait for seconds ends early if the after card comes. At most 15 minutes. Its frames are timed as any step's, so a
+ *   wait reads the battle's frame rate over that span.
+ * Neither waits for the table to be still first (the raid keeps it busy until it is handed back), and the press that
+ * opens the raid (FLY IT YOURSELF) takes its picture a second in, in the flyover. The picture is the battle screen.
  */
 class FStepPlayer
 {
@@ -44,6 +58,11 @@ private:
 	void Log(ACampaignPlayerController& Player, const FStep& Step);
 	void Sweep(ACampaignPlayerController& Player, const FStep& Step);
 	bool Press(ACampaignPlayerController& Player, const FString& Words);
+	void ActAir(ACampaignPlayerController& Player, const FStep& Step);
+	/** (air-wait) True while what the step waits for has not come. */
+	bool AirWaiting() const;
+	/** (an air step) The battle as the picture is taken, for the log's note. */
+	FString AirNow() const;
 
 	TArray<FStep> Steps;
 	FString Folder;
@@ -78,4 +97,10 @@ private:
 	bool bLook = false; // the eye goes to a place and the picture waits for its fine ground ("look-at")
 	float LookSettled = 0.0f;
 	int32 OnScreen = -1; // (a press) 1 where the whole button lay inside the window, 0 where part of it lay beyond the edge, -1 for no button
+	// (an air step) the battle it was given to; what it did; what it waits for; the speed a pause held
+	bool bAir = false, bAirDid = false, bAirHandBack = false;
+	float AirSettle = 0.3f;
+	TWeakObjectPtr<AAirBattle> AirOpen;
+	FString AirWait;
+	double AirSpeedBefore = 1.0;
 };
