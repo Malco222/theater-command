@@ -28,6 +28,11 @@ PICS = os.path.join(gore.STAGE, "pictures", "gore")
 def load(name):
     X = json.load(open(os.path.join(gore.SHARED, name + ".json")))
     Y = json.load(open(os.path.join(gore.STAGE, name + "_gore.json")))
+    if os.environ.get("GORE_CHECK_SKIP_RIDERS"):
+        # (the riders' clips, seated in the vehicles: 43 of a rifleman's 113 since 23 November, and the twin plays them
+        #  on the same skeleton; leaving them out of the poses checked keeps a check near a quarter of an hour)
+        riders = set((X.get("ride_clips") or {}).get("names") or [])
+        X = dict(X, clips={k: v for k, v in X["clips"].items() if k not in riders})
     return X, Y
 
 

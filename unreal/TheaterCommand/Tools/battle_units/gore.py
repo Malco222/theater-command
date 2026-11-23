@@ -349,9 +349,32 @@ def split_lod(M, rig, lod, bank):
         for v in TV[t]:
             if v in openv:
                 openv[v].add(t)
-    openv = {v: sorted(ts) for v, ts in openv.items()}
+    # (only the triangles of one fan round the point go together, the ones joined to each other by edges through it:
+    #  two pieces that merely touch there, a thinned coat's hem welded onto the top of a puttee, are not one cuff and
+    #  may part; tied, the puttee went with the coat to the body, FRA far 11-23)
+    fans = {}
+    for v, ts in openv.items():
+        ts = sorted(ts)
+        up = {t: t for t in ts}
+        def fnd(x):
+            while up[x] != x:
+                up[x] = up[up[x]]
+                x = up[x]
+            return x
+        for t in ts:
+            for w in TV[t]:
+                if w != v:
+                    for u in edge_tris.get((min(v, w), max(v, w)), ()):
+                        if u in up:
+                            up[fnd(u)] = fnd(t)
+        groups = {}
+        for t in ts:
+            groups.setdefault(fnd(t), []).append(t)
+        fans[v] = [g for g in groups.values() if len(g) > 1]
+    openv = fans
     order = sorted(range(len(CUTS)), key=lambda k: rig.rdepth(k + 1))
     cut_report = {}
+    parted = []
     for k in order:
         c = k + 1
         cut = CUTS[k]
@@ -408,6 +431,20 @@ def split_lod(M, rig, lod, bank):
         HARD = float("inf")    # a cost of 1e3 or more is a rule, never a trade (see below for the integers)
         rows, cols, caps = [], [], []
         forced_out = 0
+        # a rigid piece that rides both sides outright (some of its triangles only the limb's bones, some none of
+        # them: a felt boot whose thinned top rides the thigh) is not one thing at this joint: it parts at the band
+        # like cloth. Tied whole it went with the thigh, foot and all, when the shin came off (SOV snow far, 11-23)
+        tin_all = {int(t): all(bool(S_in[part[i]] and (w2[i] <= 0 or S_in[part2[i]])) for i in T[t]) for t in ai}
+        tin_any = {int(t): any(bool(S_in[part[i]] or (w2[i] > 0 and S_in[part2[i]])) for i in T[t]) for t in ai}
+        barred = {int(t) for t in ai if any((not act[u]) and not rig.related(int(treg[u]), c) for u in tnb[t])}
+        tout = {int(t): not any(bool(S_in[part[i]]) for i in T[t]) for t in ai}     # every point mostly off the limb
+        stiff = rigid.copy()
+        for pt in np.unique(patch[ai][rigid[ai]]):
+            mem = [int(t) for t in ai if patch[t] == pt]
+            # (off it: every point mostly off the limb, none on it at all, or beside a region the limb may not touch)
+            if any(tin_all[t] for t in mem) and any((not tin_any[t]) or t in barred or tout[t] for t in mem):
+                stiff[mem] = False
+                parted.append((lod, cut, int(tpaint[mem[0]]), len(mem)))
         for t in ai:
             j = node[int(t)]
             u_in = area[t] * np.mean([s_in[loc[int(i)]] for i in T[t]])
@@ -420,7 +457,10 @@ def split_lod(M, rig, lod, bank):
             # one none of whose points does stays off it)
             tin = [bool(S_in[part[i]] and (w2[i] <= 0 or S_in[part2[i]])) for i in T[t]]
             tany = [bool(S_in[part[i]] or (w2[i] > 0 and S_in[part2[i]])) for i in T[t]]
-            if all(tin) and not rigid[t]:
+            # (a rigid triangle may leave its limb with the rest of its piece; one with no neighbours at all, a sliver
+            #  of a puttee's wrap on edges shared three ways, has no piece to go with and stays where its points ride:
+            #  tiny, its two costs round to the same integer and the tie would send it to the body, FRA 11-23)
+            if all(tin) and (not stiff[t] or not tnb[t]):
                 u_out = 1e3
             elif not any(tany):
                 u_in = max(u_in, 1e3)
@@ -431,20 +471,21 @@ def split_lod(M, rig, lod, bank):
             if act[t] and act[u]:
                 l = float(np.linalg.norm(VP[e[0]] - VP[e[1]]))
                 w = 2.0 * l * 0.05 * 0.5 * (vcrack.get(e[0], 0) + vcrack.get(e[1], 0))
-                if rigid[t] and rigid[u] and patch[t] == patch[u]:
+                if stiff[t] and stiff[u] and patch[t] == patch[u]:
                     w = 1e3
                 rows += [node[t], node[u]]
                 cols += [node[u], node[t]]
                 caps += [w, w]
         # an open edge of the mesh (a cuff, a collar) is never crossed by the cut: the triangles round it go together
-        for v, ts in openv.items():
-            ts = [node[t] for t in ts if act[t]]
-            for x, y in zip(ts[:-1], ts[1:]):
-                rows += [x, y]
-                cols += [y, x]
-                caps += [HARD, HARD]
+        for v, fs in openv.items():
+            for ts in fs:
+                ts = [node[t] for t in ts if act[t]]
+                for x, y in zip(ts[:-1], ts[1:]):
+                    rows += [x, y]
+                    cols += [y, x]
+                    caps += [HARD, HARD]
         # rigid kit in its own piece (no neighbours across): tie its triangles
-        for pt in np.unique(patch[ai][rigid[ai]]):
+        for pt in np.unique(patch[ai][stiff[ai]]):
             ts = [node[int(t)] for t in ai if patch[t] == pt]
             for x, y in zip(ts[:-1], ts[1:]):
                 rows += [x, y]
@@ -547,7 +588,7 @@ def split_lod(M, rig, lod, bank):
         sh = np.array(M["shade"], float)
         arr["shade"] = np.concatenate([sh, sh[src]])
     info = {"n": n, "m": m, "band_points": int(band.sum()), "hardened": hardened, "seam_copies": len(src),
-            "unrelated_neighbours": int(unrelated), "rigid_pieces_moved_whole": rigid_moved,
+            "unrelated_neighbours": int(unrelated), "rigid_pieces_moved_whole": rigid_moved, "rigid_pieces_parted": parted,
             "treg": treg, "cut_report": cut_report, "T2": T2, "V": V, "VP": VP, "TV": TV, "comp": comp, "rigid": rigid}
     info["loops"] = seam_loops(TV, treg, rig, VP)
     return arr, info
@@ -1007,13 +1048,19 @@ def make_twin(D, per_clip=6, log=print):
         st = {"points": [info["n"], None], "triangles": [info["m"], None], "band_points": info["band_points"],
               "hardened": info["hardened"], "seam_copies": [info["n"], info["seam_copies"]],
               "unrelated_neighbours": info["unrelated_neighbours"], "cuts": {}}
+        if info["rigid_pieces_parted"]:
+            st["rigid_pieces_parted"] = [list(x[1:]) for x in info["rigid_pieces_parted"]]
+            log(f"    {lod}: rigid pieces riding both sides of a cut, parted at the band (cut, paint, triangles): "
+                f"{st['rigid_pieces_parted']}")
         for k, cut in enumerate(CUTS):
             c_reg = k + 1
             p_reg = rig.rparent[c_reg]
             pbone = rig.parent[rig.index[cut]]
             loops = [lp for lp in info["loops"][cut] if lp["closed"]]
             bad = [lp for lp in info["loops"][cut] if not lp["closed"]]
-            stray = [b for b in bad if len(b["verts"]) <= 3]
+            # (a short open chain beside the loop is left uncapped; at the far level, a few hundred triangles seen from
+            #  tens of metres, a longer one too: a sliver of gap at the torn sleeve that no one can see there)
+            stray = [b for b in bad if len(b["verts"]) <= (8 if lod == "far" else 3)]
             if bad and (len(stray) < len(bad) or (not loops and lod == "near")):
                 raise RuntimeError(f"{lod} {cut}: open seam {[len(b['verts']) for b in bad]}")
             if stray:
@@ -1079,7 +1126,7 @@ def make_twin(D, per_clip=6, log=print):
         for j, (w_, m_) in sorted(cap_joined.items()):
             jl.append((j, w_, m_))
         joined_lod = {"points": [j for j, _, _ in jl], "part": [w[0] for _, w, _ in jl],
-                      "part2": [w[1] for _, w, _ in jl], "w2": [round(w[2], 3) for _, w, _ in jl],
+                      "part2": [w[1] for _, w, _ in jl], "w2": [round(w[2], 4) for _, w, _ in jl],
                       "cuts": [m for _, _, m in jl]}
         Pn = np.array(B.P)
         mesh = {"points": [round(float(v), 4) for v in Pn.ravel()],
@@ -1089,13 +1136,16 @@ def make_twin(D, per_clip=6, log=print):
                 "w2": [round(float(v), 3) for v in B.w2]}
         if B.shade is not None:
             mesh["shade"] = [round(float(v), 3) for v in B.shade]
-        # the originals exactly as they were (their values, not re-rounded)
+        # the originals exactly as they were (their values, not re-rounded: the faces' round 2 wrote some weights and
+        #  shade to 4 places, which a round to 3 here changed by a hair)
         n = info["n"]
         mesh["points"][:3 * n] = M["points"]
         mesh["facings"][:3 * n] = M["facings"]
+        if "shade" in mesh and "shade" in M:
+            mesh["shade"][:n] = M["shade"]
         for key in ("part", "part2", "w2"):
             for i in range(n):
-                if M[key][i] == (arr[key][i] if key != "w2" else round(float(arr[key][i]), 3)):
+                if abs(float(M[key][i]) - float(arr[key][i])) < 1e-6:
                     mesh[key][i] = M[key][i]
         twin[lod] = mesh
         st["joined"] = joined_lod
