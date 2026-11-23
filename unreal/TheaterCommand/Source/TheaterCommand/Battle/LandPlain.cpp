@@ -50,7 +50,7 @@ namespace LandScape
 
 		enum Slot : int
 		{
-			KPoplar = 0, // (unused: the poplars are LandField's own elm drawn tall and narrow, its fine leaves and its bare winter crown)
+			KPoplar = 0, // the poplar, built here: a soft leafy column, or its fine grey twigs in the winter
 			KWillow = 1,
 			KPine = 2,
 			KHouse = 3,
@@ -73,7 +73,7 @@ namespace LandScape
 		 * a block's edges are the fields' edges; the strips run one way within each, north-south or east-west. */
 		constexpr double StripCell = 402.335, FieldLine = 100.58375;
 		/** The town wall: its rammed earth's height (the fight's wall the same), its thickness at the foot and the top. */
-		constexpr double WallHigh = 3.05, WallFoot = 0.8, WallTop = 0.64;
+		constexpr double WallHigh = 3.05, WallFoot = 1.0, WallTop = 0.6;
 		/** The loess terraces: a step's rise; the tread's fall outward; the riser's share of a step's run. */
 		constexpr double Rise = 3.0, TreadFall = 0.1, RiserRun = 0.25;
 
@@ -185,6 +185,26 @@ namespace LandScape
 			}
 		}
 
+		/** A broad leaf from its foot (X0, Y0, Z0) to its tip: a rounded oval Width across, its tip blunt; one face, lit
+		 * from above as the row crops' leaves are seen. */
+		void Leaflet(Writer& W, double X0, double Y0, double Z0, double X1, double Y1, double Z1, double Width, const Tone& Foot, const Tone& Tip)
+		{
+			double AX = -(Y1 - Y0), AY = X1 - X0;
+			const double L = std::hypot(AX, AY);
+			if (L < 1e-9) { AX = 1.0; AY = 0.0; }
+			else { AX /= L; AY /= L; }
+			auto At = [&](double F, double Side, double Lift, const Tone& C) {
+				return W.Vert(X0 + F * (X1 - X0) + Side * AX, Y0 + F * (Y1 - Y0) + Side * AY, Z0 + F * (Z1 - Z0) + Lift, 0.12 * AX, 0.12 * AY, 0.99, C);
+			};
+			const Tone Mid = Mixed(Foot, Tip, 0.5);
+			const uint32_t B = At(0.0, 0.0, 0.0, Foot), L1 = At(0.38, 0.5 * Width, 0.01, Mid), R1 = At(0.38, -0.5 * Width, 0.01, Mid);
+			const uint32_t L2 = At(0.82, 0.32 * Width, 0.0, Tip), R2 = At(0.82, -0.32 * Width, 0.0, Tip), T = At(1.0, 0.0, -0.01, Tip);
+			W.Tri(B, R1, L1);
+			W.Tri(L1, R1, R2);
+			W.Tri(L1, R2, L2);
+			W.Tri(L2, R2, T);
+		}
+
 		/** A rounded spindle along P (a seed head): six sides round, R its radius at each point, its normals out. */
 		void Spindle(Writer& W, const double (&P)[4][3], const double (&R)[4], const Tone& Foot, const Tone& Tip)
 		{
@@ -224,7 +244,7 @@ namespace LandScape
 
 		/** A ridge along x, Half either way: its profile Wide across and High up (round, or plain for afar), sunk at its
 		 * ends Sink so lengths laid end to end run on as one line. (The rice country's bund, LandAsia.) */
-		void Ridge(Writer& W, double Half, double High, double Wide, const Tone& Crest, const Tone& Flank, const Tone& Foot, bool bRound, double Sink)
+		void Ridge(Writer& W, double Half, double High, double Wide, const Tone& Crest, const Tone& Flank, const Tone& Foot, bool bRound, double Sink, int Sections = 1)
 		{
 			struct Pt
 			{
@@ -236,14 +256,20 @@ namespace LandScape
 											{ 0.24 * H, High, 0.12, 0.99, Crest }, { 0.62 * H, 0.62 * High, 0.45, 0.89, Flank }, { H, -0.05, 0.6, 0.8, Foot } };
 			const std::vector<Pt> Flat = { { -H, -0.05, -0.5, 0.87, Foot }, { -0.25 * H, High, -0.15, 0.99, Crest }, { 0.25 * H, High, 0.15, 0.99, Crest }, { H, -0.05, 0.5, 0.87, Foot } };
 			const std::vector<Pt>& Pr = bRound ? Round : Flat;
-			const double Xs[4] = { -Half, -Half + Sink, Half - Sink, Half };
-			const int Rings = Sink > 0.0 ? 4 : 2;
+			// (its length in Sections between the sunk ends, each ring's earth and grass its own shade a little, so a long
+			// ridge is no smooth tube)
+			std::vector<double> Xs;
+			if (Sink > 0.0) Xs.push_back(-Half);
+			for (int K = 0; K <= Sections; ++K) Xs.push_back(-Half + Sink + (2.0 * (Half - Sink)) * K / Sections);
+			if (Sink > 0.0) Xs.push_back(Half);
+			const int Rings = static_cast<int>(Xs.size());
 			std::vector<std::vector<uint32_t>> V(static_cast<size_t>(Rings));
 			for (int R = 0; R < Rings; ++R)
 			{
-				const double X = Sink > 0.0 ? Xs[R] : (R == 0 ? -Half : Half);
-				const bool bEnd = Sink > 0.0 && (R == 0 || R == 3);
-				for (const Pt& P : Pr) V[static_cast<size_t>(R)].push_back(W.Vert(X, P.Y * (bEnd ? 0.7 : 1.0), bEnd ? -0.06 : P.Z, 0.0, P.NY, P.NZ, P.C));
+				const double X = Xs[static_cast<size_t>(R)];
+				const bool bEnd = Sink > 0.0 && (R == 0 || R == Rings - 1);
+				const double Sh = Sections > 1 ? 0.9 + 0.2 * Unit(Hash(0x41D6, static_cast<uint64_t>(R))) : 1.0;
+				for (const Pt& P : Pr) V[static_cast<size_t>(R)].push_back(W.Vert(X, P.Y * (bEnd ? 0.7 : 1.0), bEnd ? -0.06 : P.Z, 0.0, P.NY, P.NZ, Varied(P.C, Sh, 0.0)));
 			}
 			for (int R = 0; R + 1 < Rings; ++R)
 				for (size_t K = 0; K + 1 < Pr.size(); ++K)
@@ -340,6 +366,7 @@ namespace LandScape
 				MeanZ = F.Height.empty() ? 0.0 : Sum / static_cast<double>(F.Height.size());
 				// (the India's crops dried off and the earth baked and cracked from March to the rains)
 				bHardpan = bIndia && M >= 3 && M <= 6;
+				bBare = LeaflessOf(F, Look::Plain) || SnowLying > 0.25;
 				// The loess country (Shansi, Shensi, western Honan; or where the rules say hills): the tableland rising
 				// round the field in its terraces, cut by its gullies, its cave dwellings in their banks (Relief).
 				bLoess = !bIndia && !bManchuria && (F.Lon < 114.5 || F.Terrain == "hills" || F.Terrain == "mountain");
@@ -488,7 +515,7 @@ namespace LandScape
 			struct Strip
 			{
 				uint64_t Key = 0;
-				double Jit = 0.0, Balk = 99.0, Shade = 1.0;
+				double Jit = 0.0, Balk = 99.0, Shade = 1.0, Warm = 0.0;
 				/** The way its rows run (radians from east). */
 				double Angle = 0.0;
 				bool bFallow = false;
@@ -552,7 +579,10 @@ namespace LandScape
 				}
 				St.Jit = 0.9 * (Unit(Hash(St.Key, 0x717)) - 0.5) + 0.6 * (Unit(Hash(S.Key, 0x718)) - 0.5);
 				St.bFallow = Unit(Hash(St.Key, 0xFA11)) < 0.1;
-				St.Shade = 0.92 + 0.16 * Unit(Hash(St.Key, 0x5AD));
+				// (each strip's own shade and its own warmth, a yellower green or a bluer: the strips read on from 30 m up, as
+				// the farm's fields do; the art director, 23 November)
+				St.Shade = 0.82 + 0.36 * Unit(Hash(St.Key, 0x5AD));
+				St.Warm = Unit(Hash(St.Key, 0x3A3)) - 0.5;
 				return St;
 			}
 			/** A strip's crop: the parcel's, or (in China's and Manchuria's low crops) a neighbour's, one strip in three. */
@@ -780,6 +810,7 @@ namespace LandScape
 				const Strip St = StripOf(S);
 				const Life L = ParcelLife(StripCrop(S, St), T0() + St.Jit);
 				Tone T = Varied(StateColour(L, FloorAt(S)), St.Shade, 0.0);
+				T = Tone{ T.R * (1.0 + 0.24 * St.Warm), T.G * (1.0 + 0.06 * St.Warm), T.B * (1.0 - 0.28 * St.Warm) };
 				// (the balks between the strips and round the field: a line of grass, beaten earth in the dry months)
 				return Mixed(T, Mixed(GrassAt(S, OpenGrass), Soil(), 0.35), 0.45 * Smooth(0.9, 0.2, St.Balk) + 0.5 * Smooth(1.2, 0.0, S.Edge));
 			}
@@ -950,13 +981,28 @@ namespace LandScape
 				const bool bSnow = SnowLying > 0.25;
 				if (S.Kind == KLane) return S.Lane > 0.8 ? Grown{ ClutOf(CGrass), bSnow ? 0.2 : 0.3 + 0.4 * Green } : Grown{};
 				if (bLoess && Outside(S.X, S.Y) > 0.0)
+				{
 					for (const Cave& C : Caves)
 						if (InYard(C, S.X, S.Y, 0.0)) return Pick < 0.15 ? Grown{ ClutOf(CGrass), 0.3 } : Grown{};
+					// (the terraces' lips: a band of long grass along each bank's top, rounding it; the art director)
+					const double D = Outside(S.X, S.Y);
+					if (D > 30.0 && TerraceW(S.X, S.Y, D) >= 0.45)
+					{
+						const double L0 = Rise * (1.0 - RiserRun), F = (LoessLift(S.X, S.Y, D) - L0) / Rise;
+						if (F - std::floor(F) < 0.13) return Grown{ ClutOf(CGrass), bSnow ? 0.3 : 1.5 };
+					}
+				}
 				// (the village's ground: grass along the walls and round the yards, thin by the doors)
 				if (S.Kind == KVillage) return Pick < 0.8 ? Grown{ ClutOf(CGrass), bSnow ? 0.15 : S.bNear ? 0.35 : 0.85 } : Grown{};
 				if (S.Kind == KYard) return Pick < 0.25 ? Grown{ ClutOf(CStubble), 0.15 } : Grown{};
 				// (the old fieldworks' ground: grass over it again, trodden thin in its patches)
-				if (S.Kind == KWorks) return Pick < 0.94 ? Grown{ ClutOf(CGrass), bSnow ? 0.2 : 0.8 + 0.5 * Smooth(-0.3, 0.5, S.N1) } : Grown{};
+				if (S.Kind == KWorks)
+				{
+					// (one sward over it, the ground's own mottle through it, the taller tufts in its patches; the art
+					// director, 23 November)
+					if (bSnow) return Pick < 0.85 ? Grown{ ClutOf(CGrass), 0.2 } : Grown{};
+					return Pick < 0.62 ? Grown{ LandField::Base::Sward, 1.25 } : Grown{ ClutOf(CGrass), 0.5 + 0.6 * Smooth(-0.3, 0.5, S.N1) };
+				}
 				if (S.Kind == KMarsh) return Pick < 0.6 ? Grown{ ClutOf(CReed), bSnow ? 0.4 : 0.7 } : Grown{ ClutOf(CGrass), bSnow ? 0.3 : 1.0 };
 				if (S.Kind == KWoods) return Grown{ ClutOf(CGrass), bSnow ? 0.2 : 0.6 };
 				switch (S.Crop)
@@ -976,7 +1022,7 @@ namespace LandScape
 				}
 				if (!Tilled(S.Crop)) return Pick < 0.5 ? Grown{ ClutOf(CGrass), bSnow ? 0.2 : 0.8 } : Grown{};
 				const Strip St = StripOf(S);
-				if (S.Crop != Terrace && (St.Balk < 0.35 || S.Edge < 0.5)) return Grown{ ClutOf(CGrass), bSnow ? 0.3 : 0.9 };
+				if (S.Crop != Terrace && (St.Balk < 0.5 || S.Edge < 0.5)) return Grown{ ClutOf(CGrass), bSnow ? 0.3 : 1.6 }; // (the balk's grass, through its ridge)
 				const Life L = S.Crop == Terrace ? ParcelLife(Terrace, T0()) : ParcelLife(StripCrop(S, St), T0() + St.Jit);
 				if (bSnow)
 				{
@@ -1015,6 +1061,21 @@ namespace LandScape
 			}
 
 			bool Dress(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const override
+			{
+				if (!DressOwn(P, S, U4, U5, U6, U7)) return false;
+				// (each strip's crop drawn in its strip's own shade and warmth, as its floor is)
+				const int K = static_cast<int>(P.Kind) - static_cast<int>(LandField::Base::Clut0);
+				if ((K == CGao || K == CGrain || K == CBush) && SnowLying <= 0.25 && !bHardpan && (S.Kind == KField || S.Kind == KOpen || S.Kind == KRough) && Tilled(S.Crop) && S.Crop != Terrace)
+				{
+					const Strip St = StripOf(S);
+					auto Ch = [](uint8_t C, double F) { return static_cast<uint8_t>(std::clamp(C * F, 0.0, 255.0)); };
+					P.Tint.R = Ch(P.Tint.R, St.Shade * (1.0 + 0.24 * St.Warm));
+					P.Tint.G = Ch(P.Tint.G, St.Shade * (1.0 + 0.06 * St.Warm));
+					P.Tint.B = Ch(P.Tint.B, St.Shade * (1.0 - 0.28 * St.Warm));
+				}
+				return true;
+			}
+			bool DressOwn(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const
 			{
 				const int K = static_cast<int>(P.Kind) - static_cast<int>(LandField::Base::Clut0);
 				const bool bField = (S.Kind == KField || S.Kind == KOpen || S.Kind == KRough) && Tilled(S.Crop);
@@ -1152,9 +1213,11 @@ namespace LandScape
 								// the plate: its corners drawn in toward its middle by the crack's half width, raised a hair
 								const double MX = 0.25 * (PX[J][I] + PX[J][I + 1] + PX[J + 1][I + 1] + PX[J + 1][I]), MY = 0.25 * (PY[J][I] + PY[J][I + 1] + PY[J + 1][I + 1] + PY[J + 1][I]);
 								const Tone Pl = Varied(Rgb(196, 178, 140), 0.92 + 0.12 * Unit(Hash(0x4A2E, static_cast<uint64_t>(J * N + I))), 0.0);
+								// (the crack's width its own along each plate, a hairline to a finger's width)
+								const double Keep = 0.93 + 0.045 * Unit(Hash(0x4A2F, static_cast<uint64_t>(J * N + I)));
 								auto In = [&](double X, double Y, double Z, double (&Out)[3]) {
-									Out[0] = MX + (X - MX) * 0.9;
-									Out[1] = MY + (Y - MY) * 0.9;
+									Out[0] = MX + (X - MX) * Keep;
+									Out[1] = MY + (Y - MY) * Keep;
 									Out[2] = Z;
 								};
 								double A[3], B[3], C[3], D[3];
@@ -1217,16 +1280,18 @@ namespace LandScape
 							}
 							else
 							{
-								// (the head: a compact panicle some 0.3 m long and a hand thick, nodding a little as the gaoliang's
-								// heavy heads do: a rounded spindle, round from every side, a few knots of grain proud of it)
-								const double Pt[4][3] = { { X, Y, Tall - 0.03 }, { X + 0.3 * (HX - X), Y + 0.3 * (HY - Y), Tall + 0.08 },
-														  { X + 0.7 * (HX - X), Y + 0.7 * (HY - Y), Tall + 0.2 }, { HX, HY, Tall + 0.32 } };
-								const double Rd[4] = { 0.022, 0.05, 0.042, 0.012 };
+								// (the head: one compact cluster of grain at the stalk's very top, some 0.3 m long and a hand thick,
+								// nodding a little: a slim core and its knots of grain heaped round it, knobbly from every side; the art
+								// director, 23 November)
+								const double Pt[4][3] = { { X, Y, Tall - 0.06 }, { X + 0.3 * (HX - X), Y + 0.3 * (HY - Y), Tall + 0.06 },
+														  { X + 0.7 * (HX - X), Y + 0.7 * (HY - Y), Tall + 0.18 }, { HX, HY, Tall + 0.3 } };
+								const double Rd[4] = { 0.02, 0.034, 0.03, 0.01 };
 								Spindle(W, Pt, Rd, HeadFoot, HeadTop);
-								for (int B = 0; B < 3; ++B)
+								for (int B = 0; B < 8; ++B)
 								{
-									const double A = NA + 2.0 * Pi * (B + 0.3 * Unit(Hash(Hs, 50 + B))) / 3.0, F = 0.25 + 0.2 * B;
-									W.Bead(X + F * (HX - X) + 0.04 * std::cos(A), Y + F * (HY - Y) + 0.04 * std::sin(A), Tall + 0.04 + 0.26 * F, 0.028, 0.06, HeadTop, HeadFoot);
+									const double F = 0.08 + 0.11 * B, A = NA + 2.39996 * B, Bulge = 0.032 + 0.018 * std::sin(Pi * std::min(1.0, F * 1.1));
+									const double BR = (0.024 + 0.008 * Unit(Hash(Hs, 50 + B))) * (1.0 - 0.35 * F);
+									W.Bead(X + F * (HX - X) + Bulge * std::cos(A), Y + F * (HY - Y) + Bulge * std::sin(A), Tall - 0.03 + 0.32 * F, BR, 1.7 * BR, B % 3 == 0 ? Varied(HeadTop, 1.1, 0.0) : HeadTop, HeadFoot);
 								}
 							}
 						}
@@ -1285,7 +1350,8 @@ namespace LandScape
 								const double Z = 0.1 + 0.1 * Tier, Out = 0.17 + 0.07 * Unit(Hash(Hs, 20 + B)) - 0.03 * Tier;
 								const double FX = X + 0.04 * std::cos(A), FY = Y + 0.04 * std::sin(A);
 								W.Blade(X, Y, 0.0, FX, FY, Z, 0.014, Rgb(76, 96, 48), Rgb(92, 112, 56));
-								W.Blade(FX, FY, Z, FX + Out * std::cos(A), FY + Out * std::sin(A), Z + 0.08 + 0.06 * Unit(Hash(Hs, 30 + B)), 0.13, Rgb(70, 98, 46), Rgb(116, 142, 70));
+								// (the leaflet: a broad rounded oval, blunt at its tip, a dull green; the art director, 23 November)
+								Leaflet(W, FX, FY, Z, FX + Out * std::cos(A), FY + Out * std::sin(A), Z + 0.08 + 0.06 * Unit(Hash(Hs, 30 + B)), 0.15, Rgb(66, 86, 46), Rgb(98, 114, 64));
 							}
 							if (Pl % 2 == R) W.Bead(X, Y, 0.3 + 0.08 * Unit(Hash(Hs, 40)), 0.035, 0.07, Rgb(140, 132, 70), Rgb(108, 104, 60)); // (pods, or the mustard's flowers by the tint)
 						}
@@ -1303,11 +1369,11 @@ namespace LandScape
 						for (int R = 0; R < 2; ++R)
 						{
 							// (each ridge low and rounded, 3.6 m of it, its ends sunk so the lengths run on as one line; under
-							// the snow drifted level with it, only a soft grey line of earth and frost along the crest (no ledge
-							// to throw the low sun's shadow, the stubs held tall by the dressing), the stubs' rows what reads)
+							// the snow a soft white mound along it, its ends drawn out long and low (no ledge to throw the low
+							// sun's shadow; the art director, 23 November), the stubs' rows what reads)
 							const double Y = -0.3 + 0.6 * R;
 							const size_t First = M.Near.Points();
-							Ridge(W, 1.8, bWhite ? 0.022 : 0.1, bWhite ? 0.36 : 0.42, bWhite ? Rgb(146, 138, 126) : Rgb(70, 62, 52), bWhite ? Rgb(206, 210, 218) : Rgb(62, 55, 46), bWhite ? Rgb(236, 240, 246) : Rgb(58, 52, 44), true, 0.3);
+							Ridge(W, 1.8, bWhite ? 0.04 : 0.1, bWhite ? 0.52 : 0.42, bWhite ? Rgb(210, 214, 222) : Rgb(70, 62, 52), bWhite ? Rgb(220, 224, 231) : Rgb(62, 55, 46), bWhite ? Rgb(226, 230, 236) : Rgb(58, 52, 44), true, bWhite ? 0.7 : 0.3);
 							for (size_t P = First; P < M.Near.Points(); ++P) M.Near.Positions[3 * P + 1] = static_cast<float>(M.Near.Positions[3 * P + 1] + Y);
 							for (int H = 0; H < 12; ++H)
 							{
@@ -1317,7 +1383,7 @@ namespace LandScape
 								{
 									// (a stub from the crest, standing a hand or more over it)
 									const double A = 2.0 * Pi * (B + Unit(Hash(Hs, 2, B))) / 3.0, Tall = 0.2 + 0.08 * Unit(Hash(Hs, 3, B));
-									const double Foot = bWhite ? 0.015 : 0.07;
+									const double Foot = bWhite ? 0.03 : 0.07;
 									W.Blade(X, Y, Foot, X + 0.025 * std::cos(A), Y + 0.025 * std::sin(A), Tall + Foot - 0.07, 0.02, Rgb(118, 104, 74), Rgb(170, 152, 108));
 								}
 							}
@@ -1374,6 +1440,7 @@ namespace LandScape
 			{
 				switch (K)
 				{
+				case KPoplar: return bBare ? (SnowLying > 0.25 ? "PoplarSnowBare" : "PoplarBare") : "PoplarLeaf";
 				case KWillow: return "Willow";
 				case KPine: return "HillPine";
 				case KHouse: return "NorthHouse";
@@ -1392,10 +1459,10 @@ namespace LandScape
 				default: return nullptr;
 				}
 			}
-			bool KitBuilt(int K) const override { return K >= KRidge && K <= KCave; }
+			bool KitBuilt(int K) const override { return K == KPoplar || (K >= KRidge && K <= KCave); }
 			void KitPlain(int K, LandField::BaseMesh& M) const override
 			{
-				if (K < KRidge || K > KCave)
+				if (K != KPoplar && (K < KRidge || K > KCave))
 				{
 					Region::KitPlain(K, M);
 					return;
@@ -1404,25 +1471,29 @@ namespace LandScape
 				M.Far = LandField::Mesh();
 				switch (K)
 				{
+				case KPoplar:
+					PoplarMesh(M);
+					break;
 				case KRidge:
 				case KRidgeShort:
 				{
 					// the balk between two strips as a low ridge, its crest a beaten path (the art director, 23 November: the
-					// strips' edges crisp from 30 m up): grassed in the summer, dust in the dry months; under the snow its
-					// flanks white, its crest dark
+					// strips' edges crisp and unbroken from 30 m up): low and broad, grassed in the summer (the clutter's
+					// grass through it near), dust in the dry months, each stretch its own shade; its lengths' ends barely
+					// sunk, so they run on as one line; under the snow a soft white mound, its crest a shade greyer
 					const bool bSnow = SnowLying > 0.25;
 					const Tone Dust = Mixed(Soil(), Rgb(160, 142, 106), bManchuria ? 0.3 : 0.5);
-					const Tone Crest = bSnow ? Rgb(98, 90, 74) : Mixed(Dust, Rgb(112, 118, 74), 0.5 * Green);
-					const Tone Flank = bSnow ? Rgb(224, 228, 234) : Mixed(Varied(Dust, 0.86, 0.0), Rgb(96, 108, 60), 0.8 * Green);
-					const Tone Foot = bSnow ? Rgb(230, 234, 240) : Mixed(Varied(Soil(), 0.85, 0.0), Rgb(92, 104, 58), 0.5 * Green);
+					const Tone Crest = bSnow ? Rgb(204, 208, 216) : Mixed(Dust, Rgb(112, 118, 74), 0.5 * Green);
+					const Tone Flank = bSnow ? Rgb(218, 222, 229) : Mixed(Varied(Dust, 0.86, 0.0), Rgb(96, 108, 60), 0.8 * Green);
+					const Tone Foot = bSnow ? Rgb(226, 230, 236) : Mixed(Varied(Soil(), 0.85, 0.0), Rgb(92, 104, 58), 0.5 * Green);
 					const double Half = 0.5 * (K == KRidge ? RidgeLong : RidgeShort);
 					{
 						Writer W(M.Near);
-						Ridge(W, Half, 0.2, 0.6, Crest, Flank, Foot, true, 0.6);
+						Ridge(W, Half, bSnow ? 0.14 : 0.12, bSnow ? 0.95 : 0.8, Crest, Flank, Foot, true, 0.15, K == KRidge ? 8 : 3);
 					}
 					{
 						Writer W(M.Far);
-						Ridge(W, Half, 0.22, 0.75, Crest, Flank, Foot, false, 0.0);
+						Ridge(W, Half, 0.14, 0.9, Crest, Flank, Foot, bSnow, 0.0);
 					}
 					M.FarFrom = 50.0f;
 					M.Radius = static_cast<float>(Half);
@@ -1471,18 +1542,22 @@ namespace LandScape
 					// the breastwork and its merlons along the outer edge; the lip inside
 					const Tone Top = Varied(C, 1.04, 0.0);
 					W.Box(0.0, -T + 0.2, Z1 + 0.27, H, 0.2, 0.27, 0.0, Top);
-					const int N = std::max(1, static_cast<int>(std::lround(Long / 1.2)));
-					for (int K = 0; K < N; ++K) W.Box(-H + (K + 0.5) * Long / N, -T + 0.21, Z1 + 0.54 + 0.22, 0.32, 0.21, 0.22, 0.0, Top);
+					const int N = std::max(1, static_cast<int>(std::lround(Long / 1.6)));
+					for (int K = 0; K < N; ++K) W.Box(-H + (K + 0.5) * Long / N, -T + 0.23, Z1 + 0.54 + 0.32, 0.42, 0.23, 0.32, 0.0, Top);
 					W.Box(0.0, T - 0.1, Z1 + 0.12, H, 0.1, 0.12, 0.0, Varied(C, 0.94, 0.0));
 					if (!bNear) continue;
-					// the putlog holes in their rows on the outside (each face's own place on the batter)
-					for (const double Z : { 0.75, 1.55, 2.35 })
+					// the putlog holes along the boards' courses on the outside, each where its beam went, many filled or
+					// weathered away (no even grid; the art director, 23 November)
+					for (const double Z0h : { 0.75, 1.55, 2.35 })
 					{
-						const double Y = -(B + (T - B) * (Z - Z0) / (Z1 - Z0)) - 0.012;
 						const int Holes = std::max(1, static_cast<int>(std::lround(Long)));
 						for (int K = 0; K < Holes; ++K)
 						{
-							const double X = -H + (K + 0.5) * Long / Holes + (Z > 1.0 && Z < 2.0 ? 0.25 : 0.0);
+							const uint64_t Hh = Hash(S ^ 0x9071, static_cast<uint64_t>(K), static_cast<uint64_t>(Z0h * 100.0));
+							if (Unit(Hh) < 0.45) continue;
+							const double Z = Z0h + 0.1 * (Unit(Hash(Hh, 1)) - 0.5);
+							const double Y = -(B + (T - B) * (Z - Z0) / (Z1 - Z0)) - 0.012;
+							const double X = -H + (K + 0.5) * Long / Holes + 0.36 * (Unit(Hash(Hh, 2)) - 0.5);
 							const double A[3] = { X - 0.06, Y, Z - 0.06 }, Bq[3] = { X + 0.06, Y, Z - 0.06 }, Cq[3] = { X + 0.06, Y, Z + 0.06 }, D[3] = { X - 0.06, Y, Z + 0.06 };
 							Quad(W, A, Bq, Cq, D, Rgb(72, 60, 46));
 						}
@@ -1578,37 +1653,84 @@ namespace LandScape
 				{
 					const bool bNear = Lv == 0;
 					Writer W(bNear ? M.Near : M.Far);
-					// the bank: its face cut near upright, in the spade's layers; its top grassed; its sides
-					Rammed(W, H, 0.0, -H, 0.0, H, -0.05, -H, -0.05, Z0, Z1, bNear ? 0.55 : 2.0, Face, 0xCA71);
+					// the bank: its face cut upright, in the spade's layers, round its three arches (the arches cut straight
+					// into it, the homes' fronts set back in them; the art director, 23 November); its top grassed; its sides
+					const double R = 1.7, Spring = 2.5, Crown = Spring + R, Deep = 0.6, Xs[3] = { -6.6, 0.0, 6.6 };
+					const double Lay = bNear ? 0.55 : 2.0;
+					Rammed(W, H, 0.0, -H, 0.0, H, 0.0, -H, 0.0, Crown, Z1, Lay, Face, 0xCA71);
+					Rammed(W, H, 0.0, -H, 0.0, H, 0.0, -H, 0.0, Z0, 0.0, Lay, Face, 0xCA74);
+					for (int K = 0; K <= 3; ++K)
 					{
-						const double A[3] = { -H, -0.05, Z1 }, B[3] = { H, -0.05, Z1 }, C[3] = { H, -Back, Z1 }, D[3] = { -H, -Back, Z1 };
+						// (the piers between the arches and at the ends)
+						const double A = K == 0 ? -H : Xs[K - 1] + R, B = K == 3 ? H : Xs[K] - R;
+						Rammed(W, B, 0.0, A, 0.0, B, 0.0, A, 0.0, 0.0, Crown, Lay, Face, 0xCA80 + static_cast<uint64_t>(K));
+					}
+					auto Flat = [&W](const double (&P)[3], const double (&Q)[3], const double (&Rr)[3], double NX, double NY, double NZ, const Tone& C) {
+						// (a triangle turned to face its normal)
+						const double UX = Q[0] - P[0], UY = Q[1] - P[1], UZ = Q[2] - P[2], VX = Rr[0] - P[0], VY = Rr[1] - P[1], VZ = Rr[2] - P[2];
+						const bool bFlip = (UY * VZ - UZ * VY) * NX + (UZ * VX - UX * VZ) * NY + (UX * VY - UY * VX) * NZ < 0.0;
+						const uint32_t I0 = W.Vert(P[0], P[1], P[2], NX, NY, NZ, C), I1 = W.Vert(Q[0], Q[1], Q[2], NX, NY, NZ, C), I2 = W.Vert(Rr[0], Rr[1], Rr[2], NX, NY, NZ, C);
+						if (bFlip) W.Tri(I0, I2, I1);
+						else W.Tri(I0, I1, I2);
+					};
+					const Tone Reveal = Rgb(146, 126, 94);
+					constexpr int Steps = 8;
+					for (const double X : Xs)
+					{
+						// the spandrels over each arch, the face's own
+						for (const double Sd : { -1.0, 1.0 })
+						{
+							const double C[3] = { X + Sd * R, 0.0, Crown };
+							for (int K = 0; K < Steps; ++K)
+							{
+								const double T0 = 0.5 * Pi * K / Steps, T1 = 0.5 * Pi * (K + 1) / Steps;
+								const double P0[3] = { X + Sd * R * std::cos(T0), 0.0, Spring + R * std::sin(T0) };
+								const double P1[3] = { X + Sd * R * std::cos(T1), 0.0, Spring + R * std::sin(T1) };
+								Flat(C, P0, P1, 0.0, 1.0, 0.0, Varied(Face, 0.98, 0.0));
+							}
+						}
+						// its reveals: the jambs and the arch's soffit, cut back to the front
+						for (const double Sd : { -1.0, 1.0 })
+						{
+							const double A[3] = { X + Sd * R, 0.0, 0.0 }, B[3] = { X + Sd * R, -Deep, 0.0 }, C[3] = { X + Sd * R, -Deep, Spring }, D[3] = { X + Sd * R, 0.0, Spring };
+							Flat(A, B, C, -Sd, 0.0, 0.0, Reveal);
+							Flat(A, C, D, -Sd, 0.0, 0.0, Reveal);
+						}
+						for (int K = 0; K < 2 * Steps; ++K)
+						{
+							const double T0 = Pi * K / (2 * Steps), T1 = Pi * (K + 1) / (2 * Steps), TM = 0.5 * (T0 + T1);
+							const double A[3] = { X + R * std::cos(T0), 0.0, Spring + R * std::sin(T0) }, B[3] = { X + R * std::cos(T1), 0.0, Spring + R * std::sin(T1) };
+							const double C[3] = { X + R * std::cos(T1), -Deep, Spring + R * std::sin(T1) }, D[3] = { X + R * std::cos(T0), -Deep, Spring + R * std::sin(T0) };
+							Flat(A, B, C, -std::cos(TM), 0.0, -std::sin(TM), Varied(Reveal, 0.85, 0.0));
+							Flat(A, C, D, -std::cos(TM), 0.0, -std::sin(TM), Varied(Reveal, 0.85, 0.0));
+						}
+						// a small eave of grey tiles over each arch
+						W.Box(X, 0.12, Crown + 0.38, R + 0.55, 0.16, 0.06, 0.0, Rgb(88, 88, 90));
+					}
+					{
+						const double A[3] = { -H, 0.0, Z1 }, B[3] = { H, 0.0, Z1 }, C[3] = { H, -Back, Z1 }, D[3] = { -H, -Back, Z1 };
 						Quad(W, D, C, B, A, Top);
 					}
-					Rammed(W, -H, 0.0, -H, -Back, -H, -0.05, -H, -Back, Z0, Z1, 2.0, Varied(Face, 0.92, 0.0), 0xCA72);
-					Rammed(W, H, -Back, H, 0.0, H, -Back, H, -0.05, Z0, Z1, 2.0, Varied(Face, 0.92, 0.0), 0xCA73);
-					// the eave: grey tiles along the face over the arches
-					W.Box(0.0, 0.25, 5.05, H - 0.4, 0.3, 0.1, 0.0, Rgb(88, 88, 90));
-					for (int K = 0; K < 3; ++K)
+					Rammed(W, -H, 0.0, -H, -Back, -H, 0.0, -H, -Back, Z0, Z1, 2.0, Varied(Face, 0.92, 0.0), 0xCA72);
+					Rammed(W, H, -Back, H, 0.0, H, -Back, H, 0.0, Z0, Z1, 2.0, Varied(Face, 0.92, 0.0), 0xCA73);
+					for (const double X : Xs)
 					{
-						const double X = -6.6 + 6.6 * K, R = 1.7, Spring = 2.5;
-						// the surround: brick or smoothed loess, a little proud of the face
-						Panel(W, X - R - 0.3, X + R + 0.3, 0.04, 0.0, Spring, Rgb(150, 128, 96));
-						Arch(W, X, 0.04, Spring, R + 0.3, 10, Rgb(150, 128, 96));
-						// the front under the arch: timber below, the lattice's paper in the arch
-						Panel(W, X - R, X + R, 0.07, 0.0, Spring, Rgb(118, 86, 58));
-						Arch(W, X, 0.07, Spring, R, 10, Rgb(214, 204, 174));
+						const double Y0 = -Deep;
+						// the front set back in the arch: timber below, the lattice's paper in the arch
+						Panel(W, X - R, X + R, Y0, 0.0, Spring, Rgb(118, 86, 58));
+						Arch(W, X, Y0, Spring, R, 10, Rgb(214, 204, 174));
 						// the door, the windows either side of it
-						Panel(W, X - 0.5, X + 0.5, 0.1, 0.0, 2.05, Rgb(60, 44, 34));
-						Panel(W, X - 1.45, X - 0.75, 0.1, 1.0, 2.0, Rgb(206, 196, 166));
-						Panel(W, X + 0.75, X + 1.45, 0.1, 1.0, 2.0, Rgb(206, 196, 166));
+						Panel(W, X - 0.5, X + 0.5, Y0 + 0.03, 0.0, 2.05, Rgb(60, 44, 34));
+						Panel(W, X - 1.45, X - 0.75, Y0 + 0.03, 1.0, 2.0, Rgb(206, 196, 166));
+						Panel(W, X + 0.75, X + 1.45, Y0 + 0.03, 1.0, 2.0, Rgb(206, 196, 166));
 						if (!bNear) continue;
 						// the lattice's bars: up the arch, across it, across the windows
 						const Tone Bar = Rgb(80, 58, 40);
-						for (const double BX : { -1.0, -0.33, 0.33, 1.0 }) Panel(W, X + BX - 0.035, X + BX + 0.035, 0.1, Spring, Spring + std::sqrt(std::max(0.0, R * R - BX * BX)) - 0.05, Bar);
-						Panel(W, X - R + 0.1, X + R - 0.1, 0.1, Spring + 0.7, Spring + 0.76, Bar);
-						Panel(W, X - R, X + R, 0.1, Spring - 0.05, Spring + 0.04, Bar);
-						for (const double SX : { -1.1, 1.1 }) Panel(W, X + SX - 0.03, X + SX + 0.03, 0.12, 1.0, 2.0, Bar);
-						for (const double SX : { -1.1, 1.1 }) Panel(W, X + SX - 0.35, X + SX + 0.35, 0.12, 1.47, 1.53, Bar);
+						for (const double BX : { -1.0, -0.33, 0.33, 1.0 }) Panel(W, X + BX - 0.035, X + BX + 0.035, Y0 + 0.03, Spring, Spring + std::sqrt(std::max(0.0, R * R - BX * BX)) - 0.05, Bar);
+						Panel(W, X - R + 0.1, X + R - 0.1, Y0 + 0.03, Spring + 0.7, Spring + 0.76, Bar);
+						Panel(W, X - R, X + R, Y0 + 0.03, Spring - 0.05, Spring + 0.04, Bar);
+						for (const double SX : { -1.1, 1.1 }) Panel(W, X + SX - 0.03, X + SX + 0.03, Y0 + 0.05, 1.0, 2.0, Bar);
+						for (const double SX : { -1.1, 1.1 }) Panel(W, X + SX - 0.35, X + SX + 0.35, Y0 + 0.05, 1.47, 1.53, Bar);
 					}
 				}
 				M.FarFrom = 400.0f;
@@ -1627,10 +1749,10 @@ namespace LandScape
 				switch (K)
 				{
 				case KPoplar:
-					// (its near mesh from 60 m, not 90: the plain's poplars stand in their hundreds along the tracks)
+					// (its near mesh from 110 m: the plain's poplars stand in their hundreds along the tracks)
 					M.bTree = true;
 					M.Paint = 1;
-					M.FarFrom = 60.0f;
+					M.FarFrom = 110.0f;
 					Sight(0.6f, 0.4f, 0.5f, 0.3f);
 					break;
 				case KWillow:
@@ -1985,6 +2107,21 @@ namespace LandScape
 					double WSum = 0.0;
 					int WN = 0;
 					auto Lay = [&]() {
+						// (the contour's corners rounded off twice over, so the bank curves along the hillside as the
+						// terraces do, no straight boxes; the art director, 23 November)
+						for (int It = 0; It < 2 && Line.size() >= 3; ++It)
+						{
+							std::vector<std::pair<double, double>> Sm{ Line.front() };
+							for (size_t K = 0; K + 1 < Line.size(); ++K)
+							{
+								const auto& A = Line[K];
+								const auto& Bp = Line[K + 1];
+								Sm.push_back({ 0.75 * A.first + 0.25 * Bp.first, 0.75 * A.second + 0.25 * Bp.second });
+								Sm.push_back({ 0.25 * A.first + 0.75 * Bp.first, 0.25 * A.second + 0.75 * Bp.second });
+							}
+							Sm.push_back(Line.back());
+							Line.swap(Sm);
+						}
 						if (Line.size() >= 4 && WN > 0) H.Wall(Line, 0.3 + (WSum / WN) * Rise * (1.0 - TreadFall), 0.8);
 						Line.clear();
 						WSum = 0.0;
@@ -2019,12 +2156,143 @@ namespace LandScape
 
 			/** A poplar: LandField's elm drawn tall and narrow (the art director, 23 November: a column of fine leaves, soft
 			 * at its edges; bare in the north's winter, its branches up its stem), 19 to 26 m; yellow in October. */
+			/**
+			 * The poplar, 20 m high (scaled to its own where it is planted; the art director, 23 November): its pale grey
+			 * trunk to near its tip; in leaf a soft column of small leaf clusters from a quarter of the way up straight to
+			 * the top, rounded in at its foot, widest a third of the way up, drawn to a point, its clusters lit as one
+			 * rounded mass; bare, its branches held close up the trunk and a fine grey mass of twigs along them. Far off the
+			 * same column whole, its edge stippled soft; bare, the twigs' grey haze.
+			 */
+			void PoplarMesh(LandField::BaseMesh& M) const
+			{
+				constexpr double Tall = 20.0, Foot = 0.24 * Tall, Wide = 1.75;
+				auto Rad = [](double V) { return Wide * std::sqrt(Smooth(0.0, 0.16, V)) * std::pow(std::max(0.0, 1.0 - std::pow(V, 2.3)), 0.8); };
+				auto ZOf = [](double V) { return Foot + V * (Tall - Foot); };
+				const Tone Bark = Rgb(158, 156, 146), BarkFoot = Rgb(112, 108, 98), Twig = Rgb(136, 132, 128), TwigTip = Rgb(160, 156, 152);
+				Writer W(M.Near);
+				const double TP[4][3] = { { 0.0, 0.0, -0.3 }, { 0.0, 0.0, 0.3 * Tall }, { 0.0, 0.0, 0.65 * Tall }, { 0.0, 0.0, 0.93 * Tall } };
+				const double TR[4] = { 0.3, 0.2, 0.12, 0.03 };
+				Spindle(W, TP, TR, BarkFoot, Bark);
+				if (!bBare)
+				{
+					// the leaf column: a dark heart of shaded leaves (so what shows between the clusters is leaf, not sky), and
+					// clusters spiralled up it, most at its skin, some within (darker), each two small leaves of a few
+					// hand-widths crossed, their normals the column's, so the whole lights as one rounded mass
+					Column(W, Rad, ZOf, 0.7, [](double V, double U) { return Mixed(Rgb(34, 48, 24), Rgb(52, 70, 34), Clamp01(0.3 + 0.5 * V + 0.2 * U)); }, 0x9075);
+					constexpr int N = 560;
+					for (int I = 0; I < N; ++I)
+					{
+						const uint64_t Hs = Hash(0x9070, static_cast<uint64_t>(I));
+						const double V = Clamp01((I + Unit(Hash(Hs, 1))) / N * 1.02 - 0.01);
+						const double A = 2.39996 * I + 0.4 * (Unit(Hash(Hs, 2)) - 0.5);
+						const bool bIn = Unit(Hash(Hs, 3)) < 0.16;
+						const double R0 = Rad(V), Fr = bIn ? 0.35 + 0.35 * Unit(Hash(Hs, 4)) : 0.78 + 0.26 * Unit(Hash(Hs, 4));
+						const double Ca = std::cos(A), Sa = std::sin(A);
+						const double CX = Fr * R0 * Ca, CY = Fr * R0 * Sa, CZ = ZOf(V) + 0.3 * (Unit(Hash(Hs, 5)) - 0.5);
+						double NX = Ca, NY = Sa, NZ = 0.3 + 0.6 * (V - 0.5);
+						const double NN = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+						NX /= NN; NY /= NN; NZ /= NN;
+						const double Light = Clamp01(0.3 + 0.45 * V + 0.3 * Unit(Hash(Hs, 6))) * (bIn ? 0.55 : 1.0);
+						const Tone C = Unit(Hash(Hs, 7)) < 0.08 ? Rgb(112, 124, 84) : Mixed(Rgb(44, 62, 30), Rgb(92, 112, 54), Light);
+						const double Sz = (0.3 + 0.16 * Unit(Hash(Hs, 8))) * (0.65 + 0.35 * R0 / Wide);
+						// (its two leaves: across the column and up it, each turned a little)
+						const double UX = -Sa, UY = Ca, UZ = 0.0;
+						const double VX = NY * UZ - NZ * UY, VY = NZ * UX - NX * UZ, VZ = NX * UY - NY * UX;
+						for (int L = 0; L < 2; ++L)
+						{
+							const double Th = (L == 0 ? 0.0 : 0.5 * Pi) + 0.7 * (Unit(Hash(Hs, 10 + L)) - 0.5), Ct = std::cos(Th), St = std::sin(Th);
+							const double AX = Ct * UX + St * VX, AY = Ct * UY + St * VY, AZ = Ct * UZ + St * VZ;
+							const double BX = NY * AZ - NZ * AY, BY = NZ * AX - NX * AZ, BZ = NX * AY - NY * AX;
+							const double Out = 0.04 * L, PX = CX + Out * NX, PY = CY + Out * NY, PZ = CZ + Out * NZ;
+							const Tone CL = Varied(C, 0.94 + 0.12 * Unit(Hash(Hs, 20 + L)), 0.0);
+							const uint32_t P0 = W.Vert(PX + Sz * AX, PY + Sz * AY, PZ + Sz * AZ, NX, NY, NZ, CL);
+							const uint32_t P1 = W.Vert(PX + 0.62 * Sz * BX, PY + 0.62 * Sz * BY, PZ + 0.62 * Sz * BZ, NX, NY, NZ, CL);
+							const uint32_t P2 = W.Vert(PX - Sz * AX, PY - Sz * AY, PZ - Sz * AZ, NX, NY, NZ, CL);
+							const uint32_t P3 = W.Vert(PX - 0.62 * Sz * BX, PY - 0.62 * Sz * BY, PZ - 0.62 * Sz * BZ, NX, NY, NZ, CL);
+							W.Tri(P0, P1, P2);
+							W.Tri(P0, P2, P3);
+						}
+					}
+				}
+				else
+				{
+					// bare: its branches from the trunk all the way up, steeply up and close in (the column's own outline),
+					// and their fine twigs, grey
+					constexpr int Limbs = 30;
+					for (int I = 0; I < Limbs; ++I)
+					{
+						const uint64_t Hs = Hash(0x9072, static_cast<uint64_t>(I));
+						const double V0 = Clamp01((I + Unit(Hash(Hs, 1))) / Limbs * 0.9 - 0.04);
+						const double A = 2.39996 * I, Ca = std::cos(A), Sa = std::sin(A);
+						const double Z0 = ZOf(V0) - 0.6, Up = 4.0 + 5.0 * (1.0 - V0) * Unit(Hash(Hs, 2));
+						const double V1 = Clamp01((Z0 + Up - Foot) / (Tall - Foot)), Out = 0.85 * Rad(V1);
+						const double EX = Out * Ca, EY = Out * Sa, EZ = std::min(Tall - 0.3, Z0 + Up);
+						W.Blade(0.0, 0.0, Z0, EX, EY, EZ, 0.09, Twig, TwigTip);
+						for (int T = 0; T < 9; ++T)
+						{
+							const uint64_t Ht = Hash(Hs, 30 + T);
+							const double F = 0.2 + 0.8 * Unit(Hash(Ht, 1));
+							const double SX = F * EX, SY = F * EY, SZ = Z0 + F * (EZ - Z0);
+							const double TA = A + 1.6 * (Unit(Hash(Ht, 2)) - 0.5), Ln = 0.9 + 1.1 * Unit(Hash(Ht, 3));
+							const double VT = Clamp01((SZ - Foot) / (Tall - Foot)), Lim = std::max(0.2, Rad(VT) - std::hypot(SX, SY));
+							const double Rch = std::min(0.45 * Ln, Lim);
+							W.Blade(SX, SY, SZ, SX + Rch * std::cos(TA), SY + Rch * std::sin(TA), SZ + 0.85 * Ln, 0.035, Twig, TwigTip);
+						}
+					}
+				}
+				// far off: the column whole, a ring of eight every few metres, each point pushed in or out a little so its
+				// edge is soft, the trunk under it; bare, narrower, the twigs' grey haze
+				Writer Fw(M.Far);
+				const double FP[4][3] = { { 0.0, 0.0, -0.3 }, { 0.0, 0.0, 0.5 * Foot }, { 0.0, 0.0, Foot }, { 0.0, 0.0, Foot + 1.0 } };
+				const double FR[4] = { 0.3, 0.24, 0.2, 0.18 };
+				Spindle(Fw, FP, FR, BarkFoot, Bark);
+				if (!bBare)
+					Column(Fw, Rad, ZOf, 1.0, [](double V, double U) { return Mixed(Rgb(46, 64, 31), Rgb(84, 104, 50), Clamp01(0.35 + 0.5 * V) * (0.9 + 0.2 * U)); }, 0x9073);
+				else
+					for (int I = 0; I < 12; ++I)
+					{
+						// (bare: its limbs as a fan of thin grey strokes up the column's outline, the sky through them)
+						const double V0 = 0.02 + 0.07 * (I % 4), A = 2.39996 * I, V1 = 0.55 + 0.4 * Unit(Hash(0x9076, static_cast<uint64_t>(I)));
+						const double Out = 0.8 * Rad(0.5 * V1);
+						Fw.Blade(0.0, 0.0, ZOf(V0), Out * std::cos(A), Out * std::sin(A), ZOf(V1), 0.32, Twig, Mixed(Twig, Rgb(170, 166, 168), 0.4));
+					}
+			}
+
+			/** A column round the tree's axis: a ring of eight every few metres to Rad and ZOf (V 0 to 1), each point pushed
+			 * in or out a little so its edge is soft, drawn to a point; Share of the radius; its colour by V and a jitter. */
+			template <typename RadF, typename ZF, typename ColF>
+			static void Column(Writer& W, RadF Rad, ZF ZOf, double Share, ColF Col, uint64_t Salt)
+			{
+				constexpr int Rings = 9, Round = 8;
+				const double Vs[Rings] = { 0.0, 0.06, 0.16, 0.3, 0.45, 0.6, 0.74, 0.87, 0.96 };
+				uint32_t Id[Rings][Round];
+				for (int K = 0; K < Rings; ++K)
+					for (int J = 0; J < Round; ++J)
+					{
+						const double V = Vs[K], A = 2.0 * Pi * (J + 0.5 * (K % 2)) / Round, Ca = std::cos(A), Sa = std::sin(A);
+						const double Push = 0.86 + 0.24 * Unit(Hash(Salt, static_cast<uint64_t>(K * Round + J)));
+						const double R0 = Share * Rad(std::max(0.03, V)) * Push;
+						const double NZ = 0.25 + 0.5 * (V - 0.5), NN = std::sqrt(1.0 + NZ * NZ);
+						Id[K][J] = W.Vert(R0 * Ca, R0 * Sa, ZOf(V), Ca / NN, Sa / NN, NZ / NN, Col(V, Unit(Hash(Salt ^ 0x77, static_cast<uint64_t>(K * Round + J)))));
+					}
+				const uint32_t Apex = W.Vert(0.0, 0.0, ZOf(1.0), 0.0, 0.0, 1.0, Col(1.0, 0.5));
+				for (int K = 0; K + 1 < Rings; ++K)
+					for (int J = 0; J < Round; ++J)
+					{
+						const int J1 = (J + 1) % Round;
+						W.Tri(Id[K][J], Id[K][J1], Id[K + 1][J1]);
+						W.Tri(Id[K][J], Id[K + 1][J1], Id[K + 1][J]);
+					}
+				for (int J = 0; J < Round; ++J) W.Tri(Id[Rings - 1][J], Id[Rings - 1][(J + 1) % Round], Apex);
+			}
+
 			void Poplar(Host& H, double X, double Y, double Room, double Yaw, double USize) const
 			{
 				if (!H.Free(X, Y, Room)) return;
 				const double High = 19.0 + 7.0 * Clamp01(USize);
 				const LandField::Rgb8 Tn = Month == 10 ? Tint(1.3, 1.16, 0.66) : Tint(0.96, 1.0, 0.94);
-				H.Plant(LandField::Base::Elm, X, Y, Yaw, High / 18.0 * 0.42, High / 18.0, Tn);
+				const double Fat = 0.9 + 0.2 * Unit(Hash(static_cast<uint64_t>(std::llround(X * 3.0)), static_cast<uint64_t>(std::llround(Y * 3.0)), 0x9071));
+				H.Plant(KitOf(KPoplar), X, Y, Yaw, High / 20.0 * Fat, High / 20.0, Tn);
 			}
 
 			/**
@@ -2245,7 +2513,7 @@ namespace LandScape
 			std::vector<Exit> Exits;
 			std::vector<Cave> Caves;
 			int Month = 7;
-			bool bIndia = false, bManchuria = false, bHills = false, bTownWall = false, bLoess = false, bHardpan = false;
+			bool bIndia = false, bManchuria = false, bHills = false, bTownWall = false, bLoess = false, bHardpan = false, bBare = false;
 			double Green = 1.0, MeanZ = 0.0, SnowLying = 0.0;
 			double WallX = 0.0, WallY = 0.0, WallHalf = 0.0, WallTurn = 0.0;
 		};
