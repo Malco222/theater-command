@@ -74,7 +74,14 @@ namespace LandBail
 		double Speed = 4.5;       // metres a second on the ground
 		double Crawl = 0.0;       // a wounded man's crawl after he falls, metres
 		int Fall = 0;             // which fall: 0 forward, 1 back
+		/** The soldiers' bail clips (Wreck::bClips): out of the hatch in bail_climb_out, off her hull in bail_jump_down,
+		 * a man on fire in burning_run and burning_fall_roll; his way out the clips' length (OnGroundOf). */
+		bool bClips = false;
+		double Face = 0.0;        // with the clips: his facing as he climbs out (his right toward the side he drops from)
 	};
+
+	/** Life's seconds from his start out of the hatch to his feet on the ground (2.05 s; 3.53 s with the bail clips). */
+	double OnGroundOf(const Man& M);
 
 	struct Wreck
 	{
@@ -89,6 +96,10 @@ namespace LandBail
 		double Blast = -1.0;             // life's seconds after her kill her ammunition goes (-1 never)
 		bool bBurns = false;             // she burns (a man may come out on fire)
 		bool bUnderFire = true;          // the fight goes on round her (men in the open may be hit)
+		/** The soldiers' bail clips are in her crew's file (bail_climb_out, bail_jump_down, burning_run,
+		 * burning_fall_roll; labtrr 42bb946f): played in place of the infantry's stand_up, run and falls. False: as
+		 * before, the same crew to the last number. */
+		bool bClips = false;
 		/** 0 to 1: the enemy who can see her men in the open, 1 close and in sight (the scene's nearest living enemy),
 		 * toward 0 with none in sight. A runner's odds of being hit are 1 in 6 times it; a crawler's half that. */
 		double Threat = 1.0;
@@ -117,6 +128,9 @@ namespace LandBail
 		double Facing = 0.0; // radians, 0 north, clockwise
 		bool bOnFire = false;
 		bool bMoving = false;
+		/** Where his body is: At moved as the clip's own root moves (bail_climb_out, bail_jump_down, burning_fall_roll),
+		 * else At. For what goes with him: a burning man's flames, the camera. */
+		V3 Root;
 	};
 	Pose PoseAt(const Man& M, double Since, const std::function<double(double, double)>& Ground);
 

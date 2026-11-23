@@ -527,11 +527,24 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
   asked of the soldiers' thread; until they come these stand in.
+- **The soldiers' bail clips** (labtrr 42bb946f, in all 19 files with a `bail_clips` block). Where a crew's file has all
+  four (`LandBail::Wreck::bClips`), he climbs out in `bail_climb_out` (1.5 s, his boots 0.92 m under the hatch's point,
+  facing so the clip's step to his right is the side he drops from), runs along her deck to its edge, and drops in
+  `bail_jump_down` (off at 0.40 s, 1.70 m out and 1.5 m down, her own height made up between 0.40 and 1.05 s); a man on
+  fire runs in `burning_run` (its stride, 7.35 m a loop, by the ground he covers) and falls in `burning_fall_roll`,
+  living or not. The clips' roots move him: his seat is moved on where each ends, `Crowd::Ride::bOwnRoot` keeps the
+  root the new clip's through the blend, and `Pose::Root` is where his body is (a burning man's flames go with it). The
+  clips take 1.48 s longer to the ground, so each man starts up that much sooner (not before 0.3 s after her kill) and
+  every man goes as he did without them (the test, run both ways: the same tallies). Without the clips, the same crew
+  to the last number. Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
+  `/mnt/project-files/battle-fx/bail-out/bail-clips-r1.jpg`). Not yet: the step down from her turret's roof to her
+  deck is the run's (it floats about 1 m down over 0.5 s); her roof's own height over the clip's 0.95 m (the soldiers'
+  note: a Panzer IV 0.82, a Sherman 1.07) is not made up.
 
 None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
 own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
 Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/land_bail/run.sh` plays every land way
-with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s; `LAND_BREW_WAIT=5.5,10` runs the kit's
+with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips; `LAND_BREW_WAIT=5.5,10` runs the kit's
 own test with the wait.
 
 The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the

@@ -14,6 +14,15 @@ namespace LandBail
 		// (his way out, life's seconds: up out of the hatch, along the deck to her edge, down to the ground)
 		constexpr double ClimbS = 1.0, StepS = 0.5, JumpS = 0.55, OnGroundS = ClimbS + StepS + JumpS;
 		constexpr double ProneS = 0.9; // (a crawler going down flat before he crawls; a wounded man as he falls)
+		// The soldiers' bail clips (labtrr 42bb946f, each file's bail_clips): bail_climb_out, 1.5 s, his boots 0.92 m
+		// under the hatch's point, up 0.95 m onto her roof, 0.47 m to his right and 0.10 m forward; along her deck at a
+		// run; bail_jump_down from her hull's edge facing out, off at 0.40 s, down 1.5 m and out 1.70 m at 1.05 s, into
+		// his first stride, 1.70 m out at its end, where the run takes him on; burning_run, in place, 7.35 m a 2.1 s loop; burning_fall_roll,
+		// 3.8 s, still from 3.3 s, his pelvis 0.95 m forward and 1.20 m to his right at the end.
+		constexpr double ClipClimbS = 1.5, ClipJumpS = 1.53, ClipOnGroundS = ClipClimbS + StepS + ClipJumpS;
+		constexpr double BootsUnder = 0.92, ClimbUp = 0.95, ClimbRight = 0.47, ClimbFwd = 0.10;
+		constexpr double JumpOff = 0.40, JumpDown = 1.05, JumpDrop = 1.5, JumpOut = 1.70;
+		constexpr double BurnStride = 7.35, BurnLoop = 2.1, RollStill = 3.3, RollFwd = 0.95, RollRight = 1.20;
 
 		/** Its own dice (splitmix64): the same wreck, the same crew. */
 		struct Dice
@@ -178,13 +187,18 @@ namespace LandBail
 		/** His time on his way, life's seconds since he reached the ground, his flinch at her blast taken out. */
 		double WayTime(const Man& M, double Since)
 		{
-			double T = Since - M.Out - OnGroundS;
+			double T = Since - M.Out - OnGroundOf(M);
 			if (M.FlinchAt >= 0.0 && Since > M.FlinchAt)
 			{
 				T -= std::min(Since - M.FlinchAt, M.FlinchS);
 			}
 			return T;
 		}
+	}
+
+	double OnGroundOf(const Man& M)
+	{
+		return M.bClips ? ClipOnGroundS : OnGroundS;
 	}
 
 	Crew Make(const Wreck& W)
@@ -277,7 +291,12 @@ namespace LandBail
 				M.Deck = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * (Half + 0.05), W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * (Half + 0.05), 0.0 };
 				const double DeckGround = Ground(M.Deck.X, M.Deck.Y);
 				M.Deck.Z = std::max(DeckGround + 0.8, std::min(M.Hatch.Z, DeckGround + 1.9));
-				M.Down = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * (Half + 1.1), W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * (Half + 1.1), 0.0 };
+				// (with the bail clips: where bail_jump_down lands him, 1.70 m out from her edge; and he climbs out facing
+				// her way or back from it, so that his right, the clip's way, is the side he drops from)
+				M.bClips = W.bClips;
+				M.Face = M.Side > 0 ? W.Heading : W.Heading + Pi;
+				const double Off = M.bClips ? Half + 0.05 + JumpOut : Half + 1.1;
+				M.Down = V3{ W.Middle.X + Fwd.X * Along + Right.X * M.Side * Off, W.Middle.Y + Fwd.Y * Along + Right.Y * M.Side * Off, 0.0 };
 				M.Down.Z = Ground(M.Down.X, M.Down.Y);
 				M.Lee = M.Down;
 				if (M.To == "beside")
@@ -343,7 +362,13 @@ namespace LandBail
 				{
 					break; // (still inside when her ammunition goes: the rest of her crew are lost with her)
 				}
-				if (W.Blast >= 0.0 && M.Out + OnGroundS > W.Blast)
+				// (the bail clips take 1.48 s longer to the ground: he starts up out of her that much sooner, no sooner
+				// than 0.3 s after her kill, so each man is on the ground when he was without them, and goes as he did)
+				if (M.bClips)
+				{
+					M.Out = std::max(0.3, M.Out - (ClipOnGroundS - OnGroundS));
+				}
+				if (W.Blast >= 0.0 && M.Out + OnGroundOf(M) > W.Blast)
 				{
 					M.How = End::Caught;
 					M.FallAt = W.Blast;
@@ -357,7 +382,7 @@ namespace LandBail
 					M.How = End::Burning;
 					M.Go = "run";
 					M.Speed = D.U(3.4, 4.4);
-					M.FallAt = M.Out + OnGroundS + D.U(2.0, 5.0);
+					M.FallAt = M.Out + OnGroundOf(M) + D.U(2.0, 5.0);
 					M.bLives = D.P(1.0 / 3.0);
 					M.FireOut = M.FallAt + (M.bLives ? D.U(2.5, 4.0) : D.U(10.0, 15.0));
 					M.Crawl = M.bLives ? D.U(0.4, 1.0) : 0.0;
@@ -374,7 +399,7 @@ namespace LandBail
 					if (Roll < Hit)
 					{
 						M.How = Roll < Shot ? End::Shot : End::Wounded;
-						M.FallAt = M.Out + OnGroundS + (M.Go == "crawl" ? ProneS : 0.0) + Run * D.U(0.2, 0.85);
+						M.FallAt = M.Out + OnGroundOf(M) + (M.Go == "crawl" ? ProneS : 0.0) + Run * D.U(0.2, 0.85);
 						M.Crawl = M.How == End::Wounded ? D.U(1.5, 6.0) : 0.0;
 					}
 				}
@@ -387,13 +412,13 @@ namespace LandBail
 		{
 			for (Man& M : Out.Men)
 			{
-				if (M.How == End::Caught || M.How == End::Burning || M.Out + OnGroundS > W.Blast || (M.FallAt >= 0.0 && M.FallAt <= W.Blast))
+				if (M.How == End::Caught || M.How == End::Burning || M.Out + OnGroundOf(M) > W.Blast || (M.FallAt >= 0.0 && M.FallAt <= W.Blast))
 				{
 					continue;
 				}
 				V3 Way;
 				const double Lead = M.Go == "crawl" ? ProneS : 0.0;
-				const V3 At = Legs(M).At(M.Speed * (W.Blast - M.Out - OnGroundS - Lead), Way);
+				const V3 At = Legs(M).At(M.Speed * (W.Blast - M.Out - OnGroundOf(M) - Lead), Way);
 				if (std::hypot(At.X - W.Middle.X, At.Y - W.Middle.Y) <= 15.0)
 				{
 					M.FlinchAt = W.Blast;
@@ -413,7 +438,7 @@ namespace LandBail
 			{
 				if (M.How == End::Safe && M.To == "beside")
 				{
-					M.BackAt = std::max(M.Out + OnGroundS + 2.0, Back + 0.7 * Nth++);
+					M.BackAt = std::max(M.Out + OnGroundOf(M) + 2.0, Back + 0.7 * Nth++);
 				}
 			}
 		}
@@ -440,7 +465,7 @@ namespace LandBail
 		return Out;
 	}
 
-	Pose PoseAt(const Man& M, double Since, const std::function<double(double, double)>& Ground)
+	static Pose PoseOn(const Man& M, double Since, const std::function<double(double, double)>& Ground)
 	{
 		Pose P;
 		const double T = Since - M.Out;
@@ -469,10 +494,51 @@ namespace LandBail
 			return At;
 		};
 		// (on his way out: up out of the hatch, along her deck, down to the ground)
-		auto Climbing = [&](double Tc, Pose& Q)
+		auto Climbing = [&](double Tc, Pose& Q, bool bClips)
 		{
 			Q.bShown = true;
 			Q.Facing = Out;
+			if (bClips)
+			{
+				// The soldiers' clips, their root moving him: up out of the hatch (his boots under its point, facing so
+				// his right is the side he drops from), at a run along her deck to its edge, and off it, landed by the
+				// jump's own fall where she is higher or lower than its 1.5 m.
+				const V3 FwdF{ std::sin(M.Face), std::cos(M.Face), 0.0 }, RightF{ std::cos(M.Face), -std::sin(M.Face), 0.0 };
+				const V3 Up{ M.Hatch.X + RightF.X * ClimbRight + FwdF.X * ClimbFwd, M.Hatch.Y + RightF.Y * ClimbRight + FwdF.Y * ClimbFwd, M.Hatch.Z - BootsUnder + ClimbUp };
+				if (Tc < ClipClimbS)
+				{
+					const double E = Ease(Tc / ClipClimbS);
+					Q.At = V3{ M.Hatch.X, M.Hatch.Y, M.Hatch.Z - BootsUnder };
+					Q.Facing = M.Face;
+					Q.Clip = "bail_climb_out";
+					Q.Time = Tc;
+					Q.Root = Lerp(Q.At, Up, E);
+				}
+				else if (Tc < ClipClimbS + StepS)
+				{
+					Q.At = Lerp(Up, M.Deck, Ease((Tc - ClipClimbS) / StepS));
+					Q.Facing = YawOf(M.Deck.X - Up.X, M.Deck.Y - Up.Y, Out);
+					Q.Clip = "run";
+					Q.Time = Tc - ClipClimbS;
+					Q.bMoving = true;
+					Q.Root = Q.At;
+				}
+				else
+				{
+					const double Tj = Tc - ClipClimbS - StepS;
+					const double Drop = M.Deck.Z - M.Down.Z;
+					const double Fit = std::clamp((Tj - JumpOff) / (JumpDown - JumpOff), 0.0, 1.0);
+					Q.At = V3{ M.Deck.X, M.Deck.Y, M.Deck.Z + (JumpDrop - Drop) * Fit };
+					Q.Facing = YawOf(M.Down.X - M.Deck.X, M.Down.Y - M.Deck.Y, Out);
+					Q.Clip = "bail_jump_down";
+					Q.Time = Tj;
+					Q.bMoving = true;
+					// (his body: out with the clip, 0.1 m by 0.40 s, 1.70 m at its end; down as it falls, 0.40 to 1.05 s)
+					const double Ahead = std::clamp((Tj - 0.3) / (ClipJumpS - 0.3), 0.0, 1.0);
+					Q.Root = V3{ M.Deck.X + (M.Down.X - M.Deck.X) * Ahead, M.Deck.Y + (M.Down.Y - M.Deck.Y) * Ahead, M.Deck.Z + (M.Down.Z - M.Deck.Z) * Ease(Fit) };
+				}
+				return;
+			}
 			if (Tc < ClimbS)
 			{
 				const double E = Ease(Tc / ClimbS);
@@ -496,13 +562,15 @@ namespace LandBail
 				Q.Time = Tc - ClimbS;
 				Q.bMoving = true;
 			}
+			Q.Root = Q.At;
 		};
 		P.bOnFire = M.How == End::Burning && Since < M.FireOut;
 		// Thrown down by her ammunition going, wherever he was on his way out: 2 to 5 m out from her, over an arc.
 		if (M.How == End::Caught && Since >= M.FallAt)
 		{
 			Pose Was;
-			Climbing(std::max(0.0, M.FallAt - M.Out), Was);
+			Climbing(std::max(0.0, M.FallAt - M.Out), Was, M.bClips);
+			Was.At = Was.Root; // (from where his body was: the clips' root moves him)
 			const double Dx = M.Down.X - M.Hatch.X, Dy = M.Down.Y - M.Hatch.Y;
 			const double Dl = std::max(1e-6, std::hypot(Dx, Dy));
 			const double Thrown = M.Thrown > 0.0 ? M.Thrown : 0.5 * Dl;
@@ -516,11 +584,12 @@ namespace LandBail
 			P.Facing = Out + Pi;
 			P.Clip = "die_back";
 			P.Time = Since - M.FallAt;
+			P.Root = P.At;
 			return P;
 		}
-		if (T < OnGroundS)
+		if (T < OnGroundOf(M))
 		{
-			Climbing(T, P);
+			Climbing(T, P, M.bClips);
 			return P;
 		}
 		const double Tg = WayTime(M, Since);
@@ -533,6 +602,19 @@ namespace LandBail
 			const V3 Fell = OnWay(WayTime(M, M.FallAt), Way);
 			const double Tf = Since - M.FallAt;
 			P.Facing = YawOf(Way.X, Way.Y, Go);
+			if (M.bClips && M.How == End::Burning)
+			{
+				// (the soldiers' roll: down and over to his right, his flames rolled out or burning on; still from 3.3 s,
+				// whether he lives or not, lying where it leaves him)
+				const double E = Ease(Tf / RollStill);
+				const double Fx = std::sin(P.Facing), Fy = std::cos(P.Facing);
+				P.At = Fell;
+				P.Clip = "burning_fall_roll";
+				P.Time = Tf;
+				P.Root = V3{ Fell.X + (Fx * RollFwd + Fy * RollRight) * E, Fell.Y + (Fy * RollFwd - Fx * RollRight) * E, 0.0 };
+				P.Root.Z = G(P.Root.X, P.Root.Y);
+				return P;
+			}
 			if ((M.How == End::Wounded || (M.How == End::Burning && M.bLives)) && Tf >= ProneS)
 			{
 				// (he crawls on a few metres, then lies writhing where he stopped; a man on fire who lives rolls a little
@@ -583,8 +665,9 @@ namespace LandBail
 				P.bShown = false; // (in again)
 				return P;
 			}
-			// (the way out played backwards: up onto her deck, along it, down into the hatch)
-			Climbing(OnGroundS - Tc, P);
+			// (the way out played backwards: up onto her deck, along it, down into the hatch; the infantry's, the bail
+			// clips being one way only)
+			Climbing(OnGroundS - Tc, P, false);
 			P.Facing = Out + Pi;
 			return P;
 		}
@@ -602,8 +685,13 @@ namespace LandBail
 			V3 Way;
 			P.At = OnWay(Tg, Way);
 			P.Facing = YawOf(Way.X, Way.Y, Go);
-			P.Clip = M.Go == "crawl" ? "crawl" : M.Go == "crouch" ? "advance" : M.How == End::Burning ? "flee" : "run";
+			P.Clip = M.Go == "crawl" ? "crawl" : M.Go == "crouch" ? "advance" : M.How == End::Burning ? (M.bClips ? "burning_run" : "flee") : "run";
 			P.Time = Tg - Lead;
+			if (M.bClips && M.How == End::Burning)
+			{
+				// (his stride the clip's: a loop for each 7.35 m he goes)
+				P.Time = std::clamp(M.Speed * (Tg - Lead), 0.0, Long) / BurnStride * BurnLoop;
+			}
 			P.bMoving = true;
 			if (M.How == End::Burning)
 			{
@@ -630,6 +718,17 @@ namespace LandBail
 		{
 			P.Clip = "go_prone";
 			P.Time = Tg - Arrive;
+		}
+		return P;
+	}
+
+	Pose PoseAt(const Man& M, double Since, const std::function<double(double, double)>& Ground)
+	{
+		Pose P = PoseOn(M, Since, Ground);
+		// (his body where the clip leaves it: At itself but for the clips whose root moves him)
+		if (P.Clip != "bail_climb_out" && P.Clip != "bail_jump_down" && P.Clip != "burning_fall_roll")
+		{
+			P.Root = P.At;
 		}
 		return P;
 	}
