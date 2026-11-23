@@ -1114,6 +1114,49 @@ int main(int argc, char** argv)
 		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.81 m (a 150's at six months is 0.8)");
 		if (bFreshTried && !bFreshLaid) Fault("scars: a fresh round's hole not laid after the old ones");
 	}
+	// The thrown soil's thin edge on the ground as drawn (pre-check's probe, 23 November: laid 2 mm over HeightAt's
+	// smooth height, a quarter of its points sank under the drawn ground's flat triangles on a slope's bend): holes laid
+	// as the game lays them (on HeightAt, painted by the ground's colour, lit by its normal, their soil on DrawnZ), each
+	// outer point at or over the drawn ground but inside a newer hole's cut, where that ground is cut away.
+	{
+		LandCrater::Field Edge;
+		Edge.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, 29u, [&Field](double X, double Y) { return Field.ColourAt(X, Y); });
+		Edge.Lit = [&Field](double X, double Y, double& NX, double& NY, double& NZ) { Field.DrawnUp(X, Y, NX, NY, NZ); };
+		Edge.Drawn = [&Field](double X, double Y) { return Field.DrawnZ(X, Y); };
+		Edge.Dig = LandCrater::Field::DigOn(Field);
+		int Tried = 0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size() && Tried < 300; K += 37)
+			{
+				const double X = Tr.At[K].X, Y = Tr.At[K].Y;
+				if (!Edge.Dig(X, Y) || Edge.Bare(X, Y)) continue;
+				++Tried;
+				Edge.Add(X, Y, Tried % 3 == 0 ? "mortar" : Tried % 3 == 1 ? "field" : "heavy", 0.0, std::string(Field.At(X, Y).Fx));
+			}
+		}
+		int EdgePoints = 0, EdgeUnder = 0;
+		double EdgeWorst = 0.0;
+		for (const LandCrater::Field::Hole& H : Edge.All())
+		{
+			if (H.bBreach || H.Sides < 3) continue;
+			const LandField::Mesh& M = Edge.Section(H.In);
+			for (int K = 0; K < H.Sides; ++K)
+			{
+				// (its outer ring: the middle, then nine rings of Sides points, the ninth the thin edge)
+				const size_t I = static_cast<size_t>(H.First) + 1u + static_cast<size_t>(8 * H.Sides + K);
+				if (I * 3 + 2 >= M.Positions.size()) continue;
+				const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
+				if (Edge.InCut(Px, Py)) continue;
+				++EdgePoints;
+				const double Below = Field.DrawnZ(Px, Py) - Pz;
+				EdgeWorst = std::max(EdgeWorst, Below);
+				if (Below > 0.0005) ++EdgeUnder;
+			}
+		}
+		std::printf("thrown soil's edge: %zu holes, %d edge points, %d under the drawn ground (the most %.1f mm)\n", Edge.All().size(), EdgePoints, EdgeUnder, 1000.0 * EdgeWorst);
+		if (EdgePoints > 0 && EdgeUnder > 0) Fault("a shell hole's thin edge sank under the ground as drawn");
+	}
 	if (std::getenv("LAND_PLAY_ONLY_SCARS"))
 	{
 		std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());

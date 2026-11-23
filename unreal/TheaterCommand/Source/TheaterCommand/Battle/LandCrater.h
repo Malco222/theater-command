@@ -54,6 +54,9 @@ namespace LandCrater
 		double Deep = 0.0;
 		/** 0 a fresh hole; up to 1 one long weathered (scarred ground: Field::Add's Months): no blast soot in it. */
 		double Weathered = 0.0;
+		/** 1: the thrown soil feathered into the ground past its reach, its thin edge flush on it (the art director, 23
+		 * November); 0: the old edge, ended at its reach a little over the ground (Field::bOldEdge, for the A/B). */
+		double Feather = 1.0;
 	};
 
 	/**
@@ -96,10 +99,12 @@ namespace LandCrater
 	 * when OutCut is given, writes there the outline to cut the ground by (x, y pairs, counter-clockwise, convex: the
 	 * hull of its wall's 0.86 ring, where the wall already stands over the ground). The thrown soil is lit by Lit's
 	 * normal toward its edge (by the slope of Height across the drawn ground's spacing where none is given), so it is
-	 * lit as the ground round it.
+	 * lit as the ground round it. The thrown soil runs a metre and a half or so past its reach, feathered into the
+	 * ground with a broken edge, laid on Thin where given (the ground as drawn, its flat triangles), on Height where not,
+	 * its thin edge 2 mm over it.
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn());
+		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn(), const HeightFn& Thin = HeightFn());
 
 	/**
 	 * Cuts out of a mesh what lies inside a convex outline seen from above (x, y pairs, counter-clockwise): every
@@ -184,6 +189,12 @@ namespace LandCrater
 		std::function<bool(double X, double Y)> Dig;
 		/** The drawn ground's normal, to light the thrown soil by (Lay's Lit; set before the first Add). */
 		UpFn Lit;
+		/** The ground's height as drawn (LandField::Ground::DrawnZ), for the thrown soil to lie on, over Height where
+		 * that is higher and not in an older hole's cut (Lay's Thin; set before the first Add; none: Height). */
+		HeightFn Drawn;
+		/** The crater's edge as it was before 23 November: no feather, its lip 0.6 of the floor's lift over the ground,
+		 * a fresh hole's grass cleared to a round 1.2 of its radius (-TheaterLandCraterOldEdge, for the A/B). */
+		bool bOldEdge = false;
 		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
 		 * grass, the country beyond), not a lane, a bank, a yard, a garden or orchard, the woods (a tree or a hedge would
 		 * hang over a bowl dug under it), a floor, a wall's line, water or marsh. G must outlive the function. */

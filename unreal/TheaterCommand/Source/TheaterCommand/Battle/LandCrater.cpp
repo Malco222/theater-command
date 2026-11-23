@@ -350,7 +350,7 @@ namespace LandCrater
 	}
 
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit)
+		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit, const HeightFn& Thin)
 	{
 		if (OutCut)
 		{
@@ -364,7 +364,7 @@ namespace LandCrater
 		const double R = 0.5 * S.Across;
 		const double RimHigh = std::max(0.0, S.Rim);
 		const double ReachOf = std::max(1.2, S.Reach);
-		const double Feather = std::min(1.5, 0.9 * R); // (how far past the thrown soil's reach it thins into the grass)
+		const double Feather = std::min(1.5, 0.9 * R) * std::clamp(S.Feather, 0.0, 1.0); // (how far past the thrown soil's reach it thins into the grass)
 		const int N = std::clamp(S.Sides, 8, 48);
 		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
 
@@ -472,7 +472,7 @@ namespace LandCrater
 				{
 					// the thrown soil, falling away from the crest to a thin ragged edge over the grass
 					Radius = Rc * (1.0 + Rg.T * (Reach[Kk] - 1.0)) * (bRim ? D.U(0.78, 1.12) : D.U(0.96, 1.04));
-					if (bRim && Under)
+					if (bRim)
 					{
 						// (feathered into the grass: the soil thinning out over a metre and a half past where it lay
 						// thick, its edge broken, so the eye finds no line where the hole's earth ends. Ended at the
@@ -514,7 +514,10 @@ namespace LandCrater
 					const Rgb8 Ground = Under(Px, Py);
 					Painted = bRim ? Ground : Rg.T >= 0.6 ? Mixed(Painted, Ground, 0.4) : Painted;
 				}
-				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + (bLip ? 0.002 : Base + Over), Painted);
+				// (the thrown soil on the ground as drawn: on HeightAt's smooth height its thin edge sank under the drawn
+				// triangles at a quarter of its points on a slope's bend, pre-check's probe, 23 November)
+				const double Gz = Rg.bOut && Thin ? Thin(Px, Py) : Height(Px, Py);
+				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Gz + (bLip ? (S.Feather > 0.0 ? 0.002 : 0.6 * Base) : Base + Over), Painted);
 			}
 		}
 		if (OutCut && Deep > 0.0)
@@ -939,6 +942,10 @@ namespace LandCrater
 			S.Reach *= ByAge(1.0, 0.88, 0.78, 0.72);
 			S.Clods = 0;
 		}
+		if (bOldEdge)
+		{
+			S.Feather = 0.0;
+		}
 		if (S.Deep > 0.0 && Dig)
 		{
 			// (dug only in open ground, its middle and all round its crest: a lane's floor, a bank or a yard keeps the
@@ -996,7 +1003,21 @@ namespace LandCrater
 			// (grass is evener than torn soil: each point's tone wanders less as it grows over)
 			Paint.Mottle = 1.0 - 0.6 * By;
 		}
-		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
+		// (the thrown soil on the ground as drawn, or on an older hole's faces inside its cut)
+		HeightFn Thin;
+		if (Drawn)
+		{
+			Thin = [this](double Px, double Py)
+			{
+				double Z = 0.0;
+				if (InCut(Px, Py) && TopAt(Px, Py, Z))
+				{
+					return Z;
+				}
+				return std::max(Height(Px, Py), Drawn(Px, Py));
+			};
+		}
+		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit, Thin);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		// (an old hole's grass and corn stand round it but over its bowl: on its worn rim they have grown back)
 		H.BareR = bOld ? (H.Deep > 0.0 ? 0.92 : 0.55) * 0.5 * S.Across : 0.0;
@@ -1194,7 +1215,7 @@ namespace LandCrater
 			}
 			// (a fresh hole: bare to its crest, then a ragged clearing, a tuft here and there left standing in the thrown
 			// soil and more the further out, not a ruled circle of grass round it: the art director, 23 November)
-			const double In = 1.12 * H.R, Out = 1.3 * H.R;
+			const double In = bOldEdge ? 1.2 * H.R : 1.12 * H.R, Out = bOldEdge ? 1.2 * H.R : 1.3 * H.R;
 			if (D2 >= Out * Out)
 			{
 				continue;
