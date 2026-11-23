@@ -228,7 +228,7 @@ describe('forward dumps', () => {
     const h = war({ cols: true, shift: true, dumps: true }, 3);
     h.dumps = [{ nat: 'GER', region: 5, stock: 12, fill: 0, turn: 1 }];
     h.lorryFirst = { GER: 'POL' };
-    const back = loadGame(saveGame(h));
+    const back = loadGame(saveGame(h))!;
     expect(back.dumps).toEqual(h.dumps);
     expect(back.lorryFirst).toEqual(h.lorryFirst);
     const off = war({ cols: true }, 3);
@@ -248,7 +248,7 @@ describe('in a war with all three on', () => {
       expect(r.share).toBeLessThanOrEqual(1);
       expect(r.lorries + (r.horse ?? 0) + (r.short ?? 0)).toBeLessThanOrEqual((r.need ?? r.lorries) + 1);
     }
-    const back = loadGame(saveGame(g));
+    const back = loadGame(saveGame(g))!;
     expect(back.columns).toEqual(g.columns);
   }, 120_000);
 });
