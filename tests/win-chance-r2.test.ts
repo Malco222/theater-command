@@ -9,8 +9,11 @@ import {
   DEFENCE, FIELD_DICE, addCorps, assess, battleCost, chanceOn, createGame, evenOdds, luckOf, relocate, resolveBattle, sureWords, winChanceOn,
 } from '../src/campaign/game';
 import { SIEGE } from '../src/campaign/siege';
+import { clampToDice, diceNow } from '../src/battle/core/result';
+import { landTicket } from '../src/battle/land/ticket';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import { WINCHANCE_STAGE } from '../src/campaign/stage';
 import stage from '../data/campaign/stage.json';
 import win from '../data/campaign/winchance.json';
@@ -20,6 +23,15 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 function war(on: boolean, seed = 3): Game {
   const g = startOpen(createGame(seed, null));
   if (on) g.flags.winChance = 1;
+  return g;
+}
+
+/** The same with Germany's general at the table, his first month open, as the game's own screen would have it. */
+function playing(on: boolean, seed = 3): Game {
+  const g = startOpen(createGame(seed, 'GER'));
+  if (on) g.flags.winChance = 1;
+  for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+  beginHuman(g);
   return g;
 }
 
@@ -171,6 +183,46 @@ describe('the battle', () => {
       const rx = resolveBattle(x.g, x.l.att, x.l.target, { fought: a.odds * (a.dice[0] + (a.dice[1] - a.dice[0]) * share) });
       const ry = resolveBattle(y.g, y.l.att, y.l.target, { fought: a.odds * (a.luck![0] + (a.luck![1] - a.luck![0]) * share) });
       expect(rx.attLost).toBe(ry.attLost);
+    }
+  });
+});
+
+describe('the field fought out (the 3D game)', () => {
+  it('its ticket carries the wide run for the chance and today\'s for the field\'s fortune; off, today\'s alone', () => {
+    const on = playing(true), off = playing(false);
+    const l = line(on, 1, 4), m = line(off, 1, 4);
+    const a = assess(on, l.att, l.target);
+    const t = landTicket(on, l.att, l.target)!;
+    expect(t.reckoning.dice).toEqual(a.dice);
+    expect(t.reckoning.luck).toEqual(FIELD_DICE);
+    expect(t.reckoning.even).toBeCloseTo(evenOdds(a.dice), 9);
+    const u = landTicket(off, m.att, m.target)!;
+    expect(u.reckoning.dice).toEqual(FIELD_DICE);
+    expect('luck' in u.reckoning).toBe(false);
+  });
+
+  it('one throw: the field\'s clamp, the staff\'s hand-back and the card bill a result at the same share alike', () => {
+    const on = war(true);
+    const l = line(on, 1, 4);
+    const a = assess(on, l.att, l.target);
+    for (const share of [0.02, 0.1, 0.4, 0.8]) {
+      const thrown = a.odds * (a.dice[0] + (a.dice[1] - a.dice[0]) * share);
+      const winner = thrown >= 1.2 ? 'att' : 'def';
+      // Inside the run, the field's clamp and the hand-back to the staff (at the ratio the card set) leave it as it is.
+      expect(clampToDice(thrown, a.odds, a.dice, winner)).toBeCloseTo(thrown, 9);
+      expect(diceNow(a.odds, a.dice, { att: 1, def: 1 }, share)).toBeCloseTo(thrown, 9);
+      // The card's own throw at that share, and the field's result handed back: the same verdict and the same bill.
+      const x = again(on, l), y = again(on, l);
+      const range = y.g.rng.range.bind(y.g.rng);
+      let thrownOnce = false;
+      y.g.rng.range = (lo: number, hi: number): number => (!thrownOnce && lo === 0 && hi === 1 ? ((thrownOnce = true), share) : range(lo, hi));
+      const fought = resolveBattle(x.g, x.l.att, x.l.target, { fought: thrown });
+      const card = resolveBattle(y.g, y.l.att, y.l.target);
+      expect(thrownOnce).toBe(true);
+      expect(fought.taken).toBe(card.taken);
+      expect(fought.level).toBe(card.level);
+      expect(fought.attLost).toBe(card.attLost);
+      expect(fought.defLost).toBe(card.defLost);
     }
   });
 });

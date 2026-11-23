@@ -502,7 +502,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     // the defence's the other way, so the field spreads its results as the card's chance does. Drawn apart from the
     // blow-by-blow luck, so nothing else in the fight moves with it. A second attack on the same place this month
     // (ticket.attempt) draws afresh.
-    const [d0, d1] = ticket.reckoning.dice;
+    // (With the honest win chance on, the card's run is the record's wide one; the field's fortune keeps today's run, so
+    // its blows and its bill are what they were, and its result is clamped into the wide run and billed at that share.)
+    const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
     const roll = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
     this.fortune = 1 + LAND.fortune * (roll - 1);
     // Fighters on call (air support): a side with a share, strikes and a group to fly them. None draws on the dice.
