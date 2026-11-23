@@ -515,7 +515,7 @@ namespace LandScape
 		const std::unique_ptr<Region> R = Make(Pick(F), F, F.Seed);
 		if (!R) return false;
 		OutFolder = R->Folder();
-		for (int K = 0; K < 16; ++K)
+		for (int K = 0; K < LandField::KitSlots; ++K)
 			if (const char* Name = R->KitName(K); Name && !R->KitBuilt(K))
 				if (std::find(OutNames.begin(), OutNames.end(), Name) == OutNames.end()) OutNames.push_back(Name);
 		return !OutFolder.empty() && !OutNames.empty();

@@ -283,6 +283,10 @@ namespace LandField
 		Kit13,
 		Kit14,
 		Kit15,
+		Kit16,
+		Kit17,
+		Kit18,
+		Kit19,   // (the last kit slot: KitSlots in all, one after another from Kit0, before Haycock and the clutter)
 		Haycock, // a mown meadow's hay forked into cocks to make, 1.2 to 1.6 m, in loose rows (the bocage's July)
 		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
@@ -308,6 +312,12 @@ namespace LandField
 		Clut5,
 		Count
 	};
+	/** A region's kit slots, Kit0 to Kit19 one after another (a region names its slot K as Kit0 + K). */
+	constexpr int KitSlots = 20;
+	static_assert(static_cast<int>(Base::Kit0) + KitSlots == static_cast<int>(Base::Haycock), "the kit's slots run on from Kit0 to the haycock");
+	/** The tallest a region's low kit stands, metres (Region::KitLow: a balk's ridge, a bund): a man steps over it and a
+	 * tank rolls over it, so it may lie across a recorded men's way. */
+	constexpr double LowKitHigh = 0.25;
 
 	struct BaseMesh
 	{

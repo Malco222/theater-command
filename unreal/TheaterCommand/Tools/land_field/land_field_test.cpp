@@ -208,7 +208,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 	static_assert(sizeof(BaseNames) / sizeof(BaseNames[0]) == static_cast<size_t>(LandField::Base::Count), "a name for every base");
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
@@ -1027,7 +1027,7 @@ int main(int Argc, char** Argv)
 		int Crowns = 0;
 		// (and a region's kit trees, which the game draws far off the same way)
 		std::vector<LandField::Base> Trees = { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch };
-		for (int K = 0; K < 16; ++K)
+		for (int K = 0; K < LandField::KitSlots; ++K)
 		{
 			const LandField::Base Kb = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
 			if (G.BaseOf(Kb).bTree) Trees.push_back(Kb);
@@ -1616,7 +1616,7 @@ int main(int Argc, char** Argv)
 		// A region's ground: its village of its own kit's houses round the rules' town, and every model of its kit read.
 		Check(!F.bTown || T.Houses >= 10, "the village has its houses (the region's own)", Fmt("%.0f houses", T.Houses));
 		int Named = 0, Read = 0, Standing = 0;
-		for (int B = static_cast<int>(LandField::Base::Kit0); B <= static_cast<int>(LandField::Base::Kit15); ++B)
+		for (int B = static_cast<int>(LandField::Base::Kit0); B < static_cast<int>(LandField::Base::Kit0) + LandField::KitSlots; ++B)
 		{
 			const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
 			if (Bm.Near.Empty()) continue;
@@ -1874,7 +1874,7 @@ int main(int Argc, char** Argv)
 				if (B == static_cast<int>(LandField::Base::Khata)) continue; // (a cottage stands on its own floor)
 				const LandField::Surface Su = G.At(P.X, P.Y);
 				// (and a region's kit house on its own)
-				if (B >= static_cast<int>(LandField::Base::Kit0) && B <= static_cast<int>(LandField::Base::Kit15) && Su.What == LandField::Drawn::Floor) continue;
+				if (B >= static_cast<int>(LandField::Base::Kit0) && B < static_cast<int>(LandField::Base::Kit0) + LandField::KitSlots && Su.What == LandField::Drawn::Floor) continue;
 				++All;
 				if (Su.What == LandField::Drawn::Floor) ++Bad;
 				if (std::fabs(Su.Z - P.Z) > 0.02) ++Off;
@@ -2027,6 +2027,26 @@ int main(int Argc, char** Argv)
 		            Segs.size(), Crossings, Shut, MenCrossings, MenShut, Through, Standing, All, StandingMen, By.c_str());
 		Check(Shut == 0 && Standing == 0, "the vehicles cross the hedges where they are open, and nothing but a hedge's shrub stands on a way",
 		      Fmt("%.0f vehicle crossings shut, %.0f things on a way", static_cast<double>(Shut), static_cast<double>(Standing)));
+		// A region's kit on a way: only its low kit (a balk's ridge a man steps over, LandField::LowKitHigh or less as
+		// planted), and only on a men's way (said only where some kit lies on a way).
+		{
+			int Low = 0, Tall = 0, OnVehicles = 0;
+			for (int B = static_cast<int>(LandField::Base::Kit0); B < static_cast<int>(LandField::Base::Kit0) + LandField::KitSlots; ++B)
+			{
+				const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
+				for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
+				{
+					bool bMan = false, bVehicle = false;
+					for (const uint32_t K : SegGrid[static_cast<size_t>(Sqr(P.Y, SY)) * SX + Sqr(P.X, SX)])
+						if (Dist(Segs[K], P.X, P.Y) < Segs[K].Half) (Segs[K].Half < 1.2 ? bMan : bVehicle) = true;
+					if (bVehicle) ++OnVehicles;
+					else if (bMan) ++(Bm.Height * P.ScaleZ <= LandField::LowKitHigh + 1e-3 ? Low : Tall);
+				}
+			}
+			if (Low + Tall + OnVehicles > 0)
+				Check(Tall == 0 && OnVehicles == 0, "a region's kit lies across a men's way only where it is low (a man steps over it), and never on a vehicles' way",
+				      Fmt("%.0f low on men's ways, %.0f taller there, %.0f on vehicles' ways", Low, Tall, OnVehicles));
+		}
 	}
 	// The bocage at a man's eye: a green wall round each field, the view closed at 100 to 200 m.
 	{
