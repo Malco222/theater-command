@@ -166,15 +166,16 @@ describe('boats lose where they fight (OEG T2 and T10)', () => {
   /** The boats a raider of 10 is expected to lose to a convoy's escort this month, as the meeting gives it. */
   const expectLoss = (g: Game, route = atlantic, nat = 'UK'): number => convoyMeeting(g, nat, route).raiders[0].expect;
 
-  it('a close escort sinks 5 in 100 boats that attack, 12 with ahead-throwing weapons and escort-group training', () => {
+  it('a close escort sinks 5 in 100 boats that attack, 9.5 with ahead-throwing weapons, 12 with escort-group training too', () => {
     const g = open(true);
     sea(g, 'GER', 'natl', { ss: 10 }, 'raid');
     const esc = sea(g, 'UK', 'wapp', { dd: 20 }, 'escort', 'atlantic');
     expect(expectLoss(g)).toBeCloseTo(10 * CAUSE.find * 0.05 * fit(g, esc), 6);
     const kit = twin(g);
     give(kit, 'UK', ['sonar', 'hedgehog']);
-    // (Ahead-throwing weapons alone stay at the depth-charge rate until OEG T9 is read.)
-    expect(expectLoss(kit)).toBeCloseTo(expectLoss(g), 9);
+    // Ahead-throwing weapons alone: OEG T9's first half-year edge over depth charges (7.5% against 4.0%).
+    expect(CAUSE.incident.atw).toBe(1.9);
+    expect(expectLoss(kit) / expectLoss(g)).toBeCloseTo(1.9, 9);
     give(kit, 'UK', ['escortgroups']);
     expect(expectLoss(kit) / expectLoss(g)).toBeCloseTo(0.12 / 0.05, 9);
   });
