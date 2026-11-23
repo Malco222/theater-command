@@ -1209,6 +1209,25 @@ function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number,
     if (Math.abs(next - k) < 1e-9) break;
     k = next;
   }
+  // (release 1.5) Where the field's loss fell on one corps, that corps' part can pass its cap at the first step, so the
+  // steps above stop with nothing left to scale and the side paid that corps' cap, more than its whole bill (an army
+  // that fell back after half a minute at Gazala, 6.9% lost on the field and a bill of 6.9%, was booked 17.5%). Where
+  // the bill is short of every corps at its cap and the steps did not reach it, it is found exactly: the corps passing
+  // their caps in turn, each one's part a straight line until it does.
+  const billAt = (s: number) => cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, s * part[i]), 0);
+  const most = cs.reduce((a, _c, i) => a + (part[i] > 0 ? m[i] * cap : 0), 0), near = 1e-9 * Math.max(1, want);
+  if (want < most - near && Math.abs(billAt(k) - want) > near) {
+    const order = cs.map((_c, i) => i).filter((i) => part[i] > 0).sort((x, y) => cap / part[x] - cap / part[y]);
+    let held = 0, free = order.reduce((a, i) => a + m[i] * part[i], 0);
+    for (const i of order) {
+      const at = cap / part[i];
+      const s = free > 1e-12 ? Math.max(0, (want - held) / free) : at;
+      if (s <= at) { k = s; break; }
+      held += m[i] * cap;
+      free -= m[i] * part[i];
+      k = at;
+    }
+  }
   return k;
 }
 

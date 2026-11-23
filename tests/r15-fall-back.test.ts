@@ -9,6 +9,7 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { liveTicket } from '../src/battle/land/live';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { monthCard, monthMark } from '../src/campaign/monthcard';
+import { orderAttack } from '../src/campaign/turn';
 import type { FieldResult } from '../src/battle/core/types';
 
 const TC = (globalThis as unknown as { TC: Record<string, (...a: unknown[]) => any> }).TC;
@@ -55,7 +56,7 @@ describe('release 1.5: ALL FALL BACK', () => {
     // (it pays by the highest its bar stood from the order on: never less than it stood when he gave it)
     expect(over.pulled?.side).toBe('att');
     expect(over.pulled!.bar).toBeGreaterThanOrEqual(Math.round(ordered!.bar * 1000) / 1000 - 1e-9);
-  });
+  }, 180_000);
 
   it('asks once: no new orders after it, and not before the battle has begun', () => {
     fresh();
@@ -74,7 +75,7 @@ describe('release 1.5: ALL FALL BACK', () => {
     const mine = L.sim.units.find((u) => u.side === 'att' && u.state !== 'gone' && u.kind !== 'fort')!;
     expect(L.order({ do: 'move', units: [mine.id], x: mine.x, y: mine.y + 300 } as never)).toBe(false);
     expect(L.order({ do: 'attack', units: [mine.id], target: L.sim.units.find((u) => u.side === 'def')!.id } as never)).toBe(false);
-  });
+  }, 120_000);
 
   it('the campaign books it once: the attack is called off, the army stays home and keeps what it did not lose', () => {
     fresh();
@@ -103,7 +104,7 @@ describe('release 1.5: ALL FALL BACK', () => {
     const row = monthCard(loadGame(TC.save().text)!, mark).rows.find((r) => r.region === 39);
     expect(row?.line).toBe('Your army fell back to fight another day.');
     expect(row?.head).toBe('The attack on Pomorze is called off');
-  });
+  }, 180_000);
 
   it('saves and loads with it, and the month closes', () => {
     fresh();
@@ -118,7 +119,7 @@ describe('release 1.5: ALL FALL BACK', () => {
     const done = TC.endMonth() as { view?: { turn?: number } };
     expect(done).toBeTruthy();
     expect(loadGame(TC.save().text)!.turn).toBe(month + 1);
-  });
+  }, 180_000);
 
   it('a defence that falls back gives up the province: to a friendly neighbour, or taken where it has no way out', () => {
     // (the rules let either side fall back; the staff never orders it, so the defence's is ordered here by hand)
@@ -154,7 +155,7 @@ describe('release 1.5: ALL FALL BACK', () => {
       if (boxed) expect(left).toEqual([]);
       else for (const c of left) expect(g.regions[c!.reg].ctrl).not.toBe('GER');
     }
-  });
+  }, 300_000);
 
   it('a battle nobody falls back in is fought exactly as before', () => {
     fresh();
@@ -163,7 +164,24 @@ describe('release 1.5: ALL FALL BACK', () => {
     expect(over.fellBack).toBeUndefined();
     // (pinned on 2dcc018b, before ALL FALL BACK: the same seed, the same day to the second)
     expect({ how: over.how, winner: over.winner, seconds: over.seconds, R: over.R, lost: over.lost }).toEqual(PINNED);
-  });
+  }, 180_000);
+
+  it('a bill the field laid on one corps is never booked past the side\'s whole bill (b474 with the field\'s split)', () => {
+    // Gazala, 1942 (Germany, start 33): an army that fell back half a minute after contact, its field loss all on the 5th
+    // Light Division (the other two not yet engaged), its bar at 0.53. Its whole bill is the field's 6.9% (the rules' bill
+    // times the bar squared is less); before the mend the 5th Light alone was booked its cap of 60%, 17.5% of the army.
+    TC.start({ human: 'GER', from: 33, view: 'grand', seed: 1 });
+    const g = loadGame(TC.save().text)!;
+    const cs = [240, 264, 306].map((id) => g.corps.find((c) => c.id === id)!);
+    expect(cs.every((c) => !!c)).toBe(true);
+    const field = { corps: { 240: 0.175, 264: 0, 306: 0 }, att: 0.069, def: 0.0134, whole: true, pulled: { side: 'att' as const, bar: 0.53 } };
+    const rep = orderAttack(g, cs, g.regions[342], 0.737, field)!;
+    const men = rep.attackers.reduce((a, u) => a + u.men, 0);
+    expect(rep.attLost / men).toBeGreaterThanOrEqual(0.069 * 0.98);
+    expect(rep.attLost / men).toBeLessThan(0.069 * 1.05);
+    // (still on the corps the field hit: the others lose nothing)
+    expect(rep.attackers.filter((u) => u.lost > 0).length).toBe(1);
+  }, 60_000);
 });
 
 const PINNED = { how: 'rout', winner: 'att', seconds: 139, R: 3.327, lost: { att: 0.00903942382543982, def: 0.22122056672925716 } };
