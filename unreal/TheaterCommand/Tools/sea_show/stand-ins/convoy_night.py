@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """A stand-in convoy night for the sea show's cloud test (ruling 241, the submarine scene D1), in the recording's names
 (naval-battles/wolfpack-r2/form.md section 5, field-side-read.md section 3). Hand-made, not the battle's: it exercises
-every new name (boats surfaced, at periscope depth and deep; a boat's wakeless salvo; asdic; a pattern of depth charges
-and an ahead-thrown salvo; a hit, a boat crushed and one forced up and scuttled; a star shell; a sighting report; a
-rescue) until the production lead's staged recording lands.
+every new name (boats surfaced, at periscope depth and deep; a boat's wakeless salvo; asdic, radar, a radio bearing and a
+sighting, which find the boats the defender does not see until then, a contact held long with no attack on her, a boat
+whose views say who is running in on her (heard, as the D1 stager writes it), a merchant's gun laid on her, boats' deck
+guns laid on a merchant and a hit of theirs, and an aircraft running in on a boat past another one not yet found; a
+pattern of depth charges and an ahead-thrown salvo; hits, a boat crushed and one forced up, given up and scuttled; a star
+shell; a sighting report; a rescue) until the production lead's staged recording lands.
 
-    python3 Tools/sea_show/stand-ins/convoy_night.py   (writes convoy-night.json beside it)
+    python3 Tools/sea_show/stand-ins/convoy_night.py   (writes convoy-night.json and convoy-night-air.json beside it)
+
+convoy-night-air is the same night with Boat D astern and the escort's aircraft that runs in on her: kept to a night of
+its own, as in this one they would shift every random draw the show makes after them, and the convoy looks' checks are
+played on this night's draws as they are.
 """
 import json
 import math
@@ -36,8 +43,8 @@ piece(21, "def", "dd", "Escort 2", "UK", [(0, 8200, 7200), (280, 8200, 7200 + V 
                                           (470, 8530, 8700), (500, 8300, 8450), (620, 7600, 8000)])
 piece(22, "def", "dd", "Escort 3", "UK", [(0, 12000, 5800), (100, 12000, 5800 + V * 100), (330, 12460, 9300), (360, 12560, 9550), (420, 12400, 9700),
                                           (620, 11800, 9500)])
-# The boats: A closing on the surface, driven down by the star shell, hunted, forced up and scuttled; B at periscope depth,
-# fires a wakeless salvo, goes deep, and is crushed by the ahead-thrown salvo.
+# The boats: A closing on the surface, driven down by the star shell, hunted, forced up, given up by her crew and scuttled;
+# B at periscope depth, fires a wakeless salvo, goes deep, is damaged by a pattern and crushed by the ahead-thrown salvo.
 A0 = (12600, 9800)
 def along(p, hdg_deg, dist):
     h = math.radians(hdg_deg)
@@ -51,6 +58,22 @@ B0 = (8500, 9200)
 B1 = along(B0, 160, 2.5 * 285)
 B2 = along(B1, 270, 2 * 196)
 piece(31, "att", "ss", "Boat B", "GER", [(0, *B0), (285, *B1), (481, *B2), (620, *B2)])
+# C shadows the convoy's port quarter on the surface, 1250 m off its last port merchant, until she dives at 240 and goes deep
+# at 300, closing it at 2.5 m/s under. Her hunters are told by her views alone (heard, and each escort's echo on her: no
+# sea:sonar for her), so it is her heard that holds her and lets her go: the sea show's SetMine.
+C0 = (7400, 5000)
+C1 = (C0[0], C0[1] + V * 240)
+C2 = along(C1, 45, 2.5 * 60)
+C3 = along(C2, 45, 2.5 * 320)
+piece(32, "att", "ss", "Boat C", "GER", [(0, *C0), (240, *C1), (300, *C2), (620, *C3)])
+# D (convoy-night-air only) trails the convoy on the surface, two kilometres astern of its port column, and lays her deck
+# gun on its last port merchant; an aircraft of the escort's runs in on her from ahead, over Boat C not yet found (her guns
+# quiet), and lets go on her; she dives, goes deep and falls astern, unseen again for the rest of the night.
+D0 = (7550, 3000)
+D1 = (D0[0], D0[1] + V * 76)
+D2 = (D1[0], D1[1] + 2.5 * (END - 76))
+piece(33, "att", "ss", "Boat D", "GER", [(0, *D0), (76, *D1), (END, *D2)])
+AIR = {33}
 
 
 def place(path, t):
@@ -66,8 +89,21 @@ SUNK = {1: 272.0, 31: 481.0, 30: 450.0}
 DIVES = {  # piece -> [(from t, state, keel or None, scope)]
     30: [(0, "surfaced", None, False), (65, "periscope", None, True), (150, "deep", 80, False), (360, "surfaced", None, False)],
     31: [(0, "periscope", None, True), (285, "deep", 80, False)],
+    32: [(0, "surfaced", None, False), (240, "periscope", None, True), (300, "deep", 60, False)],
+    33: [(0, "surfaced", None, False), (76, "periscope", None, True), (120, "deep", 60, False)],
 }
-STR = {30: [(0, 1.0), (330, 0.5), (450, 0.0)], 31: [(0, 1.0), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)]}
+# Whom the defender finds Boat C by (her views' heard, written as it changes, as the D1 stager does; and the escort's echo on
+# her while it holds her): Escort 2's radar on her on the surface from 100, lost at 130 with her still up within the night's
+# seeing of Merchant 3 (his lookouts keep her in sight until she is under: no pop on the surface in plain view); Escort 1's
+# asdic on her deep from 472 as it comes back for the survivors, lost at 500 (she is let go FoundFor after). (472, off the
+# 2.5 s beat of the swirls she has laid since she went deep at 300: found, her next swirl must come on that beat, not at once)
+HEARD = {32: [(0, []), (100, [21]), (130, []), (472, [20]), (500, [])]}
+ECHO = {21: [(100, 130, 32, "radar")], 20: [(472, 500, 32, "asdic")]}
+# Deck guns laid (extra.gun, as each view says, while she is up): Boat D's on Merchant 3 from 20, her gun found before
+# anything else has her; Boat C's on Merchant 3 from 64, her first round falling on him at 63.8, before the view that says
+# her gun is on (a gun's hit from her finds her at the hit); Merchant 3's gunners on Boat C on the surface from 80.
+GUN = {3: [(80, 90, 32)], 32: [(64, 74, 3)], 33: [(20, 30, 3)]}
+STR = {30: [(0, 1.0), (330, 0.5), (450, 0.0)], 31: [(0, 1.0), (358, 0.7), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)]}
 
 
 def at(table, t, default):
@@ -89,8 +125,17 @@ def unit(pid, t, first):
     u = {"id": pid, "x": round(x, 1), "y": round(y, 1), "face": round(face, 4), "str": strength, "mor": 1, "state": "gone" if gone else "steady",
          "figures": ships, "d": 0, "act": "march", "speed": round(speed, 2), "engaged": -1,
          "extra": {"ships": ships, "sunk": 1 - ships}}
-    if pid == 22 and 438 <= t < 450:
-        u["engaged"] = 30  # (the boat forced up: her hunter's guns on her as her crew get out)
+    if pid == 22 and 436 <= t < 446:
+        u["engaged"] = 30  # (the boat forced up: her hunter's guns on her until her crew give her up, then off her)
+    for (t0, heard) in HEARD.get(pid, []):
+        if t0 <= t < t0 + STEP - 1e-9:
+            u["extra"]["heard"] = heard
+    for (t0, t1, on, kind) in ECHO.get(pid, []):
+        if t0 <= t < t1:
+            u["extra"]["echo"] = {"on": on, "kind": kind}
+    for (t0, t1, on) in GUN.get(pid, []):
+        if t0 <= t < t1:
+            u["extra"]["gun"] = on
     if first:
         u.update({"side": p["side"], "kind": p["cls"], "name": p["name"], "nat": p["nat"], "figures0": 1})
         u["extra"].update({"cls": p["cls"], "ships0": 1, "fleet": "Convoy HX 0" if p["side"] == "def" else "Pack"})
@@ -123,13 +168,35 @@ def pos(pid, t):
     return x, y
 
 
+def contact(by, on, t):
+    """A sea:sonar's range (metres) and bearing (radians clockwise from north) from the escort to the boat, from their paths."""
+    (ax, ay), (bx, by_) = pos(by, t), pos(on, t)
+    return dict(range=round(math.hypot(bx - ax, by_ - ay)), bearing=round(math.atan2(bx - ax, by_ - ay) % (2 * math.pi), 3))
+
+
 EVENTS = [
     ev(20, "sea:report", 30, "att", "A U-boat reports the convoy.", at=1),
+    # Whom the defender (the player: "me") finds, for the boats he does not see until then (the sea show's SetMine): Boat A's
+    # report taken by direction-finding (a bearing, a line on the plot: it finds nothing), Escort 1's radar on her up and losing
+    # her as she dives, Escort 3's asdic on her deep, and its lookouts on her once she is forced up and has broken surface.
+    ev(21, "sea:sonar", 20, "def", "", on=30, kind="bearing", err=0.05, **contact(20, 30, 21)),
+    ev(58, "sea:sonar", 20, "def", "Escort 1 has a radar contact.", on=30, kind="radar", **contact(20, 30, 58)),
+    ev(70, "sea:sonar", 20, "def", "", on=30, kind="radar", lost="deep"),
+    ev(300, "sea:sonar", 22, "def", "Escort 3 has a contact.", on=30, kind="asdic", **contact(22, 30, 300)),
+    ev(436, "sea:sonar", 22, "def", "Escort 3 sights the boat on the surface.", on=30, kind="sight", **contact(22, 30, 436)),
+    # (Escort 1's asdic on Boat B running down her tracks, held a hundred seconds with no attack on her until its station
+    # ahead of the convoy calls it back and it loses her: she is in sight all the while it holds her, and FoundFor after)
+    ev(130, "sea:sonar", 20, "def", "Escort 1 has a contact.", on=31, kind="asdic", **contact(20, 31, 130)),
+    ev(230, "sea:sonar", 20, "def", "", on=31, kind="asdic", lost="faded"),
+    # (Boat C's first round hits Merchant 3)
+    ev(63.8, "sea:gunHit", 3, "att", "A shell from a U-boat's deck gun hits Merchant 3.", here=pos(3, 63.8), n=1, **{"from": 32}),
     ev(60, "sea:starshell", 20, "def", "Escort 1 fires star shell.", here=pos(30, 60), by=20),
     ev(65, "sea:dive", 30, "att", "Boat A dives.", dive="periscope", why="radar"),
     ev(120, "sea:torpedo", 31, "att", "Boat B fires a salvo at the convoy.", "torpedo_launch", here=pos(31, 120), target=1, x=pos(1, 270)[0], y=pos(1, 270)[1],
        running=150, fish=4, spread=10, wakeless=True, dive="periscope"),
     ev(150, "sea:dive", 30, "att", "", dive="deep", keel=80, why="evade"),
+    ev(240, "sea:dive", 32, "att", "Boat C dives.", dive="periscope", why="sighted"),
+    ev(300, "sea:dive", 32, "att", "", dive="deep", keel=60, why="evade"),
     ev(270, "sea:torpedoHit", 1, "att", "A torpedo hits Merchant 1.", "torpedo_hit", here=pos(1, 270), **{"from": 31}),
     ev(272, "sea:sunk", 1, "def", "Merchant 1 breaks in two and goes down.", "ship_sinking", here=pos(1, 272), cls="mv", how="break"),
     ev(280, "sea:sonar", 21, "def", "Escort 2 has a contact.", on=31, kind="asdic", range=420, bearing=1.1),
@@ -141,7 +208,14 @@ EVENTS = [
     # (Boat A's hit told at the moment of the drop, Boat B's ten seconds after the bombs went: the pre-check's what-if)
     ev(330, "sea:depthChargeHit", 30, "def", "Boat A is damaged.", here=pos(30, 330), harm=0.5, keel=80, **{"from": 22}),
     ev(360, "sea:dive", 30, "att", "Boat A is forced to the surface.", dive="surfaced", why="forced"),
-    ev(400, "sea:sonar", 21, "def", "", on=31, kind="asdic", lost="close"),
+    # (Escort 2 loses Boat B close as it runs in over her, its pattern's charge at 358 the blow the battle books on her: in
+    # sight FoundFor after the blow, not only after the loss and the drop; it gains her again for its ahead-thrown run, and
+    # that contact is closed by her end)
+    ev(335, "sea:sonar", 21, "def", "", on=31, kind="asdic", lost="close"),
+    ev(358, "sea:depthChargeHit", 31, "def", "Boat B is damaged.", here=pos(31, 358), harm=0.3, keel=80, **{"from": 21}),
+    ev(456, "sea:sonar", 21, "def", "Escort 2 regains the contact.", on=31, kind="asdic", **contact(21, 31, 456)),
+    # (Boat A's crew give her up, forced up at 360: the escort's guns off her, and she goes down scuttled at 450)
+    ev(446, "sea:surrender", 30, "att", "Boat A's crew give her up.", ship=1, how="scuttle", by=22),
     ev(470, "sea:depthCharge", 21, "def", "Escort 2 fires ahead at Boat B.", here=pos(21, 470), on=31, x=pos(31, 470)[0], y=pos(31, 470)[1], n=24, kind="ahead"),
     ev(480, "sea:depthChargeHit", 31, "def", "Boat B is hit.", here=pos(31, 480), harm=1, keel=80, **{"from": 21}),
     ev(450, "sea:sunk", 30, "att", "Boat A is scuttled by her crew.", "ship_sinking", here=pos(30, 450), cls="ss", how="scuttled"),
@@ -149,28 +223,35 @@ EVENTS = [
     ev(520, "sea:rescue", 20, "def", "Escort 1 picks up survivors.", here=pos(20, 520), on=1),
 ]
 EVENTS.sort(key=lambda e: e["t"])
+# convoy-night-air's own: Boat D's gun on Merchant 3 brings an aircraft of the escort's running in on her from ahead (over
+# Boat C, not yet found: her guns quiet as it passes), letting go on her; she dives and goes deep.
+AIR_EVENTS = [
+    ev(30, "sea:air", 33, "def", "An escort aircraft runs in on a U-boat astern of the convoy.", kind="patrol", n=1, running=40),
+    ev(76, "sea:dive", 33, "att", "Boat D dives.", dive="periscope", why="aircraft"),
+    ev(120, "sea:dive", 33, "att", "", dive="deep", keel=60, why="evade"),
+]
 
 
-def main():
+def night(key, title, pids, events):
     views = []
     t = 0.0
     told = 0
     while t <= END + 1e-9:
         first = not views
         v = {"t": t, "limit": END, "speed": 1, "me": "def", "contact": 0, "balance": {"att": 0.5},
-             "units": [unit(pid, t, first) for pid in sorted(PIECES)],
+             "units": [unit(pid, t, first) for pid in pids],
              "events": []}
-        while told < len(EVENTS) and EVENTS[told]["t"] <= t + 1e-9:
-            v["events"].append(EVENTS[told])
+        while told < len(events) and events[told]["t"] <= t + 1e-9:
+            v["events"].append(events[told])
             told += 1
         if t >= END - 1e-9:
             v["over"] = {"winner": "def", "level": "Victory", "lines": ["The convoy holds its course.", "One merchant lost; two boats sunk."]}
         views.append(v)
         t += STEP
     rec = {
-        "what": "a stand-in convoy night (hand-made, not the battle's)", "recording": 1, "key": "convoy-night", "seed": 241, "step": STEP,
+        "what": "a stand-in convoy night (hand-made, not the battle's)", "recording": 1, "key": key, "seed": 241, "step": STEP,
         "field": {
-            "size": 20000, "edge": 5000, "zoneName": "Western Approaches", "title": "A convoy at night (stand-in)", "date": "Practice",
+            "size": 20000, "edge": 5000, "zoneName": "Western Approaches", "title": title, "date": "Practice",
             "when": {"year": 1942, "month": 11}, "lat": 55, "lon": -20,
             "att": {"nat": "GER", "adj": "German"}, "def": {"nat": "UK", "adj": "British"},
             "classes": {
@@ -187,10 +268,15 @@ def main():
         "views": views,
         "after": {"lines": ["The convoy holds its course."], "level": "Victory", "winner": "def", "seconds": END},
     }
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "convoy-night.json")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), key + ".json")
     with open(out, "w") as f:
         json.dump(rec, f, separators=(",", ":"))
-    print(out, len(views), "views,", len(EVENTS), "events")
+    print(out, len(views), "views,", len(events), "events")
+
+
+def main():
+    night("convoy-night", "A convoy at night (stand-in)", [pid for pid in sorted(PIECES) if pid not in AIR], EVENTS)
+    night("convoy-night-air", "A convoy at night, an aircraft over it (stand-in)", sorted(PIECES), sorted(EVENTS + AIR_EVENTS, key=lambda e: e["t"]))
 
 
 if __name__ == "__main__":

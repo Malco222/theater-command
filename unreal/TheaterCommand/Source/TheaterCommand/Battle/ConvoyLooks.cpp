@@ -513,8 +513,11 @@ void FConvoyLooks::StepBoats()
 		In.At = P3(Ship.At.X, Ship.At.Y, 0.0);
 		In.Heading = Ship.Heading;
 		In.ScopeKeel = ScopeKeel;
-		// (the light over her, only worth working out while she runs deep)
+		// (the light over her, only worth working out while she runs deep, in the player's sight or out of it: her swirls'
+		// clock runs on it, so found she lays her next one when she would have; out of it, an enemy boat not yet found, she
+		// throws nothing on the sea, SeaShow's SetMine)
 		In.Lit = Ship.Dive == "deep" ? LitAt(In.At) : 0.0;
+		In.bShown = Ship.bShown;
 		B.Out = StepBoat(B.State, In, B.Model, B.Drawn);
 		B.At = In.At;
 		B.SeenAt = Now;

@@ -54,6 +54,7 @@ enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks,
  * Other flags: "-TheaterSeaBattleSpeed=2" (the battle's pace, 0.25 to 4), "-TheaterSeaBattleFrom=300" (start there),
  * "-TheaterSeaHour=9.5" (the hour of the day, for the sun), "-TheaterSeaWake=1,1" (the wakes' brightness and strength),
  * "-TheaterSeaNoFunnels" (no funnel smoke; there is none either on an effects kit without its own "funnel" kind),
+ * "-TheaterSeaShowAll" (every boat drawn: else an enemy boat is drawn only once the player's ships have found her),
  * "-TheaterSeaTextScale=1.25" (the screen's size over Unreal's own, 0.75 to 2, as the air screen's).
  */
 UCLASS()
@@ -101,7 +102,8 @@ private:
 		ESeaShot Kind = ESeaShot::Overview;
 		double At = 0.0;         // battle seconds
 		int32 Subject = -1;      // a ship's key (the show's), or -1
-		int32 Other = -1;        // the ship she fires on (Broadside), her piece (Fleets), the side (Line), or -1
+		int32 Other = -1;        // the ship she fires on (Broadside), her piece (Fleets), the side (Line), 1 for a salvo
+		                         // from a boat the player has not found (Tracks: a lookout's view), or -1
 		FVector2D Spot = FVector2D::ZeroVector; // board metres: where it happens (a splash, a track's start, an oil fire)
 		FVector2D Way = FVector2D::ZeroVector;  // a track's way; a ridden shot's (BothLines) speed, board metres a second
 		/** A shot PlanShots weighed whole (BothLines): the eye and the point it looks at as it cuts in (board metres, Z up),

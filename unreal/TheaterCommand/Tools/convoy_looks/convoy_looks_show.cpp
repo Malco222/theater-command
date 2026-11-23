@@ -528,6 +528,144 @@ namespace
 		}
 		return 0;
 	}
+
+	/** An enemy boat's looks as the scene steps them (FConvoyLooks::StepBoats) out of the player's sight, beside a twin
+	 * stepped as if she were in sight all along. */
+	struct UnseenSeen
+	{
+		BoatState Hid, Open;
+		BoatModel Model;
+		bool bSeen = false, bWasShown = true;
+		int HiddenFrames = 0, Reveals = 0;
+		int Thrown = 0, TwinThrown = 0, Laid = 0, ShownOff = 0;
+		double MostApart = 0.0;
+		/** Her first swirl after each time she is found, and her twin's after the same moment (-1: none yet; RevealAt -1
+		 * between), until she is hidden again or the night ends: the same moment, her clock having run on unseen. */
+		double RevealAt = -1.0, HidSwirl = -1.0, TwinSwirl = -1.0;
+		int SwirlsAfter = 0, SwirlsOff = 0;
+	};
+
+	/**
+	 * The night again as the player's side sees it (SetMine from the views' "me", as the scene's OpenOn): each enemy boat's
+	 * looks stepped as the scene steps them, her bShown the show's, beside a twin in sight all along. Hidden, she rides as
+	 * her twin (found, she is where she would be: no jump) and throws nothing on the sea, no splash and no new swirl; in
+	 * sight, she throws as her twin does, and found deep she lays her first swirl when her twin does.
+	 */
+	int PlayUnseen(const std::string& Path)
+	{
+		std::ifstream File(Path);
+		if (!File) return 2;
+		std::stringstream Text;
+		Text << File.rdbuf();
+		SeaFeed::Recording Rec;
+		std::string Error;
+		if (!SeaFeed::ReadRecording(Text.str(), Rec, Error) || Rec.Views.empty()) return 2;
+		SeaShow::Show Night(Rec.Seed ? Rec.Seed : 239);
+		Night.SetField(Rec.Board);
+		const int Mine = SeaFeed::SideOf(Rec.Views.front().Head.Me);
+		Night.SetMine(Mine);
+		size_t Taken = 0;
+		auto TakeNext = [&]()
+		{
+			const SeaFeed::Frame& V = Rec.Views[Taken++];
+			Night.Take(V.Head.T, V.Pieces, V.Events, V.bZones ? &V.Zones : nullptr, V.Head.Contact);
+		};
+		TakeNext();
+		if (Taken < Rec.Views.size()) TakeNext();
+		const SeaShow::Field& Board = Night.Board();
+		const double Sky = SkyLit(Board.bLight, Board.SunUp, Board.MoonUp, Board.MoonLit);
+		std::map<int, UnseenSeen> Boats;
+		const double Step = 1.0 / 30.0;
+		double T = Rec.Views.front().Head.T;
+		const double EndT = Rec.Views.back().Head.T;
+		while (true)
+		{
+			Night.Advance(T);
+			for (const SeaShow::ShipOut& Ship : Night.Ships())
+			{
+				if (Ship.Class != "ss" || Ship.Dive.empty() || Ship.Side == Mine) continue;
+				UnseenSeen& B = Boats[Ship.Key];
+				if (!B.bSeen) B.Model = SculptedOf(Ship.Nation == "GER" ? "Submarine_GER" : Ship.Nation == "USA" ? "Submarine_USA" : "Submarine");
+				BoatIn In;
+				In.T = T;
+				In.Dive = Ship.Dive;
+				In.Keel = Ship.Keel;
+				In.Dived = Ship.Dived;
+				In.bScope = Ship.bScope;
+				In.Heave = Ship.Heave;
+				In.Pitch = Ship.Pitch;
+				In.Speed = Ship.Speed;
+				In.At = P3(Ship.At.X, Ship.At.Y, 0.0);
+				In.Heading = Ship.Heading;
+				In.ScopeKeel = Board.ScopeKeel;
+				In.Lit = Ship.Dive == "deep" ? Sky : 0.0;
+				const BoatOut Twin = StepBoat(B.Open, In, B.Model, Drawn());
+				// (as the scene: the light over her worked out in sight or out of it, so her swirls' clock runs on unseen)
+				In.bShown = Ship.bShown;
+				const BoatOut Out = StepBoat(B.Hid, In, B.Model, Drawn());
+				// (found, her first swirl and her twin's: settled once both are laid, she is hidden again, or the night ends)
+				auto Settle = [&B]()
+				{
+					if (B.RevealAt >= 0.0 && (B.HidSwirl >= 0.0 || B.TwinSwirl >= 0.0))
+					{
+						++B.SwirlsAfter;
+						if (std::fabs(B.HidSwirl - B.TwinSwirl) > 1e-9) ++B.SwirlsOff;
+					}
+					B.RevealAt = -1.0;
+				};
+				if (B.bSeen && Ship.bShown && !B.bWasShown)
+				{
+					B.RevealAt = T;
+					B.HidSwirl = B.TwinSwirl = -1.0;
+				}
+				if (B.RevealAt >= 0.0)
+				{
+					for (const Swirl& W : B.Hid.Swirls)
+						if (B.HidSwirl < 0.0 && W.T0 >= B.RevealAt) B.HidSwirl = W.T0;
+					for (const Swirl& W : B.Open.Swirls)
+						if (B.TwinSwirl < 0.0 && W.T0 >= B.RevealAt) B.TwinSwirl = W.T0;
+					if ((B.HidSwirl >= 0.0 && B.TwinSwirl >= 0.0) || !Ship.bShown || T >= EndT - 1e-9) Settle();
+				}
+				if (!(Ship.Keel > 0.0)) continue;
+				B.MostApart = std::max({ B.MostApart, std::fabs(Out.Heave - Twin.Heave), std::fabs(Out.BridgeZ - Twin.BridgeZ), std::fabs(Out.ScopeZ - Twin.ScopeZ) });
+				if (!Ship.bShown)
+				{
+					++B.HiddenFrames;
+					B.Thrown += static_cast<int>(Out.Splashes.size());
+					B.TwinThrown += static_cast<int>(Twin.Splashes.size());
+					// (a swirl laid this frame while she is hidden: none)
+					for (const Swirl& W : B.Hid.Swirls)
+						if (W.T0 > T - Step * 0.5) ++B.Laid;
+				}
+				else if (Out.Splashes.size() != Twin.Splashes.size()) ++B.ShownOff;
+				if (B.bSeen && Ship.bShown && !B.bWasShown) ++B.Reveals;
+				B.bWasShown = Ship.bShown;
+				B.bSeen = true;
+			}
+			Night.Effects.clear();
+			if (T >= EndT - 1e-9) break;
+			T = std::min(EndT, T + Step);
+			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
+		}
+		int Hidden = 0, Found = 0, TwinThrown = 0, SwirledAfter = 0;
+		for (const auto& [Key, B] : Boats)
+		{
+			Hidden += B.HiddenFrames;
+			Found += B.Reveals;
+			TwinThrown += B.TwinThrown;
+			SwirledAfter += B.SwirlsAfter;
+			ShowCheck(B.MostApart < 1e-9, Said("boat %.0f out of the player's sight rides as her twin in it (%.2g m apart at the most): found, she is where she would be", Key, B.MostApart));
+			ShowCheck(B.Thrown == 0 && B.Laid == 0, Said("boat %.0f out of the player's sight throws nothing on the sea (%.0f splashes, %.0f swirls laid)", Key, B.Thrown, B.Laid));
+			ShowCheck(B.ShownOff == 0, Said("boat %.0f in sight throws as her twin (%.0f frames otherwise)", Key, B.ShownOff));
+			ShowCheck(B.SwirlsOff == 0, Said("boat %.0f found lays her first swirl when her twin in sight does (%.0f times found with a swirl after, %.0f otherwise)", Key, B.SwirlsAfter,
+			                                 B.SwirlsOff));
+		}
+		ShowCheck(Boats.empty() || (Hidden > 0 && Found > 0 && TwinThrown > 0),
+		          Said("the night's enemy boats out of the player's sight a while (%.0f boat-frames), then found (%.0f times); their twins in sight threw %.0f splashes then", Hidden, Found, TwinThrown));
+		std::printf("%s as the player's side sees it: %zu enemy boats, %d boat-frames out of sight, found %d times (%d with a swirl after, laid when her twin's)\n", Rec.Key.c_str(),
+		            Boats.size(), Hidden, Found, SwirledAfter);
+		return 0;
+	}
 }
 
 int main(int ArgC, char** ArgV)
@@ -536,6 +674,7 @@ int main(int ArgC, char** ArgV)
 	for (int I = 1; I < ArgC; ++I)
 	{
 		Status = std::max(Status, PlayNight(ArgV[I]));
+		Status = std::max(Status, PlayUnseen(ArgV[I]));
 	}
 	std::printf("convoy looks against the show: %d checks, %d failed\n", ShowChecks, ShowFailures);
 	return ShowFailures > 0 ? 1 : Status;

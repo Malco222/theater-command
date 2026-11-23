@@ -139,6 +139,15 @@ namespace SeaShow
 		double Keel = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
+		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
+		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
+		 * the enemy piece her deck gun is on while she is up (gun, -1 none: as each view says). An escort: the piece its echo
+		 * is on and how ("asdic", "radar", "sight", "bearing"; echo {on, kind}, -1 and empty without one: as each view says). */
+		std::vector<int> Heard;
+		bool bHeard = false;
+		int GunOn = -1;
+		int EchoOn = -1;
+		std::string EchoKind;
 	};
 
 	/** One event of a view, with what the show needs of its extra. */
@@ -546,6 +555,9 @@ namespace SeaShow
 		int DiveEvents = 0, SonarEvents = 0, ChargeEvents = 0, ChargeHitEvents = 0, ReportEvents = 0, StarshellEvents = 0, RescueEvents = 0;
 		int ChargeDrops = 0, ChargeBursts = 0, ChargeBurstsBooked = 0, ChargeHitUnmatched = 0, Dives = 0, Starshells = 0, Rescues = 0;
 		int AirOnBoats = 0, AirBlowsOnBoats = 0; // aircraft told on a boat (sea:air), and their blows let go on her while she was afloat
+		// Enemy boats the player has not found (SetMine): contacts an escort of the other side gained on one and lost, a loss
+		// told for a contact no escort held, and radio bearings (a line on the plot, not her place: they find nothing).
+		int Contacts = 0, ContactsLost = 0, ContactsOdd = 0, Bearings = 0;
 		double MostKeel = 0.0;      // metres: the deepest a boat was drawn
 		// Ships under air attack (B4, B5.4 of naval-battles/ship-air-defence.md): the big ships put hard over against a
 		// dive, every ship's turn to comb a torpedo plane's drop, those back in their place after, the worst still off it
@@ -594,6 +606,23 @@ namespace SeaShow
 
 		void SetField(const Field& InField);
 		const Field& Board() const { return F; }
+		/** The player's side (0 the attacker, 1 the defender: the views' "me", SeaFeed::SideOf), told before the first Take. An
+		 * enemy boat (class "ss" of the other side) is drawn only once she is found and while she stays found: ShipOut::bShown
+		 * false until then, with no wake and no smoke, her own cues unheard and her guns silent (her torpedo tracks still run),
+		 * and the scene hides her hull and what she throws on the sea. Found: an escort of the other side has her by asdic,
+		 * radar or sight (the boat's heard where her view gives it, else sea:sonar, each contact until its loss is told, its
+		 * escort is gone or she is, or FoundFor after the last attack of one that has made an ahead-thrown run on her, which
+		 * sends no loss; a radio bearing finds nothing), and FoundFor after the last of them loses her; an escort's depth
+		 * charges on her or a blow on her; guns laid on her (an escort's or an armed merchant's) or hers firing; aircraft
+		 * running in on her; forced up; out of the fight. Up in plain sight within the night's seeing of a ship of the
+		 * player's, she stays found until she is under. -1, as made: every ship drawn, as before (the art director's
+		 * -TheaterSeaShowAll). */
+		void SetMine(int Side) { MySide = Side == 0 || Side == 1 ? Side : -1; }
+		int MineSide() const { return MySide; }
+		/** Seconds an enemy boat stays in sight after the last escort holding her loses her, or after a blow on her under: her
+		 * hunters' run in on where she was lost and their charges sinking to her (form.md section 5: asdic lost close at 150
+		 * to 300 m, charges 20 to 25 s down). */
+		static constexpr double FoundFor = 90.0;
 
 		/** Where the camera is (board metres): columns and screens near it come first when the room is short. */
 		Vec Eye;
@@ -847,6 +876,31 @@ namespace SeaShow
 		 * so; and how many each piece has lost. */
 		std::map<std::pair<int, int>, int> LostShips;
 		std::map<int, int> LostCount;
+		/** An enemy boat as the player's side has found her (SetMine): the escorts holding her by their sea:sonar events (a
+		 * recording whose boats carry no heard), each until it tells its loss, is gone or she is (the battle closes every
+		 * contact with a loss or her end: a contact it still holds keeps her in sight however long it goes without an
+		 * attack), save one that has made an ahead-thrown run on her, which sends no loss: let go FoundFor after its last
+		 * attack; in sight until when (FoundFor after the last of them lost her, or after a blow on her under), up in sight (hit
+		 * or forced up: until she is under again, then FoundFor), out of the fight for good (her crew giving her up), held by
+		 * the escorts her view says are running in on her, kept by a lookout's eye (up within the night's seeing), and in
+		 * sight as of the last sweep. */
+		struct Hunted
+		{
+			/** An escort holding her by its events: when it last had word of her (its contact gained, or its charges on her),
+			 * and whether it has made an ahead-thrown run on her since it gained her (no loss is told after one: its hold
+			 * runs out FoundFor after that last word). */
+			struct Hunter
+			{
+				double Word = 0.0;
+				bool bAhead = false;
+			};
+			std::map<int, Hunter> HeldBy;
+			std::set<int> Lapsed; // escorts whose hold ran out after an ahead-thrown run: a loss told for one after is no odd one
+			double Until = -1.0;
+			bool bUp = false, bForGood = false, bHeld = false, bLookout = false, bSeen = false;
+		};
+		std::map<int, Hunted> Hunts; // by hull key: only boats of the other side, once anything has touched them
+		int MySide = -1;
 		std::vector<ShipOut> OutShips;
 		std::vector<PlaneOut> OutPlanes;
 		std::vector<TorpOut> OutTorps;
@@ -988,6 +1042,23 @@ namespace SeaShow
 		void HandOver(Column& C, Hull& Old, Hull& New);
 		void Debts(const View& Before, const View& After, const std::vector<Event>& Between);
 		void Output();
+		/** Her hunt (SetMine): nullptr unless the player's side is set and she is a boat of the other side. */
+		Hunted* Quarry(const Hull& Boat);
+		/** A boat under (her casing below the sea, and not on her way up): out of a lookout's sight. */
+		bool BoatUnder(const Hull& Boat) const;
+		/** She is in sight until at least For seconds from now. */
+		void Sight(const Hull& Boat, double For = FoundFor);
+		/** A blow on her: up, in sight until she is under again; and FoundFor from now either way. */
+		void SightHit(const Hull& Boat);
+		/** What an event finds (before its cue: one that finds her is heard): an escort's contact gained or lost, a boat
+		 * forced up or given up, a gun's hit. */
+		void HuntEvent(const Event& E, const Piece* P, const Vec& At);
+		/** Each step, after everything that finds her: the escorts her view says hold her, a holder of the events' gone, sunk
+		 * or FoundFor past its last attack after an ahead-thrown run letting her go, guns laid on her or hers while she is
+		 * up, a boat up once under again, a lookout's eye on her; then whether she is in sight. */
+		void Hunt();
+		/** Whether the player sees her: every ship but an enemy boat in the fight not found. */
+		bool InSight(const Hull& H) const;
 
 		/** The ship of a piece nearest a board point, afloat in its line (null: none). */
 		Hull* NearestOf(int PieceId, double X, double Y);

@@ -574,6 +574,86 @@ namespace
 		Check(SculptedOf("Submarine_ITA").Name.empty(), "no row for a file the game does not have");
 	}
 
+	/**
+	 * An enemy boat out of the player's sight (BoatIn::bShown false: the sea show's SetMine, until she is found): stepped
+	 * through the run of Steam (surfaced, a crash dive, her periscope up, deep under a starshell's light, up again) beside a
+	 * twin kept in sight all along, hidden from 10 to 100 s and from 150 to 240 s. She rides exactly as her twin (so found she
+	 * is where she would be, no jump), throws nothing on the sea while hidden (no feather, wash, spray or new swirl), leaves
+	 * the swirls laid before to fade as their own, and once found throws as her twin does. A third, hidden from 140 to 180 s
+	 * and found while still deep under the light, lays her first swirl after it when her twin does: her swirls' clock runs
+	 * on while she is out of sight, so found she gives no swirl of her own the moment she is seen.
+	 */
+	void TestUnseen()
+	{
+		const BoatModel M = ModelOf("GER");
+		const Drawn D = DrawnOf(M, 95.0, 8.3);
+		BoatState Hid, Open, FoundDeep;
+		auto OutDeep = [](double T) { return T >= 140.0 && T < 180.0; };
+		double FoundDeepSwirl = -1.0, OpenDeepSwirl = -1.0;
+		ShowBoat Show;
+		auto Out = [](double T) { return (T >= 10.0 && T < 100.0) || (T >= 150.0 && T < 240.0); };
+		double MostApart = 0.0;
+		int HidThrown = 0, OpenThrownHidden = 0, HidLaid = 0, OpenLaidHidden = 0, HidAfter = 0, OpenAfter = 0, KeptAtHide = 0, OpenKeptAtHide = 0;
+		bool bLooked = false;
+		for (double T = 0.0; T < 300.0; T += Frame)
+		{
+			std::string Dive = "surfaced";
+			if (T >= 20.0 && T < 130.0) Dive = "periscope";
+			else if (T >= 130.0 && T < 210.0) Dive = "deep";
+			Show.Step(T, Dive);
+			BoatIn In;
+			In.T = T;
+			In.Dive = Dive;
+			In.Keel = Show.Keel;
+			In.Dived = Show.Dived();
+			In.bScope = T >= 60.0 && T < 120.0;
+			In.Speed = Dive == "surfaced" ? 3.5 : 2.5;
+			In.Pitch = Show.Pitch(T, In.Speed);
+			In.Heading = 30.0;
+			In.At = P3(100.0 + In.Speed * T * 0.5, 200.0 + In.Speed * T * 0.866, 0.0);
+			In.Heave = 0.6 * std::sin(T * 0.7) * Show.Calm();
+			In.Lit = 0.6;
+			const BoatOut O = StepBoat(Open, In, M, D);
+			In.bShown = !Out(T);
+			const BoatOut H = StepBoat(Hid, In, M, D);
+			In.bShown = !OutDeep(T);
+			StepBoat(FoundDeep, In, M, D);
+			for (const Swirl& W : FoundDeep.Swirls)
+				if (FoundDeepSwirl < 0.0 && W.T0 >= 180.0) FoundDeepSwirl = W.T0;
+			for (const Swirl& W : Open.Swirls)
+				if (OpenDeepSwirl < 0.0 && W.T0 >= 180.0) OpenDeepSwirl = W.T0;
+			MostApart = std::max({ MostApart, std::fabs(H.Heave - O.Heave), std::fabs(H.BridgeZ - O.BridgeZ), std::fabs(H.ScopeZ - O.ScopeZ) });
+			if (Out(T))
+			{
+				HidThrown += static_cast<int>(H.Splashes.size());
+				OpenThrownHidden += static_cast<int>(O.Splashes.size());
+			}
+			else if (T >= 240.0)
+			{
+				HidAfter += static_cast<int>(H.Splashes.size());
+				OpenAfter += static_cast<int>(O.Splashes.size());
+			}
+			for (const Swirl& W : Hid.Swirls)
+				if (Out(W.T0) && W.T0 > T - Frame * 0.5) ++HidLaid;
+			for (const Swirl& W : Open.Swirls)
+				if (Out(W.T0) && W.T0 > T - Frame * 0.5) ++OpenLaidHidden;
+			// (just after the hide while deep: the swirls laid before it still on the sea, as many as her twin's)
+			if (!bLooked && T >= 150.0 + 2.0 * Frame)
+			{
+				bLooked = true;
+				for (const Swirl& W : Hid.Swirls) KeptAtHide += W.T0 < 150.0 ? 1 : 0;
+				for (const Swirl& W : Open.Swirls) OpenKeptAtHide += W.T0 < 150.0 ? 1 : 0;
+			}
+		}
+		Check(MostApart < 1e-9, F("hidden, she rides exactly as her twin in sight: %.2g m apart at the most", MostApart));
+		Check(HidThrown == 0 && OpenThrownHidden > 0, F("hidden, nothing thrown on the sea (her twin threw %.0f): %.0f", OpenThrownHidden, HidThrown));
+		Check(HidLaid == 0 && OpenLaidHidden > 0, F("hidden deep under the light, no swirl laid (her twin laid %.0f): %.0f", OpenLaidHidden, HidLaid));
+		Check(KeptAtHide > 0 && KeptAtHide == OpenKeptAtHide, F("the swirls laid before the hide fade as their own, none put out: %.0f of her twin's %.0f", KeptAtHide, OpenKeptAtHide));
+		Check(HidAfter > 0 && HidAfter == OpenAfter, F("found, she throws as her twin does: %.0f of her twin's %.0f", HidAfter, OpenAfter));
+		Check(FoundDeepSwirl >= 180.0 && FoundDeepSwirl < 210.0 && std::fabs(FoundDeepSwirl - OpenDeepSwirl) < 1e-9,
+		      F("found while deep, her first swirl when her twin's (her clock ran on unseen): %.3f s, her twin's %.3f s", FoundDeepSwirl, OpenDeepSwirl));
+	}
+
 	void TestBursts()
 	{
 		const double Mk = ChargeKg("pattern"), Hh = ChargeKg("ahead");
@@ -1062,6 +1142,7 @@ int main(int ArgC, char** ArgV)
 	bStory = std::getenv("CONVOY_LOOKS_STORY") != nullptr;
 	TestModelRows(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestBoats();
+	TestUnseen();
 	TestBursts();
 	TestPatterns();
 	TestStarshell();

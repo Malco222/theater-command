@@ -737,7 +737,14 @@ namespace SeaShow
 	{
 		const Piece* P = E.Unit >= 0 ? PieceNow(E.Unit) : nullptr;
 		const Vec At = P ? Vec(P->X, P->Y, 0.0) : Vec(E.X, E.Y, 0.0);
-		if (!E.Cue.empty()) Emit(FxKind::Sound, At, E.Cue, E.Unit).Side = E.Side;
+		// What it finds first (SetMine), so a cue that finds her is heard. A cue of her own doing from an enemy boat the player
+		// has not found (her torpedoes away, her tanks flooding, her signal) goes unheard: he knows of her only what his own
+		// ships find. Forced up she is found, her tanks blown heard. The words are told whatever.
+		HuntEvent(E, P, At);
+		const bool bHerOwn = E.What == "sea:torpedo" || (E.What == "sea:dive" && E.Why != "forced") || E.What == "sea:report";
+		// (the hull that acts, as every handler below takes it: her sister of a piece of two, found, is heard)
+		const Hull* Doer = bHerOwn && MySide >= 0 && E.Unit >= 0 ? NearestOf(E.Unit, At.X, At.Y) : nullptr;
+		if (!E.Cue.empty() && !(Doer && !InSight(*Doer))) Emit(FxKind::Sound, At, E.Cue, E.Unit).Side = E.Side;
 		if (!E.Text.empty())
 		{
 			Fx& D = Emit(FxKind::Dispatch, At, E.What, E.Unit);
@@ -919,6 +926,7 @@ namespace SeaShow
 			Fx& X = Emit(FxKind::TorpedoHit, Hit, "torpedo", Struck->Key);
 			X.Side = Struck->Side;
 			Struck->LastBlow = "torpedo";
+			SightHit(*Struck); // (a boat struck is found: SetMine)
 			++Check.TorpedoHits;
 			return;
 		}
@@ -1042,6 +1050,8 @@ namespace SeaShow
 				}
 				Strikes.push_back(S);
 				AirBlowAt[E.Unit] = E.T;
+				// (the aircraft have her: in sight over their run and FoundFor after, SetMine)
+				Sight(*Boat, Run + FoundFor);
 				++Check.AirOnBoats;
 				return;
 			}
@@ -1198,6 +1208,7 @@ namespace SeaShow
 				return;
 			}
 			Best->bHit = true;
+			Best->Boat = E.Unit; // (the boat it is booked on: found where it bursts, SetMine)
 			Best->At = Vec(Near.X, Near.Y, -Keel);
 			if (std::fabs(Best->Bursts - E.T) <= 15.0) Best->Bursts = E.T;
 			else if (Boat)
@@ -1368,6 +1379,259 @@ namespace SeaShow
 		return SizeOf(Class).Long * 0.07;
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// Whom the player sees (SetMine): an enemy boat only once his ships have found her. Looks only: no draw on the dice,
+	// nothing the battle reads; what finds her is what the battle told.
+
+	Show::Hunted* Show::Quarry(const Hull& Boat)
+	{
+		if (MySide < 0 || Boat.Class != "ss" || Boat.Side == MySide) return nullptr;
+		return &Hunts[Boat.Key];
+	}
+
+	bool Show::BoatUnder(const Hull& Boat) const
+	{
+		// (on her way up, her state "surfaced", she is coming into sight: under again only once she has gone down)
+		return Boat.Keel > SurfacedKeel(Boat.Class) + 1.0 && Boat.Dive != "surfaced";
+	}
+
+	void Show::Sight(const Hull& Boat, double For)
+	{
+		if (Hunted* W = Quarry(Boat)) W->Until = std::max(W->Until, ShownT + For);
+	}
+
+	void Show::SightHit(const Hull& Boat)
+	{
+		Hunted* W = Quarry(Boat);
+		if (!W) return;
+		// (struck up, she is in plain sight of whoever struck her until she is under again; under, her hunters work the spot)
+		if (!BoatUnder(Boat)) W->bUp = true;
+		W->Until = std::max(W->Until, ShownT + FoundFor);
+	}
+
+	void Show::HuntEvent(const Event& E, const Piece* P, const Vec& At)
+	{
+		if (MySide < 0) return;
+		if (E.What == "sea:sonar")
+		{
+			// (a radio bearing is a line on the plot, not her place: it finds nothing)
+			if (E.Kind == "bearing")
+			{
+				++Check.Bearings;
+				return;
+			}
+			Hull* Boat = P && E.On >= 0 ? NearestOf(E.On, At.X, At.Y) : nullptr;
+			Hunted* W = Boat && Boat->Side != P->Side ? Quarry(*Boat) : nullptr;
+			if (!W) return;
+			// Where her view says who is running in on her (heard), that is her hold, Hunt; a contact gained finds her for
+			// FoundFor, and one lost keeps her FoundFor more if she was in sight. Else the escorts' events hold her, each
+			// escort's by itself whatever the kind (radar may gain her up and asdic lose her under), each until its loss is
+			// told, it is gone or she is: the battle closes every contact so, and one it still holds is her hunters' however
+			// long they go without an attack (Hunt lets go only of one FoundFor past an ahead-thrown run, which sends none).
+			const Piece* Her = PieceNow(Boat->Piece);
+			const bool bByHeard = Her && Her->bHeard;
+			if (E.Lost.empty())
+			{
+				++Check.Contacts;
+				if (bByHeard) W->Until = std::max(W->Until, ShownT + FoundFor);
+				else
+				{
+					// (gained, or gained again: its word on her is now, and no ahead-thrown run has been made on it since)
+					Hunted::Hunter& Holds = W->HeldBy[E.Unit];
+					Holds.Word = ShownT;
+					Holds.bAhead = false;
+				}
+				W->Lapsed.erase(E.Unit);
+				return;
+			}
+			// (the loss lets go of what this escort's events held, whichever way she is held now: a recording whose views
+			// begin saying heard after an escort's gain leaves no stale holder)
+			const bool bWasHolding = W->HeldBy.erase(E.Unit) > 0;
+			const bool bLapsed = W->Lapsed.erase(E.Unit) > 0;
+			if (bByHeard)
+			{
+				++Check.ContactsLost;
+				if (W->bSeen || bWasHolding) W->Until = std::max(W->Until, ShownT + FoundFor);
+				return;
+			}
+			if (!bWasHolding)
+			{
+				// (one whose hold ran out after its ahead-thrown run is let go already: its loss, told late, is its own, and
+				// she is in sight FoundFor from it as from any loss, the battle having held her until now; one never held is
+				// odd)
+				if (bLapsed)
+				{
+					++Check.ContactsLost;
+					W->Until = std::max(W->Until, ShownT + FoundFor);
+				}
+				else ++Check.ContactsOdd;
+				return;
+			}
+			++Check.ContactsLost;
+			if (W->HeldBy.empty()) W->Until = std::max(W->Until, ShownT + FoundFor);
+			return;
+		}
+		if (E.What == "sea:depthCharge")
+		{
+			// (an escort's attack on her, a pattern or an ahead-thrown salvo, is made on her contact: she is the hunt's, and
+			// an escort holding her by its events still has word of her; an ahead-thrown run is followed by no loss, so its
+			// hold on her runs out FoundFor after the run unless it tells more, Hunt)
+			Hull* Boat = P && E.On >= 0 ? NearestOf(E.On, At.X, At.Y) : nullptr;
+			if (!Boat || Boat->Side == P->Side) return;
+			Sight(*Boat);
+			if (Hunted* W = Quarry(*Boat))
+			{
+				const auto It = W->HeldBy.find(E.Unit);
+				if (It != W->HeldBy.end())
+				{
+					It->second.Word = ShownT;
+					if (E.Kind == "ahead") It->second.bAhead = true;
+				}
+			}
+			return;
+		}
+		if (E.What == "sea:dive" && E.Why == "forced")
+		{
+			// (forced up by her hunters: in their sight while she is up, and FoundFor once she is under again)
+			if (Hull* Boat = NearestOf(E.Unit, At.X, At.Y))
+			{
+				if (Hunted* W = Quarry(*Boat)) W->bUp = true;
+			}
+			return;
+		}
+		if (E.What == "sea:surrender")
+		{
+			// (her crew giving her up, scuttling her or taken: out of the fight, in her takers' sight to her end)
+			if (Hull* Boat = NearestOf(E.Unit, At.X, At.Y))
+			{
+				if (Hunted* W = Quarry(*Boat)) W->bForGood = true;
+			}
+			return;
+		}
+		if (E.What == "sea:gunHit")
+		{
+			// (a deck gun's hit: on her, she is struck; from her, her gun's flash gives her away)
+			if (Hull* Boat = NearestOf(E.Unit, At.X, At.Y)) SightHit(*Boat);
+			if (const Piece* By = E.From >= 0 ? PieceNow(E.From) : nullptr)
+			{
+				if (Hull* Firer = NearestOf(E.From, By->X, By->Y)) Sight(*Firer);
+			}
+		}
+	}
+
+	void Show::Hunt()
+	{
+		if (MySide < 0) return;
+		// (a lookout's eye on a boat up: the night's seeing where the recording gives it, else a clear night's)
+		const double Sees = F.Seeing > 0.0 ? F.Seeing : 4000.0;
+		for (auto& Pair : Hulls)
+		{
+			Hull& Boat = Pair.second;
+			if (Boat.Class != "ss" || Boat.Side == MySide || Boat.Doing != Fate::Line) continue;
+			Hunted& W = Hunts[Boat.Key];
+			const Piece* Her = PieceNow(Boat.Piece);
+			// (her view saying who is running in on her now, what the escorts' events held lets go, as a contact lost: a
+			// recording that begins to say heard part way through keeps no holder of the events' from before)
+			if (Her && Her->bHeard && !W.HeldBy.empty())
+			{
+				W.HeldBy.clear();
+				W.Until = std::max(W.Until, ShownT + FoundFor);
+			}
+			if (Her && Her->bHeard) W.Lapsed.clear();
+			// The escorts her view says are running in on her (heard), each afloat and of the other side; one whose echo on
+			// her is a radio bearing has her place only as a line on the plot.
+			bool bHeld = false;
+			if (Her && Her->bHeard)
+			{
+				for (const int Id : Her->Heard)
+				{
+					const Piece* By = PieceNow(Id);
+					if (!By || By->Side == Boat.Side || By->Ships <= 0) continue;
+					if (By->EchoOn == Boat.Piece && By->EchoKind == "bearing") continue;
+					bHeld = true;
+					break;
+				}
+			}
+			if (W.bHeld && !bHeld) W.Until = std::max(W.Until, ShownT + FoundFor);
+			W.bHeld = bHeld;
+			// An escort holding her by its events holds her until it tells its loss (HuntEvent) or her end, however long it
+			// goes without an attack, and lets her go when it is sunk or gone, as a contact lost (FoundFor after the last of
+			// them). One that has made an ahead-thrown run on her, with no word since its last attack (the run sends no
+			// loss), has held her its while: she is in sight to FoundFor after that attack, no longer.
+			if (!W.HeldBy.empty())
+			{
+				bool bLetGo = false;
+				for (auto It = W.HeldBy.begin(); It != W.HeldBy.end();)
+				{
+					const Piece* By = PieceNow(It->first);
+					const bool bRunOut = It->second.bAhead && ShownT > It->second.Word + FoundFor + 1e-9;
+					if (By && By->Ships > 0 && !bRunOut)
+					{
+						++It;
+						continue;
+					}
+					if (bRunOut)
+					{
+						W.Until = std::max(W.Until, It->second.Word + FoundFor);
+						W.Lapsed.insert(It->first);
+					}
+					else bLetGo = true;
+					It = W.HeldBy.erase(It);
+				}
+				if (bLetGo && W.HeldBy.empty()) W.Until = std::max(W.Until, ShownT + FoundFor);
+			}
+			// (her deck gun laid on one of the player's ships while she is up: its flash finds her; and the guns of a ship
+			// of the player's laid on her, an armed merchant's as an escort's, have her in their sight)
+			if (!BoatUnder(Boat))
+			{
+				bool bGunned = Her && Her->GunOn >= 0;
+				for (auto It = Now.begin(); !bGunned && It != Now.end(); ++It)
+				{
+					const Piece& Gunner = It->second;
+					bGunned = Gunner.GunOn == Boat.Piece && Gunner.Side != Boat.Side && Gunner.Ships > 0;
+				}
+				if (bGunned) W.Until = std::max(W.Until, ShownT + FoundFor);
+			}
+			// (up in sight, struck or forced: once she is under again, her hunters work the spot FoundFor)
+			if (W.bUp && BoatUnder(Boat))
+			{
+				W.bUp = false;
+				W.Until = std::max(W.Until, ShownT + FoundFor);
+			}
+			// A lookout's eye: a boat in sight, up and within the night's seeing of a ship of the player's, stays in sight
+			// until she is under or beyond it (never a pop on the surface in plain view); then FoundFor.
+			bool bLookout = false;
+			if (W.bSeen && !BoatUnder(Boat))
+			{
+				for (const auto& Other : Hulls)
+				{
+					const Hull& O = Other.second;
+					if (O.Side != MySide || (O.Doing != Fate::Line && O.Doing != Fate::Limping)) continue;
+					if (O.Class == "ss" && BoatUnder(O)) continue; // (a boat of his own dived has no lookout up)
+					if (Flat(O.P - Boat.P) <= Sees)
+					{
+						bLookout = true;
+						break;
+					}
+				}
+			}
+			if (W.bLookout && !bLookout) W.Until = std::max(W.Until, ShownT + FoundFor);
+			W.bLookout = bLookout;
+			W.bSeen = InSight(Boat);
+		}
+	}
+
+	bool Show::InSight(const Hull& H) const
+	{
+		// (every ship but an enemy boat still in the fight: his own, the escorts, the merchants, and a boat going down,
+		// limping away or given up are all drawn)
+		if (MySide < 0 || H.Class != "ss" || H.Side == MySide || H.Doing != Fate::Line || H.bAbandoned) return true;
+		const auto It = Hunts.find(H.Key);
+		if (It == Hunts.end()) return false;
+		const Hunted& W = It->second;
+		return W.bForGood || W.bUp || W.bHeld || W.bLookout || !W.HeldBy.empty() || ShownT <= W.Until + 1e-9;
+	}
+
 	double Show::Trim(Hull& H, const Piece* P, double Dt, double& OutSink)
 	{
 		OutSink = 0.0;
@@ -1438,6 +1702,11 @@ namespace SeaShow
 			E.Side = C.Side;
 			++Check.ChargeBursts;
 			if (C.bHit) ++Check.ChargeBurstsBooked;
+			// (the battle's blow found her where it burst, which is where the picture shows her: SetMine)
+			if (C.bHit)
+			{
+				if (const Hull* Boat = NearestOf(C.Boat, C.At.X, C.At.Y)) SightHit(*Boat);
+			}
 		}
 	}
 
@@ -1893,6 +2162,7 @@ namespace SeaShow
 			const Hull& H = Pair.second;
 			if (H.Doing == Fate::Gone) continue;
 			if (H.Class == "ss" && H.Keel > SurfacedKeel(H.Class) + 1.0) continue; // (a boat dived: her guns are under)
+			if (!InSight(H)) continue; // (an enemy boat not found keeps her guns quiet: her tracer would give her away, SetMine)
 			const ClassSize& Sz = SizeOf(H.Class);
 			ShipGuns::Hull G;
 			G.Id = H.Key;
@@ -2635,6 +2905,8 @@ namespace SeaShow
 					if (!On || On->Piece != Foe->Id || On->Doing != Fate::Line || std::fmod(ShownT, 5.0) < Dt) On = NearestOf(Foe->Id, H->P.X, H->P.Y);
 					// (a boat dived is no gun target: her hunters' weapon is the depth charge)
 					if (On && On->Class == "ss" && On->Keel > SurfacedKeel(On->Class) + 1.0) On = nullptr;
+					// (nor does a boat dived fire: her deck gun is under)
+					if (On && H->Class == "ss" && H->Keel > SurfacedKeel(H->Class) + 1.0) On = nullptr;
 				}
 				if (!On)
 				{
@@ -2658,6 +2930,9 @@ namespace SeaShow
 				H->NextSalvo = ShownT + Cadence(H->Class);
 				H->bFiring = true;
 				H->FiredAt = ShownT;
+				// (guns laid on a boat, or hers firing, have her in sight: the flash and her hull come together, SetMine)
+				Sight(*H);
+				Sight(*On);
 				const double Cal = Calibre(H->Class, H->Nation);
 				Shells S;
 				S.From = H->Key;
@@ -2713,6 +2988,7 @@ namespace SeaShow
 				On->LastBlow = Weapon;
 				++Check.ShellHits;
 			}
+			if (Hits > 0) SightHit(*On); // (a boat struck is found: SetMine)
 			for (int C = Hits; C < Fell.Count; ++C)
 			{
 				const Vec At = Middle + Down * (Roll.Bell() * (0.006 * Range + 25.0)) + Across * (Roll.Bell() * (0.002 * Range + 8.0));
@@ -2904,6 +3180,7 @@ namespace SeaShow
 								Fx& E = Emit(FxKind::BombHit, At, bTorp ? "torpedo" : S.bFromCoast ? "level" : "dive", On->Key);
 								E.Side = On->Side;
 								On->LastBlow = bTorp ? "torpedo" : "dive";
+								SightHit(*On); // (a boat struck is found: SetMine)
 								++Check.BombHits;
 								// B5.4: beside a dive bomber's hit, its two small wing bombs close aboard (Repulse took one hit
 								// and seven near misses): columns within about 50 m of her side.
@@ -4076,6 +4353,8 @@ namespace SeaShow
 			CoverFleet(Fixed);
 			LayScreens();
 			RunWrecks(Fixed);
+			// (whom the player sees, once every step's finds are in: SetMine)
+			Hunt();
 			// The seamanship's checks over the step: no pop, no slide, no turn or rudder past the class's, for ships in a line.
 			for (auto& Pair : Lines)
 			{
@@ -4184,6 +4463,15 @@ namespace SeaShow
 					S.Funnel = 0.0;
 				}
 			}
+			// An enemy boat the player has not found (SetMine): not drawn, and nothing of her on the sea (her wake and her
+			// diesels' smoke, which the scene draws from these; the scene hides her hull, AirStage::SetShown, and her looks,
+			// ConvoyLooks).
+			S.bShown = InSight(H);
+			if (!S.bShown)
+			{
+				S.Wake = 0.0;
+				S.Funnel = 0.0;
+			}
 			OutShips.push_back(S);
 		}
 		OutPlanes.clear();
@@ -4236,8 +4524,9 @@ namespace SeaShow
 		for (const ShipOut& S : OutShips)
 		{
 			const char* Doing = S.Doing == Fate::Line ? "line" : S.Doing == Fate::Limping ? "limping" : S.Doing == Fate::Sinking ? "sinking" : "gone";
-			std::snprintf(Line, sizeof(Line), "%5d %s %s p%d.%d %s at %.0f,%.0f hdg %.0f %.1f m/s heel %.1f train %.0f%s%s%s\n", S.Key, S.Side ? "def" : "att", S.Class.c_str(), S.Piece, S.Slot, Doing,
-				S.At.X, S.At.Y, S.Heading, S.Speed, S.Heel, S.Train, S.bFiring ? " FIRE" : "", S.bScreen ? " smoke" : "", S.Doing == Fate::Sinking ? (" " + S.How).c_str() : "");
+			std::snprintf(Line, sizeof(Line), "%5d %s %s p%d.%d %s at %.0f,%.0f hdg %.0f %.1f m/s heel %.1f train %.0f%s%s%s%s\n", S.Key, S.Side ? "def" : "att", S.Class.c_str(), S.Piece, S.Slot, Doing,
+				S.At.X, S.At.Y, S.Heading, S.Speed, S.Heel, S.Train, S.bFiring ? " FIRE" : "", S.bScreen ? " smoke" : "", S.Doing == Fate::Sinking ? (" " + S.How).c_str() : "",
+				S.bShown ? "" : " unseen");
 			Out += Line;
 		}
 		for (const Wreck& W : Wrecked)

@@ -117,6 +117,9 @@ namespace ConvoyLook
 		double Heading = 0.0;   // degrees
 		double ScopeKeel = 13.0;
 		double Lit = 0.0;
+		/** In the player's sight (SeaShow's ShipOut::bShown: an enemy boat not yet found is not): out of it, she throws
+		 * nothing on the sea, while her ride and her clocks go on as in sight, so that found she is where she would be. */
+		bool bShown = true;
 	};
 
 	/** A faint swirl on the sea over a boat running deep, where light falls on it: where, when, how strong (0 to 1). */

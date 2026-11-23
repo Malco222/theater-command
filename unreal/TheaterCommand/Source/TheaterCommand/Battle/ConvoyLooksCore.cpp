@@ -335,9 +335,13 @@ namespace ConvoyLook
 		const double SwirlK = In.Dive == "deep" && S.ForcedAt < 0.0 ? Clamp(In.Lit, 0.0, 1.0) * std::exp(-std::max(0.0, In.Keel - In.ScopeKeel) / SwirlFade) : 0.0;
 		if (!bJump && SwirlK >= SwirlLeast && In.Speed > FeatherFrom && In.T >= S.NextSwirl)
 		{
-			S.Swirls.push_back({ Mid, In.T, SwirlK });
+			// (out of the player's sight none is laid; those already on the sea fade as their own, a sudden going a tell too)
+			if (In.bShown) S.Swirls.push_back({ Mid, In.T, SwirlK });
 			S.NextSwirl = In.T + SwirlEvery;
 		}
+		// Out of the player's sight (an enemy boat not yet found): nothing of her thrown on the sea, her periscope's feather,
+		// the water off her casing, her bow's spray, though her clocks run on as in sight.
+		if (!In.bShown) Out.Splashes.clear();
 		S.T = In.T;
 		S.bBegun = true;
 		return Out;

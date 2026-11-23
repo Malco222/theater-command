@@ -89,6 +89,13 @@ public:
 	 * by Advance. A ship never steered lies where she was laid, as before.
 	 */
 	void Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch, double Heave = 0.0);
+	/**
+	 * Whether the player sees ship Id (the fleet action's, each frame: an enemy boat not yet found is hidden, SeaShow's
+	 * SetMine). Hidden, her hull (and her bow's half) is not drawn, she gives no deck to stand a burst on and no funnel
+	 * tops; she is still steered, so found she is where she should be, and what her looks lit before rides on with her
+	 * (it goes under with her, as on any boat dived). The air scene never hides a ship.
+	 */
+	void SetShown(int32 Id, bool bShown);
 
 	/** The ships of the battle, as they lie at the start. A ship already laid is moved, not made again. */
 	void SetShips(const TArray<FStageShip>& Ships);
@@ -190,6 +197,7 @@ private:
 		FVector Stretch = FVector::OneVector;
 		bool bTwoMeshes = false;
 		bool bNearShown = true;
+		bool bHidden = false; // out of the player's sight (SetShown)
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */

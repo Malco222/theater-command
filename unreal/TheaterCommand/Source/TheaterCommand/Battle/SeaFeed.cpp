@@ -163,6 +163,22 @@ namespace SeaFeed
 			P.Keel = X["keel"].IsNumber() ? std::clamp(X["keel"].Num(), 0.0, 1000.0) : -1.0;
 			P.bScope = X["scope"].Truth(false);
 			if (X["column"].IsNumber()) P.ConvoyColumn = X["column"].Int();
+			// Whether the player's side has her (Show::SetMine): a boat's hunters as last told (the stager writes heard only as
+			// it changes), her deck gun's mark and an escort's echo as each view says (written afresh while they last).
+			const Json& Heard = X["heard"];
+			if (Heard.IsArray())
+			{
+				P.bHeard = true;
+				P.Heard.clear();
+				for (size_t K = 0; K < Heard.Count(); ++K)
+				{
+					if (Heard.At(K).IsNumber()) P.Heard.push_back(Heard.At(K).Int());
+				}
+			}
+			P.GunOn = X["gun"].IsNumber() ? X["gun"].Int() : -1;
+			const Json& Echo = X["echo"];
+			P.EchoOn = Echo.IsObject() && Echo["on"].IsNumber() ? Echo["on"].Int() : -1;
+			P.EchoKind = Echo.IsObject() ? Echo["kind"].Str("") : std::string();
 			Kept.Still[P.Id] = P;
 		}
 

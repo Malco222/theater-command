@@ -1383,6 +1383,10 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	FSeaBattleState& S = *State;
 	S.Rec = std::move(Rec);
 	S.Show.SetField(S.Rec.Board);
+	// Enemy boats unseen until found (the player's side from the first view's "me", as bDefender below): her hull, her
+	// wake, her looks and the camera's eye kept off her until an escort holds her, a blow finds her or she is out of the
+	// fight. "-TheaterSeaShowAll" draws every boat (the art director's look at a whole night).
+	S.Show.SetMine(FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaShowAll")) ? -1 : SeaFeed::SideOf(S.Rec.Views.front().Head.Me));
 	S.BeginT = S.Rec.Views.front().Head.T;
 	S.EndT = S.Rec.Views.back().Head.T;
 	S.BattleT = S.BeginT;
@@ -2016,7 +2020,13 @@ void ASeaBattle::LayAndSteer()
 		// boat states (surfaced, periscope, deep) may give her own heave here.
 		const double Heave = FConvoyLooks::Steer(SubLooks, Root, Stage, Effects.Get(), S.Show, UnitsPerMetre, S.BattleT, bSkipping, bOnWater, Ship); // D1 hook (convoy looks)
 		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Heave);
-		LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
+		// (an enemy boat the player has not found: steered in her place, so that found she is where she should be, but not
+		// drawn, and no last sight of her for the camera: SeaShow's SetMine)
+		Stage->SetShown(Ship.Key, Ship.bShown);
+		if (Ship.bShown)
+		{
+			LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
+		}
 	}
 }
 
@@ -4030,6 +4040,8 @@ void ASeaBattle::PlanShots()
 	// (the same show as the scene's: the same seed, the same views, handed over the same way)
 	SeaShow::Show Trial(S.Rec.Seed ? S.Rec.Seed : 239);
 	Trial.SetField(S.Rec.Board);
+	// (the player's sight of the enemy's boats as the scene's: a boat not yet found is no shot's subject)
+	Trial.SetMine(S.Show.MineSide());
 	const double Mid = S.Rec.Board.Size * 0.5;
 	Trial.Eye = SeaShow::Vec(Mid, Mid - 3000.0, 900.0);
 	size_t Given = 0;
@@ -4115,7 +4127,7 @@ void ASeaBattle::PlanShots()
 			const SeaShow::ShipOut* Small = nullptr;
 			for (const SeaShow::ShipOut& Ship : Trial.Ships())
 			{
-				if (Ship.Doing == SeaShow::Fate::Line && (!Small || Ship.Long < Small->Long))
+				if (Ship.Doing == SeaShow::Fate::Line && Ship.bShown && (!Small || Ship.Long < Small->Long))
 				{
 					Small = &Ship;
 				}
@@ -4125,7 +4137,7 @@ void ASeaBattle::PlanShots()
 			for (const SeaShow::ShipOut& Ship : Trial.Ships())
 			{
 				const double Away = Small ? FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), FVector2D(Small->At.X, Small->At.Y)) : 0.0;
-				if (Small && Ship.Doing == SeaShow::Fate::Line && Ship.Long >= Small->Long + 40.0 && Away - Ship.Long * 10.0 < Best)
+				if (Small && Ship.Doing == SeaShow::Fate::Line && Ship.bShown && Ship.Long >= Small->Long + 40.0 && Away - Ship.Long * 10.0 < Best)
 				{
 					Best = Away - Ship.Long * 10.0;
 					Big = &Ship;
@@ -4135,17 +4147,27 @@ void ASeaBattle::PlanShots()
 			Ride.Subject = Small ? Small->Key : -1;
 			Ride.Other = Big ? Big->Key : -1;
 		}
-		// The fleets: the attacker's biggest column, by its leader.
+		// The fleets: the attacker's biggest column, by its leader; a column led by a boat the player has not found is passed
+		// over, and with none of the attacker's left, the defender's.
 		if (Fleets.Subject < 0)
 		{
-			int32 Best = 0;
-			for (const SeaShow::ShipOut& Ship : Trial.Ships())
+			bool bKeptBack = false;
+			for (int32 Pass = 0; Pass < 2 && Fleets.Subject < 0 && (Pass == 0 || bKeptBack); ++Pass)
 			{
-				if (Ship.Side == 0 && Ship.Slot == 0 && Rank(Ship.Class) > Best)
+				int32 Best = 0;
+				for (const SeaShow::ShipOut& Ship : Trial.Ships())
 				{
-					Best = Rank(Ship.Class);
-					Fleets.Subject = Ship.Key;
-					Fleets.Other = Ship.Piece;
+					if (Ship.Side == Pass && Ship.Slot == 0 && Rank(Ship.Class) > Best)
+					{
+						if (!Ship.bShown)
+						{
+							bKeptBack = true;
+							continue;
+						}
+						Best = Rank(Ship.Class);
+						Fleets.Subject = Ship.Key;
+						Fleets.Other = Ship.Piece;
+					}
 				}
 			}
 		}
@@ -4228,7 +4250,7 @@ void ASeaBattle::PlanShots()
 					for (const SeaShow::ShipOut& Ship : Trial.Ships())
 					{
 						const double Away = FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), At);
-						if ((Ship.Doing == SeaShow::Fate::Line || Ship.Doing == SeaShow::Fate::Limping) && Away <= Ship.Long * 0.5 + 300.0 && Away < Best)
+						if ((Ship.Doing == SeaShow::Fate::Line || Ship.Doing == SeaShow::Fate::Limping) && Ship.bShown && Away <= Ship.Long * 0.5 + 300.0 && Away < Best)
 						{
 							Best = Away;
 							About = &Ship;
@@ -4271,6 +4293,30 @@ void ASeaBattle::PlanShots()
 					Run.At = T;
 					Run.Spot = At;
 					Run.Way = FVector2D(E.Vel.X, E.Vel.Y).GetSafeNormal();
+					// (fired from a boat the player has not found: her place is no shot's, so the tracks are seen as his lookout
+					// sees them, from the nearest ship of his they run toward, ShotEye; Other 1 says so)
+					const SeaShow::ShipOut* Firer = nullptr;
+					for (const SeaShow::ShipOut& Ship : Trial.Ships())
+					{
+						if (!Ship.bShown && FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), At) <= Ship.Long * 0.5 + 60.0)
+						{
+							Firer = &Ship;
+						}
+					}
+					if (Firer)
+					{
+						Run.Other = 1;
+						double Nearest = TNumericLimits<double>::Max();
+						for (const SeaShow::ShipOut& Ship : Trial.Ships())
+						{
+							const FVector2D Off = FVector2D(Ship.At.X, Ship.At.Y) - At;
+							if (Ship.bShown && Ship.Side != Firer->Side && Ship.Doing == SeaShow::Fate::Line && FVector2D::DotProduct(Off, Run.Way) > 0.0 && Off.Size() < Nearest)
+							{
+								Nearest = Off.Size();
+								Run.Subject = Ship.Key;
+							}
+						}
+					}
 				}
 				break;
 			case SeaShow::FxKind::BombHit:
@@ -4683,6 +4729,11 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		}
 		if (const SeaShow::ShipOut* Ship = S.Show.Ship(Which))
 		{
+			// (an enemy boat the player has not found is no shot's: neither where she is nor where she was last seen)
+			if (!Ship->bShown)
+			{
+				return false;
+			}
 			OutP = FVector2D(Ship->At.X, Ship->At.Y);
 			OutHeading = Ship->Heading;
 			OutLong = DrawnLong.Contains(Which) ? DrawnLong[Which] : Ship->Long;
@@ -4709,7 +4760,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		int32 Count = 0;
 		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 		{
-			if (Ship.Side == Which && Ship.Doing == SeaShow::Fate::Line)
+			if (Ship.Side == Which && Ship.Doing == SeaShow::Fate::Line && Ship.bShown)
 			{
 				Sum += FVector2D(Ship.At.X, Ship.At.Y);
 				++Count;
@@ -4728,7 +4779,12 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 	{
 	case ESeaShot::Fleets:
 	{
-		// Behind the column's quarter, looking up its line as it zig-zags.
+		// Behind the column's quarter, looking up its line as it zig-zags (never a column the player has not found).
+		const SeaShow::ShipOut* Leader = S.Show.Ship(Shot.Subject);
+		if (Leader && !Leader->bShown)
+		{
+			return false;
+		}
 		SeaShow::Vec Middle;
 		double Face = 0.0;
 		if (S.Show.PieceMiddle(Shot.Other, Middle, Face))
@@ -4756,7 +4812,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		int32 Count = 0;
 		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 		{
-			if (Ship.Side != Hers || Ship.LineAt < 0)
+			if (Ship.Side != Hers || Ship.LineAt < 0 || !Ship.bShown)
 			{
 				continue;
 			}
@@ -4834,7 +4890,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 			for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 			{
 				const double Away = FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), P);
-				if (Away < Best)
+				if (Ship.bShown && Away < Best)
 				{
 					Best = Away;
 					Target = Ship.Side;
@@ -4885,6 +4941,31 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		// Above and behind where the salvo was fired, looking down its tracks.
 		const FVector2D Way = Shot.Way.IsNearlyZero() ? FVector2D(0.0, 1.0) : Shot.Way.GetSafeNormal();
 		const FVector2D Aside(Way.Y, -Way.X);
+		if (Shot.Other == 1)
+		{
+			// Fired from a boat the player has not found (PlanShots): no eye over where she is, but his lookout's, on the
+			// bridge wing of the ship the tracks run toward on the side they come from, just outboard of her hull, looking
+			// back up them as they come; with no such ship, high over the tracks ahead, looking back along them. Neither
+			// eye is ever inside steel.
+			const FVector2D Coming = Shot.Spot + Way * 700.0;
+			if (Find(Shot.Subject, P, Heading, Long))
+			{
+				const SeaShow::ShipOut* Hers = S.Show.Ship(Shot.Subject);
+				const double HalfBeam = 0.5 * (Hers ? Hers->Beam : Long * 0.13);
+				const FVector2D Wing = FVector2D::DotProduct(Starboard(Heading), Shot.Spot - P) >= 0.0 ? Starboard(Heading) : -Starboard(Heading);
+				const FVector2D Lookout = P + Ahead(Heading) * (Long * 0.12) + Wing * (HalfBeam + 2.0);
+				const FVector2D Toward = FVector2D::Distance(Lookout, Shot.Spot) > 900.0 ? Coming : Shot.Spot;
+				OutEye = World(Lookout.X, Lookout.Y, 14.0);
+				OutLook = World(Toward.X, Toward.Y, 0.0);
+				OutLens = 40.0;
+				return true;
+			}
+			const FVector2D High = Shot.Spot + Way * 1500.0 + Aside * 150.0;
+			OutEye = World(High.X, High.Y, 260.0);
+			OutLook = World(Coming.X, Coming.Y, 0.0);
+			OutLens = 50.0;
+			return true;
+		}
 		const FVector2D From = Shot.Spot - Way * 350.0 + Aside * 150.0, To = Shot.Spot + Way * 700.0;
 		OutEye = World(From.X, From.Y, 260.0);
 		OutLook = World(To.X, To.Y, 0.0);
@@ -4999,7 +5080,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 			double Nearest = TNumericLimits<double>::Max();
 			for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 			{
-				if (Ship.Doing != SeaShow::Fate::Sinking)
+				if (Ship.Doing != SeaShow::Fate::Sinking && Ship.bShown)
 				{
 					Nearest = FMath::Min(Nearest, FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), At));
 				}
@@ -5050,7 +5131,7 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		int32 Count = 0;
 		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 		{
-			if (Ship.Doing == SeaShow::Fate::Line)
+			if (Ship.Doing == SeaShow::Fate::Line && Ship.bShown)
 			{
 				Sum += FVector2D(Ship.At.X, Ship.At.Y);
 				++Count;

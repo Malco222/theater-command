@@ -617,8 +617,8 @@ bool AAirStage::DeckUnder(const FVector& WorldAt, FVector& OutDeck) const
 	{
 		const FShip& Ship = Pair.Value;
 		// (a ship going down has no deck to stand on: what is laid for her end, her oil and the water boiling round her,
-		// goes on the sea, or at the height the stage gives it)
-		if (Ship.bGone || Ship.SunkAt >= 0.0)
+		// goes on the sea, or at the height the stage gives it; nor has one hidden, SetShown)
+		if (Ship.bGone || Ship.SunkAt >= 0.0 || Ship.bHidden)
 		{
 			continue;
 		}
@@ -647,7 +647,7 @@ bool AAirStage::FunnelTops(int32 Id, TArray<FVector4>& Out) const
 	Out.Reset();
 	const FShip* Ship = Ships.Find(Id);
 	const TArray<FVector4>* Tops = FunnelsOf.Find(Id);
-	if (!Ship || !Ship->Hull || Ship->bGone || Ship->SunkAt >= 0.0 || !Tops || Tops->Num() == 0)
+	if (!Ship || !Ship->Hull || Ship->bGone || Ship->SunkAt >= 0.0 || Ship->bHidden || !Tops || Tops->Num() == 0)
 	{
 		return false;
 	}
@@ -1766,6 +1766,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			Fore->RegisterComponent();
 			Fore->CreateMeshSection(0, Model.Vertices, Bow, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 			Fore->SetMaterial(0, SteelInk);
+			Fore->SetVisibility(!Ship->bHidden);
 			Fore->SetRelativeLocationAndRotation(Ship->Base, FRotator(0.0, Ship->Yaw, 0.0));
 			Ship->Fore = Fore;
 			ShipMeshes.Add(Fore);
@@ -1947,6 +1948,8 @@ void AAirStage::Advance(double Now)
 	Looks.Advance(Now, Effects, [this](int32 Id, FShipLie& Lie)
 	{
 		const FShip* Ship = Ships.Find(Id);
+		// (one hidden, SetShown, still lies where she is: what her looks lit rides on with her and goes under with her, as
+		// on any boat dived, and is not left burning on the empty sea where she was hidden to mark her place)
 		if (!Ship || Ship->bGone)
 		{
 			return false;
@@ -1984,7 +1987,7 @@ void AAirStage::ShowNearOrFar()
 	for (TPair<int32, FShip>& Pair : Ships)
 	{
 		FShip& Ship = Pair.Value;
-		if (!Ship.bTwoMeshes || !Ship.Hull || Ship.bGone)
+		if (!Ship.bTwoMeshes || !Ship.Hull || Ship.bGone || Ship.bHidden)
 		{
 			continue;
 		}
@@ -2182,6 +2185,25 @@ void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, d
 	Ship->WayList = -Heel;
 	Ship->WayTrim = -Pitch;
 	Ship->WayHeave = Heave;
+}
+
+void AAirStage::SetShown(int32 Id, bool bShown)
+{
+	FShip* Ship = Ships.Find(Id);
+	// (only as it changes; a ship gone under stays as her end left her)
+	if (!Ship || Ship->bGone || Ship->bHidden == !bShown)
+	{
+		return;
+	}
+	Ship->bHidden = !bShown;
+	if (Ship->Hull)
+	{
+		Ship->Hull->SetVisibility(bShown);
+	}
+	if (Ship->Fore)
+	{
+		Ship->Fore->SetVisibility(bShown);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------

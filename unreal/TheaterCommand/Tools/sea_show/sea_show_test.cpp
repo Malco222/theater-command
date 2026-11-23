@@ -161,6 +161,25 @@ namespace
 		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
 		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
+		// Enemy boats the player has not found (SetMine, the views' "me"): what the show hid, and anything of hers out while
+		// it did; against the recording's own finds (FindsOf): shown before anything could find her, hidden while held.
+		int EnemyBoats = 0;
+		long UnseenFrames = 0;
+		int Reveals = 0, Hides = 0;
+		int WrongHidden = 0, HiddenOut = 0, HiddenMarks = 0; // hidden and not an enemy boat; hidden out of the fight; with a wake or smoke
+		int HitsUnseen = 0, GunsUnseen = 0, HeardUnseen = 0; // a blow on her, a gun of hers, a cue of hers, while hidden
+		int HeldHidden = 0, ShownUnfound = 0;                // hidden while an escort held her; shown before anything could find her
+		int ShownStale = 0;                                  // shown under, with nothing finding her for FoundFor and more
+		std::string HeldHiddenFirst, ShownUnfoundFirst, ShownStaleFirst;
+		std::map<int, double> UnderSince, BlowAt;            // by key: under since (the show's BoatUnder), and the last blow on her
+		std::map<int, bool> WasShown;                        // by key: shown in the frame before
+		struct Sighting
+		{
+			double T = 0.0;
+			int Key = 0;
+			bool bShown = false;
+		};
+		std::vector<Sighting> Sightings;                     // each change of a ship's bShown (and a ship first drawn hidden)
 		// where ships went down (Brian, 22 November 05:32Z): men in the water and wreckage never inside a ship, no man popping
 		int MenInHull = 0, FloatsInHull = 0;
 		std::string MenInHullFirst;
@@ -180,11 +199,236 @@ namespace
 		double ContactAt = -1.0;
 	};
 
-	Played Play(const SeaFeed::Recording& Rec, double Fps, std::ofstream* Track)
+	/** What the battle told that finds each enemy boat of the player (Mine), read from the recording alone, as the rule has
+	 * it (SeaShow::Show::SetMine) and not as the show keeps it: when anything could first have found her (a contact, a blow,
+	 * aircraft on her, guns laid on her or hers, forced up, given up or gone); the spans an escort of the other side held
+	 * her (the views' heard where her view, as the show has it when each event plays, gives it; else each escort's contact
+	 * from its gain to its loss, its end or hers, or her view beginning to say heard, however long it goes without an
+	 * attack: the battle closes every contact so; only one that has made an ahead-thrown run on her, which sends no loss,
+	 * ends FoundFor after its last attack);
+	 * every moment the rule may count FoundFor on from (each find, each loss and each span's end, as late as each can come:
+	 * aircraft over their run, a booked charge still sinking to her); and when she was given up (in sight to her end). */
+	struct Finds
+	{
+		std::map<int, double> First;                                // by boat piece
+		std::map<int, std::vector<std::pair<double, double>>> Held; // by boat piece
+		std::map<int, std::vector<double>> Found;                   // by boat piece, in order
+		std::map<int, double> Given;                                // by boat piece
+	};
+
+	Finds FindsOf(const SeaFeed::Recording& Rec, int Mine)
+	{
+		Finds Out;
+		if (Mine < 0 || Rec.Views.empty()) return Out;
+		const double For = SeaShow::Show::FoundFor;
+		const SeaShow::Field& Board = Rec.Board;
+		std::map<int, int> Sides;
+		std::map<int, std::string> Classes;
+		for (const SeaFeed::Frame& F : Rec.Views)
+		{
+			for (const SeaShow::Piece& P : F.Pieces)
+			{
+				Sides[P.Id] = P.Side;
+				Classes[P.Id] = P.Class;
+			}
+		}
+		auto Enemy = [&](int Id) { return Id >= 0 && Classes.count(Id) && Classes[Id] == "ss" && Sides[Id] != Mine; };
+		auto Note = [&Out, &Enemy](int Id, double T)
+		{
+			if (!Enemy(Id)) return;
+			auto It = Out.First.find(Id);
+			if (It == Out.First.end() || T < It->second) Out.First[Id] = T;
+			Out.Found[Id].push_back(T);
+		};
+		// (a moment the rule may count FoundFor on from that finds nothing first: a loss, the end of a run over her)
+		auto Later = [&Out, &Enemy](int Id, double T)
+		{
+			if (Enemy(Id)) Out.Found[Id].push_back(T);
+		};
+		struct HeldSpan
+		{
+			double Since = 0.0, Word = 0.0; // held since, and its last word on her (a gain, or its charges on her)
+			bool bAhead = false;            // an ahead-thrown run of its on her since its gain (no loss told after one)
+		};
+		using Spans = std::map<std::pair<int, int>, HeldSpan>; // (escort, boat)
+		Spans Open;
+		auto Close = [&Out, &Open](Spans::iterator It, double T)
+		{
+			Out.Held[It->first.second].push_back({ It->second.Since, T });
+			Out.Found[It->first.second].push_back(T);
+			return Open.erase(It);
+		};
+		// (one that has made an ahead-thrown run on her, with no word since its last attack for FoundFor, has held her its
+		// while; any other holds her until its loss, its end or hers)
+		auto Expire = [&Open, &Close, For](double T)
+		{
+			for (auto It = Open.begin(); It != Open.end();)
+				It = It->second.bAhead && It->second.Word + For < T ? Close(It, It->second.Word + For) : std::next(It);
+		};
+		std::map<int, std::vector<std::pair<double, double>>> Drops; // escort: its patterns, dropped when and burst by when at the latest
+		std::map<int, double> HeardSince;                            // boat: held by her heard since
+		std::map<int, bool> HeardWas;                                // by piece: whether its view said heard, as of the view before
+		for (const SeaFeed::Frame& F : Rec.Views)
+		{
+			const double T = F.Head.T;
+			std::map<int, const SeaShow::Piece*> Here;
+			std::map<int, bool> HeardNow;
+			for (const SeaShow::Piece& P : F.Pieces)
+			{
+				if (P.Ships > 0) Here[P.Id] = &P;
+				HeardNow[P.Id] = P.bHeard;
+			}
+			// (her view as the show has it when an event of this view plays: this view at its own moment, else the one before)
+			auto ByHeard = [&HeardNow, &HeardWas, T](const SeaShow::Event& E, int Boat)
+			{
+				const std::map<int, bool>& As = E.T >= T - 1e-6 ? HeardNow : HeardWas;
+				const auto It = As.find(Boat);
+				return It != As.end() && It->second;
+			};
+			for (const SeaShow::Event& E : F.Events)
+			{
+				Expire(E.T);
+				const bool bFoe = Sides.count(E.Unit) && Enemy(E.On) && Sides[E.Unit] != Sides[E.On];
+				if (E.What == "sea:depthCharge" && E.Kind != "ahead")
+				{
+					// (its charges set where the battle says, else as deep as they go; at least 3 m/s over the spread)
+					const double Set = E.Set >= 0.0 ? E.Set : Board.CrushKeel;
+					const double Sinks = E.Sinking >= 0.0 ? E.Sinking : Set / std::max(0.5, Board.ChargeSink);
+					Drops[E.Unit].push_back({ E.T, E.T + (E.Spread > 0.0 ? E.Spread : 120.0) / 3.0 + Sinks });
+				}
+				if (E.What == "sea:sonar" && E.Kind != "bearing" && bFoe)
+				{
+					auto It = Open.find(std::make_pair(E.Unit, E.On));
+					// (a loss lets go of what this escort's events held, whichever way she is held as it is told)
+					if (!E.Lost.empty())
+					{
+						Later(E.On, E.T);
+						if (It != Open.end()) Close(It, E.T);
+						continue;
+					}
+					Note(E.On, E.T);
+					if (ByHeard(E, E.On)) continue;
+					if (It == Open.end()) Open[std::make_pair(E.Unit, E.On)] = { E.T, E.T, false };
+					else It->second = { It->second.Since, E.T, false };
+				}
+				else if (E.What == "sea:sunk")
+				{
+					Note(E.Unit, E.T);
+					for (auto It = Open.begin(); It != Open.end();)
+						It = It->first.first == E.Unit || It->first.second == E.Unit ? Close(It, E.T) : std::next(It);
+				}
+				else if (E.What == "sea:surrender")
+				{
+					Note(E.Unit, E.T);
+					if (Enemy(E.Unit) && !Out.Given.count(E.Unit)) Out.Given[E.Unit] = E.T;
+				}
+				else if (E.What == "sea:abandon" || E.What == "sea:torpedoHit")
+					Note(E.Unit, E.T);
+				else if (E.What == "sea:depthChargeHit")
+				{
+					Note(E.Unit, E.T);
+					// (its blow is the one of that escort's charges bursting nearest: one of a pattern dropped up to two
+					// minutes before bursts at its own time, as late as it can sink)
+					double Due = E.T;
+					const auto Of = Drops.find(E.From);
+					if (Of != Drops.end())
+					{
+						for (const auto& Drop : Of->second)
+							if (E.T - Drop.first <= 120.0 + 1e-6) Due = std::max(Due, Drop.second);
+					}
+					Later(E.Unit, Due);
+				}
+				else if (E.What == "sea:air")
+				{
+					// (the aircraft have her over their run as the show flies it, and their blow comes at its end)
+					Note(E.Unit, E.T);
+					Later(E.Unit, E.T + std::clamp(E.Running > 0.0 ? E.Running : 8.0, 4.0, 60.0));
+				}
+				else if (E.What == "ability" && E.Key == "strike")
+				{
+					// (a carrier's strike on her: its blow comes as it lands, its windup on and its run in)
+					Note(E.Target, E.T);
+					Later(E.Target, E.T + Board.StrikeWindup + 60.0);
+				}
+				else if (E.What == "sea:gunHit")
+				{
+					Note(E.Unit, E.T);
+					Note(E.From, E.T);
+				}
+				else if (E.What == "sea:dive" && E.Why == "forced")
+					Note(E.Unit, E.T);
+				else if (E.What == "sea:depthCharge" && bFoe)
+				{
+					Note(E.On, E.T);
+					// (an escort holding her by its events has word of her in its attack; after an ahead-thrown run its
+					// hold ends FoundFor after its last attack, unless it tells more)
+					auto It = Open.find(std::make_pair(E.Unit, E.On));
+					if (It != Open.end()) It->second = { It->second.Since, E.T, It->second.bAhead || E.Kind == "ahead" };
+				}
+			}
+			Expire(T);
+			// (an escort, or the boat, gone from the fight lets the contact go; and her view beginning to say heard lets go
+			// of what the escorts' events held, as the show's Hunt does)
+			for (auto It = Open.begin(); It != Open.end();)
+			{
+				const auto Says = HeardNow.find(It->first.second);
+				const bool bSays = Says != HeardNow.end() && Says->second;
+				It = !Here.count(It->first.first) || !Here.count(It->first.second) || bSays ? Close(It, T) : std::next(It);
+			}
+			for (const SeaShow::Piece& P : F.Pieces)
+			{
+				if (P.Engaged >= 0)
+				{
+					Note(P.Id, T);
+					Note(P.Engaged, T);
+				}
+				// (a deck gun laid: hers on a ship of his, or a ship of his, an escort's or an armed merchant's, on her)
+				if (P.GunOn >= 0)
+				{
+					Note(P.Id, T);
+					Note(P.GunOn, T);
+				}
+				if (!Enemy(P.Id) || !P.bHeard) continue;
+				bool bHeld = false;
+				for (const int By : P.Heard)
+				{
+					auto Es = Here.find(By);
+					if (Es == Here.end() || Es->second->Side == P.Side) continue;
+					if (Es->second->EchoOn == P.Id && Es->second->EchoKind == "bearing") continue;
+					bHeld = P.Ships > 0;
+					break;
+				}
+				auto Since = HeardSince.find(P.Id);
+				if (bHeld && Since == HeardSince.end())
+				{
+					HeardSince[P.Id] = T;
+					Note(P.Id, T);
+				}
+				else if (!bHeld && Since != HeardSince.end())
+				{
+					Out.Held[P.Id].push_back({ Since->second, T });
+					Later(P.Id, T);
+					HeardSince.erase(Since);
+				}
+			}
+			HeardWas = HeardNow;
+		}
+		const double EndT = Rec.Views.back().Head.T;
+		Expire(EndT);
+		for (auto It = Open.begin(); It != Open.end();) It = Close(It, EndT);
+		for (const auto& Pair : HeardSince) Out.Held[Pair.first].push_back({ Pair.second, EndT });
+		for (auto& Pair : Out.Found) std::sort(Pair.second.begin(), Pair.second.end());
+		return Out;
+	}
+
+	Played Play(const SeaFeed::Recording& Rec, double Fps, std::ofstream* Track, int Mine)
 	{
 		Played Out;
 		SeaShow::Show Show(Rec.Seed ? Rec.Seed : 239);
 		Show.SetField(Rec.Board);
+		// (the player's side as the game takes it, ASeaBattle::OpenOn: an enemy boat drawn only once found)
+		Show.SetMine(Mine);
+		const Finds Oracle = FindsOf(Rec, Mine);
 		const double Mid = Rec.Board.Size * 0.5;
 		Show.Eye = Vec(Mid, Mid - 3000.0, 900.0);
 
@@ -232,10 +476,49 @@ namespace
 			const std::vector<SeaShow::ShipOut>& Ships = Show.Ships();
 			std::map<int, const SeaShow::ShipOut*> ByKey;
 			for (const SeaShow::ShipOut& S : Ships) ByKey[S.Key] = &S;
+			// (the ships hidden this frame, and their pieces: nothing of theirs may come out while they are)
+			auto Hidden = [&ByKey](int Key) { auto It = ByKey.find(Key); return It != ByKey.end() && !It->second->bShown; };
+			std::set<int> HiddenPieces;
+			for (const SeaShow::ShipOut& S : Ships)
+				if (!S.bShown) HiddenPieces.insert(S.Piece);
 
 			for (const SeaShow::Fx& E : Show.Effects)
 			{
 				++Out.Fx[FxName(E.Kind)];
+				switch (E.Kind)
+				{
+				case SeaShow::FxKind::ShellHit:
+				case SeaShow::FxKind::BombHit:
+				case SeaShow::FxKind::TorpedoHit:
+					if (Hidden(E.Key)) ++Out.HitsUnseen;
+					Out.BlowAt[E.Key] = Show.Shown(); // (a blow finds her: the show's own shell, bomb or torpedo on her)
+					break;
+				case SeaShow::FxKind::ChargeBurst:
+					// (a charge the battle booked on a boat, bursting on her: a blow that finds her where it bursts)
+					if (E.Size > 0.5)
+					{
+						for (const SeaShow::ShipOut& S : Ships)
+						{
+							if (S.Class != "ss" || std::hypot(S.At.X - E.At.X, S.At.Y - E.At.Y) > Rec.Board.ChargeLethal + 2.0) continue;
+							Out.BlowAt[S.Key] = Show.Shown();
+							// (the blow finds her where it bursts: in sight in the frame it bursts in)
+							if (!S.bShown) ++Out.HitsUnseen;
+						}
+					}
+					break;
+				case SeaShow::FxKind::Salvo:
+				case SeaShow::FxKind::ShipGun:
+					if (Hidden(E.Key)) ++Out.GunsUnseen;
+					break;
+				case SeaShow::FxKind::Gun:
+					if (ShipGuns::IsStream(E.Key) && Hidden((E.Key - ShipGuns::StreamBase) / 64)) ++Out.GunsUnseen;
+					break;
+				case SeaShow::FxKind::Sound:
+					// (her own cue keyed to her piece; an escort's asdic finding her is the escort's, and finds her)
+					if (E.What != "sea_asdic_ping" && HiddenPieces.count(E.Key)) ++Out.HeardUnseen;
+					break;
+				default: break;
+				}
 				switch (E.Kind)
 				{
 				case SeaShow::FxKind::Sound: ++Out.Sounds[E.What]; break;
@@ -307,6 +590,78 @@ namespace
 			for (size_t I = 0; I < Ships.size(); ++I)
 			{
 				const SeaShow::ShipOut& S = Ships[I];
+				// Whom the player sees (SetMine): only an enemy boat in the fight hidden, with nothing of her on the sea; never
+				// shown before the battle told anything that could find her, never hidden while an escort held her.
+				{
+					const bool bEnemyBoat = Mine >= 0 && S.Class == "ss" && S.Side != Mine;
+					if (bEnemyBoat && !Out.WasShown.count(S.Key)) ++Out.EnemyBoats;
+					auto Shown = Out.WasShown.find(S.Key);
+					if (Shown == Out.WasShown.end() ? !S.bShown : Shown->second != S.bShown)
+					{
+						Out.Sightings.push_back({ Show.Shown(), S.Key, S.bShown });
+						if (Shown != Out.WasShown.end()) ++(S.bShown ? Out.Reveals : Out.Hides);
+					}
+					Out.WasShown[S.Key] = S.bShown;
+					if (!S.bShown)
+					{
+						++Out.UnseenFrames;
+						if (!bEnemyBoat) ++Out.WrongHidden;
+						if (S.Doing != SeaShow::Fate::Line) ++Out.HiddenOut;
+						if (S.Wake > 0.0 || S.Funnel > 0.0) ++Out.HiddenMarks;
+					}
+					if (bEnemyBoat && S.Doing == SeaShow::Fate::Line)
+					{
+						const double Now = Show.Shown();
+						const auto First = Oracle.First.find(S.Piece);
+						if (S.bShown && (First == Oracle.First.end() || Now < First->second - 0.1))
+						{
+							if (!Out.ShownUnfound) Out.ShownUnfoundFirst = "ship " + std::to_string(S.Key) + " at " + Num(Now, 2) + " s";
+							++Out.ShownUnfound;
+						}
+						const auto Spans = Oracle.Held.find(S.Piece);
+						bool bHeld = false;
+						if (Spans != Oracle.Held.end())
+							for (const auto& Span : Spans->second)
+								if (Now >= Span.first + 0.1 && Now <= Span.second - 0.1) bHeld = true;
+						if (bHeld && !S.bShown)
+						{
+							if (!Out.HeldHidden) Out.HeldHiddenFirst = "ship " + std::to_string(S.Key) + " at " + Num(Now, 2) + " s";
+							++Out.HeldHidden;
+						}
+						// Hidden again once nothing has found her for FoundFor, the rule's other half: under longer than that
+						// (every hold of hers on the surface, struck, forced up, a lookout's eye on her, a gun laid, lets her go
+						// as she gets under, FoundFor on), in no span held, with no find nor blow on her for as long, and not
+						// given up.
+						const bool bUnder = S.Keel > S.Long * 0.07 + 1.0 && S.Dive != "surfaced";
+						if (!bUnder) Out.UnderSince.erase(S.Key);
+						else Out.UnderSince.emplace(S.Key, Now);
+						const double Stale = SeaShow::Show::FoundFor + 1.0;
+						if (bUnder && S.bShown && Now - Out.UnderSince[S.Key] > Stale)
+						{
+							double LastFind = -1e18;
+							const auto Found = Oracle.Found.find(S.Piece);
+							if (Found != Oracle.Found.end())
+							{
+								const auto Past = std::upper_bound(Found->second.begin(), Found->second.end(), Now + 1e-9);
+								if (Past != Found->second.begin()) LastFind = *std::prev(Past);
+							}
+							const auto Blow = Out.BlowAt.find(S.Key);
+							if (Blow != Out.BlowAt.end()) LastFind = std::max(LastFind, Blow->second);
+							bool bInSpan = false;
+							if (Spans != Oracle.Held.end())
+								for (const auto& Span : Spans->second)
+									if (Now >= Span.first - 0.1 && Now <= Span.second + 0.1) bInSpan = true;
+							const auto Given = Oracle.Given.find(S.Piece);
+							const bool bGiven = Given != Oracle.Given.end() && Given->second <= Now + 1e-9;
+							if (!bInSpan && !bGiven && Now - LastFind > Stale)
+							{
+								if (!Out.ShownStale)
+									Out.ShownStaleFirst = "ship " + std::to_string(S.Key) + " at " + Num(Now, 2) + " s, under since " + Num(Out.UnderSince[S.Key], 2) + " s, last found " + Num(LastFind, 2) + " s";
+								++Out.ShownStale;
+							}
+						}
+					}
+				}
 				auto Was = Last.find(S.Key);
 				if (Was != Last.end() && Out.Frames > 1)
 				{
@@ -469,7 +824,7 @@ namespace
 					const char* Doing = S.Doing == SeaShow::Fate::Line ? "line" : S.Doing == SeaShow::Fate::Limping ? "limping" : S.Doing == SeaShow::Fate::Sinking ? "sinking" : "gone";
 					*Track << Num(Show.Shown(), 2) << ",ship," << S.Key << "," << S.Piece << "," << S.Side << "," << S.Class << "," << S.Nation << "," << Num(S.At.X, 1) << ","
 					       << Num(S.At.Y, 1) << "," << Num(S.At.Z, 1) << "," << Num(S.Heading, 1) << "," << Num(S.Heel, 2) << "," << Num(S.Speed, 1) << "," << Doing << ","
-					       << (S.bFiring ? "fire" : "") << (S.bScreen ? " smoke" : "") << (S.Doing == SeaShow::Fate::Sinking ? " " + S.How : std::string()) << "\n";
+					       << (S.bFiring ? "fire" : "") << (S.bScreen ? " smoke" : "") << (S.Doing == SeaShow::Fate::Sinking ? " " + S.How : std::string()) << (S.bShown ? "" : " unseen") << "\n";
 				}
 				for (const SeaShow::PlaneOut& P : Show.Planes())
 				{
@@ -588,9 +943,11 @@ int main(int Argc, char** Argv)
 
 	std::ofstream Track(OutDir + "/" + Rec.Key + "-sea-track.csv");
 	Track << "t,kind,key,piece,side,class,nation,x,y,z,heading,heel,speed,doing,extra\n";
-	const Played P = Play(Rec, Fps, &Track);
-	const Played Again = Play(Rec, Fps, nullptr);
-	const Played Half = Play(Rec, Fps * 0.5, nullptr);
+	// (the player's side as the game takes it, the first view's "me": an enemy boat drawn only once found, SetMine)
+	const int Player = SeaFeed::SideOf(Rec.Views.front().Head.Me);
+	const Played P = Play(Rec, Fps, &Track, Player);
+	const Played Again = Play(Rec, Fps, nullptr, Player);
+	const Played Half = Play(Rec, Fps * 0.5, nullptr, Player);
 	const SeaShow::Checks& C = P.Check;
 	// B4's come-back, forced (the pre-check, 21 November 19:24Z): no strike flown after the battle's first 150 s, so each
 	// ship that dodged has quiet water to come back to her place in, and every dodge is judged before the end.
@@ -604,7 +961,7 @@ int main(int Argc, char** Argv)
 			F.Events.erase(std::remove_if(F.Events.begin(), F.Events.end(), [From](const SeaShow::Event& E) { return E.T > From && E.What == "ability" && E.Key == "strike"; }),
 			               F.Events.end());
 		}
-		Quiet = Play(Cut, Fps, nullptr).Check;
+		Quiet = Play(Cut, Fps, nullptr, Player).Check;
 	}
 
 	std::printf("  effects:");
@@ -800,6 +1157,160 @@ int main(int Argc, char** Argv)
 		Limits.push_back({ "every star shell and rescue shown", C.Starshells == Starshells && C.Rescues == Rescues,
 		                   std::to_string(C.Starshells) + " of " + std::to_string(Starshells) + " star shells, " + std::to_string(C.Rescues) + " of " + std::to_string(Rescues) + " rescues", "all" });
 	}
+	// Enemy boats unseen until found (SetMine, the views' "me"): drawn only once the battle has told what finds her, and
+	// nothing of her out while she is not. Where the player's side has no enemy boat but there are boats (a hunt of his own
+	// boats, as D1's), the recording is played again as the other side's, so the rule is held there too.
+	{
+		auto SameSightings = [](const Played& A, const Played& B, double Slack)
+		{
+			if (A.Sightings.size() != B.Sightings.size()) return false;
+			for (size_t K = 0; K < A.Sightings.size(); ++K)
+			{
+				const Played::Sighting& X = A.Sightings[K];
+				const Played::Sighting& Y = B.Sightings[K];
+				if (X.Key != Y.Key || X.bShown != Y.bShown || std::fabs(X.T - Y.T) > Slack) return false;
+			}
+			return true;
+		};
+		auto HideLimits = [&Limits, &SameSightings, Fps](const Played& Q, const Played& QAgain, const Played& QHalf, bool bFlip)
+		{
+			const SeaShow::Checks& QC = Q.Check;
+			std::string Seen;
+			for (size_t K = 0; K < Q.Sightings.size() && K < 16; ++K)
+				Seen += (K ? ", " : "") + Num(Q.Sightings[K].T, 1) + " s " + std::to_string(Q.Sightings[K].Key) + (Q.Sightings[K].bShown ? " found" : " hidden");
+			std::printf("  enemy boats unseen%s: %d boats, %ld ship-frames hidden, %d found, %d lost again (%s%s); contacts %d gained, %d lost (%d odd), %d radio bearings\n",
+			            bFlip ? " (played as the other side)" : "", Q.EnemyBoats, Q.UnseenFrames, Q.Reveals, Q.Hides, Seen.c_str(), Q.Sightings.size() > 16 ? ", ..." : "", QC.Contacts,
+			            QC.ContactsLost, QC.ContactsOdd, QC.Bearings);
+			Limits.push_back({ bFlip ? "as the other side: only an enemy boat in the fight hidden" : "only an enemy boat in the fight is ever hidden", Q.WrongHidden == 0 && Q.HiddenOut == 0,
+			                   std::to_string(Q.WrongHidden) + " not an enemy boat, " + std::to_string(Q.HiddenOut) + " out of the fight", "0, 0" });
+			Limits.push_back({ bFlip ? "as the other side: nothing of a hidden boat on the sea" : "nothing of a hidden boat on the sea: no wake, no smoke", Q.HiddenMarks == 0,
+			                   std::to_string(Q.HiddenMarks) + " ship-frames with a wake or smoke", "0" });
+			Limits.push_back({ bFlip ? "as the other side: no blow, gun or cue of hers while hidden" : "no blow on her, gun of hers or cue of hers while she is hidden",
+			                   Q.HitsUnseen == 0 && Q.GunsUnseen == 0 && Q.HeardUnseen == 0,
+			                   std::to_string(Q.HitsUnseen) + " blows, " + std::to_string(Q.GunsUnseen) + " guns, " + std::to_string(Q.HeardUnseen) + " cues", "0" });
+			Limits.push_back({ bFlip ? "as the other side: hidden until found, shown while held" : "an enemy boat hidden until found, and shown while an escort holds her",
+			                   Q.ShownUnfound == 0 && Q.HeldHidden == 0,
+			                   std::to_string(Q.ShownUnfound) + " frames shown unfound" + (Q.ShownUnfound ? " (first " + Q.ShownUnfoundFirst + ")" : std::string()) + ", " +
+			                       std::to_string(Q.HeldHidden) + " hidden while held" + (Q.HeldHidden ? " (first " + Q.HeldHiddenFirst + ")" : std::string()),
+			                   "0, 0" });
+			Limits.push_back({ bFlip ? "as the other side: hidden again once nothing has found her for FoundFor" : "an enemy boat hidden again once nothing has found her for FoundFor",
+			                   Q.ShownStale == 0, std::to_string(Q.ShownStale) + " frames shown so" + (Q.ShownStale ? " (first " + Q.ShownStaleFirst + ")" : std::string()), "0" });
+			Limits.push_back({ bFlip ? "as the other side: every contact lost was one held" : "every contact lost was one held", QC.ContactsOdd == 0,
+			                   std::to_string(QC.ContactsLost) + " lost, " + std::to_string(QC.ContactsOdd) + " never held", "0 never held" });
+			const bool bSame = SameSightings(Q, QAgain, 1e-9), bHalf = SameSightings(Q, QHalf, 1.0 / (Fps * 0.5) + 1e-6);
+			Limits.push_back({ bFlip ? "as the other side: the same sightings every time, at half the rate" : "the same sightings every time and at half the frame rate",
+			                   bSame && bHalf, std::string(bSame ? "same" : "different") + ", " + (bHalf ? "same" : "different") + " at half the rate (" + std::to_string(Q.Sightings.size()) + ")",
+			                   "same, same within a frame" });
+		};
+		if (P.EnemyBoats > 0 || P.UnseenFrames > 0)
+		{
+			HideLimits(P, Again, Half, false);
+			// The stand-in's own, each sighting pinned: Boat A (1920) found by radar at 58 s and lost diving at 70, out of sight
+			// from 160, found again by asdic at 300, to her end (forced up, given up, scuttled). Boat B (1984) found at 130 by an
+			// asdic contact held a hundred seconds with no attack on her and lost at 230, found again by asdic at 280 to its loss
+			// close at 335, kept in sight by the blow the battle booked on her at 358 to FoundFor after it, found again at 456 for
+			// the ahead-thrown run, to her end. Boat C (2048, her views' heard and no sea:sonar) found at 63.8 by her deck gun's
+			// hit on Merchant 3, before the view that says her gun is on, held by her heard from 100 to 130 and kept by his
+			// lookouts while she stays up within the night's seeing, out of sight FoundFor after she is under (dived at 240);
+			// held by her heard again from 472 deep, out of sight FoundFor after it lets her go at 500. The night with an
+			// aircraft over it (convoy-night-air) the same, and Boat D (2112) found at 20 by her deck gun laid on Merchant 3
+			// (before the aircraft run in on her at 30, over Boat C not yet found: Boat C's guns quiet, the check above), out of
+			// sight FoundFor after she is under (dived at 76).
+			auto Pin = [](const std::vector<Played::Sighting>& Got, const std::vector<Played::Sighting>& Want, std::string& Words)
+			{
+				bool bSame = Got.size() == Want.size();
+				std::string Seen, Wanted;
+				for (size_t K = 0; K < std::max(Got.size(), Want.size()); ++K)
+				{
+					if (K < Got.size()) Seen += (K ? ", " : "") + Num(Got[K].T, 2) + " " + std::to_string(Got[K].Key) + (Got[K].bShown ? " found" : " hidden");
+					if (K < Want.size()) Wanted += (K ? ", " : "") + Num(Want[K].T, 2) + " " + std::to_string(Want[K].Key) + (Want[K].bShown ? " found" : " hidden");
+					if (K < Got.size() && K < Want.size())
+						bSame = bSame && Got[K].Key == Want[K].Key && Got[K].bShown == Want[K].bShown && std::fabs(Got[K].T - Want[K].T) <= 0.1;
+				}
+				Words = Seen + (bSame ? std::string() : " against " + Wanted);
+				return bSame;
+			};
+			if (Rec.Key == "convoy-night" || Rec.Key == "convoy-night-air")
+			{
+				const bool bAir = Rec.Key == "convoy-night-air";
+				const int Reveals = bAir ? 7 : 6, Hides = bAir ? 5 : 4;
+				Limits.push_back({ "the stand-in's boats found when its events say", P.Reveals == Reveals && P.Hides == Hides && P.UnseenFrames > 0,
+				                   std::to_string(P.Reveals) + " found, " + std::to_string(P.Hides) + " lost again",
+				                   bAir ? "7 found, 5 lost again" : "6 found, 4 lost again" });
+				std::vector<Played::Sighting> Pinned = {
+					{ 0.0, 1920, false }, { 0.0, 1984, false }, { 0.0, 2048, false }, { 58.0, 1920, true }, { 63.8, 2048, true }, { 130.0, 1984, true },
+					{ 160.05, 1920, false }, { 300.0, 1920, true }, { 334.95, 2048, false }, { 448.05, 1984, false }, { 456.0, 1984, true }, { 472.0, 2048, true },
+					{ 590.05, 2048, false } };
+				if (bAir)
+				{
+					Pinned.insert(Pinned.begin() + 3, { { 0.0, 2112, false }, { 20.0, 2112, true } });
+					Pinned.insert(Pinned.begin() + 9, Played::Sighting{ 171.0, 2112, false });
+				}
+				std::string Said;
+				const bool bPinned = Pin(P.Sightings, Pinned, Said);
+				Limits.push_back({ "the stand-in's boats found and lost again each when its events say", bPinned, Said, "each as pinned here, within 0.1 s" });
+			}
+			if (Rec.Key == "convoy-night")
+			{
+				// The rules the night does not show by themselves, each on the night changed for it: Escort 1's contact on
+				// Boat B closed by an ahead-thrown run of its at 150 (no loss told after one: she is let go FoundFor after the
+				// run) and its loss told only at 250, after that (in sight FoundFor from the loss, as from any); and Boat C given
+				// up at 200 on the surface (in sight to her end, whatever she does after: here she dives at 240 as before). The
+				// recording's own reading of each (FindsOf) holds there too.
+				SeaFeed::Recording Changed = Rec;
+				for (SeaFeed::Frame& F : Changed.Views)
+				{
+					F.Events.erase(std::remove_if(F.Events.begin(), F.Events.end(),
+					                              [](const SeaShow::Event& E) { return E.What == "sea:sonar" && E.Unit == 20 && E.On == 31 && !E.Lost.empty(); }),
+					               F.Events.end());
+				}
+				auto Tell = [&Changed](double T, const char* What, int Unit, int Side, int On, const char* Kind, const char* Lost)
+				{
+					SeaShow::Event E;
+					E.T = T;
+					E.What = What;
+					E.Unit = Unit;
+					E.Side = Side;
+					E.On = On;
+					E.Kind = Kind;
+					E.Lost = Lost;
+					for (SeaFeed::Frame& F : Changed.Views)
+					{
+						if (F.Head.T < T - 1e-9) continue;
+						F.Events.push_back(E);
+						break;
+					}
+				};
+				Tell(150.0, "sea:depthCharge", 20, 1, 31, "ahead", "");
+				Tell(200.0, "sea:surrender", 32, 0, -1, "", "");
+				Tell(250.0, "sea:sonar", 20, 1, 31, "asdic", "faded");
+				const Played Q = Play(Changed, Fps, nullptr, Player);
+				std::vector<Played::Sighting> Of;
+				for (const Played::Sighting& Seen : Q.Sightings)
+					if (Seen.Key == 1984 || Seen.Key == 2048) Of.push_back(Seen);
+				const std::vector<Played::Sighting> Ruled = {
+					{ 0.0, 1984, false }, { 0.0, 2048, false }, { 63.8, 2048, true }, { 130.0, 1984, true }, { 240.05, 1984, false }, { 250.0, 1984, true },
+					{ 448.05, 1984, false }, { 456.0, 1984, true } };
+				std::string RuledSaid;
+				const bool bRuled = Pin(Of, Ruled, RuledSaid);
+				const bool bRead = Q.ShownUnfound == 0 && Q.HeldHidden == 0 && Q.ShownStale == 0 && Q.Check.ContactsOdd == 0;
+				Limits.push_back({ "an ahead-thrown run's hold, a late loss and a boat given up, each as its rule says", bRuled && bRead,
+				                   RuledSaid + "; " + std::to_string(Q.ShownUnfound) + " shown unfound, " + std::to_string(Q.HeldHidden) + " hidden while held, " +
+				                       std::to_string(Q.ShownStale) + " shown stale, " + std::to_string(Q.Check.ContactsOdd) + " odd losses",
+				                   "each as pinned here, within 0.1 s; 0, 0, 0, 0" });
+			}
+		}
+		else if (Boats > 0 && Player >= 0)
+		{
+			const Played Flip = Play(Rec, Fps, nullptr, 1 - Player);
+			const Played FlipAgain = Play(Rec, Fps, nullptr, 1 - Player);
+			const Played FlipHalf = Play(Rec, Fps * 0.5, nullptr, 1 - Player);
+			Limits.push_back({ "the player's own boats never hidden", P.UnseenFrames == 0, std::to_string(P.UnseenFrames) + " ship-frames hidden", "0" });
+			Limits.push_back({ "as the other side: his enemy's boats hidden until found", Flip.EnemyBoats > 0 && Flip.UnseenFrames > 0,
+			                   std::to_string(Flip.EnemyBoats) + " boats, " + std::to_string(Flip.UnseenFrames) + " ship-frames hidden", "some" });
+			HideLimits(Flip, FlipAgain, FlipHalf, true);
+		}
+	}
 	// The tug-of-war bar (release 2; the UI director's ruling, 21 November): the knot each view gives, from the
 	// player's flag. First the rule itself on views made up for it, then the recording's own.
 	{
@@ -875,7 +1386,7 @@ int main(int Argc, char** Argv)
 	// three plays' such frames and means, as one busy stretch of a shared machine is not the show's: the air test's clock
 	// lines do the same, and Samar's sat on this line, 0.59 to 1.18 ms over twelve runs of one SeaShow.cpp, the pre-check,
 	// 22 November 11:31Z)
-	const Played Third = Play(Rec, Fps, nullptr);
+	const Played Third = Play(Rec, Fps, nullptr, Player);
 	double Slow = 1e18, Mean = 1e18;
 	for (const Played* Q : { &P, &Again, &Third })
 	{
