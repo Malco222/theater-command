@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c8c4a7d8 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c4d6e5a7 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11393,6 +11393,8 @@
       __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
+      /** The player's looks switches the header reads (worn uniforms, mud remembered). */
+      __publicField(this, "looks", { worn: true, mud: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -11434,6 +11436,9 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false };
+      const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
+      const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
         let model = null;
@@ -11441,6 +11446,11 @@
         else if (a && u.kind === "art" && !u.team) model = a.gun;
         if (model) sim.vehicleIs(u.id, model);
         else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+        const took = caught && u.kind === "arm" && caughtLeft[u.side] > 0 ? caught[u.side] : void 0;
+        if (took) {
+          caughtLeft[u.side]--;
+          model = standInModel("arm", took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+        }
         return {
           id: u.id,
           side: u.side,
@@ -11460,7 +11470,8 @@
           ...u.crew ? { crew: u.crew } : {},
           model,
           ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
-          ...u.joined !== void 0 ? { joins: true } : {}
+          ...u.joined !== void 0 ? { joins: true } : {},
+          ...took ? { captured: took.from } : {}
         };
       });
       this.look();
@@ -11480,13 +11491,14 @@
         date: t.date,
         turn: t.turn,
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-        // lays thaw mud from "mud" and weathered old craters from the scars)
+        // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
         ...t.weather ? { weather: t.weather } : {},
         ...t.scars && t.scars.count > 0 ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
+        ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
         ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
-          att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {} },
-          def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {} }
+          att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
+          def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {}, ...t.def.worn !== void 0 && this.looks.worn ? { worn: t.def.worn } : {} }
         },
         field: {
           w: f.w,
@@ -11750,7 +11762,10 @@
         bocage: !!opts?.bocage,
         phones: opts?.phones !== false,
         bearers: opts?.bearers !== false,
-        patrol: opts?.patrol !== false
+        patrol: opts?.patrol !== false,
+        captured: opts?.captured !== false,
+        worn: opts?.worn !== false,
+        mud: opts?.mud !== false
       });
       return live3.header();
     },
@@ -11780,6 +11795,9 @@
         phones: o.phones !== false,
         bearers: o.bearers !== false,
         patrol: o.patrol !== false,
+        captured: o.captured !== false,
+        worn: o.worn !== false,
+        mud: o.mud !== false,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
