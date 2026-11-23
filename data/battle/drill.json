@@ -151,5 +151,23 @@
     "share": 0.3,
     "back": 24,
     "base": 500
+  },
+  "spg": {
+    "_about": "Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to 'a tank destroyer and a self-propelled gun for each major army'; LandBattle.spg, off unless turned on; looks only; a campaign battle's only, set pieces stay as the historian drew them). Some of a battery's guns are drawn as its army's self-propelled howitzer: no tractor, no crew on foot, firing when the battery fires and moving with it. 'rows': the historian's (23 November 07:05Z, historian/halftracks-td-spg-movers-1123.md, H): [from, until, models, per, with] by the battle's year (a fraction for the month): its side's blocks of that army of a kind in 'with' each bring 'per' of them (the US an M7 battery behind each armoured block; Britain's Priests, then Sextons, behind theirs; Germany's Hummel battery of six in a panzer division; the Soviet SU-76 regiment of each rifle division), taken from that army's batteries in the order of their blocks, a battery's first guns first (they stand longest), the models in turn. An army with no row draws none (Italy's Semovente is drawn as a tank destroyer; Japan had none worth drawing). Units decide (the design director, 23 November 07:19Z): these rows are only the history start's mix; where the campaign says what a corps has (ForceKit.spg, its share of its guns self-propelled), 'kit' draws it, its army's own model or the stand-in in its coat.",
+    "rows": {
+      "USA": [[1943, 9999, ["M7"], 3, ["arm"]]],
+      "UK": [[1942.75, 1943.75, ["M7"], 1.5, ["arm"]], [1943.75, 1944.67, ["Sexton", "M7"], 1.5, ["arm"]], [1944.67, 9999, ["Sexton"], 1.5, ["arm"]]],
+      "GER": [[1943.5, 9999, ["Hummel"], 0.5, ["arm"]]],
+      "SOV": [[1943, 9999, ["SU76"], 0.5, ["inf"]]]
+    },
+    "kit": {"models": {"USA": "M7", "UK": "Sexton", "GER": "Hummel", "SOV": "SU76"}, "axisStand": "Hummel", "stand": "M7"}
+  },
+  "td": {
+    "_about": "Tank destroyers (release 2, the same yes; LandBattle.td, off unless turned on; looks only; a campaign battle's only). The design director, 23 November 07:28Z, (a): a tank destroyer may be one model in an armoured block's mix, as the StuG is; the block keeps its own figures and fights as ever; a whole block of them waits for Units decide to give corps tank-destroyer battalions with figures of their own. ForceKit.td reads first (its share of the block's tanks), its army's own model ('kit') or the stand-in in its coat; else the historian's rows (23 November 07:05Z, H), [from, until, models, share] by the battle's year: the Soviet SU-85 with the tank blocks from August 1943, Italy's Semovente with the armoured blocks to its armistice. The tanks drawn so are spread through the block (a share of a quarter: its fourth tank of each four). Germany's StuG is in its stand-in mix already; the American and British M10 went with the infantry, so they come by the kit.",
+    "rows": {
+      "SOV": [[1943.58, 1945, ["SU85"], 0.25]],
+      "ITA": [[1941, 1943.75, ["Semovente"], 0.25]]
+    },
+    "kit": {"models": {"USA": "M10", "UK": "M10", "GER": "StuG3", "SOV": "SU85", "ITA": "Semovente"}, "axisStand": "StuG3", "stand": "M10"}
   }
 }

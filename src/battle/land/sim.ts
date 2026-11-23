@@ -420,6 +420,20 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Battle rules card's Armoured infantry row).
    */
   mech = false;
+  /**
+   * Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to "a tank destroyer and a self-propelled gun for each
+   * major army"): some of a battery's guns are drawn as its army's self-propelled howitzer, with no tractor and no crew
+   * on foot (Drill.spgOf; DRILL.spg). Looks only. Off unless turned on (the bridge's { spg: true }, the Battle rules
+   * card's Self-propelled guns row); a campaign battle's only (set pieces stay as the historian drew them).
+   */
+  spg = false;
+  /**
+   * Tank destroyers (release 2, the same yes; the design director, 23 November 07:28Z, (a)): one model in an armoured
+   * block's mix is drawn as its army's tank destroyer or assault gun, the block's own figures and fight unchanged
+   * (Drill.tdOf; DRILL.td). Looks only. Off unless turned on (the bridge's { td: true }, the Battle rules card's Tank
+   * destroyers row); a campaign battle's only.
+   */
+  td = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */

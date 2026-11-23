@@ -396,7 +396,7 @@ namespace LandKit
 		int Block = 0, K = 0;
 		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
-		std::string Model;                   // a carrier of armoured infantry: her model (ml); empty, the lorry
+		std::string Model;                   // her own model where not her block's (ml): a carrier (empty, the lorry), an SP gun, a TD
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;
 		std::vector<double> Shots;

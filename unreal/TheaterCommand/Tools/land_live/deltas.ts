@@ -16,7 +16,7 @@ const me: Side | null = meArg === 'none' ? null : (meArg as Side);
 // stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
 // run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
 const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
-const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}) });
+const L = livePiece(key, seedArg ? Number(seedArg) : undefined, { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}) });
 const header = L.header();
 const deltas: LiveDelta[] = [];
 const lines: string[] = [];

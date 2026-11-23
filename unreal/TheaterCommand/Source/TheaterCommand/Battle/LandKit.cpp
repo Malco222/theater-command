@@ -4993,16 +4993,17 @@ namespace LandKit
 	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
-		// she wears her owner's coat. Armoured infantry's carriers, release 2: the recording names each one's model, a
-		// half-track of her army's or the lorry)
-		const std::string ModelName = Role == "lorry" ? (Carrier.empty() ? std::string("Truck") : Carrier) : B.Model;
+		// she wears her owner's coat. Release 2: where the recording names a vehicle's own model (ml), she is drawn as
+		// that: an armoured infantry's carrier, a half-track of her army's or the lorry; a battery's self-propelled gun;
+		// an armoured block's tank destroyer)
+		const std::string ModelName = !Carrier.empty() ? Carrier : Role == "lorry" ? std::string("Truck") : B.Model;
 		if (ModelName.empty())
 		{
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
 			return false;
 		}
 		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
-		const std::string Captured = Role != "lorry" && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
+		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
 		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
 		if (Looks.count(OutKey))
 		{
@@ -5024,7 +5025,7 @@ namespace LandKit
 			}
 			std::vector<std::string> Near;
 			if (Role == "lorry") Near = { "Truck" }; // (a carrier not in the game yet: the lorry)
-			else if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			else if (B.Kind == "art" && Carrier.empty()) Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
 			else if (bLight || N == "JAP") Near = { "LightTank" };
 			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
 			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
@@ -5130,7 +5131,10 @@ namespace LandKit
 		// a self-propelled gun: the fates' tank ways name theirs, blow, burn or still). The table then picks how that end
 		// looks.
 		const Block* Of = BlockOf(W.Block);
-		const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+		// (by the model's file name, as performance-land.json keys it: her own where the recording names it, a tank
+		// destroyer's or a self-propelled gun's, else her block's)
+		const std::string Named = !W.Model.empty() && W.Role != "lorry" ? W.Model : Of ? Of->Model : M.Name;
+		const auto Odds = Fires.find(Named);
 		if (Kill && (Kill->Fate == "out" || Kill->Fate == "burn" || Kill->Fate == "blow"))
 		{
 			Bl.How = Kill->Fate == "out" ? "still" : Kill->Fate;
@@ -5154,7 +5158,7 @@ namespace LandKit
 			Bl.How.clear();
 			F = Picker->Choose(Bl);
 		}
-		Ends.push_back({ Index, Of ? Of->Model : M.Name, Bl.Aspect, Drawn, F.Key });
+		Ends.push_back({ Index, Named, Bl.Aspect, Drawn, F.Key });
 		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
 		return F.Key;
 	}

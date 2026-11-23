@@ -46,7 +46,7 @@ type Ch = (number | string | null)[];
 /** One man's track as the scene reads it (the recording's men[]). */
 export interface TrackOut {
   b: number; k: number; j?: number; r: string; at: Pt[]; ch: Ch[]; s: number[]; d?: number; mk?: unknown[]; out?: number; fo?: 1;
-  /** A carrier of armoured infantry (release 2, sim.mech): the model the 3D game draws her with (absent: the lorry). */
+  /** The model the 3D game draws her with where it is not her block's (release 2, looks only): a carrier of armoured infantry (absent: the lorry), a self-propelled gun, a tank destroyer. */
   ml?: string;
 }
 
@@ -347,6 +347,10 @@ export interface LiveOpts {
   escort?: boolean;
   /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
   mech?: boolean;
+  /** Self-propelled guns (release 2, looks only; sim.spg): some of a battery's guns drawn self-propelled. A campaign battle's only; off unless true. */
+  spg?: boolean;
+  /** Tank destroyers (release 2, looks only; sim.td): one model in an armoured block's mix a tank destroyer. A campaign battle's only; off unless true. */
+  td?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -450,6 +454,9 @@ export class LiveBattle {
     if (this.me && opts.radio !== false) sim.radio = true;
     // (armoured infantry: before the drill is made, which draws them with their blocks)
     if (opts.mech === true) sim.mech = true;
+    // (self-propelled guns and tank destroyers: a campaign battle's, set pieces stay as the historian drew them)
+    if (opts.spg === true && !piece) sim.spg = true;
+    if (opts.td === true && !piece) sim.td = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);

@@ -64,6 +64,10 @@ export interface ForceKit {
   halftracks?: number;
   /** Its foot carries its own anti-tank weapons, bazookas or Panzerfausts (the overrun's test, LAND.overrun; sim ownAntiTank). */
   at?: boolean;
+  /** An artillery corps: the share of its guns that are self-propelled, 0..1, the rest towed (looks only: Drill.spgOf). */
+  spg?: number;
+  /** An armoured corps: the share of its tanks that are tank destroyers or assault guns, 0..1 (looks only: Drill.tdOf). */
+  td?: number;
 }
 
 export interface ForceTicket {
