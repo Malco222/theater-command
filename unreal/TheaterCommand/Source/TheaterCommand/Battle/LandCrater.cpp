@@ -2016,12 +2016,21 @@ namespace LandCrater
 		Pc.Apart = Apart;
 		Pc.Width = Width;
 		Pc.bCorn = Mid == Under::Corn;
+		Keep(Pc);
+		++Count;
+		Touched(In);
+		Mark();
+		return true;
+	}
+
+	void Ruts::Keep(const Piece& Pc)
+	{
 		const int Number = static_cast<int>(Laid.size());
 		Laid.push_back(Pc);
-		const double Reach = 0.5 * Apart + Width;
+		const double Reach = 0.5 * Pc.Apart + Pc.Width;
 		constexpr double Square = 8.0;
-		const int I0 = static_cast<int>(std::floor((std::min(PX, MX) - Reach) / Square)), I1 = static_cast<int>(std::floor((std::max(PX, MX) + Reach) / Square));
-		const int J0 = static_cast<int>(std::floor((std::min(PY, MY) - Reach) / Square)), J1 = static_cast<int>(std::floor((std::max(PY, MY) + Reach) / Square));
+		const int I0 = static_cast<int>(std::floor((std::min(Pc.AX, Pc.BX) - Reach) / Square)), I1 = static_cast<int>(std::floor((std::max(Pc.AX, Pc.BX) + Reach) / Square));
+		const int J0 = static_cast<int>(std::floor((std::min(Pc.AY, Pc.BY) - Reach) / Square)), J1 = static_cast<int>(std::floor((std::max(Pc.AY, Pc.BY) + Reach) / Square));
 		for (int J = J0; J <= J1; ++J)
 		{
 			for (int I = I0; I <= I1; ++I)
@@ -2029,14 +2038,140 @@ namespace LandCrater
 				Squares[SquareOf(I, J)].push_back(Number);
 			}
 		}
-		++Count;
+	}
+
+	void Ruts::Touched(const Place& In)
+	{
 		const bool bListed = std::any_of(Changed.begin(), Changed.end(), [&In](const Place& C) { return C.Patch == In.Patch && C.Section == In.Section; });
 		if (!bListed)
 		{
 			Changed.push_back(In);
 		}
-		Mark();
-		return true;
+	}
+
+	int Ruts::LayOld(const std::vector<std::vector<std::pair<double, double>>>& Ways, double Months, bool bWet, uint64_t Seed)
+	{
+		if (!Height || !Kind)
+		{
+			return 0;
+		}
+		Dice D(Mix(Seed, 0x0D5A75ull));
+		const double M = std::max(0.0, Months);
+		// (a grassed rut's green: whole at three months, a quarter at two years)
+		const double Shows = M < 3.0 ? 1.0 : std::clamp(1.0 - 0.75 * (M - 3.0) / 21.0, 0.25, 1.0);
+		const bool bBare = bWet || M < 3.0; // (dried mud or puddled: nothing grows in them yet)
+		int Pieces_ = 0;
+		uint64_t Salt = Mix(Seed, 0x01DA75ull);
+		for (const std::vector<std::pair<double, double>>& Way : Ways)
+		{
+			// (the way at an even step along it, each point's heading from its neighbours, so the pieces join at a bend)
+			std::vector<std::pair<double, double>> At;
+			for (size_t K = 0; K + 1 < Way.size(); ++K)
+			{
+				const double AX = Way[K].first, AY = Way[K].second, BX = Way[K + 1].first, BY = Way[K + 1].second;
+				const double Long = std::hypot(BX - AX, BY - AY);
+				if (!(Long > 1e-6) || Long > 1e4)
+				{
+					continue;
+				}
+				const int Steps = std::max(1, static_cast<int>(std::ceil(Long / OldStep)));
+				for (int I = (At.empty() ? 0 : 1); I <= Steps; ++I)
+				{
+					const double T = static_cast<double>(I) / Steps;
+					At.emplace_back(AX + (BX - AX) * T, AY + (BY - AY) * T);
+				}
+			}
+			if (At.size() < 2)
+			{
+				continue;
+			}
+			const double Apart = D.U(2.5, 2.9);
+			const double Width = D.U(0.5, 0.7);
+			std::vector<std::pair<double, double>> Left(At.size()), Right(At.size());
+			for (size_t K = 0; K < At.size(); ++K)
+			{
+				const std::pair<double, double>& P0 = At[K > 0 ? K - 1 : 0];
+				const std::pair<double, double>& P1 = At[K + 1 < At.size() ? K + 1 : K];
+				const double Dx = P1.first - P0.first, Dy = P1.second - P0.second, Long = std::max(1e-6, std::hypot(Dx, Dy));
+				const double Nx = -Dy / Long, Ny = Dx / Long;
+				// (each rut wandering its own few centimetres: a column's tracks never quite on one line)
+				const double WanderL = 0.08 * std::sin(0.11 * static_cast<double>(K) + 1.7 * static_cast<double>(Salt % 7));
+				const double WanderR = 0.08 * std::sin(0.13 * static_cast<double>(K) + 0.9 * static_cast<double>(Salt % 5));
+				Left[K] = { At[K].first + Nx * (0.5 * Apart + WanderL), At[K].second + Ny * (0.5 * Apart + WanderL) };
+				Right[K] = { At[K].first - Nx * (0.5 * Apart + WanderR), At[K].second - Ny * (0.5 * Apart + WanderR) };
+			}
+			for (size_t K = 0; K + 1 < At.size(); ++K)
+			{
+				if (Pieces_ >= MostOld || Count >= Most)
+				{
+					return Pieces_;
+				}
+				const double MX = 0.5 * (At[K].first + At[K + 1].first), MY = 0.5 * (At[K].second + At[K + 1].second);
+				if (DugAt && (DugAt(At[K].first, At[K].second) || DugAt(At[K + 1].first, At[K + 1].second) || DugAt(MX, MY)))
+				{
+					continue;
+				}
+				Under Sides[2];
+				bool bAny = false;
+				for (int Side = 0; Side < 2; ++Side)
+				{
+					const std::vector<std::pair<double, double>>& Line = Side ? Right : Left;
+					Sides[Side] = Kind(0.5 * (Line[K].first + Line[K + 1].first), 0.5 * (Line[K].second + Line[K + 1].second));
+					bAny = bAny || (Sides[Side] != Under::None && Sides[Side] != Under::Corn);
+				}
+				if (!bAny)
+				{
+					continue;
+				}
+				Place In;
+				Patch& P = PatchFor(MX, MY, In);
+				LandField::Mesh& Out = P.Sections[static_cast<size_t>(In.Section)];
+				for (int Side = 0; Side < 2; ++Side)
+				{
+					++Salt;
+					if (Sides[Side] == Under::None || Sides[Side] == Under::Corn)
+					{
+						continue;
+					}
+					const std::vector<std::pair<double, double>>& Line = Side ? Right : Left;
+					const double AX = Line[K].first, AY = Line[K].second, BX = Line[K + 1].first, BY = Line[K + 1].second;
+					const Rgb8 Ground = UnderColour ? UnderColour(0.5 * (AX + BX), 0.5 * (AY + BY)) : Rgb(100, 100, 70);
+					Rgb8 Paint;
+					if (bWet)
+					{
+						Paint = Mixed(Ground, Rgb(44, 38, 30), 0.72); // (water standing in them, wet mud at their sides)
+					}
+					else if (M < 3.0)
+					{
+						Paint = Mixed(Ground, Rgb(138, 124, 98), 0.62); // (the spring's mud dried in them, pale)
+					}
+					else
+					{
+						// (grassed over: the ruts hold the wet, so their grass grows lusher and darker than the field's)
+						Rgb8 Lush = Toned(Ground, 0.84);
+						Lush.R = Byte(Lush.R * 0.94);
+						Lush.B = Byte(Lush.B * 0.88);
+						Paint = Mixed(Ground, Lush, Shows);
+					}
+					Strip(Out, AX, AY, BX, BY, 0.4 * Width, 0.6 * Width, Paint, 0.017, Salt);
+				}
+				if (bBare)
+				{
+					Piece Pc;
+					Pc.AX = At[K].first;
+					Pc.AY = At[K].second;
+					Pc.BX = At[K + 1].first;
+					Pc.BY = At[K + 1].second;
+					Pc.Apart = Apart;
+					Pc.Width = Width;
+					Keep(Pc);
+				}
+				++Count;
+				++Pieces_;
+				Touched(In);
+			}
+		}
+		return Pieces_;
 	}
 
 	bool Ruts::Flat(double X, double Y) const
@@ -2076,6 +2211,138 @@ namespace LandCrater
 			}
 		}
 		return false;
+	}
+
+	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
+		const std::vector<std::pair<double, double>>& Gates, double Heading)
+	{
+		std::vector<std::vector<std::pair<double, double>>> Ways;
+		if (Battles <= 0)
+		{
+			return Ways;
+		}
+		// The fought-over ground, as LayScars reads it: the middle four fifths each way, 300 m at least.
+		std::vector<double> Xs, Ys;
+		for (const auto& P : Fought)
+		{
+			if (P.first == P.first && P.second == P.second)
+			{
+				Xs.push_back(P.first);
+				Ys.push_back(P.second);
+			}
+		}
+		if (Xs.empty())
+		{
+			return Ways;
+		}
+		std::sort(Xs.begin(), Xs.end());
+		std::sort(Ys.begin(), Ys.end());
+		const auto At = [](const std::vector<double>& V, double Q) { return V[std::min(V.size() - 1, static_cast<size_t>(Q * static_cast<double>(V.size() - 1) + 0.5))]; };
+		double X0 = At(Xs, 0.1), X1 = At(Xs, 0.9), Y0 = At(Ys, 0.1), Y1 = At(Ys, 0.9);
+		const auto Widen = [](double& A, double& B) { const double Mid = 0.5 * (A + B), Half = std::max(150.0, 0.5 * (B - A)); A = Mid - Half; B = Mid + Half; };
+		Widen(X0, X1);
+		Widen(Y0, Y1);
+		const auto InBox = [&](double X, double Y) { return X >= X0 && X <= X1 && Y >= Y0 && Y <= Y1; };
+		const int Wanted = std::min(10, 3 + 2 * Battles);
+		Dice D(Mix(Seed, 0x3A7Dull));
+		// (a leg from A to B, bowed a little to one side, a point every 6 m)
+		const auto Leg = [&D](std::vector<std::pair<double, double>>& Way, double AX, double AY, double BX, double BY)
+		{
+			const double Long = std::hypot(BX - AX, BY - AY);
+			const double Bow = D.U(-0.12, 0.12) * Long;
+			const double Cx = 0.5 * (AX + BX) - (BY - AY) / std::max(1e-6, Long) * Bow, Cy = 0.5 * (AY + BY) + (BX - AX) / std::max(1e-6, Long) * Bow;
+			const int Steps = std::max(2, static_cast<int>(Long / 6.0));
+			for (int I = Way.empty() ? 0 : 1; I <= Steps; ++I)
+			{
+				const double T = static_cast<double>(I) / Steps, U = 1.0 - T;
+				Way.emplace_back(U * U * AX + 2.0 * U * T * Cx + T * T * BX, U * U * AY + 2.0 * U * T * Cy + T * T * BY);
+			}
+		};
+		std::vector<std::pair<double, double>> Open;
+		for (const auto& G : Gates)
+		{
+			if (InBox(G.first, G.second)) Open.push_back(G);
+		}
+		if (Open.size() >= 4)
+		{
+			// Through the gateways: from one to another, on and on, never back the way it came.
+			for (int W = 0; W < Wanted * 3 && static_cast<int>(Ways.size()) < Wanted; ++W)
+			{
+				size_t Here = std::min(Open.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Open.size())));
+				std::vector<size_t> Been{ Here };
+				std::vector<std::pair<double, double>> Way;
+				double Was = 0.0;
+				const int Legs = 2 + static_cast<int>(D.U() * 3.0);
+				for (int L = 0; L < Legs; ++L)
+				{
+					std::vector<size_t> Next;
+					for (size_t K = 0; K < Open.size(); ++K)
+					{
+						if (std::find(Been.begin(), Been.end(), K) != Been.end()) continue;
+						const double Dx = Open[K].first - Open[Here].first, Dy = Open[K].second - Open[Here].second;
+						const double Long = std::hypot(Dx, Dy);
+						if (Long < 30.0 || Long > 220.0) continue;
+						if (L > 0 && std::cos(std::atan2(Dy, Dx) - Was) < std::cos(75.0 * Pi / 180.0)) continue;
+						Next.push_back(K);
+					}
+					if (Next.empty())
+					{
+						break;
+					}
+					const size_t To = Next[std::min(Next.size() - 1, static_cast<size_t>(D.U() * static_cast<double>(Next.size())))];
+					Was = std::atan2(Open[To].second - Open[Here].second, Open[To].first - Open[Here].first);
+					Leg(Way, Open[Here].first, Open[Here].second, Open[To].first, Open[To].second);
+					Been.push_back(To);
+					Here = To;
+				}
+				if (Way.size() >= 2)
+				{
+					Ways.push_back(std::move(Way));
+				}
+			}
+			if (!Ways.empty())
+			{
+				return Ways;
+			}
+		}
+		// Open ground: across it along the battle's heading (else the line its ground spreads along most), wandering.
+		double Head = Heading;
+		if (!(Head == Head))
+		{
+			double Mx = 0.0, My = 0.0;
+			for (size_t K = 0; K < Xs.size(); ++K) { Mx += Xs[K]; My += Ys[K]; }
+			Mx /= static_cast<double>(Xs.size());
+			My /= static_cast<double>(Xs.size());
+			double Sxx = 0.0, Syy = 0.0, Sxy = 0.0;
+			for (const auto& P : Fought)
+			{
+				if (!(P.first == P.first && P.second == P.second)) continue;
+				Sxx += (P.first - Mx) * (P.first - Mx);
+				Syy += (P.second - My) * (P.second - My);
+				Sxy += (P.first - Mx) * (P.second - My);
+			}
+			Head = 0.5 * std::atan2(2.0 * Sxy, Sxx - Syy);
+		}
+		const double Cx = 0.5 * (X0 + X1), Cy = 0.5 * (Y0 + Y1), Half = 0.5 * std::max(X1 - X0, Y1 - Y0);
+		for (int W = 0; W < Wanted; ++W)
+		{
+			// (starting behind the ground's middle, off to a side, and driving on through it)
+			const double Back = D.U(0.4, 0.9) * Half, Aside = D.U(-0.8, 0.8) * Half;
+			const double Hx = std::cos(Head), Hy = std::sin(Head);
+			double X = Cx - Hx * Back - Hy * Aside, Y = Cy - Hy * Back + Hx * Aside;
+			double A = Head + D.U(-0.3, 0.3);
+			const double Long = D.U(150.0, 450.0);
+			std::vector<std::pair<double, double>> Way{ { X, Y } };
+			for (double Gone = 0.0; Gone < Long; Gone += 6.0)
+			{
+				A += D.U(-0.07, 0.07) + 0.1 * std::remainder(Head - A, 2.0 * Pi);
+				X += std::cos(A) * 6.0;
+				Y += std::sin(A) * 6.0;
+				Way.emplace_back(X, Y);
+			}
+			Ways.push_back(std::move(Way));
+		}
+		return Ways;
 	}
 
 	OldLines OldLinesOf(const LandField::Ground& G, double TownX, double TownY, double TownR)

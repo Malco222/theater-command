@@ -418,6 +418,19 @@ namespace LandCrater
 		bool Flat(double X, double Y) const;
 		/** A dug hole's cut (Field::TakeCuts): the marks inside it cut away. */
 		void Cut(const std::vector<double>& Outline);
+		/**
+		 * Mud memory (release 2; Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for the
+		 * next battle there; looks only): an earlier battle's worn ways, laid before this one opens. Each way (a line of
+		 * points, field metres) laid as one pair of ruts some 2.7 m apart, worn wider than one tank's by the column that
+		 * drove it, a piece every OldStep. By Months since: under three the mud dried in them, pale, the grass beside
+		 * them flattened (Flat says so: none stands in them); then grassed over, a lusher, darker green line, fainter
+		 * month by month to a quarter at two years. bWet (the ground in mud now): puddled, dark. None in standing corn
+		 * (sown since), none where no mark is left (Kind None), none across a dug hole. Laid a few millimetres under
+		 * the battle's own marks. At most MostOld pieces (and Most in all). Returns how many pieces laid.
+		 */
+		int LayOld(const std::vector<std::vector<std::pair<double, double>>>& Ways, double Months, bool bWet, uint64_t Seed);
+		static constexpr int MostOld = 2500;
+		static constexpr double OldStep = 2.4;
 		/** Where the ground is cut (Field::InCut): no mark is laid across it. */
 		std::function<bool(double X, double Y)> DugAt;
 		/** The drawn ground's normal, each strip lit by it (none: the slope of the height across the ground's spacing). */
@@ -452,8 +465,23 @@ namespace LandCrater
 		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
 			uint64_t Salt) const;
 		Patch& PatchFor(double X, double Y, Place& OutIn);
+		/** A laid piece kept for Flat, in the squares it reaches. */
+		void Keep(const Piece& Pc);
+		/** A section laid in, listed for TakeChanged once. */
+		void Touched(const Place& In);
 		static int64_t SquareOf(int I, int J) { return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J)); }
 	};
+
+	/**
+	 * Mud memory's ways (Ruts::LayOld): where an earlier battle's columns drove over the fought-over ground (Fought, read
+	 * as LayScars reads it). Through the hedges' gateways where the field has them there (Gates: the openings' places),
+	 * each way from one gateway to another 30 to 220 m on, turning less than 75 degrees, two to four legs, each gently
+	 * bowed; on open ground across it along Heading (radians from east, the way the battle's machines went; not a
+	 * number: the line its ground is spread along most), wandering a little, 150 to 450 m. Three, and two more for
+	 * each battle before, ten at most. Seeded: the same field, the same ways.
+	 */
+	std::vector<std::vector<std::pair<double, double>>> OldWays(const std::vector<std::pair<double, double>>& Fought, int Battles, uint64_t Seed,
+		const std::vector<std::pair<double, double>>& Gates, double Heading);
 
 	/**
 	 * Where an earlier battle's fight lay along (LayScars): the hedgerows', walls' and lanes' middle lines (each a line of

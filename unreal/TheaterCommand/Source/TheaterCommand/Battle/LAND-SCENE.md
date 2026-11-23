@@ -71,6 +71,11 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the ground stayed dry (23 November). The two may sit on one line.
    - `-TheaterLandScars=N`, `-TheaterLandScarMonths=M`, `-TheaterLandNoScars` (release 2): old shell holes from
      earlier battles over the same field, as a recording's root `"scars": {"count", "months"}` gives them.
+   - `-TheaterLandOldRuts=N`, `-TheaterLandOldRutMonths=M`, `-TheaterLandNoOldRuts` (release 2, mud memory): the ruts
+     of battles fought here in mud before, as a recording's root `"oldRuts": {"count", "months"}` gives them: dried
+     pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
+   - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
+     `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
    - `-TheaterLandFill=shade,overcast shade,kelvin,height` (0.36, 0.62, 7500, 60): shaded open ground's share of
      sunlit in light on a fair day and on an overcast one, the sky fill's warmth, and how high it stands in degrees.

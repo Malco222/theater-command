@@ -415,6 +415,13 @@ namespace LandFeed
 		 */
 		int ScarCount = 0;
 		double ScarMonths = 0.0;
+		/**
+		 * Mud memory (release 2, Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for
+		 * the next battle there; looks only, as the scars): root "oldRuts" {"count": the battles fought here in mud
+		 * before, "months": since the last}. Count 0 where none is given.
+		 */
+		int OldRutCount = 0;
+		double OldRutMonths = 0.0;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header

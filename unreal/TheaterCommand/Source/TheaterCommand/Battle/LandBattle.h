@@ -692,6 +692,8 @@ private:
 	void LayField();
 	/** Scarred ground (release 2): the old holes of the battles fought here before, laid as the battle opens. */
 	void LayScars();
+	/** Mud memory (release 2): the ruts of the battles fought here in mud before, laid as the battle opens. */
+	void LayOldRuts();
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing

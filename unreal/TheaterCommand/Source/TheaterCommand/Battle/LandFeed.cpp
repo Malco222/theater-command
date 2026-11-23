@@ -348,6 +348,11 @@ namespace LandFeed
 				R.ScarCount = std::max(0, Root["scars"]["count"].Int(0));
 				R.ScarMonths = std::max(0.0, Root["scars"]["months"].Num(0.0));
 			}
+			if (Root["oldRuts"].IsObject())
+			{
+				R.OldRutCount = std::max(0, Root["oldRuts"]["count"].Int(0));
+				R.OldRutMonths = std::max(0.0, Root["oldRuts"]["months"].Num(0.0));
+			}
 		}
 
 		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or

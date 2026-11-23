@@ -1157,6 +1157,55 @@ int main(int argc, char** argv)
 		std::printf("thrown soil's edge: %zu holes, %d edge points, %d under the drawn ground (the most %.1f mm)\n", Edge.All().size(), EdgePoints, EdgeUnder, 1000.0 * EdgeWorst);
 		if (EdgePoints > 0 && EdgeUnder > 0) Fault("a shell hole's thin edge sank under the ground as drawn");
 	}
+	// Mud memory (release 2; Brian 23 November): the ruts of two battles fought here in mud before, laid as LandBattle's
+	// LayOldRuts lays them (its ways through the hedges' gateways, else along the machines' heading); how many, how fast,
+	// within their cap; a month on bare (no grass stands in them), at six grassed (it stands again).
+	{
+		std::vector<std::pair<double, double>> Fought, Gates;
+		double Sx = 0.0, Sy = 0.0;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+		{
+			for (size_t K = 0; K < Tr.At.size(); K += 4) Fought.emplace_back(Tr.At[K].X, Tr.At[K].Y);
+			if (Tr.IsVehicle() && Tr.At.size() >= 2)
+			{
+				const double Dx = Tr.At.back().X - Tr.At.front().X, Dy = Tr.At.back().Y - Tr.At.front().Y, Long = std::hypot(Dx, Dy);
+				if (Long > 20.0) { Sx += Long * std::cos(2.0 * std::atan2(Dy, Dx)); Sy += Long * std::sin(2.0 * std::atan2(Dy, Dx)); }
+			}
+		}
+		for (const LandField::HedgeOpening& O : Field.Openings()) Gates.emplace_back(O.X, O.Y);
+		const double Heading = Sx * Sx + Sy * Sy > 0.0 ? 0.5 * std::atan2(Sy, Sx) : std::nan("");
+		const auto RutT0 = std::chrono::steady_clock::now();
+		const auto Ways = LandCrater::OldWays(Fought, 2, Rec.Seed ? Rec.Seed : 1, Gates, Heading);
+		int Laid[2] = { 0, 0 }, FlatOn[2] = { 0, 0 }, Asked = 0;
+		double RutMs = 0.0;
+		for (int Age = 0; Age < 2; ++Age)
+		{
+			LandCrater::Ruts Old;
+			Old.Begin([&Field](double X, double Y) { return Field.HeightAt(X, Y); }, [&Field](double X, double Y) { return Field.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(Field));
+			Laid[Age] = Old.LayOld(Ways, Age == 0 ? 1.0 : 6.0, false, Rec.Seed ? Rec.Seed : 1);
+			if (Age == 0) RutMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - RutT0).count();
+			// (on each way's ruts, either side of its line some 1.35 m)
+			for (const auto& W : Ways)
+				for (size_t K = 1; K + 1 < W.size(); K += 3)
+				{
+					const double Dx = W[K + 1].first - W[K - 1].first, Dy = W[K + 1].second - W[K - 1].second, L = std::max(1e-6, std::hypot(Dx, Dy));
+					for (const double Side : { 1.35, -1.35 })
+					{
+						if (Age == 0) ++Asked;
+						if (Old.Flat(W[K].first - Dy / L * Side, W[K].second + Dx / L * Side)) ++FlatOn[Age];
+					}
+				}
+		}
+		std::printf("mud memory: %zu ways (%zu gateways), %d pieces of old ruts at a month and %d at six (at most %d) laid in %.1f ms; grass kept off at %d of %d places on them at a month, %d at six\n",
+			Ways.size(), Gates.size(), Laid[0], Laid[1], LandCrater::Ruts::MostOld, RutMs, FlatOn[0], Asked, FlatOn[1]);
+		if (!Fought.empty() && Ways.empty()) Fault("mud memory: no way laid over the fought-over ground");
+		if (!Ways.empty() && Laid[0] == 0) Fault("mud memory: no old rut laid");
+		if (Laid[0] > LandCrater::Ruts::MostOld || Laid[1] > LandCrater::Ruts::MostOld) Fault("mud memory: more old ruts than their cap");
+		if (Laid[0] != Laid[1]) Fault("mud memory: the same ways laid differently by their age");
+		if (RutMs > 500.0) Fault("mud memory: laying the old ruts took past half a second");
+		if (Laid[0] > 0 && FlatOn[0] == 0) Fault("mud memory: grass standing in a month-old rut (dried mud)");
+		if (FlatOn[1] > 0) Fault("mud memory: grass kept off a rut grassed over at six months");
+	}
 	if (std::getenv("LAND_PLAY_ONLY_SCARS"))
 	{
 		std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());

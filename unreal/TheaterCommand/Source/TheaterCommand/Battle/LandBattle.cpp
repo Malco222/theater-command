@@ -1745,6 +1745,7 @@ bool ALandBattle::Open()
 	Took = LandParts::Seconds();
 	LayField();
 	LayScars();
+	LayOldRuts();
 	const double LaySeconds = LandParts::Seconds() - Took;
 	MakeFlags();
 	HideTheTable();
@@ -7122,6 +7123,79 @@ void ALandBattle::LayScars()
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle: scarred ground: %d old holes of %d battle(s) fought here before, the last %.0f months ago, laid in %.2f s (-TheaterLandNoScars: none)"),
 		Laid, Battles, Months, LandParts::Seconds() - Took);
+}
+
+void ALandBattle::LayOldRuts()
+{
+	// Mud memory (release 2; Brian 23 November, "Do all of these": a spring battle's ruts stay on that field for the next
+	// battle there; looks only): the recording's "oldRuts" {count, months}; -TheaterLandOldRuts=N (the battles fought here
+	// in mud before) and -TheaterLandOldRutMonths=M stand in for it on any field, for the Mac's off/on line;
+	// -TheaterLandNoOldRuts lays none.
+	FLandBattleState& S = *State;
+	if (!S.Field)
+	{
+		return;
+	}
+	int32 Battles = S.Rec.OldRutCount;
+	double Months = S.Rec.OldRutMonths;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldRuts="), Battles);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldRutMonths="), Months);
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoOldRuts")))
+	{
+		Battles = 0;
+	}
+	if (Battles <= 0)
+	{
+		return;
+	}
+	// The fought-over ground (as the scars read it), and the way the battle's machines went: their tracks' start to
+	// end, as a line (a heading and its reverse alike), the longer the more.
+	std::vector<std::pair<double, double>> Fought;
+	double Sx = 0.0, Sy = 0.0;
+	for (const LandFeed::Track& T : S.Rec.Tracks)
+	{
+		for (size_t K = 0; K < T.At.size(); K += 4)
+		{
+			Fought.emplace_back(T.At[K].X, T.At[K].Y);
+		}
+		if (T.IsVehicle() && T.At.size() >= 2)
+		{
+			const double Dx = T.At.back().X - T.At.front().X, Dy = T.At.back().Y - T.At.front().Y, Long = FMath::Sqrt(Dx * Dx + Dy * Dy);
+			if (Long > 20.0)
+			{
+				const double A = 2.0 * FMath::Atan2(Dy, Dx);
+				Sx += Long * FMath::Cos(A);
+				Sy += Long * FMath::Sin(A);
+			}
+		}
+	}
+	const double Heading = Sx * Sx + Sy * Sy > 0.0 ? 0.5 * FMath::Atan2(Sy, Sx) : std::nan("");
+	std::vector<std::pair<double, double>> Gates;
+	for (const LandField::HedgeOpening& O : S.Field->Openings())
+	{
+		Gates.emplace_back(O.X, O.Y);
+	}
+	// (puddled when the ground is in mud now: the campaign's word, or the Mac's stand-in for it)
+	FString Word(UTF8_TO_TCHAR(S.Rec.WeatherWord.c_str()));
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeatherWord="), Word);
+	const bool bWet = Word.TrimStartAndEnd().ToLower() == TEXT("mud");
+	const double Took = LandParts::Seconds();
+	const uint64_t Seed = S.Rec.Seed ? S.Rec.Seed : 1;
+	const std::vector<std::vector<std::pair<double, double>>> Ways = LandCrater::OldWays(Fought, Battles, Seed, Gates, Heading);
+	const int Laid = S.Ruts.LayOld(Ways, Months, bWet, Seed);
+	// (the grass laid again without what stands in a bare rut: dried mud or puddled; grassed over, it stands)
+	if (Carpet.IsValid() && (bWet || Months < 3.0))
+	{
+		for (const std::vector<std::pair<double, double>>& Way : Ways)
+		{
+			for (size_t K = 0; K < Way.size(); K += 2)
+			{
+				Carpet->Mark(Way[K].first, Way[K].second, 8.0);
+			}
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: mud memory: %d pieces of old ruts along %d ways, %d battle(s) fought here in mud before, the last %.0f months ago%s, laid in %.2f s (-TheaterLandNoOldRuts: none)"),
+		Laid, static_cast<int32>(Ways.size()), Battles, Months, bWet ? TEXT(", puddled") : TEXT(""), LandParts::Seconds() - Took);
 }
 
 void ALandBattle::SendDug()
