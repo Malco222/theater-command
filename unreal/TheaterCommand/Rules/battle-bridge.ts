@@ -748,8 +748,8 @@ export function battleCalls(h: BattleHooks) {
         const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
         return divs > 0 && cs.some((c) => c.line !== undefined) ? Math.round(cs.reduce((s2, c) => s2 + (c.line ?? 0) * c.divs, 0) / divs / 4.345) : undefined;
       };
-      const ids = new Set(corps.map((c) => c.id));
-      const wa = worn(corps), wd = worn(g.corps.filter((c) => c.reg === to && !ids.has(c.id) && c.kind !== 'fort'));
+      const inAttack = new Set(corps.map((c) => c.id));
+      const wa = worn(corps), wd = worn(g.corps.filter((c) => c.reg === to && !inAttack.has(c.id) && c.kind !== 'fort'));
       if (wa !== undefined) ticket.att = { ...ticket.att, worn: wa };
       if (wd !== undefined) ticket.def = { ...ticket.def, worn: wd };
       return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
