@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b46a99b5 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0f05bef2 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3082,6 +3082,14 @@
       counter: { at: 45, ahead: 12, xp: [2, 1, 0.6] },
       flank: { rush: [14, 26], out: 45 },
       smoke: { on: true, every: 60, spread: 10, per: 15, most: 12 }
+    },
+    blast: {
+      _about: "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
+      hold: 6,
+      anchor: 1,
+      most: { light: 2, mortar: 3, field: 4, howitzer: 5, heavy: 7, bomb: 10 },
+      lying: 0.45,
+      kneeling: 0.75
     }
   };
 
@@ -3610,6 +3618,7 @@
       this.shellKills.add(on + ":" + k);
       const vq = this.squads.get(on), v = vq?.men.find((x2) => x2.k === k);
       if (vq && v) this.killRound(by2 !== void 0 ? this.b.unit(by2) : void 0, vq, v, [x, y]);
+      if (vq && this.b.blast) vq.anchor = { x, y, t: this.b.t };
     }
     /** A model the rules took with no striker on the field (the air's bombs and guns): no round of the field's for him. */
     fromAir(on, k) {
@@ -3709,6 +3718,12 @@
      * takes the men round its burst together, one round each at the one burst (the same t, x and y); small arms one by one.
      * A block that ran off the field, or left it in order, takes its men with it.
      */
+    /** How much of him a burst finds (shell blasts): a man lying down DR.blast.lying, kneeling DR.blast.kneeling, else 1. */
+    exposed(m) {
+      if (m.pose === "fire_prone" || m.pose === "hide" || m.pose === "crawl" || m.pose === "observe" || m.pose === "cower" || m.pose === "lmg_burst") return DR.blast.lying;
+      if (m.pose === "fire_kneel" || m.pose === "wait" || m.pose === "creep") return DR.blast.kneeling;
+      return 1;
+    }
     thin(sq) {
       const u = sq.u, b = this.b;
       if (u.state === "withdrawn" || u.state === "gone" && (u.figures > 0 || u.y < 0 || u.y > b.field.h)) return;
@@ -3733,11 +3748,20 @@
       const shell = !!by2 && (by2.kind === "arm" && !this.mgKill(by2, u, sq.lost) || by2.kind === "art" && by2.team !== "mg");
       const from = by2 ? [by2.x, by2.y] : [u.x, u.y];
       let burst;
+      const blast = shell && b.blast && !!by2;
+      const cal = by2?.cal ?? "field";
+      if (blast) {
+        const a = sq.anchor && b.t - sq.anchor.t <= DR.blast.anchor ? sq.anchor : void 0;
+        if (a) burst = [a.x, a.y];
+        else if (fighting(u) && !b.over && n < DR.blast.most[cal] && b.t - (sq.held ?? (sq.held = b.t)) < DR.blast.hold) return;
+        sq.held = void 0;
+      }
+      const reach = blast ? REACH[cal] : 12;
       while (n-- > 0 && cand.length) {
         let best = 0, score = Infinity;
         cand.forEach((m2, i) => {
           const p = burst ?? from;
-          const sc = Math.hypot(m2.x - p[0], m2.y - p[1]) * (2 - (DR.rounds.cover[m2.cover] ?? 1)) + (burst ? 6 : 40) * roll(this.seed, u.id, m2.n, sq.lost, 81);
+          const sc = Math.hypot(m2.x - p[0], m2.y - p[1]) * (2 - (DR.rounds.cover[m2.cover] ?? 1)) / (blast ? this.exposed(m2) : 1) + (burst ? 6 : 40) * roll(this.seed, u.id, m2.n, sq.lost, 81);
           if (sc < score) {
             score = sc;
             best = i;
@@ -3745,15 +3769,16 @@
         });
         const m = cand.splice(best, 1)[0];
         sq.lost++;
-        if (shell && (!burst || Math.hypot(m.x - burst[0], m.y - burst[1]) > 12)) {
+        let mate = false;
+        if (shell && (!burst || Math.hypot(m.x - burst[0], m.y - burst[1]) > reach)) {
           burst = [m.x, m.y];
           this.duck(m.x, m.y);
-        }
+        } else if (blast) mate = true;
         m.fell = b.t;
         m.v = 0;
         m.aim = void 0;
         m.hidden = void 0;
-        if (by2) this.killRound(by2, sq, m, shell ? burst : void 0);
+        if (by2) this.killRound(by2, sq, m, shell ? burst : void 0, mate);
         m.pose = "down";
         m.spot = [m.x, m.y];
         if (b.bearers) this.hurt(sq, m);
@@ -6678,7 +6703,7 @@
      * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
      * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
      */
-    killRound(by2, vq, v, p) {
+    killRound(by2, vq, v, p, mate = false) {
       const t = this.b.t, tq = by2 ? this.squads.get(by2.id) : void 0;
       const at = p ?? [v.x, v.y];
       let s, w = p ? by2?.kind === "arm" ? "tank" : by2?.team === "mor" ? "mortar" : "gun" : "rifle";
@@ -6701,11 +6726,12 @@
       const r = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: "kill" };
       if (v.j !== void 0) r.oj = v.j;
       if (by2) r.by = by2.id;
+      if (mate) r.m = 1;
       if (s) {
         r.k = s.k;
         if (s.j !== void 0) r.j = s.j;
         if (w === "mg" && s.role === "tank" && by2) r.g = this.tankGun(by2, s, at, Math.round(t * 10));
-        if (w !== "rifle" && w !== "mg") {
+        if (w !== "rifle" && w !== "mg" && !mate) {
           s.shot = t;
           s.fired = t;
           s.aim = [v.x, v.y];
@@ -7144,6 +7170,12 @@
        * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
        */
       __publicField(this, "bearers", false);
+      /**
+       * Shell blasts (release 2; Brian, 23 November 05:04Z): the men a block loses to shells fall together, the men near one
+       * burst, as one shell takes them (Drill.thin, DRILL.blast). Looks only: the drill reads it, the fight never. Off unless
+       * whoever opens the field turns it on (the bridge's { blast: true }, the Battle rules card's Shell blasts row).
+       */
+      __publicField(this, "blast", false);
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
       __publicField(this, "litters", /* @__PURE__ */ new Map());
       /**
@@ -11434,6 +11466,7 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
+      if (opts.blast === true) sim.blast = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
@@ -11766,7 +11799,8 @@
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
         mud: opts?.mud !== false,
-        scars: opts?.scars !== false
+        scars: opts?.scars !== false,
+        blast: opts?.blast === true
       });
       return live3.header();
     },
@@ -11800,6 +11834,7 @@
         worn: o.worn !== false,
         mud: o.mud !== false,
         scars: o.scars !== false,
+        blast: o.blast === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
