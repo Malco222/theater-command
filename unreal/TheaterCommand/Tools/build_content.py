@@ -1787,7 +1787,11 @@ def wind_sway(m, x, y, leaves=False):
     connect(metres, "", along, "A")
     connect(way, "", along, "B")
     spring = node(m, unreal.MaterialExpressionSine, x + 1350, y + 350, period=1.0)
-    connect(plus(m, times(m, time, scalar(m, "SpringHz", 0.55, x + 1050, y + 200), x + 1200, y + 300), times(m, along, 0.04, x + 1200, y + 400), x + 1300, y + 350), "", spring, "")
+    # (each copy on its own beat: a tree, a tuft, a sheaf of corn swings out of step with its neighbours; the art
+    # director's round 1, 23 November)
+    own_beat = node(m, unreal.MaterialExpressionPerInstanceRandom, x + 1050, y + 480)
+    connect(plus(m, plus(m, times(m, time, scalar(m, "SpringHz", 0.55, x + 1050, y + 200), x + 1200, y + 300), times(m, along, 0.04, x + 1200, y + 400), x + 1300, y + 350),
+                 own_beat, x + 1300, y + 450), "", spring, "")
     push = plus(m, lerp(m, scalar(m, "WindCalm", 0.3, x + 1200, y + 100), 1.0, gust, x + 1350, y + 100),
                 times(m, times(m, spring, scalar(m, "Spring", 0.25, x + 1350, y + 450), x + 1500, y + 400), gust, x + 1650, y + 400), x + 1800, y + 200)
     lean = times(m, times(m, times(m, push, scalar(m, "Bend", 0.0, x + 1800, y + 300), x + 1950, y + 250), reach, x + 2100, y + 300), 100.0, x + 2250, y + 300)
@@ -1820,12 +1824,16 @@ def windy(name, make):
         return None
 
 
-def wind_sheen(m, x, y):
+def wind_sheen(m, x, y, ripe=None):
     """What a gust does to a field's look from afar: the grass and the corn bent over show their paler sides, so each
-    gust runs over a field as a light patch and each lull as a darker one. A share about 1, by "Sheen" (nothing unless
-    C++ says)."""
+    gust runs over a field as a light patch and each lull as a darker one, moving with the lean (the same gusts). A
+    share about 1, by "Sheen" (nothing unless C++ says). ripe: where the paint is ripe grain (0..1), by "SheenRipe"
+    there instead (the art director's round 1: ripe wheat, barley, gaoliang show it most)."""
     gust, _, _ = wind_gust(m, x, y, False)
-    return plus(m, times(m, plus(m, gust, -0.5, x + 1200, y), times(m, scalar(m, "Sheen", 0.0, x + 1200, y + 100), 2.0, x + 1350, y + 100), x + 1500, y), 1.0, x + 1650, y)
+    amount = scalar(m, "Sheen", 0.0, x + 1050, y + 100)
+    if ripe is not None:
+        amount = lerp(m, amount, scalar(m, "SheenRipe", 0.0, x + 1050, y + 200), ripe, x + 1200, y + 150)
+    return plus(m, times(m, plus(m, gust, -0.5, x + 1200, y), times(m, amount, 2.0, x + 1350, y + 100), x + 1500, y), 1.0, x + 1650, y)
 
 
 
@@ -1964,7 +1972,9 @@ def build_land_surface():
     # earth, sand, snow or a lane's dust; only where it faces up.
     plant = sat(plus(m, times(m, over(plus(m, (colour, "G"), times(m, (colour, "B"), -1.0, -2400, -2100), -2250, -2100),
                                       plus(m, (colour, "G"), 0.02, -2250, -2000), -2100, -2050), 5.0, -1950, -2050), -1.5, -1800, -2050), -1650, -2050)
-    sheen = windy("M_LandSurface", lambda: wind_sheen(m, -3600, -2600))
+    # (ripe grain's gold, its red well over its green; a green sward's red is under its green)
+    ripe = sat(times(m, plus(m, over((colour, "R"), plus(m, (colour, "G"), 0.01, -2400, -2300), -2250, -2300), -0.9, -2100, -2300), 3.3, -1950, -2300), -1800, -2300)
+    sheen = windy("M_LandSurface", lambda: wind_sheen(m, -3600, -2600, ripe=ripe))
     lit = times(m, base, lit_top, -200, 0)
     if sheen is not None:
         lit = times(m, lit, lerp(m, 1.0, sheen, times(m, plant, up, -1500, -2050), -1350, -2100), -100, -100)
@@ -2181,15 +2191,20 @@ def build_land_leaves_or_tell():
 
 def build_land_cloud_shade():
     """THE CLOUDS' SHADOWS ON THE FIELD (release 2; Brian, 23 November: "can we make the grass, trees, and sky more
-    visually realistic and epic?"). The light function on the battle's sun: on a fair day the cumulus' shadows lie on
-    the field, on the hedges, the trees, the tanks and the men alike (it takes the sun's light away, not the paint), and
-    slide over it as the wind carries the clouds. Its number is the share of the sun let through: 1 in the open, "Dark"
-    under a cloud.
+    visually realistic and epic?"; the art director's round 1 the same day). The light function on the battle's sun: on
+    a fair day the cumulus' shadows lie on the field, on the hedges, the trees, the tanks and the men alike (it takes
+    the sun's light away, not the paint), and slide over it as the wind carries the clouds. Its number is the share of
+    the sun let through: 1 in the open, "Dark" under a cloud.
 
     Where a point's sun ray ("SunWay", the way to the sun in the world) meets the clouds' base ("CloudBase", metres of
     the world's height), carried back by the clouds' drift ("Drift", metres in the world's X and Y, the same carry as
-    the clouds drawn), T_LandCloudWind's red is read, "ShadeSize" metres a repeat: over 1 - "Cover" it is under a
-    cloud, the edge "Soft" wide. "Strength" takes it from none (0, the default: the sun as before) to all (1)."""
+    the clouds drawn), T_LandCloudWind is read, "ShadeSize" metres a repeat, moved by "Anchor" (repeats: the C++ lays
+    the picture's clear disc over the field's middle at the start). Its red is how far inside a cloud's shadow the point
+    is ("Reach" metres either side of 0.5; make_sky_textures.py), so the edge is blurred over "Feather" metres the
+    same all round every cloud. Its blue is the cloud's place in the day's order: only clouds under "Cover" /
+    "FullCover" (the share the picture's clouds shade in all, make_sky_textures.py's FULL_COVER) are drawn, so a day of
+    less cover has fewer clouds, not smaller ones. "Strength" takes it from none (0, the default: the sun as before) to
+    all (1)."""
     m = new_material("M_LandCloudShade")
     m.set_editor_property("material_domain", unreal.MaterialDomain.MD_LIGHT_FUNCTION)
     air = _AIR.get("picture") or _AIR.setdefault("picture", land_texture("T_LandCloudWind"))
@@ -2203,14 +2218,18 @@ def build_land_cloud_shade():
     sun_flat = node_from(m, unreal.MaterialExpressionComponentMask, sun, -2100, 200, r=True, g=True, b=False, a=False)
     at = plus(m, plus(m, node_from(m, unreal.MaterialExpressionComponentMask, where, -2100, 0, r=True, g=True, b=False, a=False), times(m, sun_flat, climb, -1500, 250), -1350, 100),
               times(m, node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "Drift", (0.0, 0.0, 0.0, 0.0), -1650, 550), -1500, 550, r=True, g=True, b=False, a=False), -1.0, -1350, 550), -1200, 200)
-    shade = node(m, unreal.MaterialExpressionTextureSample, -900, 200, texture=air, sampler_type=sampler_for(air))
-    connect(over(m, at, scalar(m, "ShadeSize", 4000.0, -1200, 350), -1050, 250), "", shade, "UVs")
-    soft = scalar(m, "Soft", 0.03, -900, 500)
-    low = plus(m, plus(m, 1.0, times(m, scalar(m, "Cover", 0.3, -900, 400), -1.0, -750, 400), -600, 400), times(m, soft, -1.0, -750, 500), -450, 450)
-    ramp = one_in(m, unreal.MaterialExpressionSaturate, over(m, plus(m, (shade, "R"), times(m, low, -1.0, -450, 550), -300, 300), times(m, soft, 2.0, -450, 650), -150, 350), 0, 350)
+    anchor = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "Anchor", (0.0, 0.0, 0.0, 0.0), -1200, 650), -1050, 650, r=True, g=True, b=False, a=False)
+    shade = node(m, unreal.MaterialExpressionTextureSample, -750, 200, texture=air, sampler_type=sampler_for(air))
+    connect(plus(m, over(m, at, scalar(m, "ShadeSize", 4000.0, -1200, 350), -1050, 250), anchor, -900, 300), "", shade, "UVs")
+    # (how far inside, in metres; the edge's blur; the clouds the day's cover keeps)
+    inside = times(m, plus(m, (shade, "R"), -0.5, -600, 200), times(m, scalar(m, "Reach", 400.0, -750, 450), 2.0, -600, 450), -450, 250)
+    feather = scalar(m, "Feather", 30.0, -600, 550)
+    ramp = one_in(m, unreal.MaterialExpressionSaturate, plus(m, over(m, inside, feather, -300, 300), 0.5, -150, 300), 0, 300)
     smooth = times(m, times(m, ramp, ramp, 150, 300), plus(m, 3.0, times(m, ramp, -2.0, 150, 450), 300, 450), 450, 350)
-    lit = lerp(m, 1.0, scalar(m, "Dark", 0.2, 450, 500), smooth, 600, 350)
-    to_property(lerp(m, 1.0, lit, scalar(m, "Strength", 0.0, 600, 500), 750, 350), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    keep_to = over(m, scalar(m, "Cover", 0.3, -600, 700), scalar(m, "FullCover", 0.42, -600, 800), -450, 750)
+    kept = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, keep_to, times(m, (shade, "B"), -1.0, -450, 850), -300, 800), 255.0, -150, 800), 0, 800)
+    lit = lerp(m, 1.0, scalar(m, "Dark", 0.2, 450, 500), times(m, smooth, kept, 600, 600), 750, 450)
+    to_property(lerp(m, 1.0, lit, scalar(m, "Strength", 0.0, 750, 650), 900, 450), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)
 
 
