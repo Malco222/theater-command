@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of da2ce066 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f4445fcb 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7276,7 +7276,7 @@
       }
       for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
-      const [d0, d1] = ticket.reckoning.dice;
+      const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll2 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
       this.fortune = 1 + LAND.fortune * (roll2 - 1);
       for (const s of ["att", "def"]) {

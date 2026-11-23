@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9d4bcea2 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c13fd661 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -62142,7 +62142,7 @@
       // game.ts): the field lays the river before those, and no others.
       att: { ...sideOf6(g2, attNat, going, (c) => corpsBase(g2, c) * KIND[c.kind].atk, crossing2 ? (c) => !!riverBetween(g2, c.reg, target.id) : void 0), ...onCall(cardAir?.att) },
       def: { ...withGuard(g2, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf6(g2, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-      reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...band.exact ? {} : { seen: band.mid } },
+      reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...a.luck ? { luck: [a.luck[0], a.luck[1]] } : {}, ...band.exact ? {} : { seen: band.mid } },
       lines: a.lines,
       limit: LAND2.limit,
       // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
@@ -67727,7 +67727,7 @@
       }
       for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
-      const [d0, d1] = ticket.reckoning.dice;
+      const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
       const roll3 = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
       this.fortune = 1 + LAND2.fortune * (roll3 - 1);
       for (const s of ["att", "def"]) {
