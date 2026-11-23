@@ -109,6 +109,11 @@ namespace LandEye
 		 * face filled 75% of a still): a shot whose picture stays over Settings::DarkLeave is left, and the next stands
 		 * clear of where it stood. Unset: never asked (the rays cannot see light). */
 		std::function<double()> DarkNow;
+		/** Whether a vehicle's crew may get out at her end (the effects thread's bail-out, release 2, -TheaterLandBailOut:
+		 * a tank or an armoured car with a fates row and a soldier file for her crew). Asked before her kill, as the film
+		 * goes to a tank's end 1 to 3 s ahead; Director::BailOut then says at the kill whether anyone did. Unset: none,
+		 * and the film is as it was. */
+		std::function<bool(int Track)> Bails;
 	};
 
 	struct Settings
@@ -238,6 +243,17 @@ namespace LandEye
 		 * the Mac pays for the pass nearly all fight long. Held at 0 from 21:22Z, on again at 23:10Z (Brian's "full speed
 		 * ahead on graphics"): it ships on only if the Mac's A/B, -TheaterLandFocusLive=0 against 1, holds 45 fps.) */
 		double FocusFar = 40.0, FocusPull = 5.0, FocusMost = 300.0;
+		/** The first bail-out (the effects thread's ask, 23 November, release 2, with World::Bails): the first tank's end
+		 * of a battle whose crew may get out, gone to as ever, is watched from BailNear to BailFar metres off her side
+		 * toward her rear, 1.2 to 2 m up, a 24 to 32 degree lens, the look BailLookBack metres behind her middle (her
+		 * hatches, her men dropping off her side and running back in her lee, all in the picture; nobody running at the
+		 * lens). Once Director::BailOut says her crew is getting out, the shot holds from her hit for the longer of the
+		 * first man up and BailRun seconds, and her ammunition going and BailBlast seconds, at least BailLeast, at most
+		 * BailMost (real seconds), with no cut to another tank's end, a fall or a radio call meanwhile (a shell or a fuel
+		 * ball at the lens, a man walking into it, still cut). Once a battle; later bail-outs are held as any tank's end.
+		 * Not while a radio call's barrage is owed (the film went to the man calling it): the next crew is watched for. */
+		double BailNear = 22.0, BailFar = 38.0, BailLookBack = 3.0;
+		double BailRun = 8.0, BailBlast = 2.5, BailLeast = 10.0, BailMost = 15.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -350,6 +366,24 @@ namespace LandEye
 		const std::vector<RadioBeat>& RadioBeats() const { return Beats; }
 		/** The fresh calls for fire the film could go to (found once, at the first look). */
 		int RadioCalls() const { return static_cast<int>(Radios.size()); }
+		/** A vehicle's crew getting out at her kill (the scene calls it as it makes her crew, World::Bails): FirstOut the
+		 * battle seconds after her kill the first man starts up out of a hatch, -1 nobody got out; Blast the battle
+		 * seconds after it her ammunition goes, -1 never. On the first bail-out of the battle the film is watching for
+		 * (Settings::BailNear), the shot holds for it; any other call is let be. */
+		void BailOut(int Track, double FirstOut, double Blast);
+		/** The first bail-out's hold, for the test: her track, the hold asked (real s from her hit), the real time she was
+		 * hit and the shot left (-1 not yet), and why it was left. */
+		struct BailBeat
+		{
+			int Track = -1;
+			double Hold = 0.0, Hit = -1.0, Left = -1.0;
+			Why LeftWhy = Why::Asked;
+		};
+		const std::vector<BailBeat>& BailBeats() const { return BailLog; }
+		/** The bail watches placed (the shot gone to for a crew that may get out), and whether the shot on the screen is
+		 * one, for the test. */
+		int BailWatches() const { return BailWatchCount; }
+		bool BailWatchNow() const { return bShotBail; }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -450,6 +484,16 @@ namespace LandEye
 		double FocusWanted(double Battle) const;
 		/** The subject fell during this shot (the real time he went down, -1 not): hold on him a while, then cut. */
 		double FellAt = -1.0;
+		/** How long this shot holds on its subject's fall or end (real s; Settings::FallHold, or a bail-out's hold). */
+		double ShotHold = 4.0;
+		/** The first bail-out (Settings::BailNear): bBailWatch while a choice tries the bail watch; bShotBail, this shot is
+		 * one (BailShift: its look's step behind her middle); bBailHold, it holds for her crew (BailOut said so);
+		 * bBailDone, the battle's one is held. */
+		bool bBailWatch = false, bShotBail = false, bBailHold = false, bBailDone = false;
+		Vec BailShift;
+		int BailWatchCount = 0;
+		std::vector<BailBeat> BailLog;
+		bool BailWanted(int Track) const;
 		/** Battle seconds a real second (the scene plays the approach fast and the fight at life's pace, half the rules'
 		 * clock): every rule about what the film shows in the next seconds asks Soon(real seconds) of the battle. */
 		double Pace = 1.0;
@@ -647,6 +691,7 @@ namespace LandEye
 			Kind K = Kind::Wide;
 			int Who = -1;
 			bool bNear = false;
+			bool bBail = false;
 		};
 		std::vector<Option> Options;
 		bool bChoosing = false, bChoiceAsked = false;
@@ -734,6 +779,9 @@ namespace LandEye
 			int House = -1;
 			Vec Aim;
 			bool bSalvo = false;
+			bool bBail = false, bBailHold = false;
+			double Hold = 4.0;
+			Vec BailShift;
 		};
 		ShotKept KeepShot() const;
 		void PutShot(const ShotKept& K);

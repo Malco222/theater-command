@@ -308,6 +308,11 @@ namespace LandEye
 		LastFallCut = -100.0;
 		bNearWatch = false;
 		bFallEye = false;
+		ShotHold = Set.FallHold;
+		bBailWatch = bShotBail = bBailHold = bBailDone = false;
+		BailShift = Vec();
+		BailWatchCount = 0;
+		BailLog.clear();
 		LastTankSide = -1;
 		LeanBlock = -1;
 		LeanUntil = -1.0;
@@ -1721,6 +1726,10 @@ namespace LandEye
 		bShotSalvo = K == Kind::Watch && bTrySalvo;
 		ShotAim = TryAim;
 		FellAt = -1.0;
+		ShotHold = Set.FallHold;
+		bShotBail = K == Kind::Watch && bBailWatch && ShotHouse < 0 && !bShotSalvo;
+		bBailHold = false;
+		BailShift = Vec();
 		bFallEye = false;
 		bMassNow = false;
 		// (the whole mass: its own place, over the own side's rear)
@@ -1846,6 +1855,26 @@ namespace LandEye
 				Now.Fov = bShotSalvo ? std::clamp(std::max(14.0 + Roll() * 6.0, Needed), 12.0, 52.0) : std::clamp(std::max(24.0 + Roll() * 8.0, Needed), 18.0, 52.0);
 				return !Here.Open || Here.Open(Stand, Target);
 			}
+			// The first bail-out (Settings::BailNear): off her side toward her rear, low, the look a few metres behind her
+			// middle, so her hatches, her men dropping off her side and their run back in her lee are all in the picture
+			// and nobody runs at the lens (her crew runs back from her front, toward her rear, spread a third of a turn).
+			// Set up where her end will be, from the recording, and by her hull's heading there (Where's facing is her
+			// turret's): she drives into the picture and dies in it (placed where she was, a tank still moving came to
+			// her end 18 m from the lens on the Mac-paced run).
+			if (bShotBail)
+			{
+				const LandFeed::Spot End = LandFeed::SpotAt(Tr, Tr.Fell >= Battle ? Tr.Fell : Battle);
+				const Vec Her(End.X, End.Y, HeightAt(End.X, End.Y));
+				const double Hull = End.F;
+				const double Angle = Hull + Pi + SideSign * (0.95 + Roll() * 0.35);
+				const double Away = std::min(Set.BailFar, Set.BailNear + Roll() * (Set.BailFar - Set.BailNear) * 0.75 + 4.0 * Further);
+				const Vec Base = Her + Vec(std::sin(Angle) * Away, std::cos(Angle) * Away, 0.0);
+				Stand = Vec(Base.X, Base.Y, HeightAt(Base.X, Base.Y) + 1.2 + Roll() * 0.8);
+				BailShift = Vec(std::sin(Hull + Pi) * Set.BailLookBack, std::cos(Hull + Pi) * Set.BailLookBack, -0.3);
+				Target = Her + Vec(0.0, 0.0, 1.3) + BailShift;
+				Now.Fov = 24.0 + Roll() * 8.0;
+				return !Here.Open || Here.Open(Stand, Target);
+			}
 			// Near, for a fall about to come: off his side at a man's height, a long lens. Otherwise from a bank or a rise
 			// off his own side's rear quarter, a long lens on him and the men round him.
 			const double Away = bNearWatch ? 10.0 + Roll() * 8.0 + 3.0 * Further : 28.0 + Roll() * 27.0 + 8.0 * Further;
@@ -1876,6 +1905,7 @@ namespace LandEye
 			Vec B;
 			OutLook = BodyOf(Subject, Battle, B) ? B : At + Vec(0.0, 0.0, 1.0);
 			if (ShotHouse >= 0 || bShotSalvo) OutLook = OutLook + (ShotAim - OutLook) * AimLook();
+			if (bShotBail) OutLook = OutLook + BailShift;
 		}
 		else if (Shot == Kind::Track)
 		{
@@ -2035,6 +2065,10 @@ namespace LandEye
 		K.House = ShotHouse;
 		K.Aim = ShotAim;
 		K.bSalvo = bShotSalvo;
+		K.bBail = bShotBail;
+		K.bBailHold = bBailHold;
+		K.Hold = ShotHold;
+		K.BailShift = BailShift;
 		return K;
 	}
 
@@ -2061,6 +2095,10 @@ namespace LandEye
 		ShotAim = K.Aim;
 		bShotSalvo = K.bSalvo;
 		TrackOff = K.TrackOff;
+		bShotBail = K.bBail;
+		bBailHold = K.bBailHold;
+		ShotHold = K.Hold;
+		BailShift = K.BailShift;
 	}
 
 	void Director::BeginChoice(double Battle, double Real)
@@ -2196,6 +2234,8 @@ namespace LandEye
 				const Track& Tr = Rec->Tracks[static_cast<size_t>(Coming)];
 				if (Tr.IsVehicle())
 				{
+					// (the battle's first bail-out: watched from her side toward her rear, low, first)
+					if (BailWanted(Coming)) Options.push_back({ Kind::Watch, Coming, false, true });
 					Options.push_back({ Kind::Track, Coming, false });
 					Options.push_back({ Kind::Watch, Coming, false });
 					Options.push_back({ Kind::Watch, Coming, true });
@@ -2508,6 +2548,7 @@ namespace LandEye
 				{
 					if (!bTrying && Spent()) return false;
 					bNearWatch = Op.bNear;
+					bBailWatch = Op.bBail;
 					if (bAskedOp && !AskTries.empty()) { TryHouse = AskTries.front().House; TryAim = AskTries.front().Aim; }
 					const int Fit = TryPlace(Op.K, Op.Who, Battle, ChoiceV, Start, Budget);
 					if (Fit < 0) return false;
@@ -2517,7 +2558,7 @@ namespace LandEye
 				if (bAskedOp)
 				{
 					// (the asked kind on the other men it may be of, two places each, before it is placed unfit)
-					bNearWatch = false;
+					bNearWatch = bBailWatch = false;
 					for (; AskNext < AskTries.size(); ++AskNext, AskNextV = 0)
 					{
 						for (; AskNextV < 2; ++AskNextV)
@@ -2567,6 +2608,7 @@ namespace LandEye
 					{
 						if (!bTrying && Spent()) return false;
 						bNearWatch = Op.bNear;
+						bBailWatch = Op.bBail;
 						const int Fit = TryPlace(Op.K, Op.Who, Battle, ChoiceV, Start, Budget);
 						if (Fit < 0) return false;
 						if (Fit > 0) return true;
@@ -2591,7 +2633,7 @@ namespace LandEye
 			if (bFarBank)
 			{
 				bLoose = true;
-				bNearWatch = false;
+				bNearWatch = bBailWatch = false;
 				for (; ChoiceO < Options.size(); ++ChoiceO, ChoiceV = 4)
 				{
 					if (Options[ChoiceO].Who < 0) continue;
@@ -2609,7 +2651,7 @@ namespace LandEye
 			}
 			ChoiceStage = 3;
 		}
-		bNearWatch = false;
+		bNearWatch = bBailWatch = false;
 		// (riding with a unit, or going to the men the general just sent, and no place fit on any of them: first its other
 		// men, away from those four (a unit of a hundred has more than four places to stand: Kursk's ride left its men 7 s
 		// in 80), then the field weighed for this one cut instead, the ride kept, before the aerial: the ride over
@@ -2746,6 +2788,7 @@ namespace LandEye
 			ShotLength = std::max(ShotLength, OnScreen(Tc.Fell - Battle) + Set.FallHold);
 			if (!Tc.IsVehicle()) LastFallCut = Real;
 		}
+		if (bShotBail) ++BailWatchCount;
 		// (the whole mass holds its own length, and is taken once)
 		if (bMassNow)
 		{
@@ -2756,6 +2799,29 @@ namespace LandEye
 		++CutCount;
 		CutLog.emplace_back(Battle, Shot);
 		Now.bCut = true;
+	}
+
+	bool Director::BailWanted(int Track) const
+	{
+		// (not with a radio call's barrage owed: the film went to the man calling it, and its salvo is the payoff)
+		return !bBailDone && RadioStage != 2 && Here.Bails && Rec && Track >= 0 && static_cast<size_t>(Track) < Rec->Tracks.size() &&
+			Rec->Tracks[static_cast<size_t>(Track)].IsVehicle() && Here.Bails(Track);
+	}
+
+	void Director::BailOut(int Track, double FirstOut, double Blast)
+	{
+		// (the battle's first bail-out the film watches for: this shot is the bail watch on her, and her crew gets out;
+		// anyone else's, or nobody getting out, is let be, and the next crew that may is watched for)
+		if (!Rec || bChoosing || bBailDone || !bShotBail || bBailHold || RadioStage == 2 || Track < 0 || Track != Subject || FirstOut < 0.0) return;
+		const double Run = OnScreen(FirstOut) + Set.BailRun;
+		const double Brew = Blast >= 0.0 ? OnScreen(Blast) + Set.BailBlast : 0.0;
+		ShotHold = std::clamp(std::max(Run, Brew), Set.BailLeast, std::max(Set.BailLeast, Set.BailMost));
+		bBailHold = bBailDone = true;
+		BailBeat B;
+		B.Track = Track;
+		B.Hold = ShotHold;
+		B.Hit = FellAt;
+		BailLog.push_back(B);
 	}
 
 	bool Director::InSquad(int TrackIndex) const
@@ -3146,8 +3212,10 @@ namespace LandEye
 				FellAt = Real;
 				FallEye = EyeEased;
 				bFallEye = true;
+				if (bBailHold && !BailLog.empty() && BailLog.back().Hit < 0.0) BailLog.back().Hit = Real;
 			}
-			if (!bChoosing && !bCut && FellAt >= 0.0 && Real > FellAt + Set.FallHold && !bHeld) { bCut = true; Reason = Why::Fall; }
+			// (a bail-out's hold, Settings::BailLeast to BailMost, instead of the fall's own)
+			if (!bChoosing && !bCut && FellAt >= 0.0 && Real > FellAt + ShotHold && !bHeld) { bCut = true; Reason = Why::Fall; }
 			if (!bChoosing && !bCut && Tr.Out >= 0.0 && Battle > Tr.Out) { bCut = true; Reason = Why::Gone; }
 		}
 		// Cut on action: a tank about to be knocked out, or a man about to fall, a second or two ahead and not in this
@@ -3156,7 +3224,8 @@ namespace LandEye
 		// (a tank's end is let through a man's fall held 0.8 s, and gone to as late as 0.4 s before it: the camera, held on a
 		// man's fall, missed a tank knocked out 1.6 s after him, her window gone by)
 		// (not from the whole mass: the field is its subject, and a tank's end or a fall is in it)
-		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && (FellAt < 0.0 || Real > FellAt + Set.FallSeen) && Held >= Set.ShotLeast)
+		// (nor from the first bail-out's hold: her crew is the film's, all of it)
+		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && (FellAt < 0.0 || Real > FellAt + (bBailHold ? ShotHold : Set.FallSeen)) && Held >= Set.ShotLeast)
 		{
 			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
@@ -3169,6 +3238,10 @@ namespace LandEye
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
+				// (nor a shot holding for the tank's end or the fall it was cut to, now under 2.5 s off, for a man's fall
+				// elsewhere: Normandy's three tanks' ends were each gone to 3 to 4 s ahead and each left for a man's fall a
+				// second or so before it, none of the three in the picture)
+				if (!Tr.IsVehicle() && bWaiting) continue;
 				// (a shot on a tank, the scarcer kind among hundreds of men, is not left for a man's fall before 6 s)
 				if (!Tr.IsVehicle() && (Shot == Kind::Tank || Shot == Kind::Track) && Held < 6.0) continue;
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
@@ -3190,7 +3263,7 @@ namespace LandEye
 		// unless the shot on the screen already shows the spot near, which then holds for it.
 		IndexRadios();
 		if (RadioStage == 2 && Battle > Radios[static_cast<size_t>(RadioNow)].Land + Soon(0.5)) RadioStage = 0;
-		if (!Radios.empty() && !bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && !bWaiting && !bShotAsked && (FellAt < 0.0 || Real > FellAt + Set.FallSeen))
+		if (!Radios.empty() && !bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && !bWaiting && !bShotAsked && (FellAt < 0.0 || Real > FellAt + (bBailHold ? ShotHold : Set.FallSeen)))
 		{
 			if (RadioStage == 0 && Real - LastRadioReal >= Set.RadioEvery && Held >= Set.ShotLeast)
 			{
@@ -3376,6 +3449,11 @@ namespace LandEye
 					bAsked = true;
 				}
 				LeftWhy = Reason;
+				if (bBailHold && !BailLog.empty() && BailLog.back().Left < 0.0)
+				{
+					BailLog.back().Left = Real;
+					BailLog.back().LeftWhy = Reason;
+				}
 				// (a shot left for anything but a dark picture held its light: the dark rule's run starts again)
 				if (Reason != Why::Dark) DarkRunNow = 0;
 				BeginChoice(Battle, Real);
@@ -3461,6 +3539,8 @@ namespace LandEye
 				// (the village still and the barrage's cut keep the look turned toward their house or salvo as placed, not
 				// eased back onto the man alone: a salvo framed at the picture's edge slid out of it as it landed)
 				if (ShotHouse >= 0 || bShotSalvo) WantLook = WantLook + (ShotAim - WantLook) * AimLook();
+				// (the first bail-out: the look a few metres behind her middle, where her crew runs)
+				if (bShotBail) WantLook = WantLook + BailShift;
 			}
 			else if (Shot == Kind::Track)
 			{

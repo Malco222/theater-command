@@ -649,6 +649,10 @@ int main(int argc, char** argv)
 	// (the choice's share by steps alone, so a run is the same on any machine; LAND_PLAY_CHOOSE_MS=ms tries the clock's
 	// share as the game has it, ms a frame)
 	ES.ChooseMs = std::getenv("LAND_PLAY_CHOOSE_MS") ? std::atof(std::getenv("LAND_PLAY_CHOOSE_MS")) : 0.0;
+	// The first bail-out (LAND_PLAY_BAIL=1, as the scene with -TheaterLandBailOut): every tank's crew may get out; at her
+	// kill (BailOut, below) five crews in six do, as the effects thread's LandBail plays them.
+	const bool bBailTest = std::getenv("LAND_PLAY_BAIL") != nullptr;
+	if (bBailTest) EW.Bails = [&Rec](int T) { return Rec.Tracks[static_cast<size_t>(T)].Role == "tank"; };
 	LandEye::Director Eye;
 	Eye.Begin(Rec, EW, ES);
 	LandDesk::Desk Desk;
@@ -698,6 +702,12 @@ int main(int argc, char** argv)
 	bool bFocusWas = false;
 	double FocusPullMost = 0.0, FocusWas = 0.0, FocusShotAt = -1.0;
 	std::vector<double> FocusOff;
+	// (the first bail-out: the crews that got out, those on a bail watch then, the hold's lens at her hit, and the tanks'
+	// ends the hold kept the film from)
+	int BailCrews = 0, BailWatched = 0, BailEndsPassed = 0;
+	bool bBailLensSeen = false;
+	double BailLensOff = 0.0, BailLensUp = 0.0;
+	bool bBailInPicture = false;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -1138,13 +1148,47 @@ int main(int argc, char** argv)
 		Takes.clear();
 		Play.Step(From, Battle, Fx, Noises, Losses);
 		PlaceMovers(Battle);
+		// (the scene's call at a tank's kill, before the camera's frame: five crews in six get out, the first man up 0.6 to
+		// 2.4 life seconds after the hit, every second one brewing up 5.5 to 10 s after it; battle seconds to the camera)
+		if (bBailTest)
+		{
+			for (size_t I = 0; I < Rec.Tracks.size(); ++I)
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[I];
+				if (Tr.Role != "tank" || Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= Battle)) continue;
+				const uint64_t H = (static_cast<uint64_t>(I) + 1) * 0x9E3779B97F4A7C15ull ^ Rec.Seed;
+				const double U1 = static_cast<double>((H >> 11) % 1000) / 1000.0, U2 = static_cast<double>((H >> 23) % 1000) / 1000.0;
+				const bool bOut = (H >> 37) % 6 != 0, bBrew = (H >> 41) % 2 == 0;
+				if (bOut)
+				{
+					++BailCrews;
+					if (Pose.Subject == static_cast<int>(I) && Eye.BailWatchNow() && Eye.BailBeats().empty()) ++BailWatched;
+				}
+				if (!Eye.BailBeats().empty() && Eye.BailBeats().back().Left < 0.0) ++BailEndsPassed;
+				if (std::getenv("LAND_PLAY_BAILS")) std::printf("  bail-out: track %zu at %.1f, %s, the film %s on %d%s\n", I, Tr.Fell, bOut ? "her crew gets out" : "nobody gets out",
+					LandEye::NameOf(Pose.Shot), Pose.Subject, Eye.BailWatchNow() ? " (a bail watch)" : "");
+				Eye.BailOut(static_cast<int>(I), bOut ? (0.6 + 1.8 * U1) / Life : -1.0, bBrew ? (5.5 + 4.5 * U2) / Life : -1.0);
+			}
+		}
 		const auto E0 = std::chrono::steady_clock::now();
 		const long Steps0 = Eye.Steps();
 		Pose = Eye.Update(Battle, Real, Dt);
+		if (bBailTest && !bBailLensSeen && !Eye.BailBeats().empty() && Eye.BailBeats().front().Hit >= 0.0)
+		{
+			// (the lens as she is hit: how far off her and how high, and whether she is in the picture)
+			bBailLensSeen = true;
+			const LandFeed::Track& Tb = Rec.Tracks[static_cast<size_t>(Eye.BailBeats().front().Track)];
+			const LandFeed::Spot S = LandFeed::SpotAt(Tb, Battle);
+			const LandEye::Vec At(S.X, S.Y, GroundAt(S.X, S.Y) + 1.3);
+			BailLensOff = std::hypot(Pose.Eye.X - S.X, Pose.Eye.Y - S.Y);
+			BailLensUp = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
+			bBailInPicture = LandEye::InPicture(Pose, At);
+		}
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
 		StepsByFrame.push_back(FrameSteps);
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
+		if (Pose.bCut && std::getenv("LAND_PLAY_CUTS")) std::printf("  cut at %.2f (real %.2f) to %s on %d, the last left for %s\n", Battle, Real, LandEye::NameOf(Pose.Shot), Pose.Subject, LandEye::NameOf(Eye.LastWhy()));
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
 		{
@@ -2389,10 +2433,32 @@ int main(int argc, char** argv)
 		const int Calls = Eye.RadioCalls(), Went = static_cast<int>(Eye.RadioBeats().size());
 		std::printf("radio call, then the barrage: %d fresh calls for fire, the film went to %d of the callers (%.0f s apart at the least), %d salvos cut to or held for, %d of them in the picture as they landed\n",
 			Calls, Went, RadioGapLeast < 1e8 ? RadioGapLeast : 0.0, RadioBarrages, RadioSeen);
+		if (std::getenv("LAND_PLAY_RADIO"))
+			for (const LandEye::Director::RadioBeat& Bt : Eye.RadioBeats()) std::printf("  radio: call at %.1f by %d, its salvo at %.1f, %s\n", Bt.T, Bt.Caller, Bt.Land, Bt.bBarrage ? "cut to or held for" : "MISSED");
 		if (Calls >= 3 && Went == 0) Fault("the film went to none of the radio calls");
 		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
 		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
 		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
+	// The first bail-out (the effects thread's ask, 23 November): with crews getting out, the film's first bail watch on a
+	// crew that does is held for it, 10 to 15 s from her hit, from 18 to 45 m off her and no higher than 2.6 m, she in
+	// the picture; left early only for a shell or fuel ball at the lens, a man at it, or the scene's own cut; once.
+	if (!bOnlyGen && bBailTest)
+	{
+		const std::vector<LandEye::Director::BailBeat>& Bb = Eye.BailBeats();
+		const LandEye::Director::BailBeat* B0 = Bb.empty() ? nullptr : &Bb.front();
+		const double HeldFor = B0 && B0->Hit >= 0.0 ? (B0->Left >= 0.0 ? B0->Left : Real) - B0->Hit : 0.0;
+		std::printf("bail-out: %d crews got out, %d bail watches placed, %d of the crews on one as they were hit; ", BailCrews, Eye.BailWatches(), BailWatched);
+		if (B0) std::printf("the first held on track %d for %.1f s of %.1f asked (left for %s), the lens %.0f m off her, %.1f m up, she %s the picture; %d tanks' ends passed in the hold\n",
+			B0->Track, HeldFor, B0->Hold, B0->Left >= 0.0 ? LandEye::NameOf(B0->LeftWhy) : "the battle's end", BailLensOff, BailLensUp, bBailInPicture ? "in" : "NOT in", BailEndsPassed);
+		else std::printf("none held\n");
+		if (BailWatched > 0 && !B0) Fault("a bail watch on a crew getting out was not held for it");
+		if (Bb.size() > 1) Fault("more than one bail-out was held");
+		if (B0 && (B0->Hold < ES.BailLeast - 1e-6 || B0->Hold > ES.BailMost + 1e-6)) Fault("a bail-out's hold was asked outside BailLeast to BailMost");
+		if (B0 && B0->Left >= 0.0 && HeldFor > B0->Hold + 0.25) Fault("a bail-out was held past its hold");
+		const bool bRescue = B0 && (B0->LeftWhy == LandEye::Why::Burst || B0->LeftWhy == LandEye::Why::Rescue || B0->LeftWhy == LandEye::Why::Dark || B0->LeftWhy == LandEye::Why::Gone);
+		if (B0 && B0->Left >= 0.0 && HeldFor < B0->Hold - 0.25 && !bRescue) Fault("a bail-out's hold was cut short by the film's own wants");
+		if (B0 && bBailLensSeen && (BailLensOff < 18.0 || BailLensOff > 45.0 || BailLensUp > 2.6 || !bBailInPicture)) Fault("a bail-out's lens was not 18 to 45 m off her, low, with her in the picture as she was hit");
 	}
 	// The film's shallow focus (the graphics audit's E9, Brian's D3): the close follow shots in it, never a wide, never
 	// switched in the middle of a shot, the distance held near its man (the Mac's cost is paid only in these frames).
