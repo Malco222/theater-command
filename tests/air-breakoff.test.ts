@@ -8,6 +8,7 @@ import { loadGame } from '../src/campaign/save';
 import type { Game } from '../src/campaign/types';
 import { airBattle } from '../src/battle/air/sim';
 import { airTicket } from '../src/battle/air/ticket';
+import { skyFight, skyFought } from '../src/campaign/aircampaigns';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,6 +98,56 @@ describe('breaking off before contact does not win (release 1.5 FLY IT YOURSELF)
     expect(JSON.stringify(look).length).toBeLessThan(20_000);
     const st = TC.airStart('bomb', target, ids);
     expect(st.sky.place.ground.land.length).toBeGreaterThan(0);
+  });
+
+  it('breaking off at once every month over Zaporozhye builds no sky there, as staying at home (the playtester, 23 Nov)', () => {
+    // SOV from January 1942, seed 7: the playtester's re-run held the sky in February and March this way, 0 lost.
+    TC.start({ view: 'grand', human: 'SOV', from: 29, seed: 7, world: true });
+    const t = copy().regions.find((r) => r.name === 'Zaporozhye')!.id;
+    let flown = 0;
+    for (let m = 0; m < 4; m++) {
+      const p = planRaid(copy(), 'superiority', t, undefined, 'SOV');
+      if (p.picked?.length && TC.airLook('superiority', t, p.picked)?.ticket) {
+        TC.airStart('superiority', t, p.picked);
+        TC.battleSpeed(1);
+        let v = TC.battleTick(1);
+        expect(TC.battleOrder({ do: 'withdrawAll', side: 'att' }).ok).toBe(true);
+        while (!v.over) v = TC.battleTick(1);
+        expect(TC.battleEnd().note).toBe('The fighters broke off and turned for home before they met the enemy.');
+        flown++;
+      }
+      const g = copy();
+      expect(g.sky[t]?.nat === 'SOV' && g.sky[t]?.turn === g.turn).toBe(false);
+      expect(skyFight(g, t)?.now ?? 'contested').not.toBe('held');
+      expect(skyFight(g, t)?.run ?? 0).toBeLessThanOrEqual(0);
+      TC.endMonth();
+    }
+    expect(flown).toBe(4);
+  });
+
+  it("a fight given up counts only against the side that gave it up: outnumbered, it still goes on to 'lost'", () => {
+    TC.start({ view: 'grand', human: 'SOV', from: 29, seed: 7, world: true });
+    const g = copy();
+    const seen = { beaten: 0, not: 0 };
+    for (const r of raidTargets(g, 'superiority', 'SOV')) {
+      const quit = loadGame(TC.save().text)!, fought = loadGame(TC.save().text)!;
+      skyFought(quit, 'SOV', r.id, false, true);
+      skyFought(fought, 'SOV', r.id, false);
+      const q = quit.ac?.sky[r.id], f = fought.ac?.sky[r.id]!;
+      if (f.streak < 0) {
+        // The enemy outnumbers it there: the month counts against it exactly as a fight would, on to 'lost'.
+        seen.beaten++;
+        expect(q).toEqual(f);
+        for (let i = 0; i < 6 && quit.ac!.sky[r.id].state !== 'lost'; i++) { quit.turn++; skyFought(quit, 'SOV', r.id, false, true); }
+        expect(quit.ac!.sky[r.id].state).toBe('lost');
+      } else {
+        // Otherwise the month stands as if it had stayed at home: no fight is begun there.
+        seen.not++;
+        expect(q).toBeUndefined();
+      }
+    }
+    expect(seen.beaten).toBeGreaterThan(0);
+    expect(seen.not).toBeGreaterThan(0);
   });
 
   it('flown with no orders, the same raid is fought and judged as before (nobody gave up)', () => {

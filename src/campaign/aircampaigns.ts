@@ -144,10 +144,19 @@ function settled(s: SkyFight, turn: number): { state: SkyState; streak: number }
  * A fight for the sky over a province has been flown (fly(), 'superiority'): the month's result is weighed and the
  * fight's state moves on. Several fights by one side in a month count as the month's best one. Returns the state.
  */
-export function skyFought(g: Game, nat: string, region: number, won: boolean): SkyState {
+export function skyFought(g: Game, nat: string, region: number, won: boolean, gaveUp = false): SkyState {
   const M = mem(g);
   let s = M.sky[region];
   const ours = !!s && (s.by === nat || allied(g, s.by, nat));
+  // Release 1.5's FLY IT YOURSELF: a fight given up before it met the enemy (gaveUp) wins nothing and keeps nothing. The
+  // month stands as if the side had stayed at home (no run built, a held sky not kept up), except where the enemy
+  // outnumbers it there: that month counts against it as a fight would, so breaking off never stops a sky going 'lost'
+  // (the playtester's re-run, 23 Nov: breaking off at once each month still built a held sky, the numbers counting).
+  if (gaveUp) {
+    const { a, d } = numbers(g, nat, region);
+    if (!(d >= AIR.sky.least && d >= AIRWAR.sky.own * a)) return s && ours ? settled(s, g.turn).state : 'contested';
+    won = false;
+  }
   if (!s || !ours) {
     // A side that begins to fight for a sky someone else was fighting for begins its own fight.
     s = M.sky[region] = { by: nat, state: 'contested', streak: 0, turn: g.turn, since: g.turn, best: -2, was: { state: 'contested', streak: 0 } };
