@@ -9,8 +9,8 @@
 // how (brew-up, the Fates look) and when, each frame's step of her place and heading (the grown battle's against the
 // whole's: a piece that works her out again must not make her jump), and every event the effects and the sound are
 // given (the same effect and cue, on the same vehicle, within a frame; one a step of the passes apart is counted, and
-// so are a lorry's first move-off and a move-off or stop that a provisional point dated otherwise, each named; one
-// missing fails).
+// so are a lorry's first move-off, a move-off or stop that a provisional point dated otherwise, and one of a turn on
+// the spot of less than the rules' facing slack that only a provisional point showed, each named; one missing fails).
 // A lorry is left out of the heading check until 3 s after she first moves: read whole, she faces her first way of
 // going from the start, which a live battle cannot know (her worst is printed apart). Extend is timed: what a piece
 // costs the game thread, at the battle's end too.
@@ -528,6 +528,68 @@ int main(int Argc, char** Argv)
 			++I;
 		}
 	}
+	// And a turn on the spot that only a provisional point showed: she stood where the rules last kept her and turned less
+	// than a kept line may miss her facing by (0.05 rad, under 3 degrees), so the whole battle's line holds her still and
+	// gives no move-off or stop, while the grown battle, shown that point a tenth of a second after the kept one, saw her
+	// pivot that much at once (her brakes and idle heard after it). Counted and named only where the event is her going's
+	// or standing's (from her move_off, drive, stop or idle clip) and the whole battle holds her within 0.1 m and that
+	// slack for a second either side of it; any other the grown battle alone gives is missing.
+	long Twitches = 0;
+	std::string TwitchWho;
+	const double FacingSlack = 0.05 * 180.0 / Pi;
+	auto GoingFx = [](const Vehicle& V, const Event& E)
+	{
+		if (E.Round != 0)
+		{
+			return false;
+		}
+		for (const char* Name : { "move_off", "drive", "stop", "idle" })
+		{
+			const Clip* C = V.Look().FindClip(Name);
+			for (size_t K = 0; C && K < C->Events.size(); ++K)
+			{
+				if (C->Events[K].Fx == E.Fx)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	auto HeldStill = [&](const Vehicle& V, double T)
+	{
+		double X0 = 0.0, Y0 = 0.0, F0 = 0.0;
+		Along(V.Words().At, T - 1.0, X0, Y0, F0);
+		for (int S = -9; S <= 10; ++S)
+		{
+			double X = 0.0, Y = 0.0, F = 0.0;
+			Along(V.Words().At, T + S * 0.1, X, Y, F);
+			if (std::hypot(X - X0, Y - Y0) > 0.1 + 1e-6 || std::fabs(WrapDeg((F - F0) * 180.0 / Pi)) > FacingSlack + 1e-6)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+	for (size_t I = 0; I < OnlyLive.size();)
+	{
+		const Event& E = OnlyLive[I];
+		const size_t V = static_cast<size_t>(E.Vehicle);
+		if (V < Whole.Vehicles().size() && V < Live.Vehicles().size() && GoingFx(Live.Vehicles()[V], E)
+			&& (Whole.Vehicles()[V].Died < 0.0 || E.T < Whole.Vehicles()[V].Died - 1.0) && HeldStill(Whole.Vehicles()[V], E.T))
+		{
+			++Twitches;
+			char Buf[160];
+			std::snprintf(Buf, sizeof(Buf), "%s at %.2f", Who(Whole.Vehicles()[V]).c_str(), E.T);
+			if (TwitchWho.find(Buf) == std::string::npos)
+			{
+				TwitchWho += (TwitchWho.empty() ? "" : "; ") + std::string(Buf);
+			}
+			OnlyLive.erase(OnlyLive.begin() + static_cast<std::ptrdiff_t>(I));
+			continue;
+		}
+		++I;
+	}
 	for (const Event& E : OnlyWhole)
 	{
 		Check(false, "only the whole battle gives " + E.Fx + " / " + E.Cue + " of " + Who(Whole.Vehicles()[static_cast<size_t>(E.Vehicle)]) + " at " + std::to_string(E.T));
@@ -586,14 +648,16 @@ int main(int Argc, char** Argv)
 	std::printf("  %ld events the same within a frame (worst %.4f s), places within %.3f m (%s; %ld over 0.5 m); %ld a step or two apart (worst %.3f s:%s)\n",
 		Matched, EventTWorst, EventAtWorst, EventAtWho.c_str(), FarEvents, Shifted, ShiftWorst, Shifts.c_str());
 	std::printf("  %ld of a lorry's first move (her turn, up to %.2f s apart); %ld moved by a provisional point (up to %.2f s: %s); "
-		"%zu only whole, %zu only grown; ends differing in %ld vehicle-frames\n",
-		Lorries, LorryShift, Provisional, ProvisionalWorst, ProvisionalWho.empty() ? "none" : ProvisionalWho.c_str(), OnlyWhole.size(), OnlyLive.size(), DeathMisses);
+		"%ld of a turn on the spot only a provisional point showed (%s); %zu only whole, %zu only grown; ends differing in %ld vehicle-frames\n",
+		Lorries, LorryShift, Provisional, ProvisionalWorst, ProvisionalWho.empty() ? "none" : ProvisionalWho.c_str(), Twitches,
+		TwitchWho.empty() ? "none" : TwitchWho.c_str(), OnlyWhole.size(), OnlyLive.size(), DeathMisses);
 	Check(PlaceWorst <= 0.25, "every place within 0.25 m");
 	Check(HeadingWorst <= Facing, "every heading within " + std::to_string(Facing) + " deg");
 	Check(TurretWorst <= Facing && GunWorst <= Facing, "every turret and gun within " + std::to_string(Facing) + " deg");
 	Check(Matched > 1000, "enough events");
 	Check(Shifted * 50 < Matched, "events a step apart are few");
 	Check(Provisional * 200 < Matched, "events moved by a provisional point are few");
+	Check(Twitches * 200 < Matched, "events of a turn on the spot only a provisional point showed are few");
 	Check(JumpPlace <= 0.02 && JumpHeading <= 1.0, "no jump on the screen as a piece works her out again");
 	std::printf("%s\n", Failures ? "FAIL" : "PASS");
 	return Failures ? 1 : 0;
