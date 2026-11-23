@@ -1394,6 +1394,12 @@ UPRIGHT = {}
 # The machines whose far (plain) model carries her loads as well: the parts `torpedo` and `bombs` where her bay is,
 # at the far model's grain, with no doors and no bay round them (the game draws one load a group from them).
 PLAIN_LOADS = set()
+# The machines whose bay torpedo is turned as the game turns one slung under a machine (the Nell's, planes._torpedo):
+# name: a function of (its middle, the height of its axis, how long, half as thick) giving its body and the box of its
+# wooden fins in the game's form of extras. Round at 24 a ring close up; the far model takes PLAIN_GRAIN or her own
+# `plain_extras`.
+TURNED_TORPEDO = {}
+PLAIN_GRAIN = (12, 0.3, 10)                                 # (around, step, rod sides: the game's own grain for what hangs under her)
 
 
 def bomb_bay(m, f, s, G, hull):
@@ -1445,7 +1451,9 @@ def bomb_bay(m, f, s, G, hull):
         c = sum(ring, Vector()) / len(ring)
         m.add(ring + [c], [(k, (k + 1) % len(ring), len(ring)) for k in range(len(ring))], "inside", False, inward)
     # her torpedo, where her bay can hold one instead of bombs
-    if getattr(f, "bay_torpedo", None):
+    if getattr(f, "bay_torpedo", None) and f.name in TURNED_TORPEDO:
+        turned_torpedo(m, f, s, G, hull, xm, lo)
+    elif getattr(f, "bay_torpedo", None):
         long, r = f.bay_torpedo
         m.use("torpedo")
         at = Vector((xm + 0.5 * long, 0.0, hull.at(xm, lo).z + r + 0.06))
@@ -1489,6 +1497,20 @@ def upright_bombs(f, hull, x0, x1, lo):
     return [Vector((xm + ((n - 1) / 2.0 - k) * pitch, 0.0, nose)) for k in range(n)]
 
 
+def turned_torpedo(m, f, s, G, hull, xm, lo):
+    """Her bay torpedo (TURNED_TORPEDO) in the middle of her bay, a hand above her doors' hinges: its body ringed as the
+    game rings a body under a machine, the box of its fins a rod."""
+    long, r = f.bay_torpedo
+    around, step, sides = (24, 0.12, 22) if m.fine else s.get("plain_extras", PLAIN_GRAIN)
+    m.use("torpedo")
+    for kind, v in TURNED_TORPEDO[f.name](xm, hull.at(xm, lo).z + r + 0.06, long, r):
+        if kind == "body":
+            body = G["Body"](v[0], v[2])
+            m.skin([[port(body.at(x, 2.0 * math.pi * k / around)) for k in range(around)] for x in body.xs(step)], "torpedo", (True, True))
+        else:
+            m.rod(port(v[0]), port(v[1]), v[2], "torpedo", v[3], sides=sides)
+
+
 def plain_loads(m, f, s, G, hull):
     """Her loads on her far model (PLAIN_LOADS), where her bay is: her torpedo, or her bombs, at the far grain, in the
     places the near model hangs them, without the bay's doors or its dark (they drop out through her belly)."""
@@ -1498,6 +1520,8 @@ def plain_loads(m, f, s, G, hull):
     half = math.radians(f.bay_half)
     lo = 1.5 * math.pi - half
     xm = 0.5 * (x0 + x1)
+    if getattr(f, "bay_torpedo", None) and f.name in TURNED_TORPEDO:
+        turned_torpedo(m, f, s, G, hull, xm, lo)
     m.use("bombs")
     if f.name in UPRIGHT:
         for at in upright_bombs(f, hull, x0, x1, lo):

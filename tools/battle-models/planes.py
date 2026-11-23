@@ -571,6 +571,10 @@ def _torpedo(x, z, long=5.3, r=0.225):
             ("rod", ((b + 0.02, 0.0, z), (b + 0.42, 0.0, z), 0.24, 0.24, "torpedo"))]
 
 
+fitout.TURNED_TORPEDO["Betty"] = _torpedo                   # (the Type 91 in the Betty's bay is the Nell's, turned as finely)
+fitout.PLAIN_LOADS.add("Betty")                             # (and her far model carries it and her bombs: fitout.plain_loads)
+
+
 _PALE = {"upper": "A9B19F", "upper2": "A9B19F", "under": "9DA593", "nose": "1E1F22", "boss": "8E9092"}      # (the Japanese navy's pale grey of the early war)
 # ---- the D3A1 Val, laid out again to Brian's benchmark for all aircraft (2026-11-19) against "Aichi D3A1 Val - 3
 # vistas" (Wikimedia Commons, MMK-Draw, CC BY-SA 4.0) at 267 pixels to the metre along her and 265 across, her length
