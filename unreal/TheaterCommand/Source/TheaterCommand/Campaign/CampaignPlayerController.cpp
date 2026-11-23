@@ -97,6 +97,7 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	{
 		return;
 	}
+	bool bAskNations = false;
 	if (StartGroups.Num() == 0)
 	{
 		StartGroups = Rules->Starts();
@@ -155,7 +156,7 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 		// Each time the screen opens, a new war is on offer: new dice, and the list of countries read afresh.
 		GrandSeed = NewSeed();
 		Opening.YearIndex = FMath::Clamp(Opening.YearIndex, 0, Opening.Years.Num() - 1);
-		LoadGrandNations();
+		bAskNations = true;
 	}
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
@@ -167,6 +168,11 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	}
 	Opening.bVisible = bShow;
 	++Opening.Revision;
+	if (bAskNations)
+	{
+		// (Asked last: given aside (tc.Speed.NationsAside), anything asked of the rules after it would wait for it.)
+		AskGrandNations();
+	}
 }
 
 void ACampaignPlayerController::LoadGrandNations()
@@ -177,8 +183,63 @@ void ACampaignPlayerController::LoadGrandNations()
 	{
 		return;
 	}
+	TakeGrandNations(Rules->GrandNations(Opening.Years[Opening.YearIndex].From, GrandSeed));
+}
+
+void ACampaignPlayerController::AskGrandNations()
+{
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = Mode ? Mode->GetSession() : nullptr;
+	if (!Rules || !Opening.Years.IsValidIndex(Opening.YearIndex))
+	{
+		Opening.bWorking = false;
+		return;
+	}
+	FString Shots;
+	if (bScripted || !TheaterSpeed::NationsAside() || FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false))
+	{
+		// At once, as before (and always in a run that takes pictures, whose opening screen is pictured as it was).
+		Opening.bWorking = false;
+		LoadGrandNations();
+		++Opening.Revision;
+		return;
+	}
+	Opening.bWorking = true;
+	++Opening.Revision;
+	if (bNationsAsked && Rules->IsAnswering())
+	{
+		return; // (one is being worked out: once it is in, the year and the dice wanted then are asked for, where they changed)
+	}
+	bNationsAsked = true;
+	const int32 From = Opening.Years[Opening.YearIndex].From;
+	const int32 Seed = GrandSeed;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Rules->GrandNationsAside(From, Seed, true, [Self, From, Seed](TArray<FGrandNation> Listed)
+	{
+		ACampaignPlayerController* Hand = Self.Get();
+		if (!Hand)
+		{
+			return;
+		}
+		Hand->bNationsAsked = false;
+		FOpening& Screen = Hand->Opening;
+		if (Screen.Years.IsValidIndex(Screen.YearIndex) && Screen.Years[Screen.YearIndex].From == From && Hand->GrandSeed == Seed)
+		{
+			Hand->TakeGrandNations(MoveTemp(Listed));
+			Screen.bWorking = false;
+			++Screen.Revision;
+		}
+		else if (Screen.bWorking)
+		{
+			Hand->AskGrandNations(); // (another year, or new dice, were picked while this list was worked out)
+		}
+	});
+}
+
+void ACampaignPlayerController::TakeGrandNations(TArray<FGrandNation>&& Listed)
+{
 	const FString Chosen = Opening.Nations.IsValidIndex(Opening.NationIndex) ? Opening.Nations[Opening.NationIndex].Tag : FString();
-	GrandNations = Rules->GrandNations(Opening.Years[Opening.YearIndex].From, GrandSeed);
+	GrandNations = MoveTemp(Listed);
 	Opening.Nations.Reset();
 	Opening.NationIndex = INDEX_NONE;
 	bool bAmerica = false;
@@ -544,7 +605,13 @@ void ACampaignPlayerController::PickGrandYear(int32 Index, bool bAtOnce)
 	}
 	Opening.YearIndex = Index;
 	++Opening.Revision;
-	if (bAtOnce || Opening.Years[Index].From <= 1)
+	FString Shots;
+	if (!bAtOnce && !bScripted && TheaterSpeed::NationsAside() && !FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false))
+	{
+		// (Release 2, tc.Speed.NationsAside) Said at once, and worked out on the rules' own thread: the screen stays live.
+		AskGrandNations();
+	}
+	else if (bAtOnce || Opening.Years[Index].From <= 1)
 	{
 		Opening.bWorking = false;
 		LoadGrandNations();
@@ -733,6 +800,7 @@ void ACampaignPlayerController::BeginWar(TFunction<bool(ACampaignGameMode&)>&& S
 	{
 		return; // (a war is already being begun)
 	}
+	bNationsAsked = false; // (tc.Speed.NationsAside: a war begun or read in drops a list still being worked out; the screen asks again when it next opens)
 	FString Shots;
 	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
 	if (!TheaterSpeed::WarSpread() || bScripted || bPictures)
@@ -810,6 +878,10 @@ void ACampaignPlayerController::AskToBegin(int32 Kind, int32 GroupIndex, int32 S
 	// (Ruling 130.) One campaign is kept on this computer. A new war writes over it at its first month's end, when
 	// the menu is opened, or when the game is left: so where one is saved (and a campaign under way is saved as the
 	// menu opens) the new war waits for the player's answer to a question that names it.
+	if (Opening.bWorking && Kind != 3)
+	{
+		return; // (tc.Speed.NationsAside: the list of countries is still being worked out, and the grand wars wait for it)
+	}
 	Opening.AskKind = Kind;
 	Opening.AskGroup = GroupIndex;
 	Opening.AskSide = SideIndex;
@@ -5618,8 +5690,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (tc.Speed.WarSpread) A war being begun under the opening's plate: begun, laid a step a frame, then entered.
 	StepWar();
 
-	// History being played for the opening screen: the screen has said so for a few frames; now do it.
-	if (Opening.bWorking && ++WorkingFrames >= 3)
+	// History being played for the opening screen: the screen has said so for a few frames; now do it. (With
+	// tc.Speed.NationsAside it is being worked out on the rules' own thread instead, and laid when it is in.)
+	if (Opening.bWorking && !bNationsAsked && (bScripted || !TheaterSpeed::NationsAside() || FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr) && ++WorkingFrames >= 3)
 	{
 		Opening.bWorking = false;
 		LoadGrandNations();

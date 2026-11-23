@@ -1394,6 +1394,16 @@ private:
 	int32 WorkingFrames = 0;
 	void LoadGrandNations();
 	/**
+	 * (Release 2, tc.Speed.NationsAside; the UI director's bar: every press answers within a tenth of a second.) The
+	 * list of countries for the year and the dice now chosen, worked out on the rules' own thread while the screen says
+	 * so (Opening.bWorking), and laid when it is in; a list asked while one is out is asked once that one is in. At
+	 * once, as LoadGrandNations, where the switch is off or in a run that takes pictures.
+	 */
+	void AskGrandNations();
+	/** The list of countries laid on the opening screen; the country chosen stays chosen where it is still there. */
+	void TakeGrandNations(TArray<FGrandNation>&& Listed);
+	bool bNationsAsked = false; // (tc.Speed.NationsAside) a list of countries is being worked out on the rules' thread
+	/**
 	 * (Release 2, tc.Speed.WarSpread; the UI director's bar: every press answers within a tenth of a second.) A war
 	 * begun or continued from the opening screen: at once, as before, or with the plate drawn first, the war begun
 	 * (Start) a few frames on, laid a step a frame under the plate, and entered when the last step is down (StepWar,

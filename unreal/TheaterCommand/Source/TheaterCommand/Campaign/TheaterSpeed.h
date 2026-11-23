@@ -173,6 +173,12 @@ class APlayerController;
  *                         thread, a frame or a few later. A save at once (the opening screen's, on leaving the game)
  *                         waits for one still being written, and a save still out is never written over a later one.
  *                         0: all in the month's frame, as before. The same file either way.
+ *   tc.Speed.NationsAside 1 (default): the opening screen's list of countries (TC.grand: a later year is history
+ *                         played up to it with the new dice, 0.7 to 1 s for January 1941 in a cloud run, and more for
+ *                         each year later) is worked out on the rules' own thread, as an order's answer is, while the
+ *                         screen says so; it is asked when a year is picked and every time the screen opens, Escape
+ *                         from the war included, where it was worked out in the press's frame. 0: in the press's
+ *                         frame (a year picked: three frames after it), as before. The same list either way.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -227,6 +233,7 @@ namespace TheaterSpeed
 	bool CardAside(); // (tc.Speed.CardAside) the attack card's forecast asked on the rules' thread: false in the press's frame, as before
 	bool WarSpread(); // (tc.Speed.WarSpread) a war begun is laid a step a frame under a plate: false all in the press's frame, as before
 	bool SaveAside(); // (tc.Speed.SaveAside) the month's save written out off the game thread: false in the month's frames, as before
+	bool NationsAside(); // (tc.Speed.NationsAside) the opening screen's countries worked out on the rules' thread: false in the press's frame, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

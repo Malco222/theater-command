@@ -253,6 +253,45 @@ TArray<FStartGroup> FCampaignSession::Starts()
 	return Out;
 }
 
+namespace
+{
+	/** The arguments of TC.grand: the month, the dice, and the wider world where the table has it. */
+	FString GrandArgs(int32 From, int32 Seed)
+	{
+		return FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false"));
+	}
+
+	/** TC.grand's answer read: who can be led. */
+	TArray<FGrandNation> ReadGrandNations(const TSharedPtr<FJsonObject>& Object)
+	{
+		TArray<FGrandNation> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Listed = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(TEXT("nations"), Listed))
+		{
+			return Out;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Listed)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FGrandNation& Nation = Out.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Nation.Nation);
+			Entry->TryGetStringField(TEXT("name"), Nation.Name);
+			Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
+			Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
+			Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
+			Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
+			Entry->TryGetStringArrayField(TEXT("abilities"), Nation.Abilities);
+			Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
+			Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
+		}
+		return Out;
+	}
+}
+
 TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 {
 	TArray<FGrandNation> Out;
@@ -261,28 +300,39 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	const double Began = FPlatformTime::Seconds();
 	Settle();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
-	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false")), Json, Error)
+	if (!bReady || !Host->Call(TEXT("grand"), GrandArgs(From, Seed), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d: %s"), From, *Error);
 		return Out;
 	}
-	for (const TSharedPtr<FJsonValue>& Value : Object->GetArrayField(TEXT("nations")))
-	{
-		const TSharedPtr<FJsonObject> Entry = Value->AsObject();
-		FGrandNation& Nation = Out.AddDefaulted_GetRef();
-		Entry->TryGetStringField(TEXT("nat"), Nation.Nation);
-		Entry->TryGetStringField(TEXT("name"), Nation.Name);
-		Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
-		Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
-		Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
-		Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
-		Entry->TryGetStringArrayField(TEXT("abilities"), Nation.Abilities);
-		Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
-		Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
-	}
+	Out = ReadGrandNations(Object);
 	UE_LOG(LogTheater, Display, TEXT("Grand campaign from month %d: %d countries can be led (worked out in %.0f ms)"), From, Out.Num(), (FPlatformTime::Seconds() - Began) * 1000.0);
 	return Out;
+}
+
+void FCampaignSession::GrandNationsAside(int32 From, int32 Seed, bool bAside, TFunction<void(TArray<FGrandNation>)>&& InThen)
+{
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bReady || !Host.IsValid())
+	{
+		InThen(GrandNations(From, Seed)); // (at once, as before)
+		return;
+	}
+	const double Began = FPlatformTime::Seconds();
+	Order(TEXT("grand"), GrandArgs(From, Seed), true, nullptr,
+		[From, Began, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			TArray<FGrandNation> Listed = ReadGrandNations(Answer);
+			if (Answer.IsValid())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Grand campaign from month %d: %d countries can be led (worked out beside the game in %.0f ms)"), From, Listed.Num(), (FPlatformTime::Seconds() - Began) * 1000.0);
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d"), From);
+			}
+			Then(MoveTemp(Listed));
+		});
 }
 
 bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
@@ -423,6 +473,15 @@ namespace
 	bool IsWrittenOut(const FString& Function)
 	{
 		return Function == TEXT("save");
+	}
+
+	/**
+	 * (Release 2, tc.Speed.NationsAside) Asked of the rules with or without a war in hand: TC.grand plays a history of
+	 * its own (historyTo) and reads no war being played, so it may be given aside on the opening screen before any war.
+	 */
+	bool IsBeforeAnyWar(const FString& Function)
+	{
+		return Function == TEXT("grand");
 	}
 }
 
@@ -4821,7 +4880,7 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 {
 	// (one order at a time: the controller takes no order while one is being answered, and an earlier one is taken first)
 	Deliver(true);
-	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || (!bRunning && !IsBeforeAnyWar(Function)) || !Host.IsValid())
 	{
 		// At once, as before: the order, its picture of the war, then its Then.
 		TSharedPtr<FJsonObject> Object;

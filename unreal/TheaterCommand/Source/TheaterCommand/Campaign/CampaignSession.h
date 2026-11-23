@@ -40,6 +40,14 @@ public:
 
 	/** Who can be led in the grand campaign from a month. History is played up to it the first time this is asked. */
 	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
+	/**
+	 * (Release 2, tc.Speed.NationsAside; the UI director's bar: every press answers within a tenth of a second.)
+	 * GrandNations worked out on the rules' own thread as an order is: a later year is history played up to it, 0.7 to
+	 * 1 s for January 1941 in a cloud run, and the opening screen asks it on every year picked and every time it opens.
+	 * Then is given the list on the game thread, from Deliver, a frame or a few later (empty where the rules failed).
+	 * bAside false, or the rules not ready or not given aside, asks it at once and gives it to Then before returning.
+	 */
+	void GrandNationsAside(int32 From, int32 Seed, bool bAside, TFunction<void(TArray<FGrandNation>)>&& Then);
 
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
 	/** bFirstCommand (rules 84.3.3): the campaign FIRST COMMAND opened, marked as its, with the ten notes armed again once all are done. */

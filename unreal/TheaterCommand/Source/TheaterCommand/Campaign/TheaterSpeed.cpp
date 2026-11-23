@@ -133,6 +133,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarSaveAside(
 		TEXT("tc.Speed.SaveAside"), 1,
 		TEXT("1 writes the month's save out on the rules' own thread and onto the disk on a worker thread, a frame or a few after the month (some 2.3 MB of text by August 1944); 0 writes it in the month's frames, as before. The same file either way."));
+	TAutoConsoleVariable<int32> CVarNationsAside(
+		TEXT("tc.Speed.NationsAside"), 1,
+		TEXT("1 works the opening screen's list of countries out on the rules' own thread while the screen says so (a later year is history played up to it: 0.7 to 1 s for 1941 in a cloud run); 0 works it out in the press's frame, as before. The same list either way."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -517,6 +520,11 @@ namespace TheaterSpeed
 	bool SaveAside()
 	{
 		return CVarSaveAside.GetValueOnGameThread() != 0;
+	}
+
+	bool NationsAside()
+	{
+		return CVarNationsAside.GetValueOnGameThread() != 0;
 	}
 
 	double TreesSpread()

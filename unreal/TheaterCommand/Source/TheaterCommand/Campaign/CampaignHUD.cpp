@@ -16034,7 +16034,8 @@ namespace
 					Starts->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 70.0f, 0.0f, 0.0f)
 					[
 						SNew(STextBlock).Font(Font(TEXT("Italic"), 15)).ColorAndOpacity(Cream)
-						.Text(FText::FromString(FString::Printf(TEXT("History is being played up to %s. This takes a few seconds."), *Year.Title.ToString())))
+						.Text(FText::FromString(Year.From <= 1 ? FString(TEXT("The countries are being read.")) // (release 2, tc.Speed.NationsAside: September 1939 is asked aside too, with no history to play)
+							: FString::Printf(TEXT("History is being played up to %s. This takes a few seconds."), *Year.Title.ToString())))
 					];
 					return;
 				}
