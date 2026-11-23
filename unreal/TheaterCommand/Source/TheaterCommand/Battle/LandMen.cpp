@@ -3947,6 +3947,9 @@ namespace LandMen
 				const double Months = std::max(0.0, Root["sides"][Side.c_str()]["worn"].Num0(0.0));
 				I.BlockWorn[static_cast<int>(B["id"].Num0())] = Months;
 				I.ArmyWorn[Army] = std::max(I.ArmyWorn[Army], Months);
+				// (and by his nation, which is what a rider asks by: a block whose army is named apart from its nation)
+				const std::string Nat = B["nat"].Text();
+				if (!Nat.empty() && Nat != Army) I.ArmyWorn[Nat] = std::max(I.ArmyWorn[Nat], Months);
 			}
 		}
 
