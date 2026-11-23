@@ -939,6 +939,7 @@ namespace AircraftParts
 		{ TEXT("Sturmovik"), &Sturmovik, TEXT("Il-2 Sturmovik  -  span 14.6 m, length 11.6 m"), TEXT("SOV"), false, 19.0, 4.0 },
 		{ TEXT("Zero"), &Zero, TEXT("A6M2 Zero  -  span 12.0 m, length 9.1 m"), TEXT("JAP"), false, 15.0, 3.0 },
 		{ TEXT("Yak"), &Yak, TEXT("Yak-1  -  span 10.0 m, length 8.5 m"), TEXT("SOV"), false, 14.0, 3.0 },
+		{ TEXT("C202"), &PlainFighter, TEXT("Macchi C.202 Folgore  -  span 10.6 m, length 8.9 m"), TEXT("ITA"), false, 14.0, 3.0 },
 		{ TEXT("He111"), &He111, TEXT("Heinkel He 111  -  span 22.6 m, length 16.4 m"), TEXT("GER"), false, 28.0, 4.0 },
 		{ TEXT("Lancaster"), &Lancaster, TEXT("Avro Lancaster  -  span 31.1 m, length 21.2 m"), TEXT("UK"), false, 38.0, 4.5 },
 		{ TEXT("Fighter"), &PlainFighter, TEXT("Fighter  -  span 10.6 m"), TEXT("ITA"), true, 14.0, 3.0 },
