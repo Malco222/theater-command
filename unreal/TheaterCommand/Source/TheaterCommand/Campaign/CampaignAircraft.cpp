@@ -961,6 +961,8 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1940 ? TEXT("Spitfire") : TEXT("Hurricane");
 	if (Tag == TEXT("USA")) return Reached >= 1944 ? TEXT("Mustang") : TEXT("Warhawk");
 	if (Tag == TEXT("SOV")) return Reached >= 1942 ? FString(TEXT("Yak")) : TEXT("Fighter:") + Tag;
+	// Italy's C.202 from 1942, as the rules' fighterOf (doctrine.ts; Brian 23 Nov: every nation's own aircraft).
+	if (Tag == TEXT("ITA")) return Reached >= 1942 ? FString(TEXT("C202")) : TEXT("Fighter:") + Tag;
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Zero");
 	return TEXT("Fighter:") + Tag;
 }
