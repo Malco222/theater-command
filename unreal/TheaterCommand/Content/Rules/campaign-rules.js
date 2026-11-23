@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2e860d01 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 35aabc4d 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -50829,18 +50829,50 @@
   function retreatTarget(g2, c, from2, banned) {
     if (c.kind === "fort") return null;
     let best = null, bs = 1e9;
-    const d = g2.capDist[c.nat];
     for (const j of from2.nb) {
       const r = g2.regions[j];
-      if (banned.has(j) || !allied(g2, c.nat, fieldCtrl(g2, r)) || hostileUnits(g2, r, c.nat).length) continue;
-      if (placed(g2, r, c.nat).length >= STACK + 2 || barred(g2, c, r)) continue;
-      const abroad3 = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
-      const ways = inDesert(r) ? r.nb.filter((k) => k !== from2.id && !banned.has(k) && allied(g2, c.nat, g2.regions[k].ctrl)).length : 2;
-      const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad3 ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
-      const s = back + (g2.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+      if (!fallsOn(g2, c, r, banned)) continue;
+      if (placed(g2, r, c.nat).length >= STACK + 2) continue;
+      const s = fallScore(g2, c, from2, r, banned);
       if (s < bs) {
         bs = s;
         best = r;
+      }
+    }
+    return best;
+  }
+  function fallsOn(g2, c, r, banned) {
+    return !banned.has(r.id) && allied(g2, c.nat, fieldCtrl(g2, r)) && !hostileUnits(g2, r, c.nat).length && !barred(g2, c, r);
+  }
+  function fallScore(g2, c, from2, r, banned) {
+    const d = g2.capDist[c.nat];
+    const j = r.id;
+    const abroad3 = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
+    const ways = inDesert(r) ? r.nb.filter((k) => k !== from2.id && !banned.has(k) && allied(g2, c.nat, g2.regions[k].ctrl)).length : 2;
+    const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad3 ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
+    return back + (g2.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+  }
+  function fallThrough(g2, c, from2, banned) {
+    if (!unitsDecide(g2) || c.kind === "fort") return null;
+    const full = from2.nb.map((j) => g2.regions[j]).filter((r) => fallsOn(g2, c, r, banned));
+    let best = null, bs = 1e9;
+    for (const n of full) {
+      for (const k of n.nb) {
+        const m = g2.regions[k];
+        if (k === from2.id || !fallsOn(g2, c, m, banned) || placed(g2, m, c.nat).length >= STACK + 2) continue;
+        const s = fallScore(g2, c, n, m, banned);
+        if (s < bs) {
+          bs = s;
+          best = m;
+        }
+      }
+    }
+    if (best) return best;
+    for (const n of full) {
+      const s = fallScore(g2, c, from2, n, banned);
+      if (s < bs) {
+        bs = s;
+        best = n;
       }
     }
     return best;
@@ -51081,6 +51113,7 @@
     if (win) {
       const banned = new Set(attackers2.map((c) => c.reg));
       let intoWorks = false;
+      let back = null;
       defenders.forEach((c, i) => {
         if (!town && sieges2 && fortRow(g2, c) && allied(g2, c.nat, target.ctrl) && c.str >= 0.15 * (c.full ?? 1)) {
           target.units.splice(target.units.indexOf(c), 1);
@@ -51116,6 +51149,11 @@
             g2.flags[`evac:${g2.turn}`] = 1;
             headline(g2, "event", `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? "" : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: "land", lost: c.nat });
           }
+        } else if (back = !town && !overrun2 && c.str >= 0.15 ? fallThrough(g2, c, target, banned) : null) {
+          place(g2, c, back);
+          c.ap = 0;
+          defU[i].fate = "retreated";
+          if (driveOut(g2)) defU[i].to = back.id;
         } else {
           const left = men(c);
           const shattered = c.str < 0.15 * (fortRow(g2, c) ? c.full ?? 1 : 1);
