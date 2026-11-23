@@ -330,6 +330,14 @@ export interface LiveOpts {
   bearers?: boolean;
   patrol?: boolean;
   /**
+   * Looks the player can switch off on the Battle rules card (release 2; Brian, 23 November 01:11Z "Do all of these"):
+   * captured tanks drawn in their captor's paint (blocks[].captured), uniforms that age (sides' worn), and ground that
+   * keeps the ruts of its battles fought in mud (oldRuts). On unless false; the fight reads none of them.
+   */
+  captured?: boolean;
+  worn?: boolean;
+  mud?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -402,6 +410,8 @@ export class LiveBattle {
   private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
+  /** The player's looks switches the header reads (worn uniforms, mud remembered). */
+  private looks: { worn: boolean; mud: boolean } = { worn: true, mud: true };
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -443,6 +453,11 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
+    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false };
+    // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
+    // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
+    const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
+    const caughtLeft: Record<string, number> = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
     // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
     // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
     this.blocks = sim.allBlocks().map((u) => {
@@ -455,11 +470,16 @@ export class LiveBattle {
       // A campaign battle (no piece): the nearest model the 3D game has for the nation and year, looks only, so the
       // battle stays the one the campaign priced (the fight never reads it).
       else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
+      const took = caught && u.kind === 'arm' && caughtLeft[u.side] > 0 ? caught[u.side as 'att' | 'def'] : undefined;
+      if (took) {
+        caughtLeft[u.side]--;
+        model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
+      }
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
-        ...(u.joined !== undefined ? { joins: true } : {}),
+        ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
       };
     });
     this.look();
@@ -473,13 +493,14 @@ export class LiveBattle {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
       // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-      // lays thaw mud from "mud" and weathered old craters from the scars)
+      // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
       ...(t.weather ? { weather: t.weather } : {}),
       ...(t.scars && t.scars.count > 0 ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
+      ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
       ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
-        att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}) },
-        def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}) },
+        att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },
+        def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}), ...(t.def.worn !== undefined && this.looks.worn ? { worn: t.def.worn } : {}) },
       },
       field: {
         w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x: number) => r1(x)),
