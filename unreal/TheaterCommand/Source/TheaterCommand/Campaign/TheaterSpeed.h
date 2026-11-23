@@ -179,6 +179,13 @@ class APlayerController;
  *                         screen says so; it is asked when a year is picked and every time the screen opens, Escape
  *                         from the war included, where it was worked out in the press's frame. 0: in the press's
  *                         frame (a year picked: three frames after it), as before. The same list either way.
+ *   tc.Speed.PicturesAside 1 (default): a card's unit pictures (the arsenal's, a province's raise list, the bigger
+ *                         unit card, a page's machines, a fleet's ships) that have not been taken yet are each a model
+ *                         built and photographed in the studio, and a card opened for the first time took all of them in
+ *                         the press's frame. The card now stands at once with each picture's place kept at its size, and
+ *                         the pictures are taken one a frame after it (PortraitOwed in the log), each appearing in its
+ *                         place. A run that takes pictures takes them at once. 0: all in the press's frame, as before.
+ *                         The same pictures either way, a few frames later.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -234,6 +241,7 @@ namespace TheaterSpeed
 	bool WarSpread(); // (tc.Speed.WarSpread) a war begun is laid a step a frame under a plate: false all in the press's frame, as before
 	bool SaveAside(); // (tc.Speed.SaveAside) the month's save written out off the game thread: false in the month's frames, as before
 	bool NationsAside(); // (tc.Speed.NationsAside) the opening screen's countries worked out on the rules' thread: false in the press's frame, as before
+	bool PicturesAside(); // (tc.Speed.PicturesAside) a card's unit pictures not yet taken are taken one a frame after it stands: false all in its frame, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

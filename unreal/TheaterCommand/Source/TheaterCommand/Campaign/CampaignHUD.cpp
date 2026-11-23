@@ -8631,6 +8631,7 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			TakeOwedPortrait(); // (release 2, tc.Speed.PicturesAside: one picture a frame, owed by a card laid before this frame)
 			UpdateBigCard();
 			UpdateFold(InDeltaTime); // (release 2: before the staff's note, which stands under the date card)
 			PlaceLessonNote();
@@ -16536,6 +16537,21 @@ namespace
 			}
 			TSharedPtr<FSlateBrush> Made;
 			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			// (Release 2, tc.Speed.PicturesAside; the UI director's bar: every press answers within a tenth of a second.)
+			// A picture not yet taken is a model built and photographed in the studio, and a card of a dozen of them (the
+			// arsenal, a province's raise list, opened for the first time) took them all in the press's frame. The card
+			// now stands at once, each picture's place kept at its size, and the pictures are taken one a frame after it
+			// (TakeOwedPortrait), each laid in its place as it is taken. A run that takes pictures takes them at once.
+			static const bool bPictureRun = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr;
+			if (Table && TheaterSpeed::PicturesAside() && !bPictureRun && !Table->HasPortrait(Model, bLarge))
+			{
+				Made = MakeShared<FSlateBrush>();
+				Made->ImageSize = bLarge ? FVector2D(552.0, 336.0) : FVector2D(184.0, 112.0);
+				Made->DrawAs = ESlateBrushDrawType::NoDrawType; // (nothing drawn in its place until it is taken)
+				Brushes.Add(Model, Made);
+				OwedPortraits.Emplace(Model, bLarge);
+				return Made;
+			}
 			if (UTextureRenderTarget2D* Picture = Table ? Table->GetPortrait(Model, bLarge) : nullptr)
 			{
 				Made = MakeShared<FSlateBrush>();
@@ -16545,6 +16561,26 @@ namespace
 			}
 			Brushes.Add(Model, Made);
 			return Made;
+		}
+
+		/** (tc.Speed.PicturesAside) One picture owed to a card taken, in this frame, and laid in its place. */
+		void TakeOwedPortrait()
+		{
+			if (OwedPortraits.Num() == 0)
+			{
+				return;
+			}
+			THEATER_SPEED_SCOPE(PortraitOwed);
+			const TPair<FString, bool> Owed = OwedPortraits[0];
+			OwedPortraits.RemoveAt(0);
+			const TSharedPtr<FSlateBrush>* Kept = (Owed.Value ? LargePortraitBrushes : PortraitBrushes).Find(Owed.Key);
+			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			UTextureRenderTarget2D* Picture = Table && Kept && Kept->IsValid() ? Table->GetPortrait(Owed.Key, Owed.Value) : nullptr;
+			if (Picture)
+			{
+				(*Kept)->SetResourceObject(Picture);
+				(*Kept)->DrawAs = ESlateBrushDrawType::Image;
+			}
 		}
 
 		/**
@@ -17239,6 +17275,7 @@ namespace
 		int32 ShownArsenal = -1;
 		TMap<FString, TSharedPtr<FSlateBrush>> PortraitBrushes;
 		TMap<FString, TSharedPtr<FSlateBrush>> LargePortraitBrushes; // (for the bigger unit card)
+		TArray<TPair<FString, bool>> OwedPortraits; // (tc.Speed.PicturesAside) the pictures cards are waiting for, in the order asked: the model, and whether large
 		TSharedPtr<SBox> BigCardShow;
 		TSharedPtr<SBorder> HoverTipBox;
 		struct FBigCardTarget

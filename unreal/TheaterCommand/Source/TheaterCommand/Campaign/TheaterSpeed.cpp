@@ -136,6 +136,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarNationsAside(
 		TEXT("tc.Speed.NationsAside"), 1,
 		TEXT("1 works the opening screen's list of countries out on the rules' own thread while the screen says so (a later year is history played up to it: 0.7 to 1 s for 1941 in a cloud run); 0 works it out in the press's frame, as before. The same list either way."));
+	TAutoConsoleVariable<int32> CVarPicturesAside(
+		TEXT("tc.Speed.PicturesAside"), 1,
+		TEXT("1 stands a card at once and takes its unit pictures not yet taken one a frame after it, each laid in its place (the arsenal or a province's raise list opened for the first time took them all in the press's frame); 0 takes them all in the press's frame, as before. A run that takes pictures takes them at once. The same pictures either way, a few frames later."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -525,6 +528,11 @@ namespace TheaterSpeed
 	bool NationsAside()
 	{
 		return CVarNationsAside.GetValueOnGameThread() != 0;
+	}
+
+	bool PicturesAside()
+	{
+		return CVarPicturesAside.GetValueOnGameThread() != 0;
 	}
 
 	double TreesSpread()

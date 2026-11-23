@@ -325,6 +325,8 @@ public:
 	 * "Rider:POL", "Pioneer:GER").
 	 */
 	UTextureRenderTarget2D* GetPortrait(const FString& Model, bool bLarge = false); // (the large one is for the bigger unit card)
+	/** (Release 2, tc.Speed.PicturesAside) Whether GetPortrait has been asked for this one already (it answers at once). */
+	bool HasPortrait(const FString& Model, bool bLarge = false) const { return (bLarge ? LargePortraits : Portraits).Contains(Model); }
 
 	/** The model that stands for a kind of corps of a nation, as it is this year: its tank, its gun, its soldier. */
 	static FString ModelFor(const FString& Nation, const FString& Kind);
