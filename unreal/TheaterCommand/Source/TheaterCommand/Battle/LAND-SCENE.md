@@ -700,15 +700,19 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   `land:strafe`: from, to, width, its time in battle seconds), its bombs (`land:bomb-drop`: each burst a shell of
   calibre bomb, drawn by the scene as ever) and the planes it cost (`air:lost`: explode, burn or spin) as the run
   ends. `LandFeed::AirNote` reads the four; nothing here changes any of them.
-- **The plan** (`LandAir.h/.cpp`, plain C++). A leg's planes come in one behind another down the run's line, high, dive
-  onto it, their guns walking from its start to its end down a lane each, pull out low over its far end, climb away and
-  break left and right in turn, at a real fighter's speed (105 to 140 m/s); the trail is spaced so that the leg's guns
-  rake the strip for the rules' time. The machine by nation and year (`MachineOf`): Mustang or Warhawk, Stuka (steep,
-  from 700 m) or Fw 190, Spitfire or Hurricane, the Il-2 (low and shallow, from 160 m), Zero, else a plain fighter in
-  the nation's paint. The ground's guns: the other side's four blocks nearest the run, two guns a block, ragged bursts,
+- **The plan** (`LandAir.h/.cpp`, plain C++). A leg's planes come in one behind another down the run's line, high, push
+  over into a dive aimed at their lane's middle, their guns opening at the machine's range from the lane's start and
+  walking it to its end, pull out, climb away and break left and right in turn, each 6 to 12 s behind the one before
+  (each dive its own beat), at a real machine's speed along its way (105 to 140 m/s). The shapes are the art director's
+  (23 November, 19:08Z): a fighter from 700 to 800 m in a 25 degree dive, guns from 900 m to 250 m slant, out at 45 m;
+  a Stuka from 1,800 m rolled into a 75 degree dive, its two guns a short burst (1,100 to 700 m), out at 300 m; an Il-2
+  from 160 m at 8 degrees, guns from 700 to 200 m, out at 15 m. A lane starts at least 150 m past its own side's front
+  (the rules' strip is unchanged; only where the rounds are seen to strike moves on). The machine by nation and year
+  (`MachineOf`): Mustang or Warhawk, Stuka or Fw 190, Spitfire or Hurricane, the Il-2, Zero, else a plain fighter in the
+  nation's paint. The ground's guns: the other side's four blocks nearest the run, two guns a block, ragged bursts,
   aimed short of the lead so that the tracers fall behind. A plane lost is the last of its leg not yet lost: blown apart
-  in its pass, or hit climbing away and going down on fire in a long shallow dive, or spinning in; it burns where it
-  struck the rest of the battle.
+  in its pass, or hit climbing away and going down on fire in a long shallow dive, or spinning in (about 3 s from 150 m);
+  it burns where it struck the rest of the battle.
 - **The scene** (`LandBattleAir.cpp`, `ALandBattle::FlyOver`, each frame after `PlayEffects`). Each plane a mesh of its
   model's far form (`FMiniatureMesh`; the plain fighter sized to its span where there is none), on `SteelInk`. Its wing
   guns on the kit's `AirGun` (flash, smoke, the nation's tracer, carried with the plane), and `Shots`' dust spurts over
@@ -723,8 +727,8 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   falling, light flak's puffs (the kit has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
   from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
-  while firing), the guns (each lane from the strip's start to its end, aimed on the ground, raking for the rules'
-  time), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
+  while firing, the art director's dive angles, bottoms and gun ranges), the guns (each lane from the strip's start to
+  its end, aimed on the ground, each plane 6 to 12 s after the one before, a lane 150 m past its own side's front), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
   other side's blocks, each stream ending in the air near a plane), the same (built twice, grown note by note, rounds
   the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
   (`paths.py`). Picture: `/mnt/project-files/battle-fx/air-support/`.

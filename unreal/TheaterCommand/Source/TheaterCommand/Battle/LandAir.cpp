@@ -9,11 +9,12 @@ namespace LandAir
 	{
 		constexpr double Pi = 3.14159265358979323846;
 		constexpr double Rad = Pi / 180.0;
-		// The pass (metres): its guns open this far short of the run's start and shut this far short of its end, the
-		// planes' aim walking down the strip between (a fighter's guns were laid for 300 to 450 m).
-		constexpr double OpenAt = 430.0, ShutAt = 170.0;
-		// The pull-out and the break: the climb's curve, the straight past the run, the turn's radius and how far it
-		// turns (metres, degrees); the roll into and out of it (seconds); and how long a plane is drawn after its pass.
+		// The way in: the level run before the push-over (metres); how far past its own side's front a lane starts at the
+		// least (the art director: never over its own men), and how near the strip it may be to count; the trail's gap
+		// (seconds: each dive its own beat, the next pilot running in through the leader's dust).
+		constexpr double LevelIn = 1100.0, OwnClear = 150.0, OwnAside = 60.0, GapLeast = 6.0, GapMost = 12.0;
+		// The climb away and the break: the climb's curve, the straight past the bottom, the turn's radius and how far it
+		// turns (metres, degrees); the roll into and out of it (seconds); and how long a plane is drawn after its bottom.
 		constexpr double ClimbCurve = 250.0, Straight = 350.0, TurnR = 700.0, TurnMost = 100.0, Roll = 1.2, Away = 16.0, LevelOver = 120.0;
 		// The ground's guns: how far from the run's middle a block may stand and fire, the blocks and guns a block, and
 		// how far they reach (metres), and their tracers' speed (the kit's tracer.speed_mps).
@@ -61,7 +62,10 @@ namespace LandAir
 		const bool bEmpire = Nat == "UK" || Nat == "CAN" || Nat == "AUS" || Nat == "NZL" || Nat == "SAF" || Nat == "IND";
 		if (Nat == "GER" && Year < 1943)
 		{
-			M.Model = "Stuka"; M.Span = 13.8; M.Speed = 115.0; M.High = 700.0; M.Low = 80.0; M.Dive = 38.0; M.Climb = 30.0; M.Gun = "rifle"; M.Rate = 16.0;
+			// (from high, rolled over into a 75 degree dive, its two guns a short burst on the way down, out at about 300 m;
+			// once the bombs are drawn, the bomb leaving it at about 600 m is the shot)
+			M.Model = "Stuka"; M.Span = 13.8; M.Speed = 140.0; M.High = 1800.0; M.Low = 300.0; M.Dive = 75.0; M.Climb = 30.0; M.Gun = "rifle"; M.Rate = 16.0;
+			M.Open = 1100.0; M.Shut = 700.0; M.PushG = 6.5; M.PullG = 6.0;
 		}
 		else if (Nat == "GER")
 		{
@@ -70,15 +74,17 @@ namespace LandAir
 		else if (Nat == "USA")
 		{
 			M.Model = Year >= 1944 ? "Mustang" : "Warhawk"; M.Span = Year >= 1944 ? 11.3 : 11.4; M.Speed = Year >= 1944 ? 140.0 : 125.0; M.Gun = "hmg"; M.Rate = 22.0;
+			M.High = Year >= 1944 ? 800.0 : 700.0;
 		}
 		else if (bEmpire)
 		{
-			M.Model = Year >= 1943 ? "Spitfire" : "Hurricane"; M.Span = Year >= 1943 ? 11.2 : 12.2; M.Speed = Year >= 1943 ? 135.0 : 115.0;
+			M.Model = Year >= 1943 ? "Spitfire" : "Hurricane"; M.Span = Year >= 1943 ? 11.2 : 12.2; M.Speed = Year >= 1943 ? 135.0 : 115.0; M.High = Year >= 1943 ? 800.0 : 700.0;
 			M.Gun = Year >= 1942 ? "cannon20" : "rifle"; M.Rate = Year >= 1942 ? 14.0 : 18.0;
 		}
 		else if (Nat == "SOV")
 		{
-			M.Model = "Sturmovik"; M.Span = 14.6; M.Speed = 105.0; M.High = 160.0; M.Low = 25.0; M.Dive = 8.0; M.Climb = 18.0; M.Gun = "cannon20"; M.Rate = 12.0;
+			M.Model = "Sturmovik"; M.Span = 14.6; M.Speed = 105.0; M.High = 160.0; M.Low = 15.0; M.Dive = 8.0; M.Climb = 18.0; M.Gun = "cannon20"; M.Rate = 12.0;
+			M.Open = 700.0; M.Shut = 200.0; M.PullG = 3.0;
 		}
 		else if (Nat == "JAP" || Nat == "JPN")
 		{
@@ -142,13 +148,64 @@ namespace LandAir
 		{
 			Plan& P = Plans[I];
 			const Machine& M = P.M;
-			P.Uc = std::max(P.Len - ShutAt, -OpenAt + 150.0);
-			P.Pass = (P.Uc + OpenAt) / M.Speed;
-			P.Ua = std::min(P.Uc - (M.High - M.Low) / std::tan(std::max(3.0, M.Dive) * Rad), -OpenAt - 150.0);
-			// (the trail spaced so that its guns rake the strip for the rules' time, at least 0.8 s and at most 2.6 s apart)
-			const double Rules = (Secs[I] > 0.0 ? Secs[I] : P.Len / 120.0) * Life;
-			P.Gap = P.Models > 1 ? std::clamp((Rules - P.Pass) / (P.Models - 1), 0.8, 2.6) : 0.0;
 			P.Base = GroundZ(P.Run[0] + P.Fx * P.Len * 0.5, P.Run[1] + P.Fy * P.Len * 0.5);
+			// Its lane: from the strip's start, or 150 m past its own side's front where that stands on the strip (the
+			// rules' strip is the rules'; only where its guns are seen to strike moves on), leaving 40 m of it at the least.
+			P.Us = 0.0;
+			if (const LandFeed::View* V = Rec.ViewAt(P.Tin))
+			{
+				for (const LandFeed::Unit& U : V->Units)
+				{
+					if (U.Side != P.Side || U.Str <= 0.05) continue;
+					const double Along = (U.X - P.Run[0]) * P.Fx + (U.Y - P.Run[1]) * P.Fy, Aside = (U.X - P.Run[0]) * P.Fy - (U.Y - P.Run[1]) * P.Fx;
+					if (std::fabs(Aside) <= P.Width * 0.5 + OwnAside && Along >= -OwnClear && Along <= P.Len) P.Us = std::max(P.Us, Along + OwnClear);
+				}
+			}
+			P.Us = std::min(P.Us, std::max(0.0, P.Len - 40.0));
+			// Its way in, as a line: level at its height, the push-over into its dive (a circle of the push's g), the dive
+			// down the line aimed at its lane's middle, and the pull-out (a circle of the pull's g) to its bottom.
+			const double V = M.Speed, G = 9.81;
+			P.Gam = std::clamp(M.Dive, 3.0, 85.0) * Rad;
+			P.Rq = V * V / (G * std::max(0.5, M.PushG));
+			P.Rp = V * V / (G * std::max(0.5, M.PullG - 1.0));
+			const double Sn = std::sin(P.Gam), Tn = std::tan(P.Gam), Half = std::tan(P.Gam * 0.5);
+			const double Drop = std::max(10.0, M.High - M.Low);
+			double E = P.Rq * Half, Dd = P.Rp * Half;
+			if ((E + Dd) * Sn > Drop)
+			{
+				// (no room for both turns at their g between its heights: both tighter, so the dive is all turn)
+				const double K = Drop / ((E + Dd) * Sn);
+				P.Rq *= K; P.Rp *= K; E *= K; Dd *= K;
+			}
+			const double Um = (P.Us + P.Len) * 0.5;
+			P.Uq = Um - M.High / Tn - E;
+			P.Uc = Um - M.Low / Tn + Dd;
+			P.Ua = P.Uq - LevelIn;
+			P.Seg[0] = LevelIn;
+			P.Seg[1] = P.Rq * P.Gam;
+			P.Seg[2] = std::max(0.0, Drop / Sn - E - Dd);
+			P.Seg[3] = P.Rp * P.Gam;
+			const double Sb = P.Seg[0] + P.Seg[1] + P.Seg[2] + P.Seg[3];
+			// Its guns: open once its lane's start is within the machine's range, shut once its lane's end is within its
+			// closest (or at the bottom); at least a second's burst.
+			double F0 = -1.0, F1 = -1.0;
+			for (double S = 0.0; S <= Sb; S += 2.0)
+			{
+				double U = 0.0, H = 0.0, Pitch = 0.0;
+				WayIn(P, S, U, H, Pitch);
+				if (F0 < 0.0 && std::hypot(U - P.Us, H) <= M.Open) F0 = S;
+				if (F0 >= 0.0 && std::hypot(U - P.Len, H) <= M.Shut) { F1 = S; break; }
+			}
+			if (F0 < 0.0) F0 = std::max(0.0, Sb - 3.0 * V);
+			if (F1 < 0.0) F1 = Sb;
+			F1 = std::min(Sb, std::max(F1, F0 + V));
+			P.Sf0 = F0;
+			P.Pass = std::max(0.5, (F1 - F0) / V);
+			P.Bottom = (Sb - F0) / V;
+			// (the trail: each dive its own beat, 6 to 12 s apart, longer where the rules have the strip raked longer)
+			const double Rules = (Secs[I] > 0.0 ? Secs[I] : P.Len / 120.0) * Life;
+			Dice Dg(static_cast<uint64_t>(P.Flight) * 2654435761ull + 0x6A9ull);
+			P.Gap = P.Models > 1 ? std::clamp(std::max((Rules - P.Pass) / (P.Models - 1), Dg.U(GapLeast, GapLeast + 3.0)), GapLeast, GapMost) : 0.0;
 		}
 		// The planes it cost: the last of the leg not yet lost, hit in its pass or its pull-out.
 		for (const LandFeed::AirNote& N : Rec.Air)
@@ -179,7 +236,7 @@ namespace LandAir
 			}
 			std::sort(Near.begin(), Near.end(), [](const auto& A, const auto& B) { return A.first != B.first ? A.first < B.first : A.second->Id < B.second->Id; });
 			if (Near.size() > static_cast<size_t>(PostBlocks)) Near.resize(static_cast<size_t>(PostBlocks));
-			const double End = (P.Models - 1) * P.Gap + P.Pass + 5.0;
+			const double End = (P.Models - 1) * P.Gap + P.Bottom + 5.0;
 			int K = 0;
 			for (const auto& Pair : Near)
 			{
@@ -208,31 +265,63 @@ namespace LandAir
 		}
 	}
 
+	void Sky::WayIn(const Plan& P, double S, double& U, double& H, double& Pitch)
+	{
+		const Machine& M = P.M;
+		const double Sn = std::sin(P.Gam), Cs = std::cos(P.Gam);
+		if (S <= P.Seg[0])
+		{
+			U = P.Ua + S;
+			H = M.High;
+			Pitch = 0.0;
+			return;
+		}
+		S -= P.Seg[0];
+		if (S <= P.Seg[1])
+		{
+			const double F = S / std::max(1.0, P.Rq);
+			U = P.Uq + P.Rq * std::sin(F);
+			H = M.High - P.Rq * (1.0 - std::cos(F));
+			Pitch = -F;
+			return;
+		}
+		S -= P.Seg[1];
+		const double U2 = P.Uq + P.Rq * Sn, H2 = M.High - P.Rq * (1.0 - Cs);
+		if (S <= P.Seg[2])
+		{
+			U = U2 + S * Cs;
+			H = H2 - S * Sn;
+			Pitch = -P.Gam;
+			return;
+		}
+		S -= P.Seg[2];
+		const double F = P.Gam - std::min(S, P.Seg[3]) / std::max(1.0, P.Rp);
+		U = P.Uc - P.Rp * std::sin(F);
+		H = M.Low + P.Rp * (1.0 - std::cos(F));
+		Pitch = -F;
+	}
+
 	bool Sky::Fly(const Plan& P, int Slot, double Tau, Sample& Out) const
 	{
 		const Machine& M = P.M;
 		const double V = M.Speed;
 		const double Tp = Tau - Slot * P.Gap;
-		const double First = (P.Ua - 1100.0 + OpenAt) / V;
-		if (Tp < First || Tp > P.Pass + Away) return false;
+		const double First = -P.Sf0 / V;
+		if (Tp < First || Tp > P.Bottom + Away) return false;
 		const int N = P.Models;
 		const double W0 = N > 1 ? (Slot - (N - 1) * 0.5) * std::min(18.0, P.Width / N) : 0.0;
-		double U = 0.0, W = W0, H = M.High, Slope = 0.0, Turned = 0.0, Bank = 0.0;
-		if (Tp <= P.Pass)
+		double U = 0.0, W = W0, H = M.High, Slope = 0.0, Turned = 0.0, Bank = 0.0, Dived = 0.0;
+		bool bIn = false;
+		if (Tp <= P.Bottom)
 		{
-			// Coming in high down the run's line, then the dive onto the run, steepest in its middle, coming out low.
-			U = -OpenAt + V * Tp;
-			if (U > P.Ua)
-			{
-				const double Span = std::max(1.0, P.Uc - P.Ua), S = std::clamp((U - P.Ua) / Span, 0.0, 1.0);
-				H = M.High + (M.Low - M.High) * S * S * (3.0 - 2.0 * S);
-				Slope = (M.Low - M.High) * (6.0 * S - 6.0 * S * S) / Span;
-			}
+			// Coming in high down the run's line, the push-over, the dive, the pull-out (at its speed along its way).
+			WayIn(P, P.Sf0 + V * Tp, U, H, Dived);
+			bIn = true;
 		}
 		else
 		{
-			// The pull-out over the run's far end, the climb away, and the break, left and right in turn.
-			const double S = V * (Tp - P.Pass), Tc = std::tan(M.Climb * Rad);
+			// The climb away from the bottom, and the break, left and right in turn.
+			const double S = V * (Tp - P.Bottom), Tc = std::tan(M.Climb * Rad);
 			H = S < ClimbCurve ? M.Low + Tc * S * S / (2.0 * ClimbCurve) : M.Low + Tc * (ClimbCurve * 0.5 + S - ClimbCurve);
 			Slope = S < ClimbCurve ? Tc * S / ClimbCurve : Tc;
 			// (levelling off some way over its height before the dive, smoothly: it goes home, it does not climb away)
@@ -264,7 +353,7 @@ namespace LandAir
 		Out.At.Z = P.Base + H;
 		if (GroundAt) Out.At.Z = std::max(Out.At.Z, GroundAt(Out.At.X, Out.At.Y) + 6.0);
 		Out.Heading = P.Head + Turned;
-		Out.Pitch = std::atan(Slope) / Rad;
+		Out.Pitch = (bIn ? Dived : std::atan(Slope)) / Rad;
 		Out.Bank = Bank;
 		return true;
 	}
@@ -282,7 +371,7 @@ namespace LandAir
 		if (Out.bFiring)
 		{
 			const int N = P.Models;
-			const double W0 = N > 1 ? (Slot - (N - 1) * 0.5) * std::min(18.0, P.Width / N) : 0.0, U = P.Len * Tp / std::max(0.1, P.Pass);
+			const double W0 = N > 1 ? (Slot - (N - 1) * 0.5) * std::min(18.0, P.Width / N) : 0.0, U = P.Us + (P.Len - P.Us) * Tp / std::max(0.1, P.Pass);
 			Out.Aim = { P.Run[0] + P.Fx * U + P.Fy * W0, P.Run[1] + P.Fy * U - P.Fx * W0, 0.0 };
 			Out.Aim.Z = GroundAt ? GroundAt(Out.Aim.X, Out.Aim.Y) : 0.0;
 			const V3 Right = RightOf(Out.Heading);
@@ -298,7 +387,7 @@ namespace LandAir
 		// (blown up in its pass or as it pulls out; on fire or spinning once it is climbing away, so it has the height
 		// to go down in: the rules lose it as the run ends, which is about then)
 		const double S0 = Slot * P.Gap;
-		D.Hit = How == Fall::Explode ? std::clamp(Tau, S0 + 0.5 * P.Pass, S0 + P.Pass + 3.0) : std::clamp(Tau, S0 + P.Pass + 2.0, S0 + P.Pass + 4.0);
+		D.Hit = How == Fall::Explode ? std::clamp(Tau, S0 + 0.5 * P.Pass, S0 + P.Pass) : std::clamp(Tau, S0 + P.Bottom + 2.0, S0 + P.Bottom + 3.5);
 		Sample A, B;
 		if (!Fly(P, Slot, D.Hit - 0.025, A) || !Fly(P, Slot, D.Hit + 0.025, B)) { D.How = Fall::None; return; }
 		Fly(P, Slot, D.Hit, A);
@@ -328,8 +417,8 @@ namespace LandAir
 		double Heading = A.Heading, Pitch = A.Pitch, Bank = A.Bank, T = 0.0;
 		const double Speed = std::max(60.0, Length(D.HitVel));
 		V3 Centre = Plus(Pos, Times(RightOf(Heading), Side * 24.0)), Drift = Times(Ahead(Heading), Speed * 0.5);
-		// (struck, it stops climbing at once: a spin's sink starts from none, however it was climbing)
-		double Theta = std::atan2(Pos.Y - Centre.Y, Pos.X - Centre.X), Sink = std::min(0.0, D.HitVel.Z), Way = Speed;
+		// (struck, it stops climbing at once: a spin drops away from the start, about 3 s from 150 m, the art director's)
+		double Theta = std::atan2(Pos.Y - Centre.Y, Pos.X - Centre.X), Sink = std::min(-20.0, D.HitVel.Z), Way = Speed;
 		V3 Was = Pos;
 		D.Path.push_back({ D.Hit, Pos, Heading, Pitch, Bank });
 		while (T < 25.0)
@@ -351,7 +440,7 @@ namespace LandAir
 				Drift = Times(Drift, std::exp(-Dt / 2.0));
 				Centre = Plus(Centre, Times(Drift, Dt));
 				Theta += -Side * 210.0 * Rad * Dt;
-				Sink = std::max(Sink - 14.0 * Dt, -55.0);
+				Sink = std::max(Sink - 25.0 * Dt, -70.0);
 				Pos = { Centre.X + 24.0 * std::cos(Theta), Centre.Y + 24.0 * std::sin(Theta), Pos.Z + Sink * Dt };
 				const double Dx = Pos.X - Was.X, Dy = Pos.Y - Was.Y;
 				if (Dx * Dx + Dy * Dy > 1e-8) Heading = std::atan2(Dx, Dy) / Rad;
