@@ -87,6 +87,8 @@ const G: Record<string, Spec> = {
   // Italy's 12.7 mm and 7.7 mm (the historian, question 10: the guns; rates and speeds unchecked).
   breda127: { gun: 'Breda-SAFAT 12.7 mm', kind: 'hmg', rate: 700, mv: 765 },
   breda77: { gun: 'Breda-SAFAT 7.7 mm', kind: 'rifle', rate: 900, mv: 730 },
+  // Japan's flexible 7.7 mm, the Lewis pattern on 97-round pans (rate and speed unchecked).
+  type92: { gun: 'Type 92', kind: 'rifle', rate: 600, mv: 750 },
   // The plain fighter and bomber of a nation the sources do not cover: a rifle-calibre and a heavy gun of the period.
   rifle: { gun: 'rifle-calibre machine gun', kind: 'rifle', rate: 1_100, mv: 800 },
   heavy: { gun: 'heavy machine gun', kind: 'hmg', rate: 800, mv: 860 },
@@ -156,8 +158,11 @@ export function fighterGuns(model: string, nat: string, w: When): Loadout {
       return { mark: d < 1942 + 6 / 12 ? 'A6M2' : d < 1944 ? 'A6M3' : 'A6M5', conv: 250, silent: [], guns: [fixed(G.type97, ['gun.nose'], 500, { n: 2, rate: Math.round(G.type97.rate * SYNC) }), fixed(G.type99, ['gun.1', 'gun.2'], c, c < 125 ? { drum: c } : {})] };
     }
     // France's D.520 model (23 Nov) flies the D.520's guns from the first: the MS.406 before it is the plain fighter.
-    case 'D520':
-      return plainFighter('FRA', Math.max(d, 1940 + 5 / 12));
+    // The model has a muzzle for each of the four MAC 1934s: gun.1 and gun.3 port, gun.2 and gun.4 starboard.
+    case 'D520': {
+      const L = plainFighter('FRA', Math.max(d, 1940 + 5 / 12));
+      return { ...L, guns: L.guns.map((x) => (x.gun === G.mac34.gun ? { ...x, at: wings(4), n: 4 } : x)) };
+    }
   }
   return plainFighter(nat, d);
 }
@@ -198,7 +203,6 @@ const turret = (spec: Spec, where: string[], rounds: number, arc: Gun['arc'] = n
 /** A gunner's reach (3.3): 550 m for the .50 (G18); a placeholder 370 m for rifle calibre (B5); cannon as the .50. */
 const REACH: Record<GunKind, number> = { rifle: 370, hmg: 550, cannon20: 550 };
 
-const MARKS: Record<string, string> = { SM79: 'SM.79', Nell: 'G3M', Betty: 'G4M', Wellington: 'Wellington', Pe2: 'Pe-2', LeO451: 'LeO 451' };
 
 export function bomberGuns(model: string, nat: string, w: When): Loadout {
   const d = at(w);
@@ -244,10 +248,51 @@ export function bomberGuns(model: string, nat: string, w: When): Loadout {
       // 3D game keeps it off her own fins and wings); the tail 95 either side, 60 down to 60 up, the widest field of
       // fire in the aircraft. Rounds unchecked: about 1,000 a gun forward and above, about 2,500 in the tail.
       return box('Lancaster I', [turret(G.browning303, ['turret.1', 'turret.2'], 1_000, about(0, 95, -45, 60)), turret(G.browning303, ['turret.3', 'turret.4'], 1_000, from(0, 360, 0, 70)), turret(G.browning303, ['turret.5', 'turret.6', 'turret.7', 'turret.8'], 2_500, about(180, 95, -60, 60))]);
+    // The four models of 23 Nov, laid on their own sockets (the 3D thread's reading of the files, 08:41Z). Guns from the
+    // standard references (medium, for the historian's check); rounds unchecked. Arcs as the same turret or position on
+    // the Lancaster, the B-17 and the He 111.
+    case 'Wellington': {
+      // The Mk IC: an FN5 nose turret and an FN10 tail turret, two .303s each, and a hand-held .303 at each beam window
+      // (turret.5 starboard, turret.6 port). The Mk III, at the front from mid-1941: the FN20 tail turret's four guns,
+      // drawn from the file's two tail muzzles.
+      const nose = turret(G.browning303, ['turret.1', 'turret.2'], 1_000, about(0, 95, -45, 60));
+      const beams = [hand(G.browning303, ['turret.5'], 500, from(30, 150, -40, 50)), hand(G.browning303, ['turret.6'], 500, from(210, 330, -40, 50))];
+      const tail = (n: number) => ({ ...turret(G.browning303, ['turret.3', 'turret.4'], n === 4 ? 2_500 : 1_000, about(180, 95, -60, 60)), n });
+      return d < 1941 + 5 / 12 ? box('Wellington IC', [nose, tail(2), ...beams]) : box('Wellington III', [nose, tail(4), ...beams]);
+    }
+    case 'Pe2': {
+      // Two fixed guns in the nose (gun.1, gun.2), the navigator's gun above facing aft (turret.1) and the gunner's below
+      // facing aft (turret.2). ShKAS throughout at first; from mid-1942 a UBK beside a ShKAS in the nose and UBTs above
+      // and below.
+      const above = about(180, 70, 0, 70), below = about(180, 40, -60, 0);
+      if (d < 1942 + 6 / 12) return box('Pe-2', [fixed(G.shkas, ['gun.1', 'gun.2'], 750), hand(G.shkas, ['turret.1'], 750, above), hand(G.shkas, ['turret.2'], 750, below)]);
+      return box('Pe-2 (1942)', [fixed(G.ubs, ['gun.1'], 150), fixed(G.shkas, ['gun.2'], 450), hand(G.ubs, ['turret.1'], 200, above), hand(G.ubs, ['turret.2'], 200, below)]);
+    }
+    case 'LeO451':
+      // A 20 mm HS.404 above facing aft (turret.1), a MAC 1934 below facing aft (turret.2), and a fixed MAC 1934 in the
+      // nose, which the model gives no muzzle (it fires from the nearest socket and adds none).
+      return box('LeO 451', [hand(G.hs404, ['turret.1'], 120, about(180, 70, 0, 70), { drum: 60 }), hand(G.mac34, ['turret.2'], 500, about(180, 40, -60, 0)), fixed(G.mac34, [], 300)]);
+    case 'SM79':
+      // The rebuilt model (23 Nov 08:53Z): a fixed 12.7 mm firing forward from the top of the hump (turret.1), a 12.7 mm
+      // at the back of the hump facing aft (turret.2), one in the gondola below facing aft (turret.3), and a 7.7 mm at
+      // each beam window (turret.4 starboard, turret.5 port; one gun moved between them on early aircraft).
+      return box('SM.79', [fixed(G.breda127, ['turret.1'], 500), hand(G.breda127, ['turret.2'], 350, about(180, 70, 0, 70)), hand(G.breda127, ['turret.3'], 350, about(180, 40, -60, 0)), hand(G.breda77, ['turret.4'], 500, from(30, 150, -40, 50)), hand(G.breda77, ['turret.5'], 500, from(210, 330, -40, 50))]);
+    case 'Nell':
+      // The G3M2: a 20 mm Type 99 in the rear dorsal position (turret.2), a 7.7 mm in the retractable dorsal turret
+      // (turret.1), one in each side blister (turret.3 starboard, turret.4 port), and one in the cockpit without a muzzle.
+      return box('G3M2', [hand(G.type99, ['turret.2'], 360, about(180, 70, 0, 70), { drum: 45 }), hand(G.type92, ['turret.1'], 582, from(0, 360, 0, 70), { drum: 97 }), hand(G.type92, ['turret.3'], 582, from(30, 150, -40, 50), { drum: 97 }), hand(G.type92, ['turret.4'], 582, from(210, 330, -40, 50), { drum: 97 }), hand(G.type92, [], 582, from(320, 40, -30, 30), { drum: 97 })]);
+    case 'Betty': {
+      // The G4M1: a 7.7 mm in the nose (turret.1), one in the dorsal blister (turret.2), one in each side blister
+      // (turret.3 starboard, turret.4 port) and a 20 mm Type 99 in the tail (turret.5). The G4M2, at the front from
+      // late 1943: 20 mm in the dorsal turret and the side blisters too.
+      const nose = hand(G.type92, ['turret.1'], 582, from(320, 40, -30, 30), { drum: 97 });
+      const tail = hand(G.type99, ['turret.5'], 360, about(180, 30, -30, 30), { drum: 45 });
+      const up = about(180, 80, 0, 80), right = from(30, 150, -40, 50), left = from(210, 330, -40, 50);
+      if (d < 1943 + 8 / 12) return box('G4M1', [nose, hand(G.type92, ['turret.2'], 582, up, { drum: 97 }), hand(G.type92, ['turret.3'], 582, right, { drum: 97 }), hand(G.type92, ['turret.4'], 582, left, { drum: 97 }), tail]);
+      return box('G4M2', [nose, turret(G.type99, ['turret.2'], 450, up), hand(G.type99, ['turret.3'], 360, right, { drum: 45 }), hand(G.type99, ['turret.4'], 360, left, { drum: 45 }), tail]);
+    }
   }
-  // The new models (23 Nov) fly their nation's plain guns under their own name until the historian lays each type's.
-  const named = MARKS[model];
-  return named ? { ...plainBomber(nat, d), mark: named } : plainBomber(nat, d);
+  return plainBomber(nat, d);
 }
 
 /** The plain twin: a hand-held gun in the nose and a dorsal turret (the file's limits); France adds a ventral gun. */
