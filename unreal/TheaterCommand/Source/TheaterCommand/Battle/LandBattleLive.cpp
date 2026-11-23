@@ -63,6 +63,10 @@ namespace
 	 * s at 1x, 5 at 2x, 10 at 4x"). */
 	constexpr double LiveLead = 2.5;
 
+	/** Milliseconds of one frame the pieces may take while the screen waits on the rules (PumpLive): past it, the rest wait
+	 * for the next frame, so a backlog of pieces is laid over a few frames and never holds the picture. */
+	constexpr double LivePumpMs = 12.0;
+
 	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): on (Brian, 22 November 21:21Z). */
 	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 1,
 		TEXT("1: the attack card offers FIGHT IT YOURSELF, the campaign's land battle fought live in the land rules from its ticket (release 2). 0: SEND THEM IN only."));
@@ -339,12 +343,17 @@ void ALandBattle::PumpLive()
 		S.NoteAge = -1.0;
 	}
 
-	// The pieces fought: one a frame (each some milliseconds to read and lay), every one waiting when the screen waits on
-	// them (the opening, the setup step's placings, the rules catching up).
+	// The pieces fought: one a frame (each some milliseconds to read and lay), and more when the screen waits on them (the
+	// opening, the setup step's placings, the rules catching up), up to LivePumpMs of the frame: the rest the next frame.
+	// (release 1.5, the Mac's speed gate on 2dcc018b, 23 November: every live battle held its picture for 200 to 550 ms
+	// every few seconds; a frame that took every waiting piece at once was one way. "-TheaterLandPumpAll": every waiting
+	// piece in one frame, as before)
+	static const bool bPumpAll = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPumpAll"));
 	const bool bWaitedOn = !S.Rec.bOver && S.Battle >= S.Rec.Fought - LiveMargin - 1e-6;
+	const double PumpFrom = FPlatformTime::Seconds();
 	std::string Delta;
 	int32 Taken = 0;
-	while ((Taken == 0 || bWaitedOn) && Live->TakeOne(Delta))
+	while ((Taken == 0 || (bWaitedOn && (bPumpAll || (FPlatformTime::Seconds() - PumpFrom) * 1000.0 < LivePumpMs))) && Live->TakeOne(Delta))
 	{
 		++Taken;
 		// (release 1.5, the Mac's speed gate on 2dcc018b, 23 November: on every battlefield fought live a piece took 200 to
@@ -443,6 +452,14 @@ void ALandBattle::PumpLive()
 				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the result for the campaign (%d bytes): %s"), Result.Len(), *Result.Left(400));
 			}
 		}
+	}
+	// (several pieces in one frame, the screen waiting on them: said with their count when they took over 50 ms together,
+	// so the Mac's run tells a backlog from one heavy piece)
+	const double FrameMs = (FPlatformTime::Seconds() - PumpFrom) * 1000.0;
+	if (Taken > 1 && FrameMs > 50.0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %d pieces in one frame, %.0f ms (the screen waiting on the rules at %.1f s, %.1f s fought)%s"),
+			Taken, FrameMs, S.Battle, S.Rec.Fought, bPumpAll ? TEXT(", every waiting piece taken: -TheaterLandPumpAll") : TEXT(""));
 	}
 }
 
