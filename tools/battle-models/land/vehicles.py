@@ -209,6 +209,10 @@ BUILDERS["WLA"] = motorcycles.wla
 ABOUT["WLA"] = {"nation": "USA", "role": "motorcycle", "years": "1940-45",
                 "units": "the American army's despatch riders, military police and scouts; Lend-Lease sent the Red Army thousands (and Britain and Canada rode its cousin)"}
 FACES["WLA"] = [("Solo, the Thompson in its scabbard", {})]
+BUILDERS["Rikuo"] = motorcycles.rikuo
+ABOUT["Rikuo"] = {"nation": "JAP", "role": "motorcycle with sidecar", "years": "1937-45",
+                  "units": "the Japanese army's motorcycle troops, scouts and military police, in China, Malaya and Burma; solo (the sidecar off), the despatch riders"}
+FACES["Rikuo"] = [("With her sidecar and its light machine gun", {}), ("Solo", {"sidecar": False})]
 BUILDERS["M20"] = motorcycles.m20
 ABOUT["M20"] = {"nation": "UK", "role": "motorcycle", "years": "1937-45",
                 "units": "the British and Commonwealth despatch riders, military police and signallers, in every theatre"}

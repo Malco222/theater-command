@@ -97,6 +97,48 @@ def flat_twin(v, x, z, bore=0.068, out=0.33, fins=7, head="ohv"):
                 v.bolts(hd + Y * s * 0.072, Y * s, 0.05, 4, r=0.008, paint="steel")
 
 
+def gun_sidecar(v, R, W, xr, ys, xsw, yt, gun, driven=True, spare=None):
+    """The sidecar of the machine-gun combinations: a boat tub on its tube chassis (its wheel at xsw, ys; driven off
+    her back axle if `driven`), the gunner's well, backrest and cushion, the gun (`gun`: a post_gun kind) on its
+    nose; spare: (centre, axis) of a spare wheel on its tail, or None."""
+    v.part("sidecar", "hull", (0.0, yt, 0.40), kind="fixed", note="the sidecar: its tub, chassis and gun (the swap `sidecar` takes it off)")
+    v.rod((0.36, -0.10, 0.24), (0.30, yt + 0.10, 0.34), 0.02, "upper", 8)                                          # the chassis' arms out from her frame
+    v.rod((-0.34, -0.10, 0.40), (-0.30, yt + 0.10, 0.36), 0.02, "upper", 8)
+    v.rod((0.30, yt + 0.10, 0.34), (-0.70, yt + 0.10, 0.34), 0.02, "upper", 8)
+    v.rod((0.30, yt + 0.10, 0.34), (xsw, ys + 0.12, 0.30), 0.02, "upper", 8)
+    if driven:
+        v.rod((xr, -0.13, R), (xsw, ys + 0.10, R), 0.022, "steel", 8)                                               # the shaft that drives its wheel
+    else:
+        v.rod((xsw, ys + 0.10, R), (xsw, yt - 0.05, 0.34), 0.02, "upper", 8)                                        # its axle's arm in to the chassis
+    keys = [{"z": 0.36, "xc": 0.0, "af": 0.74, "ar": 0.78, "b": 0.20, "n": 2.2, "yc": yt},
+            {"z": 0.50, "xc": 0.02, "af": 0.92, "ar": 0.90, "b": 0.29, "n": 2.5, "yc": yt},
+            {"z": 0.68, "xc": 0.04, "af": 0.84, "ar": 0.90, "b": 0.29, "n": 2.6, "yc": yt}]
+    v.cast(keys, "upper", sides=v.n(40, 14), top=0.05, steps=2, between=2)
+    zt = 0.73
+    v.prism([(0.02 + 0.23 * math.cos(a), yt + 0.24 * math.sin(a)) for a in [2 * math.pi * k / 20 for k in range(20)]], zt - 0.005, zt + 0.003, "black")  # the well where he sits
+    v.tube([Vector((0.02 + 0.24 * math.cos(a), yt + 0.25 * math.sin(a), zt + 0.01)) for a in [2 * math.pi * k / 20 for k in range(20)]], 0.014, "leather", 6, closed=True)
+    v.hull([(-0.14, yt + 0.20, zt), (-0.20, yt + 0.20, zt), (-0.24, yt + 0.18, zt + 0.22), (-0.30, yt + 0.18, zt + 0.22),
+            (-0.14, yt - 0.20, zt), (-0.20, yt - 0.20, zt), (-0.24, yt - 0.18, zt + 0.22), (-0.30, yt - 0.18, zt + 0.22)], "leather", 0.03, both=False)   # his backrest
+    if spare:
+        sc, tn = Vector(spare[0]), Vector(spare[1]).normalized()
+        v.tyre(sc, tn, R, R - W * 0.95, W, lugs=v.n(18, 8))                                                         # the spare, on the tail
+        v.lathe(sc, tn, [(W * 0.4, 0.0), (W * 0.4, R - W), (-W * 0.4, R - W), (-W * 0.4, 0.0)], "upper", v.n(20, 8))
+    v.use("sidecar")
+    v.mudguard((xsw, R), R + 0.05, 15.0, 165.0, ys - 0.07, ys + 0.07, paint="upper", step=12)                      # its wheel's guard
+    v.headlamp((xsw + 0.36, ys + 0.02, 0.56), X, 0.03, stalk=0.02)
+    if v.fine:
+        v.tube([(0.62, yt + 0.22, zt + 0.02), (0.66, yt + 0.22, zt + 0.10), (0.66, yt - 0.22, zt + 0.10), (0.62, yt - 0.22, zt + 0.02)], 0.01, "steel", 5)   # the grab rail
+    v.post_gun(gun, (0.42, yt, zt + 0.04), 0.20, arc=(-80.0, 80.0), lay=(-10.0, 50.0), parent="sidecar")
+    v.use("sidecar")
+    v.socket("gunner", (-0.10, yt, 0.50), X, part="sidecar",
+             note="the gunner, seated low in the sidecar: the top of his cushion, 0.12 over the tub's floor; his legs forward inside the tub (0.9 of room ahead), his hands on grip.gunner.l and grip.gunner.r")
+    v.slab((-0.24, yt - 0.20, 0.44), (0.06, yt + 0.20, 0.50), "leather", 0.02)                                     # his cushion, on the tub's floor
+    v.socket("hit.right", (0.0, yt - 0.30, 0.55), -Y, part="sidecar")
+    v.socket("fire.2", (0.0, yt, 0.75), Z, part="sidecar", note="out of the sidecar")
+    v.spoke_wheel("wheel_side", "vehicle", (xsw, ys, R), R, W)
+    v.use("hull")
+
+
 # =====================================================================================================================
 def r75(fine=True, tag="GER", paint=None, sidecar=True):
     """The BMW R 75 and its driven sidecar: 2.40 m long, 1.73 m wide, 1.00 m to her bars. Three men: the driver,
@@ -205,44 +247,10 @@ def _flat_twin_combo(kind, fine, tag, paint, sidecar):
     v.use("hull")
     grips = [Vector((0.37, s * 0.42, 1.003)) for s in (LEFT, RIGHT)]
 
-    # ---- the sidecar: the tub on its chassis, its wheel driven off her back axle, the gun on its nose -------------
+    # ---- the sidecar: the tub on its chassis, its wheel driven off her back axle (the R 75), the gun on its nose -----
     if sidecar:
-        v.part("sidecar", "hull", (0.0, yt, 0.40), kind="fixed", note="the sidecar: its tub, chassis and gun (the swap `sidecar` takes it off)")
-        v.rod((0.36, -0.10, 0.24), (0.30, yt + 0.10, 0.34), 0.02, "upper", 8)                                          # the chassis' arms out from her frame
-        v.rod((-0.34, -0.10, 0.40), (-0.30, yt + 0.10, 0.36), 0.02, "upper", 8)
-        v.rod((0.30, yt + 0.10, 0.34), (-0.70, yt + 0.10, 0.34), 0.02, "upper", 8)
-        v.rod((0.30, yt + 0.10, 0.34), (xsw, ys + 0.12, 0.30), 0.02, "upper", 8)
-        if r75k:
-            v.rod((xr, -0.13, R), (xsw, ys + 0.10, R), 0.022, "steel", 8)                                               # the shaft that drives its wheel
-        else:
-            v.rod((xsw, ys + 0.10, R), (xsw, yt - 0.05, 0.34), 0.02, "upper", 8)                                        # its axle's arm in to the chassis
-        keys = [{"z": 0.36, "xc": 0.0, "af": 0.74, "ar": 0.78, "b": 0.20, "n": 2.2, "yc": yt},
-                {"z": 0.50, "xc": 0.02, "af": 0.92, "ar": 0.90, "b": 0.29, "n": 2.5, "yc": yt},
-                {"z": 0.68, "xc": 0.04, "af": 0.84, "ar": 0.90, "b": 0.29, "n": 2.6, "yc": yt}]
-        v.cast(keys, "upper", sides=v.n(40, 14), top=0.05, steps=2, between=2)
-        zt = 0.73
-        v.prism([(0.02 + 0.23 * math.cos(a), yt + 0.24 * math.sin(a)) for a in [2 * math.pi * k / 20 for k in range(20)]], zt - 0.005, zt + 0.003, "black")  # the well where he sits
-        v.tube([Vector((0.02 + 0.24 * math.cos(a), yt + 0.25 * math.sin(a), zt + 0.01)) for a in [2 * math.pi * k / 20 for k in range(20)]], 0.014, "leather", 6, closed=True)
-        v.hull([(-0.14, yt + 0.20, zt), (-0.20, yt + 0.20, zt), (-0.24, yt + 0.18, zt + 0.22), (-0.30, yt + 0.18, zt + 0.22),
-                (-0.14, yt - 0.20, zt), (-0.20, yt - 0.20, zt), (-0.24, yt - 0.18, zt + 0.22), (-0.30, yt - 0.18, zt + 0.22)], "leather", 0.03, both=False)   # his backrest
-        sc = Vector((-0.62, yt, zt + 0.07)) if r75k else Vector((-0.64, yt, zt + 0.10))
-        tn = Vector((-0.30, 0.0, 0.95)).normalized() if r75k else Vector((-0.50, 0.0, 0.87)).normalized()   # (the M-72's stands up more, on her tail)
-        v.tyre(sc, tn, R, R - W * 0.95, W, lugs=v.n(18, 8))                                                             # the spare, on the tail
-        v.lathe(sc, tn, [(W * 0.4, 0.0), (W * 0.4, R - W), (-W * 0.4, R - W), (-W * 0.4, 0.0)], "upper", v.n(20, 8))
-        v.use("sidecar")
-        v.mudguard((xsw, R), R + 0.05, 15.0, 165.0, ys - 0.07, ys + 0.07, paint="upper", step=12)                      # its wheel's guard
-        v.headlamp((xsw + 0.36, ys + 0.02, 0.56), X, 0.03, stalk=0.02)
-        if fine:
-            v.tube([(0.62, yt + 0.22, zt + 0.02), (0.66, yt + 0.22, zt + 0.10), (0.66, yt - 0.22, zt + 0.10), (0.62, yt - 0.22, zt + 0.02)], 0.01, "steel", 5)   # the grab rail
-        v.post_gun("mg34" if r75k else "dt", (0.42, yt, zt + 0.04), 0.20, arc=(-80.0, 80.0), lay=(-10.0, 50.0), parent="sidecar")
-        v.use("sidecar")
-        v.socket("gunner", (-0.10, yt, 0.50), X, part="sidecar",
-                 note="the gunner, seated low in the sidecar: the top of his cushion, 0.12 over the tub's floor; his legs forward inside the tub (0.9 of room ahead), his hands on grip.gunner.l and grip.gunner.r")
-        v.slab((-0.24, yt - 0.20, 0.44), (0.06, yt + 0.20, 0.50), "leather", 0.02)                                     # his cushion, on the tub's floor
-        v.socket("hit.right", (0.0, yt - 0.30, 0.55), -Y, part="sidecar")
-        v.socket("fire.2", (0.0, yt, 0.75), Z, part="sidecar", note="out of the sidecar")
-        v.spoke_wheel("wheel_side", "vehicle", (xsw, ys, R), R, W)
-        v.use("hull")
+        gun_sidecar(v, R, W, xr, ys, xsw, yt, "mg34" if r75k else "dt", driven=r75k,
+                    spare=((-0.62, yt, 0.80), (-0.30, 0.0, 0.95)) if r75k else ((-0.64, yt, 0.83), (-0.50, 0.0, 0.87)))   # (the M-72's spare stands up more, on her tail)
 
     # ---- the men, the marks, what happens to her -----------------------------------------------------------------
     v.socket("driver", (-0.24, 0.0, 0.86), X, part="hull", note="the driver astride the saddle (a pose of its own, not the seated man's): the top of the saddle under him, his boots on foot.l and foot.r, his hands on grip.driver.l and grip.driver.r")
@@ -312,12 +320,25 @@ def wla(fine=True, tag="USA", paint=None):
     1.04 m high. A side-valve V-twin, a springer front fork, a rigid back end under a sprung saddle, the big oil-bath
     air cleaner on her right, footboards and crash bars, a luggage rack with leather saddlebags, the Thompson's
     scabbard down her right fork and an ammunition box on her left. Olive drab, a white star on her tank."""
-    v = BikeWorks("WLA", "Harley-Davidson WLA", "bike", tag, fine, paint=paint)
+    return _vtwin_bike("wla", fine, tag, paint, sidecar=False)
+
+
+def rikuo(fine=True, tag="JAP", paint=None, sidecar=True):
+    """The Rikuo Type 97 (1937-45), Japan's army machine: the big side-valve V-twin built in Japan under licence from
+    Harley-Davidson, a springer fork, footboards, a pillion on the rack, and a sidecar whose wheel is driven off hers,
+    with a light machine gun on its nose. Japanese khaki; the swap `sidecar` takes it off."""
+    return _vtwin_bike("rikuo", fine, tag, paint, sidecar=sidecar)
+
+
+def _vtwin_bike(kind, fine, tag, paint, sidecar):
+    wla_k = kind == "wla"
+    v = BikeWorks(*(("WLA", "Harley-Davidson WLA") if wla_k else ("Rikuo", "Rikuo Type 97 with sidecar")), "bike", tag, fine, paint=paint)
     v.dice = 0.2
     v.worn_kw = dict(LIGHT_WORN, ground="field", foot=0.30, top=0.62, shade_knee=0.3, shade_reach=0.35)
     v.root(hull_pivot=(0.0, 0.0, 0.40), rock=(-4.0, 4.0))
-    R, W = 0.33, 0.10                                    # 4.00-18
-    xf, xr = 0.73, -0.73
+    R, W = (0.33, 0.10) if wla_k else (0.34, 0.105)     # 4.00-18; 4.50-18
+    xf, xr = (0.73, -0.73) if wla_k else (0.76, -0.76)
+    ys, xsw, yt = -1.10, -0.66, -0.68                    # (the Rikuo's sidecar: its wheel driven, a little ahead of hers)
 
     # ---- the back wheel; the frame; the engine, the box, the chains ------------------------------------------------
     v.spoke_wheel("wheel_back", "vehicle", (xr, 0.0, R), R, W)
@@ -331,7 +352,7 @@ def wla(fine=True, tag="USA", paint=None):
     v.tube([(-0.26, 0.0, 0.72), (-0.22, 0.0, 0.40), (-0.24, 0.0, 0.18)], 0.02, "upper", 8)                 # the seat post tube
     v.lathe((0.49, 0.0, 0.84), Vector((-0.25, 0.0, 0.55)), [(0.14, 0.0), (0.14, 0.032), (0.0, 0.032), (0.0, 0.0)], "upper", 10)   # the steering head
     v.hull([(0.16, 0.08, 0.28), (0.16, 0.08, 0.40), (0.04, 0.09, 0.20), (0.04, 0.09, 0.44), (-0.12, 0.08, 0.26), (-0.12, 0.08, 0.40)], "upper", 0.02)   # the crankcase
-    v_twin(v, 0.02, 0.42)
+    v_twin(v, 0.02, 0.42) if wla_k else v_twin(v, 0.02, 0.42, core=0.056, barrel=0.17)
     v.hull([(-0.12, 0.08, 0.28), (-0.12, 0.08, 0.44), (-0.22, 0.08, 0.28), (-0.22, 0.08, 0.44)], "upper", 0.02)           # the gearbox
     v.hull([(0.10, 0.10, 0.26), (0.10, 0.10, 0.36), (-0.04, 0.13, 0.22), (-0.04, 0.13, 0.40), (-0.30, 0.13, 0.26), (-0.30, 0.13, 0.42),
             (0.10, 0.15, 0.27), (-0.30, 0.15, 0.28), (-0.30, 0.15, 0.40)], "upper", 0.015, both=False)                    # the primary chain's case, on her left
@@ -371,11 +392,14 @@ def wla(fine=True, tag="USA", paint=None):
         for k in range(4):
             xx = -0.56 - 0.13 * k
             v.rod((xx, -0.13, 0.80), (xx, 0.13, 0.80), 0.008, "upper", 5)
-    for s in (LEFT, RIGHT):                                                                                                # the saddlebags
+    for s in (LEFT, RIGHT) if wla_k else ():                                                                              # the saddlebags
         v.bin((-0.92, s * 0.15, 0.46), (-0.56, s * 0.28, 0.78), paint="leather", bevel=0.02, latches=2, lid_side=Y * s)
     for s in (LEFT, RIGHT):                                                                                                # the footboards and crash bars
         v.slab((0.02, s * 0.17, 0.22), (0.34, s * 0.32, 0.24), "rubber", 0.01)
-        v.tube([(0.38, s * 0.03, 0.66), (0.44, s * 0.24, 0.56), (0.42, s * 0.31, 0.36), (0.34, s * 0.30, 0.22), (0.26, s * 0.09, 0.18)], 0.014, "upper", 6)
+        if wla_k:
+            v.tube([(0.38, s * 0.03, 0.66), (0.44, s * 0.24, 0.56), (0.42, s * 0.31, 0.36), (0.34, s * 0.30, 0.22), (0.26, s * 0.09, 0.18)], 0.014, "upper", 6)
+    if not wla_k:                                                                                                          # the pillion pad on the rack
+        v.hull([(-0.56, 0.08, 0.81), (-0.56, 0.08, 0.86), (-0.82, 0.09, 0.81), (-0.82, 0.09, 0.87)], "leather", 0.025)
     v.socket("engine", (0.02, 0.0, 0.42), Z, part="hull", note="the engine: smoke and the first fire")
     v.socket("fire.1", (0.20, 0.0, 0.86), Z, part="hull", note="the tank")
 
@@ -396,35 +420,62 @@ def wla(fine=True, tag="USA", paint=None):
     v.headlamp((0.66, 0.0, 0.94), X, 0.085, stalk=0.03, cover=True)
     v.headlamp((0.70, 0.13, 0.80), X, 0.035, stalk=0.02, cover=True)                                                      # the blackout driving lamp
     v.mudguard_y((xf, R), R + 0.05, 10.0, 150.0, 0.065)                                                                    # (no skirts: the army cut them off)
+    if wla_k:
+        thompson(v)
+    v.spoke_wheel("wheel_front", "steer", (xf, 0.0, R), R, W)
+    v.use("hull")
+    grips = [Vector((0.29, s * 0.45, 1.053)) for s in (LEFT, RIGHT)]
+    if sidecar:
+        gun_sidecar(v, R, W, xr, ys, xsw, yt, "jap", driven=True)
+
+    # ---- the man, the marks, what happens to her -------------------------------------------------------------------
+    _vtwin_end(v, wla_k, sidecar, grips, xr, ys, xsw, tag)
+    return v
+
+
+def thompson(v):
+    """The WLA's Thompson in its scabbard down her right fork, and the ammunition box on her left (on `steer`)."""
     v.hull([(0.42, -0.17, 1.00), (0.42, -0.23, 1.00), (0.38, -0.17, 0.96), (0.38, -0.23, 0.96),
             (0.94, -0.16, 0.50), (0.94, -0.20, 0.50), (0.90, -0.16, 0.47), (0.90, -0.20, 0.47)], "leather", 0.015, both=False)   # the Thompson's scabbard
     v.hull([(0.42, -0.18, 1.00), (0.42, -0.22, 1.00), (0.34, -0.18, 1.10), (0.34, -0.22, 1.10), (0.31, -0.18, 1.07), (0.31, -0.22, 1.07)], "wood", 0.01, both=False)   # its butt
     v.rod((0.52, -0.08, 0.86), (0.55, -0.17, 0.86), 0.01, "steel", 5)
     v.rod((0.75, -0.08, 0.62), (0.79, -0.17, 0.64), 0.01, "steel", 5)
     v.bin((0.60, 0.10, 0.70), (0.72, 0.18, 0.86), paint="upper", bevel=0.01, latches=1, lid_side=Z)                         # the ammunition box
-    v.spoke_wheel("wheel_front", "steer", (xf, 0.0, R), R, W)
     v.use("hull")
-    grips = [Vector((0.29, s * 0.45, 1.053)) for s in (LEFT, RIGHT)]
 
-    # ---- the man, the marks, what happens to her -------------------------------------------------------------------
+
+def _vtwin_end(v, wla_k, sidecar, grips, xr, ys, xsw, tag):
+    """The V-twins' men, marks, clips and swaps."""
     v.socket("driver", (-0.30, 0.0, 0.86), X, part="hull", note="the rider astride the saddle (a pose of its own, not the seated man's): the top of the saddle under him, his boots on foot.l and foot.r, his hands on grip.driver.l and grip.driver.r")
     v.socket("grip.driver.l", grips[0], Z, part="steer", note="the rider's left hand on the bar's grip")
     v.socket("grip.driver.r", grips[1], Z, part="steer", note="the rider's right hand on the bar's grip")
     for letter, s in (("l", LEFT), ("r", RIGHT)):
         v.socket(f"foot.{letter}", (0.16, s * 0.25, 0.24), X, part="hull", note="the rider's boot on the footboard")
-    v.socket("weapon", (0.36, -0.20, 1.06), (-0.4, 0, 0.9), part="steer", note="the Thompson's butt out of its scabbard: where his hand goes to draw it")
+    if wla_k:
+        v.socket("weapon", (0.36, -0.20, 1.06), (-0.4, 0, 0.9), part="steer", note="the Thompson's butt out of its scabbard: where his hand goes to draw it")
+    else:
+        v.socket("rider.1", (-0.68, 0.0, 0.86), X, part="hull", note="the man on the pillion, astride: his hands on the saddle's springs ahead of him, his boots on the footboards' back ends")
     v.socket("hit.front", (0.70, 0.0, 0.70), X, part="hull")
     v.socket("hit.left", (0.0, 0.25, 0.50), Y, part="hull")
-    v.socket("hit.right", (0.0, -0.25, 0.50), -Y, part="hull")
+    if not sidecar:
+        v.socket("hit.right", (0.0, -0.25, 0.50), -Y, part="hull")
     v.socket("hit.rear", (-1.0, 0.0, 0.60), -X, part="hull")
     v.socket("dust.left", (xr - 0.35, 0.05, 0.05), (-1, 0, 0.3), part="vehicle")
-    v.socket("dust.right", (xr - 0.35, -0.05, 0.05), (-1, 0, 0.3), part="vehicle")
-    for s in (LEFT, RIGHT):
-        v.mark(tag, (0.18, s * 0.124, 0.85), Y * s, 0.055, part="hull")
-    v.bike_clips("A solo machine: lean her into a turn by rolling her root, and stand her on her side stand when she stops (lean her 8 degrees to her left).")
+    v.socket("dust.right", ((xsw if sidecar else xr) - 0.35, ys if sidecar else -0.05, 0.05), (-1, 0, 0.3), part="vehicle")
+    if wla_k:
+        for s in (LEFT, RIGHT):
+            v.mark(tag, (0.18, s * 0.124, 0.85), Y * s, 0.055, part="hull")
+    v.bike_clips(("With the sidecar on she stands on her three wheels and never leans; with the `sidecar` swap off she is a solo machine: " if sidecar else "A solo machine: ") +
+                 "lean her into a turn by rolling her root, and stand her on her side stand when she stops (lean her 8 degrees to her left).")
+    if sidecar:
+        v.gun_controls("The gun is on the sidecar's nose; the gunner sits in the sidecar behind it and turns his shoulders with it.")
     v.worn(**v.worn_kw)
-    v.m.info.setdefault("file", {})["swaps"] = {}
-    return v
+    swaps = {}
+    if sidecar:
+        swaps = {"how": "sidecar: off scales the sidecar's parts to nothing (a part scaled to nothing is not drawn): a solo machine, her rider and the man on her pillion.",
+                 "sidecar": {"default": "on", "choices": {"on": {"what": "the sidecar and its light machine gun (the motorcycle troops, the scouts)", "parts": ["sidecar", "wheel_side", "mg_mount", "mg_cradle"]},
+                                                          "off": {"what": "a solo machine: a despatch rider", "parts": []}}}}
+    v.m.info.setdefault("file", {})["swaps"] = swaps
 
 
 def barrel(v, a, d, core=0.05, L=0.17, fins=8, head="sv", side=None):

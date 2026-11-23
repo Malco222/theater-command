@@ -262,8 +262,8 @@ def jeep(fine=True, tag="USA", mg=True):
     # ---- the seats, the wheel, the levers -------------------------------------------------------------------------
     for s in (LEFT, RIGHT):
         v.slab((-0.40, s * 0.12, zfl), (-0.02, s * 0.54, 0.71), "upper", 0.01)                              # the seat boxes (her fuel under his)
-        v.seat(-0.42, 0.0, *sorted((s * 0.11, s * 0.55)), 0.80, back=0.38, lean=0.07)
-    v.seat(-1.46, -1.04, -0.56, 0.56, 0.86, back=0.32, lean=0.04)                                         # the seat behind, over the wheel housings
+        v.seat(-0.42, 0.0, *sorted((s * 0.11, s * 0.55)), 0.80, back=0.38, lean=0.07, paint="upper2")   # (olive canvas, a step darker than her body: the AD, 23 Nov)
+    v.seat(-1.46, -1.04, -0.56, 0.56, 0.86, back=0.32, lean=0.04, paint="upper2")                         # the seat behind, over the wheel housings
     grip_l, grip_r = v.steering_wheel((0.55, 0.33, 0.64), (0.08, 0.33, 1.10), r=0.215)
     if fine:
         for k, (y, lean) in enumerate(((0.16, 0.10), (0.06, 0.05), (0.01, 0.12))):                         # the gear lever and the two of the transfer box
