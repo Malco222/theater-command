@@ -178,6 +178,8 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
     expect(fighterOf('SOV', 1941)).toBe('Fighter:SOV');
     expect(fighterOf('SOV', 1942)).toBe('Yak');
     expect(fighterOf('JAP', 1941)).toBe('Zero');
+    expect(fighterOf('ITA', 1941)).toBe('Fighter:ITA');
+    expect(fighterOf('ITA', 1942)).toBe('C202');
     expect(fighterOf('FRA', 1939)).toBe('Fighter:FRA');
     expect(bomberOf('UK', 1941)).toBe('Bomber:UK');
     expect(bomberOf('UK', 1942)).toBe('Lancaster');
