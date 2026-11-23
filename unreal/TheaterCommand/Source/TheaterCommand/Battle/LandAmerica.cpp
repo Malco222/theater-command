@@ -84,10 +84,12 @@ namespace LandScape
 		const Tone CornDry = Rgb(160, 140, 98);
 		const Tone CornStalk = Rgb(146, 128, 94);
 		const Tone WheatGreen = Rgb(88, 118, 58);
-		const Tone WheatGold = Rgb(184, 158, 94);
-		const Tone StubbleC = Rgb(174, 156, 112);
+		// (the ripe wheat's and the oats' gold, the straw's and the stubble's: red well over green, the blue low, so under
+		// the sky's light they read gold, not grey cream; the art director's new-grounds carry, 23 November)
+		const Tone WheatGold = Rgb(178, 144, 72);
+		const Tone StubbleC = Rgb(172, 148, 96);
 		const Tone OatGreen = Rgb(98, 124, 66);
-		const Tone OatGold = Rgb(176, 164, 110);
+		const Tone OatGold = Rgb(180, 152, 88);
 		const Tone HayGreen = Rgb(84, 114, 58);
 		const Tone HayCut = Rgb(138, 138, 88);
 		const Tone HayDormant = Rgb(128, 120, 84);
@@ -369,8 +371,9 @@ namespace LandScape
 
 			/** A field's own month, a fortnight either way (each farmer plants and cuts in his own week). */
 			double MonthOf(uint64_t Key) const { return Month + 0.5 + 0.7 * (Unit(Hash(Key, 0x0A7E)) - 0.5); }
-			/** The wheat's harvest: the plains' late June, the north's July. */
-			double Harvest() const { return bPlains ? 6.6 : bSouth ? 6.5 : 7.3; }
+			/** The wheat's harvest: the plains' turn of June into July (a July battle there among the last of it standing
+			 * gold and the cut stubble), the north's July. */
+			double Harvest() const { return bPlains ? 7.0 : bSouth ? 6.5 : 7.3; }
 			/** A corn field shocked in the fall (the rest picked standing). */
 			static bool Shocked(uint64_t Key) { return Unit(Hash(Key, 0x5C0C)) < 0.5; }
 			/** A corn or small-grain field ploughed in the fall (the rest left in its stalks or stubble till spring). */
@@ -765,7 +768,7 @@ namespace LandScape
 					P.Scale = static_cast<float>(0.85 + 0.3 * U4);
 					P.ScaleZ = static_cast<float>(Ph.High * (0.9 + 0.2 * U5));
 					const double L = 0.94 + 0.12 * U6;
-					// (the clump built ripe, its ears about 186, 160, 94; the tint takes it back to the spring's green, red under
+					// (the clump built ripe, its ears about 186, 154, 80; the tint takes it back to the spring's green, red under
 					// green, and the straw comes as the green goes: the art director's lime wheat, farmland round 2)
 					P.Tint = Tint(Lerp(0.26, 1.0, Ph.Ripe) * L, Lerp(0.6, 1.0, Ph.Ripe) * L, Lerp(0.42, 1.0, Ph.Ripe) * L);
 					return true;
@@ -876,9 +879,9 @@ namespace LandScape
 						const double A = 2.0 * Pi * Unit(Hash(0x6E41, B)), D = 0.26 * std::sqrt(Unit(Hash(0x6E42, B)));
 						const double X = D * std::cos(A), Y = D * std::sin(A), High = 0.85 + 0.2 * Unit(Hash(0x6E43, B));
 						const double LX = 0.07 * std::cos(A), LY = 0.07 * std::sin(A);
-						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.018, Rgb(150, 128, 80), Rgb(178, 152, 96));
-						W.Blade(X + 0.9 * LX, Y + 0.9 * LY, High - 0.04, X + 1.3 * LX, Y + 1.3 * LY, High + 0.1, 0.03, Rgb(184, 158, 94), Rgb(196, 170, 104));
-						if (B % 3 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(146, 126, 80), Rgb(170, 146, 94));
+						W.Blade(X, Y, 0.0, X + LX, Y + LY, High, 0.018, Rgb(148, 122, 70), Rgb(178, 148, 84));
+						W.Blade(X + 0.9 * LX, Y + 0.9 * LY, High - 0.04, X + 1.3 * LX, Y + 1.3 * LY, High + 0.1, 0.03, Rgb(182, 150, 78), Rgb(196, 162, 88));
+						if (B % 3 == 0) W.Blade(X, Y, 0.0, X + 2.5 * LX - 0.04, Y + 2.5 * LY + 0.04, 0.35, 0.025, Rgb(144, 120, 72), Rgb(168, 140, 82));
 					}
 					M.Paint = 2;
 					M.FarFrom = 45.0f;
@@ -894,12 +897,12 @@ namespace LandScape
 							const uint64_t Hs = Hash(0x57B1, static_cast<uint64_t>(R * 6 + B));
 							const double X = -0.5 + 0.2 * B + 0.06 * (Unit(Hash(Hs, 1)) - 0.5), Y = -0.35 + 0.35 * R;
 							const double High = 0.14 + 0.16 * Unit(Hash(Hs, 2));
-							W.Blade(X, Y, 0.0, X + 0.03 * (Unit(Hash(Hs, 3)) - 0.5), Y + 0.03 * (Unit(Hash(Hs, 4)) - 0.5), High, 0.035, Rgb(138, 120, 86), Rgb(184, 166, 120));
+							W.Blade(X, Y, 0.0, X + 0.03 * (Unit(Hash(Hs, 3)) - 0.5), Y + 0.03 * (Unit(Hash(Hs, 4)) - 0.5), High, 0.035, Rgb(134, 112, 72), Rgb(184, 156, 100));
 						}
 					for (int B = 0; B < 3; ++B)
 					{
 						const double X = Unit(Hash(0x57B2, B)) - 0.5, Y = 0.8 * (Unit(Hash(0x57B3, B)) - 0.5), A = 2.0 * Pi * Unit(Hash(0x57B4, B));
-						W.Blade(X, Y, 0.01, X + 0.45 * std::cos(A), Y + 0.45 * std::sin(A), 0.04, 0.06, Rgb(160, 142, 102), Rgb(178, 160, 116));
+						W.Blade(X, Y, 0.01, X + 0.45 * std::cos(A), Y + 0.45 * std::sin(A), 0.04, 0.06, Rgb(156, 134, 88), Rgb(178, 152, 100));
 					}
 					M.Paint = 2;
 					M.FarFrom = 40.0f;

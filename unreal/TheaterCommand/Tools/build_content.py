@@ -1939,7 +1939,12 @@ def build_land_surface():
     patch = times(m, plus(m, (patch_a, "RGB"), (patch_b, "RGB"), -2000, 1150), 0.5, -1850, 1150)
     patch_value = times(m, plus(m, mask(patch, "R", -1700, 1100), -0.5, -1550, 1100), scalar(m, "PatchValue", 0.8, -1550, 1000), -1400, 1100)
     patch_warm = times(m, plus(m, mask(patch, "G", -1700, 1250), -0.5, -1550, 1250), scalar(m, "PatchWarmth", 1.0, -1550, 1350), -1400, 1250)
-    patch_on = times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400)
+    # (snow lies even: its paint near white, its blue high, the broad lie all but gone from it, so the lie's cool
+    # patches are not blue-grey blotches over a snowfield (the art director's camouflage, Manchuria in January, 23
+    # November); "PatchSnow" how much of it the snow loses)
+    snowy = sat(times(m, plus(m, (colour, "B"), -0.7, -1700, 1480), 8.0, -1550, 1480), -1400, 1480)
+    unsnowed = plus(m, times(m, snowy, times(m, scalar(m, "PatchSnow", 0.85, -1550, 1560), -1.0, -1400, 1560), -1250, 1500), 1.0, -1100, 1500)
+    patch_on = times(m, times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400), unsnowed, -1100, 1420)
     # Tussocks: the 40 m reading's, and fewer from the turned reading (larger there, a rank patch rather than a clump),
     # thick where the turned reading is lush (its warmth low), none where it is dry; on grass only.
     lush = sat(plus(m, times(m, (patch_b, "G"), -4.0, -1700, 1500), 3.0, -1550, 1500), -1400, 1500)
