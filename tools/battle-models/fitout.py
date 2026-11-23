@@ -1400,6 +1400,10 @@ PLAIN_LOADS = set()
 # `plain_extras`.
 TURNED_TORPEDO = {}
 PLAIN_GRAIN = (12, 0.3, 10)                                 # (around, step, rod sides: the game's own grain for what hangs under her)
+# The machines that flew their torpedo sorties with the doors of the bay off and the torpedo half in it: its axis on
+# her keel line, half of it out of her belly, on her near model and her far one (planes.convert: load.torpedo takes her
+# doors away, and torpedo_away drops it at once).
+TORPEDO_HUNG = set()
 
 
 def bomb_bay(m, f, s, G, hull):
@@ -1499,11 +1503,13 @@ def upright_bombs(f, hull, x0, x1, lo):
 
 def turned_torpedo(m, f, s, G, hull, xm, lo):
     """Her bay torpedo (TURNED_TORPEDO) in the middle of her bay, a hand above her doors' hinges: its body ringed as the
-    game rings a body under a machine, the box of its fins a rod."""
+    game rings a body under a machine, the box of its fins a rod. One that hangs half out of her (TORPEDO_HUNG) has its
+    axis on her keel line."""
     long, r = f.bay_torpedo
     around, step, sides = (24, 0.12, 22) if m.fine else s.get("plain_extras", PLAIN_GRAIN)
+    axis = hull.at(xm, 1.5 * math.pi).z if f.name in TORPEDO_HUNG else hull.at(xm, lo).z + r + 0.06
     m.use("torpedo")
-    for kind, v in TURNED_TORPEDO[f.name](xm, hull.at(xm, lo).z + r + 0.06, long, r):
+    for kind, v in TURNED_TORPEDO[f.name](xm, axis, long, r):
         if kind == "body":
             body = G["Body"](v[0], v[2])
             m.skin([[port(body.at(x, 2.0 * math.pi * k / around)) for k in range(around)] for x in body.xs(step)], "torpedo", (True, True))

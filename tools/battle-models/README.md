@@ -523,7 +523,12 @@ What they add to the form:
   she carries one or the other, never both: play `load.torpedo` or `load.bombs` first (each scales the other load
   away) and leave it applied. Extras painted `torpedo` are her torpedo; `BAY_TORPEDO` puts one in a bay. The Betty's
   is the Nell's Type 91, ringed as finely (`fitout.TURNED_TORPEDO`), and her far model carries it and her bombs too,
-  at the game's own grain for what hangs under a machine (`fitout.PLAIN_LOADS`, `PLAIN_GRAIN`). The new
+  at the game's own grain for what hangs under a machine (`fitout.PLAIN_LOADS`, `PLAIN_GRAIN`). On a torpedo sortie
+  she flew with her bay's doors off and the torpedo half out of her belly (`fitout.TORPEDO_HUNG`): it hangs so on her
+  near and far models, her `load.torpedo` also scales `bay.port` and `bay.starboard` away, and her `torpedo_away`
+  drops it at once (no doors to open). On a bomb sortie (`load.bombs`) her doors are on and closed, and `bombs_away`
+  opens them as before. Her default, with neither load clip, shows the torpedo through her closed doors: always play
+  one. The new
   `Torpedo` model is for the game to drop and run: clips `drop` and `run` (its wooden air fins, part `box`, are
   scaled away in the water; part `screws` turns), sockets `nose` and `wake`.
 - **A coat graded down her sides** (`graded` in the numbers, patched in by `GRADED`): the Hellcat's sea blue on top,
