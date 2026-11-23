@@ -59,7 +59,17 @@
    "tough": 0,
    "fire": 0.34,
    "plain": "It is light, agile and flies far with a drop tank. It is slow, has an open cockpit and carries only two machine guns.",
-   "history": "It won Japan control of the air over China from 1937."
+   "history": "It won Japan control of the air over China from 1937.",
+   "top": 435,
+   "wl": 93.9,
+   "climb": 14.9,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "a6m2_21": {
    "short": "Zero 21",
@@ -81,7 +91,17 @@
    "tough": 0,
    "fire": 2.56,
    "plain": "It out-turns and out-climbs every Allied fighter below 5,000 m and flies twice as far. It is slow in a dive, stiff on the ailerons at speed and unarmoured, and its engine cuts out if the pilot pushes the nose down.",
-   "history": "In 1940-42 it won almost every turning fight it was drawn into."
+   "history": "In 1940-42 it won almost every turning fight it was drawn into.",
+   "top": 533,
+   "wl": 107.4,
+   "climb": 14.0,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "a6m3_32": {
    "short": "Zero 32",
@@ -103,7 +123,17 @@
    "tough": 0,
    "fire": 2.56,
    "plain": "It has more power and a little more speed and roll than the Zero 21. It has less range and keeps every weakness: heavy controls at speed, a slow dive and no protection.",
-   "history": "Its shorter range told in the long flights to Guadalcanal in 1942."
+   "history": "Its shorter range told in the long flights to Guadalcanal in 1942.",
+   "top": 499,
+   "wl": 122.9,
+   "climb": 16.6,
+   "diveLimit": 670,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "a6m5_52": {
    "short": "Zero 52",
@@ -125,7 +155,17 @@
    "tough": 0,
    "fire": 2.43,
    "plain": "It still turns tighter than anything at low speed and climbs well down low. A Hellcat or Corsair is faster, tougher and better in a dive.",
-   "history": "By 1944 it was outclassed, and most of the pilots who had made its name were gone."
+   "history": "By 1944 it was outclassed, and most of the pilots who had made its name were gone.",
+   "top": 565,
+   "wl": 129.8,
+   "climb": 16.4,
+   "diveLimit": 657,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "b239": {
    "short": "Brewster",
@@ -147,7 +187,17 @@
    "tough": 1,
    "fire": 1.89,
    "plain": "It is light, pleasant to fly and well armed, with armour added. It is slower than the newer Soviet monoplanes and weak high up.",
-   "history": "Finnish pilots claimed about 26 Soviet aircraft for each one they lost in it (claims): a record that belonged to the pilots."
+   "history": "Finnish pilots claimed about 26 Soviet aircraft for each one they lost in it (claims): a record that belonged to the pilots.",
+   "top": 478,
+   "wl": 136.1,
+   "climb": 15.5,
+   "diveLimit": 650,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "b534": {
    "short": "B-534",
@@ -169,7 +219,17 @@
    "tough": 0.5,
    "fire": 0.7,
    "plain": "It is the best of the last biplanes, quick to climb and tight in the turn. It is far slower than any monoplane fighter and carries only rifle-calibre guns.",
-   "history": "Slovak pilots flew it against Poland in 1939 and the Soviet Union in 1941."
+   "history": "Slovak pilots flew it against Poland in 1939 and the Soviet Union in 1941.",
+   "top": 405,
+   "wl": 84.0,
+   "climb": 13.0,
+   "diveLimit": 550,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "bf109_e": {
    "short": "Bf 109 E",
@@ -191,7 +251,17 @@
    "tough": 1,
    "fire": 2.75,
    "plain": "It climbs faster than anything it meets and fights by diving, firing and climbing away, with fuel injection and cannon. It cannot turn with any opponent, grows heavy on the controls at speed and has little fuel.",
-   "history": "Over England in 1940 it had only minutes over the target before it had to turn for home."
+   "history": "Over England in 1940 it had only minutes over the target before it had to turn for home.",
+   "top": 560,
+   "wl": 161.0,
+   "climb": 15.2,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "bf109_f4": {
    "short": "Bf 109 F",
@@ -213,7 +283,17 @@
    "tough": 2,
    "fire": 1.64,
    "plain": "It is the best-balanced Bf 109 and out-climbs and out-runs a Hurricane or Spitfire V at height. It carries only one cannon and two machine guns and cannot turn with a Spitfire or Hurricane.",
-   "history": "It was the Luftwaffe's main fighter in the East in 1941 and in the desert in 1942."
+   "history": "It was the Luftwaffe's main fighter in the East in 1941 and in the desert in 1942.",
+   "top": 659,
+   "wl": 180.1,
+   "climb": 19.0,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": false,
+    "dive": true
+   }
   },
   "bf109_g2": {
    "short": "Bf 109 G",
@@ -235,7 +315,17 @@
    "tough": 2,
    "fire": 1.64,
    "plain": "It climbs better than anything it meets and is fast at height: 666 km/h at 7,000 m. It is lightly armed, heavy on the controls at speed and out-turned by Spitfires and Soviet fighters.",
-   "history": "It was the main German fighter on every front in 1942-43."
+   "history": "It was the main German fighter on every front in 1942-43.",
+   "top": 666,
+   "wl": 186.6,
+   "climb": 18.9,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "bf109_g6": {
    "short": "Bf 109 G-6",
@@ -257,7 +347,17 @@
    "tough": 2,
    "fire": 2.16,
    "plain": "It climbs well, is quick into a dive, and with a 30 mm cannon it kills a bomber in a few hits. It is 50 to 80 km/h slower than a Mustang and out-turned by every Allied fighter it meets.",
-   "history": "It was the most-built Bf 109, and it met the American day raids of 1943-44."
+   "history": "It was the most-built Bf 109, and it met the American day raids of 1943-44.",
+   "top": 640,
+   "wl": 196.3,
+   "climb": 15.8,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "bf109_k4": {
    "short": "Bf 109 K",
@@ -279,7 +379,17 @@
    "tough": 2,
    "fire": 4.31,
    "plain": "It is the fastest Bf 109, 710 km/h at 7,500 m, with a climb to match the best Allied fighters. It is hard to fly well and short-ranged, and its one big cannon suits bombers, not fighters.",
-   "history": "It reached the units from October 1944 and fought to the end of the war."
+   "history": "It reached the units from October 1944 and fought to the end of the war.",
+   "top": 710,
+   "wl": 211.8,
+   "climb": 18.0,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "bf110_c": {
    "short": "Bf 110",
@@ -301,7 +411,17 @@
    "tough": 2.5,
    "fire": 3.29,
    "plain": "It has range, speed enough to outrun a Hurricane I and the heaviest nose guns of any fighter, deadly in one diving pass. It cannot turn or accelerate with single-seat fighters and needs an escort of its own against them.",
-   "history": "Over Britain in 1940 it needed single-seat fighters to escort it."
+   "history": "Over Britain in 1940 it needed single-seat fighters to escort it.",
+   "top": 541,
+   "wl": 157.0,
+   "climb": 11.0,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "bulldog": {
    "short": "Bulldog",
@@ -323,7 +443,17 @@
    "tough": 0,
    "fire": 0.27,
    "plain": "It is a sturdy biplane that is easy to fly. It is slower than any monoplane fighter and carries only two rifle-calibre guns.",
-   "history": "It was Estonia's fighter of the 1930s, and the Spitfires Estonia ordered in 1939 never came."
+   "history": "It was Estonia's fighter of the 1930s, and the Spitfires Estonia ordered in 1939 never came.",
+   "top": 287,
+   "wl": 55.8,
+   "climb": 7.5,
+   "diveLimit": 450,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "cr32": {
    "short": "CR.32",
@@ -345,7 +475,17 @@
    "tough": 0.5,
    "fire": 0.61,
    "plain": "It is a tough, agile biplane with two heavy machine guns. It is slow beside any monoplane and can neither catch nor escape one.",
-   "history": "It was the best Nationalist fighter of the Spanish Civil War, and Hungary's in 1939-41."
+   "history": "It was the best Nationalist fighter of the Spanish Civil War, and Hungary's in 1939-41.",
+   "top": 360,
+   "wl": 83.7,
+   "climb": 11.0,
+   "diveLimit": 500,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "cr42": {
    "short": "CR.42",
@@ -367,7 +507,17 @@
    "tough": 0,
    "fire": 0.61,
    "plain": "It out-turns anything in the sky and is fast for a biplane. It is 60 to 80 km/h slower than a Hurricane I, lightly armed and unarmoured, so a monoplane pilot who will not turn with it is safe.",
-   "history": "It was Italy's most numerous fighter into 1941."
+   "history": "It was Italy's most numerous fighter into 1941.",
+   "top": 441,
+   "wl": 102.5,
+   "climb": 11.8,
+   "diveLimit": 520,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "d21": {
    "short": "D.XXI",
@@ -389,7 +539,17 @@
    "tough": 1,
    "fire": 0.84,
    "plain": "It is sturdy, easy to fly and quick to climb. It has fixed wheels, is slower than any fighter with retracting wheels and carries only rifle-calibre guns.",
-   "history": "It was Finland's main fighter in the Winter War."
+   "history": "It was Finland's main fighter in the Winter War.",
+   "top": 460,
+   "wl": 126.5,
+   "climb": 13.5,
+   "diveLimit": 650,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "d3801": {
    "short": "D-3801",
@@ -411,7 +571,17 @@
    "tough": 1.5,
    "fire": 1.91,
    "plain": "It is the MS.406 rebuilt with a stronger engine: handy and sturdy, with a cannon. It is slower than a Bf 109 E and turns wider.",
-   "history": "Switzerland built it at home through the war."
+   "history": "Switzerland built it at home through the war.",
+   "top": 535,
+   "wl": 168.8,
+   "climb": 15.0,
+   "diveLimit": 730,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "d501": {
    "short": "D.501",
@@ -433,7 +603,17 @@
    "tough": 0,
    "fire": 1.26,
    "plain": "It is a light monoplane with a cannon firing through the propeller hub. It has fixed wheels and an open cockpit and is slower than any modern fighter.",
-   "history": "Lithuania flew it from the mid-1930s."
+   "history": "Lithuania flew it from the mid-1930s.",
+   "top": 360,
+   "wl": 103.0,
+   "climb": 10.0,
+   "diveLimit": 550,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "d520": {
    "short": "D.520",
@@ -455,7 +635,17 @@
    "tough": 2,
    "fire": 2.3,
    "plain": "It turns with a Bf 109 E and dives well, the only French fighter that can meet it on near-equal terms. It is 30 to 40 km/h slower and climbs less well.",
-   "history": "Only one group had it when the Germans attacked in May 1940, and five by June."
+   "history": "Only one group had it when the Germans attacked in May 1940, and five by June.",
+   "top": 530,
+   "wl": 168.7,
+   "climb": 14.3,
+   "diveLimit": 830,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "d551": {
    "short": "D.551",
@@ -477,7 +667,17 @@
    "tough": 1.5,
    "fire": 2.3,
    "plain": "It is a lighter, faster D.520.",
-   "history": "It was still on the drawing board when France fell in 1940."
+   "history": "It was still on the drawing board when France fell in 1940.",
+   "top": 645,
+   "wl": 200.0,
+   "climb": 17.0,
+   "diveLimit": 850,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "f2a3": {
    "short": "Buffalo",
@@ -499,7 +699,17 @@
    "tough": 2,
    "fire": 2.29,
    "plain": "It is sturdy and can dive away from a Zero. It is too heavy for its wing and engine, and slow to climb and turn.",
-   "history": "At Midway in June 1942 the Marine Buffalo squadron lost most of its aircraft."
+   "history": "At Midway in June 1942 the Marine Buffalo squadron lost most of its aircraft.",
+   "top": 517,
+   "wl": 167.2,
+   "climb": 12.4,
+   "diveLimit": 650,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "f4b4": {
    "short": "F4B",
@@ -521,7 +731,17 @@
    "tough": 0,
    "fire": 0.33,
    "plain": "It is a nimble, sturdy biplane. It is far slower than any monoplane and carries only two machine guns.",
-   "history": "It was Brazil's fighter before the war came."
+   "history": "It was Brazil's fighter before the war came.",
+   "top": 304,
+   "wl": 77.7,
+   "climb": 10.0,
+   "diveLimit": 480,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "f4f3": {
    "short": "Wildcat F4F-3",
@@ -543,7 +763,17 @@
    "tough": 2.5,
    "fire": 2.29,
    "plain": "It is sturdy, well armed and as fast as a Zero at 6,000 m. It cannot climb or turn with a Zero and has half its range.",
-   "history": "It was the US Navy's fighter at Pearl Harbor and Wake Island."
+   "history": "It was the US Navy's fighter at Pearl Harbor and Wake Island.",
+   "top": 531,
+   "wl": 129.5,
+   "climb": 16.8,
+   "diveLimit": 741,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "f4f4": {
    "short": "Wildcat F4F-4",
@@ -565,7 +795,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It is tough, hard-hitting and safe in a dive. It climbs slower than any fighter it meets and lives by teamwork, armour and deflection shooting.",
-   "history": "It held the line at Midway and Guadalcanal in 1942 with the Thach weave."
+   "history": "It held the line at Midway and Guadalcanal in 1942 with the Thach weave.",
+   "top": 513,
+   "wl": 139.5,
+   "climb": 9.4,
+   "diveLimit": 741,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "f4u1": {
    "short": "Corsair F4U-1",
@@ -587,7 +827,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It is the fastest carrier fighter, about 100 km/h quicker than a Zero and superb in a dive. It turns poorly and is a handful to land on a deck.",
-   "history": "In 1943 it flew from land in the Solomons, and US squadrons took it to sea only in 1945."
+   "history": "In 1943 it flew from land in the Solomons, and US squadrons took it to sea only in 1945.",
+   "top": 694,
+   "wl": 174.1,
+   "climb": 14.7,
+   "diveLimit": 713,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "f4u1d": {
    "short": "Corsair F4U-1D",
@@ -609,7 +859,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It reaches about 670 km/h with water injection and can carry a ton of bombs. It turns wide and is tricky to land on a deck.",
-   "history": "Navy and Marine Corsairs went aboard the fast carriers from January 1945."
+   "history": "Navy and Marine Corsairs went aboard the fast carriers from January 1945.",
+   "top": 669,
+   "wl": 187.9,
+   "climb": 15.2,
+   "diveLimit": 713,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "f6f3": {
    "short": "Hellcat F6F-3",
@@ -631,7 +891,17 @@
    "tough": 3,
    "fire": 3.44,
    "plain": "It is fast enough, tough, hard-hitting and the easiest of the big fighters to fly from a carrier. It cannot turn or climb with a Zero at low speed.",
-   "history": "It took over the carrier war from the Wildcat in 1943."
+   "history": "It took over the carrier war from the Wildcat in 1943.",
+   "top": 613,
+   "wl": 179.0,
+   "climb": 14.7,
+   "diveLimit": 778,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "f6f5": {
    "short": "Hellcat F6F-5",
@@ -653,7 +923,17 @@
    "tough": 3,
    "fire": 3.44,
    "plain": "It is fast with water injection, about 630 to 660 km/h, and tough, steady and deadly against lightly built fighters. It still cannot turn with a Zero.",
-   "history": "Its pilots claimed about 19 Japanese aircraft for each Hellcat lost in combat (claims), most of it the pilots' edge."
+   "history": "Its pilots claimed about 19 Japanese aircraft for each Hellcat lost in combat (claims), most of it the pilots' edge.",
+   "top": 658,
+   "wl": 181.6,
+   "climb": 14.8,
+   "diveLimit": 843,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "fm2": {
    "short": "Wildcat FM-2",
@@ -675,7 +955,17 @@
    "tough": 2.5,
    "fire": 2.29,
    "plain": "It is a light, quick-climbing Wildcat that nearly turns with a Zero. It is slow beside the newer fighters.",
-   "history": "It flew from the small escort carriers in 1944-45."
+   "history": "It flew from the small escort carriers in 1944-45.",
+   "top": 530,
+   "wl": 139.6,
+   "climb": 18.3,
+   "diveLimit": 741,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "fokker_g1": {
    "short": "G.I",
@@ -697,7 +987,17 @@
    "tough": 1.5,
    "fire": 1.69,
    "plain": "It is a twin-boom heavy fighter with eight guns in the nose. It turns and climbs worse than a single-seat fighter.",
-   "history": "It fought for five days in May 1940 before the Netherlands fell."
+   "history": "It fought for five days in May 1940 before the Netherlands fell.",
+   "top": 475,
+   "wl": 125.3,
+   "climb": 13.0,
+   "diveLimit": 650,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "fulmar_ii": {
    "short": "Fulmar",
@@ -719,7 +1019,17 @@
    "tough": 0.5,
    "fire": 1.73,
    "plain": "It is a long-ranged, steady two-seater with eight guns, good against bombers and shadowers far from land. Any single-seat fighter is 100 km/h faster and climbs twice as fast.",
-   "history": "It covered the Malta convoys in 1941-42."
+   "history": "It covered the Malta convoys in 1941-42.",
+   "top": 438,
+   "wl": 138.0,
+   "climb": 6.1,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "fury": {
    "short": "Fury",
@@ -741,7 +1051,17 @@
    "tough": 0,
    "fire": 0.27,
    "plain": "It is a quick-climbing, agile biplane interceptor. It is far slower than a monoplane fighter and carries two rifle-calibre guns.",
-   "history": "Yugoslavia flew it against the German attack of April 1941."
+   "history": "Yugoslavia flew it against the German attack of April 1941.",
+   "top": 359,
+   "wl": 70.1,
+   "climb": 11.7,
+   "diveLimit": 500,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "fw190_a3": {
    "short": "Fw 190 A",
@@ -763,7 +1083,17 @@
    "tough": 2.5,
    "fire": 4.25,
    "plain": "It is faster than a Spitfire V, climbs, dives and rolls better, and nothing can follow it when it changes direction. It turns wide, and above about 6,700 m it loses its edge.",
-   "history": "From late 1941 it beat the Spitfire V over the Channel until the Spitfire IX came."
+   "history": "From late 1941 it beat the Spitfire V over the Channel until the Spitfire IX came.",
+   "top": 635,
+   "wl": 210.4,
+   "climb": 16.6,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": false,
+    "dive": false
+   }
   },
   "fw190_a8": {
    "short": "Fw 190 A-8",
@@ -785,7 +1115,17 @@
    "tough": 3,
    "fire": 5.52,
    "plain": "It carries the heaviest guns of any single-engined fighter and rolls better than anything. It is 50 to 80 km/h slower than a Mustang at every height and poor above 7,000 m.",
-   "history": "It led the attacks on the American bomber streams in 1944."
+   "history": "It led the attacks on the American bomber streams in 1944.",
+   "top": 652,
+   "wl": 241.4,
+   "climb": 15.0,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "fw190_d9": {
    "short": "Fw 190 D",
@@ -807,7 +1147,17 @@
    "tough": 2.5,
    "fire": 3.0,
    "plain": "It is faster, climbs better and dives better than the Fw 190 A-8, and it is good at height. It gives up some of the A's roll and turn and is a little slower than a Mustang or Tempest.",
-   "history": "It reached the units from October 1944."
+   "history": "It reached the units from October 1944.",
+   "top": 665,
+   "wl": 235.0,
+   "climb": 17.0,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "g50": {
    "short": "Freccia",
@@ -829,7 +1179,17 @@
    "tough": 0,
    "fire": 0.61,
    "plain": "It is agile and pleasant to fly. It is slower than a Hurricane I, short-ranged and armed with two machine guns.",
-   "history": "It was Italy's first monoplane fighter, and Finland flew it against the Soviets."
+   "history": "It was Italy's first monoplane fighter, and Finland flew it against the Soviets.",
+   "top": 470,
+   "wl": 131.6,
+   "climb": 13.8,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "g55": {
    "short": "Centauro",
@@ -851,7 +1211,17 @@
    "tough": 2,
    "fire": 4.39,
    "plain": "It is big-winged and heavily armed, and it keeps its handling at heights where the Bf 109 G and Fw 190 A lose theirs. It is a little slower than the best Allied fighters.",
-   "history": "Only about 30 were in service when Italy surrendered in September 1943."
+   "history": "Only about 30 were in service when Italy surrendered in September 1943.",
+   "top": 623,
+   "wl": 166.7,
+   "climb": 17.1,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "gauntlet": {
    "short": "Gauntlet",
@@ -873,7 +1243,17 @@
    "tough": 0,
    "fire": 0.27,
    "plain": "It is a steady biplane that is easy to fly. It is far slower than any monoplane and carries two rifle-calibre guns.",
-   "history": "Denmark's army flew it in 1940 beside a handful of Fokker D.XXIs."
+   "history": "Denmark's army flew it in 1940 beside a handful of Fokker D.XXIs.",
+   "top": 370,
+   "wl": 61.4,
+   "climb": 11.5,
+   "diveLimit": 520,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "gladiator": {
    "short": "Gladiator",
@@ -895,7 +1275,17 @@
    "tough": 0.5,
    "fire": 0.87,
    "plain": "It turns inside any monoplane. It is about 150 km/h slower than a Bf 109 E.",
-   "history": "It was the RAF's last biplane fighter, and it fought over Norway, Malta and Greece."
+   "history": "It was the RAF's last biplane fighter, and it fought over Norway, Malta and Greece.",
+   "top": 407,
+   "wl": 73.5,
+   "climb": 11.7,
+   "diveLimit": 560,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "hawk3": {
    "short": "Hawk III",
@@ -917,7 +1307,17 @@
    "tough": 0,
    "fire": 0.33,
    "plain": "It is a robust, handy biplane. It is far slower than a monoplane and lightly armed.",
-   "history": "It was the American export biplane of the mid-1930s."
+   "history": "It was the American export biplane of the mid-1930s.",
+   "top": 386,
+   "wl": 83.3,
+   "climb": 11.5,
+   "diveLimit": 500,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "hawk75a": {
    "short": "Hawk 75A",
@@ -939,7 +1339,17 @@
    "tough": 0,
    "fire": 0.94,
    "plain": "It is light on the controls at any speed and out-turns a Bf 109 E with ease. It is about 60 km/h slower, lightly armed and weak at height.",
-   "history": "It was the best dogfighter France had in 1939-40."
+   "history": "It was the best dogfighter France had in 1939-40.",
+   "top": 504,
+   "wl": 116.9,
+   "climb": 12.8,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "hawk75m": {
    "short": "Hawk 75M",
@@ -961,7 +1371,17 @@
    "tough": 0,
    "fire": 1.17,
    "plain": "It is a sound, simple monoplane about as fast as a Ki-27. It has fixed wheels, is slower than the retracting Hawk and is lightly armed.",
-   "history": "China flew it in 1938-39, before the Zero came."
+   "history": "China flew it in 1938-39, before the Zero came.",
+   "top": 451,
+   "wl": 109.7,
+   "climb": 11.9,
+   "diveLimit": 720,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "hawk75o": {
    "short": "Hawk 75O",
@@ -983,7 +1403,17 @@
    "tough": 0.5,
    "fire": 0.78,
    "plain": "It is a sturdy, simple monoplane. It has fixed wheels, is slower than any fighter with retracting wheels and is lightly armed.",
-   "history": "It was Argentina's only modern fighter of the war years."
+   "history": "It was Argentina's only modern fighter of the war years.",
+   "top": 450,
+   "wl": 114.1,
+   "climb": 12.5,
+   "diveLimit": 650,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "hurricane_i": {
    "short": "Hurricane I",
@@ -1005,7 +1435,17 @@
    "tough": 1.5,
    "fire": 1.73,
    "plain": "It shoots steadily, turns tightly and takes punishment. A Bf 109 E is about 60 km/h faster, climbs better and out-dives it, so it can neither catch nor escape one.",
-   "history": "It did most of the RAF's bomber killing in the Battle of Britain."
+   "history": "It did most of the RAF's bomber killing in the Battle of Britain.",
+   "top": 515,
+   "wl": 120.8,
+   "climb": 13.3,
+   "diveLimit": 628,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "hurricane_ii": {
    "short": "Hurricane II",
@@ -1027,7 +1467,17 @@
    "tough": 2,
    "fire": 5.2,
    "plain": "It is tougher and hits harder than the Hurricane I, and it still out-turns German fighters. It is over 100 km/h slower than a Bf 109 F.",
-   "history": "From 1941 it was moved to ground attack, the desert and the Far East."
+   "history": "From 1941 it was moved to ground attack, the desert and the Far East.",
+   "top": 531,
+   "wl": 145.6,
+   "climb": 13.8,
+   "diveLimit": 628,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "hurricane_iib_vvs": {
    "short": "Hurricane IIB",
@@ -1049,7 +1499,17 @@
    "tough": 2,
    "fire": 2.6,
    "plain": "It is steady and easy to fly. It is slower than every German fighter it meets, and its machine guns are too light.",
-   "history": "It was the first Lend-Lease fighter to reach the Soviet Union in numbers, from late 1941."
+   "history": "It was the first Lend-Lease fighter to reach the Soviet Union in numbers, from late 1941.",
+   "top": 531,
+   "wl": 137.2,
+   "climb": 13.8,
+   "diveLimit": 628,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "i153": {
    "short": "Chaika",
@@ -1071,7 +1531,17 @@
    "tough": 1,
    "fire": 1.15,
    "plain": "It turns a full circle in about 13 seconds, faster than any monoplane except the Ki-27. It is 100 to 200 km/h slower than a modern monoplane and can neither catch nor escape one.",
-   "history": "About a quarter of the Soviet fighters in the west on 22 June 1941 were I-153s."
+   "history": "About a quarter of the Soviet fighters in the west on 22 June 1941 were I-153s.",
+   "top": 424,
+   "wl": 79.7,
+   "climb": 16.4,
+   "diveLimit": 520,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "i15bis": {
    "short": "I-15bis",
@@ -1093,7 +1563,17 @@
    "tough": 1,
    "fire": 0.48,
    "plain": "It is a tough, tight-turning biplane. It is 50 km/h slower than the A5M and helpless against a Zero.",
-   "history": "It held its own over China in 1938-39."
+   "history": "It held its own over China in 1938-39.",
+   "top": 379,
+   "wl": 75.6,
+   "climb": 14.2,
+   "diveLimit": 520,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "i16_10": {
    "short": "I-16 type 10",
@@ -1115,7 +1595,17 @@
    "tough": 1,
    "fire": 1.15,
    "plain": "It is a fast, hard-hitting little monoplane. It cannot turn with the Japanese fighters, and a Zero outclasses it.",
-   "history": "China and the Soviet volunteers flew it in 1938-39."
+   "history": "China and the Soviet volunteers flew it in 1938-39.",
+   "top": 448,
+   "wl": 118.0,
+   "climb": 13.6,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "i16_24": {
    "short": "I-16 type 24",
@@ -1137,7 +1627,17 @@
    "tough": 1,
    "fire": 1.15,
    "plain": "It still out-turns every other monoplane in Europe. It is 100 km/h too slow and can fight only when the enemy chooses to come down to it.",
-   "history": "It was the fastest fighter in the world in 1935, and still the most numerous Soviet fighter in June 1941."
+   "history": "It was the fastest fighter in the world in 1935, and still the most numerous Soviet fighter in June 1941.",
+   "top": 462,
+   "wl": 129.4,
+   "climb": 15.8,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "iar80": {
    "short": "IAR 80",
@@ -1159,7 +1659,17 @@
    "tough": 1.5,
    "fire": 1.26,
    "plain": "It is about a match for a Hurricane I or Bf 109 E and carries six machine guns. Its guns are all rifle-calibre, and it is slow beside the newer Allied and Soviet fighters.",
-   "history": "It was Romania's own fighter, and it fought over Odessa in 1941."
+   "history": "It was Romania's own fighter, and it fought over Odessa in 1941.",
+   "top": 510,
+   "wl": 167.6,
+   "climb": 15.0,
+   "diveLimit": 650,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "iar81c": {
    "short": "IAR 81",
@@ -1181,7 +1691,17 @@
    "tough": 1.5,
    "fire": 2.94,
    "plain": "It is the IAR 80 with two German cannon, deadly to a heavy bomber. A Lightning or Mustang outclasses it.",
-   "history": "It fought the American bombers over Ploiești in 1943-44."
+   "history": "It fought the American bombers over Ploiești in 1943-44.",
+   "top": 505,
+   "wl": 175.3,
+   "climb": 14.5,
+   "diveLimit": 650,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ik3": {
    "short": "IK-3",
@@ -1203,7 +1723,17 @@
    "tough": 1,
    "fire": 1.87,
    "plain": "It is a clean, agile monoplane with a cannon, as good as a Hurricane I. It is slower than a Bf 109 E.",
-   "history": "Only twelve were built, and they fought over Belgrade in April 1941."
+   "history": "Only twelve were built, and they fought over Belgrade in April 1941.",
+   "top": 527,
+   "wl": 145.5,
+   "climb": 15.5,
+   "diveLimit": 700,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "j22": {
    "short": "J 22",
@@ -1225,7 +1755,17 @@
    "tough": 1.5,
    "fire": 1.79,
    "plain": "It is a light, fast fighter that climbs well low down. It loses its edge high up and is lightly built of steel tube and wood.",
-   "history": "Sweden built it at home during the war, on a copied Twin Wasp engine."
+   "history": "Sweden built it at home during the war, on a copied Twin Wasp engine.",
+   "top": 575,
+   "wl": 177.2,
+   "climb": 17.5,
+   "diveLimit": 700,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "j2m3": {
    "short": "Raiden",
@@ -1247,7 +1787,17 @@
    "tough": 0,
    "fire": 4.31,
    "plain": "It climbs fast and carries four cannon to kill bombers. It turns poorly and lacks power at bomber heights.",
-   "history": "It was never built in numbers, and it met the B-29 raids on Japan."
+   "history": "It was never built in numbers, and it met the B-29 raids on Japan.",
+   "top": 671,
+   "wl": 160.1,
+   "climb": 18.5,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki27": {
    "short": "Ki-27",
@@ -1269,7 +1819,17 @@
    "tough": 0,
    "fire": 0.32,
    "plain": "It is the supreme turning fighter. It is slow, fragile and armed with two light guns, and anything faster can refuse its fight.",
-   "history": "It was the Japanese army's main fighter over China and into 1942."
+   "history": "It was the Japanese army's main fighter over China and into 1942.",
+   "top": 470,
+   "wl": 96.4,
+   "climb": 17.4,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki43_i": {
    "short": "Hayabusa I",
@@ -1291,7 +1851,17 @@
    "tough": 0,
    "fire": 1.05,
    "plain": "It is wonderfully agile and long-ranged. It is 70 to 80 km/h slower than a Warhawk E, weakly armed, unprotected and fragile.",
-   "history": "Only two army regiments had it when the Pacific war began in December 1941."
+   "history": "Only two army regiments had it when the Pacific war began in December 1941.",
+   "top": 495,
+   "wl": 93.1,
+   "climb": 17.0,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki43_ii": {
    "short": "Hayabusa II",
@@ -1313,7 +1883,17 @@
    "tough": 2,
    "fire": 1.05,
    "plain": "It has more power, armour and tank protection, and it keeps its extraordinary turn. It is about 100 km/h slower than the newer Allied fighters and still carries only two machine guns.",
-   "history": "It was the Japanese army's most numerous fighter to the end of the war."
+   "history": "It was the Japanese army's most numerous fighter to the end of the war.",
+   "top": 530,
+   "wl": 121.0,
+   "climb": 16.2,
+   "diveLimit": 620,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki44_ii": {
    "short": "Shoki",
@@ -1335,7 +1915,17 @@
    "tough": 0,
    "fire": 2.1,
    "plain": "It is a fast-climbing interceptor, quicker than a Warhawk above 4,000 m. It gives up the Japanese turning edge.",
-   "history": "It was built in modest numbers and defended Palembang's oil and the home islands."
+   "history": "It was built in modest numbers and defended Palembang's oil and the home islands.",
+   "top": 605,
+   "wl": 184.3,
+   "climb": 21.8,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki61_i": {
    "short": "Hien",
@@ -1357,7 +1947,17 @@
    "tough": 2,
    "fire": 3.43,
    "plain": "It is fast, strong in a dive, armoured and a good turner, a match for a Warhawk. Its engine is unreliable.",
-   "history": "Its licence-built Daimler-Benz engine was its ruin in New Guinea in 1943-44."
+   "history": "Its licence-built Daimler-Benz engine was its ruin in New Guinea in 1943-44.",
+   "top": 580,
+   "wl": 173.5,
+   "climb": 15.2,
+   "diveLimit": 850,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ki84": {
    "short": "Hayate",
@@ -1379,7 +1979,17 @@
    "tough": 2,
    "fire": 3.43,
    "plain": "It is fast, well armed, protected and still agile, the best Japanese army fighter. Its engine and undercarriage are weak, and it seldom flies as well as it tests.",
-   "history": "Poor engines and green pilots kept it from its promise in 1944-45."
+   "history": "Poor engines and green pilots kept it from its promise in 1944-45.",
+   "top": 687,
+   "wl": 171.5,
+   "climb": 21.84,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "la5": {
    "short": "La-5",
@@ -1401,7 +2011,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It has a 1,700 hp radial and two cannon in a strong airframe. It is heavier and slower to climb than a Bf 109 G.",
-   "history": "It first fought at Stalingrad in 1942."
+   "history": "It first fought at Stalingrad in 1942.",
+   "top": 580,
+   "wl": 192.0,
+   "climb": 15.6,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "la5fn": {
    "short": "La-5FN",
@@ -1423,7 +2043,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It is faster than a Bf 109 G or Fw 190 A below 3,000 m and turns tighter. Its edge fades above 6,000 m, and it has fuel for only about 40 minutes at combat power.",
-   "history": "It came to the front in numbers for Kursk in July 1943."
+   "history": "It came to the front in numbers for Kursk in July 1943.",
+   "top": 648,
+   "wl": 179.9,
+   "climb": 16.5,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "la7": {
    "short": "La-7",
@@ -1445,7 +2075,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It is fast, quick-climbing and tight-turning below 6,000 m. It is short-ranged, hot in the cockpit and keeps its pilot busy.",
-   "history": "It came from autumn 1944 and was the best Soviet fighter of the war below 6,000 m."
+   "history": "It came from autumn 1944 and was the best Soviet fighter of the war below 6,000 m.",
+   "top": 661,
+   "wl": 188.5,
+   "climb": 20.4,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "lagg3": {
    "short": "LaGG-3",
@@ -1467,7 +2107,17 @@
    "tough": 2,
    "fire": 2.5,
    "plain": "It is strong and well armed. It is too heavy for its engine: slow, slow-climbing and outclassed by a Bf 109 F.",
-   "history": "It was lightened in 1942-43 and gave way to the La-5."
+   "history": "It was lightened in 1942-43 and gave way to the La-5.",
+   "top": 549,
+   "wl": 186.2,
+   "climb": 12.7,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "martlet_ii": {
    "short": "Martlet",
@@ -1489,7 +2139,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It is a true carrier fighter with folding wings and heavy guns. At about 470 km/h it is too slow to match land fighters.",
-   "history": "It gave the Royal Navy its first modern carrier fighter in 1941."
+   "history": "It gave the Royal Navy its first modern carrier fighter in 1941.",
+   "top": 472,
+   "wl": 146.3,
+   "climb": 9.9,
+   "diveLimit": 741,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "mb152": {
    "short": "MB.152",
@@ -1511,7 +2171,17 @@
    "tough": 1.5,
    "fire": 3.42,
    "plain": "It is rugged and armed with cannon. It is slow to climb and slower than a Bf 109 E.",
-   "history": "It was the most numerous French fighter after the MS.406 in May 1940."
+   "history": "It was the most numerous French fighter after the MS.406 in May 1940.",
+   "top": 509,
+   "wl": 155.9,
+   "climb": 12.0,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "mc200": {
    "short": "Saetta",
@@ -1533,7 +2203,17 @@
    "tough": 1,
    "fire": 0.61,
    "plain": "It is strong and agile, dives very well, and out-turns and out-climbs a Hurricane I. Its radial engine keeps it near 500 km/h, and it has only two machine guns.",
-   "history": "It fought from Greece to Russia and North Africa in 1940-43."
+   "history": "It fought from Greece to Russia and North Africa in 1940-43.",
+   "top": 504,
+   "wl": 130.8,
+   "climb": 15.3,
+   "diveLimit": 805,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "mc202": {
    "short": "Folgore",
@@ -1555,7 +2235,17 @@
    "tough": 2,
    "fire": 0.93,
    "plain": "It matches a Spitfire V in speed and climb, dives as well and out-runs a Hurricane. A Spitfire turns tighter, and its two heavy machine guns hit too lightly.",
-   "history": "It first fought in late November 1941 and was Italy's best fighter of 1942."
+   "history": "It first fought in late November 1941 and was Italy's best fighter of 1942.",
+   "top": 600,
+   "wl": 174.2,
+   "climb": 18.1,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "mc205v": {
    "short": "Veltro",
@@ -1577,7 +2267,17 @@
    "tough": 2,
    "fire": 3.13,
    "plain": "It is a match for a Spitfire IX or Mustang in speed and turn below 7,000 m. Its small wing lets it down at height.",
-   "history": "Only about 66 were in service when Italy surrendered in September 1943."
+   "history": "Only about 66 were in service when Italy surrendered in September 1943.",
+   "top": 642,
+   "wl": 202.9,
+   "climb": 17.4,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "me262_a1a": {
    "short": "Me 262",
@@ -1599,7 +2299,17 @@
    "tough": 1.5,
    "fire": 13.64,
    "plain": "It is about 150 km/h faster than the best propeller fighters, and nothing can stop its pass through a bomber formation. It cannot fight slowly, cannot be throttled quickly and is helpless near its own runway.",
-   "history": "Never more than about 60 were serviceable at once, against more than 1,000 German piston fighters."
+   "history": "Never more than about 60 were serviceable at once, against more than 1,000 German piston fighters.",
+   "top": 869,
+   "wl": 294.9,
+   "climb": 20.0,
+   "diveLimit": 1000,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "meteor3": {
    "short": "Meteor",
@@ -1621,7 +2331,17 @@
    "tough": 2,
    "fire": 5.2,
    "plain": "It is a fast, steady jet with four cannon. It is slow to accelerate and its early engines are weak.",
-   "history": "It flew against the flying bombs in 1944 and never met a German fighter."
+   "history": "It flew against the flying bombs in 1944 and never met a German fighter.",
+   "top": 790,
+   "wl": 180.2,
+   "climb": 20.0,
+   "diveLimit": 870,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "mig3": {
    "short": "MiG-3",
@@ -1643,7 +2363,17 @@
    "tough": 2,
    "fire": 1.22,
    "plain": "It is very fast above 7,000 m. Low down, where it has to fight, it is heavy, slow to turn and under-armed.",
-   "history": "It was the most numerous new Soviet fighter in June 1941."
+   "history": "It was the most numerous new Soviet fighter in June 1941.",
+   "top": 622,
+   "wl": 189.2,
+   "climb": 16.4,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "ms406": {
    "short": "MS.406",
@@ -1665,7 +2395,17 @@
    "tough": 0,
    "fire": 1.91,
    "plain": "It is handy and easy, out-turns a Bf 109 and takes punishment. It is 60 to 70 km/h slower, under-powered and under-armed, and its guns freeze at height.",
-   "history": "It was France's most numerous fighter in 1939-40."
+   "history": "It was France's most numerous fighter in 1939-40.",
+   "top": 490,
+   "wl": 158.8,
+   "climb": 13.2,
+   "diveLimit": 730,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "n1k2j": {
    "short": "Shiden-Kai",
@@ -1687,7 +2427,17 @@
    "tough": 0,
    "fire": 4.18,
    "plain": "It matches a Hellcat or Corsair in a dogfight and carries four cannon. Its engine is unreliable and it climbs too slowly to catch a B-29.",
-   "history": "It came late and in small numbers, mostly with the 343rd Kokutai in 1945."
+   "history": "It came late and in small numbers, mostly with the 343rd Kokutai in 1945.",
+   "top": 656,
+   "wl": 166.0,
+   "climb": 19.7,
+   "diveLimit": 780,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "na50": {
    "short": "Torito",
@@ -1709,7 +2459,17 @@
    "tough": 0.5,
    "fire": 0.33,
    "plain": "It is a sturdy monoplane that climbs well low down. It is slow beside the great powers' fighters and carries only two machine guns.",
-   "history": "Seven were built for Peru, and they fought Ecuador in 1941."
+   "history": "Seven were built for Peru, and they fought Ecuador in 1941.",
+   "top": 475,
+   "wl": 115.3,
+   "climb": 12.0,
+   "diveLimit": 650,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p11c": {
    "short": "P.11c",
@@ -1731,7 +2491,17 @@
    "tough": 0.5,
    "fire": 0.56,
    "plain": "It is sturdy and handy, with a gull wing and an open cockpit. It is about 170 km/h slower than a Bf 109 E and has about a fifth of its weight of fire.",
-   "history": "Polish pilots in P.11cs claimed about as many as they lost in September 1939, in a fighter a generation behind."
+   "history": "Polish pilots in P.11cs claimed about as many as they lost in September 1939, in a fighter a generation behind.",
+   "top": 390,
+   "wl": 91.1,
+   "climb": 13.0,
+   "diveLimit": 600,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p24": {
    "short": "P.24",
@@ -1753,7 +2523,17 @@
    "tough": 0.5,
    "fire": 2.34,
    "plain": "It is a sturdy gull-wing fighter with cannon. It is about 120 km/h slower than a Bf 109 E.",
-   "history": "It was Greece's main fighter against Italy in 1940-41."
+   "history": "It was Greece's main fighter against Italy in 1940-41.",
+   "top": 430,
+   "wl": 111.7,
+   "climb": 14.0,
+   "diveLimit": 600,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p26a": {
    "short": "Peashooter",
@@ -1775,7 +2555,17 @@
    "tough": 0.5,
    "fire": 0.33,
    "plain": "It is a light, nimble monoplane. It has fixed wheels, an open cockpit and two machine guns.",
-   "history": "It was America's first all-metal monoplane fighter."
+   "history": "It was America's first all-metal monoplane fighter.",
+   "top": 377,
+   "wl": 98.6,
+   "climb": 11.8,
+   "diveLimit": 600,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p36a": {
    "short": "P-36",
@@ -1797,7 +2587,17 @@
    "tough": 1,
    "fire": 0.51,
    "plain": "It is light, handy and turns well. It is slow and lightly armed beside the newer fighters.",
-   "history": "It was the US Army's fighter of 1938-41."
+   "history": "It was the US Army's fighter of 1938-41.",
+   "top": 504,
+   "wl": 116.9,
+   "climb": 17.0,
+   "diveLimit": 720,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p38_fg": {
    "short": "Lightning G",
@@ -1819,7 +2619,17 @@
    "tough": 2.5,
    "fire": 3.59,
    "plain": "It climbs fast, flies far and hits hard from the nose. It rolls slowly, cannot follow a German fighter that dives steeply from height, and an Fw 190 out-turns it at most speeds.",
-   "history": "It escorted the first long raids from North Africa, and it shot down Admiral Yamamoto in 1943."
+   "history": "It escorted the first long raids from North Africa, and it shot down Admiral Yamamoto in 1943.",
+   "top": 650,
+   "wl": 218.7,
+   "climb": 18.1,
+   "diveLimit": 680,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p38_jl": {
    "short": "Lightning J",
@@ -1841,7 +2651,17 @@
    "tough": 2.5,
    "fire": 3.59,
    "plain": "It flies far, out-climbs the German fighters and out-runs them at height. It is costly and demanding to fly, and its engines suffer in the cold.",
-   "history": "It was the top-scoring American fighter in the Pacific."
+   "history": "It was the top-scoring American fighter in the Pacific.",
+   "top": 678,
+   "wl": 230.0,
+   "climb": 20.3,
+   "diveLimit": 750,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p39d": {
    "short": "Airacobra D",
@@ -1863,7 +2683,17 @@
    "tough": 2,
    "fire": 3.01,
    "plain": "It carries a 37 mm cannon in the nose and is good low down. It has no high-altitude supercharger and is poor above 4,500 m.",
-   "history": "It fought in New Guinea in 1942 and went to the Soviet Union in numbers."
+   "history": "It fought in New Guinea in 1942 and went to the Soviet Union in numbers.",
+   "top": 592,
+   "wl": 175.3,
+   "climb": 15.0,
+   "diveLimit": 760,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p39n_vvs": {
    "short": "Airacobra N",
@@ -1885,7 +2715,17 @@
    "tough": 2,
    "fire": 2.67,
    "plain": "Flown low and light, it is fast, well armed and a match for a Bf 109 G below 4,500 m. It has no high-altitude power and an unforgiving spin.",
-   "history": "Soviet aces such as Pokryshkin made their names in it."
+   "history": "Soviet aces such as Pokryshkin made their names in it.",
+   "top": 641,
+   "wl": 166.7,
+   "climb": 16.9,
+   "diveLimit": 760,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p40_bc": {
    "short": "Tomahawk",
@@ -1907,7 +2747,17 @@
    "tough": 2.5,
    "fire": 1.49,
    "plain": "It is fast in a dive, quick in the roll and tough, and it turns well at speed. It cannot climb or fight high, so its enemies start above it.",
-   "history": "The RAF flew it in the desert from mid-1941."
+   "history": "The RAF flew it in the desert from mid-1941.",
+   "top": 566,
+   "wl": 155.1,
+   "climb": 13.5,
+   "diveLimit": 772,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p40_e": {
    "short": "Warhawk E",
@@ -1929,7 +2779,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It is a rugged low-level fighter with six heavy machine guns that out-turns and out-dives a Bf 109. A Bf 109 F climbs away from it and attacks from above, and it is helpless above about 5,000 m.",
-   "history": "It was the RAF's Kittyhawk in the desert and the Americans' fighter in the Pacific in 1942."
+   "history": "It was the RAF's Kittyhawk in the desert and the Americans' fighter in the Pacific in 1942.",
+   "top": 570,
+   "wl": 171.4,
+   "climb": 10.7,
+   "diveLimit": 772,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p40b": {
    "short": "Hawk 81",
@@ -1951,7 +2811,17 @@
    "tough": 2.5,
    "fire": 1.94,
    "plain": "It is fast low down, very fast in a dive, well armed and tough. It climbs poorly, cannot turn with any Japanese fighter and runs out of power above 6,000 m.",
-   "history": "The American Volunteer Group flew it over Burma and China in 1941-42."
+   "history": "The American Volunteer Group flew it over Burma and China in 1941-42.",
+   "top": 566,
+   "wl": 151.5,
+   "climb": 16.6,
+   "diveLimit": 772,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p40n": {
    "short": "Warhawk N",
@@ -1973,7 +2843,17 @@
    "tough": 2.5,
    "fire": 3.44,
    "plain": "It is rugged, well armed and fast in a dive. Everything it meets out-climbs it, and the newer Japanese army fighters outpace it.",
-   "history": "It kept the Warhawk useful into 1944, most of all in China and New Guinea."
+   "history": "It kept the Warhawk useful into 1944, most of all in China and New Guinea.",
+   "top": 552,
+   "wl": 172.7,
+   "climb": 12.7,
+   "diveLimit": 772,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "p43a": {
    "short": "Lancer",
@@ -1995,7 +2875,17 @@
    "tough": 0,
    "fire": 2.29,
    "plain": "It is a high-altitude fighter with a turbo-supercharger and four heavy guns. It is unprotected and leaks fuel.",
-   "history": "China flew a few from 1942."
+   "history": "China flew a few from 1942.",
+   "top": 573,
+   "wl": 162.7,
+   "climb": 14.2,
+   "diveLimit": 760,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "p47_cd": {
    "short": "Thunderbolt C",
@@ -2017,7 +2907,17 @@
    "tough": 3,
    "fire": 4.59,
    "plain": "Above 7,500 m it is as fast as anything, and it out-dives every opponent. It climbs poorly, turns wide and is at a disadvantage low down.",
-   "history": "It first fought on 10 April 1943, with the Eighth Air Force."
+   "history": "It first fought on 10 April 1943, with the Eighth Air Force.",
+   "top": 697,
+   "wl": 211.4,
+   "climb": 14.6,
+   "diveLimit": 837,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "p47_d25": {
    "short": "Thunderbolt D",
@@ -2039,7 +2939,17 @@
    "tough": 3,
    "fire": 4.59,
    "plain": "It climbs faster than the Thunderbolt C, has a clear view and can fight nearly 1,000 km from its base. It is still the widest-turning Allied fighter and slow to accelerate low down.",
-   "history": "It was the most numerous American fighter in Europe to the end of 1944."
+   "history": "It was the most numerous American fighter in Europe to the end of 1944.",
+   "top": 707,
+   "wl": 211.5,
+   "climb": 16.6,
+   "diveLimit": 837,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "p51_a": {
    "short": "Mustang A",
@@ -2061,7 +2971,17 @@
    "tough": 2,
    "fire": 2.29,
    "plain": "It is the fastest fighter low down, with long range. Above 5,000 m it runs out of power, and it rolls and climbs worse than a Spitfire.",
-   "history": "The RAF flew it from 1942 as a low-level fighter and reconnaissance aircraft."
+   "history": "The RAF flew it from 1942 as a low-level fighter and reconnaissance aircraft.",
+   "top": 668,
+   "wl": 167.6,
+   "climb": 15.2,
+   "diveLimit": 813,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "p51_bc": {
    "short": "Mustang B",
@@ -2083,7 +3003,17 @@
    "tough": 2,
    "fire": 2.29,
    "plain": "It is 50 to 80 km/h faster than a Bf 109 G or Fw 190 A at height, out-dives them and can fight far from its base. A Spitfire out-climbs and out-turns it, and an Fw 190 out-rolls it.",
-   "history": "It could fly to Berlin and back, and only the 354th Group had it in December 1943."
+   "history": "It could fly to Berlin and back, and only the 354th Group had it in December 1943.",
+   "top": 711,
+   "wl": 192.8,
+   "climb": 18.3,
+   "diveLimit": 813,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "p51_d": {
    "short": "Mustang D",
@@ -2105,7 +3035,17 @@
    "tough": 2,
    "fire": 3.44,
    "plain": "It is fast at every height, dives fast and can fight 1,200 km from its base. It climbs and turns worse than a Spitfire, and ground fire brings it down easily.",
-   "history": "It won the Allies daylight command of the air over Germany."
+   "history": "It won the Allies daylight command of the air over Germany.",
+   "top": 711,
+   "wl": 202.8,
+   "climb": 17.3,
+   "diveLimit": 813,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "p80a": {
    "short": "Shooting Star",
@@ -2127,7 +3067,17 @@
    "tough": 2,
    "fire": 3.44,
    "plain": "It is a fast, clean jet fighter with six heavy machine guns. Its early engines are unreliable and it is slow to accelerate.",
-   "history": "Four reached Italy in 1945 and none fought."
+   "history": "Four reached Italy in 1945 and none fought.",
+   "top": 898,
+   "wl": 240.1,
+   "climb": 23.0,
+   "diveLimit": 950,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "re2000": {
    "short": "Re.2000",
@@ -2149,7 +3099,17 @@
    "tough": 1,
    "fire": 0.61,
    "plain": "It is a light, agile radial fighter. It carries only two guns.",
-   "history": "Hungary built its own as the Héja, and Sweden flew it as the J 20."
+   "history": "Hungary built its own as the Héja, and Sweden flew it as the J 20.",
+   "top": 530,
+   "wl": 139.2,
+   "climb": 15.0,
+   "diveLimit": 700,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "re2001": {
    "short": "Re.2001",
@@ -2171,7 +3131,17 @@
    "tough": 2,
    "fire": 0.93,
    "plain": "It is agile, with a big wing and good range. On the same engine it is much slower than a Folgore, and no better armed.",
-   "history": "It flew over Malta in 1942."
+   "history": "It flew over Malta in 1942.",
+   "top": 542,
+   "wl": 160.8,
+   "climb": 13.0,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "re2005": {
    "short": "Sagittario",
@@ -2193,7 +3163,17 @@
    "tough": 2,
    "fire": 4.39,
    "plain": "It is perhaps the best-handling Italian fighter, fast and heavily armed. Its tail is suspect in fast dives.",
-   "history": "Only 48 were built."
+   "history": "Only 48 were built.",
+   "top": 628,
+   "wl": 177.0,
+   "climb": 20.0,
+   "diveLimit": 800,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "sea_hurricane_ib": {
    "short": "Sea Hurricane",
@@ -2215,7 +3195,17 @@
    "tough": 2,
    "fire": 1.73,
    "plain": "It is handy and tough and climbs well for a carrier fighter. It is slow by land standards and short-ranged, and its wings do not fold.",
-   "history": "It gave the Royal Navy a real single-seat fighter in 1941-42, on the Malta and Arctic convoys."
+   "history": "It gave the Royal Navy a real single-seat fighter in 1941-42, on the Malta and Arctic convoys.",
+   "top": 496,
+   "wl": 138.4,
+   "climb": 12.5,
+   "diveLimit": 628,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "seafire_l2c": {
    "short": "Seafire II",
@@ -2237,7 +3227,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It is a fleet interceptor: 507 km/h at sea level and a climb of nearly 24 m/s. It has two hours of fuel, no folding wings and a fragile undercarriage.",
-   "history": "It covered the Salerno landings in 1943."
+   "history": "It covered the Salerno landings in 1943.",
+   "top": 546,
+   "wl": 141.1,
+   "climb": 23.8,
+   "diveLimit": 724,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "seafire_l3": {
    "short": "Seafire III",
@@ -2259,7 +3259,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It is a superb low-level interceptor: 578 km/h at 1,800 m and a climb of 16.5 m/s. It is short-ranged, and its undercarriage is too weak for carrier decks.",
-   "history": "It flew with the British Pacific Fleet in 1945."
+   "history": "It flew with the British Pacific Fleet in 1945.",
+   "top": 578,
+   "wl": 145.8,
+   "climb": 16.5,
+   "diveLimit": 724,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "seversky_j9": {
    "short": "Seversky",
@@ -2281,7 +3291,17 @@
    "tough": 1,
    "fire": 1.44,
    "plain": "It is a sturdy, long-ranged monoplane, the P-35's cousin. It is slow beside the newer fighters.",
-   "history": "Sweden received 60 before the American export ban of 1940 stopped the rest."
+   "history": "Sweden received 60 before the American export ban of 1940 stopped the rest.",
+   "top": 485,
+   "wl": 129.9,
+   "climb": 12.0,
+   "diveLimit": 700,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "spitfire_i": {
    "short": "Spitfire I",
@@ -2303,7 +3323,17 @@
    "tough": 1.5,
    "fire": 1.73,
    "plain": "It turns better than any other monoplane and is as fast as a Bf 109 E. Its engine cuts out if it pushes straight over into a dive, it carries only rifle-calibre guns and it has little fuel.",
-   "history": "About 19 Spitfire squadrons fought the Battle of Britain beside about 30 of Hurricanes."
+   "history": "About 19 Spitfire squadrons fought the Battle of Britain beside about 30 of Hurricanes.",
+   "top": 578,
+   "wl": 122.5,
+   "climb": 14.7,
+   "diveLimit": 724,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "spitfire_ix": {
    "short": "Spitfire IX",
@@ -2325,7 +3355,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It matches an Fw 190 A and a Bf 109 G for speed, out-climbs them high and out-turns both. It cannot follow them down in a dive or fly far from its base.",
-   "history": "It came in July 1942 and put the RAF level with the Fw 190 again."
+   "history": "It came in July 1942 and put the RAF level with the Fw 190 again.",
+   "top": 658,
+   "wl": 150.8,
+   "climb": 19.6,
+   "diveLimit": 724,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "spitfire_v": {
    "short": "Spitfire V",
@@ -2347,7 +3387,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It is a Spitfire I with cannon and 40% more power, a match for a Bf 109 F. An Fw 190 A beats it in everything except the turn.",
-   "history": "It was the RAF's main fighter of 1941-42, from the Channel to Malta."
+   "history": "It was the RAF's main fighter of 1941-42, from the Channel to Malta.",
+   "top": 604,
+   "wl": 132.1,
+   "climb": 14.3,
+   "diveLimit": 724,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "spitfire_v_trop": {
    "short": "Tropical Spitfire V",
@@ -2369,7 +3419,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It is a Spitfire V with a dust filter for the desert and the tropics. The filter costs it about 15 km/h and some climb.",
-   "history": "It was the Spitfire of Malta, the desert, Burma and Darwin in 1942-43."
+   "history": "It was the Spitfire of Malta, the desert, Burma and Darwin in 1942-43.",
+   "top": 589,
+   "wl": 132.1,
+   "climb": 13.5,
+   "diveLimit": 724,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "spitfire_xiv": {
    "short": "Spitfire XIV",
@@ -2391,7 +3451,17 @@
    "tough": 2,
    "fire": 3.47,
    "plain": "It climbs and turns better than any other Allied fighter, with speed to match anything with a propeller. It cannot go far, and it is the slowest Allied fighter in a dive.",
-   "history": "It came from January 1944 and hunted flying bombs and jets."
+   "history": "It came from January 1944 and hunted flying bombs and jets.",
+   "top": 721,
+   "wl": 170.1,
+   "climb": 23.3,
+   "diveLimit": 756,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "tempest_v": {
    "short": "Tempest",
@@ -2413,7 +3483,17 @@
    "tough": 2.5,
    "fire": 5.2,
    "plain": "It is the fastest propeller fighter low down, with superb dive acceleration and four cannon. Above about 6,000 m it fades, and it cannot out-turn a Spitfire or out-roll an Fw 190.",
-   "history": "It came from April 1944 and destroyed more flying bombs than any other fighter."
+   "history": "It came from April 1944 and destroyed more flying bombs than any other fighter.",
+   "top": 695,
+   "wl": 182.7,
+   "climb": 22.3,
+   "diveLimit": 869,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "typhoon_ib": {
    "short": "Typhoon",
@@ -2435,7 +3515,17 @@
    "tough": 2.5,
    "fire": 5.2,
    "plain": "It is very fast below 3,000 m and a steady platform for four cannon. It climbs poorly high up, and it turns and rolls worse than a Spitfire.",
-   "history": "It ended the war as the RAF's main ground-attack fighter, with about 18 to 20 squadrons by June 1944."
+   "history": "It ended the war as the RAF's main ground-attack fighter, with about 18 to 20 squadrons by June 1944.",
+   "top": 665,
+   "wl": 193.9,
+   "climb": 19.5,
+   "diveLimit": 845,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": true
+   }
   },
   "vg33": {
    "short": "VG-33",
@@ -2457,7 +3547,17 @@
    "tough": 1.5,
    "fire": 2.3,
    "plain": "It is a wooden fighter as fast as a Bf 109 E, with a cannon in the propeller hub. It turns wider than a Bf 109 E.",
-   "history": "A handful flew before the armistice of June 1940."
+   "history": "A handful flew before the armistice of June 1940.",
+   "top": 558,
+   "wl": 207.1,
+   "climb": 15.0,
+   "diveLimit": 800,
+   "laid": {
+    "speed": false,
+    "turn": false,
+    "climb": false,
+    "dive": false
+   }
   },
   "yak1": {
    "short": "Yak-1",
@@ -2479,7 +3579,17 @@
    "tough": 2,
    "fire": 1.86,
    "plain": "It is light on the controls, a good turner and a match for a Bf 109 E. It never climbs with a Bf 109 F or G.",
-   "history": "It was the best Soviet fighter of 1941."
+   "history": "It was the best Soviet fighter of 1941.",
+   "top": 577,
+   "wl": 166.6,
+   "climb": 15.5,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": false,
+    "dive": false
+   }
   },
   "yak3": {
    "short": "Yak-3",
@@ -2501,7 +3611,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It is a superb low-level dogfighter: 646 km/h at 4,100 m, 5,000 m in four and a half minutes and a full circle in about 18 seconds. It has short range, a light structure and little to offer above 5,000 m.",
-   "history": "It came to the front in mid-1944."
+   "history": "It came to the front in mid-1944.",
+   "top": 646,
+   "wl": 181.6,
+   "climb": 20.8,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "yak7b": {
    "short": "Yak-7B",
@@ -2523,7 +3643,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It is a steady, well-armed low-level fighter that matches a Bf 109 G at ground level. Above 4,000 m it falls behind in speed and climb.",
-   "history": "It came to the front in 1942."
+   "history": "It came to the front in 1942.",
+   "top": 588,
+   "wl": 175.2,
+   "climb": 14.2,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "yak9": {
    "short": "Yak-9",
@@ -2545,7 +3675,17 @@
    "tough": 2,
    "fire": 1.92,
    "plain": "It out-turns every German fighter and matches them for speed at ground level. It is lightly armed and loses its edge above 4,000 m.",
-   "history": "It became the most-built Soviet fighter of the war."
+   "history": "It became the most-built Soviet fighter of the war.",
+   "top": 599,
+   "wl": 167.5,
+   "climb": 18.4,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "yak9d": {
    "short": "Yak-9D",
@@ -2567,7 +3707,17 @@
    "tough": 2,
    "fire": 1.92,
    "plain": "It trades climb and turn for range and can fly 1,360 km. It is only an even match for a Bf 109 G low down, and worse above 3,500 m.",
-   "history": "It escorted Soviet bombers on long raids from 1943."
+   "history": "It escorted Soviet bombers on long raids from 1943.",
+   "top": 591,
+   "wl": 181.7,
+   "climb": 15.4,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   },
   "yak9u": {
    "short": "Yak-9U",
@@ -2589,7 +3739,17 @@
    "tough": 2,
    "fire": 2.56,
    "plain": "It has a 1,500 hp engine and reaches 672 km/h. Its engine is unreliable, and its test figures come from prepared aircraft.",
-   "history": "It came to the front from late 1944."
+   "history": "It came to the front from late 1944.",
+   "top": 672,
+   "wl": 186.8,
+   "climb": 18.8,
+   "diveLimit": 700,
+   "laid": {
+    "speed": true,
+    "turn": true,
+    "climb": true,
+    "dive": false
+   }
   }
  },
  "ladders": {
@@ -6520,5 +7680,19 @@
     ]
    }
   }
+ },
+ "law": {
+  "_about": "The design director, 23 Nov 2026 06:55Z and 07:00Z (air-battles/dogfight/plan-1123.md): the edge of type A over type B is k times the sum of the log ratios that apply: top speed at rated height always; for a side whose doctrine is the turning fight, wing loading (lower turns tighter; the historian's 14 trial turn times are record tests, never laid); for a side whose doctrine is dive-and-climb, climb and limiting dive speed; pilot training hours. Doctrine only picks the term. A figure not laid makes its term 1. k is one shared power fitted to the historian's fighter-against-fighter exchange anchors from both sides' loss records; until it is fitted it is 0 and no edge is given. No cap but the widest anchor the record gives.",
+  "k": 0,
+  "fitted": false,
+  "widest": null
+ },
+ "doctrine": {
+  "_about": "Doctrine by nation and month, laid only once read (the historian's held rows are not laid: 07:00Z).",
+  "rows": {}
+ },
+ "hours": {
+  "_about": "Pilot training hours before first combat by nation and month, laid only once read.",
+  "rows": {}
  }
 }

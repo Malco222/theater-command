@@ -25,6 +25,7 @@ import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
 import { mendStars } from './stars';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
+import { fighterTypesOn, joinBought, sellerType } from './fighters';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
@@ -744,7 +745,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const r = g.regions[o.at];
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
-  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) b.from = o.from; }
+  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) { b.from = o.from; const mk = item === 'ftr' && fighterTypesOn(g) ? sellerType(g, o.from) : null; if (mk) b.mark = mk; } }
   else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
   // Airfields as targets: a strip goes on the books as a level of 'field' marked 'strip' (one counter, one cap, and a
@@ -809,6 +810,8 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
       if (wing === 'ftr') { p.ftr += count; p.pilots += count; } else p.bmr += count;
       return;
     }
+    // A wing bought abroad keeps the seller's fighter type (the switch 'Fighter types'; the design director, 23 Nov 07:00Z).
+    if (wing === 'ftr' && b.from && fighterTypesOn(g)) { const mk = b.mark ?? sellerType(g, b.from); if (mk) joinBought(f, mk, f.ftr, count); }
     f[wing] += count;
     f.est[wing] += count;
     (f.extra ??= { ftr: 0, bmr: 0 })[wing] += count;

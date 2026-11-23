@@ -21,6 +21,12 @@ interface TypeRow {
   /** Least sustained turn radius (m), roll rate (deg/s), dive limit (km/h), how quick into a dive (1 to 3), toughness (0 to 3), weight of fire (kg/s). */
   r: number; roll: number; dive: number; acc: number; tough: number; fire: number;
   plain: string; history: string;
+  /**
+   * The law's measures (the historian, 23 Nov 06:56Z; the design director 06:55Z and 07:00Z): top speed at rated height
+   * (km/h), wing loading (kg/m2, loaded weight over wing area), climb (m/s), limiting dive speed (km/h), and which are laid.
+   */
+  top?: number; wl?: number; climb?: number; diveLimit?: number;
+  laid?: { speed: boolean; turn: boolean; climb: boolean; dive: boolean };
 }
 interface Ladder {
   clock: 'research' | 'calendar';
@@ -29,7 +35,12 @@ interface Ladder {
   deck?: [string, Mix][];
 }
 
+/** A nation's doctrine and pilots by month, laid only once read (the design director, 23 Nov 07:00Z). */
+export type Doctrine = 'turn' | 'dive-zoom';
 export const FIGHTERS = data as unknown as {
+  law: { k: number; fitted: boolean; widest: number | null };
+  doctrine: { rows: Record<string, [string, Doctrine][]> };
+  hours: { rows: Record<string, [string, number][]> };
   words: { setting: string; help: string; tooltip: string; realWar: string };
   w: { speed: number; speedScale: number; climb: number; climbScale: number; dive: number; turn: number; turnScale: number; refuse: number; punch: number; fireScale: number; cap: number };
   bands: Record<Band, number>;
@@ -74,18 +85,37 @@ export function edgeParts(A: TypeRow, B: TypeRow, band: Band): { speed: number; 
   return { speed, climb, diveRoll, turn, punch };
 }
 
-/** Type A's edge over type B at a band, in log units, capped. Antisymmetric. */
-export function edge(a: string, b: string, band: Band): number {
-  const A = FIGHTERS.types[a], B = FIGHTERS.types[b];
-  if (!A || !B) return 0;
-  const p = edgeParts(A, B, band);
-  return clip(p.speed + p.climb + p.diveRoll + p.turn + p.punch, -FIGHTERS.w.cap, FIGHTERS.w.cap);
+/**
+ * Type A's edge over type B, in log units (the design director, 23 Nov 2026 06:55Z and 07:00Z; data 'law'): k times the
+ * sum of the log ratios that apply. Top speed at rated height always: the faster side chooses whether to fight. A side
+ * whose doctrine is the turning fight brings wing loading (the lower turns tighter); a side whose doctrine is
+ * dive-and-climb brings climb and limiting dive speed. Doctrine only picks the term; with none laid for a side, it
+ * brings neither. A figure not laid makes its term 1 (log 0). k is fitted to the record's exchange anchors; until then
+ * it is 0 and no edge is given. No cap but the widest anchor. Antisymmetric. `band` is kept for the callers; the
+ * law reads one measure a type.
+ */
+export function edge(a: string, b: string, band: Band, docA?: Doctrine, docB?: Doctrine): number {
+  void band;
+  const A = FIGHTERS.types[a], B = FIGHTERS.types[b], L = FIGHTERS.law;
+  if (!A || !B || !L.k) return 0;
+  const both = (k: keyof NonNullable<TypeRow['laid']>): boolean => !!(A.laid?.[k] && B.laid?.[k]);
+  const ln = (x: number | undefined, y: number | undefined): number => (x && y ? Math.log(x / y) : 0);
+  let t = both('speed') ? ln(A.top, B.top) : 0;
+  // Each side brings the terms its own doctrine fights by: the turner its wing loading, the diver its climb and dive.
+  const terms = (doc: Doctrine | undefined, sign: number): number => {
+    if (doc === 'turn') return both('turn') ? sign * ln(B.wl, A.wl) : 0;
+    if (doc === 'dive-zoom') return sign * ((both('climb') ? ln(A.climb, B.climb) : 0) + (both('dive') ? ln(A.diveLimit, B.diveLimit) : 0));
+    return 0;
+  };
+  t += terms(docA, 1) + terms(docB, 1);
+  const e = L.k * t;
+  return L.widest ? clip(e, -L.widest, L.widest) : e;
 }
 
 /** One mix's mean edge over another's, each pair weighted by both shares. */
-export function mixEdge(a: Mix, b: Mix, band: Band): number {
+export function mixEdge(a: Mix, b: Mix, band: Band, docA?: Doctrine, docB?: Doctrine): number {
   let t = 0, s = 0;
-  for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) { t += sx * sy * edge(x, y, band); s += sx * sy; }
+  for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) { t += sx * sy * edge(x, y, band, docA, docB); s += sx * sy; }
   return s > 0 ? t / s : 0;
 }
 
@@ -140,10 +170,19 @@ const deckBred = (f: AirFleet): boolean => f.ship !== undefined || f.ashore !== 
 /** The types an air fleet flies, as shares: its nation's mix (a carrier wing's from the deck ladder), with the tropical Spitfire V in the desert. */
 export function typeMix(g: Game, f: AirFleet): Mix | null {
   const L = FIGHTERS.ladders[f.nat];
-  if (!L) return null;
-  let mix: Mix;
-  if (deckBred(f) && L.deck) mix = L.deck[rowAt(L.deck, g.turn)][1];
-  else mix = landRow(g, f.nat)!.mix;
+  const bought = Object.entries(f.bought ?? {}).filter(([k, s]) => s > 0 && FIGHTERS.types[k]);
+  if (!L && !bought.length) return null;
+  let mix: Mix = {};
+  if (L && deckBred(f) && L.deck) mix = L.deck[rowAt(L.deck, g.turn)][1];
+  else if (L) mix = landRow(g, f.nat)!.mix;
+  // Bought wings fly the seller's type; the group's own share flies the nation's own (07:00Z).
+  if (bought.length) {
+    const shareBought = Math.min(1, bought.reduce((a, [, s]) => a + s, 0)), own = L ? 1 - shareBought : 0;
+    const out: Mix = {};
+    for (const [k, s] of Object.entries(mix)) out[k] = (out[k] ?? 0) + s * own;
+    for (const [k, s] of bought) out[k] = (out[k] ?? 0) + s / (L ? 1 : shareBought);
+    mix = out;
+  }
   // The Spitfire Vs of the desert, Malta and the far theatres carried a dust filter that cost them speed and climb.
   const base = g.regions[f.base];
   if (!deckBred(f) && base && inDesert(base) && Object.keys(mix).some((k) => FIGHTERS.swap[k])) {
@@ -156,6 +195,35 @@ export function typeMix(g: Game, f: AirFleet): Mix | null {
 
 export interface Weighed { f: AirFleet; w: number }
 
+/** The type a great power has in production now, its ladder's largest share: what a wing it sells flies (07:00Z). */
+export function sellerType(g: Game, nat: string): string | null {
+  const row = FIGHTERS.ladders[nat] ? landRow(g, nat) : null;
+  if (!row) return null;
+  return Object.entries(row.mix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+/** A bought wing of `count` fighters of type `mark` joins group `f` of `had` fighters: its share of the group is kept. */
+export function joinBought(f: AirFleet, mark: string, had: number, count: number): void {
+  const all = had + count;
+  if (all <= 0) return;
+  const b = (f.bought ??= {});
+  for (const k of Object.keys(b)) b[k] = (b[k] * had) / all;
+  b[mark] = (b[mark] ?? 0) + count / all;
+}
+
+/** A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). */
+export function doctrineOf(g: Game, nat: string): Doctrine | undefined {
+  const rows = FIGHTERS.doctrine.rows[nat];
+  return rows?.length ? rows[rowAt(rows, g.turn)][1] : undefined;
+}
+
+/** The pilots' edge from training hours before first combat, k times the log ratio; 0 where either side's is not laid. */
+export function hoursEdge(g: Game, a: string, b: string): number {
+  const R = FIGHTERS.hours.rows, k = FIGHTERS.law.k;
+  if (!k || !R[a]?.length || !R[b]?.length) return 0;
+  return k * Math.log(R[a][rowAt(R[a], g.turn)][1] / R[b][rowAt(R[b], g.turn)][1]);
+}
+
 /**
  * The edge of the escort's fighters over the defenders', in log units: the mean over every pair of an escorting and a
  * defending group, weighted by both groups' fighting weight, of their mixes' edge at the mission's height. A research
@@ -165,7 +233,6 @@ export interface Weighed { f: AirFleet; w: number }
 export function typeEdge(g: Game, att: Weighed[], def: Weighed[], m: AirMission): number {
   const band = bandOf(m);
   if (!band) return 0;
-  const cap = FIGHTERS.w.cap;
   const mixes = new Map<AirFleet, Mix | null>();
   const mixOf = (f: AirFleet): Mix | null => { if (!mixes.has(f)) mixes.set(f, typeMix(g, f)); return mixes.get(f)!; };
   let t = 0, s = 0;
@@ -174,9 +241,11 @@ export function typeEdge(g: Game, att: Weighed[], def: Weighed[], m: AirMission)
     for (const d of def) {
       if (d.w <= 0) continue;
       const ma = mixOf(a.f), md = mixOf(d.f);
-      const e = ma && md ? mixEdge(ma, md, band) : 0;
+      const e = ma && md ? mixEdge(ma, md, band, doctrineOf(g, a.f.nat), doctrineOf(g, d.f.nat)) + hoursEdge(g, a.f.nat, d.f.nat) : 0;
+      // M replaces fighterTech in the fighters' worth against each other (06:55Z): the research lead the count gives
+      // through techMul is taken off, so the plane is priced once, by its type.
       const lead = Math.log(techMul(g, a.f.nat, 'fighters') / techMul(g, d.f.nat, 'fighters'));
-      t += a.w * d.w * clip(e - lead, -cap, cap);
+      t += a.w * d.w * (e - lead);
       s += a.w * d.w;
     }
   }

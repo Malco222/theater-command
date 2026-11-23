@@ -357,6 +357,8 @@ export interface Build {
   cadre?: number;
   /** A wing bought abroad (arsenal.json smallAir.abroad): the great power that sells it. */
   from?: string;
+  /** Its fighters' type, the seller's in production in the order month (the switch 'Fighter types'; the design director, 23 Nov 07:00Z). */
+  mark?: string;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -1224,6 +1226,11 @@ export interface AirFleet extends Storied {
   ashore?: number;
   /** Its bombers one by one, where its nation's bombers carry names (bombers.ts): each with its missions and its gunners' kills. */
   bombers?: BomberRoster;
+  /**
+   * Fighters bought abroad, by type, as shares of the group (the switch 'Fighter types'; 07:00Z): a bought wing keeps the
+   * seller's type, flown by this nation's pilots, and never upgrades with the seller's research. The rest is its own.
+   */
+  bought?: Record<string, number>;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

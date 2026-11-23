@@ -8,7 +8,7 @@ import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
 import {
   FIGHTERS, bandOf, edge, fighterClock, fighterMonth, fighterPanel, fighterTypesOn, mixEdge, namesOf, raidCardLines, serviceNews,
-  setFighterTypes, sideTypes, typeEdge, typeMix,
+  joinBought, setFighterTypes, sideTypes, typeEdge, typeMix,
 } from '../src/campaign/fighters';
 import type { AirFleet, AirMission, Game } from '../src/campaign/types';
 
@@ -62,34 +62,69 @@ describe('the data', () => {
   });
 });
 
-describe('the matchup', () => {
-  it('gives the research table\'s edges (matchup.py), and is antisymmetric', () => {
-    // The calibration anchors as fighters-table.json gives them (three places).
-    const anchors: [string, string, 'low' | 'mid' | 'high', number][] = [
-      ['spitfire_i', 'bf109_e', 'mid', 0.02], ['hurricane_i', 'bf109_e', 'mid', -0.15], ['fw190_a3', 'spitfire_v', 'mid', 0.12],
-      ['p51_bc', 'bf109_g6', 'high', 0.21], ['f6f5', 'a6m5_52', 'mid', 0.17], ['p11c', 'bf109_e', 'mid', -0.26],
-      ['mc202', 'spitfire_v_trop', 'mid', -0.02], ['cr42', 'hurricane_i', 'low', -0.19], ['tempest_v', 'fw190_a8', 'low', 0.19],
-    ];
-    for (const [a, b, band, e] of anchors) {
-      expect(edge(a, b, band), `${a} v ${b}`).toBeCloseTo(e, 1);
-      expect(Math.abs(edge(a, b, band) - e), `${a} v ${b}`).toBeLessThan(0.006);
-      expect(edge(b, a, band)).toBeCloseTo(-edge(a, b, band), 12);
-    }
-    expect(edge('spitfire_i', 'spitfire_i', 'mid')).toBe(0);
+describe('the matchup (the design director, 23 Nov 2026 06:55Z and 07:00Z)', () => {
+  const withK = <T>(k: number, run: () => T, widest: number | null = null): T => {
+    const was = { ...FIGHTERS.law };
+    FIGHTERS.law.k = k; FIGHTERS.law.widest = widest;
+    try { return run(); } finally { Object.assign(FIGHTERS.law, was); }
+  };
+  const T = FIGHTERS.types;
+  const ln = (x?: number, y?: number): number => (x && y ? Math.log(x / y) : 0);
+
+  it('gives no edge until k is fitted to the record\'s anchors', () => {
+    expect(FIGHTERS.law.fitted).toBe(false);
+    for (const [a, b] of [['spitfire_i', 'bf109_e'], ['a6m2_21', 'f4f4'], ['bf109_e', 'p11c']]) expect(edge(a, b, 'mid')).toBe(0);
   });
 
-  it('never counts an airframe for more than the cap', () => {
-    let most = 0;
-    const ids = Object.keys(FIGHTERS.types);
-    for (const band of ['low', 'mid', 'high'] as const) for (const a of ids) for (const b of ids) most = Math.max(most, Math.abs(edge(a, b, band)));
-    expect(most).toBe(FIGHTERS.w.cap);
-    // A jet against a biplane: every part at its most but the turn, which the faster side refuses.
-    expect(edge('me262_a1a', 'gauntlet', 'high')).toBeCloseTo(0.29, 12);
+  it('with no doctrine laid, top speed alone decides, k times its log ratio; antisymmetric', () => {
+    withK(1, () => {
+      const [a, b] = ['bf109_e', 'p11c'];
+      expect(T[a].laid!.speed && T[b].laid!.speed).toBe(true);
+      expect(edge(a, b, 'mid')).toBeCloseTo(Math.log(T[a].top! / T[b].top!), 12);
+      expect(edge(a, b, 'mid')).toBeGreaterThan(0);
+      expect(edge(b, a, 'mid')).toBeCloseTo(-edge(a, b, 'mid'), 12);
+      expect(edge(a, a, 'mid')).toBe(0);
+    });
+  });
+
+  it('doctrine picks the term: a turner brings its wing loading, a diver its climb and dive; a figure not laid is 1', () => {
+    withK(1, () => {
+      const [a, b] = ['a6m2_21', 'f4f4'], A = T[a], B = T[b];
+      const both = (k: 'speed' | 'turn' | 'climb' | 'dive'): boolean => !!(A.laid![k] && B.laid![k]);
+      const speed = both('speed') ? ln(A.top, B.top) : 0;
+      const turn = both('turn') ? ln(B.wl, A.wl) : 0;
+      const dive = (both('climb') ? ln(A.climb, B.climb) : 0) + (both('dive') ? ln(A.diveLimit, B.diveLimit) : 0);
+      expect(edge(a, b, 'mid', 'turn', 'dive-zoom')).toBeCloseTo(speed + turn + dive, 12);
+      expect(edge(a, b, 'mid', 'turn', 'turn')).toBeCloseTo(speed + 2 * turn, 12);
+      expect(edge(a, b, 'mid')).toBeCloseTo(speed, 12);
+      // The Zero turns tighter than the Wildcat (lower wing loading): in a turning fight that is the Zero's.
+      expect(A.wl!).toBeLessThan(B.wl!);
+    });
+  });
+
+  it('has no cap of its own: once fitted, the widest anchor the record gives bounds it', () => {
+    withK(1, () => expect(Math.abs(edge('bf109_e', 'p11c', 'mid'))).toBeGreaterThan(0.3));
+    withK(1, () => expect(Math.abs(edge('bf109_e', 'p11c', 'mid'))).toBeCloseTo(0.1, 12), 0.1);
   });
 
   it('weighs a mix against a mix by both shares', () => {
-    const mix = mixEdge({ spitfire_i: 0.4, hurricane_i: 0.6 }, { bf109_e: 1 }, 'mid');
-    expect(mix).toBeCloseTo(0.4 * edge('spitfire_i', 'bf109_e', 'mid') + 0.6 * edge('hurricane_i', 'bf109_e', 'mid'), 12);
+    withK(1, () => {
+      const mix = mixEdge({ spitfire_i: 0.4, hurricane_i: 0.6 }, { bf109_e: 1 }, 'mid');
+      expect(mix).toBeCloseTo(0.4 * edge('spitfire_i', 'bf109_e', 'mid') + 0.6 * edge('hurricane_i', 'bf109_e', 'mid'), 12);
+    });
+  });
+
+  it('a wing bought abroad keeps the seller\'s type, as its share of the group (07:00Z)', () => {
+    const g = createGame(3, null);
+    const f = g.airFleets.find((x) => x.nat === 'POL' && x.ftr > 0)!;
+    const had = f.ftr;
+    joinBought(f, 'hurricane_i', had, 100);
+    expect(f.bought!.hurricane_i).toBeCloseTo(100 / (had + 100), 12);
+    const mix = typeMix(g, f)!;
+    expect(mix.hurricane_i).toBeCloseTo(100 / (had + 100), 12);
+    expect(Object.values(mix).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+    joinBought(f, 'hurricane_i', had + 100, 100);
+    expect(f.bought!.hurricane_i).toBeCloseTo(200 / (had + 200), 12);
   });
 });
 
@@ -152,13 +187,20 @@ describe('the count', () => {
     y.base = x.f.base;
     const a0 = assessAir(off, [x.f], 'superiority', x.target);
     const a1 = assessAir(g, [y], 'superiority', x.target);
-    const E = a1.typeEdge!;
-    expect(E).toBeGreaterThan(0.2);
-    expect(E).toBeLessThanOrEqual(FIGHTERS.w.cap);
-    expect(a1.Epow / a0.Epow).toBeCloseTo(Math.exp(E / 2), 10);
-    expect(a1.Dpow / a0.Dpow).toBeCloseTo(Math.exp(-E / 2), 10);
-    // The Bf 109 E against the P.11c, on schedule (techMul 1 on both sides): the airframes' edge alone.
-    expect(E).toBeCloseTo(mixEdge({ bf109_e: 0.9, bf110_c: 0.1 }, { p11c: 1 }, 'mid'), 10);
+    // Until k is fitted the types give no edge, and on schedule (techMul 1 on both sides) nothing moves.
+    expect(a1.typeEdge).toBe(0);
+    expect(a1.Epow / a0.Epow).toBeCloseTo(1, 10);
+    // With a trial k: the Bf 109 E against the P.11c, the airframes' edge alone, as a pair.
+    const was = FIGHTERS.law.k;
+    FIGHTERS.law.k = 1;
+    try {
+      const a2 = assessAir(g, [y], 'superiority', x.target);
+      const E = a2.typeEdge!;
+      expect(E).toBeGreaterThan(0.1);
+      expect(a2.Epow / a0.Epow).toBeCloseTo(Math.exp(E / 2), 10);
+      expect(a2.Dpow / a0.Dpow).toBeCloseTo(Math.exp(-E / 2), 10);
+      expect(E).toBeCloseTo(mixEdge({ bf109_e: 0.9, bf110_c: 0.1 }, { p11c: 1 }, 'mid'), 10);
+    } finally { FIGHTERS.law.k = was; }
   });
 
   it('at night there is no matchup', () => {
