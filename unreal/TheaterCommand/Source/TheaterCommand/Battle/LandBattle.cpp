@@ -615,6 +615,22 @@ namespace LandParts
 		return Made;
 	}
 
+	/**
+	 * Which of a battle model's triangle corners goes to the engine at place I (LandKit's meshes: the tanks, guns, lorries,
+	 * cars and props): each triangle's last two swapped. The model files wind a triangle's corners counter-clockwise seen
+	 * from its front in their own axes; the engine draws the side it sees them clockwise from (the campaign's own reader
+	 * turns them so, FMiniatureMesh::Face), and the files' axes go to the engine's with no mirror on the way. Handed over
+	 * as they stood, every vehicle was drawn inside out: from outside the inner side of her far walls, and whatever stood
+	 * inside her, her commander's legs and his hatch's floor, drawn over the walls in front of him (Brian, 23 November
+	 * 14:45Z to 15:05Z: "some of the tanks you can see through the back of them", "every tank appears to be see
+	 * through", his Tiger's commander seen whole through her turret). The men and the field are wound for the engine
+	 * already (their mirror on the way, LandMen::WorldOf and World's swap) and are not turned.
+	 */
+	static constexpr int32 KitFront(int32 I)
+	{
+		return I % 3 == 1 ? I + 1 : I % 3 == 2 ? I - 1 : I;
+	}
+
 	/** A far man of the soldier pose bank (SO1: one baked set in one pose, LandMen::Crowd::BankMesh and BankLook) as a
 	 * mesh of its own on the men's ink, for instancing: his own axes (x forward, y to his right, z up: the same hand as
 	 * Unreal's) as the mesh's, metres to Unreal's units; colours as sRGB bytes (see ThingMesh). Null where the points
@@ -685,7 +701,8 @@ namespace LandParts
 
 	/** A battle model's bodies at rest (a prop: the field telephone, the cable reel, the stretcher; LandKit's shape) as
 	 * one mesh on Ink for instancing: its own axes (x forward, y right, z up, Unreal's hand), each body's points from its
-	 * pivot; Far its plain level, else its fine one. Null where the model has no points. */
+	 * pivot, its triangles turned for the engine (KitFront); Far its plain level, else its fine one. Null where the model
+	 * has no points. */
 	static UStaticMesh* PropMesh(UObject* Owner, const FName& Name, const LandKit::Model& Prop, bool bFar, UMaterialInterface* Ink, double U)
 	{
 		std::vector<float> At, Facing;
@@ -707,9 +724,10 @@ namespace LandParts
 				Facing.insert(Facing.end(), { M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2] });
 				Paint.Rgb.insert(Paint.Rgb.end(), { M.Colours[K * 4], M.Colours[K * 4 + 1], M.Colours[K * 4 + 2] });
 			}
-			for (const uint32_t T : M.Triangles)
+			// (each triangle's last two corners swapped, as FromBody's: KitFront)
+			for (size_t K = 0; K < M.Triangles.size(); ++K)
 			{
-				Paint.Triangles.push_back(First + T);
+				Paint.Triangles.push_back(First + M.Triangles[static_cast<size_t>(KitFront(static_cast<int32>(K)))]);
 			}
 			Paint.Points += static_cast<int>(Count);
 		}
@@ -751,7 +769,8 @@ namespace LandParts
 	static constexpr double StalkClear = 3.5, StalkEyeLow = 2.5, StalkEyeHigh = 3.0;
 
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
-	 * engine takes it, its colours taken toward the burnt colour by Soot. */
+	 * engine takes it, its colours taken toward the burnt colour by Soot. Each triangle's last two corners are swapped
+	 * (KitFront). */
 	static void FromBody(const LandKit::Mesh& M, const uint8_t* Burnt, double Soot, double U, TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>* T)
 	{
 		const int32 Count = static_cast<int32>(M.Count());
@@ -772,7 +791,7 @@ namespace LandParts
 			T->SetNumUninitialized(static_cast<int32>(M.Triangles.size()));
 			for (int32 I = 0; I < T->Num(); ++I)
 			{
-				(*T)[I] = static_cast<int32>(M.Triangles[static_cast<size_t>(I)]);
+				(*T)[I] = static_cast<int32>(M.Triangles[static_cast<size_t>(KitFront(I))]);
 			}
 		}
 	}
