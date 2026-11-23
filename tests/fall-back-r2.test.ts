@@ -88,10 +88,17 @@ describe('a beaten corps whose rear is full', () => {
     for (const c of p.def) expect(c.reg).toBe(p.rear.id);
   });
 
-  it('on: with no ground of its side next to the field at all, is taken whole (ruling 232)', () => {
-    const p = pocket(true, 'room');
-    hand(p.g, p.rear, 'GER');
-    const rep = fight(p);
-    expect(rep.defenders.filter((u) => !u.guard).map((u) => u.fate)).toEqual(['surrendered', 'surrendered']);
-  });
+  // Ruling 232 stays as it is, on and off: with no ground of its side next to the field, the fall back has nowhere to go.
+  for (const on of [false, true]) {
+    it(`${on ? 'on' : 'off'}: with no ground of its side next to the field at all, is taken whole (ruling 232)`, () => {
+      const p = pocket(on, 'room');
+      hand(p.g, p.rear, 'GER');
+      expect(p.target.nb.every((j) => p.g.regions[j].ctrl === 'GER')).toBe(true);
+      const rep = fight(p);
+      expect(rep.taken).toBe(true);
+      expect(rep.defenders.filter((u) => !u.guard).map((u) => u.fate)).toEqual(['surrendered', 'surrendered']);
+      for (const c of p.def) expect(c.dead).toBe(true);
+      expect(rep.prisoners).toBeGreaterThan(0);
+    });
+  }
 });
