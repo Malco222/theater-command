@@ -1,0 +1,902 @@
+{
+ "about": "The pose bank for far soldiers (the true-scale plan, SO1). Each pose is a clip at a phase (0 to 1 of that clip's `long`), baked once per soldier file when a battle loads: the file's own skinning (its `about`), keys blended linearly. Each cycle lists its poses in phase order. A far man playing clip C at time t shows pose cycles[C][round(n * (t mod long) / long) mod n] for a loop (n = len(cycles[C])), and for a one-shot clip the nearest phase, the last one once he is past it; a man drawn as an instance (the vertex-animation form, mid and far) goes between the two poses either side of t by its share. Poses 70 on are the gaits' in-between poses (walk, run, crawl 16 a cycle, advance, creep, flee 12), added 11-22 so a man stepping out past 25 m stays within a pixel of his live self; the first 70 keep their numbers. Poses 112 on are release 2's field clips (field_clips.py): stretcher_front and stretcher_rear (12 a cycle), carried_wounded and splice_kneel (4); poses 144 on are reel_walk (12) and wounded_waiting (4); a file without them (the sailors) goes by `instead`. A clip not in `cycles` shows the cycle of `instead[C]`, and a clip the file lacks is left out of its bake and also goes by `instead`. Falls are not in the bank: a far man's fall plays as today (skinned), then he is frozen in its last pose. Pose-bank men fire no clip flashes (SO3): their clips' `muzzle_flash` events are skipped; their rounds, if the recording has them, flash as the battle's distance cap allows. Bake cost measured by pose_bank.py --bake (numpy, one core): see `bake_ms`.",
+ "poses": [
+  {
+   "clip": "idle",
+   "phase": 0.0
+  },
+  {
+   "clip": "idle",
+   "phase": 0.25
+  },
+  {
+   "clip": "idle",
+   "phase": 0.5
+  },
+  {
+   "clip": "idle",
+   "phase": 0.75
+  },
+  {
+   "clip": "walk",
+   "phase": 0.0
+  },
+  {
+   "clip": "walk",
+   "phase": 0.125
+  },
+  {
+   "clip": "walk",
+   "phase": 0.25
+  },
+  {
+   "clip": "walk",
+   "phase": 0.375
+  },
+  {
+   "clip": "walk",
+   "phase": 0.5
+  },
+  {
+   "clip": "walk",
+   "phase": 0.625
+  },
+  {
+   "clip": "walk",
+   "phase": 0.75
+  },
+  {
+   "clip": "walk",
+   "phase": 0.875
+  },
+  {
+   "clip": "run",
+   "phase": 0.0
+  },
+  {
+   "clip": "run",
+   "phase": 0.125
+  },
+  {
+   "clip": "run",
+   "phase": 0.25
+  },
+  {
+   "clip": "run",
+   "phase": 0.375
+  },
+  {
+   "clip": "run",
+   "phase": 0.5
+  },
+  {
+   "clip": "run",
+   "phase": 0.625
+  },
+  {
+   "clip": "run",
+   "phase": 0.75
+  },
+  {
+   "clip": "run",
+   "phase": 0.875
+  },
+  {
+   "clip": "advance",
+   "phase": 0.0
+  },
+  {
+   "clip": "advance",
+   "phase": 0.1667
+  },
+  {
+   "clip": "advance",
+   "phase": 0.3333
+  },
+  {
+   "clip": "advance",
+   "phase": 0.5
+  },
+  {
+   "clip": "advance",
+   "phase": 0.6667
+  },
+  {
+   "clip": "advance",
+   "phase": 0.8333
+  },
+  {
+   "clip": "creep",
+   "phase": 0.0
+  },
+  {
+   "clip": "creep",
+   "phase": 0.1667
+  },
+  {
+   "clip": "creep",
+   "phase": 0.3333
+  },
+  {
+   "clip": "creep",
+   "phase": 0.5
+  },
+  {
+   "clip": "creep",
+   "phase": 0.6667
+  },
+  {
+   "clip": "creep",
+   "phase": 0.8333
+  },
+  {
+   "clip": "flee",
+   "phase": 0.0
+  },
+  {
+   "clip": "flee",
+   "phase": 0.1667
+  },
+  {
+   "clip": "flee",
+   "phase": 0.3333
+  },
+  {
+   "clip": "flee",
+   "phase": 0.5
+  },
+  {
+   "clip": "flee",
+   "phase": 0.6667
+  },
+  {
+   "clip": "flee",
+   "phase": 0.8333
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.0
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.125
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.25
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.375
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.5
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.625
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.75
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.875
+  },
+  {
+   "clip": "fire_stand",
+   "phase": 0.0
+  },
+  {
+   "clip": "fire_stand",
+   "phase": 0.08
+  },
+  {
+   "clip": "fire_stand",
+   "phase": 0.3
+  },
+  {
+   "clip": "fire_stand",
+   "phase": 0.6
+  },
+  {
+   "clip": "fire_kneel",
+   "phase": 0.0
+  },
+  {
+   "clip": "fire_kneel",
+   "phase": 0.08
+  },
+  {
+   "clip": "fire_kneel",
+   "phase": 0.3
+  },
+  {
+   "clip": "fire_kneel",
+   "phase": 0.6
+  },
+  {
+   "clip": "fire_prone",
+   "phase": 0.0
+  },
+  {
+   "clip": "fire_prone",
+   "phase": 0.08
+  },
+  {
+   "clip": "fire_prone",
+   "phase": 0.3
+  },
+  {
+   "clip": "fire_prone",
+   "phase": 0.6
+  },
+  {
+   "clip": "cower",
+   "phase": 0.2
+  },
+  {
+   "clip": "cower",
+   "phase": 0.6
+  },
+  {
+   "clip": "reload_stand",
+   "phase": 0.3
+  },
+  {
+   "clip": "reload_stand",
+   "phase": 0.65
+  },
+  {
+   "clip": "reload_kneel",
+   "phase": 0.3
+  },
+  {
+   "clip": "reload_kneel",
+   "phase": 0.65
+  },
+  {
+   "clip": "reload_prone",
+   "phase": 0.3
+  },
+  {
+   "clip": "reload_prone",
+   "phase": 0.65
+  },
+  {
+   "clip": "kneel_down",
+   "phase": 0.5
+  },
+  {
+   "clip": "stand_up",
+   "phase": 0.5
+  },
+  {
+   "clip": "go_prone",
+   "phase": 0.35
+  },
+  {
+   "clip": "go_prone",
+   "phase": 0.7
+  },
+  {
+   "clip": "walk",
+   "phase": 0.0625
+  },
+  {
+   "clip": "walk",
+   "phase": 0.1875
+  },
+  {
+   "clip": "walk",
+   "phase": 0.3125
+  },
+  {
+   "clip": "walk",
+   "phase": 0.4375
+  },
+  {
+   "clip": "walk",
+   "phase": 0.5625
+  },
+  {
+   "clip": "walk",
+   "phase": 0.6875
+  },
+  {
+   "clip": "walk",
+   "phase": 0.8125
+  },
+  {
+   "clip": "walk",
+   "phase": 0.9375
+  },
+  {
+   "clip": "run",
+   "phase": 0.0625
+  },
+  {
+   "clip": "run",
+   "phase": 0.1875
+  },
+  {
+   "clip": "run",
+   "phase": 0.3125
+  },
+  {
+   "clip": "run",
+   "phase": 0.4375
+  },
+  {
+   "clip": "run",
+   "phase": 0.5625
+  },
+  {
+   "clip": "run",
+   "phase": 0.6875
+  },
+  {
+   "clip": "run",
+   "phase": 0.8125
+  },
+  {
+   "clip": "run",
+   "phase": 0.9375
+  },
+  {
+   "clip": "advance",
+   "phase": 0.0833
+  },
+  {
+   "clip": "advance",
+   "phase": 0.25
+  },
+  {
+   "clip": "advance",
+   "phase": 0.4167
+  },
+  {
+   "clip": "advance",
+   "phase": 0.5833
+  },
+  {
+   "clip": "advance",
+   "phase": 0.75
+  },
+  {
+   "clip": "advance",
+   "phase": 0.9167
+  },
+  {
+   "clip": "creep",
+   "phase": 0.0833
+  },
+  {
+   "clip": "creep",
+   "phase": 0.25
+  },
+  {
+   "clip": "creep",
+   "phase": 0.4167
+  },
+  {
+   "clip": "creep",
+   "phase": 0.5833
+  },
+  {
+   "clip": "creep",
+   "phase": 0.75
+  },
+  {
+   "clip": "creep",
+   "phase": 0.9167
+  },
+  {
+   "clip": "flee",
+   "phase": 0.0833
+  },
+  {
+   "clip": "flee",
+   "phase": 0.25
+  },
+  {
+   "clip": "flee",
+   "phase": 0.4167
+  },
+  {
+   "clip": "flee",
+   "phase": 0.5833
+  },
+  {
+   "clip": "flee",
+   "phase": 0.75
+  },
+  {
+   "clip": "flee",
+   "phase": 0.9167
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.0625
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.1875
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.3125
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.4375
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.5625
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.6875
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.8125
+  },
+  {
+   "clip": "crawl",
+   "phase": 0.9375
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.0
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.0833
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.1667
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.25
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.3333
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.4167
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.5
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.5833
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.6667
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.75
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.8333
+  },
+  {
+   "clip": "stretcher_front",
+   "phase": 0.9167
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.0
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.0833
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.1667
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.25
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.3333
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.4167
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.5
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.5833
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.6667
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.75
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.8333
+  },
+  {
+   "clip": "stretcher_rear",
+   "phase": 0.9167
+  },
+  {
+   "clip": "carried_wounded",
+   "phase": 0.0
+  },
+  {
+   "clip": "carried_wounded",
+   "phase": 0.25
+  },
+  {
+   "clip": "carried_wounded",
+   "phase": 0.5
+  },
+  {
+   "clip": "carried_wounded",
+   "phase": 0.75
+  },
+  {
+   "clip": "splice_kneel",
+   "phase": 0.0
+  },
+  {
+   "clip": "splice_kneel",
+   "phase": 0.2
+  },
+  {
+   "clip": "splice_kneel",
+   "phase": 0.45
+  },
+  {
+   "clip": "splice_kneel",
+   "phase": 0.8
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.0
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.0833
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.1667
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.25
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.3333
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.4167
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.5
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.5833
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.6667
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.75
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.8333
+  },
+  {
+   "clip": "reel_walk",
+   "phase": 0.9167
+  },
+  {
+   "clip": "wounded_waiting",
+   "phase": 0.0
+  },
+  {
+   "clip": "wounded_waiting",
+   "phase": 0.25
+  },
+  {
+   "clip": "wounded_waiting",
+   "phase": 0.5
+  },
+  {
+   "clip": "wounded_waiting",
+   "phase": 0.75
+  }
+ ],
+ "cycles": {
+  "idle": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "walk": [
+   4,
+   70,
+   5,
+   71,
+   6,
+   72,
+   7,
+   73,
+   8,
+   74,
+   9,
+   75,
+   10,
+   76,
+   11,
+   77
+  ],
+  "run": [
+   12,
+   78,
+   13,
+   79,
+   14,
+   80,
+   15,
+   81,
+   16,
+   82,
+   17,
+   83,
+   18,
+   84,
+   19,
+   85
+  ],
+  "advance": [
+   20,
+   86,
+   21,
+   87,
+   22,
+   88,
+   23,
+   89,
+   24,
+   90,
+   25,
+   91
+  ],
+  "creep": [
+   26,
+   92,
+   27,
+   93,
+   28,
+   94,
+   29,
+   95,
+   30,
+   96,
+   31,
+   97
+  ],
+  "flee": [
+   32,
+   98,
+   33,
+   99,
+   34,
+   100,
+   35,
+   101,
+   36,
+   102,
+   37,
+   103
+  ],
+  "crawl": [
+   38,
+   104,
+   39,
+   105,
+   40,
+   106,
+   41,
+   107,
+   42,
+   108,
+   43,
+   109,
+   44,
+   110,
+   45,
+   111
+  ],
+  "fire_stand": [
+   46,
+   47,
+   48,
+   49
+  ],
+  "fire_kneel": [
+   50,
+   51,
+   52,
+   53
+  ],
+  "fire_prone": [
+   54,
+   55,
+   56,
+   57
+  ],
+  "cower": [
+   58,
+   59
+  ],
+  "reload_stand": [
+   60,
+   61
+  ],
+  "reload_kneel": [
+   62,
+   63
+  ],
+  "reload_prone": [
+   64,
+   65
+  ],
+  "kneel_down": [
+   66
+  ],
+  "stand_up": [
+   67
+  ],
+  "go_prone": [
+   68,
+   69
+  ],
+  "stretcher_front": [
+   112,
+   113,
+   114,
+   115,
+   116,
+   117,
+   118,
+   119,
+   120,
+   121,
+   122,
+   123
+  ],
+  "stretcher_rear": [
+   124,
+   125,
+   126,
+   127,
+   128,
+   129,
+   130,
+   131,
+   132,
+   133,
+   134,
+   135
+  ],
+  "carried_wounded": [
+   136,
+   137,
+   138,
+   139
+  ],
+  "splice_kneel": [
+   140,
+   141,
+   142,
+   143
+  ],
+  "reel_walk": [
+   144,
+   145,
+   146,
+   147,
+   148,
+   149,
+   150,
+   151,
+   152,
+   153,
+   154,
+   155
+  ],
+  "wounded_waiting": [
+   156,
+   157,
+   158,
+   159
+  ]
+ },
+ "instead": {
+  "advance": "run",
+  "creep": "walk",
+  "flee": "run",
+  "fire_stand": "idle",
+  "cower": "fire_kneel",
+  "reload_stand": "fire_stand",
+  "reload_kneel": "fire_kneel",
+  "reload_prone": "fire_prone",
+  "kneel_down": "fire_kneel",
+  "stand_up": "fire_kneel",
+  "go_prone": "fire_prone",
+  "stretcher_front": "walk",
+  "stretcher_rear": "walk",
+  "splice_kneel": "fire_kneel",
+  "reel_walk": "walk",
+  "lmg_burst": "fire_prone",
+  "throw_grenade": "fire_stand"
+ },
+ "loops": [
+  "idle",
+  "walk",
+  "run",
+  "advance",
+  "creep",
+  "flee",
+  "crawl",
+  "fire_stand",
+  "fire_kneel",
+  "fire_prone",
+  "cower",
+  "stretcher_front",
+  "stretcher_rear",
+  "carried_wounded",
+  "splice_kneel",
+  "reel_walk",
+  "wounded_waiting"
+ ],
+ "bake_ms": {
+  "how": "pose_bank.py --bake, numpy on one core of the cloud machine, 70 poses",
+  "soldier_USA far (445 points)": 68,
+  "soldier_USA near (7,177 points)": 201,
+  "soldier_GER far (64 poses: no reloads)": 52,
+  "soldier_USA_nco far": 49,
+  "soldier_USA_para far": 45,
+  "soldier_SOV far (64 poses)": 47,
+  "soldier_USA far, all 160 poses (11-22, release 2's field clips in)": 143,
+  "soldier_USA_radio far, 154 poses (no reloads)": 135
+ }
+}

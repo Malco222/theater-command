@@ -76,14 +76,34 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface():
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
-    The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth."""
-    m = new_material("M_MapSurface")
+    The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
+    (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
+    paint taken toward "BurntColour" by its soot weight, the mesh's first texture coordinate's U, times how far her
+    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)
+    (SO1: with crowd, M_LandCrowd, the ground battle's mid and far men as instances in the pose bank's poses: see
+    crowd_poses.)"""
+    m = new_material(name)
+    # (the ground battle draws its hedges, trees and grass with this surface by instancing)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
     # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
-    connect(colour, "", to_linear, "Base")
+    posed_facing = None
+    if crowd:
+        # SO1
+        m.set_editor_property("tangent_space_normal", False)  # his posed facing is given in the world
+        toned, posed_facing = crowd_poses(m, colour)
+        connect(toned, "", to_linear, "Base")
+    elif soot:
+        # TK1
+        weight = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 150), -1300, 150,
+                           r=True, g=False, b=False, a=False)
+        burnt = one_in(m, unreal.MaterialExpressionSaturate, times(m, weight, node(m, unreal.MaterialExpressionPerInstanceCustomData, -1300, 250), -1150, 200), -1050, 200)
+        connect(lerp(m, colour, vector(m, "BurntColour", (38.0 / 255.0, 33.0 / 255.0, 29.0 / 255.0, 1.0), -1150, 50), burnt, -850, 100), "", to_linear, "Base")
+    else:
+        connect(colour, "", to_linear, "Base")
 
     # Unevenness: a soft noise at two sizes, multiplied together so the repeat does not show.
     noise = unreal.load_asset("/Engine/MapTemplates/TilingNoise05")
@@ -177,7 +197,7 @@ def build_map_surface():
                                              scalar(m, "ChipSharp", 9.0, -50, -1850), 150, -1750), 300, -1750), metal, 450, -1750), wear, 600, -1750)
     # (and what faces the sky is paler than what faces the side: the light from above, and the dust that settles)
     skyward = node(m, unreal.MaterialExpressionComponentMask, -900, -2100, r=False, g=False, b=True, a=False)
-    connect(node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
+    connect(posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
     lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, -750, -2100), scalar(m, "TopLight", 0.26, -750, -2000), -600, -2050),
                                  times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)
     weathered = times(m, times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
@@ -194,7 +214,7 @@ def build_map_surface():
     # says so, which only the pieces' material does: the land, the towns and the woods are as they were. No light
     # is added to the scene and nothing throws a new shadow.)
     figure_sun = vector(m, "FigureSun", (0.0, 0.0, 1.0, 0.0), 900, -2600)
-    facing = node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
+    facing = posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
     to_sun = node(m, unreal.MaterialExpressionDotProduct, 1100, -2500)
     connect(facing, "", to_sun, "A")
     connect(figure_sun, "", to_sun, "B")
@@ -223,7 +243,8 @@ def build_map_surface():
     connect(flat, "", tooth, "A")
     connect(bump, "RGB", tooth, "B")
     connect(scalar(m, "Tooth", 0.35, -850, 1250), "", tooth, "Alpha")
-    to_property(tooth, "", unreal.MaterialProperty.MP_NORMAL)
+    # (a posed man: his facing as posed, in the world; the men's ink has no tooth)
+    to_property(posed_facing if crowd else tooth, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
     to_property(lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
@@ -302,6 +323,145 @@ def build_cloud():
     shown = times(m, times(m, (colour, "A"), (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
     to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
     finish(m)
+
+
+def _sky_chip_code():
+    """GS6: M_CloudTurned's Custom node: Battle/AirSkyChip.inl as it stands (the clouds' arithmetic, which the cloud test
+    also compiles as C++ and checks against the painter's), then a few lines that read one puff's texels from the
+    table and hand back where the point goes (the mesh's own units, its own frame) with its colour and its place on
+    the sheet."""
+    import os
+    places = []
+    try:
+        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    except NameError:  # (run where the script's own path is not given)
+        pass
+    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    for path in places:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                maths = f.read()
+            break
+    else:
+        raise RuntimeError("Battle/AirSkyChip.inl was not found at " + " or ".join(places))
+    texels = ", ".join(f"SkyTable.Load(int3({k}, 0, 0))" for k in range(5)) + ",\n    " + \
+        ", ".join(f"SkyTable.Load(int3(SkyCol + {k}, SkyRow, 0))" for k in range(8))
+    return maths + f"""
+// (the glue: one point of one puff, for the eye where it is this frame)
+FSkyChip SkyChip;
+SkyChip.Pad = 0.0f;
+int SkyCol = (int)(SkySlot.x + 0.5f);
+int SkyRow = (int)(SkySlot.y + 0.5f);
+float3 SkyLocal = SkyEye / SkyUnits;
+FSkyChipOut SkyOut = SkyChip.Vertex({texels},
+    float3(SkyLocal.y, SkyLocal.x, SkyLocal.z), SkyCol / 8 + (SkyRow - 1) * 256, (int)(SkyRing.x + 0.5f), (int)(SkyRing.y + 0.5f));
+SkyColour = SkyOut.Colour;
+SkySheet = SkyOut.Sheet;
+return float3(SkyOut.At.y, SkyOut.At.x, SkyOut.At.z) * SkyUnits;
+"""
+
+
+def build_cloud_turned():
+    """GS6, THE CLOUDS TURNED ON THE GRAPHICS CHIP (the speed gate's sky: the same clouds as M_Cloud, with nothing turned
+    or sent from the game's thread as the eye moves). One mesh, made once, a puff's room for each slot of the table:
+    each point's first texture coordinate is its place round its puff (the point round the ring, and which ring: 0 the
+    middle, 1 the heart, 2 the rim), its second its slot's first texel in "Table" (a float picture the game lays, far
+    to near: AirSky::Chip). Where the points are placed (the vertex shader) the Custom node runs Battle/AirSkyChip.inl,
+    the painter's own arithmetic, for the eye as it is this frame ("UnitsPerMetre": the scene's), and the point is
+    moved there; its colour and its place on the sheet are carried to the pixels, which are M_Cloud's (the "Sheet" of
+    shapes, "Brightness", "Tint", "Opacity"). Light of its own, see-through, seen from both sides."""
+    m = new_material("M_CloudTurned")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+
+    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
+    chip.set_editor_property("description", "AirSkyChip")
+    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    chip.set_editor_property("code", _sky_chip_code())
+    inputs = []
+    for name in ("SkyTable", "SkyRing", "SkySlot", "SkyEye", "SkyUnits"):
+        each = unreal.CustomInput()
+        each.set_editor_property("input_name", name)
+        inputs.append(each)
+    chip.set_editor_property("inputs", inputs)
+    outputs = []
+    for name in ("SkyColour", "SkySheet"):
+        each = unreal.CustomOutput()
+        each.set_editor_property("output_name", name)
+        each.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+        outputs.append(each)
+    chip.set_editor_property("additional_outputs", outputs)
+
+    stand = stand_in(True)
+    table = node(m, unreal.MaterialExpressionTextureObjectParameter, -2900, 700, parameter_name="Table", texture=stand, sampler_type=sampler_for(stand))
+    connect(table, "", chip, "SkyTable")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 850, coordinate_index=0), "", chip, "SkyRing")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 950, coordinate_index=1), "", chip, "SkySlot")
+    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1050,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1050), "", eye, "")
+    connect(eye, "", chip, "SkyEye")
+    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1150), "", chip, "SkyUnits")
+
+    # The point moved from where the mesh made it to where the chip puts it, in the world.
+    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
+    connect(chip, "", away, "A")
+    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
+    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(away, "", moved, "")
+    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # The pixels: M_Cloud's, from the colour and the sheet's place carried from the points.
+    colour = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkyColour"), -1700, -300)
+    carried = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkySheet"), -1700, 300)
+    paint = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, -300, r=True, g=True, b=True, a=False)
+    alpha = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, 650, r=False, g=False, b=False, a=True)
+    place = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1400, 0, r=True, g=True, b=False, a=False)
+    sheet = picture(m, "Sheet", place, -1100, 0, numbers=True)
+    behind = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 400, r=False, g=False, b=True, a=False)
+    ahead = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 520, r=False, g=False, b=False, a=True)
+
+    def less(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionSubtract, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    # light = 2 (side + (front - side) behind + (back - side) ahead), as M_Cloud
+    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
+    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
+    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
+    lit = times(m, times(m, paint, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
+    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    shown = times(m, times(m, alpha, (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+    try:  # (what the points' shader costs, for the next Mac run's notes; an engine without the call says nothing)
+        stats = mel.get_statistics(m)
+        unreal.log(f"Theater Command: M_CloudTurned: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
+                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
+    except Exception:
+        pass
+
+
+def build_cloud_turned_or_tell():
+    """GS6: M_CloudTurned is the clouds' on the graphics chip only; without it the scenes turn them on the game's thread
+    as before (LandBattle's LaySky says so). Whatever goes wrong in it is told, and the rest is built as before."""
+    import traceback
+    try:
+        build_cloud_turned()
+    except Exception:
+        unreal.log_error("Theater Command: M_CloudTurned was not built (the clouds are turned on the game's thread, as before):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_CloudTurned"):
+                eal.delete_asset(f"{MATERIALS}/M_CloudTurned")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
 
 
 def build_wake():
@@ -489,6 +649,118 @@ def picture(material, name, uv, x, y, numbers=False):
     if uv is not None:
         connect(uv, "", n, "UVs")
     return n
+
+
+def over(material, a, b, x=0, y=0):
+    n = node(material, unreal.MaterialExpressionDivide, x, y)
+    _feed(material, n, "A", a)
+    _feed(material, n, "B", b)
+    return n
+
+
+def crowd_poses(m, colour):
+    """THE MEN AS ONE CROWD (the true-scale plan's SO1, the vertex-animation form; the soldiers thread's bake, LandMen's
+    BankBody). Each body set of men alike out there is one mesh at rest, drawn by instancing; every pose of the bank is
+    in one picture handed in by C++ ("Poses", plain numbers kept as half floats, read texel by texel): a row a pose, a
+    column a point of the mesh, each point's way from its rest (Unreal's units, his own axes) in the first "PoseCount"
+    rows and its facing in the next as many. The mesh's second texture coordinate's U is the point's number (a whole
+    number, which a half float holds exactly up to 2048: C++ keeps a set under that), "Columns" the picture's width,
+    "Rows" its height (two rows a pose), "PoseCount" how many.
+
+    The instance's own numbers say what he shows (LandMen's BankShow): 0 and 1 the two poses and 2 the share of the
+    second (so he goes smoothly between them), 3 to 5 the same a frame before (BankShowBefore, for the anti-aliasing's
+    sense of movement), and 6 to 8 his face's tone, which multiplies his skin's colour (the mesh's first texture
+    coordinate's U is 1 on skin) in the sRGB the mesh keeps, as LandMen's MakeLook does for a skinned man.
+
+    All of it is read where the points are placed (the vertex shader), at the picture's first level; the facing and the
+    toned colour are carried to the pixels. Returns the toned colour (sRGB, to be made linear as any other) and his
+    facing in the world, unit length, in place of the mesh's."""
+    stand = stand_in(True)
+    columns = scalar(m, "Columns", 1.0, -4200, 1600)
+    rows = scalar(m, "Rows", 2.0, -4200, 1700)
+    poses = scalar(m, "PoseCount", 1.0, -4200, 1800)
+    point = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -4400, 1500, coordinate_index=1), -4200, 1500,
+                      r=True, g=False, b=False, a=False)
+    u = over(m, plus(m, point, 0.5, -4000, 1500), columns, -3850, 1550)
+    numbers = {}
+
+    def own(index, default=0.0):
+        if index not in numbers:
+            n = node(m, unreal.MaterialExpressionPerInstanceCustomData, -4200, 2000 + 100 * index, data_index=index)
+            if default != 0.0:
+                try:
+                    n.set_editor_property("const_default_value", default)
+                except Exception:  # (an engine that names it otherwise: his tone is always handed in)
+                    pass
+            numbers[index] = n
+        return numbers[index]
+
+    def read(row, x, y):
+        """The picture's numbers at this point in row 'row' (a node)."""
+        v = over(m, plus(m, row, 0.5, x - 300, y), rows, x - 150, y)
+        n = node(m, unreal.MaterialExpressionTextureSampleParameter2D, x, y, parameter_name="Poses", texture=stand, sampler_type=sampler_for(stand),
+                 mip_value_mode=unreal.TextureMipValueMode.TMVM_MIP_LEVEL, const_mip_value=0)
+        connect(pair(m, u, v, x - 100, y + 60), "", n, "UVs")
+        return (n, "RGB")
+
+    def to_world(v, x, y):
+        n = node(m, unreal.MaterialExpressionTransform, x, y,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+        connect(*(v if isinstance(v, tuple) else (v, "")), n, "")
+        return n
+
+    def moved(first, y):
+        """His points' way from rest, in the world, by the own numbers first (pose A), first + 1 (pose B), first + 2 (B's share)."""
+        a = read(own(first), -3500, y)
+        b = read(own(first + 1), -3500, y + 150)
+        return to_world(lerp(m, a, b, own(first + 2), -3200, y + 75), -3000, y + 75)
+
+    now = moved(0, 2000)
+    before = moved(3, 2400)
+    # (the frame before, where the anti-aliasing asks: an engine without the switch, or naming its pins otherwise,
+    # takes this frame's for both, said in the log)
+    offset = now
+    try:
+        switch = node(m, unreal.MaterialExpressionPreviousFrameSwitch, -2700, 2200)
+        for current_pin, previous_pin in (("Current Frame", "Previous Frame"), ("CurrentFrame", "PreviousFrame")):
+            if mel.connect_material_expressions(now, "", switch, current_pin) and mel.connect_material_expressions(before, "", switch, previous_pin):
+                offset = switch
+                break
+        if offset is not switch:
+            unreal.log_warning("Theater Command: M_LandCrowd: the frame-before switch's pins were not found; the men's poses give the anti-aliasing this frame's only")
+    except Exception as e:
+        unreal.log_warning(f"Theater Command: M_LandCrowd: no frame-before switch ({e}); the men's poses give the anti-aliasing this frame's only")
+    to_property(offset, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # His facing as posed (the rows after the positions), turned into the world, carried to the pixels and made unit long.
+    fa = read(plus(m, own(0), poses, -3800, 2800), -3500, 2800)
+    fb = read(plus(m, own(1), poses, -3800, 2950), -3500, 2950)
+    facing = to_world(lerp(m, fa, fb, own(2), -3200, 2875), -3000, 2875)
+    facing = one_in(m, unreal.MaterialExpressionNormalize, one_in(m, unreal.MaterialExpressionVertexInterpolator, facing, -2800, 2875), -2600, 2875)
+
+    # His face's tone on his skin, worked where the points are and carried to the pixels.
+    skin = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -4400, 3200, coordinate_index=0), -4200, 3200,
+                     r=True, g=False, b=False, a=False)
+    tone = pair(m, pair(m, own(6, 1.0), own(7, 1.0), -4000, 3300), own(8, 1.0), -3850, 3300)
+    toned = one_in(m, unreal.MaterialExpressionVertexInterpolator, lerp(m, colour, times(m, colour, tone, -3600, 3300), skin, -3400, 3250), -3200, 3250)
+    return toned, facing
+
+
+def build_land_crowd_or_tell():
+    """SO1: M_LandCrowd (M_MapSurface's paint on the pose bank's men drawn as instances: crowd_poses) is the ground
+    battle's alone, and the battle falls back to a mesh a set and pose without it (LandBattle's BankCopyFor; mid men
+    then skinned as before): whatever goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandCrowd", crowd=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandCrowd was not built (far men are drawn a mesh a pose, mid men skinned):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandCrowd"):
+                eal.delete_asset(f"{MATERIALS}/M_LandCrowd")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandCrowd could not be removed:\n" + traceback.format_exc())
 
 
 def sky_over(m, c, place, x, y, full=True):
@@ -1418,6 +1690,390 @@ def build_sea():
     finish(m)
 
 
+# ---- The ground battle's ground (release 2) -----------------------------------------------------------------------
+
+LAND_TEXTURES = "/Game/Campaign/Textures/Land"
+
+
+def land_texture(name, cut_out=False):
+    """One of the ground's own detail pictures, painted by Tools/land_look/make_ground_textures.py (or, the leaves,
+    make_leaf_textures.py) and kept beside it: brought in under /Game/Campaign/Textures/Land as plain numbers (not
+    colours), wrapping, kept as BC7. A cut-out picture (the leaves) keeps its leaves in its smaller pictures: each
+    made so that as much of it is over the material's clip (a half) as in the full one, so a hedge does not thin to
+    twigs with distance."""
+    import os
+    source = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Tools", "land_look", name + ".png")
+    if not os.path.isfile(source):
+        raise RuntimeError(f"{source} is missing: run Tools/land_look/make_ground_textures.py")
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", source)
+    task.set_editor_property("destination_path", LAND_TEXTURES)
+    task.set_editor_property("destination_name", name)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", False)
+    asset_tools.import_asset_tasks([task])
+    texture = unreal.load_asset(f"{LAND_TEXTURES}/{name}")
+    if texture is None:
+        raise RuntimeError(f"{LAND_TEXTURES}/{name} was not imported")
+    texture.set_editor_property("srgb", False)
+    texture.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
+    if cut_out:
+        try:
+            texture.set_editor_property("do_scale_mips_for_alpha_coverage", True)
+            texture.set_editor_property("alpha_coverage_thresholds", unreal.Vector4(0.0, 0.0, 0.0, 0.5))
+        except Exception as e:  # (an engine without these: the leaves thin a little with distance, nothing worse)
+            unreal.log_warning(f"Theater Command: {name}'s smaller pictures not scaled for their cut-out: {e}")
+    eal.save_asset(texture.get_path_name(), only_if_is_dirty=False)
+    unreal.log(f"Theater Command: wrote {texture.get_path_name()}")
+    return texture
+
+
+def build_land_surface():
+    """THE GROUND BATTLE'S GROUND (release 2; Brian on the first pictures of Normandy: "the graphics for the terrain
+    need a lot of work"). The pastures and bare fields read as felt: one flat colour. This is M_MapSurface's ground
+    (the same vertex colours, sRGB made linear, the same light on what faces the sky) with the ground's own grain over
+    it, for the battle's ground tiles only; the hedges, trees, grass, houses, tanks and men keep M_MapSurface, and the
+    campaign map never sees this material.
+
+    - The grain (T_LandGrain, about 2 m a repeat): a grazed sward seen from above where the vertex colour is green, a
+      loam's clods and crumbs where it is brown or gold, read at two sizes and two ways round and mixed, so its
+      repeat never lines up. It multiplies the colour: strong close by, fading with distance ("DetailFadeStart" to
+      "DetailFadeEnd", in metres, down to "DetailFar"), so the far fields stay calm.
+    - The lie of the field (T_LandPatch, about 40 m and, turned, about 97 m): value and warmth broadly (dry, yellow
+      and paler, or lush and blue-green), and in a pasture the trodden places where the soil shows.
+    - Tussocks (T_LandPatch's alpha): the rank, darker, bluer clumps in a pasture, on grass only (bare earth, a
+      cornfield's floor and a lane's dust have none), gathered in the picture itself and again where the turned
+      reading is lush, missing where it is dry, so they never lie as an even rash.
+    - Which way the ground leans (T_LandBump, from the grain's own heights), flattened with distance.
+    All of it only where the surface faces up: a steep bank keeps its paint. The mesh's alpha is not read (the ground
+    is painted at 255, which M_MapSurface takes as "not metal")."""
+    m = new_material("M_LandSurface")
+    # (the same usage as M_MapSurface)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("tangent_space_normal", False)  # the lean is worked out in the world, from the mesh's normal
+    grain_picture = land_texture("T_LandGrain")
+    bump_picture = land_texture("T_LandBump")
+    patch_picture = land_texture("T_LandPatch")
+
+    def sample(texture, uv, x, y):
+        n = node(m, unreal.MaterialExpressionTextureSample, x, y, texture=texture, sampler_type=sampler_for(texture))
+        connect(uv, "", n, "UVs")
+        return n
+
+    def over(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionDivide, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def sat(v, x, y):
+        return one_in(m, unreal.MaterialExpressionSaturate, v, x, y)
+
+    def mask(source, channel, x, y):
+        return node_from(m, unreal.MaterialExpressionComponentMask, source, x, y,
+                         r=channel == "R", g=channel == "G", b=channel == "B", a=False)
+
+    def restored(value, by, x, y):
+        """Two readings of a grain mixed are flatter than one: pushed back out from its middle (0.5)."""
+        return plus(m, times(m, plus(m, value, -0.5, x, y), by, x + 150, y), 0.5, x + 300, y)
+
+    colour = node(m, unreal.MaterialExpressionVertexColor, -2600, 0)
+    # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
+    to_linear = node(m, unreal.MaterialExpressionPower, -2400, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+
+    # Where a point is on the ground, in metres, both ways round: (north, east) and, turned, (east, north).
+    where = node(m, unreal.MaterialExpressionWorldPosition, -3600, 600)
+    metres = times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, -3400, 600, r=True, g=True, b=False, a=False), 0.01, -3250, 600)
+    turned = pair(m, mask(metres, "G", -3100, 700), mask(metres, "R", -3100, 780), -2950, 740)
+    uv_a = times(m, metres, scalar(m, "GrainTiling", 0.5, -2950, 560), -2800, 600)
+    uv_b = plus(m, times(m, turned, scalar(m, "GrainTilingTurned", 0.365, -2800, 820), -2650, 740),
+                node(m, unreal.MaterialExpressionConstant2Vector, -2800, 900, r=0.31, g=0.57), -2500, 740)
+    patch_uv_a = times(m, metres, scalar(m, "PatchTiling", 0.025, -2950, 1100), -2800, 1100)
+    patch_uv_b = plus(m, times(m, turned, scalar(m, "PatchTilingTurned", 0.0103, -2800, 1250), -2650, 1200),
+                      node(m, unreal.MaterialExpressionConstant2Vector, -2800, 1320, r=0.43, g=0.11), -2500, 1200)
+    grain_a = sample(grain_picture, uv_a, -2300, 500)
+    grain_b = sample(grain_picture, uv_b, -2300, 700)
+    bump_a = sample(bump_picture, uv_a, -2300, 1500)
+    bump_b = sample(bump_picture, uv_b, -2300, 1700)
+    patch_a = sample(patch_picture, patch_uv_a, -2300, 1050)
+    patch_b = sample(patch_picture, patch_uv_b, -2300, 1250)
+
+    # (how much the turned reading of the grain counts here, from the lie of the field's warmth: never one reading
+    # alone)
+    lead = plus(m, times(m, (patch_a, "G"), 0.4, -2100, 900), 0.3, -1950, 900)
+    restore = scalar(m, "GrainRestore", 1.3, -1950, 980)
+    grain = restored(lerp(m, (grain_a, "RGB"), (grain_b, "RGB"), lead, -1900, 600), restore, -1750, 600)
+    grass_lum = mask(grain, "R", -1300, 500)
+    soil_lum = mask(grain, "G", -1300, 600)
+    grass_hue = mask(grain, "B", -1300, 700)
+
+    # Only where the surface faces up: a bank's side or a lane's wall keeps its paint.
+    skyward = mask(node(m, unreal.MaterialExpressionVertexNormalWS, -2600, -600), "B", -2400, -600)
+    up = sat(times(m, plus(m, skyward, -0.55, -2250, -600), 4.0, -2100, -600), -1950, -600)
+    # How far off it is, in metres: the grain fades from "DetailFadeStart" to "DetailFadeEnd".
+    depth = times(m, node(m, unreal.MaterialExpressionPixelDepth, -2600, -400), 0.01, -2450, -400)
+    fade_start = scalar(m, "DetailFadeStart", 12.0, -2450, -320)
+    fade_span = plus(m, scalar(m, "DetailFadeEnd", 140.0, -2450, -240), times(m, fade_start, -1.0, -2300, -240), -2150, -240)
+    fade = sat(over(plus(m, depth, times(m, fade_start, -1.0, -2300, -320), -2150, -400), fade_span, -2000, -400), -1850, -400)
+    strength = times(m, times(m, scalar(m, "DetailGrain", 1.0, -1700, -500), lerp(m, 1.0, scalar(m, "DetailFar", 0.35, -1850, -300), fade, -1700, -400), -1550, -450),
+                     up, -1400, -450)
+
+    # Grass or soil, from the vertex colour itself: green over red is a sward (a pasture, a meadow, a lane's grass),
+    # red over green is ground (bare earth, a lane's dust, the floor of a cornfield, a stubble).
+    green = sat(plus(m, times(m, plus(m, (colour, "G"), times(m, (colour, "R"), -1.0, -2400, -800), -2250, -800), 12.0, -2100, -800), 0.6, -1950, -800), -1800, -800)
+    # The trodden places of a pasture, where the soil shows: only on grass, only facing up.
+    wear = times(m, times(m, sat(times(m, (patch_a, "B"), scalar(m, "Wear", 1.0, -2100, -1000), -1950, -1000), -1800, -1000), green, -1650, -950), up, -1500, -950)
+    grassy = times(m, green, one_in(m, unreal.MaterialExpressionOneMinus, wear, -1500, -850), -1350, -850)
+
+    # The broad lie: value and warmth from the two readings of the patch picture.
+    patch = times(m, plus(m, (patch_a, "RGB"), (patch_b, "RGB"), -2000, 1150), 0.5, -1850, 1150)
+    patch_value = times(m, plus(m, mask(patch, "R", -1700, 1100), -0.5, -1550, 1100), scalar(m, "PatchValue", 0.8, -1550, 1000), -1400, 1100)
+    patch_warm = times(m, plus(m, mask(patch, "G", -1700, 1250), -0.5, -1550, 1250), scalar(m, "PatchWarmth", 1.0, -1550, 1350), -1400, 1250)
+    patch_on = times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400)
+    # Tussocks: the 40 m reading's, and fewer from the turned reading (larger there, a rank patch rather than a clump),
+    # thick where the turned reading is lush (its warmth low), none where it is dry; on grass only.
+    lush = sat(plus(m, times(m, (patch_b, "G"), -4.0, -1700, 1500), 3.0, -1550, 1500), -1400, 1500)
+    clumps = plus(m, (patch_a, "A"), times(m, (patch_b, "A"), scalar(m, "TussockBroad", 0.5, -1700, 1650), -1550, 1600), -1400, 1600)
+    tussock = times(m, times(m, sat(times(m, clumps, lush, -1250, 1500), -1150, 1500), grassy, -1050, 1500), patch_on, -950, 1500)
+    value_shift = plus(m, times(m, patch_value, patch_on, -1250, 1100),
+                       times(m, tussock, scalar(m, "TussockDark", -0.4, -950, 1600), -800, 1550), -1100, 1100)
+    warm_shift = plus(m, times(m, patch_warm, patch_on, -1250, 1250),
+                      times(m, tussock, scalar(m, "TussockCool", -0.3, -950, 1700), -800, 1650), -950, 1300)
+    broad = times(m, plus(m, value_shift, 1.0, -950, 1100),
+                  plus(m, times(m, vector(m, "PatchHue", (0.35, 0.1, -0.45, 0.0), -800, 1350), warm_shift, -800, 1250), 1.0, -650, 1250),
+                  -650, 1150)
+
+    # The grain: brightness, and its hue (a sward's own; a soil's follows its brightness: a dry clod's top is paler
+    # and warmer, a damp parting darker and colder).
+    lum = lerp(m, soil_lum, grass_lum, grassy, -1100, 550)
+    factor = lerp(m, 1.0, times(m, lum, 2.0, -950, 550), strength, -800, 550)
+    hue = lerp(m, times(m, plus(m, soil_lum, -0.5, -1100, 750), scalar(m, "SoilWarmth", 1.6, -1100, 850), -950, 750),
+               times(m, plus(m, grass_hue, -0.5, -1100, 650), 2.0, -950, 650), grassy, -800, 700)
+    tinted_by = plus(m, times(m, vector(m, "GrainHue", (0.3, 0.1, -0.35, 0.0), -800, 850), times(m, hue, strength, -650, 750), -500, 800), 1.0, -350, 800)
+
+    # The colour: worn to the soil where it is trodden, the field's broad lie, the grain, and (as M_MapSurface) what
+    # faces the sky a little paler.
+    worn = times(m, wear, scalar(m, "WornMix", 0.6, -2200, -50), -2050, -100)
+    base = lerp(m, to_linear, vector(m, "WornColour", (0.17, 0.14, 0.085, 1.0), -2200, -150), worn, -1900, 0)
+    base = times(m, times(m, times(m, base, broad, -650, 0), tinted_by, -500, 0), factor, -350, 0)
+    lit_top = plus(m, times(m, sat(skyward, -500, -200), scalar(m, "TopLight", 0.26, -500, -120), -350, -200), 1.0, -200, -200)
+    to_property(times(m, base, lit_top, -200, 0), "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # Which way it leans: the sward's lean or the soil's (red and green, or blue and alpha, of the bump picture), each
+    # read as the grain is, the turned reading's lean turned back. Added to the mesh's own normal; flattened with
+    # distance.
+    lean_a = lerp(m, leaning(m, bump_a, "B", "A", -2000, 1500), leaning(m, bump_a, "R", "G", -2000, 1600), grassy, -1400, 1550)
+    lean_b = lerp(m, leaning(m, bump_b, "A", "B", -2000, 1750), leaning(m, bump_b, "G", "R", -2000, 1850), grassy, -1400, 1800)
+    lean = times(m, lerp(m, lean_a, lean_b, lead, -1250, 1650), restore, -1100, 1650)
+    lean = times(m, times(m, lean, scalar(m, "DetailBump", 0.8, -1100, 1750), -950, 1650),
+                 times(m, lerp(m, 1.0, scalar(m, "DetailBumpFar", 0.15, -1100, 1900), fade, -950, 1850), up, -800, 1850), -650, 1700)
+    flat_lean = pair(m, lean, node(m, unreal.MaterialExpressionConstant, -650, 1850, r=0.0), -500, 1750)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, plus(m, node(m, unreal.MaterialExpressionVertexNormalWS, -500, 1600), flat_lean, -350, 1700), -200, 1700)
+    to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+
+    to_property(scalar(m, "Roughness", 0.95, -200, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.15, -200, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_leaves():
+    """THE HEDGES' AND THE TREES' LEAVES (release 2; Brian, 22 November: "i want the grass and bushes and plants to
+    look more realistic"). The ground battle's shrubs and trees carry their leaves on flat cards (LandField's LeafCard),
+    each a spray of the leaves' picture (T_LandLeaves, Tools/land_look/make_leaf_textures.py): its twigs and leaves cut
+    out by the picture's alpha, the gaps between them open to the sky and the light, both faces drawn. The card's
+    vertex colour is its paint (sRGB, made linear, as M_MapSurface's), the picture's colour a number about it (0.5 as
+    painted: each leaf a little lighter or darker, a pale midrib, the twigs dark). Lit as foliage: what the sun shines
+    through from behind glows a little, yellow-green ("Through", "ThroughStrength"). Instanced, as the shrubs and trees
+    are. Without it (build_content.py not run since it came) the game draws the old solid sprigs instead, said once."""
+    m = new_material("M_LandLeaves")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    m.set_editor_property("two_sided", True)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
+    m.set_editor_property("opacity_mask_clip_value", 0.5)
+    leaves_picture = land_texture("T_LandLeaves", cut_out=True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    leaves = node(m, unreal.MaterialExpressionTextureSample, -900, 300, texture=leaves_picture, sampler_type=sampler_for(leaves_picture))
+    # (the picture's numbers: 0.5 as painted)
+    painted = times(m, times(m, to_linear, (leaves, "RGB"), -500, 100), scalar(m, "LeafValue", 2.0, -500, 220), -350, 100)
+    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -350, 300), -200, 250),
+                    scalar(m, "ThroughStrength", 0.6, -350, 400), -50, 300)
+    to_property(through, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+    to_property((leaves, "A") if False else node_from(m, unreal.MaterialExpressionComponentMask, (leaves, "A"), -500, 500, r=True, g=False, b=False, a=False),
+                "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    to_property(scalar(m, "Roughness", 0.75, -200, 600), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.3, -200, 700), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_stalks():
+    """THE CORN NEAR THE LENS, STALK BY STALK (release 2; the art director on cut 4, fix 4: "the near wheat reads as
+    paper"). Within 3.5 m of a low lens the corn's bundles are taken away and each clump drawn as its own stalks
+    (LandField's Stalks: thin stems, drooping leaves, an ear of crossed strips, the poppies' cups), painted by vertex
+    colour (sRGB, made linear, as M_LandLeaves) times "Value", lit as foliage (what the sun shines through glows a
+    little, "Through", "ThroughStrength"). Both faces are in the mesh, so it is drawn one-sided. It is faded in and out
+    by dither (smoothed by the temporal anti-aliasing): in from "NearFrom" over "NearSpan" metres of depth, so no stalk
+    stands across the lens itself, and out from "FarTo" less "FarSpan" to "FarTo" metres along the ground, where the
+    bundles take over (the C++ sets all four, LandBattle::LoadInks). Its shadow ignores the fades. Instanced, as the
+    clutter is. Without it the corn keeps its bundles to the lens, said once."""
+    m = new_material("M_LandStalks")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    m.set_editor_property("two_sided", False)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
+    m.set_editor_property("opacity_mask_clip_value", 0.5)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    painted = times(m, to_linear, scalar(m, "Value", 1.0, -700, 150), -500, 50)
+    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
+                    scalar(m, "ThroughStrength", 0.5, -500, 350), -200, 250)
+    to_property(through, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+
+    def over(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionDivide, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def sat(v, x, y):
+        return one_in(m, unreal.MaterialExpressionSaturate, v, x, y)
+
+    # In by the depth from the lens (metres), out by the distance along the ground from it.
+    depth = times(m, node(m, unreal.MaterialExpressionPixelDepth, -1600, 500), 0.01, -1450, 500)
+    near_in = sat(over(plus(m, depth, times(m, scalar(m, "NearFrom", 0.6, -1450, 580), -1.0, -1300, 580), -1150, 500),
+                       scalar(m, "NearSpan", 0.3, -1150, 600), -1000, 500), -850, 500)
+    here = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, -1750, 750), -1600, 750,
+                     r=True, g=True, b=False, a=False)
+    eye = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionCameraPositionWS, -1750, 850), -1600, 850,
+                    r=True, g=True, b=False, a=False)
+    apart = node(m, unreal.MaterialExpressionDistance, -1450, 800)
+    connect(here, "", apart, "A")
+    connect(eye, "", apart, "B")
+    along = times(m, apart, 0.01, -1300, 800)
+    far_out = sat(over(plus(m, scalar(m, "FarTo", 5.0, -1300, 900), times(m, along, -1.0, -1150, 800), -1000, 850),
+                       scalar(m, "FarSpan", 1.5, -1000, 950), -850, 850), -700, 850)
+    shown = node(m, unreal.MaterialExpressionMin, -550, 650)
+    connect(near_in, "", shown, "A")
+    connect(far_out, "", shown, "B")
+    # (the engine's DitherTemporalAA is a material function, not a node: called, its "Alpha Threshold" the share shown)
+    dither = node(m, unreal.MaterialExpressionMaterialFunctionCall, -400, 650)
+    dither.set_material_function(unreal.load_asset("/Engine/Functions/Engine_MaterialFunctions02/Utility/DitherTemporalAA"))
+    connect(shown, "", dither, "Alpha Threshold")
+    # (the shadow ignores the fades: the stalks' shadows fall whole, and none flickers with the dither; the node shown
+    # as ShadowPassSwitch is MaterialExpressionShadowReplace)
+    cast = node(m, unreal.MaterialExpressionShadowReplace, -250, 650)
+    connect(dither, "", cast, "Default")
+    connect(scalar(m, "ShadowMask", 1.0, -400, 780), "", cast, "Shadow")
+    to_property(cast, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    to_property(scalar(m, "Roughness", 0.8, -200, 400), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.3, -200, 500), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_stalks_or_tell():
+    """M_LandStalks is the ground battle's alone, and the corn keeps its bundles to the lens without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_stalks()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandStalks was not built (the corn keeps its bundles to the lens):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandStalks"):
+                eal.delete_asset(f"{MATERIALS}/M_LandStalks")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_shade():
+    """THE SHADE ON THE GROUND UNDER A TANK, A GUN OR A MAN (release 2; the art director on cut 4, fix 3: "a soft
+    footprint shade under every vehicle and wreck"). The light that the sky and the bounce would have given the ground
+    under a hull, which the sun's shadow alone does not take away: a flat mesh laid just over the ground (LandShade.h),
+    multiplying what is drawn behind it (modulate), never lighting anything. Its vertex colour's red is the share of the
+    light left there as the eye would measure it (0.35 under a tank's belly, 1.0 where it ends), made linear here;
+    "Strength" (C++, -TheaterLandFootShade) takes it from none (0) to all (1). Unlit, both faces, instanced (one mesh a
+    kind of tank, gun or man). Without it the battle draws no footprint shade, said once."""
+    m = new_material("M_LandShade")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MODULATE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -650, 0, const_exponent=2.2)
+    connect(colour, "R", to_linear, "Base")
+    left = lerp(m, 1.0, to_linear, scalar(m, "Strength", 1.0, -650, 200), -400, 0)
+    to_property(left, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+def build_land_shade_or_tell():
+    """M_LandShade is the ground battle's alone, and the battle draws no footprint shade without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_shade()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandShade was not built (the ground battle draws no footprint shade):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandShade"):
+                eal.delete_asset(f"{MATERIALS}/M_LandShade")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandShade could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_steel_or_tell():
+    """TK1: M_LandSteel (M_MapSurface with the wrecks' soot, for the far tanks, guns and lorries drawn as instances) is
+    the ground battle's alone, and the battle falls back to the near meshes' ink without it (a far wreck then shows her
+    paint unburnt): whatever goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandSteel", soot=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandSteel was not built (far wrecks show their paint unburnt):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandSteel"):
+                eal.delete_asset(f"{MATERIALS}/M_LandSteel")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandSteel could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_leaves_or_tell():
+    """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_leaves()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandLeaves was not built (the ground battle draws its solid sprigs):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandLeaves"):
+                eal.delete_asset(f"{MATERIALS}/M_LandLeaves")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_surface_or_tell():
+    """M_LandSurface is the ground battle's alone, and the battle falls back to M_MapSurface without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_surface()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandSurface was not built (the ground battle falls back to M_MapSurface):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandSurface"):
+                eal.delete_asset(f"{MATERIALS}/M_LandSurface")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandSurface could not be removed:\n" + traceback.format_exc())
+
+
 def build_level():
     """An empty level. The game mode lays the table when play begins."""
     if eal.does_asset_exist(LEVEL):
@@ -1523,10 +2179,150 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
+# build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
+# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
+# M_LandShade, the footprint shade under tanks, guns and men, the same; M_LandStalks, the corn's stalks near the lens,
+# the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
+# after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
+# TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
+# (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
+# Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
+def build_battle_puffs(name="M_BattlePuffs", soft=False):
+    """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
+    shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
+    burn past white) and "Tint", but the colour is stored as a picture file stores it (sRGB) and made linear here, as
+    M_MapSurface's. In plain bytes, a charcoal smoke written four times darker was one to four steps a channel, so its
+    red, green and blue rounded apart: specks of red and blue in dark smoke at dusk, and a big far piece of dark earth
+    read olive over grass (the art director, 22 November). The kit writes its bytes to suit when it finds this
+    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before.
+    soft (M_BattlePuffsSoft, the land battle's soft contact): every piece also fades where it comes within FadeCm
+    (world units) in front of the ground or a hull, by the scene's depth there less its own, so a burning wreck's flame
+    meets the hull softly and is never cut along a straight line (the art director's cut 5, still 07). The scene puts
+    it on the kit's mesh with FBattleEffects::SetSoftContact; the kit lays its lying pieces nearer the eye to match.
+    Its own material, so the scenes without it pay nothing for the depth read."""
+    m = new_material(name)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    glow = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(to_linear, "", glow, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(glow, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -160), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    faded = node(m, unreal.MaterialExpressionMultiply, -450, 200)
+    connect(colour, "A", faded, "A")
+    connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
+    if soft:
+        # (how far in front of the opaque world this pixel of the piece is, as a share of FadeCm, held 0 to 1)
+        gap = node(m, unreal.MaterialExpressionSubtract, -700, 480)
+        connect(node(m, unreal.MaterialExpressionSceneDepth, -900, 440), "", gap, "A")
+        connect(node(m, unreal.MaterialExpressionPixelDepth, -900, 540), "", gap, "B")
+        share = node(m, unreal.MaterialExpressionDivide, -550, 480)
+        connect(gap, "", share, "A")
+        connect(scalar(m, "FadeCm", 10.0, -700, 600), "", share, "B")
+        touch = one_in(m, unreal.MaterialExpressionSaturate, share, -400, 480)
+        faded = times(m, faded, touch, -250, 300)
+    to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
+    # (the pieces mark where they are on the screen, in the custom depth, wherever they are a tenth seen or more, so
+    # M_FireSpread knows the kit's own pixels from the field's. Nothing is marked unless the scene asks for the fire's
+    # spread: FBattleEffects::SetFireSpread turns the mesh's custom depth on)
+    m.set_editor_property("allow_translucent_custom_depth_writes", True)
+    m.set_editor_property("opacity_mask_clip_value", 0.1)
+    finish(m)
+
+
+# The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
+# the kit marked and the opaque world does not hide has its colour spread from its own grey by Spread when it is fire's
+# (orange to yellow, deep in colour, or bright and a little coloured) or a bluish-green light (bright and coloured: a
+# Soviet tracer, which the grade leaves grey-green; red is fire's hue already, a field's greens are yellow-green, and
+# blue and violet are the sky's, all left alone). The whitest are left as they are (a white-hot core stays as ruled). Warm raises green on fire's orange only
+# (on yellow it went lime, on the sky cyan: the pre-check). All else is left as it was. "heat" feathers it, so there
+# is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
+FIRE_SPREAD_HLSL = """
+float3 c = saturate(C.rgb);
+if (!(Marked.r < MarkFar && Marked.r <= Solid.r * 1.001 + 1.0) || Spread <= 1.0) return C.rgb;
+float mx = max(c.r, max(c.g, c.b));
+float mn = min(c.r, min(c.g, c.b));
+float s = (mx - mn) / max(mx, 1e-4);
+float hx = 2.0 * c.r - c.g - c.b;
+float hy = 1.7320508 * (c.g - c.b);
+float h = (abs(hx) + abs(hy) > 1e-5) ? degrees(atan2(hy, hx)) : 0.0;
+float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
+float y = dot(c, float3(0.2126, 0.7152, 0.0722));
+float top = 1.0 - smoothstep(0.85, 0.95, y);
+float fire = hue * max(smoothstep(0.30, 0.45, s), smoothstep(0.70, 0.85, y) * smoothstep(0.08, 0.18, s) * top);
+float green = smoothstep(95.0, 108.0, h) * (1.0 - smoothstep(160.0, 175.0, h));
+float lit = green * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
+float dim = smoothstep(0.01, 0.04, y);
+float heat = max(fire, lit) * dim;
+float3 o = y + (c - y) * (1.0 + (Spread - 1.0) * heat);
+o.g *= 1.0 + (Warm - 1.0) * fire * dim * (1.0 - smoothstep(32.0, 42.0, h));
+return saturate(o);
+"""
+
+
+def build_fire_spread():
+    """Fire keeps its orange under a scene's grade (the art director, 22 November: the land battle's grade, made for
+    its fields, drained a burning wreck's flame to salmon and peach). A post-process drawn after the tonemapper, so it
+    works on the picture as the screen shows it: the kit's pixels are known by the custom depth its mesh writes
+    (M_BattlePuffs), and of those only the fire-coloured are spread (FIRE_SPREAD_HLSL). Smoke, dust, earth and the
+    field behind a thin flame stay as the grade left them. Added to a scene's lens by FBattleEffects::SetFireSpread."""
+    m = new_material("M_FireSpread")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    after = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_AFTER_TONEMAPPING", None)
+    if after is None:
+        after = unreal.BlendableLocation.BL_AFTER_TONEMAPPING  # (its name before 5.4; hidden, and not in python, since)
+    m.set_editor_property("blendable_location", after)
+    spread = node(m, unreal.MaterialExpressionCustom, -200, 0,
+                  code=FIRE_SPREAD_HLSL,
+                  description="FireSpread",
+                  output_type=unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    names = ("C", "Marked", "Solid", "Spread", "Warm", "MarkFar")
+    pins = []
+    for name in names:
+        pin = unreal.CustomInput()
+        pin.set_editor_property("input_name", name)
+        pins.append(pin)
+    spread.set_editor_property("inputs", pins)
+    for name, which, y in (("C", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0, 0),
+                           ("Marked", unreal.SceneTextureId.PPI_CUSTOM_DEPTH, 160),
+                           ("Solid", unreal.SceneTextureId.PPI_SCENE_DEPTH, 320)):
+        texture = node(m, unreal.MaterialExpressionSceneTexture, -600, y, scene_texture_id=which)
+        connect(texture, "Color", spread, name)
+    # (MarkFar: a custom depth this far or more is a pixel no piece marked; the cleared value is far beyond any battle)
+    for name, default, y in (("Spread", 2.0, 480), ("Warm", 1.2, 600), ("MarkFar", 1.0e8, 720)):
+        connect(scalar(m, name, default, -600, y), "", spread, name)
+    to_property(spread, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+# (M_BattlePuffs, the battle effects kit's: built when missing, or with TC_REBUILD=M_BattlePuffs or all. Without it the
+# kit draws with M_Highlight in plain bytes, as before)
+if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffs"):
+    build_battle_puffs()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffs already exists, left alone")
+# (M_BattlePuffsSoft, the land battle's soft contact (FBattleEffects::SetSoftContact): M_BattlePuffs, fading where it
+# meets the ground or a hull. The same: built when missing, or with TC_REBUILD=M_BattlePuffsSoft or all)
+if REBUILD == "all" or "M_BattlePuffsSoft" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffsSoft"):
+    build_battle_puffs("M_BattlePuffsSoft", soft=True)
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffsSoft already exists, left alone")
+# (M_FireSpread, the same: built when missing, or with TC_REBUILD=M_FireSpread or all. An M_BattlePuffs made before it
+# came does not mark its pixels: TC_REBUILD=M_BattlePuffs,M_FireSpread once)
+if REBUILD == "all" or "M_FireSpread" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_FireSpread"):
+    build_fire_spread()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_FireSpread already exists, left alone")
 build_level()
 unreal.log("Theater Command: content built")
