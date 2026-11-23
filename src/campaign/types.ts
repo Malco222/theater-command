@@ -359,6 +359,9 @@ export interface Corps extends Storied {
   digging?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
+  /** Weeks in the line since it was last rested or formed (release 1.5's worn uniforms, from release 2; looks only):
+   * absent for a corps fresh or rested, and in a save from before it was counted. Nothing in the war reads it. */
+  line?: number;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**

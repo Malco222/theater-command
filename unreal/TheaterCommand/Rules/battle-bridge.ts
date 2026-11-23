@@ -93,6 +93,16 @@ export function battleCalls(h: BattleHooks) {
       const took = (nat: string) => (g.captured?.[nat] ?? []).filter((k) => g.turn - k.turn < 6).slice(-1)[0];
       const ca = took(t.att.nat), cd = took(t.def.nat);
       if (ca || cd) ticket.captured = { ...(ca ? { att: { from: ca.from, n: ca.n } } : {}), ...(cd ? { def: { from: cd.from, n: cd.n } } : {}) };
+      // Worn uniforms: each side's months in the line without a rest (its corps' weeks, weighed by divisions), where
+      // the campaign counts them; the Worn uniforms row (off at first in 1.5) decides whether the 3D game hears of it.
+      const worn = (cs: typeof corps) => {
+        const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
+        return divs > 0 && cs.some((c) => c.line !== undefined) ? Math.round(cs.reduce((s2, c) => s2 + (c.line ?? 0) * c.divs, 0) / divs / 4.345) : undefined;
+      };
+      const inAttack = new Set(corps.map((c) => c.id));
+      const wa = worn(corps), wd = worn(g.corps.filter((c) => c.reg === to && !inAttack.has(c.id) && c.kind !== 'fort'));
+      if (wa !== undefined) ticket.att = { ...ticket.att, worn: wa };
+      if (wd !== undefined) ticket.def = { ...ticket.def, worn: wd };
       return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
     },
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {

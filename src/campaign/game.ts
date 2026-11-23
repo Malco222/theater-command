@@ -622,6 +622,21 @@ export function groundWeather(g: Game, r: Region): string {
 }
 
 /**
+ * Worn uniforms (release 2's wearMonth, in release 1.5 for its looks): a corps' weeks in the line since it was last
+ * rested or formed. A month fought, attacked, cut off or facing the enemy counts four weeks; a month marching counts
+ * the weeks it marched; a quiet month away from the front clears them. Read only by the battle card's ticket.
+ */
+function wornMonth(g: Game, c: Corps): void {
+  const r = g.regions[c.reg];
+  const facing = !!r && (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))
+    || r.nb.some((j) => { const o = g.regions[j].ctrl; return !!o && o !== c.nat && atWar(g, o, c.nat); }));
+  const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
+  const weeks = c.kind === 'fort' || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || facing ? 4 : marched;
+  if (weeks <= 0) delete c.line;
+  else c.line = (c.line ?? 0) + weeks;
+}
+
+/**
  * Captured kit (release 2, in release 1.5 for its looks): after a fought battle won heavily over an army with tanks, the
  * winner keeps a few of them (1 to 3 tank blocks to be drawn as the loser's model in the 3D game), at even odds for a
  * heroic win or a rout of the attack, and a third for a decisive win; kept six months, the three latest for each nation.
@@ -3875,6 +3890,8 @@ export function startPhase(g: Game, nat: string): void {
         return;
       }
     }
+    // (worn uniforms, looks only: its weeks in the line; a quiet month away from the front clears them)
+    wornMonth(g, c);
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;
