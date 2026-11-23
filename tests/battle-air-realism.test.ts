@@ -183,7 +183,7 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
     expect(fighterOf('FRA', 1939)).toBe('Fighter:FRA');
     expect(bomberOf('UK', 1941)).toBe('Wellington');
     expect(fighterOf('FRA', 1940)).toBe('D520');
-    expect([bomberOf('JAP', 1940), bomberOf('JAP', 1941), bomberOf('SOV', 1941), bomberOf('SOV', 1942), bomberOf('FRA', 1939), bomberOf('FRA', 1940)]).toEqual(['Nell', 'Betty', 'Bomber:SOV', 'Pe2', 'Bomber:FRA', 'LeO451']);
+    expect([bomberOf('JAP', 1940), bomberOf('JAP', 1941), bomberOf('SOV', 1940), bomberOf('SOV', 1941), bomberOf('FRA', 1939), bomberOf('FRA', 1940)]).toEqual(['Nell', 'Betty', 'Bomber:SOV', 'Pe2', 'Bomber:FRA', 'LeO451']);
     expect([enginesOf('SM79'), enginesOf('Betty'), enginesOf('Wellington')]).toEqual([3, 2, 2]);
     expect(bomberGuns('SM79', 'ITA', { year: 1941, month: 3 }).mark).toBe('SM.79');
     expect(fighterGuns('D520', 'FRA', { year: 1940, month: 0 }).mark).toBe('D.520');
