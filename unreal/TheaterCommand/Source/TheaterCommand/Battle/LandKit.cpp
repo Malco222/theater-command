@@ -4196,6 +4196,10 @@ namespace LandKit
 		{
 			DustRight = Root.At;
 		}
+		// (the front corners of her footprint, at her dust's height: her tracks' marks start under her)
+		const bool bFoot = M.Foot[0].X > 0.0 && M.Foot[1].X > 0.0 && M.Foot[0].Y < M.Foot[1].Y;
+		TreadLeft = bFoot ? Root.Point(V3(M.Foot[0].X, M.Foot[0].Y, 0.05)) : DustLeft;
+		TreadRight = bFoot ? Root.Point(V3(M.Foot[1].X, M.Foot[1].Y, 0.05)) : DustRight;
 	}
 
 	void Vehicle::Update(double T, std::vector<Event>* Out)
