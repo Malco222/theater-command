@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of d52d6377 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of edd70eb8 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9821,8 +9821,8 @@
      * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
      * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
      */
-    groundTake(t) {
-      const gt = coverAt(this.field, t.x, t.y);
+    groundTake(t, at = [t.x, t.y]) {
+      const gt = coverAt(this.field, at[0], at[1]);
       let take = LAND.cover[gt];
       const ws = this.wreckShare(t);
       if (ws > 0) take = take * (1 - ws) + Math.min(take, LAND.cover[LAND.wreck.cover]) * ws;
@@ -9835,7 +9835,9 @@
      * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
      */
     blow(u, t) {
-      const gu = coverAt(this.field, u.x, u.y);
+      const pair = this.inOverrun(u, t);
+      const uAt = pair && u.ovr ? u.ovr.back : [u.x, u.y], tAt = pair && t.ovr ? t.ovr.back : [t.x, t.y];
+      const gu = coverAt(this.field, uAt[0], uAt[1]);
       let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
       if (this.bearers) p *= this.atHand(u);
       if (u.state === "wavering") p *= LAND.wavering;
@@ -9860,14 +9862,14 @@
         if (u.team && t.kind === "arm") p *= LAND.teams[u.team].armour;
       }
       if (u.kind === "arm" && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
-      const rise = heightAt(this.field, u.x, u.y) - heightAt(this.field, t.x, t.y);
+      const rise = heightAt(this.field, uAt[0], uAt[1]) - heightAt(this.field, tAt[0], tAt[1]);
       if (rise > LAND.height.over) p *= LAND.height.up;
       else if (rise < -LAND.height.over) p *= LAND.height.down;
-      const aspect = rearguard || this.inOverrun(u, t) ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
+      const aspect = rearguard || pair ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
       const [am, nm] = LAND.aspect[aspect];
       let amx = 1;
       if (this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt)) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
-      const ground = this.groundTake(t);
+      const ground = this.groundTake(t, tAt);
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
       if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
