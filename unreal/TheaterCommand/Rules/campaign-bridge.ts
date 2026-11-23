@@ -111,7 +111,7 @@ import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
-import { chanceOn } from '../../../src/campaign/game';
+import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
@@ -1333,6 +1333,7 @@ function load(text: string) {
   const loaded = loadGame(text);
   if (!loaded) return null;
   g = loaded;
+  airCampaignsOnLoad(g);
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
@@ -1404,6 +1405,16 @@ const acCalls = {
 };
 function openAirCampaigns(g: Game): void {
   try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
+}
+/**
+ * A grand campaign saved before air campaigns were flown (Brian, 23 November: "i want this in release 1 as its a major
+ * part") flies them from the month it is loaded, as a new one does from its first, with one line in the news. Only a
+ * grand campaign (startOpen's flag): a scenario or a history campaign is never open, so it is never touched.
+ */
+function airCampaignsOnLoad(g: Game): void {
+  if (!isOpen(g) || g.flags.ac) return;
+  openAirCampaigns(g);
+  if (g.flags.ac) headline(g, 'info', 'Air campaigns are flown in this war from this month: the air forces fight standing campaigns for the sky and bomb to a plan.', g.human ?? undefined);
 }
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };
