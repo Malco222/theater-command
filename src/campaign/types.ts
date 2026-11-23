@@ -1050,6 +1050,8 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
+  dropped?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
@@ -1388,3 +1390,48 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
 export const FORT_MUL = [1, 1.3, 1.7, 2.6];
 export const STACK = 5;
+
+// Release 1.6: the bomber types an air battle reads (release 2, types.ts). Release 1.6 seats no bomber by name, so
+// a battle is handed none and hands none back; the types are here so the air battle compiles as release 2 has it.
+/**
+ * One bomber of a group, kept by name (bombers.ts): the number of its name on the nose-art list (0: none yet, a new
+ * replacement), which of that name in this group it is (1, or 2 for 'II'), the missions the aircraft has flown (the
+ * bombs painted on its nose), the fighters its gunners have shot down, the experience its present crew arrived with
+ * from the schools, and the missions that crew has flown (its tour runs on these: a bomber outlives its first crew).
+ */
+export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number, by?: Record<string, number>];
+
+/**
+ * One bomber of a group as an air battle is handed it (bombers.ts seatsOf; battle/air AirPlace.bombers): what the 3D
+ * game paints on it, and what the battle hands back about it. Shown, never counted.
+ */
+export interface BomberSeat {
+  /** What it is called ('Prize Pumpkin', 'G for George', '5J+DM') and its marking as painted ('KM-G', 'K-312'): both '' for a new aircraft not yet named. */
+  name: string;
+  mark: string;
+  /** Its number on the nose-art list, for a nation that paints nose art (America alone); 0 for a bare nose, and for every other nation. */
+  art: number;
+  /** The missions it has flown (a bomb painted for each), the aircraft its gunners have shot down (a symbol for each), and whose they were. */
+  missions: number;
+  kills: number;
+  by?: Record<string, number>;
+  /** Its present crew's missions, and what their experience is called. */
+  crew: number;
+  grade: string;
+  /** How likely a loss of the group is to be this one, beside the others: a green crew's the likeliest (stories.json bombers.risk). */
+  risk: number;
+  /** The campaign's own row for it, handed back as it is with what the battle saw of it. */
+  row: BomberRow;
+}
+
+/** A group's bombers for an air battle: how its nation marks them (bomber-marks.ts), and the seats, old hands first. */
+export interface BomberSeats {
+  style: string;
+  /** The missions from which a bomber's loss is told by name, and what its nation calls one ('mission', 'operation'). */
+  told: number;
+  flown: string;
+  seats: BomberSeat[];
+}
+
+/** What an air battle saw a bomber's gunners shoot down: the bomber's row as the battle was handed it, and how many of each nation's. */
+export interface BomberShot { row: BomberRow; by: Record<string, number> }
