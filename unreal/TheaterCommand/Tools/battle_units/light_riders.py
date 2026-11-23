@@ -26,8 +26,10 @@ The clips (the game's axes; each clip's root is at its seat socket, `places`):
     sidecar_ride                              the plain Motorcycle's sidecar man (rider.2), no gun to hold
     jeep_gunner                               standing behind the Jeep's post, hands on grip.gunner.l/.r (root: the
                                               gunner socket, his feet); rifle slung
-    die_seat_slump, die_ride_slump, die_bike_slump, die_pillion_slump, die_sidecar_slump, die_gunner_slump
-                                              each seat's death, from its clip's first pose (`death` on each seat clip)
+    die_seat_slump, die_seat_slump_r, die_ride_slump, die_ride_slump_l, die_bike_slump, die_pillion_slump,
+    die_sidecar_slump, die_gunner_slump      each seat's death, from its clip's first pose; a car seat's death falls
+                                              to the car's outside (_r: the right-hand drive drivers; _l: the seats
+                                              on the left), so two men side by side never fall onto each other
 """
 
 import json
@@ -1024,6 +1026,8 @@ def reference(names):
 
 # ================================================================================================ the pictures
 def add_pictures():
+    # (`also` pieces are placed in the game's axes, y right; `eye` and `target` are Blender's, y left: so a piece
+    #  beside the camera's side is at a negative game y)
     P = C.PICTURES
     P.clear()
     P["riders_jeep"] = {"kind": "vehicle", "piece": "Jeep", "men": [("car_drive", 0.6, "driver"), ("car_ride", 1.1, "rider.1"),
@@ -1051,16 +1055,19 @@ def add_pictures():
                             "eye": (1.8, -3.6, 1.7), "target": (-0.3, 0.8, 0.9), "lens": 36,
                             "about": "The Alce with its second man on his own saddle (bike_pillion_d), and the WLA beside it (bike_astride_b)."}
     P["riders_cars"] = {"kind": "vehicle", "piece": "GAZ67", "men": [("car_drive", 1.6, "driver"), ("car_ride_back", 0.4, "rider.3")],
-                        "also": [{"kind": "vehicle", "piece": "Fiat508", "at": (0.0, 2.2), "yaw": 0.0, "men": [("car_drive_b", 2.2, "driver"), ("car_ride", 3.0, "rider.1")]},
-                                 {"kind": "vehicle", "piece": "Kurogane", "at": (0.0, 4.4), "yaw": 0.0, "men": [("car_drive_c", 0.9, "driver"), ("car_ride_back", 1.9, "rider.2")]}],
+                        "also": [{"kind": "vehicle", "piece": "Fiat508", "at": (0.0, -2.2), "yaw": 0.0, "men": [("car_drive_b", 2.2, "driver"), ("car_ride", 3.0, "rider.1")]},
+                                 {"kind": "vehicle", "piece": "Kurogane", "at": (0.0, -4.4), "yaw": 0.0, "men": [("car_drive_c", 0.9, "driver"), ("car_ride_back", 1.9, "rider.2")]}],
                         "eye": (5.8, -2.6, 3.4), "target": (-0.3, 2.2, 0.8), "lens": 32,
                         "about": "The GAZ-67, the Fiat 508 (right-hand drive) and the Kurogane (right-hand drive) with their drivers and men."}
     P["riders_deaths"] = {"kind": "vehicle", "piece": "Jeep", "men": [("die_gunner_slump", DIE, "gunner"), ("die_seat_slump", DIE, "driver"),
                                                                       ("die_ride_slump", DIE, "rider.1")],
-                          "also": [{"kind": "vehicle", "piece": "R75", "at": (0.0, 2.2), "yaw": 0.0,
-                                    "men": [("die_bike_slump", DIE, "driver"), ("die_pillion_slump", DIE, "rider.1"), ("die_sidecar_slump", DIE, "gunner")]}],
-                          "eye": (4.6, -3.0, 3.2), "target": (-0.4, 1.1, 0.8), "lens": 34,
-                          "about": "Each seat's death at its end: the Jeep's gunner, driver and the man beside him; the R75's rider, pillion and gunner."}
+                          "also": [{"kind": "vehicle", "piece": "R75", "at": (0.0, -2.2), "yaw": 0.0,
+                                    "men": [("die_bike_slump", DIE, "driver"), ("die_pillion_slump", DIE, "rider.1"), ("die_sidecar_slump", DIE, "gunner")]},
+                                   {"kind": "vehicle", "piece": "Kurogane", "at": (0.0, -4.6), "yaw": 0.0,
+                                    "men": [("die_seat_slump_r", DIE, "driver"), ("die_ride_slump_l", DIE, "rider.1")]}],
+                          "eye": (6.0, -3.2, 3.6), "target": (-0.4, 2.3, 0.8), "lens": 30,
+                          "about": "Each seat's death at its end: the Jeep's gunner, driver and the man beside him; the R75's rider, pillion "
+                                   "and gunner; the Kurogane's (right-hand drive) driver and the man beside him, each falling to his own side."}
 
 
 def main(argv):
