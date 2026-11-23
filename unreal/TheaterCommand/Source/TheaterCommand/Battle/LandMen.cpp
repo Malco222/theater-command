@@ -769,6 +769,7 @@ namespace LandMen
 			Cl.Long = static_cast<float>(C["long"].Num0(1.0));
 			Cl.Stride = static_cast<float>(C["stride"].Num0(0.0));
 			Cl.bLoop = C["loop"].K == J::Bool ? C["loop"].B : C["loop"].Num0() != 0.0;
+			Cl.StyleOf = C["style_of"].Text("");
 			if (C["end_offset"].Size() >= 3)
 			{
 				Cl.bEndOffset = true;
@@ -872,6 +873,17 @@ namespace LandMen
 				if (Cl.LeftFoot < 0.f && Cl.Long > 0.f && (E.BoneName == "foot_l" || E.BoneName == "lowerarm_l")) Cl.LeftFoot = E.T / Cl.Long;
 			}
 			if (Cl.LeftFoot < 0.f) Cl.LeftFoot = 0.f;
+		}
+		// (release 2's run styles: each clip with its styles; a style of no clip, or of a style, stands alone)
+		Styles.assign(Clips.size(), std::vector<int>());
+		for (size_t I = 0; I < Clips.size(); ++I)
+		{
+			if (Clips[I].StyleOf.empty()) continue;
+			const int B = ClipIndex(Clips[I].StyleOf);
+			if (B < 0 || !Clips[static_cast<size_t>(B)].StyleOf.empty() || !Clips[I].bLoop || !Clips[static_cast<size_t>(B)].bLoop) continue;
+			std::vector<int>& V = Styles[static_cast<size_t>(B)];
+			if (V.empty()) V.push_back(B);
+			V.push_back(static_cast<int>(I));
 		}
 
 		const char* LodNames[LodCount] = { "near", "mid", "far" };
@@ -1547,6 +1559,7 @@ namespace LandMen
 			bool bShotsDirty = false;
 			size_t ShotCur = 0;
 			float PhaseSeed = 0.f;
+			float StylePick = 0.f;          // which of a clip's styles is his (SetRunStyles), a share
 			std::string FallKindWanted;
 			// The kill: what struck him, from where.
 			double KillT = -1.0;
@@ -1664,6 +1677,7 @@ namespace LandMen
 		std::map<std::string, double> ArmyWorn; // (an army's months, for a rider, who has no block: AddRider)
 		std::map<std::tuple<const ArmyColours*, int, int>, ArmyColours> AgedRows;
 		bool bWornLook = false;
+		bool bRunStyles = false;        // each man his own runner (SetRunStyles)
 		double WornForced = -1.0;
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
@@ -1795,6 +1809,13 @@ namespace LandMen
 				{
 					const auto It = BankInstead.find(S.Clips[Ci].Name);
 					if (It != BankInstead.end()) Cy = CycleNamed(It->second);
+				}
+				// (a run style with no poses of its own: the poses of the clip it is a style of, or of that clip's stand-in)
+				if (Cy.empty() && !S.Clips[Ci].StyleOf.empty())
+				{
+					Cy = CycleNamed(S.Clips[Ci].StyleOf);
+					const auto It = BankInstead.find(S.Clips[Ci].StyleOf);
+					if (Cy.empty() && It != BankInstead.end()) Cy = CycleNamed(It->second);
 				}
 				B.CycleOf[Ci] = std::move(Cy);
 			}
@@ -2372,6 +2393,16 @@ namespace LandMen
 			return H == Stance::Gait ? Segment::Gait : H == Stance::Loop ? Segment::Loop : Segment::Hold;
 		}
 
+		/** His own runner for a gait's clip (SetRunStyles): one of the clip's styles by his StylePick, else the clip. */
+		int StyleOf(const Man& M, int Clip) const
+		{
+			if (!bRunStyles || Clip < 0 || !M.S || static_cast<size_t>(Clip) >= M.S->Styles.size()) return Clip;
+			const std::vector<int>& V = M.S->Styles[static_cast<size_t>(Clip)];
+			if (V.size() < 2) return Clip;
+			const size_t K = std::min(V.size() - 1, static_cast<size_t>(M.StylePick * static_cast<float>(V.size())));
+			return V[K];
+		}
+
 		Segment SegmentOf(const Man& M, const Stance& St, double Start, float BlendIn) const
 		{
 			Segment G;
@@ -2386,6 +2417,7 @@ namespace LandMen
 			G.LieA = G.LieB = St.Cl == Prone ? 1.f : 0.f;
 			G.Rate = G.How == Segment::Loop ? M.Info.Jitter * static_cast<float>(Life) : 1.f;
 			G.Phase = M.PhaseSeed;
+			if (G.How == Segment::Gait) G.Clip = StyleOf(M, G.Clip);
 			if (bClipShotsRef && *bClipShotsRef && St.bFiring && G.How == Segment::Hold)
 			{
 				// The test's switch: the firing poses loop their own clips again, shots and all.
@@ -3709,6 +3741,7 @@ namespace LandMen
 			Mn.Info.Delay = 0.2 * Unit01(Who ^ 0xDE1Aull);
 			Mn.Info.Jitter = static_cast<float>(0.95 + 0.1 * Unit01(Who ^ 0x7177E5ull));
 			Mn.PhaseSeed = static_cast<float>(Unit01(Who ^ 0x57E9ull));
+			Mn.StylePick = static_cast<float>(Unit01(Who ^ 0x5717E5ull));
 			MakeStances(Mn);
 			// His mesh without his helmet (where a finish is drawn) and his face's rest points, made now rather than on
 			// the frame he first comes into view (a few milliseconds each the first time).
@@ -4386,6 +4419,7 @@ namespace LandMen
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
 	void Crowd::SetRun(RunFn Run) { Inner->Run = std::move(Run); }
 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
+	void Crowd::SetRunStyles(bool bOn) { Inner->bRunStyles = bOn; }
 	void Crowd::SetWorn(bool bOn, double ForcedMonths)
 	{
 		Inner->bWornLook = bOn;
@@ -4887,6 +4921,7 @@ namespace LandMen
 		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them)
 		Mn.Info.Finish = -1;
 		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
+		Mn.StylePick = static_cast<float>(Unit01(Seed ^ 0x5717E5ull));
 		Mn.bVisible = false;
 		RestPose(Mn.Now);
 		for (int L = 0; L < LodCount; ++L)

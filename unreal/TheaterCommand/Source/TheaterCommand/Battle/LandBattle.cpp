@@ -2861,6 +2861,17 @@ void ALandBattle::MakeMen()
 			UE_LOG(LogTheater, Display, TEXT("Land battle: uniforms that age ON (%s)"), Months >= 0.0 ? *FString::Printf(TEXT("%.0f months in the line, both sides"), Months) : TEXT("each side's months in the line from the recording"));
 		}
 	}
+	// Run styles (release 2, on trial: "-TheaterLandTrial=runs"; Brian's 23 Nov "not all players are running exactly the
+	// same at the same time"): each man runs and advances as his own one of his file's four runners, so a squad on the
+	// move is not one man copied; "-TheaterLandNoRunStyles" off whatever the trial (the player's switch).
+	{
+		const bool bRuns = LandParts::OnTrial("runs") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRunStyles"));
+		Crowd->SetRunStyles(bRuns);
+		if (bRuns)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: run styles ON (each man his own runner)"));
+		}
+	}
 	// The armies' colours and stand-ins (armies.json), read first: an army with no soldier file of its own is drawn with
 	// the file its row names, else the Pole's (LandMen's MakeMan; never a side left blank).
 	{

@@ -119,7 +119,7 @@ namespace LandField
 		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
 		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
-		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
 		 */
 		std::string Trial;

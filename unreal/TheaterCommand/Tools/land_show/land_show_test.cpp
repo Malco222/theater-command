@@ -331,6 +331,11 @@ int main(int Argc, char** Argv)
 	const char* ThriftEnv = std::getenv("LAND_SHOW_THRIFT");
 	const bool bThrift = ThriftEnv && std::string(ThriftEnv) == "1";
 	C.SetThrift(bThrift);
+	// LAND_SHOW_RUN_STYLES=1: each man his own runner (Crowd::SetRunStyles, the scene's "runs" trial)
+	const char* StylesEnv = std::getenv("LAND_SHOW_RUN_STYLES");
+	const bool bRunStyles = StylesEnv && std::string(StylesEnv) == "1";
+	C.SetRunStyles(bRunStyles);
+	if (bRunStyles) std::printf("run styles: each man his own runner (Crowd::SetRunStyles)\n");
 	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
 	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
 	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
@@ -1161,6 +1166,32 @@ int main(int Argc, char** Argv)
 		std::printf("\nclips shown (share of man-frames):");
 		for (size_t K = 0; K < V.size() && K < 16; ++K) std::printf(" %s %.1f%%;", V[K].second.c_str(), 100.0 * V[K].first / std::max(1L, ManFrames));
 		std::printf("\n");
+		// Run styles: the men on the run show the four runners, none of them the most by far; off, only the file's own.
+		long Runs[4] = { 0, 0, 0, 0 };
+		for (const auto& KV : ClipFrames)
+		{
+			const std::string& Nm = KV.first;
+			for (const char* Base : { "run", "advance" })
+			{
+				const std::string B(Base);
+				if (Nm == B) Runs[0] += KV.second;
+				else if (Nm == B + "_b") Runs[1] += KV.second;
+				else if (Nm == B + "_c") Runs[2] += KV.second;
+				else if (Nm == B + "_d") Runs[3] += KV.second;
+			}
+		}
+		const long AllRuns = Runs[0] + Runs[1] + Runs[2] + Runs[3];
+		std::printf("run styles: of %ld man-frames running or advancing, own %.0f%%, b %.0f%%, c %.0f%%, d %.0f%%\n", AllRuns,
+			100.0 * Runs[0] / std::max(1L, AllRuns), 100.0 * Runs[1] / std::max(1L, AllRuns), 100.0 * Runs[2] / std::max(1L, AllRuns),
+			100.0 * Runs[3] / std::max(1L, AllRuns));
+		if (!bRunStyles && Runs[0] != AllRuns) Fail("run styles off, yet %ld man-frames ran as another runner", AllRuns - Runs[0]);
+		if (bRunStyles && AllRuns > 2000)
+		{
+			for (int K = 0; K < 4; ++K)
+			{
+				if (Runs[K] < AllRuns / 10) Fail("run styles on, yet runner %d shows on only %.1f%% of the running", K, 100.0 * Runs[K] / AllRuns);
+			}
+		}
 	}
 
 	// The tank commanders (Crowd::AddRider): each crew file's tank clips on the seats their places name, as the scene
