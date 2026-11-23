@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9f64dee6 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of be9ca178 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -36743,6 +36743,17 @@
     const sky = skyAt(g2, r.id);
     return sky === "closed" ? "rain" : sky === "clear" ? "clear" : "";
   }
+  function wornMonth(g2, c) {
+    const r = g2.regions[c.reg];
+    const facing2 = !!r && (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g2, u.nat, c.nat)) || r.nb.some((j) => {
+      const o = g2.regions[j].ctrl;
+      return !!o && o !== c.nat && atWar(g2, o, c.nat);
+    }));
+    const marched = c.town !== void 0 || c.joint !== void 0 ? 0 : Math.max(0, c.apMax - c.ap);
+    const weeks = c.kind === "fort" || c.born === g2.turn ? 0 : c.fought || c.pressed || !c.supplied || facing2 ? 4 : marched;
+    if (weeks <= 0) delete c.line;
+    else c.line = (c.line ?? 0) + weeks;
+  }
   function capturedKit(g2, rep, target) {
     const attWon = rep.level.endsWith("victory");
     const heavy = rep.level === "Heroic victory" || rep.level === "Decisive defeat" ? 50 : rep.level === "Decisive victory" ? 33 : 0;
@@ -39333,6 +39344,7 @@
           return;
         }
       }
+      wornMonth(g2, c);
       c.fought = false;
       if (c.blows !== void 0) delete c.blows;
       if (c.gaveWay) delete c.gaveWay;
@@ -47435,6 +47447,14 @@
         const took = (nat) => (g2.captured?.[nat] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-1)[0];
         const ca = took(t.att.nat), cd = took(t.def.nat);
         if (ca || cd) ticket.captured = { ...ca ? { att: { from: ca.from, n: ca.n } } : {}, ...cd ? { def: { from: cd.from, n: cd.n } } : {} };
+        const worn = (cs) => {
+          const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
+          return divs > 0 && cs.some((c) => c.line !== void 0) ? Math.round(cs.reduce((s2, c) => s2 + (c.line ?? 0) * c.divs, 0) / divs / 4.345) : void 0;
+        };
+        const inAttack = new Set(corps.map((c) => c.id));
+        const wa = worn(corps), wd = worn(g2.corps.filter((c) => c.reg === to && !inAttack.has(c.id) && c.kind !== "fort"));
+        if (wa !== void 0) ticket.att = { ...ticket.att, worn: wa };
+        if (wd !== void 0) ticket.def = { ...ticket.def, worn: wd };
         return { ticket, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
       },
       battleSettleLand(ids2, to, result, seed) {
