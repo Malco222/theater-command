@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 30a57d1f 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of ac12d240 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3262,6 +3262,7 @@
   var TANK_SHED = 6;
   var tankTop = (sq) => Math.max(TANK_TOP, Math.min(sq.speed, sq.u.speed ?? 0));
   var MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3 };
+  var HOP = { hop: 0.65, same: 1.05, takes: 2.8, most: 15, tail: 4.1, abreast: 0.35, clear: 2.5, ring: 100 };
   var RIDERS_RING = 120;
   var COVER_OF = { works: "works", bunker: "works", buildings: "building", industry: "building", suburb: "building", woods: "woods", rock: "rock", rough: "rough", field: "field" };
   var fwd = (f) => [Math.sin(f), Math.cos(f)];
@@ -4397,7 +4398,7 @@
       }
       if (sq.down && ph !== "gone" && (u.kind === "cav" || u.kind === "mot" && sq.veh.length)) {
         sq.close = sq.fast >= 1 ? true : sq.slow >= 3 ? false : sq.close;
-        if (sq.boarding === void 0 && sq.fast >= MOUNT.upAfter) this.mountUp(sq);
+        if (sq.boarding === void 0 && sq.fast >= MOUNT.upAfter && sq.hop === void 0) this.mountUp(sq);
         else if (sq.boarding !== void 0 && sq.slow >= MOUNT.stayAfter) {
           got = true;
           this.alight(sq);
@@ -4422,6 +4423,10 @@
       if (sq.boarding !== void 0) {
         this.board(sq);
         return;
+      }
+      if (sq.hop !== void 0) {
+        if (!this.hopOut(sq)) return;
+        sq.since = t;
       }
       this.lorries(sq);
       if ((u.kind === "mot" || u.kind === "cav") && !sq.down) {
@@ -5724,16 +5729,101 @@
         if (m.v === 0) m.pose = "ride";
       }
     }
-    /** Off the lorries and horses where they are, each on his feet: the block's phase then sends him to his place. */
+    /**
+     * Off the lorries and horses where they are, each on his feet: the block's phase then sends him to his place. With Men
+     * in lorries on, lorried men get down over their lorry's tailboard one at a time instead, the back of her bed first and
+     * the two benches turn about (hopOut), the lorries standing (Brian, 23 November 14:10Z: "soldiers in the back of a
+     * truck and they then hop out and start engaging enemies").
+     */
     alight(sq) {
       sq.boarding = void 0;
-      for (const m of sq.men) if (m.fell === void 0 && (m.pose === "mounted" || m.pose === "ride")) {
+      const t = this.b.t, aboard = [];
+      for (const m of sq.men) {
+        if (m.fell !== void 0 || m.pose !== "mounted" && m.pose !== "ride") continue;
+        if (this.b.trucks && m.pose === "mounted" && sq.veh.length) {
+          aboard.push(m);
+          continue;
+        }
         m.pose = "wait";
         m.v = 0;
         m.spot = [m.x, m.y];
         m.aim = void 0;
         m.cover = "none";
       }
+      if (!aboard.length) return;
+      const by2 = /* @__PURE__ */ new Map();
+      for (const m of aboard) {
+        const i = this.lorryIx(sq, m), l = by2.get(i);
+        if (l) l.push(m);
+        else by2.set(i, [m]);
+      }
+      for (const l of by2.values()) {
+        let at = t, was = -1;
+        for (const m of l.sort((a, c) => this.seatNo(sq, c) - this.seatNo(sq, a))) {
+          const j = this.seatNo(sq, m);
+          if (was >= 0) at += was % 2 === j % 2 ? HOP.same : HOP.hop;
+          m.out = at;
+          m.off = void 0;
+          was = j;
+        }
+      }
+      sq.hop = t;
+      sq.left = void 0;
+      for (const v of sq.veh) {
+        v.spot = [v.x, v.y];
+        v.slotAt = v.spot;
+        v.pose = "parked";
+        v.v = 0;
+      }
+    }
+    /**
+     * Men in lorries, getting down (alight): each man, his turn come, gets up and makes for the tailboard (off: the 3D game
+     * plays it from here, his seat said with a 1, MenOut.sv), and HOP.takes later is on the ground behind his lorry, off at
+     * a run to clear her tail (the left bench's men to her left, the right's to her right, the back benches' nearest), to
+     * kneel there till the last of the block is down; the lorries stand meanwhile. True once every man is down.
+     */
+    hopOut(sq) {
+      const t = this.b.t;
+      let still = false;
+      for (const v of sq.veh) {
+        v.v = 0;
+        v.pose = "parked";
+        v.spot = [v.x, v.y];
+      }
+      for (const m of sq.men) {
+        if (m.out === void 0) continue;
+        if (m.fell !== void 0 || m.pose !== "mounted" || !sq.veh.length) {
+          m.out = void 0;
+          m.off = void 0;
+          continue;
+        }
+        const most = t - (sq.hop ?? t) >= HOP.most;
+        if (t >= m.out && !m.off) m.off = true;
+        if (t < m.out + HOP.takes && !most) {
+          still = true;
+          continue;
+        }
+        m.out = void 0;
+        m.off = void 0;
+        const v = this.lorryOf(sq, m), j = this.seatNo(sq, m), side = j % 2 ? 1 : -1, row = Math.floor(j / 2);
+        const vf = v.roadF ?? v.face;
+        [m.x, m.y] = this.landing(sq, m);
+        m.face = wrap(vf + Math.PI);
+        m.went = 0;
+        m.spot = toWorld(v, vf, side * (1.6 + 0.5 * row), -HOP.tail - 1.5 - 0.4 * row);
+        m.slotAt = m.spot;
+        m.pose = "run";
+        m.v = 3.5;
+        m.aim = void 0;
+        m.hidden = void 0;
+        m.cover = "none";
+        m.until = t + 1;
+      }
+      for (const m of sq.men) if (m.fell === void 0 && m.out === void 0 && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+      if (still) return false;
+      sq.hop = void 0;
+      sq.left = t;
+      return true;
     }
     /**
      * Down, and the block goes on faster than men on foot can follow: they mount again. Each lorried man makes for his own
@@ -5743,6 +5833,11 @@
     mountUp(sq) {
       const u = sq.u;
       sq.boarding = this.b.t;
+      sq.hop = sq.left = void 0;
+      for (const m of sq.men) {
+        m.out = void 0;
+        m.off = void 0;
+      }
       for (const v of sq.veh) if (v.pose === "parked") v.pose = "drive";
       const men = sq.men.filter((m) => this.stands(sq, m));
       for (const m of men) {
@@ -5797,12 +5892,44 @@
     /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
     seat(sq, m) {
       const v = this.lorryOf(sq, m);
+      if (this.b.trucks) {
+        const j2 = this.seatNo(sq, m);
+        return sq.tier >= 1 ? toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2)) : toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j2 / 2));
+      }
       if (sq.tier >= 1) {
         const j2 = m.seat ?? m.j ?? 0;
         return toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2));
       }
       const j = Math.floor(m.k / sq.veh.length);
       return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+    }
+    /**
+     * Men in lorries: where he stands, down off her tailboard (hopOut): HOP.tail behind her as the 3D game faces her (her
+     * way over her last metre of road: roadF), to his own bench's side.
+     */
+    landing(sq, m) {
+      const v = this.lorryOf(sq, m);
+      return toWorld(v, v.roadF ?? v.face, (this.seatNo(sq, m) % 2 ? 1 : -1) * HOP.abreast, -HOP.tail);
+    }
+    /**
+     * Men in lorries: his seat's number in his lorry's bed (seat): two abreast, the odd ones on her right, front to back.
+     * Each lorry's men are numbered once, in their sections' own order (a section to a lorry keeps its seats: its key man
+     * first); where sections share a lorry they sit turn about, so no two men have one seat.
+     */
+    seatNo(sq, m) {
+      const own = (x) => sq.tier >= 1 ? x.seat ?? x.j ?? 0 : Math.floor(x.k / sq.veh.length);
+      if (!sq.seats) {
+        sq.seats = /* @__PURE__ */ new Map();
+        const by2 = /* @__PURE__ */ new Map();
+        for (const x of sq.men) {
+          if (x.role === "holder") continue;
+          const i = this.lorryIx(sq, x), l = by2.get(i);
+          if (l) l.push(x);
+          else by2.set(i, [x]);
+        }
+        for (const l of by2.values()) l.map((x, i) => ({ x, o: own(x), i })).sort((a, c) => a.o - c.o || a.i - c.i).forEach(({ x }, n) => sq.seats.set(x, n));
+      }
+      return sq.seats.get(m) ?? own(m);
     }
     /**
      * Where a man mounting runs to: his lorry, or his horse at his holder's side (the holder's string of horses spread
@@ -5954,6 +6081,14 @@
         }
       }
       if (u.kind !== "mot" || !sq.down) return;
+      if (sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee") {
+        for (const v of sq.veh) {
+          v.v = 0;
+          v.pose = "parked";
+          v.spot = [v.x, v.y];
+        }
+        return;
+      }
       sq.veh.forEach((v, i) => {
         if (sq.phase === "flee" || sq.phase === "fallback" || sq.close) {
           const s2 = toWorld(u, u.face, (i - 0.5) * 20, -u.d / 2 - (sq.close ? 30 : 40));
@@ -6487,6 +6622,13 @@
         walkOne(m);
         m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
         if (m.role === "tank") m.way = Math.max(m.went, (m.way ?? 0) - TANK_SHED * DT);
+        if (this.b.trucks && m.role === "lorry") {
+          if (!m.road) m.road = [x0, y0];
+          if (Math.hypot(m.x - m.road[0], m.y - m.road[1]) >= 1) {
+            m.roadF = Math.atan2(m.x - m.road[0], m.y - m.road[1]);
+            m.road = [m.x, m.y];
+          }
+        }
       };
       const walkOne = (m) => {
         if (m.v > 0 && !MOVING.has(m.pose) && !CARRIED.has(m.pose)) {
@@ -6566,8 +6708,9 @@
             if (e === void 0) e = this.threat(u);
             if (e) want = bearing2(m.x, m.y, e.x, e.y);
           }
-          if (want !== void 0) m.face = turnTo(m.face, want, rate);
+          if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, rate);
         }
+        if (m.role === "lorry" && (sq.hop !== void 0 || sq.left !== void 0 && t < sq.left + HOP.clear && sq.phase !== "flee")) return;
         const extra = m.role === "lorry" ? 120 : 0;
         const [lx, ly] = this.leash(sq, [m.x, m.y], extra);
         const gd = Math.hypot(lx - m.x, ly - m.y);
@@ -6589,7 +6732,7 @@
           m.pose = rev ? "reverse" : m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : sq.phase === "flee" ? "flee" : sq.phase === "bound" || sq.phase === "fight" ? "advance" : "run";
           m.until = t + 1;
         }
-        this.ring(sq, m, extra || (u.kind === "mot" || u.kind === "cav" ? RIDERS_RING : 0));
+        this.ring(sq, m, extra || (u.kind === "mot" || u.kind === "cav" ? RIDERS_RING + (this.b.trucks && u.kind === "mot" && m.role !== "lorry" ? HOP.ring : 0) : 0));
       };
       for (const m of sq.veh) step(m);
       for (const m of sq.men) {
@@ -6599,11 +6742,11 @@
         }
         if (m.job) continue;
         if (m.pose === "mounted" && (u.kind === "mot" || m.role === "crew") && sq.veh.length) {
-          const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
+          const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = m.off ? this.landing(sq, m) : this.seat(sq, m);
           m.x = p[0];
           m.y = p[1];
           m.face = turnTo(m.face, lorry.face, TURN.foot * DT);
-          m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
+          m.went = m.off ? 0 : Math.hypot(m.x - x0, m.y - y0) / DT;
           m.spot = p;
           m.v = lorry.v;
           continue;
@@ -6985,6 +7128,7 @@
         if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
         const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
           const o = one(m);
+          if (b.trucks && m.pose === "mounted" && m.fell === void 0 && sq.veh.length) o.sv = m.out !== void 0 ? [this.lorryOf(sq, m).k, this.seatNo(sq, m), Math.round(m.out * 100) / 100] : [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
         });
@@ -7395,6 +7539,13 @@
        * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
        */
       __publicField(this, "escort", false);
+      /**
+       * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
+       * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
+       * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
+       * { trucks: true }, the Battle rules card's Men in lorries row): off, all get down at once where they sat.
+       */
+      __publicField(this, "trucks", false);
       /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
       __publicField(this, "overrun", /* @__PURE__ */ new Map());
       /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
@@ -11516,6 +11667,7 @@
       const key = keyOf(b, m, fo);
       const p = [r2(t), r12(m.x), r12(m.y), r32(m.f)];
       const ch = [r2(t), m.p, m.c, m.a ? r12(m.a[0]) : null, m.a ? r12(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+      if (m.sv) ch.push(...m.sv);
       let k = this.men.get(key);
       if (!k) {
         k = {
@@ -11537,7 +11689,7 @@
         this.men.set(key, k);
         this.order.push(k);
       } else {
-        if (k.ch.slice(1).some((v, i) => v !== ch[i + 1])) {
+        if (k.ch.length !== ch.length || k.ch.slice(1).some((v, i) => v !== ch[i + 1])) {
           k.ch = ch;
           k.newCh.push(ch);
         }
@@ -11805,6 +11957,7 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
+      if (opts.trucks === true) sim.trucks = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wet: opts.wet !== false };
@@ -12139,7 +12292,8 @@
         mud: opts?.mud !== false,
         scars: opts?.scars !== false,
         blast: opts?.blast === true,
-        escort: opts?.escort === true
+        escort: opts?.escort === true,
+        trucks: opts?.trucks === true
       });
       return live3.header();
     },
@@ -12177,6 +12331,7 @@
         wet: o.wet !== false,
         blast: o.blast === true,
         escort: o.escort === true,
+        trucks: o.trucks === true,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
