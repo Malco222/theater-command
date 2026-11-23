@@ -191,8 +191,8 @@ ABOUT["Kubelwagen"] = {"nation": "GER", "role": "light car", "years": "1940-45",
                        "units": "staffs, scouts, messengers and every German unit's light car, in Europe, Russia and Africa (Italy had some too)"}
 FACES["Kubelwagen"] = [("1940 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})]
 BUILDERS["GAZ67"] = light_cars.gaz67
-ABOUT["GAZ67"] = {"nation": "SOV", "role": "light car", "years": "1943-45",
-                  "units": "the Red Army's commanders, scouts and signallers, and the tractor of the 45 mm anti-tank gun; before her, Lend-Lease jeeps and the older GAZ-64"}
+ABOUT["GAZ67"] = {"nation": "SOV", "role": "light car", "years": "1941-45",
+                  "units": "the Red Army's commanders, scouts and signallers, and the tractor of the 45 mm anti-tank gun; she came in 1943, and stands in before then for the near-identical GAZ-64 (1941-43; the art director, 23 Nov). Lend-Lease jeeps served beside her"}
 FACES["GAZ67"] = [("Screen up, four seats", {})]
 
 BUILDERS["Fiat508"] = light_cars.fiat508
