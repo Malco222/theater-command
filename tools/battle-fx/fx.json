@@ -1341,6 +1341,32 @@
      90,
      78
     ]
+   },
+   "wet": {
+    "_how": "The art director's read of the thaw (23 November, ground stills ca6aeca3): thrown mud is dark wet clods that land and stay, never a dust puff. Its own switch: on 0 (from 23 November) draws mud's burst as before; on 1, the clods and the shower take clod (the shower by shower_shade; land_grade.grounds.mud.wet.clod in the land battle, 48,42,35: lit by the sun as every clod is, a lying clump measured from 25 m shows a median of 54 and a darkest of 36 against the field's 70, dark wet brown with a lit side and never a black hole, not the olive of paint.clod (100,87,69 showed 67: paler than the field)), the clods r_k as big (clumps, not spray); none bounces, none sheds dust in flight, none puffs dust where it lands; and of a burst within stay_within_m of the eye, up to stay_most clods of stay_from_m radius or more lie stay_s where they land, fading over the last fade_s. Farther bursts' clods go as before, after their short rest: a clod there is a pixel or two. It ships on 1 once the art director passes the game's stills and the Mac holds 45 (production lead 23:10Z); the Mac flips it at launch with -TheaterFxSet=grounds.mud.wet.on=1, on a thaw battle (-TheaterLandWeatherWord=mud).",
+    "on": 0,
+    "clod": [
+     60,
+     54,
+     48
+    ],
+    "tint": [
+     0.9,
+     1.05
+    ],
+    "shower_shade": [
+     0.7,
+     0.95
+    ],
+    "r_k": 2.3,
+    "stay_s": [
+     20,
+     35
+    ],
+    "fade_s": 5,
+    "stay_from_m": 0.05,
+    "stay_most": 40,
+    "stay_within_m": 120
    }
   },
   "town": {
@@ -6607,6 +6633,13 @@
       110,
       97,
       59
+     ]
+    },
+    "wet": {
+     "clod": [
+      48,
+      42,
+      35
      ]
     }
    },

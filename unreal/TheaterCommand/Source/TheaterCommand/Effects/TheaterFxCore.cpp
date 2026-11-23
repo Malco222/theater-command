@@ -2290,6 +2290,21 @@ namespace TheaterFx
 		int DustTrails = bDustTrails ? DT.Whole(static_cast<int>(SafeNum(Num("burst.debris.dust_trails.0", 3.0), 0.0, 12.0, 3.0)), static_cast<int>(SafeNum(Num("burst.debris.dust_trails.1", 5.0), 0.0, 12.0, 5.0))) : 0;
 		const double TrailFrom = SafeNum(Num("burst.debris.dust_trail_from_m", 0.08), 0.0, 5.0, 0.08) * K;
 		Dice Thin(PlaceKey(At) * 0x9FB21C651E98DF25ull ^ 0xFE3ull); // (burst.far: which clods are thrown, by dice of their own)
+		// (grounds.<ground>.wet, its own switch on: the art director's read of the thaw (23 November): thrown mud is dark
+		// wet clods that land and stay, never a dust puff. The clods and the shower take the wet colour (clod, by
+		// tint; the shower by shower_shade) and the clods r_k as big; none bounces, none sheds dust in flight, none
+		// puffs dust where it lands; and of a burst within stay_within_m of the eye, up to stay_most clods of
+		// stay_from_m or more lie stay_s where they land, fading over the last fade_s. Dice of their own; off, as before)
+		const std::string Wt = "grounds." + CrownGround + ".wet.";
+		const bool bWet = !CrownGround.empty() && Num(Wt + "on", 0.0) >= 0.5;
+		Dice DW(PlaceKey(At) * 0xE7037ED1A0B428DBull ^ 0x3E7ull);
+		const Rgb WetClod = bWet ? Picture(Wt + "clod", P.Clod) : P.Clod;
+		const Span WetTint = GradeRange(Wt + "tint", 0.9, 1.05), WetShower = GradeRange(Wt + "shower_shade", 0.7, 0.95), WetStay = Range(Wt + "stay_s", 20.0, 35.0);
+		const double WetBig = SafeNum(Num(Wt + "r_k", 1.0), 0.2, 4.0, 1.0), WetFade = SafeNum(Num(Wt + "fade_s", 5.0), 0.1, 120.0, 5.0);
+		const double WetFrom = SafeNum(Num(Wt + "stay_from_m", 0.04), 0.0, 5.0, 0.04);
+		const int WetMost = static_cast<int>(SafeNum(Num(Wt + "stay_most", 24.0), 0.0, 500.0, 24.0));
+		const bool bWetNear = bWet && bEyeKnown && (LastEye - At).Length() < SafeNum(Num(Wt + "stay_within_m", 150.0), 0.0, 1.0e6, 150.0);
+		int WetStays = 0;
 		for (size_t I = 0; I < Launch.size(); ++I)
 		{
 			if (bFew && Thin.U() >= Few)
@@ -2306,6 +2321,14 @@ namespace TheaterFx
 			B.R0 = B.R1 = LaunchR[I];
 			const bool bShower = I >= ShowerFrom && I < ShowerTo;
 			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : (bShower ? P.Stone : P.Clod)) * (bShower ? ShowerShade.Pick(D) : ClodTint.Pick(D));
+			if (bWet && I < ShowerTo)
+			{
+				B.Col = WetClod * (bShower ? WetShower.Pick(DW) : WetTint.Pick(DW));
+				if (!bShower)
+				{
+					B.R0 = B.R1 = LaunchR[I] * WetBig;
+				}
+			}
 			B.Col2 = B.Col;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
@@ -2331,12 +2354,24 @@ namespace TheaterFx
 				}
 			}
 			Throw(B);
+			if (bWet)
+			{
+				B.Vel2 = Vec(); // (wet mud sticks where it lands: no bounce)
+				B.Land2 = B.Land;
+				B.At2 = B.At1;
+			}
 			B.Life = B.Land2 + (bShower ? ShowerRest.Pick(D) : D.U(2.0, 4.0));
 			B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
+			if (bWetNear && I < ShowerFrom && B.R0 >= WetFrom && WetStays < WetMost)
+			{
+				++WetStays;
+				B.Life = B.Land2 + WetStay.Pick(DW);
+				B.Hold = std::min(0.99, std::max(B.Hold, (B.Life - WetFade) / B.Life));
+			}
 			const Vec Landed = B.At1;
 			const double Down = B.Born + B.Land;
 			const double R = B.R0;
-			if (DustTrails > 0 && I < ShowerTo && R > TrailFrom && B.Land > 0.6)
+			if (DustTrails > 0 && !bWet && I < ShowerTo && R > TrailFrom && B.Land > 0.6)
 			{
 				// (thin dust shed along its flight, each puff where the clod was at that moment)
 				--DustTrails;
@@ -2363,7 +2398,7 @@ namespace TheaterFx
 				}
 			}
 			Bits.push_back(B);
-			if (R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
+			if (!bWet && R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
 			{
 				Bit Puff;
 				Puff.Born = Down;
