@@ -1300,6 +1300,7 @@ namespace LandMen
 			bool bFiring = false;           // a firing pose: its clip's shots come from the rounds
 			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
 			float Lift = 0.f;               // carried on a stretcher: the canvas's height over the ground, metres
+			bool bUnderCanvas = false;      // riding in a lorry (pose mounted): under her canvas, not drawn (Crowd::Visible)
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -1597,6 +1598,7 @@ namespace LandMen
 			float F = 0.f, V = 0.f;
 			float Fade = 1.f;
 			bool bVisible = true;
+			bool bUnderCanvas = false;      // alive and riding in a lorry's bed now (his shown stance's): not drawn
 			double Last = -1.0;
 			uint32_t Stamp = 0;
 			Lod L = Far;
@@ -2351,6 +2353,10 @@ namespace LandMen
 				// Sitting in a lorry or on a horse: the soldier has no seated clip yet, so he kneels where his seat is
 				// (the rules put him there), which at least keeps him low in the lorry's bed. A seated clip is wanted.
 				Use("fire_kneel", Stance::Hold, Kneel);
+				// (in a lorry he is not drawn: he knelt on the ground under her, "troops are stuck under the truck",
+				// Brian, 23 November 14:10Z; the men who ride in her bed sit under her canvas. Release 2 seats them on
+				// her benches instead.)
+				St.bUnderCanvas = Pose == "mounted";
 			}
 			else if (Pose == "horses") Use(bMoving ? "walk" : "idle", bMoving ? Stance::Gait : Stance::Loop, Up);
 			// Release 2's stretcher bearers and linemen (the tactics thread's poses; the soldiers thread's field clips,
@@ -3518,6 +3524,8 @@ namespace LandMen
 				const Stance& Lifted = M.Stances[static_cast<size_t>(M.Shown)];
 				Pl.Lift = Lifted.Lift * static_cast<float>(std::clamp(Now - Lifted.T, 0.0, 1.0));
 			}
+			M.bUnderCanvas = M.State == Man::Alive && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
+				&& M.Stances[static_cast<size_t>(M.Shown)].bUnderCanvas;
 			M.Place = Pl;
 			M.World = WorldOf(Pl, GroundAt, &M.Footing);
 			M.bFooting = true;
@@ -4415,7 +4423,11 @@ namespace LandMen
 	}
 
 	const ManInfo& Crowd::Info(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Info; }
-	bool Crowd::Visible(int Man) const { return Inner->Men[static_cast<size_t>(Man)].bVisible; }
+	bool Crowd::Visible(int Man) const
+	{
+		const Impl::Man& M = Inner->Men[static_cast<size_t>(Man)];
+		return M.bVisible && !M.bUnderCanvas;
+	}
 	float Crowd::Fade(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Fade; }
 	bool Crowd::Frozen(int Man) const { return Inner->Men[static_cast<size_t>(Man)].State == Impl::Man::Rest; }
 	bool Crowd::IsFalling(int Man) const

@@ -483,7 +483,8 @@ namespace LandMen
 		 * drill's sections), or -1. */
 		int Find(int Block, int K, int J = 0) const;
 		const ManInfo& Info(int Man) const;
-		/** Drawn at all (false only once a man who left with his block has faded out). */
+		/** Drawn at all (false once a man who left with his block has faded out, and while he rides in a lorry's bed,
+		 * under her canvas). */
 		bool Visible(int Man) const;
 		/** 1 drawn whole; less while he fades out after leaving with his block. Never less for a dead man. */
 		float Fade(int Man) const;
