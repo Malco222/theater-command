@@ -49,6 +49,7 @@ export function fighterOf(nat: string, design: number): string {
   if (COMMONWEALTH.has(nat)) return design >= 1940 ? 'Spitfire' : 'Hurricane';
   if (nat === 'USA') return design >= 1944 ? 'Mustang' : 'Warhawk';
   if (nat === 'SOV') return design >= 1942 ? 'Yak' : `Fighter:${nat}`;
+  if (nat === 'FRA') return design >= 1940 ? 'D520' : `Fighter:${nat}`;
   if (nat === 'ITA') return design >= 1942 ? 'C202' : `Fighter:${nat}`;
   if (nat === 'JAP' || nat === 'JPN') return 'Zero';
   return `Fighter:${nat}`;
@@ -58,7 +59,14 @@ export function fighterOf(nat: string, design: number): string {
 export function bomberOf(nat: string, design: number): string {
   if (nat === 'USA') return 'B17';
   if (nat === 'GER') return 'He111';
-  if (COMMONWEALTH.has(nat)) return design >= 1942 ? 'Lancaster' : 'Bomber:UK';
+  if (COMMONWEALTH.has(nat)) return design >= 1942 ? 'Lancaster' : 'Wellington';
+  // Brian 23 Nov ("do 1 and 3": model the missing planes). Italy's SM.79 throughout and Japan's G3M, then the G4M from
+  // 1941 (the art director's unit table); the Soviet Pe-2 from 1942, the SB (the plain bomber) before it, as the Yak;
+  // France's LeO 451 from 1940, the Amiot and Bloch of 1939 (the plain bomber) before it.
+  if (nat === 'ITA') return 'SM79';
+  if (nat === 'JAP' || nat === 'JPN') return design >= 1941 ? 'Betty' : 'Nell';
+  if (nat === 'SOV') return design >= 1942 ? 'Pe2' : `Bomber:${nat}`;
+  if (nat === 'FRA') return design >= 1940 ? 'LeO451' : `Bomber:${nat}`;
   return `Bomber:${nat}`;
 }
 
@@ -69,9 +77,9 @@ export function bomberOf(nat: string, design: number): string {
  */
 const SINGLE = new Set(['B5N', 'B6N', 'D3A', 'D4Y', 'TBD', 'TBF', 'SBD', 'SB2C', 'Swordfish', 'Barracuda', 'Skua', 'Stuka']);
 
-/** Engines on a bomber model: the B-17 and the Lancaster have four; the carrier and dive bombers one; the He 111 and the plain bomber two. */
+/** Engines on a bomber model: the B-17 and the Lancaster have four; the SM.79 three; the carrier and dive bombers one; the He 111, the other twins and the plain bomber two. */
 export const enginesOf = (model: string): number =>
-  model === 'B17' || model === 'Lancaster' ? 4 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
+  model === 'B17' || model === 'Lancaster' ? 4 : model === 'SM79' ? 3 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
 
 // ---- Fighters against fighters ---------------------------------------------------------------------------------
 

@@ -155,6 +155,9 @@ export function fighterGuns(model: string, nat: string, w: When): Loadout {
       const c = d < 1942 + 6 / 12 ? 60 : d < 1944 ? 100 : 125;
       return { mark: d < 1942 + 6 / 12 ? 'A6M2' : d < 1944 ? 'A6M3' : 'A6M5', conv: 250, silent: [], guns: [fixed(G.type97, ['gun.nose'], 500, { n: 2, rate: Math.round(G.type97.rate * SYNC) }), fixed(G.type99, ['gun.1', 'gun.2'], c, c < 125 ? { drum: c } : {})] };
     }
+    // France's D.520 model (23 Nov) flies the D.520's guns from the first: the MS.406 before it is the plain fighter.
+    case 'D520':
+      return plainFighter('FRA', Math.max(d, 1940 + 5 / 12));
   }
   return plainFighter(nat, d);
 }
@@ -194,6 +197,8 @@ const turret = (spec: Spec, where: string[], rounds: number, arc: Gun['arc'] = n
 
 /** A gunner's reach (3.3): 550 m for the .50 (G18); a placeholder 370 m for rifle calibre (B5); cannon as the .50. */
 const REACH: Record<GunKind, number> = { rifle: 370, hmg: 550, cannon20: 550 };
+
+const MARKS: Record<string, string> = { SM79: 'SM.79', Nell: 'G3M', Betty: 'G4M', Wellington: 'Wellington', Pe2: 'Pe-2', LeO451: 'LeO 451' };
 
 export function bomberGuns(model: string, nat: string, w: When): Loadout {
   const d = at(w);
@@ -240,7 +245,9 @@ export function bomberGuns(model: string, nat: string, w: When): Loadout {
       // fire in the aircraft. Rounds unchecked: about 1,000 a gun forward and above, about 2,500 in the tail.
       return box('Lancaster I', [turret(G.browning303, ['turret.1', 'turret.2'], 1_000, about(0, 95, -45, 60)), turret(G.browning303, ['turret.3', 'turret.4'], 1_000, from(0, 360, 0, 70)), turret(G.browning303, ['turret.5', 'turret.6', 'turret.7', 'turret.8'], 2_500, about(180, 95, -60, 60))]);
   }
-  return plainBomber(nat, d);
+  // The new models (23 Nov) fly their nation's plain guns under their own name until the historian lays each type's.
+  const named = MARKS[model];
+  return named ? { ...plainBomber(nat, d), mark: named } : plainBomber(nat, d);
 }
 
 /** The plain twin: a hand-held gun in the nose and a dorsal turret (the file's limits); France adds a ventral gun. */

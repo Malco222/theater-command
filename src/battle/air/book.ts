@@ -210,6 +210,7 @@ export const SKY = {
       D3A: 2, D4Y: 2, SBD: 2, SB2C: 2, Skua: 2, Stuka: 2, Dive: 2,
       B5N: 3, B6N: 3, TBD: 3, TBF: 3, Swordfish: 3, Barracuda: 3, Torpedo: 3,
       He111: 5, Bomber: 5, 'Bomber:SOV': 3, 'Bomber:JAP': 7, 'Bomber:JPN': 7, G4M: 7,
+      Nell: 7, Betty: 7, SM79: 6, Wellington: 6, Pe2: 3, LeO451: 4, // the new models (23 Nov; crews as built, unchecked)
       Lancaster: 7, B17: 10,
     } as Record<string, number>,
     /**

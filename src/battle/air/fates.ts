@@ -70,7 +70,7 @@ export type Fate = Required<Pick<Fall, 'how' | 'hit' | 'dur' | 'end' | 'roll' | 
   Pick<Fall, 'side' | 'engineAt' | 'fire' | 'boom' | 'with' | 'cause' | 'ditch' | 'out' | 'chuteAt'> & { chutes: number };
 
 /** Japan's navy land bombers, the G4M and the G3M (the plain Japanese bomber is drawn as a G4M). */
-const japanTwin = (model: string): boolean => /^(G4M|G3M|Bomber:(JAP|JPN))$/.test(model);
+const japanTwin = (model: string): boolean => /^(G4M|G3M|Betty|Nell|Bomber:(JAP|JPN))$/.test(model);
 /**
  * Japan flew without self-sealing tanks or armour for most of the war: hit, its aircraft burned and blew apart far
  * more often. 'bare' until mid-1944, and the G4M until November 1944, when the G4M3 came (the historian, 20 November,
@@ -113,7 +113,7 @@ export function crewOf(model: string, w: { year: number; month: number }): numbe
  * radials).
  */
 export function coolOf(model: string): 'liquid' | 'radial' {
-  if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|Il2|Pe2|Whitley)/.test(model)) return 'liquid';
+  if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|D520|Il2|Pe2|Whitley)/.test(model)) return 'liquid';
   if (/^(Fighter:FRA|Bomber:SOV)$/.test(model)) return 'liquid';
   return 'radial';
 }

@@ -181,11 +181,16 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
     expect(fighterOf('ITA', 1941)).toBe('Fighter:ITA');
     expect(fighterOf('ITA', 1942)).toBe('C202');
     expect(fighterOf('FRA', 1939)).toBe('Fighter:FRA');
-    expect(bomberOf('UK', 1941)).toBe('Bomber:UK');
+    expect(bomberOf('UK', 1941)).toBe('Wellington');
+    expect(fighterOf('FRA', 1940)).toBe('D520');
+    expect([bomberOf('JAP', 1940), bomberOf('JAP', 1941), bomberOf('SOV', 1941), bomberOf('SOV', 1942), bomberOf('FRA', 1939), bomberOf('FRA', 1940)]).toEqual(['Nell', 'Betty', 'Bomber:SOV', 'Pe2', 'Bomber:FRA', 'LeO451']);
+    expect([enginesOf('SM79'), enginesOf('Betty'), enginesOf('Wellington')]).toEqual([3, 2, 2]);
+    expect(bomberGuns('SM79', 'ITA', { year: 1941, month: 3 }).mark).toBe('SM.79');
+    expect(fighterGuns('D520', 'FRA', { year: 1940, month: 0 }).mark).toBe('D.520');
     expect(bomberOf('UK', 1942)).toBe('Lancaster');
     expect(bomberOf('USA', 1939)).toBe('B17');
     expect(bomberOf('GER', 1944)).toBe('He111');
-    expect(bomberOf('ITA', 1940)).toBe('Bomber:ITA');
+    expect(bomberOf('ITA', 1940)).toBe('SM79');
     expect([enginesOf('B17'), enginesOf('Lancaster'), enginesOf('He111'), enginesOf('Bomber:FRA')]).toEqual([4, 4, 2, 2]);
     const t = ticketOf('GER', 'bomb', 'Alsace', 0);
     expect(t.place.when).toEqual({ year: 1939, month: 8 });
