@@ -199,13 +199,27 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> BushInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WoodInk;
+	/** The art director's round 1 (23 November): the ripe grain's own (GrainInk: the wheat, bending toward the ear and
+	 * nodding back, its sheen stronger), the lively trees' (LivelyInk and their leaves LivelyLeafInk: poplars, birches,
+	 * willows, bamboo, two to three times an oak's sway, their leaves quicker) and the palms' (PalmInk, PalmLeafInk:
+	 * the fronds lifting and tossing). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GrainInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyLeafInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmLeafInk;
 	/** The clouds' shadows on the field (M_LandCloudShade, the light function on the battle's sun), on with
 	 * "-TheaterLandCloudShadows" (or "=darkness", the sun's share left under a cloud, 0.2) or "-TheaterLandEpic". */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> CloudShadeInk;
 	bool bWindOn = false;
-	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low before the lens ("-TheaterLandSunShafts",
-	 * or "=bloom", 0.2; or "-TheaterLandEpic"). */
+	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low (under 25 degrees) before the
+	 * lens ("-TheaterLandSunShafts", or "=bloom", 0.2; or "-TheaterLandEpic"). */
 	bool bSunShafts = false;
 	float SunShaftBloom = 0.2f;
 

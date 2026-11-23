@@ -252,8 +252,7 @@ namespace LandFieldPicture
 
 		/** The game's switches for the wind and the clouds' shadows, as the painter shows them in a still (release 2,
 		 * 23 November): LAND_FIELD_CLOUD_SHADE=dark (-TheaterLandCloudShadows: the share of the sun left under a cloud) and
-		 * LAND_FIELD_SHEEN=s (the gusts' sheen over the grass and the corn, the game's 0.07 on the blades and 0.05 on the
-		 * ground at a breeze), each at the battle's start (the clouds not yet carried, the gusts where they stand). */
+		 * LAND_FIELD_SHEEN=s (the gusts' sheen over the grass, the game's 0.06 at a breeze; ripe grain 11 of its 6), each at the battle's start (the clouds not yet carried, the gusts where they stand). */
 		struct Air
 		{
 			double Dark = -1.0, Sheen = 0.0;
@@ -603,6 +602,9 @@ namespace LandFieldPicture
 			double Beta = 3.912 / 3500.0;
 			double Exposure = 0.85;
 			double Cover = 0.45, Base = 900.0;
+			// (the clouds' shadows' picture moved so its clear disc lies over the field's middle at the start, as the
+			// game's LandBattle lays M_LandCloudShade's "Anchor": U along the field's y, V along its x, in repeats)
+			double AnchorU = 0.0, AnchorV = 0.0;
 		};
 
 		Light Morning(const Sky& Sk)
@@ -747,25 +749,31 @@ namespace LandFieldPicture
 									break;
 								}
 							}
-							// (the game's clouds' shadows: where this point's sun ray meets the clouds' base, under four fifths of the
-							// day's cover, as M_LandCloudShade lays them; the field's x is the world's Y)
+							// (the game's clouds' shadows: where this point's sun ray meets the clouds' base, as M_LandCloudShade lays
+							// them: how far inside a cloud (red, metres either side of 0.5 over 400), the edge blurred over 30 m,
+							// the clouds the day's cover keeps (blue under four fifths of the cover, at most 0.4, over the 0.42 the
+							// picture's clouds shade in all); the field's x is the world's Y)
 							const Air& Ai = AirAsked();
 							if (Ai.Dark >= 0.0 && L.Cover >= 0.05)
 							{
 								const double Climb = (L.Base - P.Z) / std::max(L.Sun.Z, 0.15);
 								const double QX = P.X + L.Sun.X * Climb, QY = P.Y + L.Sun.Y * Climb;
-								const double Low = 1.0 - std::min(0.8 * L.Cover, 0.7) - 0.03;
-								const double Ramp = std::clamp((AirAt(QY / 4000.0, QX / 4000.0, 0) - Low) / 0.06, 0.0, 1.0);
-								Lit *= 1.0 - Ramp * Ramp * (3.0 - 2.0 * Ramp) * (1.0 - Ai.Dark);
+								const double CU = QY / 4000.0 + L.AnchorU, CV = QX / 4000.0 + L.AnchorV;
+								const double Inside = (AirAt(CU, CV, 0) - 0.5) * 800.0;
+								const double Kept = std::clamp((std::min(0.8 * L.Cover, 0.4) / 0.42 - AirAt(CU, CV, 2)) * 255.0, 0.0, 1.0);
+								const double Ramp = std::clamp(Inside / 30.0 + 0.5, 0.0, 1.0);
+								Lit *= 1.0 - Ramp * Ramp * (3.0 - 2.0 * Ramp) * Kept * (1.0 - Ai.Dark);
 							}
 							double Swept = 1.0;
 							if (Ai.Sheen > 0.0 && (Mat == MatGround || Mat == MatBlades))
 							{
-								// (a plant's paint only, never bare earth, sand or snow: its green well over its blue; on the ground,
-								// 5 of the blades' 7)
+								// (a plant's paint only, never bare earth, sand or snow: its green well over its blue; the grass at
+								// LAND_FIELD_SHEEN, the game's 0.06, ripe grain, its red well over its green, at 11 of its 6)
+								const double SR = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 0])), 1.0 / 2.2);
 								const double SG = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 1])), 1.0 / 2.2), SB = std::pow(std::max(0.0, static_cast<double>(T.Albedo[K * 3 + 2])), 1.0 / 2.2);
-								const double Plant = std::clamp((SG - SB) / (SG + 0.02) * 5.0 - 1.5, 0.0, 1.0) * (Mat == MatGround ? std::clamp((N.Z - 0.55) * 4.0, 0.0, 1.0) * 5.0 / 7.0 : 1.0);
-								Swept = 1.0 + Plant * Ai.Sheen * 2.0 * (AirAt(P.Y / 150.0, P.X / 150.0, 1) - 0.5);
+								const double Plant = std::clamp((SG - SB) / (SG + 0.02) * 5.0 - 1.5, 0.0, 1.0) * (Mat == MatGround ? std::clamp((N.Z - 0.55) * 4.0, 0.0, 1.0) : 1.0);
+								const double Ripe = std::clamp((SR / (SG + 0.01) - 0.9) * 3.3, 0.0, 1.0);
+								Swept = 1.0 + Plant * Ai.Sheen * (1.0 + Ripe * 5.0 / 6.0) * 2.0 * (AirAt(P.Y / 150.0, P.X / 150.0, 1) - 0.5);
 							}
 							const double NL = Dot(N, L.Sun);
 							// Leaves and blades let light through and scatter it: their lit side wraps round, and their shade is lighter.
@@ -912,7 +920,15 @@ namespace LandFieldPicture
 	bool Paint(const LandField::Ground& G, const LandField::Field& F, const Sky& Sk, const std::string& Key, const std::string& Dir)
 	{
 		for (int K = 0; K < 256; ++K) LinearOf[K] = static_cast<float>(Linear(K));
-		const Light L = Morning(Sk);
+		Light Lamp = Morning(Sk);
+		{
+			const double MidX = 0.5 * F.Width(), MidY = 0.5 * F.Depth(), MidZ = G.At(MidX, MidY).Z;
+			const double Climb = (Lamp.Base - MidZ) / std::max(Lamp.Sun.Z, 0.15);
+			const double UX = MidX + Lamp.Sun.X * Climb, UY = MidY + Lamp.Sun.Y * Climb;
+			Lamp.AnchorU = 0.5 - (UY / 4000.0 - std::floor(UY / 4000.0));
+			Lamp.AnchorV = 0.5 - (UX / 4000.0 - std::floor(UX / 4000.0));
+		}
+		const Light L = Lamp;
 		bool bOk = true;
 		const double TX = F.bTown ? F.TownX : 0.5 * F.Width(), TY = F.bTown ? F.TownY : F.Depth();
 		const int W = 3200, H = 1800;

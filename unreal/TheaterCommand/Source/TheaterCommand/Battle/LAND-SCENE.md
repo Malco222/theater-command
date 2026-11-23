@@ -383,35 +383,76 @@ log says it all in its `Land battle look:` lines.
 
 ## The wind, the clouds' shadows and the sun's shafts (release 2, off until passed)
 
-Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and epic?" Three switches, each off
-until the art director and the Mac's 45 fps pass it, all three with `-TheaterLandEpic`. Every battlefield alike (the
-bocage, the steppe, the desert, Italy, the jungle, rice, the farms, the plains): nothing is per place. Build the
-materials once on the Mac: `TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks`
-(they read `Tools/land_look/T_LandCloudWind.png`, made by `make_sky_textures.py`: red the clouds, green the gusts).
+Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and epic?" There are three switches,
+each off until the art director and the Mac's 45 fps pass it; `-TheaterLandEpic` turns on all three. The art director's
+round 1 notes are in. Every battlefield is treated alike (the bocage, the steppe, the desert, Italy, the jungle, rice,
+the farms, the plains): nothing is set per place. Build the materials once on the Mac:
+`TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks`. They read
+`Tools/land_look/T_LandCloudWind.png`, made by `make_sky_textures.py`: red is how far inside a cloud's shadow, blue is
+the cloud's order, green is the gusts.
 
-- **The wind** (`-TheaterLandWind`, or `=strength`, 1 as worked out from the recording's wind; 0 off). Gusts of 20 to
-  75 m run downwind over the field at about 1.3 times the wind's speed. The grass, the corn, the flowers and a region's
-  blades lean from the root, about 8 degrees in a gust at a fresh breeze, and spring back and forth a little; a region's
-  low leafy plants less; the shrubs and the trees bend toward the top (some 20 cm at 18 m) with their leaves, and each
-  leaf card flutters 2 to 3 cm. Each gust runs over the grass and the corn as a light patch, each lull a darker one
-  (the sheen: 7 per cent on the blades, 5 on the ground's grass and corn, none on earth, sand or snow). New material
-  `M_LandBlades` (M_MapSurface with the sway and the sheen; the campaign's M_MapSurface is untouched); the sway is in
-  M_LandLeaves and M_LandStalks too, still unless the C++ sets it. Bent only within 250 m of the eye
-  (`-TheaterLandSwayTo=`; the clutter within 120 m), and each swaying copy's shadow kept as cached (VSM `Rigid`), so the
-  shadows are not drawn again for every leaf. With the wind off, the leaves' and stalks' copies are told not to move.
-- **The clouds' shadows** (`-TheaterLandCloudShadows`, or `=darkness`, the sun's share left under a cloud, 0.2). The
-  light function `M_LandCloudShade` on the battle's sun: a fair day's cumulus at its base over the field, four fifths of
-  the day's cover in shadow, carried with the clouds drawn (DrawSky sets its drift every frame). It takes the sun off
-  everything under a cloud (the ground, the hedges, the tanks, the men), never the paint. None on an overcast day, a
-  clear one or with `-TheaterLandNoClouds`. Put back as the table had it when the battle ends.
-- **The sun's shafts** (`-TheaterLandSunShafts`, or `=bloom`, 0.2). Light-shaft occlusion and bloom on the sun: when it
-  stands before the lens, rays through the crowns, the hedges, the smoke and the dust. A fair day's only.
+### The wind
 
-The log says each one at load ("the wind ON ...", "the clouds' shadows ON ...", "the sun's shafts ON ..."). The cloud
-test's painter shows the clouds' shadows and the gusts' sheen in its stills with `LAND_FIELD_CLOUD_SHADE=0.2` and
-`LAND_FIELD_SHEEN=0.07` (the wind's motion only the game shows). On the Mac, look at: the opening wide and a low eye in
-the corn with `-TheaterLandEpic` against without (the A/B), a 20 s clip of the corn and a hedge in the wind, one shot
-toward a low sun through a tree line, and the frame rate over the first minute with and without.
+`-TheaterLandWind`, or `=strength`: 1 is as worked out from the recording's wind, 0 is off.
+
+- Gusts of 20 to 75 m run downwind over the field at about 1.3 times the wind's speed. A calm day, under a metre a
+  second, stands near still.
+- The grass, the flowers and a region's blades lean from the root, about 8 degrees in a gust at a fresh breeze.
+- The ripe wheat bends toward the ear and nods back over about 1.7 s. The corn's and the gaoliang's stalks do the same,
+  taller.
+- A region's low leafy plants and the bushes lean less.
+- An oak, an elm or a shrub bends toward its top, some 20 cm at 18 m, slowly, and each leaf card shakes 2 to 3 cm.
+- Poplars, birches, willows and bamboo move two to three times as much, with quicker leaves.
+- Palms' fronds lift and toss.
+- Every copy swings on its own beat (the materials' PerInstanceRandom).
+- Each gust runs over the grass and the corn as a light patch, and each lull as a darker one, moving with the lean.
+  This sheen is 6 per cent on grass and 11 on ripe grain (wheat, and the ground's gold fields by their colour). There
+  is none on earth, sand or snow.
+
+The new material `M_LandBlades` is M_MapSurface with the sway and the sheen; the campaign's M_MapSurface is untouched.
+M_LandLeaves and M_LandStalks also carry the sway, but stay still unless the C++ sets it. Each kind of tree's leaves get
+their own copy of the leaf ink, so they sway with their wood. Things bend only within 250 m of the eye
+(`-TheaterLandSwayTo=`; the clutter within 120 m). Each swaying copy's shadow is kept as cached (VSM `Rigid`), so the
+shadows are not redrawn for every leaf. With the wind off, the leaves' and stalks' copies are told not to move.
+
+### The clouds' shadows
+
+`-TheaterLandCloudShadows`, or `=darkness`: the sun's share left under a cloud, 0.2. That leaves a shadowed field about
+0.49 of sunlit in game: the sky's light of 0.36, plus 0.2 of the sun's remaining 0.64. A tree's cast shadow stays
+darker, at 0.36, and cast shadows fade under a cloud as they should.
+
+- The light function `M_LandCloudShade` on the battle's sun lays the fair-weather cumulus seen from below. The clouds
+  are lobed, cauliflower outlines 150 to 600 m across with a 30 m soft edge, with sun between.
+- The day's cover decides how many clouds are drawn, not how big they are: four fifths of the cover, never more than
+  0.4 of the field.
+- The picture's clear disc (280 m) is laid over the field's middle at the start (`Anchor`), so the opening stands in
+  sun and the shadows cross the rest. The shadows come over the middle as the clouds drift: DrawSky sets the drift
+  every frame, the same drift as the clouds drawn.
+- It takes the sun off everything under a cloud (the ground, the hedges, the tanks, the men), never the paint.
+- There are none on an overcast day, a clear one, or with `-TheaterLandNoClouds`.
+- The table's sun is put back as it was when the battle ends.
+
+### The sun's shafts
+
+`-TheaterLandSunShafts`, or `=bloom`: 0.2. This is light-shaft occlusion and bloom on the sun, only on a fair day with
+the sun under 25 degrees. When the sun stands before the lens, rays come through the crowns, the hedges, the smoke and
+the dust. The bloom starts only above the engine's threshold of 8, so it comes from the sun's disc, fires and flashes,
+never as a milky film.
+
+### Checking it
+
+The log reports each one at load ("the wind ON ...", "the clouds' shadows ON ...", "the sun's shafts ON ..."). The
+field painter shows the clouds' shadows and the gusts' sheen in its stills with `LAND_FIELD_CLOUD_SHADE=0.2` and
+`LAND_FIELD_SHEEN=0.06`. Only the game shows the wind's motion and the shafts.
+
+The art director's Mac shots:
+
+- The opening wide and a low eye in the corn, with `-TheaterLandEpic` against without (the A/B).
+- The wide on an overcast day.
+- 30 s of shadows crossing, from the wide.
+- 20 s of wind with wheat, a hedge, poplars and palms, plus 10 s at top wind and 10 s on a calm day.
+- A low-sun shaft shot, plus a midday frame.
+- The frame rate for each look alone and for all three, against the 45 fps gate.
 
 ## Packaging
 

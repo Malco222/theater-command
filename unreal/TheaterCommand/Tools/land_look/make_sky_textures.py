@@ -1,34 +1,46 @@
 """
-Paints the ground battle's picture of the air over the field, which Tools/build_content.py brings in for two things:
-M_LandCloudShade, the light function on the battle's sun (the shadows of a fair day's cumulus lying on the field and
-sliding over it with the wind), and the wind's gusts that bend the grass, the corn and the trees (M_LandBlades,
-M_LandLeaves, M_LandStalks) and run over the fields as a sheen (M_LandSurface). Made from numbers with a fixed seed:
-nothing is fetched and nothing copied.
+Paints the ground battle's picture of the air over the field. Tools/build_content.py brings it in for two things:
+M_LandCloudShade, the light function on the battle's sun, which lays a fair day's cumulus shadows on the field and slides
+them over it with the wind; and the wind's gusts, which bend the grass, the corn and the trees (M_LandBlades,
+M_LandLeaves, M_LandStalks) and run over the fields as a sheen (M_LandSurface). It is made from numbers with a fixed
+seed: nothing is fetched and nothing is copied.
 
-    python3 Tools/land_look/make_sky_textures.py        (numpy and Pillow; a second or two)
+    python3 Tools/land_look/make_sky_textures.py        (numpy and Pillow; a few seconds)
 
-writes, beside this script:
+It writes T_LandCloudWind.png beside this script: 1024 px, linear numbers, not colours.
 
-T_LandCloudWind.png    512 px. Linear numbers, not colours, each ranked evenly from 0 to 1 (the share of the picture
-                       above 1 - c is c).
-                       R  the clouds, about 4 km a repeat (the material's "ShadeSize"): how cloudy the sky is over a
-                          place. The material shades a place where it is over 1 - Cover, so the day's cover of
-                          cumulus casts that share of the field into shadow. Clouds of some 300 m to 1.5 km, gathered
-                          in loose groups with clear sky between, their edges a little ragged (100 to 200 m).
-                       G  the gusts, about 150 m a repeat (the materials' "GustSize"): how hard the wind blows over a
-                          place, carried downwind at the gusts' own speed. Gusts of some 20 to 75 m, a few stronger.
-                       B  as R, A 255.
+R  the clouds' shadows, 4 km a repeat (the material's "ShadeSize"). Each texel holds how far it lies inside the nearest
+   cloud's shadow, in metres: 0.5 + metres / (2 * REACH), clamped, so 0.5 is the edge, above is under a cloud and
+   below is in the sun. The material blurs the edge over "Feather" metres, and because the value is a distance that
+   blur is the same width all the way round every cloud.
+   The clouds are cumulus seen from below, after the art director's round 1 of 23 November. Each is 150 to 600 m
+   across and lobed: a body with four to eight rounder lobes on its rim, joined by soft fillets, with edges a little
+   ragged. They lie in loose groups with sun between, and never touch, so each keeps its own outline. In all they shade
+   FULL_COVER of the ground. A disc of CLEAR_RADIUS metres round CLEAR_UV is left without cloud: the battle's
+   C++ lays it over the middle of the field at the start, so the opening shot stands in sun and the shadows cross the
+   rest.
+B  each cloud's place in the order the day's cover keeps them (0..1, the same over the whole cloud). The material
+   shades only clouds with B under Cover / FULL_COVER, so a day of less cover has fewer clouds, not smaller ones.
+G  the gusts, about 150 m a repeat (the materials' "GustSize"): how hard the wind blows over a place, carried downwind
+   at the gusts' own speed. Gusts are some 20 to 75 m across, a few of them stronger. Ranked evenly from 0 to 1, so the
+   share of the picture above 1 - c is c.
+A  255.
 
-It repeats without a seam: the noise is made periodic in the frequency domain. Alpha is never 0, because Unreal's PNG
-import fills the colour of fully clear pixels.
+The picture repeats without a seam: the gusts are periodic in the frequency domain, and the clouds are measured round
+the repeat. Alpha is never 0, because Unreal's PNG import fills in the colour of fully clear pixels.
 """
 import os
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-N = 512
+N = 1024
 SEED = 19440606
+SIZE = 4000.0          # metres a repeat (M_LandCloudShade's ShadeSize)
+REACH = 400.0          # metres either side of the edge that R holds
+CLEAR_UV = (0.5, 0.5)  # the clear disc's middle, in repeats (M_LandCloudShade's "Clear")
+CLEAR_RADIUS = 280.0   # metres
+GAP = 40.0             # metres of sun at least between two clouds
 
 
 def periodic_noise(rng, n, low, high, power=1.0):
@@ -53,31 +65,112 @@ def ranked(x):
     return out.reshape(x.shape)
 
 
-def cloud_shade():
-    rng = np.random.default_rng(SEED)
-    # (the groups: a few across the 4 km, where the clouds gather and where the sky stays clear)
-    groups = periodic_noise(rng, N, 1.5, 5.0, power=1.0)
-    # (the clouds themselves, some 300 m to 1.5 km: 3 to 14 across the repeat)
-    clouds = periodic_noise(rng, N, 3.0, 14.0, power=1.7)
-    # (their edges a little ragged, 100 to 200 m)
-    rags = periodic_noise(rng, N, 20.0, 40.0, power=1.0)
-    sky = 0.6 * groups + 1.0 * clouds + 0.09 * rags
-    return ranked(sky)
+def smooth_max(a, b, k):
+    """The greater of a and b, rounded over k where they are near: the fillet where a lobe joins its cloud."""
+    h = np.clip(k - np.abs(a - b), 0.0, None) / k
+    return np.maximum(a, b) + h * h * k * 0.25
 
 
-def gusts():
-    rng = np.random.default_rng(SEED + 1)
+def clouds(rng):
+    """The cumulus: (inside, order), each N x N. inside is in metres, positive under a cloud. order is the cloud's
+    place, the same over the whole cloud and its sunlit surround."""
+    px = SIZE / N
+    groups = periodic_noise(rng, N, 1.5, 5.0, power=1.0)          # where the clouds gather (a few across the 4 km)
+    rags = periodic_noise(rng, N, SIZE / 60.0, SIZE / 25.0, 1.0)   # edges a little ragged at 25 to 60 m
+    placed = []   # (x, y, reach, parts)
+    at = np.zeros((0, 3))  # (x, y, reach) of those placed, to test a new one against all at once
+    cx, cy = CLEAR_UV[0] * SIZE, CLEAR_UV[1] * SIZE
+    # (more small clouds than big, the body's radius 55 to 220 m so the cloud is 150 to 600 m across; laid biggest
+    # first, so the small ones fill the sun between)
+    extents = np.sort(75.0 * (300.0 / 75.0) ** (rng.uniform(size=900) ** 1.5))[::-1]
+    for extent in extents:
+        # (a cumulus from below: a body, five to nine lobes round its rim reaching out to the cloud's extent, and on
+        # each lobe two smaller ones, so the outline is a cauliflower's, not an oval's; some drawn out along an axis)
+        body = extent * rng.uniform(0.5, 0.62)
+        parts = [(0.0, 0.0, body)]
+        lobes = int(rng.integers(5, 10))
+        turn = rng.uniform(0.0, 2.0 * np.pi)
+        for k in range(lobes):
+            a = turn + 2.0 * np.pi * (k + rng.uniform(-0.3, 0.3)) / lobes
+            d = body * rng.uniform(0.55, 0.85)
+            r = max(extent * rng.uniform(0.78, 1.0) - d, 0.3 * body)
+            lx, ly = d * np.cos(a), d * np.sin(a)
+            parts.append((lx, ly, r))
+            for side in (-1.0, 1.0):
+                b = a + side * rng.uniform(0.35, 0.8)
+                parts.append((lx + 0.78 * r * np.cos(b), ly + 0.78 * r * np.sin(b), r * rng.uniform(0.3, 0.45)))
+        stretch, axis = rng.uniform(1.0, 1.45), rng.uniform(0.0, np.pi)
+        ca, sa = np.cos(axis), np.sin(axis)
+        parts = [((qx * ca + qy * sa) * stretch * ca - (-qx * sa + qy * ca) * sa,
+                  (qx * ca + qy * sa) * stretch * sa + (-qx * sa + qy * ca) * ca, r) for qx, qy, r in parts]
+        reach = max(np.hypot(qx, qy) + r for qx, qy, r in parts) + 6.0
+        for _ in range(80):
+            x, y = rng.uniform(0.0, SIZE, 2)
+            # (gathered loosely in groups: fewer where the groups' noise is low)
+            g = groups[int(y / px) % N, int(x / px) % N]
+            if rng.uniform() > 1.0 / (1.0 + np.exp(-2.2 * (g + 0.3))):
+                continue
+            dx = (x - cx + SIZE / 2) % SIZE - SIZE / 2
+            dy = (y - cy + SIZE / 2) % SIZE - SIZE / 2
+            if np.hypot(dx, dy) < CLEAR_RADIUS + reach:
+                continue
+            if len(at):
+                dx = (x - at[:, 0] + SIZE / 2) % SIZE - SIZE / 2
+                dy = (y - at[:, 1] + SIZE / 2) % SIZE - SIZE / 2
+                if np.any(np.hypot(dx, dy) < reach + at[:, 2] + GAP):
+                    continue
+            placed.append((x, y, reach, parts))
+            at = np.vstack([at, [x, y, reach]])
+            break
+    # (the order the day's cover keeps them in, at random, so a thin day's few clouds are as spread as a full day's)
+    orders = rng.permutation(len(placed)).astype(np.float64)
+    orders = (orders + 0.5) / len(placed)
+    inside = np.full((N, N), -REACH * 4.0)
+    order = np.zeros((N, N))
+    best = np.full((N, N), -1e9)
+    for (x, y, reach, parts), o in zip(placed, orders):
+        span = reach + REACH
+        i0, i1 = int(np.floor((x - span) / px)), int(np.ceil((x + span) / px))
+        j0, j1 = int(np.floor((y - span) / px)), int(np.ceil((y + span) / px))
+        ii = np.arange(i0, i1)
+        jj = np.arange(j0, j1)
+        X, Y = np.meshgrid((ii + 0.5) * px - x, (jj + 0.5) * px - y)
+        field = None
+        for (qx, qy, r) in parts:
+            d = r - np.hypot(X - qx, Y - qy)
+            field = d if field is None else smooth_max(field, d, 18.0)
+        rows = jj % N
+        cols = ii % N
+        R, C = np.meshgrid(rows, cols, indexing="ij")
+        better = field > best[R, C]
+        best[R[better], C[better]] = field[better]
+        order[R[better], C[better]] = o
+        inside[R, C] = np.maximum(inside[R, C], field)
+    inside = inside + 4.0 * rags * np.clip(1.0 - np.abs(inside) / 60.0, 0.0, 1.0)
+    return inside, order, len(placed)
+
+
+def gusts(rng):
     # (2 to 8 across the 150 m: gusts of 20 to 75 m, their shapes soft)
     return ranked(periodic_noise(rng, N, 2.0, 8.0, power=1.5))
 
 
-def save(name, red, green):
+def save(name, inside, order, wind):
+    red = np.clip(0.5 + inside / (2.0 * REACH), 0.0, 1.0)
     r = np.clip(np.round(red * 255.0), 0, 255).astype(np.uint8)
-    g = np.clip(np.round(green * 255.0), 0, 255).astype(np.uint8)
-    rgba = np.dstack([r, g, r, np.full_like(r, 255)])
+    b = np.clip(np.round(order * 255.0), 0, 255).astype(np.uint8)
+    g = np.clip(np.round(wind * 255.0), 0, 255).astype(np.uint8)
+    rgba = np.dstack([r, g, b, np.full_like(r, 255)])
     Image.fromarray(rgba, "RGBA").save(os.path.join(HERE, name))
-    print(f"wrote {name}: {red.shape[1]} x {red.shape[0]}, clouds mean {red.mean():.3f}, gusts mean {green.mean():.3f}")
 
 
 if __name__ == "__main__":
-    save("T_LandCloudWind.png", cloud_shade(), gusts())
+    inside, order, count = clouds(np.random.default_rng(SEED))
+    wind = gusts(np.random.default_rng(SEED + 1))
+    save("T_LandCloudWind.png", inside, order, wind)
+    full = float((inside > 0.0).mean())
+    print(f"wrote T_LandCloudWind.png: {N} x {N}, {count} clouds shading {full:.3f} of the ground (FULL_COVER), "
+          f"the clear disc {CLEAR_RADIUS:.0f} m round {CLEAR_UV}, gusts mean {wind.mean():.3f}")
+    for keep in (0.25, 0.5, 0.75, 1.0):
+        share = float(((inside > 0.0) & (np.round(order * 255.0) / 255.0 < keep)).mean())
+        print(f"  cover asked {keep * full:.3f}: shaded {share:.3f}")
