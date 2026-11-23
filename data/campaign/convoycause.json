@@ -1,0 +1,15 @@
+{
+  "_about": "The convoy war by cause (audit #5; the design director's ruling of 23 November 2026 07:26Z on the form naval-battles/convoy-r2/form.md). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every navy and both sides: the kit a navy holds and the work its ships are given set each figure, never the nation or the month. Every size is OEG Report 51's (naval-battles/wolfpack-r2/history.md, where each is marked).",
+  "_cover": "OEG T7: ships torpedoed a day were 0.60 with air cover against 1.75 without. The raiders in a sea sink at this share of their rate over the waters that aircraft carrying anti-submarine kit reach. Without that kit, aircraft only force boats down; that figure is not laid, so no cut is given for it.",
+  "cover": 0.34,
+  "_asv": "Aircraft carry anti-submarine kit when their navy (or its senior partner) holds depth charges for aircraft (the tree's 'sonar') and this research: sea-search radar, which also fits its escorts. (The form's first reading, the radar branch's second design, hung the kit on Fighter control, an air-defence row Britain's staff took only in January 1945.)",
+  "asv": "asvradar",
+  "_find": "OEG T2: 41-43% of convoys were attacked. The share of the boats raiding a convoy route's seas that find a convoy and attack it in a month; each is one incident with the convoy's escort.",
+  "find": 0.42,
+  "_incident": "OEG T10: the chance that an incident ends with the boat sunk, answered by a support group (destroyers on hunting duty in that sea) or by the convoy's close escort (destroyers bound to its route). With depth charges alone, and with ahead-throwing weapons and escort-group training together. Ahead-throwing weapons alone stay at the depth-charge rate until OEG T9 is read.",
+  "incident": { "group": 0.17, "lone": 0.05, "groupKit": 0.55, "loneKit": 0.12 },
+  "_radar": "Radar on escorts: what sea-search radar adds to a ship's guard and hunting weight. Not laid (the historian's figure from OEG 10.1.2 and the HF/DF record): 0 until it is read.",
+  "radar": 0,
+  "_seaLoss": "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
+  "seaLoss": ["sonar"]
+}

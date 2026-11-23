@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { CONVOY_STAGE, WINCHANCE_STAGE } from './stage';
+import { CONVOY_STAGE, UNITS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -166,6 +166,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (CONVOY_STAGE) g.flags.convoyBattle = 1;
   // The honest win chance on land (release 2, auto-resolve fix 1): set at a campaign's start only, where stage.json switches it on.
   if (WINCHANCE_STAGE) g.flags.winChance = 1;
+  // Units decide (release 2, src/campaign/units.ts): set at a campaign's start only, where stage.json switches it on.
+  if (UNITS_STAGE) g.flags.unitsDecide = 1;
   // A neutral's bargains (release 2): only where stage.json switches them on.
   openBargains(g);
   openGovernment(g);

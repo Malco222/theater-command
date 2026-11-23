@@ -60,7 +60,8 @@ describe('the data', () => {
     // (Ruling 240: a row marked 'ships' is a fitting of the fleet. The mark names its switch in carriers.json, and its number is there too.)
     const FITTED = (await import('../data/campaign/carriers.json')).default as unknown as { research: Record<string, { on: boolean; tech?: string }>; flak: { vt: number }; strike: { dc: number } };
     for (const t of TECH.techs) {
-      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons', 'spy', 'ships'].filter((k) => (t as any)[k] !== undefined);
+      // (Units decide: a row marked 'units' does its work in the convoy war by cause, navy.ts, and is in the tree only with that switch.)
+      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons', 'spy', 'ships', 'units'].filter((k) => (t as any)[k] !== undefined);
       expect(does.length, t.id).toBeGreaterThan(0);
       if (t.ships !== undefined) {
         expect(['vt', 'dc'], t.id).toContain(t.ships);

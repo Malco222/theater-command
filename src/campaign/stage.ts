@@ -70,3 +70,9 @@ const winForced = (globalThis as { TC_WINCHANCE?: unknown }).TC_WINCHANCE ?? G.p
 
 /** True where new grand campaigns open with the honest win chance on land (data/campaign/stage.json 'winChance'). */
 export const WINCHANCE_STAGE: boolean = winForced !== undefined ? !!winForced && winForced !== '0' : (stage as { winChance?: boolean }).winChance === true;
+
+// Units decide (release 2; src/campaign/units.ts): the grand campaigns opened while this is true carry the flag
+// 'unitsDecide'. Forced by TC_UNITS, as the far side's switch is by TC_FAR.
+const units = (globalThis as { TC_UNITS?: unknown }).TC_UNITS ?? G.process?.env?.TC_UNITS;
+/** True where new grand campaigns open with Units decide (data/campaign/stage.json 'unitsDecide'). */
+export const UNITS_STAGE: boolean = units !== undefined ? !!units && units !== '0' : (stage as { unitsDecide?: boolean }).unitsDecide === true;

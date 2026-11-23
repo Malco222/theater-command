@@ -787,6 +787,8 @@ export interface ConvoyMonth {
   /** Release 2, with the convoy battle on (ruling 241), record only: the month's swing on the share sunk, and whether a night the player fought set it ('field'), or set it with a count held inside the dice's run ('clamped': a bare close result, b331). */
   swing?: number;
   fought?: 'field' | 'clamped';
+  /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
+  byEscorts?: number;
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
@@ -807,7 +809,8 @@ export interface SubLook {
   /** sunk: false where damage control kept her afloat (ruling 240, C3): the same hit, told the same. */
   torpedoes: { fleet: number; zone: number; cls: ShipClass; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
   /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
+  /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false), the air cover's kind, and the boats its escorts sank there. */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range'; lost?: number }[] }[];
 }
 
 export interface Headline {
