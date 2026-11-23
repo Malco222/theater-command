@@ -1258,11 +1258,12 @@ bool ALandBattle::Open()
 		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
 		// (the campaign's weather word over the place, the recording's "weather": "mud" the thaw's mud over open ground;
-		// "-TheaterLandWeather=mud" stands in for it on any field, for the Mac's off/on line, "-TheaterLandWeather=clear"
-		// lays none)
+		// "-TheaterLandWeatherWord=mud" stands in for it on any field, for the Mac's off/on line,
+		// "-TheaterLandWeatherWord=clear" lays none. Not "-TheaterLandWeather=", the day's cover, deck and base, which
+		// FParse would read "mud" from as a clear sky)
 		{
 			FString Word;
-			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeather="), Word))
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeatherWord="), Word))
 			{
 				Lay.Weather = LandParts::Narrow(Word.TrimStartAndEnd().ToLower());
 			}
