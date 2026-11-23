@@ -679,7 +679,7 @@ namespace ConvoyLook
 
 	double BoatFreeOf(const std::string& Nation)
 	{
-		return Nation == "USA" ? 2.6 : Nation.empty() || Nation == "GER" ? 1.8 : 2.0;
+		return Nation == "USA" ? 2.6 : Nation == "GER" ? 1.8 : 2.0;
 	}
 
 	double FreeOf(const std::string& Class)

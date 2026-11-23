@@ -3223,9 +3223,9 @@ namespace SeaShow
 		/** The deck's height over the sea of a ship of the class (a rescuer's side, for a man climbing it). */
 		double FreeOf(const std::string& Class) { return CompanyOf(Class).Free; }
 		/** A boat's casing over her waterline as the stage draws her now, the battle modeller's boat of her navy (AirStage's
-		 * ShipFileOf; ConvoyLook::SculptedOf's Deck): a Type VIIC's 1.77 m, a fleet boat's 2.6, any other's 2.0. Her men go
-		 * over her side from there. */
-		double BoatFreeOf(const std::string& Nation) { return Nation == "USA" ? 2.6 : Nation.empty() || Nation == "GER" ? 1.8 : 2.0; }
+		 * ShipFileOf; ConvoyLook::SculptedOf's Deck): a Type VIIC's 1.77 m, a fleet boat's 2.6, any other's (or a boat of no navy) 2.0.
+		 * Her men go over her side from there. */
+		double BoatFreeOf(const std::string& Nation) { return Nation == "USA" ? 2.6 : Nation == "GER" ? 1.8 : 2.0; }
 		/** A man's place on a float, in its own frame (x along, y across): aboard, or round it in the water holding on. */
 		Vec SlotOn(const FloatOut& O, int Slot, bool bIn, int Room, int Hold)
 		{

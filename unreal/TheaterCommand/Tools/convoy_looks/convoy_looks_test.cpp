@@ -1009,7 +1009,8 @@ namespace
 		for (const char* Nation : { "GER", "", "USA", "UK", "JAP" })
 		{
 			const std::string Nat(Nation);
-			const BoatModel M = SculptedOf(Nat == "USA" ? "Submarine_USA" : Nat.empty() || Nat == "GER" ? "Submarine_GER" : "Submarine");
+			// (as the stage's ShipFileOf: "Submarine_" + her navy where the game has it, else the class's own, no navy too)
+			const BoatModel M = SculptedOf(Nat == "USA" ? "Submarine_USA" : Nat == "GER" ? "Submarine_GER" : "Submarine");
 			Check(std::fabs(BoatFreeOf(Nat) - M.Deck) <= 0.1, "[" + Nat + "] " + F("the battle modeller's boat riding high: her casing %.2f m out, the scene's men go over it from %.2f m", M.Deck, BoatFreeOf(Nat)));
 		}
 		if (Root.empty())
@@ -1037,7 +1038,7 @@ namespace
 		Check(Show.find("return { 300, 6, 1, 30, 5.0, 1.0 }; // a destroyer") != std::string::npos && FreeOf("dd") == 5.0, "and any other (a destroyer's): 5.0 m");
 		for (const char* Said : {
 			     "double FreeOf(const std::string& Class) { return CompanyOf(Class).Free; }",
-			     "double BoatFreeOf(const std::string& Nation) { return Nation == \"USA\" ? 2.6 : Nation.empty() || Nation == \"GER\" ? 1.8 : 2.0; }",
+			     "double BoatFreeOf(const std::string& Nation) { return Nation == \"USA\" ? 2.6 : Nation == \"GER\" ? 1.8 : 2.0; }",
 			     "W.Free = H.Class == \"ss\" ? BoatFreeOf(H.Nation) : C.Free;",
 			     "if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;",
 			     "const double Along = Clamp(Rel.Dot(Ahead(By->Hdg)), -0.35 * Sz.Long, 0.35 * Sz.Long);",

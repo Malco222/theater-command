@@ -89,7 +89,7 @@ namespace
 			StageBoat B(std::string(), 69.0, 6.2);
 			B.Up = 1.0;
 			B.Along = 1.0;
-			if (Nation.empty() || Nation == "GER")
+			if (Nation == "GER")
 			{
 				B.Deck = 1.77; B.Top = 5.3; B.Fore = 3.5; B.Aft = -6.5; B.WireAlong = 0.0; B.WireTop = 5.94;
 				B.ScopeAlong = -0.2; B.ScopeTop = 10.49; B.LowAlong = -1.2; B.LowTop = 5.79;
@@ -197,7 +197,7 @@ namespace
 				if (!B.bSeen)
 				{
 					// (the stage draws the battle modeller's boat for her navy, as made: AirStage's ShipFileOf)
-					const std::string Made = Ship.Nation == "GER" || Ship.Nation.empty() ? "Submarine_GER" : Ship.Nation == "USA" ? "Submarine_USA" : "Submarine";
+					const std::string Made = Ship.Nation == "GER" ? "Submarine_GER" : Ship.Nation == "USA" ? "Submarine_USA" : "Submarine";
 					B.Model = SculptedOf(Made);
 					B.Size = Drawn();
 					B.Stage = StageBoat::Sculpted(Ship.Nation);
