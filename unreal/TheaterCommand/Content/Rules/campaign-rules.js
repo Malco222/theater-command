@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bcca7351 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a2a9f159 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40252,8 +40252,8 @@
     asv: "asvradar",
     _find: "OEG T2: 41-43% of convoys were attacked. The share of the boats raiding a convoy route's seas that find a convoy and attack it in a month; each is one incident with the convoy's escort.",
     find: 0.42,
-    _incident: "OEG T10: the chance that an incident ends with the boat sunk, answered by a support group (destroyers on hunting duty in that sea) or by the convoy's close escort (destroyers bound to its route). With depth charges alone, and with ahead-throwing weapons and escort-group training together. Ahead-throwing weapons alone stay at the depth-charge rate until OEG T9 is read.",
-    incident: { group: 0.17, lone: 0.05, groupKit: 0.55, loneKit: 0.12 },
+    _incident: "OEG T10: the chance that an incident ends with the boat sunk, answered by a support group (destroyers on hunting duty in that sea) or by the convoy's close escort (destroyers bound to its route). With depth charges alone, and with ahead-throwing weapons and escort-group training together. atw: ahead-throwing weapons alone, without escort-group training, multiply the depth-charge rate by this (OEG T9: Hedgehog 7.5% against depth charges 4.0% per attack in its first half-year at sea, H2 1943; historian/convoy-figures-for-r2-1123.md). The weapon's later rise (2.6-4.7 times in 1944) is crews learning it, a cause not yet laid, never the month.",
+    incident: { group: 0.17, lone: 0.05, groupKit: 0.55, loneKit: 0.12, atw: 1.9 },
     _radar: "Radar on escorts: what sea-search radar adds to a ship's guard and hunting weight. Not laid (the historian's figure from OEG 10.1.2 and the HF/DF record): 0 until it is read.",
     radar: 0,
     _seaLoss: "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
@@ -40573,7 +40573,7 @@
     if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air2}. Its escorts carry the sets too.`;
     if (id === "patrolaircraft") return "Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.";
     if (id === "escortgroups") return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
-    if (id === "hedgehog") return `With escort groups too, ${kills}.`;
+    if (id === "hedgehog") return `A convoy's own escort sinks the submarine in ${in100(I.lone * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.group * I.atw)}, against ${in100(I.lone)} and ${in100(I.group)} with depth charges alone. With escort groups too, ${kills}.`;
     return null;
   }
   function techRule(t, g2, nat) {
@@ -44918,8 +44918,9 @@
   }
   var airKit = (k) => k.asdic && k.radar;
   function incidentRate(k, group) {
-    const I = CAUSE2.incident, kit = k.hedgehog && k.groups;
-    return group ? kit ? I.groupKit : I.group : kit ? I.loneKit : I.lone;
+    const I = CAUSE2.incident;
+    if (k.hedgehog && k.groups) return group ? I.groupKit : I.loneKit;
+    return (group ? I.group : I.lone) * (k.hedgehog ? I.atw : 1);
   }
   var kitEdge = (k, group) => incidentRate(k, group) / incidentRate({ ...k, hedgehog: false }, group);
   var radarKit = (k) => 1 + (k.radar ? CAUSE2.radar : 0);
