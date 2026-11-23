@@ -96,6 +96,10 @@ namespace
 		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
+		// (release 1.5, Brian 23 Nov 06:35Z "yes 1 and 2 for 1.5": the campaign's weather word on the field, off until the art
+		// director's stills and 45 fps pass it; -TheaterLandRuleWetMud turns it on for a run. The 3D's -TheaterLandWeatherWord=
+		// stand-in is another flag.)
+		{ TEXT("wet"), TEXT("Wet mud"), TEXT("The month's weather reaches the field: deep mud in the thaw in the east, snow in winter, rain under a closed sky. Off: the ground is dry and the sky fair, whatever the month."), TEXT("TheaterLandNoWetMud"), false, TEXT("TheaterLandRuleWetMud") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

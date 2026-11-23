@@ -4,8 +4,9 @@
 // this file is the campaign's side of it, bundled with campaign-bridge.ts by Tools/build_rules.sh. It is the land part of
 // release 2's battle-bridge.ts, ported onto release 1's campaign: nothing here decides anything. It builds the battle's
 // ticket from the campaign's own attack, and settles the battle through the campaign's own attack order with the
-// field's R in place of the dice and the field's bill (ruling 226(6)). Release 2's looks (scarred ground, old ruts,
-// captured tanks, worn uniforms, the weather word) are not here: release 1.5 sends none of them.
+// field's R in place of the dice and the field's bill (ruling 226(6)). Release 2's looks ride on the ticket as release 2
+// sends them (Brian 23 November 06:35Z, "yes 1 and 2 for 1.5"), each shown only with its Battle rules row on: the
+// weather word (wet mud), scarred ground and old ruts, captured tanks, worn uniforms.
 //
 // Wiring (made in campaign-bridge.ts):
 //   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
@@ -29,7 +30,7 @@ import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/batt
 import { staffOnly } from '../../../src/battle/land/offered';
 import { armourYear } from '../../../src/campaign/tech';
 import type { BattleReport, Game } from '../../../src/campaign/types';
-import type { FieldBill } from '../../../src/campaign/game';
+import { groundWeather, type FieldBill } from '../../../src/campaign/game';
 import { attackOutlook } from '../../../src/campaign/turn';
 
 export interface BattleHooks {
@@ -78,7 +79,12 @@ export function battleCalls(h: BattleHooks) {
       // is settled by the staff.
       const why = staffOnly(t);
       if (why) return { ticket: null, why };
-      return { ticket: t, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
+      const ticket: typeof t = { ...t };
+      // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only. The land
+      // rules send it to the 3D game only with the Battle rules card's "Wet mud" row on.
+      const wx = groundWeather(g, g.regions[to]);
+      if (wx && !ticket.weather) ticket.weather = wx;
+      return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
     },
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {
       const r = result && 'over' in result ? result.over : (result as FieldResult | null);

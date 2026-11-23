@@ -51,7 +51,7 @@ import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, guardForce, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
-import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
+import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
@@ -604,6 +604,21 @@ export function weather(g: Game): { mud: boolean; winter: boolean; text: string 
   if (EASTERN.mud.includes(m)) return { mud: true, winter: false, text: 'Mud in the east slows every army there.' };
   if (EASTERN.winter.months.includes(m)) return { mud: false, winter: true, text: 'Winter in the east: armies without winter kit fight and march badly there.' };
   return { mud: false, winter: false, text: 'Clear campaigning weather.' };
+}
+
+/**
+ * The ground's weather over a province this month, in the 3D game's words (release 1.5, from release 2; looks only):
+ * 'mud' in the eastern thaw, 'snow' in its zone's snow months, else under the skies switch 'rain' (a closed sky) or
+ * 'clear'; '' where there is none to tell. Nothing in the war reads it.
+ */
+export function groundWeather(g: Game, r: Region): string {
+  const zone = WEATHER.zones[zoneOfRegion(g, r.id)];
+  const m = turnToDate(g.turn).month;
+  if (zone && (zone.key === 'nrus' || zone.key === 'srus') && weather(g).mud) return 'mud';
+  if (zone && zone.snow.includes(m + 1)) return 'snow';
+  if (!weatherOn(g)) return '';
+  const sky = skyAt(g, r.id);
+  return sky === 'closed' ? 'rain' : sky === 'clear' ? 'clear' : '';
 }
 
 /**

@@ -89,7 +89,7 @@ function need(): LiveBattle {
    */
   landStartTicket(
     ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> & { latLon?: [number, number] } },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; blast?: boolean; escort?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky; latLon?: [number, number] } | null,
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean; patrol?: boolean; captured?: boolean; worn?: boolean; mud?: boolean; scars?: boolean; wet?: boolean; blast?: boolean; escort?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky; latLon?: [number, number] } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
@@ -97,12 +97,12 @@ function need(): LiveBattle {
     const o = { ...(look?.live ?? {}), ...(opts ?? {}) };
     // (release 1.5: the place on the earth the campaign's card sends, live.latLon, so the 3D game lays the field the
     // card weighed, desert or steppe or bocage, under that latitude's sun; without it, as before)
-    const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(ticket), latLon: o.latLon } : undefined);
+    const sky = o.sky ?? (Array.isArray(o.latLon) && o.latLon.length === 2 ? { ...ticketSky(o.wet === false ? { ...ticket, weather: undefined } : ticket), latLon: o.latLon } : undefined);
     live = liveTicket(ticket, {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
       cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
-      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, blast: o.blast === true, escort: o.escort === true,
+      phones: o.phones !== false, bearers: o.bearers !== false, patrol: o.patrol !== false, captured: o.captured !== false, worn: o.worn !== false, mud: o.mud !== false, scars: o.scars !== false, wet: o.wet !== false, blast: o.blast === true, escort: o.escort === true,
       fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(sky ? { sky } : {}),
     });
     return live.header();

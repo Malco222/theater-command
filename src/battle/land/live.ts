@@ -344,6 +344,11 @@ export interface LiveOpts {
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
   escort?: boolean;
   /**
+   * Wet mud (release 1.5, looks only): the campaign's weather word over the field (thaw mud, snow, rain, clear), for
+   * the 3D game's ground and the battle's sky. Off, the word is not sent and the sky is drawn as if there were none.
+   */
+  wet?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -417,7 +422,7 @@ export class LiveBattle {
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
   /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-  private looks: { worn: boolean; mud: boolean; scars: boolean } = { worn: true, mud: true, scars: true };
+  private looks: { worn: boolean; mud: boolean; scars: boolean; wet: boolean } = { worn: true, mud: true, scars: true, wet: true };
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -432,7 +437,7 @@ export class LiveBattle {
 
   constructor(readonly ticket: FieldTicket<LandPlace>, readonly piece: SetPiece | null, opts: LiveOpts = {}) {
     this.me = opts.me ?? null;
-    this.skyOf = opts.sky ?? ticketSky(ticket);
+    this.skyOf = opts.sky ?? ticketSky(opts.wet === false ? { ...ticket, weather: undefined } : ticket);
     const sim = (this.sim = new LandBattle(ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -461,7 +466,7 @@ export class LiveBattle {
     if (opts.escort === true) sim.escort = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
-    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wet: opts.wet !== false };
     // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
     // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
     const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
@@ -502,7 +507,7 @@ export class LiveBattle {
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
       // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
       // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
-      ...(t.weather ? { weather: t.weather } : {}),
+      ...(t.weather && this.looks.wet ? { weather: t.weather } : {}),
       ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
       ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
