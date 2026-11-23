@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1793d6ef 2026-11-23. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9d4bcea2 2026-11-23. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -879,7 +879,9 @@
     _bargains: "A neutral's bargains (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and ruling of 03:47 UTC). Off: nothing of src/campaign/bargains.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'bargains', and their neutrals sell their goods to whichever country at war bids best (data/campaign/bargains.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_BARGAINS=1.",
     bargains: false,
     _legions: "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC). Off: nothing of src/campaign/legions.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'legions', and a country at peace outside both sides may send one legion of volunteers at a time to fight in a patron's army (data/campaign/legions.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_LEGIONS=1.",
-    legions: false
+    legions: false,
+    _winChance: "The honest win chance on land (release 2; auto-resolve fix 1, Brian's yes of 23 November 2026 07:11Z and the design director's order of 07:06Z; data/campaign/winchance.json). Off: every battle throws today's luck and nothing changes. On: the grand campaigns opened from now on carry the flag 'winChance', and an attack in the field carries the ground at the record's rate for its odds (wider luck, losses unchanged). A test turns it on for its own games by setting that flag; a run outside the browser by TC_WINCHANCE=1.",
+    winChance: false
   };
 
   // ../../src/campaign/stage.ts
@@ -900,6 +902,8 @@
   var BARGAINS_STAGE = bargainsForced !== void 0 ? !!bargainsForced && bargainsForced !== "0" : stage_default.bargains === true;
   var legionsForced = B.TC_LEGIONS ?? B.process?.env?.TC_LEGIONS;
   var LEGIONS_STAGE = legionsForced !== void 0 ? !!legionsForced && legionsForced !== "0" : stage_default.legions === true;
+  var winForced = globalThis.TC_WINCHANCE ?? G.process?.env?.TC_WINCHANCE;
+  var WINCHANCE_STAGE = winForced !== void 0 ? !!winForced && winForced !== "0" : stage_default.winChance === true;
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -32209,6 +32213,7 @@
     openEscorts(g2);
     openTrade(g2);
     if (CONVOY_STAGE) g2.flags.convoyBattle = 1;
+    if (WINCHANCE_STAGE) g2.flags.winChance = 1;
     openBargains(g2);
     openGovernment(g2);
     openFooting(g2);
@@ -48546,6 +48551,18 @@
     }
   };
 
+  // ../../data/campaign/winchance.json
+  var winchance_default = {
+    _about: "The honest win chance on land (release 2, auto-resolve fix 1; stage.json 'winChance'). An attack in the field throws one luck, a share of the way between 'field' low and high, times the card's odds, and carries the ground at 1.2 or better: the chance is (high - 1.2/odds) / (high - low). The same share of the way between today's luck (0.8 to 1.2, wider against a prepared line) sets the losses, the order, the morale and the level of the victory, so what an attack costs at given odds is what it cost before. Towns and guns caught alone keep today's luck.",
+    _field: "Fitted to the record over combat power (the design director, 23 November 2026 07:27Z; the historian's attack-success-by-force-ratio.md, section 5): the record's men ratio times the Germans' measured edge for each matchup, at the middles of the recalled ranges (over the Western Allies, ETO 1944 and the Americans in Italy, 1.35; over the Soviets, 1943, 2.5), 17 cells, 457 engagements, least squares weighted by cases (rules-builder/release2/win-chance/fit_cp.py; re-run when the historian has read Dupuy's edges, and the pair moves with them). On the card: 1 to 1 wins 56%, 1.5 to 1 71%, 2 to 1 78%, 3 to 1 85%, 5 to 1 91%, 10 to 1 96%; no odds make it sure, and nothing under 0.44 to 1 wins. The card already counts quality (training, doctrine, supply, tech), so the luck is the record's luck once quality is counted: units decide, never the date or the flag.",
+    field: [
+      0,
+      2.74
+    ],
+    _prepared: "Against a line that is dug in and fed the whole range shrinks by this share of the prepared part of the defence: today's prepared luck moves the even chance by the same 15% (0.5-1.2 against 0.8-1.2).",
+    prepared: 0.15
+  };
+
   // ../../src/campaign/support.ts
   var SUPPORT = support_default;
   var weight2 = (c) => c.divs * c.str;
@@ -49804,6 +49821,13 @@
   var chanceOn = (odds, dice2) => Math.max(0, Math.min(1, (dice2[1] - 1.2 / Math.max(1e-6, odds)) / (dice2[1] - dice2[0])));
   var listAnd2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var evenOdds = (dice2) => 2.4 / (dice2[0] + dice2[1]);
+  var WIN = winchance_default;
+  var winChanceOn = (g2) => g2.flags.winChance === 1;
+  var sureWords = (dice2) => dice2[0] > 0 ? `nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1` : "no odds make it sure";
+  var luckOf = (prepared) => {
+    const f = 1 - WIN.prepared * Math.max(0, Math.min(1, prepared));
+    return [WIN.field[0] * f, WIN.field[1] * f];
+  };
   var digsLate = (r) => r.terrain === DESERT.terrain && !r.fort;
   var worksOf = (c) => c.dug ? Math.max(0, Math.min(DEFENCE.entrench.months, c.dugFor ?? 1)) : 0;
   function worksShare(months3) {
@@ -50156,7 +50180,8 @@
     const caught = wide3 && !town && surprised(g2, attNat, /* @__PURE__ */ new Set([...dN, target.ctrl])) ? DEFENCE.prepared.surprise : 0;
     const pierced = armorShock ? DEFENCE.prepared.armour * (at4 ? 1 - at4.strength : 1) : 0;
     const prepared = wide3 && !town && D2 > 0 ? Math.min(1, readyD / D2) * (1 - soften) * (1 - mortar) * (1 - caught) * (1 - pierced) : 0;
-    const dice2 = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]] : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
+    const today = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]] : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
+    let dice2 = winChanceOn(g2) && !town ? luckOf(prepared) : today;
     const guarded2 = !town && !opts.sally && defenders.length > 0 ? guardInField(g2, target, attNat, attackers2) : 0;
     const guardWalls = guarded2 > 0 ? fieldWalls(g2, target, breach2 ? 1 - (1 - soften) * (1 - breach2) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
     const watch = town ? guardPower(g2, target) * walls : guarded2 > 0 ? guardPower(g2, target) * guardWalls : 0;
@@ -50336,7 +50361,7 @@
       const broke = !at4 ? "LINE has no armour to meet the tanks" : at4.strength < 0.1 ? "LINE has little to stop the tanks" : "the tanks break part of the way into LINE";
       const lost = [(soften || mortar) && prepared < 1 ? `${worked} worked LINE over` : "", caught ? "the new offensive has caught LINE off balance" : "", pierced ? broke : ""].filter(Boolean).map((t, i) => t.replace("LINE", i ? "it" : "the line"));
       const cover3 = dugD > 0 ? Math.round((DUG_IN - 1) * Math.min(1, works) * 100) : 0;
-      const luck = prepared > 5e-3 ? `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer` : defenders.some((d) => d.dug && !d.supplied && !fortRow(g2, d)) && !defenders.some((d) => d.dug && (d.supplied || fortRow(g2, d))) ? "Cut off from supply, the line is no better than open ground on the day" : "On the day the line is no better than open ground";
+      const luck = prepared > 5e-3 ? `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and ${sureWords(dice2)}. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer` : defenders.some((d) => d.dug && !d.supplied && !fortRow(g2, d)) && !defenders.some((d) => d.dug && (d.supplied || fortRow(g2, d))) ? "Cut off from supply, the line is no better than open ground on the day" : "On the day the line is no better than open ground";
       const after = wear2 >= 0.05 ? `. Won or lost, this attack takes ${wear2 >= 0.95 && wear2 < 1.05 ? "a month" : `${Math.round(wear2 * 10) / 10} months`} off the works${wear2 < works - 0.05 ? "" : ", which leaves nothing of them"}` : "";
       lines2.push({
         label: "Dug in",
@@ -50470,7 +50495,8 @@
     }
     const overrun2 = gunsRule(g2) && !town && !guarded2 && defenders.some((c) => c.kind === "art" || isTeam(c)) && defenders.every((c) => c.kind === "art" || c.kind === "eng" || isTeam(c));
     if (overrun2) lines2.push(GUNS_OVERRUN);
-    return { A, D: D2, odds: overrun2 ? Math.max(A / D2, OVERRUN_ODDS / dice2[0]) : A / D2, lines: lines2, defenders, dice: dice2, prepared, works, wear: wear2, weight: weight6, tired, faced, ...overrun2 ? { overrun: overrun2 } : {}, ...guarded2 > 0 ? { guard: guarded2 } : {}, ...close3 ? { air: close3 } : {} };
+    if (overrun2) dice2 = today;
+    return { A, D: D2, odds: overrun2 ? Math.max(A / D2, OVERRUN_ODDS / dice2[0]) : A / D2, lines: lines2, defenders, dice: dice2, ...dice2 !== today ? { luck: today } : {}, prepared, works, wear: wear2, weight: weight6, tired, faced, ...overrun2 ? { overrun: overrun2 } : {}, ...guarded2 > 0 ? { guard: guarded2 } : {}, ...close3 ? { air: close3 } : {} };
   }
   function reportUnit(c) {
     return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: "" };
@@ -50702,6 +50728,12 @@
       for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight6;
       return { ours: Math.round(ours), theirs: Math.round(theirs), share: all > 0 ? theirs / all : 0 };
     };
+    if (a.luck) {
+      const [d0, d1] = a.dice, [l0, l1] = a.luck;
+      const bar = Math.max(0, Math.min(1, (1.2 / Math.max(1e-6, odds) - d0) / (d1 - d0)));
+      const billAt = (s) => Math.max(1e-6, odds * (l0 + (l1 - l0) * s));
+      return { chance: chanceOn(odds, a.dice), won: bar < 1 ? at4(billAt((bar + 1) / 2), true) : null, lost: bar > 0 ? at4(billAt(bar / 2), false) : null };
+    }
     const lo = Math.max(1e-6, odds * a.dice[0]), hi = Math.max(lo, odds * a.dice[1]);
     return {
       chance: chanceOn(odds, a.dice),
@@ -50758,27 +50790,30 @@
     const count4 = late ? `t${target.theatre}:${g2.flags[`fought:${target.theatre}`] ?? 0}` : `${(g2.flags.battles ?? 0) - (g2.flags.lateBattles ?? 0)}`;
     const dice2 = aside2 ? new Rng(hashString(`land:${g2.seed}:${g2.turn}:${target.id}:${attNat}:${count4}`)) : g2.rng;
     const overrun2 = !!a.overrun;
-    const rolled = a.odds * dice2.range(a.dice[0], a.dice[1]);
+    const throwAt = a.luck ? dice2.range(0, 1) : 0;
+    const rolled = a.luck ? a.odds * (a.dice[0] + (a.dice[1] - a.dice[0]) * throwAt) : a.odds * dice2.range(a.dice[0], a.dice[1]);
+    const billed = a.luck ? a.odds * (a.luck[0] + (a.luck[1] - a.luck[0]) * throwAt) : rolled;
     const R2 = opts.fought ?? rolled;
+    const RL = opts.fought === void 0 ? billed : a.luck ? a.odds * (a.luck[0] + (a.luck[1] - a.luck[0]) * clamp((opts.fought / Math.max(1e-6, a.odds) - a.dice[0]) / (a.dice[1] - a.dice[0]), 0, 1)) : opts.fought;
     const attU = attackers2.map(reportUnit), defU = defenders.map(reportUnit);
     const attGens = attackers2.map((c) => generalOf(g2, c)), defGens = defenders.map((c) => generalOf(g2, c));
     const mobile = attackers2.some((c) => KIND[c.kind].mobile);
-    const defFrac = defenceLoss(R2);
+    const defFrac = defenceLoss(RL);
     const ready = town ? 0 : a.prepared;
-    const attFrac = attackLoss(R2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+    const attFrac = attackLoss(RL) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     let attLost = 0, defLost = 0, prisoners = 0;
     let held3 = false, gates = false;
     const bled = /* @__PURE__ */ new Map();
     const attW = splitWeights(attackers2, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
     const attPart = (c, i, w = attW[i]) => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
-    const attPlain = (c) => attackLoss(rolled) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
+    const attPlain = (c) => attackLoss(billed) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g2, c);
     const pulled = (s) => opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null;
     const attOut = pulled("att");
     const attK = !opts.field ? 1 : opts.field.broke === "att" && R2 < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att) : attOut !== null && R2 < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut) : fieldScale(attackers2, attackers2.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g2, c))), opts.field.att, opts.field.whole);
     attackers2.forEach((c, i) => {
       const before = men(c);
       c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g2, c));
-      c.org = clamp(c.org - (0.1 + 0.08 / R2) * cmdSteady(g2, c) * nerve(c), 0, 1);
+      c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.05);
       c.fought = true;
       attU[i].lost = before - men(c);
@@ -50787,16 +50822,16 @@
     });
     const win = R2 >= 1.2;
     const stood = win ? 1 : HELD_LOSS;
-    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R2 >= 2 ? 1 : 0] : 1;
+    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
     const defPart = (c, i, w = defW[i]) => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
-    const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[rolled >= 2 ? 1 : 0] : 1;
-    const defPlain = (c) => defenceLoss(rolled) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+    const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
+    const defPlain = (c) => defenceLoss(billed) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
     const defOut = pulled("def");
     const defK = !opts.field ? 1 : opts.field.broke === "def" && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def) : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut) : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
     defenders.forEach((c, i) => {
       const before = men(c);
       c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
-      c.org = clamp(c.org - clamp(0.18 + 0.14 * R2, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c) * a.weight, 0, 1);
+      c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c) * a.weight, 0, 1);
       c.xp = Math.min(1, c.xp + 0.04);
       c.fought = true;
       defU[i].lost = before - men(c);
@@ -50810,10 +50845,10 @@
         if (a.weight > 0) c.blows = Math.min(DEFENCE.tired.most, (c.blows ?? 0) + a.weight);
       }
     }
-    moraleBattle(g2, attackers2, defenders, R2, win, bled, enemyCapital);
+    moraleBattle(g2, attackers2, defenders, RL, win, bled, enemyCapital);
     identify(g2, defenders, attNat);
     for (const nat of new Set(defenders.map((c) => c.nat))) identify(g2, attackers2, nat);
-    const level = R2 >= 3 ? "Heroic victory" : R2 >= 2 ? "Decisive victory" : R2 >= 1.2 ? attLost > defLost ? "Pyrrhic victory" : "Close victory" : R2 >= 0.8 ? "Close defeat" : "Decisive defeat";
+    const level = win ? RL >= 3 ? "Heroic victory" : RL >= 2 ? "Decisive victory" : attLost > defLost ? "Pyrrhic victory" : "Close victory" : RL >= 0.8 ? "Close defeat" : "Decisive defeat";
     const affected = new Set(defenders.map((c) => c.nat));
     if (win) {
       const banned = new Set(attackers2.map((c) => c.reg));
@@ -50888,7 +50923,7 @@
       if (town) tallySiege(g2, "repulsed");
       if ((town || inField2) && watch > 0) {
         const onField = inField2 && opts.field ? opts.field.corps[guardForce(target)] !== void 0 ? opts.field.def : null : null;
-        const share = onField !== null ? clamp(onField, 0, 1) : clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, R2), 0.05, 0.6);
+        const share = onField !== null ? clamp(onField, 0, 1) : clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, RL), 0.05, 0.6);
         const lost = Math.round(watchMen * share);
         guardAfter(g2, target, share);
         defLost += lost;
