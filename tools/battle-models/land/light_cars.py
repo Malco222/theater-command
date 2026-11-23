@@ -432,7 +432,7 @@ def kubelwagen(fine=True, tag="GER", paint=None):
             v.handle((-0.28, s * (yb + 0.006), 0.92), (-0.14, s * (yb + 0.006), 0.92), Y * s, r=0.007, reach=0.025, paint="steel")
             v.tube([Vector((x, s * (yb - 0.008), zt + 0.004)) for x in (xs, xd)], 0.012, coat, 6)           # the rolled top edge
     v.hull([(xs, 0.74, zt), (xs, 0.50, zl0), (xs - 0.10, 0.74, zt), (xs - 0.10, 0.50, zt), (xs, 0.74, zl0 - 0.20), (xs - 0.10, 0.74, zl0 - 0.20)], coat, 0.008)   # the cowl
-    v.slab((xs - 0.11, -0.74, zfl), (xs - 0.09, 0.74, zt - 0.01), "upper")                                # the dash
+    v.slab((xs - 0.11, -0.74, 0.78), (xs - 0.09, 0.74, zt - 0.01), "upper")                               # the dash (the footwells run on under it to the front compartment)
     v.slab((xe + 0.02, -0.74, zfl), (xd, 0.74, zfl + 0.01), "upper")
     for s in (LEFT, RIGHT):                                                                                  # the housings over the back wheels
         hump = arch(xr, 0.44, 180, -1, -20)
@@ -456,11 +456,14 @@ def kubelwagen(fine=True, tag="GER", paint=None):
     v.shovel((0.30, -(yb + 0.02), 0.78), yaw=180.0, long=0.86, roll=90.0)
 
     # ---- inside: two seats and the bench, the wheel ------------------------------------------------------------
+    # (the front seats 0.18 ahead of where they were first built, on pedestals under their front halves, so the bench's men have
+    # room for their legs: 0.61 from the bench's back to the front seats' backs; the soldiers thread, 23 Nov)
+    fx = 0.18
     for s in (LEFT, RIGHT):
-        v.slab((-0.46, s * 0.10, zfl), (-0.08, s * 0.58, 0.66), "upper", 0.01)
-        v.seat(-0.48, -0.06, *sorted((s * 0.10, s * 0.60)), 0.76, back=0.40, lean=0.08, paint="leather")
+        v.slab((-0.26 + fx, s * 0.12, zfl), (-0.08 + fx, s * 0.56, 0.66), "upper", 0.01)
+        v.seat(-0.48 + fx, -0.06 + fx, *sorted((s * 0.10, s * 0.60)), 0.76, back=0.40, lean=0.08, paint="leather")
     v.seat(-0.96, -0.60, -0.62, 0.62, 0.80, back=0.36, lean=0.06, paint="leather")
-    grip_l, grip_r = v.steering_wheel((xs + 0.05, 0.36, 0.62), (0.16, 0.36, 1.08), r=0.20)
+    grip_l, grip_r = v.steering_wheel((xs + 0.08, 0.36, 0.66), (0.32, 0.36, 1.12), r=0.20)
 
     # ---- the windscreen, up: one pane in a frame -----------------------------------------------------------------
     v.part("screen", "hull", (xs - 0.02, 0.0, zt + 0.02), axis=(0, 1, 0), limits=[0.0, 80.0], kind="turn",
@@ -474,11 +477,11 @@ def kubelwagen(fine=True, tag="GER", paint=None):
     v.use("hull")
 
     # ---- the men, the marks, what happens to her -------------------------------------------------------------------
-    v.socket("driver", (-0.27, 0.36, 0.76), X, part="hull", note="the driver, seated: the top of his seat, 0.34 over the floor his boots are on (the footwell runs on to the dash 0.78 ahead); his hands on grip.driver.l and grip.driver.r")
+    v.socket("driver", (-0.27 + fx, 0.36, 0.76), X, part="hull", note="the driver, seated: the top of his seat, 0.34 over the floor his boots are on (the footwell runs on under the dash to the front compartment 0.71 ahead); his hands on grip.driver.l and grip.driver.r")
     v.socket("grip.driver.l", grip_l, Z, part="hull", note="the driver's left hand on the wheel's rim")
     v.socket("grip.driver.r", grip_r, Z, part="hull", note="the driver's right hand on the wheel's rim")
-    v.socket("rider.1", (-0.27, -0.36, 0.76), X, part="hull", note="the man beside the driver, seated (the top of his seat)")
-    v.socket("rider.2", (-0.78, 0.32, 0.80), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.38 over the floor")
+    v.socket("rider.1", (-0.27 + fx, -0.36, 0.76), X, part="hull", note="the man beside the driver, seated (the top of his seat)")
+    v.socket("rider.2", (-0.78, 0.32, 0.80), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.38 over the floor; his boots go under the front seat's back half")
     v.socket("rider.3", (-0.78, -0.32, 0.80), X, part="hull", note="a man on the bench behind, seated facing ahead")
     for s in (LEFT, RIGHT):
         v.mark(tag, (-1.30, s * (yb + 0.001), 0.90), Y * s, 0.09, part="hull")
@@ -792,7 +795,8 @@ def _tourer(kind, fine, tag, paint):
         a_ = [(xr + (ar + 0.04) * math.cos(math.radians(a)), R + (ar + 0.04) * math.sin(math.radians(a))) for a in range(168, 11, -12)]
         v.crown_wing(a_, s * (yb - 0.01), [(0.0, 0.0), (0.04, 0.0), (yo - yb - 0.02, 0.02), (yo - yb + 0.01, 0.07)])   # the back wing's flare
         hump = [(xr + (ar - 0.02) * math.cos(math.radians(a)), R + (ar - 0.02) * math.sin(math.radians(a))) for a in range(180, -1, -20)]
-        v.extrude([(hump[0][0], zfl)] + hump + [(hump[-1][0], zfl)], s * (yw - W / 2 - 0.05), s * (yb - 0.02), "upper", 0.01)   # the housing over the wheel
+        hin = yw - W / 2 - (0.05 if kind != "kurogane" else 0.02)                                          # (the Kurogane's hugs her tyre: room for the bench men's calves)
+        v.extrude([(hump[0][0], zfl)] + hump + [(hump[-1][0], zfl)], s * hin, s * (yb - 0.02), "upper", 0.01)   # the housing over the wheel
     v.slab((xb - 0.02, -yb, zb), (xb, yb, zt - 0.02), "upper", 0.008)                                          # the back
     v.slab((xb, -yb + 0.02, zfl - 0.02), (xc + 0.14, yb - 0.02, zfl), "upper")                                 # the floor
     v.slab((xc - 0.02, -yb + 0.02, zt - 0.20), (xc, yb - 0.02, zt), "upper")                                   # the dash
@@ -848,8 +852,9 @@ def _tourer(kind, fine, tag, paint):
     v.socket("grip.driver.l", grip_l, Z, part="hull", note="the driver's left hand on the wheel's rim")
     v.socket("grip.driver.r", grip_r, Z, part="hull", note="the driver's right hand on the wheel's rim")
     v.socket("rider.1", (xs0 + 0.20, -dy, zfl + 0.34), X, part="hull", note="the man beside the driver, seated (the top of his seat)")
-    v.socket("rider.2", (xr0 + 0.20, 0.30, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.38 over the floor")
-    v.socket("rider.3", (xr0 + 0.20, -0.30, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead")
+    ry = 0.30 if kind != "kurogane" else 0.23            # (the Kurogane's short wheelbase puts her back wheels' housings beside the bench men's calves: they sit closer in; the soldiers thread, 23 Nov)
+    v.socket("rider.2", (xr0 + 0.20, ry, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead: the top of the bench, 0.38 over the floor")
+    v.socket("rider.3", (xr0 + 0.20, -ry, zfl + 0.38), X, part="hull", note="a man on the bench behind, seated facing ahead")
     v.socket("engine", ((xg + xc) / 2, 0.0, zbt + 0.02), Z, part="hull", note="the bonnet: smoke and the first fire")
     v.socket("fire.1", (xs0 + 0.20, 0.0, zfl + 0.30), Z, part="hull", note="in the seats")
     v.socket("fire.2", (xr0 + 0.20, 0.0, zfl + 0.30), Z, part="hull", note="her fuel tank, under the bench behind")
