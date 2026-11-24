@@ -9610,6 +9610,7 @@ void ALandBattle::TakeShots()
 	// (a still asked only once the one before it is taken: Sedan asked 05 before 06 was taken, and the second ask
 	// overrode the first. The shots are sorted by their time; the camera director, 22 November)
 	bool bBeforeTaken = true;
+	const int32 TakenBefore = ShotsTaken;
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
@@ -9637,6 +9638,33 @@ void ALandBattle::TakeShots()
 				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
 		}
 		bBeforeTaken = Shot.bTaken;
+	}
+	// (the camera specials, release 2, when their switches are on: a still of each special's shot once it has held
+	// 1.5 s, sp-whistle-N, sp-nickname-N, sp-last-stand-N, for the art director; never on a frame a timed picture was
+	// taken, whose ask it would override; the camera director, 24 November)
+	const LandEye::Special Sp = S.Pose.Sp;
+	if (Sp == LandEye::Special::Whistle || Sp == LandEye::Special::Nick || Sp == LandEye::Special::Stand)
+	{
+		if (S.Pose.bCut || SpStillKind != static_cast<int32>(Sp))
+		{
+			SpStillKind = static_cast<int32>(Sp);
+			SpStillFrom = RealT;
+			bSpStillTaken = false;
+		}
+		if (!bSpStillTaken && RealT - SpStillFrom >= 1.5 && ShotsTaken == TakenBefore)
+		{
+			bSpStillTaken = true;
+			const TCHAR* SpName = Sp == LandEye::Special::Whistle ? TEXT("whistle") : Sp == LandEye::Special::Nick ? TEXT("nickname") : TEXT("last-stand");
+			const FString Name = FString::Printf(TEXT("sp-%s-%d"), SpName, ++SpStills);
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Name + TEXT(".png")), true, false);
+			++ShotsTaken;
+			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d, card on block %d"), *Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
+				S.Pose.Card);
+		}
+	}
+	else
+	{
+		SpStillKind = -1;
 	}
 	if (S.bCard && !bCardShot)
 	{

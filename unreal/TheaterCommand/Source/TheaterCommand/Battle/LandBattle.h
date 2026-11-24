@@ -718,6 +718,12 @@ private:
 	};
 	TArray<FShot> Shots;
 	int32 ShotsTaken = 0;
+	/** The camera specials in a picture run (release 2): the special on the screen now (LandEye::Special as a number, -1
+	 * none), since when (real seconds), whether its still is taken, and how many were. */
+	int32 SpStillKind = -1;
+	double SpStillFrom = 0.0;
+	bool bSpStillTaken = false;
+	int32 SpStills = 0;
 	double QuitAt = -1.0, CardShotAt = -1.0;
 	bool bCardShot = false;
 
