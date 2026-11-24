@@ -275,6 +275,16 @@ public:
 
 	/** Ends the player's month and plays every other nation's. Returns what happened, nation by nation. */
 	FMonthResult EndMonth();
+	/**
+	 * (Release 2, tc.Speed.MonthAside; the map-speed lane, the whole-world map's month end.) EndMonth worked out on the
+	 * rules' own thread as an order is: the other nations' months (1.0 to 1.7 s a month on the whole-world map in a cloud
+	 * run, after the far map's speedups) and the reading of their answer (some 1.9 MB of text there, five steps each with
+	 * a whole picture of the war) are done there, so the frames go on meanwhile. Then is given what happened on the game
+	 * thread, from Deliver, a frame or a few later, after the new picture of the war is taken; empty where the rules
+	 * failed, as EndMonth's. IsAnswering is true until then, so the table takes no order. bAside false, the switch off, or
+	 * "tc.Speed.RulesAside 0" ends the month at once, as EndMonth does, and gives it to Then before returning.
+	 */
+	void EndMonthAside(bool bAside, TFunction<void(FMonthResult&&)>&& Then);
 
 	// ---- (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes ----
 	// The lessons, their words and the tests of their deeds are the rules'; the deeds of the player's own orders are
@@ -406,6 +416,8 @@ private:
 	static FCampaignView ParseView(const TSharedPtr<FJsonObject>& Object);
 	/** ParseView without the speed log's timing, which is kept on the game thread only: for the rules' thread. */
 	static FCampaignView ReadView(const TSharedPtr<FJsonObject>& Object);
+	/** The endMonth answer read into what happened (its picture of the war is left for TakeView). bGameThread: the steps' pictures read with ParseView's timing, as EndMonth always read them; false on the rules' thread. */
+	static FMonthResult ReadMonth(const TSharedPtr<FJsonObject>& Object, bool bGameThread);
 	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 	/** (Rules 84.3.3) The player's notebook of FIRST COMMAND: its file, read into the rules once they are loaded, and written whenever an answer carries it. */
 	static FString NotebookFile();
