@@ -625,6 +625,14 @@ public:
 
 	/** True while the other nations' months are being played out in front of the player. */
 	bool IsWatching() const { return bWatching; }
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+	/** True while the watch is of the others' months near his ground only (the option "Enemy moves near you"). */
+	bool IsWatchingNear() const { return bWatching && bWatchNear; }
+	/** The heading over the watch's sentence while it is of the moves near him ("MOVES NEAR YOU · GERMANY · 1 OF 3"); empty otherwise. */
+	FString GetWatchHeading() const;
+	/** Whose month the watch is showing, for the flag beside the heading. */
+	const FString& GetWatchNation() const { return WatchNation; }
+	// ---- (end release 2)
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
 	/** (release 1) What an arm is, for the bigger unit card; null where the rules give none. */
@@ -1481,6 +1489,22 @@ private:
 
 	// The other nations' month, being played out one nation at a time.
 	bool bWatching = false;
+	// ---- (release 2, the enemy's month near you) The option (kept with the options; on unless he turns it off), and the
+	// watch of only the months that came near him: how many there are, how many have been shown, whose is up, and the
+	// arrows of the one up as they grow (from ArrowsSince).
+	bool bEnemyMoves = true;
+	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
+	bool bWatchNear = false;
+	int32 NearCount = 0, NearShown = 0;
+	FString WatchNation;
+	TArray<FStepArrow> ArrowsShown;
+	double ArrowsSince = 0.0;
+	bool bArrowsGrowing = false;
+	/** A step the watch near him stops at: another country's month that came near his ground or touched him. */
+	bool IsNearStep(const FMonthStep& Step) const;
+	/** Puts away the step's arrows. */
+	void ClearStepArrows();
+	// ---- (end release 2)
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) Where bMonthCardDue is for a month just resolved, its
 	// rows are laid as seals on the map's edge instead of the card opening by itself, unless the option "Month report:

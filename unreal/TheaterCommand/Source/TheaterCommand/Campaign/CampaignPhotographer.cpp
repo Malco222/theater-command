@@ -849,6 +849,25 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		}
 	}
 
+	// ---- (release 2, the enemy's month near you) "-TheaterWatchNear" with "-TheaterGrand=FRA,1" takes the watch of the
+	// enemy's months near the player instead: the table as the months asked for ("-TheaterMonths=2") leave it, then four
+	// months ended in turn, each caught at its first stop near him, the eye there and the arrows grown.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterWatchNear")) && !GrandNation.IsEmpty())
+	{
+		Shots.Reset();
+		int32 Before = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Before);
+		Add(TEXT("60a-before-the-month-ends"), TEXT("@capital"), 0.6f).Months = FMath::Clamp(Before, 0, 80);
+		static const TCHAR* Names[4] = { TEXT("60b-enemy-moves-month-1"), TEXT("60c-enemy-moves-month-2"), TEXT("60d-enemy-moves-month-3"), TEXT("60e-enemy-moves-month-4") };
+		for (const TCHAR* Name : Names)
+		{
+			FShot& Shot = Add(Name, TEXT("@capital"), 0.6f);
+			Shot.bKeep = Shot.bWatch = true;
+			Shot.Wait = -0.4f; // (2.6 s in: the eye arrived, the arrows grown, the sentence up)
+		}
+	}
+	// ---- (end release 2)
+
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
 	FString Only;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterOnly="), Only, false))
@@ -1381,6 +1400,7 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	if (Shot.bWatch)
 	{
 		Controller->PutDownArmy();
+		Controller->SkipWatching(); // (release 2: a watch still going from the last picture is finished first, or the month would not end)
 		Controller->EndMonthAndWatch();
 		return; // the view now follows the action
 	}

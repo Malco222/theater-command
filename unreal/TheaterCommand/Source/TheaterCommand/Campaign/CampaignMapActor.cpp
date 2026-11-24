@@ -19,6 +19,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
+#include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -12972,6 +12973,111 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 	Buffers.AddTriangleFacingUp(A, B, C);
 	Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
 }
+
+// ---- (release 2, the enemy's month near you; Brian, 24 November 2026: "when the AI nations are doing their turn, show
+// movements around my territories or if my units are attacked so i know whats going on".) The arrows of one step of the
+// others' month, from army to army, laid in a section of the orders' mesh of their own (11), over the ground's own
+// heights. Campaign/EnemyMoves draws them (plain C++, checked alone by Tools/enemy_moves/run.sh).
+namespace
+{
+	/** The arrows' ends as the table stands its pieces (SpotOf: where an army in that province stands, in map units). */
+	bool StepArrowEnds(const FCampaignMapData& Map, const TFunctionRef<FVector2D(int32)>& SpotOf, const FStepArrow& Arrow, TheaterEnemyMoves::FArrow& Out)
+	{
+		if (!Map.Regions.IsValidIndex(Arrow.To))
+		{
+			return false;
+		}
+		const FVector2D To = SpotOf(Arrow.To);
+		Out.To = TheaterEnemyMoves::FPoint{ To.X, To.Y };
+		Out.bFrom = Map.Regions.IsValidIndex(Arrow.From) && Arrow.From != Arrow.To;
+		if (Out.bFrom)
+		{
+			const FVector2D From = SpotOf(Arrow.From);
+			Out.From = TheaterEnemyMoves::FPoint{ From.X, From.Y };
+			// (two ends a world apart are the two sides of the whole-world map's seam: the mark alone is drawn)
+			Out.bFrom = FVector2D::Distance(From, To) < 400.0;
+		}
+		Out.Kind = Arrow.Kind == 1 ? TheaterEnemyMoves::EKind::Attack : Arrow.Kind == 2 ? TheaterEnemyMoves::EKind::Fell : TheaterEnemyMoves::EKind::Move;
+		Out.bWar = Arrow.bWar;
+		Out.bAway = Arrow.bAway;
+		Out.bTaken = Arrow.bTaken;
+		Out.bSiege = Arrow.bSiege;
+		Out.bAlly = Arrow.bAlly;
+		Out.bOurs = Arrow.bOurs;
+		Out.Corps = FMath::Max(Arrow.Corps, 1);
+		return true;
+	}
+}
+
+void ACampaignMapActor::ShowStepArrows(const TArray<FStepArrow>& Arrows, float Grow)
+{
+	OrdersMesh->ClearMeshSection(11);
+	if (Arrows.Num() == 0 || Grow <= 0.0f || !Data.IsLoaded())
+	{
+		return;
+	}
+	auto SpotOf = [this](int32 RegionId) { return WorldToMap(ArmySpot(RegionId, 0)); };
+	std::vector<TheaterEnemyMoves::FArrow> Laid;
+	for (const FStepArrow& Arrow : Arrows)
+	{
+		TheaterEnemyMoves::FArrow One;
+		if (StepArrowEnds(Data, SpotOf, Arrow, One))
+		{
+			Laid.push_back(One);
+		}
+	}
+	TheaterEnemyMoves::FDrawing Drawing;
+	TheaterEnemyMoves::Lay(Laid, Grow, Drawing);
+	FCampaignMeshBuffers Buffers;
+	auto Colour = [](const TheaterEnemyMoves::FInk& Ink) { return FColor(Ink.R, Ink.G, Ink.B, Ink.A); };
+	// (the dark edges first, then the inks over them: one section, laid in that order)
+	for (const TheaterEnemyMoves::FLayer* Layer : { &Drawing.Under, &Drawing.Over })
+	{
+		for (const TheaterEnemyMoves::FStroke& Stroke : Layer->Strokes)
+		{
+			TArray<FVector2D> Points;
+			Points.Reserve(static_cast<int32>(Stroke.Points.size()));
+			for (const TheaterEnemyMoves::FPoint& Point : Stroke.Points)
+			{
+				Points.Emplace(Point.X, Point.Y);
+			}
+			AppendRibbon(Buffers, Points, Stroke.Half, Stroke.Lift, Colour(Stroke.Ink), Stroke.bClosed);
+		}
+		for (const TheaterEnemyMoves::FTriangle& Face : Layer->Triangles)
+		{
+			const FColor Ink = Colour(Face.Ink);
+			const int32 A = Buffers.AddVertex(SurfacePoint(Face.A.X, Face.A.Y, Face.Lift), FVector::UpVector, Ink);
+			const int32 B = Buffers.AddVertex(SurfacePoint(Face.B.X, Face.B.Y, Face.Lift), FVector::UpVector, Ink);
+			const int32 C = Buffers.AddVertex(SurfacePoint(Face.C.X, Face.C.Y, Face.Lift), FVector::UpVector, Ink);
+			Buffers.AddTriangleFacingUp(A, B, C);
+		}
+	}
+	Buffers.Commit(OrdersMesh, 11, HighlightMaterial);
+}
+
+bool ACampaignMapActor::FrameStepArrows(const TArray<FStepArrow>& Arrows, FVector2D& OutMiddle, double& OutReach) const
+{
+	auto SpotOf = [this](int32 RegionId) { return Data.Regions[RegionId].Center; }; // (framing needs no more than the provinces' middles)
+	std::vector<TheaterEnemyMoves::FPoint> Ends;
+	for (const FStepArrow& Arrow : Arrows)
+	{
+		TheaterEnemyMoves::FArrow One;
+		if (!StepArrowEnds(Data, SpotOf, Arrow, One))
+		{
+			continue;
+		}
+		Ends.push_back(One.To);
+		if (One.bFrom)
+		{
+			Ends.push_back(One.From);
+		}
+	}
+	const TheaterEnemyMoves::FFrame Frame = TheaterEnemyMoves::Frame(Ends);
+	OutMiddle = FVector2D(Frame.Middle.X, Frame.Middle.Y);
+	OutReach = Frame.Reach;
+	return Frame.bValid;
+}
+// ---- (end release 2)
 
 void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 {
