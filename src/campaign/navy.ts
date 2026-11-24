@@ -2033,6 +2033,8 @@ export const CAUSE = causeData as unknown as {
   count: { attacked: number; sighted: number; boatsT2: number; perAttack: number; ways: number; t2: { convoys: number; months: number }; sink: number | null; ships: Record<string, number | null>; grt: Record<string, number | null> };
   /** The boat ceiling: a boat's torpedoes inside its hull and outside it (used only in a calm sea), the share of those fired that hit, the ships sunk a hit. A null in inside, hit or sinkHit: no ceiling. */
   ceiling: { inside: number | null; outside: number | null; hit: number | null; sinkHit: number | null };
+  /** The escort's radar before a boat fires: the share of the boats that try which fire at T2's ratio of radar-fitted escorts a convoy to boats trying, and that ratio. A null in either: the pack fires as counted. */
+  firing: { t2: number | null; rT2: number | null };
 };
 
 /** A navy's anti-submarine kit: sonar and depth charges, sea-search radar, ahead-throwing weapons, escort-group training, long-range patrol aircraft. */
@@ -2534,19 +2536,43 @@ type ConvoyRoute = (typeof NAVY.convoys)[number];
  * where it is laid.
  * L is the share of the route's ships sunk, both ways, and so of its cargoes.
  */
-export interface ConvoySide { P: number; E: number; sunk: number; L: number; torps?: number }
-function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: number, each: number | null): ConvoySide {
+export interface ConvoySide { P: number; E: number; sunk: number; L: number; torps?: number; fire?: number; fired?: number }
+
+/**
+ * The share of the boats that try which reach firing against a convoy (the design director's ruling of 24 November 2026
+ * 16:35Z on naval-battles/convoy-r2/radar-firing-form.md): 1 / (1 + c x r), r the radar-fitted escorts a convoy for
+ * each boat trying, c set so the share is 't2' at T2's ratio 'rT2' (the record's, never the game's). 1 with no
+ * radar-fitted escort. Null where it is not laid.
+ */
+export function firingShare(radarEscorts: number, tries: number): number | null {
+  const F = CAUSE.firing;
+  if (!F || F.t2 === null || F.rT2 === null || F.t2 <= 0 || F.rT2 <= 0) return null;
+  const c = (1 / F.t2 - 1) / F.rT2;
+  const r = tries > 0 ? radarEscorts / tries : 0;
+  return 1 / (1 + c * r);
+}
+
+function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: number, each: number | null, radarShips = 0): ConvoySide {
   const K = CAUSE.count, ships = K.ships[route.id] ?? 0, k = K.sink!;
+  // (The escort's radar before a boat fires, ruled 16:35Z: the count's pack is the boats that fired at T2, against
+  // escorts with radar, so the boats that try are the pack / t2, and those that fire are the tries x the share at this
+  // convoy's own ratio of radar-fitted escorts to boats trying. At T2's ratio it gives the count's pack back. Applied
+  // once, here, on the pack the contest and the ceiling both read; the escort's kills keep the count's incidents.)
+  const F = CAUSE.firing;
+  const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+  const tries = laid ? count.pack / F.t2! : count.pack;
+  const fire = laid ? firingShare(count.sailed > 0 ? radarShips / count.sailed : 0, tries) : null;
+  const pack = fire === null ? count.pack : tries * fire;
   // (The pack, times a boat's raid strength on station: its kit, fit and the air over it, as the lanes count them.)
-  const P = count.boats > 0 ? (count.pack * boats) / count.boats : 0;
+  const P = count.boats > 0 ? (pack * boats) / count.boats : 0;
   const E = count.sailed > 0 ? G / count.sailed : 0;
   const contest = P > 0 ? (ships * P) / (P + k * E) : 0;
   // (The boat ceiling: never more than the pack's torpedoes sink on an average night, each boat's at most 'each'. A convoy
   // attacked has at least one boat on it, so the pack counts as one where the count's falls under one: on a short route
   // of many convoys, as Libya's, its incidents a convoy attacked are fewer than one. Builder's choice, review of 24 Nov.)
-  const torps = each === null ? undefined : Math.max(1, count.pack) * each;
+  const torps = each === null ? undefined : Math.max(1, pack) * each;
   const sunk = torps === undefined ? contest : Math.min(contest, torps);
-  return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}) };
+  return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}), ...(fire !== null ? { fire, fired: pack } : {}) };
 }
 
 /** True where every figure of the boat ceiling is laid. */
@@ -2623,7 +2649,7 @@ export function convoySideOf(g: Game, nat: string, route: ConvoyRoute): ConvoySi
  */
 function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[]; raid: number; guard: number; raiders: Fleet[]; escorts: Fleet[]; G: number; L: number; cover?: SeaCover[]; side?: ConvoySide; Lo?: number } {
   const zones = route.zones.map((k) => zoneOf(g, k));
-  let raid = 0, guard = 0, boats = 0, weighed = 0;
+  let raid = 0, guard = 0, boats = 0, weighed = 0, radarShips = 0;
   const raiders: Fleet[] = [], escorts: Fleet[] = [];
   // (Units decide: the raiders in a sea under air cover with anti-submarine kit sink at OEG T7's share of their rate.)
   const cover = unitsDecide(g) ? zones.map((z) => seaCover(g, nat, z, route.id)) : undefined;
@@ -2640,8 +2666,12 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
       if (w <= 0) continue;
       let p = 0;
       for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
-      p *= quality(g, f.nat) * fit(g, f) * w * (cover ? radarKit(aswKit(g, f.nat)) : 1);
+      const kit = aswKit(g, f.nat);
+      p *= quality(g, f.nat) * fit(g, f) * w * (cover ? radarKit(kit) : 1);
       if (p > 0) { guard += p; escorts.push(f); }
+      // (The escort ships on the route with sea-search radar, for the firing share: every escort vessel is a destroyer
+      // in the game's classes, counted at its share on the route.)
+      if (kit.radar) radarShips += f.ships.dd * w;
     }
   }
   if (route.base) {
@@ -2658,7 +2688,7 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
     const count = (CAUSE.count.sink ?? null) === null ? null : convoyCount(g, route);
     if (count) {
       // (P counts a boat on station at 1; the others' part is the raid less the boats as the lanes weigh them.)
-      const side = convoySide(route, count, boats, G, routeCeiling(g, route));
+      const side = convoySide(route, count, boats, G, routeCeiling(g, route), radarShips);
       const rest = raid - weighed;
       const Lo = rest > 1e-12 ? rest / (rest + G + NAVY.convoy.ocean) : 0;
       return { zones, raid, guard, raiders, escorts, G, L: sideLoss(route, side, Lo, 1).L, cover, side, Lo };

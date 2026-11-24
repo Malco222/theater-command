@@ -5,7 +5,7 @@
 // weather table's chance of one that month), 0.45 a torpedo fired for every boat, 0.57 ships a hit
 // (historian/naval-reads-3-1124.md sections 2 and 5). A convoy attacked loses at most the pack x that; the month's swing
 // and a fought night act around it, mean 1. Nothing in it reads the flag or the date.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, CONVOY_BATTLE, NAVY, boatCeiling, convoyCount, convoyField, convoyMeeting, convoySideOf, convoyWar, laneLoss, navalUpkeep, zoneOf } from '../src/campaign/navy';
 import type { ConvoyNights } from '../src/campaign/navy';
@@ -57,6 +57,11 @@ const clearOdds = (g: Game, z: number): number => { const o = oddsOf(zoneOfSea(g
 const NATL = (g: Game): number => top(clearOdds(g, zoneOf(g, 'natl')));
 
 afterEach(() => { convoyField.fought = undefined; });
+// (The ceiling on the pack as the count counts it: the escort's radar before a boat fires is unread here, and tested
+// with the ceiling in convoy-firing-r2.)
+const firingKept = CAUSE.firing.t2;
+beforeAll(() => { CAUSE.firing.t2 = null; });
+afterAll(() => { CAUSE.firing.t2 = firingKept; });
 
 describe('the figures', () => {
   it('lays 12 torpedoes inside the hull, 2 outside, 0.45 a torpedo fired, 0.57 a hit: about 3.1 ships a boat that fires a battle, 3.6 in a calm sea', () => {
