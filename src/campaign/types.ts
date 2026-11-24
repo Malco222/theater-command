@@ -1492,6 +1492,12 @@ export interface Game {
    */
   scars?: Record<number, { n: number; last: number; mudN?: number; mudLast?: number }>;
   /**
+   * Old wrecks (release 2, looks only): for each region a land battle was fought in, the armoured vehicles its battles
+   * left burnt out or knocked out on the field, by nation (game.ts wreckBump), and the month of the last that left any.
+   * Absent until the first; nothing in any fight reads it.
+   */
+  wrecks?: Record<number, { n: Record<string, number>; last: number }>;
+  /**
    * Captured kit (release 2, looks only): by nation, the enemy tanks it lately took in a heavy win, whose they were, how
    * many tank blocks they make, and the month; kept six months, the three latest.
    */

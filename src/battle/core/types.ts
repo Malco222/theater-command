@@ -231,6 +231,12 @@ export interface FieldTicket<P = unknown> {
    */
   oldRuts?: { count: number; months: number };
   /**
+   * Old wrecks (release 2): the armoured vehicles the land battles fought here before left burnt out or knocked out on
+   * the field (both sides, at most 60), how many of them each nation's, and the months since the last battle that left
+   * any; absent where none was. Looks only: the field lays them, and nothing in the fight reads it.
+   */
+  oldWrecks?: { count: number; months: number; nats: Record<string, number> };
+  /**
    * Captured kit (release 2): a side that lately beat an army with tanks fields a few of the loser's own in its paint:
    * whose they were and how many of its tanks in this battle are drawn so. Looks only, as the scars.
    */

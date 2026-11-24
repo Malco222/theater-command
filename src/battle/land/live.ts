@@ -339,6 +339,8 @@ export interface LiveOpts {
   mud?: boolean;
   /** Scarred ground (release 2, looks only): the campaign's earlier battles here, as old craters; off, none are sent. */
   scars?: boolean;
+  /** Old wrecks (release 2, looks only): the armour the campaign's earlier battles here left burnt out; off, none are sent. */
+  wrecks?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -412,8 +414,8 @@ export class LiveBattle {
   private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
-  /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-  private looks: { worn: boolean; mud: boolean; scars: boolean } = { worn: true, mud: true, scars: true };
+  /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
+  private looks: { worn: boolean; mud: boolean; scars: boolean; wrecks: boolean } = { worn: true, mud: true, scars: true, wrecks: true };
   private seen = new Set<number>();
   private roundsNew: (Round & { n: number })[] = [];
   private phases = new Map<number, [number, string, number | null, number | null]>();
@@ -455,7 +457,7 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
-    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+    this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false };
     // (captured kit, a campaign battle's only: the first few tank blocks of a side that lately beat an army with tanks
     // are drawn as the loser's model, marked with whose they were, in their captor's paint; looks only)
     const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
@@ -495,10 +497,12 @@ export class LiveBattle {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
       // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-      // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
+      // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
+      // burnt-out armour of the battles here from oldWrecks)
       ...(t.weather ? { weather: t.weather } : {}),
       ...(t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {}),
+      ...(t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats } } } : {}),
       ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}), ...(t.att.worn !== undefined && this.looks.worn ? { worn: t.att.worn } : {}) },

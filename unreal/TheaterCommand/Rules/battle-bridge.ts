@@ -502,7 +502,7 @@ import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
 import type { BattleReport, Game } from '../../../src/campaign/types';
-import { groundWeather, type FieldBill } from '../../../src/campaign/game';
+import { groundWeather, wreckLook, type FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
 import { attackOutlook, endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
 import { seaLoop } from '../../../src/battle/sea/cues';
@@ -735,6 +735,10 @@ export function battleCalls(h: BattleHooks) {
       if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g.turn - scar.last) };
       // Mud memory (release 2): the battles fought here in the mud, and the months since the last of them.
       if (scar?.mudN && scar.mudLast !== undefined) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g.turn - scar.mudLast) };
+      // Old wrecks (release 2): the armoured vehicles the battles here left burnt out on the field, by nation, and the
+      // months since the last of them.
+      const wrecks = wreckLook(g.wrecks?.[to], g.turn);
+      if (wrecks) ticket.oldWrecks = wrecks;
       // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only.
       const wx = groundWeather(g, g.regions[to]);
       if (wx && !ticket.weather) ticket.weather = wx;
