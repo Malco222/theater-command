@@ -7,8 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { allied } from '../src/campaign/game';
-import { CAUSE, NAVY, airKit, aswKit, convoyCount, huntersIn, navalUpkeep, onStation, onWatch, quieterBeat, seaCover, seaRoutes, zoneOf } from '../src/campaign/navy';
-import { setMission, whyNotMission } from '../src/campaign/air';
+import { CAUSE, NAVY, airKit, aswKit, convoyCount, huntersIn, navalUpkeep, onStation, onWatch, quieterBeat, seaCover, seaRoutes, seaSquares, zoneOf } from '../src/campaign/navy';
+import { AIR, airRange, airfieldsHold, assessAir, fieldClass, setMission, whyNotMission } from '../src/campaign/air';
 import { groupJobs, groupRow } from '../src/campaign/airwar';
 import { patrolAircraft, patrolOn, patrolReach, patrolSeas, patrolStaff, watchAgainst, watchFor } from '../src/campaign/seapatrol';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -19,7 +19,7 @@ import type { AirFleet, Fleet, Game, Ships } from '../src/campaign/types';
 
 const atlantic = NAVY.convoys.find((r) => r.id === 'atlantic')!;
 const UNREAD = structuredClone(CAUSE.patrol);
-const FIG = { a0: 50, attacks: { kit: 0.6, none: 0.3 }, kill: { kit: 0.1, none: 0.04 }, lost: null as number | null };
+const FIG = { reach: 'map' as 'map' | 'air', a0: 50, intensity: 0.5, attacks: { kit: 0.6, none: 0.3 }, kill: { kit: 0.1, none: 0.04 }, lost: null as number | null };
 const lay = (fig: typeof FIG = FIG): void => { Object.assign(CAUSE.patrol, structuredClone(fig)); };
 
 function open(seed = 1): Game {
@@ -46,7 +46,7 @@ afterEach(() => { Object.assign(CAUSE.patrol, structuredClone(UNREAD)); });
 
 describe('as shipped: every figure unread', () => {
   it('lays none of the figures', () => {
-    expect(CAUSE.patrol).toEqual({ a0: null, attacks: { kit: null, none: null }, kill: { kit: null, none: null }, lost: null });
+    expect(CAUSE.patrol).toEqual({ reach: 'map', a0: null, intensity: null, attacks: { kit: null, none: null }, kill: { kit: null, none: null }, lost: null });
   });
 
   it('offers no patrol, reads none of it, and keeps the flat air term and the coasts\' cover (never remove a working cause before its replacement is laid)', () => {
@@ -88,11 +88,36 @@ describe('who flies it and where (Q1, Q2)', () => {
     expect(whyNotMission(g, group(g, '1. Fliegerdivision'), 'seapatrol', wapp)).toMatch(/beyond/i);
   });
 
-  it('reaches the sea\'s air share of its waters, and all of them with long-range patrol aircraft', () => {
+  it('a bomber group on a field strip flies no patrol from it, as it flies no raid (the air thread\'s Q2)', () => {
     const g = open(), wapp = zoneOf(g, 'wapp'), grp = group(g, 'No. 1 Group');
+    g.flags.fields = 1; g.flags.airwar = 1;
+    const strip = g.regions.find((r) => r.ctrl === 'UK' && !r.overseas && fieldClass(g, r.id) === 1 && airfieldsHold(g, r.id) > 0)!;
+    expect(strip).toBeDefined();
+    grp.base = strip.id;
+    expect(grp.kind).toBe('bmr');
+    expect(whyNotMission(g, grp, 'seapatrol', wapp)).toMatch(/concrete airfield/);
+  });
+
+  it('reaches the share of the sea\'s squares on the chart within its range of its airfield, or as first ruled the sea\'s air share; all of it with long-range patrol aircraft', () => {
+    const g = open(), wapp = zoneOf(g, 'wapp'), natl = zoneOf(g, 'natl'), grp = group(g, 'No. 1 Group');
+    expect(CAUSE.patrol.reach).toBe('map');
+    const sq = seaSquares(g);
+    const share = (z: number): number => {
+      const at = sq.at.get(z)!, r = g.regions[grp.base], lim = airRange(grp, g).bmr / AIR.kmPerUnit;
+      return at.filter((p) => Math.hypot(p.x - r.x, p.y - r.y) <= lim).length / at.length;
+    };
+    const w = patrolReach(g, grp, wapp)!, n = patrolReach(g, grp, natl)!;
+    expect(w.R).toBeCloseTo(share(wapp), 12);
+    expect(n.R).toBeCloseTo(share(natl), 12);
+    expect(n.R).toBeGreaterThan(0);
+    expect(n.R).toBeLessThan(1);
+    expect(w.nm2).toBeCloseTo(w.R * sq.at.get(wapp)!.length * sq.nm2, 6);
+    CAUSE.patrol.reach = 'air';
     expect(patrolReach(g, grp, wapp)!.R).toBe(g.seas[wapp].air);
+    CAUSE.patrol.reach = 'map';
     grantTech(g, 'UK', 'patrolaircraft');
     expect(patrolReach(g, grp, wapp)!.R).toBe(1);
+    expect(patrolReach(g, grp, natl)!.R).toBe(1);
   });
 
   it('a sea with no coast only with long-range patrol aircraft, from within range of a coast of a sea next to it', () => {
@@ -124,15 +149,19 @@ describe('who flies it and where (Q1, Q2)', () => {
 describe('the share watched (Q3)', () => {
   beforeEach(() => lay());
 
-  it('is R(1 - e^(-A/A_R)), A_R = a0 R / air, A the group\'s bombers x readiness at full cover inside 60% of its range', () => {
+  it('is R(1 - e^(-A/A_R)), A_R = a0 x the area reached / 10,000 square nautical miles (or a0 R / air as first ruled), A the group\'s bombers x readiness at full cover inside 60% of its range', () => {
     const g = open(), grp = group(g, 'No. 1 Group'), wapp = zoneOf(g, 'wapp');
     setMission(g, grp, 'seapatrol', wapp);
     const A = patrolAircraft(g, grp, wapp);
     expect(A).toBeCloseTo(grp.bmr * grp.ready, 9);
-    const R = g.seas[wapp].air, AR = (FIG.a0 * R) / g.seas[wapp].air;
+    const at = patrolReach(g, grp, wapp)!, AR = (FIG.a0 * at.nm2) / 1e4;
     const w = watchFor(g, wapp, ukSide(g))!;
-    expect(w.s).toBeCloseTo(R * (1 - Math.exp(-A / AR)), 12);
+    expect(w.s).toBeCloseTo(at.R * (1 - Math.exp(-A / AR)), 12);
     expect(w.A).toBeCloseTo(A, 12);
+    // (As first ruled: A_R = a0 R / air.)
+    CAUSE.patrol.reach = 'air';
+    const R = g.seas[wapp].air;
+    expect(watchFor(g, wapp, ukSide(g))!.s).toBeCloseTo(R * (1 - Math.exp(-A / ((FIG.a0 * R) / g.seas[wapp].air))), 12);
     grp.ready = 0.5;
     expect(patrolAircraft(g, grp, wapp)).toBeCloseTo(A / 2, 9);
   });
@@ -144,7 +173,7 @@ describe('the share watched (Q3)', () => {
     setMission(g, group(g, 'No. 2 Group'), 'seapatrol', wapp);
     const two = watchFor(g, wapp, ukSide(g))!.s;
     expect(two).toBeGreaterThan(one);
-    expect(two).toBeLessThan(g.seas[wapp].air);
+    expect(two).toBeLessThan(patrolReach(g, group(g, 'No. 1 Group'), wapp)!.R);
   });
 
   it('none under a closed sky, half under cloud', () => {
@@ -232,6 +261,16 @@ describe('what the watch does to the boats (Q4, Q5)', () => {
     expect(Math.floor(run(false) / 100)).toBe(0);
   });
 
+  it('enemy fighters meet a patrol as they meet a strike over the sea, at the patrol\'s own intensity row (the air thread\'s Q6)', () => {
+    const g = open(), grp = group(g, 'No. 1 Group'), nsea = zoneOf(g, 'nsea');
+    expect(whyNotMission(g, grp, 'seapatrol', nsea)).toBeNull();
+    for (const f of g.airFleets) if (f.nat === 'GER' && f.kind === 'ftr') { f.mission = 'support'; f.ready = 1; }
+    const at = (i: number): number => { lay({ ...FIG, intensity: i }); const a = assessAir(g, [grp], 'seapatrol', nsea); return a.def.length ? a.B * a.bomberLoss : -1; };
+    const lo = at(0.2), hi = at(1);
+    expect(lo).toBeGreaterThanOrEqual(0);
+    expect(hi).toBeGreaterThan(lo);
+  });
+
   it('aircraft are lost on patrol at the operational share where it is laid', () => {
     lay({ ...FIG, lost: 0.2 });
     const g = open(), wapp = zoneOf(g, 'wapp'), grp = group(g, 'No. 1 Group');
@@ -256,6 +295,16 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     patrolStaff(g, 'UK', mine);
     expect(mine.some((f) => f.mission === 'seapatrol' && f.target === wapp)).toBe(true);
     expect(mine.filter((f) => f.mission === 'seapatrol').every((f) => f.kind === 'bmr' && f.ship === undefined)).toBe(true);
+  });
+
+  it('send only groups with no fighters: a patrol flies alone, and nothing that guards the ground is taken (the air thread\'s Q7)', () => {
+    const g = open(), wapp = zoneOf(g, 'wapp');
+    grantTech(g, 'UK', 'asvradar');
+    sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+    const mine = g.airFleets.filter((f) => f.nat === 'UK');
+    for (const f of mine) if (f.kind !== 'ftr' && f.bmr > 0) f.ftr = 5;
+    patrolStaff(g, 'UK', mine);
+    expect(mine.some((f) => f.mission === 'seapatrol' && f.target === wapp)).toBe(false);
   });
 
   it('a computer-run raider moves out of waters watched by aircraft without kit, to a sea of the route where its boats stay up longer', () => {

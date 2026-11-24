@@ -28,7 +28,7 @@ import { armsOf, intoPool, unitsDecide } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
-import { patrolOn, patrolReach, patrolStaff } from './seapatrol';
+import { patrolFigures, patrolOn, patrolReach, patrolStaff } from './seapatrol';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
@@ -172,7 +172,7 @@ export const MISSION: Record<AirMission, { label: string; what: string }> = {
 };
 const OFFENSIVE: AirMission[] = ['superiority', 'bomb', 'night', 'strike', 'ground', 'fleet', 'harbour', 'town', 'line', 'airfield'];
 /** How hard a month of one kind of mission is fought, beside a fight for the sky. */
-const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.intensity : m === 'line' ? AIRWAR.line.intensity : m === 'fleet' ? CARRIERS.strike.intensity : m === 'harbour' ? CARRIERS.harbour.intensity : m === 'town' ? SIEGE.bombard.intensity : m === 'airfield' ? AIR.combat.intensity.bomb : m === 'seapatrol' ? AIR.combat.intensity.strike : AIR.combat.intensity[m]);
+const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.intensity : m === 'line' ? AIRWAR.line.intensity : m === 'fleet' ? CARRIERS.strike.intensity : m === 'harbour' ? CARRIERS.harbour.intensity : m === 'town' ? SIEGE.bombard.intensity : m === 'airfield' ? AIR.combat.intensity.bomb : m === 'seapatrol' ? patrolFigures()?.intensity ?? AIR.combat.intensity.strike : AIR.combat.intensity[m]);
 export const isOffensive = (m: AirMission): boolean => OFFENSIVE.includes(m);
 
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
@@ -1238,6 +1238,8 @@ function whyNotPatrol(g: Game, f: AirFleet, z: number): string | null {
   if (f.kind === 'ftr' || f.bmr <= 0) return 'Only bombers patrol the sea: fighters do not reach far enough.';
   const field = whyNotField(g, f);
   if (field) return field;
+  // (As a raid: a bomber group left on a field strip flies from it only once moved to a concrete airfield.)
+  if (g.flags.fields === 1 && f.kind === 'bmr' && f.ashore === undefined && fieldRules(g) && fieldTier(g, f.base) === 'strip') return `Bombers need a concrete airfield to fly from: ${g.regions[f.base].name} has a field strip.`;
   if (patrolReach(g, f, z)) return null;
   return g.seas[z].coast.length || aswKit(g, f.nat).patrol ? 'That sea is beyond its bombers.' : 'Only long-range patrol aircraft reach a sea with no coast.';
 }

@@ -245,6 +245,42 @@ export function seaAt(x: number, y: number, g?: Game): number {
   return lookup[r * lookCols + c];
 }
 
+/**
+ * The squares of the chart in play, sea by sea (their centres, in map units), and each square's area in square
+ * nautical miles: the map's own measure of a sea's waters (release 2, the sea patrol's reach). Read only by the sea
+ * patrol, which nothing reads while its figures are unread.
+ */
+const squaresOf = new Map<string, { at: Map<number, { x: number; y: number }[]>; nm2: number }>();
+export function seaSquares(g: Game): { at: Map<number, { x: number; y: number }[]>; nm2: number } {
+  const wideChart = g.flags.world === 1;
+  const key = wideChart ? 'world' : 'europe';
+  let s = squaresOf.get(key);
+  if (s) return s;
+  const at = new Map<number, { x: number; y: number }[]>();
+  const put = (z: number, x: number, y: number): void => { if (z >= 0) { let l = at.get(z); if (!l) at.set(z, (l = [])); l.push({ x, y }); } };
+  let cell: number;
+  if (wideChart) {
+    const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
+    cell = W.seas.cell;
+    for (let r = 0; r < W.seas.grid.length; r++) for (let c = 0; c < W.seas.cols; c++) {
+      const x = W.frame.x0 + (c + 0.5) * cell, y = W.frame.y0 + (r + 0.5) * cell;
+      put(seaAtWide(x, y), x, y);
+    }
+  } else {
+    const md = (mapData as any).seas as { cell: number; grid: string[] };
+    cell = md.cell;
+    const cols = Math.ceil((mapData as any).width / cell);
+    for (let r = 0; r < md.grid.length; r++) for (let c = 0; c < cols; c++) {
+      const x = (c + 0.5) * cell, y = (r + 0.5) * cell;
+      put(seaAt(x, y), x, y);
+    }
+  }
+  const km = cell * AIR.kmPerUnit;
+  s = { at, nm2: (km / 1.852) ** 2 };
+  squaresOf.set(key, s);
+  return s;
+}
+
 // ---- Setting up ---------------------------------------------------------------------------
 
 /** Lays a chart's seas and straits into a game: the map of Europe's when it is made, the wider world's when that is attached (world.ts). */
@@ -2045,8 +2081,8 @@ export const CAUSE = causeData as unknown as {
   ceiling: { inside: number | null; outside: number | null; hit: number | null; sinkHit: number | null };
   /** The escort's radar before a boat fires: the share of the boats that try which fire at T2's ratio of radar-fitted escorts a convoy to boats trying, and that ratio. A null in either: the pack fires as counted. */
   firing: { t2: number | null; rT2: number | null; screen?: { stations: number | null; columnsAStation: number | null; shipsAColumn: number | null; maxColumns: number | null } };
-  /** The sea patrol against submarines (seapatrol.ts): the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month. A null in a0, attacks or kill: none of it is read. */
-  patrol: { a0: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
+  /** The sea patrol against submarines (seapatrol.ts): the aircraft that watch a sea's waters reached, attacks on a boat a month in watched waters and the share of them that sink it, by kit, and aircraft lost a month; 'intensity' the air fighting's own row for a patrol met by enemy fighters (the air thread's Q6). A null in a0, intensity, attacks or kill: none of it is read. */
+  patrol: { reach: 'map' | 'air'; a0: number | null; intensity: number | null; attacks: { kit: number | null; none: number | null }; kill: { kit: number | null; none: number | null }; lost: number | null };
 };
 
 /** The escorts' cycle on a convoy route (convoycause.json station.dd): days with a convoy, turnaround and refit in port, the share of strength out of service, and a convoy's crossing. A null: unread. */

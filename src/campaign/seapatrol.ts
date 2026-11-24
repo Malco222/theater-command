@@ -18,8 +18,9 @@
 // nothing here is read (the design director's mark of 15:14Z: never remove a working cause before its replacement is
 // laid): no order is offered, the staffs send no group, and the flat air term and the cover from coasts held stand.
 // Off (no Units decide) none of it exists. Nothing in it reads the flag or the date.
-import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaRoutes, zoneOf } from './navy';
-import { AIRWAR, CARRIERS, airRange, assessAir, cover, deckBred, forecastAir, kmToSea, setMission, whyNotMission } from './air';
+import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaRoutes, seaSquares, zoneOf } from './navy';
+import { AIR, AIRWAR, CARRIERS, airRange, assessAir, cover, deckBred, forecastAir, kmToSea, setMission, whyNotMission } from './air';
+import { mapDist } from './wrap';
 import { allied, atWar } from './game';
 import { railsAt } from './rails';
 import { bombingFor } from './difficulty';
@@ -30,38 +31,55 @@ import type { AirFleet, Game } from './types';
 type ConvoyRoute = (typeof NAVY.convoys)[number];
 
 /** The sea patrol's figures, all laid: a0, the attacks and kill shares by kit. */
-interface Laid { a0: number; attacks: { kit: number; none: number }; kill: { kit: number; none: number }; lost: number | null }
+interface Laid { a0: number; intensity: number; attacks: { kit: number; none: number }; kill: { kit: number; none: number }; lost: number | null }
 
 /** The sea patrol's figures where every one it needs is laid, else null. */
 export function patrolFigures(): Laid | null {
   const P = CAUSE.patrol;
-  if (!P || P.a0 === null || P.attacks.kit === null || P.attacks.none === null || P.kill.kit === null || P.kill.none === null) return null;
-  return { a0: P.a0, attacks: { kit: P.attacks.kit, none: P.attacks.none }, kill: { kit: P.kill.kit, none: P.kill.none }, lost: P.lost };
+  if (!P || P.a0 === null || P.intensity === null || P.attacks.kit === null || P.attacks.none === null || P.kill.kit === null || P.kill.none === null) return null;
+  return { a0: P.a0, intensity: P.intensity, attacks: { kit: P.attacks.kit, none: P.attacks.none }, kill: { kit: P.kill.kit, none: P.kill.none }, lost: P.lost };
 }
 
 /** True where this campaign flies sea patrols against submarines: Units decide, and every figure laid. */
 export const patrolOn = (g: Game): boolean => unitsDecide(g) && patrolFigures() !== null;
 
 /**
- * How a group reaches a sea on patrol: the share of its waters it can watch (R) and how far it flies to get there, or
- * null where it cannot patrol it. A sea with a coast is reached as a strike is judged, its nearest coast within the
- * group's bomber range: its 'air' share of waters, all of them with long-range patrol aircraft. A sea with no coast is
- * reached only with long-range patrol aircraft, from a base within range of a coast of a sea next to it. Carrier wings
- * keep their escort cover and fighters their reach: neither patrols.
+ * How a group reaches a sea on patrol: the share of its waters it can watch (R), their area in square nautical miles,
+ * and how far it flies to get there, or null where it cannot patrol it. A sea with a coast is reached as a strike is
+ * judged, its nearest coast within the group's bomber range. A sea with no coast is reached only with long-range patrol
+ * aircraft, from a base within range of a coast of a sea next to it. Carrier wings keep their escort cover and fighters
+ * their reach: neither patrols.
+ * The waters reached (data 'reach'): 'map', the share of the sea's squares on the chart within the group's bomber range
+ * of its airfield (the builder's proposal, for the design director: the map's own measure); 'air', the sea's air share
+ * (as ruled at 15:14Z, Q2 (a)). All of it with long-range patrol aircraft, either way.
  */
-export function patrolReach(g: Game, f: AirFleet, z: number): { R: number; d: number } | null {
+export function patrolReach(g: Game, f: AirFleet, z: number): { R: number; d: number; nm2: number } | null {
   const zone = g.seas[z];
   if (!zone || f.ship !== undefined || f.ashore !== undefined || f.kind === 'ftr') return null;
   const range = airRange(f, g).bmr;
   const long = aswKit(g, f.nat).patrol;
-  if (zone.coast.length) {
-    const d = kmToSea(g, f, z);
-    return d <= range ? { R: long ? 1 : zone.air, d } : null;
-  }
-  if (!long) return null;
   let d = Infinity;
-  for (const a of zone.adj) if (g.seas[a]?.coast.length) d = Math.min(d, kmToSea(g, f, a));
-  return d <= range ? { R: 1, d } : null;
+  if (zone.coast.length) d = kmToSea(g, f, z);
+  else if (long) for (const a of zone.adj) if (g.seas[a]?.coast.length) d = Math.min(d, kmToSea(g, f, a));
+  if (d > range) return null;
+  const sq = seaSquares(g), all = sq.at.get(z)?.length ?? 0;
+  const R = long ? 1 : CAUSE.patrol.reach === 'map' ? squaresWithin(g, f.base, z, range) : zone.air;
+  return { R, d, nm2: R * all * sq.nm2 };
+}
+
+/** The share of a sea's squares within so many kilometres of a region (an airfield): kept, since the chart never changes. */
+const within = new Map<string, number>();
+function squaresWithin(g: Game, base: number, z: number, km: number): number {
+  const key = `${g.flags.world === 1 ? 'w' : 'e'}:${base}:${z}:${km}`;
+  let v = within.get(key);
+  if (v !== undefined) return v;
+  const at = seaSquares(g).at.get(z) ?? [];
+  const r = g.regions[base], lim = km / AIR.kmPerUnit;
+  let n = 0;
+  for (const p of at) if (mapDist(g, p.x, p.y, r.x, r.y) <= lim) n++;
+  v = at.length ? n / at.length : 0;
+  within.set(key, v);
+  return v;
 }
 
 /** The aircraft a group keeps on patrol over a sea this month: its bombers x its readiness x the sky (none under a closed sky or from a grounded field, half under cloud), all of them out to 60% of its range and fewer towards its limit (the air rules' cover curve). */
@@ -83,7 +101,7 @@ export interface Watch { s: number; kit: number; none: number; A: number; R: num
 function watch(g: Game, z: number, side: (nat: string) => boolean): Watch | null {
   const F = patrolFigures();
   if (!F || !unitsDecide(g) || !g.seas[z]) return null;
-  let A = 0, Ak = 0, R = 0, attacks = 0, kills = 0;
+  let A = 0, Ak = 0, R = 0, nm2 = 0, attacks = 0, kills = 0;
   const by: Record<string, number> = {};
   for (const f of g.airFleets) {
     if (f.mission !== 'seapatrol' || f.target !== z || !side(f.nat)) continue;
@@ -92,13 +110,15 @@ function watch(g: Game, z: number, side: (nat: string) => boolean): Watch | null
     if (!at || a <= 0) continue;
     const kit = airKit(aswKit(g, f.nat));
     A += a; if (kit) Ak += a;
-    R = Math.max(R, at.R);
+    if (at.R > R) { R = at.R; nm2 = at.nm2; }
     const rate = kit ? F.attacks.kit : F.attacks.none;
     attacks += a * rate; kills += a * rate * (kit ? F.kill.kit : F.kill.none);
     by[f.nat] = (by[f.nat] ?? 0) + a;
   }
   if (A <= 0 || R <= 0) return null;
-  const AR = (F.a0 * R) / g.seas[z].air;
+  // (The aircraft needed to watch the waters reached: by their area on the chart, a0 to each 10,000 square nautical
+  // miles; or, as ruled, by the share reached over the sea's air share, the only scale the old map had.)
+  const AR = CAUSE.patrol.reach === 'map' ? (F.a0 * nm2) / 1e4 : (F.a0 * R) / g.seas[z].air;
   const s = R * (1 - Math.exp(-A / AR));
   return { s, kit: (s * Ak) / A, none: (s * (A - Ak)) / A, A, R, attacks: attacks / A, kills: kills / A, by };
 }
@@ -218,7 +238,9 @@ function raidWorth(g: Game, nat: string, f: AirFleet): number {
 export function patrolStaff(g: Game, nat: string, mine: AirFleet[]): void {
   if (!patrolOn(g)) return;
   const R = AIRWAR.ai.raids;
-  const free = (f: AirFleet): boolean => f.flew !== g.turn && f.mission === 'support' && !f.close && !deckBred(f) && f.kind !== 'ftr' && f.bmr > 0 && f.ready >= R.ready;
+  // (Only groups with no fighters: a patrol flies alone, and a group with fighters would leave the ground it guards
+  // (comesUp raises only groups left on support). A bomber group defends nothing, so nothing defended is given up.)
+  const free = (f: AirFleet): boolean => f.flew !== g.turn && f.mission === 'support' && !f.close && !deckBred(f) && f.kind !== 'ftr' && f.ftr <= 0 && f.bmr > 0 && f.ready >= R.ready;
   const routes: { r: ConvoyRoute; zs: number[]; boats: number }[] = [];
   for (const r of NAVY.convoys) {
     const to = g.nations[r.to];
