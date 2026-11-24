@@ -396,6 +396,17 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, voyage.ts; Brian 24 November 2026 19:47Z) Each fleet's log of where it sailed and what it fought.
 			Add(TEXT("voyagelogrule"), TEXT("Voyage log"), TEXT("Each fleet writes one line at every month's end: where it was, what it was doing there, and the fleet actions it fought, with the ships sunk and lost. The log is on the fleet's page, newest first, three years of it. It changes nothing in the war. It can be switched in any month."),
 				Now.bVoyageLog ? TEXT("ON") : TEXT("OFF"), Now.bVoyageLog);
+			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
+			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
+				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
+			// (Release 2, heavyseas.ts; Brian 24 November 2026 20:38Z) Gales at sea slow fleets, delay convoys and lose shadows.
+			Add(TEXT("heavyseasrule"), TEXT("Heavy seas"), TEXT("Gales blow at sea under a closed sky, mostly in winter and in the northern oceans. Ships can sail into a sea in a gale but not on through it that month, convoys through one are late with some of their cargoes, and a shadow may lose its quarry in one. The same for every country. It can be switched in any month."),
+				Now.bHeavySeas ? TEXT("ON") : TEXT("OFF"), Now.bHeavySeas);
+			// (Release 2, shadow.ts; Brian 24 November 2026 20:38Z) A fresh squadron takes over a shadow whose fuel has run out.
+			Add(TEXT("shadowrelayrule"), TEXT("Shadow relay"), Now.bShadowRule
+					? TEXT("A shadow's fuel lasts three months on station. Then it makes for harbour, and a fresh cruiser fleet of yours lying in harbour takes over the shadow without losing contact, like a relay runner handing on the baton. With none in harbour, contact is lost. The computer's admirals work the same way. It can be switched in any month.")
+					: TEXT("A shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. It works only with Shadowing on. It can be switched in any month."),
+				Now.bShadowRelay ? TEXT("ON") : TEXT("OFF"), Now.bShadowRelay);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -636,7 +647,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -644,7 +655,8 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Now.bColumnsOn;
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());

@@ -761,6 +761,10 @@ export interface Fleet extends Storied {
   why?: [number, string];
   /** The enemy fleet it shadows (release 2, shadow.ts): it follows that fleet each month and keeps it in contact. Written only under that switch. */
   shadow?: number;
+  /** The month its shadow went on station (release 2, shadow.ts, the shadow relay): its fuel lasts SHADOW.relay.months from then. Written only under that switch. */
+  shadowAt?: number;
+  /** The month it last laid a field of mines (release 2, mines.ts): once a month. Written only under that switch. */
+  mined?: number;
   /**
    * Its voyage log (release 2, voyage.ts), oldest first: for each month, what it was doing at the month's end (`s`), the
    * sea (`z`) or harbour (`p`), and the fleet actions it fought (`f`, a sentence each). A record only, apart from its
@@ -1657,6 +1661,12 @@ export interface Game {
    * Absent until the first; nothing in any fight reads it.
    */
   wrecks?: Record<number, { n: Record<string, number>; last: number }>;
+  /**
+   * Mines at sea (release 2, mines.ts): each field's sea (`z`), the nation that laid it, its strength (`s`, 1 new, worn
+   * by the months and the sweepers), the month laid (`t`), and the enemies who have found it (`known`). Kept only under
+   * that switch.
+   */
+  mines?: { z: number; nat: string; s: number; t: number; known?: string[] }[];
   /**
    * Captured kit (release 2, looks only): by nation, the enemy tanks it lately took in a heavy win, whose they were, how
    * many tank blocks they make, and the month; kept six months, the three latest.

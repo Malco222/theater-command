@@ -13,15 +13,25 @@
 //
 // The same rule for every country: the computer's admirals set shadows of their own (aiShadows), at most SHADOW.ai.most
 // at a time, on the strongest enemy fleet at sea they have found.
+//
+// The shadow relay (release 2; Brian, 24 November 2026 20:38Z, "yes to all"; its own switch, 'shadowRelay', read only with
+// shadowing on): a shadow's fuel lasts SHADOW.relay.months on station. Then, at the start of its own side's month, it
+// makes for harbour, and a fresh cruiser fleet of the same country lying in harbour takes the quarry over first, so
+// contact is never broken: like a relay runner handing on the baton. With none in harbour, contact is lost.
+//
+// Heavy seas (release 2, heavyseas.ts; its own switch): a shadow whose quarry is in a gale loses it HEAVY.contact of the
+// time, at the start of its own side's month.
 
 import data from '../../data/campaign/shadow.json';
+import { Rng, hashString } from '../core/rng';
 import { fleetKnown } from './carriers';
 import { atWar, headline } from './game';
+import { HEAVY, inGale } from './heavyseas';
 import { atSea, fleetName, fleetPower, fleetReach, sail, shipCount, surfaceShips } from './navy';
 import { seaWhere } from './sea-words';
 import type { Fleet, Game } from './types';
 
-export const SHADOW = data as unknown as { slip: number; ai: { most: number; ready: number; home: number } };
+export const SHADOW = data as unknown as { slip: number; ai: { most: number; ready: number; home: number }; relay: { months: number; ready: number } };
 
 /** True where fleets may be set to shadow an enemy fleet: the grand campaign, with the switch on. */
 export const shadowOn = (g: Game): boolean => g.flags.open === 1 && g.flags.shadow === 1;
@@ -31,7 +41,19 @@ export function setShadow(g: Game, on: boolean): void {
   if (on) g.flags.shadow = 1;
   else {
     delete g.flags.shadow;
-    for (const f of g.fleets) delete f.shadow;
+    for (const f of g.fleets) { delete f.shadow; delete f.shadowAt; }
+  }
+}
+
+/** True where a shadow's fuel runs out and a fresh squadron takes over: shadowing on, and the relay's own switch. */
+export const shadowRelayOn = (g: Game): boolean => shadowOn(g) && g.flags.shadowRelay === 1;
+
+/** Turns the shadow relay on or off in a campaign under way. Off, shadows stay on station as long as they keep contact. */
+export function setShadowRelay(g: Game, on: boolean): void {
+  if (on) g.flags.shadowRelay = 1;
+  else {
+    delete g.flags.shadowRelay;
+    for (const f of g.fleets) delete f.shadowAt;
   }
 }
 
@@ -81,6 +103,7 @@ function setOn(g: Game, f: Fleet, t: Fleet): boolean {
   const z = watchSea(g, f, t);
   if (z < 0 || !sail(g, f, z, 'patrol')) return false;
   f.shadow = t.id;
+  if (shadowRelayOn(g)) f.shadowAt = g.turn;
   (t.seen ??= {})[f.nat] = g.turn;
   return true;
 }
@@ -98,7 +121,18 @@ export function orderShadow(g: Game, id: number, target: number): boolean {
 export function stopShadow(f: Fleet): boolean {
   if (f.shadow === undefined) return false;
   delete f.shadow;
+  delete f.shadowAt;
   return true;
+}
+
+/** The months of fuel a shadow has left on station, under the relay (0: it makes for harbour at its side's next month). */
+const fuelLeft = (g: Game, f: Fleet): number => Math.max(0, SHADOW.relay.months - (g.turn - (f.shadowAt ?? g.turn)));
+
+/** The fresh fleet that would take over shadow `f`'s quarry `t` now: a cruiser fleet of its country in harbour, the readiest. */
+function reliefFor(g: Game, f: Fleet, t: Fleet): Fleet | undefined {
+  return g.fleets
+    .filter((r) => r.id !== f.id && r.nat === f.nat && r.shadow === undefined && r.stance === 'port' && !r.tied && r.ready >= SHADOW.relay.ready && ruleOut(g, r, t) === null)
+    .sort((a, b) => b.ready - a.ready || a.id - b.id)[0];
 }
 
 /** The enemy fleets the player's fleet `id` can be set to shadow now. Empty while the switch is off. */
@@ -114,21 +148,43 @@ export function shadowTargets(g: Game, id: number): number[] {
  */
 export function shadowsFollow(g: Game, nat: string): void {
   if (!shadowOn(g)) return;
+  const relieved = new Set<number>();
   for (const f of g.fleets) {
-    if (f.shadow === undefined) continue;
+    if (f.shadow === undefined || relieved.has(f.id)) continue;
     const own = f.nat === nat;
     const tell = (text: string): void => { if (own && f.nat === g.human) headline(g, 'info', text, f.nat); };
     const t = g.fleets.find((x) => x.id === f.shadow);
-    if (!shipCount(f.ships) || !g.nations[f.nat]?.alive || !shadowShips(f)) { delete f.shadow; continue; }
+    if (!shipCount(f.ships) || !g.nations[f.nat]?.alive || !shadowShips(f)) { stopShadow(f); continue; }
     if (!t || !shipCount(t.ships) || surfaceShips(t) <= 0) {
-      delete f.shadow;
+      stopShadow(f);
       tell(`${cap(fleetName(f))} has nothing left to shadow: the fleet it followed is gone.`);
       continue;
     }
-    if (!atWar(g, f.nat, t.nat)) { delete f.shadow; tell(`${cap(fleetName(f))} stops shadowing ${fleetName(t)}: the two countries are no longer at war.`); continue; }
+    if (!atWar(g, f.nat, t.nat)) { stopShadow(f); tell(`${cap(fleetName(f))} stops shadowing ${fleetName(t)}: the two countries are no longer at war.`); continue; }
+    // (Heavy seas) At its own side's month, a quarry in a gale may be lost in the storm.
+    if (own && atSea(t) && inGale(g, t.zone) && new Rng(hashString(`galeshadow:${g.seed}:${g.turn}:${f.id}`)).next() < HEAVY.contact) {
+      stopShadow(f);
+      tell(`${cap(fleetName(f))} has lost ${fleetName(t)} in the gale ${whereIs(g, t)}.`);
+      continue;
+    }
+    // (The shadow relay) At its own side's month, a shadow out of fuel makes for harbour, and a fresh one takes over.
+    if (own && shadowRelayOn(g)) {
+      f.shadowAt ??= g.turn;
+      if (fuelLeft(g, f) <= 0) {
+        const r = reliefFor(g, f, t);
+        stopShadow(f);
+        sail(g, f, f.home, 'port');
+        if (r && setOn(g, r, t)) {
+          if (f.ordered) r.ordered = true;
+          relieved.add(r.id);
+          tell(`${cap(fleetName(r))} takes over shadowing ${fleetName(t)} from ${fleetName(f)}, which makes for ${f.port} to refuel. Contact is kept: it reports ${fleetName(t)} ${whereIs(g, t)}.`);
+        } else tell(`${cap(fleetName(f))} must make for ${f.port} to refuel after ${SHADOW.relay.months} months shadowing ${fleetName(t)}, and no fresh cruiser fleet lies in harbour to take over: contact is lost, ${whereIs(g, t)}.`);
+        continue;
+      }
+    }
     const z = watchSea(g, f, t);
     if (z < 0) {
-      delete f.shadow;
+      stopShadow(f);
       tell(`${cap(fleetName(f))} has lost contact with ${fleetName(t)}: last seen ${whereIs(g, t)}, out of its reach from ${f.port}.`);
       continue;
     }
@@ -148,7 +204,7 @@ export const allShadows = (g: Game, met: Fleet[]): boolean => shadowOn(g) && met
 export function aiShadows(g: Game, nat: string): void {
   if (!shadowOn(g) || nat === g.human || !g.nations[nat]?.atWar.length) return;
   const mine = g.fleets.filter((f) => f.nat === nat && shipCount(f.ships) > 0);
-  for (const f of mine) if (f.shadow !== undefined && f.ready < SHADOW.ai.home) { delete f.shadow; sail(g, f, f.home, 'port'); }
+  for (const f of mine) if (f.shadow !== undefined && f.ready < SHADOW.ai.home) { stopShadow(f); sail(g, f, f.home, 'port'); }
   if (mine.filter((f) => f.shadow !== undefined).length >= SHADOW.ai.most) return;
   const free = mine.filter((f) => f.shadow === undefined && shadowShips(f) && f.ready >= SHADOW.ai.ready && f.stance !== 'escort' && f.duty !== 'raid');
   if (!free.length) return;
@@ -166,5 +222,10 @@ export function shadowLine(g: Game, f: Fleet): string {
   if (!shadowOn(g) || f.shadow === undefined) return '';
   const t = g.fleets.find((x) => x.id === f.shadow);
   if (!t) return '';
-  return `Shadowing ${fleetName(t)}: it reports it ${whereIs(g, t)}, and follows it wherever it goes in its reach.`;
+  const line = `Shadowing ${fleetName(t)}: it reports it ${whereIs(g, t)}, and follows it wherever it goes in its reach.`;
+  if (!shadowRelayOn(g)) return line;
+  // (The shadow relay) How long its fuel lasts on station, and who would take over.
+  const left = fuelLeft(g, f), r = reliefFor(g, f, t);
+  const fuel = left <= 1 ? 'Its fuel runs out at the start of next month' : `Its fuel lasts ${left} more months on station`;
+  return `${line} ${fuel}: ${r ? `${fleetName(r)}, in harbour at ${r.port}, would take over.` : 'no fresh cruiser fleet lies in harbour to take over, so contact would be lost.'}`;
 }

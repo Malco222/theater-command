@@ -21,6 +21,7 @@ const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
+import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
 import { capOver, deckWorth, fleetKnown, syncWings, wingShare } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
@@ -1367,12 +1368,15 @@ export function coastReport(g: Game, att: string): void {
 // ---- Fleet orders -------------------------------------------------------------------------------
 
 /** Seas a fleet can be sent to: those within reach of its base, through straits open to it. */
-export function fleetReach(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
+export function fleetReach(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, calm = false): number[] {
   const d = new Int16Array(g.seas.length).fill(-1);
   const q: number[] = [];
+  // (Release 2, heavyseas.ts) A sea in a gale can be sailed into but not on through this month; `calm` reads the reach
+  // as if no gale blew (a tied fleet's beat is its beat whatever the weather). Nothing with that switch off.
+  const gales = calm ? null : galeSeas(g);
   for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
-    if (d[q[i]] >= NAVY.range) continue;
+    if (d[q[i]] >= NAVY.range || gales?.has(q[i])) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
   }
   return q;
@@ -1391,7 +1395,7 @@ export function tieLapses(g: Game, f: Fleet): boolean {
   const row = NAVY.fleets.find((r) => r.nat === f.nat && r.name === f.name);
   const home = row?.base ? g.byName[row.base] : undefined;
   if (home && home.id !== f.base && !allied(g, f.nat, home.ctrl)) return true;
-  return !fleetReach(g, f).includes(f.station);
+  return !fleetReach(g, f, true).includes(f.station);
 }
 
 /**
@@ -3064,7 +3068,8 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
   if (!cover) for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
   const G = guard * NAVY.convoy.escortWorth * (cover ? 1 : techMul(g, nat, 'radar'));
   const loss = raid > 0 ? (raid / (raid + G + NAVY.convoy.ocean)) * seaLossMul(g, nat) : 0;
-  return { raid, guard, loss: Math.min(LANE_CAP, loss) };
+  // (Release 2, heavyseas.ts) A lane through a sea in a gale is late with more of its cargoes. Nothing with that switch off.
+  return { raid, guard, loss: Math.min(LANE_CAP, loss + galeLaneLoss(g, zones)) };
 }
 
 /** Which way Swedish iron ore is reaching Germany this month, if at all. */
@@ -3087,6 +3092,8 @@ export function seaIncomeLoss(g: Game, nat: string): number {
   // (With a neutral's bargains the ore is Sweden's to sell, and its share follows the bargain: release 2.)
   if (nat === NAVY.ore.to && !replacedDeal(g, 'ore') && oreRoute(g) === 'cut') s += NAVY.ore.share;
   s += bargainOutputLoss(g, nat);
+  // (Release 2, heavyseas.ts) Convoys through a gale are late. Nothing with that switch off.
+  s += galeConvoyLoss(g, nat);
   // A nation that reads the raiders' signals steers its convoys round them (the grand campaign).
   return Math.min(0.9, s) * seaLossMul(g, nat);
 }

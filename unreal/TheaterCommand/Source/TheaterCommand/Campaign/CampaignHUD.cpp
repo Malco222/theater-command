@@ -14672,6 +14672,38 @@ namespace
 			// The forecast: one large number with its verdict, who goes and who rises, what it costs, what a hit does.
 			const bool bTwoWays = Card.Ways.Num() == 2;
 			TSharedRef<SVerticalBox> Forecast = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Heading(bTwoWays && !Card.WaysLabel.IsEmpty() ? Card.WaysLabel : FString(TEXT("THE FORECAST")))];
+			// (Release 2; the UI director, 24 November 2026, on the air thread's words.) Under the fighters in reach, in the same box:
+			// the types at the raid's height, then which side's aircraft are stronger and, under Units decide, the pilots'
+			// training. The kit's small type, no colour for better or worse (a reading, not a warning), wrapped and never cut.
+			// Nothing is added where the rules give no types: the box is as it was.
+			auto WithTypes = [&](const TSharedRef<SWidget>& TypesAbove) -> TSharedRef<SWidget>
+			{
+				if (Card.Types.IsEmpty())
+				{
+					return TypesAbove;
+				}
+				const FString TypeRest = (Card.TypesEdge + TEXT(" ") + Card.Pilots).TrimStartAndEnd();
+				TSharedRef<SVerticalBox> TypeRows = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[TypesAbove]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Faint.CopyWithNewOpacity(0.45f))]
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Card.Types)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f)).AutoWrapText(true)
+						.ToolTipText(FText::FromString(Card.TypesTip))
+					];
+				if (!TypeRest.IsEmpty())
+				{
+					TypeRows->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TypeRest)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						.ToolTipText(FText::FromString(Card.TypesTip))
+					];
+				}
+				return TypeRows;
+			};
 			if (bTwoWays)
 			{
 				// (Brian, 16 November 2026; ruling 107(d); the art director's brief.) A bombing raid by day and by night,
@@ -14732,7 +14764,7 @@ namespace
 					[
 						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(13.0f, 6.0f, 13.0f, 6.0f))
 						[
-							Common
+							WithTypes(Common)
 						]
 					];
 				}
@@ -14947,7 +14979,7 @@ namespace
 						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(14.0f, 9.0f, 14.0f, 9.0f))
 						.ToolTipText(FText::FromString(Card.Meets.Num() == 0 ? FString(TEXT("No enemy fighters are in reach of the target.")) : Who + (Card.FoeLoss > 0 ? FString::Printf(TEXT("\nThey are likely to lose about %s."), *Number(Card.FoeLoss)) : FString())))
 						[
-							Going
+							WithTypes(Going)
 						]
 					];
 				}

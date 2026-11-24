@@ -143,3 +143,13 @@ export const SHADOW_STAGE: boolean = staged('TC_SHADOW', 'shadow');
 export const VOYAGELOG_STAGE: boolean = staged('TC_VOYAGELOG', 'voyageLog');
 /** True where new grand campaigns open with rearguards blowing the bridges behind them (stage.json 'rearBridges'). */
 export const REARBRIDGES_STAGE: boolean = staged('TC_REARBRIDGES', 'rearBridges');
+
+// Mines at sea, heavy seas and the shadow relay (release 2; Brian 24 November 2026 20:38Z, "yes to all"; mines.ts,
+// heavyseas.ts, shadow.ts): the grand campaigns opened while each is true carry its flag. Forced by TC_SEAMINES,
+// TC_HEAVYSEAS and TC_SHADOWRELAY.
+/** True where new grand campaigns open with fleets able to lay mines at sea (stage.json 'seaMines'). */
+export const SEAMINES_STAGE: boolean = staged('TC_SEAMINES', 'seaMines');
+/** True where new grand campaigns open with gales at sea (stage.json 'heavySeas'). */
+export const HEAVYSEAS_STAGE: boolean = staged('TC_HEAVYSEAS', 'heavySeas');
+/** True where new grand campaigns open with the shadow relay (stage.json 'shadowRelay'). */
+export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay');

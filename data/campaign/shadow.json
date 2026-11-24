@@ -5,5 +5,7 @@
     "most": 1,
     "ready": 0.6,
     "home": 0.5
-  }
+  },
+  "_relay": "The shadow relay (release 2; Brian, 24 November 2026 20:38Z, 'yes to all', of the idea 'when a shadowing squadron runs low on fuel and has to go home, a fresh squadron takes over without losing contact'). Its own switch, read only with shadowing on. A shadow's fuel lasts 'months' months on station; then, at the start of its own side's month, it makes for harbour. A fleet of cruisers of the same country lying in harbour, at 'ready' readiness or better and able to shadow the same fleet, takes over first, and contact is kept; with none, contact is lost. The same for every country.",
+  "relay": { "months": 3, "ready": 0.75 }
 }

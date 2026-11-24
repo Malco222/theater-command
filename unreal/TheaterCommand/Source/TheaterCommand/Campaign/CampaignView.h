@@ -591,6 +591,9 @@ struct FRaidCard
 	int32 WaysGuns = 0;
 	FString WaysGunsFigure, WaysGunsNoun, WaysGunsTail, WaysGunsTip;
 	FString GunsWords, ToGuns; // on the single forecast of any other raid: the one line under the bombers lost
+	// (Release 2.) The fighters at the raid's height, which side's aircraft are stronger, the pilots' training (under Units
+	// decide), and the words for the pointer; each empty where the rules give none.
+	FString Types, TypesEdge, Pilots, TypesTip;
 };
 
 /** A figure on the month's card: "3,000" over "lost". */
@@ -1213,6 +1216,9 @@ struct FCampaignView
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
+	bool bSeaMines = false; // (release 2, mines.ts) fleets can lay minefields at sea
+	bool bHeavySeas = false; // (release 2, heavyseas.ts) gales blow at sea: fleets slowed, convoys late, shadows lost
+	bool bShadowRelay = false; // (release 2, shadow.ts) a fresh squadron takes over a shadow whose fuel has run out (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
