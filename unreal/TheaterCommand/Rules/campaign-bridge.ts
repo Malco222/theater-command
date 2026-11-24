@@ -125,6 +125,7 @@ import { newsSide } from '../../../src/campaign/turn';
 import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { fieldRepairView } from '../../../src/campaign/fieldstate';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
+import { FIGHTERS } from '../../../src/campaign/fighters';
 import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
@@ -6123,6 +6124,11 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
       meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
       massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
+      // (Release 2; the UI director, 24 Nov 2026, on the air thread's words.) The fighters at the raid's height and which side's
+      // aircraft are stronger (fighters.ts raidCardLines, under its switch or Units decide), and, under Units decide where
+      // both sides' hours are read, the pilots' training. Each '' where the rules give none; the card leaves an empty one out.
+      types: p.why ? '' : p.fighterTypes?.types ?? '', typesEdge: p.why ? '' : p.fighterTypes?.edge ?? '',
+      pilots: p.why ? '' : (p.fighterTypes as { pilots?: string } | undefined)?.pilots ?? '', typesTip: p.why || !p.fighterTypes ? '' : FIGHTERS.words.tooltip,
       // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
       // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
       gunsWords: p.why || p.bombers <= 0 ? '' : gunsOfThem(p.guns), toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
