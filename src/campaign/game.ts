@@ -5,6 +5,7 @@
 import { FORT_XP, crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
 import capData from '../../data/campaign/capitulations.json';
 import { mapDist2 } from './wrap';
+import { AFV_PER_DIV } from '../battle/land/wrecks';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -693,13 +694,11 @@ function capturedKit(g: Game, rep: BattleReport, target: Region): void {
 /**
  * Old wrecks (release 2, looks only; Brian, 23 November 20:09Z): the armoured vehicles a land battle leaves burnt out or
  * knocked out on its field, for the next battle there. Estimated from the losses the battle booked, so no die is thrown:
- * an armoured division fields about 'per.arm' armoured vehicles (tanks, assault guns and tank destroyers, armoured cars,
- * half-tracks; the historian's division table, historian/division-equipment-by-year.md, at its middle), a motorised one
- * about 'per.mot' (its armoured cars, and the tank or assault gun battalion it came to have), and a corps loses them in the
- * share of its men it lost. The side that holds the field after it tows 'towed' of its own away to be mended; the side
- * that leaves it leaves all of its. A ticket shows at most 'most' (the 3D game's own cap). Nothing in any fight reads it.
+ * an armoured division fields about 'per.arm' armoured vehicles and a motorised one about 'per.mot' (battle/land/wrecks.ts),
+ * and a corps loses them in the share of its men it lost. The side that holds the field after it tows 'towed' of its own
+ * away to be mended; the side that leaves it leaves all of its. A ticket shows at most 'most' (the 3D game's own cap). Nothing in any fight reads it.
  */
-export const WRECKS = { per: { arm: 150, mot: 40 } as Partial<Record<Kind, number>>, towed: 0.5, most: 60 } as const;
+export const WRECKS = { per: AFV_PER_DIV as Partial<Record<Kind, number>>, towed: 0.5, most: 60 } as const;
 
 /** One battle's wrecks, by nation, booked on its region (and the month of the last battle that left any). */
 export function wreckBump(g: Game, rep: BattleReport): void {

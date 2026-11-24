@@ -75,9 +75,31 @@ describe('old wrecks (release 2)', () => {
     g.wrecks = { [to]: { n: { GER: 5, SOV: 2 }, last: g.turn - 1 } };
     const look = TC.battleLook(ids, to) as Look;
     const on = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null } as never).header() as Record<string, any>;
-    expect(on.oldWrecks).toEqual({ count: 7, months: 1, nats: { GER: 5, SOV: 2 } });
+    const { per, ...rest } = on.oldWrecks as { per?: number };
+    expect(rest).toEqual({ count: 7, months: 1, nats: { GER: 5, SOV: 2 } });
+    // (per: the real armoured vehicles one tank model stands for in this battle, both sides' armour together; absent
+    // where the battle draws no tanks)
+    const tanks = (on.blocks as { kind: string; figures0: number }[]).filter((b) => b.kind === 'arm');
+    if (!tanks.length) expect(per).toBeUndefined();
+    else {
+      expect(per).toBeGreaterThanOrEqual(1);
+      expect(Math.round(per! * 10)).toBe(per! * 10);
+    }
     const off = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null, wrecks: false } as never).header() as Record<string, any>;
     expect(off.oldWrecks).toBeUndefined();
+  });
+
+  it("one tank model's real vehicles: the armour's divisions by strength over the tank models drawn for them", () => {
+    const { g, TC, o, ids, to } = setUp();
+    o.corps[0].kind = 'arm'; // (the opening's first offer is all foot: one corps of it made armour, cut into regiments)
+    g.wrecks = { [to]: { n: { GER: 5 }, last: g.turn } };
+    const look = TC.battleLook(ids, to) as Look;
+    const live = liveTicket(look.ticket as never, { ...(look.live ?? {}), me: null } as never);
+    const units = (live as unknown as { sim: { allBlocks(): { kind: string; figures0: number; worth?: number; tray: number }[] } }).sim.allBlocks().filter((u) => u.kind === 'arm');
+    const head = live.header() as Record<string, any>;
+    expect(units.length).toBeGreaterThan(0);
+    const real = units.reduce((s, u) => s + 150 * (u.worth ?? u.figures0 / u.tray), 0), models = units.reduce((s, u) => s + u.figures0, 0);
+    expect(head.oldWrecks.per).toBe(Math.max(1, Math.round((real / models) * 10) / 10));
   });
 
   it('a grand campaign save keeps them; a save without them is given them back from its reports', () => {
