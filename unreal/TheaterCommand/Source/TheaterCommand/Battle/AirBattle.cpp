@@ -73,7 +73,6 @@
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -87,27 +86,6 @@ struct FAirLandMade
 	std::vector<AirLand::Frame> Frames;
 	TArray<CampaignTextures::FLevels> Levels;
 	double Seconds = 0.0;
-	/** The far picture at half its texels, painted before the rest and laid at once (LayLand(true)), then the far
-	 * picture itself in its place: the flyover flies over the far picture's ground, and the whole ground was laid 9.3
-	 * to 9.8 s after the press, with the flyover 9.5 s, so its first seconds were the plain sheet in the haze (the art
-	 * director on the inland raids, 24 November). Stage is set on the pool's thread when each is made: 1 Rough, 2 the
-	 * far picture's own (Levels[2]) too. Everything else here is the game thread's. */
-	CampaignTextures::FLevels Rough;
-	std::atomic<int32> Stage{ 0 };
-	bool bRoughLaid = false;
-	TWeakObjectPtr<UMaterialInstanceDynamic> RoughInk;
-	/** (the far picture, made once it is painted and laid over the rough one; LayLand takes it, not made twice) */
-	TWeakObjectPtr<UTexture2D> FarPicture;
-
-	/** The rough picture: the far one's ground at twice its texel, a quarter of its work. */
-	static AirLand::Frame RoughOf(const AirLand::Frame& Far)
-	{
-		AirLand::Frame Out = Far;
-		Out.W /= 2;
-		Out.H /= 2;
-		Out.Step *= 2.0;
-		return Out;
-	}
 };
 
 namespace AirParts
@@ -1358,21 +1336,20 @@ void AAirBattle::PaintLand()
 	}
 	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
 	LandAsked = FPlatformTime::Seconds();
-	// (a picture run waits for the whole ground at the press, below: it lays no rough one, and does not paint it)
-	const bool bRoughFirst = ShotFolder.IsEmpty();
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, bRoughFirst]()
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans]()
 	{
 		const double Began = FPlatformTime::Seconds();
 		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
 		Made->Frames = AirLand::Frames(P);
 		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
-		const AirLand::Painter& Painter = *Made->Painter;
-		auto Paint = [&Painter](const AirLand::Frame& F, CampaignTextures::FLevels& Out)
+		for (int32 K = 0; K < Made->Levels.Num(); ++K)
 		{
+			const AirLand::Frame& F = Made->Frames[static_cast<size_t>(K)];
 			std::vector<uint8_t> Rgba(static_cast<size_t>(F.W) * F.H * 4);
 			std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
 			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
 			const int32 Bands = (F.H + 63) / 64;
+			const AirLand::Painter& Painter = *Made->Painter;
 			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); });
 			if (AirLand::Painter::Shades(F))
 			{
@@ -1385,25 +1362,7 @@ void AAirBattle::PaintLand()
 				const uint8_t* C = &Rgba[static_cast<size_t>(I) * 4];
 				Pixels[I] = FColor(C[0], C[1], C[2], 255);
 			}
-			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Out);
-		};
-		// The far picture first, rough and then whole, each laid as soon as it is made (Tick), then the near and middle
-		// ones: the flyover is over the far picture's ground (the raid comes in some 70 km short of the aim, and the
-		// middle picture reaches 35 km out).
-		const bool bFarFirst = bRoughFirst && Made->Frames.size() == 3;
-		if (bFarFirst)
-		{
-			Paint(FAirLandMade::RoughOf(Made->Frames[2]), Made->Rough);
-			Made->Stage = 1;
-			Paint(Made->Frames[2], Made->Levels[2]);
-			Made->Stage = 2;
-		}
-		for (int32 K = 0; K < Made->Levels.Num(); ++K)
-		{
-			if (!(bFarFirst && K == 2))
-			{
-				Paint(Made->Frames[static_cast<size_t>(K)], Made->Levels[K]);
-			}
+			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Made->Levels[K]);
 		}
 		Made->Seconds = FPlatformTime::Seconds() - Began;
 	});
@@ -1416,12 +1375,10 @@ void AAirBattle::PaintLand()
 	}
 }
 
-void AAirBattle::LayLand(bool bRough)
+void AAirBattle::LayLand()
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_LayLand);
-	// (the rough far picture while the pool still paints: only it and the frames, which the pool set before it, are read)
-	if (!LandMade.IsValid() || (bRough ? (LandMade->Stage.load() < 1 || LandMade->Rough.Each.Num() == 0 || LandMade->Frames.size() != 3)
-	                                   : (!LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))))
+	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))
 	{
 		return;
 	}
@@ -1472,28 +1429,18 @@ void AAirBattle::LayLand(bool bRough)
 	// Each picture a grid of flat cells (the coast's 2 m step kept at the cells' corners), less the cells a finer picture
 	// covers: the pictures are laid out so that a finer one's edges fall on the coarser one's cells.
 	const double Cells[3] = { 512.0, 2048.0, 8192.0 };
-	// (laid rough: the rough far picture alone, whole, on the far picture's cells; its sheets named apart from the final
-	// ones, which are laid over them in the same battle)
-	const AirLand::Frame RoughFrame = bRough ? FAirLandMade::RoughOf(Made.Frames[2]) : AirLand::Frame();
-	const int32 Pictures = bRough ? 1 : Made.Levels.Num();
-	for (int32 K = 0; K < Pictures; ++K)
+	for (int32 K = 0; K < Made.Levels.Num(); ++K)
 	{
-		const AirLand::Frame& F = bRough ? RoughFrame : Made.Frames[static_cast<size_t>(K)];
+		const AirLand::Frame& F = Made.Frames[static_cast<size_t>(K)];
 		// (read through the anisotropic filter: the ground is seen at a slant, and plain trilinear smeared it across the
-		// view; build 1782's Mac stills, the aim-point flyover worst, its town at some 8 degrees. The far picture made
-		// while the rest were painted is the same picture, taken here.)
-		UTexture2D* Picture = !bRough && K == 2 && Made.FarPicture.IsValid() ? Made.FarPicture.Get()
-			: CampaignTextures::CreateFromLevels(bRough ? Made.Rough : Made.Levels[K], false,
-				MakeUniqueObjectName(this, UTexture2D::StaticClass(), bRough ? FName(TEXT("AirLandPicture_Rough")) : FName(*FString::Printf(TEXT("AirLandPicture_%d"), K))), false, true);
+		// view; build 1782's Mac stills, the aim-point flyover worst, its town at some 8 degrees)
+		UTexture2D* Picture = CampaignTextures::CreateFromLevels(Made.Levels[K], false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *FString::Printf(TEXT("AirLandPicture_%d"), K)), false, true);
 		if (!Picture)
 		{
 			continue;
 		}
-		if (!bRough)
-		{
-			LandPictures.Add(Picture);
-		}
-		const double Cell = Cells[bRough ? 2 : FMath::Min(K, 2)];
+		LandPictures.Add(Picture);
+		const double Cell = Cells[FMath::Min(K, 2)];
 		const int32 NX = FMath::Max(1, FMath::RoundToInt((F.X1() - F.X0) / Cell)), NY = FMath::Max(1, FMath::RoundToInt((F.Y1() - F.Y0) / Cell));
 		TArray<FVector> V;
 		TArray<FVector2D> Uv;
@@ -1508,7 +1455,7 @@ void AAirBattle::LayLand(bool bRough)
 				Colours.Add(FColor::White);
 			}
 		}
-		const AirLand::Frame* Finer = !bRough && K > 0 ? &Made.Frames[static_cast<size_t>(K - 1)] : nullptr;
+		const AirLand::Frame* Finer = K > 0 ? &Made.Frames[static_cast<size_t>(K - 1)] : nullptr;
 		TArray<int32> T;
 		for (int32 J = 0; J < NY; ++J)
 		{
@@ -1524,19 +1471,14 @@ void AAirBattle::LayLand(bool bRough)
 				Up(V, A, A + NX + 2, A + NX + 1, T);
 			}
 		}
-		UMaterialInstanceDynamic* Ink = InkOf(Picture);
-		if (bRough)
-		{
-			Made.RoughInk = Ink;
-		}
-		Laid.Add(Sheet(bRough ? FString(TEXT("AirLandSheet_Rough")) : FString::Printf(TEXT("AirLandSheet_%d"), K), V, T, Uv, Colours, Ink));
+		Laid.Add(Sheet(FString::Printf(TEXT("AirLandSheet_%d"), K), V, T, Uv, Colours, InkOf(Picture)));
 	}
 	// Past the far picture to the sea sheet's rim: the colour of the far picture's edge, carried out (each point of the
 	// edge the mean of the texels by it, the rim the mean of its whole side), on a picture of plain white.
-	if (bRough ? Laid.Num() == 1 : (Made.Levels.Num() == 3 && LandPictures.Num() == 3))
+	if (Made.Levels.Num() == 3 && LandPictures.Num() == 3)
 	{
-		const AirLand::Frame& F = bRough ? RoughFrame : Made.Frames[2];
-		const TArray<FColor>& Px = bRough ? Made.Rough.Each[0] : Made.Levels[2].Each[0];
+		const AirLand::Frame& F = Made.Frames[2];
+		const TArray<FColor>& Px = Made.Levels[2].Each[0];
 		auto Linear = [](uint8 C) { const double V = C / 255.0; return V <= 0.04045 ? V / 12.92 : FMath::Pow((V + 0.055) / 1.055, 2.4); };
 		// (the mean of a box of texels, as linear light, by the pixel's column and row)
 		auto Mean = [&](int32 I0, int32 J0, int32 I1, int32 J1, double Out[3])
@@ -1610,14 +1552,11 @@ void AAirBattle::LayLand(bool bRough)
 		}
 		if (Plain)
 		{
-			if (!bRough)
-			{
-				LandPictures.Add(Plain);
-			}
-			Laid.Add(Sheet(bRough ? TEXT("AirLandRimRough") : TEXT("AirLandRim"), V, T, Uv, Colours, InkOf(Plain)));
+			LandPictures.Add(Plain);
+			Laid.Add(Sheet(TEXT("AirLandRim"), V, T, Uv, Colours, InkOf(Plain)));
 		}
 	}
-	// The plain sheets out of sight; the pictures' in their place (and the rough ones', once the final ones are laid).
+	// The plain sheets out of sight; the pictures' in their place.
 	for (UProceduralMeshComponent* Old : Ground)
 	{
 		if (Old)
@@ -1626,15 +1565,6 @@ void AAirBattle::LayLand(bool bRough)
 		}
 	}
 	Ground.Append(Laid);
-	if (bRough)
-	{
-		UE_LOG(LogTheater, Log, TEXT("Air battle ground: %s, its far ground laid rough (%.0f m a texel) %.2f s after it was asked for; the rest is still being painted."),
-			*AirParts::Wide(S.Board.PlaceName), RoughFrame.Step, FPlatformTime::Seconds() - LandAsked);
-		// (its texels are the picture's now; the pool does not touch them again)
-		Made.Rough = CampaignTextures::FLevels();
-		return;
-	}
-	Made.Rough = CampaignTextures::FLevels();
 	const AirLand::Tally& Count = Made.Painter->Laid();
 	UE_LOG(LogTheater, Log, TEXT("Air battle ground: %s (plan %s), %d villages, %d country roads, %d bridges, %d spires%s; painted aside in %.2f s, laid %.2f s after it was asked for."),
 		*AirParts::Wide(S.Board.PlaceName), *AirParts::Wide(Count.Plan), Count.Villages, Count.Links, Count.Bridges, Count.Spires, Count.bCoast ? TEXT(", the coast") : TEXT(""),
@@ -3568,29 +3498,6 @@ void AAirBattle::Tick(float DeltaSeconds)
 		LandPainting.Wait();
 		LandPainting = TFuture<void>();
 		LayLand();
-	}
-	else if (LandPainting.IsValid() && LandMade.IsValid())
-	{
-		// (while the pool paints: the far ground laid rough as soon as it is made, then the far picture itself in the
-		// rough one's place, a frame apart; the pool sets Stage after each is made, and touches neither again)
-		FAirLandMade& Made = *LandMade;
-		const int32 Painted = Made.Stage.load();
-		if (Painted >= 1 && !Made.bRoughLaid)
-		{
-			Made.bRoughLaid = true;
-			LayLand(true);
-		}
-		else if (Painted >= 2 && Made.RoughInk.IsValid() && !Made.FarPicture.IsValid())
-		{
-			UTexture2D* Far = CampaignTextures::CreateFromLevels(Made.Levels[2], false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), TEXT("AirLandPicture_2")), false, true);
-			if (Far)
-			{
-				Made.FarPicture = Far;
-				Made.RoughInk->SetTextureParameterValue(TEXT("Flag"), Far);
-				UE_LOG(LogTheater, Log, TEXT("Air battle ground: the far picture (%.0f m a texel) laid %.2f s after it was asked for, over the rough one."),
-					Made.Frames[2].Step, FPlatformTime::Seconds() - LandAsked);
-			}
-		}
 	}
 	const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Real;

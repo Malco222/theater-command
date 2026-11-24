@@ -678,9 +678,8 @@ private:
 	/** The ground's pictures begun on the pool's threads (LayGround, no stage). */
 	void PaintLand();
 	/** The pictures, painted, laid as sheets over the plain ones: the finest round the aim, each coarser one round that,
-	 * the plain colour of the far picture's edge out to the sea sheet's rim. bRough: the far picture at half its texels
-	 * alone, laid while the rest are still painted (the flyover's first seconds), and laid over in its turn. */
-	void LayLand(bool bRough = false);
+	 * the plain colour of the far picture's edge out to the sea sheet's rim. */
+	void LayLand();
 	/** The day's clouds laid round the target (AirSky) and their mesh made; once they are drawn, the deck handed to the
 	 * flight core (where falls begun above it pass out of sight). */
 	void LaySky();
