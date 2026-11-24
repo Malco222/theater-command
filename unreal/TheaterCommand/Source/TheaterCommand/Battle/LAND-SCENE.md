@@ -564,9 +564,13 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   up in his hatch in all; the art director, 24 November 02:04Z: he is the most exposed man on the field). It lands 9 to
   14 m off toward her enemy, past her hull, and 1 to 3 m upwind of that line (`Wreck::Wind`, the battle's own wind), so
   its drift lies between her enemy and her crew's way back, about 0.9 s later (`Crew::SmokeAt`), and gushes grey-white
-  from the ground (the kit's `SmokeScreen`, Kind "grenade", `smoke_screen.grenade`: 3 to 5 m across within 2 s,
-  swelling to 10 to 15 m at the canister, densest there, drawn down the wind into a low plume 30 to 60 m long that
-  widens and thins with distance, laid until its last 15 s, then thinning) for 60 to 90 s. A man on the
+  from the ground (the kit's `SmokeScreen`, Kind "grenade", `smoke_screen.grenade`, `Battle::GrenadeLumps`; round 2
+  by the art director's notes of 24 November 02:18Z: one short jet off the canister, 0.5 to 1 m down the wind, growing
+  into a dense rolling billow there, 3 to 5 m across within 2 s and 10 to 15 m by 10 s; then a plume leaning up down
+  the wind, its middle climbing about 1.3 m in 10 m, widening, with torn wisps off its top; solid for its first 15 m,
+  then thinning steadily, 0.4 thick at 40 m and 0.1 to 0.2 at 50 to 60 m; a sunlit grey-white top, 212-232 in the
+  cloud picture, a cool grey underside and lee, 164-185; a soft shadow on the ground under its dense part, laid away
+  from the sun; laid until its last 15 s, then thinning) for 60 to 90 s. A man on the
   ground 2.5 s or more after it lands is hit half as often (the test: 0.078 against 0.175 in the open). Its own dice
   (`Wreck::Seed` with its own salt): with the switch off every crew goes to the last number as before. Without the
   bail clips the grenade still lands; he is unseen in her until he climbs out.
@@ -585,7 +589,11 @@ crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole c
 With `-TheaterLandBailSmoke` too: a tank knocked out with her enemy close (her commander's throw from 30 m, the screen
 coming up between her and the enemy from 150 m, with some wind so the plume shows), and the frame rate with four or more
 screens up. The plume's own picture: `Tools/land_look/smoke_screen_picture.cpp` (the kit's three kinds from 120 m across
-the wind; `/mnt/project-files/battle-fx/bail-out/smoke-plume-r1.jpg`, the grenade's at 0.5 to 85 s).
+the wind; the grenade's also at 30 s from 40 m square across its plume at a 1.5 m eye and from the game's camera 25 m
+up, with its shadow alone, and measured down its plume: how solid, how high, its top's and underside's own colour;
+`/mnt/project-files/battle-fx/bail-out/smoke-plume-r2.jpg`, round 2, against round 1's `smoke-plume-r1.jpg`).
+For the Mac shot of round 2: the plume from the side at 40 m and from 150 m, a still at 2 s close to (the jet), and
+the frame rate with four screens up (each now at most about 150 pieces, round 1's 58).
 
 ## Shell holes each their own (release 2, off until passed)
 
@@ -758,16 +766,34 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   planes' guns 90000 on, the ground's 95000 on (`GunIdOf`, `GunnerIdOf`), a plane's fall, trail and fire `1 << 25` on.
   A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
   was hit begins where it is. A replay from the start tells it all again.
-- **Not yet.** Parachutes (the rules' chutes), the engines' and guns' sound (the sound director's), the bombs seen
-  falling, light flak's puffs (the kit has only its heavy row).
+- **Downed pilots** (`-TheaterLandChutes`, with `-TheaterLandAirSupport`; release 2, off until the art director and a
+  45 fps reading pass; Brian, 23 November 20:09Z). The rules say whether a pilot got out (air:lost's chutes: half the
+  burning and spinning planes', never a plane blown apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1
+  to 2 s after the hit (out of a spin 0.5 to 0.9 s), never in her last 0.8 s, and where she is under 60 m by then at the
+  highest she is after the hit; falls free 1 to 1.6 s (pulling at once under 70 m), his way off her dying fast; his
+  canopy blossoms over 1 s and he comes down at 5 to 6.5 m/s, drifting with the battle's wind, swinging under it (14
+  degrees, 3.2 s a swing, dying away). In the air he and his canopy are one small mesh (`LandBattleAir.cpp`,
+  `ChuteShape`: a 7 m canopy, eight lines, a man in his harness 4.1 m under it, its pivot the canopy so he swings),
+  built again only as it blossoms. Down, he goes flat as he lands (`go_prone`), lies 1.5 to 3.5 s, gets up
+  (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block at 4.2 to 5 m/s (`run`), and goes to
+  ground there (`go_prone`, held): a man of the crowd in his army's infantry clips with no rifle (`RiderFileOf`). His
+  canopy falls in over 2.5 s and lies flat 4 m downwind of where he landed, its lines back to there (`HeapShape`).
+  Its own dice: the planes fly as before.
+- **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
+  has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
   from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
   while firing, the art director's dive angles, bottoms and gun ranges), the guns (each lane from the strip's start to
   its end, aimed on the ground, each plane 6 to 12 s after the one before, a lane 150 m past its own side's front), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
   other side's blocks, each stream ending in the air near a plane), the same (built twice, grown note by note, rounds
   the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
-  (`paths.py`). Picture: `/mnt/project-files/battle-fx/air-support/`.
+  (`paths.py`); the chutes (a pilot out of the burning and the spinning plane, none out of the one blown apart; out
+  after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
+  up, running from the enemy, flat; his canopy 4 m downwind; the same twice), `chutes.py` drawing them side-on and
+  down from above. Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`).
 - **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
+  With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
+  lying on the field.
 
 ## Packaging
 
