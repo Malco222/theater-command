@@ -16,13 +16,18 @@
 //   their convoys and its hunting groups work, the seas its patrols watch, and the seas its search has in view for boats
 //   (carriers.ts boatsInView). What it saw there is the most any one source showed, so that a boat seen twice is one boat
 //   (D): the boats that fired on its convoys there, those its escort met, those its patrols sighted, those it sank, and
-//   the boats of fleets its side has found there (fleetFound). Eyes and nothing seen: the record says none, with this
-//   month. No eyes: the old record stands, with its month.
+//   the boats of fleets its side has identified there (fleetFound 'exact'). A fleet only reported ('report') is not
+//   counted, since the one sight gives no strength for it (carriers.ts fleetsSeen and seaPicture); nor does its sea then
+//   read as empty: where nothing else was counted there, the old record stands. (The form's Q2 (a) names fleetFound
+//   without saying how a report counts; this is the builder's reading of the one sight, for the design director.) Eyes
+//   and nothing seen: the record says none, with this month. No eyes: the old record stands, with its month.
 // - The enemy aircraft its own boats met there, which its boats' staff reads (navy.ts quieterBeat). They are written at
-//   the same close, and only in the seas where its raiding boats are on station: the watch kept against them there
-//   (seapatrol.ts watchAgainst: the part of a boat's time kept down by aircraft without anti-submarine kit, and the part
-//   attacked by aircraft with it), and its boats lost to aircraft there since its last month. No watch: none met, with
-//   this month. Elsewhere the old record stands.
+//   the same close, in the seas where its raiding boats are on station and those where the enemy's patrols met its boats
+//   since its last month: the watch those patrols kept over its boats on station there, as each patrolling nation's
+//   month booked it (navy.ts patrolSubs, g.patrolSunk 'met': the part of a boat's time kept down by aircraft without
+//   anti-submarine kit, and the part attacked by aircraft with it), and its boats lost to aircraft there. So a patrol is
+//   seen once it has flown its month over the boats, never when it is ordered. No watch met: none, with this month.
+//   Elsewhere the old record stands.
 // A staff reads the newest record among its own nation and its allies, one rule for every alliance (seaSeen). A sea never
 // seen counts as clear: no boats for the patrol staff, no aircraft for the boats' staff, so a staff learns by trying.
 // There is no decay figure: each record carries its month, and the staff and the player's panel both show it.
@@ -66,27 +71,38 @@ function boatsThere(g: Game, nat: string, z: number): number {
   return b;
 }
 
+/** What a nation's boats met of the enemy's aircraft on patrol in one sea: the parts of a boat's time watched with kit and without, and its boats they sank. */
+interface AirMet { kit: number; none: number; lost: number }
+
 /**
- * A nation's boats lost to aircraft on patrol in a sea since its own last month at sea: each enemy's month of patrols
- * (g.patrolSunk) that came after it, this month's before its own in the order of play and last month's after it.
+ * What a nation's boats met of the enemy's aircraft on patrol since its own last month at sea, sea by sea: each enemy's
+ * month of patrols (g.patrolSunk, booked in its own month by navy.ts patrolSubs) that came after it, this month's before
+ * its own in the order of play and last month's after it. The watch those patrols kept over its boats on station ('met',
+ * each patrolling nation's part, added up) and its boats they sank ('at'). Only a patrol that has flown its month over
+ * the boats is here: an order not yet flown is not (the design director's ruling of 24 November 2026 17:54Z).
  */
-function lostToAir(g: Game, nat: string, z: number): number {
+function airMet(g: Game, nat: string): Map<number, AirMet> {
   const me = g.order.indexOf(nat);
-  let k = 0;
+  const out = new Map<number, AirMet>();
+  const sea = (z: number): AirMet => { let r = out.get(z); if (!r) out.set(z, (r = { kit: 0, none: 0, lost: 0 })); return r; };
   for (const by of Object.keys(g.patrolSunk ?? {}).sort()) {
     const rec = g.patrolSunk![by];
-    if (rec.turn === g.turn || (rec.turn === g.turn - 1 && g.order.indexOf(by) > me)) k += rec.at?.[z]?.[nat] ?? 0;
+    if (!(rec.turn === g.turn || (rec.turn === g.turn - 1 && g.order.indexOf(by) > me))) continue;
+    for (const z of Object.keys(rec.met ?? {})) { const m = rec.met![+z][nat]; if (m) { const r = sea(+z); r.kit += m.kit; r.none += m.none; } }
+    for (const z of Object.keys(rec.at ?? {})) { const k = rec.at![+z][nat]; if (k) sea(+z).lost += k; }
   }
-  return k;
+  return out;
 }
 
 /**
  * The close of a nation's month at sea (navy.ts navalUpkeep, after the hunt, its patrols' attacks and the battles on its
  * convoy routes): what it saw of the enemy's boats in every sea it had eyes on, and what its own boats met of the
- * enemy's aircraft where they are on station, written into its record (the design director's ruling of 24 November 2026
- * 17:54Z, Q2 and Q3 (a)). Only what happened is read: what its convoys, escorts, hunters and patrols met, and what its
- * side's search has found. Never an order or a plan. 'sunk' is the month's hunt by sea, its patrols' kills included
- * (navy.ts huntSubs and patrolSubs). Nothing while the patrol is not live.
+ * enemy's aircraft where they are on station or were met by the enemy's patrols since its last month, written into its
+ * record (the design director's ruling of 24 November 2026 17:54Z, Q2 and Q3 (a)). Only what happened is read: what its
+ * convoys, escorts, hunters and patrols met, what its side's search has identified, and the watch the enemy's patrols
+ * kept over its boats as their own months booked it (airMet). Never an order or a plan, the enemy's patrol orders not
+ * yet flown included. 'sunk' is the month's hunt by sea, its patrols' kills included (navy.ts huntSubs and patrolSubs).
+ * Nothing while the patrol is not live.
  */
 export function noteSeaSight(g: Game, nat: string, month: SeaMonth = seaMonth(), sunk: Record<number, number> = {}): void {
   const n = g.nations[nat];
@@ -130,26 +146,35 @@ export function noteSeaSight(g: Game, nat: string, month: SeaMonth = seaMonth(),
     if (a.nat !== nat || a.mission !== 'seapatrol' || !g.seas[a.target] || watched.has(a.target)) continue;
     watched.set(a.target, watchFor(g, a.target, (x) => x === nat)?.s ?? 0);
   }
-  // (And the boats of fleets its side has found there, as fleetFound finds a fleet: the one sight.)
+  // (And the boats of fleets its side has identified there, as fleetFound finds a fleet: the one sight. A fleet only
+  // reported is not counted, as the map counts no strength for it (carriers.ts fleetsSeen, seaPicture), and its sea is
+  // not read as empty either.)
+  const reported = new Set<number>();
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.ss <= 0 || !g.seas[f.zone] || !atWar(g, f.nat, nat)) continue;
     const b = f.ships.ss * onStation(g, f, f.zone);
     show(f.zone, 'sighting', b * (watched.get(f.zone) ?? 0));
-    if (fleetFound(g, f, nat) !== 'none') show(f.zone, 'search', b);
+    const found = fleetFound(g, f, nat);
+    if (found === 'exact') show(f.zone, 'search', b);
+    else if (found === 'report') reported.add(f.zone);
   }
   const book = (z: number): SeaSight => (((g.intel.seaSight ??= {})[nat] ??= {})[z] ??= {});
   for (const z of [...new Set([...eyes, ...shown.keys()])].sort((a, b) => a - b)) {
     const m = shown.get(z);
+    if (!m && reported.has(z)) continue;
     const most = m ? Math.max(...m.values()) : 0;
     book(z).boats = { t, n: r2(most), how: HOW.filter((h) => (m?.get(h) ?? 0) > 0) };
   }
-  // (The aircraft its own boats met, only where they are on station raiding: the watch kept against them there, and its
-  // boats lost to aircraft there since its last month.)
-  const on = new Set<number>();
+  // (The aircraft its own boats met, where they are on station raiding and where the enemy's patrols met them since its
+  // last month: the watch those patrols kept over them, as each patrol's own month booked it, and its boats lost to
+  // aircraft there. Never the orders standing now.)
+  const met = airMet(g, nat);
+  const on = new Set<number>(met.keys());
   for (const f of g.fleets) if (f.nat === nat && atSea(f) && f.ships.ss > 0 && raidShare(f) > 0 && g.seas[f.zone]) on.add(f.zone);
   for (const z of [...on].sort((a, b) => a - b)) {
-    const w = watchAgainst(g, z, nat);
-    const kit = r3(w?.kit ?? 0), none = r3(w?.none ?? 0), lost = lostToAir(g, nat, z);
+    if (!g.seas[z]) continue;
+    const a = met.get(z);
+    const none = r3(Math.min(1, a?.none ?? 0)), kit = r3(Math.min(1 - none, a?.kit ?? 0)), lost = a?.lost ?? 0;
     const how: SightHow[] = [];
     if (kit > 0) how.push('attack');
     if (lost > 0) how.push('loss');
@@ -205,7 +230,7 @@ export function boatsKnown(g: Game, viewer: string | null, z: number): { n: numb
  */
 export function airKnown(g: Game, viewer: string | null, z: number): { kit: number; none: number; lost: number; t: number } | null {
   if (!viewer || !patrolOn(g) || !g.seas[z]) return null;
-  if (lifted(g, viewer)) { const w = watchAgainst(g, z, viewer); return { kit: w?.kit ?? 0, none: w?.none ?? 0, lost: lostToAir(g, viewer, z), t: g.turn }; }
+  if (lifted(g, viewer)) { const w = watchAgainst(g, z, viewer); return { kit: w?.kit ?? 0, none: w?.none ?? 0, lost: airMet(g, viewer).get(z)?.lost ?? 0, t: g.turn }; }
   const a = seenAir(g, viewer, z);
   return a ? { kit: a.kit, none: a.none, lost: a.lost, t: a.t } : null;
 }

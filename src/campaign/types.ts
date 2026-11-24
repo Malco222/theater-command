@@ -1612,9 +1612,12 @@ export interface Game {
   /**
    * Release 2, with Units decide and the sea patrol live (seapatrol.ts): the boats each nation's aircraft on patrol sank
    * in its month, by the boats' nation ('sunk'), by sea ('seas'), and by sea and the boats' nation ('at'), which the
-   * boats' own side reads as its boats lost to aircraft there (seasight.ts).
+   * boats' own side reads as its boats lost to aircraft there (seasight.ts); and its part of the watch its patrols kept
+   * against the boats on station in each sea that month, by sea and the boats' nation ('met': the parts of a boat's time
+   * watched by its aircraft with anti-submarine kit and without), which the boats' own side reads as the aircraft its
+   * boats met there.
    */
-  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number>; at?: Record<number, Record<string, number>> }>;
+  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number>; at?: Record<number, Record<string, number>>; met?: Record<number, Record<string, { kit: number; none: number }>> }>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
   /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */

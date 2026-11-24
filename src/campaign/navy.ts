@@ -2325,9 +2325,10 @@ export function nearerPort(g: Game, f: Fleet, z = f.station): Region | null {
  * other from sea to sea, and with Atlantic ports held the boats spent every other month in harbour.
  * The staff reads only what its side has seen (the design director's 17:49Z amendment to ruling 1, and his ruling of
  * 17:54Z): the aircraft over each sea as its side's boats last met them there (seasight.ts seenAir), never the patrols
- * truly flown there. A sea its boats have never met aircraft in counts as clear (Q2 (a)), so a staff learns of new cover
- * by its losses there. The keeping down itself, in the convoys' count, the lanes and the next night, stays the world's
- * (keptUp).
+ * truly flown or ordered there. A sea its boats have never met aircraft in counts as clear (Q2 (a)), so a staff learns
+ * of new cover only once it has flown its month over its boats there, keeping them down, attacking them or sinking them
+ * (the patrols' own months, patrolSubs), and never at the order. The keeping down itself, in the convoys' count, the
+ * lanes and the next night, stays the world's (keptUp).
  */
 export function quieterBeat(g: Game, f: Fleet): number {
   if (!patrolOn(g) || f.tied || f.duty !== 'raid' || f.ships.ss <= 0) return -1;
@@ -2591,13 +2592,30 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
  * hunt's cap for the month, on dice of their own ('patrol:<nation>:<sea>'). The boats sunk join the month's hunt by sea
  * ('sunk', which the convoys' record reads), and the month's record by the boats' nation and sea (g.patrolSunk), which the
  * boats' own side reads as its boats lost to aircraft (seasight.ts).
+ * The same record keeps, by sea and the boats' nation, this nation's part of the watch its patrols kept against boats on
+ * station there this month ('met': the parts of a boat's time watched by its aircraft with kit and without, its share
+ * of the watch by its share of the aircraft on patrol, as the kills are shared). That is the watch as it acted on the
+ * boats, which their own side reads as the aircraft its boats met there (seasight.ts): a patrol is seen by doing it,
+ * once it has flown its month over the boats, never at its order (the design director's ruling of 24 November 2026
+ * 17:54Z). Throws no dice.
  */
 function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
   const zones = [...new Set(g.airFleets.filter((f) => f.nat === nat && f.mission === 'seapatrol').map((f) => f.target))].filter((z) => !!g.seas[z]).sort((a, b) => a - b);
   const rec: Record<string, number> = {}, seas: Record<number, number> = {}, at: Record<number, Record<string, number>> = {};
+  const met: Record<number, Record<string, { kit: number; none: number }>> = {};
+  const kit = airKit(aswKit(g, nat));
   for (const z of zones) {
     const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
     if (!quarry.length) continue;
+    // (The watch this nation's patrols kept over the boats on station here, by the boats' nation.)
+    for (const f of quarry) {
+      if (met[z]?.[f.nat]) continue;
+      const w = watchAgainst(g, z, f.nat);
+      const mine = w?.by[nat] ?? 0;
+      if (!w || mine <= 0) continue;
+      const part = ((w.kit + w.none) * mine) / w.A;
+      (met[z] ??= {})[f.nat] = kit ? { kit: part, none: 0 } : { kit: 0, none: part };
+    }
     const rng = seaRng(g, `patrol:${nat}:${z}`);
     let n = 0;
     // (The boats sunk in this sea, by their nation, for the month's words.)
@@ -2627,7 +2645,7 @@ function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
     const most = boats.reduce((a, b) => (here[b] > here[a] ? b : a));
     if (told) routineNews(g, `patrol:${nat}:${z}`, 'battle', `${g.nations[nat].adj} aircraft on patrol sink ${subs} ${seaWhere(g.seas[z].name)}.`, `${subs} sunk from the air ${seaWhere(g.seas[z].name)}`, nat, undefined, { arm: 'sea', won: nat, lost: most });
   }
-  (g.patrolSunk ??= {})[nat] = { turn: g.turn, sunk: rec, seas, at };
+  (g.patrolSunk ??= {})[nat] = { turn: g.turn, sunk: rec, seas, at, met };
   // (Q6 (a): the aircraft lost on patrol, after the month's hunt, and only these two: an operational share of those on
   // patrol where it is laid, and the enemy's fighters where they reach the sea and meet it, as they meet a strike there
   // (seapatrol.ts patrolLoss). Booked to the group's and the nation's losses, as a raid's are.)
