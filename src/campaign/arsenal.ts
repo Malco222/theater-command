@@ -295,7 +295,8 @@ export function factoriesHeld(g: Game, nat: string): { held: number; building: n
   let held = 0;
   for (const r of g.regions) if (isHome(g, nat, r)) held += r.fac;
   // Factories it built in conquered towns it still holds count against its industry too (release 2, settled towns).
-  if (settledTownsOn(g)) for (const r of g.regions) if (r.ctrl === nat && r.owner !== nat) held += g.flags[`wk:facon:${r.id}:${nat}`] ?? 0;
+  // (Read whatever the switch says now: what was built stays built. The flag is written only with the switch on.)
+  for (const r of g.regions) if (r.ctrl === nat && r.owner !== nat) held += g.flags[`wk:facon:${r.id}:${nat}`] ?? 0;
   const building = g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === 'factory').length;
   return { held, building };
 }
@@ -690,7 +691,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const cost = W.factory.cost + W.factory.step * have;
     // Ruling 213(e): a smaller power at the end of its industry: the country's fact comes before the province's reasons.
     const ceiling = whyNoFactory(g, nat);
-    const why = ceiling ?? (!r ? pick : r.overseas ? 'Factories are built in the home country.' : whyNotWorksHere(g, nat, r, 'Factories are built in the home country.') ?? (!isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost)));
+    const why = ceiling ?? (!r ? pick : r.overseas ? 'Factories are built in the home country.' : whyNotWorksHere(g, nat, r, 'Factories are built in the home country.', !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : null) ?? (!isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost)));
     const carry = factoryCeiling(g, nat);
     const said = carry !== null && carry > 0 && !ceiling ? ` ${g.nations[nat].name} has ${factoriesHeld(g, nat).held + factoriesHeld(g, nat).building} of the ${plural(carry, 'factory', 'factories')} its industry can carry in this war.` : '';
     out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.${said}` : '', why });
@@ -706,7 +707,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       why: why ?? (next > TOP ? FULL[what].replace('%', r!.name) : poor(cost)),
     });
   };
-  level('yard', W.yard, r ? yardLevel(g, r) : 0, 0, !r ? pick : whyNotWorksHere(g, nat, r, 'Shipyards are built in the home country.') ?? (!r.port ? `${r.name} has no harbour.` : null));
+  level('yard', W.yard, r ? yardLevel(g, r) : 0, 0, !r ? pick : whyNotWorksHere(g, nat, r, 'Shipyards are built in the home country.', !r.port ? `${r.name} has no harbour.` : null) ?? (!r.port ? `${r.name} has no harbour.` : null));
   level('aa', W.aa, r ? workLevel(g, 'aa', r.id) : 0, W.aa.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
   if (!fieldRules(g)) level('field', W.field, r ? workLevel(g, 'field', r.id) : 0, W.field.upkeep, !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null);
   else {
@@ -764,6 +765,8 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   // Airfields as targets: a strip goes on the books as a level of 'field' marked 'strip' (one counter, one cap, and a
   // save an older build loads still delivers it as a level of airfield).
   if (key === 'work:strip') { b.item = 'field'; (b as { kind?: string }).kind = 'strip'; }
+  // Ordered in a conquered town that has settled (release 2): it is delivered while the town is held.
+  if (r && r.owner !== nat && settledFor(g, nat, r) && (group === 'ship' || item === 'factory' || item === 'yard')) b.conq = true;
   n.queue.push(b);
   return b;
 }
@@ -841,7 +844,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
-    if (!f && (isHome(g, nat, r) || (settledTownsOn(g) && r.ctrl === nat)) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
+    if (!f && (isHome(g, nat, r) || ((settledTownsOn(g) || b.conq) && r.ctrl === nat)) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     // New ships join at the back of their class, with no battle stars (stars.ts).
     mendStars(f, hull);
@@ -855,7 +858,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
   const what = b.item as Work;
   if (what === 'factory') {
     // The city was lost before the factory was finished. (A settled conquered town keeps one, release 2.)
-    const conquered = settledTownsOn(g) && r.ctrl === nat && r.owner !== nat;
+    const conquered = (settledTownsOn(g) || !!b.conq) && r.ctrl === nat && r.owner !== nat;
     if (!isHome(g, nat, r) && !conquered) return;
     r.fac += 1;
     g.flags[`wk:fac:${r.id}`] = factoriesBuilt(g, r.id) + 1;
@@ -864,7 +867,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     return;
   }
   if (what === 'yard') {
-    if ((!isHome(g, nat, r) && !(settledTownsOn(g) && r.ctrl === nat)) || !r.port) return;
+    if ((!isHome(g, nat, r) && !((settledTownsOn(g) || b.conq) && r.ctrl === nat)) || !r.port) return;
     g.flags[`wk:yard:${r.id}`] = Math.min(TOP, yardLevel(g, r) + 1);
     tell(`The shipyard at ${r.name} is enlarged to level ${yardLevel(g, r)}.`);
     return;

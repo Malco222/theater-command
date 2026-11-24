@@ -573,6 +573,8 @@ export function orderFort(g: Game, nat: string, region: number): Build | null {
   if (!n.alive || cost === null || n.pp < cost) return null;
   n.pp -= cost;
   const b: Build = { id: g.nextBuild++, what: 'fort', name: `Fortifications at ${r.name}`, region, ordered: g.turn, eta: g.turn + PRODUCTION.fort.months, cost };
+  // Ordered in a conquered town that has settled (release 2): finished while the town is held.
+  if (r.owner !== nat) b.conq = true;
   n.queue.push(b);
   return b;
 }
@@ -610,7 +612,7 @@ export function deliver(g: Game, nat: string): void {
     if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
       // The ground was lost before the works were finished. (A conquered town its builder still holds keeps them, release 2.)
-      if (!isHome(g, nat, r) && !(settledTownsOn(g) && r.ctrl === nat)) continue;
+      if (!isHome(g, nat, r) && !((settledTownsOn(g) || b.conq) && r.ctrl === nat)) continue;
       const vs = new Set(r.fort?.vs ?? []);
       vs.add(r.owner);
       for (const j of r.nb) vs.add(g.regions[j].owner);

@@ -63,8 +63,11 @@ export const settledTownsOn = (g: Game): boolean => g.flags.open === 1 && g.flag
 
 /** Turns the settling of conquered towns on or off. What was built stays built either way. */
 export function setSettledTowns(g: Game, on: boolean): void {
-  if (on) g.flags.settledTowns = 1;
-  else delete g.flags.settledTowns;
+  if (!on) { delete g.flags.settledTowns; return; }
+  // Turned on in a campaign under way: ground already held by another than its owner starts settling now, since a
+  // country's fall while the switch was off left no record of the month it changed hands (handedOver).
+  if (g.flags.settledTowns !== 1) for (const r of g.regions) if (r.ctrl !== r.owner) g.flags[`hand:${r.id}`] = g.turn;
+  g.flags.settledTowns = 1;
 }
 
 /**
@@ -94,9 +97,11 @@ export const settledFor = (g: Game, nat: string, r: Region): boolean => settledT
  * Why the military works that go only on a country's own ground (factories, shipyards, fortifications) cannot go up
  * here, or null when they can: at home, or in a conquered town that has settled. 'home' is what is said without the switch.
  */
-export function whyNotWorksHere(g: Game, nat: string, r: Region, home: string): string | null {
+export function whyNotWorksHere(g: Game, nat: string, r: Region, home: string, never: string | null = null): string | null {
   if ((r.owner === nat && r.ctrl === nat) || settledFor(g, nat, r)) return null;
   if (!settledTownsOn(g) || r.ctrl !== nat) return home;
+  // (A reason the wait will not clear, such as a town with no harbour, is said first.)
+  if (never) return never;
   const left = settleLeft(g, nat, r);
   return `${townName(r)} is still settling after it was taken: works can go up there in ${left} ${left === 1 ? 'month' : 'months'}.`;
 }
@@ -132,7 +137,8 @@ function effectOf(g: Game, l: CivicLine, r: Region, nat: string, keeps: boolean)
   if (l.trade) bits.push(`trade agreements worth ${pct(l.trade)} more`);
   if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
   if (l.research) bits.push(`research ${pct(l.research)} faster`);
-  if (l.xp) bits.push('corps raised here start more experienced');
+  // (Corps are raised on home ground only: a training ground in a conquered town speeds replacements, nothing more.)
+  if (l.xp && (own || !settledTownsOn(g))) bits.push('corps raised here start more experienced');
   if (l.drafts) bits.push(`replacements ${pct(l.drafts)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest)} faster`);
   if (own && l.tax) bits.push(`${cash(l.tax * keep)} more tax a month`);
@@ -156,7 +162,7 @@ function doesOf(g: Game, l: CivicLine, r: Region, lv: number, keeps: boolean): s
   if (serve && l.trade) bits.push(`trade agreements worth ${pct(l.trade * lv)} more`);
   if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
   if (serve && l.research) bits.push(`research ${pct(l.research * lv)} faster`);
-  if (serve && l.xp) bits.push('corps raised here start more experienced');
+  if (own && l.xp) bits.push('corps raised here start more experienced');
   if (serve && l.drafts) bits.push(`replacements ${pct(l.drafts * lv)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest * lv)} faster`);
   if (own && l.tax) bits.push(`${cash(l.tax * lv * keep)} tax a month`);

@@ -3,8 +3,8 @@
 // and their slips, fortifications), once it has been held a few months; its buildings then serve its holder as at
 // home. One rule for every country, read from the ground alone. Off, nothing changes.
 import { describe, expect, it } from 'vitest';
-import { CIVIC, civicSum, orderCivic, setSettledTowns, settleLeft, settledFor, settledTownsOn, whyNotCivic } from '../src/campaign/buildings';
-import { canLay, deliverArsenal, factoriesHeld, offers } from '../src/campaign/arsenal';
+import { CIVIC, civicOffers, civicSum, orderCivic, plotsAt, setSettledTowns, settleLeft, settledFor, settledTownsOn, whyNotCivic } from '../src/campaign/buildings';
+import { canLay, deliverArsenal, factoriesHeld, offers, orderOffer } from '../src/campaign/arsenal';
 import { fortCost } from '../src/campaign/economy';
 import { capitulate, createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -72,12 +72,13 @@ describe('on', () => {
 
   it('a settled town serves its holder: learning counts, its pay stays at the conquered share, taxes stay with home ground', () => {
     const g = playing('GER');
-    const warsaw = take(g, g.byName['Warsaw'], 'GER', WAIT);
+    setSettledTowns(g, true);
+    const warsaw = take(g, g.byName['Warsaw'], 'GER', 0);
     g.flags['cv:any'] = 1;
     g.flags[`cv:school:${warsaw.id}`] = 2;
     g.flags[`cv:hall:${warsaw.id}`] = 1;
-    const before = civicSum(g, 'GER');
-    setSettledTowns(g, true);
+    const before = civicSum(g, 'GER'); // still settling: as without the switch
+    take(g, warsaw, 'GER', WAIT);
     const after = civicSum(g, 'GER');
     const school = CIVIC.lines.find((l) => l.id === 'school')!;
     expect(after.research - before.research).toBeCloseTo(Math.min(CIVIC.caps.research, before.research + school.research! * 2) - before.research, 9);
@@ -115,7 +116,7 @@ describe('on', () => {
     g.flags[`wk:yard:${port.id}`] = 1;
     expect(canLay(g, 'GER', port, 1)).toBe(false);
     expect(offerAt(g, 'GER', port, 'work:yard').why).toBe('Shipyards are built in the home country.');
-    setSettledTowns(g, true);
+    g.flags.settledTowns = 1; // as a campaign opened with the switch on
     expect(canLay(g, 'GER', port, 1)).toBe(true);
     g.nations.GER.pp = 5000;
     expect(offerAt(g, 'GER', port, 'work:yard').why).toBeNull();
@@ -152,6 +153,56 @@ describe('on', () => {
         expect(settledFor(g, 'GER', handed[0])).toBe(true);
       }
     }
+  });
+
+  it('a training ground in a settled town speeds replacements and promises nothing it cannot give', () => {
+    const g = playing('GER');
+    setSettledTowns(g, true);
+    const warsaw = take(g, g.byName['Warsaw'], 'GER', WAIT);
+    const camp = civicOffers(g, 'GER', warsaw.id).find((o) => o.line === 'camp')!;
+    expect(camp.why).toBeNull();
+    expect(camp.effect).toMatch(/replacements/i);
+    expect(camp.effect).not.toMatch(/corps raised here/i);
+    expect(camp.effect).not.toMatch(/corps raised here/);
+    g.flags['cv:any'] = 1;
+    g.flags[`cv:camp:${warsaw.id}`] = 1;
+    const plot = plotsAt(g, warsaw.id).find((p) => /Drill|Training|Barracks/.test(JSON.stringify(p)));
+    expect(plot, "the drill ground stands in the town plan").toBeDefined();
+    expect(JSON.stringify(plot)).not.toMatch(/corps raised here/i);
+  });
+
+  it('works ordered in a settled town are delivered even if the switch is turned off before they finish, and still count', () => {
+    const g = playing('GER');
+    setSettledTowns(g, true);
+    const warsaw = take(g, g.byName['Warsaw'], 'GER', WAIT);
+    g.nations.GER.pp = 5000;
+    const held0 = factoriesHeld(g, 'GER').held, fac0 = warsaw.fac;
+    const b = orderOffer(g, 'GER', 'work:factory', warsaw.id)!;
+    expect(b).not.toBeNull();
+    expect(b.conq).toBe(true);
+    setSettledTowns(g, false);
+    deliverArsenal(g, 'GER', b);
+    expect(warsaw.fac).toBe(fac0 + 1);
+    expect(factoriesHeld(g, 'GER').held).toBe(held0 + 1);
+  });
+
+  it('turned on in a campaign under way, ground already held by another starts its wait then', () => {
+    const g = playing('GER');
+    g.turn = 12;
+    const warsaw = take(g, g.byName['Warsaw'], 'GER', 9); // taken long ago, but the switch was off
+    warsaw.since = 0; // as a country's fall leaves it
+    setSettledTowns(g, true);
+    expect(settleLeft(g, 'GER', warsaw)).toBe(WAIT);
+    g.turn += WAIT;
+    expect(settledFor(g, 'GER', warsaw)).toBe(true);
+  });
+
+  it('a reason the wait will not clear is said first', () => {
+    const g = playing('GER');
+    setSettledTowns(g, true);
+    const inland = g.regions.find((r) => r.owner === 'POL' && !r.port && !r.sov)!;
+    take(g, inland, 'GER', 0);
+    expect(offerAt(g, 'GER', inland, 'work:yard').why).toBe(`${inland.name} has no harbour.`);
   });
 
   it('home ground is as it always was, with the switch on or off', () => {

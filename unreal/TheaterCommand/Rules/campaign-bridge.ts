@@ -3734,7 +3734,8 @@ function province(id: number) {
     }) : [],
     raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
     // Fortifications: the next level, if there is one.
-    fort: home && cost !== null ? {
+    // (fortCost is null off home ground, save a conquered town that has settled: release 2, buildings.ts.)
+    fort: cost !== null ? {
       level: level + 1, cost: shown(cost), months: PRODUCTION.fort.months,
       ok: up && !!n && n.pp >= cost,
       why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
@@ -6252,7 +6253,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     setSettledTowns(s, part[1] === 'on');
     ok = true;
     note = settledTownsOn(s)
-      ? 'Conquered towns settle: a few months after you take a town, every kind of building and works can go up there, and its buildings serve you as at home.'
+      ? 'Conquered towns settle: a few months after you take a town, every kind of building and works can go up there. Its schools, drill grounds and trade houses then serve you as at home; its pay stays at the conquered share.'
       : 'Conquered towns stay as they were: of the buildings only administration and medicine can go up there, and no factories, shipyards or fortifications.';
     return { ok, note, fly, flies, open, view: view() };
   }
