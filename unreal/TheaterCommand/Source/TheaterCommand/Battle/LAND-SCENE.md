@@ -22,6 +22,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
 | `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. A man is (block, k, j): j is a follower of key man k in the drill's sections (0 the key man), with the roles leader, loader and crew besides the key men's. The scene plays the crowd thrifty (`SetThrift`: a man away from the eye posed every 2nd to 4th frame by distance, his place, shots and falls every frame) and skins the men who moved over all the cores (`ParallelFor`; a body's first skin, which reads the ground, on the game thread). 698 men: about 1 ms a frame on 4 cores. |
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
+| `LandHulk.h/.cpp` | Old wrecks (release 2, `-TheaterLandOldWrecks`): where the burnt-out armour of earlier battles lies on the field and how each looks, from the game's own vehicle models. Plain C++; `Tools/land_hulk/run.sh` tests it. |
 | `LandAir.h/.cpp` | The fighters on call (release 2, `-TheaterLandAirSupport`): each leg's planes down their run, the ground's guns and the lost plane's fall, from the rules' air notes. Plain C++; drawn by `LandBattleAir.cpp`. |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
@@ -75,6 +76,10 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
    - `-TheaterLandOldRuts=N`, `-TheaterLandOldRutMonths=M`, `-TheaterLandNoOldRuts` (release 2, mud memory): the ruts
      of battles fought here in mud before, as a recording's root `"oldRuts": {"count", "months"}` gives them: dried
      pale under three months, then a lusher green line fading; puddled with `-TheaterLandWeatherWord=mud`.
+   - `-TheaterLandOldWrecks=N`, `-TheaterLandOldWreckMonths=M`, `-TheaterLandNoOldWrecks` (release 2, old wrecks):
+     the burnt-out armour of battles fought here before (N laid, at most 20, burnt M months ago, the nations the
+     battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats", "per"}`. See
+     "Old wrecks" below.
    - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
      `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
@@ -877,6 +882,129 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   - *Not done of her third note:* "no pack". The infantry fallback still wears his pack and webbing: the soldier files
     have only a helmet range to leave off (`HelmetFirst`, `HelmetCount`), none for a pack. Owed: a pack range from the
     soldiers' thread, or a flier's own file.
+
+## Old wrecks on a field fought over before (release 2, off unless asked)
+
+Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next battle there. Looks only,
+as the scars and the old ruts are: nothing the rules fight reads them, no round strikes one, no man takes cover behind
+one, and they are kept off every way the recording's men and vehicles go, so nothing the battle shows is moved by them.
+
+- **What asks for them.** The campaign writes the recording's root `"oldWrecks": {"count": n, "months": m, "nats":
+  {"GER": n1, "SOV": n2, ...}, "per": p}`: the real armoured vehicles burnt out here before (60 at most), the months
+  since the last of those battles, whose they were, and this battle's scale (the real armoured vehicles each tank
+  model drawn in it stands for, to a tenth; left out where no tank is drawn). It leaves the key out where none burnt
+  here, or where the player's Battle rules row "Old wrecks" is off (sgfei1 b0a47250, src/battle/land/wrecks.ts).
+  `LandFeed` reads it with any part missing or odd (a count over 60 is 60, below nothing is none, a nation's count
+  must be a number over 0, a per missing, not a number or under 1 is 1 and over 1000 is 1000;
+  `Recording::OldWreckCount`, `OldWreckMonths`, `OldWreckNats`, `OldWreckPer`). On the
+  Mac `-TheaterLandOldWrecks=N` and `-TheaterLandOldWreckMonths=M` stand in for it on any field (the nations then the
+  battle's two sides', the attacker's the odd one), and `-TheaterLandNoOldWrecks` lays none. The stand-in's N is how
+  many are laid (at most 20; `Ask::bAsLaid`), not how many burnt out: its months age their look and the scrap men take
+  none away, so the Mac's off/on shots show N at any age (the key's count is the burnt-out armour, salvaged as below;
+  the switch was first written to read N as the key's count, and lay 6 of `=40` at two years). **With neither the key
+  nor the stand-in nothing is made, read or said**: `LayOldWrecks` returns before anything, the grass's `Covers` and
+  `ShowOldWrecks` find an empty yard, and no die of the battle, the scars or the ruts is moved (the wrecks throw their
+  own, seeded on their own constants). A live battle lays none (it opens with no tracks: nothing fought over yet), and
+  says so.
+- **How many** (`LandHulk::Models`, `Left`, `Kept`). First the battle's scale (Brian's rule: one model stands for as
+  many real things in every part of a battle): the count's real machines are drawn `per` to a wreck, `Models(count,
+  per)` = count / per rounded, at least one where any burnt (an armoured division's 150 drawn as 20 tanks is 7.5 to a
+  tank, so the 60 a campaign can carry are 8 wrecks; 3 burnt out at 10 to a tank are still one). The stand-in's N is
+  laid as it is and reads no scale. Then the recovery companies took what could be mended within weeks and the scrap
+  men the rest over a year or two: all of them lie there within three months, half at a year, 15% at two years, 6% from
+  four years on, in straight lines between. At most 20 on a field (each a static mesh of some 70,000 to 95,000 points
+  at its near level, so twenty are about as many points as the dry run's own armour; the Mac's 45 fps gate judges it).
+- **Which machines** (`ModelFor`). Each nation's tanks as the month they burnt in had them, by live.ts's `standInModel`
+  mix (and the Panther from 1944, as shells.ts draws it): the German Panzer IV, StuG III, Tiger and Panther, the
+  American Sherman, the Soviet T-34, the light tank for the early war and for others; one in five a half-track (the
+  German Sd.Kfz. 251, the American M3) or a lorry. The battle's own models where it has them and the wrecks burnt in
+  its own month (they are dressed for its coats and kit); else each read as `MakeArmour` reads them and dressed for the
+  month she burnt in (a German wreck of the spring in a summer battle wears her spring coat under the soot). A model not
+  at hand is drawn as the nearest that is, and said in the log line.
+- **Where** (`Yard::Lay`, on `LandHulk::FieldOf`: the scene and the cloud test read the field the same way). In small
+  groups, a platoon's one to four 13 to 28 m apart, one group a fight: along the field's old lines (a run of hedges,
+  walls and lanes across the fought-over ground in one heading, as the scars' fronts, 12 to 34 m out on the side the
+  attacker came from, most of the time), at the lanes' junctions and the village's edge, along the battle's own axis
+  (the way its machines went, through their middle), a few strewn. A side's wrecks face the other side's ground, some
+  turned as they were hit, a few going back. A field with no old lines (the open steppe) gives their share to the axis.
+  Each is kept off the lanes (6 m from a lane's middle: the engineers cleared them), the banks, walls and woods' edges
+  (3 m), and never lies in a hedge, a house, a yard or garden, a wood, water, marsh, standing corn, an old shell hole,
+  an old rut or across a cattle's path; 8 m from every recorded vehicle's way at any time in the battle (her middle),
+  1.5 m from every man's, 4 m from where any shell, bomb or grenade of this battle lands (its hole would open under
+  her), 1 m from a field telephone's wire (the recording's, or `-TheaterLandPhones`'s made from the battle: a lineman
+  lays his round her), 2 m from another wreck. Her scorched patch, which reaches some 2.4 m past her outline, lies on
+  open ground too, every point of it (the steppe's first lay had three patches over a trench's works and one over a
+  garden).
+- **How each looks** (`Yard::Dress`; the art director's to judge, round 1 below). Her own model, knocked out and burnt
+  through: her turret turned (mostly within 50 degrees of ahead) and her gun drooped to its stop, or, one in five, her
+  turret blown off and lying 1 to 4 m off her side, tail or bow (clear of her hull's corners, its gun turned away from
+  her hull, and off the side her track ran off), on its roof, its side or tilted back on its rear edge with its gun in
+  the air, its own hatches and doors shut (open, one on its side stood on a door a metre over the grass), and her open
+  ring black; her hatches and doors open; three in ten tanks (one in five half-tracks) with a track run off and lying
+  stretched out flat beside and behind her, link by link from her own track (never under her thrown turret);
+  a lorry's tyres burnt off to the rims, a tank's road wheels' rubber charred; her aerial and roof gun gone. Soot black
+  where the fire was, the paint burnt off to bare steel where it was hottest and scorched and blistered elsewhere; the
+  bare steel rusting within weeks, a bright orange first, browning over a year and more, in patches and runs down her
+  sides; the soot washing off what faces the sky; the scorched paint flaking over two years. Low on her the field's
+  earth splashed up and, after half a year, a green stain where the weeds stand. Settled 4 to 17 cm into the ground
+  (a lorry less). No fire and no smoke. Under her a scorched patch (`Yard::Patch`) that browns within a few months and
+  then greens lusher than the field round it; the grass and corn stand to her sides but not under her (her hull's
+  corners too, which her rings leave), her thrown turret or her track, nor on the patch while it is fresh (`Covers`, in
+  the carpet's `Stands`). On a field with snow lying (`LandField::Ground::SnowLying`, white from 0.45 as `LandSnow`
+  whitens a roof) the snow fallen since she burnt lies over her patch as over the field round it (only a fresh one,
+  under a month, shows black through, its fire having melted the snow round her), over the earth splashed on her low
+  parts and the weeds' stain, and on what faces up on her, the steel showing through where it lies thin.
+- **The scene** (`ALandBattle::LayOldWrecks`, after `LayOldRuts` as the battle opens; `ShowOldWrecks` each frame after
+  `DrawArmour`). Each wreck's near and far levels are static meshes of their own (`LandParts::GroundMesh`) on the
+  vehicles' `SteelInk`, casting shadows, the near one shown within 140 m of the eye (`LandHulk::NearTo`, the vehicles'
+  hand-over), the far beyond; her patch on `GroundInk`, 2 cm over the drawn ground. The camera keeps out of them as it
+  keeps out of the battle's own (`PlaceMovers` adds each to `LandSight` as a still machine, and her thrown turret as
+  another: its box as it lies and its gun's muzzle, `Hulk::TurretBoxLo`, `TurretBoxHi`, `TurretMuzzle`; on its side
+  it stands as tall as a man, and a tilted one holds its gun up two metres). One log line: "Land battle:
+  old wrecks: 20 laid of 40 the scrap men left of 40 burnt out here, 1 month since the last ...: 10 GER (...); 10 USA
+  (...); 2 turrets thrown, 1 track run off; 5 groups along the old lines, ...; N meshes, N points, made in N s" (the
+  stand-in's "20 laid of 40 asked (the stand-in: none taken by the scrap men), 6 months since they burnt ...").
+- **Test**: `Tools/land_hulk/run.sh [recording.json ...]` (`LAND_HULK_OUT`). Built with `-Wconversion` by both
+  compilers; the clang build must lay every wreck where the gcc build laid it. On every recording, laid as the scene
+  lays them: the same twice (every wreck, her pose and her near, far and patch meshes, hashed); every point of every
+  wreck read where it lies, none on a lane, a bank, a house, a wall, a yard or garden, a wood, water, marsh or standing
+  corn, none over a cattle's path; 8 m from every vehicle's way, 1.5 m from every man's; no half-metre square held by
+  two; every wreck and thrown turret settled on the ground, not floating; fewer as the months go (twenty burnt out:
+  20, 17, 10, 3 and 1 at 1, 6, 12, 24 and 60 months); the nats' shares (GER 30, USA 10: 15 and 5 of twenty); the cap;
+  none with nothing asked or on a live battle's open; the key read ten ways; the meshes finite and whole; the rust
+  spreading over the same twenty wrecks as they age; and on an old field (two battles' scars and old ruts laid first)
+  none on an old hole or rut. Since the review of 24 November: every point of every scorched patch read where it lies,
+  as her own are; the grass kept out of every hull's footprint, every 10 cm; each thrown turret clear of her own hull
+  and run-off track, its gun not through her hull, and its box for the camera on the ground; the battle's own models
+  drawn only for wrecks of its own month; the stand-in laying 12 of 12 at 18 months (the key's reading 4) and 20 of
+  40; with the field telephones made from the battle (six wires), none within 0.5 m of a wire (on the steppe, laid
+  without them, one lay over one); and the same field with snow lying 0.9, six months on: the patch the field's own
+  colour (off by 0, against 12 and 17 in summer), what faces up on her white. It paints `placement_<recording>` (the
+  field from above, the wrecks drawn to scale from their own meshes, ringed by nation, four close looks) and
+  `look_<recording>` (four wrecks a week, a month, six months, a year and a year and a half on). Pictures:
+  `/mnt/project-files/battle-fx/old-wrecks/` (`placement_r1.png`, `placement_r1_prokhorovka.png`, `look_r1.png`,
+  `look_r1_prokhorovka.png`), with the look's rules in `look_rules_r1.txt`.
+- **Not yet.** Wrecks on a live battle (none: no tracks at its open); the guns' and soft vehicles' own wrecks beyond the
+  half-tracks and lorries; a tank burnt out on her side or nose-down in a ditch.
+- **Owed.** The Mac compile (the names to check: `LayOldWrecks`, `ShowOldWrecks`, `OldWreckNear`, `OldWreckFar`,
+  `OldWreckShownNear`, `FLandBattleState::OldWrecks` and `OldRutWays`, with `LandParts::GroundMesh`,
+  `UStaticMeshComponent`'s `SetRelativeLocation` and `SetVisibility`, `FParse::Value` and `Param`; and since the
+  review of 24 November, `LandHulk::Ask::bAsLaid`, `LandHulk::Hulk`'s `TurretYaw`, `TurretBoxLo`, `TurretBoxHi`,
+  `TurretMuzzle` and `bTurretGun`, and `LandSight::Machine`'s `Root`, `Heading`, `HullLo`, `HullHi`, `bTurret`,
+  `bMuzzle` and `Muzzle` for the thrown turret; and `LandHulk::Ask::Per` with `Recording::OldWreckPer` for the battle's
+  scale), the art director's look, and the 45 fps gate with twenty wrecks
+  laid. The Mac shots, with `-TheaterLandOldWrecks=20 -TheaterLandOldWreckMonths=1` against without on Normandy, then
+  `=6` and `=18` months (the same twenty, aged): from 300 m up over the old lines; a group from 40 m and from a man's
+  height; a thrown turret and a run-off track close to; a wreck as the eye crosses 140 m (her near and far levels
+  should not jump); a half-track's burnt tyres; and the patch's edge against the ground's far tile (it is laid 2 cm
+  over the near ground's height, as a hole's edge is; a far tile's coarser mesh may differ). Since the review: a
+  winter field with snow lying (a recording whose field has snow, 0.5 and over) with `-TheaterLandOldWrecks=20
+  -TheaterLandOldWreckMonths=6` (the patches lost under the snow, snow on the decks) and `=0.2` months (a fresh one
+  black through it); the grass round a wreck's corners from a man's height (it should stand round her and not through
+  her); a thrown turret on its side, from the camera at a man's height (the camera kept out of it and its gun); and
+  with `-TheaterLandPhones` on, the wires laid round the wrecks. And once the campaign's row is on (sgfei1 b0a47250,
+  "Old wrecks" off by default), one campaign battle on a field fought over before, its log line saying how many were
+  drawn for how many burnt out at the battle's scale ("one for every 7.5").
 
 ## Packaging
 

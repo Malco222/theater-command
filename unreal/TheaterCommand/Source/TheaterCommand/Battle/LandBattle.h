@@ -243,6 +243,13 @@ private:
 	/** GS8: the ground tiles' own static meshes and their components. */
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> GroundKept;
+	/** Old wrecks (release 2, LayOldWrecks): each wreck's near and far meshes (static, made as the battle opens; kept in
+	 * GroundKept with their scorched patches, which show at any distance), and which of the two shows. */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckNear;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> OldWreckFar;
+	TArray<uint8> OldWreckShownNear;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
 	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn
@@ -806,6 +813,11 @@ private:
 	void LayScars();
 	/** Mud memory (release 2): the ruts of the battles fought here in mud before, laid as the battle opens. */
 	void LayOldRuts();
+	/** Old wrecks (release 2): the burnt-out armour of the battles fought here before, laid as the battle opens. */
+	void LayOldWrecks();
+	/** Each old wreck's near level shown within LandHulk::NearTo of the eye, its far beyond (each frame; nothing where
+	 * none was laid). */
+	void ShowOldWrecks(const FVector& EyeWorld);
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing

@@ -13,6 +13,7 @@
 #include "Battle/LandField.h"
 #include "Battle/LandGeneral.h"
 #include "Battle/LandGeneralEye.h"
+#include "Battle/LandHulk.h"
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
 #include "Battle/LandNight.h"
@@ -52,6 +53,11 @@ struct FLandBattleState
 	LandCrater::Field Holes;
 	/** The tanks' and lorries' track marks so far, and the corn their tracks laid flat (LandCrater), kept the whole battle. */
 	LandCrater::Ruts Ruts;
+	/** Mud memory's old ways as LayOldRuts laid them (none where it laid none): the old wrecks keep off them. */
+	std::vector<std::vector<std::pair<double, double>>> OldRutWays;
+	/** Old wrecks (release 2, -TheaterLandOldWrecks; LandHulk): the burnt-out armour of the battles fought here before,
+	 * laid as the battle opens (none where none is asked: the yard empty, and nothing asks it anything). */
+	LandHulk::Yard OldWrecks;
 	/** The ground drawn, cut over the dug holes' bowls (a tile's near ground split into parts once dug in). */
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;

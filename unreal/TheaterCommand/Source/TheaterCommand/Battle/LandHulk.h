@@ -1,0 +1,279 @@
+#pragma once
+
+#include "Battle/LandCrater.h"
+#include "Battle/LandFeed.h"
+#include "Battle/LandField.h"
+#include "Battle/LandKit.h"
+
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+/**
+ * Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
+ * battle there): the armour burnt out in the land battles fought over a region before, laid on its field as the battle
+ * opens, rusting where they fell. LOOKS ONLY, as the scars and the old ruts: nothing the rules fight reads them, no
+ * round strikes one, no man takes cover behind one, and they are kept off every way the recording's men and machines
+ * go, so nothing it shows is changed by them.
+ *
+ * The campaign sends the recording's root "oldWrecks": {"count": n, "months": m, "nats": {"GER": n1, ...}}: the
+ * armoured vehicles burnt out in battles fought there before (60 at most), the months since the last of them, and
+ * whose they were. LandFeed reads it (any part of it may be missing); the scene's -TheaterLandOldWrecks=N and
+ * -TheaterLandOldWreckMonths=M stand in for it on the Mac, the nations then the battle's two sides'.
+ *
+ * Two halves, both plain C++ (the cloud test, Tools/land_hulk, runs them on every recording):
+ * - Where they lie (Yard::Lay): how many the scrap men left (all within three months, about half by a year, a few by
+ *   two), each nation's machines as that year had them (live.ts's standInModel's mix, with the models at hand), in
+ *   small groups where a fight went on: along the field's old lines (hedges, walls and lanes, as the scars lie), at
+ *   the lanes' junctions and the village's edge, and along the battle's own axis. Each is pushed off the lanes (the
+ *   engineers cleared those), never in a hedge, a house, a yard, a wood, water, marsh or standing corn, never on an old
+ *   shell hole, a trench, an old rut or a cattle's path, clear of every recorded vehicle's way by 8 m and every man's by
+ *   1.5 m, and clear of the others.
+ * - How each looks (Yard::Dress, Yard::Patch): the game's own model of her (the miniature the battle draws, posed by
+ *   LandKit), knocked out and burnt through: her turret turned, or blown off and lying near, upturned or on its side;
+ *   her gun drooped to its stop; her hatches open; a track run off and lying stretched out beside her; a lorry's tyres
+ *   burnt off to the rims; her aerial and roof gun gone. Soot black where the fire was, the paint burnt off to bare
+ *   steel and the steel rusting orange, then brown, as the months go; settled into the ground; a scorched patch under
+ *   her that greens again, lusher than the field round it. No fire and no smoke: they burnt out long ago.
+ *
+ * Frames. The field is x east, y north, z up, metres (the recording's). Headings are radians, 0 north, clockwise, as
+ * LandKit's. A dressed mesh is a LandField::Mesh in the field's axes, metres from its hulk's anchor (Hulk::X, Y, Z),
+ * wound as the field's own meshes are (counter-clockwise seen from the front in the field's axes): the scene hands it
+ * to the ground's static mesh maker (LandParts::GroundMesh) and stands the mesh at World(X, Y, Z).
+ */
+namespace LandHulk
+{
+	/** The campaign's cap on its count, and the most laid on a field at once (each a static mesh of some 90,000 points
+	 * at its near level: twenty are about as many points as the dry run's own armour; the Mac's 45 fps gate judges it). */
+	constexpr int MostCount = 60;
+	constexpr int Most = 20;
+	/** The near level is drawn within this many metres of the eye, the far beyond (as a vehicle's, LandBattle's 140). */
+	constexpr double NearTo = 140.0;
+	/** How far each is kept: from every recorded vehicle's way (her middle, wherever she drives the whole battle) to
+	 * the wreck's outline; from every man's; from the middle line of a lane and of a hedge, wall or wood's edge; from
+	 * where a shell, bomb or grenade of this battle lands (its hole would open under her); from an old rut; from another. */
+	constexpr double VehicleClear = 8.0, ManClear = 1.5, LaneClear = 6.0, HedgeClear = 3.0, BlastClear = 4.0, WayClear = 2.5, Apart = 2.0;
+	/** And from every piece of a cattle's path's trodden earth (a path is not laid across a wreck), and from every field
+	 * telephone's wire (a lineman lays his wire round a wreck, not under her). */
+	constexpr double PathClear = 1.0, WireClear = 1.0;
+
+	/**
+	 * The share of a field's burnt-out armour still lying there Months after the battle (the recovery companies took
+	 * what could be mended within weeks, the scrap men the rest over the next year or two): all of it within three
+	 * months, half at a year, 15% at two years, 6% from four on, in straight lines between.
+	 */
+	double Left(double Months);
+	/**
+	 * How many wrecks are drawn for Count burnt out (capped at MostCount) at Per real machines to a drawn one: the
+	 * battle's own scale (the recording's oldWrecks "per"), so a wreck stands for as many as a tank in the battle does
+	 * (Brian's battle-scale rule). Count / Per rounded, at least one where any burnt; Per not a number or under 1 is 1,
+	 * over 1000 is 1000.
+	 */
+	int Models(int Count, double Per);
+	/** How many of those (Models of Count at Per) are left after Months, rounded, at most Most. */
+	int Kept(int Count, double Months, double Per = 1.0);
+
+	/**
+	 * A nation's burnt-out machine in Year as the game draws that nation's armour (src/battle/land/live.ts's
+	 * standInModel: its tank mix by year, with the Panther from 1944 as shells.ts's DRAWN has it), the Nth of them; or,
+	 * bSoft, its half-track where the model is at hand (the German Sd.Kfz. 251, the American M3), else the lorry.
+	 */
+	std::string ModelFor(const std::string& Nation, int Year, int N, bool bSoft);
+
+	/** A circle of a wreck's outline on the field (its hull in a few, a thrown turret, a run-off track). */
+	struct Ring
+	{
+		double X = 0.0, Y = 0.0, R = 0.0;
+	};
+
+	/** How a thrown turret lies. */
+	enum class Lie : uint8_t { Tilted, OnSide, Upturned };
+
+	/** Where the fight that left a group lay. */
+	enum class Where : uint8_t { OldLine, Spot, Axis, Strewn };
+
+	/** One wreck as laid. */
+	struct Hulk
+	{
+		/** Her anchor: the hull's root (the middle of her footprint) on the field, sunk as she has settled. */
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		double Heading = 0.0;
+		/** Her hull's turn on the ground (radians: nose up, right side up), as she rests on it. */
+		double Pitch = 0.0, Roll = 0.0;
+		std::string Nation, Model;
+		bool bSoft = false;
+		/** Months since she burnt (the last battle's, or an earlier one's: a few months more). */
+		double Months = 0.0;
+		/** Her group (the fight she burnt in) and where it lay. */
+		int Group = 0;
+		Where At = Where::Strewn;
+		/** Her turret's turn from ahead and her gun's lay, degrees (the model's own: + the turret clockwise seen from
+		 * above, the gun up). */
+		double Turret = 0.0, Gun = 0.0;
+		/** Her turret blown off: where it lies (its ring's middle on the field), turned how, settled how deep. */
+		bool bTurretOff = false;
+		double TurretX = 0.0, TurretY = 0.0, TurretYaw = 0.0, TurretTilt = 0.0, TurretTiltWay = 0.0, TurretZ = 0.0;
+		Lie TurretLie = Lie::Tilted;
+		/** A track run off (-1 her left, +1 her right, 0 none), and where its links lie, one point a link. */
+		int TrackOff = 0;
+		std::vector<std::pair<double, double>> Strip;
+		/** Her hatches and doors open (a bit each, in the model's order of Hatches, then doors and tailboard). */
+		uint32_t Open = 0;
+		/** How fiercely she burnt (0.8 to 1: the share of each point's own soot weight), and how deep she has settled. */
+		double Fire = 1.0, Sink = 0.0;
+		/** Her own dice for her look. */
+		uint64_t Seed = 0;
+		/** Her outline: the hull, her gun where it reaches past it, a thrown turret, a run-off track. */
+		std::vector<Ring> Rings;
+		/** The scorched patch's half length along her and half width across (metres). */
+		double PatchLong = 0.0, PatchWide = 0.0;
+		/** Her hull's footprint, metres along her and to her right from her anchor (her model's HullLo to HullHi): Covers
+		 * keeps the grass out of her corners, which her rings leave. */
+		double FootLoX = 0.0, FootHiX = 0.0, FootLoY = 0.0, FootHiY = 0.0;
+		/** Her thrown turret's reach, for the camera (the scene's LandSight, as a still machine of its own): a box in its
+		 * own axes about (TurretX, TurretY, TurretZ), x along TurretYaw, y to its right, z up, as it lies (on its side it
+		 * stands as tall as it is wide); and its gun's muzzle on the field where it has one (bTurretGun). */
+		LandKit::V3 TurretBoxLo, TurretBoxHi, TurretMuzzle;
+		bool bTurretGun = false;
+	};
+
+	/** What the field asks of where they lie (the scene's, or the cloud test's laid the same way). */
+	struct Field
+	{
+		/** The fought-over ground (as LayScars reads it: every 4th point of every track). */
+		std::vector<std::pair<double, double>> Fought;
+		/** The battle's axis: the way its machines went (radians from east, a line: either way; LayOldRuts's Heading;
+		 * not a number: none). */
+		double Axis = 0.0;
+		bool bAxis = false;
+		/** The old lines a fight lay along (LandCrater::OldLinesOf: hedges, walls, lanes; the lanes' junctions, the
+		 * village's edge). */
+		LandCrater::OldLines Lines;
+		/** The lanes' middle lines (kept LaneClear off) and the hedges', walls' and woods' edges' (HedgeClear). */
+		std::vector<std::vector<std::pair<double, double>>> Lanes, Hedges;
+		/** The recording's ways: each vehicle's kept points, each man's (the battle's own and anything that walks it). */
+		std::vector<std::vector<std::pair<double, double>>> Vehicles, Men;
+		/** Where this battle's shells, bombs and grenades land (each tears a hole). */
+		std::vector<std::pair<double, double>> Blasts;
+		/** What stands or lies in the open: trees, shrubs, carts, wells, a region's kit, the field's kept craters and
+		 * the old shell holes laid before (each its middle and reach). */
+		std::vector<Ring> Standing;
+		/** Mud memory's old ways (their ruts are drawn: a scorched patch is not laid over one). */
+		std::vector<std::vector<std::pair<double, double>>> Ways;
+		/** The field telephones' wires (release 2: the recording's "wires", or the scene's -TheaterLandPhones made from
+		 * the battle), each laid on the ground along its points: kept WireClear off her outline. */
+		std::vector<std::vector<std::pair<double, double>>> Wires;
+		/** The snow lying on the field (LandField::Ground::SnowLying, 0 to 1): her patch and the earth on her low parts
+		 * under it once it has fallen since she burnt, and on what faces up on her. */
+		double Snow = 0.0;
+		/** The two sides' deployment zones' middles (bSides): a side's wrecks lie nearer its own, facing the other. */
+		bool bSides = false;
+		double AttX = 0.0, AttY = 0.0, DefX = 0.0, DefY = 0.0;
+		std::string AttNat, DefNat;
+		/** The cattle's paths' trodden earth in a box (LandField's near clutter, its Trodden pieces; none: no paths). */
+		std::function<void(double X0, double Y0, double X1, double Y1, std::vector<std::pair<double, double>>& Out)> Trodden;
+		/** Where a wreck and her scorched patch may lie (a field, a pasture, rough ground: not a lane, a bank, a house, a
+		 * wall, a yard, a garden, a wood, water, marsh, a trench, standing corn or an old shell hole). */
+		std::function<bool(double X, double Y)> Open;
+		/** The ground (height and its normal), as the battle's vehicles stand on it. */
+		LandKit::GroundFn Ground;
+		/** For the scorched patch: the ground as drawn (its flat triangles' height), its normal as lit, its own colour. */
+		std::function<double(double X, double Y)> DrawnZ;
+		std::function<void(double X, double Y, double& OutX, double& OutY, double& OutZ)> DrawnUp;
+		std::function<LandField::Rgb8(double X, double Y)> Colour;
+	};
+
+	/**
+	 * The field as the scene reads it for the wrecks (LandBattle's LayOldWrecks, and the cloud test the same way): the
+	 * recording's tracks (every 4th point the fought-over ground, as LayScars reads it; each vehicle's and each man's
+	 * points their ways), the way its machines went (LayOldRuts's heading), the shells, bombs and grenades of this
+	 * battle (each round of a mortar, a gun, a tank or an anti-tank gun and each grenade where it lands, each 'shell'
+	 * event, each crater the field keeps), the field's old lines, lanes, banks, walls and woods' edges, what stands in
+	 * the open (every tree, shrub, cart, well and haycock, and a region's kit), the field telephones' wires, the two
+	 * sides' zones and nations, the snow lying, and the ground. Open ground only: a pasture, rough ground, the country
+	 * beyond, a field of stubble or roots (not standing corn), never on an old shell hole or in a dug one's cut (Holes:
+	 * the field's holes as laid so far, the scars'; null: none); OldRuts: mud memory's ways (empty: none). G and Holes
+	 * must outlive the field's functions.
+	 */
+	Field FieldOf(const LandFeed::Recording& Rec, const LandField::Ground& G, const LandCrater::Field* Holes,
+		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
+
+	/** What the campaign (or the Mac's stand-in) asks for. */
+	struct Ask
+	{
+		int Count = 0;
+		double Months = 0.0;
+		/** Whose they were, as the recording's nats give them, in its order (empty: the battle's two sides, the
+		 * attacker's the odd one). */
+		std::vector<std::pair<std::string, int>> Nats;
+		/** The real machines each drawn wreck stands for (the recording's "per", the battle's scale; 1: one to one).
+		 * Count is burnt-out machines, so Models(Count, Per) are drawn before the scrap men's share. Not read by the
+		 * stand-in (bAsLaid). */
+		double Per = 1.0;
+		/** This battle's month: the wrecks' own is Months before it, and their machines and coats that month's (the
+		 * battle's own models, Have, taken only where that is this month: else each read and dressed for hers). */
+		int Year = 1944, Month = 7;
+		/** The field's ground word for the coats (LandKit::Dress::Terrain). */
+		std::string Terrain = "plains";
+		uint64_t Seed = 1;
+		/** Count is how many to lay (the Mac's stand-in, -TheaterLandOldWrecks=N: N laid, at most Most), not how many
+		 * burnt out: no salvage taken off, and Months ages their look only. */
+		bool bAsLaid = false;
+	};
+
+	/** The laid wrecks, their models and how many of each came to lie where (for the scene's log line). */
+	class Yard
+	{
+	public:
+		using ReadFn = LandKit::Battle::ReadFn;
+		/** A model the battle has already read ("Name|Nation"), or null. */
+		using HaveFn = std::function<const LandKit::Model*(const std::string& Name, const std::string& Nation)>;
+
+		/**
+		 * Lays them (and forgets any laid before): A.Count's survivors of A.Months' salvage (A.bAsLaid: A.Count), each
+		 * nation's share by its nats, each machine read by Read (or taken from Have where that is this month's), placed
+		 * on F. Seeded: the same field, ask and seed lay the same wrecks. Returns how many. F's ground functions are kept
+		 * for Dress and Patch, and must outlive the yard.
+		 */
+		int Lay(const Field& F, const Ask& A, const ReadFn& Read, const HaveFn& Have = nullptr);
+
+		const std::vector<Hulk>& Hulks() const { return List; }
+		/** The model she is drawn from (never null for a laid one). */
+		const LandKit::Model* ModelOf(size_t K) const;
+
+		/** Hulk K posed, broken and burnt (bNear: the model's near level, else its far), into Out (emptied first). */
+		void Dress(size_t K, bool bNear, LandField::Mesh& Out) const;
+		/** The ground under and round hulk K: scorched black while fresh, browning, then greener than the field. */
+		void Patch(size_t K, LandField::Mesh& Out) const;
+		/** Whether the grass and corn round the eye stand at a place (false under a wreck, her hull's corners and all, or a
+		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh). */
+		bool Covers(double X, double Y) const;
+
+		/** What was asked and what came of it, for the scene's log line ("12 laid of 18 left of 30 ..."). */
+		std::string Said() const;
+		/** How many the salvage left, how many found no room, the groups by where they lay. */
+		int Wanted = 0, NoRoom = 0;
+		int ByWhere[4] = { 0, 0, 0, 0 };
+		/** Models read for the wrecks (none where the battle had them already), and one line for each drawn as another. */
+		int Read = 0;
+		std::vector<std::string> StandIns;
+
+	private:
+		std::vector<Hulk> List;
+		std::map<std::string, std::shared_ptr<LandKit::Model>> Loaded;
+		std::map<std::string, const LandKit::Model*> Models;
+		std::vector<std::string> KeyOf;
+		Ask Asked;
+		LandKit::GroundFn Ground;
+		std::function<double(double, double)> DrawnZ;
+		std::function<void(double, double, double&, double&, double&)> DrawnUp;
+		std::function<LandField::Rgb8(double, double)> Colour;
+		double Snow = 0.0;
+		/** Covers' squares (4 m): each wreck's rings, her hull's footprint, and her patch while it is fresh. */
+		std::map<int64_t, std::vector<std::pair<size_t, int>>> Cover;
+	};
+}
