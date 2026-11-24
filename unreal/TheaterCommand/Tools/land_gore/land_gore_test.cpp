@@ -20,7 +20,10 @@
 //         (within 1 m, whatever his stance: the deaths thread, 24 Nov) whose stance's gore falls hold one from under he
 //         may take falls in one, or, by a field gun's or a howitzer's shell, in the throw his gun's side gives him (from
 //         that side, every limb as far from the gun as that side's falls set); a fall from under never given a man the
-//         burst was not under. No limb off a man standing or running moves toward the burst (or the gun) as played, from
+//         burst was not under. Not held but printed: the falls from under read against his gun (a burst under him is no
+//         point to be thrown away from; about half move his lower leg toward the gun), and the men such a shell offered
+//         both a fall from under and a throw, and how many of them were thrown (the throw weighs 8 to its 3; the Fates
+//         rule, never the last fall again, sways a choice of two too far for a check of the weight). No limb off a man standing or running moves toward the burst (or the gun) as played, from
 //         his pose as struck to rest (a note under half a metre: his pose as struck is not the fall's first frame), nor
 //         off a man of any stance whose gore falls hold one from each side that is not a throw (the twins of 24 Nov:
 //         kneeling, in cover and lying too; those before, a note), nor the body (pelvis) of a man standing or running
@@ -50,7 +53,7 @@
 //         man of a stance whose falls hold one from each side; no fall given a man standing or running moving his body
 //         toward it more than 0.01 m where another he may take moves it away (kneeling, in cover or lying a note); the
 //         burst under him, every fall from under he may take and else only such a shell's throw from his gun's side,
-//         none moving a limb or his body toward the gun.
+//         none moving a limb or his body toward the gun (the falls from under read against the gun printed, not held).
 //   same  a second crowd gores the same men with the same falls
 //   back  a replay from the start gives every man his own file again; played on, the same men are gored again
 // With an out folder it also paints gore_falls.ppm: six gored men from the side, each from the hit to rest in six steps.
@@ -619,6 +622,8 @@ namespace
 		int Under = 0, UnderFrom = 0;    // within 1 m of the burst, his stance's gore falls holding one from under he may take; of them in one
 		int UnderThrown = 0;             // of them thrown from his gun's side (a field gun's or a howitzer's shell)
 		int UnderWrong = 0;              // of them in neither, or in a throw his gun's side would not give him
+		int UnderOffered = 0, UnderOfferedThrown = 0; // of them by such a shell offered both a fall from under and a throw (GoreFalls); of those thrown
+		std::map<std::string, Lot> UnderGun; // by stance: of those in a fall from under, his gun known, their limbs and bodies against the gun (not held: a burst under him is no point to be thrown away from)
 		std::map<std::string, std::array<int, 3>> By; // side: gored, thrown, with no fall from there in his stance's table
 		std::map<std::string, int> None;              // "stance side": no fall from there
 	};
@@ -700,12 +705,13 @@ namespace
 	double BodyAway(const FallRead& F, double X, double Y) { return F.bBody ? Away(F.Body.first, F.Body.second, X, Y) : 1e9; }
 
 	/** Whether a gored man may take the fall (the test's own reading): any not a throw; a throw only from a field gun's or
-	 * a howitzer's shell, and where he is thrown away from a point (bAway) only from his side; none from under (gore_from
-	 * under: a lower leg off, or the prone throw) but where the burst was under him (Side under). */
-	bool MayTakeRead(const FallRead& F, bool bBig, const std::string& Side, bool bAway = true)
+	 * a howitzer's shell, and only from his side (the burst under him and his gun not known: only the prone throw, from
+	 * under); none from under (gore_from under: a lower leg off, or the prone throw) but where the burst was under him
+	 * (Side under). */
+	bool MayTakeRead(const FallRead& F, bool bBig, const std::string& Side)
 	{
 		if (F.From == "under" && Side != "under") return false;
-		return !F.bThrow || (bBig && (!bAway || F.From == Side));
+		return !F.bThrow || (bBig && F.From == Side);
 	}
 
 	/** Whether a fall's side (gore_from) is the one opposite Side: front and behind, left and right (under opposite none). */
@@ -856,7 +862,63 @@ namespace
 			if (bUnder)
 			{
 				++Out.Under;
-				if (Gf == "under") { ++Out.UnderFrom; continue; }
+				// (a field gun's or a howitzer's shell: whether GoreFalls offers him both a fall from under, not a throw, and a
+				// throw from his gun's side, and so whether he was thrown: the kind from under weighs 3 to the throw's 8)
+				if (bBig && bGunKnown)
+				{
+					GoreStrike Strike;
+					Strike.Stance = In.FallStance;
+					Strike.Side = "under";
+					Strike.Gun = Gun;
+					Strike.bAway = true;
+					Strike.bBig = true;
+					Own(Men[I].SX, Men[I].SY, Strike.X, Strike.Y);
+					bool bOfferUnder = false, bOfferThrow = false;
+					for (const auto& Fall : GoreFalls(Tw, Strike))
+					{
+						const bool bTh = Throws(Fall.first, Fall.second);
+						bOfferThrow = bOfferThrow || bTh;
+						bOfferUnder = bOfferUnder || (!bTh && GoreFromOf(Tw, Fall.second) == "under");
+					}
+					if (bOfferUnder && bOfferThrow)
+					{
+						++Out.UnderOffered;
+						Out.UnderOfferedThrown += bThrown ? 1 : 0;
+					}
+				}
+				if (Gf == "under")
+				{
+					++Out.UnderFrom;
+					// (not held, a burst under him being no point to be thrown away from: his limbs and his body read against
+					// his gun, where known, as b470998e read him)
+					if (bGunKnown)
+					{
+						Lot& Ug = Out.UnderGun[In.FallStance];
+						++Ug.Men;
+						char At[200];
+						std::snprintf(At, sizeof(At), "%s %s (%s, %s%s, his gun %s %.0f deg)", In.FileArmy.c_str(), In.FallClip.c_str(), In.FallStance.c_str(),
+							Men[I].W.c_str(), Men[I].bLight ? " light" : "", Gun.c_str(), GunOff * 57.2957795);
+						const std::vector<Vec3>& U0 = R.Joint[I];
+						const std::vector<Vec3>& U1 = R.End[I];
+						for (size_t L = 0; L < U0.size() && L < U1.size(); ++L)
+						{
+							const double Gain = Away(U0[L], U1[L], Men[I].SX, Men[I].SY);
+							if (L + 1 < U0.size())
+							{
+								++Ug.Limbs;
+								Ug.Toward += Gain < 0.0 ? 1 : 0;
+								if (Gain < Ug.Least) { Ug.Least = Gain; Ug.LeastAt = At; }
+							}
+							else
+							{
+								++Ug.Bodies;
+								Ug.BodyToward += Gain < 0.0 ? 1 : 0;
+								if (Gain < Ug.BodyLeast) { Ug.BodyLeast = Gain; Ug.BodyAt = At; }
+							}
+						}
+					}
+					continue;
+				}
 				double GX = 0.0, GY = 0.0, Taken = 1e9;
 				Own(Men[I].SX, Men[I].SY, GX, GY);
 				for (const FallRead& Fr : Falls) if (Fr.Clip == In.FallClip) Taken = std::min(Taken, LeastAway(Fr, GX, GY));
@@ -1004,6 +1066,19 @@ namespace
 		}
 		std::printf("\n     %s: a field gun's or a howitzer's gored men %d, thrown %d; lying %d, %d of them in a fall that is not a throw\n", Label, S.GunGored, S.GunThrown,
 			S.Lying, S.LyingSide);
+		if (S.UnderOffered)
+			std::printf("     %s: the burst under him, by a field gun's or a howitzer's shell offered both a fall from under and a throw from his gun's side: %d, %d of them "
+				"thrown (the throw weighs 8 to the fall from under's 3, before the Fates and the section rules)\n", Label, S.UnderOffered, S.UnderOfferedThrown);
+		for (const char* St : GoreStances)
+		{
+			const auto Found = S.UnderGun.find(St);
+			if (Found == S.UnderGun.end()) continue;
+			const Lot& L = Found->second;
+			std::printf("     %s: %s, the burst under him, in a fall from under, read against his gun (not held: a burst under him is no point to be thrown away from): %d "
+				"men, %d limbs off, %d toward it, the most %.2f m (%s); %d bodies, %d toward it, the most %.2f m (%s)\n", Label, St, L.Men, L.Limbs, L.Toward,
+				L.Least < 0.0 ? -L.Least : 0.0, L.Least < 0.0 ? L.LeastAt.c_str() : "none", L.Bodies, L.BodyToward, L.BodyLeast < 0.0 ? -L.BodyLeast : 0.0,
+				L.BodyLeast < 0.0 ? L.BodyAt.c_str() : "none");
+		}
 		for (const char* St : GoreStances)
 		{
 			const auto Found = S.Lots.find(St);
@@ -1419,6 +1494,7 @@ int main(int Argc, char** Argv)
 		// other than his gun's side gives; with none and his gun not known, and of them given other than all he may take)
 		int UnderCells = 0, UnderThere = 0, UnderWrong = 0, UnderThrew = 0, UnderBack = 0, UnderBackWrong = 0, UnderAll = 0, UnderAllWrong = 0;
 		Lot UnderThrow;
+		std::map<std::string, Lot> UnderFall; // by stance: the cells with a fall from under given, his gun known, read against it (not held)
 		// (the burst 1 to 3 m off, by where it fell; his gun 25 or 400 m off, the burst under him and his stance's gore falls
 		// holding none from under he may take, by his gun's side)
 		const double Places[] = { 1.0, 1.5, 2.0, 2.5, 3.0, 25.0, 400.0 };
@@ -1533,7 +1609,7 @@ int main(int Argc, char** Argv)
 							}
 							const std::string By = ReadSide(Falls, bBig, "under", Strike.Gun);
 							bool bMay = false;
-							for (const FallRead& Fr : Falls) bMay = bMay || MayTakeRead(Fr, bBig, By, Strike.bAway);
+							for (const FallRead& Fr : Falls) bMay = bMay || MayTakeRead(Fr, bBig, By);
 							SideWrong += GoreSide(Tw, Strike) == (bMay ? By : std::string()) ? 0 : 1;
 							if (!bMay) { ++NoneMay; continue; }
 							++UnderCells;
@@ -1551,26 +1627,43 @@ int main(int Argc, char** Argv)
 							{
 								++UnderAll;
 								bool bWrong = false;
-								for (const FallRead& Fr : Falls) bWrong = bWrong || Has(Falls2, Fr) != MayTakeRead(Fr, bBig, "under", false);
+								for (const FallRead& Fr : Falls) bWrong = bWrong || Has(Falls2, Fr) != MayTakeRead(Fr, bBig, "under");
 								UnderAllWrong += bWrong ? 1 : 0;
 								continue;
 							}
 							++UnderThere;
 							const double Floor = Strike.bAway ? FloorRead(Falls, bBig, Strike.Gun, Strike.X, Strike.Y) : 1e9;
-							bool bWrong = false, bThrew = false;
-							double Least = 1e9, BodyLeast = 1e9;
+							bool bWrong = false, bThrew = false, bFromUnder = false;
+							double Least = 1e9, BodyLeast = 1e9, UnderLeast = 1e9, UnderBody = 1e9;
 							for (const FallRead& Fr : Falls)
 							{
 								const bool bDue = Fr.From == "under" && MayTakeRead(Fr, bBig, "under");
 								const bool bGunThrow = !bDue && Fr.bThrow && bBig && Strike.bAway && Fr.From == Strike.Gun && LeastAway(Fr, Strike.X, Strike.Y) >= Floor - 1e-9;
 								const bool bGiven = Has(Falls2, Fr);
 								bWrong = bWrong || bGiven != (bDue || bGunThrow);
+								if (bGiven && bDue && Strike.bAway)
+								{
+									bFromUnder = true;
+									UnderLeast = std::min(UnderLeast, LeastAway(Fr, Strike.X, Strike.Y));
+									UnderBody = std::min(UnderBody, BodyAway(Fr, Strike.X, Strike.Y));
+								}
 								if (!bGiven || !bGunThrow) continue;
 								bThrew = true;
 								Least = std::min(Least, LeastAway(Fr, Strike.X, Strike.Y));
 								BodyLeast = std::min(BodyLeast, BodyAway(Fr, Strike.X, Strike.Y));
 							}
 							UnderWrong += bWrong ? 1 : 0;
+							if (bFromUnder)
+							{
+								Lot& Uf = UnderFall[St];
+								char At[160];
+								std::snprintf(At, sizeof(At), "%s, %s, his gun %.0f m %+d deg", KV.first.c_str(), bBig ? "a field gun's or a howitzer's" : "another's", Far, Deg);
+								++Uf.Men;
+								Uf.Toward += UnderLeast < 0.0 ? 1 : 0;
+								Uf.BodyToward += UnderBody < 0.0 ? 1 : 0;
+								if (UnderLeast < Uf.Least) { Uf.Least = UnderLeast; Uf.LeastAt = At; }
+								if (UnderBody < Uf.BodyLeast) { Uf.BodyLeast = UnderBody; Uf.BodyAt = At; }
+							}
 							if (!bThrew) continue;
 							++UnderThrew;
 							++UnderThrow.Men;
@@ -1611,6 +1704,16 @@ int main(int Argc, char** Argv)
 			"cells under 0.5 m, %d with his body toward it); %d with none from under, his gun known (by its side); %d with none and his gun not known (all he may "
 			"take)\n", UnderCells, UnderThere, UnderThrew, UnderThrow.Men ? UnderThrow.Least : 0.0, UnderThrow.LeastAt.c_str(), UnderThrow.Short,
 			UnderThrow.BodyToward, UnderBack, UnderAll);
+		for (const char* St : GoreStances)
+		{
+			const auto Found = UnderFall.find(St);
+			if (Found == UnderFall.end()) continue;
+			const Lot& L = Found->second;
+			std::printf("     sweep: the burst under him, %s, the falls from under given read against his gun (not held: a burst under him is no point to be thrown "
+				"away from): %d cells, %d with a limb toward the gun, the most %.2f m (%s); %d with his body toward it, the most %.2f m (%s)\n", St, L.Men, L.Toward,
+				L.Least < 0.0 ? -L.Least : 0.0, L.Least < 0.0 ? L.LeastAt.c_str() : "none", L.BodyToward, L.BodyLeast < 0.0 ? -L.BodyLeast : 0.0,
+				L.BodyLeast < 0.0 ? L.BodyAt.c_str() : "none");
+		}
 		Check(Cells > 0 && NotMay == 0, "sweep: every fall given one of his stance's he may take (no throw but a field gun's or a howitzer's, none from another side, "
 			"none from under but where the burst was under him), never none (" + std::to_string(NotMay) + " not)");
 		Check(SideWrong == 0, "sweep: GoreSide reads every strike's side as the test does (a burst under him, under where his stance's gore falls hold one from under he "

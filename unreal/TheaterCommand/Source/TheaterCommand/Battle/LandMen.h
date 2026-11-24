@@ -412,7 +412,7 @@ namespace LandMen
 	/**
 	 * Effects (R2): the gore falls a man of that twin so struck may be given (the crowd weighs these by kind and the
 	 * Fates rule, and no other), each as kind and clip, in his stance's gore falls' order. Those he may take: any that
-	 * is not a throw (kind thrown, or any die_blast_*), a throw only where bBig and (bAway) from his side. Of them the
+	 * is not a throw (kind thrown, or any die_blast_*), a throw only where bBig and from his side. Of them the
 	 * ones from his side (gore_from), where any; where he is thrown away from a point, of those the falls whose every
 	 * limb moves half a metre or more away from it (along the line from it to the limb's joint as he was struck, read
 	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take but
@@ -423,7 +423,8 @@ namespace LandMen
 	 * take (a throw from under, the prone one, only where bBig), none measured (a burst under him is no point to be
 	 * thrown away from), and where bBig the throw his gun's side would give him (the falls from Gun as above, of them
 	 * the throws: from that side alone, his limbs away from the gun); where his stance's gore falls hold none from under
-	 * he may take, the falls from Gun as above, or where it is not known all he may take.
+	 * he may take, the falls from Gun as above, or where it is not known all he may take (no throw: none is from under
+	 * but the prone one).
 	 */
 	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
 	/** Effects (R2): the side a man of that twin so struck is given his gore falls by (GoreFalls): Side, but for a burst
@@ -465,11 +466,14 @@ namespace LandMen
 		 * his stance's falls from under (a lower leg off; lying, the throw from under, a gun's alone), or from such a
 		 * shell the throw from the side of the gun that fired it (its track as it fired), his limbs away from the gun;
 		 * where his stance's gore falls hold none from under he may take, by the gun's side as for a burst there, or
-		 * where the gun is not known all he may take (GoreFalls). The kinds weighed as for any man, the kind from under
-		 * three times where the burst was under him, as the kind matching the burst is (so a field gun's shell bursting
-		 * on him throws him as often as it did when he was read by his gun's side). The same battle gores the same men
-		 * every time (his own dice). Who dies and when are the battle's; only how he falls changes. Off unless set:
-		 * every man falls as before.
+		 * where the gun is not known all he may take but a throw (GoreFalls). The kinds weighed as for any man, the kind
+		 * from under three times where the burst was under him, as the kind matching the burst is: where such a shell
+		 * bursting on him is offered a throw, the throw 8 to the fall from under's 3 whatever his stance and his gun's
+		 * side (as when he was read by his gun's side for a man standing with it ahead or behind, or running with it
+		 * ahead; somewhat more often than then otherwise, where the matching kind weighed 3.9 to 6). The fall from under
+		 * is not measured: read against his gun it moves his lower leg toward the gun about half the time. The same
+		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
+		 * changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */

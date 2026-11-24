@@ -1615,17 +1615,17 @@ namespace LandMen
 		bool IsThrow(const std::string& Kind, const std::string& Name) { return Kind == "thrown" || Name.rfind("die_blast_", 0) == 0; }
 
 		/** Effects (R2): whether a gored man may take a gore fall of his twin's: any not a throw; a throw only where his
-		 * round may throw him (bBig, Crowd's BigThrow), and where he is thrown away from a point (bAway) only one from
-		 * its side (gore_from is Side); one from under (gore_from under: a lower leg off, or the prone throw) only where
-		 * the burst was under him (Side under: the deaths thread, 24 Nov, the burst within a metre). */
-		bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, bool bAway, const std::string& Side)
+		 * round may throw him (bBig, Crowd's BigThrow), and only one from its side (gore_from is Side: where the burst was
+		 * under him and no gun is known, only the throw from under, the prone one; a424a37e gave a man on his feet there a
+		 * throw from any side, with twins that hold no fall from under for his stance); one from under (gore_from under: a
+		 * lower leg off, or the prone throw) only where the burst was under him (Side under: the deaths thread, 24 Nov, the
+		 * burst within a metre). */
+		bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, const std::string& Side)
 		{
 			const auto From = Tw.GoreFrom.find(Name);
 			if (From != Tw.GoreFrom.end() && From->second == "under" && Side != "under") return false;
 			if (!IsThrow(Kind, Name)) return true;
-			if (!bBig) return false;
-			if (!bAway) return true;
-			return From != Tw.GoreFrom.end() && From->second == Side;
+			return bBig && From != Tw.GoreFrom.end() && From->second == Side;
 		}
 
 		/** Effects (R2): whether a gore fall of his twin's is from under him (gore_from under) and he may take it where
@@ -1633,7 +1633,7 @@ namespace LandMen
 		bool FromUnder(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig)
 		{
 			const auto From = Tw.GoreFrom.find(Name);
-			return From != Tw.GoreFrom.end() && From->second == "under" && MayTake(Tw, Kind, Name, bBig, true, "under");
+			return From != Tw.GoreFrom.end() && From->second == "under" && MayTake(Tw, Kind, Name, bBig, "under");
 		}
 
 		/** The kinds of falls a man of stance St takes from a deaths table (ChooseFall's): his stance's, else the
@@ -1691,7 +1691,7 @@ namespace LandMen
 			// of them those whose gore_from is where the burst was against him (in front, the falls from the front, of kind
 			// back; behind, forward; at his left or his right, the side falls from that side), where his stance's gore falls
 			// hold any.
-			auto May = [&](const std::string& Kind, const std::string& Name) { return MayTake(Tw, Kind, Name, Strike.bBig, Strike.bAway, Strike.Side); };
+			auto May = [&](const std::string& Kind, const std::string& Name) { return MayTake(Tw, Kind, Name, Strike.bBig, Strike.Side); };
 			auto FromBurst = [&](const std::string& Kind, const std::string& Name) {
 				const auto Side = Tw.GoreFrom.find(Name);
 				return Side != Tw.GoreFrom.end() && Side->second == Strike.Side && May(Kind, Name);
@@ -1805,7 +1805,7 @@ namespace LandMen
 		{
 			for (const std::string& Name : KV.second)
 			{
-				if (MayTake(Tw, KV.first, Name, By.bBig, By.bAway, By.Side)) return By.Side;
+				if (MayTake(Tw, KV.first, Name, By.bBig, By.Side)) return By.Side;
 			}
 		}
 		return std::string();
@@ -1821,7 +1821,8 @@ namespace LandMen
 		// gun's side would (the falls from there, of them the throws: from that side alone, his limbs and his body thrown
 		// away from the gun, as before); the kind from under weighed as the kind matching the burst is, ChooseFall. Where
 		// his stance's gore falls hold none from under he may take (lying, but for the prone throw, none), by his gun's
-		// side as for a burst there (ReadBy), or where it is not known all he may take)
+		// side as for a burst there (ReadBy), or where it is not known all he may take but a throw (MayTake: a throw only
+		// from his side, and under him only the prone one is from under))
 		if (Strike.Side == "under" && AnyFromUnder(Tw, *Kinds, Strike.bBig))
 		{
 			GoreList Thrown;
@@ -3241,8 +3242,9 @@ namespace LandMen
 			// side; with no shooter known, the front (a man faces what he fights).
 			if (M.KillT < 0.0) return "front";
 			// (Effects (R2): a gored man is thrown away from the burst, or from the gun where it burst under him and his
-			// falls are read by its side: that side, as StartFall has just read it, GoreSide; a burst under him, by the
-			// gun's side as for any man)
+			// falls are read by its side: that side, as StartFall has just read it, GoreSide. A burst under him read below
+			// from the gun as for any man, front within 70 degrees of his nose and back past 110, not by the 45-degree
+			// quarter his throw is read by: it weighs none of his falls from under nor the throw, ChooseFall)
 			const std::string& Burst = M.Info.GoreFrom;
 			if (!Burst.empty() && Burst != "under") return Burst == "front" ? "front" : Burst == "behind" ? "back" : "side";
 			double SX = 0.0, SY = 0.0;
@@ -3336,9 +3338,15 @@ namespace LandMen
 						if (bShell) W *= Kind == "thrown" ? (M.bGore && !bBig ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
 						// (a gored man the burst was under, within 1 m: the kind from under, a lower leg off (the deaths thread,
 						// 24 Nov), weighed three times, as the kind matching the burst is above (back for one in front, forward
-						// behind, side at his side; From is his gun's side then, which none of his falls from under is), so a
-						// field gun's or a howitzer's shell bursting on him throws him as often as when he was read by his
-						// gun's side, 8 to 3, and every other kills him in a fall from under)
+						// behind, side at his side; From, read from his gun as for any man, weighs none of his falls from under
+						// nor the throw). So where a field gun's or a howitzer's shell bursting on him is offered a throw from
+						// his gun's side, the throw weighs 8 (0.2, 40 times) to the fall from under's 3 whatever his stance and
+						// his gun's side, before the Fates and the section rules. Read by his gun's side (b470998e) it was the
+						// same for a man standing with his gun ahead or behind, or running with it ahead, but the matching kind
+						// weighed more elsewhere: standing or running with it at his side 3.9 (3, 1.3 for a shell's side
+						// fall), running with it behind 6 (forward twice running), kneeling with it on his left 5.85 (side 1.5
+						// kneeling, 1.3); so such men are thrown somewhat more often now. Every other round kills him in a
+						// fall from under)
 						if (M.bGore && M.Info.GoreFrom == "under") W *= Kind == "under" ? 3.0 : 1.0;
 						if (bCrushed) W *= Kind == "back" || Kind == "forward" ? 6.0 : Kind == "thrown" || Kind == "spin" ? 0.05 : 1.0;
 						if (!M.FallKindWanted.empty() && Kind == M.FallKindWanted) W *= 50.0;
@@ -4105,8 +4113,11 @@ namespace LandMen
 			// how close the shell truly fell: such a man OnHim (a gun's 0.2, the others 0.12). Measured on the rules'
 			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall, while a man lying
 			// took any shell; with twins whose prone falls are only the throw from under him, 1 in 12 to 22.5 as the
-			// recordings are (2 of Normandy's 45 shell kills, 4 of Prokhorovka's 48); with the lying falls of 24 Nov
-			// (below), 1 in 6.4 to 6.9 (7 and 7; 8 of the 14 lying, by a mortar's or a tank's shell). Not changed here.
+			// recordings are (2 of Normandy's 45 shell kills, 4 of Prokhorovka's 48; these odds summed over them expect
+			// 2.8 and 5.1); with the lying falls of 24 Nov (below), 7 and 7, 1 in 6.4 and 6.9, where these odds summed over
+			// the same kills expect 4.3 and 5.6 (1 in 10.5 and 8.6; 9.8 of the 93, 1 in 9.5, within the art director's 1
+			// in 8 to 10). The 14 are those two seeded battles' dice, about 1.5 standard deviations above that (8 of them
+			// lying, by a mortar's or a tank's shell; b470998e gored the same 14 with those twins). Not changed here.
 			double Near = 0.0, OnHim = 0.0, Reach = 0.0;
 			if (M.KillWeapon == "gun") Near = 0.55, OnHim = 0.2, Reach = 8.0;
 			else if (M.KillWeapon == "tank") Near = 0.35, OnHim = 0.12, Reach = 6.0;

@@ -717,12 +717,16 @@ for fall and skin for skin the same as with none).
   is the throw from under him (those before), only by a field gun's or a howitzer's shell bursting on him. He falls as
   any man, asked before his dice. Measured on the rules' Normandy and Prokhorovka, shell blasts off and on, while a man
   lying took any shell: 1 shell kill in 7.6 to 11. The recordings as they are (45 and 48 shell kills, all by a gun's, a
-  tank's or a mortar's round): with the twins of 24 November 7 and 7 gored, 1 in 6.4 and 1 in 6.9 (1 in 6.6 together, a
-  little more often than the art director's 1 in 8 to 10), 8 of the 14 lying and killed by a mortar's or a tank's shell,
-  every one of the 14 within 0.2 m of the burst (under, below); with twins whose only lying fall is the throw, 2 and 4
-  (1 in 22.5 and 1 in 12). The odds are not changed here. His own dice, so the same battle gores the same men. On the
-  frame he is struck the crowd swaps him to his file's twin (`Impl::ToTwin`: his mesh at each level, his face, no bank),
-  then picks his fall from the twin's gore falls. A replay from the start gives him his own file back.
+  tank's or a mortar's round, every one within 1 m of the burst): with the twins of 24 November 7 and 7 gored, 1 in 6.4
+  and 1 in 6.9 (1 in 6.6 together), 8 of the 14 lying and killed by a mortar's or a tank's shell, all 14 struck within
+  0.3 m of the burst (13 within 0.2 m; under, below). That count is these two seeded battles' dice, not the odds: the
+  odds summed over the same 93 kills expect 4.3 and 5.6 gored (1 in 10.5 and 1 in 8.6; 9.8 together, 1 in 9.5, inside
+  the art director's 1 in 8 to 10), and 14 is about 1.5 standard deviations above that. b470998e gores the same 14 men
+  with these twins: the rise from 6 is the twins' lying falls, not the rule of the burst under him. With twins whose
+  only lying fall is the throw, 2 and 4 (1 in 22.5 and 1 in 12; 2.8 and 5.1 expected). The odds are not changed here.
+  His own dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to his file's twin
+  (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore falls. A replay
+  from the start gives him his own file back.
 - **Which fall: away from the burst** (the art director, 23 Nov 17:52Z: "the limb flies AWAY from the blast", the kind
   by the burst against his facing, `die_blast_*` a field gun's or a howitzer's; the deaths thread, 20:1xZ: weigh only
   the kind matching the burst; and 24 Nov: the falls from under, and a man lying's from each side). The twin's
@@ -736,49 +740,70 @@ for fall and skin for skin the same as with none).
   from the burst. One within 1 m (the rules' 8 in 10), whatever his stance: under. He is then given every fall from
   under he may take, none measured (a burst under him is no point to be thrown away from), and from a shell that may
   throw him (below) the throw his gun's side would give him: the gun as it fired (the round's `by`, `k`, `j`: its track
-  at the round, as `FromWhere` reads it), the falls from that side as for a burst there, of them the throws, so from
-  that side alone and away from the gun. Where his stance's gore falls hold none from under he may take (a man lying
-  killed by any other round; any man of twins before 24 November), by the gun's side as for a burst there, away from the
-  gun; where the gun is not known or stood within 1 m of him, all he may take, none measured. His `FallFrom` reads
-  front, back or side from the burst's side, or for a burst under him the gun's. A gun's shell may throw him
-  (`Impl::BigThrow`) when it is a field gun's, a howitzer's or a heavy gun's: the round's `w` `gun` (the rules write a
-  gun crew's shell so, whatever its calibre) from a block whose `cal` is not `light` (a block with no `cal`: a
-  howitzer's, as the Fates table reads it, `LandKit`'s `WeaponWord`); a light gun's, a tank's (`tank`), a mortar's
-  (`mortar`) or a grenade's (`grenade`) never. He may take (`MayTake`) any of his stance's gore falls that is not a
-  throw (kind `thrown`, or any `die_blast_*`) nor from under; a throw only from a shell that may throw him and, where he
-  is thrown away from a point, only one from his side; a fall from under only where the burst was under him.
-  `ChooseFall` weighs only the falls `LandMen::GoreFalls` gives him (from the twin and how the round struck him,
-  `GoreStrike`: his stance, his side, the point in his own axes, his gun's side, whether the shell may throw him; the
-  test asks it too): of those he may take, the ones from his side (a burst in front: those from the front, of kind
-  `back`; behind: `forward`; left or right: the side falls from that side), or where his stance's gore falls hold none
-  from there he may take (in twins before 24 November: kneeling or in cover none from the right, and from the left only
-  `die_blast_c`, a throw; lying only the throw from under), all he may take. Of those, where he is thrown away from a
-  point, the falls whose every limb moves at least half a metre away from it, along the line from it to the limb's joint
-  as he was struck (`((B - A) . (A - P)) / |A - P|`: a limb flung across the burst, or through it to land beyond, does
-  not count as away), read from the fall's first frame and its last, in his own axes (his own pose as struck is within
-  0.35 m of the fall's first at a cut). Where none from his side does so, the same of all he may take but those from the
-  side opposite his (front and behind, left and right), never a throw from another side (the verifier of 35ffc951: a
-  side is a quarter round, and the twins' standing and running falls from the front fling a left arm or leg back and to
-  his left, so `die_arm_off_b` and `die_leg_off_a` flung it toward a burst or a gun 33 to 44 degrees round ahead on his
-  left); never one from the side opposite (the verifier of f6f8b75c, whose widening took them: such a fall throws him
-  toward the burst, so CHN and ITA_desert men standing or running with it 40 to 44.5 degrees round ahead on their left
-  were given `die_leg_off_b`, from behind, their pelvis 1.1 to 1.7 m toward it); and never one from under (b470998e's
-  widening took `die_leg_off_d` from the twins of 24 November, a standing or running man's body as much as 0.23 m toward
-  a burst or a gun 45 degrees round ahead on his left, in 720 and 721 cells of the fine grid below). Widened so, he
-  keeps his side's own falls. Failing any, the one whose limbs move farthest so. Each kind keeps its weight (by his
-  stance, the shell, `FallKindWanted`), shared among its falls taken; where the burst was under him the kind `under`
-  three times, as the kind matching the burst is (back for one in front, forward behind, side at his side; his
-  `FallFrom` is his gun's side then, which no fall from under is), so a field gun's or a howitzer's shell bursting on a
-  man standing throws him as often as when he was read by his gun's side (the throw 8 to the matching kind's 3), and
-  every other round kills him in a fall from under. The Fates rule and the section rule as for any man. A man not gored
-  falls exactly as before: the test's digests of the switch off, and of the men not gored where the same men are gored,
-  are the same before the change and after (the code of 3f85e988 and 3e64f668 against this; the men not gored against
-  that code with only this change to who is gored, the men lying; and 35ffc951, f6f8b75c and b470998e against this, each
-  changing no dice and not who is gored, only a gored man's fall: in the band's battle below its 2232 men not gored the
-  same and its 1338 gored the same men, and in the rules' Normandy and Prokhorovka every man not gored the same, the
-  switch off and on, and the same men gored; against b470998e so with the twins of 24 November and with 7caf9453's, and
-  with 7caf9453's every gored man's fall the same too: b470998e's own test built against this prints its output byte for
-  byte, but for its timings). What holds, read from the falls' first frames and last (the test's sweep, below: every
+  at the round, as `FromWhere` reads it; its side the 45-degree quarter, as for a burst), the falls from that side as
+  for a burst there, of them the throws, so from that side alone and away from the gun. Nothing holds the falls from
+  under away from anything: read against his gun they move his lower leg toward it about half the time (the fine grid
+  below, his gun known: 82,010 of 171,360 cells standing or running, 84,302 kneeling or in cover; his body as often),
+  and in the rules' battles 3 of the 5 men who fell from under moved it 0.84 to 1.64 m toward the gun, where under
+  b470998e, read by the gun's side, the same 5 moved every limb 1.06 to 4.92 m away from it (one thrown). Since the
+  rules lay nearly every shell kill on its man, the falls from under now take most gored men on their feet. Where his
+  stance's gore falls hold none from under he may take (a man lying killed by any other round; any man of twins before
+  24 November), by the gun's side as for a burst there, away from the gun (a man lying so since a424a37e: under
+  b470998e he was under, not measured, and in the rules' battles 5 of the 8 lying gored flung a limb 0.80 to 2.55 m
+  toward the gun, where now every limb moves 0.90 to 3.05 m away); where the gun is not known or stood within 1 m of
+  him, all he may take but a throw (a throw only from his side, and from under only the prone one; a424a37e and
+  b470998e still threw a man on his feet so struck from any side, with twins that hold no fall from under for him),
+  none measured. His `FallFrom` reads front, back or side from the side his falls are read by (the burst's, or his
+  gun's quarter); for a burst under him from the gun as for any man (`FromWhere`: front within 70 degrees of his nose,
+  back past 110, the side between), not by its quarter, and it weighs neither his falls from under nor the throw. A
+  gun's shell may throw him (`Impl::BigThrow`) when it is a field gun's, a howitzer's or a heavy gun's: the round's `w`
+  `gun` (the rules write a gun crew's shell so, whatever its calibre) from a block whose `cal` is not `light` (a block
+  with no `cal`: a howitzer's, as the Fates table reads it, `LandKit`'s `WeaponWord`); a light gun's, a tank's (`tank`),
+  a mortar's (`mortar`) or a grenade's (`grenade`) never. He may take (`MayTake`) any of his stance's gore falls that is
+  not a throw (kind `thrown`, or any `die_blast_*`) nor from under; a throw only from a shell that may throw him and
+  only one from his side (where the burst was under him and no gun is known, only the prone throw, from under); a fall
+  from under only where the burst was under him. `ChooseFall` weighs only the falls `LandMen::GoreFalls` gives him (from
+  the twin and how the round struck him, `GoreStrike`: his stance, his side, the point in his own axes, his gun's side,
+  whether the shell may throw him; the test asks it too): of those he may take, the ones from his side (a burst in
+  front: those from the front, of kind `back`; behind: `forward`; left or right: the side falls from that side), or
+  where his stance's gore falls hold none from there he may take (in twins before 24 November: kneeling or in cover none
+  from the right, and from the left only `die_blast_c`, a throw; lying only the throw from under), all he may take. Of
+  those, where he is thrown away from a point, the falls whose every limb moves at least half a metre away from it,
+  along the line from it to the limb's joint as he was struck (`((B - A) . (A - P)) / |A - P|`: a limb flung across the
+  burst, or through it to land beyond, does not count as away), read from the fall's first frame and its last, in his
+  own axes (his own pose as struck is within 0.35 m of the fall's first at a cut). Where none from his side does so, the
+  same of all he may take but those from the side opposite his (front and behind, left and right), never a throw from
+  another side (the verifier of 35ffc951: a side is a quarter round, and the twins' standing and running falls from the
+  front fling a left arm or leg back and to his left, so `die_arm_off_b` and `die_leg_off_a` flung it toward a burst or
+  a gun 33 to 44 degrees round ahead on his left); never one from the side opposite (the verifier of f6f8b75c, whose
+  widening took them: such a fall throws him toward the burst, so CHN and ITA_desert men standing or running with it 40
+  to 44.5 degrees round ahead on their left were given `die_leg_off_b`, from behind, their pelvis 1.1 to 1.7 m toward
+  it); and never one from under (b470998e's widening took `die_leg_off_d` from the twins of 24 November, a standing or
+  running man's body as much as 0.23 m toward a burst or a gun 45 degrees round ahead on his left, in 720 and 721 cells
+  of the fine grid below). Widened so, he keeps his side's own falls. Failing any, the one whose limbs move farthest so.
+  Each kind keeps its weight (by his stance, the shell, `FallKindWanted`), shared among its falls taken; where the burst
+  was under him the kind `under` three times, as the kind matching the burst is (back for one in front, forward behind,
+  side at his side; his `FallFrom` weighs neither it nor the throw). So where a field gun's or a howitzer's shell
+  bursting on him is offered a throw from his gun's side, the throw weighs 8 (0.2, 40 times) to the fall from under's 3,
+  8 times in 11 whatever his stance and his gun's side, before the Fates rule and the section rule: as often as when he
+  was read by his gun's side (b470998e) for a man standing with his gun ahead or behind, or running with it ahead;
+  somewhat more often otherwise, where the matching kind weighed more (standing or running with it at his side 3.9, 8 in
+  11.9; running with it behind 6, 8 in 14; kneeling with it on his left 5.85, 8 in 13.85). In the test's band's battle
+  73 men were offered both and 43 thrown (the Fates rule, never the last fall again, sways a choice of two). Every other
+  round kills him in a fall from under, of which each stance has one, so every man on his feet so struck falls alike:
+  `die_leg_off_d`, his right calf, standing or running, and `die_leg_off_e`, his left, kneeling or in cover (all 5 in
+  the rules' battles; Owed). The Fates rule and the section rule as for any man. A man not gored falls exactly as
+  before: the test's digests of the switch off, and of the men not gored where the same men are gored, are the same
+  before the change and after (the code of 3f85e988 and 3e64f668 against this; the men not gored against that code with
+  only this change to who is gored, the men lying; and 35ffc951, f6f8b75c and b470998e against this, each changing no
+  dice and not who is gored, only a gored man's fall: in the band's battle below its 2232 men not gored the same and its
+  1338 gored the same men, and in the rules' Normandy and Prokhorovka every man not gored the same, the switch off and
+  on, and the same men gored; against b470998e so with the twins of 24 November and with 7caf9453's, and with 7caf9453's
+  every gored man's fall the same too but where the burst was under a man with no gun known, who is no longer thrown:
+  b470998e's own test built against this prints its output byte for byte but for its timings and those men, its first
+  battle's thrown 8 of 22 where 13, its sides' battle's 11 of 52 where 19. Against a424a37e, whose reading of a man with
+  no gun known this round changed, every fall with the twins of 24 November the same, the test's battles and the rules'
+  Normandy and Prokhorovka). What holds, read from the falls' first frames and last (the test's sweep, below: every
   twin, every 3 degrees all round; and a finer sweep beside it, every half degree, the burst or the gun 1 to 400 m off
   at 17 distances, 416,160 cells for each stance, and the burst under him, his gun 12 to 400 m off all round or not
   known, 97,954 for each stance): where a fall from his side he may take moves every limb half a metre away from the
@@ -787,39 +812,44 @@ for fall and skin for skin the same as with none).
   limbs move less far away than another he may take not from the side opposite would move them, up to half a metre; and
   with the twins of 24 November in no cell of the fine sweep a fall from the side opposite where he may take one from
   his side, a fall from under but where the burst was under him, a throw but a field gun's or a howitzer's, or a throw
-  from a side not his (or his gun's), its own reading of the rule giving the same falls in every cell (with 7caf9453's
-  the same, but where the burst was under a man on his feet and his gun is not known, 17 cells of each stance: all he
-  may take, any throw, as under b470998e). With the twins of 24 November, on the fine grid: a man standing or running,
-  no limb toward the burst or the gun, the least 0.36 m away, in 151 cells of each stance under half a metre, the burst
-  or the gun 25.5 to 37.5 degrees round ahead on his left, where no fall he may take does better (CHN, FRA, ITA,
-  ITA_desert and SOV, as with the twins before), and his body never toward it (the least 0.18 m away); kneeling or in
-  cover, no limb toward it and none under half a metre (the least 0.50 m), his body toward it in 858 cells of each, as
-  much as 0.36 m (SOV_snow, a burst 1 m off behind on his left, a fall from behind), 806 of them where another fall he
-  may take moves it away; lying, no limb toward it and none under half a metre (the least 0.50 m), his body toward it in
-  6824 cells, as much as 0.04 m (172 where another moves it away); the burst under him, a throw from his gun's side
-  given standing in 47,437 cells, running in 22,821, kneeling or in cover in 12,308 (`die_blast_c`, the gun on his
-  left), its every limb at least 0.50 m and his body at least 1.46 m away from the gun; lying, a field gun's or a
-  howitzer's shell the throw from under him, any other by his gun's side (his body toward the gun in 824 of those 48,960
-  cells, as much as 0.02 m). With the twins before (7caf9453's), as under b470998e: standing or running the same;
-  kneeling or in cover a limb toward it in 4932 cells of each (as much as 0.73 m: USA in cover, his gun 400 m off 44.5
-  degrees round ahead on his right, `die_arm_off_e`), 24,083 under half a metre, his body toward it in 63,859 (as much
-  as 1.02 m: a burst behind on his left from a shell that may not throw him, so no fall from the left he may take, and
-  `die_arm_off_e` falls back). His limb leaves from his own pose as struck, not the fall's first frame, so it moves a
-  little more or less than that. In the test's four battles (below), with the twins of 24 November, no limb toward the
-  burst or the gun (standing 439 limbs, running 351, kneeling 372, lying 16; the least 0.38 m away, 10 under half a
-  metre, all in the band's battle), and no body of a man standing or running; with 7caf9453's, as under b470998e,
-  standing and running the same and kneeling 39 of 587 limbs toward (as much as 0.50 m). In the test's first three
-  battles with the twins of 24 November (GER, USA and POL): of 241 gored men, 105 were read by a side (6 by the gun's
-  side: lying, killed by a light gun's, a tank's or a mortar's shell bursting on them) and 129 the burst was under, of
-  them 123 in a fall from under and 6 thrown from their gun's side; every one standing or running read had a fall from
-  his side he may take, and fell in one; 23 lying gored, 18 in falls by side (not throws) and 5 thrown from under by a
-  field gun's or a howitzer's shell bursting on them. No throw but a field gun's or a howitzer's (none of a light gun's
-  gored men), and none thrown toward the burst or the gun. In the rules' Normandy and Prokhorovka with the twins of 24
-  November the 14 gored men were all struck within 0.2 m of the burst: of the 6 standing, running or kneeling, 5 fell
-  from under and 1 (a howitzer's shell) was thrown from his gun's side, away from it; the 8 lying (a mortar's or a
-  tank's shell) fell by their gun's side, every limb 0.90 to 3.05 m away from the gun, the body at most 0.01 m toward
-  it. With 7caf9453's twins the 6 gored men as under b470998e (2 thrown, both by a howitzer's or a field gun's shell),
-  all by the gun's side.
+  from a side not his (or his gun's), its own reading of the rule giving the same falls in every cell; with 7caf9453's
+  the same (where the burst was under a man on his feet and his gun is not known, 17 cells of each stance, all he may
+  take but a throw, where a424a37e and b470998e gave him a throw from any side). With the twins of 24 November, on the
+  fine grid: a man standing or running, no limb toward the burst or the gun, the least 0.36 m away, in 151 cells of each
+  stance under half a metre, the burst or the gun 25.5 to 37.5 degrees round ahead on his left, where no fall he may
+  take does better (CHN, FRA, ITA, ITA_desert and SOV, as with the twins before), and his body never toward it (the
+  least 0.18 m away); kneeling or in cover, no limb toward it and none under half a metre (the least 0.50 m), his body
+  toward it in 858 cells of each, as much as 0.36 m (SOV_snow, a burst 1 m off behind on his left, a fall from behind),
+  806 of them where another fall he may take moves it away; lying, no limb toward it and none under half a metre (the
+  least 0.50 m), his body toward it in 6824 cells, as much as 0.04 m (172 where another moves it away); the burst under
+  him, a throw from his gun's side given standing in 47,437 cells, running in 22,821, kneeling or in cover in 12,308
+  (`die_blast_c`, the gun on his left), its every limb at least 0.50 m and his body at least 1.46 m away from the gun;
+  lying, a field gun's or a howitzer's shell the throw from under him, any other by his gun's side (his body toward the
+  gun in 824 of those 48,960 cells, as much as 0.02 m). With the twins before (7caf9453's), as under b470998e: standing
+  or running the same; kneeling or in cover a limb toward it in 4932 cells of each (as much as 0.73 m: USA in cover, his
+  gun 400 m off 44.5 degrees round ahead on his right, `die_arm_off_e`), 24,083 under half a metre, his body toward it
+  in 63,859 (as much as 1.02 m: a burst behind on his left from a shell that may not throw him, so no fall from the left
+  he may take, and `die_arm_off_e` falls back). His limb leaves from his own pose as struck, not the fall's first frame,
+  so it moves a little more or less than that. In the test's four battles (below), with the twins of 24 November, no
+  limb toward the burst or the gun of a man read by a side or thrown (standing 439 limbs, running 351, kneeling 372,
+  lying 16; the least 0.38 m away, 10 under half a metre, all in the band's battle), and no body of a man standing or
+  running; the falls from under are not among them (not measured), and read against the gun the test prints them: in the
+  guns' battle 37 of 82 lower legs toward it (as much as 2.12 m) and the 2 lying thrown from under 2 of their 4 limbs
+  (4.72 m), in the band's 240 of 433 (1.32 m); in its first two battles no gun is known; with 7caf9453's, as under
+  b470998e, standing and running the same and kneeling 39 of 587 limbs toward (as much as 0.50 m). In the test's first
+  three battles with the twins of 24 November (GER, USA and POL): of 241 gored men, 105 were read by a side (6 by the
+  gun's side: lying, killed by a light gun's, a tank's or a mortar's shell bursting on them) and 129 the burst was
+  under, of them 123 in a fall from under and 6 thrown from their gun's side; every one standing or running read had a
+  fall from his side he may take, and fell in one; 23 lying gored, 18 in falls by side (not throws) and 5 thrown from
+  under by a field gun's or a howitzer's shell bursting on them. No throw but a field gun's or a howitzer's (none of a
+  light gun's gored men), and none thrown from a side toward the burst or the gun (the prone throw from under is not
+  measured: the guns' battle's 2 so thrown flung 2 of their 4 limbs toward the gun, as much as 4.72 m). In the rules'
+  Normandy and Prokhorovka with the twins of 24 November the 14 gored men were all struck within 0.3 m of the burst (13
+  within 0.2 m): of the 6 standing, running or kneeling, 5 fell from under (not measured: against the gun 3 of them
+  moved the lower leg 0.84 to 1.64 m toward it, above) and 1 (a howitzer's shell) was thrown from his gun's side, away
+  from it; the 8 lying (a mortar's or a tank's shell) fell by their gun's side, every limb 0.90 to 3.05 m away from the
+  gun, the body at most 0.01 m toward it. With 7caf9453's twins the 6 gored men as under b470998e (2 thrown, both by a
+  howitzer's or a field gun's shell), all by the gun's side.
 - **Whole joints stay whole** (the art director's PASS, 18:34Z: the caps hidden till his limb goes). The twin's skin is
   split hard at the eight cuts, which opens a crack of up to 20 cm at a bent shoulder or hip with its red caps inside.
   Its `gore.joined` lists, per level, the points at each joint with the man's own weights and the cuts they sit at:
@@ -850,54 +880,64 @@ for fall and skin for skin the same as with none).
   and never in one from the side opposite where he may take one from his side (the falls read from their first frames
   and last), every one standing or running with a fall from his side; each the burst was under (within 1 m) whose
   stance's gore falls hold one from under he may take in one, or by a field gun's or a howitzer's shell in the throw his
-  gun's side gives him (every limb as far from the gun as that side's falls set); no limb off a man standing or running
-  moving toward the burst or the gun as it moved (the least and those under half a metre counted), nor off a man of a
-  stance whose gore falls hold one from each side that is not a throw (with the twins of 24 November kneeling, in cover
-  and lying too; in those before a note), nor his body (his pelvis), standing or running, more than 0.1 m where another
-  fall he may take moves it away (kneeling, in cover or lying a note); no man thrown with a limb or his body moving
-  toward it; only a field gun's or a howitzer's shell throwing a gored man (a light gun's goring some, throwing none); a
-  man lying thrown only from under him, by such a shell bursting on him; where the twins hold lying falls by side, men
-  lying gored in them by a tank's or a mortar's shell or one off to their side; where they hold falls from under, men
-  the burst was under falling in them and some thrown from their gun's side; counted by side and by stance; and digests
-  of the falls and skins of the men not gored and of the switch off, to be byte-identical before and after a change that
-  does not change who is gored. Then the sweep: `GoreFalls` and `GoreSide` for each twin in the twins folder, standing,
-  running, kneeling, in cover and lying, a shell that may throw him and one that may not, the burst 1, 1.5, 2, 2.5 or 3
-  m off or his gun 25 or 400 m off (read by its side), every 3 degrees all round (142,800 cells), and the burst under
-  him, his gun 25 or 400 m off every 3 degrees all round or not known (40,970), each fall given read by the test from
-  its first frame and last: every fall given one he may take (none from under but where the burst was under him); the
-  side read as the test reads it; only falls from his side wherever one from there moves every limb half a metre away;
-  none moving a limb less far away than another he may take (but where he may take one from his side, none from the side
-  opposite), up to half a metre; none from the side opposite where he may take one from his side; no limb off a man
-  standing or running moving toward the burst or the gun, naming the least move and counting the cells under half a
-  metre, the band's (30 to 50 degrees round ahead on either side) apart, nor off a man of a stance whose falls hold one
-  from each side; no fall given a man standing or running moving his body toward it more than 0.01 m where another he
-  may take moves it away (kneeling, in cover or lying a note, the cells toward counted); the burst under him, every fall
-  from under he may take and else only such a shell's throw from his gun's side, where none from under what his gun's
-  side gives, and no throw moving a limb or his body toward the gun. Built against 35ffc951's rule it failed six of its
-  then 52 checks: falls given where another he may take moves every limb farther (the sides' battle 1, the guns' 3, the
-  band's 136, the sweep 926 cells); the band's battle 60 of its 1006 standing and running limbs toward the burst or the
-  gun (as much as 0.58 m, 80 under half a metre away); the sweep 290 cells toward, all in the band (756 of its 6664
-  under half a metre; as much as 0.63 m: SOV_winter standing, a burst 1 m off 42 degrees round ahead on his left that
-  may not throw him, `die_arm_off_b`). Built against f6f8b75c's rule, whose widening took falls from the side opposite,
-  it failed six of its then 62: a fall from the side opposite (the sides' battle 1 man, the guns' 2, the band's 4, all
-  kneeling but the band's, and the sweep 164 cells), and a standing or running man's body toward the burst or the gun
-  (the band's battle 4, as much as 1.65 m: CHN standing, his gun 43 degrees round ahead on his left, `die_leg_off_b`;
-  the sweep 28 cells, as much as 1.70 m). b470998e's own test and code, given the twins of 24 November, fail four of its
-  62 checks: men lying gored in falls that are not throws (the sides' battle 12, the guns' 6: the rule it held them to),
-  and a standing or running man's body toward the burst or the gun where another fall he may take moves it away (the
-  band's battle 2, as much as 0.11 m; the sweep 95 cells, as much as 0.23 m: USA_nco standing, his gun 45 degrees round
-  ahead on his left, `die_leg_off_d`, from under, widened to); built against this rule it fails eleven, reading a man
-  the burst was under by his gun's side, so that his fall from under counts as flinging a limb toward the gun. With this
-  rule, given the twins of 24 November, all 76 checks pass: no note at all; no limb toward the burst or the gun in any
-  battle, at any stance, and no body of a man standing or running; on the sweep's grid standing and running each 10
-  cells under half a metre (the least 0.36 m), kneeling and in cover none (the least 0.51 m), lying none (0.50 m), the
-  band's 18 (746 given a fall from another side); a body toward it kneeling or in cover in 58 cells each (as much as
-  0.30 m), lying in 454 (0.04 m); the burst under him, 36,873 cells with falls from under he may take, in 7928 of them a
-  throw from the gun's side (none toward it), 4080 with none from under read by the gun's side, 17 with the gun not
-  known. Given 7caf9453's twins all 74 pass (the lying and the under battles' two checks need their falls), as under
-  b470998e: kneeling and in cover a note, 650 of the sweep's cells with a limb toward it (as much as 0.59 m), 8878 with
-  the body toward it (as much as 1.02 m). The same output from g++ and clang++; 9 to 12 s here. Pictures:
-  `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
+  gun's side gives him (every limb as far from the gun as that side's falls set), and not held but printed, his fall
+  from under read against his gun, by stance, and the men such a shell offered both a fall from under and a throw, with
+  how many were thrown (no check of the kind's weight: the Fates rule sways a choice of two too far, the band's 43 of
+  73 thrown against 8 in 11 before it); no limb off a man standing or running moving toward the burst or the gun as it
+  moved (the least and those under half a metre counted), nor off a man of a stance whose gore falls hold one from each
+  side that is not a throw (with the twins of 24 November kneeling, in cover and lying too; in those before a note), nor
+  his body (his pelvis), standing or running, more than 0.1 m where another fall he may take moves it away (kneeling, in
+  cover or lying a note); no man thrown from a side with a limb or his body moving toward it; only a field gun's or a
+  howitzer's shell throwing a gored man (a light gun's goring some, throwing none); a man lying thrown only from under
+  him, by such a shell bursting on him; where the twins hold lying falls by side, men lying gored in them by a tank's or
+  a mortar's shell or one off to their side; where they hold falls from under, men the burst was under falling in them
+  and some thrown from their gun's side; counted by side and by stance; and digests of the falls and skins of the men
+  not gored and of the switch off, to be byte-identical before and after a change that does not change who is gored.
+  Then the sweep: `GoreFalls` and `GoreSide` for each twin in the twins folder, standing, running, kneeling, in cover
+  and lying, a shell that may throw him and one that may not, the burst 1, 1.5, 2, 2.5 or 3 m off or his gun 25 or 400 m
+  off (read by its side), every 3 degrees all round (142,800 cells), and the burst under him, his gun 25 or 400 m off
+  every 3 degrees all round or not known (40,970), each fall given read by the test from its first frame and last: every
+  fall given one he may take (none from under but where the burst was under him); the side read as the test reads it;
+  only falls from his side wherever one from there moves every limb half a metre away; none moving a limb less far away
+  than another he may take (but where he may take one from his side, none from the side opposite), up to half a metre;
+  none from the side opposite where he may take one from his side; no limb off a man standing or running moving toward
+  the burst or the gun, naming the least move and counting the cells under half a metre, the band's (30 to 50 degrees
+  round ahead on either side) apart, nor off a man of a stance whose falls hold one from each side; no fall given a man
+  standing or running moving his body toward it more than 0.01 m where another he may take moves it away (kneeling, in
+  cover or lying a note, the cells toward counted); the burst under him, every fall from under he may take and else only
+  such a shell's throw from his gun's side, where none from under what his gun's side gives, and no throw moving a limb
+  or his body toward the gun (the falls from under given read against the gun, printed, not held). Built against
+  35ffc951's rule it failed six of its then 52 checks: falls given where another he may take moves every limb farther
+  (the sides' battle 1, the guns' 3, the band's 136, the sweep 926 cells); the band's battle 60 of its 1006 standing and
+  running limbs toward the burst or the gun (as much as 0.58 m, 80 under half a metre away); the sweep 290 cells toward,
+  all in the band (756 of its 6664 under half a metre; as much as 0.63 m: SOV_winter standing, a burst 1 m off 42
+  degrees round ahead on his left that may not throw him, `die_arm_off_b`). Built against f6f8b75c's rule, whose
+  widening took falls from the side opposite, it failed six of its then 62: a fall from the side opposite (the sides'
+  battle 1 man, the guns' 2, the band's 4, all kneeling but the band's, and the sweep 164 cells), and a standing or
+  running man's body toward the burst or the gun (the band's battle 4, as much as 1.65 m: CHN standing, his gun 43
+  degrees round ahead on his left, `die_leg_off_b`; the sweep 28 cells, as much as 1.70 m). b470998e's own test and
+  code, given the twins of 24 November, fail four of its 62 checks: men lying gored in falls that are not throws (the
+  sides' battle 12, the guns' 6: the rule it held them to), and a standing or running man's body toward the burst or the
+  gun where another fall he may take moves it away (the band's battle 2, as much as 0.11 m; the sweep 95 cells, as much
+  as 0.23 m: USA_nco standing, his gun 45 degrees round ahead on his left, `die_leg_off_d`, from under, widened to);
+  built against this rule it fails eleven, reading a man the burst was under by his gun's side, so that his fall from
+  under counts as flinging a limb toward the gun. With this rule, given the twins of 24 November, all 76 checks pass: no
+  note at all; no limb toward the burst or the gun in any battle, at any stance, of the men read by a side or thrown,
+  and no body of a man standing or running (the falls from under, not measured, read against the gun: in the guns'
+  battle 37 of 82 lower legs toward it and 2 of the 4 limbs of the lying thrown from under, in the band's 240 of 433; on
+  the sweep's grid, his gun known, standing or running 4074 of 8160 cells with the leg toward it and 4080 with the body,
+  kneeling or in cover 4076 and 4082, lying, the throw from under, 3992 of 4080 with a limb toward it); on the sweep's
+  grid standing and running each 10 cells under half a metre (the least 0.36 m), kneeling and in cover none (the least
+  0.51 m), lying none (0.50 m), the band's 18 (746 given a fall from another side); a body toward it kneeling or in
+  cover in 58 cells each (as much as 0.30 m), lying in 454 (0.04 m); the burst under him, 36,873 cells with falls from
+  under he may take, in 7928 of them a throw from the gun's side (none toward it), 4080 with none from under read by the
+  gun's side, 17 with the gun not known (lying, by a smaller round: all his lying falls). Given 7caf9453's twins all 74
+  pass (the lying and the under battles' two checks need their falls), as under b470998e but that the burst under a man
+  with no gun known throws him no more (the first battle's thrown 8 of 22 where a424a37e had 13, the sides' battle's 11
+  of 52 where 19; the same men gored, the men not gored and the switch off the same): kneeling and in cover a note, 650
+  of the sweep's cells with a limb toward it (as much as 0.59 m), 8878 with the body toward it (as much as 1.02 m). The
+  same output from g++ and clang++; 9 to 12 s here. Pictures: `/mnt/project-files/battle-fx/gore/` (r3: the joined skin,
+  fresh twins 29ad7cfe).
 - **Owed.** The Mac shots behind the switch, and gore twins for every soldier file (the soldiers folder's `GER_panzer`
   and `USA_tanker` have none: they fall as before). The deaths thread's re-runs of the falls that rested a limb under 1
   m from its joint or threw one over 3 m up (USA and GER `die_leg_off_a`, GER `die_arm_off_b`; USA and GER
@@ -906,13 +946,22 @@ for fall and skin for skin the same as with none).
   that flings a limb back and to his right (today each flings one back and to his left, so for a burst or a gun ahead on
   his left he is often given a fall from another side (746 of the sweep's 6664 band cells), and in CHN, FRA, ITA,
   ITA_desert and SOV, 25.5 to 37.5 degrees round on the fine grid (27 to 36 on the test's), none he may take moves every
-  limb half a metre away: 0.36 m at least). Kneeling, in cover or lying the falls' own bodies may move toward the burst
-  or the gun: kneeling or in cover as much as 0.36 m, a burst behind on his left, in a fall from behind (806 cells of
-  each stance's on the fine grid where another he may take moves it away), lying as much as 0.04 m; the test notes them.
-  The rate: with the lying falls by side, 1 shell kill in 6.4 to 6.9 in the rules' battles against the art director's 1
-  in 8 to 10; the odds are not changed here, hers to rule. The half metre is the falls' own, read from their first
-  frames: his limb leaves from his pose as struck, a little less or more, and nothing holds it so (in the band's battle
-  10 of its 1053 limbs under half a metre away, none toward).
+  limb half a metre away: 0.36 m at least). From the deaths thread, for the burst under him: a second fall from under
+  for each stance, mirrored (today one each, `die_leg_off_d` taking the right calf standing or running and
+  `die_leg_off_e` the left kneeling or in cover, so every man on his feet killed by a smaller round bursting on him,
+  most gored men on their feet in the rules' battles, falls the same way; the code takes every fall from under the twin
+  holds, and the Fates rule would then vary them). Nothing holds the falls from under, nor the prone throw from under
+  (`die_blast_d`, a limb toward the gun in 75,810 of the fine grid's 85,680 cells), away from the gun: the art director
+  should know that most gored men on their feet now fall so. Kneeling, in cover or lying the falls' own bodies may move
+  toward the burst or the gun: kneeling or in cover as much as 0.36 m, a burst behind on his left, in a fall from behind
+  (806 cells of each stance's on the fine grid where another he may take moves it away; in nearly all of them the falls
+  given already hold one that does, `die_arm_off_m` beside `die_arm_off_f`, so choosing among those by the body too
+  would make the test's note a check: a follow-up), lying as much as 0.04 m; the test notes them. The rate: in the
+  rules' battles 14 of 93 shell kills gored (1 in 6.6) where the odds expect 9.8 (1 in 9.5, inside the art director's 1
+  in 8 to 10; the 14 about 1.5 standard deviations above it, those battles' dice); the odds are not changed here, hers
+  to rule, with both figures before her. The half metre is the falls' own, read from their first frames: his limb leaves
+  from his pose as struck, a little less or more, and nothing holds it so (in the band's battle 10 of its 1053 limbs
+  under half a metre away, none toward).
 
 ## The fighters on call over the field (release 2, off until passed)
 
