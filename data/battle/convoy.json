@@ -36,8 +36,8 @@
     "_": "Mean seconds to a contact while a boat lies within reach (M): sea-search radar on a surfaced boat 60, lookouts 120, sonar on a dived boat 90 (a deep boat at 0.8 of the chance). A held contact slips away at 0.04 a check (M). A boat's lookouts pick up an escort within their reach in 45 s (M). HF/DF, a boat's radar warning, the acoustic torpedo and the noise decoy have no rows (U): no effect."
   },
   "torpedo": {
-    "speed": 15, "hit": 0.3, "escortHit": 0.15, "escortSinks": 0.6, "column": 400,
-    "_": "Electric torpedoes at 15 m/s; each in a salvo fired into the columns hits at 0.3 (M; OEG T3's about one ship sunk per attacking boat a night in 1941-42 is what a night should come to, history §5), any ship within 400 m of its aim; at a manoeuvring escort 0.15. A torpedoed merchant is lost (one hull a ship); a torpedoed escort sinks at 0.6, else limps home damaged (a look, ruling 241 Q7)."
+    "speed": 15, "hit": 0.3, "escortHit": 0.15, "escortSinks": 0.75, "column": 400,
+    "_": "Electric torpedoes at 15 m/s; each in a salvo fired into the columns hits at 0.3 (M; OEG T3's about one ship sunk per attacking boat a night in 1941-42 is what a night should come to, history §5), any ship within 400 m of its aim; at a manoeuvring escort 0.15. A torpedoed merchant is lost (one hull a ship); a torpedoed escort sinks at 0.75, else limps home damaged (the design director's 14:49Z ruling of 24 November 2026, from one hit sinking a small warship about 7 to 8 times in 10, historian/naval-reads-3-1124.md, D; it was 0.6, a look, ruling 241 Q7)."
   },
   "hunt": {
     "patterns": 4, "hurt": 0.08, "harm": 0.4, "forced": 0.4,

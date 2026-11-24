@@ -2530,7 +2530,8 @@ type ConvoyRoute = (typeof NAVY.convoys)[number];
  * What a convoy the boats attack loses, from the convoys' side (the design director's tons ruling of 24 November 2026
  * 14:04Z, naval-battles/convoy-r2/tons-form.md): the pack's raid strength P against the convoy's escort E, the route's
  * escort worth shared over the convoys sailed. Ships sunk a convoy attacked = its ships x P / (P + k E), k refit once at
- * OEG T2's window, and never more than the pack's torpedoes can sink (the boat ceiling, below): torps, where it is laid.
+ * OEG T2's window, and never more than the pack's torpedoes sink on an average night (the boat ceiling, below): torps,
+ * where it is laid.
  * L is the share of the route's ships sunk, both ways, and so of its cargoes.
  */
 export interface ConvoySide { P: number; E: number; sunk: number; L: number; torps?: number }
@@ -2540,7 +2541,7 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   const P = count.boats > 0 ? (count.pack * boats) / count.boats : 0;
   const E = count.sailed > 0 ? G / count.sailed : 0;
   const contest = P > 0 ? (ships * P) / (P + k * E) : 0;
-  // (The boat ceiling: never more than the pack's torpedoes can sink, each boat's at most 'each'.)
+  // (The boat ceiling: never more than the pack's torpedoes sink on an average night, each boat's at most 'each'.)
   const torps = each === null ? undefined : count.pack * each;
   const sunk = torps === undefined ? contest : Math.min(contest, torps);
   return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}) };
@@ -2548,14 +2549,15 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
 
 /**
  * The boat ceiling (the design director's ruling of 24 November 2026, 14:46Z and 14:49Z): the ships one boat can sink in
- * one convoy battle at most, in a sea. Its torpedoes inside the hull, and those carried outside it where the sea is calm
- * (the sky over it not closed; every sea where the campaign has no weather), x the share of torpedoes that hit, one figure
- * for every navy, x the ships a hit sinks. Nothing in it reads the flag or the date. Null where a figure is not laid.
+ * one convoy battle on an average night, in a sea. Its torpedoes inside the hull, and those carried outside it only where
+ * the sea is calm (the sky over it clear; with no weather in the campaign, no sea is shown calm), x the share of
+ * torpedoes that hit, one figure for every navy, x the ships a hit sinks. Nothing in it reads the flag or the date. Null
+ * where a figure is not laid.
  */
 export function boatCeiling(g: Game, z: number): number | null {
   const C = CAUSE.ceiling;
   if (!C || C.inside === null || C.hit === null || C.sinkHit === null) return null;
-  const calm = !weatherOn(g) || skyAtSea(g, z) !== 'closed';
+  const calm = weatherOn(g) && skyAtSea(g, z) === 'clear';
   return (C.inside + (calm ? C.outside ?? 0 : 0)) * C.hit * C.sinkHit;
 }
 
@@ -2575,14 +2577,14 @@ function routeCeiling(g: Game, route: ConvoyRoute): number | null {
 
 /**
  * A month's share lost and tons sunk on a route where the boats sink from the convoys' side, with the month's swing w
- * (1 where none is drawn): the swing acts on the ships sunk a convoy attacked, never past the convoy's ships nor the pack's
- * torpedoes, and on the
- * other raiders' share as on the lanes; the two shares together at most LANE_CAP. The boats' tons are of the ships
+ * (1 where none is drawn): the swing acts on the ships sunk a convoy attacked, never past the convoy's ships, and on the
+ * other raiders' share as on the lanes. Where the boat ceiling holds the ships sunk, the swing acts around it, so the
+ * month's mean stays the card's (ruling 241's mean-1 swing): a good night's torpedoes hit more often than the average's; the two shares together at most LANE_CAP. The boats' tons are of the ships
  * sailing both ways, the others' of the loaded sailings, as the lanes count them.
  */
 function sideLoss(route: ConvoyRoute, side: ConvoySide, Lo: number, w: number): { L: number; tons: number; sunk: number } {
   const ships = CAUSE.count.ships[route.id] ?? 0;
-  const sunk = Math.min(side.torps === undefined ? ships : Math.min(ships, side.torps), side.sunk * w);
+  const sunk = Math.min(ships, side.sunk * w);
   const Lb = side.sunk > 0 ? side.L * (sunk / side.sunk) : 0;
   const lo = Lo * w, sum = Lb + lo, L = Math.min(LANE_CAP, sum);
   const cut = sum > 0 ? L / sum : 1;

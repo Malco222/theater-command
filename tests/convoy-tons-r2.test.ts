@@ -5,7 +5,9 @@
 // ships sunk x GRT, both ways; the share lost is the share of the ships sunk. The month's swing acts on the ships sunk a
 // convoy attacked, never past its ships. A surface raider or a fortress astride the route keeps the lanes' form, and the
 // lanes' form keeps its boat weight on station (3.5) wherever it still counts boats. The boat ceiling (what a pack's
-// torpedoes can sink) is unread here, so these test the contest itself; its own tests are convoy-ceiling-r2.
+// torpedoes sink on an average night) is unread here, so these test the contest itself; its own tests are
+// convoy-ceiling-r2. Where the ceiling holds (weak escorts, no aircraft with kit), the escort and the pack's size do not
+// move the ships sunk a boat; there these claims are the contest's, not the game's.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, NAVY, convoyCount, convoyField, convoyMeeting, convoySideOf, convoyWar, fit, laneLoss, navalUpkeep, seaCover, zoneOf } from '../src/campaign/navy';
@@ -117,7 +119,7 @@ describe('a convoy attacked', () => {
     expect(convoySideOf(tired, 'UK', atlantic)!.P / p0).toBeCloseTo(fit(tired, u) / f1, 9);
   });
 
-  it('bigger packs sink more a convoy, and less a boat', () => {
+  it('the contest: bigger packs sink more a convoy, and less a boat (under the ceiling, each boat sinks the same: convoy-ceiling-r2)', () => {
     const g = open(true);
     let sunk = 0, each = Infinity;
     for (const n of [20, 40, 80, 160, 320]) {
@@ -130,7 +132,7 @@ describe('a convoy attacked', () => {
     }
   });
 
-  it('more escorts sink fewer', () => {
+  it('the contest: more escorts sink fewer (where the ceiling holds, they do not: convoy-ceiling-r2)', () => {
     const g = open(true);
     let last = Infinity;
     for (const dd of [10, 20, 40, 80]) {
