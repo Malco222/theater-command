@@ -4,8 +4,9 @@
 // counted at 1), E the convoy's share of the route's escort, k refit once at OEG T2's window. Tons = convoys attacked x
 // ships sunk x GRT, both ways; the share lost is the share of the ships sunk. The month's swing acts on the ships sunk a
 // convoy attacked, never past its ships. A surface raider or a fortress astride the route keeps the lanes' form, and the
-// lanes' form keeps its boat weight on station (3.5) wherever it still counts boats.
-import { afterEach, describe, expect, it } from 'vitest';
+// lanes' form keeps its boat weight on station (3.5) wherever it still counts boats. The boat ceiling (what a pack's
+// torpedoes can sink) is unread here, so these test the contest itself; its own tests are convoy-ceiling-r2.
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, NAVY, convoyCount, convoyField, convoyMeeting, convoySideOf, convoyWar, fit, laneLoss, navalUpkeep, seaCover, zoneOf } from '../src/campaign/navy';
 import type { ConvoyNights } from '../src/campaign/navy';
@@ -50,6 +51,9 @@ function meet(g: Game, ss: number, dd: number, zone = 'natl'): Fleet {
 const night = (swing: number): ConvoyNights => new Map([['atlantic', { fought: { swing, ss: {}, dd: {} }, ss: new Set<number>(), dd: new Set<number>(), clamped: false }]]);
 
 afterEach(() => { convoyField.fought = undefined; });
+const ceilingKept = CAUSE.ceiling.inside;
+beforeAll(() => { CAUSE.ceiling.inside = null; });
+afterAll(() => { CAUSE.ceiling.inside = ceilingKept; });
 
 describe('the figures', () => {
   it('lays k at 0.137: at T2\'s window 2 boats sink 3.75 ships a convoy attacked, inside T2\'s 3.2-4.4', () => {
