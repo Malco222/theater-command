@@ -4,14 +4,20 @@ level of artistic detail as the vehicles, tanks, and planes"; release 2; the pla
 The German rifleman made again by soldier.py with the art director's gap list worked through, as wrappers round
 soldier.py's own builders (soldier.py itself is not changed, so every other army is made as before):
 
-- cloth: the uniform thinned to about 8,800 triangles, not 2,450, so its hems, flaps and folds keep their shape; folds
-  where cloth gathers (the crook of each elbow, the sleeve above the cuff, the front of the armpit, the crotch, behind
-  and above each knee) and the jackboot's ankle wrinkles; box pleats on the four pockets and the pointed (scalloped)
-  flaps the pleats button to;
+- cloth: the uniform thinned to about 6,500 triangles, not 2,450, so its hems, flaps and folds keep their shape; folds
+  where cloth gathers (the crook of each elbow, the sleeve above the cuff, from the armpit to the Y-strap, by each
+  strap's foot at the belt, the crotch, behind and above each knee) and the jackboot's ankle wrinkles; the hem eased
+  to a clean line (`smooth_hem`);
+- pockets: four patch pockets as pieces of their own laid on the cloth's curve (`Pocket`): a filled bag with a crisp
+  rim, a box pleat, a pointed flap whose lip stands 5.8 mm off the bag with a 3 mm dark gap under it, its button;
+  made in the cloth they were lost at its 3.4 mm meshing grid and read as muscles;
+- Y-straps laid without teeth (`lay_strap`: eased, each edge moved only along the strap's normal, lifted smoothly
+  over a pocket), over each breast pocket's outer third with its button clear, their buckles and rings on the strap;
+- pouches: stiff leather cells (`leather_cell`): flat front, rounded top, a flap with its edge, a strap and stud;
 - small hardware: domed buttons (front, pockets, shoulder straps), the collar patches with their two bars, the belt's
   buckle plate with its round boss, the Y-straps' chest buckles, shoulder rings and back ring, the pouches' closing
   straps and studs, the bread bag's straps;
-- kit: every bag, pouch, flask, case and canister made at about three times the triangles on a finer grid; the bayonet
+- kit: every bag, flask, case and canister made at about three times the triangles on a finer grid; the bayonet
   in its frog over the entrenching tool;
 - helmet: 72 sides and twelve rings, a rolled rim, the two vent lugs and three liner rivets, the chin strap's buckle;
 - rifle: the stock at 1,400 triangles with finger grooves and the butt's disc and sling slot; a stepped barrel, the
@@ -51,7 +57,7 @@ SHARED = "/mnt/project-files/battle-models/land/soldier/"
 _n = S._n
 
 # ================================================================================================ budgets
-S.BUDGET["uniform"] = int(os.environ.get("DETAIL_UNIFORM", 7800))
+S.BUDGET["uniform"] = int(os.environ.get("DETAIL_UNIFORM", 6000))   # (7800 before the pockets were pieces of their own)
 S.BUDGET["hand"] = 900
 S.LOD_TARGET[1] = 2700
 SCALE = {"tris": 1.0, "h": 1.0}
@@ -59,12 +65,80 @@ _mesh_from_layers = S.mesh_from_layers
 
 
 def mesh_from_layers(name, layers, h, target_tris, **kw):
-    """soldier.py's, with the kit's budgets scaled while the kit is made."""
+    """soldier.py's, with the kit's budgets scaled while the kit is made (and the uniform's hem made clean)."""
     t = int(target_tris * SCALE["tris"]) if target_tris else target_tris
-    return _mesh_from_layers(name, layers, h * SCALE["h"], t, **kw)
+    ob = _mesh_from_layers(name, layers, h * SCALE["h"], t, **kw)
+    if name == "uniform":
+        smooth_hem(ob)
+    return ob
+
+
+def smooth_hem(ob, it=6):
+    """The tunic's hem as a clean line: where the skirt's foot meets the trousers the meshing grid and the cut along
+    the paints left it ragged (its points up and down 5 mm, little teeth that read at 1 m). The line where the two
+    paints meet is eased along itself, and the cloth two points either side of it (skirt and trousers) eased with
+    it; nothing else moves."""
+    import bmesh
+    me = ob.data
+    mats = [mt.name.split(".")[0] for mt in me.materials]
+    if "tunic" not in mats or "trousers" not in mats:
+        return
+    ti, ri = mats.index("tunic"), mats.index("trousers")
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    zt = [v.co.z for f in bm.faces if f.material_index == ti for v in f.verts]
+    belt = float(np.percentile(zt, 1)) + 0.08 if zt else 0.0       # (well below the belt: the skirt's foot only)
+    seam = [v for v in bm.verts if v.co.z < belt and {f.material_index for f in v.link_faces} >= {ti, ri}]
+    if not seam:
+        bm.free()
+        return
+    hem = min(v.co.z for v in seam)
+    sid = {v.index for v in seam}
+    near, edge = set(), set(sid)
+    for _ in range(2):
+        edge = {e.other_vert(v).index for v in bm.verts if v.index in edge for e in v.link_edges} - sid - near
+        near |= edge
+    bm.verts.ensure_lookup_table()
+    foot = [bm.verts[i] for i in sorted(near) if {f.material_index for f in bm.verts[i].link_faces} <= {ti, ri}
+            and not bm.verts[i].is_boundary]
+    along = {v.index: [e.other_vert(v) for e in v.link_edges if e.other_vert(v).index in sid] for v in seam}
+    moved = 0.0
+    for _ in range(it):
+        new = {}
+        for v in seam:
+            nb = along[v.index]
+            if len(nb) >= 2:
+                q = sum((u.co for u in nb), v.co * 0.0) / len(nb)
+                new[v] = v.co * 0.4 + q * 0.6
+        for v in foot:
+            nb = [e.other_vert(v) for e in v.link_edges]
+            q = sum((u.co for u in nb), v.co * 0.0) / len(nb)
+            new[v] = v.co * 0.5 + q * 0.5
+        for v, c in new.items():
+            moved = max(moved, (v.co - c).length)
+            v.co = c
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    zs = np.array([ob.data.vertices[i].co.z for i in sid])
+    print(f"    {ob.name}: hem eased ({len(seam)} points on its line, {len(foot)} beside it; now {zs.min():.4f}..{zs.max():.4f})")
 
 
 S.mesh_from_layers = mesh_from_layers
+_layer_bounds = Layer.bounds
+
+
+def _padded_bounds(self):
+    """A layer's box grown by half its widest smooth join (and 3 mm): a smooth union swells the shape past both its
+    parts' boxes, and where it swelled past the meshing grid's edge the surface was cut open there (the rifle's stock
+    had holes through it beside the receiver and in the butt, seen as black ovals)."""
+    lo, hi = _layer_bounds(self)
+    ks = [k for how, p, k in self.ops if how == "add"]
+    pad = 0.5 * max(ks, default=0.0) + 0.003
+    return lo - pad, hi + pad
+
+
+Layer.bounds = _padded_bounds
 
 
 # ================================================================================================ small helpers
@@ -237,6 +311,42 @@ class Patch(RoundBox):
         return np.maximum(outline, x - (self.height(y, z) + self.t))
 
 
+class ClothMap:
+    """The cloth's height along R's x over a patch at c (a `march` straight in from outside at nu x nv places), read
+    back bilinearly, so pieces laid on the tunic follow its curve: `at(y, z, lift)` is the world point `lift` metres
+    out from the cloth at (y, z) in R's frame (x the cloth's normal at c, z up)."""
+
+    def __init__(self, L, c, R, half, nu=15, nv=17, margin=0.016):
+        self.c, self.R = np.asarray(c, float), np.asarray(R, float)
+        self.us = np.linspace(-half[0] - margin, half[0] + margin, nu)
+        self.ws = np.linspace(-half[1] - margin, half[1] + margin, nv)
+        U, W = np.meshgrid(self.us, self.ws, indexing="ij")
+        loc = np.stack([np.full(U.size, 0.06), U.ravel(), W.ravel()], axis=1)
+        P, ok = march(L, self.c + loc @ self.R.T, -self.R[:, 0])
+        self.h = ((P - self.c) @ self.R[:, 0]).reshape(U.shape)
+        if not ok.all():
+            good = ok.reshape(U.shape)
+            self.h[~good] = self.h[good].mean() if good.any() else 0.0
+
+    def height(self, y, z):
+        y, z = np.asarray(y, float), np.asarray(z, float)
+        iy = np.clip((y - self.us[0]) / (self.us[1] - self.us[0]), 0, len(self.us) - 1.001)
+        iz = np.clip((z - self.ws[0]) / (self.ws[1] - self.ws[0]), 0, len(self.ws) - 1.001)
+        i0, j0 = np.floor(iy).astype(int), np.floor(iz).astype(int)
+        fy, fz = iy - i0, iz - j0
+        h = self.h
+        return ((1 - fy) * (1 - fz) * h[i0, j0] + fy * (1 - fz) * h[i0 + 1, j0]
+                + (1 - fy) * fz * h[i0, j0 + 1] + fy * fz * h[i0 + 1, j0 + 1])
+
+    def at(self, y, z, lift):
+        y, z, lift = np.broadcast_arrays(np.asarray(y, float), np.asarray(z, float), np.asarray(lift, float))
+        loc = np.stack([self.height(y, z) + lift, y, z], axis=-1)
+        return self.c + loc @ self.R.T
+
+    def local(self, P):
+        return (np.asarray(P, float) - self.c) @ self.R
+
+
 def uniform_layers(man, J, spec, LM):
     ls = _uniform_layers(man, J, spec, LM)
     t0 = time.time()
@@ -252,18 +362,26 @@ def uniform_layers(man, J, spec, LM):
         for k, (u, tilt, ln) in enumerate(((-0.035, 18.0, 0.026), (-0.008, -6.0, 0.03), (0.02, 14.0, 0.024))):
             c = el + axis * u + crook * 0.05
             d = _n(across * math.cos(math.radians(tilt)) + axis * math.sin(math.radians(tilt)))
-            ridge(tunic, [c - d * ln, c, c + d * ln], 0.0068, 0.0038, 0.005)
+            ridge(tunic, [c - d * ln, c, c + d * ln], 0.0075, 0.003, 0.0075)   # (soft: bent, sharper ones creased like cuts)
         # the sleeve gathered above the turned-back cuff: two soft slanting folds, front and back
         cc = wr - fa * 0.075
         for k, (dz, a0, a1) in enumerate(((0.0, -70.0, 60.0), (0.03, 120.0, 230.0))):
             Rk = S.ring_frame(fa) @ rot_euler(8.0 * (1 - 2 * k), 0, 0)
             rx, ry = S.ring_axes(tunic, cc + fa * dz, Rk)
             ridge(tunic, arc(cc + fa * dz, Rk, rx, ry, a0, a1, 6), 0.006, 0.0032, 0.005)
-        # the front of the armpit: the sleeve's cloth pulled across to the chest, two folds
+        # the front of the armpit: the cloth drawn from the armpit's hollow up to the Y-strap, two soft folds that stop
+        # at the breast pocket's outer edge (they had run on across the chest, under where the pocket now lies, and
+        # lumped it: with the pocket over them they read as muscles)
+        Zf = LM.get("Z", lambda z: z)
         for k in range(2):
-            a = sh + np.array((0.07, -side * 0.035, -0.06 - 0.03 * k))
-            b = sh + np.array((0.1, -side * 0.095, -0.03 - 0.035 * k))
-            ridge(tunic, [a, (a + b) / 2, b], 0.007, 0.0034, 0.006)
+            a = np.array((sh[0] + 0.06, side * 0.192, sh[2] - 0.115 - 0.035 * k))
+            b = np.array((sh[0] + 0.1, side * 0.16, sh[2] - 0.06 - 0.04 * k))
+            ridge(tunic, [a, (a + b) / 2, b], 0.011, 0.0032, 0.009)       # (broad and low: a narrow fold thins to a scratch)
+        # where the strap pulls on the belt: the wool bunched by the strap's foot, two short folds slanting up and out
+        for k in range(2):
+            a = np.array((0.13, side * 0.112, Zf(1.05 + 0.03 * k)))
+            b = np.array((0.11, side * 0.165, Zf(1.095 + 0.04 * k)))
+            ridge(tunic, [a, (a + b) / 2, b], 0.01, 0.0028, 0.008)
         # ---- the trousers: folds from the crotch over the inner thigh, behind and above the knee
         hip, knee, ank = (np.array(J[k + s]) for k in ("thigh_", "calf_", "foot_"))
         th = _n(knee - hip)
@@ -292,10 +410,9 @@ def uniform_layers(man, J, spec, LM):
     # ---- the pockets and the button strip, where a tunic has them. soldier.py's march onto the cloth slid the pockets
     # toward the middle (the two breast pockets met over the buttons, the skirt's sat by the strip), and each was one
     # flat box: out at the chest's sides, where the cloth curves away, a flat box stands proud at its edges and reads
-    # as a bag (and the strip stood out of the hollow of his breastbone). So they are taken out and laid again as
-    # patches of the cloth itself, lifted (`Patch`: the cloth's own surface raised so much, inside a cut outline):
-    # breast pockets 9.5 cm and skirt pockets 11.5 cm either side of the buttons, 9 to 10 mm proud with a crisp edge (a filled
-    # pocket; any lower and it does not read under the game's smooth shading), the flap 3.5 mm over the pocket and pointed in the middle, a box pleat down each, the strip 2 mm proud
+    # as a bag (and the strip stood out of the hollow of his breastbone). So they are taken out; the strip is laid
+    # again as a patch of the cloth itself, 2 mm proud (`Patch`), and the pockets' places kept for `build_pockets`:
+    # breast pockets 9.5 cm and skirt pockets 11.8 cm either side of the buttons
     old = LM.get("pockets", [])
     if old:
         Z = LM["Z"]
@@ -313,26 +430,15 @@ def uniform_layers(man, J, spec, LM):
             top, bot = sb.c[2] + sb.half[2], sb.c[2] - sb.half[2]
             q, nq = land(base, (0.4, 0.0, 0.5 * (top + bot)), (-1.0, 0.0, 0.0))
             tunic.add(Patch(base, q, (0.014, 0.5 * (top - bot)), 0.004, frame_from(nq, (0.0, 0.0, 1.0)), 0.002), 0.001)
+        # the four pockets themselves are made as pieces of their own, with crisp edges (`build_pockets`, with the kit):
+        # cut into the cloth's own surface they were lost at its meshing grid (3.4 mm) and read as muscles, not pockets
         LM["pockets"] = []
         for side in (1.0, -1.0):
-            for aim_, half in (((0.4, 0.095 * side, Z(1.305)), (0.010, 0.052, 0.058)),
-                               ((0.4, 0.118 * side, Z(0.875)), (0.009, 0.062, 0.072))):
+            for aim_, half in (((0.4, 0.095 * side, Z(1.305)), (0.0068, 0.052, 0.058)),
+                               ((0.4, 0.118 * side, Z(0.875)), (0.0066, 0.062, 0.072))):
                 c0, n0 = land(base, np.array(aim_), (-1.0, 0.0, 0.0))
-                R0 = frame_from(n0, (0.0, 0.0, 1.0))
-                tunic.add(Patch(base, c0, half[1:], 0.006, R0, half[0]), 0.0012)
-                LM["pockets"].append((c0, R0, half))
-    # ---- the flap over each pocket, drawn to a point in the middle (its button's), and a box pleat down it
+                LM["pockets"].append((c0, frame_from(n0, (0.0, 0.0, 1.0)), half))
     LM["flap_points"] = []
-    base = locals().get("base")
-    for (p, R, half) in LM.get("pockets", []):
-        flap_c = p + R @ np.array((0.0, 0.0, half[2] - 0.016))
-        tunic.add(Patch(base, flap_c, (half[1] + 0.004, 0.019), 0.004, R, half[0] + 0.0035), 0.0008)
-        tip = p + R @ np.array((0.0, 0.0, half[2] - 0.035))
-        tunic.add(Patch(base, tip, (0.0105, 0.0105), 0.003, R @ rot_euler(45.0, 0, 0), half[0] + 0.0035), 0.0008)
-        tunic.add(Patch(base, p + R @ np.array((0.0, 0.0, -0.016)), (0.0115, half[2] - 0.022), 0.0015, R,
-                        half[0] + 0.0018), 0.0008)
-        q, nq = land(tunic, tip + R[:, 0] * 0.05 + R @ np.array((0.0, 0.0, -0.006)), -R[:, 0])
-        LM["flap_points"].append((q, nq))
     print(f"  detail: folds, pleats and points laid in {time.time() - t0:.0f} s")
     return ls
 
@@ -342,6 +448,253 @@ S.uniform_layers = uniform_layers
 
 # ================================================================================================ the kit
 _build_kit = S.build_kit
+
+
+def _wind(V, f, out):
+    """A face (indices into V) wound so its normal faces `out`."""
+    a, b, c = (np.asarray(V[i]) for i in f[:3])
+    return tuple(f) if np.cross(b - a, c - a) @ np.asarray(out) >= 0 else tuple(reversed(f))
+
+
+# the tunic's four pockets (metres): the bag `t` proud of the cloth in the middle and `edge` at its rim, sunk `sink`
+# into the cloth; the flap `flap` thick, its lip `lip` over the bag, `drop` deep at its sides and pointed `point`
+# lower in the middle; a box pleat `pleat` either side of the middle, `pleat_up` over the bag
+POCKET = dict(edge=0.0046, sink=0.0025, flap=0.0026, lip=0.0058, drop=0.036, point=0.012, pleat=0.0115, pleat_up=0.0016)
+
+
+class Pocket:
+    """One patch pocket laid on the cloth as pieces of its own: a filled bag with a crisp rim, a pleat down its middle
+    and a pointed flap whose lip stands off the bag (a dark gap under it), all following the cloth's curve."""
+
+    def __init__(self, L, c, R, half):
+        self.t, self.hy, self.hz = half
+        self.cm = ClothMap(L, c, R, (self.hy + 0.006, self.hz + 0.006))
+        self.R = self.cm.R
+        P = POCKET
+        self.W = self.hy + 0.003
+        self.z_top = self.hz - 0.001
+
+    def rho(self, y, z, n=6.0):
+        return (np.abs(np.asarray(y) / self.hy) ** n + np.abs(np.asarray(z) / self.hz) ** n) ** (1.0 / n)
+
+    def bag_lift(self, y, z):
+        t = self.t
+        return np.interp(self.rho(y, z), [0.0, 0.55, 0.9, 1.0], [t, t, 0.94 * t, POCKET["edge"]])
+
+    def z_bot(self, u):
+        return self.hz - POCKET["drop"] - POCKET["point"] * (1.0 - np.abs(u))
+
+    def flap_lift(self, v):
+        P = POCKET
+        return self.t + 0.0008 + (P["lip"] - 0.0008) * np.clip(v, 0.0, 1.0) ** 1.3
+
+    def lift(self, P_world):
+        """How far the pocket stands off the cloth under each world point (0 off it): for laying straps over it."""
+        loc = self.cm.local(np.atleast_2d(P_world))
+        y, z = loc[:, 1], loc[:, 2]
+        out = np.where(self.rho(y, z) <= 1.0, self.bag_lift(y, z), 0.0)
+        pl = (np.abs(y) <= POCKET["pleat"]) & (z > -self.hz + 0.008) & (z < self.z_bot(0.0) + 0.006)
+        out = np.where(pl, out + POCKET["pleat_up"], out)
+        u = np.clip(y / self.W, -1.0, 1.0)
+        zb = self.z_bot(u)
+        v = (self.z_top - z) / np.maximum(self.z_top - zb, 1e-6)
+        inf = (np.abs(y) <= self.W) & (v >= 0.0) & (v <= 1.0)
+        return np.where(inf, np.maximum(out, self.flap_lift(v)), out)
+
+    def build(self, g, paint="tunic"):
+        P, cm, R = POCKET, self.cm, self.R
+        X, Y, Zx = R[:, 0], R[:, 1], R[:, 2]
+        # ---- the bag: rings of a rounded rectangle from its sunk foot to its middle
+        K = 20
+        th = 2 * math.pi * (np.arange(K) + 0.5) / K
+        cs, sn = np.cos(th), np.sin(th)
+        oy = self.hy * np.sign(cs) * np.abs(cs) ** (2 / 6.0)
+        oz = self.hz * np.sign(sn) * np.abs(sn) ** (2 / 6.0)
+        rings = [(1.0, -P["sink"]), (1.0, P["edge"]), (0.9, 0.94 * self.t), (0.55, self.t)]
+        V, F = [], []
+        idx = []
+        for sc, lf in rings:
+            pts = cm.at(oy * sc, oz * sc, lf)
+            idx.append(list(range(len(V), len(V) + K)))
+            V += list(pts)
+        centre = len(V)
+        V.append(cm.at(0.0, 0.0, self.t))
+        for r in range(len(rings) - 1):
+            a, b = idx[r], idx[r + 1]
+            for k in range(K):
+                k1 = (k + 1) % K
+                out = X if r > 0 else (Y * oy[k] / self.hy + Zx * oz[k] / self.hz)
+                F.append(_wind(V, (a[k], a[k1], b[k1], b[k]), out))
+        for k in range(K):
+            F.append(_wind(V, (idx[-1][k], idx[-1][(k + 1) % K], centre), X))
+        g._add(V, F, paint)
+        # ---- the box pleat down the middle, under the flap at its top
+        z0, z1 = -self.hz + 0.008, self.z_bot(0.0) + 0.006
+        zs = np.linspace(z0, z1, 5)
+        V, F = [], []
+        cols = []
+        for yy in (-P["pleat"], P["pleat"]):
+            top = cm.at(np.full(5, yy), zs, self.bag_lift(yy, zs) + P["pleat_up"])
+            foot = cm.at(np.full(5, yy), zs, self.bag_lift(yy, zs) - 0.0015)
+            cols.append((list(range(len(V), len(V) + 5)), list(range(len(V) + 5, len(V) + 10))))
+            V += list(top) + list(foot)
+        (tl, fl), (tr, fr) = cols
+        for j in range(4):
+            F.append(_wind(V, (tl[j], tr[j], tr[j + 1], tl[j + 1]), X))
+            F.append(_wind(V, (fl[j], tl[j], tl[j + 1], fl[j + 1]), -Y))
+            F.append(_wind(V, (tr[j], fr[j], fr[j + 1], tr[j + 1]), Y))
+        F.append(_wind(V, (fl[0], fr[0], tr[0], tl[0]), -Zx))
+        g._add(V, F, paint)
+        # ---- the flap: pointed at the bottom, its lip off the bag
+        nu, nv = 7, 3
+        us, vs = np.linspace(-1.0, 1.0, nu), np.linspace(0.0, 1.0, nv)
+        V, F = [], []
+        T_, U_ = {}, {}
+        for i, u in enumerate(us):
+            for j, v in enumerate(vs):
+                y = u * self.W
+                z = self.z_top + (self.z_bot(u) - self.z_top) * v
+                T_[i, j] = len(V)
+                V.append(cm.at(y, z, self.flap_lift(v)))
+                U_[i, j] = len(V)
+                V.append(cm.at(y, z, self.flap_lift(v) - P["flap"]))
+        for i in range(nu - 1):
+            for j in range(nv - 1):
+                F.append(_wind(V, (T_[i, j], T_[i + 1, j], T_[i + 1, j + 1], T_[i, j + 1]), X))
+                F.append(_wind(V, (U_[i, j], U_[i, j + 1], U_[i + 1, j + 1], U_[i + 1, j]), -X))
+            F.append(_wind(V, (T_[i, nv - 1], T_[i + 1, nv - 1], U_[i + 1, nv - 1], U_[i, nv - 1]), -Zx))   # the lip
+            F.append(_wind(V, (T_[i, 0], U_[i, 0], U_[i + 1, 0], T_[i + 1, 0]), Zx))
+        for j in range(nv - 1):
+            F.append(_wind(V, (T_[0, j], T_[0, j + 1], U_[0, j + 1], U_[0, j]), -Y))
+            F.append(_wind(V, (T_[nu - 1, j], U_[nu - 1, j], U_[nu - 1, j + 1], T_[nu - 1, j + 1]), Y))
+        g._add(V, F, paint)
+        # ---- its button, on the flap above the point
+        z = self.z_bot(0.0) + 0.0105
+        v = (self.z_top - z) / (self.z_top - self.z_bot(0.0))
+        p0 = cm.at(0.0, z, self.flap_lift(v))
+        dy = cm.at(0.003, z, self.flap_lift(v)) - cm.at(-0.003, z, self.flap_lift(v))
+        vz = lambda zz: (self.z_top - zz) / (self.z_top - self.z_bot(0.0))
+        dz = cm.at(0.0, z + 0.003, self.flap_lift(vz(z + 0.003))) - cm.at(0.0, z - 0.003, self.flap_lift(vz(z - 0.003)))
+        n = _n(np.cross(dy, dz))
+        return p0, (n if n @ X > 0 else -n)
+
+
+def build_pockets(tunic, LM_):
+    """The four pockets as one piece (the tunic's paint), the flaps' button places, and the pockets for the straps."""
+    g = Geo()
+    pockets, buttons = [], []
+    for c, R, half in LM_.get("pockets", []):
+        pk = Pocket(tunic, c, R, half)
+        buttons.append(pk.build(g))
+        pockets.append(pk)
+    return (g.build("tunic_pockets", sharp=40.0, recalc=False) if pockets else None), buttons, pockets
+
+
+def lay_strap(g, L, pts, width, thick, pockets=(), paint="straps", gap=0.0025):
+    """soldier.py's strap_on without its teeth: the path pulled onto the cloth and eased; each edge moved onto the
+    cloth only along the path's normal (pulled along the field's slope, an edge slid sideways over a pocket's rim);
+    and the whole strap lifted, smoothly, over any pocket it crosses (a stiff strap bridges a pocket, it does not step
+    up and down its rim). Returns the path (its underside's middle), normals and tangents."""
+    P, N = S.project(L, pts)
+    for _ in range(3):
+        Q = P.copy()
+        Q[1:-1] = (P[:-2] + 2 * P[1:-1] + P[2:]) / 4
+        d = L.at_points(Q)
+        P = Q + N * np.maximum(gap - d, 0.0)[:, None]
+    for _ in range(2):
+        N[1:-1] = N[:-2] + 2 * N[1:-1] + N[2:]
+        N /= np.linalg.norm(N, axis=1)[:, None]
+    T = np.gradient(P, axis=0)
+    T /= np.linalg.norm(T, axis=1)[:, None]
+    B = np.cross(T, N)
+    B /= np.linalg.norm(B, axis=1)[:, None]
+
+    def ease(a, n=3):
+        a = np.asarray(a, float).copy()
+        for _ in range(n):
+            a[1:-1] = (a[:-2] + 2 * a[1:-1] + a[2:]) / 4
+        return a
+    E = []
+    for sgn in (1.0, -1.0):
+        E0 = P + B * sgn * width * 0.5
+        Ep, _ = S.project(L, E0)
+        off = ease(((Ep - E0) * N).sum(axis=1))
+        E.append(E0 + N * (off + gap)[:, None])
+    lift = np.zeros(len(P))
+    for pk in pockets:
+        lift = np.maximum.reduce([lift, pk.lift(P), pk.lift(E[0]), pk.lift(E[1])])
+    if lift.any():
+        lift = np.where(lift > 0, lift + 0.0012, 0.0)
+        lift = np.maximum.reduce([lift, np.r_[lift[1:], 0.0], np.r_[0.0, lift[:-1]]])
+        lift = np.maximum(ease(lift, 4), lift * 0.0)
+        P, E = P + N * lift[:, None], [e + N * lift[:, None] for e in E]
+    E1, E2 = E
+    verts, faces = [], []
+    for i in range(len(P)):
+        verts += [E1[i] + N[i] * thick, E1[i], E2[i], E2[i] + N[i] * thick]
+    for i in range(len(P) - 1):
+        j = i + 1
+        for k in range(4):
+            faces.append((4 * i + k, 4 * i + (k + 1) % 4, 4 * j + (k + 1) % 4, 4 * j + k))
+    faces.append((3, 2, 1, 0))
+    faces.append((4 * (len(P) - 1), 4 * (len(P) - 1) + 1, 4 * (len(P) - 1) + 2, 4 * (len(P) - 1) + 3))
+    g._add(verts, faces, paint)
+    return P, N, T
+
+
+def leather_cell(g, c, R, a, hw, b, paint="straps"):
+    """A stiff leather ammunition pouch cell (half depth a, half width hw, half height b, at c in R: x out, z up): a
+    flat front and back, its top rounded to the front, a flap over the top and a third of the way down the front
+    standing 1.8 mm off it (its edge a line), a strap down the front from the flap to a stud."""
+    X, Y, Zx = R[:, 0], R[:, 1], R[:, 2]
+    rt, rb = 0.011, 0.003
+    prof = []                                             # the cell's side, (x, z), round from the front's foot
+    prof += [(a - rb + rb * math.cos(t), -b + rb - rb * math.sin(t)) for t in np.linspace(0.0, math.pi / 2, 2)[::-1]]
+    prof += [(-a + rb - rb * math.sin(t), -b + rb - rb * math.cos(t)) for t in np.linspace(0.0, math.pi / 2, 2)]
+    prof += [(-a + 0.004 - 0.004 * math.cos(t), b - 0.004 + 0.004 * math.sin(t)) for t in np.linspace(0.0, math.pi / 2, 2)]
+    prof += [(a - rt + rt * math.sin(t), b - rt + rt * math.cos(t)) for t in np.linspace(0.0, math.pi / 2, 4)]
+    V, F = [], []
+    ends = []
+    for yy in (-hw, hw):
+        ends.append(list(range(len(V), len(V) + len(prof))))
+        V += [c + X * x + Y * yy + Zx * z for x, z in prof]
+    n = len(prof)
+    for k in range(n):
+        k1 = (k + 1) % n
+        mid = np.array(prof[k]) + np.array(prof[k1])
+        out = X * mid[0] + Zx * mid[1]
+        F.append(_wind(V, (ends[0][k], ends[0][k1], ends[1][k1], ends[1][k]), out))
+    F.append(_wind(V, tuple(ends[0]), -Y))
+    F.append(_wind(V, tuple(ends[1]), Y))
+    g._add(V, F, paint)
+    # the flap: over the top from the back and down the front to a third of the way
+    zl = b - 0.036
+    path = [(-a + 0.003, b)] + [(a - rt + rt * math.sin(t), b - rt + rt * math.cos(t)) for t in np.linspace(0.0, math.pi / 2, 4)] + [(a, zl)]
+    path = np.array(path)
+    tang = np.gradient(path, axis=0)
+    nrm = np.stack([tang[:, 1], -tang[:, 0]], axis=1)
+    nrm /= np.linalg.norm(nrm, axis=1)[:, None]
+    outer, inner = path + nrm * 0.0018, path - nrm * 0.0004
+    V, F = [], []
+    m = len(path)
+    rows = {}
+    for side, yy in (("l", -hw - 0.0012), ("r", hw + 0.0012)):
+        rows[side, "o"] = list(range(len(V), len(V) + m))
+        V += [c + X * x + Y * yy + Zx * z for x, z in outer]
+        rows[side, "i"] = list(range(len(V), len(V) + m))
+        V += [c + X * x + Y * yy + Zx * z for x, z in inner]
+    for k in range(m - 1):
+        o = X * (nrm[k, 0] + nrm[k + 1, 0]) + Zx * (nrm[k, 1] + nrm[k + 1, 1])
+        F.append(_wind(V, (rows["l", "o"][k], rows["l", "o"][k + 1], rows["r", "o"][k + 1], rows["r", "o"][k]), o))
+        F.append(_wind(V, (rows["l", "i"][k], rows["l", "i"][k + 1], rows["r", "i"][k + 1], rows["r", "i"][k]), -o))
+        F.append(_wind(V, (rows["l", "o"][k], rows["l", "o"][k + 1], rows["l", "i"][k + 1], rows["l", "i"][k]), -Y))
+        F.append(_wind(V, (rows["r", "o"][k], rows["r", "o"][k + 1], rows["r", "i"][k + 1], rows["r", "i"][k]), Y))
+    F.append(_wind(V, (rows["l", "o"][-1], rows["r", "o"][-1], rows["r", "i"][-1], rows["l", "i"][-1]), -Zx))   # its edge
+    F.append(_wind(V, (rows["l", "o"][0], rows["r", "o"][0], rows["r", "i"][0], rows["l", "i"][0]), -X))
+    g._add(V, F, paint)
+    # the strap from under the flap's edge to the stud, and the stud
+    g.box(c + X * (a + 0.0011) + Zx * (zl - 0.012), (0.0011, min(0.0055, hw * 0.35), 0.0145), paint, R)
+    g.tube(c + X * (a + 0.0004) + Zx * (zl - 0.028), c + X * (a + 0.0034) + Zx * (zl - 0.028), 0.0034, 0.0026, "steel", 6, up=tuple(Zx))
 
 
 def build_kit(J, spec, body_ls, Z=None):
@@ -387,9 +740,11 @@ def build_kit(J, spec, body_ls, Z=None):
     for start, way in spots:
         p, nrm = on_surface(tunic, start, way)
         dome(g, p - nrm * 0.0004, nrm, 0.0082, 0.0042)
-    for p, nrm in LM_.get("flap_points", []):
-        q, nrm2 = on_surface(tunic, p + nrm * 0.03, -nrm)
-        dome(g, q - nrm2 * 0.0004, nrm2, 0.0072, 0.0038)
+    pk_ob, pk_buttons, pockets = build_pockets(tunic, LM_)
+    if pk_ob is not None:
+        out["tunic_pockets"] = (pk_ob, None)
+    for q, nq in pk_buttons:                                                            # each flap's button
+        dome(g, q - nq * 0.0004, nq, 0.0072, 0.0038)
     nmid, nfwd, nrx, nry = LM_["neck_ring"]
     for side in (1.0, -1.0):
         sh = np.array(J["upperarm_" + ("l" if side > 0 else "r")])
@@ -407,27 +762,20 @@ def build_kit(J, spec, body_ls, Z=None):
     # ---- the ammunition pouches: three cells either side of the buckle, each flap held by a strap to a stud
     po = dict(spec.get("pouches") or {})
     cells = {3: ((0.06, 0.0195), (0.103, 0.0195), (0.143, 0.0195)), 1: ((0.095, 0.042),), 0: ()}[po.get("front", 3)]
-    L = Layer("pouches", "straps")
+    g = Geo()
     for side in (1.0, -1.0):
         for k, (y, hw) in enumerate(cells):
             a = math.atan2(y * side, 0.12)
             p0, n0 = S.project(tunic, [(cx + math.cos(a) * 0.2, math.sin(a) * 0.2, zb - 0.012)])
             p0, n0 = p0[0], n0[0]
             R = frame_from(n0, (0.0, 0.0, 1.0))
-            c = p0 + n0 * 0.028
-            L.add(RoundBox(c, (0.021, hw, 0.04), 0.008, R), 0.0)
-            L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, hw + 0.0015, 0.016), 0.006, R), 0.003)
-            L.add(RoundBox(c + R @ np.array((0.0225, 0.0, 0.0)), (0.0016, 0.0055, 0.022), 0.0012, R), 0.0012)     # the strap
-            L.add(Ellipsoid(c + R @ np.array((0.0222, 0.0, -0.026)), (0.0032, 0.0042, 0.0042), R), 0.0008)       # its stud
+            leather_cell(g, p0 + n0 * 0.028, R, 0.021, hw, 0.04)
     if po.get("rear"):
         p0, n0 = S.project(tunic, [(cx - 0.2, 0.0, zb - 0.012)])
         p0, n0 = p0[0], n0[0]
-        R = frame_from(n0, (0.0, 0.0, 1.0))
-        c = p0 + n0 * 0.032
-        L.add(RoundBox(c, (0.026, 0.07, 0.045), 0.01, R), 0.0)
-        L.add(RoundBox(c + R @ np.array((0.005, 0.0, 0.034)), (0.024, 0.072, 0.017), 0.007, R), 0.003)
+        leather_cell(g, p0 + n0 * 0.032, frame_from(n0, (0.0, 0.0, 1.0)), 0.026, 0.07, 0.045)
     if cells or po.get("rear"):
-        out["pouches"] = (_mesh_from_layers("pouches", [L], 0.0016, 1100, detail=0.004), None)
+        out["pouches"] = (g.build("pouches", sharp=40.0, recalc=False), None)
     # ---- the bread bag at the right hip: its flap held by two straps to buckles below
     L = Layer("bread_bag", "pack")
     flap = Layer("bread_flap", "pack")
@@ -460,22 +808,23 @@ def build_kit(J, spec, body_ls, Z=None):
     out["bayonet"] = (g.build("bayonet", sharp=50.0), "pelvis")
     # ---- the Y-straps' hardware: chest buckles, the rings at the shoulders' front, the ring at the back
     if spec.get("y_straps", True):
-        g = Geo()                                  # (soldier.py's Y-straps at twice the points along them)
+        g = Geo()                                  # (the front straps run over each breast pocket's outer third, its button clear)
+        hw_ = Geo()
         for side in (1.0, -1.0):
-            ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.082, 1.03), (0.13, 0.09, 1.16), (0.125, 0.1, 1.28), (0.09, 0.112, 1.4),
-                    (0.025, 0.12, 1.468), (-0.05, 0.112, 1.45), (-0.12, 0.085, 1.37), (-0.142, 0.045, 1.29), (-0.145, 0.006, 1.235))]
-            S.strap_on(g, tunic, S.spline(ctrl, 48), 0.032, 0.004)
-        S.strap_on(g, tunic, S.spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 14), 0.036, 0.004)
+            ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.088, 1.03), (0.13, 0.1, 1.16), (0.125, 0.118, 1.27), (0.105, 0.127, 1.36),
+                    (0.05, 0.126, 1.445), (-0.02, 0.118, 1.462), (-0.08, 0.104, 1.43), (-0.128, 0.078, 1.36), (-0.143, 0.04, 1.29),
+                    (-0.145, 0.006, 1.235))]
+            P, N, T = lay_strap(g, tunic, S.spline(ctrl, 48), 0.032, 0.004, pockets)
+            front = np.nonzero(P[:, 0] > cx)[0]
+            i = front[np.argmin(np.abs(P[front, 2] - Z(1.2)))]
+            buckle(hw_, P[i] + N[i] * 0.0043, N[i], T[i], 0.034, 0.03)
+            i = front[np.argmin(np.abs(P[front, 2] - Z(1.378)))]
+            ring(hw_, P[i] + N[i] * 0.0055, N[i], 0.011, 0.0018, up=tuple(T[i]))
+        lay_strap(g, tunic, S.spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 14), 0.036, 0.004)
         out["straps"] = (g.build("straps"), None)
-        g = Geo()
-        for side in (1.0, -1.0):
-            p, nrm = on_surface(tunic, (0.3, 0.092 * side, Z(1.2)), (-1.0, 0.0, 0.0))
-            buckle(g, p + nrm * 0.0068, nrm, (0.0, 0.0, 1.0), 0.034, 0.03)
-            p, nrm = on_surface(tunic, (0.3, 0.108 * side, Z(1.39)), (-1.0, 0.0, 0.0))
-            ring(g, p + nrm * 0.008 + np.array((0.0, 0.0, -0.012)), nrm, 0.011, 0.0018, up=(0.0, 0.0, 1.0))
         p, nrm = on_surface(tunic, (-0.3, 0.0, Z(1.245)), (1.0, 0.0, 0.0))
-        ring(g, p + nrm * 0.008, nrm, 0.016, 0.0024)
-        out["strap_metal"] = (g.build("strap_metal", sharp=50.0), None)
+        ring(hw_, p + nrm * 0.008, nrm, 0.016, 0.0024)
+        out["strap_metal"] = (hw_.build("strap_metal", sharp=50.0), None)
     print(f"  detail: kit's hardware made in {time.time() - t0:.0f} s")
     return out
 
@@ -762,6 +1111,7 @@ def pictures(m, fast=False):
     game_smooth(near0 + mid0)
     old_near = load_json_lod(SHARED + "soldier_GER.json", "near", "old_near")
     old_mid = load_json_lod(SHARED + "soldier_GER.json", "mid", "old_mid")
+    clear_studio()
     kit.studio(sun_elev=40, sun_turn=-40, strength=3.4)
     kit.backdrop("B5AC96")
     cam = kit.camera(lens=50)
@@ -843,6 +1193,14 @@ def pictures(m, fast=False):
     return path
 
 
+def clear_studio():
+    """Take away an earlier studio's sun, backdrop and camera (a second set over the first rendered the backdrop
+    black and lit the men twice)."""
+    for ob in list(bpy.data.objects):
+        if ob.type in ("LIGHT", "CAMERA") or ob.name.split(".")[0] == "backdrop":
+            bpy.data.objects.remove(ob)
+
+
 def chest_check(m):
     """A quick look while working: the new man's chest at 1 m and square on, 640 px (pictures/check_*.png)."""
     out = os.path.join(WORK, "pictures")
@@ -851,6 +1209,7 @@ def chest_check(m):
     show(m["lods"][1], False)
     show(m["lods"][2], False)
     game_smooth(near0)
+    clear_studio()
     kit.studio(sun_elev=40, sun_turn=-40, strength=3.4)
     kit.backdrop("B5AC96")
     cam = kit.camera(lens=50)
