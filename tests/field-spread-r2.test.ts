@@ -16,6 +16,7 @@ import { LAND } from '../src/battle/land/rules';
 import { startNerve, type LandUnit } from '../src/battle/land/units';
 import { PIECES, ticketOf } from '../src/battle/land/pieces';
 import { liveTicket } from '../src/battle/land/live';
+import { sampleTicket } from '../src/battle/land/sample';
 import type { LandPlace } from '../src/battle/land/field';
 import type { FieldResult, FieldTicket, NervePart, Side, SideTicket, SpreadReckoning } from '../src/battle/core/types';
 import stage from '../data/campaign/stage.json';
@@ -371,6 +372,39 @@ describe('the mask (choice 6 A)', () => {
     expect(high.i).toBe(mid.i);
     // An enemy that drew low breaks before the bar shown reaches three quarters: no dispatch tells it first.
     expect(run({ W: { att: 0.4, def: 0.03 } })).toBeNull();
+  });
+
+  it("a small enemy held at his brink gives ground with no dispatch to the player: its words and moment would tell his draw", () => {
+    // A defence of one regiment's blocks (a small army, not behind works: the fresh hold) that drew low, 0.05.
+    type Gives = { u: number; t: number; text: string };
+    const run = (who: 'att' | 'def' | null): { seen: Gives[]; log: Gives[]; gave: number[]; over: FieldResult } => {
+      const t = sampleTicket('plains', 1.2, { seed: 3 });
+      t.def.forces = [{ ...t.def.forces.find((f) => f.kind === 'inf')!, divs: 1, share: 1 }];
+      t.reckoning.spread = { W: { att: 0.4, def: 0.05 } };
+      const b = new LandBattle(t);
+      // (Set after the battle is built, so the staffs still fight both sides and the words go to whoever plays.)
+      if (who) t[who].human = true;
+      const seen: Gives[] = [];
+      for (let i = 0; i < 400000 && !b.over; i++) {
+        b.step();
+        for (const e of b.view(who ?? undefined).events) if (e.what === 'land:gives' && e.side === 'def') seen.push({ u: e.unit!, t: e.t, text: e.text });
+      }
+      const log = b.log.filter((e) => e.what === 'land:gives' && e.side === 'def').map((e) => ({ u: e.unit!, t: e.t, text: e.text }));
+      return { seen, log, gave: b.units.filter((u) => u.side === 'def' && u.gives).map((u) => u.id), over: b.over! };
+    };
+    const film = run(null), mine = run('att'), his = run('def');
+    // With nobody playing, as today: it gave ground at its drawn point, and said so.
+    expect(film.seen.length).toBeGreaterThan(0);
+    expect(film.seen[0].text).toMatch(/is worn out and falls back; the rest of its army holds\.$/);
+    // The attack's player is told nothing of it; the log keeps it blank, at the same moment, as for a block he has not met.
+    expect(mine.seen).toEqual([]);
+    expect(mine.log).toEqual(film.seen.map((g) => ({ ...g, text: '' })));
+    // The fight is the same: the same blocks gave ground and the battle ended alike (the words are view-only).
+    expect(mine.gave).toEqual(film.gave);
+    expect([mine.over.winner, mine.over.how, mine.over.seconds, mine.over.lost]).toEqual([film.over.winner, film.over.how, film.over.seconds, film.over.lost]);
+    // The defence's own player reads it, as today.
+    expect(his.seen.length).toBe(film.seen.length);
+    expect(his.seen[0].text).toMatch(/is worn out and falls back; the rest of its army holds\.$/);
   });
 });
 

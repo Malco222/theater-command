@@ -3526,6 +3526,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * player sends in again is left to the player (gives stays set until it rallies).
    */
   private giveGround(s: Side, left: LandUnit[]): void {
+    // (The side whose bar the other side's player sees through the mask: its dispatch is not his to read.)
+    const hide = !!this.ticket.reckoning.spread && !this.ticket[s].human && !!this.ticket[other(s)].human;
     for (const u of this.units) if (u.side === s && u.state === 'routing') u.gives = true;
     for (const u of left) {
       if (u.gives || this.fresh(u)) continue;
@@ -3535,8 +3537,11 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.waits) this.endWait(u, 'gives');
       this.send(u, { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h });
       u.engaged = undefined;
-      // The UI director's words (16:37Z): "gives ground" read as ground lost.
-      this.say({ what: 'land:gives', unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
+      // The UI director's words (16:37Z): "gives ground" read as ground lost. Under the field spread, never to the other
+      // side's player (the mask, choice 6 (A)): the words, and the moment they come, would tell him the enemy's drawn
+      // point (his worn share when his true bar reached it). The log keeps the event, blank, as for a block he has not met.
+      const ev = { what: 'land:gives', unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y } as const;
+      if (hide) this.log.push({ t: Math.round(this.t * 10) / 10, ...ev, text: '' }); else this.say(ev);
     }
   }
 
