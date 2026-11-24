@@ -759,12 +759,13 @@ namespace LandScape
 				}
 				case 3:
 				{
-					// clods: three angular lumps of turned earth along x, built a mid brown (the tint gives the soil)
+					// clods: three soft lumps of turned earth along x, some 10 to 25 cm across and low, settled into the
+					// ground, built a mid brown (the tint gives the soil), their undersides only a little darker (the art
+					// director, 24 Nov: as sharp boxes they read as hard brown bricks round the men, a boot through one)
 					for (int B = 0; B < 3; ++B)
 					{
-						const double X = -0.35 + 0.35 * B + R.Range(-0.08, 0.08), Y = R.Range(-0.08, 0.08), S = R.Range(0.06, 0.12);
-						const double Turn = R.Range(-0.5, 0.5);
-						W.Box(X, Y, 0.35 * S, S, 0.7 * S, 0.6 * S, Turn, Rgb(128, 112, 94));
+						const double X = -0.35 + 0.35 * B + R.Range(-0.08, 0.08), Y = R.Range(-0.08, 0.08), S = R.Range(0.055, 0.1);
+						W.Rock(X, Y, S, R.Range(0.4, 0.55) * S, 51 + static_cast<uint64_t>(B), Rgb(128, 112, 94), Rgb(106, 92, 78));
 					}
 					M.Paint = 0;
 					M.FarFrom = 40.0f;
