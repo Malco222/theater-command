@@ -136,9 +136,18 @@ namespace
 		int W = 0, H = 0;
 		std::vector<uint8_t> Rgb;
 		std::vector<float> Depth;
+		/** What each pixel shows, for the measure (0 untagged; 1 + a wreck's Coat; 32 + her patch's Scorch), how lit it is
+		 * (the sun's light on it, 0.42 to 1), and how much its face looks up (its facing's z, toward the eye). */
+		std::vector<uint8_t> Tag;
+		std::vector<float> Lit, Up;
 		/** The box lines and rings are drawn in (the map's, not its key's). */
 		int ClipW = 0, ClipH = 0;
-		Image(int InW, int InH) : W(InW), H(InH), Rgb(static_cast<size_t>(InW) * static_cast<size_t>(InH) * 3, 0), Depth(static_cast<size_t>(InW) * static_cast<size_t>(InH), 1e30f), ClipW(InW), ClipH(InH) {}
+		Image(int InW, int InH)
+			: W(InW), H(InH), Rgb(static_cast<size_t>(InW) * static_cast<size_t>(InH) * 3, 0), Depth(static_cast<size_t>(InW) * static_cast<size_t>(InH), 1e30f),
+			  Tag(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0), Lit(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f),
+			  Up(static_cast<size_t>(InW) * static_cast<size_t>(InH), 0.0f), ClipW(InW), ClipH(InH)
+		{
+		}
 		void Put(int X, int Y, double R, double G, double B)
 		{
 			if (X < 0 || Y < 0 || X >= W || Y >= H) return;
@@ -221,9 +230,11 @@ namespace
 		}
 	};
 
-	/** A mesh drawn in a view (its points At metres from Origin), lit by Sun, each triangle's corners' colours mixed. */
-	void Draw(Image& Img, const View& V, const LandField::Mesh& M, const V3& Origin, const V3& Sun)
+	/** A mesh drawn in a view (its points At metres from Origin), lit by Sun, each triangle's corners' colours mixed; each
+	 * pixel tagged TagBase + the nearest corner's tag (Tags: one a point; none: 0). */
+	void Draw(Image& Img, const View& V, const LandField::Mesh& M, const V3& Origin, const V3& Sun, const std::vector<uint8_t>* Tags = nullptr, int TagBase = 0)
 	{
+		const bool bTags = Tags && Tags->size() == M.Colours.size();
 		const size_t N = M.Colours.size();
 		std::vector<double> Sx(N), Sy(N), Sz(N);
 		for (size_t I = 0; I < N; ++I)
@@ -257,10 +268,35 @@ namespace
 					float& D = Img.Depth[static_cast<size_t>(J) * static_cast<size_t>(Img.W) + static_cast<size_t>(I)];
 					if (Z >= D) continue;
 					D = static_cast<float>(Z);
+					const size_t Px0 = static_cast<size_t>(J) * static_cast<size_t>(Img.W) + static_cast<size_t>(I);
+					Img.Lit[Px0] = static_cast<float>(Light);
+					Img.Up[Px0] = static_cast<float>(Nm.Z);
+					Img.Tag[Px0] = bTags ? static_cast<uint8_t>(TagBase + (*Tags)[W0 >= W1 && W0 >= W2 ? A : W1 >= W2 ? B : C]) : 0;
 					const LandField::Rgb8 &Ca = M.Colours[A], &Cb = M.Colours[B], &Cc = M.Colours[C];
 					Img.Put(I, J, Light * (W0 * Ca.R + W1 * Cb.R + W2 * Cc.R), Light * (W0 * Ca.G + W1 * Cb.G + W2 * Cc.G), Light * (W0 * Ca.B + W1 * Cb.B + W2 * Cc.B));
 				}
 		}
+	}
+
+	/** A pixel's class by its colour alone, as the art director reads a picture (and as the review of round 2 measured
+	 * it): dark (no channel over 55: soot, char), bright orange (flash rust), brown rust, pale grey-buff (grey, 97 and
+	 * over: scorched paint), darker grey (bare steel, paint), and the rest. */
+	enum class Hue : int { Dark, Orange, BrownRust, PaleGrey, Grey, Other };
+	constexpr int Hues = 6;
+	const char* HueName(int H)
+	{
+		static const char* Names[Hues] = { "dark", "orange", "brown rust", "pale grey-buff", "grey", "other" };
+		return H >= 0 && H < Hues ? Names[H] : "?";
+	}
+	int HueOf(const uint8_t* C)
+	{
+		const int R = C[0], G = C[1], B = C[2];
+		const int Hi = std::max({ R, G, B }), Lo = std::min({ R, G, B });
+		if (Hi <= 55) return static_cast<int>(Hue::Dark);
+		if (R >= 105 && R >= 2.6 * std::max(B, 1) && R - G >= 35) return static_cast<int>(Hue::Orange);
+		if (R >= 60 && R - G >= 22 && R >= 1.6 * std::max(B, 1)) return static_cast<int>(Hue::BrownRust);
+		if (Hi - Lo <= 30) return static_cast<int>(Hi >= 97 ? Hue::PaleGrey : Hue::Grey);
+		return static_cast<int>(Hue::Other);
 	}
 
 	/** The ground round a place as a mesh (Half metres each way, Step apart), as drawn and coloured, for a close look. */
@@ -296,15 +332,6 @@ namespace
 		else if (Nat == "USA") { R = 120; G = 255; B = 90; }
 		else if (Nat == "GBR" || Nat == "CAN") { R = 255; G = 220; B = 60; }
 		else { R = 255; G = 140; B = 255; }
-	}
-
-	/** Whether a colour reads as rust: orange to deep brown (its hue 5 to 40 degrees, well saturated, not black). */
-	bool Rusty(const LandField::Rgb8& C)
-	{
-		const double R = C.R, G = C.G, B = C.B, Hi = std::max({ R, G, B }), Lo = std::min({ R, G, B });
-		if (Hi < 45.0 || Hi - Lo < 0.35 * Hi || Hi != R) return false;
-		const double Hue = 60.0 * (G - B) / (Hi - Lo);
-		return Hue >= 5.0 && Hue <= 40.0;
 	}
 
 	const char* WhereWord(LandHulk::Where W)
@@ -695,6 +722,100 @@ int main(int Argc, char** Argv)
 			if (FootBare > 0) Fault(Label + ": grass standing through a wreck's hull");
 			if (OwnHit > 0) Fault(Label + ": a thrown turret on her own hull or run-off track, or its gun through her hull");
 			if (BadBox > 0) Fault(Label + ": a thrown turret's box for the camera off the ground or out of size");
+			// (her run-off track, the art director's carry of 24 November, not a dead-straight ladder: snaking, folded back on
+			// itself once with the fold showing from above, its links flat on the ground, none through her hull, her road
+			// wheels or the ground. Round 2 let a half-track's short track through with a sway of 5 cm: the snake now reads
+			// at the game's scale, 8 cm and more off its own smooth line, and turns from one way to the other (on a
+			// half-track's short track the 3 m the line is smoothed over leaves only a metre or so to count turns in); the
+			// doubled end angled out off the links under it by some 15 in 100 of her track's width and more)
+			int Tracks = 0, Unfolded = 0, Straight = 0, UnderHer = 0, Through = 0, TurnsLeast = 1 << 30, Hidden = 0;
+			double SwayLeast = 1e9, SwayMost = 0.0, ClearLeast = 1e9, LowLeast = 1e9, HighMost = -1e9, AsideLeast = 1e9;
+			for (size_t K = 0; K < Y.Hulks().size(); ++K)
+			{
+				const LandHulk::Hulk& Hk = Y.Hulks()[K];
+				const LandKit::Model* Mo = Y.ModelOf(K);
+				if (Hk.TrackOff == 0 || !Mo || Hk.Strip.size() < 16) continue;
+				++Tracks;
+				const size_t N = Hk.Strip.size(), Flat = Hk.Fold > 0 ? std::min(N, static_cast<size_t>(Hk.Fold)) : N;
+				if (Hk.Fold <= 0 || Hk.Curl <= 0 || Flat + static_cast<size_t>(Hk.Curl) >= N) ++Unfolded;
+				// (the sway: each flat link's middle off its own smooth line, the mean of the links a metre and a half either
+				// side; and how often it turns from bending one way to the other)
+				const double Pitch = std::hypot(Hk.Strip[1].first - Hk.Strip[0].first, Hk.Strip[1].second - Hk.Strip[0].second);
+				const size_t Reach = std::max<size_t>(2, static_cast<size_t>(std::lround(1.5 / std::max(0.05, Pitch))));
+				double Sway = 0.0;
+				int Turns = 0, Was = 0;
+				for (size_t L = Reach; L + Reach < Flat; ++L)
+				{
+					double Mx = 0.0, My = 0.0;
+					for (size_t J = L - Reach; J <= L + Reach; ++J)
+					{
+						Mx += Hk.Strip[J].first;
+						My += Hk.Strip[J].second;
+					}
+					Mx /= static_cast<double>(2 * Reach + 1);
+					My /= static_cast<double>(2 * Reach + 1);
+					Sway = std::max(Sway, std::hypot(Hk.Strip[L].first - Mx, Hk.Strip[L].second - My));
+					const double Ax = Hk.Strip[L].first - Hk.Strip[L - Reach].first, Ay = Hk.Strip[L].second - Hk.Strip[L - Reach].second;
+					const double Bx = Hk.Strip[L + Reach].first - Hk.Strip[L].first, By = Hk.Strip[L + Reach].second - Hk.Strip[L].second;
+					const double Bend = (Ax * By - Ay * Bx) / std::max(1e-9, std::hypot(Ax, Ay) * std::hypot(Bx, By));
+					const int Way = Bend > 0.01 ? 1 : (Bend < -0.01 ? -1 : 0);
+					if (Way != 0 && Was != 0 && Way != Was) ++Turns;
+					if (Way != 0) Was = Way;
+				}
+				SwayLeast = std::min(SwayLeast, Sway);
+				SwayMost = std::max(SwayMost, Sway);
+				TurnsLeast = std::min(TurnsLeast, Turns);
+				if (Sway < 0.08 || Turns < 1) ++Straight;
+				// (its links' inner edge off her footprint, which holds her road wheels: half her track's width, her own
+				// model's, inside each flat link's middle)
+				const int TB = Mo->TrackBody[Hk.TrackOff < 0 ? 0 : 1];
+				double Y0 = 1e9, Y1w = -1e9;
+				if (TB >= 0)
+				{
+					const LandKit::Mesh& Tm = Mo->Bodies[static_cast<size_t>(TB)].Near;
+					for (size_t I = 0; I < Tm.Count(); ++I)
+					{
+						Y0 = std::min(Y0, static_cast<double>(Tm.Points[I * 3 + 1]));
+						Y1w = std::max(Y1w, static_cast<double>(Tm.Points[I * 3 + 1]));
+					}
+				}
+				const double HalfW = Y1w > Y0 ? 0.5 * (Y1w - Y0) : 0.0;
+				// (the doubled end's free link off the flat one it lies on, as a share of her track's width)
+				if (Flat + static_cast<size_t>(std::max(0, Hk.Curl)) < N && HalfW > 0.0)
+				{
+					const size_t Last = N - 1, Under = Flat - 1 - std::min(Flat - 1, Last - Flat - static_cast<size_t>(Hk.Curl));
+					const double Aside = std::hypot(Hk.Strip[Last].first - Hk.Strip[Under].first, Hk.Strip[Last].second - Hk.Strip[Under].second) / (2.0 * HalfW);
+					AsideLeast = std::min(AsideLeast, Aside);
+					if (Aside < 0.15) ++Hidden;
+				}
+				double Clear = 1e9;
+				for (size_t L = 0; L < Flat; ++L) Clear = std::min(Clear, FromFootprint(Hk, *Mo, Hk.Strip[L].first, Hk.Strip[L].second) - HalfW);
+				ClearLeast = std::min(ClearLeast, Clear);
+				if (Clear < 0.0) ++UnderHer;
+				// (its points as dressed, off her footprint and low: on the ground, not through it)
+				LandField::Mesh Dm;
+				Y.Dress(K, true, Dm);
+				for (size_t I = 0; I < Dm.Colours.size(); ++I)
+				{
+					const double Px = Hk.X + Dm.Positions[I * 3], Py = Hk.Y + Dm.Positions[I * 3 + 1], Pz = Hk.Z + Dm.Positions[I * 3 + 2];
+					if (FromFootprint(Hk, *Mo, Px, Py) < 0.15 || (Hk.bTurretOff && std::hypot(Px - Hk.TurretX, Py - Hk.TurretY) < 2.5)) continue;
+					const double Over = Pz - G.HeightAt(Px, Py);
+					if (Over > 0.6) continue;
+					LowLeast = std::min(LowLeast, Over);
+					HighMost = std::max(HighMost, Over);
+					if (Over < -0.03) ++Through;
+				}
+			}
+			if (Tracks > 0)
+			{
+				std::printf("%s: %d run-off tracks: %d folded back on themselves once, the doubled end's free link at least %.0f%% of her track's width off the link under it; snaking (each link off its own smooth line up to %.2f to %.2f m, turning from one way to the other at least %d times); their links' inner edges at least %.2f m off her footprint (her road wheels); their points low off her %.3f to %.2f m over the ground, %d through it\n",
+					Label.c_str(), Tracks, Tracks - Unfolded, AsideLeast < 1e8 ? 100.0 * AsideLeast : 0.0, SwayLeast, SwayMost, TurnsLeast, ClearLeast, LowLeast, HighMost, Through);
+				if (Unfolded > 0) Fault(Label + ": " + std::to_string(Unfolded) + " run-off tracks not folded back on themselves");
+				if (Hidden > 0) Fault(Label + ": " + std::to_string(Hidden) + " run-off tracks' folds hidden from above (the doubled end straight over the links under it)");
+				if (Straight > 0) Fault(Label + ": " + std::to_string(Straight) + " run-off tracks lying straight (off their own smooth line under 8 cm, or never turning from one way to the other)");
+				if (UnderHer > 0) Fault(Label + ": " + std::to_string(UnderHer) + " run-off tracks under her road wheels");
+				if (Through > 0) Fault(Label + ": " + std::to_string(Through) + " points of run-off tracks through the ground");
+			}
 			// (none across a cattle's path: its trodden pieces under no wreck's outline)
 			int OnPath = 0;
 			std::vector<LandField::Placed> Laid;
@@ -822,6 +943,7 @@ int main(int Argc, char** Argv)
 				FarPoints, FarTris, FarMs, PatchTris, Since(DressT0), Bad);
 			if (Bad > 0) Fault(Name + ": a dressed mesh with a NaN, a stray corner or a broken count");
 			const double Ages[] = { 0.25, 1.0, 6.0, 12.0, 18.0 };
+			const char* AgeWords[] = { "a week on", "a month on", "six months", "a year", "a year and a half" };
 			double Share[5] = { 0, 0, 0, 0, 0 }, Dark[5] = { 0, 0, 0, 0, 0 };
 			std::vector<LandHulk::Yard> Aged(5);
 			bool bSameLay = true;
@@ -839,16 +961,19 @@ int main(int Argc, char** Argv)
 				for (size_t K = 0; K < Y.Hulks().size(); ++K)
 				{
 					LandField::Mesh M;
-					Y.Dress(K, true, M);
-					for (const LandField::Rgb8& C : M.Colours)
+					LandHulk::Dressing Nd;
+					Y.Dress(K, true, M, &Nd);
+					for (size_t P = 0; P < M.Colours.size() && P < Nd.Coats.size(); ++P)
 					{
 						++All;
-						if (Rusty(C))
+						const LandHulk::Coat C = static_cast<LandHulk::Coat>(Nd.Coats[P]);
+						if (C == LandHulk::Coat::Flash || C == LandHulk::Coat::OldRust)
 						{
 							++Rust;
-							Bright += C.R + C.G + C.B;
+							Bright += M.Colours[P].R + M.Colours[P].G + M.Colours[P].B;
 						}
 					}
+					if (Nd.Coats.size() != M.Colours.size()) Fault(Name + ": a dressed wreck's coats not one a point");
 					if (I > 0)
 					{
 						const LandHulk::Hulk &P = Aged[0].Hulks()[std::min(K, Aged[0].Hulks().size() - 1)], &Same = Y.Hulks()[K];
@@ -858,13 +983,19 @@ int main(int Argc, char** Argv)
 				Share[I] = All > 0 ? static_cast<double>(Rust) / static_cast<double>(All) : 0.0;
 				Dark[I] = Rust > 0 ? Bright / (3.0 * static_cast<double>(Rust)) : 0.0;
 			}
-			std::printf("rust as the months go (the same twenty): %.0f%% a week on, %.0f%% at a month, %.0f%% at six, %.0f%% at a year, %.0f%% at a year and a half; its brightness %.0f, %.0f, %.0f, %.0f, %.0f (orange browning)\n",
+			std::printf("rust as the months go (the same twenty, each at her own age: flash and old rust, of every point): %.0f%% a week on, %.0f%% at a month, %.0f%% at six, %.0f%% at a year, %.0f%% at a year and a half; its brightness %.0f, %.0f, %.0f, %.0f, %.0f (orange browning)\n",
 				100 * Share[0], 100 * Share[1], 100 * Share[2], 100 * Share[3], 100 * Share[4], Dark[0], Dark[1], Dark[2], Dark[3], Dark[4]);
 			if (!bSameLay) Fault(Name + ": the same count laid otherwise at another age");
 			if (!(Share[1] > Share[0] && Share[2] > Share[1] && Share[4] >= Share[2] - 0.02)) Fault(Name + ": the rust not spreading as the months go");
 
-			// The look sheet: four of them (a thrown turret, a run-off track, a soft-skinned one, another) at each age,
-			// from the south-east, 30 degrees up, on their own ground and patch.
+			// The look sheets: four of them (a thrown turret, a run-off track, a soft-skinned one, another) at each age (each
+			// drawn at the column's own age), from the south-east, 30 degrees up, on their own ground and patch; and the
+			// measure of each: each wreck's lit faces (the sun's light on them 0.75 and over, the faces the art director reads)
+			// by what each pixel shows and by its colour alone, its share and median sRGB, and her patch's. Three sheets: her
+			// near level in the sheet's sun from the north-west (look_), her far level in the same (look_far_: what the game
+			// shows beyond 140 m, where the strategy camera mostly sits; round 2 measured only the near level, and the far one
+			// had turned one orange coat again), and her near level with the sun from the south-east, on the sides the camera
+			// sees (look_side_: her cooler sides' paint and the rust's runs, which the first sheet shows only in shade).
 			std::vector<size_t> Pick;
 			const auto Choose = [&](auto Test)
 			{
@@ -882,43 +1013,514 @@ int main(int Argc, char** Argv)
 			for (size_t K = 0; Pick.size() < 4 && K < Aged[0].Hulks().size(); ++K)
 				if (std::find(Pick.begin(), Pick.end(), K) == Pick.end()) Pick.push_back(K);
 			const int CellW = 440, CellH = 330, Head = 30;
-			Image Sheet(CellW * 5, Head + CellH * static_cast<int>(std::max<size_t>(1, Pick.size())));
-			Sheet.Fill(0, 0, Sheet.W, Sheet.H, 34, 34, 36);
-			std::string Labels;
 			const V3 Sun = V3(-0.45, 0.35, 0.82).Unit();
+			// (the side sheet's: from the south-east, 35 degrees up, on the sides the camera sees)
+			const V3 SideSun = V3(0.6, -0.55, 0.57).Unit();
+			// (what each cell's pixels show: a wreck's coats lit and all, by colour, on her sides, her patch's scorches)
+			struct Tally
+			{
+				std::vector<uint8_t> Lit[LandHulk::Coats], Patch[LandHulk::Scorches], Side[LandHulk::Coats], ByHue[Hues];
+				size_t LitN = 0, AllN = 0, All[LandHulk::Coats] = {}, PatchN = 0, PatchDark = 0, SideN = 0;
+			};
+			constexpr double LitFrom = 0.75;
+			const auto Median = [](const std::vector<uint8_t>& V, int Channel)
+			{
+				std::vector<uint8_t> One;
+				for (size_t K = static_cast<size_t>(Channel); K < V.size(); K += 3) One.push_back(V[K]);
+				if (One.empty()) return -1;
+				std::nth_element(One.begin(), One.begin() + static_cast<std::ptrdiff_t>(One.size() / 2), One.end());
+				return static_cast<int>(One[One.size() / 2]);
+			};
+			const auto PaintSheet = [&](bool bNearLevel, const V3& Light, const std::string& File, const std::string& Title, std::vector<std::vector<Tally>>& Cells,
+										std::vector<Tally>& Pooled)
+			{
+				Cells.assign(Pick.size(), std::vector<Tally>(5));
+				Pooled.assign(5, Tally());
+				Image Sheet(CellW * 5, Head + CellH * static_cast<int>(std::max<size_t>(1, Pick.size())));
+				Sheet.Fill(0, 0, Sheet.W, Sheet.H, 34, 34, 36);
+				std::string Labels;
+				const auto Count = [&](Tally& T, Tally& P, int X0, int Y0)
+				{
+					for (int J = Y0; J < Y0 + CellH; ++J)
+						for (int I = X0; I < X0 + CellW; ++I)
+						{
+							const size_t Px = static_cast<size_t>(J) * static_cast<size_t>(Sheet.W) + static_cast<size_t>(I);
+							const int Tag = Sheet.Tag[Px];
+							const uint8_t* C = &Sheet.Rgb[Px * 3];
+							if (Tag >= 1 && Tag <= LandHulk::Coats)
+							{
+								for (Tally* Into : { &T, &P })
+								{
+									++Into->AllN;
+									++Into->All[Tag - 1];
+									if (Sheet.Lit[Px] >= LitFrom)
+									{
+										++Into->LitN;
+										Into->Lit[Tag - 1].insert(Into->Lit[Tag - 1].end(), { C[0], C[1], C[2] });
+										Into->ByHue[HueOf(C)].insert(Into->ByHue[HueOf(C)].end(), { C[0], C[1], C[2] });
+										if (std::fabs(Sheet.Up[Px]) < 0.4)
+										{
+											++Into->SideN;
+											Into->Side[Tag - 1].insert(Into->Side[Tag - 1].end(), { C[0], C[1], C[2] });
+										}
+									}
+								}
+							}
+							else if (Tag >= 32 && Tag < 32 + LandHulk::Scorches)
+							{
+								for (Tally* Into : { &T, &P })
+								{
+									++Into->PatchN;
+									Into->PatchDark += std::max({ C[0], C[1], C[2] }) <= 60 ? 1 : 0;
+									Into->Patch[Tag - 32].insert(Into->Patch[Tag - 32].end(), { C[0], C[1], C[2] });
+								}
+							}
+						}
+				};
+				for (size_t R = 0; R < Pick.size(); ++R)
+				{
+					for (int I = 0; I < 5; ++I)
+					{
+						const LandHulk::Yard& Y = Aged[static_cast<size_t>(I)];
+						const LandHulk::Hulk& H = Y.Hulks()[Pick[R]];
+						const V3 Anchor(H.X, H.Y, H.Z);
+						double Cx = H.X, Cy = H.Y;
+						if (H.bTurretOff)
+						{
+							Cx = 0.5 * (H.X + H.TurretX);
+							Cy = 0.5 * (H.Y + H.TurretY);
+						}
+						const int X0 = I * CellW, Y0 = Head + static_cast<int>(R) * CellH;
+						const View V = View::Looking(V3(Cx, Cy, H.Z + 0.8), 2.35, 0.52, H.bTurretOff || H.TrackOff != 0 ? 26.0 : 34.0, X0, Y0, X0 + CellW, Y0 + CellH);
+						Draw(Sheet, V, GroundAround(G, Cx, Cy, 16.0, 0.4, Anchor), Anchor, Light);
+						LandField::Mesh M;
+						LandHulk::Dressing Nd;
+						Nd.Months = Ages[I];
+						Y.Patch(Pick[R], M, &Nd);
+						Draw(Sheet, V, M, Anchor, Light, &Nd.Coats, 32);
+						Y.Dress(Pick[R], bNearLevel, M, &Nd);
+						Draw(Sheet, V, M, Anchor, Light, &Nd.Coats, 1);
+						for (int E = 0; E < CellW; ++E) Sheet.Put(X0 + E, Y0, 34, 34, 36);
+						for (int E = 0; E < CellH; ++E) Sheet.Put(X0, Y0 + E, 34, 34, 36);
+						Count(Cells[R][static_cast<size_t>(I)], Pooled[static_cast<size_t>(I)], X0, Y0);
+						if (R == 0) Labels += std::to_string(X0 + 8) + " 8 " + AgeWords[I] + (I == 4 ? "   " + Title : std::string()) + "\n";
+						if (I == 0)
+						{
+							std::string Who = Describe(Aged[0].Hulks()[Pick[R]]);
+							// (her own age out of it: each column draws her at its age)
+							const size_t Comma = Who.find(", ");
+							const size_t Next = Comma == std::string::npos ? std::string::npos : Who.find(", ", Comma + 2);
+							if (Next != std::string::npos) Who.erase(Comma, Next - Comma);
+							Labels += std::to_string(X0 + 6) + " " + std::to_string(Y0 + CellH - 20) + " " + Who.substr(0, 60) + " (each column her age)\n";
+						}
+					}
+				}
+				Sheet.Save(OutDir + "/" + File + "_" + Name + ".ppm");
+				std::ofstream(OutDir + "/" + File + "_" + Name + ".txt") << Labels;
+			};
+			std::vector<std::vector<Tally>> Cells, FarCells, SideCells;
+			std::vector<Tally> Pooled, FarPooled, SidePooled;
+			PaintSheet(true, Sun, "look", "near level (within 140 m), sun from the north-west", Cells, Pooled);
+			PaintSheet(false, Sun, "look_far", "FAR level (as beyond 140 m), sun from the north-west", FarCells, FarPooled);
+			PaintSheet(true, SideSun, "look_side", "near level, sun from the south-east on the sides seen", SideCells, SidePooled);
+			// The scorches from above (the review of round 2: her patch's ash, burnt grass and fuel within 5 of one another,
+			// one drop shadow): the look sheets' camera, low from the south-east, hides her fuel's stain behind her when it
+			// lies on her far side, so all twenty a week on from straight above (north up), as the strategy camera mostly
+			// sees them, in the sheet's sun, each with her hull over her patch; her patch's zones measured here.
+			Tally Above;
+			{
+				const int AbW = 300, AbH = 240, Cols = 5;
+				const size_t Many = std::min<size_t>(20, Aged[0].Hulks().size());
+				const int Rows = static_cast<int>((Many + Cols - 1) / Cols);
+				Image Sheet(AbW * Cols, Head + AbH * std::max(1, Rows));
+				Sheet.Fill(0, 0, Sheet.W, Sheet.H, 34, 34, 36);
+				std::string Labels = "8 8 a week on: all twenty's scorched patches from straight above (north up), the sun from the north-west\n";
+				for (size_t K = 0; K < Many; ++K)
+				{
+					const LandHulk::Hulk& H = Aged[0].Hulks()[K];
+					const V3 Anchor(H.X, H.Y, H.Z);
+					const int X0 = static_cast<int>(K % Cols) * AbW, Y0 = Head + static_cast<int>(K / Cols) * AbH;
+					const View V = View::Looking(V3(H.X, H.Y, H.Z), 0.0, 1.5707, 16.0, X0, Y0, X0 + AbW, Y0 + AbH);
+					Draw(Sheet, V, GroundAround(G, H.X, H.Y, 10.0, 0.4, Anchor), Anchor, Sun);
+					LandField::Mesh M;
+					LandHulk::Dressing Nd;
+					Nd.Months = Ages[0];
+					Aged[0].Patch(K, M, &Nd);
+					Draw(Sheet, V, M, Anchor, Sun, &Nd.Coats, 32);
+					Aged[0].Dress(K, true, M, &Nd);
+					Draw(Sheet, V, M, Anchor, Sun, &Nd.Coats, 1);
+					for (int E = 0; E < AbW; ++E) Sheet.Put(X0 + E, Y0, 34, 34, 36);
+					for (int E = 0; E < AbH; ++E) Sheet.Put(X0, Y0 + E, 34, 34, 36);
+					for (int J = Y0; J < Y0 + AbH; ++J)
+						for (int I = X0; I < X0 + AbW; ++I)
+						{
+							const size_t Px = static_cast<size_t>(J) * static_cast<size_t>(Sheet.W) + static_cast<size_t>(I);
+							const int Tag = Sheet.Tag[Px];
+							if (Tag < 32 || Tag >= 32 + LandHulk::Scorches) continue;
+							const uint8_t* C = &Sheet.Rgb[Px * 3];
+							++Above.PatchN;
+							Above.PatchDark += std::max({ C[0], C[1], C[2] }) <= 60 ? 1 : 0;
+							Above.Patch[Tag - 32].insert(Above.Patch[Tag - 32].end(), { C[0], C[1], C[2] });
+						}
+					Labels += std::to_string(X0 + 6) + " " + std::to_string(Y0 + AbH - 20) + " " + H.Nation + " " + H.Model + "\n";
+				}
+				Sheet.Save(OutDir + "/scorch_" + Name + ".ppm");
+				std::ofstream(OutDir + "/scorch_" + Name + ".txt") << Labels;
+			}
+			// The measure, as a table (and a .csv beside each picture).
+			std::ofstream Csv(OutDir + "/look_" + Name + ".csv");
+			Csv << "recording,sheet,wreck,age,what,class,share,share_all,r,g,b\n";
+			const auto Row = [&](const Tally& T, const std::string& Sheet, const std::string& Who, int I, bool bPrint) -> std::string
+			{
+				std::string Line, Hues2, Sides;
+				char Buf[160];
+				for (int C = 0; C < LandHulk::Coats; ++C)
+				{
+					const size_t N = T.Lit[C].size() / 3;
+					const double Of = T.LitN > 0 ? 100.0 * static_cast<double>(N) / static_cast<double>(T.LitN) : 0.0;
+					const double OfAll = T.AllN > 0 ? 100.0 * static_cast<double>(T.All[C]) / static_cast<double>(T.AllN) : 0.0;
+					const int R = Median(T.Lit[C], 0), Gm = Median(T.Lit[C], 1), B = Median(T.Lit[C], 2);
+					Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",wreck lit," << LandHulk::CoatName(static_cast<LandHulk::Coat>(C)) << "," << Of << "," << OfAll << "," << R
+						<< "," << Gm << "," << B << "\n";
+					if (N > 0)
+					{
+						std::snprintf(Buf, sizeof(Buf), "  %s %.0f%% (%d,%d,%d)", LandHulk::CoatName(static_cast<LandHulk::Coat>(C)), Of, R, Gm, B);
+						Line += Buf;
+					}
+					const size_t Ns = T.Side[C].size() / 3;
+					const double OfSide = T.SideN > 0 ? 100.0 * static_cast<double>(Ns) / static_cast<double>(T.SideN) : 0.0;
+					Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",sides lit," << LandHulk::CoatName(static_cast<LandHulk::Coat>(C)) << "," << OfSide << ",,"
+						<< Median(T.Side[C], 0) << "," << Median(T.Side[C], 1) << "," << Median(T.Side[C], 2) << "\n";
+					if (Ns > 0 && OfSide >= 0.5)
+					{
+						std::snprintf(Buf, sizeof(Buf), "  %s %.0f%% (%d,%d,%d)", LandHulk::CoatName(static_cast<LandHulk::Coat>(C)), OfSide, Median(T.Side[C], 0), Median(T.Side[C], 1),
+							Median(T.Side[C], 2));
+						Sides += Buf;
+					}
+				}
+				for (int Hc = 0; Hc < Hues; ++Hc)
+				{
+					const size_t N = T.ByHue[Hc].size() / 3;
+					const double Of = T.LitN > 0 ? 100.0 * static_cast<double>(N) / static_cast<double>(T.LitN) : 0.0;
+					const int R = Median(T.ByHue[Hc], 0), Gm = Median(T.ByHue[Hc], 1), B = Median(T.ByHue[Hc], 2);
+					Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",wreck lit by colour," << HueName(Hc) << "," << Of << ",," << R << "," << Gm << "," << B << "\n";
+					if (N == 0 || Of < 0.5) continue;
+					std::snprintf(Buf, sizeof(Buf), "  %s %.0f%% (%d,%d,%d)", HueName(Hc), Of, R, Gm, B);
+					Hues2 += Buf;
+				}
+				std::string Ground;
+				for (int C = 1; C < LandHulk::Scorches; ++C)
+				{
+					const size_t N = T.Patch[C].size() / 3;
+					const double Of = T.PatchN > 0 ? 100.0 * static_cast<double>(N) / static_cast<double>(T.PatchN) : 0.0;
+					const int R = Median(T.Patch[C], 0), Gm = Median(T.Patch[C], 1), B = Median(T.Patch[C], 2);
+					Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",patch," << LandHulk::ScorchName(static_cast<LandHulk::Scorch>(C)) << "," << Of << ",," << R << "," << Gm
+						<< "," << B << "\n";
+					if (N == 0 || Of < 0.5) continue;
+					std::snprintf(Buf, sizeof(Buf), "  %s %.0f%% (%d,%d,%d)", LandHulk::ScorchName(static_cast<LandHulk::Scorch>(C)), Of, R, Gm, B);
+					Ground += Buf;
+				}
+				if (T.PatchN > 0)
+				{
+					std::snprintf(Buf, sizeof(Buf), "  [%.0f%% at or below 60]", 100.0 * static_cast<double>(T.PatchDark) / static_cast<double>(T.PatchN));
+					Ground += Buf;
+				}
+				if (bPrint)
+				{
+					std::printf("     %-18s lit %5zu px:%s\n", AgeWords[I], T.LitN, Line.c_str());
+					std::printf("     %-18s  by colour:%s\n", "", Hues2.c_str());
+					if (Sheet == "side") std::printf("     %-18s  her sides %5zu px:%s\n", "", T.SideN, Sides.c_str());
+					if (Sheet == "near") std::printf("     %-18s patch %5zu px:%s\n", "", T.PatchN, Ground.empty() ? "  the field's own" : Ground.c_str());
+				}
+				return Line;
+			};
+			const auto LitShare = [](const Tally& T, LandHulk::Coat C) { return T.LitN > 0 ? static_cast<double>(T.Lit[static_cast<int>(C)].size() / 3) / static_cast<double>(T.LitN) : 0.0; };
+			const auto SideShare = [](const Tally& T, LandHulk::Coat C) { return T.SideN > 0 ? static_cast<double>(T.Side[static_cast<int>(C)].size() / 3) / static_cast<double>(T.SideN) : 0.0; };
+			const auto HueShare = [](const Tally& T, Hue H) { return T.LitN > 0 ? static_cast<double>(T.ByHue[static_cast<int>(H)].size() / 3) / static_cast<double>(T.LitN) : 0.0; };
+			const auto Orange = [&](const Tally& T) { return LitShare(T, LandHulk::Coat::Flash) + LitShare(T, LandHulk::Coat::Run); };
+			const auto Rusted = [&](const Tally& T) { return Orange(T) + LitShare(T, LandHulk::Coat::OldRust); };
+			std::printf("the look, measured on its sheet (lit faces: the sun's light on them %.2f and over; each coat's share of her lit pixels and its median sRGB in the picture, and by colour alone; her patch's, of its pixels shown):\n", LitFrom);
 			for (size_t R = 0; R < Pick.size(); ++R)
 			{
-				for (int I = 0; I < 5; ++I)
+				std::printf("  %zu %s\n", R + 1, Describe(Aged[0].Hulks()[Pick[R]]).c_str());
+				for (int I = 0; I < 5; ++I) Row(Cells[R][static_cast<size_t>(I)], "near", std::to_string(R + 1) + " " + Aged[0].Hulks()[Pick[R]].Model, I, true);
+			}
+			std::printf("  all four, against the art director's numbers (24 November):\n");
+			const char* Wants[] = {
+				"soot 25-40 over about half; scorched grey-buff 100-110; bare grey 85-95; her paint low on the cool sides; orange only on edges",
+				"flash rust about 130,70,38 on the bare steel only, 15-25% of her, with runs",
+				"old rust about 80-90,52-56,38-42 (red at most 2.2 times blue); soot off the sky faces; the paint flaking, some staying",
+				"as six months", "as six months" };
+			for (int I = 0; I < 5; ++I)
+			{
+				std::printf("    %s (wanted: %s)\n", AgeWords[I], Wants[I]);
+				Row(Pooled[static_cast<size_t>(I)], "near", "all four", I, true);
+			}
+			// (each wreck's flash rust a month on, by tag and by colour: the art director's 15 to 25 in 100 of her)
+			std::string EachMonth;
+			for (size_t R = 0; R < Pick.size(); ++R)
+			{
+				char Buf[120];
+				std::snprintf(Buf, sizeof(Buf), "%s%s %.0f%% (by colour %.0f%% orange)", EachMonth.empty() ? "" : "; ", Aged[0].Hulks()[Pick[R]].Model.c_str(), 100.0 * Orange(Cells[R][1]),
+					100.0 * HueShare(Cells[R][1], Hue::Orange));
+				EachMonth += Buf;
+			}
+			std::printf("  each a month on, flash rust of her lit faces: %s\n", EachMonth.c_str());
+			// (loose guards, so a later change that loses her patchwork is caught: a week on soot over a third to two thirds
+			// and next to no orange, by tag or by colour; a month on some rust; the old rust's red no more than 2.2 times its
+			// blue)
+			const double WeekSoot = LitShare(Pooled[0], LandHulk::Coat::Soot), WeekFlash = Orange(Pooled[0]), WeekOrange = HueShare(Pooled[0], Hue::Orange);
+			const double MonthRust = Rusted(Pooled[1]);
+			bool bOldDull = true;
+			for (int I = 2; I < 5; ++I)
+			{
+				const Tally& T = Pooled[static_cast<size_t>(I)];
+				const int R = Median(T.Lit[static_cast<int>(LandHulk::Coat::OldRust)], 0), B = Median(T.Lit[static_cast<int>(LandHulk::Coat::OldRust)], 2);
+				if (R >= 0 && B > 0 && R > 2.25 * B) bOldDull = false;
+			}
+			if (WeekSoot < 0.33 || WeekSoot > 0.67 || WeekFlash > 0.1 || WeekOrange > 0.08 || MonthRust < 0.1 || !bOldDull)
+				Fault(Name + ": the look's measure off its marks (a week on soot " + std::to_string(WeekSoot) + ", orange " + std::to_string(WeekFlash) + ", by colour " +
+					std::to_string(WeekOrange) + "; a month on rust " + std::to_string(MonthRust) + (bOldDull ? "" : "; the old rust too red") + ")");
+			// Her patch a week on: its three zones told apart (the review of round 2: ash, burnt grass and fuel all within 5
+			// of one another and of round 1's drop shadow, 38,35,26): their median colours 15 and more apart, measured on
+			// all twenty from above (the scorch sheet).
+			{
+				const Tally& T = Above;
+				const LandHulk::Scorch Zones[3] = { LandHulk::Scorch::Ash, LandHulk::Scorch::Burnt, LandHulk::Scorch::Fuel };
+				int Mid[3][3];
+				for (int Z = 0; Z < 3; ++Z)
+					for (int C = 0; C < 3; ++C) Mid[Z][C] = Median(T.Patch[static_cast<int>(Zones[Z])], C);
+				double Least = 1e9;
+				std::string Apart;
+				for (int Za = 0; Za < 3; ++Za)
+					for (int Zb = Za + 1; Zb < 3; ++Zb)
+					{
+						const double D = std::sqrt(static_cast<double>((Mid[Za][0] - Mid[Zb][0]) * (Mid[Za][0] - Mid[Zb][0]) + (Mid[Za][1] - Mid[Zb][1]) * (Mid[Za][1] - Mid[Zb][1])
+							+ (Mid[Za][2] - Mid[Zb][2]) * (Mid[Za][2] - Mid[Zb][2])));
+						if (Mid[Za][0] >= 0 && Mid[Zb][0] >= 0) Least = std::min(Least, D);
+						Apart += (Apart.empty() ? "" : ", ") + std::string(LandHulk::ScorchName(Zones[Za])) + " to " + LandHulk::ScorchName(Zones[Zb]) + " " + std::to_string(static_cast<int>(std::lround(D)));
+					}
+				const auto ZoneOf = [&](LandHulk::Scorch Z) { return T.PatchN > 0 ? 100.0 * static_cast<double>(T.Patch[static_cast<int>(Z)].size() / 3) / static_cast<double>(T.PatchN) : 0.0; };
+				std::printf("  her patch a week on, all twenty from above (the scorch sheet), its zones: ash %.0f%% (%d,%d,%d), burnt grass %.0f%% (%d,%d,%d), rim %.0f%% (%d,%d,%d), fuel %.0f%% (%d,%d,%d); apart %s; %.0f%% of the patch at or below 60 (round 2: 24 to 52)\n",
+					ZoneOf(LandHulk::Scorch::Ash), Mid[0][0], Mid[0][1], Mid[0][2], ZoneOf(LandHulk::Scorch::Burnt), Mid[1][0], Mid[1][1], Mid[1][2], ZoneOf(LandHulk::Scorch::Rim),
+					Median(T.Patch[static_cast<int>(LandHulk::Scorch::Rim)], 0), Median(T.Patch[static_cast<int>(LandHulk::Scorch::Rim)], 1), Median(T.Patch[static_cast<int>(LandHulk::Scorch::Rim)], 2),
+					ZoneOf(LandHulk::Scorch::Fuel), Mid[2][0], Mid[2][1], Mid[2][2], Apart.c_str(), T.PatchN > 0 ? 100.0 * static_cast<double>(T.PatchDark) / static_cast<double>(T.PatchN) : 0.0);
+				if (!(Least >= 15.0) || Least > 1e8) Fault(Name + ": her patch's ash, burnt grass and fuel not told apart a week on (" + Apart + ")");
+			}
+			// The far level, beside the near one: the same patchwork's shares a week on (round 2's far level was a third
+			// flash orange and next to none scorched, its near one 3 and 22 in 100).
+			std::printf("  her far level (as the game shows her beyond 140 m), all four:\n");
+			for (int I = 0; I < 5; ++I) Row(FarPooled[static_cast<size_t>(I)], "far", "all four", I, true);
+			{
+				const double NearFlash = Orange(Pooled[0]), FarFlash = Orange(FarPooled[0]);
+				const double NearScorch = LitShare(Pooled[0], LandHulk::Coat::Scorched), FarScorch = LitShare(FarPooled[0], LandHulk::Coat::Scorched);
+				const double NearOrange = HueShare(Pooled[0], Hue::Orange), FarOrange = HueShare(FarPooled[0], Hue::Orange);
+				const double NearPale = HueShare(Pooled[0], Hue::PaleGrey), FarPale = HueShare(FarPooled[0], Hue::PaleGrey);
+				const double NearMonth = Rusted(Pooled[1]), FarMonth = Rusted(FarPooled[1]);
+				std::printf("  near against far a week on: orange %.0f%% / %.0f%% (by colour %.0f%% / %.0f%%), scorched %.0f%% / %.0f%% (pale grey-buff by colour %.0f%% / %.0f%%); a month on rust %.0f%% / %.0f%%\n",
+					100 * NearFlash, 100 * FarFlash, 100 * NearOrange, 100 * FarOrange, 100 * NearScorch, 100 * FarScorch, 100 * NearPale, 100 * FarPale, 100 * NearMonth, 100 * FarMonth);
+				if (std::fabs(FarFlash - NearFlash) > 0.05 || std::fabs(FarScorch - NearScorch) > 0.06 || FarOrange > NearOrange + 0.05 || std::fabs(FarMonth - NearMonth) > 0.08)
+					Fault(Name + ": the far level's patchwork off the near one's");
+			}
+			// The side sheet: her sides in the sun (the first sheet's sun is behind the sides its camera sees): her own paint
+			// low on her cooler sides a week on, the rust's runs down them a month on.
+			std::printf("  her sides in the sun (the side sheet, near level, the sun from the south-east), all four:\n");
+			for (int I = 0; I < 5; ++I) Row(SidePooled[static_cast<size_t>(I)], "side", "all four", I, true);
+			{
+				const double WeekPaint = SideShare(SidePooled[0], LandHulk::Coat::Paint), MonthRuns = SideShare(SidePooled[1], LandHulk::Coat::Run);
+				const double MonthSideRust = SideShare(SidePooled[1], LandHulk::Coat::Flash) + MonthRuns;
+				std::printf("  her sides: her own paint a week on %.0f%%; a month on flash rust %.0f%% of them, %.0f%% in runs\n", 100 * WeekPaint, 100 * MonthSideRust, 100 * MonthRuns);
+				if (WeekPaint < 0.1 || MonthRuns < 0.02) Fault(Name + ": her sides show no paint kept a week on, or no runs a month on");
+			}
+			// And every one of the twenty (not only the sheet's four), by area: what faces up on her near and far levels a
+			// week on, each corner's coat a third of its triangle's area. (The near level's orange is its plates' edges, a
+			// point on each, which this measure weighs by the triangles round it, three times what the picture shows; the far
+			// level has none, its edges under a pixel at 140 m: so its scorched paint is held to the near level's scorched
+			// and edges together, and its orange to no more than the near level's.)
+			{
+				double Area[2][LandHulk::Coats] = {}, Total[2] = { 0.0, 0.0 };
+				for (size_t K = 0; K < Aged[0].Hulks().size(); ++K)
 				{
-					const LandHulk::Yard& Y = Aged[static_cast<size_t>(I)];
-					const LandHulk::Hulk& H = Y.Hulks()[Pick[R]];
-					const V3 Anchor(H.X, H.Y, H.Z);
-					double Cx = H.X, Cy = H.Y;
-					if (H.bTurretOff)
+					for (int Lv = 0; Lv < 2; ++Lv)
 					{
-						Cx = 0.5 * (H.X + H.TurretX);
-						Cy = 0.5 * (H.Y + H.TurretY);
+						LandField::Mesh Dm;
+						LandHulk::Dressing Nd;
+						Nd.Months = 0.25;
+						Aged[0].Dress(K, Lv == 0, Dm, &Nd);
+						for (size_t T = 0; T + 2 < Dm.Triangles.size(); T += 3)
+						{
+							const uint32_t Ia = Dm.Triangles[T], Ib = Dm.Triangles[T + 1], Ic = Dm.Triangles[T + 2];
+							const V3 Pa(Dm.Positions[Ia * 3], Dm.Positions[Ia * 3 + 1], Dm.Positions[Ia * 3 + 2]), Pb(Dm.Positions[Ib * 3], Dm.Positions[Ib * 3 + 1], Dm.Positions[Ib * 3 + 2]);
+							const V3 Pc(Dm.Positions[Ic * 3], Dm.Positions[Ic * 3 + 1], Dm.Positions[Ic * 3 + 2]);
+							const V3 Nm = (Pb - Pa).Cross(Pc - Pa);
+							const double Ar = 0.5 * Nm.Length();
+							if (!(Ar > 0.0) || std::fabs(Nm.Z) < 0.7 * 2.0 * Ar) continue;
+							for (const uint32_t Vx : { Ia, Ib, Ic })
+								if (Vx < Nd.Coats.size()) Area[Lv][Nd.Coats[Vx]] += Ar / 3.0;
+							Total[Lv] += Ar;
+						}
 					}
-					const int X0 = I * CellW, Y0 = Head + static_cast<int>(R) * CellH;
-					const View V = View::Looking(V3(Cx, Cy, H.Z + 0.8), 2.35, 0.52, H.bTurretOff || H.TrackOff != 0 ? 26.0 : 34.0, X0, Y0, X0 + CellW, Y0 + CellH);
-					Draw(Sheet, V, GroundAround(G, Cx, Cy, 16.0, 0.4, Anchor), Anchor, Sun);
+				}
+				const auto Of = [&](int Lv, LandHulk::Coat C) { return Total[Lv] > 0.0 ? 100.0 * Area[Lv][static_cast<int>(C)] / Total[Lv] : 0.0; };
+				const double NearF = Of(0, LandHulk::Coat::Flash) + Of(0, LandHulk::Coat::Run), FarF = Of(1, LandHulk::Coat::Flash) + Of(1, LandHulk::Coat::Run);
+				std::printf("  all twenty a week on, what faces up by area, near / far: soot %.0f%% / %.0f%%, scorched %.0f%% / %.0f%%, bare %.0f%% / %.0f%%, orange %.0f%% / %.0f%%, paint %.0f%% / %.0f%%\n",
+					Of(0, LandHulk::Coat::Soot), Of(1, LandHulk::Coat::Soot), Of(0, LandHulk::Coat::Scorched), Of(1, LandHulk::Coat::Scorched), Of(0, LandHulk::Coat::Bare), Of(1, LandHulk::Coat::Bare),
+					NearF, FarF, Of(0, LandHulk::Coat::Paint), Of(1, LandHulk::Coat::Paint));
+				if (FarF > NearF + 3.0 || std::fabs(Of(0, LandHulk::Coat::Scorched) + NearF - Of(1, LandHulk::Coat::Scorched) - FarF) > 6.0
+					|| std::fabs(Of(0, LandHulk::Coat::Soot) - Of(1, LandHulk::Coat::Soot)) > 6.0)
+					Fault(Name + ": the twenty's far levels' orange, scorched paint or soot off their near levels'");
+			}
+		}
+
+		// 2b. The lorries and half-tracks burnt out (the art director's note, 24 November): a lorry's canvas tilt burnt off
+		// its hoops (every nation's: round 1 drew the tilt as rusting steel), her bed's floor laid again as planks, charred,
+		// a quarter to two fifths gone, her glass gone, her tyres burnt to the rims; a half-track's canvas, leather, seats and glass
+		// likewise. Every nation's wrecks, twenty of each laid (the stand-in), each dressed and counted against her own model,
+		// by this test's own list of what burns and what is wood, read by each paint's stem before any dot (round 2 matched
+		// whole names here as in the dressing, and missed the M3's 640 points of "canvas.seat" and the T-34's logs, "wood.end"
+		// and "wood.split"); a thrown turret's open ring the size of her turret's own base.
+		{
+			const auto Stem = [](const std::string& P) { return P.substr(0, P.find('.')); };
+			const auto BurnsAway = [&Stem](const std::string& P)
+			{
+				static const char* Cloth[] = { "canvas", "leather", "rope", "cloth", "torn", "skin" };
+				const std::string S = Stem(P);
+				return std::any_of(std::begin(Cloth), std::end(Cloth), [&S](const char* C) { return S == C; });
+			};
+			std::string Seen;
+			int Soft = 0, Wrong = 0, Seats = 0, SeatsChecked = 0, Logs = 0, LogsWood = 0, Rings = 0, RingsWrong = 0;
+			double RingLeast = 1e9, RingMost = 0.0;
+			std::map<std::string, bool> Said;
+			for (const char* Nat : { "GBR", "SOV", "ITA", "JAP", "GER", "USA" })
+			{
+				LandHulk::Ask Q = AskOf(20, 1.0);
+				Q.bAsLaid = true;
+				Q.Nats = { { Nat, 1 } };
+				LandHulk::Yard Y;
+				Y.Lay(F, Q, ReadModel, Have);
+				for (size_t K = 0; K < Y.Hulks().size(); ++K)
+				{
+					const LandHulk::Hulk& H = Y.Hulks()[K];
+					const LandKit::Model* Mo = Y.ModelOf(K);
+					if (!Mo) continue;
+					// (her own model's canvas, leather, rope and cloth, glass, wood, tilt and pneumatic tyres, on the bodies
+					// drawn; and her bed's floor: the flat of wood facing up holding the most of it)
+					int Gone = 0, Glass = 0, Tyres = 0, Wood = 0, Seat = 0, Log = 0;
+					std::map<int64_t, double> UpWood;
+					double UpWoodAll = 0.0;
+					const int OffB = H.TrackOff != 0 ? Mo->TrackBody[H.TrackOff < 0 ? 0 : 1] : -1;
+					for (const LandKit::Body& Bo : Mo->Bodies)
+					{
+						if (Bo.Name == "aerial" || Bo.Name.find("roof_mg") != std::string::npos || Bo.Name == "mg_mount") continue;
+						if (OffB >= 0 && &Bo == &Mo->Bodies[static_cast<size_t>(OffB)]) continue;
+						const std::string& Part = Mo->Parts[static_cast<size_t>(Bo.Part)].Name;
+						Tyres += Part.find("wheel_front") != std::string::npos || Part.find("wheel_back") != std::string::npos ? 1 : 0;
+						const LandKit::Mesh& Me = Bo.Near;
+						const auto PaintOf = [&](size_t I) { return I < Me.Paints.size() && Me.Paints[I] < Mo->PaintNames.size() ? Mo->PaintNames[Me.Paints[I]] : std::string(); };
+						for (size_t I = 0; I < Me.Paints.size(); ++I)
+						{
+							const std::string Paint = PaintOf(I);
+							Gone += BurnsAway(Paint) ? 1 : 0;
+							Glass += Stem(Paint) == "glass" || Stem(Paint) == "lamp" ? 1 : 0;
+							Wood += Stem(Paint) == "wood" ? 1 : 0;
+							Seat += Paint.rfind("canvas.", 0) == 0 ? 1 : 0;
+							Log += Paint.rfind("wood.", 0) == 0 ? 1 : 0;
+						}
+						for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
+						{
+							const uint32_t Ia = Me.Triangles[T], Ib = Me.Triangles[T + 1], Ic = Me.Triangles[T + 2];
+							if (Stem(PaintOf(Ia)) != "wood" || Stem(PaintOf(Ib)) != "wood" || Stem(PaintOf(Ic)) != "wood") continue;
+							const double Za = Me.Points[Ia * 3 + 2], Zb = Me.Points[Ib * 3 + 2], Zc = Me.Points[Ic * 3 + 2];
+							if (std::fabs(Za - Zb) > 0.005 || std::fabs(Za - Zc) > 0.005 || Me.Normals[Ia * 3 + 2] < 0.95 || Me.Normals[Ib * 3 + 2] < 0.95 || Me.Normals[Ic * 3 + 2] < 0.95) continue;
+							const V3 Pa(Me.Points[Ia * 3], Me.Points[Ia * 3 + 1], Za), Pb(Me.Points[Ib * 3], Me.Points[Ib * 3 + 1], Zb), Pc(Me.Points[Ic * 3], Me.Points[Ic * 3 + 1], Zc);
+							const double Ar = 0.5 * (Pb - Pa).Cross(Pc - Pa).Length();
+							UpWood[std::llround((Bo.Pivot.Z + Za) * 100.0)] += Ar;
+							UpWoodAll += Ar;
+						}
+					}
 					LandField::Mesh M;
-					Y.Patch(Pick[R], M);
-					Draw(Sheet, V, M, Anchor, Sun);
-					Y.Dress(Pick[R], true, M);
-					Draw(Sheet, V, M, Anchor, Sun);
-					for (int E = 0; E < CellW; ++E) Sheet.Put(X0 + E, Y0, 34, 34, 36);
-					for (int E = 0; E < CellH; ++E) Sheet.Put(X0, Y0 + E, 34, 34, 36);
-					if (R == 0)
+					LandHulk::Dressing Nd;
+					Y.Dress(K, true, M, &Nd);
+					bool bOk = Nd.Burnt == Gone && Nd.Glass == Glass;
+					if (Mo->Name == "M3Halftrack" || H.Model == "M3Halftrack")
 					{
-						const char* Age = I == 0 ? "a week on" : I == 1 ? "a month on" : I == 2 ? "six months" : I == 3 ? "a year" : "a year and a half";
-						Labels += std::to_string(X0 + 8) + " 8 " + Age + "\n";
+						Seats += Seat;
+						SeatsChecked += 1;
+						bOk = bOk && Seat > 0;
 					}
-					if (I == 0) Labels += std::to_string(X0 + 6) + " " + std::to_string(Y0 + CellH - 20) + " " + Describe(Aged[0].Hulks()[Pick[R]]).substr(0, 60) + "\n";
+					if (Log > 0)
+					{
+						Logs += Log;
+						LogsWood += Nd.Wood;
+					}
+					const bool bBed = H.Model == "Truck";
+					// (her wood dressed as charred wood: every point of it, but her bed's floor, which her planks replace)
+					if (!bBed && Wood > 0) bOk = bOk && Nd.Wood >= Wood * 95 / 100;
+					// (a thrown turret's open ring: within her turret's own base, not over the roof round it)
+					if (H.bTurretOff && Mo->Turret >= 0)
+					{
+						double Low = 1e9, Reach = 0.0;
+						const LandKit::Part& Tp = Mo->Parts[static_cast<size_t>(Mo->Turret)];
+						for (const LandKit::Body& Bo : Mo->Bodies)
+						{
+							if (Bo.Part != Mo->Turret) continue;
+							for (size_t I = 0; I < Bo.Near.Count(); ++I) Low = std::min(Low, Bo.Pivot.Z + Bo.Near.Points[I * 3 + 2]);
+							for (size_t I = 0; I < Bo.Near.Count(); ++I)
+								if (Bo.Pivot.Z + Bo.Near.Points[I * 3 + 2] <= Low + 0.04)
+									Reach = std::max(Reach, std::hypot(Bo.Pivot.X + Bo.Near.Points[I * 3] - Tp.Pivot.X, Bo.Pivot.Y + Bo.Near.Points[I * 3 + 1] - Tp.Pivot.Y));
+						}
+						++Rings;
+						RingLeast = std::min(RingLeast, Nd.RingR);
+						RingMost = std::max(RingMost, Nd.RingR);
+						if (!(Nd.Hole > 0 && Nd.RingR <= Reach && Nd.RingR >= 0.8 * Reach)) ++RingsWrong;
+					}
+					if (!H.bSoft)
+					{
+						Wrong += bOk ? 0 : 1;
+						continue;
+					}
+					++Soft;
+					const bool bTilt = Mo->PartIndex("tilt") >= 0;
+					bOk = bOk && Nd.Rims == Tyres && (!bTilt || Nd.Hoops > 0);
+					std::string BedSaid;
+					if (bBed)
+					{
+						// (her floor, by this test's own read of her model: the level of wood facing up that holds the most)
+						int64_t FloorKey = INT64_MIN;
+						double FloorArea = 0.0;
+						for (const auto& [Key, Ar] : UpWood)
+							if (Ar > FloorArea)
+							{
+								FloorArea = Ar;
+								FloorKey = Key;
+							}
+						const double FloorZ = static_cast<double>(FloorKey) / 100.0;
+						const double GoneShare = Nd.Planks > 0 ? static_cast<double>(Nd.PlanksGone) / Nd.Planks : 0.0;
+						const bool bFloor = FloorKey != INT64_MIN && std::fabs(Nd.BedTop - FloorZ) <= 0.02 && std::fabs(Nd.PlankTop - FloorZ) <= 0.02 && Nd.BedDropped >= 0.8 * FloorArea
+							&& Nd.BedDropped >= 0.8 * Nd.BedArea && Nd.WoodKept >= 0.9 * (UpWoodAll - FloorArea);
+						bOk = bOk && bFloor && Nd.Planks > 0 && GoneShare >= 0.2 && GoneShare <= 0.45;
+						char Buf[320];
+						std::snprintf(Buf, sizeof(Buf), ", her bed's floor (%.2f m up, %.1f square metres, her own model's %.2f m) taken off %.1f square metres and laid again as %d planks, their tops %.2f m up, %d burnt through (%.0f%%); her benches and other wood facing up kept, %.1f of %.1f square metres",
+							Nd.BedTop, Nd.BedArea, FloorZ, Nd.BedDropped, Nd.Planks, Nd.PlankTop, Nd.PlanksGone, 100.0 * GoneShare, Nd.WoodKept, UpWoodAll - FloorArea);
+						BedSaid = Buf;
+					}
+					Wrong += bOk ? 0 : 1;
+					const std::string Key = H.Nation + " " + H.Model;
+					if (Said[Key] && bOk) continue;
+					Said[Key] = true;
+					char Line[640];
+					std::snprintf(Line, sizeof(Line), "%s%s: %d points of canvas, leather, rope and cloth burnt away%s%s, %d of glass gone, %d tyres to the rims%s%s", Seen.empty() ? "" : "; ",
+						Key.c_str(), Nd.Burnt, Seat > 0 ? (" (her " + std::to_string(Seat) + " points of canvas seats among them)").c_str() : "",
+						bTilt ? (" (the tilt's hoops kept, " + std::to_string(Nd.Hoops) + " points)").c_str() : "", Nd.Glass, Nd.Rims, BedSaid.c_str(), bOk ? "" : " (WRONG)");
+					Seen += Line;
 				}
 			}
-			Sheet.Save(OutDir + "/look_" + Name + ".ppm");
-			std::ofstream(OutDir + "/look_" + Name + ".txt") << Labels;
+			std::printf("lorries and half-tracks burnt out, every nation's (%d soft wrecks): %s\n", Soft, Seen.c_str());
+			std::printf("every nation's wrecks by their paints' stems: the M3's canvas seats, %d points in %d M3s, burnt away; the T-34's logs, %d points, dressed among %d points of charred wood; %d thrown turrets' open rings %.2f to %.2f m across their middles, each within her turret's own base\n",
+				Seats, SeatsChecked, Logs, LogsWood, Rings, RingLeast < 1e8 ? RingLeast : 0.0, RingMost);
+			if (Soft == 0 || Wrong > 0) Fault(Name + ": " + std::to_string(Wrong) + " wrecks with their canvas, seats, glass, wood, bed or tyres not burnt as asked");
+			if (SeatsChecked > 0 && Seats == 0) Fault(Name + ": the M3's canvas seats not found");
+			if (RingsWrong > 0) Fault(Name + ": " + std::to_string(RingsWrong) + " thrown turrets' open rings out of her turret's own base");
 		}
 
 		// 3. Fewer as the months go (twenty burnt out: 20, 17, 10, 3 left), each nation's share by the nats, the cap.
@@ -1267,7 +1869,93 @@ int main(int Argc, char** Argv)
 			}
 			Map.Save(OutDir + "/placement_" + Name + ".ppm");
 			std::ofstream(OutDir + "/placement_" + Name + ".txt") << Labels;
-			std::printf("pictures: %s/placement_%s.ppm, %s/look_%s.ppm (their words beside them, .txt)\n", OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str());
+
+			// Her run-off track close (the art director's carry, 24 November: not a dead-straight ladder): each wreck with a
+			// track off from above and from low on the side it lies, a week on.
+			std::vector<size_t> Tracked;
+			for (size_t K = 0; K < Y1.Hulks().size() && Tracked.size() < 4; ++K)
+				if (Y1.Hulks()[K].TrackOff != 0) Tracked.push_back(K);
+			if (!Tracked.empty())
+			{
+				const int TrackW = 520, TrackH = 360;
+				Image Close2(TrackW * 2, TrackH * static_cast<int>(Tracked.size()));
+				std::string Said;
+				for (size_t R = 0; R < Tracked.size(); ++R)
+				{
+					const size_t K = Tracked[R];
+					const LandHulk::Hulk& H = Y1.Hulks()[K];
+					double Sx = 0.0, Sy = 0.0;
+					for (const auto& P : H.Strip)
+					{
+						Sx += P.first / static_cast<double>(H.Strip.size());
+						Sy += P.second / static_cast<double>(H.Strip.size());
+					}
+					const double Cx = 0.5 * (Sx + H.X), Cy = 0.5 * (Sy + H.Y);
+					const V3 Anchor(H.X, H.Y, H.Z);
+					LandField::Mesh Ground = GroundAround(G, Cx, Cy, 20.0, 0.25, Anchor), Scorched, Her;
+					LandHulk::Dressing Nd;
+					Nd.Months = 0.25;
+					Y1.Patch(K, Scorched, &Nd);
+					Y1.Dress(K, true, Her, &Nd);
+					const int Y0 = static_cast<int>(R) * TrackH;
+					// (from above, north up; and from low on her track's side, looking across it at her)
+					const View Above = View::Looking(V3(Cx, Cy, H.Z), 0.0, 1.5707, 34.0, 0, Y0, TrackW, Y0 + TrackH);
+					const View Low = View::Looking(V3(Sx, Sy, H.Z + 0.3), std::atan2(Sx - H.X, Sy - H.Y), 0.3, 40.0, TrackW, Y0, 2 * TrackW, Y0 + TrackH);
+					for (const View* V : { &Above, &Low })
+					{
+						Draw(Close2, *V, Ground, Anchor, Sun);
+						Draw(Close2, *V, Scorched, Anchor, Sun);
+						Draw(Close2, *V, Her, Anchor, Sun);
+					}
+					for (int E = 0; E < 2 * TrackW; ++E) Close2.Put(E, Y0, 34, 34, 36);
+					for (int E = 0; E < TrackH; ++E) Close2.Put(TrackW, Y0 + E, 34, 34, 36);
+					Said += "8 " + std::to_string(Y0 + 8) + " " + Describe(H) + ": from above (north up), " + std::to_string(H.Fold) + " links flat, " + std::to_string(H.Curl)
+						+ " turned over, " + std::to_string(static_cast<int>(H.Strip.size()) - H.Fold - H.Curl) + " doubled back on top\n";
+					Said += std::to_string(TrackW + 8) + " " + std::to_string(Y0 + 8) + " from low on the side her track lies, a week on\n";
+				}
+				Close2.Save(OutDir + "/track_" + Name + ".ppm");
+				std::ofstream(OutDir + "/track_" + Name + ".txt") << Said;
+			}
+			// The Soviet lorry close (the review of round 2: her bed's floor, not her benches, laid again as planks with gaps
+			// that show the ground): the first of twenty Soviet wrecks laid as the stand-in lays them, a week on, from above
+			// (north up) and from the south-east, 40 degrees up.
+			{
+				LandHulk::Ask Q = AskOf(20, 1.0);
+				Q.bAsLaid = true;
+				Q.Nats = { { "SOV", 1 } };
+				LandHulk::Yard Sov;
+				Sov.Lay(F, Q, ReadModel, Have);
+				size_t Lorry = Sov.Hulks().size();
+				for (size_t K = 0; K < Sov.Hulks().size() && Lorry == Sov.Hulks().size(); ++K)
+					if (Sov.Hulks()[K].Model == "Truck") Lorry = K;
+				if (Lorry < Sov.Hulks().size())
+				{
+					const LandHulk::Hulk& H = Sov.Hulks()[Lorry];
+					const int LorryW = 520, LorryH = 420;
+					Image Shot(LorryW * 2, LorryH);
+					const V3 Anchor(H.X, H.Y, H.Z);
+					LandField::Mesh Ground = GroundAround(G, H.X, H.Y, 9.0, 0.1, Anchor), Scorched, Her;
+					LandHulk::Dressing Nd;
+					Nd.Months = 0.25;
+					Sov.Patch(Lorry, Scorched, &Nd);
+					Sov.Dress(Lorry, true, Her, &Nd);
+					const View Above = View::Looking(V3(H.X, H.Y, H.Z + 1.0), 0.0, 1.5707, 62.0, 0, 0, LorryW, LorryH);
+					const View Side = View::Looking(V3(H.X, H.Y, H.Z + 1.0), 2.35, 0.7, 58.0, LorryW, 0, 2 * LorryW, LorryH);
+					for (const View* V : { &Above, &Side })
+					{
+						Draw(Shot, *V, Ground, Anchor, Sun);
+						Draw(Shot, *V, Scorched, Anchor, Sun);
+						Draw(Shot, *V, Her, Anchor, Sun);
+					}
+					for (int E = 0; E < LorryH; ++E) Shot.Put(LorryW, E, 34, 34, 36);
+					Shot.Save(OutDir + "/lorry_" + Name + ".ppm");
+					std::ofstream(OutDir + "/lorry_" + Name + ".txt") << "8 8 SOV lorry a week on, from above (north up): " << Nd.Planks << " planks, " << Nd.PlanksGone
+																	   << " burnt through, the ground through the gaps\n"
+																	   << LorryW + 8 << " 8 from the south-east, 40 degrees up: bare hoops, no glass, rims\n";
+				}
+			}
+			std::printf("pictures: %s/placement_%s.ppm, %s/look_%s.ppm, %s/look_far_%s.ppm, %s/look_side_%s.ppm, %s/scorch_%s.ppm, %s/lorry_%s.ppm%s (their words beside them, .txt)\n", OutDir.c_str(), Name.c_str(),
+				OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), OutDir.c_str(), Name.c_str(), Tracked.empty() ? "" : (", " + OutDir + "/track_" + Name + ".ppm").c_str());
 		}
 	}
 	std::printf("\n%s (%d faults)\n", Faults == 0 ? "old wrecks: all checks passed" : "old wrecks: FAILED", Faults);

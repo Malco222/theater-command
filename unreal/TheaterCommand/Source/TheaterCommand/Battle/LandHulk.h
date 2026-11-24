@@ -35,10 +35,16 @@
  *   1.5 m, and clear of the others.
  * - How each looks (Yard::Dress, Yard::Patch): the game's own model of her (the miniature the battle draws, posed by
  *   LandKit), knocked out and burnt through: her turret turned, or blown off and lying near, upturned or on its side;
- *   her gun drooped to its stop; her hatches open; a track run off and lying stretched out beside her; a lorry's tyres
- *   burnt off to the rims; her aerial and roof gun gone. Soot black where the fire was, the paint burnt off to bare
- *   steel and the steel rusting orange, then brown, as the months go; settled into the ground; a scorched patch under
- *   her that greens again, lusher than the field round it. No fire and no smoke: they burnt out long ago.
+ *   her gun drooped to its stop; her hatches open; a track run off beside her, snaking a little and folded back on
+ *   itself once; a lorry's canvas burnt off its hoops, her bed's planks charred and some burnt through, her glass gone
+ *   and her tyres burnt off to the rims; her aerial and roof gun gone. A patchwork by the fire's heat and the months
+ *   (round 2, the art director's notes of 24 November), not one coat: a week on soot black over about half of what
+ *   faces the sky, round it her paint scorched to a chalky grey-buff and burnt off to bare grey steel, her own paint
+ *   low on her cooler sides, orange only along the edges; a month on the bare steel flash-rusted orange, in runs; by
+ *   half a year the soot washed off what faces the sky, the rust old and brown, the scorched paint flaking; settled
+ *   into the ground; a ragged scorched patch under her, ash black at her engine's end with a brown rim of burnt grass
+ *   and her fuel's stain, that greens again, lusher than the field round it. No fire and no smoke: they burnt out long
+ *   ago.
  *
  * Frames. The field is x east, y north, z up, metres (the recording's). Headings are radians, 0 north, clockwise, as
  * LandKit's. A dressed mesh is a LandField::Mesh in the field's axes, metres from its hulk's anchor (Hulk::X, Y, Z),
@@ -118,9 +124,15 @@ namespace LandHulk
 		bool bTurretOff = false;
 		double TurretX = 0.0, TurretY = 0.0, TurretYaw = 0.0, TurretTilt = 0.0, TurretTiltWay = 0.0, TurretZ = 0.0;
 		Lie TurretLie = Lie::Tilted;
-		/** A track run off (-1 her left, +1 her right, 0 none), and where its links lie, one point a link. */
+		/** A track run off (-1 her left, +1 her right, 0 none), and where its links lie, one point a link. It snakes a
+		 * little as it lies and folds back on itself once (the art director's carry, 24 November: a thrown track lay dead
+		 * straight like a ladder): its first Fold links lie flat on the ground from her bow, the next Curl turn over in
+		 * the fold, and the rest lie doubled back on top of the first, upside down (Strip: each one's place on the field,
+		 * the doubled ones over those they lie on). Laid along the strip the placement read (Yard::Lay), beside her moved out
+		 * off her road wheels. */
 		int TrackOff = 0;
 		std::vector<std::pair<double, double>> Strip;
+		int Fold = 0, Curl = 0;
 		/** Her hatches and doors open (a bit each, in the model's order of Hatches, then doors and tailboard). */
 		uint32_t Open = 0;
 		/** How fiercely she burnt (0.8 to 1: the share of each point's own soot weight), and how deep she has settled. */
@@ -202,6 +214,44 @@ namespace LandHulk
 	Field FieldOf(const LandFeed::Recording& Rec, const LandField::Ground& G, const LandCrater::Field* Holes,
 		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
 
+	/**
+	 * What a point of a dressed wreck shows (round 2 of her look, the art director's patchwork of 24 November): soot,
+	 * scorched paint gone chalky, bare steel, flash rust, old rust, her own paint left, charred rubber, wood or glass, a
+	 * track's links or a rim black-grey through the fire (not yet rusted), the snow fallen on her since, the open hole of
+	 * her turret ring (her turret thrown: the dark of her inside, not soot), or a run of rust down her side from a rusted
+	 * patch above (flash or old as the patch is). The cloud test measures each in its pictures.
+	 */
+	enum class Coat : uint8_t { Soot, Scorched, Bare, Flash, OldRust, Paint, Charred, Links, Snow, Hole, Run };
+	constexpr int Coats = 11;
+	const char* CoatName(Coat C);
+	/** What a point of her scorched patch shows: the field's own, ash black at her engine's end, burnt grass, its brown
+	 * rim, her fuel's stain, the brown of the months after, the weeds coming up lusher. */
+	enum class Scorch : uint8_t { Field, Ash, Burnt, Rim, Fuel, Brown, Lush };
+	constexpr int Scorches = 7;
+	const char* ScorchName(Scorch S);
+
+	/** What Dress and Patch may be asked and tell (all of it the cloud test's: the scene asks nothing). */
+	struct Dressing
+	{
+		/** Her age to dress her at, months (the look sheet's columns); under 0 her own. */
+		double Months = -1.0;
+		/** Each point's coat (Dress: a Coat; Patch: a Scorch), one a point of the mesh made. */
+		std::vector<uint8_t> Coats;
+		/** Points burnt away (canvas, leather, rope, cloth), of glass gone or blackened, and left standing just under where
+		 * the burnt cloth's top was (a lorry's tilt: its hoops). */
+		int Burnt = 0, Glass = 0, Hoops = 0;
+		/** A lorry's wooden bed: its planks, and how many burnt through and gone; the old floor's top and the planks' (model
+		 * metres up, at rest), the floor's footprint (square metres) and how much of it, and of the rest of her wood facing
+		 * up (her benches, her sides' tops), was taken off and kept. */
+		int Planks = 0, PlanksGone = 0;
+		double BedTop = 0.0, PlankTop = 0.0, BedArea = 0.0, BedDropped = 0.0, WoodKept = 0.0;
+		/** Points dressed as wood (charred), and as her turret ring's open hole (her turret thrown), and its radius. */
+		int Wood = 0, Hole = 0;
+		double RingR = 0.0;
+		/** Tyres burnt off to their rims. */
+		int Rims = 0;
+	};
+
 	/** What the campaign (or the Mac's stand-in) asks for. */
 	struct Ask
 	{
@@ -245,10 +295,12 @@ namespace LandHulk
 		/** The model she is drawn from (never null for a laid one). */
 		const LandKit::Model* ModelOf(size_t K) const;
 
-		/** Hulk K posed, broken and burnt (bNear: the model's near level, else its far), into Out (emptied first). */
-		void Dress(size_t K, bool bNear, LandField::Mesh& Out) const;
-		/** The ground under and round hulk K: scorched black while fresh, browning, then greener than the field. */
-		void Patch(size_t K, LandField::Mesh& Out) const;
+		/** Hulk K posed, broken and burnt (bNear: the model's near level, else its far), into Out (emptied first); Note
+		 * (the cloud test's): her age to dress her at, and each point's coat and what burnt away. */
+		void Dress(size_t K, bool bNear, LandField::Mesh& Out, Dressing* Note = nullptr) const;
+		/** The ground under and round hulk K: burnt black and ragged while fresh (ash at her engine's end, a brown rim of
+		 * burnt grass, her fuel's stain), browning, then greener than the field. Note as Dress's. */
+		void Patch(size_t K, LandField::Mesh& Out, Dressing* Note = nullptr) const;
 		/** Whether the grass and corn round the eye stand at a place (false under a wreck, her hull's corners and all, or a
 		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh). */
 		bool Covers(double X, double Y) const;

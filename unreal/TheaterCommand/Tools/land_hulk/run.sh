@@ -4,7 +4,8 @@
 # sight, shell-hole and vehicle cores it reads with their own tests' flags, and lays the wrecks on every recording's
 # field as the scene would: the same twice, none on a lane, a bank, a house, a wall, water, marsh or standing corn,
 # clear of every recorded vehicle's way by 8 m, fewer as the months go, the campaign's key read whatever is odd in it.
-# Paints placement_<recording> and look_<recording> into the out folder (PNG where python3 has Pillow, else PPM).
+# Paints placement_, look_, look_far_, look_side_, scorch_, lorry_ and track_<recording> into the out folder (PNG where
+# python3 has Pillow, else PPM).
 # Usage: Tools/land_hulk/run.sh [recording.json ...]   (default: every recording)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
