@@ -9,7 +9,7 @@ import { landTicket } from '../src/battle/land/ticket';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
-import { breakPoint, levelN, setSpread, sigmaOne, spreadDraw, spreadKeys, spreadOn, zOf } from '../src/campaign/spread';
+import { breakPoint, levelN, residualOf, setSpread, sigmaOne, spreadDraw, spreadKeys, spreadOn, zOf } from '../src/campaign/spread';
 import { REF_NERVE, SPREAD, ledgerK, nerveSplit, refStaying, type NerveParts } from '../src/battle/land/spread';
 import { LandBattle } from '../src/battle/land/sim';
 import { LAND } from '../src/battle/land/rules';
@@ -553,8 +553,23 @@ describe("step 1b's keys", () => {
     for (const x of read({})) expect(x).toBeCloseTo(sigmaOne(), 10);
     for (const x of read({ level: true, ledger: false })) expect(x).toBeCloseTo(0.791, 10);
     for (const x of read({ level: true, ledger: true, m: { flank: false, rear: false } })) expect(x).toBeCloseTo(0.791, 10);
-    for (const x of read({ level: true, ledger: true })) expect(x).toBeCloseTo(0.766, 10);
-    for (const x of read({ level: true, ledger: true, m: { flank: false, rear: false, air: true } })) expect(x).toBeCloseTo(0.766, 10);
+    // 13 (A) as ruled (the data's m: flank and rear at the army, fire, ambush and air to 1) at its own, 0.774 (D).
+    expect(SPREAD.m).toEqual({ flank: true, rear: true, fire: false, ambush: false, air: false });
+    for (const x of read({ level: true, ledger: true })) expect(x).toBeCloseTo(0.774, 10);
+    // Every part at the army, 0.766.
+    for (const x of read({ level: true, ledger: true, m: { fire: true, ambush: true, air: true } })) expect(x).toBeCloseTo(0.766, 10);
+    // Any other set has none derived: refused unless the harness gives one, so no arm reuses another's.
+    for (const m of [{ rear: false }, { flank: false, rear: false, air: true }, { fire: true }] as Partial<Record<NervePart, boolean>>[]) {
+      expect(() => spreadKeys(reseed(base, 1), { level: true, ledger: true, m })).toThrow(/no residual derived/);
+      for (const x of read({ level: true, ledger: true, m, residual: 0.8 })) expect(x).toBeCloseTo(0.8, 10);
+    }
+    expect(residualOf(null)).toBe(0.791);
+    expect(residualOf({ flank: false, rear: false, fire: false, ambush: false, air: false })).toBe(0.791);
+    expect(residualOf({ flank: true, rear: true, fire: false, ambush: false, air: false })).toBe(0.774);
+    expect(residualOf({ flank: true, rear: true, fire: true, ambush: true, air: true })).toBe(0.766);
+    expect(residualOf({ flank: true, rear: false, fire: false, ambush: false, air: false }, 0.79)).toBe(0.79);
+    // Each by quadrature off McQuie's 0.821 (D, fsx/brk/spread.py's rule): the causes' spread 0.221, 0.274 and 0.296.
+    for (const [r, c] of [[SPREAD.residual.staying, 0.221], [SPREAD.residual.flankRear, 0.274], [SPREAD.residual.ledger, 0.296]]) expect(r).toBeCloseTo(Math.sqrt(0.821 ** 2 - c ** 2), 3);
     // Under the ledger its residual draw is W over the front-on level: held as W is.
     const t = reseed(base, 3), k = spreadKeys(t, { level: true, ledger: true });
     for (const s of SIDES) expect(k.ledger!.draw[s]).toBe(k.W[s] / (SPREAD.level * k.N![s]));

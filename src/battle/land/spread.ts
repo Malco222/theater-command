@@ -12,7 +12,8 @@ export interface SpreadData {
   level: number;
   tail: { W: number; z: number };
   hold: [number, number];
-  residual: { staying: number; ledger: number };
+  /** The spread no cause explains, by which parts of m the army reads: none (staying), all five (ledger), flank and rear alone (flankRear). */
+  residual: { staying: number; ledger: number; flankRear: number };
   ref: { org: number; mor: number; xp: number; general: number };
   move: { p: number; c: number };
   mask: { hold: number };

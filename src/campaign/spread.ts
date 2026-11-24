@@ -82,17 +82,36 @@ export function levelN(side: SideTicket, s: Side, known: (f: ForceTicket) => boo
 
 // ---- The keys a ticket carries -------------------------------------------------------------------------------------
 
-/** Which of step 1b's keys to lay (absent: the data's steps and m), and the mask's shown levels. */
-export interface SpreadParts { level?: boolean; ledger?: boolean; m?: Partial<Record<NervePart, boolean>>; shown?: Record<Side, number> }
+/**
+ * Which of step 1b's keys to lay (absent: the data's steps and m), the mask's shown levels, and a residual for a set of
+ * m's parts at the army that has none derived in the data (residualOf).
+ */
+export interface SpreadParts { level?: boolean; ledger?: boolean; m?: Partial<Record<NervePart, boolean>>; shown?: Record<Side, number>; residual?: number }
+
+const PARTS: NervePart[] = ['flank', 'rear', 'fire', 'ambush', 'air'];
+/**
+ * The residual's spread for a ticket that carries N, by the parts of m its army ledger reads (null: no ledger). Each
+ * set-up at its own (DD 19:47Z: "(B) at its own residual 0.791: re-run, don't reuse 0.766"): no part at the army, the
+ * level by staying alone, 0.791 (N without a ledger, or 13 (B)); flank and rear alone, 0.774 (13 (A) as ruled: fire,
+ * ambush and air to 1); all five, 0.766. Any other set (a part alone, for the gate) has none derived, so the harness
+ * gives it ('given', spread.py's rule on those parts) or this refuses: no arm draws at another set-up's residual.
+ */
+export function residualOf(m: Record<NervePart, boolean> | null, given?: number): number {
+  if (given !== undefined) return given;
+  const at = m ? PARTS.filter((p) => m[p]) : [];
+  if (!at.length) return SPREAD.residual.staying;
+  if (at.length === PARTS.length) return SPREAD.residual.ledger;
+  if (at.length === 2 && m!.flank && m!.rear) return SPREAD.residual.flankRear;
+  throw new Error(`field spread: no residual derived for m read at the army by ${at.join(', ')} alone; give parts.residual (spread.py's rule on those parts)`);
+}
 
 /**
  * The keys a ticket carries (the bench's hook, form s9 proof 3): the draw on the ticket's own seed and attempt, with
  * step 1b's parts where asked (data steps and m by default). A harness that re-seeds a ticket lays them afresh with this.
  * With the data as laid (step 1) it is exactly { W }.
  *
- * The residual's spread by what the ticket carries (DD 19:47Z, choice 13 (B) at its own residual): no N, one level,
- * 0.8211; N without a ledger, or a ledger with every part of m at the block, 0.791; a ledger with any part of m at the
- * army, 0.766 (a partial m keeps it until its own residual is derived: G).
+ * The spread its break points are drawn at: no N, one level, 0.8211 (sigmaOne); with N, the residual for the parts of m
+ * the ledger reads at the army (residualOf: none 0.791, flank and rear 0.774, all five 0.766), or parts.residual.
  */
 export function spreadKeys(t: FieldTicket<LandPlace>, parts: SpreadParts = {}): SpreadReckoning {
   const level = parts.level ?? SPREAD.steps.level, ledger = level && (parts.ledger ?? SPREAD.steps.ledger);
@@ -102,7 +121,7 @@ export function spreadKeys(t: FieldTicket<LandPlace>, parts: SpreadParts = {}): 
     return { W: { att: breakPoint(u.att, SPREAD.level, s1), def: breakPoint(u.def, SPREAD.level, s1) }, ...(parts.shown ? { shown: parts.shown } : {}) };
   }
   const m = { ...SPREAD.m, ...(parts.m ?? {}) } as Record<NervePart, boolean>;
-  const sigma = ledger && Object.values(m).some((x) => x) ? SPREAD.residual.ledger : SPREAD.residual.staying;
+  const sigma = residualOf(ledger ? m : null, parts.residual);
   const N = { att: levelN(t.att, 'att'), def: levelN(t.def, 'def') };
   const W = { att: breakPoint(u.att, SPREAD.level * N.att, sigma), def: breakPoint(u.def, SPREAD.level * N.def, sigma) };
   return {
