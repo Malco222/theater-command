@@ -7,13 +7,15 @@ import { techMul } from '../src/campaign/research';
 import { startOpen } from '../src/campaign/staff';
 import { saveGame } from '../src/campaign/save';
 import {
-  FIGHTERS, bandOf, edge, fighterClock, fighterMonth, fighterPanel, fighterTypesOn, mixEdge, namesOf, raidCardLines, serviceNews,
+  FIGHTERS, bandOf, edge, fighterClock, fighterMonth, fighterPanel, fighterTypesOn, lawK, mixEdge, namesOf, raidCardLines, serviceNews,
   joinBought, setFighterTypes, sideTypes, typeEdge, typeMix,
 } from '../src/campaign/fighters';
 import type { AirFleet, AirMission, Game } from '../src/campaign/types';
 
 const fleetOf = (g: Game, nat: string): AirFleet => g.airFleets.find((f) => f.nat === nat && f.ship === undefined)!;
 const on = (g: Game): Game => { expect(setFighterTypes(g, true)).toBe(true); return g; };
+/** The same campaign under Units decide, which folds the switch in and reads the fitted k. */
+const ud = (g: Game): Game => { g.flags.open = 1; g.flags.unitsDecide = 1; return g; };
 
 /** A fight for the sky over an enemy province both sides' fighters reach: this nation's first fighter group, moved to its ground nearest the enemy's capital. */
 function aFight(g: Game, nat: string, foe: string, m: AirMission = 'superiority'): { f: AirFleet; target: number } | null {
@@ -71,9 +73,17 @@ describe('the matchup (the design director, 23 Nov 2026 06:55Z and 07:00Z)', () 
   const T = FIGHTERS.types;
   const ln = (x?: number, y?: number): number => (x && y ? Math.log(x / y) : 0);
 
-  it('gives no edge until k is fitted to the record\'s anchors', () => {
-    expect(FIGHTERS.law.fitted).toBe(false);
-    for (const [a, b] of [['spitfire_i', 'bf109_e'], ['a6m2_21', 'f4f4'], ['bf109_e', 'p11c']]) expect(edge(a, b, 'mid')).toBe(0);
+  it('k is fitted (Guadalcanal, L) and read only under Units decide: the switch alone keeps none and gives no edge', () => {
+    expect(FIGHTERS.law.fitted).toBe(true);
+    expect(FIGHTERS.law.k).toBeGreaterThan(0);
+    const alone = on(createGame(3, null)), both = ud(createGame(3, null));
+    expect(fighterTypesOn(both)).toBe(true);
+    expect(lawK(alone)).toBe(0);
+    expect(lawK(both)).toBe(FIGHTERS.law.k);
+    for (const [a, b] of [['spitfire_i', 'bf109_e'], ['a6m2_21', 'f4f4'], ['bf109_e', 'p11c']]) {
+      expect(edge(a, b, 'mid', undefined, undefined, lawK(alone))).toBe(0);
+      expect(edge(a, b, 'mid', undefined, undefined, lawK(both))).not.toBe(0);
+    }
   });
 
   it('with no doctrine laid, top speed alone decides, k times its log ratio; antisymmetric', () => {
@@ -187,19 +197,27 @@ describe('the count', () => {
     y.base = x.f.base;
     const a0 = assessAir(off, [x.f], 'superiority', x.target);
     const a1 = assessAir(g, [y], 'superiority', x.target);
-    // Until k is fitted the types give no edge, and on schedule (techMul 1 on both sides) nothing moves.
+    // The switch alone keeps no k, so the types give no edge, and on schedule (techMul 1 on both sides) nothing moves.
     expect(a1.typeEdge).toBe(0);
     expect(a1.Epow / a0.Epow).toBeCloseTo(1, 10);
-    // With a trial k: the Bf 109 E against the P.11c, the airframes' edge alone, as a pair.
+    // Under Units decide, with a trial k against none: the Bf 109 E against the P.11c, the airframes' edge alone, as a
+    // pair (no doctrine is read, and the Poles' hours are not, so both keep their level).
+    const h = ud(createGame(3, null)), z = h.airFleets.find((f) => f.id === x.f.id)!;
+    z.base = x.f.base;
     const was = FIGHTERS.law.k;
-    FIGHTERS.law.k = 1;
     try {
-      const a2 = assessAir(g, [y], 'superiority', x.target);
-      const E = a2.typeEdge!;
+      // (The open campaign's tree gives GER a research lead at the start, which the edge takes off at any k: guard A.)
+      FIGHTERS.law.k = 0;
+      const b0 = assessAir(h, [z], 'superiority', x.target);
+      const lead = Math.log(techMul(h, 'GER', 'fighters') / techMul(h, 'POL', 'fighters'));
+      expect(b0.typeEdge).toBeCloseTo(-lead, 12);
+      FIGHTERS.law.k = 1;
+      const b1 = assessAir(h, [z], 'superiority', x.target);
+      const E = b1.typeEdge! - b0.typeEdge!;
       expect(E).toBeGreaterThan(0.1);
-      expect(a2.Epow / a0.Epow).toBeCloseTo(Math.exp(E / 2), 10);
-      expect(a2.Dpow / a0.Dpow).toBeCloseTo(Math.exp(-E / 2), 10);
-      expect(E).toBeCloseTo(mixEdge({ bf109_e: 0.9, bf110_c: 0.1 }, { p11c: 1 }, 'mid'), 10);
+      expect(b1.Epow / b0.Epow).toBeCloseTo(Math.exp(E / 2), 10);
+      expect(b1.Dpow / b0.Dpow).toBeCloseTo(Math.exp(-E / 2), 10);
+      expect(E).toBeCloseTo(mixEdge({ bf109_e: 0.9, bf110_c: 0.1 }, { p11c: 1 }, 'mid', undefined, undefined, 1), 10);
     } finally { FIGHTERS.law.k = was; }
   });
 
@@ -216,7 +234,7 @@ describe('the count', () => {
     const f = fleetOf(g, 'GER'), p = fleetOf(g, 'POL');
     const lead = Math.log(techMul(g, 'GER', 'fighters') / techMul(g, 'POL', 'fighters'));
     expect(lead).toBeGreaterThan(0);
-    const e = mixEdge(typeMix(g, f)!, typeMix(g, p)!, 'mid');
+    const e = mixEdge(typeMix(g, f)!, typeMix(g, p)!, 'mid', undefined, undefined, lawK(g));
     const want = Math.max(-FIGHTERS.w.cap, Math.min(FIGHTERS.w.cap, e - lead));
     expect(typeEdge(g, [{ f, w: 2 }], [{ f: p, w: 3 }], 'superiority')).toBeCloseTo(want, 12);
   });

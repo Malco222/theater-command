@@ -1754,7 +1754,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
   if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0) {
-    const E = typeEdge(g, out.att.map((x) => ({ f: x.f, w: x.ftr * worth(g, x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth(g, x.f) })), m);
+    // Under Units decide each group brings its pilots' hours and its held level, for the pair (fighters.ts pilotsEdge).
+    const pilots = (f: AirFleet) => (unitsDecide(g) ? { h: hoursOf(g, f), q: heldOf(g, f) } : {});
+    const E = typeEdge(g, out.att.map((x) => ({ f: x.f, w: x.ftr * worth(g, x.f), ...pilots(x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth(g, x.f), ...pilots(x.f) })), m);
     out.typeEdge = E;
     out.Epow *= Math.exp(E / 2);
     out.Dpow *= Math.exp(-E / 2);

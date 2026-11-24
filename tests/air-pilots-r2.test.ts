@@ -8,9 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
-import { AIR, AIRWAR, airPool, deckBred, fxpOf, hoursOf, joinPilots, levelOf, openPilots, poolIn, splitFleet } from '../src/campaign/air';
+import { AIR, AIRWAR, airPool, assessAir, heldOf, deckBred, fxpOf, hoursOf, joinPilots, levelOf, openPilots, poolIn, splitFleet } from '../src/campaign/air';
 import { UNITS, aceSchool, armsOf, schoolPilots, wayNow } from '../src/campaign/units';
-import { doctrineOf } from '../src/campaign/fighters';
+import { FIGHTERS, doctrineOf, pilotsEdge } from '../src/campaign/fighters';
 import { headStart } from '../src/campaign/bombers';
 import { airTicket } from '../src/battle/air/ticket';
 import { planRaid, raidTargets } from '../src/campaign/airwar';
@@ -198,5 +198,46 @@ describe('on: seasoning, the ace\'s school, the crews\' head start and doctrine'
     const force = tk.att.forces.find((x) => x.corps === f.id)!;
     expect(force.xp).toBeCloseTo(levelOf(0.5) / 3, 9);
     expect(levelOf(1)).toBe(AIR.leader.maxLevel);
+  });
+});
+
+describe('on: the pilots in the fighters\' fight, k as fitted', () => {
+  it('a pair whose hours are both laid: k times the log ratio of the hours, and the held level leaves it; else 0', () => {
+    const k = FIGHTERS.law.k, f = {} as AirFleet;
+    expect(k).toBeGreaterThan(0);
+    const a = { f, w: 1, h: 250, q: 1.1 }, d = { f, w: 1, h: 350, q: 1.05 };
+    expect(pilotsEdge(a, d, k)).toBeCloseTo(k * Math.log(250 / 350) - Math.log(1.1 / 1.05), 12);
+    expect(pilotsEdge(a, { ...d, h: null }, k)).toBe(0);
+    expect(pilotsEdge({ ...a, h: undefined }, d, k)).toBe(0);
+    expect(pilotsEdge(a, d, 0)).toBe(0);
+  });
+
+  it('in a sweep: both sides keep their level until the defenders\' school is read; then the hours price the pilots', () => {
+    const g = open(true);
+    // The first sweep whose defenders are one nation's land groups, with no school read.
+    for (const t of raidTargets(g, 'superiority', 'GER')) {
+      const ids = planRaid(g, 'superiority', t.id, undefined, 'GER').picked ?? [];
+      const fs = g.airFleets.filter((x) => ids.includes(x.id));
+      if (!fs.length) continue;
+      const a1 = assessAir(g, fs, 'superiority', t.id);
+      const nats = new Set(a1.def.map((x) => x.f.nat));
+      if (a1.why || a1.Epow <= 0 || a1.Dpow <= 0 || nats.size !== 1 || a1.def.some((x) => deckBred(x.f))) continue;
+      const q = (xs: AirFleet[]) => new Set(xs.map((x) => heldOf(g, x)));
+      const qa = q(fs), qd = q(a1.def.map((x) => x.f));
+      if (qa.size !== 1 || qd.size !== 1) continue;
+      const nat = [...nats][0], A = armsOf(g, nat)!.air;
+      expect(A.school).toBeNull();
+      for (const x of a1.def) expect(hoursOf(g, x.f)).toBeNull();
+      // Read a school for the defenders: their groups take its hours, and the pair prices the pilots in place of the levels.
+      A.school = 350; A.pool = 350;
+      openPilots(g);
+      const a2 = assessAir(g, fs, 'superiority', t.id);
+      const want = FIGHTERS.law.k * Math.log(250 / 350) - Math.log([...qa][0] / [...qd][0]);
+      expect(a2.typeEdge! - a1.typeEdge!).toBeCloseTo(want, 9);
+      expect(a2.Epow / a1.Epow).toBeCloseTo(Math.exp(want / 2), 9);
+      expect(a2.Dpow / a1.Dpow).toBeCloseTo(Math.exp(-want / 2), 9);
+      return;
+    }
+    throw new Error('no sweep with one nation\'s land groups defending');
   });
 });
