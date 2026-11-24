@@ -51,6 +51,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
 #include "RenderingThread.h"
+#include "CoreGlobals.h" // (GGameThreadTime: the opening held, WarmTick)
+#include "RenderTimer.h" // (GRenderThreadTime, as TheaterSpeed reads it)
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
@@ -88,6 +90,19 @@ struct FAirLandMade
 	TArray<CampaignTextures::FLevels> Levels;
 	double Seconds = 0.0;
 };
+
+/** (1.5.1) The opening held (AAirBattle::WarmUp, WarmTick). */
+namespace AirParts
+{
+	/** How long the opening is held at least and at most (s); the frames in a row that must come quick, and how quick
+	 * (ms, the frame and both threads). The stalls it waits out were 600 to 1,200 ms; a flying frame on the Mac 20 to 40. */
+	static constexpr double WarmLeast = 0.8;
+	static constexpr double WarmMost = 8.0;
+	static constexpr int32 WarmQuickWanted = 8;
+	static constexpr double WarmQuickMs = 80.0;
+	/** The black's easing off as the flyover begins (s). */
+	static constexpr double CurtainFade = 0.5;
+}
 
 namespace AirParts
 {
@@ -1085,6 +1100,11 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("12-ace-close"), 30.0, true, false, false, false, false, false, false, false, false, true }, // (an ace's marks, 8 m off them)
 			{ TEXT("12b-ace-chase"), 36.0, true, false, false, false, true, false, false, false, false, true }, // (the chase view behind the ace)
 		};
+	}
+	// (1.5.1) The opening held behind its black frame while the scene just made is taken in (WarmUp, WarmTick).
+	if (!NoCurtain())
+	{
+		WarmUp();
 	}
 	ShowScreen();
 	bBegun = true;
@@ -3562,7 +3582,9 @@ void AAirBattle::Tick(float DeltaSeconds)
 		LandPainting = TFuture<void>();
 		LayLand();
 	}
-	const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	// (1.5.1: nothing moves while the opening is held behind its black frame, WarmTick)
+	const bool bHeld = bBegun && State.IsValid() && State->bWarming;
+	const double Real = bHeld ? 0.0 : FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Real;
 	if (QuitAt >= 0.0 && RealT >= QuitAt)
 	{
@@ -3580,6 +3602,16 @@ void AAirBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	FAirBattleState& S = *State;
+	// (1.5.1) The opening held: the frames watched while the black stands; then the black eased off over the flyover's
+	// first half second (at once where no flyover runs).
+	if (S.bWarming)
+	{
+		WarmTick(DeltaSeconds);
+	}
+	else if (S.Curtain > 0.0)
+	{
+		S.Curtain = S.bFlying ? FMath::Max(0.0, S.Curtain - FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1) / AirParts::CurtainFade) : 0.0;
+	}
 	// The screen's clock: x1 is real time; the run-up and the run home at x10; held while a question stands or the card is up.
 	S.Clock.bQuestion = S.Question != 0 || S.bCard;
 	S.Clock.bFlyover = S.bFlying;
@@ -3647,6 +3679,11 @@ void AAirBattle::Tick(float DeltaSeconds)
 	if (MetRealT < 0.0 && S.Desk.Head().Contact >= 0.0)
 	{
 		MetRealT = RealT;
+	}
+	// (1.5.1: every aircraft model of the raid made under the opening's black, once its first groups stand)
+	if (S.bWarming && !bWarmShapes && !S.Show.Planes().empty())
+	{
+		WarmShapes();
 	}
 	// (the eye first: a cut to a new aircraft must draw it at its near shape on the very frame of the cut)
 	AimEye(Real);
@@ -4754,44 +4791,8 @@ namespace AirParts
 	}
 }
 
-UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
+FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
 {
-	TArray<FPlaneMade::FMark> Struck; // (an aircraft made again keeps the strikes it took, laid again on its new skin)
-	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
-	{
-		const FPlaneMade* Was = PlaneMade.Find(Key);
-		if (*Found && Was && Was->Model == Model && Was->Span == Span)
-		{
-			return Found->Get();
-		}
-		// (made before a view named its model, the place's main one standing in: made again as its own)
-		if (*Found)
-		{
-			(*Found)->DestroyComponent();
-		}
-		if (FPlaneMade* Old = PlaneMade.Find(Key))
-		{
-			for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Old->Discs)
-			{
-				if (Disc.IsValid())
-				{
-					Disc->DestroyComponent();
-				}
-			}
-			LiftMarks(*Old);
-			if (Old->Tally.IsValid())
-			{
-				Old->Tally->DestroyComponent();
-			}
-			Struck = MoveTemp(Old->Marks);
-			for (FPlaneMade::FMark& Mark : Struck)
-			{
-				Mark.bOnSkin = false;
-			}
-		}
-		Planes.Remove(Key);
-		PlaneMade.Remove(Key);
-	}
 	// A sculpted model has two shapes: its far one (a few thousand points) for every aircraft, and its near one (tens
 	// of thousands) made only for those that come near the eye (PlaneNear): two hundred aircraft at the near shape were
 	// millions of points. A stand-in is sized to the battle's span, so each span is a shape of its own (a Kate is not a
@@ -4855,6 +4856,49 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 		FMiniatureMesh::bTorpedoLoad = false;
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
+	return ShapeKey;
+}
+
+UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
+{
+	TArray<FPlaneMade::FMark> Struck; // (an aircraft made again keeps the strikes it took, laid again on its new skin)
+	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
+	{
+		const FPlaneMade* Was = PlaneMade.Find(Key);
+		if (*Found && Was && Was->Model == Model && Was->Span == Span)
+		{
+			return Found->Get();
+		}
+		// (made before a view named its model, the place's main one standing in: made again as its own)
+		if (*Found)
+		{
+			(*Found)->DestroyComponent();
+		}
+		if (FPlaneMade* Old = PlaneMade.Find(Key))
+		{
+			for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Old->Discs)
+			{
+				if (Disc.IsValid())
+				{
+					Disc->DestroyComponent();
+				}
+			}
+			LiftMarks(*Old);
+			if (Old->Tally.IsValid())
+			{
+				Old->Tally->DestroyComponent();
+			}
+			Struck = MoveTemp(Old->Marks);
+			for (FPlaneMade::FMark& Mark : Struck)
+			{
+				Mark.bOnSkin = false;
+			}
+		}
+		Planes.Remove(Key);
+		PlaneMade.Remove(Key);
+	}
+	const FString ShapeKey = ShapeFor(Model, Nation, bFighter, Span, bTorpedo);
+	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	// (her bay's racked load, for where her stick's bombs leave her: the flight core's BaysOf, in metres forward, to the
 	// right and up from the point she is drawn about; the shape has her nose toward -X and her right hand at -Y)
 	const AirParts::FShape* Bayed = Shapes.Find(ShapeKey);
@@ -5142,6 +5186,211 @@ void AAirBattle::SendCopies()
 		Group.At.Reset();
 		Group.Before.Reset();
 	}
+}
+
+// ---- (1.5.1) The opening held ----------------------------------------------------------------------------------
+// The Mac's cold Rhineland raids of 24 November (build 3e098f1f; p1 twice in one run, p2 with the sky captured at every
+// step, p4 with no capture at all): every raid, the draw thread took 0.6 to 1.1 s a frame for the two frames after the
+// press while the game thread idled, the flyover running and the aircraft jumping through them; the first raid of a run
+// stalled once more (0.7 to 1.2 s) as the land's picture first went down, and the game thread 258 ms as the defending
+// fighters' model was first built mid-flight. The sky light's capture was not it (p4). So the raid now opens behind a
+// black frame with its title, the clock held, while the scene just made is drawn and taken in, with a sheet of each
+// kind first drawn later set before the eye and every aircraft model of the raid made; the black lifts when the frames
+// come quick again, and the flyover begins from its first second.
+
+bool AAirBattle::NoCurtain()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterAirNoCurtain"));
+	return bAsked;
+}
+
+void AAirBattle::WarmUp()
+{
+	FAirBattleState& S = *State;
+	S.bWarming = true;
+	S.Curtain = 1.0;
+	WarmBegan = -1.0;
+	WarmQuick = 0;
+	WarmFrames = 0;
+	WarmSlowest = 0.0;
+	bWarmShapes = false;
+	// A sheet of each kind the raid first draws only later, its shaders made ready under the black: the land's paint
+	// (LayLand's sheets, once the pool has painted them: the stall as it first went down, the first raid of a run only),
+	// and an aircraft on its own mesh (PlaneMesh: those near the eye, first seen at the flyover's later shots). Each as
+	// its own kind is made, the same material, the same points' parts and the same shadow; set before the eye each frame
+	// while the black holds (WarmTick), and taken down with it (WarmDone).
+	auto Quad = [this](const TCHAR* Name, UMaterialInterface* Ink, bool bUv, bool bPlane)
+	{
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), FName(Name)));
+		Mesh->SetupAttachment(Root);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (bPlane)
+		{
+			Mesh->SetMobility(EComponentMobility::Movable);
+			Mesh->SetCastShadow(true);
+			Mesh->LightingChannels.bChannel1 = true;
+			Mesh->bUseAsyncCooking = false;
+		}
+		else
+		{
+			Mesh->SetCastShadow(false);
+		}
+		Mesh->RegisterComponent();
+		const double Half = 3.0 * UnitsPerMetre;
+		const TArray<FVector> Points = { FVector(0.0, -Half, -Half), FVector(0.0, Half, -Half), FVector(0.0, Half, Half), FVector(0.0, -Half, Half) };
+		// (both faces, so that it shows whichever way it is turned)
+		const TArray<int32> Triangles = { 0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2 };
+		TArray<FVector> Normals;
+		Normals.Init(bPlane ? FVector::ForwardVector : FVector::UpVector, Points.Num());
+		TArray<FColor> Colours;
+		Colours.Init(FColor::White, Points.Num());
+		TArray<FVector2D> Uv;
+		if (bUv)
+		{
+			Uv = { FVector2D(0.0, 1.0), FVector2D(1.0, 1.0), FVector2D(1.0, 0.0), FVector2D(0.0, 0.0) };
+		}
+		Mesh->CreateMeshSection(0, Points, Triangles, Normals, Uv, Colours, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, Ink);
+		WarmShelf.Add(Mesh);
+	};
+	if (LandMade.IsValid())
+	{
+		UMaterialInterface* Cloth = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
+		TArray<FColor> White;
+		White.Init(FColor::White, 16);
+		UTexture2D* Plain = Cloth ? CampaignTextures::Create(4, 4, White, true, false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), TEXT("AirWarmPicture"))) : nullptr;
+		if (Plain)
+		{
+			// (LayLand's InkOf, as it is)
+			UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(Cloth, this);
+			Ink->SetTextureParameterValue(TEXT("Flag"), Plain);
+			Ink->SetScalarParameterValue(TEXT("Glow"), 0.0f);
+			Ink->SetScalarParameterValue(TEXT("Fade"), 0.0f);
+			Ink->SetScalarParameterValue(TEXT("Drain"), 0.0f);
+			Ink->SetScalarParameterValue(TEXT("Veiled"), 0.0f);
+			Ink->SetScalarParameterValue(TEXT("Roughness"), 0.92f);
+			WarmKeep.Add(Plain);
+			WarmKeep.Add(Ink);
+			Quad(TEXT("AirWarmLand"), Ink, true, false);
+		}
+	}
+	if (PlaneInk)
+	{
+		Quad(TEXT("AirWarmPlane"), PlaneInk.Get(), false, true);
+	}
+}
+
+void AAirBattle::WarmShapes()
+{
+	bWarmShapes = true;
+	const FAirBattleState& S = *State;
+	const double Began = FPlatformTime::Seconds();
+	TSet<FString> Done;
+	const int32 Before = AirParts::Shapes().Num();
+	auto Ready = [&](const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
+	{
+		const FString ShapeKey = ShapeFor(Model, Nation, bFighter, Span, bTorpedo);
+		if (Done.Contains(ShapeKey))
+		{
+			return;
+		}
+		Done.Add(ShapeKey);
+		// (and its copies' meshes, far and light, as Draw asks for them: PlaneStill keeps them for the raid)
+		if (AirParts::Shapes().Contains(ShapeKey + TEXT("|far")))
+		{
+			PlaneStill(ShapeKey, false);
+			PlaneStill(ShapeKey, true);
+		}
+	};
+	for (const AirShow::PlaneOut& P : S.Show.Planes())
+	{
+		const auto Flown = S.Show.Groups().find(P.Group);
+		const bool bTorpedo = !P.bFighter && Flown != S.Show.Groups().end() && Flown->second.Strike == "torpedo";
+		Ready(AirParts::Wide(P.Model), AirParts::Wide(P.Nation), P.bFighter, P.Span, bTorpedo);
+	}
+	// The place's main models of both sides, as the board names them ("<nat>:ftr", "<nat>:bmr"): a side's fighters
+	// that are not yet in the air (the Bf 109s over the Rhineland, first seen 18 s in) are made here too. A stand-in is
+	// made to its group's own span when it first shows, as before.
+	for (const auto& Pair : S.Board.Models)
+	{
+		FString Nat, Kind;
+		if (Pair.second.empty() || !AirParts::Wide(Pair.first).Split(TEXT(":"), &Nat, &Kind))
+		{
+			continue;
+		}
+		const bool bFighter = Kind == TEXT("ftr");
+		const FString Model = AirParts::Wide(Pair.second);
+		const FString Name = ModelFor(Model, Nat, bFighter);
+		if (Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:")))
+		{
+			continue;
+		}
+		Ready(Model, Nat, bFighter, 12.0, false);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the raid's %d aircraft shapes made ready under the opening's black (%d near and far shapes new this run), with their copies' meshes, in %.0f ms."),
+		Done.Num(), AirParts::Shapes().Num() - Before, 1000.0 * (FPlatformTime::Seconds() - Began));
+}
+
+void AAirBattle::WarmTick(float DeltaSeconds)
+{
+	const double Now = FPlatformTime::Seconds();
+	if (WarmBegan < 0.0)
+	{
+		WarmBegan = Now;
+	}
+	++WarmFrames;
+	// (the frame just ended as the speed log reads it; the draw thread's time is its last frame's, which holds the black
+	// a frame longer at most)
+	const double FrameMs = 1000.0 * static_cast<double>(DeltaSeconds);
+	const double GameMs = FPlatformTime::ToMilliseconds(GGameThreadTime);
+	const double DrawMs = FPlatformTime::ToMilliseconds(GRenderThreadTime);
+	WarmSlowest = FMath::Max(WarmSlowest, FMath::Max3(FrameMs, GameMs, DrawMs));
+	const bool bQuick = FrameMs < AirParts::WarmQuickMs && GameMs < AirParts::WarmQuickMs && DrawMs < AirParts::WarmQuickMs;
+	WarmQuick = bQuick ? WarmQuick + 1 : 0;
+	if (Eye)
+	{
+		// (60 m before the eye, side by side, turned to it)
+		const FVector At = Eye->GetActorLocation();
+		const FVector Ahead = Eye->GetActorForwardVector();
+		const FVector Right = Eye->GetActorRightVector();
+		for (int32 K = 0; K < WarmShelf.Num(); ++K)
+		{
+			if (UProceduralMeshComponent* Mesh = WarmShelf[K].Get())
+			{
+				const double Across = (K - 0.5 * (WarmShelf.Num() - 1)) * 8.0 * UnitsPerMetre;
+				Mesh->SetWorldLocationAndRotation(At + Ahead * (60.0 * UnitsPerMetre) + Right * Across, Eye->GetActorRotation());
+			}
+		}
+	}
+	const double Held = Now - WarmBegan;
+	if (Held >= AirParts::WarmMost)
+	{
+		WarmDone(TEXT("held its longest"));
+	}
+	else if (WarmQuick >= AirParts::WarmQuickWanted && Held >= AirParts::WarmLeast)
+	{
+		WarmDone(TEXT("the frames quick again"));
+	}
+}
+
+void AAirBattle::WarmDone(const TCHAR* Why)
+{
+	if (!State.IsValid() || !State->bWarming)
+	{
+		return;
+	}
+	State->bWarming = false;
+	for (const TObjectPtr<UProceduralMeshComponent>& Mesh : WarmShelf)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	WarmShelf.Empty();
+	WarmKeep.Empty();
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the opening held %.2f s behind its black frame (%d frames, the slowest %.0f ms; %s); the flyover begins. (-TheaterAirNoCurtain: the old opening)"),
+		WarmBegan >= 0.0 ? FPlatformTime::Seconds() - WarmBegan : 0.0, WarmFrames, WarmSlowest, Why);
 }
 
 void AAirBattle::Draw(double Real)

@@ -798,6 +798,31 @@ private:
 	static bool SkyEveryStep();
 	/** SkyLowerOnce has laid this battle's lower half. */
 	bool bSkyLowerLaid = false;
+	/**
+	 * (1.5.1, the opening held.) The Mac's cold Rhineland raids of 24 November (p1, p2 and p4, with the sky light's
+	 * capture and without it): every raid, the draw thread took about a second a frame for the two frames after the
+	 * press, taking in the scene just made, while the flyover ran and the aircraft jumped; the first raid of a run also
+	 * stalled once as the land's picture first went down, and once as the defending fighters' model was first built
+	 * mid-flight (the Bf 109's, 258 ms). WarmUp, at the end of Open: the screen black with the raid's title (FAirBattleState
+	 * Curtain), the clock held, a small sheet of the land's paint and one of the aircraft's set before the eye, where
+	 * they are drawn once under the black. WarmTick, each frame while it holds: every aircraft model of the raid made
+	 * (WarmShapes), and the black lifted once WarmQuick frames in a row come quick on both threads, after WarmLeast
+	 * seconds, or at WarmMost whatever. "-TheaterAirNoCurtain": the old opening, for the A/B.
+	 */
+	void WarmUp();
+	void WarmTick(float DeltaSeconds);
+	void WarmShapes();
+	void WarmDone(const TCHAR* Why);
+	static bool NoCurtain();
+	double WarmBegan = -1.0;
+	int32 WarmQuick = 0;
+	int32 WarmFrames = 0;
+	double WarmSlowest = 0.0;
+	bool bWarmShapes = false;
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> WarmShelf;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> WarmKeep;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
@@ -827,6 +852,9 @@ private:
 	/** The close view on, riding aircraft Key of squadron Group, chosen by him (kept until he steps or it is gone). */
 	void RideOn(int32 Group, int32 Key);
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
+	/** The key of an aircraft's shape in AirParts::Shapes (its near shape, and its far one under "|far"), the shapes
+	 * made the first time they are asked for (once a run: they are kept from raid to raid). */
+	FString ShapeFor(const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo);
 	/** Aircraft Key's mesh, made the first time; bTorpedo for one of a torpedo group (a model with both loads carries its torpedo). */
 	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo);
 	/** Shows aircraft Key's near shape (made the first time) or its far one. */
