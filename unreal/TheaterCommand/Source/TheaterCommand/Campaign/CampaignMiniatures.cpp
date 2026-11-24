@@ -712,6 +712,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
 			// leading one first, then the lower trailing, the upper trailing and the upper leading)
 			TArray<FVector2D> Quad;
+			// (and its own stripes there, where its maker gave them: {"dir": "v" or "h", "bands": [colours]}, from the
+			// leading edge or from the top, as the table's fin stripes)
+			TArray<FLinearColor> Bands;
+			bool bBandsUpright = true;
 			FString Part; // (on a land vehicle: "turret" or "hull")
 		};
 		TArray<FMark> PlaneMarks;
@@ -1035,6 +1039,22 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 										Mark.Quad.Reset();
 									}
 								}
+								const TSharedPtr<FJsonObject>* Striped = nullptr;
+								const TArray<TSharedPtr<FJsonValue>>* BandList = nullptr;
+								if ((*Entry)->TryGetObjectField(TEXT("bands"), Striped) && (*Striped)->TryGetArrayField(TEXT("bands"), BandList))
+								{
+									FString Way;
+									(*Striped)->TryGetStringField(TEXT("dir"), Way);
+									Mark.bBandsUpright = Way != TEXT("h");
+									for (const TSharedPtr<FJsonValue>& Band : *BandList)
+									{
+										FString Hexed;
+										if (Band.IsValid() && Band->TryGetString(Hexed))
+										{
+											Mark.Bands.Add(FLinearColor(FColor::FromHex(Hexed)));
+										}
+									}
+								}
 								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
 								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
@@ -1306,26 +1326,89 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					TGuardValue<uint8> Metal(Fresh.Finish, 128);
 					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
-					if (What.StartsWith(TEXT("FIN:")) && Mark.Quad.Num() == 4)
+					// (The maker's own rudder stripes, "FRA-FIN": blue, white and red, blue toward the nose; and Savoy's
+					// white cross with a small plain shield at its middle, "ITA-CROSS". Neither is a mark WingMarking
+					// knows: both wore its plain white disc with a grey middle, standing off the tail (the art director,
+					// 24 November). They fill the rudder's place as the table's stripes do.)
+					const bool bOwnBands = !What.StartsWith(TEXT("FIN:")) && Mark.Bands.Num() > 0;
+					const bool bSavoy = Mark.Tag == TEXT("ITA-CROSS");
+					if ((What.StartsWith(TEXT("FIN:")) || bOwnBands || bSavoy) && Mark.Quad.Num() == 4)
 					{
-						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on each side)
-						const double Off = Hand * (FMath::Abs(Mark.At.Y) + 0.006);
-						auto Corner = [&Mark, Off](const FVector2D& P) { return FVector(P.X, Off, P.Y); };
+						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on the face the mark
+						// faces: each side of a single fin, or the one face of one of twin fins the maker named)
+						const double Out = Hand * Mark.Facing.Y >= 0.0 ? 1.0 : -1.0;
+						const FVector Outward(0.0, Out, 0.0);
+						auto Corner = [&Mark, Hand, Out](const FVector2D& P, double Hair = 0.006) { return FVector(P.X, Hand * Mark.At.Y + Out * Hair, P.Y); };
 						const FVector2D LowLead = Mark.Quad[0], LowTrail = Mark.Quad[1], HighTrail = Mark.Quad[2], HighLead = Mark.Quad[3];
-						const int32 Count = FinBands.Num();
+						if (bSavoy)
+						{
+							// (the cross's arms the rudder's whole height and its whole chord, about a quarter of the chord wide;
+							// the shield a third of the chord across, blue edged, red, with its own white cross)
+							auto Place = [&](double U, double V) { return FMath::Lerp(FMath::Lerp(LowLead, LowTrail, U), FMath::Lerp(HighLead, HighTrail, U), V); };
+							const double Chord = FMath::Max(0.05, FVector2D::Distance(Place(0.0, 0.5), Place(1.0, 0.5)));
+							const double Tall = FMath::Max(0.05, FVector2D::Distance(Place(0.5, 0.0), Place(0.5, 1.0)));
+							auto Patch = [&](double U0, double V0, double U1, double V1, const FColor& Ink, double Hair)
+							{
+								Fresh.Quad(Corner(Place(U0, V0), Hair), Corner(Place(U1, V0), Hair), Corner(Place(U1, V1), Hair), Corner(Place(U0, V1), Hair), Outward, Ink);
+							};
+							const FColor White = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))).ToFColor(true);
+							const FColor Red = FLinearColor(FColor::FromHex(TEXT("C8102E"))).ToFColor(true);
+							const FColor Blue = FLinearColor(FColor::FromHex(TEXT("1F3A93"))).ToFColor(true);
+							const double ArmU = 0.12, ArmV = 0.12 * Chord / Tall;
+							Patch(0.5 - ArmU, 0.0, 0.5 + ArmU, 1.0, White, 0.006);
+							Patch(0.0, 0.5 - ArmV, 0.5 - ArmU, 0.5 + ArmV, White, 0.006);
+							Patch(0.5 + ArmU, 0.5 - ArmV, 1.0, 0.5 + ArmV, White, 0.006);
+							// (the shield: a flat top, straight sides and a round foot, as a fan from its middle)
+							auto Shield = [&](double Across, const FColor& Ink, double Hair)
+							{
+								TArray<FVector2D> Edge;
+								const double Half = 0.5 * Across, Top = 0.62 * Across, Foot = -0.62 * Across, Bend = Foot + Half;
+								Edge.Add(FVector2D(-Half, Top));
+								Edge.Add(FVector2D(Half, Top));
+								for (int32 K = 0; K <= 8; ++K)
+								{
+									const double Angle = -UE_DOUBLE_HALF_PI * K / 8.0;
+									Edge.Add(FVector2D(Half * FMath::Cos(Angle), Bend + Half * FMath::Sin(Angle)));
+								}
+								for (int32 K = 7; K >= 0; --K)
+								{
+									Edge.Add(FVector2D(-Edge[2 + K].X, Edge[2 + K].Y));
+								}
+								const int32 Middle = Fresh.Add(Corner(Place(0.5, 0.5), Hair), Outward, Ink);
+								TArray<int32> Ring;
+								for (const FVector2D& E : Edge)
+								{
+									Ring.Add(Fresh.Add(Corner(Place(0.5 + E.X / Chord, 0.5 + E.Y / Tall), Hair), Outward, Ink));
+								}
+								for (int32 K = 0; K < Ring.Num(); ++K)
+								{
+									Fresh.Face(Middle, Ring[K], Ring[(K + 1) % Ring.Num()], Outward);
+								}
+							};
+							Shield(0.34 * Chord, Blue, 0.009);
+							Shield(0.27 * Chord, Red, 0.012);
+							const double SmallU = 0.035, SmallV = 0.035 * Chord / Tall, ReachU = 0.1, ReachV = 0.13 * Chord / Tall;
+							Patch(0.5 - SmallU, 0.5 - ReachV, 0.5 + SmallU, 0.5 + ReachV, White, 0.015);
+							Patch(0.5 - ReachU, 0.5 - SmallV, 0.5 - SmallU, 0.5 + SmallV, White, 0.015);
+							Patch(0.5 + SmallU, 0.5 - SmallV, 0.5 + ReachU, 0.5 + SmallV, White, 0.015);
+							continue;
+						}
+						const TArray<FLinearColor>& Stripes = bOwnBands ? Mark.Bands : FinBands;
+						const bool bUpright = bOwnBands ? Mark.bBandsUpright : bFinUpright;
+						const int32 Count = Stripes.Num();
 						for (int32 K = 0; K < Count; ++K)
 						{
 							const double A = static_cast<double>(K) / Count, B = static_cast<double>(K + 1) / Count;
-							const FColor Ink = FinBands[K].ToFColor(true);
-							if (bFinUpright)
+							const FColor Ink = Stripes[K].ToFColor(true);
+							if (bUpright)
 							{
 								Fresh.Quad(Corner(FMath::Lerp(LowLead, LowTrail, A)), Corner(FMath::Lerp(LowLead, LowTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, A)),
-									FVector(0.0, Hand, 0.0), Ink);
+									Outward, Ink);
 							}
 							else
 							{
 								Fresh.Quad(Corner(FMath::Lerp(HighLead, LowLead, A)), Corner(FMath::Lerp(HighTrail, LowTrail, A)), Corner(FMath::Lerp(HighTrail, LowTrail, B)), Corner(FMath::Lerp(HighLead, LowLead, B)),
-									FVector(0.0, Hand, 0.0), Ink);
+									Outward, Ink);
 							}
 						}
 						continue;
