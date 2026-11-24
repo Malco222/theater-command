@@ -25,6 +25,9 @@ function saved(nat: string, from: number, seed: number): (on: boolean) => Game {
   return (on) => {
     const g = loadGame(text)!;
     if (on) { g.flags.open = 1; g.flags.unitsDecide = 1; } else delete g.flags.unitsDecide;
+    // Honours are the player's own edge (storyEdge), which Units decide leaves out of a group's worth: cleared, so the
+    // two weigh the groups alike and only the height differs.
+    for (const f of g.airFleets) delete f.hon;
     return g;
   };
 }

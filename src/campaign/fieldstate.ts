@@ -14,7 +14,7 @@
 
 import data from '../../data/campaign/damage.json';
 import type { AirFleet, Game, Region } from './types';
-import { airPool, airRange, airfieldsHold, fieldClass, km } from './air';
+import { airPool, airRange, airfieldsHold, fieldClass, km, poolIn } from './air';
 import { prizeHolder, prizeRules, hasPrize } from './prizes';
 import { besieged } from './siege';
 import { PRODUCTION } from './economy';
@@ -216,7 +216,7 @@ export function damageField(g: Game, region: number, how: FieldHow, blow?: Field
     const p = airPool(g, f.nat);
     f.ftr -= x.ftr; f.bmr -= x.bmr; f.lost.ftr += x.ftr; f.lost.bmr += x.bmr;
     // Pilots of fighters lost on the ground go back to the pool, as release 1's fight for the sky has it.
-    p.lostFtr += x.ftr; p.lostBmr += x.bmr; p.pilots += x.ftr;
+    p.lostFtr += x.ftr; p.lostBmr += x.bmr; poolIn(g, f.nat, x.ftr, f);
   }
   return hit;
 }

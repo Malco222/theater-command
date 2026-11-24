@@ -5,7 +5,8 @@
 // Nothing in the campaign is changed here; the raid is flown, and paid for, only when the battle hands its result
 // back through launchRaid (see campaign/airfought.ts).
 
-import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, forecastAir, groupAt } from '../../campaign/air';
+import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, forecastAir, fxpOf, groupAt, levelOf } from '../../campaign/air';
+import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
@@ -119,11 +120,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
       // (A group that carries bombers of its own starts with them: its top cover climbs from there.)
       const top = !!H && !sweep && udRole(k++) === 'top' && bmr <= 0;
       starts[x.f.id] = { x: sx, y: 1_000, band: top ? 2 : attBand, fuel: SKY.fuel.full * x.esc, wait: false };
-      att.push(force(x.f, 'ftr', ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
+      att.push(force(g, x.f, 'ftr', ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
     }
     if (bmr > 0) {
       starts[x.f.id] = starts[x.f.id] ?? { x: sx, y: 1_000, band: 1, fuel: SKY.fuel.home, wait: false };
-      att.push(force(x.f, 'bmr', bmr, share(bmr * C.bomberDefence, Atot)));
+      att.push(force(g, x.f, 'bmr', bmr, share(bmr * C.bomberDefence, Atot)));
     }
   });
   // Where the raid comes on from, for a fleet's own cover: the bearing from the target to the raid's start.
@@ -138,7 +139,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     if (kind === 'fleet' && x.f.ship !== undefined && x.d <= 0 && raidAt.length) {
       const ahead = STYLES.cap.ahead;
       starts[x.f.id] = { x: SKY.target.x + (rax / rad) * ahead, y: SKY.target.y + (ray / rad) * ahead, band: 1, fuel: SKY.fuel.home, wait: false, over: true };
-      def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+      def.push(force(g, x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
       continue;
     }
     // The campaign has already weighed how far each field is (cover) and whether radar warned it: on the board every
@@ -150,7 +151,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
     const [bx, by] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
     starts[x.f.id] = H ? { x: bx, y: by, band: defBand, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by, band: (a.radar ? 1 : 0) as Band, fuel: SKY.fuel.home, wait: !a.radar };
-    def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+    def.push(force(g, x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
   }
 
   // Warned defenders meet a sweep together, as the card counts every warned fighter up in time (Units decide): each
@@ -308,10 +309,12 @@ function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
   return decks.length && decks.every(Boolean) ? 'sea' : decks.some(Boolean) ? 'both' : 'land';
 }
 
-function force(f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): ForceTicket {
+function force(g: Game, f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): ForceTicket {
+  // Experience: the leader's level, or under Units decide the group's own, read as a level (#2 form Part 2 section 1).
+  const level = unitsDecide(g) ? levelOf(fxpOf(g, f)) : f.leader ? f.leader.level : 0;
   return {
     corps: f.id, name: f.name, nat: f.nat, kind, divs: 0, men: n,
-    str: 1, org: f.ready, xp: f.leader ? f.leader.level / 3 : 0, share,
+    str: 1, org: f.ready, xp: level / 3, share,
   };
 }
 

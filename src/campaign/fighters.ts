@@ -12,6 +12,7 @@ import { techMul } from './research';
 import { treeLevel } from './tech';
 import { hasAircraftWorks } from './arsenal';
 import { designYear } from '../battle/air/doctrine';
+import { armsOf, unitsDecide, wayNow } from './units';
 
 export type Band = 'low' | 'mid' | 'high';
 export type Mix = Record<string, number>;
@@ -276,8 +277,12 @@ export function stealMark(g: Game, nat: string, from: string, mark: string): boo
   return true;
 }
 
-/** A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). */
+/**
+ * A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). Under
+ * Units decide, its fighter Way in the quality store, null (no term) where no row is read (#2 form Part 2 section 3).
+ */
 export function doctrineOf(g: Game, nat: string): Doctrine | undefined {
+  if (unitsDecide(g)) { const w = armsOf(g, nat)?.air.fighter; return w ? wayNow(g, w) : undefined; }
   const rows = FIGHTERS.doctrine.rows[nat];
   return rows?.length ? rows[rowAt(rows, g.turn)][1] : undefined;
 }

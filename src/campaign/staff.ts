@@ -23,7 +23,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
-import { openAirWar, openWorldAir, skyDenies } from './air';
+import { openAirWar, openPilots, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
@@ -177,6 +177,8 @@ export function startOpen(g: Game, wide = true): Game {
   // Units decide's quality store (units.ts; DD 24 Nov 15:53Z, #2 form Part 2): seeded once the wider world, the
   // opening research, the world's air commands and the carriers are in place. Off, nothing.
   openQuality(g);
+  // (And every air group's pilots from it: their hours and experience, under the switch only.)
+  openPilots(g);
   openSieges(g);
   openMorale(g);
   openEscorts(g);

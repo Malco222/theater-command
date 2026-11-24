@@ -24,7 +24,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
-import { unitsDecide } from './units';
+import { armsOf, intoPool, unitsDecide } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
@@ -266,6 +266,72 @@ export function airPool(g: Game, nat: string): AirPool {
   return (g.airPool[nat] ??= { ftr: 0, bmr: 0, pilots: 0, lostFtr: 0, lostBmr: 0, lostPilots: 0 });
 }
 
+// ---- Pilots under Units decide (the quality store, #2 form Part 2; the design director, 24 Nov 2026 15:53Z) -----------
+// The nation holds what its schools know (air.school, the deck school apart, and the reserve's mean hours and
+// experience); a group holds what its own pilots have lived through (hours and fxp on the group). A new pilot leaves
+// school with its hours and no experience; one who comes down and flies again carries his group's; a refit blends
+// them by count. Off, none of it is read or written.
+
+/** A nation's air arm in the quality store, under the switch only. */
+const airArm = (g: Game, nat: string) => armsOf(g, nat)?.air;
+/** The hours a new pilot of a group's kind leaves school with: the deck school for a carrier wing, else the nation's school; null where not laid. */
+const schoolOf = (g: Game, f: { nat: string; ship?: number; ashore?: number }): number | null => {
+  const A = airArm(g, f.nat);
+  return !A ? null : deckBred(f) ? A.deck : A.school;
+};
+/** A group's experience at the start where no war before it is read: from its leader's level today, so the start is today's. */
+const seedFxp = (f: AirFleet): number => (f.leader ? clamp((f.leader.level - 1) / (AIR.leader.maxLevel - 1), 0, 1) : 0);
+/** A group's pilots' mean hours under the switch: null where its school is not laid (then nothing prices them). */
+export const hoursOf = (g: Game, f: AirFleet): number | null => (unitsDecide(g) ? f.hours ?? schoolOf(g, f) : null);
+/** A group's experience under the switch, 0 to 1 (its one counter); 0 off. */
+export const fxpOf = (g: Game, f: AirFleet): number => (unitsDecide(g) ? f.fxp ?? seedFxp(f) : 0);
+/** A level from experience, as a leader's is counted (1 to AIR.leader.maxLevel): what the card and the field read under the switch. */
+export const levelOf = (fxp: number): number => 1 + (AIR.leader.maxLevel - 1) * fxp;
+
+/** Blends two counts' means; null where either side has none and the other is not alone. */
+const blend = (a: number | null, na: number, b: number | null, nb: number): number | null =>
+  na <= 0 ? b : nb <= 0 ? a : a === null || b === null ? null : (a * na + b * nb) / (na + nb);
+
+/**
+ * Puts `n` fighter pilots into a nation's reserve: under the switch the reserve's mean hours and experience take theirs
+ * in by count (#2 form Part 2 section 6). `from` is the group they flew with (a pilot back carries its figures);
+ * without one they are new, at the school's hours and no experience. Off, only the count moves, as before.
+ */
+export function poolIn(g: Game, nat: string, n: number, from?: AirFleet): void {
+  const p = airPool(g, nat);
+  const A = airArm(g, nat);
+  // The land reserve's hours are the land school's: a carrier pilot ashore brings his experience but not deck hours to it.
+  if (A) intoPool(A, p.pilots, n, from && !deckBred(from) ? hoursOf(g, from) : A.school, from ? fxpOf(g, from) : 0);
+  p.pilots += n;
+}
+
+/**
+ * Under the switch, `n` aircraft join group `f` with their pilots: its hours and experience become the means by count.
+ * `how`: 'pool', pilots drawn from the reserve (a carrier wing's at the deck school's hours, its experience the
+ * reserve's); 'school', new pilots straight from school (bought wings at the buyer's school, BO:2067; a new carrier
+ * wing's at the deck school); a bomber group's crews come new, with no experience. Call before the count changes.
+ */
+export function joinPilots(g: Game, f: AirFleet, n: number, kind: 'ftr' | 'bmr', how: 'pool' | 'school'): void {
+  const A = airArm(g, f.nat);
+  if (!A || n <= 0) return;
+  const had = f.ftr + f.bmr;
+  const inHours = kind === 'bmr' ? hoursOf(g, f) : how === 'pool' && !deckBred(f) ? A.pool : schoolOf(g, f);
+  const inXp = kind === 'ftr' && how === 'pool' ? A.poolXp : 0;
+  const h = kind === 'ftr' ? blend(hoursOf(g, f), f.ftr, inHours, n) : hoursOf(g, f);
+  if (h === null) delete f.hours; else f.hours = h;
+  f.fxp = blend(fxpOf(g, f), had, inXp, n) ?? 0;
+}
+
+/** Seeds every group's pilots as a grand campaign opens with Units decide (staff.ts startOpen, after the store). */
+export function openPilots(g: Game): void {
+  if (!unitsDecide(g)) return;
+  for (const f of g.airFleets) {
+    const h = schoolOf(g, f);
+    if (h !== null) f.hours = h;
+    f.fxp = seedFxp(f);
+  }
+}
+
 /** True in the month a war opens between two nations, whichever declared it. */
 export const warOpens = (g: Game, a: string, b: string): boolean => g.flags[`war:${a}:${b}`] === g.turn || g.flags[`war:${b}:${a}`] === g.turn;
 
@@ -383,9 +449,18 @@ const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: num
 /** The share of a bombing raid that anti-aircraft guns of this level stop. */
 export const gunsStop = (level: number): number => Math.max(0, Math.min(1, level * WORKS.aa.cut));
 
-const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
-/** What one of a fleet's aircraft is worth in a fight. */
-const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * fighterTech(g, f) * storyEdge(g, f) * fuelAir(g, f.nat);
+/**
+ * Experience: the leader's level, or under Units decide the group's own (fxp, read as a level by the same step), so it
+ * is priced once (#2 form Part 2 section 1: leaderMul reads fxp).
+ */
+const leaderMul = (g: Game, f: AirFleet): number => 1 + (unitsDecide(g) ? AIR.leader.perLevel * (levelOf(fxpOf(g, f)) - 1) : f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
+/**
+ * What one of a fleet's aircraft is worth in a fight. Under Units decide the player's own stories add nothing on top
+ * of the group's experience (storyEdge is a player-only edge: #2 form Part 2 section 6), so every side is priced alike.
+ */
+const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(g, f) * (0.5 + 0.5 * f.ready) * fighterTech(g, f) * (unitsDecide(g) ? 1 : storyEdge(g, f)) * fuelAir(g, f.nat);
+/** The held level a group fights at where hours are not priced (its nation's quality, a carrier wing's at the deck's share of it). */
+export const heldOf = (g: Game, f: AirFleet): number => reach(f, g).quality;
 
 /**
  * A group's fighter technology (research.ts techMul). Airfields as targets: a group of a nation that has jets, based
@@ -606,7 +681,7 @@ export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Recor
         // Pilots who come down over their own ground mostly fly again; over the enemy's, few do.
         const back = Math.round(lost * (home ? AIR.pilots.home : AIR.pilots.away));
         f.ftr -= lost; f.lost.ftr += lost;
-        p.lostFtr += lost; p.pilots += back; p.lostPilots += lost - back;
+        p.lostFtr += lost; poolIn(g, f.nat, back, f); p.lostPilots += lost - back;
       }
       f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
       f.closeAt = stamp;
@@ -784,6 +859,9 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     grp.kind = p.kind;
     grp.parent = f.parent;
     grp.share = 1 / p.of;
+    // Under Units decide a group split off flies with the same pilots: their hours and experience go with it.
+    if (i > 0 && f.hours !== undefined) grp.hours = f.hours;
+    if (i > 0 && f.fxp !== undefined) grp.fxp = f.fxp;
     grp.ftr = p.kind === 'ftr' ? part(whole.ftr) : 0;
     grp.bmr = p.kind === 'bmr' ? part(whole.bmr) : 0;
     grp.est = { ftr: p.kind === 'ftr' ? part(whole.est.ftr) : 0, bmr: p.kind === 'bmr' ? part(whole.est.bmr) : 0 };
@@ -1269,7 +1347,7 @@ export function airUpkeep(g: Game, nat: string): void {
   const p = airPool(g, nat);
   const built = row(AIR.production[nat], g.turn), trained = row(AIR.pilots.perMonth[nat], g.turn);
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
-  if (trained) p.pilots += trained[1];
+  if (trained) poolIn(g, nat, trained[1]);
   for (const f of airFleetsOf(g, nat)) {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
@@ -1283,7 +1361,7 @@ export function airUpkeep(g: Game, nat: string): void {
     const ef = e ? (f.kind === 'bmr' ? 0 : Math.round(e[1] * (f.share ?? 1))) : 0, eb = e ? (f.kind === 'ftr' ? 0 : Math.round(e[2] * (f.share ?? 1))) : 0;
     // Wings bought from the arsenal are kept on top of what the staff allots.
     if (e) f.est = f.extra ? { ftr: ef + f.extra.ftr, bmr: eb + f.extra.bmr } : { ftr: ef, bmr: eb };
-    if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; p.pilots += s; }
+    if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; poolIn(g, nat, s, f); }
     if (f.bmr > f.est.bmr) { const s = f.bmr - f.est.bmr; f.bmr -= s; p.bmr += s; }
   }
   // Replacements go to resting fleets first.
@@ -1294,8 +1372,11 @@ export function airUpkeep(g: Game, nat: string): void {
     const ship = f.ship === undefined ? null : carrierOf(g, f);
     const refits = f.ship === undefined || (!!ship && !atSea(ship));
     const nf = refits ? Math.max(0, Math.min(f.est.ftr - f.ftr, p.ftr, p.pilots)) : 0;
+    // (Under Units decide the newcomers dilute what the group knows: its hours and experience become the means.)
+    joinPilots(g, f, nf, 'ftr', 'pool');
     f.ftr += nf; p.ftr -= nf; p.pilots -= nf;
     const nb = refits ? Math.max(0, Math.min(f.est.bmr - f.bmr, p.bmr)) : 0;
+    joinPilots(g, f, nb, 'bmr', 'pool');
     f.bmr += nb; p.bmr -= nb;
     f.ready = clamp(f.ready + (f.mission === 'rest' ? R.rest : f.mission === 'support' ? R.support : R.flying), R.floor, 1);
     // A group that flew a planned raid last month is back at its airfield, on patrol again.
@@ -1370,7 +1451,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
   const lf = Math.round(f.ftr * 0.1), lb = Math.round(f.bmr * 0.1);
   f.ftr -= lf; f.bmr -= lb;
   f.lost.ftr += lf; f.lost.bmr += lb;
-  p.lostFtr += lf; p.lostBmr += lb; p.pilots += lf;
+  p.lostFtr += lf; p.lostBmr += lb; poolIn(g, f.nat, lf, f);
   f.base = best.id;
   f.ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
   f.mission = 'support';
@@ -1879,7 +1960,13 @@ export function previewAir(g: Game, f: AirFleet, m: AirMission, target: number):
 
 // ---- Flying it ------------------------------------------------------------------------------
 
-function gainXp(f: AirFleet, won: boolean): void {
+function gainXp(g: Game, f: AirFleet, won: boolean): void {
+  // Under Units decide every group seasons, leader or not, in the leader's steps read as a level (#2 form Part 2
+  // section 6): a fight survived is worth as many steps as it is to a leader at that level.
+  if (unitsDecide(g)) {
+    const L = levelOf(fxpOf(g, f));
+    f.fxp = Math.min(1, fxpOf(g, f) + (won ? 2 : 1) / (3 * L) / (AIR.leader.maxLevel - 1));
+  }
   const l = f.leader;
   if (!l) return;
   l.xp += won ? 2 : 1;
@@ -1979,7 +2066,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const p = airPool(g, f.nat);
     const back = fix ? fix.back(f, k) : Math.min(k, h.back) + rng.roll(Math.max(0, k - h.ftr) * saved(home));
     f.ftr -= k; f.lost.ftr += k; side.lostFtr += k;
-    p.lostFtr += k; p.pilots += back; p.lostPilots += k - back;
+    p.lostFtr += k; poolIn(g, f.nat, back, f); p.lostPilots += k - back;
   };
   const bomber = (f: AirFleet, side: AirSide, n: number): void => {
     const k = Math.min(f.bmr, fix ? fix.bmr(f) : had(f).bmr + rng.roll(Math.max(0, n * (staff ? staff.rest.bmr : 1))));
@@ -2098,7 +2185,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const gf = all ? Math.min(f.ftr, rng.roll(n * (f.ftr / all))) : 0, gb = all ? Math.min(f.bmr, rng.roll(n * (f.bmr / all))) : 0;
       const p = airPool(g, f.nat);
       f.ftr -= gf; f.bmr -= gb; f.lost.ftr += gf; f.lost.bmr += gb;
-      p.lostFtr += gf; p.lostBmr += gb; p.pilots += gf;
+      p.lostFtr += gf; p.lostBmr += gb; poolIn(g, f.nat, gf, f);
       const side = def.find((s) => s.fleet === f.name && s.nat === f.nat);
       if (side) { side.lostFtr += gf; side.lostBmr += gb; }
       ground += gf + gb;
@@ -2256,8 +2343,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const seen = (rows: { f: AirFleet }[]): number => rows.reduce((t, x) => t + (battle!.lost[x.f.id]?.ftr ?? 0) + (battle!.lost[x.f.id]?.bmr ?? 0), 0);
   const fieldWon = battle && !staff ? (battle.gaveUp ? battle.gaveUp === 'def' : sky || (seen(a.def) + value + 10) / (seen(a.att) + 10) >= 1) : null;
   const won = fieldWon ?? rolled;
-  for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); }
-  for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); }
+  for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(g, x.f, won); }
+  for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(g, x.f, !won); }
   const level: VictoryLevel = fieldWon !== null && fieldWon !== rolled ? (won ? 'Close victory' : 'Close defeat')
     : sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
