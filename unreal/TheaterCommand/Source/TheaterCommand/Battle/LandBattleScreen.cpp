@@ -2033,7 +2033,13 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		}
 		else if (Bit != 0u)
 		{
-			// (his view's keys, held: the scene moves the view while they are down)
+			// (his view's keys, held: the scene moves the view while they are down. W or S walks, or with Shift
+			// tilts, never both at once: the key repeats, so Shift pressed or let go while it is held switches which)
+			if (Bit == 4u || Bit == 64u || Bit == 8u || Bit == 128u)
+			{
+				const uint32 Pair = Bit == 4u || Bit == 64u ? (4u | 64u) : (8u | 128u);
+				ViewKeys &= ~Pair;
+			}
 			ViewKeys |= Bit;
 			HandViewKeys();
 			return FReply::Handled();
