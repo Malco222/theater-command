@@ -99,6 +99,7 @@ import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
+import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { townName } from '../../../src/campaign/towns';
@@ -618,6 +619,12 @@ function drawView() {
       carry: carriedBy(s, c), digging: !c.dug && ((c as { digging?: number }).digging ?? 0) > 0,
       // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
       lean: !!c.lean,
+      // (The 1.5 patch, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
+      // divisions split off now ('' if it can), and the corps it could rejoin here, the first of them.
+      ...(c.nat === s.human && breakUpOn(s) ? (() => {
+        const to = up ? rejoinTargets(s, c)[0] : undefined;
+        return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? '' : 'It is not your month.', rejoinId: to?.id ?? -1, rejoinName: to?.name ?? '' };
+      })() : {}),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -821,6 +828,10 @@ function drawView() {
       // The player's trade routes, over land and sea, in gold: red where one is cut.
       ...(pictureTrade(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
     ] : [],
+    // (The 1.5 patch, breakup.ts) Whether the player can split divisions off his corps, and put them back.
+    breakUp: breakUpOn(s),
+    // (The 1.5 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+    breakUpCan: s.flags.open === 1,
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -5367,6 +5378,35 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'breakuprule') {
+    // (The 1.5 patch, breakup.ts) Breaking corps up, switched by the player in any month.
+    setBreakUp(s, part[1] === 'on');
+    ok = true;
+    note = breakUpOn(s)
+      ? 'Breaking corps up is on: pick divisions on a corps\' card in the tray and SPLIT OFF makes them a corps of their own; REJOIN puts them back.'
+      : 'Breaking corps up is off: a corps moves and fights whole.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'breakup') {
+    // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) 'breakup:<corps>:<slot,slot>': the divisions picked on the
+    // corps' card, by their place in it from 0, split off as a corps of their own where it stands.
+    const c = s.corps.find((x) => x.id === Number(part[1]) && !x.dead);
+    const slots = (part[2] ?? '').split(',').filter((x) => x !== '').map(Number);
+    const why = whyNotBreakUp(s, c, slots);
+    const made = !why && c ? breakCorps(s, c, slots) : null;
+    ok = !!made;
+    note = made && c ? `${made.name} ${made.divs === 1 ? 'is' : 'are'} split off from ${c.name}, and stand${made.divs === 1 ? 's' : ''} at ${s.regions[c.reg]?.name ?? 'the same place'} as a corps of ${made.divs === 1 ? 'its' : 'their'} own.` : why ?? 'Those divisions cannot be split off now.';
+    return { ok, note, fly, flies: [], open: '', made: made?.id ?? -1, view: view() };
+  }
+  if (part[0] === 'rejoin') {
+    // (The 1.5 patch, breakup.ts) 'rejoin:<part>:<into>': a part goes back into the corps it was split from, or another part of it.
+    const a = s.corps.find((x) => x.id === Number(part[1]) && !x.dead), b = s.corps.find((x) => x.id === Number(part[2]) && !x.dead);
+    const why = whyNotRejoin(s, a, b);
+    const name = a?.name ?? '';
+    ok = !why && !!a && !!b && rejoinCorps(s, a, b);
+    note = ok && b ? `${name} rejoins ${b.name}: ${b.divs} division${b.divs === 1 ? '' : 's'} together again.` : why ?? 'They cannot be put back together now.';
+    return { ok, note, fly, flies: [], open: '', joined: ok ? Number(part[2]) : -1, view: view() };
+  }
   if (part[0] === 'cabinet') {
     // The government (Version 57): a minister appointed, a decree, or the directive set aside.
     const v = governmentOf(s);
@@ -6350,3 +6390,5 @@ function find(name: string) {
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
   ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }) };
+// (The 1.5 patch, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).breakUp = (on: boolean) => { const s = game(); setBreakUp(s, !!on); return { on: breakUpOn(s) }; };

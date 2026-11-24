@@ -56700,6 +56700,144 @@
     return null;
   }
 
+  // ../../data/campaign/breakup.json
+  var breakup_default = {
+    _about: `Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed"). The player's own order, in his month, for one of his own corps standing in the field: the divisions he picks are split off as a corps of their own where it stands, with their own share of the men, the experience and the numbers, the corps' morale, rest, works and moves; the general stays with the corps. Nothing is lost or gained: the men of the two add up to the men of the one. A part rejoins the corps it came from, or another part of it, standing in the same place, never making a corps bigger than the corps was before it was broken up (so no corps is made bigger than it was raised and no road takes more men). No computer nation breaks its corps up. Switch: stage.json 'breakUp'.`,
+    _detached: "How a part split off is named: one division takes its own division's name; more take the corps' name with this after it.",
+    detached: "detachment"
+  };
+
+  // ../../src/campaign/breakup.ts
+  var BREAKUP = breakup_default;
+  var breakUpOn = (g2) => g2.flags.open === 1 && g2.flags.breakUp !== 0;
+  function setBreakUp(g2, on) {
+    if (on) delete g2.flags.breakUp;
+    else g2.flags.breakUp = 0;
+  }
+  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  function whyNotBreakUp(g2, c, slots) {
+    if (!breakUpOn(g2)) return "Corps are broken up only where that is switched on.";
+    if (!c || c.dead) return "There is no such corps.";
+    if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps can be broken up, in your own month.";
+    if (c.kind === "fort") return "Fortress troops stay together in their works.";
+    if (c.divs < 2) return "A single division cannot be broken up any further.";
+    if (c.town !== void 0) return "A garrison is broken up in the field: order it out of the town first.";
+    if (c.joint !== void 0) return "It marches with an ally's army, and takes that army's orders.";
+    if (c.leave !== void 0) return "It is at home, out of the line.";
+    const picked = new Set(slots);
+    if (picked.size === 0 || [...picked].some((i) => !Number.isInteger(i) || i < 0 || i >= c.divs)) return "Pick the divisions to split off.";
+    if (picked.size >= c.divs) return "Some divisions have to stay with the corps.";
+    return null;
+  }
+  function breakUp(g2, c, slots) {
+    if (whyNotBreakUp(g2, c, slots) !== null) return null;
+    const cards = divisionsOf(g2, c);
+    const picked = new Set(slots);
+    const go = cards.filter((d) => picked.has(d.slot)), stay = cards.filter((d) => !picked.has(d.slot));
+    const sum2 = (ds, f) => ds.reduce((n, d) => n + f(d), 0);
+    const goMen = sum2(go, (d) => d.str), stayMen = c.str * c.divs - goMen;
+    const goXp = sum2(go, (d) => d.xp * d.str) / Math.max(1e-9, goMen);
+    const stayXp = stayMen > 1e-9 ? (c.xp * c.str * c.divs - goXp * goMen) / stayMen : c.xp;
+    const whole2 = c.whole ?? cards.map((d) => d.no);
+    const name = go.length === 1 ? go[0].name : `${c.name} ${BREAKUP.detached}`;
+    const p = {
+      id: g2.nextCorps++,
+      nat: c.nat,
+      name,
+      kind: c.kind,
+      divs: go.length,
+      str: 1,
+      org: c.org,
+      xp: goXp,
+      reg: c.reg,
+      ap: c.ap,
+      apMax: c.apMax,
+      general: null,
+      hold: c.hold,
+      dyle: c.dyle,
+      supplied: c.supplied,
+      fought: c.fought,
+      dead: false
+    };
+    g2.corps.push(p);
+    const nos = go.map((d) => d.no);
+    p.dn = nos[0];
+    if (nos.some((n, i) => n !== nos[0] + i)) p.nos = nos;
+    else delete p.nos;
+    const left = stay.map((d) => d.no);
+    c.dn = left[0];
+    if (left.some((n, i) => n !== left[0] + i)) c.nos = left;
+    else delete c.nos;
+    p.str = Math.max(0, Math.min(1, goMen / go.length));
+    c.divs = stay.length;
+    c.str = Math.max(0, Math.min(1, stayMen / stay.length));
+    c.xp = Math.max(0, Math.min(1, stayXp));
+    p.xp = Math.max(0, Math.min(1, goXp));
+    for (const k of ["born", "home", "mor", "full", "dug", "dugFor", "digging", "pressed", "relief", "blows", "digs", "yields", "gaveWay", "lean", "line", "elite", "airborne", "stay"]) {
+      if (c[k] !== void 0) p[k] = c[k];
+    }
+    p.part = c.part ?? c.id;
+    p.whole = whole2;
+    c.whole = whole2;
+    const r = g2.regions[c.reg];
+    r.units.splice(r.units.indexOf(c) + 1, 0, p);
+    g2.supplyDirty = true;
+    return p;
+  }
+  function rejoinTargets(g2, c) {
+    if (!breakUpOn(g2) || c.dead) return [];
+    const root = c.part ?? c.id;
+    return g2.regions[c.reg].units.filter((o) => o !== c && !o.dead && (o.id === root || o.part === root) && whyNotRejoin(g2, c, o) === null);
+  }
+  function whyNotRejoin(g2, part, into) {
+    if (!breakUpOn(g2)) return "Corps are put back together only where that is switched on.";
+    if (!part || !into || part.dead || into.dead || part === into) return "There is nothing to put back together.";
+    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    const root = part.part ?? part.id;
+    if (!(into.id === root || into.part === root || (into.part ?? into.id) === root)) return "A part rejoins only the corps it was split from, or another part of it.";
+    if (part.reg !== into.reg || part.town !== void 0 || into.town !== void 0) return "The two must stand together in the field, in the same province.";
+    if (part.kind !== into.kind) return "The two must be of the same kind.";
+    if (part.joint !== void 0 || into.joint !== void 0) return "A corps marching with an ally's army cannot be put back together.";
+    if (part.leave !== void 0 || into.leave !== void 0) return "Both must be in the line.";
+    const most = Math.max(part.whole?.length ?? part.divs, into.whole?.length ?? into.divs);
+    if (part.divs + into.divs > most) return `Together they would be bigger than the corps was: ${most} divisions at most.`;
+    return null;
+  }
+  function rejoin(g2, part, into) {
+    if (whyNotRejoin(g2, part, into) !== null) return false;
+    const a = divisionsOf(g2, into), b = divisionsOf(g2, part);
+    const all = [...a, ...b];
+    const men2 = into.str * into.divs + part.str * part.divs;
+    const xp = men2 > 1e-9 ? (into.xp * into.str * into.divs + part.xp * part.str * part.divs) / men2 : into.xp;
+    const mine4 = into.str * into.divs, theirs = part.str * part.divs;
+    if (into.mor !== void 0 && part.mor !== void 0 && men2 > 1e-9) into.mor = (into.mor * mine4 + part.mor * theirs) / men2;
+    into.org = men2 > 1e-9 ? (into.org * mine4 + part.org * theirs) / men2 : into.org;
+    const seq = into.whole ?? part.whole ?? [];
+    const at4 = (no) => {
+      const i = seq.indexOf(no);
+      return i < 0 ? seq.length + no : i;
+    };
+    all.sort((x, y) => at4(x.no) - at4(y.no));
+    const nos = all.map((d) => d.no);
+    into.divs = all.length;
+    into.str = Math.max(0, Math.min(1, men2 / into.divs));
+    into.xp = Math.max(0, Math.min(1, xp));
+    into.ap = Math.min(into.ap, part.ap);
+    into.dn = nos[0];
+    if (nos.some((n, i) => n !== nos[0] + i)) into.nos = nos;
+    else delete into.nos;
+    if (part.fought) into.fought = true;
+    if (part.pressed) into.pressed = true;
+    if ((part.blows ?? 0) > (into.blows ?? 0)) into.blows = part.blows;
+    if ((part.whole?.length ?? 0) > (into.whole?.length ?? 0)) into.whole = part.whole;
+    if (into.part === void 0 && into.whole !== void 0 && into.divs >= into.whole.length && !g2.corps.some((o) => o !== part && !o.dead && o.part === into.id)) {
+      delete into.whole;
+    }
+    removeCorps(g2, part);
+    g2.supplyDirty = true;
+    return true;
+  }
+
   // ../../src/campaign/monthcard.ts
   var num4 = (n) => Math.round(n).toLocaleString("en-US");
   var cap10 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -58603,6 +58741,12 @@
           digging: !c.dug && (c.digging ?? 0) > 0,
           // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
           lean: !!c.lean,
+          // (The 1.5 patch, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
+          // divisions split off now ('' if it can), and the corps it could rejoin here, the first of them.
+          ...c.nat === s.human && breakUpOn(s) ? (() => {
+            const to = up ? rejoinTargets(s, c)[0] : void 0;
+            return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? "" : "It is not your month.", rejoinId: to?.id ?? -1, rejoinName: to?.name ?? "" };
+          })() : {},
           ...c.nat === s.human || s.human && c.joint === s.human ? cardOf(s, c) : {}
         };
       }),
@@ -58870,6 +59014,10 @@
         // The player's trade routes, over land and sea, in gold: red where one is cut.
         ...(pictureTrade(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === "open" ? "trade" : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 }))
       ] : [],
+      // (The 1.5 patch, breakup.ts) Whether the player can split divisions off his corps, and put them back.
+      breakUp: breakUpOn(s),
+      // (The 1.5 patch) A grand campaign, where the OPTIONS row for it is shown (on or off).
+      breakUpCan: s.flags.open === 1,
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
       idle: s.human ? idleTeams(s, s.human) : 0,
       // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -63401,6 +63549,29 @@ ${standing5}`,
       }
       return { ok, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "breakuprule") {
+      setBreakUp(s, part[1] === "on");
+      ok = true;
+      note4 = breakUpOn(s) ? "Breaking corps up is on: pick divisions on a corps' card in the tray and SPLIT OFF makes them a corps of their own; REJOIN puts them back." : "Breaking corps up is off: a corps moves and fights whole.";
+      return { ok, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "breakup") {
+      const c = s.corps.find((x) => x.id === Number(part[1]) && !x.dead);
+      const slots = (part[2] ?? "").split(",").filter((x) => x !== "").map(Number);
+      const why = whyNotBreakUp(s, c, slots);
+      const made = !why && c ? breakUp(s, c, slots) : null;
+      ok = !!made;
+      note4 = made && c ? `${made.name} ${made.divs === 1 ? "is" : "are"} split off from ${c.name}, and stand${made.divs === 1 ? "s" : ""} at ${s.regions[c.reg]?.name ?? "the same place"} as a corps of ${made.divs === 1 ? "its" : "their"} own.` : why ?? "Those divisions cannot be split off now.";
+      return { ok, note: note4, fly: fly2, flies: [], open: "", made: made?.id ?? -1, view: view2() };
+    }
+    if (part[0] === "rejoin") {
+      const a = s.corps.find((x) => x.id === Number(part[1]) && !x.dead), b = s.corps.find((x) => x.id === Number(part[2]) && !x.dead);
+      const why = whyNotRejoin(s, a, b);
+      const name = a?.name ?? "";
+      ok = !why && !!a && !!b && rejoin(s, a, b);
+      note4 = ok && b ? `${name} rejoins ${b.name}: ${b.divs} division${b.divs === 1 ? "" : "s"} together again.` : why ?? "They cannot be put back together now.";
+      return { ok, note: note4, fly: fly2, flies: [], open: "", joined: ok ? Number(part[2]) : -1, view: view2() };
+    }
     if (part[0] === "cabinet") {
       const v = governmentOf(s);
       if (part[1] === "tab") {
@@ -64474,5 +64645,10 @@ ${standing5}`,
     openingCard,
     // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
     ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids2, f) => playerOrder(act)(`raid:${k}:${t}:${ids2.join(".")}`, -1, f) })
+  };
+  globalThis.TC.breakUp = (on) => {
+    const s = game();
+    setBreakUp(s, !!on);
+    return { on: breakUpOn(s) };
   };
 })();

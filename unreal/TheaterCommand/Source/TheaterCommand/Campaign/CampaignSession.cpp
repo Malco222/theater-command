@@ -908,6 +908,8 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (the 1.5 patch, breakup.ts)
+	Object->TryGetBoolField(TEXT("breakUpCan"), Out.bBreakUpCan);
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{
@@ -1413,6 +1415,14 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
 			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
+			// (Release 2, breakup.ts) Sent only for his own corps, and only where breaking corps up is on.
+			C.bBreakKnown = Unit->TryGetStringField(TEXT("breakWhy"), C.BreakWhy);
+			{
+				double Rejoin = -1.0;
+				Unit->TryGetNumberField(TEXT("rejoinId"), Rejoin);
+				C.RejoinId = Rejoin >= 0.0 ? static_cast<int32>(Rejoin) : INDEX_NONE;
+				Unit->TryGetStringField(TEXT("rejoinName"), C.RejoinName);
+			}
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);

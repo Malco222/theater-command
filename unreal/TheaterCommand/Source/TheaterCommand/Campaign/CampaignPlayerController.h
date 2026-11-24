@@ -87,6 +87,11 @@ struct FTrayCard
 	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
 	bool bInTown = false;
 	FString Apart;
+	// (Release 2, breakup.ts) Its division tiles can be picked and split off (bCanBreak), or why not; the corps it could rejoin.
+	bool bCanBreak = false;
+	FString BreakWhy;
+	int32 RejoinId = INDEX_NONE;
+	FString RejoinName;
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -592,6 +597,17 @@ public:
 
 	/** Leaves a corps of the picked-up army behind, or takes it along again. */
 	void ToggleCorps(int32 CorpsId);
+
+	/**
+	 * (Release 2, breakup.ts; Brian 24 November 2026 18:02Z: "see each individual unit ... so I can break it up".) A
+	 * division's tile on a corps' card picked to be split off, or put back; SPLIT OFF makes the picked divisions a corps
+	 * of their own where the army stands (it stays behind when the army moves); REJOIN puts a part back.
+	 */
+	void ToggleDivision(int32 CorpsId, int32 Slot);
+	bool IsDivisionPicked(int32 CorpsId, int32 Slot) const { const TSet<int32>* Set = PickedDivisions.Find(CorpsId); return Set && Set->Contains(Slot); }
+	int32 DivisionsPicked(int32 CorpsId) const { const TSet<int32>* Set = PickedDivisions.Find(CorpsId); return Set ? Set->Num() : 0; }
+	void SplitOffDivisions(int32 CorpsId);
+	void RejoinCorps(int32 CorpsId, int32 IntoId);
 
 	/** The standing order for the army in hand on the day the enemy comes: "stand", "dig" or "back". */
 	void SetStance(const FString& Posture);
@@ -1520,6 +1536,7 @@ private:
 	FString LookNation;
 	void LayOutLook();
 	FFleetHand FleetHand; // the fleet in hand as the rules describe it
+	TMap<int32, TSet<int32>> PickedDivisions; // (the 1.5 patch, breakup.ts) by corps: the division tiles picked to be split off
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
 	bool bPointerOnWater = false;

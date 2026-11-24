@@ -395,6 +395,10 @@ export interface Corps extends Storied {
   nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
+  /** The corps it was split off from (breakup.ts; release 1.5 patch): it can rejoin that one, or another part split off it. */
+  part?: number;
+  /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
+  whole?: number[];
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */

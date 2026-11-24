@@ -267,6 +267,17 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
+	// (The 1.5 patch, breakup.ts; Brian 24 November 2026 18:02Z) Divisions split off a corps, and put back: on in a grand
+	// campaign unless switched off here, in any month.
+	if (const FCampaignSession* Session = GetSession())
+	{
+		const FCampaignView& Now = Session->GetView();
+		if (Session->IsRunning() && Now.bBreakUpCan)
+		{
+			Add(TEXT("breakuprule"), TEXT("Break up corps"), TEXT("Pick up an army and every division of each corps is a tile on its card. Click the tiles of the divisions you want apart and press SPLIT OFF: they become a corps of their own where the army stands, and stay behind when the army moves. REJOIN puts a part back into the corps it came from. Nothing is lost or gained, and no corps grows bigger than it was. It can be switched in any month."),
+				Now.bBreakUp ? TEXT("ON") : TEXT("OFF"), Now.bBreakUp);
+		}
+	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
 	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
@@ -393,6 +404,25 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		{
 			FString Note;
 			Session->Act(Session->GetView().bOfficeSecure ? TEXT("cabinet:office:fall") : TEXT("cabinet:office:secure"), INDEX_NONE, Note);
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
+	}
+	else if (Id == TEXT("breakuprule"))
+	{
+		// (The 1.5 patch, breakup.ts) Breaking corps up, switched in any month; kept by the campaign.
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			if (Session->Act(Session->GetView().bBreakUp ? TEXT("breakuprule:off") : TEXT("breakuprule:on"), INDEX_NONE, Note))
+			{
+				PickedDivisions.Reset();
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			}
 			if (!Note.IsEmpty())
 			{
 				Notify(Note, 6.0);
@@ -808,6 +838,7 @@ void ACampaignPlayerController::EnterCampaign()
 	PickedBeforeMass.Reset();
 	PutDownFleet();
 	PutDownAgent();
+	PickedDivisions.Reset(); // (nor divisions picked on a card of the war before)
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
@@ -7404,7 +7435,101 @@ void ACampaignPlayerController::PutDownArmy()
 	}
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
+	PickedDivisions.Reset();
 	bHandOrdered = false;
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::ToggleDivision(int32 CorpsId, int32 Slot)
+{
+	const FTrayCard* Card = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& C) { return C.CorpsId == CorpsId; });
+	if (ArmyRegion == INDEX_NONE || !Card || Slot < 0)
+	{
+		return;
+	}
+	if (!Card->bCanBreak)
+	{
+		if (!Card->BreakWhy.IsEmpty())
+		{
+			Notify(Card->BreakWhy, 6.0);
+		}
+		return;
+	}
+	TSet<int32>& Set = PickedDivisions.FindOrAdd(CorpsId);
+	if (Set.Contains(Slot))
+	{
+		Set.Remove(Slot);
+	}
+	else
+	{
+		Set.Add(Slot);
+	}
+	if (Set.Num() == 0)
+	{
+		PickedDivisions.Remove(CorpsId);
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.4f);
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	const TSet<int32>* Set = PickedDivisions.Find(CorpsId);
+	if (!Session || !Set || Set->Num() == 0)
+	{
+		Notify(TEXT("Click the tiles of the divisions to split off first."), 5.0);
+		return;
+	}
+	TArray<int32> Slots = Set->Array();
+	Slots.Sort();
+	TArray<FString> Parts;
+	for (const int32 Slot : Slots)
+	{
+		Parts.Add(FString::FromInt(Slot));
+	}
+	FString Note, Next;
+	TArray<FSortie> Sorties;
+	FActExtras Extras;
+	if (Session->Act(FString::Printf(TEXT("breakup:%d:%s"), CorpsId, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note, &Sorties, &Next, &Extras))
+	{
+		// The picks are spent; the new corps stays behind when the army moves (it is not among the corps picked to go).
+		PickedDivisions.Remove(CorpsId);
+		if (Extras.Made != INDEX_NONE)
+		{
+			PickedCorps.Remove(Extras.Made);
+		}
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	// (a refused split keeps the picks, so they can be changed and tried again)
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || CorpsId == INDEX_NONE || IntoId == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("rejoin:%d:%d"), CorpsId, IntoId), INDEX_NONE, Note))
+	{
+		PickedCorps.Remove(CorpsId);
+		PickedDivisions.Remove(CorpsId);
+		PickedDivisions.Remove(IntoId); // (its tiles are laid out afresh: the old picks no longer point at the same divisions)
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
 	RefreshOrders();
 }
 
@@ -7547,6 +7672,11 @@ void ACampaignPlayerController::RefreshOrders()
 			Card.MoodTip = FString::Join(Tip, TEXT("\n"));
 		}
 		Card.Parts = Unit.Parts;
+		// (Release 2, breakup.ts) Its division tiles can be picked and split off, where that is on and it can be done now.
+		Card.bCanBreak = Unit.bBreakKnown && Unit.BreakWhy.IsEmpty() && Unit.Divisions >= 2;
+		Card.BreakWhy = Unit.BreakWhy;
+		Card.RejoinId = Unit.RejoinId;
+		Card.RejoinName = Unit.RejoinName;
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;

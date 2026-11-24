@@ -133,6 +133,12 @@ struct FViewCorps
 	// counts none for (tanks, guns, engineers), for one not identified, and outside the grand campaign.
 	TArray<int32> Carry;
 	bool bDigging = false; // it has begun to dig where the first month's digging shows no works yet (the open desert)
+	// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on, for his own corps: whether
+	// divisions can be split off it now (BreakWhy empty) and the corps it could rejoin here, if any.
+	bool bBreakKnown = false;
+	FString BreakWhy;
+	int32 RejoinId = INDEX_NONE;
+	FString RejoinName;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -987,6 +993,8 @@ struct FCampaignView
 	FViewStock Oil;
 	FViewStock Supplies;
 	TArray<FViewLane> Lanes;
+	bool bBreakUp = false; // (the 1.5 patch, breakup.ts) divisions can be split off a corps in the tray, and put back
+	bool bBreakUpCan = false; // (the 1.5 patch) a grand campaign: the OPTIONS row for it is shown
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain
