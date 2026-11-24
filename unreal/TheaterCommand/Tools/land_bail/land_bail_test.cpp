@@ -42,7 +42,15 @@ int main(int Argc, char** Argv)
 	{
 		std::printf("with the soldiers' bail clips (bail_climb_out, bail_step_down, bail_jump_down, burning_run, burning_fall_roll)\n");
 	}
+	// (and with LAND_BAIL_SMOKE=1, -TheaterLandBailSmoke: her commander's smoke grenade to cover them)
+	const char* SmokeEnv = std::getenv("LAND_BAIL_SMOKE");
+	const bool bSmokeOn = SmokeEnv && std::string(SmokeEnv) == "1";
+	if (bSmokeOn)
+	{
+		std::printf("with smoke to cover them (throw_grenade from her commander's hatch)\n");
+	}
 	int Bad = 0, Wrecks = 0, Men = 0;
+	int SmokeCan = 0, SmokeThrown = 0, RunScreened = 0, HitScreened = 0;
 	int BurnWrecks = 0, OnFire = 0, Lives = 0, Flinched = 0;
 	int RunNear = 0, HitNear = 0, RunFar = 0, HitFar = 0;
 	int Steps = 0, Walks = 0, Ends = 0, Sides[4] = { 0, 0, 0, 0 }, Flanks = 0;
@@ -101,9 +109,43 @@ int main(int Argc, char** Argv)
 			W.Ground = Ground;
 			W.bClips = bClips;
 			W.bStep = bClips;
+			W.bSmoke = bSmokeOn;
 			const LandBail::Crew Cr = LandBail::Make(W);
 			const LandBail::Crew Again = LandBail::Make(W);
 			++Wrecks;
+			// (her smoke: only with the switch on, her enemy close and in sight and no blast to come; thrown by her first
+			// man out from his hatch, seen throwing it with the clips, before he climbs out; landing past her hull toward
+			// her enemy, on the ground, as it leaves his hand and flies; a grenade's cloud for a minute or a minute and a half)
+			{
+				const bool bCan = bSmokeOn && W.Blast < 0.0 && W.bUnderFire && W.Threat >= 0.5 && !Cr.Men.empty();
+				SmokeCan += bCan;
+				if (Cr.SmokeAt >= 0.0)
+				{
+					++SmokeThrown;
+					const LandBail::Man& T0 = Cr.Men[0];
+					const double Toward = -((Cr.SmokeTo.X - W.Middle.X) * std::sin(W.Away) + (Cr.SmokeTo.Y - W.Middle.Y) * std::cos(W.Away));
+					const char* Wrong = !bCan ? "with nobody to throw it (switch off, her blast to come, or no enemy close)"
+						: T0.ThrowAt < 0.3 - 1e-9 || std::abs(T0.Out - (T0.ThrowAt + 1.6)) > 1e-9 ? "not her first man's throw just before he climbs out"
+						: std::abs(Cr.SmokeAt - (T0.ThrowAt + 0.95 + 0.9)) > 1e-9 ? "landing at the wrong moment"
+						: Toward < 4.0 ? "not out toward her enemy, past her hull"
+						: std::abs(Cr.SmokeTo.Z - Ground(Cr.SmokeTo.X, Cr.SmokeTo.Y)) > 1e-9 ? "off the ground"
+						: Cr.SmokeS < 60.0 || Cr.SmokeS > 90.0 || Cr.SmokeAcross < 10.0 || Cr.SmokeAcross > 15.0 ? "too long, short, wide or narrow" : nullptr;
+					for (size_t K = 1; K < Cr.Men.size() && !Wrong; ++K)
+					{
+						Wrong = Cr.Men[K].ThrowAt >= 0.0 ? "thrown by more than one man" : nullptr;
+					}
+					if (!Wrong && bClips)
+					{
+						const LandBail::Pose Tp = LandBail::PoseAt(T0, T0.ThrowAt + 0.5, Ground);
+						Wrong = !Tp.bShown || Tp.Clip != "throw_grenade" ? "not seen thrown" : nullptr;
+					}
+					if (Wrong)
+					{
+						std::printf("FAIL %s seed %llu: her smoke %s\n", Way.Key.c_str(), static_cast<unsigned long long>(Seed), Wrong);
+						++Bad;
+					}
+				}
+			}
 			BurnWrecks += W.bBurns && !Cr.Men.empty();
 			if (Again.Men.size() != Cr.Men.size() || Again.Story != Cr.Story)
 			{
@@ -153,8 +195,10 @@ int main(int Argc, char** Argv)
 				if (M.To != "beside" && M.Go == "run" && M.How != LandBail::End::Caught && M.How != LandBail::End::Burning && W.bUnderFire)
 				{
 					const bool bHit = M.How == LandBail::End::Shot || M.How == LandBail::End::Wounded;
-					(W.Threat > 0.5 ? RunNear : RunFar)++;
-					(W.Threat > 0.5 ? HitNear : HitFar) += bHit;
+					// (on the ground once her smoke is up: counted apart, hit about half as often)
+					const bool bScreened = Cr.SmokeAt >= 0.0 && M.Out + LandBail::OnGroundOf(M) >= Cr.SmokeAt + 2.5;
+					(bScreened ? RunScreened : W.Threat > 0.5 ? RunNear : RunFar)++;
+					(bScreened ? HitScreened : W.Threat > 0.5 ? HitNear : HitFar) += bHit;
 				}
 				// (his first leg: back from where he lands to past her rear as the enemy sees her, never through her hull,
 				// ending in her hull's shadow or as far toward it as it keeps clear)
@@ -224,7 +268,7 @@ int main(int Argc, char** Argv)
 					const LandBail::Pose Walk = LandBail::PoseAt(M, M.bStep ? M.Out + 1.5 + 0.5 * M.RoofS : 0.5 * (OffRoof + Jump), Ground);
 					const LandBail::Pose Stepping = LandBail::PoseAt(M, OnRoof + 0.3, Ground);
 					double Most = 0.0;
-					for (double T = M.Out; T < M.Out + LandBail::OnGroundOf(M) + 0.5; T += 1.0 / 120.0)
+					for (double T = M.ThrowAt >= 0.0 ? M.ThrowAt : M.Out; T < M.Out + LandBail::OnGroundOf(M) + 0.5; T += 1.0 / 120.0)
 					{
 						const LandBail::Pose A = LandBail::PoseAt(M, T, Ground), B = LandBail::PoseAt(M, T + 1.0 / 120.0, Ground);
 						Most = std::max(Most, std::sqrt((A.Root.X - B.Root.X) * (A.Root.X - B.Root.X) + (A.Root.Y - B.Root.Y) * (A.Root.Y - B.Root.Y) + (A.Root.Z - B.Root.Z) * (A.Root.Z - B.Root.Z)));
@@ -259,7 +303,7 @@ int main(int Argc, char** Argv)
 				for (double T = 0.0; T <= 180.0; T += 0.1)
 				{
 					const LandBail::Pose P = LandBail::PoseAt(M, T, Ground);
-					if (T < M.Out && P.bShown)
+					if (T < M.Out && P.bShown && !(M.ThrowAt >= 0.0 && T >= M.ThrowAt))
 					{
 						std::printf("FAIL %s: shown before he starts out\n", Way.Key.c_str());
 						++Bad;
@@ -319,6 +363,22 @@ int main(int Argc, char** Argv)
 	const double NearShare = RunNear ? static_cast<double>(HitNear) / RunNear : 0.0, FarShare = RunFar ? static_cast<double>(HitFar) / RunFar : 0.0;
 	std::printf("\n  on fire: %d of %d burning wrecks (%.3f), %d of them living (%.2f); %d men flinched flat at a blast\n", OnFire, BurnWrecks, FireShare, Lives, LiveShare, Flinched);
 	std::printf("  runners hit: %.3f with the enemy close (%d), %.3f with none in sight (%d)\n", NearShare, RunNear, FarShare, RunFar);
+	if (bSmokeOn)
+	{
+		const double SmokeShare = SmokeCan ? static_cast<double>(SmokeThrown) / SmokeCan : 0.0;
+		const double ScreenShare = RunScreened ? static_cast<double>(HitScreened) / RunScreened : 0.0;
+		std::printf("  smoke: thrown by %d of %d crews who could (%.2f); runners hit under it %.3f (%d)\n", SmokeThrown, SmokeCan, SmokeShare, ScreenShare, RunScreened);
+		if (SmokeShare < 0.5 || SmokeShare > 0.7 || RunScreened < 200 || ScreenShare > 0.6 * NearShare + 0.02)
+		{
+			std::printf("FAIL: smoke too seldom or too often, or no cover under it\n");
+			++Bad;
+		}
+	}
+	else if (SmokeThrown)
+	{
+		std::printf("FAIL: smoke with the switch off\n");
+		++Bad;
+	}
 	if (bClips)
 	{
 		std::printf("  the clips' way out: %d stepped down off her turret, %d scrambled from her roof (the driver's hatch); %.1f to %.1f s to the ground; his body's biggest jump %.3f m in a 120th of a second\n", Steps, Walks, ClipsLong[0], ClipsLong[1], WayMost);

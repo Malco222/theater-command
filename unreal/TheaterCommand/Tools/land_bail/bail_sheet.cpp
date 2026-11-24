@@ -95,10 +95,17 @@ int main(int Argc, char** Argv)
 	F.FallAt = OnGround + 2.2;
 	F.FireOut = F.FallAt + 3.0;
 	F.bLives = true;
+	// (smoke, -TheaterLandBailSmoke: first he stands in his hatch and throws it toward her enemy, ahead of her, turning
+	// as it leaves his hand; then out the same way)
+	LandBail::Man Tm = M;
+	Tm.ThrowAt = 0.0;
+	Tm.ThrowFace = W.Away + 3.14159265358979;
+	Tm.Out = 1.6;
 	const std::vector<std::pair<const LandBail::Man*, std::vector<double>>> Rows = {
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
 		{ &B, { 0.7, 1.1, 1.5 + 0.5 * B.RoofS, BRoof + 0.1, BRoof + 0.35, BRoof + 0.6, BJump - 0.5 * B.DeckS, BJump + 0.3, BJump + 0.75, BJump + 1.1, BGround + 0.4 } },
+		{ &Tm, { 0.1, 0.5, 0.8, 0.95, 1.15, 1.45, 1.6 + 0.2, 1.6 + 0.7, 1.6 + 1.1, 1.6 + OnRoof + 0.35, 1.6 + Jump + 0.75 } },
 		{ &F, { OnGround + 0.6, OnGround + 1.0, OnGround + 1.4, OnGround + 1.8, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
 	};
 	const int Cols = 11, CellH = 240, SheetW = 2640;
@@ -153,10 +160,11 @@ int main(int Argc, char** Argv)
 			const int OX = (SheetW * Col) / Cols, OX1 = (SheetW * (Col + 1)) / Cols;
 			const int CW = OX1 - OX - 4, CH = CellH - 4;
 			// (from the side he drops from, three-quarters on; then from her front, her turret, deck and hull's edge
-			// as steps; off her back seen side-on; the man on fire followed off along his way, her hull behind him)
+			// as steps; off her back seen side-on; the smoke grenade thrown from her front; the man on fire followed off along his way, her hull behind him)
 			const Camera Cam = Row == 0 ? Camera({ 9.5, 7.5, 3.6 }, { 1.6, -0.3, 1.7 }, 26.0, CW * 2, CH * 2)
 				: Row == 1 ? Camera({ 1.9, 11.0, 2.2 }, { 1.9, -0.3, 1.7 }, 24.0, CW * 2, CH * 2)
 				: Row == 2 ? Camera({ 12.5, -3.4, 2.4 }, { 0.5, -3.4, 1.7 }, 26.0, CW * 2, CH * 2)
+				: Row == 3 ? Camera({ 8.0, 9.0, 3.4 }, { 0.8, -0.6, 2.3 }, 24.0, CW * 2, CH * 2)
 				: Camera({ 13.0, -5.0, 2.2 }, { 2.6, -6.5, 0.7 }, 34.0, CW * 2, CH * 2);
 			ShadowMap Sh;
 			Sh.Build(Sc, Lt.ToSun, { -4.0, -9.0, -0.1 }, { 8.0, 4.0, 4.0 }, 1536);

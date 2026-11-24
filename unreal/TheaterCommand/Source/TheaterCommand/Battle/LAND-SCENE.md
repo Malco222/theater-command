@@ -554,18 +554,32 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   `Man::ClipsS`), so each man starts up that much sooner (not before 0.3 s after her kill) and every man goes as he did
   without them (the test, run both ways: the same tallies). Without the clips, the same crew to the last number.
   Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
-  `/mnt/project-files/battle-fx/bail-out/bail-clips-r4.jpg`: three-quarters on, from her front, off her back, and the
-  man on fire).
+  `/mnt/project-files/battle-fx/bail-out/bail-clips-r5.jpg`: three-quarters on, from her front, off her back, the
+  smoke grenade thrown from her front, and the man on fire).
+- **Smoke to cover them** (`-TheaterLandBailSmoke`, with `-TheaterLandBailOut`; release 2, off until the art director
+  and a 45 fps reading pass; Brian, 23 November 20:09Z). With her enemy close and in sight (`Wreck::Threat` 0.5 or
+  more), the fight going on and her ammunition not about to go (no brew-up), six crews in ten have the first man out,
+  her commander, stand in his hatch and throw a smoke grenade toward her enemy (`throw_grenade`, 1.6 s, turning as it
+  leaves his hand at 0.95 s to the way he climbs), then climb out as before. It lands 9 to 14 m off toward her enemy,
+  past her hull, about 0.9 s later (`Crew::SmokeAt`), and gushes white from the ground (the kit's `SmokeScreen`,
+  "canister": 10 to 15 m across, a grenade's cloud against a light mortar bomb's 18 m) for 60 to 90 s. A man on the
+  ground 2.5 s or more after it lands is hit half as often (the test: 0.078 against 0.175 in the open). Its own dice
+  (`Wreck::Seed` with its own salt): with the switch off every crew goes to the last number as before. Without the
+  bail clips the grenade still lands; he is unseen in her until he climbs out.
 
 None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
 own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
 Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/land_bail/run.sh` plays every land way
-with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips; `LAND_BREW_WAIT=5.5,10` runs the kit's
+with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips, then with
+the clips and smoke (`LAND_BAIL_SMOKE=1`: thrown only where it may be, by her first man, toward her enemy, about six
+crews in ten, half the hits under it); `LAND_BREW_WAIT=5.5,10` runs the kit's
 own test with the wait.
 
 The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
 crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
 `-TheaterLandFilmFire` as well. Also the frame rate in a battle with eight kills or more, against the 45 fps gate.
+With `-TheaterLandBailSmoke` too: a tank knocked out with her enemy close (her commander's throw from 30 m, the screen
+coming up between her and the enemy from 150 m), and the frame rate with four or more screens up.
 
 ## Shell holes each their own (release 2, off until passed)
 
