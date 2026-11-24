@@ -555,7 +555,7 @@ namespace LandField
 		/** A house slot that stands for a region's kit it set down as a thing (the east's burnt-out houses): that kit's slot (-1
 		 * none) and the scale it was planted at, so the slot keeps the thing's shape in sight. */
 		std::vector<int> HouseFrom;
-		std::vector<double> HouseFromScale;
+		std::vector<double> HouseFromScale, HouseFromScaleZ;
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
 		std::vector<int> WayOf;       // each way piece's way (Fd.Ways' index)
@@ -3707,9 +3707,11 @@ namespace LandField
 					{
 						HouseFrom.resize(HouseModels.size(), -1);
 						HouseFromScale.resize(HouseModels.size(), 1.0);
+						HouseFromScaleZ.resize(HouseModels.size(), 1.0);
 					}
 					HouseFrom[Sl] = K;
 					HouseFromScale[Sl] = RK.K.Scale;
+					HouseFromScaleZ[Sl] = RK.K.ScaleZ;
 					RK.K.B = static_cast<Base>(static_cast<int>(Base::Kit0) + HouseSlot0 + Slot);
 					RK.K.Scale = 1.0;
 					RK.K.ScaleZ = 1.0;
@@ -7131,6 +7133,8 @@ namespace LandField
 				// as on its near one: its near drawn out to 300 m would be some 25 thousand triangles a house)
 				const int Slot = static_cast<int>(K) - static_cast<int>(Base::Kit0) - HouseSlot0;
 				const bool bBuilt = Slot >= 0 && Slot < static_cast<int>(HouseModels.size());
+				// (a burnt-out house's snow is its own: laid as it is built, scoured off its ashes in patches)
+				if (bBuilt && HouseModels[static_cast<size_t>(Slot)].Kind == 9) continue;
 				Mesh Kept = bBuilt ? std::move(Bases[K].Mid) : Mesh();
 				Bases[K].Mid = Mesh();
 				SnowLay->Base(static_cast<Base>(K), Bases[K]);
@@ -7159,8 +7163,8 @@ namespace LandField
 			BaseMesh& M = Bases[static_cast<size_t>(Base::Kit0) + static_cast<size_t>(HouseSlot0) + K];
 			if (!Was.bSight || M.Height <= 0.0f || M.Radius <= 0.0f) continue;
 			M.bSight = true;
-			M.SightMid = Was.SightMid * Was.Height / M.Height;
-			M.SightHalf = Was.SightHalf * Was.Height / M.Height;
+			M.SightMid = static_cast<float>(Was.SightMid * Was.Height * HouseFromScaleZ[K] / M.Height);
+			M.SightHalf = static_cast<float>(Was.SightHalf * Was.Height * HouseFromScaleZ[K] / M.Height);
 			M.SightAcross = static_cast<float>(Was.SightAcross * Was.Radius * HouseFromScale[K] / M.Radius);
 			M.SightTrunk = static_cast<float>(Was.SightTrunk * HouseFromScale[K]);
 		}

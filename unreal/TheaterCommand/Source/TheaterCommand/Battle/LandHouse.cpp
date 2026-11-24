@@ -8940,38 +8940,45 @@ namespace LandHouse
 				return P;
 			}
 
-			/** The snow over what faces up, as the snow lies (a colour pass over a level, after it is built). */
-			void SnowOver(LandField::Mesh& M, double Snow)
+			/** The snow over what faces up, as the snow lies (a colour pass over a level, after it is built): on the ashes the
+			 * wind has scoured it off in a few patches (bScour), where they show through dark; what stands over them keeps its
+			 * cap. */
+			void SnowOver(LandField::Mesh& M, const Plan& P, bool bScour)
 			{
-				if (Snow <= 0.0) return;
+				if (P.Snow <= 0.0) return;
 				for (size_t I = 0; I < M.Colours.size(); ++I)
 				{
-					const double Nz = M.Normals[I * 3 + 2], Z = M.Positions[I * 3 + 2];
-					const double K = Snow * Smooth(0.42, 0.85, Nz) * (Z > 3.0 ? 0.6 : 1.0);
+					const double Nz = M.Normals[I * 3 + 2], X = M.Positions[I * 3], Y = M.Positions[I * 3 + 1], Z = M.Positions[I * 3 + 2];
+					double K = P.Snow * Smooth(0.42, 0.85, Nz) * (Z > 3.0 ? 0.6 : 1.0);
+					if (bScour && Z < 0.45) K *= 1.0 - 0.9 * Smooth(0.62, 0.74, Noise01(X / 1.2, Y / 1.2, P.S.Key ^ 0xB0AD)) * Smooth(0.45, 0.3, Z);
 					if (K <= 0.0) continue;
 					LandField::Rgb8& C = M.Colours[I];
-					C.R = static_cast<uint8_t>(std::lround(C.R + (236.0 - C.R) * K));
-					C.G = static_cast<uint8_t>(std::lround(C.G + (238.0 - C.G) * K));
-					C.B = static_cast<uint8_t>(std::lround(C.B + (242.0 - C.B) * K));
+					C.R = static_cast<uint8_t>(std::lround(C.R + (240.0 - C.R) * K));
+					C.G = static_cast<uint8_t>(std::lround(C.G + (242.0 - C.G) * K));
+					C.B = static_cast<uint8_t>(std::lround(C.B + (246.0 - C.B) * K));
 				}
 			}
 
 			// ---------------------------------------------------------------- the ashes
 
 			/** The ashes' height over the floor at a place (x, y in its own frame): a low drift of ash, charcoal and fallen
-			 * clay over the footprint, heaped toward the stove where the ceiling's clay came down, falling away past the walls. */
+			 * clay, heaped toward the stove where the ceiling's clay came down (and along the inside of a khata's walls, where
+			 * its thatch and its ceiling fell), lumpy under snow. An izba's sinks under the yard toward the footprint's edge,
+			 * so on any ground it lies in the yard and never on it as a slab; a khata's runs to its walls. */
 			double AshAt(const Plan& P, double X, double Y)
 			{
-				const double Ox = std::max(0.0, std::fabs(X) - P.Hx + 0.1), Oy = std::max(0.0, std::fabs(Y) - P.Hy + 0.1);
-				const double Out = std::sqrt(Ox * Ox + Oy * Oy);
+				const double In = std::max(0.0, std::min(P.Hx - std::fabs(X), P.Hy - std::fabs(Y)));
 				const double Heap = 0.22 * std::exp(-(Sq(X - P.Sx) + Sq(Y - P.Sy)) / 2.6);
-				const double In = 0.07 + 0.11 * Noise01(X / 1.3, Y / 1.3, P.S.Key ^ 0xB0A1) + 0.03 * Noise(X / 0.3, Y / 0.3, P.S.Key ^ 0xB0A2) + Heap;
-				// (past the walls it runs down under the ground, so no edge shows where it meets it)
-				return In * Smooth(0.55, 0.0, Out) - 0.3 * Smooth(0.0, 0.55, Out);
+				double H = 0.07 + 0.11 * Noise01(X / 1.3, Y / 1.3, P.S.Key ^ 0xB0A1) + 0.03 * Noise(X / 0.3, Y / 0.3, P.S.Key ^ 0xB0A2) + Heap;
+				if (P.bClay) H += 0.14 * Smooth(1.6, 0.5, In) * (0.35 + 0.65 * Noise01(X / 0.7, Y / 0.7, P.S.Key ^ 0xB0AB));
+				H += 0.05 * P.Snow * Noise01(X / 0.5, Y / 0.5, P.S.Key ^ 0xB0AC);
+				if (P.bClay) return 0.03 + H * Smooth(-0.05, 0.5, In);
+				// (the line it comes up out of the yard along wanders: here half a metre in from the edge, there a metre)
+				const double Rim = 0.85 + 0.4 * Noise(X / 1.1, Y / 1.1, P.S.Key ^ 0xB0AE);
+				return H * Smooth(0.0, Rim + 0.25, In) - 0.3 * Smooth(Rim, 0.0, In);
 			}
 			Col AshCol(const Plan& P, double X, double Y, double Z, bool bFine = true)
 			{
-				const double Ox = std::max(0.0, std::fabs(X) - P.Hx + 0.1), Oy = std::max(0.0, std::fabs(Y) - P.Hy + 0.1);
 				// (a dark grey bed of ash and charcoal, lighter in soft drifts where the ash lies thick, flecked black with
 				// charcoal, a little white ash, the ceiling's clay burnt red-brown in patches, more of it in a khata)
 				Col C = Mixed(Rgb(54, 51, 48), Rgb(92, 89, 84), Smooth(0.25, 0.85, Noise01(X / 0.9, Y / 0.9, P.S.Key ^ 0xB0A3)));
@@ -8984,15 +8991,16 @@ namespace LandHouse
 				}
 				else C = Mixed(C, Rgb(118, 114, 108), 0.18); // (the white ash the near level's flecks add, on average)
 				C = Mixed(C, Rgb(104, 78, 58), (P.bClay ? 0.45 : 0.3) * Smooth(0.6, 0.78, Noise01(X / 0.6, Y / 0.6, P.S.Key ^ 0xB0A5))); // (burnt clay)
-				C = Mixed(C, P.Earth, Smooth(0.0, 0.5, std::sqrt(Ox * Ox + Oy * Oy)));
-				return Mixed(C, P.Earth, 0.4 * Smooth(0.0, -0.3, Z));
+				// (trodden into the yard's earth where it thins to the ground)
+				return Mixed(C, P.Earth, Smooth(0.07, -0.1, Z));
 			}
-			/** The ashes as a sheet over the footprint and a little past it, Cell apart, its edge run down into the ground. */
+			/** The ashes as a sheet, Cell apart: an izba's over its footprint, its rim under the yard; a khata's to the
+			 * middle of its walls' thickness; its edge run down into the ground where the ground falls away under it. */
 			void Ashes(Pen& B, const Plan& P, double Cell)
 			{
-				const double X0 = -P.Hx - 0.55, Y0 = -P.Hy - 0.55;
-				const int NX = std::max(2, static_cast<int>(std::ceil(2.0 * (P.Hx + 0.55) / Cell))), NY = std::max(2, static_cast<int>(std::ceil(2.0 * (P.Hy + 0.55) / Cell)));
-				const double Dx = 2.0 * (P.Hx + 0.55) / NX, Dy = 2.0 * (P.Hy + 0.55) / NY;
+				const double Ex = P.bClay ? P.Hx - P.Wt : P.Hx, Ey = P.bClay ? P.Hy - P.Wt : P.Hy, X0 = -Ex, Y0 = -Ey;
+				const int NX = std::max(2, static_cast<int>(std::ceil(2.0 * Ex / Cell))), NY = std::max(2, static_cast<int>(std::ceil(2.0 * Ey / Cell)));
+				const double Dx = 2.0 * Ex / NX, Dy = 2.0 * Ey / NY;
 				std::vector<uint32_t> Id(static_cast<size_t>((NX + 1) * (NY + 1)));
 				for (int J = 0; J <= NY; ++J)
 					for (int I = 0; I <= NX; ++I)
@@ -9008,105 +9016,157 @@ namespace LandHouse
 						B.Tri(Id[A], Id[A + 1], Id[A + static_cast<size_t>(NX) + 2], Up);
 						B.Tri(Id[A], Id[A + static_cast<size_t>(NX) + 2], Id[A + static_cast<size_t>(NX) + 1], Up);
 					}
-				// (its edge down into the ground, where the ground falls away under it)
-				const double Bot = -std::max(0.3, P.S.Below);
-				auto Edge = [&](V3 A, V3 Bb, V3 Out) { B.Quad(A, Bb, V3{ Bb.X, Bb.Y, Bot }, V3{ A.X, A.Y, Bot }, AshCol(P, A.X, A.Y, A.Z, Cell < 0.5), AshCol(P, Bb.X, Bb.Y, Bb.Z, Cell < 0.5), P.Earth, P.Earth, Out); };
-				for (int I = 0; I < NX; ++I)
-				{
-					const double Xa = X0 + Dx * I, Xb = Xa + Dx;
-					Edge(V3{ Xa, Y0, AshAt(P, Xa, Y0) }, V3{ Xb, Y0, AshAt(P, Xb, Y0) }, V3{ 0.0, -1.0, 0.0 });
-					Edge(V3{ Xa, -Y0, AshAt(P, Xa, -Y0) }, V3{ Xb, -Y0, AshAt(P, Xb, -Y0) }, V3{ 0.0, 1.0, 0.0 });
-				}
-				for (int J = 0; J < NY; ++J)
-				{
-					const double Ya = Y0 + Dy * J, Yb = Ya + Dy;
-					Edge(V3{ X0, Ya, AshAt(P, X0, Ya) }, V3{ X0, Yb, AshAt(P, X0, Yb) }, V3{ -1.0, 0.0, 0.0 });
-					Edge(V3{ -X0, Ya, AshAt(P, -X0, Ya) }, V3{ -X0, Yb, AshAt(P, -X0, Yb) }, V3{ 1.0, 0.0, 0.0 });
-				}
+				// (its edge down into the ground: one face a side)
+				const double Bot = -std::max(0.3, P.S.Below), Zc = AshAt(P, X0, Y0);
+				B.Quad1(V3{ X0, Y0, Zc }, V3{ -X0, Y0, Zc }, V3{ -X0, Y0, Bot }, V3{ X0, Y0, Bot }, P.Earth, V3{ 0.0, -1.0, 0.0 });
+				B.Quad1(V3{ X0, -Y0, Zc }, V3{ -X0, -Y0, Zc }, V3{ -X0, -Y0, Bot }, V3{ X0, -Y0, Bot }, P.Earth, V3{ 0.0, 1.0, 0.0 });
+				B.Quad1(V3{ X0, Y0, Zc }, V3{ X0, -Y0, Zc }, V3{ X0, -Y0, Bot }, V3{ X0, Y0, Bot }, P.Earth, V3{ -1.0, 0.0, 0.0 });
+				B.Quad1(V3{ -X0, Y0, Zc }, V3{ -X0, -Y0, Zc }, V3{ -X0, -Y0, Bot }, V3{ -X0, Y0, Bot }, P.Earth, V3{ 1.0, 0.0, 0.0 });
 			}
 
 			// ---------------------------------------------------------------- the charred timber
 
-			/** A charred timber from A to B, radius R: rings Step apart, Sides round; its ends burnt through to a ragged point
-			 * where asked (bEndA, bEndB) else sawn and capped; charcoal black, cracked grey where its top caught the air, a
-			 * little brown wood left where it lay against the ground. */
-			void Charred(Pen& B, const Plan& P, V3 A, V3 Bv, double R, double Step, int Sides, bool bEndA, bool bEndB, uint64_t Seed)
+			/** A charred timber from A to B, radius R. Its ends where the fire ate them (bEndA, bEndB): burnt down to a taper,
+			 * off its middle, or broken off ragged and hollow; else sawn and capped. Fine (the near level): the char checked
+			 * into blocks, each its own face a little proud over a black core, a dark crack between them, a block gone here
+			 * and there; grey-white ash bloomed on the faces that look up; brown wood left on its underside by Brown (a
+			 * sill log low by its footing stones). Else (the middle level) a plain tube in the same colours. */
+			void Charred(Pen& B, const Plan& P, V3 A, V3 Bv, double R, bool bFine, bool bEndA, bool bEndB, uint64_t Seed, double Brown = 0.2)
 			{
 				const V3 Ax = Bv - A;
 				const double L = std::sqrt(Dot(Ax, Ax));
 				if (L < 0.05) return;
 				const V3 Al = Ax * (1.0 / L);
 				const V3 E1 = Norm(Cross(std::fabs(Al.Z) < 0.9 ? Up : V3{ 1.0, 0.0, 0.0 }, Al)), E2 = Cross(Al, E1);
-				const int NS = std::max(2, static_cast<int>(std::ceil(L / Step)));
+				// (a thick timber's blocks some 8 cm round it and 9 cm along; a pole's fewer)
+				const int Sides = !bFine ? 5 : R >= 0.08 ? 10 : 6;
+				const int NS = std::max(2, static_cast<int>(std::ceil(L / (!bFine ? 0.7 : R >= 0.08 ? 0.095 : 0.11))));
+				// (each burnt end: a taper over its last 25 to 45 cm, or a ragged break)
+				const bool bTaperA = bEndA && Unit(Hash(Seed, 0xE0)) < 0.6, bTaperB = bEndB && Unit(Hash(Seed, 0xE1)) < 0.6;
+				const double La = std::min(0.45 * L, 0.25 + 0.2 * Unit(Hash(Seed, 0xE2))), Lb = std::min(0.45 * L, 0.25 + 0.2 * Unit(Hash(Seed, 0xE3)));
+				const double Sway = 2.0 * Pi * Unit(Hash(Seed, 0xE4));
+				auto Bite = [&](double Th) { return std::min(0.7 * L / NS, 0.13 * Noise01(Th / 0.9, 0.5, Seed ^ 0x54) + 0.05 * Noise01(Th / 0.25, 1.5, Seed ^ 0x55)); };
+				// (the rings a little unevenly along it, so no two blocks run the same length)
+				auto Ring = [&](int I) { return L * (I + (I == 0 || I == NS ? 0.0 : 0.62 * (Unit(Hash(Seed ^ 0x59, static_cast<uint64_t>(I))) - 0.5))) / NS; };
+				// (where ring I lies along it at an angle round it: a broken end's ring set back by its bite)
+				auto Along = [&](int I, double Th) {
+					const double D = Ring(I);
+					if (I == 0 && bEndA && !bTaperA) return D + Bite(Th);
+					if (I == NS && bEndB && !bTaperB) return D - Bite(Th + 2.0);
+					return D;
+				};
+				auto Thin = [&](double D) {
+					double F = 0.94 + 0.08 * Noise(D / 0.35, 0.5, Seed);
+					if (bEndA) F *= bTaperA ? 0.2 + 0.8 * std::pow(Smooth(0.0, La, D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, D);
+					if (bEndB) F *= bTaperB ? 0.2 + 0.8 * std::pow(Smooth(0.0, Lb, L - D), 0.8) : 0.8 + 0.2 * Smooth(0.0, 0.1, L - D);
+					return F;
+				};
+				// (a taper burns off its middle: the log's axis drawn aside as it thins)
+				auto Mid = [&](double D) {
+					const double Off = (bTaperA ? 1.0 - Smooth(0.0, La, D) : 0.0) + (bTaperB ? 1.0 - Smooth(0.0, Lb, L - D) : 0.0);
+					return A + Al * D + (E1 * std::cos(Sway) + E2 * std::sin(Sway)) * (0.45 * R * Off);
+				};
+				// (its skin: black char; grey-white ash bloomed in patches on what looks up, a block here ashed over, the next
+				// bare; brown wood left on its underside low down)
+				auto Skin = [&](double D, double Th, double Z, double Tone, double Ashed) {
+					const V3 Rd = E1 * std::cos(Th) + E2 * std::sin(Th);
+					Col C = Scaled(Mixed(P.Char, Rgb(58, 56, 55), 0.3), Tone);
+					const double Patch = Smooth(0.46, 0.7, Noise01(D / 0.5, Th / 1.3, Seed ^ 0x53));
+					C = Mixed(C, Rgb(166, 162, 154), Smooth(0.2, 0.85, Rd.Z) * (0.05 + 0.75 * Patch * (0.35 + 0.65 * Ashed)));
+					return Mixed(C, Rgb(104, 78, 54), Brown * Smooth(-0.1, -0.7, Rd.Z) * Smooth(0.6, 0.2, Z) * Smooth(0.3, 0.55, Noise01(D / 0.5, 0.5, Seed ^ 0x57)));
+				};
+				// (the core: black, under the blocks; the whole of the middle level's timber, in the skin's colours)
+				const int CoreSides = bFine ? 6 : Sides, CoreEvery = bFine ? 2 : 1;
 				std::vector<uint32_t> Prev, Cur;
-				// (a burnt end eaten back unevenly: the break's line along the log at each side round it)
-				std::vector<double> Bite(static_cast<size_t>(Sides));
-				for (int K = 0; K < Sides; ++K) Bite[static_cast<size_t>(K)] = std::min(0.7 * L / NS, 0.14 * Noise01(2.0 * Pi * K / Sides / 0.9, 0.5, Seed ^ 0x54) + 0.05 * Unit(Hash(Seed ^ 0x55, static_cast<uint64_t>(K))));
-				for (int I = 0; I <= NS; ++I)
+				for (int I = 0; I <= NS; I += (I + CoreEvery > NS && I < NS) ? NS - I : CoreEvery)
 				{
-					const double T = static_cast<double>(I) / NS, D = T * L;
-					// (a burnt end thinned a little over its last 12 cm, not drawn to a point; the log a little out of round)
-					double Rr = R * (0.94 + 0.08 * Noise(D / 0.35, 0.5, Seed));
-					if (bEndA) Rr *= 0.72 + 0.28 * Smooth(0.0, 0.12, D);
-					if (bEndB) Rr *= 0.72 + 0.28 * Smooth(0.0, 0.12, L - D);
 					Cur.clear();
-					for (int K = 0; K < Sides; ++K)
+					for (int K = 0; K < CoreSides; ++K)
 					{
-						const double Th = 2.0 * Pi * K / Sides;
+						const double Th = 2.0 * Pi * K / CoreSides, D = Along(I, Th);
 						const V3 Rd = E1 * std::cos(Th) + E2 * std::sin(Th);
-						const double Ck = 0.95 + 0.08 * Noise(D / 0.12, Th / 0.6, Seed ^ 0x51);
-						// (the end ring set back by its bite)
-						const double Dd = I == 0 && bEndA ? D + Bite[static_cast<size_t>(K)] : I == NS && bEndB ? D - Bite[static_cast<size_t>(K)] : D;
-						const V3 Pt = A + Al * Dd + Rd * (Rr * Ck);
-						// (the char checked into blocks: a block's face a dull silver-black, the checks between them black)
-						const double Cu = D / 0.055 + 0.5 * Noise(D / 0.2, Th, Seed ^ 0x56), Cv = Th * R / 0.035 + (static_cast<int>(std::floor(Cu)) % 2 == 0 ? 0.0 : 0.5);
-						const double Chk = std::min(std::fabs(Cu - std::round(Cu)), std::fabs(Cv - std::round(Cv)));
-						Col C = Scaled(Mixed(P.Char, Rgb(58, 56, 55), 0.55), 0.85 + 0.3 * Unit(Hash(Seed ^ 0x52, static_cast<uint64_t>(std::floor(Cu) * 64.0 + std::floor(Cv) + 4096.0))));
-						C = Mixed(C, Rgb(14, 13, 12), 0.75 * Smooth(0.16, 0.06, Chk));
-						// (grey ash lying on its top; a little brown wood left where it lay against the ground)
-						C = Mixed(C, Rgb(118, 114, 108), 0.5 * Smooth(0.45, 0.95, Rd.Z) * Smooth(0.4, 0.72, Noise01(D / 0.15, Th / 0.4, Seed ^ 0x53)));
-						C = Mixed(C, Rgb(92, 70, 52), 0.45 * Smooth(-0.4, -0.9, Rd.Z) * Smooth(0.35, 0.05, Pt.Z));
-						Cur.push_back(B.Vert(Pt, Rd, C));
+						const V3 Pt = Mid(D) + Rd * (R * Thin(D) * (bFine ? 0.965 : 1.0));
+						Cur.push_back(B.Vert(Pt, Rd, bFine ? Rgb(15, 14, 13) : Skin(D, Th, Pt.Z, 0.9 + 0.2 * Unit(Hash(Seed ^ 0x52, static_cast<uint64_t>(I * 16 + K))), 0.5)));
 					}
-					if (I > 0)
-						for (int K = 0; K < Sides; ++K)
+					if (!Prev.empty())
+						for (int K = 0; K < CoreSides; ++K)
 						{
-							const int Kn = (K + 1) % Sides;
-							const double Th = 2.0 * Pi * (K + 0.5) / Sides;
+							const int Kn = (K + 1) % CoreSides;
+							const double Th = 2.0 * Pi * (K + 0.5) / CoreSides;
 							const V3 Out = E1 * std::cos(Th) + E2 * std::sin(Th);
 							B.Tri(Prev[static_cast<size_t>(K)], Cur[static_cast<size_t>(K)], Cur[static_cast<size_t>(Kn)], Out);
 							B.Tri(Prev[static_cast<size_t>(K)], Cur[static_cast<size_t>(Kn)], Prev[static_cast<size_t>(Kn)], Out);
 						}
-					// (the ends: a burnt end drawn in to a ragged black point, a sawn one capped, its end grain charred)
+					// (the ends: a taper's small burnt tip; a break's face hollowed behind its ragged rim; a sawn end flat)
 					if (I == 0 || I == NS)
 					{
-						// (a burnt end's face hollowed a little behind its ragged rim, glowing-dark; a sawn one flat, its grain charred)
-						const bool bBurnt = I == 0 ? bEndA : bEndB;
+						const bool bBurnt = I == 0 ? bEndA : bEndB, bTaper = I == 0 ? bTaperA : bTaperB;
 						const V3 Out = Al * (I == 0 ? -1.0 : 1.0);
-						double Mb = 0.0;
-						for (const double Bt : Bite) Mb += Bt / Sides;
-						const uint32_t Mid = B.Vert(A + Al * D + Out * (bBurnt ? -Mb - 0.03 : 0.0), Out, bBurnt ? Rgb(20, 18, 17) : Rgb(52, 44, 38));
-						for (int K = 0; K < Sides; ++K) B.Tri(Mid, Cur[static_cast<size_t>(K)], Cur[static_cast<size_t>((K + 1) % Sides)], Out);
+						const double D = Ring(I);
+						const uint32_t Tip = B.Vert(Mid(D) + Out * (bTaper ? 0.02 : bBurnt ? -0.09 : 0.0), Out, bBurnt ? Rgb(20, 18, 17) : Rgb(52, 44, 38));
+						for (int K = 0; K < CoreSides; ++K) B.Tri(Tip, Cur[static_cast<size_t>(K)], Cur[static_cast<size_t>((K + 1) % CoreSides)], Out);
 					}
 					Prev = Cur;
+					if (I == NS) break;
+				}
+				if (!bFine) return;
+				// (the blocks: one between each pair of rings and each pair of sides, each ring's turned its own way round and
+				// its blocks of uneven widths, each drawn in from its neighbours by the crack's half width and set at its own
+				// height over the core)
+				auto Bound = [&](int I, int K) { return 2.0 * Pi * (K + Unit(Hash(Seed ^ 0x5A, static_cast<uint64_t>(I))) + 0.5 * (Unit(Hash(Seed ^ 0x5B, static_cast<uint64_t>(I * 32 + K % Sides))) - 0.5)) / Sides; };
+				for (int I = 0; I < NS; ++I)
+					for (int K = 0; K < Sides; ++K)
+					{
+						const uint64_t Kb = Hash(Seed ^ 0x58, static_cast<uint64_t>(I * 32 + K));
+						if (Unit(Kb) < 0.07) continue; // (a block flaked off: the core shows)
+						const double T0 = Bound(I, K), T1 = Bound(I, K + 1), Gap = 0.002 + 0.0025 * Unit(Hash(Kb, 4)), Gt = Gap / R;
+						const double Lift = 1.0 + 0.04 * Unit(Hash(Kb, 1)), Tone = 0.62 + 0.42 * Unit(Hash(Kb, 2)), Ashed = Unit(Hash(Kb, 3));
+						auto Corner = [&](int Ir, double Th, double Gd) {
+							const double D = Along(Ir, Th) + Gd;
+							const V3 Rd = E1 * std::cos(Th) + E2 * std::sin(Th);
+							const V3 Pt = Mid(D) + Rd * (R * Thin(D) * Lift);
+							return B.Vert(Pt, Rd, Skin(D, Th, Pt.Z, Tone, Ashed));
+						};
+						const uint32_t I0 = Corner(I, T0 + Gt, Gap), I1 = Corner(I, T1 - Gt, Gap), I2 = Corner(I + 1, T1 - Gt, -Gap), I3 = Corner(I + 1, T0 + Gt, -Gap);
+						const double Tm = 0.5 * (T0 + T1);
+						const V3 Out = E1 * std::cos(Tm) + E2 * std::sin(Tm);
+						B.Tri(I0, I1, I2, Out);
+						B.Tri(I0, I2, I3, Out);
+					}
+				// (a sawn end's face out to the blocks' edge, so its rim is no pipe's)
+				for (int End = 0; End < 2; ++End)
+				{
+					if (End == 0 ? bEndA : bEndB) continue;
+					const V3 Out = Al * (End == 0 ? -1.0 : 1.0);
+					const double D = End == 0 ? 0.0 : L;
+					const uint32_t Mid0 = B.Vert(Mid(D) + Out * 0.004, Out, Rgb(40, 34, 29));
+					std::vector<uint32_t> Rim;
+					for (int K = 0; K < Sides; ++K)
+					{
+						const double Th = 2.0 * Pi * K / Sides;
+						Rim.push_back(B.Vert(Mid(D) + Out * 0.004 + (E1 * std::cos(Th) + E2 * std::sin(Th)) * (R * Thin(D) * 1.045), Out, Rgb(24, 21, 19)));
+					}
+					for (int K = 0; K < Sides; ++K) B.Tri(Mid0, Rim[static_cast<size_t>(K)], Rim[static_cast<size_t>((K + 1) % Sides)], Out);
 				}
 			}
 
-			/** A field stone of the footing at (X, Y): a lump in the ash, Rv high, Rw round. */
-			void Stone(Pen& B, const Plan& P, double X, double Y, double Rw, double Rv, uint64_t Seed)
+			/** A field stone of the footing at (X, Y): a boulder set in the yard's ground, Rw round, its top Top over the
+			 * floor (its foot well under it, for where the ground falls away). */
+			void Stone(Pen& B, const Plan& P, double X, double Y, double Rw, double Top, uint64_t Seed)
 			{
-				const int NA = 7, NB = 3;
-				const double Zb = AshAt(P, X, Y) - 0.08;
+				const int NA = 7, NB = 4;
+				// (a round crown some 0.26 m high over a foot that runs straight down under the yard)
+				const double Zb = -0.4, Rv = 0.26, Zd = Top - Rv;
 				std::vector<std::vector<uint32_t>> Rg(NB + 1);
 				const Col C = Varied(Rgb(94, 90, 84), 0.85 + 0.25 * Unit(Hash(Seed, 1)), 0.03 * (Unit(Hash(Seed, 2)) - 0.5));
 				for (int J = 0; J <= NB; ++J)
 				{
-					const double Bt = 0.5 * Pi * J / (NB + 0.6);
+					const double Bt = J == 0 ? 0.0 : 0.5 * Pi * (J - 1) / (NB - 0.4);
 					for (int I = 0; I < NA; ++I)
 					{
 						const double Th = 2.0 * Pi * I / NA, Jt = 1.0 + 0.25 * (Unit(Hash(Seed, static_cast<uint64_t>(J * 16 + I + 4))) - 0.5);
 						const V3 Rd{ std::cos(Th) * std::cos(Bt), std::sin(Th) * std::cos(Bt), std::sin(Bt) };
-						const V3 Pt{ X + Rd.X * Rw * Jt, Y + Rd.Y * Rw * Jt, Zb + Rd.Z * Rv * Jt };
+						const V3 Pt{ X + Rd.X * Rw * Jt, Y + Rd.Y * Rw * Jt, J == 0 ? Zb : Zd + Rd.Z * Rv * Jt };
 						Rg[static_cast<size_t>(J)].push_back(B.Vert(Pt, Rd, Mixed(Scaled(C, 0.9 + 0.12 * Rd.Z), P.Soot, 0.25 + 0.35 * Smooth(0.3, 0.9, Rd.Z))));
 					}
 				}
@@ -9119,8 +9179,8 @@ namespace LandHouse
 						B.Tri(Rg[static_cast<size_t>(J)][A], Rg[static_cast<size_t>(J)][Bn], Rg[static_cast<size_t>(J) + 1][Bn], Out);
 						B.Tri(Rg[static_cast<size_t>(J)][A], Rg[static_cast<size_t>(J) + 1][Bn], Rg[static_cast<size_t>(J) + 1][A], Out);
 					}
-				const uint32_t Top = B.Vert(V3{ X, Y, Zb + Rv }, Up, Mixed(C, P.Soot, 0.6));
-				for (int I = 0; I < NA; ++I) B.Tri(Rg[NB][static_cast<size_t>(I)], Rg[NB][static_cast<size_t>((I + 1) % NA)], Top, Up);
+				const uint32_t Crown = B.Vert(V3{ X, Y, Top }, Up, Mixed(C, P.Soot, 0.6));
+				for (int I = 0; I < NA; ++I) B.Tri(Rg[NB][static_cast<size_t>(I)], Rg[NB][static_cast<size_t>((I + 1) % NA)], Crown, Up);
 			}
 
 			/** The izba's log walls as the fire left them: the sill logs on their footing stones, burnt through in places,
@@ -9136,12 +9196,14 @@ namespace LandHouse
 						{
 							if (Sx == 0 && Sy == 0) continue;
 							const uint64_t Sd = Hash(P.S.Key ^ 0xB057, static_cast<uint64_t>((Sx + 1) * 3 + Sy + 1));
-							Stone(B, P, Sx * Lx, Sy * Ly, 0.26 + 0.06 * Unit(Sd), 0.3 + 0.06 * Unit(Hash(Sd, 9)), Sd);
+							Stone(B, P, Sx * Lx, Sy * Ly, 0.27 + 0.06 * Unit(Sd), 0.24 + 0.04 * Unit(Hash(Sd, 9)), Sd);
 						}
 				for (int W = 0; W < 4; ++W)
 				{
 					const bool bAlongX = W < 2;
 					const double Sg = W % 2 == 0 ? 1.0 : -1.0, Half = (bAlongX ? Lx : Ly) + 0.14;
+					// (a log lies only where the one under it still does: none left hanging over a gap)
+					std::vector<int> Under;
 					for (int C = 0; C < 3; ++C)
 					{
 						const double Z = Z0 + R + (C + (bAlongX ? 0.0 : 0.5)) * 1.7 * R;
@@ -9152,8 +9214,18 @@ namespace LandHouse
 						{
 							const double U = -Half + 2.0 * Half * (K + 0.5) / NSt;
 							const double V = Noise01(U / 1.4 + 7.0 * W, 3.0 * C, P.S.Key ^ 0xB0C1) + 0.17 * C + (C == 0 ? -0.12 : 0.0);
-							Kept[static_cast<size_t>(K)] = V < 0.56 ? 1 : 0;
+							Kept[static_cast<size_t>(K)] = V < 0.56 && (C == 0 || Under[static_cast<size_t>(K)]) ? 1 : 0;
 						}
+						// (a stub too short to draw is no log, for this course or the one over it)
+						for (int K = 0; K < NSt;)
+						{
+							int E = K;
+							while (E < NSt && Kept[static_cast<size_t>(E)] == Kept[static_cast<size_t>(K)]) ++E;
+							if (Kept[static_cast<size_t>(K)] && 2.0 * Half * (E - K) / NSt <= 0.35)
+								for (int J = K; J < E; ++J) Kept[static_cast<size_t>(J)] = 0;
+							K = E;
+						}
+						Under = Kept;
 						int K = 0;
 						while (K < NSt)
 						{
@@ -9169,7 +9241,7 @@ namespace LandHouse
 							{
 								auto At = [&](double U) { return bAlongX ? V3{ U, Sg * Ly, Z } : V3{ Sg * Lx, U, Z }; };
 								const uint64_t Sd = Hash(P.S.Key ^ 0xB0C2, static_cast<uint64_t>(W * 64 + C * 16 + K));
-								Charred(B, P, At(Ua), At(Ub), R, bFine ? 0.15 : 0.6, bFine ? 10 : 5, K > 0, E + 1 < NSt, Sd);
+								Charred(B, P, At(Ua), At(Ub), R, bFine, true, true, Sd, C == 0 ? 0.85 : 0.15);
 							}
 							K = E + 1;
 						}
@@ -9182,22 +9254,25 @@ namespace LandHouse
 			void Fallen(Pen& B, const Plan& P, bool bFine)
 			{
 				Rng Rf(P.S.Key ^ 0xB0F1);
-				const int N = 6 + static_cast<int>(4.0 * Rf.Next());
+				// (fewer in a khata, whose roof's timbers ClayRoof leans on its walls)
+				const int N = (P.bClay ? 3 : 6) + static_cast<int>((P.bClay ? 3.0 : 4.0) * Rf.Next());
 				for (int K = 0; K < N; ++K)
 				{
 					const double X = Rf.Range(-P.Hx + 0.8, P.Hx - 0.8), Y = Rf.Range(-P.Hy + 0.8, P.Hy - 0.8), An = Rf.Range(0.0, Pi), Ln = Rf.Range(1.4, 3.6), R = Rf.Range(0.07, 0.11), Lift = Rf.Next();
 					const double Ca = std::cos(An), Sa = std::sin(An);
 					V3 A{ X - 0.5 * Ln * Ca, Y - 0.5 * Ln * Sa, 0.0 }, Bv{ X + 0.5 * Ln * Ca, Y + 0.5 * Ln * Sa, 0.0 };
-					A.X = std::clamp(A.X, -P.Hx + 0.3, P.Hx - 0.3);
-					A.Y = std::clamp(A.Y, -P.Hy + 0.3, P.Hy - 0.3);
-					Bv.X = std::clamp(Bv.X, -P.Hx + 0.3, P.Hx - 0.3);
-					Bv.Y = std::clamp(Bv.Y, -P.Hy + 0.3, P.Hy - 0.3);
+					// (kept where the ashes lie over the yard: in from an izba's sunk rim, inside a khata's walls)
+					const double Keep = P.bClay ? 0.65 : 1.0;
+					A.X = std::clamp(A.X, -P.Hx + Keep, P.Hx - Keep);
+					A.Y = std::clamp(A.Y, -P.Hy + Keep, P.Hy - Keep);
+					Bv.X = std::clamp(Bv.X, -P.Hx + Keep, P.Hx - Keep);
+					Bv.Y = std::clamp(Bv.Y, -P.Hy + Keep, P.Hy - Keep);
 					A.Z = AshAt(P, A.X, A.Y) + 0.6 * R;
 					Bv.Z = AshAt(P, Bv.X, Bv.Y) + 0.6 * R;
 					// (one end up on the stove, where it falls near it, or propped on the heap)
 					if (Lift < 0.3 && std::fabs(Bv.X - P.Sx) < P.Sa + 0.6 && std::fabs(Bv.Y - P.Sy) < P.Sb + 0.6) Bv.Z = P.Sh + R;
 					else if (Lift < 0.45) Bv.Z += 0.35;
-					Charred(B, P, A, Bv, R, bFine ? 0.15 : 0.8, bFine ? 8 : 4, true, Lift > 0.2, Hash(P.S.Key ^ 0xB0F2, static_cast<uint64_t>(K)));
+					Charred(B, P, A, Bv, R, bFine, true, true, Hash(P.S.Key ^ 0xB0F2, static_cast<uint64_t>(K)));
 				}
 			}
 
@@ -9231,120 +9306,183 @@ namespace LandHouse
 			/** The clay walls' broken top over a place along a wall (W its side, U along it): standing roofless mostly to
 			 * near the eaves, crumbled in lumps along it, a breach or two down toward the knee where the roof's fall brought
 			 * them down; higher at the corners, where the walls hold each other up. */
-			double ClayTop(const Plan& P, int W, double U, double Half)
+			double ClayTop(const Plan& P, int W, double U, double Ul, double Half)
 			{
 				const double Cn = Smooth(Half - 1.2, Half - 0.15, std::fabs(U));
-				// (a breach's sides broken back in steps, a lump of clay at a time, not a smooth notch)
-				const double Uq = (std::floor(U / 0.42 + 0.29 * W) + 0.5) * 0.42;
-				const double Bn = 0.5 * (Noise01(U / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1) + Noise01(Uq / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1)) + 0.07 * Noise(U / 0.3 + 2.0 * W, 1.7, P.S.Key ^ 0xB0DE);
+				// (a breach's sides broken back a lump of clay at a time: half its fall with the place, half with the lump Ul
+				// stands in, so its side runs down in a broken slope and not a stair)
+				const double Uq = (std::floor(Ul / 0.42 + 0.29 * W) + 0.5) * 0.42;
+				const double Bn = 0.65 * Noise01(U / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1) + 0.35 * Noise01(Uq / 2.2 + 9.0 * W, 0.4, P.S.Key ^ 0xB0D1) + 0.07 * Noise(U / 0.3 + 2.0 * W, 1.7, P.S.Key ^ 0xB0DE);
 				const double Breach = Smooth(0.58, 0.8, Bn) * (1.0 - Cn);
-				const double Lump = std::floor(U / 0.32 + 0.37 * W);
+				const double Lump = std::floor(Ul / 0.32 + 0.37 * W);
 				const double V = 2.02 + 0.16 * Noise(U / 1.1 + 4.0 * W, 0.9, P.S.Key ^ 0xB0DA) - 1.5 * Breach
-					+ 0.16 * (Unit(Hash(P.S.Key ^ 0xB0D2, static_cast<uint64_t>(Lump + 4096.0 + 512.0 * W))) - 0.5) + 0.12 * Cn;
+					+ 0.13 * (Unit(Hash(P.S.Key ^ 0xB0D2, static_cast<uint64_t>(Lump + 4096.0 + 512.0 * W))) - 0.5) + 0.12 * Cn;
 				return std::clamp(V, 0.3, 2.3);
 			}
-			/** The clay wall's colour: outside its whitewash, the clay showing where it has flaked, smoke-blackened in plumes
-			 * over its openings where the fire came out and in streaks down from its top; inside black with the fire, the
-			 * clay's brown showing low down; in its breaks (bInside 2) the clay burnt red-brown and black. */
+			/** A column of the clay wall's top as it broke, lump by lump: the lump of the wall round Uc (some 0.3 m of it,
+			 * standing or fallen as one) has its top its own height and tilt, here at U along it; a small step from it to
+			 * the next. */
+			double LumpTop(const Plan& P, int W, double Uc, double U, double Half)
+			{
+				const double Lump = std::floor(Uc / 0.32 + 0.37 * W), Um = (Lump + 0.5 - 0.37 * W) * 0.32;
+				const double Tilt = 0.1 * (Unit(Hash(P.S.Key ^ 0xB0E0, static_cast<uint64_t>(Lump + 4096.0 + 512.0 * W))) - 0.5);
+				return std::clamp(ClayTop(P, W, U, Uc, Half) + Tilt * (U - Um) / 0.32, 0.25, 2.35);
+			}
+			/** The clay walls' line: a wall's half length (the long walls run through the corners), its thickness's half,
+			 * its columns' width as its level draws them, and its top at a place along it. */
+			struct ClayLine
+			{
+				double Half = 1.0, Th = 0.2;
+				int NC = 2;
+				double Ua(int K) const { return -Half + 2.0 * Half * K / NC; }
+				double Mid(int K) const { return -Half + 2.0 * Half * (K + 0.5) / NC; }
+				int At(double U) const { return std::clamp(static_cast<int>(std::floor((U + Half) / (2.0 * Half) * NC)), 0, NC - 1); }
+			};
+			ClayLine LineOf(const Plan& P, int W, bool bFine)
+			{
+				ClayLine Ln;
+				Ln.Half = W < 2 ? P.Hx - P.Wt + Ln.Th : P.Hy - P.Wt - Ln.Th;
+				Ln.NC = std::max(2, static_cast<int>(std::ceil(2.0 * Ln.Half / (bFine ? 0.18 : 0.5))));
+				return Ln;
+			}
+			double WallTop(const Plan& P, int W, double U, bool bFine)
+			{
+				const ClayLine Ln = LineOf(P, W, bFine);
+				return LumpTop(P, W, Ln.Mid(Ln.At(U)), U, Ln.Half);
+			}
+			/** The clay wall's colour. Outside (Face 0): its whitewash greyed by the smoke, the fire's soot high on it where
+			 * the roof burnt over it, running down it in streaks, and in a plume up over each window and the door where the
+			 * fire came out; the yard's earth splashed up its foot. Inside (1): its limewash black with the fire, most of
+			 * all up the wall, fallen to the clay in patches. In its breaks and on its broken top (2): the clay's own,
+			 * crumbled dry and pale, burnt dark in places. */
 			Col ClayWall(const Plan& P, const std::vector<Opening>& Ops, int W, double U, double Z, int Face)
 			{
-				if (Face == 2) return Mixed(Scaled(P.Clay, 0.82), P.Soot, Clamp01(0.3 + 0.45 * Noise01(U / 0.15, Z / 0.15, P.S.Key ^ 0xB0D8)));
-				if (Face == 1) return Mixed(Mixed(P.Soot, P.Clay, 0.12 + 0.18 * Noise01(U / 0.4, Z / 0.4, P.S.Key ^ 0xB0D3)), Scaled(P.Clay, 0.7), 0.4 * Smooth(0.9, 0.0, Z));
-				Col C = Scaled(P.Wash, 0.9 + 0.1 * Noise01(U / 1.1, Z / 0.9, P.S.Key ^ 0xB0D4));
-				// (soot: streaks down from the broken top; plumes up from each opening's head, widening as they rise)
-				double Sk = 0.1 + 0.35 * Smooth(1.0, 2.2, Z) * Smooth(0.35, 0.8, Noise01(U / 0.25 + 3.0 * W, Z / 1.6, P.S.Key ^ 0xB0D5));
+				const uint64_t Kw = P.S.Key ^ static_cast<uint64_t>(W * 131);
+				if (Face == 2) return Mixed(Scaled(Rgb(128, 112, 92), 0.82 + 0.22 * Noise01(U / 0.21, Z / 0.17, Kw ^ 0xB0D8)), P.Soot, 0.12 + 0.45 * Smooth(0.4, 0.8, Noise01(U / 0.4, Z / 0.3, Kw ^ 0xB0E1)));
+				const double Run = Noise01(U / 0.13 + 3.0 * W, Z / 2.6, P.S.Key ^ 0xB0D5);
+				if (Face == 1)
+				{
+					Col C = Scaled(Mixed(P.Wash, Rgb(140, 136, 128), 0.45), 0.8 + 0.12 * Noise01(U / 0.9, Z / 0.8, Kw ^ 0xB0D3));
+					C = Mixed(C, P.Soot, Clamp01(0.42 + 0.5 * Smooth(0.3, 1.9, Z) + 0.25 * (Run - 0.5)));
+					C = Mixed(C, Mixed(Scaled(P.Clay, 0.75), P.Soot, 0.35), 0.75 * Smooth(0.6, 0.66, Noise01(U / 0.55, Z / 0.45, Kw ^ 0xB0E2)));
+					return Mixed(C, P.Ash, 0.35 * Smooth(0.5, 0.0, Z));
+				}
+				Col C = Scaled(Mixed(P.Wash, Rgb(150, 146, 138), 0.3), 0.93 + 0.07 * Noise01(U / 1.1, Z / 0.9, Kw ^ 0xB0D4));
+				// (the soot from the eaves down: each run its own reach)
+				const double Reach = 0.3 + 1.0 * Noise01(U / 0.8 + 5.0 * W, 0.5, P.S.Key ^ 0xB0DF) * Smooth(0.3, 0.75, Run);
+				double Sk = 0.06 + 0.8 * Smooth(2.2 - Reach, 2.15, Z) * (0.5 + 0.5 * Run);
+				// (the plumes: up from each opening's head, widening as they rise)
 				for (const Opening& O : Ops)
 				{
-					if (O.W != W || O.Z0 < 0.0) continue;
+					if (O.W != W) continue;
 					const double Rise = Z - O.Z1 + 0.3, Wd = O.Hw + 0.15 + 0.5 * std::max(0.0, Rise);
 					Sk += 1.0 * Smooth(-0.05, 0.25, Rise) * Smooth(Wd, 0.5 * Wd, std::fabs(U - O.U)) * (0.75 + 0.25 * Noise01(U / 0.12, Z / 0.5, P.S.Key ^ 0xB0DB));
 				}
-				for (const Opening& O : Ops)
-					if (O.W == W && O.Z0 < 0.0)
-						Sk += 0.7 * Smooth(1.5, 1.9, Z) * Smooth(O.Hw + 0.5, O.Hw, std::fabs(U - O.U));
 				C = Mixed(C, P.Soot, Clamp01(Sk));
-				// (the wash flaked off to the clay: in patches, more low down where the wet reached it)
-				C = Mixed(C, Mixed(P.Clay, P.Soot, 0.2), 0.5 * Smooth(0.76, 0.8, Noise01(U / 0.22, Z / 0.18, P.S.Key ^ 0xB0D6) + 0.2 * Smooth(0.6, 0.0, Z)));
-				return Mixed(C, P.Earth, 0.5 * Smooth(0.25, -0.05, Z));
+				C = Mixed(C, Mixed(P.Clay, P.Earth, 0.5), 0.5 * Smooth(0.32 + 0.1 * Noise(U / 0.35, 0.5, Kw ^ 0xB0D6), 0.02, Z));
+				return Mixed(C, P.Earth, 0.5 * Smooth(0.2, -0.05, Z));
 			}
-			/** The khata's clay walls as the fire left them: each wall a grid of cells over its height (rows a share of its
-			 * broken top's height at each place along it), its openings' cells left out with their reveals through the
-			 * wall's thickness, ragged as the clay broke; its broken top crumbled; the door's charred posts. */
+			/** The khata's clay walls as the fire left them: each wall in columns along it and rows up it, a column standing
+			 * to its lump's broken top (a step from one lump's to the next, the clay's section showing in it); its openings'
+			 * cells left out with their reveals through the wall's thickness, ragged as the clay broke; the door's charred
+			 * posts. */
 			void ClayWalls(Pen& B, const Plan& P, bool bFine)
 			{
-				const double Lx = P.Hx - P.Wt, Ly = P.Hy - P.Wt, Th = 0.2, Step = bFine ? 0.15 : 0.5, Rs = bFine ? 0.18 : 0.6;
+				const double Lx = P.Hx - P.Wt, Ly = P.Hy - P.Wt, Rs = bFine ? 0.2 : 0.6;
 				const std::vector<Opening> Ops = Openings(P);
 				for (int W = 0; W < 4; ++W)
 				{
 					const bool bAlongX = W < 2;
-					const double Sg = W % 2 == 0 ? 1.0 : -1.0, Half = bAlongX ? Lx + Th : Ly - Th;
+					const ClayLine Ln = LineOf(P, W, bFine);
+					const double Sg = W % 2 == 0 ? 1.0 : -1.0, Half = Ln.Half, Th = Ln.Th;
 					const V3 T = bAlongX ? V3{ 1.0, 0.0, 0.0 } : V3{ 0.0, 1.0, 0.0 }, N = bAlongX ? V3{ 0.0, Sg, 0.0 } : V3{ Sg, 0.0, 0.0 };
 					const V3 O = bAlongX ? V3{ 0.0, Sg * Ly, 0.0 } : V3{ Sg * Lx, 0.0, 0.0 };
-					const int NC = std::max(2, static_cast<int>(std::ceil(2.0 * Half / Step)));
-					std::vector<double> Us, Tops;
+					const int NC = Ln.NC;
+					std::vector<double> Ta, Tb;
 					double Most = 0.0;
-					for (int K = 0; K <= NC; ++K)
+					for (int K = 0; K < NC; ++K)
 					{
-						const double U = -Half + 2.0 * Half * K / NC;
-						Us.push_back(U);
-						Tops.push_back(ClayTop(P, W, U, Half));
-						Most = std::max(Most, Tops.back());
+						Ta.push_back(LumpTop(P, W, Ln.Mid(K), Ln.Ua(K), Half));
+						Tb.push_back(LumpTop(P, W, Ln.Mid(K), Ln.Ua(K + 1), Half));
+						Most = std::max({ Most, Ta.back(), Tb.back() });
 					}
 					const int NR = std::max(1, static_cast<int>(std::ceil((Most + 0.25) / Rs)));
-					auto Zr = [&](int K, int R) { return -0.25 + (Tops[static_cast<size_t>(K)] + 0.25) * R / NR; };
+					auto Zrow = [&](int R) { return -0.25 + Rs * R; };
 					auto Pt = [&](double U, double Z, double D) { return O + T * U + N * D + V3{ 0.0, 0.0, Z } + N * (0.012 * Noise(U / 0.5, Z / 0.5, P.S.Key ^ 0xB0D7)); };
-					// (a cell is the wall's unless an opening takes it, the opening's edges ragged as the clay broke)
-					std::vector<char> Solid(static_cast<size_t>(NC * NR), 1);
+					auto Wc = [&](double U, double Z, int Face) { return ClayWall(P, Ops, W, U, Z, Face); };
+					// (a cell: the wall's (1), an opening's (2, its edges ragged as the clay broke), or over the column's top (0))
+					std::vector<char> Cell(static_cast<size_t>(NC * NR), 0);
 					for (int K = 0; K < NC; ++K)
 						for (int R = 0; R < NR; ++R)
 						{
-							const double Um = 0.5 * (Us[static_cast<size_t>(K)] + Us[static_cast<size_t>(K) + 1]), Zm = 0.25 * (Zr(K, R) + Zr(K + 1, R) + Zr(K, R + 1) + Zr(K + 1, R + 1));
+							if (Zrow(R) >= std::max(Ta[static_cast<size_t>(K)], Tb[static_cast<size_t>(K)]) - 1e-6) continue;
+							const double Um = Ln.Mid(K), Zm = Zrow(R) + 0.5 * Rs;
+							char What = 1;
 							for (const Opening& Op : Ops)
 							{
 								if (Op.W != W) continue;
 								const double Rag = 0.05 * Noise(Zm / 0.25, Um / 0.25, P.S.Key ^ 0xB0DC);
-								if (std::fabs(Um - Op.U) < Op.Hw + Rag && Zm > Op.Z0 + Rag && Zm < Op.Z1 + 1.5 * Rag) Solid[static_cast<size_t>(K * NR + R)] = 0;
+								if (std::fabs(Um - Op.U) < Op.Hw + Rag && Zm > Op.Z0 + Rag && Zm < Op.Z1 + 1.5 * Rag) What = 2;
 							}
+							Cell[static_cast<size_t>(K * NR + R)] = What;
 						}
-					auto IsSolid = [&](int K, int R) { return K >= 0 && K < NC && R >= 0 && R < NR && Solid[static_cast<size_t>(K * NR + R)]; };
+					auto Is = [&](int K, int R) { return K >= 0 && K < NC && R >= 0 && R < NR ? Cell[static_cast<size_t>(K * NR + R)] : char(0); };
 					for (int K = 0; K < NC; ++K)
+					{
+						const double Ua = Ln.Ua(K), Ub = Ln.Ua(K + 1), TopA = Ta[static_cast<size_t>(K)], TopB = Tb[static_cast<size_t>(K)];
+						int Last = -1;
 						for (int R = 0; R < NR; ++R)
 						{
-							const double Ua = Us[static_cast<size_t>(K)], Ub = Us[static_cast<size_t>(K) + 1];
-							const double Za0 = Zr(K, R), Za1 = Zr(K, R + 1), Zb0 = Zr(K + 1, R), Zb1 = Zr(K + 1, R + 1);
-							if (IsSolid(K, R))
+							const char What = Is(K, R);
+							if (!What) continue;
+							Last = R;
+							const double Za0 = std::min(Zrow(R), TopA), Za1 = std::min(Zrow(R + 1), TopA), Zb0 = std::min(Zrow(R), TopB), Zb1 = std::min(Zrow(R + 1), TopB);
+							if (What == 1)
 							{
 								for (int Side = 0; Side < 2; ++Side)
 								{
 									const double D = Side == 0 ? Th : -Th;
-									B.Quad(Pt(Ua, Za0, D), Pt(Ub, Zb0, D), Pt(Ub, Zb1, D), Pt(Ua, Za1, D), ClayWall(P, Ops, W, Ua, Za0, Side), ClayWall(P, Ops, W, Ub, Zb0, Side), ClayWall(P, Ops, W, Ub, Zb1, Side), ClayWall(P, Ops, W, Ua, Za1, Side), N * (Side == 0 ? 1.0 : -1.0));
+									B.Quad(Pt(Ua, Za0, D), Pt(Ub, Zb0, D), Pt(Ub, Zb1, D), Pt(Ua, Za1, D), Wc(Ua, Za0, Side), Wc(Ub, Zb0, Side), Wc(Ub, Zb1, Side), Wc(Ua, Za1, Side), N * (Side == 0 ? 1.0 : -1.0));
 								}
 								continue;
 							}
 							// (an opening's cell: the reveals where the wall stands beside, under or over it)
 							auto Reveal = [&](double U0, double Z0, double U1, double Z1, V3 Face) {
-								B.Quad(Pt(U0, Z0, Th), Pt(U1, Z1, Th), Pt(U1, Z1, -Th), Pt(U0, Z0, -Th), ClayWall(P, Ops, W, U0, Z0, 2), ClayWall(P, Ops, W, U1, Z1, 2), ClayWall(P, Ops, W, U1, Z1 + 0.3, 2), ClayWall(P, Ops, W, U0, Z0 + 0.3, 2), Face);
+								B.Quad(Pt(U0, Z0, Th), Pt(U1, Z1, Th), Pt(U1, Z1, -Th), Pt(U0, Z0, -Th), Wc(U0, Z0, 2), Wc(U1, Z1, 2), Wc(U1, Z1 + 0.3, 2), Wc(U0, Z0 + 0.3, 2), Face);
 							};
-							if (IsSolid(K - 1, R)) Reveal(Ua, Za0, Ua, Za1, T);
-							if (IsSolid(K + 1, R)) Reveal(Ub, Zb0, Ub, Zb1, T * -1.0);
-							if (IsSolid(K, R - 1)) Reveal(Ua, Za0, Ub, Zb0, Up);
-							if (IsSolid(K, R + 1)) Reveal(Ua, Za1, Ub, Zb1, V3{ 0.0, 0.0, -1.0 });
+							if (Is(K - 1, R) == 1) Reveal(Ua, Za0, Ua, std::min(Za1, Tb[static_cast<size_t>(K) - 1]), T);
+							if (Is(K + 1, R) == 1) Reveal(Ub, Zb0, Ub, std::min(Zb1, Ta[static_cast<size_t>(K) + 1]), T * -1.0);
+							if (Is(K, R - 1) == 1) Reveal(Ua, Za0, Ub, Zb0, Up);
+							if (Is(K, R + 1) == 1) Reveal(Ua, Za1, Ub, Zb1, V3{ 0.0, 0.0, -1.0 });
 						}
-					// (the broken top: the clay crumbled, burnt dark at its edges, slumped a little to the inside)
-					for (int K = 0; K < NC; ++K)
-					{
-						if (!IsSolid(K, NR - 1)) continue;
-						const double Ua = Us[static_cast<size_t>(K)], Ub = Us[static_cast<size_t>(K) + 1];
-						const double Ta = Tops[static_cast<size_t>(K)], Tb = Tops[static_cast<size_t>(K) + 1];
-						B.Quad(Pt(Ua, Ta, Th), Pt(Ub, Tb, Th), Pt(Ub, Tb - 0.04, -Th), Pt(Ua, Ta - 0.04, -Th), ClayWall(P, Ops, W, Ua, Ta, 2), ClayWall(P, Ops, W, Ub, Tb, 2), ClayWall(P, Ops, W, Ub, Tb + 0.5, 2), ClayWall(P, Ops, W, Ua, Ta + 0.5, 2), Up);
+						// (its broken top: the clay's section, crumbled)
+						if (Last >= 0 && Is(K, Last) == 1)
+							B.Quad(Pt(Ua, TopA, Th), Pt(Ub, TopB, Th), Pt(Ub, TopB, -Th), Pt(Ua, TopA, -Th), Wc(Ua, TopA, 2), Wc(Ub, TopB, 2), Wc(Ub, TopB + 0.5, 2), Wc(Ua, TopA + 0.5, 2), Up);
+						// (the step to the next column's top, where one lump stands over the other)
+						if (K + 1 < NC)
+						{
+							const double Hn = Ta[static_cast<size_t>(K) + 1], Lo = std::min(TopB, Hn), Hi = std::max(TopB, Hn);
+							const int Tall = TopB > Hn ? K : K + 1, Rm = std::clamp(static_cast<int>(std::floor((0.5 * (Lo + Hi) + 0.25) / Rs)), 0, NR - 1);
+							if (Hi - Lo > 0.004 && Is(Tall, Rm) == 1)
+								B.Quad(Pt(Ub, Lo, Th), Pt(Ub, Lo, -Th), Pt(Ub, Hi, -Th), Pt(Ub, Hi, Th), Wc(Ub, Lo, 2), Wc(Ub + 0.2, Lo, 2), Wc(Ub + 0.2, Hi, 2), Wc(Ub, Hi, 2), T * (TopB > Hn ? 1.0 : -1.0));
+						}
 					}
 					// (the walls' ends at the corners, closed)
 					for (int End = -1; End <= 1; End += 2)
 					{
-						const double U = End * Half, Tt = Tops[End < 0 ? 0 : Tops.size() - 1];
+						const double U = End * Half, Tt = End < 0 ? Ta.front() : Tb.back();
 						// (a long wall's end is the corner's outside, washed as the gable it meets; a gable's is hidden in the corner)
-						const Col Lo = ClayWall(P, Ops, W, U, -0.25, bAlongX ? 0 : 2), Hi = ClayWall(P, Ops, W, U, Tt, bAlongX ? 0 : 2);
-						B.Quad(Pt(U, -0.25, Th), Pt(U, -0.25, -Th), Pt(U, Tt - 0.04, -Th), Pt(U, Tt, Th), Lo, Lo, Hi, Hi, T * static_cast<double>(End));
+						const Col Lo = Wc(U, -0.25, bAlongX ? 0 : 2), Hi = Wc(U, Tt, bAlongX ? 0 : 2);
+						B.Quad(Pt(U, -0.25, Th), Pt(U, -0.25, -Th), Pt(U, Tt, -Th), Pt(U, Tt, Th), Lo, Lo, Hi, Hi, T * static_cast<double>(End));
+					}
+					// (its foot down into the ground, where the ground falls away under it)
+					const double Bot = -std::max(0.25, P.S.Below);
+					if (Bot < -0.26)
+					{
+						const Col Fc = Wc(0.0, -0.25, 0);
+						B.Quad1(Pt(-Half, Bot, Th), Pt(Half, Bot, Th), Pt(Half, -0.25, Th), Pt(-Half, -0.25, Th), Fc, N);
+						if (bAlongX)
+							for (int End = -1; End <= 1; End += 2) B.Quad1(Pt(End * Half, Bot, Th), Pt(End * Half, Bot, -Th), Pt(End * Half, -0.25, -Th), Pt(End * Half, -0.25, Th), Fc, T * static_cast<double>(End));
 					}
 					// (the door's posts, charred, standing in its reveals)
 					if (bFine)
@@ -9355,8 +9493,93 @@ namespace LandHouse
 									const double U = Op.U + Sd * (Op.Hw - 0.05);
 									const uint64_t Sd_ = Hash(P.S.Key ^ 0xB0DD, static_cast<uint64_t>(Sd + 2));
 									const double Hi = std::min(Op.Z1 + 0.05, 0.9 + 0.9 * Unit(Sd_));
-									Charred(B, P, O + T * U + V3{ 0.0, 0.0, -0.1 }, O + T * U + V3{ 0.0, 0.0, Hi }, 0.065, 0.15, 6, false, true, Sd_);
+									Charred(B, P, O + T * U + V3{ 0.0, 0.0, -0.1 }, O + T * U + V3{ 0.0, 0.0, Hi }, 0.065, true, false, true, Sd_);
 								}
+				}
+			}
+			/** The wash flaked off the clay low on the walls' outsides, where the wet reached it: crisp patches, the clay
+			 * bared and shadowed toward its rim under the wash's broken edge, that edge a few mm proud. */
+			void Flakes(Pen& B, const Plan& P)
+			{
+				const double Lx = P.Hx - P.Wt, Ly = P.Hy - P.Wt;
+				const std::vector<Opening> Ops = Openings(P);
+				Rng R(P.S.Key ^ 0xB0FA);
+				const int NF = 10 + static_cast<int>(7.0 * R.Next());
+				for (int K = 0; K < NF; ++K)
+				{
+					const double Pick = R.Next(), Uu = R.Next(), Low = R.Next(), Rx = R.Range(0.04, 0.13), Squat = R.Range(0.5, 1.1), Tone = R.Range(0.85, 1.05);
+					const int W = Pick < 0.35 ? 0 : Pick < 0.7 ? 1 : Pick < 0.85 ? 2 : 3;
+					const bool bAlongX = W < 2;
+					const ClayLine Ln = LineOf(P, W, true);
+					const double Sg = W % 2 == 0 ? 1.0 : -1.0, Rz = Rx * Squat, U = (2.0 * Uu - 1.0) * (Ln.Half - 0.25), Z = 0.14 + Rz + 1.0 * Low * Low * Low;
+					const V3 T = bAlongX ? V3{ 1.0, 0.0, 0.0 } : V3{ 0.0, 1.0, 0.0 }, N = bAlongX ? V3{ 0.0, Sg, 0.0 } : V3{ Sg, 0.0, 0.0 };
+					const V3 O = bAlongX ? V3{ 0.0, Sg * Ly, 0.0 } : V3{ Sg * Lx, 0.0, 0.0 };
+					// (its rim's reaches drawn whether it is kept or not, so one flake's loss moves no other)
+					const int NE = 10;
+					std::vector<std::pair<double, double>> Reach;
+					for (int E = 0; E < NE; ++E)
+					{
+						const double Rr = R.Range(0.7, 1.15), Ex = R.Range(0.006, 0.011);
+						Reach.push_back({ Rr, Ex });
+					}
+					if (Z + Rz > std::min({ WallTop(P, W, U - Rx, true), WallTop(P, W, U, true), WallTop(P, W, U + Rx, true) }) - 0.12) continue;
+					bool bClear = true;
+					for (const Opening& Op : Ops)
+						if (Op.W == W && std::fabs(U - Op.U) < Op.Hw + Rx + 0.07 && Z > Op.Z0 - Rz - 0.08 && Z < Op.Z1 + Rz + 0.07) bClear = false;
+					if (!bClear) continue;
+					auto Pt = [&](double Uq, double Zq, double Off) { return O + T * Uq + N * (Ln.Th + Off) + V3{ 0.0, 0.0, Zq } + N * (0.012 * Noise(Uq / 0.5, Zq / 0.5, P.S.Key ^ 0xB0D7)); };
+					const Col Cl = Scaled(Mixed(P.Clay, P.Soot, 0.18), Tone);
+					const uint32_t Cn = B.Vert(Pt(U, Z, 0.003), N, Cl);
+					std::vector<uint32_t> Rim, Brk;
+					for (int E = 0; E < NE; ++E)
+					{
+						const double An = 2.0 * Pi * E / NE, Cs = std::cos(An), Sn = std::sin(An);
+						const auto [Rr, Ex] = Reach[static_cast<size_t>(E)];
+						const double Ur = U + Rx * Rr * Cs, Zr = Z + Rz * Rr * Sn, Ue = U + (Rx * Rr + Ex) * Cs, Ze = Z + (Rz * Rr + Ex) * Sn;
+						Rim.push_back(B.Vert(Pt(Ur, Zr, 0.003), N, Scaled(Cl, 0.78)));
+						Brk.push_back(B.Vert(Pt(Ue, Ze, 0.006), N, Scaled(ClayWall(P, Ops, W, Ue, Ze, 0), 1.05)));
+					}
+					for (size_t E = 0; E < static_cast<size_t>(NE); ++E)
+					{
+						const size_t J = (E + 1) % static_cast<size_t>(NE);
+						B.Tri(Cn, Rim[E], Rim[J], N);
+						B.Tri(Rim[E], Brk[E], Brk[J], N);
+						B.Tri(Rim[E], Brk[J], Rim[J], N);
+					}
+				}
+			}
+			/** What a khata's roof left: its thatch burnt to the ashes heaped inside the walls; a few of its rafter poles,
+			 * charred, leaning in from the walls' tops where they still stand; a ceiling beam or two with one end still on a
+			 * wall and the other come down across the room. Nothing lies where the stove and its chimney stand. */
+			void ClayRoof(Pen& B, const Plan& P, bool bFine)
+			{
+				const double Lx = P.Hx - P.Wt, Ly = P.Hy - P.Wt, Th = 0.2;
+				Rng R(P.S.Key ^ 0xB0FB);
+				auto Clear = [&](V3 A, V3 Bv, double Rad) {
+					for (int K = 0; K <= 10; ++K)
+					{
+						const V3 Q = A + (Bv - A) * (K / 10.0);
+						if (std::fabs(Q.X - P.Sx) < P.Sa + Rad + 0.05 && std::fabs(Q.Y - P.Sy) < P.Sb + Rad + 0.05 && Q.Z < P.Sh + Rad + 0.03) return false;
+						if (std::fabs(Q.X - P.Cx) < P.Cw + Rad + 0.06 && std::fabs(Q.Y - P.Cy) < P.Cw + Rad + 0.06) return false;
+					}
+					return true;
+				};
+				const int NP = 6 + static_cast<int>(3.0 * R.Next());
+				for (int K = 0; K < NP + 2; ++K)
+				{
+					const bool bBeam = K >= NP;
+					const double Pick = R.Next(), U = R.Range(-Lx + 0.5, Lx - 0.5), Skew = R.Range(-0.5, 0.5), Far = R.Next(), Over = R.Range(0.3, 0.7), Thick = R.Next();
+					const double Side = Pick < 0.5 ? 1.0 : -1.0, In = bBeam ? 2.0 * Ly - 1.6 + 1.1 * Far : 1.1 + 1.2 * Far, Rad = bBeam ? 0.08 + 0.02 * Thick : 0.045 + 0.015 * Thick;
+					const int W = Side > 0.0 ? 0 : 1;
+					const double H = std::max({ WallTop(P, W, U - 0.12, true), WallTop(P, W, U, true), WallTop(P, W, U + 0.12, true) });
+					if (H < 1.0) continue;
+					// (it bears on the wall top's inner edge and runs on up over the wall; its foot in the ashes)
+					const V3 On{ U, Side * (Ly - Th), H + Rad };
+					V3 Foot{ std::clamp(U + Skew, -Lx + 0.4, Lx - 0.4), std::clamp(Side * (Ly - Th - In), -Ly + 0.5, Ly - 0.5), 0.0 };
+					Foot.Z = AshAt(P, Foot.X, Foot.Y) + 0.5 * Rad;
+					const V3 End = On + Norm(On - Foot) * Over;
+					if (!Clear(Foot, End, Rad)) continue;
+					Charred(B, P, Foot, End, Rad, bFine, true, true, Hash(P.S.Key ^ 0xB0FC, static_cast<uint64_t>(K)), 0.15);
 				}
 			}
 
@@ -9372,7 +9595,7 @@ namespace LandHouse
 				// its top where the room's fire rolled over it; its top black)
 				C = Mixed(C, Rgb(150, 132, 108), 0.35 * Noise01(U / 0.9, Z / 0.7, Kf ^ 0xB0E8));
 				const double Streak = Noise01(U / 0.1, Z / 1.2, Kf ^ 0xB0E2), Blot = Noise01(U / 0.35, Z / 0.3, Kf ^ 0xB0E9);
-				const double K = 0.16 + 0.45 * Smooth(0.45, 0.85, Streak) * Smooth(0.2, 1.2, Z) + 0.45 * Smooth(0.9, P.Sh + 0.3, Z) + 0.3 * Smooth(0.55, 0.8, Blot) + (F == 4 ? 0.25 : 0.0);
+				const double K = 0.16 + 0.45 * Smooth(0.45, 0.85, Streak) * Smooth(0.2, 1.2, Z) + 0.45 * Smooth(0.9, P.Sh + 0.3, Z) + 0.3 * Smooth(0.55, 0.8, Blot) + (F == 4 ? 0.25 : 0.0) + 0.2 * Smooth(P.Sh + 0.05, P.Sh + 0.5, Z);
 				return Mixed(C, P.Soot, Clamp01(K));
 			}
 			/** A face of the stove or the chimney's plastered part: its middle at the floor, along it, out from it, half its
@@ -9399,53 +9622,10 @@ namespace LandHouse
 			{
 				double Z0 = 0.74, Z1 = 1.08, Hw = 0.26, Lz0 = 0.08, Lz1 = 0.36, Lw = 0.22;
 			};
-			/** Bricks bared where the plaster has come away in a patch (its middle U, Z on face Fc, its reach Ru, Rz): the
-			 * mortar behind them, each brick its own red-brown, fire-darkened, the plaster's broken edge round it. */
-			void Bared(Pen& B, const Plan& P, const SFace& Fc, double U, double Z, double Ru, double Rz, uint64_t Seed)
-			{
-				auto At = [&](double Uu, double Zz, double Off) { return Fc.O + Fc.T * Uu + Fc.N * Off + V3{ 0.0, 0.0, Zz }; };
-				const int NE = 12;
-				std::vector<V3> Rim;
-				for (int K = 0; K < NE; ++K)
-				{
-					const double Th = 2.0 * Pi * K / NE, Rr = 0.8 + 0.35 * Unit(Hash(Seed, static_cast<uint64_t>(K)));
-					Rim.push_back(V3{ U + Ru * Rr * std::cos(Th), Z + Rz * Rr * std::sin(Th), 0.0 });
-				}
-				// (the mortar under it, the plaster's broken edge round it standing proud)
-				const uint32_t Ct = B.Vert(At(U, Z, 0.004), Fc.N, Scaled(P.Mortar, 0.7));
-				std::vector<uint32_t> In, Lip;
-				for (const V3& Q : Rim)
-				{
-					In.push_back(B.Vert(At(Q.X, Q.Y, 0.004), Fc.N, Scaled(P.Mortar, 0.55)));
-					const double Ex = 0.012;
-					const V3 Dq = Norm(V3{ Q.X - U, Q.Y - Z, 0.0 });
-					Lip.push_back(B.Vert(At(Q.X + Dq.X * Ex, Q.Y + Dq.Y * Ex, 0.01), Fc.N, Scaled(PlasterCol(P, 0, Q.X, Q.Y), 0.88)));
-				}
-				for (size_t K = 0; K < Rim.size(); ++K)
-				{
-					const size_t J = (K + 1) % Rim.size();
-					B.Tri(Ct, In[K], In[J], Fc.N);
-					B.Tri(In[K], Lip[K], Lip[J], Fc.N);
-					B.Tri(In[K], Lip[J], In[J], Fc.N);
-				}
-				// (the bricks in it: courses 77 mm, each brick 250 mm, a half brick's step course to course)
-				const double Ch = 0.077, Bl = 0.262;
-				for (int Rr = static_cast<int>(std::floor((Z - Rz) / Ch)); Rr <= static_cast<int>(std::ceil((Z + Rz) / Ch)); ++Rr)
-				{
-					const double Zb = Rr * Ch, Sh = (Rr % 2 == 0) ? 0.0 : 0.5 * Bl;
-					for (int Cc = static_cast<int>(std::floor((U - Ru - Sh) / Bl)) - 1; Cc <= static_cast<int>(std::ceil((U + Ru - Sh) / Bl)); ++Cc)
-					{
-						const double Ub = Cc * Bl + Sh;
-						const double Mu = Ub + 0.5 * Bl, Mz = Zb + 0.5 * Ch;
-						if (Sq((Mu - U) / (0.8 * Ru)) + Sq((Mz - Z) / (0.8 * Rz)) > 1.0) continue;
-						const double Tn = 0.78 + 0.3 * Unit(Hash(Seed ^ 0xB1, static_cast<uint64_t>((Rr + 64) * 128 + Cc + 64)));
-						const Col Bc = Mixed(Mixed(Scaled(P.Brick, Tn), Rgb(92, 84, 78), 0.25), P.Soot, 0.4 + 0.3 * Unit(Hash(Seed ^ 0xB2, static_cast<uint64_t>((Rr + 64) * 128 + Cc + 64))));
-						B.Quad1(At(Ub + 0.006, Zb + 0.006, 0.007), At(Ub + Bl - 0.006, Zb + 0.006, 0.007), At(Ub + Bl - 0.006, Zb + Ch - 0.006, 0.007), At(Ub + 0.006, Zb + Ch - 0.006, 0.007), Bc, Fc.N);
-					}
-				}
-			}
 			/** One face of the stove: its plaster in cells Cell apart (cut round the mouth and the fire-box where it has
-			 * them), a dark recess behind each opening, the plume of soot over the mouth; bared bricks in a few patches. */
+			 * them), a dark recess behind each opening, the plume of soot over the mouth. Fine: the plaster torn away from
+			 * the bricks in a few patches, each a hole in it with a ragged outline, the plaster's broken edge standing a
+			 * finger proud of the sooted bricks behind it. */
 			void StoveSide(Pen& B, const Plan& P, int F, double Cell, bool bFine)
 			{
 				const SFace Fc = StoveFace(P, F);
@@ -9482,6 +9662,104 @@ namespace LandHouse
 					return C;
 				};
 				const size_t NUs = Us.size(), NZs = Zs.size();
+				// (where the plaster has come away: more low down, one in three near a corner where it comes off first; each
+				// a sheet's broken outline, a few corners with straight breaks between them, kept on the face and clear of its
+				// openings and of each other; the grid's cells round it left out, to be filled to its outline below)
+				struct Torn
+				{
+					double U = 0.0, Z = 0.0, Ru = 0.2, Rz = 0.2;
+					std::vector<std::pair<double, double>> Rim; // (its outline, in order round its middle)
+					size_t Ia = 0, Ib = 0, Ja = 0, Jb = 0;      // (the grid lines that box it)
+					double U0 = 0.0, U1 = 0.0, Z0 = 0.0, Z1 = 0.0;
+					uint64_t Seed = 0;
+				};
+				std::vector<Torn> Patches;
+				std::vector<char> Gone((NUs - 1) * (NZs - 1), 0);
+				if (bFine)
+				{
+					auto Tear = [&](double Uat, double Zat, double Ru, double Rz, uint64_t Seed) {
+						Torn Tn;
+						Tn.Seed = Seed;
+						Tn.U = Uat;
+						Tn.Z = Zat;
+						Tn.Ru = Ru;
+						Tn.Rz = Rz;
+						const int NCn = 6 + static_cast<int>(Hash(Tn.Seed, 77) % 3);
+						std::vector<std::pair<double, double>> Cn;
+						for (int E = 0; E < NCn; ++E)
+						{
+							const uint64_t He = Hash(Tn.Seed, static_cast<uint64_t>(E));
+							const double Th = 2.0 * Pi * (E + 0.6 * (Unit(Hash(He, 1)) - 0.5)) / NCn, Rr = 0.55 + 0.6 * Unit(Hash(He, 2));
+							Cn.push_back({ Rr * std::cos(Th), Rr * std::sin(Th) });
+						}
+						std::vector<std::pair<double, std::pair<double, double>>> Round;
+						auto Put = [&](double X, double Y) {
+							const double Uq = std::clamp(Tn.U + Ru * X, -Fc.Half + 0.05, Fc.Half - 0.05), Zq = std::clamp(Tn.Z + Rz * Y, 0.06, P.Sh - 0.07);
+							Round.push_back({ std::atan2((Zq - Tn.Z) / Rz, (Uq - Tn.U) / Ru), { Uq, Zq } });
+						};
+						for (int E = 0; E < NCn; ++E)
+						{
+							const auto [Xa, Ya] = Cn[static_cast<size_t>(E)];
+							const auto [Xb, Yb] = Cn[static_cast<size_t>((E + 1) % NCn)];
+							const double Jg = 1.0 + 0.16 * (Unit(Hash(Tn.Seed ^ 0xB3, static_cast<uint64_t>(E))) - 0.5), Sl = 0.35 + 0.3 * Unit(Hash(Tn.Seed ^ 0xB4, static_cast<uint64_t>(E)));
+							Put(Xa, Ya);
+							Put((Xa + (Xb - Xa) * Sl) * Jg, (Ya + (Yb - Ya) * Sl) * Jg);
+						}
+						std::sort(Round.begin(), Round.end());
+						Tn.U0 = Tn.Z0 = 1e9;
+						Tn.U1 = Tn.Z1 = -1e9;
+						for (const auto& Q : Round)
+						{
+							if (!Tn.Rim.empty() && std::fabs(Q.second.first - Tn.Rim.back().first) + std::fabs(Q.second.second - Tn.Rim.back().second) < 0.008) continue;
+							Tn.Rim.push_back(Q.second);
+							Tn.U0 = std::min(Tn.U0, Q.second.first);
+							Tn.U1 = std::max(Tn.U1, Q.second.first);
+							Tn.Z0 = std::min(Tn.Z0, Q.second.second);
+							Tn.Z1 = std::max(Tn.Z1, Q.second.second);
+						}
+						if (Tn.Rim.size() < 5 || Tn.U1 - Tn.U0 < 0.08 || Tn.Z1 - Tn.Z0 < 0.06) return false;
+						// (the grid lines that box it, a finger clear of it)
+						Tn.Ia = 0;
+						Tn.Ib = NUs - 1;
+						Tn.Ja = 0;
+						Tn.Jb = NZs - 1;
+						while (Tn.Ia + 1 < NUs && Us[Tn.Ia + 1] <= Tn.U0 - 0.012) ++Tn.Ia;
+						while (Tn.Ib > 0 && Us[Tn.Ib - 1] >= Tn.U1 + 0.012) --Tn.Ib;
+						while (Tn.Ja + 1 < NZs && Zs[Tn.Ja + 1] <= Tn.Z0 - 0.012) ++Tn.Ja;
+						while (Tn.Jb > 0 && Zs[Tn.Jb - 1] >= Tn.Z1 + 0.012) --Tn.Jb;
+						if (Tn.Ib <= Tn.Ia || Tn.Jb <= Tn.Ja) return false;
+						if (bMouth && Us[Tn.Ia] < Mo.Hw + 0.02 && Us[Tn.Ib] > -Mo.Hw - 0.02 && Zs[Tn.Jb] > Mo.Z0 - 0.1) return false;
+						if (bMouth && Us[Tn.Ia] < Mo.Lw + 0.03 && Us[Tn.Ib] > -Mo.Lw - 0.03 && Zs[Tn.Ja] < Mo.Lz1 + 0.03) return false;
+						bool bFree = true;
+						for (size_t I = Tn.Ia > 0 ? Tn.Ia - 1 : 0; I < std::min(NUs - 1, Tn.Ib + 1) && bFree; ++I)
+							for (size_t J = Tn.Ja > 0 ? Tn.Ja - 1 : 0; J < std::min(NZs - 1, Tn.Jb + 1); ++J)
+								if (Gone[I * (NZs - 1) + J])
+								{
+									bFree = false;
+									break;
+								}
+						if (!bFree) return false;
+						for (size_t I = Tn.Ia; I < Tn.Ib; ++I)
+							for (size_t J = Tn.Ja; J < Tn.Jb; ++J) Gone[I * (NZs - 1) + J] = 1;
+						Patches.push_back(Tn);
+						return true;
+					};
+					// (more of them low down; one in three near a corner, where the plaster comes off first)
+					Rng Rp(Hash(P.S.Key ^ 0xB0E4, static_cast<uint64_t>(F)));
+					const int NP = 3 + static_cast<int>(4.0 * Rp.Next());
+					for (int K = 0; K < NP; ++K)
+					{
+						const double Lo = Rp.Next(), Ur = Rp.Range(-Fc.Half + 0.2, Fc.Half - 0.2), Ru = Rp.Range(0.13, 0.32), Rz = Rp.Range(0.11, 0.26), Uc = Rp.Next();
+						Tear(Uc < 0.33 ? (Ur < 0.0 ? -1.0 : 1.0) * (Fc.Half - std::max(0.4 * Ru, 0.12)) : Ur, 0.48 + (P.Sh - 0.8) * std::pow(Lo, 1.4), Ru, Rz, Hash(P.S.Key ^ 0xB0E5, static_cast<uint64_t>(F * 16 + K)));
+					}
+					// (and beside the mouth, on the side the oven fork does not lean, where the heat cracked it: a narrow one)
+					if (bMouth)
+					{
+						const uint64_t Sm = Hash(P.S.Key ^ 0xB0E5, 0xA0);
+						const double In = Mo.Hw + 0.26, Out = Fc.Half - 0.05;
+						if (Out - In > 0.16) Tear((F == 1 ? 1.0 : -1.0) * 0.5 * (In + Out), 0.8 + 0.45 * Unit(Sm), 0.5 * (Out - In) / 1.15 + 0.02, 0.17 + 0.09 * Unit(Hash(Sm, 1)), Sm);
+					}
+				}
 				std::vector<uint32_t> Id(NUs * NZs);
 				for (size_t I = 0; I < NUs; ++I)
 					for (size_t J = 0; J < NZs; ++J) Id[I * NZs + J] = B.Vert(At(Us[I], Zs[J]), Fc.N, Colr(Us[I], Zs[J]));
@@ -9491,6 +9769,7 @@ namespace LandHouse
 						const double Um = 0.5 * (Us[I] + Us[I + 1]), Zm = 0.5 * (Zs[J] + Zs[J + 1]);
 						if (bMouth && std::fabs(Um) < Mo.Hw && Zm > Mo.Z0 && Zm < Mo.Z1 + Mo.Hw) continue;
 						if (bMouth && std::fabs(Um) < Mo.Lw && Zm > Mo.Lz0 && Zm < Mo.Lz1) continue;
+						if (Gone[I * (NZs - 1) + J]) continue;
 						B.Tri(Id[I * NZs + J], Id[(I + 1) * NZs + J], Id[(I + 1) * NZs + J + 1], Fc.N);
 						B.Tri(Id[I * NZs + J], Id[(I + 1) * NZs + J + 1], Id[I * NZs + J + 1], Fc.N);
 					}
@@ -9548,19 +9827,82 @@ namespace LandHouse
 					const Col Ld = Mixed(P.Wash, P.Soot, 0.55);
 					B.Box(Fc.O + Fc.N * 0.05 + V3{ 0.0, 0.0, Mo.Z0 - 0.04 }, Fc.T * (Mo.Hw + 0.12), Fc.N * 0.05, V3{ 0.0, 0.0, 0.04 }, Ld, 0);
 				}
-				if (!bFine) return;
-				// (the plaster come away from the bricks in patches: more low down and at the corners)
-				Rng Rp(Hash(P.S.Key ^ 0xB0E4, static_cast<uint64_t>(F)));
-				const int NP = 3 + static_cast<int>(4.0 * Rp.Next());
-				for (int K = 0; K < NP; ++K)
+				// (each torn patch: the plaster from the grid's box in to its outline; its broken edge down to the bricks; the
+				// mortar behind them and the bricks themselves, sooted, darker up under the plaster's edge)
+				const double Dp = 0.016, Ch = 0.077, Bl = 0.262;
+				for (const Torn& Tn : Patches)
 				{
-					// (one in three at a corner, where the plaster comes off first)
-					const double Lo = Rp.Next(), Ur = Rp.Range(-Fc.Half + 0.15, Fc.Half - 0.15), Ru = Rp.Range(0.12, 0.3), Rz = Rp.Range(0.1, 0.24), Uc = Rp.Next();
-					const double U = Uc < 0.33 ? (Ur < 0.0 ? -1.0 : 1.0) * (Fc.Half - 0.4 * Ru) : Ur;
-					const double Z = 0.2 + (P.Sh - 0.4) * Lo * Lo;
-					if (bMouth && std::fabs(U) < Mo.Hw + Ru + 0.05 && Z > Mo.Z0 - Rz - 0.05) continue;
-					if (bMouth && std::fabs(U) < Mo.Lw + Ru + 0.05 && Z < Mo.Lz1 + Rz + 0.05) continue;
-					Bared(B, P, Fc, U, Z, Ru, Rz, Hash(P.S.Key ^ 0xB0E5, static_cast<uint64_t>(F * 16 + K)));
+					auto Ang = [&](double U, double Z) { return std::atan2((Z - Tn.Z) / Tn.Rz, (U - Tn.U) / Tn.Ru); };
+					std::vector<std::pair<double, std::pair<double, double>>> Box;
+					for (size_t I = Tn.Ia; I < Tn.Ib; ++I)
+					{
+						Box.push_back({ Ang(Us[I], Zs[Tn.Ja]), { Us[I], Zs[Tn.Ja] } });
+						Box.push_back({ Ang(Us[I + 1], Zs[Tn.Jb]), { Us[I + 1], Zs[Tn.Jb] } });
+					}
+					for (size_t J = Tn.Ja; J < Tn.Jb; ++J)
+					{
+						Box.push_back({ Ang(Us[Tn.Ib], Zs[J]), { Us[Tn.Ib], Zs[J] } });
+						Box.push_back({ Ang(Us[Tn.Ia], Zs[J + 1]), { Us[Tn.Ia], Zs[J + 1] } });
+					}
+					std::sort(Box.begin(), Box.end());
+					const size_t No = Box.size(), Ni = Tn.Rim.size();
+					std::vector<uint32_t> Io, Ii;
+					std::vector<double> Ao, Ai;
+					for (const auto& Q : Box)
+					{
+						Io.push_back(B.Vert(At(Q.second.first, Q.second.second), Fc.N, Colr(Q.second.first, Q.second.second)));
+						Ao.push_back(Q.first);
+					}
+					for (const auto& Q : Tn.Rim)
+					{
+						Ii.push_back(B.Vert(At(Q.first, Q.second), Fc.N, Colr(Q.first, Q.second)));
+						Ai.push_back(Ang(Q.first, Q.second));
+					}
+					Ao.push_back(Ao.front() + 2.0 * Pi);
+					Ai.push_back(Ai.front() + 2.0 * Pi);
+					for (size_t I = 0, J = 0; I < No || J < Ni;)
+					{
+						if (J >= Ni || (I < No && Ao[I + 1] <= Ai[J + 1]))
+						{
+							B.Tri(Io[I], Io[(I + 1) % No], Ii[J % Ni], Fc.N);
+							++I;
+						}
+						else
+						{
+							B.Tri(Ii[J], Ii[(J + 1) % Ni], Io[I % No], Fc.N);
+							++J;
+						}
+					}
+					// (the plaster's broken edge: its thickness, lime-grey at the face, dark down in the shadow by the bricks)
+					for (size_t K = 0; K < Ni; ++K)
+					{
+						const auto [Ua, Za] = Tn.Rim[K];
+						const auto [Ub, Zb] = Tn.Rim[(K + 1) % Ni];
+						const V3 In = Norm(Fc.T * (Tn.U - 0.5 * (Ua + Ub)) + V3{ 0.0, 0.0, Tn.Z - 0.5 * (Za + Zb) });
+						const Col Ca = Mixed(Scaled(Colr(Ua, Za), 0.8), P.Mortar, 0.35), Cb = Mixed(Scaled(Colr(Ub, Zb), 0.8), P.Mortar, 0.35), Dk = Mixed(P.Mortar, P.Soot, 0.7);
+						B.Quad(At(Ua, Za), At(Ub, Zb), At(Ub, Zb) - Fc.N * Dp, At(Ua, Za) - Fc.N * Dp, Ca, Cb, Dk, Dk, In);
+					}
+					// (the mortar behind, then the bricks: courses 77 mm, each brick 262 mm, a half brick's step course to course)
+					const double Ua = Tn.U0 - 0.01, Ub = Tn.U1 + 0.01, Za = Tn.Z0 - 0.01, Zb = Tn.Z1 + 0.01;
+					const Col Mt = Mixed(P.Mortar, P.Soot, 0.7);
+					B.Quad1(At(Ua, Za) - Fc.N * Dp, At(Ub, Za) - Fc.N * Dp, At(Ub, Zb) - Fc.N * Dp, At(Ua, Zb) - Fc.N * Dp, Mt, Fc.N);
+					for (int Rr = static_cast<int>(std::floor(Za / Ch)); Rr <= static_cast<int>(std::floor(Zb / Ch)); ++Rr)
+					{
+						const double Sh = (Rr % 2 == 0) ? 0.0 : 0.5 * Bl;
+						const double B0 = std::max(Za, Rr * Ch + 0.006), B1 = std::min(Zb, (Rr + 1) * Ch - 0.006);
+						if (B1 - B0 < 0.012) continue;
+						for (int Cc = static_cast<int>(std::floor((Ua - Sh) / Bl)); Cc <= static_cast<int>(std::floor((Ub - Sh) / Bl)); ++Cc)
+						{
+							const double A0 = std::max(Ua, Cc * Bl + Sh + 0.006), A1 = std::min(Ub, (Cc + 1) * Bl + Sh - 0.006);
+							if (A1 - A0 < 0.012) continue;
+							const uint64_t Kb = static_cast<uint64_t>((Rr + 64) * 128 + Cc + 64);
+							const double Tone = 0.78 + 0.3 * Unit(Hash(Tn.Seed ^ 0xB1, Kb)), Sink = Dp - 0.004 - 0.003 * Unit(Hash(Tn.Seed ^ 0xB5, Kb));
+							// (sooted: more under the patch's top, where the smoke rolled up behind the plaster's edge)
+							const double Sk = 0.58 + 0.25 * Unit(Hash(Tn.Seed ^ 0xB2, Kb)) + 0.2 * Smooth(Tn.Z, Tn.Z1, B1);
+							const Col Bc = Mixed(Mixed(Scaled(P.Brick, Tone), Rgb(92, 84, 78), 0.25), P.Soot, Clamp01(Sk));
+							B.Quad(At(A0, B0) - Fc.N * Sink, At(A1, B0) - Fc.N * Sink, At(A1, B1) - Fc.N * Sink, At(A0, B1) - Fc.N * Sink, Bc, Bc, Scaled(Bc, 0.82), Scaled(Bc, 0.82), Fc.N);
+						}
+					}
 				}
 			}
 			/** The stove's top, the sleeping ledge: plaster under ash and fallen clay. */
@@ -9608,15 +9950,18 @@ namespace LandHouse
 				const double Ch = 0.077, Bl = 0.262, Fw = 0.07;
 				const int NC = static_cast<int>(std::floor((P.Ct - P.Cz0) / Ch)), NT = std::min(4, NC), NCore = NC - NT;
 				const double Zc = P.Cz0 + NCore * Ch;
-				// (a brick: its red dulled by the fire, sooted blacker toward the top and in streaks, the lime wash it had
-				// left on it in greyed patches)
+				// (a brick: its red dulled by the fire and sooted: black toward its top, where the smoke poured out; black
+				// over the stretch that stood in the burning roof, most on the face to the room's middle; the soot run down
+				// it from both in narrow streaks; the lime wash it had left on it in a few greyed patches low down)
+				const int Fr = P.Cx > 0.0 ? 2 : 0;
 				auto BrickCol = [&](int F, double U, double Z, uint64_t K) {
 					const double Tn = 0.78 + 0.3 * Unit(Hash(P.S.Key ^ 0xB0B1, K));
 					Col C = Mixed(Scaled(P.Brick, Tn), Rgb(92, 84, 78), 0.25);
-					const double Up_ = Smooth(P.Ct - 1.4, P.Ct, Z), Streak = Noise01(U / 0.1 + 5.0 * F, Z / 0.9, P.S.Key ^ 0xB0B2);
-					C = Mixed(C, P.Soot, Clamp01(0.22 + 0.5 * Up_ + 0.3 * Smooth(0.5, 0.85, Streak) + 0.2 * Unit(Hash(P.S.Key ^ 0xB0B3, K))));
+					const double Up_ = Smooth(P.Ct - 1.9, P.Ct - 0.15, Z), Roof = (F == Fr ? 1.0 : 0.6) * Smooth(P.Cz0 + 1.7, P.Cz0 + 0.3, Z);
+					const double Streak = Smooth(0.42, 0.8, Noise01(U / 0.07 + 5.0 * F, Z / 1.7, P.S.Key ^ 0xB0B2));
+					C = Mixed(C, P.Soot, Clamp01(0.3 + 0.55 * Up_ + 0.38 * Roof + 0.4 * Streak * (0.45 + 0.55 * std::max(Up_, Roof) + (F == Fr ? 0.35 : 0.0)) + 0.15 * Unit(Hash(P.S.Key ^ 0xB0B3, K))));
 					const double Lime = Noise01(U / 0.35 + 2.0 * F, Z / 0.5, P.S.Key ^ 0xB0B5);
-					return Mixed(C, Mixed(P.Wash, P.Soot, 0.5), 0.5 * Smooth(0.7, 0.76, Lime) * (1.0 - 0.7 * Up_));
+					return Mixed(C, Mixed(P.Wash, P.Soot, 0.6), 0.32 * Smooth(0.72, 0.78, Lime) * (1.0 - Up_) * (1.0 - Roof));
 				};
 				for (int F = 0; F < 4; ++F)
 				{
@@ -9646,7 +9991,13 @@ namespace LandHouse
 						}
 						continue;
 					}
-					B.Quad1(ChimAt(P, F, -P.Cw, P.Cz0, 0.0), ChimAt(P, F, P.Cw, P.Cz0, 0.0), ChimAt(P, F, P.Cw, Zc, 0.0), ChimAt(P, F, -P.Cw, Zc, 0.0), Mixed(P.Mortar, P.Soot, 0.45), N);
+					// (the joints: sooted as the bricks are, blacker up it and where the roof burnt)
+					for (int K = 0; K < 6; ++K)
+					{
+						const double Za = P.Cz0 + (Zc - P.Cz0) * K / 6.0, Zb = P.Cz0 + (Zc - P.Cz0) * (K + 1) / 6.0;
+						auto Joint = [&](double Z) { return Mixed(P.Mortar, P.Soot, Clamp01(0.55 + 0.35 * Smooth(P.Ct - 1.9, P.Ct - 0.15, Z) + 0.3 * Smooth(P.Cz0 + 1.7, P.Cz0 + 0.3, Z))); };
+						B.Quad(ChimAt(P, F, -P.Cw, Za, 0.0), ChimAt(P, F, P.Cw, Za, 0.0), ChimAt(P, F, P.Cw, Zb, 0.0), ChimAt(P, F, -P.Cw, Zb, 0.0), Joint(Za), Joint(Za), Joint(Zb), Joint(Zb), N);
+					}
 					for (int Rr = 0; Rr < NCore; ++Rr)
 					{
 						const double Zb = P.Cz0 + Rr * Ch, Sh = ((Rr + F) % 2 == 0) ? 0.0 : 0.5 * Bl;
@@ -9663,7 +10014,7 @@ namespace LandHouse
 						}
 					}
 				}
-				const Col Tc = Mixed(P.Mortar, P.Soot, 0.6);
+				const Col Tc = Mixed(P.Mortar, P.Soot, 0.85);
 				const double Zt = bFine ? Zc : P.Ct;
 				const V3 C0{ P.Cx + (Zt - P.Sh) * P.Lean, P.Cy, Zt };
 				const V3 T0 = ChimAt(P, 3, -P.Cw, Zt, 0.0), T1 = ChimAt(P, 3, P.Cw, Zt, 0.0), T2 = ChimAt(P, 1, -P.Cw, Zt, 0.0), T3 = ChimAt(P, 1, P.Cw, Zt, 0.0);
@@ -9754,7 +10105,11 @@ namespace LandHouse
 				for (int F = 0; F < 4; ++F) StoveSide(B, P, F, 0.6, false);
 				StoveTop(B, P, 0.8);
 				Chimney(B, P, false);
-				if (P.bClay) ClayWalls(B, P, false);
+				if (P.bClay)
+				{
+					ClayWalls(B, P, false);
+					ClayRoof(B, P, false);
+				}
 				else Logs(B, P, false);
 				Fallen(B, P, false);
 			}
@@ -9762,14 +10117,31 @@ namespace LandHouse
 			{
 				// (the colours as the middle level's read from afar: its ash bed, its stove, its chimney, its walls' remains)
 				const Col Ash = Mixed(Mixed(Mixed(Rgb(54, 51, 48), Rgb(92, 89, 84), 0.5), Rgb(118, 114, 108), 0.18), Rgb(104, 78, 58), P.bClay ? 0.2 : 0.1);
-				B.Quad1(V3{ -P.Hx, -P.Hy, 0.06 }, V3{ P.Hx, -P.Hy, 0.06 }, V3{ P.Hx, P.Hy, 0.06 }, V3{ -P.Hx, P.Hy, 0.06 }, Ash, Up);
+				const double Ins = P.bClay ? P.Wt + 0.2 : 0.75;
+				B.Quad1(V3{ -P.Hx + Ins, -P.Hy + Ins, 0.06 }, V3{ P.Hx - Ins, -P.Hy + Ins, 0.06 }, V3{ P.Hx - Ins, P.Hy - Ins, 0.06 }, V3{ -P.Hx + Ins, P.Hy - Ins, 0.06 }, Ash, Up);
 				const Col Stove = Mixed(P.Wash, P.Soot, 0.5);
 				B.Box(V3{ P.Sx, P.Sy, 0.5 * P.Sh }, V3{ P.Sa, 0.0, 0.0 }, V3{ 0.0, P.Sb, 0.0 }, V3{ 0.0, 0.0, 0.5 * P.Sh }, Stove, 16);
 				const double Lx = (P.Ct - P.Sh) * P.Lean * 0.5;
-				B.Box(V3{ P.Cx + Lx, P.Cy, 0.5 * (P.Sh + P.Ct) }, V3{ P.Cw, 0.0, 0.0 }, V3{ 0.0, P.Cw, 0.0 }, V3{ 0.0, 0.0, 0.5 * (P.Ct - P.Sh) }, Mixed(Mixed(P.Brick, Rgb(92, 84, 78), 0.25), P.Soot, 0.5), 16);
-				// (the walls' remains: an izba's a low line of charred logs; a khata's clay walls standing, washed outside)
-				const double Lx_ = P.Hx - P.Wt, Ly = P.Hy - P.Wt, Hh = P.bClay ? 0.85 : 0.13, Tw = P.bClay ? 0.2 : 0.13;
-				const Col Wc = P.bClay ? Mixed(P.Wash, P.Soot, 0.3) : Mixed(P.Char, P.Ash, 0.25);
+				B.Box(V3{ P.Cx + Lx, P.Cy, 0.5 * (P.Sh + P.Ct) }, V3{ P.Cw, 0.0, 0.0 }, V3{ 0.0, P.Cw, 0.0 }, V3{ 0.0, 0.0, 0.5 * (P.Ct - P.Sh) }, Mixed(Mixed(P.Brick, Rgb(92, 84, 78), 0.25), P.Soot, 0.8), 16);
+				// (the walls' remains: an izba's a few broken dark lengths of its sill logs, no frame; a khata's clay walls
+				// standing, washed outside)
+				const double Lx_ = P.Hx - P.Wt, Ly = P.Hy - P.Wt;
+				if (!P.bClay)
+				{
+					const Col Wc = Mixed(P.Char, P.Ash, 0.2);
+					for (int W = 0; W < 4; ++W)
+						for (int K = 0; K < 2; ++K)
+						{
+							const uint64_t H = Hash(P.S.Key ^ 0xB0FD, static_cast<uint64_t>(W * 4 + K));
+							if (Unit(Hash(H, 3)) < 0.3) continue;
+							const bool bAlongX = W < 2;
+							const double Sg = W % 2 == 0 ? 1.0 : -1.0, Half = bAlongX ? Lx_ : Ly, Len = 0.45 + 0.8 * Unit(Hash(H, 1)), U = (K == 0 ? -1.0 : 1.0) * Half * (0.22 + 0.5 * Unit(Hash(H, 2)));
+							B.Box(bAlongX ? V3{ U, Sg * Ly, 0.36 } : V3{ Sg * Lx_, U, 0.36 }, bAlongX ? V3{ Len, 0.0, 0.0 } : V3{ 0.0, Len, 0.0 }, bAlongX ? V3{ 0.0, 0.13, 0.0 } : V3{ 0.13, 0.0, 0.0 }, V3{ 0.0, 0.0, 0.13 }, Wc, 16);
+						}
+					return;
+				}
+				const double Hh = 0.85, Tw = 0.2;
+				const Col Wc = Mixed(Mixed(P.Wash, Rgb(150, 146, 138), 0.3), P.Soot, 0.35);
 				B.Box(V3{ 0.0, Ly, Hh }, V3{ Lx_ + Tw, 0.0, 0.0 }, V3{ 0.0, Tw, 0.0 }, V3{ 0.0, 0.0, Hh }, Wc, 16);
 				B.Box(V3{ 0.0, -Ly, Hh }, V3{ Lx_ + Tw, 0.0, 0.0 }, V3{ 0.0, Tw, 0.0 }, V3{ 0.0, 0.0, Hh }, Wc, 16);
 				B.Box(V3{ Lx_, 0.0, Hh }, V3{ Tw, 0.0, 0.0 }, V3{ 0.0, Ly - Tw, 0.0 }, V3{ 0.0, 0.0, Hh }, Wc, 16);
@@ -9786,7 +10158,12 @@ namespace LandHouse
 					for (int F = 0; F < 4; ++F) StoveSide(B, P, F, 0.1, true);
 					StoveTop(B, P, 0.15);
 					Chimney(B, P, true);
-					if (P.bClay) ClayWalls(B, P, true);
+					if (P.bClay)
+					{
+						ClayWalls(B, P, true);
+						Flakes(B, P);
+						ClayRoof(B, P, true);
+					}
 					else Logs(B, P, true);
 					Fallen(B, P, true);
 					Leavings(B, P);
@@ -9799,9 +10176,9 @@ namespace LandHouse
 					Pen B(Out.Far);
 					Far(B, P);
 				}
-				SnowOver(Out.Near, P.Snow);
-				SnowOver(Out.Mid, P.Snow);
-				SnowOver(Out.Far, P.Snow);
+				SnowOver(Out.Near, P, true);
+				SnowOver(Out.Mid, P, true);
+				SnowOver(Out.Far, P, false);
 			}
 		}
 	}
@@ -9823,7 +10200,7 @@ namespace LandHouse
 		Out.clear();
 		if (S.Kind == 9)
 		{
-			// (the burnt-out house: nothing to see through; for the pictures, its stove's mouth, 15, and its chimney, 16)
+			// (the burnt-out house: nothing to see through; for the pictures, its stove's mouth, 15, its chimney, 16, and its stove's side to the room, 17)
 			const Brn::Plan Q = Brn::Make(S);
 			const Brn::Mouths Mo;
 			Hole H;
@@ -9841,6 +10218,15 @@ namespace LandHouse
 			H.Z1 = Q.Ct;
 			H.Wide = 2.0 * Q.Cw;
 			H.What = 16;
+			Out.push_back(H);
+			// (17: the stove's side to the room's middle)
+			H.Face = Q.Sx > 0.0 ? 3 : 1;
+			H.X = Q.Sx + (Q.Sx > 0.0 ? -Q.Sa : Q.Sa);
+			H.Y = Q.Sy;
+			H.Z0 = 0.0;
+			H.Z1 = Q.Sh;
+			H.Wide = 2.0 * Q.Sb;
+			H.What = 17;
 			Out.push_back(H);
 			return;
 		}

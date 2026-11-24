@@ -97,7 +97,7 @@ namespace LandHouse
 	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window;
  * a church's, its nave's only: 9 a round-headed window, 10 its door; a village house's shop: 12 its front; and on a
  * village house's render, 13 where it has come away to the rubble, 14 a strike in it; a burnt-out house's, 15 its stove's
- * mouth, 16 its chimney from where its plaster ends to its top). */
+ * mouth, 16 its chimney from where its plaster ends to its top, 17 its stove's side to the room). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x

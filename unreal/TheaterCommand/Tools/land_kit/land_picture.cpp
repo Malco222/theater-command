@@ -97,6 +97,7 @@ namespace
 			double X0, Y0, X1, Y1;
 		};
 		std::vector<Box> Feet; // the ground footprints of bodies that touch the ground (the earth darkens under them)
+		double GroundSnow = 0.0; // (a burnt-out house's winter panels: the snow lying on the ground round it, 0 to 1)
 		V3 Lo = V3(1e9, 1e9, 1e9), Hi = V3(-1e9, -1e9, -1e9);
 	};
 
@@ -554,7 +555,7 @@ namespace
 				{
 					const double Patch = Noise2(Ground.X * 0.35, Ground.Y * 0.35) * 0.6 + Noise2(Ground.X * 1.3, Ground.Y * 1.3) * 0.4;
 					const double Grain = 0.9 + 0.2 * Noise2(Ground.X * 9.0, Ground.Y * 9.0);
-					const Colour Soil = Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain;
+					const Colour Soil = Mix(Mix(Earth, EarthDark, Smooth(0.25, 0.85, Patch)) * Grain, FromPicture(240, 242, 246) * (0.97 + 0.03 * Grain), S.GroundSnow);
 					double Under = 1.0;
 					for (const Scene::Box& B : S.Feet)
 					{
@@ -974,14 +975,16 @@ int main(int argc, char** argv)
 			{ "khata_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: middle level", 8, 9.18, 6.46, 1 },
 			{ "khata_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: far level", 8, 9.18, 6.46, 1 },
 			// (the burnt-out house, Kind 9: Roof 0 an izba burnt down on the izba's footprint, 1 a khata roofless on the khata's;
-			// aim 22 its stove's mouth, 23 its chimney's broken top, 24 its front corner at the ground)
+			// aim 22 its stove's mouth, 23 its chimney's broken top, 24 its front corner at the ground, 25 its stove's side, 26 a khata's wall top)
 			{ "burnt_logs", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "burnt out: an izba's logs, its stove standing", 9, 7.5, 7.2, 1 },
 			{ "burnt_clay", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "a khata burnt out: its clay walls, roofless", 9, 9.18, 6.46, 1 },
 			{ "burnt_other", 0, 0, 0, 4, -40.0, 16.0, 62.0, -1, 0.0, "another: the stove the other way", 9, 7.5, 7.2, 1 },
 			{ "burnt_stove", 0, 0, 0, 7, 20.0, 8.0, 62.0, 22, 3.2, "close: the stove's mouth, its plaster fallen", 9, 7.5, 7.2, 1 },
+			{ "burnt_patch", 0, 0, 0, 7, 22.0, 6.0, 62.0, 25, 3.3, "close: the plaster torn from the stove's bricks", 9, 7.5, 7.2, 1 },
 			{ "burnt_chimney", 0, 0, 0, 7, 40.0, 10.0, 62.0, 23, 3.0, "close: the chimney's broken top", 9, 7.5, 7.2, 1 },
 			{ "burnt_corner", 0, 0, 0, 7, 48.0, 18.0, 62.0, 24, 3.4, "close: charred logs in the ashes", 9, 7.5, 7.2, 1 },
-			{ "burnt_clay_corner", 0, 0, 1, 7, 48.0, 14.0, 62.0, 24, 3.8, "close: the clay wall's burnt top", 9, 9.18, 6.46, 1 },
+			{ "burnt_clay_corner", 0, 0, 1, 7, 48.0, 14.0, 62.0, 24, 3.8, "close: the clay wall's corner at the ground", 9, 9.18, 6.46, 1 },
+			{ "burnt_clay_top", 0, 0, 1, 7, 24.0, 18.0, 62.0, 26, 6.5, "close: the clay wall's broken top, its soot, a rafter", 9, 9.18, 6.46, 1 },
 			{ "burnt_snow", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "in winter", 9, 7.5, 7.2, 1, 1.0 },
 			{ "burnt_clay_snow", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "the khata's, in winter", 9, 9.18, 6.46, 1, 1.0 },
 			{ "burnt_mid", 0, 1, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 9, 7.5, 7.2, 1 },
@@ -1073,13 +1076,22 @@ int main(int argc, char** argv)
 				// (the khata's: its eaves' front corner over the +x end; a hip by the ridge's end)
 				if (K.Aim == 20) At = V3(0.5 * K.Long - 0.7, 0.5 * K.Deep - 0.7, 0.15 + LandHouse::EavesOf(HouseSpec(P)) - 0.3);
 				if (K.Aim == 21) At = V3(0.5 * K.Long - 2.2, 0.0, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.5);
-				// (the burnt-out house's: its stove's mouth, its chimney's top, its front corner at the ground)
+				// (the burnt-out house's: its stove's mouth, its chimney's top, its front corner at the ground; 25 its stove's
+				// side to the room, looked at from a little off its square)
+				double SideBearing = -1.0;
 				for (const LandHouse::Hole& H : Holes)
 				{
-					if (K.Aim == 22 && H.What == 15) At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
-					if (K.Aim == 23 && H.What == 16) At = V3(H.X, H.Y, 0.15 + H.Z1 - 0.35);
+					if (K.Aim == 22 && H.What == 15) At = V3(H.X, H.Y, 0.5 * (H.Z0 + H.Z1));
+					if (K.Aim == 23 && H.What == 16) At = V3(H.X, H.Y, H.Z1 - 0.35);
+					if (K.Aim == 25 && H.What == 17)
+					{
+						At = V3(H.X, H.Y, 0.5 * (H.Z0 + H.Z1));
+						SideBearing = H.Face == 1 ? 90.0 + K.Bearing : 270.0 - K.Bearing;
+					}
 				}
-				if (K.Aim == 24) At = V3(0.5 * K.Long - 0.6, 0.5 * K.Deep - 0.6, 0.15 + 0.35);
+				if (K.Aim == 24) At = V3(0.5 * K.Long - 0.6, 0.5 * K.Deep - 0.6, 0.35);
+				// (26: a khata's front wall's broken top, along from its corner)
+				if (K.Aim == 26) At = V3(0.5 * K.Long - 2.4, 0.5 * K.Deep - 0.3, 1.5);
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
@@ -1097,7 +1109,8 @@ int main(int argc, char** argv)
 				if (K.Aim == 8) At = V3(-11.9, 2.9, 0.15 + 6.4);
 				P.bAim = true;
 				P.AimAt = At;
-				P.AimFrom = V3(std::sin(K.Bearing * Rad) * std::cos(K.Up * Rad), std::cos(K.Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));
+				const double Bearing = SideBearing >= 0.0 ? SideBearing : K.Bearing;
+				P.AimFrom = V3(std::sin(Bearing * Rad) * std::cos(K.Up * Rad), std::cos(Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));
 				P.AimDistance = K.AimDistance;
 			}
 			Panels.push_back(P);
@@ -1194,9 +1207,11 @@ int main(int argc, char** argv)
 			LandHouse::Build(HouseSpec(P), L);
 			const LandField::Mesh& M = P.HouseLevel == 0 ? L.Near : P.HouseLevel == 1 ? L.Mid : L.Far;
 			Scene S;
-			AddHouse(M, 0.15, S);
+			// (a burnt-out house lies in the yard, with no floor to stand over it; in winter the yard's snow round it)
+			AddHouse(M, P.HouseKind == 9 ? 0.0 : 0.15, S);
 			{
 				const LandHouse::Spec Hs = HouseSpec(P);
+				if (Hs.Kind == 9) S.GroundSnow = Smooth(0.03, 0.5, Hs.Snow);
 				S.Feet.push_back({ -0.5 * Hs.Long, -0.5 * Hs.Deep, 0.5 * Hs.Long, 0.5 * Hs.Deep });
 				if (Hs.Kind == 3)
 				{
