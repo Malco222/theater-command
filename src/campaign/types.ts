@@ -893,6 +893,12 @@ export interface Headline {
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
   /**
+   * (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) News that a unit the
+   * player raised or bought has been handed over and is ready for orders: a corps (its id in `unit`), aircraft, or
+   * ships. Display only: no rule reads it.
+   */
+  ready?: 'corps' | 'air' | 'ship';
+  /**
    * A title of its own over a line of news that is no warning ('Britain stands by Canada', 'Britain stays out of
    * Canada's war': ruling 211(b)). An interface heads the news with it.
    */

@@ -73,6 +73,7 @@ struct FTrayCard
 	bool bCanOrder = false;
 	FText Nickname; // empty until the corps has earned one
 	FString Marked; // (release 2, the marked army) an enemy corps that took one of his towns: that town
+	bool bNew = false; // (release 2, new units ready) his corps handed over as this month opened
 	FString NoOrders; // (ruling 176(c)) why it never takes orders, in the rules' sentence
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
@@ -654,11 +655,23 @@ public:
 	bool IsWatchingNear() const { return bWatching && bWatchNear; }
 	/** The heading over the watch's sentence while it is of the moves near him ("MOVES NEAR YOU · GERMANY · 1 OF 3"); empty otherwise. */
 	FString GetWatchHeading() const;
-	/** Whose month the watch is showing, for the flag beside the heading. */
-	const FString& GetWatchNation() const { return WatchNation; }
+	/** Whose month the watch is showing, for the flag beside the heading (his own, under READY FOR ORDERS). */
+	const FString& GetWatchNation() const { return CanShowReady() ? ReadyNation : WatchNation; }
 	/** (round 2, Brian 18:01Z) TAKE ME THERE: the watch ends at the stop on screen, the eye stays on it and his nearest army is put in his hand (G). */
 	void TakeMeThere();
 	bool CanTakeMeThere() const { return bWatching && bWatchNear && bTakeMeThere && TakeRegion != INDEX_NONE; }
+	/**
+	 * (Release 2, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) As his
+	 * month opens, a brass READY FOR ORDERS plate names the units handed over to him; SHOW ME (or G) takes the eye to
+	 * each in turn and puts a new army in his hand. The plate is said once nothing else holds the screen.
+	 */
+	void ShowReady();
+	bool CanShowReady() const { return bReadyNotice && !bWatching && !IsFightingLive() && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
+	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
+	/** Says the READY plate now (the month's end does, once the screen is free; a picture asks for it at once). */
+	void SayReady();
+	/** G: TAKE ME THERE while the watch offers it, else SHOW ME while the READY plate is up. */
+	void PressGo();
 	// ---- (end release 2)
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
@@ -1552,9 +1565,19 @@ private:
 	// arrows of the one up as they grow (from ArrowsSince).
 	bool bEnemyMoves = true;
 	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
+	bool bAlliesThisWatch = true; // (the switch as it stood when the month was ended: the watch's stops and pings keep to it)
 	bool bTakeMeThere = true; // (round 2) the TAKE ME THERE button on each stop (OPTIONS)
 	int32 TakeRegion = INDEX_NONE; // the stop's place: where its worst arrow ends
 	bool bCornerPings = true; // (round 2) the watch's stops pulse on the small map in the corner (OPTIONS)
+	// (Release 2, new units ready; Brian 24 Nov 18:30Z) The option (on unless he turns it off), the units handed over as
+	// this month opened, the next SHOW ME goes to, whether the plate is still to be said, and the notice that said it.
+	bool bReadyNotice = true;
+	TArray<FReadyUnit> ReadyUnits;
+	int32 ReadyNext = 0;
+	bool bReadyDue = false;
+	int32 ReadySaid = -1;
+	FString ReadyNation;
+	FString ReadyHeading;
 	TArray<int32> NearStopPlaces; // each stop's place, in the watch's order (INDEX_NONE where it has nothing to draw), set as the month ends
 	TArray<FColor> NearStopInks;
 	bool bWatchNear = false;

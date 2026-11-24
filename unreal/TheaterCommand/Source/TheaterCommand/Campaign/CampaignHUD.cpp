@@ -6674,7 +6674,8 @@ namespace
 						.Visibility_Lambda([this]()
 						{
 							// (release 2: while the watch near him offers TAKE ME THERE, its button can be pressed; the rest stays out of the pointer's way)
-							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? (Controller->CanTakeMeThere() ? EVisibility::SelfHitTestInvisible : EVisibility::HitTestInvisible) : EVisibility::Collapsed;
+							// (and while the READY plate offers SHOW ME, its button: new units ready)
+							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? (Controller->CanTakeMeThere() || Controller->CanShowReady() ? EVisibility::SelfHitTestInvisible : EVisibility::HitTestInvisible) : EVisibility::Collapsed;
 						})
 						[
 							SNew(SVerticalBox)
@@ -6714,6 +6715,16 @@ namespace
 								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanTakeMeThere() ? EVisibility::Visible : EVisibility::Collapsed; })
 								[
 									MapButton(TEXT("TAKE ME THERE  \u00B7  G"), TEXT("End the watch here: the eye stays on this place and your nearest army is put in your hand."), [this]() { Controller->TakeMeThere(); })
+								]
+							]
+							// ---- (release 2, new units ready; Brian, 24 November 2026 18:30Z) SHOW ME: the eye goes to each new unit
+							// in turn, and a new army is put in his hand.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanShowReady() ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									MapButton(TEXT("SHOW ME  \u00B7  G"), TEXT("Go to each new unit in turn: the eye flies to it, and a new army is put in your hand, ready for its first orders."), [this]() { Controller->ShowReady(); })
 								]
 							]
 							// ---- (end release 2)
@@ -19376,6 +19387,13 @@ namespace
 							SNew(STextBlock).Visibility(Card.Marked.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
 							.Text(FText::FromString(FString::Printf(TEXT("TOOK %s"), *Card.Marked.ToUpper()))).Font(SmallCaps()).ColorAndOpacity(FLinearColor(FColor(226, 64, 44)))
 							.ToolTipText(FText::FromString(FString::Printf(TEXT("Marked: this army took %s from you. It wears a red tag on its flagpole until you beat it: throw back its attack, or drive it off the field."), *Card.Marked)))
+						]
+						// ---- (release 2, new units ready) His corps handed over as this month opened: NEW, in brass.
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Visibility(Card.bNew ? EVisibility::Visible : EVisibility::Collapsed)
+							.Text(FText::FromString(TEXT("NEW"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+							.ToolTipText(FText::FromString(TEXT("New this month: handed over as your month opened, and ready for its first orders. Its flagpole wears a brass NEW tag until the month ends.")))
 						]
 						// ---- (end release 2)
 						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]

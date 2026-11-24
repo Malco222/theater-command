@@ -626,7 +626,7 @@ export function deliver(g: Game, nat: string): void {
       if (i < 0) continue;
       const c = n.cadres!.splice(i, 1)[0];
       reform(g, c, at);
-      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
       continue;
     }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
@@ -635,10 +635,10 @@ export function deliver(g: Game, nat: string): void {
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
-    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
+    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
   }
   const line = airLine(air);
-  if (line) headline(g, 'info', line.text, nat, line.region);
+  if (line) headline(g, 'info', line.text, nat, line.region, { ready: 'air' });
 }
 
 /**

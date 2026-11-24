@@ -158,6 +158,11 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, new units ready) -TheaterR2Ready opens his month with an infantry corps on order at his capital, due next month (for the pictures)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("release 2 new units ready"), OutError))
+	{
+		return false;
+	}
 	// -TheaterR2Supply opens them with the columns and all three supply orders: the lorries moved, wagons, dumps
 	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Supply")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1; globalThis.TC_LORRYSHIFT = 1; globalThis.TC_WAGONS = 1; globalThis.TC_DUMPS = 1;"), TEXT("release 2 supply"), OutError))
 	{
@@ -1859,6 +1864,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
 			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
+			Unit->TryGetBoolField(TEXT("ready"), C.bReady); // (release 2, new units ready) absent unless handed over as his month opened
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
 				double Morale = -1.0, Rest = -1.0;
@@ -2825,6 +2831,32 @@ FMonthResult FCampaignSession::EndMonth()
 		}
 	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	// (Release 2; Brian, 24 November 2026 18:30Z) The units handed over to him as his month opened.
+	const TArray<TSharedPtr<FJsonValue>>* ReadyList = nullptr;
+	if (Object->TryGetArrayField(TEXT("ready"), ReadyList))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ReadyList)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FReadyUnit& Unit = Out.Ready.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("what"), Unit.What);
+			Entry->TryGetStringField(TEXT("text"), Unit.Text);
+			Entry->TryGetStringField(TEXT("name"), Unit.Name);
+			double Number = 0.0;
+			if (Entry->TryGetNumberField(TEXT("region"), Number) && Number >= 0.0)
+			{
+				Unit.Region = FMath::RoundToInt32(Number);
+			}
+			if (Entry->TryGetNumberField(TEXT("corps"), Number) && Number >= 0.0)
+			{
+				Unit.Corps = FMath::RoundToInt32(Number);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Announce = nullptr;
 	if (Object->TryGetArrayField(TEXT("announce"), Announce))
 	{

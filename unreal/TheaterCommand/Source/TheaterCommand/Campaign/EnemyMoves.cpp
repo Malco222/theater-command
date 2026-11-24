@@ -49,7 +49,7 @@ namespace TheaterEnemyMoves
 		const FInk EdgeInk = MovesInk(22, 16, 12, 215);
 		// (his allies' battles near him: a blue arrow where his side attacked, a steel ring round the place)
 		const FInk AllyInk = MovesInk(70, 118, 184);
-		const FInk AllyRingInk = MovesInk(150, 172, 200);
+		const FInk AllyRingInk = MovesInk(175, 195, 225); // (art director, 24 Nov, round 2b: lifted from 150,172,200, which sat on the French grey)
 
 		FInk MovesFaded(FInk Ink, double Share)
 		{
@@ -260,8 +260,59 @@ namespace TheaterEnemyMoves
 		return 1.0 - (1.0 - Share) * (1.0 - Share) * (1.0 - Share); // (fast at first, settling at its end)
 	}
 
-	void Lay(const std::vector<FArrow>& Arrows, double Grow, FDrawing& Out)
+	std::vector<FArrow> Fold(const std::vector<FArrow>& Arrows)
 	{
+		// (how bad an arrow is, for which of two on one road is kept)
+		auto Rank = [](const FArrow& Arrow)
+		{
+			if (Arrow.Kind == EKind::Attack)
+			{
+				return Arrow.bAlly ? 3 : 4;
+			}
+			return Arrow.bAway ? 1 : 2;
+		};
+		auto Foldable = [](const FArrow& Arrow) { return Arrow.bFrom && Arrow.Kind != EKind::Fell; };
+		std::vector<FArrow> Kept;
+		Kept.reserve(Arrows.size());
+		for (const FArrow& Arrow : Arrows)
+		{
+			bool bFolded = false;
+			if (Foldable(Arrow))
+			{
+				for (FArrow& Earlier : Kept)
+				{
+					if (!Foldable(Earlier) || MovesDistance(Earlier.From, Arrow.From) >= 1.0 || MovesDistance(Earlier.To, Arrow.To) >= 1.0)
+					{
+						continue;
+					}
+					const bool bBothMoves = Earlier.Kind == EKind::Move && Arrow.Kind == EKind::Move;
+					const int Corps = bBothMoves ? Earlier.Corps + Arrow.Corps : std::max(Earlier.Corps, Arrow.Corps);
+					const bool bWar = Earlier.bWar || Arrow.bWar;
+					if (Rank(Arrow) > Rank(Earlier))
+					{
+						Earlier = Arrow;
+					}
+					Earlier.Corps = Corps;
+					if (bBothMoves)
+					{
+						Earlier.bWar = bWar;
+					}
+					bFolded = true;
+					break;
+				}
+			}
+			if (!bFolded)
+			{
+				Kept.push_back(Arrow);
+			}
+		}
+		return Kept;
+	}
+
+	void Lay(const std::vector<FArrow>& Given, double Grow, FDrawing& Out)
+	{
+		// (art director, 24 Nov, round 2b: one arrow for each road and direction)
+		const std::vector<FArrow> Arrows = Fold(Given);
 		Out.Clear();
 		const double Share = std::clamp(Grow, 0.0, 1.0);
 		if (Share <= 0.0)
@@ -289,6 +340,19 @@ namespace TheaterEnemyMoves
 		for (size_t K = 0; K < Arrows.size(); ++K)
 		{
 			Bows[K] = HasShaft(K) ? ((Bend++ % 2) == 0 ? 1.0 : -1.0) : 0.0;
+		}
+		// (round 2b: one road the same way is folded into one arrow above; one road both ways keeps both arrows, and as
+		// each bows to its own side of its way, the same sign puts them on either side of the road)
+		for (size_t K = 0; K < Arrows.size(); ++K)
+		{
+			for (size_t J = 0; J < K && Bows[K] != 0.0; ++J)
+			{
+				if (Bows[J] != 0.0 && Arrows[J].Kind != EKind::Fell && Arrows[K].Kind != EKind::Fell && MovesDistance(Arrows[J].From, Arrows[K].To) < 1.0 && MovesDistance(Arrows[J].To, Arrows[K].From) < 1.0)
+				{
+					Bows[K] = Bows[J];
+					break;
+				}
+			}
 		}
 		std::vector<bool> Aside(Arrows.size(), false);
 		for (size_t K = 0; K < Arrows.size(); ++K)

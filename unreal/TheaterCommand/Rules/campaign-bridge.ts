@@ -18,7 +18,7 @@
 //   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], view }
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
-//   TC.endMonth()                       -> { steps, headlines, events, fallen, view }
+//   TC.endMonth()                       -> { steps, headlines, events, fallen, ready, view }
 //   TC.stance([corpsId, ...], posture)  -> view: stand, dig in ('dig') or fall back ('back') when attacked
 //   TC.railReach([corpsId, ...])        -> { regions: [id, ...] } the picked corps could go to by rail
 //   TC.rail([corpsId, ...], regionId)   -> { moved, view }
@@ -74,7 +74,7 @@ import {
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
@@ -481,6 +481,39 @@ function view() {
   }
 }
 
+/**
+ * (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) The player's corps handed
+ * over as this month opened for him (a nation's builds are handed over as its month begins, startPhase; the rules tag
+ * that news 'ready'): new through his month and the others' months that follow it. Read from the month's news, so a
+ * campaign loaded again keeps them.
+ */
+function readyCorps(s: Game): Set<number> {
+  const out = new Set<number>();
+  if (!s.human) return out;
+  const when = s.turn;
+  for (let i = s.headlines.length - 1; i >= 0 && s.headlines[i].turn >= when; i--) {
+    const h = s.headlines[i];
+    if (h.turn === when && h.ready === 'corps' && h.nat === s.human && h.unit !== undefined) out.add(h.unit);
+  }
+  return out;
+}
+
+/**
+ * (Release 2, the same ask.) The units handed over to the player as his new month opened, for the month's end to tell:
+ * what each is, its line of news, where it stands now and, for a corps, which one (one lost since is left out).
+ */
+function readyOf(s: Game, from: number): { what: string; text: string; region: number; corps: number; name: string }[] {
+  if (!s.human) return [];
+  const out: { what: string; text: string; region: number; corps: number; name: string }[] = [];
+  for (const h of s.headlines.slice(from)) {
+    if (!h.ready || h.nat !== s.human) continue;
+    const c = h.ready === 'corps' ? s.corps.find((x) => x.id === h.unit && !x.dead && x.nat === s.human) : undefined;
+    if (h.ready === 'corps' && !c) continue;
+    out.push({ what: h.ready, text: h.text, region: c ? c.reg : h.region ?? -1, corps: c ? c.id : -1, name: c ? c.name : '' });
+  }
+  return out;
+}
+
 function drawView() {
   const s = game();
   const up = humanUp(s);
@@ -494,6 +527,9 @@ function drawView() {
   // (Release 2, the marked army; marked.ts) An enemy corps that took one of his towns, where he knows who it is: the town it took.
   const marks = markedOn(s);
   const markOf = (c: Corps): { mark?: string } => (marks && c.mark && s.human && c.nat !== s.human ? { mark: thePlace(s.regions[c.mark.place]?.name ?? '') } : {});
+  // (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered") His corps handed over as
+  // his month opened, which the table tags NEW for the month they are new in.
+  const fresh = readyCorps(s);
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -683,6 +719,7 @@ function drawView() {
       // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
       wear: wearOf(c), fresh: c.fresh ?? 0,
       ...markOf(c),
+      ...(fresh.has(c.id) ? { ready: true } : {}),
       // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
       // divisions split off now ('' if it can), and the corps it could rejoin here, the first of them.
       ...(c.nat === s.human && breakUpOn(s) ? (() => {
@@ -1944,6 +1981,14 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
       runOthers(g, null);
       arrive(g);
     }
+  }
+  // (Release 2, new units ready; development only) "-TheaterR2Ready" sets TC_READY_DEMO: the player's month opens
+  // with one infantry corps on order at his capital, paid for as usual and due next month, so that the pictures can
+  // catch it handed over.
+  if (human && (globalThis as { TC_READY_DEMO?: unknown }).TC_READY_DEMO && humanUp(g)) {
+    const n = g.nations[human];
+    const b = n && n.capital >= 0 ? orderCorps(g, human, 'inf' as Kind, n.capital) : null;
+    if (b) b.eta = g.turn + 1;
   }
   try { openMonthBook(g); } catch { monthBook = null; }
   return view();
@@ -3528,7 +3573,9 @@ function endMonth() {
   } catch { month = null; }
   lastCard = month;
   try { openMonthBook(s); } catch { monthBook = null; }
-  return { steps, headlines, events, fallen, announce, newsreel, year, month, view: view() };
+  // (Release 2; Brian, 24 November 2026 18:30Z) The units handed over to him this month, for the table to say plainly.
+  const ready = fallen ? [] : readyOf(s, h0);
+  return { steps, headlines, events, fallen, announce, newsreel, year, month, ready, view: view() };
 }
 
 /** The player's standing order for the picked corps on the day the enemy comes. */
