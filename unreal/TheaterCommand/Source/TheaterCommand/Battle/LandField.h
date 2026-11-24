@@ -124,6 +124,9 @@ namespace LandField
 		 * every ground as passed.
 		 */
 		std::string Trial;
+		/** The rivers' water drawn at the rules' own level, sea level less 2 m, as before release 1.5's mend (a deep cut
+		 * through hills); else 2 m under its lowest bank near by ("-TheaterLandOldRiverBed"). */
+		bool bOldRiverBed = false;
 		bool Tried(const std::string& Word) const
 		{
 			if (Trial == "all") return true;

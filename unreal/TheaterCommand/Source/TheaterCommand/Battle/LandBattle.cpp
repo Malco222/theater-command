@@ -1458,6 +1458,13 @@ bool ALandBattle::Open()
 				UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *LandParts::Wide(Lay.Trial));
 			}
 		}
+		// (release 1.5's mend: a river's water drawn 2 m under its banks, not cut down to sea level through hills;
+		// "-TheaterLandOldRiverBed" draws it as before)
+		Lay.bOldRiverBed = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandOldRiverBed"));
+		if (Lay.bOldRiverBed)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: -TheaterLandOldRiverBed: the rivers drawn at the rules' sea level, as before 1.5's mend"));
+		}
 		if (Lay.Steppe.bOn)
 		{
 			// The steppe's cottages, ruins, poles, wattle, sweeps, ricks and birches: the east kit's models
