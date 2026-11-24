@@ -471,7 +471,7 @@ export function traitCardRule(t: Trait, scale: number, units: boolean): string {
   if (!units) return traitRule(t, scale);
   if (UNITS.land.blitzTraits.includes(t.id)) {
     const radios = techById(UNITS.land.radiosRow)?.name ?? 'field radios';
-    return `Not this army's own with Units decide: any army that holds ${radios} with a command of ${UNITS.land.gates.blitz} or more strikes this way. ${traitRule(t, scale)}`;
+    return `Not this army's own: any army that holds ${radios} with a command of ${UNITS.land.gates.blitz} or more strikes this way. ${traitRule(t, scale)}`;
   }
   if (t.seaLoss !== undefined) return traitRule({ ...t, seaLoss: undefined }, scale) || 'Not in force: with Units decide, convoys are kept safe by escorts, aircraft and their equipment.';
   return traitRule(t, scale);

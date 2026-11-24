@@ -817,7 +817,7 @@ describe('one rule for every nation: a swap of every cause swaps the attack', ()
 
 describe('the nation card under the switch: the blitz rows are no nation\'s own (#2 form Part 1 section 1)', () => {
   const t = (nat: string, id: string) => traitsOf(nat).find((x) => x.id === id)!;
-  const line = "Not this army's own with Units decide: any army that holds Field radios with a command of 0.6 or more strikes this way.";
+  const line = "Not this army's own: any army that holds Field radios with a command of 0.6 or more strikes this way.";
 
   it('gives Germany\'s Lightning war and Armoured spearheads to any army through the gate, with what they do', () => {
     for (const id of UNITS.land.blitzTraits) {
