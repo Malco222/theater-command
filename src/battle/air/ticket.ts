@@ -153,6 +153,19 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
   }
 
+  // Warned defenders meet a sweep together, as the card counts every warned fighter up in time (Units decide): each
+  // starts as far from the raid's way in as the farthest of them, along its own line from there. Otherwise a group
+  // whose field lies between the raid and the target meets the sweep alone, the sweep spends its whole fight on it and
+  // goes home before the rest come up, and the field's exchange runs seven times the card's (Kent and London).
+  if (sweep && H!.W >= 0.5 && raidAt.length) {
+    const ex = SKY.target.x + rax, ey = SKY.target.y + ray;
+    const at = [...new Set(def.map((f) => starts[f.corps]))].filter((p) => p && !p.over);
+    const far = Math.max(0, ...at.map((p) => Math.hypot(p.x - ex, p.y - ey)));
+    for (const p of at) {
+      const r = Math.hypot(p.x - ex, p.y - ey);
+      if (r > 0 && r < far) [p.x, p.y] = clampBoard(ex + ((p.x - ex) * far) / r, ey + ((p.y - ey) * far) / r);
+    }
+  }
   const side = (n: string, forces: ForceTicket[], human: boolean): SideTicket => ({
     nat: n, adj: g.nations[n]?.adj ?? n, color: g.nations[n]?.color ?? '#888888', human, forces,
     general: null,
