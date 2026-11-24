@@ -89,6 +89,24 @@ FString FCampaignMapData::ResolveDataFile(const FString& FileName, const FString
 	return FPaths::ConvertRelativePathToFull(Repo);
 }
 
+bool FCampaignMapData::FarSwitch()
+{
+	// (Release 2, the whole world.) The rules' own switch is data/campaign/stage.json, read when their bundle is built
+	// (src/campaign/stage.ts): the table reads the same file, so that the two never disagree about which chart is played.
+	// Outside a shipping build -TheaterFar turns it on for a run, and the session tells the rules the same before they load.
+#if !UE_BUILD_SHIPPING
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterFar")))
+	{
+		return true;
+	}
+#endif
+	TSharedPtr<FJsonObject> Stage;
+	FString Ignored;
+	bool bOn = false;
+	const FString StagePath = ResolveDataFile(TEXT("stage.json"), TEXT("data/campaign"));
+	return FPaths::FileExists(StagePath) && ReadJsonFile(StagePath, Stage, Ignored) && Stage->TryGetBoolField(TEXT("far"), bOn) && bOn;
+}
+
 bool FCampaignMapData::Load(FString& OutError)
 {
 	bLoaded = false;
@@ -116,6 +134,42 @@ bool FCampaignMapData::Load(FString& OutError)
 		// (the countries that exist only on the wider chart: Canada, Mexico, Cuba)
 		FString Ignored;
 		LoadNations(ResolveDataFile(TEXT("world.json"), TEXT("data/campaign")), Ignored);
+		if (bFar)
+		{
+			// (Release 2) and those of the far side, each file's "world.nations" as the rules lay them (far-rows.ts):
+			// Japan; China, Australia, New Zealand, Thailand, Manchukuo, Mongolia; South Africa, Saudi Arabia,
+			// Afghanistan, Yemen, Nepal, Liberia. Their colours are the art director's ruling 209 (Japan's red Brian's).
+			LoadNations(ResolveDataFile(TEXT("far-world.json"), TEXT("data/campaign")), Ignored);
+			LoadNations(ResolveDataFile(TEXT("far-seats-pacific.json"), TEXT("data/campaign")), Ignored);
+			LoadNations(ResolveDataFile(TEXT("far-seats-globe.json"), TEXT("data/campaign")), Ignored);
+			// (A country the rules make bare, with no row in any file, as world.ts standInCountries does: Tibet's is the
+			// rules' own colour; any other takes the rules' grey, so that every province is somebody's on the table.)
+			static const TCHAR* StandIns[][3] = { { TEXT("TIB"), TEXT("Tibet"), TEXT("8F6F5A") } };
+			int32 Bare = 0;
+			for (int32 Id = FirstBeyond; Id < Regions.Num(); ++Id)
+			{
+				const FString& Owner = Regions[Id].Owner;
+				if (Owner.IsEmpty() || Nations.Contains(Owner))
+				{
+					continue;
+				}
+				FCampaignNation Nation;
+				Nation.Tag = Owner;
+				Nation.Name = Owner;
+				Nation.Color = FColor::FromHex(TEXT("8A8A80"));
+				for (const auto& Row : StandIns)
+				{
+					if (Owner == Row[0])
+					{
+						Nation.Name = Row[1];
+						Nation.Color = FColor::FromHex(Row[2]);
+					}
+				}
+				Nations.Add(Owner, MoveTemp(Nation));
+				++Bare;
+			}
+			UE_LOG(LogTheater, Display, TEXT("The far side: %d countries in all, %d of them with no row of their own"), Nations.Num(), Bare);
+		}
 	}
 
 	RuleRegionGrid();
@@ -137,6 +191,7 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 	Height = Root->GetNumberField(TEXT("height"));
 	// The world the map lies in: itself, or (with -TheaterWorld) the frame of the whole-world map with Europe set in it.
 	bWorld = FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld"));
+	bFar = bWorld && FarSwitch();
 	WorldMinX = bWorld ? -500.0 : 0.0;
 	WorldMinY = 0.0;
 	WorldWidth = bWorld ? 9256.14 : Width;
@@ -251,7 +306,15 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		// from world-americas.json, a file of the same form. The game went on reading world-map.json and its 201, so an
 		// army that marched into a city stood on ground the table did not have and was nowhere to be seen. The table
 		// reads the file the rules read; the old one only where the new is not there.)
-		FString WidePath = ResolveDataFile(TEXT("world-americas.json"), TEXT("src/generated"));
+		// (Release 2) With the far side on, the whole world's chart, world-whole.json, which the rules read then
+		// (src/campaign/world.ts WORLD_MAP): the same form, the Americas' 540 provinces with the same numbers, and
+		// Asia, the Indies, the Pacific and the rest of the globe after them, 1,692 in all.
+		FString WidePath = ResolveDataFile(bFar ? TEXT("world-whole.json") : TEXT("world-americas.json"), TEXT("src/generated"));
+		if (bFar && !FPaths::FileExists(WidePath))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("The far side is on but there is no whole-world chart at %s: the table keeps the Americas'."), *WidePath);
+			WidePath = ResolveDataFile(TEXT("world-americas.json"), TEXT("src/generated"));
+		}
 		if (!FPaths::FileExists(WidePath))
 		{
 			WidePath = ResolveDataFile(TEXT("world-map.json"), TEXT("src/generated"));
@@ -317,7 +380,13 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 				// (and the rivers the rules cross: world-americas-rivers.json with the cities, 165 where there were 15. Each has
 				// a class: a great or a middle river is water with banks; a small one is a stream, which the art director
 				// has ruled is paint on the ground and no obstacle. Streams are left out here until that paint is built.)
+				// (Release 2: with the far side on, world-whole-rivers.json, the Americas' rivers and the far side's after them)
 				FString WatersPath = ResolveDataFile(TEXT("world-americas-rivers.json"), TEXT("src/generated"));
+				if (WidePath.EndsWith(TEXT("world-whole.json")))
+				{
+					const FString WholeWaters = ResolveDataFile(TEXT("world-whole-rivers.json"), TEXT("src/generated"));
+					WatersPath = FPaths::FileExists(WholeWaters) ? WholeWaters : WatersPath;
+				}
 				if (!FPaths::FileExists(WatersPath))
 				{
 					WatersPath = ResolveDataFile(TEXT("world-rivers.json"), TEXT("src/generated"));
@@ -362,11 +431,16 @@ double FCampaignMapData::RiverBroad(const FString& Name)
 	static const TSet<FString> Great = { TEXT("Rhine"), TEXT("Danube"), TEXT("Vistula"), TEXT("Dnieper"), TEXT("Volga"), TEXT("Don"), TEXT("Elbe"), TEXT("Oder"), TEXT("Loire"), TEXT("Seine"),
 		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester"),
 		TEXT("Mississippi"), TEXT("Missouri"), TEXT("Ohio"), TEXT("St Lawrence"), TEXT("Columbia"),
-		TEXT("Madeira"), TEXT("Paraguay"), TEXT("Uruguay"), TEXT("Magdalena") };
+		TEXT("Madeira"), TEXT("Paraguay"), TEXT("Uruguay"), TEXT("Magdalena"),
+		// (Release 2, the far side: the rivers its chart calls great)
+		TEXT("Yellow River"), TEXT("Amur"), TEXT("Mekong"), TEXT("Irrawaddy"), TEXT("Lena"), TEXT("Middle Volga"), TEXT("Lower Volga"),
+		TEXT("Irtysh"), TEXT("Ob"), TEXT("Yenisei"), TEXT("Indus"), TEXT("Ganges"), TEXT("Brahmaputra"), TEXT("Upper Nile"), TEXT("White Nile"),
+		TEXT("Niger"), TEXT("Congo"), TEXT("Zambezi") };
 	// (The art director's round 31: the Amazon's trunk is about three times the common great river at Manaus, and
 	// wider toward its mouth; the Madeira one and a half to two times. A river as broad as the rest read as a road.)
 	// (her round 33: the trunk's mean is twice what it was)
-	return Name == TEXT("Amazon") ? 4.4 : Name == TEXT("Madeira") ? 1.1 : Name == TEXT("Parana") || Name == TEXT("Orinoco") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
+	// (Release 2: the Yangtze below the gorges is as broad as the Parana, its mouth a sea of brown water)
+	return Name == TEXT("Amazon") ? 4.4 : Name == TEXT("Madeira") ? 1.1 : Name == TEXT("Parana") || Name == TEXT("Orinoco") || Name == TEXT("Yangtze") ? 0.85 : Great.Contains(Name) ? 0.625 : 0.425;
 }
 
 bool FCampaignMapData::IsCharted(double X, double Y) const
@@ -397,9 +471,12 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 	{
 		return false;
 	}
-	// (the nations' own file has them at its top; the wider chart's file keeps its countries under "nations")
+	// (the nations' own file has them at its top; the wider chart's file keeps its countries under "nations", and the
+	// far side's files under "world" and "nations" in it)
 	const TSharedPtr<FJsonObject>* Inner = nullptr;
-	const TSharedPtr<FJsonObject> From = Root->TryGetObjectField(TEXT("nations"), Inner) ? *Inner : Root;
+	const TSharedPtr<FJsonObject>* WorldPart = nullptr;
+	const TSharedPtr<FJsonObject> From = Root->TryGetObjectField(TEXT("nations"), Inner) ? *Inner
+		: Root->TryGetObjectField(TEXT("world"), WorldPart) && (*WorldPart)->TryGetObjectField(TEXT("nations"), Inner) ? *Inner : Root;
 	for (const auto& Pair : From->Values)
 	{
 		const FString Key(Pair.Key.ToView());

@@ -2456,7 +2456,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	const double Um = U / PerMap; // one house-unit, in map units
 
 	// ---- The paint of the place: walls and roofs by its part of Europe.
-	static const TCHAR* WallsOf[7][5] = {
+	static const TCHAR* WallsOf[12][5] = {
 		{ TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") }, // middle Europe: plaster
 		{ TEXT("8E5A48"), TEXT("A0705A"), TEXT("C9B79A"), TEXT("B8A890"), TEXT("7A5547") }, // the north-west: brick
 		{ TEXT("F0E8D8"), TEXT("E8DCC0"), TEXT("F2E4C8"), TEXT("E0D0B0"), TEXT("EDE0CC") }, // the south: whitewash
@@ -2466,8 +2466,15 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		// Washington the orange roofs of the Mediterranean and Mexico City the white roofs of North Africa.)
 		{ TEXT("925846"), TEXT("C8BCA2"), TEXT("925846"), TEXT("C8BCA2"), TEXT("8C5443") }, // north of Mexico: brick 146,88,70 and cream 200,188,162, about half and half
 		{ TEXT("E4DCC8"), TEXT("E4DCC8"), TEXT("CEA464"), TEXT("E6DECA"), TEXT("CEA464") }, // the plaza town: white 228,220,200, ochre 206,164,100 on about a third
+		// (Release 2, the far side: the art director's world brief, section 3.4. A town takes the kit of the land it
+		// stands in, whoever holds it; see ACampaignMapActor's sites for where each goes.)
+		{ TEXT("86827A"), TEXT("7E7A72"), TEXT("8E8A80"), TEXT("908A7E"), TEXT("7A7872") }, // the walled town (China, Korea, Manchuria, Formosa): grey brick 134,130,122
+		{ TEXT("625040"), TEXT("E0DACC"), TEXT("5A4A3C"), TEXT("DCD4C4"), TEXT("6A5644") }, // the timber town (Japan): dark timber 98,80,64 and white plaster 224,218,204
+		{ TEXT("B69C70"), TEXT("AE946A"), TEXT("BEA478"), TEXT("B49A6E"), TEXT("A88E64") }, // thatch and tin (the Indies, Siam, Indochina, Malaya, the Philippines, the islands, Africa's middle): cane 182,156,112
+		{ TEXT("E4DCCA"), TEXT("CEB488"), TEXT("B26A50"), TEXT("E0D6C2"), TEXT("C8AE84") }, // the Indian town (India, Ceylon, Burma): whitewash 228,220,202, buff 206,180,136, red stone 178,106,80
+		{ TEXT("7C6046"), TEXT("74583E"), TEXT("84684C"), TEXT("6E5440"), TEXT("7C6046") }, // the railway town (Siberia, the Soviet Far East): log 124,96,70
 	};
-	static const TCHAR* RoofsOf[7][5] = {
+	static const TCHAR* RoofsOf[12][5] = {
 		{ TEXT("9A4A32"), TEXT("7C3F2E"), TEXT("5E5A58"), TEXT("8B5A3C"), TEXT("A65B3A") }, // red tile, some slate
 		{ TEXT("4E5560"), TEXT("5E5A58"), TEXT("444B55"), TEXT("6A6660"), TEXT("3F454D") }, // slate
 		{ TEXT("C2643A"), TEXT("B4552F"), TEXT("CC7040"), TEXT("A84E30"), TEXT("BD6A45") }, // terracotta
@@ -2475,19 +2482,31 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		{ TEXT("D9CDB4"), TEXT("CFC2A6"), TEXT("E0D5BE"), TEXT("C6B99C"), TEXT("D3C7AE") }, // flat roofs, the colour of their walls
 		{ TEXT("484644"), TEXT("444240"), TEXT("4C4A48"), TEXT("484644"), TEXT("464442") }, // tar 72,70,68 (on pitched roofs, until there are flat ones)
 		{ TEXT("AC5E40"), TEXT("A85A3C"), TEXT("B06244"), TEXT("AC5E40"), TEXT("A65A3E") }, // low red tile 172,94,64
+		{ TEXT("5C646C"), TEXT("545C64"), TEXT("646A70"), TEXT("5A6068"), TEXT("4E565E") }, // grey-blue tile 92,100,108
+		{ TEXT("4A525E"), TEXT("464E5A"), TEXT("4E5662"), TEXT("4A525E"), TEXT("424A56") }, // blue-grey tile 74,82,94
+		{ TEXT("9C8256"), TEXT("927A50"), TEXT("A48A5E"), TEXT("9CA2A4"), TEXT("968058") }, // thatch 156,130,86, one in five tin 156,162,164
+		{ TEXT("D6CCB6"), TEXT("C2A87E"), TEXT("BCA282"), TEXT("D2C6AE"), TEXT("A8644C") }, // flat roofs, near the colour of their walls
+		{ TEXT("607A60"), TEXT("964E3E"), TEXT("5A725A"), TEXT("8E4A3A"), TEXT("667E64") }, // green 96,122,96 and iron red 150,78,62
 	};
-	const int32 Look = FMath::Clamp(Site.Look, 0, 6);
-	const bool bFlatRoofs = Look == 4;
+	const int32 Look = FMath::Clamp(Site.Look, 0, 11);
+	const bool bFlatRoofs = Look == 4 || Look == 10;
 	auto WallPaint = [&]() { return FLinearColor(FColor::FromHex(WallsOf[Look][Dice.RandRange(0, 4)])); };
 	auto RoofPaint = [&]() { return FLinearColor(FColor::FromHex(RoofsOf[Look][Dice.RandRange(0, 4)])); };
 	// (The capital's own piece takes its kit's colours too: north of Mexico stone 192,182,162 with caps and roofs in
 	// the roofs' tar; in the plaza town white, with red tile.)
-	const FLinearColor Ashlar(FColor::FromHex(Look == 5 ? TEXT("C0B6A2") : Look == 6 ? TEXT("E4DCC8") : TEXT("D9D2C0")));
-	const FLinearColor Verdigris(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
-	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
+	// (and the far side's kits: their stone, their domes and caps, and the roofs of their great buildings, in their own paints)
+	static const TCHAR* AshlarOf[12] = { TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("D9D2C0"), TEXT("C0B6A2"), TEXT("E4DCC8"),
+		TEXT("8E8A80"), TEXT("D6D0C2"), TEXT("E8E2D4"), TEXT("E4DCCA"), TEXT("D9D2C0") };
+	static const TCHAR* CapsOf[12] = { TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("6FA08C"), TEXT("484644"), TEXT("AC5E40"),
+		TEXT("5C646C"), TEXT("4A525E"), TEXT("9CA2A4"), TEXT("E4DCCA"), TEXT("5E8C80") };
+	static const TCHAR* LeadsOf[12] = { TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("5E5A58"), TEXT("484644"), TEXT("AC5E40"),
+		TEXT("5C646C"), TEXT("4A525E"), TEXT("9CA2A4"), TEXT("CEB488"), TEXT("607A60") };
+	const FLinearColor Ashlar(FColor::FromHex(AshlarOf[Look]));
+	const FLinearColor Verdigris(FColor::FromHex(CapsOf[Look])), RedBrick(FColor::FromHex(TEXT("7A5547")));
+	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(LeadsOf[Look])), Cobbles(FColor::FromHex(TEXT("8F887A")));
 	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("7C766A"))), Lawn(FColor::FromHex(TEXT("46553A")));
 	const FLinearColor LeafDark(FColor::FromHex(TEXT("4F6B3A"))), LeafPale(FColor::FromHex(TEXT("668249"))), Glazing(FColor::FromHex(TEXT("6E7C80")));
-	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(Look == 5 ? TEXT("484644") : Look == 6 ? TEXT("AC5E40") : TEXT("8A3B2A")));
+	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(Look >= 5 ? LeadsOf[Look] : TEXT("8A3B2A")));
 
 	// ---- The plan's own frame: its streets run a little off the compass, each town its own way.
 	const double Sway = Site.Tier >= 3 ? 10.0 : 24.0; // (a capital's lie nearer the compass, so that its landmark faces the usual eye)
@@ -2569,7 +2588,13 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	};
 
 	// ---- The church, by the country's own manner of building one: a spire, a dome and a bell tower, or onion domes.
-	const int32 Manner = Look == 2 || Look == 4 || Look == 6 ? 1 : Look == 3 ? 2 : 0;
+	// (Release 2, the far side's own: 3 a tiered tower beside a hall, 4 a castle keep with a red gate before a grove,
+	// 5 a white house with a veranda and a tin shed, 6 a domed pavilion on red stone; the railway town takes the
+	// east's domes)
+	const int32 Manner = Look == 7 ? 3 : Look == 8 ? 4 : Look == 9 ? 5 : Look == 10 ? 6 : Look == 11 ? 2 : Look == 2 || Look == 4 || Look == 6 ? 1 : Look == 3 ? 2 : 0;
+	// (and in the walled town's and the timber town's capitals that building, raised, stands in place of Europe's palace)
+	const bool bKitLandmark = Look == 7 || Look == 8;
+	const FLinearColor KitWall(FColor::FromHex(WallsOf[Look][0])), KitRoof(FColor::FromHex(RoofsOf[Look][0]));
 	auto Church = [&](double A, double B, double Size, double Turn, bool bCopper = false)
 	{
 		const FVector At = Stand(A, B);
@@ -2589,6 +2614,84 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			Ball(Off(-0.2, 0.0, 0.66), FVector(0.46, 0.46, 0.4) * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4, 10);
 			Box(Off(0.58, 0.3, 0.95), FVector(0.24, 0.24, 1.9) * Size * U, TowerWhite, Yaw0 + Turn);
 			Pillar(Off(0.58, 0.3, 1.9), 0.2 * Size * U, 0.0, 0.34 * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4);
+		}
+		else if (Manner == 3)
+		{
+			// The walled town's: a hall under grey-blue tile, and beside it a tower of five tiers, each under its own eaves.
+			House(At, 0.9 * Size * U, 0.52 * Size * U, 0.3 * Size * U, 0.2 * Size * U, KitWall, KitRoof, Yaw0 + Turn);
+			double KUp = 0.0;
+			for (int32 KRung = 0; KRung < 5; ++KRung)
+			{
+				const double KBody = 0.2 - 0.025 * KRung, KRise = KRung == 0 ? 0.34 : 0.24;
+				Pillar(Off(0.62, 0.32, KUp), KBody * Size * U, KBody * Size * U, KRise * Size * U, KitWall, 8);
+				KUp += KRise;
+				Pillar(Off(0.62, 0.32, KUp), (KBody + 0.1) * Size * U, KBody * 0.7 * Size * U, 0.07 * Size * U, KitRoof, 8);
+				KUp += 0.05;
+			}
+			Pillar(Off(0.62, 0.32, KUp), 0.03 * Size * U, 0.0, 0.22 * Size * U, Gilding, 6);
+		}
+		else if (Manner == 4)
+		{
+			// The timber town's: a keep of three white storeys, each under wide dark eaves, on a stone base, with a red
+			// gate before a grove beside it.
+			const FLinearColor KStone(FColor::FromHex(TEXT("8F8B80"))), KPlaster(FColor::FromHex(TEXT("E0DACC"))), KGate(FColor::FromHex(TEXT("B8452E")));
+			Box(Off(0.0, 0.0, 0.15), FVector(0.86, 0.74, 0.3) * Size * U, KStone, Yaw0 + Turn);
+			double KUp = 0.3;
+			for (int32 KStorey = 0; KStorey < 3; ++KStorey)
+			{
+				const double KLong = 0.66 - 0.14 * KStorey, KWide = 0.56 - 0.12 * KStorey, KRise = 0.24;
+				Box(Off(0.0, 0.0, KUp + KRise * 0.5), FVector(KLong, KWide, KRise) * Size * U, KPlaster, Yaw0 + Turn);
+				KUp += KRise;
+				Box(Off(0.0, 0.0, KUp + 0.02), FVector(KLong + 0.16, KWide + 0.16, 0.04) * Size * U, KitRoof, Yaw0 + Turn);
+				KUp += 0.04;
+			}
+			House(Off(0.0, 0.0, KUp), 0.34 * Size * U, 0.26 * Size * U, 0.06 * Size * U, 0.2 * Size * U, KPlaster, KitRoof, Yaw0 + Turn);
+			for (const double KSide : { -1.0, 1.0 })
+			{
+				Pillar(Off(-0.95, 0.55 + KSide * 0.22, 0.0), 0.025 * Size * U, 0.022 * Size * U, 0.46 * Size * U, KGate, 6);
+			}
+			Box(Off(-0.95, 0.55, 0.47), FVector(0.06, 0.62, 0.045) * Size * U, KGate, Yaw0 + Turn);
+			Box(Off(-0.95, 0.55, 0.39), FVector(0.04, 0.48, 0.03) * Size * U, KGate, Yaw0 + Turn);
+			if (!bFar)
+			{
+				Broadleaf(Off(-1.3, 0.35, 0.0), 0.55 * Size * U, 0.2 * Size * U, LeafDark);
+				Broadleaf(Off(-1.35, 0.75, 0.0), 0.62 * Size * U, 0.22 * Size * U, LeafDark);
+				Broadleaf(Off(-1.55, 0.55, 0.0), 0.5 * Size * U, 0.19 * Size * U, LeafPale);
+			}
+		}
+		else if (Manner == 5)
+		{
+			// Thatch and tin's: one white house with a veranda all round under its tin, and a long tin shed beside it.
+			const FLinearColor KWhite(FColor::FromHex(TEXT("E8E2D4"))), KTin(FColor::FromHex(TEXT("9CA2A4")));
+			House(At, 0.72 * Size * U, 0.5 * Size * U, 0.34 * Size * U, 0.2 * Size * U, KWhite, KTin, Yaw0 + Turn);
+			Box(Off(0.0, 0.0, 0.3), FVector(0.96, 0.78, 0.025) * Size * U, KTin, Yaw0 + Turn);
+			for (const double KX : { -0.46, 0.46 })
+			{
+				for (const double KY : { -0.37, 0.37 })
+				{
+					Pillar(Off(KX, KY, 0.0), 0.015 * Size * U, 0.015 * Size * U, 0.29 * Size * U, KWhite, 4);
+				}
+			}
+			House(Off(0.0, 0.85, 0.0), 1.1 * Size * U, 0.5 * Size * U, 0.26 * Size * U, 0.1 * Size * U, KTin * 0.85f, KTin, Yaw0 + Turn);
+		}
+		else if (Manner == 6)
+		{
+			// The Indian town's: a pavilion of whitewash on a plinth of red stone, its dome swelling above its walls,
+			// a small domed kiosk at each corner and a gilt finial.
+			const FLinearColor KRedStone(FColor::FromHex(TEXT("B26A50"))), KWhite(FColor::FromHex(TEXT("E4DCCA")));
+			Box(Off(0.0, 0.0, 0.09), FVector(0.9, 0.9, 0.18) * Size * U, KRedStone, Yaw0 + Turn);
+			Box(Off(0.0, 0.0, 0.38), FVector(0.58, 0.58, 0.4) * Size * U, KWhite, Yaw0 + Turn);
+			Pillar(Off(0.0, 0.0, 0.58), 0.18 * Size * U, 0.18 * Size * U, 0.08 * Size * U, KWhite, 10);
+			Ball(Off(0.0, 0.0, 0.74), FVector(0.48, 0.48, 0.52) * Size * U, KWhite, 5, 10);
+			Pillar(Off(0.0, 0.0, 0.99), 0.02 * Size * U, 0.0, 0.16 * Size * U, Gilding, 4);
+			for (const double KX : { -0.26, 0.26 })
+			{
+				for (const double KY : { -0.26, 0.26 })
+				{
+					Pillar(Off(KX, KY, 0.58), 0.05 * Size * U, 0.05 * Size * U, 0.12 * Size * U, KWhite, 6);
+					Ball(Off(KX, KY, 0.73), FVector(0.12, 0.12, 0.13) * Size * U, KWhite, 3, 6);
+				}
+			}
 		}
 		else
 		{
@@ -3037,7 +3140,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// near half of the square is only as wide as the avenue's two blocks, with a block standing in each outer
 	// corner (where the landmark is not one that fills the square itself); and in a city a block stands in the
 	// corner of the square beside its great church.
-	const bool bLandmarkFills = Site.Landmark == 2 || Site.Landmark == 6 || Site.Landmark == 7;
+	const bool bLandmarkFills = !bKitLandmark && (Site.Landmark == 2 || Site.Landmark == 6 || Site.Landmark == 7);
 	auto BuiltInSquare = [&](double A, double B)
 	{
 		if (bPacked)
@@ -3079,7 +3182,14 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	if (bCapital)
 	{
 		const int32 Before = Vertices.Num();
-		Landmark(Site.Landmark, SquareHalfA * 0.24);
+		if (bKitLandmark)
+		{
+			Church(SquareHalfA * 0.24, 0.0, 2.6, 180.0);
+		}
+		else
+		{
+			Landmark(Site.Landmark, SquareHalfA * 0.24);
+		}
 		if (OutLandmarkTop)
 		{
 			// (the highest point of it: the tip of its dome or spire, where a flag would be flown from)
@@ -3298,6 +3408,42 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 				}
 			}
 		}
+	}
+	// (Release 2) The walled city: its grid inside a square wall of grey brick, a gate tower in the middle of each side
+	// where the avenues pass through. It throws no dice, so the far town's wall stands where the near one's does.
+	if (Look == 7)
+	{
+		TArray<FVector>* const KeptWindows = Windows;
+		Windows = nullptr;
+		const FLinearColor WallBrick(FColor::FromHex(TEXT("7E7A72"))), GateTimber(FColor::FromHex(TEXT("8E5A48")));
+		const double WallRing = Reach * 0.9, WallPiece = (bFar ? 2.4 : 1.2) * Um;
+		const int32 WallPieces = FMath::Max(2, FMath::CeilToInt32(2.0 * WallRing / WallPiece));
+		const double WallEach = 2.0 * WallRing / WallPieces;
+		for (int32 WallSide = 0; WallSide < 4; ++WallSide)
+		{
+			const bool bAcross = WallSide < 2; // (the two sides that lie across the long streets)
+			const double WallAt = (WallSide % 2 == 0 ? -1.0 : 1.0) * WallRing;
+			for (int32 WallK = 0; WallK < WallPieces; ++WallK)
+			{
+				const double WallT = -WallRing + (WallK + 0.5) * WallEach;
+				if (FMath::Abs(WallT) < 0.45 * Um)
+				{
+					continue; // (the gate's own place)
+				}
+				const double WA = bAcross ? WallAt : WallT, WB = bAcross ? WallT : WallAt;
+				if (CanBuild(WA, WB))
+				{
+					Box(Stand(WA, WB, 0.0) + FVector(0.0, 0.0, 0.17 * U), FVector(WallEach * PerMap * 1.04, 0.14 * U, 0.34 * U), WallBrick, Yaw0 + (bAcross ? 90.0 : 0.0));
+				}
+			}
+			const double GateA = bAcross ? WallAt : 0.0, GateB = bAcross ? 0.0 : WallAt;
+			if (CanBuild(GateA, GateB))
+			{
+				Box(Stand(GateA, GateB, 0.0) + FVector(0.0, 0.0, 0.26 * U), FVector(0.5, 0.5, 0.52) * U, WallBrick, Yaw0);
+				House(Stand(GateA, GateB, 0.0) + FVector(0.0, 0.0, 0.52 * U), 0.58 * U, 0.46 * U, 0.16 * U, 0.16 * U, GateTimber, KitRoof, Yaw0 + (bAcross ? 90.0 : 0.0));
+			}
+		}
+		Windows = KeptWindows;
 	}
 	// (Where the plots are kept the ground is left open, a common inside the town, until something is built on it.)
 	if (OutQuarters)

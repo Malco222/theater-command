@@ -168,6 +168,14 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, the whole world) -TheaterFar beside -TheaterWorld: the rules play the far side, Asia, the Indies and
+	// the Pacific, on the whole world's chart (src/campaign/stage.ts reads TC_FAR when its bundle loads), as the table
+	// draws it (FCampaignMapData::FarSwitch). With stage.json's "far" on, the bundle is built with it and needs nothing.
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) && FParse::Param(FCommandLine::Get(), TEXT("TheaterFar"))
+		&& !Host->Evaluate(TEXT("globalThis.TC_FAR = 1;"), TEXT("release 2 the far side"), OutError))
+	{
+		return false;
+	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
@@ -1709,6 +1717,24 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 		Out.AirFleets = MoveTemp(Stood);
+		// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) On a
+		// field another country holds, the player's own groups are counted apart, for the map to show them as his.
+		for (FViewAirfield& Field : Out.Airfields)
+		{
+			if (Out.Human.IsEmpty() || Field.Nation == Out.Human || Field.Groups <= 0)
+			{
+				continue;
+			}
+			for (const FViewAirFleet& Group : Out.AirFleets)
+			{
+				if (Group.Base == Field.Region && Group.Nation == Out.Human)
+				{
+					Field.YourGroups += Group.Groups;
+					Field.YourAircraft += Group.Fighters + Group.Bombers;
+					Field.YourNation = Out.Human;
+				}
+			}
+		}
 	}
 
 	{
@@ -4283,6 +4309,10 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
 		Told->TryGetStringField(TEXT("gunsWords"), Card.GunsWords);
 		Told->TryGetStringField(TEXT("toGuns"), Card.ToGuns);
+		Told->TryGetStringField(TEXT("types"), Card.Types);
+		Told->TryGetStringField(TEXT("typesEdge"), Card.TypesEdge);
+		Told->TryGetStringField(TEXT("pilots"), Card.Pilots);
+		Told->TryGetStringField(TEXT("typesTip"), Card.TypesTip);
 		// (Ruling 107(d).) A bombing raid by day and by night.
 		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
 		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())
