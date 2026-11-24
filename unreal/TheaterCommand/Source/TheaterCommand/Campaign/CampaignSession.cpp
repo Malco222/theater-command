@@ -3385,6 +3385,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		(*Yield)->TryGetNumberField(TEXT("fac"), Factories);
 		(*Yield)->TryGetNumberField(TEXT("capital"), Capital);
 		(*Yield)->TryGetNumberField(TEXT("total"), Total);
+		Info.YieldTotal = Total;
 		TArray<FString> Parts;
 		auto Part = [&Parts](const TCHAR* What, int32 Amount)
 		{
