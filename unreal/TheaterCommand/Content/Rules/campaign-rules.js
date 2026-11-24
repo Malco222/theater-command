@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e54fe064 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d6a815e6 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12147,6 +12147,7 @@
     SHIP_AIR_ONE: () => SHIP_AIR_ONE,
     SHIP_AIR_ROOM: () => SHIP_AIR_ROOM,
     SHIP_AIR_TIP: () => SHIP_AIR_TIP,
+    UD_ROLES: () => UD_ROLES,
     afloat: () => afloat,
     airAI: () => airAI,
     airBases: () => airBases,
@@ -12242,6 +12243,7 @@
     squadronsOf: () => squadronsOf,
     troopCut: () => troopCut,
     troopWeight: () => troopWeight,
+    udRole: () => udRole,
     warOpens: () => warOpens,
     whyNotBase: () => whyNotBase,
     whyNotMission: () => whyNotMission2,
@@ -12288,7 +12290,7 @@
         { nat: "GER", from: 24, name: "the Kammhuber Line", by: "Josef Kammhuber", ground: 0.5 }
       ]
     },
-    height: { _about: "Units decide (the design director, 24 Nov 2026 02:28Z and 15:20Z; air-battles/dogfight/sweep-height-form-1124.md): in a day fight of fighters alone, height in place of the attacker's flat escortShare. The sweep flies high; the defenders' warning in time W (1 a chain over the place, an agent's read order or carriers with radar; 0.5 ground observers over their own home ground or a carrier's lookouts; 0 none) puts them above it (W 1), level (0.5) or under it (0). 'h' is the field's own edge a band, measured, never chosen: the fighter exchange moved 1.53 to 1.66 (mean 1.58) toward the side a band above, 40 seeds on each of 7 real sweeps (GER over England 1942, UK over Germany 1942); measure again whenever the field's edges change. 'observers' and 'lookouts' are the range middle (none 0, full 1), laid so until the historian reads warning lead times.", h: 1.58, observers: 0.5, lookouts: 0.5 },
+    height: { _about: "Units decide (the design director, 24 Nov 2026 02:28Z and 15:20Z; air-battles/dogfight/sweep-height-form-1124.md): in a day fight of fighters alone, height in place of the attacker's flat escortShare. The sweep flies high; the defenders' warning in time W (1 a chain over the place, an agent's read order or carriers with radar; 0.5 ground observers over their own home ground or a carrier's lookouts; 0 none) puts them above it (W 1), level (0.5) or under it (0). 'h' is the field's own edge a band, measured, never chosen: the fighter exchange moved 1.53 to 1.66 (mean 1.58) toward the side a band above, 40 seeds on each of 7 real sweeps (GER over England 1942, UK over Germany 1942); measure again whenever the field's edges change. 'observers' and 'lookouts' are the range middle (none 0, full 1), laid so until the historian reads warning lead times. Escorted raids (the design director 15:33Z; escort-height-form-1124.md): 'escort' is each role's height over the defenders in bands, as the field fights it, at W 0, 0.5 and 1 (between them, in a line): the form put a close escort with its bombers and top cover a band above, the defenders 2W - 1 bands from the bombers; measured (32 seeds, GER raids on Hampshire and Kent 1942, defenders started at each band) a close escort cannot leave its bombers to dive on defenders below, and top cover's dive is about half a band short. 'bombers' is what warned defenders a band above the bombers do to the fighters' share of the bombers' loss in the field (1.30 and 1.23 at the two targets). Measure both again whenever the field's escorts change.", h: 1.58, observers: 0.5, lookouts: 0.5, escort: { close: [-0.2, -0.1, -1.1], top: [0.5, 0.6, -0.4] }, bombers: 1.26 },
     production: {
       GER: [[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350], [40, 450, 380], [46, 800, 300], [52, 1200, 250], [56, 1800, 200]],
       UK: [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 450, 350], [28, 600, 450], [40, 820, 520], [52, 890, 650]],
@@ -40913,6 +40915,426 @@
     return g2.flags.open === 1 ? [...out, ...treeNotes(g2, who, fields)] : out;
   }
 
+  // ../../src/battle/air/book.ts
+  var SKY = {
+    /** Air seconds that pass in one battle second (6 until ruling 226: a fight then lasted some 45 battle seconds). */
+    scale: 2,
+    /** The board: 100 km square. The raid comes on from the south edge (y = 0), as the attacker does in every battle. */
+    w: 1e5,
+    h: 1e5,
+    /** The target, ringed: bombers inside this circle on a steady course are on their run. */
+    target: { x: 5e4, y: 7e4, r: 6e3 },
+    /** Flak hangs in a ring round the target out to this radius. */
+    flakR: 12e3,
+    /** The three heights. alt: the middle of each band in metres (for the 3D side); climb and dive: air seconds per band. */
+    bands: { names: ["LOW", "MED", "HIGH"], alt: [1800, 4500, 7200], climb: 120, dive: 25 },
+    /** Cruising speed, metres per air second. A climbing group makes this share of it. */
+    speed: { ftr: 120, bmr: 85, climbing: 0.6 },
+    /** Air seconds a bomber group must hold its run inside the target ring before it drops. */
+    run: 45,
+    /** Fighter fuel over the board, in air seconds, for a group well inside its range; burnt this much faster in a fight. */
+    fuel: { full: 1800, fight: 1.5, home: 99999 },
+    /** How close two groups must be to be in contact, by day and by night. */
+    contact: { day: 3e3, night: 1e3 },
+    /** How far a group can see another, by day and by night. */
+    sight: { day: 3e4, night: 3e3 },
+    /** Without radar, the defenders are scrambled when a raider comes this close to the target. */
+    scramble: 5e4,
+    /** Defending airfields stand this far from the target on the board: near + the real distance x squeeze, at most far. */
+    fields: { near: 15e3, far: 4e4, squeeze: 0.2 },
+    /**
+     * Where a close escort flies beside its bombers, how far ahead a loose escort sweeps, and how far behind its box top
+     * cover keeps station, a band above it (1 to 2 km, a placeholder; the design's 1.8); and the first escort group, by
+     * count from 0, that may fly top cover (ruling 237.2's fallback: the third).
+     */
+    escort: { close: 1500, ahead: 7e3, behind: 1500, reach: 12e3, near: 4e3, cover: [0.4, 2.5], topFrom: 2 },
+    /** Battle seconds before the battle is called (an hour in the air), and the battle seconds the computer waits between rethinks (12 air seconds). */
+    limit: 1800,
+    think: 6,
+    /** Once every bomber has dropped or turned back and nobody has been in contact for this many air seconds, it is over. */
+    quiet: 120,
+    /**
+     * The wear. The campaign settles a raid in one throw (fly() in campaign/air.ts): the raid card's forecast says how
+     * many defending fighters, escorts and bombers fall. The board hands each fighter group its share of what its side
+     * should bring down (AirSim.arm) and lets it spend that while in contact, so the sums are the card's however the
+     * fight goes; where and how it goes decides who pays. The guns' share is spread over the time a box spends in the
+     * flak ring. Checked by tests/battle-air-parity.test.ts: the computer on both sides averages the forecast within a
+     * tenth. luck: each group's luck in its fight, drawn as fly()'s own dice are.
+     */
+    wear: { luck: 0.15 },
+    /** A group in contact spends its fight by e every this many air seconds; it breaks off with 'spent' of it left. */
+    tire: 120,
+    spent: 0.12,
+    /** Bomber boxes fly as one stream, side by side this many metres apart. */
+    stream: 1500,
+    /**
+     * Flak by height: the low band takes the most, the high the least. Fighters take this share of what bombers do.
+     * kinds (shown only): the guns that reach each band, for the effects kit's AirFlak bursts round a box on its run in
+     * (the art director's flak brief, sections 3 and 4): light guns reach the low band only, medium the low and middle,
+     * heavy all three.
+     * hold (Brian, 20 November 2026: "flak should stop in the air battles when their own fighters are in the air. for
+     * example german flak 88s would stop when their bf 109s would arrive to attack the bombers to prevent taking down
+     * their own planes"): while a defending fighter group is going in on a box inside the ring, the guns do not fire on
+     * that box. They fire in the gaps between its passes, while the fighters stand off to form up again, and once the
+     * fighters have gone (the coordinator's ruling, 20 November: the first build held the guns for as long as fighters
+     * were anywhere on a box, and a defended raid had no flak left in it). Nothing is counted differently (ruling 237:
+     * the battle's sums are the raid card's): what the guns would have brought down while they hold is the fighters'
+     * doing instead, so the bombers lost, and when each falls, are the same with this on or off
+     * (tests/battle-air-flak-hold.test.ts).
+     * pass (shown only): the beat of the passes on a box, in air seconds. The fighters on it go in together for 'go',
+     * by the pass the group pressing it hardest is flying, then stand off for 'off' to form up for the next. A head-on
+     * pass is over in moments and the climb back ahead of the bombers is long; fighters sitting astern stay on a box
+     * far longer. Each length varies by 'vary' either way. A box is in the ring some 115 air seconds on its way in, so
+     * it sees two or three passes there. Every 'off' at 0 is the first build's rule: the guns silent all the while.
+     */
+    flak: {
+      band: [1.5, 1, 0.55],
+      fighters: 0,
+      kinds: [["light", "medium", "heavy"], ["medium", "heavy"], ["heavy"]],
+      hold: true,
+      pass: {
+        go: { headon: 14, astern: 26, close: 26, quarter: 18, beam: 18, below: 18 },
+        off: { headon: 34, astern: 18, close: 18, quarter: 24, beam: 24, below: 24 },
+        vary: 0.25
+      }
+    },
+    /**
+     * Bombers by name (AirPlace.bombers; Brian, 20 November 2026: "i would like the game to keep track of real bombers
+     * names and how many missions they have completed and fighters shot down"). 'lines': when one of a group's
+     * longest-serving bombers falls, a line names it, and only for this many of each group, its first seats; an air
+     * fleet that loses forty bombers in a raid does not fill the strip with forty names. Shown, never counted.
+     */
+    named: { lines: 2 },
+    /**
+     * How good a fighter group's pilots are, 0 to 1, for the 3D game's pilots (shown, never counted: the campaign has
+     * already weighed readiness, leaders and aircraft into each group's worth, and the battle's sums are the raid
+     * card's): a base, its leader's experience (the ticket's xp: his level over 3, none with no named leader) and its
+     * readiness. A group at full readiness under a level 3 leader comes to 0.85; a tired one with no leader, under a half.
+     */
+    pilots: { base: 0.3, leader: 0.25, ready: 0.3 },
+    /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
+    tied: 0.6,
+    /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
+    edge: { bounce: 1.5, bounceFor: 60, climbing: 0.7, wavering: 0.8 },
+    /** How near a side is to breaking off (AirSim.nearBreak) when the player is warned: three quarters of the way (ruling 226, mark 3). */
+    warn: 0.75,
+    /** Morale: where it starts (from readiness), what knocks it and what restores it; the marks for wavering and routing. */
+    morale: { base: 0.55, ready: 0.45, perLoss: 1.1, bounced: 0.08, alone: 5e-4, mend: 1e-3, wavering: 0.35, routing: 0.17 },
+    /**
+     * How a group is drawn (Brian, 17:50Z: our own 3D models, animated). A group shows one model for every 'per'
+     * aircraft, in a box 'gap' metres between models; a loss is one model falling out of it ('air:lost').
+     * 'per' is one number for the whole battle (Brian, 21 November 2026: the numbers "proportionate and realistic";
+     * "i dont want the defenders to go smaller to be proportionate"): all the aircraft sent up over 'all', rounded up,
+     * so about 'all' models fly at the start whatever the battle's size and every model stands for the same number of
+     * aircraft. No side's numbers are ever cut to make a battle look even: the count is the campaign's.
+     * 'all' is the 3D game's budget (the production lead's scale plan of 22 November, item AR4: its first step, S1; the
+     * next, 400, waits on the flight core's speed work, AR3, and a warm Mac reading). 'page' is the browser page's own,
+     * which draws every model on a flat map and keeps the old 60.
+     * A model falls only for its share of the losses (AR1, Brian's ask of 22 November 04:07Z: "the bombers get destroyed
+     * a lot"): its group's losses stand for round(lost / per) models, so falls x per = losses, and every aircraft lost is
+     * still told in the dispatches. At one model an aircraft, every loss is a fall, as before.
+     * 'box' is the most models drawn in one box (AR2, the production lead's boxes of 18 to 24 models): a bomber group's
+     * box of 24, the flight core's eight vics of three, and fighters in boxes of 20, five fours (a squadron of 16 and its
+     * spares, or two squadrons' worth at a coarse scale). A group with more models flies more boxes, in trail
+     * ('boxes' in the view's extra), and its box is never drawn wider than one: a big raid is a stream, not a wall.
+     */
+    look: { all: 150, page: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 }, box: { ftr: 20, bmr: 24 } },
+    /**
+     * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
+     * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how
+     * far and how dull each one plays is the mix's, read from mix.json, never copied here.
+     */
+    cues: {
+      dogfight: "dogfight",
+      onBombers: "fighter_pass",
+      scramble: "aircraft_takeoff",
+      siren: "air_raid_siren",
+      bombs: "bomb_stick_01",
+      explode: "plane_explode",
+      down: "plane_down",
+      chutes: "parachute_open",
+      bingo: "fighter_pass",
+      /** Far takes: past the family's farTakesFrom (mix.json "distance", explosions) a blast plays one of these instead. */
+      far: { plane_explode: ["explosion_far_01", "explosion_far_02"] },
+      /**
+       * A fighter group's own pass, by the model the 3D game draws for it (FMiniatureMesh::MainFighterOf): a 'fighter_pass'
+       * cue on a fighter group, or on a bomber group the fighters reached (the contact's extra.with), plays its model's
+       * take; a model with no recording of its own keeps 'fighter_pass'. No Thunderbolt is drawn yet.
+       */
+      pass: { Spitfire: "spitfire_pass", Fw190: "fw190_pass", Mustang: "p51_pass", P47: "p47_pass" },
+      /**
+       * Engines, one per formation while it flies (the bridge's 'loop'): its kind's plain loop, mix.json "air"."loops"
+       * twinEngined for bombers (every bomber drawn before the B-17 and the Lancaster has two engines) and fighter for
+       * fighters. The 3D game plays its model's own instead, by 'engines'.
+       */
+      loops: { bmr: "bomber_medium_loop", ftr: "fighter_engine_loop" },
+      /**
+       * Which mix.json "air"."loops" entry a formation's engines take, by the model the 3D game draws for it
+       * (FMiniatureMesh::MainBomberOf, MainFighterOf; '*' is any other, such as the plain twin-engined 'Bomber:<tag>').
+       */
+      engines: { bmr: { B17: "B-17", Lancaster: "fourEngined", He111: "twinEngined", "*": "twinEngined" }, ftr: { "*": "fighter" } },
+      /**
+       * What the mix plays with no event of its own, as paths into mix.json (the sound director's, never copied here):
+       * the flak ring has no loop, its guns fire and their shells burst by "air"."flak"; the formations' engines are
+       * "air"."loops", by 'engines'; each gun as it fires is "air"."gunsByCalibre", by 'calibre'; a lost engine and a
+       * windmilling airscrew are "air"."engineLost" and "air"."windmilling".
+       */
+      mix: { flak: "air.flak", engines: "air.loops", guns: "air.gunsByCalibre", engineLost: "air.engineLost", windmilling: "air.windmilling" },
+      /**
+       * A gun's kind (guns.ts, the effects kit's fx.json air_guns rows) to its entry in the mix's "air"."gunsByCalibre":
+       * a heavy gun plays that entry's wing, turret or handHeld take by its mount; a single hand-held rifle-calibre gun
+       * plays handHeldRifle. A bomber's lost engine and a windmilling airscrew play nothing of their own: the mix drops
+       * the formation's drone by "air"."engineLost".
+       */
+      calibre: { rifle: "rifle", hmg: "heavy", cannon20: "cannon" }
+    },
+    /**
+     * A loss, as the 3D side shows it (Brian's ask of 2026-11-17: it explodes, or an engine burns and it falls, and
+     * sometimes the crew bails out). Cosmetic only: the count has already dropped; this picks how it looks. Whether a
+     * fighter pilot comes back is drawn at the rules' own rate (AIR.pilots.home / away), so every pilot the rules give
+     * back was seen under a parachute.
+     */
+    fall: {
+      /** A fighter whose pilot is lost: explode, burn, spin. */
+      lost: [0.35, 0.45, 0.2],
+      /** A fighter whose pilot is saved: burn, spin (never an explosion: nobody gets out of one). */
+      saved: [0.55, 0.45],
+      /** A lost pilot over enemy ground may still be seen to bail out, and is taken prisoner: chance by burn and spin. */
+      captured: [0.5, 0.6],
+      /** Bombers: explode, burn, spin; and the chance each of the crew gets out of a burning or spinning one. */
+      bomber: [0.15, 0.6, 0.25],
+      bomberOut: [0.55, 0.35],
+      /**
+       * The men whose dice are thrown for a bomber on the look streams whatever its type: five, as when every bomber
+       * carried five. The crew aboard ('crews') says how many of them count, and a sixth man and after are thrown on a
+       * stream of their own (fates.ts fateOf), so the crew aboard never moves a count or any other look.
+       */
+      crew: 5,
+      /**
+       * Crew aboard, by the model the 3D game draws (the historian, air-fates-check.md section 6; Brian's yes of 20
+       * November 2026 to a dive bomber showing its real two parachutes, not up to five). 'Dive', 'Torpedo' and 'Bomber'
+       * are a nation's plain carrier bombers and its plain twin; Japan's plain twin is read as the G4M, as its tanks are,
+       * and the Soviet one as the SB, as its engines are. Any other model is the plain twin's.
+       */
+      crews: {
+        D3A: 2,
+        D4Y: 2,
+        SBD: 2,
+        SB2C: 2,
+        Skua: 2,
+        Stuka: 2,
+        Dive: 2,
+        B5N: 3,
+        B6N: 3,
+        TBD: 3,
+        TBF: 3,
+        Swordfish: 3,
+        Barracuda: 3,
+        Torpedo: 3,
+        He111: 5,
+        Bomber: 5,
+        "Bomber:SOV": 3,
+        "Bomber:JAP": 7,
+        "Bomber:JPN": 7,
+        G4M: 7,
+        Nell: 7,
+        Betty: 7,
+        SM79: 6,
+        Wellington: 6,
+        Pe2: 3,
+        LeO451: 4,
+        // the new models (23 Nov; crews as built, unchecked)
+        Lancaster: 7,
+        B17: 10
+      },
+      /**
+       * Crews that changed, by the month ('from' and 'to' as year + month / 12, months from 0): the He 111 flew with four
+       * until an extra gunner joined in 1941; the B-17 often with nine from mid-1944, one waist gunner dropped.
+       */
+      crewsDated: [
+        { model: "He111", to: 1941, crew: 4 },
+        { model: "B17", from: 1944 + 6 / 12, crew: 9 }
+      ]
+    },
+    /**
+     * How a lost aircraft is seen to go, from its situation (fates.ts; Brian, 20 November: many ways down, a falling plane
+     * hitting another, a wing blown off, never the same each time, "variables and different situations"). Shown only:
+     * 'fall' above still draws the rules' pilots back and is kept as it was. Weights in the order explode, flamer (the
+     * whole aircraft ablaze), burn (an engine on fire), wing (shot or burnt off), tail (shot away), pilot (hit, it noses
+     * over and goes straight in), spin, glide (engines dead, it glides down to ditch or crash-land), breakup (it comes
+     * apart). Each factor multiplies the row; a missing way is 1. Placeholders for the historian's review.
+     */
+    fate: {
+      base: { ftr: [0.13, 0.1, 0.22, 0.1, 0.07, 0.12, 0.16, 0.05, 0.05], bmr: [0.11, 0.1, 0.26, 0.12, 0.07, 0.06, 0.12, 0.1, 0.06] },
+      /** By the heaviest gun of the fighter that brought it down: a rifle-calibre gun kills men and starts fires; cannon shells take wings and tails off. */
+      gun: {
+        rifle: { pilot: 1.4, burn: 1.2, wing: 0.4, tail: 0.6, explode: 0.7, breakup: 0.4 },
+        hmg: { burn: 1.1, wing: 1.1 },
+        cannon20: { wing: 2, tail: 1.6, explode: 1.4, breakup: 1.6, pilot: 0.8 }
+      },
+      /** By the heaviest gun round the target firing at its height: a heavy shell close by blows it apart or takes a wing. */
+      flak: {
+        light: { burn: 1.3, pilot: 1.2, glide: 1.3, explode: 0.6 },
+        medium: { burn: 1.3, wing: 1.2 },
+        heavy: { explode: 2, wing: 1.5, breakup: 1.6, pilot: 0.3 }
+      },
+      /** By the way the fighter came at the box: head-on hits the cockpit and the engines; from astern the tail and the tanks; from below the tanks and the bomb bay. */
+      pass: {
+        headon: { pilot: 5, burn: 1.3, tail: 0.3 },
+        astern: { tail: 2, flamer: 1.3, pilot: 0.7 },
+        quarter: { wing: 1.3, burn: 1.2 },
+        beam: { wing: 1.4, flamer: 1.2 },
+        below: { flamer: 1.5, explode: 1.3, tail: 0.6 },
+        close: {}
+      },
+      /** A bomber with its bombs aboard blows up far more often than one that has dropped. */
+      loaded: { explode: 1.8 },
+      dropped: { explode: 0.7 },
+      /**
+       * No self-sealing tanks, no armour (fates.ts tanksOf): Japan's aircraft until mid-1944, the G4M until November 1944;
+       * and 'part', Japan's after that, with CO2 bottles and some armour but still no self-sealing tanks in most (the
+       * historian, 20 November: the Zero's flamers cut to about two times, not to none). 'boom' is how much more often
+       * a burning one blows apart on the way down.
+       */
+      fragile: { flamer: 3, explode: 1.9, burn: 1.3, glide: 0.6 },
+      frail: { flamer: 2, explode: 1.4, burn: 1.15, glide: 0.8 },
+      boomBare: { bare: 1.5, part: 1.25 },
+      /**
+       * The four-engined heavies by day took terrible punishment and often came down under control (the historian: the
+       * Eighth Air Force had more men taken prisoner than killed, so its lost heavies glided or burned down slowly at
+       * least two in five times, and blew up fewer than one in ten).
+       */
+      sturdy: { glide: 2.6, burn: 1.3, spin: 1.1, explode: 0.45, flamer: 0.7, breakup: 0.7 },
+      /**
+       * A bomber a night fighter brings down: from below and astern into the wing tanks, it goes up in flames (the
+       * historian: about three in five flamers or blown up; a Lancaster's crew the least likely of the heavies to get out).
+       */
+      night: { flamer: 4.5, explode: 3, burn: 0.8, wing: 0.7, glide: 0.3, spin: 0.5, pilot: 0.4, tail: 0.6 },
+      /** A straggler already on fewer engines: the dead engine's fire spreads, the wing burns through, the rest give out. */
+      strag: { burn: 2.5, wing: 1.6, glide: 2.5, explode: 0.6, pilot: 0.5 },
+      /** By height: low down it has no room to spin long, and glides in; high up it spins. */
+      band: [{ glide: 1.8, spin: 0.5 }, {}, { spin: 1.3 }],
+      /** The last four ways shown, newest first, are down-weighted by these: never the same twice running (unless it is the only way left). */
+      again: [0, 0.35, 0.6, 0.85],
+      /** The ways a fighter pilot the rules save can get out of under a parachute. */
+      saved: ["flamer", "burn", "wing", "tail", "spin"],
+      /** A lost fighter pilot over enemy ground seen to get out (taken prisoner), by the way down. */
+      captured: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+      /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
+      boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] },
+      /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
+      fire: { burn: [0.5, 3], flamer: [0, 0.5] },
+      /** Metres a second it comes down, by the way. */
+      fallV: {
+        explode: [40, 70],
+        flamer: [70, 110],
+        burn: [60, 110],
+        wing: [50, 80],
+        tail: [60, 90],
+        pilot: [120, 170],
+        spin: [45, 70],
+        glide: [12, 25],
+        breakup: [40, 70],
+        struck: [45, 80],
+        collide: [45, 80]
+      },
+      /** Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time). */
+      out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 },
+      outBand: [0.3, 1, 1.1],
+      /** Air seconds after the hit the first canopy opens (later out of a spin, held there by the forces), and between canopies. */
+      chute: { first: [2, 6], spin: [4, 10], gap: [1.5, 4] },
+      /**
+       * A loss of the same tight box within 't' battle seconds may strike this one: its wreckage after it blew up or
+       * came apart ('debris'), the aircraft itself falling out of control ('falling'), or burning (or diving in, its pilot
+       * hit); and a fighter shot down while it attacked the box, falling through it, at 'foe' times those (it is smaller).
+       * Each loss strikes at most one other.
+       */
+      near: { t: 4, min: 1, debris: 0.3, falling: 0.2, burning: 0.08, foe: 0.5 },
+      /**
+       * A fighter and the bomber it was attacking lost in the same moment: the chance they collided by accident, head-on
+       * and otherwise, and two fighters locked in a fight (the historian: about 2 to 3 in a hundred; closing at 900 km/h
+       * the fighters broke away under or rolled off). 'meant': a ram on purpose, its own situation by nation and month
+       * (the historian: Soviet pilots, most in 1941 to 1943; Japan's ramming units against the B-29s from late 1944;
+       * Germany's armoured Sturm groups closing from astern in 1944 and to April 1945). The pilot who rams may get out
+       * and fly again. The shares are the historian's judgement (historian/nose-art-rams-check.md, 20 November): Soviet
+       * 20 in 100 from June 1941 to the end of 1942 and 10 in 1943; Japan's one-offs 5 from June 1944 and 12 across all
+       * its fighters on the B-29s from November 1944; Germany's 8. 'same': two of one group lost in the same moment, the
+       * chance they collided, bombers of a tight box by day (one swerving from its hit into the next; the UI director's
+       * line of 15:38Z) and fighters pressing the same attack. The historian finds both shares fair (air-fates-check.md
+       * section 8): it happened inside the tight boxes, though most of the Eighth's collisions came while forming up,
+       * not under fire. By night the stream did collide, most over the target: if night raids are ever fought on the
+       * field and can lose two in the same moment there, 10 in 100 would carry it; today it is never.
+       */
+      ram: {
+        headon: 0.03,
+        other: 0.01,
+        tangle: 0.02,
+        same: { bmr: 0.3, ftr: 0.1 },
+        meant: [
+          { nat: "SOV", from: 1941 + 5 / 12, to: 1943, p: 0.2 },
+          { nat: "SOV", from: 1943, to: 1944, p: 0.1 },
+          { nat: "JAP", from: 1944 + 5 / 12, to: 1944 + 10 / 12, p: 0.05, four: true },
+          { nat: "JAP", from: 1944 + 10 / 12, to: 1946, p: 0.12, four: true },
+          { nat: "GER", from: 1944, to: 1945 + 4 / 12, p: 0.08, four: true, pass: "close" }
+        ]
+      },
+      /** How many looks each way down has on the 3D side (smoke, debris, the way it rolls); never the last one again. */
+      looks: 4
+    },
+    /**
+     * A hit that does not bring it down (Brian: "not all planes that get hit go down"). Shown only: while a group is
+     * being hit, a chance of k times what it was owed each tick of one of its aircraft taking a hit it survives, at most
+     * one each 'gap' battle seconds a group: holes punched through it, a puff and trail of smoke, pieces torn off, or (a
+     * bomber) an engine fire the crew puts out. 'for': air seconds it shows.
+     */
+    hit: {
+      k: 3,
+      gap: 6,
+      marks: {
+        ftr: [["holes", 0.45], ["smoke", 0.3], ["pieces", 0.25]],
+        bmr: [["holes", 0.35], ["smoke", 0.25], ["pieces", 0.2], ["fireout", 0.2]]
+      },
+      for: { holes: [0, 0], smoke: [3, 8], pieces: [1, 2], fireout: [4, 12] }
+    },
+    /**
+     * The straggler (the design's 1.6; the design director's ruling 237.1: shown, never counted twice). While a box is
+     * hit, each tick one of its bombers may lose an engine and fall out, at k times what the box was owed that tick, at
+     * most 'most' at a time and never its last aircraft in formation. The box's next loss is its oldest straggler that
+     * has been out at least 'seen' air seconds (so it is seen to leave before it falls) and has no escort over it. A twin
+     * on one engine makes three quarters of its speed or less and cannot hold height (B39): it drops back at 'twin.back'
+     * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39), or, still
+     * loaded, one cleanly feathered (the historian, question 6: loaded, it seldom held the box; after the drop most
+     * could, FB12): it drops back 4.5 to 9 m/s. A single-engined carrier or dive bomber has its one engine hit, running
+     * rough with its airscrew turning, and falls back and sinks as a twin does (a placeholder). The historian: about
+     * half is a fair figure for 1943 (low), less in 1944, when escorts covered the stragglers (as 'cover' does here).
+     * Before its box bombs it keeps within 'held' metres (its bombs are in the box's drop); after, it falls back freely
+     * and is clear of the fight, and gets home, past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
+     * answers (ruling 237.1). Sink rates are placeholders.
+     */
+    strag: {
+      k: 1,
+      most: 2,
+      seen: 10,
+      twin: { back: 0.25, sink: 2 },
+      four: { back: [4.5, 9], sink: 1 },
+      held: 1500,
+      clear: 3e3,
+      /**
+       * Shown only (Brian, 20 November: "some bombers flew on 2 engines after they put out the fire"). The chance its dead
+       * engine was burning as it fell out, and the air seconds before the crew put the fire out ('stays': the share where
+       * it never goes out; the historian, 20 November: an engine fire was put out about 55 to 60 times in a hundred with
+       * the propeller feathered and the CO2 bottle, a wing-tank fire almost never, so about half overall). A fire put out
+       * leaves its propeller feathered. After its box has dropped, and its fire is out, a heavy with one engine out
+       * regains the box: most with the dead engine's propeller feathered, few with it windmilling, for the drag held it
+       * back (the historian: about 60 to 65 and about 10 in a hundred). It closes at 'close' metres an air second and
+       * climbs back at 'climb'; at night it stays with the stream. A twin on one engine, or a carrier or dive bomber with
+       * its one engine hit, never does.
+       */
+      fire: { k: 0.4, out: [4, 15], stays: 0.5 },
+      join: { feather: 0.62, windmill: 0.1, close: 3, climb: 1.5 }
+    }
+  };
+
   // ../../data/campaign/hulls.json
   var hulls_default = {
     _about: "The names of the battleships and carriers, for the card that marks one lost (Brian's memorial card, asked for by the 3D builder 19 November 2026). A record only: nothing here changes a fight, a count or a die. A ship gone by any way (a fight, bombers, a submarine, a fleet scuttled for want of a port) is never named again. 'navies' gives each nation's battleships ('bb') and carriers ('cv') in the order of the record, each with her name, her crew in wartime (the men aboard), the month she joins (the campaign's turn: 1 is September 1939, 28 December 1941; none for a ship afloat at the start), and the fleet she began with ('fleet', the fleet rows' own names in navy.json, world.json and far-world.json). A light carrier unit of two ships ('pair': the arrivals' 'light carriers Independence and Princeton') is one carrier in the counts and goes down as one, both names and both crews. When a nation's battleship or carrier goes down, the ship named is one still afloat of the fleet that lost her if it has one, any afloat of her nation if not, and none (a name of null) once the record runs out; and of her crew a share is lost that is one of the real ones of her class ('share': each the men lost of the men aboard when a ship of the class went down in the war, 1939 to 1945). Both draws are the game's own and always the same for the same fight, but are made apart from the war's dice. 'crew' is the crew of a ship of the class the record has no name for. Escort carriers are named one for each the game counts in the Escort Carrier Fleet. Wyoming, a gunnery training ship from 1931, stands in for the fourth battleship the game gives the American Atlantic Fleet. Rows are only ever added at the end of a list, never moved or put between others: a lost ship is kept by her place in the list (the flag hull:nation:class:place), so a moved row would rename ships in saved games. 'later' gives a change from a month on, in the order of the months: a new name (Marat is Petropavlovsk from May 1943) or a move to another fleet (Ark Royal from the Home Fleet to Force H); a ship lost after it goes down under her name of that month. 'type' marks a ship whose type is not her class's: Hood, Renown and Repulse were battlecruisers, counted by the game as battleships. Caio Duilio and Andrea Doria were being rebuilt in September 1939 (back in July and October 1940), but stay afloat from the start, because the game's 1st Fleet has four battleships from the first month. Draft by the rules thread from the standard figures; checked by the historian on 19 November 2026 (historian/memorial-roster-check.md), corrections made.",
@@ -42369,6 +42791,23 @@
     const r = g2.regions[target];
     return r && r.owner === r.ctrl ? AIR.height.observers : 0;
   }
+  var UD_ROLES = ["close", "top"];
+  var udRole = (k) => k < SKY.escort.topFrom ? "close" : UD_ROLES[(k - SKY.escort.topFrom + 1) % UD_ROLES.length];
+  function escortAbove(g2, a, W2) {
+    const at4 = (row2) => {
+      const i = clamp(W2, 0, 1) * (row2.length - 1), lo = Math.floor(i), hi = Math.min(row2.length - 1, lo + 1);
+      return row2[lo] + (row2[hi] - row2[lo]) * (i - lo);
+    };
+    const close3 = at4(AIR.height.escort.close), top = at4(AIR.height.escort.top);
+    let k = 0, sum3 = 0, wt = 0;
+    for (const x of a.att) {
+      if (!(x.esc > 0 && Math.round(x.f.ftr * x.crowd) > 0)) continue;
+      const w = x.ftr * worth2(g2, x.f);
+      sum3 += w * (udRole(k++) === "top" ? top : close3);
+      wt += w;
+    }
+    return wt > 0 ? sum3 / wt : 0;
+  }
   function assessAir(g2, fleets, m, target) {
     const C4 = AIR.combat;
     const quarry = m === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
@@ -42421,7 +42860,7 @@
       out.why = "No bombers can reach the target.";
       return out;
     }
-    const sweep = unitsDecide(g2) && !night && out.B <= 0;
+    let dPlain = 0;
     if (sea) {
       for (const id of g2.seas[zone].coast) {
         const c = radarAt(g2, g2.regions[id]);
@@ -42447,19 +42886,15 @@
       if (w <= 0) continue;
       out.def.push({ f, d, w });
       out.D += f.ftr * w;
-      out.Dpow += f.ftr * w * worth2(g2, f) * (sweep ? 1 : techMul(g2, f.nat, "radar"));
+      out.Dpow += f.ftr * w * worth2(g2, f) * techMul(g2, f.nat, "radar");
+      dPlain += f.ftr * w * worth2(g2, f);
     }
     if (fighterTypesOn(g2) && !night && out.Epow > 0 && out.Dpow > 0) {
       const E = typeEdge(g2, out.att.map((x) => ({ f: x.f, w: x.ftr * worth2(g2, x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth2(g2, x.f) })), m);
       out.typeEdge = E;
       out.Epow *= Math.exp(E / 2);
       out.Dpow *= Math.exp(-E / 2);
-    }
-    if (sweep && out.Epow > 0 && out.Dpow > 0) {
-      const W2 = warnedIn(g2, out, sea, amb, target), x = 1 - 2 * W2, h = AIR.height.h;
-      out.height = { W: W2, x, h };
-      out.Epow *= Math.pow(h, x);
-      out.Dpow *= Math.pow(h, -x);
+      dPlain *= Math.exp(-E / 2);
     }
     out.defence = bomberDefence(g2, nat, night);
     const guns2 = out.B * out.defence;
@@ -42492,6 +42927,20 @@
       if (tough.some((k) => k !== 1)) out.tough = tough;
     }
     if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C4.night.flak : C4.flak) * gun2 + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
+    if (unitsDecide(g2) && !night && out.Epow > 0 && out.Dpow > 0) {
+      const W2 = warnedIn(g2, out, sea, amb, target), h = AIR.height.h;
+      const x = out.B <= 0 ? 1 - 2 * W2 : escortAbove(g2, out, W2);
+      out.height = { W: W2, x, h };
+      const over = 2 * W2 - 1;
+      if (out.B > 0 && over > 0) {
+        const plain2 = out.bomberLoss, byFighters = Math.max(0, plain2 - out.gunLoss);
+        out.bomberLoss = Math.min(most, out.gunLoss + byFighters * Math.pow(AIR.height.bombers, over));
+        out.height.plain = plain2;
+      }
+      out.Dpow = dPlain;
+      out.Epow *= Math.pow(h, x);
+      out.Dpow *= Math.pow(h, -x);
+    }
     const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
     const ab = out.att.reduce((s, a) => s + (a.bmr > 0 ? a.f.bmr : 0), 0);
     const df2 = out.def.reduce((s, x) => s + x.f.ftr, 0);
@@ -42519,7 +42968,13 @@
         effect: `From ${list2(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString("en-US")} fighters can meet the raid.`
       });
     } else out.lines.push({ label: "In range to intercept", value: "No enemy fighters" });
-    if (out.height) {
+    if (out.height && out.B > 0) {
+      const { W: W2, x } = out.height, hx = Math.pow(out.height.h, Math.abs(x)).toFixed(1);
+      const them = W2 >= 1 ? "Warned in time, they climb above your bombers" : W2 > 0 ? "Warned late, they meet your bombers at their height" : "Unwarned, they come up at your bombers from below";
+      const roles = out.att.filter((a) => a.esc > 0 && Math.round(a.f.ftr * a.crowd) > 0).length > SKY.escort.topFrom ? "your close escort flies with the bombers and your top cover a band above" : "your escort flies close, with the bombers";
+      const dive = out.height.plain !== void 0 ? ` They dive on your bombers as well: about ${AIR.height.bombers.toFixed(1)} times the bombers lost to fighters.` : "";
+      out.lines.push(x <= -0.25 ? { label: "Height", value: "The defenders will be above your escort", effect: `${them}; ${roles}. About ${hx} to 1 their way on height alone.${dive}` } : x >= 0.25 ? { label: "Height", value: "Your escort will be above them", effect: `${them}; ${roles}. About ${hx} to 1 your way on height alone.${dive}` } : { label: "Height", value: "Level", effect: `${them}; ${roles}. Neither side has the height to speak of.${dive}` });
+    } else if (out.height) {
       const hx = out.height.h.toFixed(1);
       out.lines.push(out.height.x < 0 ? { label: "Height", value: "The defenders will be above you", effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` } : out.height.x > 0 ? { label: "Height", value: "You will be above them", effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` } : { label: "Height", value: "Level", effect: "Ground observers warn them in time to climb to your height, not above it: neither side has the height." });
     }
@@ -73326,426 +73781,6 @@
     return `The staff settles every battle ${said}: the field cannot fight one at the card's odds.`;
   }
 
-  // ../../src/battle/air/book.ts
-  var SKY = {
-    /** Air seconds that pass in one battle second (6 until ruling 226: a fight then lasted some 45 battle seconds). */
-    scale: 2,
-    /** The board: 100 km square. The raid comes on from the south edge (y = 0), as the attacker does in every battle. */
-    w: 1e5,
-    h: 1e5,
-    /** The target, ringed: bombers inside this circle on a steady course are on their run. */
-    target: { x: 5e4, y: 7e4, r: 6e3 },
-    /** Flak hangs in a ring round the target out to this radius. */
-    flakR: 12e3,
-    /** The three heights. alt: the middle of each band in metres (for the 3D side); climb and dive: air seconds per band. */
-    bands: { names: ["LOW", "MED", "HIGH"], alt: [1800, 4500, 7200], climb: 120, dive: 25 },
-    /** Cruising speed, metres per air second. A climbing group makes this share of it. */
-    speed: { ftr: 120, bmr: 85, climbing: 0.6 },
-    /** Air seconds a bomber group must hold its run inside the target ring before it drops. */
-    run: 45,
-    /** Fighter fuel over the board, in air seconds, for a group well inside its range; burnt this much faster in a fight. */
-    fuel: { full: 1800, fight: 1.5, home: 99999 },
-    /** How close two groups must be to be in contact, by day and by night. */
-    contact: { day: 3e3, night: 1e3 },
-    /** How far a group can see another, by day and by night. */
-    sight: { day: 3e4, night: 3e3 },
-    /** Without radar, the defenders are scrambled when a raider comes this close to the target. */
-    scramble: 5e4,
-    /** Defending airfields stand this far from the target on the board: near + the real distance x squeeze, at most far. */
-    fields: { near: 15e3, far: 4e4, squeeze: 0.2 },
-    /**
-     * Where a close escort flies beside its bombers, how far ahead a loose escort sweeps, and how far behind its box top
-     * cover keeps station, a band above it (1 to 2 km, a placeholder; the design's 1.8); and the first escort group, by
-     * count from 0, that may fly top cover (ruling 237.2's fallback: the third).
-     */
-    escort: { close: 1500, ahead: 7e3, behind: 1500, reach: 12e3, near: 4e3, cover: [0.4, 2.5], topFrom: 2 },
-    /** Battle seconds before the battle is called (an hour in the air), and the battle seconds the computer waits between rethinks (12 air seconds). */
-    limit: 1800,
-    think: 6,
-    /** Once every bomber has dropped or turned back and nobody has been in contact for this many air seconds, it is over. */
-    quiet: 120,
-    /**
-     * The wear. The campaign settles a raid in one throw (fly() in campaign/air.ts): the raid card's forecast says how
-     * many defending fighters, escorts and bombers fall. The board hands each fighter group its share of what its side
-     * should bring down (AirSim.arm) and lets it spend that while in contact, so the sums are the card's however the
-     * fight goes; where and how it goes decides who pays. The guns' share is spread over the time a box spends in the
-     * flak ring. Checked by tests/battle-air-parity.test.ts: the computer on both sides averages the forecast within a
-     * tenth. luck: each group's luck in its fight, drawn as fly()'s own dice are.
-     */
-    wear: { luck: 0.15 },
-    /** A group in contact spends its fight by e every this many air seconds; it breaks off with 'spent' of it left. */
-    tire: 120,
-    spent: 0.12,
-    /** Bomber boxes fly as one stream, side by side this many metres apart. */
-    stream: 1500,
-    /**
-     * Flak by height: the low band takes the most, the high the least. Fighters take this share of what bombers do.
-     * kinds (shown only): the guns that reach each band, for the effects kit's AirFlak bursts round a box on its run in
-     * (the art director's flak brief, sections 3 and 4): light guns reach the low band only, medium the low and middle,
-     * heavy all three.
-     * hold (Brian, 20 November 2026: "flak should stop in the air battles when their own fighters are in the air. for
-     * example german flak 88s would stop when their bf 109s would arrive to attack the bombers to prevent taking down
-     * their own planes"): while a defending fighter group is going in on a box inside the ring, the guns do not fire on
-     * that box. They fire in the gaps between its passes, while the fighters stand off to form up again, and once the
-     * fighters have gone (the coordinator's ruling, 20 November: the first build held the guns for as long as fighters
-     * were anywhere on a box, and a defended raid had no flak left in it). Nothing is counted differently (ruling 237:
-     * the battle's sums are the raid card's): what the guns would have brought down while they hold is the fighters'
-     * doing instead, so the bombers lost, and when each falls, are the same with this on or off
-     * (tests/battle-air-flak-hold.test.ts).
-     * pass (shown only): the beat of the passes on a box, in air seconds. The fighters on it go in together for 'go',
-     * by the pass the group pressing it hardest is flying, then stand off for 'off' to form up for the next. A head-on
-     * pass is over in moments and the climb back ahead of the bombers is long; fighters sitting astern stay on a box
-     * far longer. Each length varies by 'vary' either way. A box is in the ring some 115 air seconds on its way in, so
-     * it sees two or three passes there. Every 'off' at 0 is the first build's rule: the guns silent all the while.
-     */
-    flak: {
-      band: [1.5, 1, 0.55],
-      fighters: 0,
-      kinds: [["light", "medium", "heavy"], ["medium", "heavy"], ["heavy"]],
-      hold: true,
-      pass: {
-        go: { headon: 14, astern: 26, close: 26, quarter: 18, beam: 18, below: 18 },
-        off: { headon: 34, astern: 18, close: 18, quarter: 24, beam: 24, below: 24 },
-        vary: 0.25
-      }
-    },
-    /**
-     * Bombers by name (AirPlace.bombers; Brian, 20 November 2026: "i would like the game to keep track of real bombers
-     * names and how many missions they have completed and fighters shot down"). 'lines': when one of a group's
-     * longest-serving bombers falls, a line names it, and only for this many of each group, its first seats; an air
-     * fleet that loses forty bombers in a raid does not fill the strip with forty names. Shown, never counted.
-     */
-    named: { lines: 2 },
-    /**
-     * How good a fighter group's pilots are, 0 to 1, for the 3D game's pilots (shown, never counted: the campaign has
-     * already weighed readiness, leaders and aircraft into each group's worth, and the battle's sums are the raid
-     * card's): a base, its leader's experience (the ticket's xp: his level over 3, none with no named leader) and its
-     * readiness. A group at full readiness under a level 3 leader comes to 0.85; a tired one with no leader, under a half.
-     */
-    pilots: { base: 0.3, leader: 0.25, ready: 0.3 },
-    /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
-    tied: 0.6,
-    /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
-    edge: { bounce: 1.5, bounceFor: 60, climbing: 0.7, wavering: 0.8 },
-    /** How near a side is to breaking off (AirSim.nearBreak) when the player is warned: three quarters of the way (ruling 226, mark 3). */
-    warn: 0.75,
-    /** Morale: where it starts (from readiness), what knocks it and what restores it; the marks for wavering and routing. */
-    morale: { base: 0.55, ready: 0.45, perLoss: 1.1, bounced: 0.08, alone: 5e-4, mend: 1e-3, wavering: 0.35, routing: 0.17 },
-    /**
-     * How a group is drawn (Brian, 17:50Z: our own 3D models, animated). A group shows one model for every 'per'
-     * aircraft, in a box 'gap' metres between models; a loss is one model falling out of it ('air:lost').
-     * 'per' is one number for the whole battle (Brian, 21 November 2026: the numbers "proportionate and realistic";
-     * "i dont want the defenders to go smaller to be proportionate"): all the aircraft sent up over 'all', rounded up,
-     * so about 'all' models fly at the start whatever the battle's size and every model stands for the same number of
-     * aircraft. No side's numbers are ever cut to make a battle look even: the count is the campaign's.
-     * 'all' is the 3D game's budget (the production lead's scale plan of 22 November, item AR4: its first step, S1; the
-     * next, 400, waits on the flight core's speed work, AR3, and a warm Mac reading). 'page' is the browser page's own,
-     * which draws every model on a flat map and keeps the old 60.
-     * A model falls only for its share of the losses (AR1, Brian's ask of 22 November 04:07Z: "the bombers get destroyed
-     * a lot"): its group's losses stand for round(lost / per) models, so falls x per = losses, and every aircraft lost is
-     * still told in the dispatches. At one model an aircraft, every loss is a fall, as before.
-     * 'box' is the most models drawn in one box (AR2, the production lead's boxes of 18 to 24 models): a bomber group's
-     * box of 24, the flight core's eight vics of three, and fighters in boxes of 20, five fours (a squadron of 16 and its
-     * spares, or two squadrons' worth at a coarse scale). A group with more models flies more boxes, in trail
-     * ('boxes' in the view's extra), and its box is never drawn wider than one: a big raid is a stream, not a wall.
-     */
-    look: { all: 150, page: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 }, box: { ftr: 20, bmr: 24 } },
-    /**
-     * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
-     * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how
-     * far and how dull each one plays is the mix's, read from mix.json, never copied here.
-     */
-    cues: {
-      dogfight: "dogfight",
-      onBombers: "fighter_pass",
-      scramble: "aircraft_takeoff",
-      siren: "air_raid_siren",
-      bombs: "bomb_stick_01",
-      explode: "plane_explode",
-      down: "plane_down",
-      chutes: "parachute_open",
-      bingo: "fighter_pass",
-      /** Far takes: past the family's farTakesFrom (mix.json "distance", explosions) a blast plays one of these instead. */
-      far: { plane_explode: ["explosion_far_01", "explosion_far_02"] },
-      /**
-       * A fighter group's own pass, by the model the 3D game draws for it (FMiniatureMesh::MainFighterOf): a 'fighter_pass'
-       * cue on a fighter group, or on a bomber group the fighters reached (the contact's extra.with), plays its model's
-       * take; a model with no recording of its own keeps 'fighter_pass'. No Thunderbolt is drawn yet.
-       */
-      pass: { Spitfire: "spitfire_pass", Fw190: "fw190_pass", Mustang: "p51_pass", P47: "p47_pass" },
-      /**
-       * Engines, one per formation while it flies (the bridge's 'loop'): its kind's plain loop, mix.json "air"."loops"
-       * twinEngined for bombers (every bomber drawn before the B-17 and the Lancaster has two engines) and fighter for
-       * fighters. The 3D game plays its model's own instead, by 'engines'.
-       */
-      loops: { bmr: "bomber_medium_loop", ftr: "fighter_engine_loop" },
-      /**
-       * Which mix.json "air"."loops" entry a formation's engines take, by the model the 3D game draws for it
-       * (FMiniatureMesh::MainBomberOf, MainFighterOf; '*' is any other, such as the plain twin-engined 'Bomber:<tag>').
-       */
-      engines: { bmr: { B17: "B-17", Lancaster: "fourEngined", He111: "twinEngined", "*": "twinEngined" }, ftr: { "*": "fighter" } },
-      /**
-       * What the mix plays with no event of its own, as paths into mix.json (the sound director's, never copied here):
-       * the flak ring has no loop, its guns fire and their shells burst by "air"."flak"; the formations' engines are
-       * "air"."loops", by 'engines'; each gun as it fires is "air"."gunsByCalibre", by 'calibre'; a lost engine and a
-       * windmilling airscrew are "air"."engineLost" and "air"."windmilling".
-       */
-      mix: { flak: "air.flak", engines: "air.loops", guns: "air.gunsByCalibre", engineLost: "air.engineLost", windmilling: "air.windmilling" },
-      /**
-       * A gun's kind (guns.ts, the effects kit's fx.json air_guns rows) to its entry in the mix's "air"."gunsByCalibre":
-       * a heavy gun plays that entry's wing, turret or handHeld take by its mount; a single hand-held rifle-calibre gun
-       * plays handHeldRifle. A bomber's lost engine and a windmilling airscrew play nothing of their own: the mix drops
-       * the formation's drone by "air"."engineLost".
-       */
-      calibre: { rifle: "rifle", hmg: "heavy", cannon20: "cannon" }
-    },
-    /**
-     * A loss, as the 3D side shows it (Brian's ask of 2026-11-17: it explodes, or an engine burns and it falls, and
-     * sometimes the crew bails out). Cosmetic only: the count has already dropped; this picks how it looks. Whether a
-     * fighter pilot comes back is drawn at the rules' own rate (AIR.pilots.home / away), so every pilot the rules give
-     * back was seen under a parachute.
-     */
-    fall: {
-      /** A fighter whose pilot is lost: explode, burn, spin. */
-      lost: [0.35, 0.45, 0.2],
-      /** A fighter whose pilot is saved: burn, spin (never an explosion: nobody gets out of one). */
-      saved: [0.55, 0.45],
-      /** A lost pilot over enemy ground may still be seen to bail out, and is taken prisoner: chance by burn and spin. */
-      captured: [0.5, 0.6],
-      /** Bombers: explode, burn, spin; and the chance each of the crew gets out of a burning or spinning one. */
-      bomber: [0.15, 0.6, 0.25],
-      bomberOut: [0.55, 0.35],
-      /**
-       * The men whose dice are thrown for a bomber on the look streams whatever its type: five, as when every bomber
-       * carried five. The crew aboard ('crews') says how many of them count, and a sixth man and after are thrown on a
-       * stream of their own (fates.ts fateOf), so the crew aboard never moves a count or any other look.
-       */
-      crew: 5,
-      /**
-       * Crew aboard, by the model the 3D game draws (the historian, air-fates-check.md section 6; Brian's yes of 20
-       * November 2026 to a dive bomber showing its real two parachutes, not up to five). 'Dive', 'Torpedo' and 'Bomber'
-       * are a nation's plain carrier bombers and its plain twin; Japan's plain twin is read as the G4M, as its tanks are,
-       * and the Soviet one as the SB, as its engines are. Any other model is the plain twin's.
-       */
-      crews: {
-        D3A: 2,
-        D4Y: 2,
-        SBD: 2,
-        SB2C: 2,
-        Skua: 2,
-        Stuka: 2,
-        Dive: 2,
-        B5N: 3,
-        B6N: 3,
-        TBD: 3,
-        TBF: 3,
-        Swordfish: 3,
-        Barracuda: 3,
-        Torpedo: 3,
-        He111: 5,
-        Bomber: 5,
-        "Bomber:SOV": 3,
-        "Bomber:JAP": 7,
-        "Bomber:JPN": 7,
-        G4M: 7,
-        Nell: 7,
-        Betty: 7,
-        SM79: 6,
-        Wellington: 6,
-        Pe2: 3,
-        LeO451: 4,
-        // the new models (23 Nov; crews as built, unchecked)
-        Lancaster: 7,
-        B17: 10
-      },
-      /**
-       * Crews that changed, by the month ('from' and 'to' as year + month / 12, months from 0): the He 111 flew with four
-       * until an extra gunner joined in 1941; the B-17 often with nine from mid-1944, one waist gunner dropped.
-       */
-      crewsDated: [
-        { model: "He111", to: 1941, crew: 4 },
-        { model: "B17", from: 1944 + 6 / 12, crew: 9 }
-      ]
-    },
-    /**
-     * How a lost aircraft is seen to go, from its situation (fates.ts; Brian, 20 November: many ways down, a falling plane
-     * hitting another, a wing blown off, never the same each time, "variables and different situations"). Shown only:
-     * 'fall' above still draws the rules' pilots back and is kept as it was. Weights in the order explode, flamer (the
-     * whole aircraft ablaze), burn (an engine on fire), wing (shot or burnt off), tail (shot away), pilot (hit, it noses
-     * over and goes straight in), spin, glide (engines dead, it glides down to ditch or crash-land), breakup (it comes
-     * apart). Each factor multiplies the row; a missing way is 1. Placeholders for the historian's review.
-     */
-    fate: {
-      base: { ftr: [0.13, 0.1, 0.22, 0.1, 0.07, 0.12, 0.16, 0.05, 0.05], bmr: [0.11, 0.1, 0.26, 0.12, 0.07, 0.06, 0.12, 0.1, 0.06] },
-      /** By the heaviest gun of the fighter that brought it down: a rifle-calibre gun kills men and starts fires; cannon shells take wings and tails off. */
-      gun: {
-        rifle: { pilot: 1.4, burn: 1.2, wing: 0.4, tail: 0.6, explode: 0.7, breakup: 0.4 },
-        hmg: { burn: 1.1, wing: 1.1 },
-        cannon20: { wing: 2, tail: 1.6, explode: 1.4, breakup: 1.6, pilot: 0.8 }
-      },
-      /** By the heaviest gun round the target firing at its height: a heavy shell close by blows it apart or takes a wing. */
-      flak: {
-        light: { burn: 1.3, pilot: 1.2, glide: 1.3, explode: 0.6 },
-        medium: { burn: 1.3, wing: 1.2 },
-        heavy: { explode: 2, wing: 1.5, breakup: 1.6, pilot: 0.3 }
-      },
-      /** By the way the fighter came at the box: head-on hits the cockpit and the engines; from astern the tail and the tanks; from below the tanks and the bomb bay. */
-      pass: {
-        headon: { pilot: 5, burn: 1.3, tail: 0.3 },
-        astern: { tail: 2, flamer: 1.3, pilot: 0.7 },
-        quarter: { wing: 1.3, burn: 1.2 },
-        beam: { wing: 1.4, flamer: 1.2 },
-        below: { flamer: 1.5, explode: 1.3, tail: 0.6 },
-        close: {}
-      },
-      /** A bomber with its bombs aboard blows up far more often than one that has dropped. */
-      loaded: { explode: 1.8 },
-      dropped: { explode: 0.7 },
-      /**
-       * No self-sealing tanks, no armour (fates.ts tanksOf): Japan's aircraft until mid-1944, the G4M until November 1944;
-       * and 'part', Japan's after that, with CO2 bottles and some armour but still no self-sealing tanks in most (the
-       * historian, 20 November: the Zero's flamers cut to about two times, not to none). 'boom' is how much more often
-       * a burning one blows apart on the way down.
-       */
-      fragile: { flamer: 3, explode: 1.9, burn: 1.3, glide: 0.6 },
-      frail: { flamer: 2, explode: 1.4, burn: 1.15, glide: 0.8 },
-      boomBare: { bare: 1.5, part: 1.25 },
-      /**
-       * The four-engined heavies by day took terrible punishment and often came down under control (the historian: the
-       * Eighth Air Force had more men taken prisoner than killed, so its lost heavies glided or burned down slowly at
-       * least two in five times, and blew up fewer than one in ten).
-       */
-      sturdy: { glide: 2.6, burn: 1.3, spin: 1.1, explode: 0.45, flamer: 0.7, breakup: 0.7 },
-      /**
-       * A bomber a night fighter brings down: from below and astern into the wing tanks, it goes up in flames (the
-       * historian: about three in five flamers or blown up; a Lancaster's crew the least likely of the heavies to get out).
-       */
-      night: { flamer: 4.5, explode: 3, burn: 0.8, wing: 0.7, glide: 0.3, spin: 0.5, pilot: 0.4, tail: 0.6 },
-      /** A straggler already on fewer engines: the dead engine's fire spreads, the wing burns through, the rest give out. */
-      strag: { burn: 2.5, wing: 1.6, glide: 2.5, explode: 0.6, pilot: 0.5 },
-      /** By height: low down it has no room to spin long, and glides in; high up it spins. */
-      band: [{ glide: 1.8, spin: 0.5 }, {}, { spin: 1.3 }],
-      /** The last four ways shown, newest first, are down-weighted by these: never the same twice running (unless it is the only way left). */
-      again: [0, 0.35, 0.6, 0.85],
-      /** The ways a fighter pilot the rules save can get out of under a parachute. */
-      saved: ["flamer", "burn", "wing", "tail", "spin"],
-      /** A lost fighter pilot over enemy ground seen to get out (taken prisoner), by the way down. */
-      captured: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
-      /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
-      boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] },
-      /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
-      fire: { burn: [0.5, 3], flamer: [0, 0.5] },
-      /** Metres a second it comes down, by the way. */
-      fallV: {
-        explode: [40, 70],
-        flamer: [70, 110],
-        burn: [60, 110],
-        wing: [50, 80],
-        tail: [60, 90],
-        pilot: [120, 170],
-        spin: [45, 70],
-        glide: [12, 25],
-        breakup: [40, 70],
-        struck: [45, 80],
-        collide: [45, 80]
-      },
-      /** Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time). */
-      out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 },
-      outBand: [0.3, 1, 1.1],
-      /** Air seconds after the hit the first canopy opens (later out of a spin, held there by the forces), and between canopies. */
-      chute: { first: [2, 6], spin: [4, 10], gap: [1.5, 4] },
-      /**
-       * A loss of the same tight box within 't' battle seconds may strike this one: its wreckage after it blew up or
-       * came apart ('debris'), the aircraft itself falling out of control ('falling'), or burning (or diving in, its pilot
-       * hit); and a fighter shot down while it attacked the box, falling through it, at 'foe' times those (it is smaller).
-       * Each loss strikes at most one other.
-       */
-      near: { t: 4, min: 1, debris: 0.3, falling: 0.2, burning: 0.08, foe: 0.5 },
-      /**
-       * A fighter and the bomber it was attacking lost in the same moment: the chance they collided by accident, head-on
-       * and otherwise, and two fighters locked in a fight (the historian: about 2 to 3 in a hundred; closing at 900 km/h
-       * the fighters broke away under or rolled off). 'meant': a ram on purpose, its own situation by nation and month
-       * (the historian: Soviet pilots, most in 1941 to 1943; Japan's ramming units against the B-29s from late 1944;
-       * Germany's armoured Sturm groups closing from astern in 1944 and to April 1945). The pilot who rams may get out
-       * and fly again. The shares are the historian's judgement (historian/nose-art-rams-check.md, 20 November): Soviet
-       * 20 in 100 from June 1941 to the end of 1942 and 10 in 1943; Japan's one-offs 5 from June 1944 and 12 across all
-       * its fighters on the B-29s from November 1944; Germany's 8. 'same': two of one group lost in the same moment, the
-       * chance they collided, bombers of a tight box by day (one swerving from its hit into the next; the UI director's
-       * line of 15:38Z) and fighters pressing the same attack. The historian finds both shares fair (air-fates-check.md
-       * section 8): it happened inside the tight boxes, though most of the Eighth's collisions came while forming up,
-       * not under fire. By night the stream did collide, most over the target: if night raids are ever fought on the
-       * field and can lose two in the same moment there, 10 in 100 would carry it; today it is never.
-       */
-      ram: {
-        headon: 0.03,
-        other: 0.01,
-        tangle: 0.02,
-        same: { bmr: 0.3, ftr: 0.1 },
-        meant: [
-          { nat: "SOV", from: 1941 + 5 / 12, to: 1943, p: 0.2 },
-          { nat: "SOV", from: 1943, to: 1944, p: 0.1 },
-          { nat: "JAP", from: 1944 + 5 / 12, to: 1944 + 10 / 12, p: 0.05, four: true },
-          { nat: "JAP", from: 1944 + 10 / 12, to: 1946, p: 0.12, four: true },
-          { nat: "GER", from: 1944, to: 1945 + 4 / 12, p: 0.08, four: true, pass: "close" }
-        ]
-      },
-      /** How many looks each way down has on the 3D side (smoke, debris, the way it rolls); never the last one again. */
-      looks: 4
-    },
-    /**
-     * A hit that does not bring it down (Brian: "not all planes that get hit go down"). Shown only: while a group is
-     * being hit, a chance of k times what it was owed each tick of one of its aircraft taking a hit it survives, at most
-     * one each 'gap' battle seconds a group: holes punched through it, a puff and trail of smoke, pieces torn off, or (a
-     * bomber) an engine fire the crew puts out. 'for': air seconds it shows.
-     */
-    hit: {
-      k: 3,
-      gap: 6,
-      marks: {
-        ftr: [["holes", 0.45], ["smoke", 0.3], ["pieces", 0.25]],
-        bmr: [["holes", 0.35], ["smoke", 0.25], ["pieces", 0.2], ["fireout", 0.2]]
-      },
-      for: { holes: [0, 0], smoke: [3, 8], pieces: [1, 2], fireout: [4, 12] }
-    },
-    /**
-     * The straggler (the design's 1.6; the design director's ruling 237.1: shown, never counted twice). While a box is
-     * hit, each tick one of its bombers may lose an engine and fall out, at k times what the box was owed that tick, at
-     * most 'most' at a time and never its last aircraft in formation. The box's next loss is its oldest straggler that
-     * has been out at least 'seen' air seconds (so it is seen to leave before it falls) and has no escort over it. A twin
-     * on one engine makes three quarters of its speed or less and cannot hold height (B39): it drops back at 'twin.back'
-     * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39), or, still
-     * loaded, one cleanly feathered (the historian, question 6: loaded, it seldom held the box; after the drop most
-     * could, FB12): it drops back 4.5 to 9 m/s. A single-engined carrier or dive bomber has its one engine hit, running
-     * rough with its airscrew turning, and falls back and sinks as a twin does (a placeholder). The historian: about
-     * half is a fair figure for 1943 (low), less in 1944, when escorts covered the stragglers (as 'cover' does here).
-     * Before its box bombs it keeps within 'held' metres (its bombs are in the box's drop); after, it falls back freely
-     * and is clear of the fight, and gets home, past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
-     * answers (ruling 237.1). Sink rates are placeholders.
-     */
-    strag: {
-      k: 1,
-      most: 2,
-      seen: 10,
-      twin: { back: 0.25, sink: 2 },
-      four: { back: [4.5, 9], sink: 1 },
-      held: 1500,
-      clear: 3e3,
-      /**
-       * Shown only (Brian, 20 November: "some bombers flew on 2 engines after they put out the fire"). The chance its dead
-       * engine was burning as it fell out, and the air seconds before the crew put the fire out ('stays': the share where
-       * it never goes out; the historian, 20 November: an engine fire was put out about 55 to 60 times in a hundred with
-       * the propeller feathered and the CO2 bottle, a wing-tank fire almost never, so about half overall). A fire put out
-       * leaves its propeller feathered. After its box has dropped, and its fire is out, a heavy with one engine out
-       * regains the box: most with the dead engine's propeller feathered, few with it windmilling, for the drag held it
-       * back (the historian: about 60 to 65 and about 10 in a hundred). It closes at 'close' metres an air second and
-       * climbs back at 'climb'; at night it stays with the stream. A twin on one engine, or a carrier or dive bomber with
-       * its one engine hit, never does.
-       */
-      fire: { k: 0.4, out: [4, 15], stays: 0.5 },
-      join: { feather: 0.62, windmill: 0.1, close: 3, climb: 1.5 }
-    }
-  };
-
   // ../../src/battle/air/falls.ts
   var pick2 = (rng, w) => {
     let x = rng.next() * w.reduce((s, v) => s + v, 0);
@@ -81302,16 +81337,19 @@
     const att = [], def = [];
     const share = (pow, all) => all > 0 ? pow / all : 0;
     const Atot = a.Epow + a.B * C4.bomberDefence, Dtot = a.Dpow;
-    const H = a.height;
-    const attBand = H ? H.x > 0 ? 2 : 1 : 1;
+    const H = a.height, sweep = !!H && a.B <= 0;
+    const attBand = sweep && H.x > 0 ? 2 : 1;
+    const defBand = H ? sweep ? H.x < 0 ? 2 : 1 : Math.max(0, Math.min(2, Math.round(2 * H.W))) : 1;
     const hx = H ? Math.pow(H.h, H.x) : 1;
-    const armed = H ? forecastAir(g2, { ...a, Epow: a.Epow / hx, Dpow: a.Dpow * hx }, m, target) : fc;
+    const armed = H ? forecastAir(g2, { ...a, Epow: a.Epow / hx, Dpow: a.Dpow * hx, bomberLoss: H.plain ?? a.bomberLoss }, m, target) : fc;
+    let k = 0;
     a.att.forEach((x) => {
       const [rx] = rot(vec(x.f));
       const sx = clampTo(SKY.target.x + rx * 0.25, 2e4, 8e4);
       const ftr = Math.round(x.f.ftr * x.crowd), bmr = Math.round(x.bmr);
       if (x.esc > 0 && ftr > 0) {
-        starts2[x.f.id] = { x: sx, y: 1e3, band: attBand, fuel: SKY.fuel.full * x.esc, wait: false };
+        const top = !!H && !sweep && udRole(k++) === "top" && bmr <= 0;
+        starts2[x.f.id] = { x: sx, y: 1e3, band: top ? 2 : attBand, fuel: SKY.fuel.full * x.esc, wait: false };
         att.push(force(x.f, "ftr", ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
       }
       if (bmr > 0) {
@@ -81335,7 +81373,7 @@
       const real = Math.hypot(rx, ry), d = SKY.fields.near + Math.min(SKY.fields.far - SKY.fields.near, real * SKY.fields.squeeze);
       const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
       const [bx, by2] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
-      starts2[x.f.id] = H ? { x: bx, y: by2, band: H.x < 0 ? 2 : 1, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
+      starts2[x.f.id] = H ? { x: bx, y: by2, band: defBand, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
       def.push(force(x.f, "ftr", n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
     }
     const side5 = (n, forces, human) => ({
@@ -81384,7 +81422,7 @@
       // that month (guns.ts).
       when,
       models,
-      guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
+      guns: Object.fromEntries(Object.entries(models).map(([n, k2]) => [n, { ftr: fighterGuns(k2.ftr, n, when), bmr: bomberGuns(k2.bmr, n, when) }])),
       // The country round the target, turned as the board is (b384(j)).
       // Open water has no ground to lay, but it keeps its true north (the sun, the wind and a wake's heading can use it).
       ground: quarry ? seaGround(turn2) : groundOf4(g2, target, (x, y) => {
@@ -81395,6 +81433,9 @@
       // where the campaign keeps weather, under the sky its card priced (a.sky, ruling 127).
       cloud: cloudOf(T.x, T.y, when, seed, weatherOn(g2) ? a.sky : void 0),
       ...styled,
+      // Units decide: the escort flies the roles the card weighed its height by (air.ts udRole), every nation's alike
+      // until the doctrine store lands (the design director 24 Nov 15:33Z).
+      ...H && !sweep ? { roles: Object.fromEntries([.../* @__PURE__ */ new Set([nat, ...att.map((f) => f.nat)])].map((n) => [n, [...UD_ROLES]])) } : {},
       ...Object.keys(bombers).length ? { bombers } : {}
     };
     const date2 = turnToDate(g2.turn).label;
