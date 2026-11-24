@@ -85,7 +85,8 @@ export function convoyTicket(g: Game, m: ConvoyMeeting, mine: string | null = g.
     place: {
       route: m.route, sea: sea?.key ?? '', seaName: sea?.name ?? '', lat, lon, when: { year, month }, light,
       ships: CONVOY.convoy.ships[m.route] ?? 40, fleets, kit, habits,
-      card: { raid: m.raid, guard: m.guard, G: m.G, L: m.L, tons: m.tons },
+      // (Units decide, where the route's convoy count is laid: the month's convoys sailed, sighted and attacked, for the card.)
+      card: { raid: m.raid, guard: m.guard, G: m.G, L: m.L, tons: m.tons, ...(m.count ? { count: m.count } : {}) },
       surrender: SUB_SURRENDER.on,
       ...(mine ? { mine } : {}),
     },

@@ -496,7 +496,9 @@ function paintBar(): void {
   const now = facts + score + log;
   if (now === barWas) return;
   barWas = now;
-  app.querySelector('[data-facts]')!.innerHTML = facts;
+  // (A campaign's night, with Units decide and the route's count laid: the month's convoys on the route, the card's sighted line, and the pack.)
+  const k = t.place.card?.count;
+  app.querySelector('[data-facts]')!.innerHTML = k ? `${facts} · <span class="nw">of about ${Math.round(k.sailed)} convoys this month, ${Math.round(k.sighted)} sighted, ${Math.round(k.attacked)} attacked${k.pack > 0 ? `, by about ${k.pack < 10 ? k.pack.toFixed(1) : Math.round(k.pack)} boats each` : ''}</span>` : facts;
   app.querySelector('[data-score]')!.innerHTML = score;
   app.querySelector('[data-log]')!.innerHTML = log;
   paintClock();
