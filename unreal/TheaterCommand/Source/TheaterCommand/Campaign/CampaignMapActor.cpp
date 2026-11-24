@@ -7436,7 +7436,11 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		if (Field.Groups > 0)
 		{
-			Signature += FString::Printf(TEXT("%d:%s:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups);
+			// (where the player shares the field, the row's share is drawn from the two counts of aircraft: they are in the
+			// signature by twenty-fives, so that his share does not go stale as the groups grow and shrink)
+			Signature += Field.YourGroups > 0
+				? FString::Printf(TEXT("%d:%s:%d:%d:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups, FMath::Max(Field.Aircraft, 0) / 25, FMath::Max(Field.YourAircraft, 0) / 25)
+				: FString::Printf(TEXT("%d:%s:%d;"), Field.Region, *Field.Nation, Field.Groups);
 		}
 	}
 	if (!Data.IsLoaded() || Signature == ShownAirSigns)
@@ -7453,6 +7457,18 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		AirSignMesh->SetCastShadow(false);
 	}
 	AirSignMesh->ClearAllMeshSections();
+	if (!AirPennantMesh)
+	{
+		// (The pennants stand in a mesh of their own: ShowParkedPlanes sinks and hides the box aircraft close to, and a
+		// pennant that went with them would be gone just where the player comes to look for his aircraft.)
+		AirPennantMesh = UTheaterStillMesh::Make(this, TEXT("AirPennants"));
+		AirPennantMesh->SetupAttachment(Root);
+		AirPennantMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		AirPennantMesh->RegisterComponent();
+		AirPennantMesh->SetCastShadow(false);
+	}
+	AirPennantMesh->ClearAllMeshSections();
+	FMiniatureMesh Pennants;
 	for (UProceduralMeshComponent* Old : ParkedMeshes)
 	{
 		if (Old)
@@ -7506,9 +7522,10 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		if (Mine)
 		{
 			const FLinearColor His(Mine->Color);
+			// (the mast is rooted below the grass, as the field's own slab is, where a full row puts it past the slab's end)
 			const FVector Mast = At + Ahead(Turn, (-1.0 - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field);
-			Model.Pillar(Mast, 0.025 * Field, 0.018 * Field, 0.95 * Field, Dural * 0.7f, 6);
-			Model.Box(Mast + Ahead(Turn, 0.2 * Field, 0.0) + FVector(0.0, 0.0, 0.8 * Field), FVector(0.4, 0.025, 0.26) * Field, His, Turn);
+			Pennants.Pillar(Mast - FVector(0.0, 0.0, 0.08 * Field), 0.025 * Field, 0.018 * Field, 1.03 * Field, Dural * 0.7f, 6);
+			Pennants.Box(Mast + Ahead(Turn, 0.2 * Field, 0.0) + FVector(0.0, 0.0, 0.8 * Field), FVector(0.4, 0.025, 0.26) * Field, His, Turn);
 		}
 		for (int32 K = 0; K < Parked; ++K)
 		{
@@ -7530,6 +7547,11 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		AirSignMesh->SetMaterial(0, SceneryMaterial);
+	}
+	if (Pennants.Vertices.Num() > 0)
+	{
+		AirPennantMesh->CreateMeshSection(0, Pennants.Vertices, Pennants.Triangles, Pennants.Normals, TArray<FVector2D>(), Pennants.Colors, TArray<FProcMeshTangent>(), false);
+		AirPennantMesh->SetMaterial(0, SceneryMaterial);
 	}
 }
 
