@@ -6615,9 +6615,9 @@
     "vehicles": {
      "low": {
       "sand": [
-       170,
-       140,
-       106
+       205,
+       190,
+       160
       ]
      },
      "high": {
@@ -6743,19 +6743,20 @@
    "vehicles": {
     "low": {
      "sand": [
-      192,
-      147,
-      84
+      231,
+      197,
+      162
      ]
     },
     "high": {
      "sand": [
-      232,
-      193,
-      122
+      240,
+      199,
+      176
      ]
     }
    }
-  }
+  },
+  "_desert_dust": "Art director, 03:04Z 24 November (release 1.5, Sidi Barrani on 849c1bc1): the tank dust was mustard, 201,158,50, and read as a coloured smoke grenade; it should be the ground's colour, about 205,190,160 at the root, thinning. Two things put it there. The sand row above was written for Normandy's grade (_targets_grade), but the desert's recording carries its own (land_grade.py GRADES desert: middles 0.66, contrast 1.25, 0.6 stops down), under which the old low dust landed 168,131,83, deeper than its 170,140,106; and the fire's spread after the grade (M_FireSpread, on the land battle's lens since 22 November) takes any kit pixel of fire's hue, orange to yellow, deep in colour (saturation past 0.30) for fire and doubles its colour: 168,131,83 went to 200,149,32. So the vehicles' sand dust is written again with land_grade.py retarget <recipe> desert (which now inverts the spread too, land_grade.unspread): low to land on 205,190,160 (_targets, the art director's new number), high on 210,196,170 as ruled at 06:48Z; both under the spread's deep-colour line, so the dust between them stays the ground's buff, never fire."
  }
 }
