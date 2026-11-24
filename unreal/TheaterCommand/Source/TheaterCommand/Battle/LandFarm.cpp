@@ -70,6 +70,38 @@ namespace LandScape
 		constexpr LandField::Base CClods = LandField::Base::Clut3;   // the plough's clods, 0.12 m
 		constexpr LandField::Base CShoots = LandField::Base::Clut4;  // the young corn in its drill row, 0.12 m
 
+		/** A clod of turned earth: a low lump RX long (along x, the furrow) and RY across, its top Height over the ground and
+		 * its foot sunk a third of that into it, its points pushed by a noise of its seed, few of them (it is small). Its
+		 * normals turned up toward the sky, so its sides take the light as the soil round it does and it reads as earth
+		 * lifted, not as a dark stone set on the field (the art director, Voronezh, 24 Nov). */
+		void Clod(Writer& W, double CX, double CY, double RX, double RY, double Height, uint64_t S, const Tone& Lit, const Tone& Under)
+		{
+			constexpr int Rings = 3, Round = 7;
+			std::vector<uint32_t> Id;
+			const uint32_t Top = W.Vert(CX, CY, Height, 0.0, 0.0, 1.0, Lit);
+			for (int R = 1; R <= Rings; ++R)
+			{
+				const double Phi = 0.5 * Pi * R / Rings; // 0 at the top to pi/2 at the foot
+				for (int K = 0; K < Round; ++K)
+				{
+					const double Th = 2.0 * Pi * (K + 0.5 * (R & 1)) / Round;
+					const double Push = 0.8 + 0.4 * Unit(Hash(S, static_cast<uint64_t>(R), static_cast<uint64_t>(K)));
+					const double X = std::sin(Phi) * std::cos(Th), Y = std::sin(Phi) * std::sin(Th), Z = std::cos(Phi);
+					const double NX = 0.5 * X, NY = 0.5 * Y, NZ = Z + 0.45, NL = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+					Id.push_back(W.Vert(CX + RX * Push * X, CY + RY * Push * Y, Height * (1.35 * Z * Push - 0.35), NX / NL, NY / NL, NZ / NL, Mixed(Under, Lit, Z)));
+				}
+			}
+			for (int K = 0; K < Round; ++K) W.Tri(Top, Id[static_cast<size_t>(K)], Id[static_cast<size_t>((K + 1) % Round)]);
+			for (int R = 0; R + 1 < Rings; ++R)
+				for (int K = 0; K < Round; ++K)
+				{
+					const uint32_t A = Id[static_cast<size_t>(R * Round + K)], B = Id[static_cast<size_t>(R * Round + (K + 1) % Round)];
+					const uint32_t C = Id[static_cast<size_t>((R + 1) * Round + (K + 1) % Round)], D = Id[static_cast<size_t>((R + 1) * Round + K)];
+					W.Tri(A, D, C);
+					W.Tri(A, C, B);
+				}
+		}
+
 		/** A house's stove chimney: its brick dulled (it drew bright orange in the low winter sun: the art director, 20:08Z)
 		 * and sooted at its top, its own shading kept (every level of the kit model). */
 		void DullChimney(LandField::BaseMesh& M)
@@ -759,13 +791,19 @@ namespace LandScape
 				}
 				case 3:
 				{
-					// clods: three soft lumps of turned earth along x, some 10 to 25 cm across and low, settled into the
-					// ground, built a mid brown (the tint gives the soil), their undersides only a little darker (the art
-					// director, 24 Nov: as sharp boxes they read as hard brown bricks round the men, a boot through one)
-					for (int B = 0; B < 3; ++B)
+					// clods: a loose spill of turned earth over a metre of furrow (x), seven lumps of mixed size, 6 to 26 cm
+					// long, each longer along the furrow than across it, low and half sunk, built the soil's own colour (the
+					// tint gives the soil), their undersides hardly darker. Not three same-size lumps in a file (the art
+					// director, 24 Nov, Voronezh re-shoot 2: dark stepping stones in single-file lines; as boxes before that,
+					// hard brown bricks round the men, a boot through one)
+					static constexpr double Spill[7][3] = { // (x, y, its half length)
+						{ -0.44, 0.06, 0.05 }, { -0.2, -0.17, 0.09 }, { 0.03, 0.13, 0.13 }, { 0.27, -0.06, 0.07 },
+						{ -0.07, -0.33, 0.035 }, { 0.2, 0.3, 0.045 }, { 0.47, 0.16, 0.03 } };
+					for (int B = 0; B < 7; ++B)
 					{
-						const double X = -0.35 + 0.35 * B + R.Range(-0.08, 0.08), Y = R.Range(-0.08, 0.08), S = R.Range(0.055, 0.1);
-						W.Rock(X, Y, S, R.Range(0.4, 0.55) * S, 51 + static_cast<uint64_t>(B), Rgb(128, 112, 94), Rgb(106, 92, 78));
+						const double RX = Spill[B][2] * R.Range(0.85, 1.15), RY = RX * R.Range(0.55, 0.8);
+						Clod(W, Spill[B][0] + R.Range(-0.05, 0.05), Spill[B][1] + R.Range(-0.05, 0.05), RX, RY, RY * R.Range(0.45, 0.7), 51 + static_cast<uint64_t>(B),
+							Rgb(128, 112, 94), Rgb(116, 101, 85));
 					}
 					M.Paint = 0;
 					M.FarFrom = 40.0f;
