@@ -12772,7 +12772,8 @@ FString ACampaignPlayerController::GetWatchHeading() const
 
 void ACampaignPlayerController::WatchAgain()
 {
-	if (bWatching || Month.Steps.Num() == 0 || !Map.IsValid())
+	// (tc.Speed.MonthAside: while the others' months are being played, Month still holds last month's: nothing to watch again yet)
+	if (bWatching || bMonthTurning || Month.Steps.Num() == 0 || !Map.IsValid())
 	{
 		return;
 	}

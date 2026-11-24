@@ -1343,7 +1343,7 @@ public:
 	void SkipWatching();
 	/** (Ruling 64.) The month's replay, shown again from the month's card. Nothing is told twice: the card comes back when it is over. */
 	void WatchAgain();
-	bool CanWatchAgain() const { return !bWatching && Month.Steps.Num() > 0; }
+	bool CanWatchAgain() const { return !bWatching && !bMonthTurning && Month.Steps.Num() > 0; }
 
 	/**
 	 * The hand on a flag, as three steps a script can take too: take hold of the player's army in a region,
