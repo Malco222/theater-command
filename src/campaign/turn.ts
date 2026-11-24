@@ -81,6 +81,7 @@ import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
+import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -166,6 +167,8 @@ export function beginHuman(g: Game): void {
   quietNews(g);
   // A field of his that has become crowded since last month: the month card says so once (b448).
   crowdedNews(g);
+  // His task forces come in to refit or go back to their jobs (release 2, taskforce.ts): before his admirals' month.
+  taskForcesMonth(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }
@@ -1503,7 +1506,10 @@ const hisOrder = (f: Fleet, ok: boolean): boolean => {
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
+  if (ok) retask(g, f!);
+  return ok;
 }
 
 /** Moves one of the player's fleets to a new home port. */
@@ -1515,12 +1521,28 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 /** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
 export const fleetKeptByHand = (g: Game, id: number): boolean => g.fleets.some((f) => f.id === id && f.nat === g.human && f.ordered === true);
 
-/** Hands one of the player's fleets back to his admirals: they sail it again from their next month's orders. */
+/** Hands one of the player's fleets back to his admirals: they sail it again from their next month's orders. A task force is released. */
 export function handBackFleet(g: Game, id: number): boolean {
   const f = myFleet(g, id);
   if (!f || !f.ordered) return false;
   delete f.ordered;
+  delete f.task;
   return true;
+}
+
+/** Why one of the player's fleets cannot be made a task force now, or null (release 2, taskforce.ts). */
+export const whyNotTaskForce = (g: Game, id: number): string | null => whyNotTask(g, g.fleets.find((f) => f.id === id));
+
+/** Makes one of the player's fleets a task force on the job it is doing now (release 2, taskforce.ts). */
+export function orderTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && makeTask(g, f);
+}
+
+/** Releases one of the player's task forces: it stays where it is, under his orders (release 2, taskforce.ts). */
+export function releaseTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && releaseTask(g, f);
 }
 
 /** A fleet sent at the enemy this month stays where the battle left it until the next (release 2, fleetattack.ts). */
@@ -1617,7 +1639,9 @@ export function previewEscort(g: Game, id: number, lane: string): EscortPlan | n
 /** Binds one of the player's fleets to a shipping lane as its escort. */
 export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
+  if (ok) retask(g, f!);
+  return ok;
 }
 
 /** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */

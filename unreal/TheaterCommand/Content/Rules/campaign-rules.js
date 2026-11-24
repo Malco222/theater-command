@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9e86f4f3 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9d1e9a45 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -895,7 +895,9 @@
     _fleetAttack: "A fleet sent straight at an enemy fleet (release 2; Brian 23 November 2026 22:23Z: drag a fleet onto theirs and the battle is fought, as an army attacks; src/campaign/fleetattack.ts, data/campaign/fleetattack.json). The player's own order, in his month, at any odds, told them first, at sea or in the enemy's harbour. Off: nothing of it is read, no die is thrown and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'fleetAttack' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETATTACK=1 or TC_FLEETATTACK=0.",
     fleetAttack: false,
     _breakUp: `Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed"; src/campaign/breakup.ts, data/campaign/breakup.json). The player picks divisions of one of his corps and splits them off as a corps of their own where it stands; a part rejoins the corps it came from. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'breakUp' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_BREAKUP=1 or TC_BREAKUP=0.`,
-    breakUp: false
+    breakUp: false,
+    _taskForce: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these'; src/campaign/taskforce.ts, data/campaign/taskforce.json). One of the player's fleets at sea on a job is made a task force: each month it comes in to refit when worn and goes back to its job when fit, until he changes it. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'taskForce' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_TASKFORCE=1 or TC_TASKFORCE=0.",
+    taskForce: false
   };
 
   // ../../src/campaign/stage.ts
@@ -934,6 +936,7 @@
   var DUMPS_STAGE = staged("TC_DUMPS", "dumps");
   var FLEETATTACK_STAGE = staged("TC_FLEETATTACK", "fleetAttack");
   var BREAKUP_STAGE = staged("TC_BREAKUP", "breakUp");
+  var TASKFORCE_STAGE = staged("TC_TASKFORCE", "taskForce");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -32555,6 +32558,7 @@
     if (DUMPS_STAGE) g2.flags.dumps = 1;
     if (FLEETATTACK_STAGE) g2.flags.fleetAttack = 1;
     if (BREAKUP_STAGE) g2.flags.breakUp = 1;
+    if (TASKFORCE_STAGE) g2.flags.taskForce = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -55063,6 +55067,7 @@
     orderTake: () => orderTake,
     orderTakeBack: () => orderTakeBack,
     orderTakeField: () => orderTakeField,
+    orderTaskForce: () => orderTaskForce,
     orderTeams: () => orderTeams,
     orderTrade: () => orderTrade,
     orderTurn: () => orderTurn,
@@ -55097,6 +55102,7 @@
     raidMenuOne: () => raidMenuOne,
     raidTargetsFor: () => raidTargetsFor,
     reach: () => reach2,
+    releaseTaskForce: () => releaseTaskForce,
     repairAllOutlook: () => repairAllOutlook,
     rivalStaff: () => rivalStaff,
     rivalStaffs: () => rivalStaffs,
@@ -55166,6 +55172,7 @@
     whyNotStandByGeneral: () => whyNotStandByGeneral,
     whyNotStormTown: () => whyNotStormTown,
     whyNotTakeBackPromise: () => whyNotTakeBackPromise,
+    whyNotTaskForce: () => whyNotTaskForce,
     whyNotTurnAgent: () => whyNotTurnAgent,
     whyNotWreckPrize: () => whyNotWreckPrize,
     wingsOfFleet: () => wingsOfFleet,
@@ -60469,6 +60476,107 @@
     }
   }
 
+  // ../../data/campaign/taskforce.json
+  var taskforce_default = {
+    _about: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea: 'a squadron you split off keeps a standing job, like guarding a convoy lane, until you change it'). src/campaign/taskforce.ts. One of the player's fleets at sea on a job (a patrol, a raid or a submarine hunt in a sea, or the escort of a shipping lane) is made a task force, and the job is written down with it. At the start of each of his months a task force worn below 'refit' readiness comes into harbour to refit; one in harbour at 'back' readiness or better goes back to its job; one driven off its job (a battle lost) goes back the same way once fit. A new order of his rewrites the job, and an order into harbour ends it. 'refit' and 'back' are a computer admiral's own figures (navy.ts navalAI: home under 0.5, out again at NAVY.ready.sortieAt).",
+    refit: 0.5,
+    back: 0.75
+  };
+
+  // ../../src/campaign/taskforce.ts
+  var TASKFORCE = taskforce_default;
+  var taskForceOn = (g2) => g2.flags.open === 1 && g2.flags.taskForce === 1;
+  function setTaskForce(g2, on) {
+    if (on) g2.flags.taskForce = 1;
+    else {
+      delete g2.flags.taskForce;
+      for (const f of g2.fleets) delete f.task;
+    }
+  }
+  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  function jobNow(f) {
+    if (!atSea(f)) return null;
+    if (f.stance === "escort") return f.lane !== void 0 ? { zone: f.zone, stance: "escort", lane: f.lane } : null;
+    return f.stance === "patrol" || f.stance === "raid" || f.stance === "hunt" ? { zone: f.zone, stance: f.stance } : null;
+  }
+  function onJob(f) {
+    const t = f.task, now = jobNow(f);
+    if (!t || !now) return false;
+    return t.stance === "escort" ? now.stance === "escort" && now.lane === t.lane : now.stance === t.stance && now.zone === t.zone;
+  }
+  function whyNotTask(g2, f) {
+    if (!taskForceOn(g2)) return "Task forces are made only where that is switched on.";
+    if (!f || !shipCount(f.ships)) return "There is no such fleet.";
+    if (f.nat !== g2.human || !hisMonth(g2)) return "Only your own fleets, in your own month.";
+    if (f.task) return "It is a task force already.";
+    if (!g2.nations[f.nat].atWar.length) return "In peace a fleet keeps to harbour: a task force is made in a war.";
+    if (!jobNow(f)) return "Send it out on a job first: a patrol, a raid, a submarine hunt or a convoy escort. That job becomes its standing order.";
+    return null;
+  }
+  function makeTask(g2, f) {
+    if (whyNotTask(g2, f) !== null) return false;
+    f.task = jobNow(f);
+    f.ordered = true;
+    return true;
+  }
+  function releaseTask(g2, f) {
+    if (!f.task || f.nat !== g2.human) return false;
+    delete f.task;
+    return true;
+  }
+  function retask(g2, f) {
+    if (!f.task || !taskForceOn(g2)) return;
+    const now = jobNow(f);
+    if (now) f.task = now;
+    else if (!atSea(f)) delete f.task;
+  }
+  function jobWords(g2, t) {
+    if (t.stance === "escort") return `guards ${seaRoutes(g2).find((r) => r.id === t.lane)?.name ?? "its lane"}`;
+    const sea = g2.seas[t.zone]?.name ?? "its sea";
+    return t.stance === "raid" ? `raids shipping in the ${sea}` : t.stance === "hunt" ? `hunts submarines in the ${sea}` : `patrols the ${sea}`;
+  }
+  function whyNotBack(g2, f) {
+    const t = f.task;
+    if (!t) return "It has no standing job.";
+    const reach3 = fleetReach(g2, f);
+    if (t.stance === "escort") {
+      const why = whyNotEscort(g2, f, t.lane ?? "");
+      if (why) return why;
+      const rt = seaRoutes(g2).find((r) => r.id === t.lane);
+      return rt && rt.zones.some((z) => reach3.includes(z)) ? null : `No sea of ${rt?.name ?? "its lane"} is in its reach from ${f.port}.`;
+    }
+    if (t.stance === "hunt" && !seaWar(g2)) return "Submarines are hunted only in the grand campaign.";
+    return reach3.includes(t.zone) ? null : `The ${g2.seas[t.zone]?.name ?? "sea"} is out of its reach from ${f.port}.`;
+  }
+  function taskForcesMonth(g2, nat) {
+    if (!taskForceOn(g2) || nat !== g2.human) return;
+    for (const f of g2.fleets) {
+      if (f.nat !== nat || !f.task) continue;
+      if (!shipCount(f.ships)) {
+        delete f.task;
+        continue;
+      }
+      if (!g2.nations[nat].atWar.length) continue;
+      const job = jobWords(g2, f.task);
+      if (atSea(f) && f.ready < TASKFORCE.refit) {
+        if (sail(g2, f, f.home, "port")) headline(g2, "info", `Task force ${f.name} comes into ${f.port} to refit. It goes back to its job, it ${job}, once it is fit for sea.`, nat);
+        continue;
+      }
+      if (onJob(f) || f.ready < TASKFORCE.back) continue;
+      const back = f.task.stance === "escort" ? escort(g2, f, f.task.lane ?? "") : sail(g2, f, f.task.zone, f.task.stance);
+      if (back) headline(g2, "info", `Task force ${f.name} is back on its job: it ${job}.`, nat);
+    }
+  }
+  function taskLine(g2, f) {
+    if (!taskForceOn(g2) || !f.task) return "";
+    const job = jobWords(g2, f.task);
+    if (onJob(f)) return `Task force: it ${job}. It comes into harbour to refit when worn, and goes back when fit.`;
+    if (atSea(f)) return `Task force: it ${job}, and goes back to that next month.`;
+    const why = whyNotBack(g2, f);
+    if (why) return `Task force: it ${job}, but cannot go back to it now. ${why}`;
+    return f.ready < TASKFORCE.back ? `Task force refitting: it ${job}, and goes back at ${Math.round(TASKFORCE.back * 100)}% readiness (now ${Math.round(f.ready * 100)}%).` : `Task force: it ${job}, and goes back to it next month.`;
+  }
+
   // ../../src/campaign/facing.ts
   var GUNS_UNKNOWN = { sign: "scouted", text: "Not scouted: their guns are unknown.", unknown: true };
   var GUNS_AND_MINES_UNKNOWN = { sign: "scouted", text: "Not scouted: their guns and mines are unknown.", unknown: true };
@@ -60562,6 +60670,7 @@
     noteReadings(g2);
     quietNews(g2);
     crowdedNews(g2);
+    taskForcesMonth(g2, current(g2));
     staffMonth(g2);
   }
   function endHuman(g2) {
@@ -61340,7 +61449,9 @@
   };
   function orderFleet(g2, id, zone, stance2) {
     const f = myFleet(g2, id);
-    return !!f && !heldAfterAttack(g2, f) && hisOrder(f, sail(g2, f, zone, stance2));
+    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, sail(g2, f, zone, stance2));
+    if (ok2) retask(g2, f);
+    return ok2;
   }
   function orderRebase(g2, id, region) {
     const f = myFleet(g2, id);
@@ -61351,7 +61462,17 @@
     const f = myFleet(g2, id);
     if (!f || !f.ordered) return false;
     delete f.ordered;
+    delete f.task;
     return true;
+  }
+  var whyNotTaskForce = (g2, id) => whyNotTask(g2, g2.fleets.find((f) => f.id === id));
+  function orderTaskForce(g2, id) {
+    const f = myFleet(g2, id);
+    return !!f && makeTask(g2, f);
+  }
+  function releaseTaskForce(g2, id) {
+    const f = myFleet(g2, id);
+    return !!f && releaseTask(g2, f);
   }
   var heldAfterAttack = (g2, f) => f.attacked === g2.turn;
   var whyNotAttackFleet = (g2, id, target) => whyNotFleetAttack(g2, id, target);
@@ -61397,7 +61518,9 @@
   }
   function orderEscort(g2, id, lane) {
     const f = myFleet(g2, id);
-    return !!f && !heldAfterAttack(g2, f) && hisOrder(f, escortLane(g2, f, lane));
+    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, escortLane(g2, f, lane));
+    if (ok2) retask(g2, f);
+    return ok2;
   }
   function previewBombard(g2, id, region, what) {
     const f = myFleet(g2, id);
@@ -86308,11 +86431,11 @@
     if (on) g2.flags.breakUp = 1;
     else delete g2.flags.breakUp;
   }
-  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var hisMonth2 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
   function whyNotBreakUp(g2, c, slots) {
     if (!breakUpOn(g2)) return "Corps are broken up only where that is switched on.";
     if (!c || c.dead) return "There is no such corps.";
-    if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps can be broken up, in your own month.";
+    if (c.nat !== g2.human || !hisMonth2(g2)) return "Only your own corps can be broken up, in your own month.";
     if (c.kind === "fort") return "Fortress troops stay together in their works.";
     if (c.divs < 2) return "A single division cannot be broken up any further.";
     if (c.town !== void 0) return "A garrison is broken up in the field: order it out of the town first.";
@@ -86390,7 +86513,7 @@
   function whyNotRejoin(g2, part, into) {
     if (!breakUpOn(g2)) return "Corps are put back together only where that is switched on.";
     if (!part || !into || part.dead || into.dead || part === into) return "There is nothing to put back together.";
-    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth2(g2)) return "Only your own corps, in your own month.";
     const root = part.part ?? part.id;
     if (!(into.id === root || into.part === root || (into.part ?? into.id) === root)) return "A part rejoins only the corps it was split from, or another part of it.";
     if (part.reg !== into.reg || part.town !== void 0 || into.town !== void 0) return "The two must stand together in the field, in the same province.";
@@ -88871,6 +88994,8 @@
       fleetAttack: fleetAttackOn(s),
       // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
       breakUp: breakUpOn(s),
+      // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
+      taskForce: taskForceOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -92007,9 +92132,17 @@ ${next.text}` : ""}` : next ? next.also : "";
         }
         options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
         if (staffRunsDesk(s, "navy") && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: "Hand it back to your admirals", detail: HAND_BACK_TIP, ok: up, why: notNow });
+        if (taskForceOn(s)) {
+          if (f2.task) options.push({ key: `fleet:${id}:untask`, label: "Release the task force", detail: RELEASE_TIP, ok: up, why: notNow });
+          else {
+            const why = whyNotTaskForce(s, id);
+            options.push({ key: `fleet:${id}:task`, label: "Make it a task force", detail: TASK_TIP, ok: up && !why, why: why ?? notNow });
+          }
+        }
       }
       const who = mine5 ? whoSails(s, id) : "";
-      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...who ? [who] : []], options };
+      const task = mine5 ? taskLine(s, f2) : "";
+      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...task ? [task] : [], ...who ? [who] : []], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
@@ -92050,11 +92183,15 @@ ${next.text}` : ""}` : next ? next.also : "";
     return fleetKeptByHand(s, id) ? "Under your own orders: your admirals leave it where you send it." : "Your admirals sail it each month. Give it an order yourself and it stays where you send it.";
   }
   var HAND_BACK_TIP = "Your admirals sail it again from next month, with the rest of the navy.";
+  var TASK_TIP = "Its job now becomes its standing order: each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order.";
+  var RELEASE_TIP = "It stays where it is, under your orders, with no standing job.";
   function forceOrder(key7) {
     const s = game();
     const [what, id, a, b] = key7.split(":");
     let ok2 = false;
     if (what === "fleet" && a === "staff") ok2 = handBackFleet(s, Number(id));
+    else if (what === "fleet" && a === "task") ok2 = orderTaskForce(s, Number(id));
+    else if (what === "fleet" && a === "untask") ok2 = releaseTaskForce(s, Number(id));
     else if (what === "fleet") ok2 = orderFleet(s, Number(id), Number(a), b);
     else if (what === "fleetbase") ok2 = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok2 = orderAir(s, Number(id), a, Number(b));
@@ -92862,14 +92999,18 @@ ${next.text}` : ""}` : next ? next.also : "";
     });
     const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : "";
     const who = whoSails(s, id);
+    const fl = s.fleets.find((x) => x.id === id);
+    const task = fl ? taskLine(s, fl) : "";
+    const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
     return {
       id: `fleet:${id}`,
       title: card.name.toUpperCase(),
       headline: `${card.doing}`,
-      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ""}`,
+      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
         { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
+        ...taskForceOn(s) && fl ? [fl.task ? { label: "RELEASE TASK FORCE", act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP } : { label: "MAKE IT A TASK FORCE", act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : [],
         ...wingsOfFleet(s, id).length ? [{ label: "CARRIER AIRCRAFT", act: `open:wings:${id}`, ok: true, tip: "The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour." }] : []
       ],
       sections: [
@@ -94156,6 +94297,26 @@ ${standing5}`,
       note4 = !ok2 ? "The secret war can be switched only in the campaign's first month." : secretWarOn(s) ? "The secret war is on: your service opens the war with agents at work on the map, hunts the enemy's agents on your ground, steals orders and can turn enemy agents, and every country at war with you spies on you." : "The secret war is off: you recruit and send agents as before, and the enemy's saboteurs are only a chance each month.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "taskforcerule") {
+      setTaskForce(s, part[1] === "on");
+      ok2 = true;
+      note4 = taskForceOn(s) ? "Task forces are on: send a fleet out on a job, then MAKE IT A TASK FORCE on its page. It refits when worn and goes back to that job when fit, until you change it." : "Task forces are off: every fleet does what you last told it, and no more.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "taskforce") {
+      const id = Number(part[1]);
+      const name = s.fleets.find((x) => x.id === id)?.name ?? "The fleet";
+      if (part[2] === "off") {
+        ok2 = releaseTaskForce(s, id);
+        note4 = ok2 ? `${name} is no longer a task force: it stays where it is, under your orders.` : "It is not a task force.";
+      } else {
+        const why = whyNotTaskForce(s, id);
+        ok2 = !why && orderTaskForce(s, id);
+        const f = s.fleets.find((x) => x.id === id);
+        note4 = ok2 && f ? `${name} is a task force: ${taskLine(s, f).replace(/^Task force: /, "")}` : why ?? "It cannot be made a task force now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: `fleet:${part[1]}`, view: view2() };
+    }
     if (part[0] === "breakuprule") {
       setBreakUp(s, part[1] === "on");
       ok2 = true;
@@ -95358,6 +95519,11 @@ ${standing5}`,
     const s = game();
     setFleetAttack(s, !!on);
     return { on: fleetAttackOn(s) };
+  };
+  globalThis.TC.taskForce = (on) => {
+    const s = game();
+    setTaskForce(s, !!on);
+    return { on: taskForceOn(s) };
   };
   globalThis.TC.breakUp = (on) => {
     const s = game();

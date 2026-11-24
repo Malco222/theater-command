@@ -726,6 +726,11 @@ export interface Fleet extends Storied {
    * it where he sent it, until he hands it back to them or hands them the navy afresh. Never set on a computer's fleet.
    */
   ordered?: true;
+  /**
+   * A task force's standing job (release 2, taskforce.ts): the sea and what it does there, or the lane it escorts. It
+   * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
+   */
+  task?: { zone: number; stance: Stance; lane?: string };
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

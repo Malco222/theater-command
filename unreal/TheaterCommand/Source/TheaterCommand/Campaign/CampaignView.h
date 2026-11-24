@@ -1194,6 +1194,7 @@ struct FCampaignView
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
+	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

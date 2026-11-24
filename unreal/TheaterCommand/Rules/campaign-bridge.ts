@@ -58,7 +58,7 @@ import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, frien
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  orderAir, orderAirBase, orderFleet, fleetKeptByHand, handBackFleet, orderTaskForce, releaseTaskForce, whyNotTaskForce, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
@@ -108,6 +108,7 @@ import { nearMoves, type NearArrow } from './near-moves'; // (release 2, the ene
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
+import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -899,6 +900,8 @@ function drawView() {
     fleetAttack: fleetAttackOn(s),
     // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
     breakUp: breakUpOn(s),
+    // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
+    taskForce: taskForceOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -4107,9 +4110,15 @@ function force(kind: string, id: number) {
       }
       options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port', why: f.stance === 'port' ? 'It is in harbour now.' : notNow });
       if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
+      // (Release 2, taskforce.ts) Its job made a standing order, or the standing order taken down.
+      if (taskForceOn(s)) {
+        if (f.task) options.push({ key: `fleet:${id}:untask`, label: 'Release the task force', detail: RELEASE_TIP, ok: up, why: notNow });
+        else { const why = whyNotTaskForce(s, id); options.push({ key: `fleet:${id}:task`, label: 'Make it a task force', detail: TASK_TIP, ok: up && !why, why: why ?? notNow }); }
+      }
     }
     const who = mine ? whoSails(s, id) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(who ? [who] : [])], options };
+    const task = mine ? taskLine(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -4156,6 +4165,9 @@ function whoSails(s: Game, id: number): string {
     : 'Your admirals sail it each month. Give it an order yourself and it stays where you send it.';
 }
 const HAND_BACK_TIP = 'Your admirals sail it again from next month, with the rest of the navy.';
+// (Release 2, taskforce.ts)
+const TASK_TIP = 'Its job now becomes its standing order: each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order.';
+const RELEASE_TIP = 'It stays where it is, under your orders, with no standing job.';
 
 /** Gives a fleet or an air fleet one of the orders its panel offered. */
 function forceOrder(key: string) {
@@ -4164,6 +4176,9 @@ function forceOrder(key: string) {
   let ok = false;
   // (The panel's 'fleet:<id>:staff' hands a fleet back to the admirals: the map sends every 'fleet:' key here.)
   if (what === 'fleet' && a === 'staff') ok = handBackFleet(s, Number(id));
+  // (Release 2, taskforce.ts) 'fleet:<id>:task' and 'fleet:<id>:untask' from the panel.
+  else if (what === 'fleet' && a === 'task') ok = orderTaskForce(s, Number(id));
+  else if (what === 'fleet' && a === 'untask') ok = releaseTaskForce(s, Number(id));
   else if (what === 'fleet') ok = orderFleet(s, Number(id), Number(a), b as Stance);
   else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
@@ -5005,12 +5020,18 @@ function fleetPage(s: Game, id: number): Page | null {
   });
   const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : '';
   const who = whoSails(s, id);
+  const fl = s.fleets.find((x) => x.id === id);
+  const task = fl ? taskLine(s, fl) : '';
+  const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${who ? ` ${who}` : ''}`,
+    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
       { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
+      ...(taskForceOn(s) && fl ? [fl.task
+        ? { label: 'RELEASE TASK FORCE', act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP }
+        : { label: 'MAKE IT A TASK FORCE', act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : []),
       ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
     ],
     sections: [
@@ -6209,6 +6230,30 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : 'The secret war is off: you recruit and send agents as before, and the enemy\'s saboteurs are only a chance each month.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'taskforcerule') {
+    // (Release 2, taskforce.ts) Task forces, switched by the player in any month.
+    setTaskForce(s, part[1] === 'on');
+    ok = true;
+    note = taskForceOn(s)
+      ? 'Task forces are on: send a fleet out on a job, then MAKE IT A TASK FORCE on its page. It refits when worn and goes back to that job when fit, until you change it.'
+      : 'Task forces are off: every fleet does what you last told it, and no more.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'taskforce') {
+    // (Release 2, taskforce.ts) 'taskforce:<fleet>:on|off': its job made a standing order, or the order taken down.
+    const id = Number(part[1]);
+    const name = s.fleets.find((x) => x.id === id)?.name ?? 'The fleet';
+    if (part[2] === 'off') {
+      ok = releaseTaskForce(s, id);
+      note = ok ? `${name} is no longer a task force: it stays where it is, under your orders.` : 'It is not a task force.';
+    } else {
+      const why = whyNotTaskForce(s, id);
+      ok = !why && orderTaskForce(s, id);
+      const f = s.fleets.find((x) => x.id === id);
+      note = ok && f ? `${name} is a task force: ${taskLine(s, f).replace(/^Task force: /, '')}` : why ?? 'It cannot be made a task force now.';
+    }
+    return { ok, note, fly, flies, open: `fleet:${part[1]}`, view: view() };
+  }
   if (part[0] === 'breakuprule') {
     // (Release 2, breakup.ts) Breaking corps up, switched by the player in any month.
     setBreakUp(s, part[1] === 'on');
@@ -7325,6 +7370,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
+// (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).breakUp = (on: boolean) => { const s = game(); setBreakUp(s, !!on); return { on: breakUpOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };

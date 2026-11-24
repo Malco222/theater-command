@@ -111,3 +111,8 @@ export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack'
 // is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
 /** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
 export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
+
+// Task forces (release 2; Brian 24 November 2026 18:24Z, taskforce.ts): the grand campaigns opened while this is true
+// carry the flag 'taskForce'. Forced by TC_TASKFORCE.
+/** True where new grand campaigns open with the player able to make task forces of his fleets (stage.json 'taskForce'). */
+export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');

@@ -1250,6 +1250,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
+	Object->TryGetBoolField(TEXT("taskForce"), Out.bTaskForce); // (release 2, taskforce.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);

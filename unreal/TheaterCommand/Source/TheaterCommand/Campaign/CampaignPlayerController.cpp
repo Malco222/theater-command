@@ -341,6 +341,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Divisions split off a corps, and put back.
 			Add(TEXT("breakuprule"), TEXT("Break up corps"), TEXT("Pick up an army and every division of each corps is a tile on its card. Click the tiles of the divisions you want apart and press SPLIT OFF: they become a corps of their own where the army stands, and stay behind when the army moves. REJOIN puts a part back into the corps it came from. Nothing is lost or gained, and no corps grows bigger than it was. It can be switched in any month."),
 				Now.bBreakUp ? TEXT("ON") : TEXT("OFF"), Now.bBreakUp);
+			// (Release 2, taskforce.ts; Brian 24 November 2026 18:24Z) A fleet with a standing job.
+			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
+				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -542,14 +545,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("taskforcerule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("taskforcerule") ? Now.bTaskForce : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
