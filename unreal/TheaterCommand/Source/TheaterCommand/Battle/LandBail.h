@@ -105,6 +105,7 @@ namespace LandBail
 		double Wide = 3.0;               // her width, metres
 		double Long = 6.0;               // her length, metres
 		double Away = 0.0;               // radians, 0 north, clockwise: the way away from her enemy
+		V3 Wind;                         // the battle's wind, metres a second, the way it blows (smoke: thrown a little upwind)
 		double Blast = -1.0;             // life's seconds after her kill her ammunition goes (-1 never)
 		bool bBurns = false;             // she burns (a man may come out on fire)
 		bool bUnderFire = true;          // the fight goes on round her (men in the open may be hit)

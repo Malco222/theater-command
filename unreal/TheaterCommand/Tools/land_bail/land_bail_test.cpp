@@ -110,6 +110,8 @@ int main(int Argc, char** Argv)
 			W.bClips = bClips;
 			W.bStep = bClips;
 			W.bSmoke = bSmokeOn;
+			// (the wind: none, across her, from her enemy, or toward it, by seed)
+			W.Wind = Seed % 4 == 0 ? LandBail::V3{ 0.0, 0.0, 0.0 } : LandBail::V3{ 2.6 * std::sin(W.Away + 1.2 * static_cast<double>(Seed % 4)), 2.6 * std::cos(W.Away + 1.2 * static_cast<double>(Seed % 4)), 0.0 };
 			const LandBail::Crew Cr = LandBail::Make(W);
 			const LandBail::Crew Again = LandBail::Make(W);
 			++Wrecks;
@@ -125,11 +127,24 @@ int main(int Argc, char** Argv)
 					const LandBail::Man& T0 = Cr.Men[0];
 					const double Toward = -((Cr.SmokeTo.X - W.Middle.X) * std::sin(W.Away) + (Cr.SmokeTo.Y - W.Middle.Y) * std::cos(W.Away));
 					const char* Wrong = !bCan ? "with nobody to throw it (switch off, her blast to come, or no enemy close)"
-						: T0.ThrowAt < 0.3 - 1e-9 || std::abs(T0.Out - (T0.ThrowAt + 1.6)) > 1e-9 ? "not her first man's throw just before he climbs out"
+						: T0.ThrowAt < 0.3 - 1e-9 || std::abs(T0.Out - (T0.ThrowAt + 1.45)) > 1e-9 ? "not her first man's throw just before he climbs out"
 						: std::abs(Cr.SmokeAt - (T0.ThrowAt + 0.95 + 0.9)) > 1e-9 ? "landing at the wrong moment"
 						: Toward < 4.0 ? "not out toward her enemy, past her hull"
 						: std::abs(Cr.SmokeTo.Z - Ground(Cr.SmokeTo.X, Cr.SmokeTo.Y)) > 1e-9 ? "off the ground"
 						: Cr.SmokeS < 60.0 || Cr.SmokeS > 90.0 || Cr.SmokeAcross < 10.0 || Cr.SmokeAcross > 15.0 ? "too long, short, wide or narrow" : nullptr;
+					// (a little upwind of the line from his hatch to her enemy: 1 to 3 m against the wind from a point 9 to 14 m
+					// out on that line; on it on a still day)
+					{
+						const LandBail::V3 Line{ -std::sin(W.Away), -std::cos(W.Away), 0.0 };
+						const double Gx = Cr.SmokeTo.X - T0.Hatch.X, Gy = Cr.SmokeTo.Y - T0.Hatch.Y;
+						const double Breeze = std::hypot(W.Wind.X, W.Wind.Y);
+						const double U = Breeze > 0.0 ? std::clamp(Breeze, 1.0, 3.0) / Breeze : 0.0;
+						const double Bx = Gx + W.Wind.X * U, By = Gy + W.Wind.Y * U;
+						const double Along = Bx * Line.X + By * Line.Y, Aside = Bx * Line.Y - By * Line.X;
+						Wrong = Wrong ? Wrong : std::abs(Aside) > 1e-6 || Along < 9.0 - 1e-6 || Along > 14.0 + 1e-6 ? "not 1 to 3 m upwind of the line" : nullptr;
+						const double Face = std::remainder(T0.ThrowFace - std::atan2(Gx, Gy), 2.0 * 3.14159265358979);
+						Wrong = Wrong ? Wrong : std::abs(Face) > 1e-6 ? "not thrown the way it goes" : nullptr;
+					}
 					for (size_t K = 1; K < Cr.Men.size() && !Wrong; ++K)
 					{
 						Wrong = Cr.Men[K].ThrowAt >= 0.0 ? "thrown by more than one man" : nullptr;

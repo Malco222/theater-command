@@ -1,5 +1,6 @@
 // Paints the smoke screen (TheaterFx::Battle::Screen, the effects kit's own code, no engine) as the kit lays it, from a
-// man's eye 120 m off across the wind, at a few moments after it lands: a phosphorus round's and a burning bomb's, so
+// man's eye 120 m off across the wind, at a few moments after it lands: a phosphorus round's, a burning bomb's and a tank
+// commander's smoke grenade's (Kind "grenade", its plume down the wind), so
 // its look can be judged before a Mac build. A plain software painter: each puff the kit lays is its middle and two
 // rings of points, filled as the game's mesh fills them and laid over a plain sky and field, far to near.
 //
@@ -149,14 +150,18 @@ int main(int Argc, char** Argv)
 	JsonRecipe Recipe;
 	Recipe.Walk(Root, "");
 	const std::string Out = Argv[2];
-	const double Moments[] = { 0.4, 1.2, 4.0, 12.0, 30.0, 60.0, 85.0 };
+	const std::vector<double> RoundMoments = { 0.4, 1.2, 4.0, 12.0, 30.0, 60.0, 85.0 };
+	// (a tank commander's smoke grenade, 12.5 m across for 75 s: its first seconds, swelling, its plume, its last 15 s)
+	const std::vector<double> GrenadeMoments = { 0.5, 2.0, 5.0, 12.0, 30.0, 62.0, 70.0, 85.0 };
 	int Status = 0;
-	for (const char* Kind : { "wp", "canister" })
+	for (const char* Kind : { "wp", "canister", "grenade" })
 	{
+		const bool bGrenade = std::string(Kind) == "grenade";
+		const std::vector<double>& Moments = bGrenade ? GrenadeMoments : RoundMoments;
 		TheaterFx::Battle Fx;
 		Fx.Setup(&Recipe, &Flat, nullptr, 7u);
 		Fx.SetWind(Vec(2.6, 1.2, 0.0)); // (the land battle's own wind when the recording gives none)
-		Fx.Screen(0.0, Vec(0.0, 0.0, 0.0), 18.0, 60.0, Kind, 1);
+		Fx.Screen(0.0, Vec(0.0, 0.0, 0.0), bGrenade ? 12.5 : 18.0, bGrenade ? 75.0 : 60.0, Kind, 1);
 		int Shot = 0;
 		size_t MostPuffs = 0;
 		for (const double Now : Moments)
@@ -164,7 +169,8 @@ int main(int Argc, char** Argv)
 			// (stepped up to the moment at 30 frames a second, as the game's frames would lay it)
 			TheaterFx::Battle::View Eye;
 			Eye.Eye = Vec(10.0, -120.0, 1.7);
-			const Vec Look = Vec(10.0, 0.0, 4.0) - Eye.Eye;
+			// (a grenade's plume runs down the wind: the eye on its middle)
+			const Vec Look = (bGrenade ? Vec(22.0, 0.0, 3.0) : Vec(10.0, 0.0, 4.0)) - Eye.Eye;
 			Eye.Forward = Look.Unit();
 			Eye.Right = Eye.Forward.Cross(Vec(0.0, 0.0, 1.0)).Unit();
 			Eye.Up = Eye.Right.Cross(Eye.Forward).Unit();
@@ -175,7 +181,7 @@ int main(int Argc, char** Argv)
 			Eye.HalfUp = Eye.HalfAcross * P.H / P.W;
 			Eye.Sun = Vec(-0.4, -0.5, 0.75).Unit();
 			int Puffs = 0;
-			for (double T = (Shot == 0 ? 0.0 : Moments[Shot - 1]); T <= Now + 1e-9; T += 1.0 / 30.0) Puffs = Fx.Draw(T, Eye);
+			for (double T = (Shot == 0 ? 0.0 : Moments[static_cast<size_t>(Shot - 1)]); T <= Now + 1e-9; T += 1.0 / 30.0) Puffs = Fx.Draw(T, Eye);
 			MostPuffs = std::max(MostPuffs, static_cast<size_t>(Puffs));
 			const double Ppr = Eye.PixelsPerRadian;
 			const double Horizon = P.H * 0.5 - Ppr * std::atan2(Eye.Forward.Z, std::hypot(Eye.Forward.X, Eye.Forward.Y));
