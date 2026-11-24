@@ -632,11 +632,14 @@ void ACampaignPlayerController::FightCustom()
 				Me->CustomHandBack(TEXT("air"), EndJson);
 			}
 		};
+		// (held as his own raid is, so every guard on the map behind it holds too: IsAnswering's keys, END THE MONTH)
 		Custom.bOpen = true;
+		LiveRaid = Sky;
 		if (!Sky->BeginLiveCall(Rules, TEXT("customAirStart"), FString::Printf(TEXT("[%s]"), *SpecText)))
 		{
 			Sky->HandBack = nullptr;
 			Sky->Destroy();
+			LiveRaid.Reset();
 			Custom.bOpen = false;
 			Opening.Custom.Problem = FText::FromString(CustomBattle::WhyNot(Rules));
 			Opening.Custom.bCanFight = false;
@@ -706,7 +709,9 @@ void ACampaignPlayerController::FightCustom()
 			Me->CustomHandBack(TEXT("land"), ResultJson);
 		}
 	};
+	// (held as his own battle is, so every guard on the map behind it holds too: IsAnswering's keys, END THE MONTH)
 	Custom.bOpen = true;
+	LiveBattle = Field;
 	UE_LOG(LogTheater, Display, TEXT("A battle of your own: the land battle opened (%s)"), *SpecText);
 	Field->LiveTicketWhenReady(LookText, Custom.Role, true);
 }
@@ -714,6 +719,8 @@ void ACampaignPlayerController::FightCustom()
 void ACampaignPlayerController::CustomHandBack(const FString& Domain, const FString& ResultJson)
 {
 	Custom.bOpen = false;
+	LiveBattle.Reset();
+	LiveRaid.Reset();
 	// How it ended, in a line on the door: the rules' own level ("Decisive victory") from his side.
 	FString Line;
 	const TSharedPtr<FJsonObject> Result = CustomBattle::Read(ResultJson);
@@ -748,6 +755,11 @@ void ACampaignPlayerController::CustomHandBack(const FString& Domain, const FStr
 	}
 	Custom.Last = FText::FromString(Line.IsEmpty() ? TEXT("The battle was closed before its end.") : FString::Printf(TEXT("Your last battle: %s"), *Line));
 	UE_LOG(LogTheater, Display, TEXT("A battle of your own: handed back (%s): %s"), *Domain, *Custom.Last.ToString());
+	// (back at the door he left from: the opening screen is shown again if anything put it away meanwhile)
+	if (!Opening.bVisible)
+	{
+		RefreshOpening(true);
+	}
 	Opening.Tab = 3;
 	RefreshCustom();
 }
