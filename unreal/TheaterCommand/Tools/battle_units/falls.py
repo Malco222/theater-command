@@ -1287,20 +1287,26 @@ def fit_gore(m, rd, rc):
             f.flight["limbs"][b].update(a)
         miss = gate_misses(r, f.flight)
         Gw, X = m.fk(m.local_at(c, c["long"] + 1.0))
-        if float(X[m.i("chest")][2]) >= LIE_MAX:
+        sitting = float(X[m.i("chest")][2]) >= LIE_MAX
+        if sitting:
             miss += ["sitting up"] * 3                  # (he must lie: worse than any one ask missed)
         if best is None or len(miss) < best[0]:
             best = (len(miss), c, f, k, r, i + 1)
         if not miss:
             break
-        r = refit(r, f.flight)
+        r = refit(r, f.flight, sitting)
     return best[1], best[2], best[3], best[4], best[5]
 
 
-def refit(rc, fl):
+def refit(rc, fl, sitting=False):
     """The recipe nudged toward the asks by what this try measured: the blast's throw and lift, the ground's grip under
-    him, each limb's reach, arc, tumble and way, his turn, the rifle's throw."""
+    him, each limb's reach, arc, tumble and way, his turn, the rifle's throw; left sitting up, his chest pushed over
+    the way he is thrown as he goes down (each try once more)."""
     G, r = GATE, dict(rc)
+    if sitting:
+        th = np.array(rc.get("throw", (0.0, 0.0, 0.0))[:2], float)
+        u = th / max(float(np.linalg.norm(th)), 1e-6) * 0.8
+        r["push"] = list(rc.get("push", [])) + [(0.3, "chest", (float(u[0]), float(u[1]), 0.0))]
     blast = rc["name"].startswith("die_blast")
     away = AWAY.get(rc.get("blast_from"))
     B = fl["body"]
