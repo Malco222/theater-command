@@ -66,7 +66,7 @@ import {
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
-  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, reachOutOfTown, apForOrders, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent, orderArrest, whyNotArrestAgent, orderTurn, whyNotTurnAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -2139,7 +2139,9 @@ function reachOf(ids: number[]) {
   if (humanUp(s)) {
     const cs = corpsById(s, ids);
     for (const c of cs) {
-      for (const [id, r] of reach(s, c)) {
+      // (release 2, Brian 24 November: a garrison sent somewhere comes out of its town first, so it is shown where it
+      // could go from the open country, with the move coming out costs; the 3D game brings it out as the order goes)
+      for (const [id, r] of c.town !== undefined ? reachOutOfTown(s, c) : reach(s, c)) {
         if (id === c.reg) continue;
         const old = merged.get(id);
         if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
@@ -2177,7 +2179,7 @@ function reachOf(ids: number[]) {
     if (humanUp(s) && !onEve(s)) {
       const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
       const lead = cs[0];
-      spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
+      spent = cs.length > 0 && cs.every((c) => apForOrders(s, c) <= 0);
       if (lead) {
         for (const [id, g] of farGround(s, lead)) {
           // (a province next door that cannot be entered this month is full: that is a matter of changing places, not of a long march)

@@ -15689,13 +15689,14 @@
     if (here >= STACK) return `There is no room in the field at ${r.name} for another corps.`;
     return null;
   }
+  var apOutOfTown = (g2, c) => c.town === g2.turn ? 0 : Math.max(0, c.apMax - 1);
   function takeField(g2, c) {
     if (whyNotTakeField(g2, c)) return false;
     const r = g2.regions[c.reg];
-    const fresh5 = c.town === g2.turn;
+    const ap = apOutOfTown(g2, c);
     quitTown(g2, c);
     r.units.push(c);
-    c.ap = fresh5 ? 0 : Math.max(0, c.apMax - 1);
+    c.ap = ap;
     return true;
   }
   function canShelter(g2, c, r) {
@@ -54879,6 +54880,7 @@
     airfieldsSeen: () => airfieldsSeen,
     announcement: () => announcement,
     announcements: () => announcements,
+    apForOrders: () => apForOrders,
     armiesAt: () => armiesAt,
     armyAt: () => armyAt,
     arsenalOffers: () => arsenalOffers,
@@ -55093,6 +55095,7 @@
     raidMenuOne: () => raidMenuOne,
     raidTargetsFor: () => raidTargetsFor,
     reach: () => reach2,
+    reachOutOfTown: () => reachOutOfTown,
     repairAllOutlook: () => repairAllOutlook,
     rivalStaff: () => rivalStaff,
     rivalStaffs: () => rivalStaffs,
@@ -61054,6 +61057,11 @@
   function orderTakeField(g2, c) {
     return whyNotLeaveTown(g2, c) === null && takeField(g2, c);
   }
+  function reachOutOfTown(g2, c) {
+    if (c.town === void 0 || whyNotLeaveTown(g2, c) !== null) return /* @__PURE__ */ new Map();
+    return reach2(g2, { ...c, town: void 0, ap: apOutOfTown(g2, c) });
+  }
+  var apForOrders = (g2, c) => c.town !== void 0 && whyNotLeaveTown(g2, c) === null ? apOutOfTown(g2, c) : c.ap;
   function stormCandidates(g2, region) {
     const r = g2.regions[region];
     if (!r || g2.human === null) return [];
@@ -90061,7 +90069,7 @@
     if (humanUp(s)) {
       const cs = corpsById(s, ids2);
       for (const c of cs) {
-        for (const [id, r] of reach2(s, c)) {
+        for (const [id, r] of c.town !== void 0 ? reachOutOfTown(s, c) : reach2(s, c)) {
           if (id === c.reg) continue;
           const old = merged.get(id);
           if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
@@ -90099,7 +90107,7 @@
       if (humanUp(s) && !onEve(s)) {
         const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
         const lead2 = cs[0];
-        spent = cs.length > 0 && cs.every((c) => c.ap <= 0);
+        spent = cs.length > 0 && cs.every((c) => apForOrders(s, c) <= 0);
         if (lead2) {
           for (const [id, g2] of farGround2(s, lead2)) {
             if (id === lead2.reg || merged.has(id) || lead2.ap > 0 && s.regions[lead2.reg].nb.includes(id) || far.length >= 1200) continue;
