@@ -1294,7 +1294,10 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		}
 		const double Now = GetActorRotation().Yaw;
 		const double Turn = FRotator::NormalizeAxis(Want - Now);
-		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * 5.0), 0.0));
+		// (The last turn, round to the table, quickens as the time left runs out: on the shortest sail it is all but
+		// done by the time she comes in, and what is left at the end is too little to see snap.)
+		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
+		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
 	}
 
 	if (Progress >= 1.0)
