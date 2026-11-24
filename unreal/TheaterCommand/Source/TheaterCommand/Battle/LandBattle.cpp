@@ -955,6 +955,20 @@ namespace LandParts
 			M.TurretLo = LandPlay::Vec(Look->TurretLo.X, Look->TurretLo.Y, Look->TurretLo.Z);
 			M.TurretHi = LandPlay::Vec(Look->TurretHi.X, Look->TurretHi.Y, Look->TurretHi.Z);
 			S.Sight.Add(M);
+			// (her thrown turret, a still machine of its own where it lies, up to some 7 m off her: on its side it stands
+			// as tall as a man, and a tilted one holds its gun up two metres; its box and muzzle as LandHulk settled it)
+			if (H.bTurretOff)
+			{
+				LandSight::Machine Thrown;
+				Thrown.Root = LandPlay::Vec(H.TurretX, H.TurretY, H.TurretZ);
+				Thrown.Heading = H.TurretYaw;
+				Thrown.HullLo = LandPlay::Vec(H.TurretBoxLo.X, H.TurretBoxLo.Y, H.TurretBoxLo.Z);
+				Thrown.HullHi = LandPlay::Vec(H.TurretBoxHi.X, H.TurretBoxHi.Y, H.TurretBoxHi.Z);
+				Thrown.bTurret = false;
+				Thrown.bMuzzle = H.bTurretGun;
+				Thrown.Muzzle = LandPlay::Vec(H.TurretMuzzle.X, H.TurretMuzzle.Y, H.TurretMuzzle.Z);
+				S.Sight.Add(Thrown);
+			}
 		}
 	}
 }
@@ -8432,8 +8446,8 @@ void ALandBattle::LayOldWrecks()
 	// Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
 	// battle there; looks only, as the scars and the old ruts: nothing the rules fight reads them): the recording's
 	// "oldWrecks" {count, months, nats}, which the campaign writes only while the player's Battle rules row "Old wrecks"
-	// is on; -TheaterLandOldWrecks=N (the armour burnt out here before) and -TheaterLandOldWreckMonths=M stand in for it
-	// on any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
+	// is on; -TheaterLandOldWrecks=N (N laid) and -TheaterLandOldWreckMonths=M (how long since they burnt) stand in for
+	// it on any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
 	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said.
 	FLandBattleState& S = *State;
 	if (!S.Field)
@@ -8443,10 +8457,13 @@ void ALandBattle::LayOldWrecks()
 	int32 Count = S.Rec.OldWreckCount;
 	double Months = S.Rec.OldWreckMonths;
 	std::vector<std::pair<std::string, int>> Nats = S.Rec.OldWreckNats;
+	bool bStandIn = false;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWrecks="), Count))
 	{
-		// (the stand-in's: the battle's two sides', not the recording's nations)
+		// (the stand-in's: the battle's two sides', not the recording's nations; and N laid, not N burnt out, so the
+		// Mac's off/on shots show N (at most 20): its months age their look and the scrap men take none away)
 		Nats.clear();
+		bStandIn = true;
 	}
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWreckMonths="), Months);
 	if (Count <= 0)
@@ -8467,7 +8484,8 @@ void ALandBattle::LayOldWrecks()
 	}
 	const double Took = LandParts::Seconds();
 	// The field as LandHulk reads it (the cloud test, Tools/land_hulk, the same): the recording's ways, this battle's
-	// blasts, the field's lines and what stands on it, the scars' holes and the old ruts laid just before.
+	// blasts, the field's lines and what stands on it, the scars' holes and the old ruts laid just before, the field
+	// telephones' wires (the recording's, or -TheaterLandPhones's made from the battle in Open) and the snow lying.
 	const LandHulk::Field Lay = LandHulk::FieldOf(S.Rec, *S.Field, &S.Holes, S.OldRutWays);
 	LandHulk::Ask Asked;
 	Asked.Count = Count;
@@ -8480,7 +8498,9 @@ void ALandBattle::LayOldWrecks()
 		Asked.Terrain = S.Armour->Terrain;
 	}
 	Asked.Seed = S.Rec.Seed ? S.Rec.Seed : 1;
-	// (each machine from the battle's own models where it has her, else read as MakeArmour reads them)
+	Asked.bAsLaid = bStandIn;
+	// (each machine from the battle's own models where it has her and they burnt this month, else read as MakeArmour
+	// reads them and dressed for their own month)
 	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Battle");
 	const LandKit::Battle::ReadFn Read = [Folder](const std::string& FileName, std::string& OutText)
 	{

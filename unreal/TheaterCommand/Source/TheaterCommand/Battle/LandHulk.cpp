@@ -105,6 +105,39 @@ namespace LandHulk
 			Ry = -std::sin(Heading);
 		}
 
+		/** The scorched patch's make (Patch): its rings, as shares of its reach, its middle first, and its spokes. */
+		constexpr int PatchSpokes = 28, PatchRings = 7;
+		constexpr double PatchRing[PatchRings] = { 0.0, 0.2, 0.4, 0.6, 0.78, 0.9, 1.0 };
+
+		/** A spoke's reach, as a share of the patch's size (0.78 to 1.12: a ragged edge of her own). */
+		double SpokeReach(const Hulk& H, int S)
+		{
+			const double Ang = 2.0 * Pi * S / PatchSpokes;
+			return 0.78 + 0.34 * Noise3(std::cos(Ang) * 1.6, std::sin(Ang) * 1.6, 0.5, H.Seed ^ 0xE5ull);
+		}
+
+		/** A point of her patch on the field: ring Ri, spoke S (its reach Reach), her ways Fx, Fy, Rx, Ry. */
+		void PatchAt(const Hulk& H, double Fx, double Fy, double Rx, double Ry, int Ri, int S, double Reach, double& OutX, double& OutY)
+		{
+			const double Ang = 2.0 * Pi * S / PatchSpokes;
+			const double F = PatchRing[Ri] * Reach;
+			const double A = std::cos(Ang) * F * H.PatchLong, B = std::sin(Ang) * F * H.PatchWide;
+			OutX = H.X + Fx * A + Rx * B;
+			OutY = H.Y + Fy * A + Ry * B;
+		}
+
+		/** The grass kept this far off her hull's footprint (Covers: a blade standing against her side, not through it). */
+		constexpr double FootMargin = 0.15;
+
+		/** How far a place on the field lies from her hull's footprint (0 on it). */
+		double FromFoot(const Hulk& H, double X, double Y)
+		{
+			double Fx, Fy, Rx, Ry;
+			Ways(H.Heading, Fx, Fy, Rx, Ry);
+			const double A = (X - H.X) * Fx + (Y - H.Y) * Fy, B = (X - H.X) * Rx + (Y - H.Y) * Ry;
+			return std::hypot(std::max({ H.FootLoX - A, 0.0, A - H.FootHiX }), std::max({ H.FootLoY - B, 0.0, B - H.FootHiY }));
+		}
+
 		/** Places on the field in squares, for asking what lies near. */
 		class Squares
 		{
@@ -193,7 +226,7 @@ namespace LandHulk
 		 */
 		struct Kit
 		{
-			std::vector<uint8_t> Drop, OnTurret;
+			std::vector<uint8_t> Drop, OnTurret, OnGun;
 			/** Her turret may be thrown (a turret turning about her up, a body of its own of some size). */
 			bool bTurret = false;
 			V3 TurretPivot;
@@ -221,11 +254,12 @@ namespace LandHulk
 			double HalfLong = 3.0, HalfWide = 1.5, MidX = 0.0;
 		};
 
-		bool InTurret(const LandKit::Model& M, int Part)
+		/** Whether a part turns with Root (Root itself, or one hung under it). */
+		bool Under(const LandKit::Model& M, int Part, int Root)
 		{
-			for (int P = Part; P >= 0 && P < static_cast<int>(M.Parts.size()); P = M.Parts[static_cast<size_t>(P)].Parent)
+			for (int P = Part; Root >= 0 && P >= 0 && P < static_cast<int>(M.Parts.size()); P = M.Parts[static_cast<size_t>(P)].Parent)
 			{
-				if (P == M.Turret) return true;
+				if (P == Root) return true;
 			}
 			return false;
 		}
@@ -236,6 +270,7 @@ namespace LandHulk
 			const size_t Bodies = M.Bodies.size();
 			K.Drop.assign(Bodies, 0);
 			K.OnTurret.assign(Bodies, 0);
+			K.OnGun.assign(Bodies, 0);
 			K.Tyre.assign(Bodies, 0);
 			K.TyreR.assign(Bodies, 0.0);
 			K.RimR.assign(Bodies, 0.0);
@@ -248,11 +283,12 @@ namespace LandHulk
 				const LandKit::Body& Bo = M.Bodies[B];
 				// (her aerial burnt off or snapped, her roof gun and its cradle and a carrier's gun mount burnt or taken)
 				if (Bo.Name == "aerial" || Contains(Bo.Name, "roof_mg") || Bo.Name == "mg_mount") K.Drop[B] = 1;
-				if (M.Turret >= 0 && InTurret(M, Bo.Part))
+				if (Under(M, Bo.Part, M.Turret))
 				{
 					K.OnTurret[B] = 1;
 					if (Bo.Part == M.Turret) TurretPoints = Bo.Near.Count();
 				}
+				if (Under(M, Bo.Part, M.Gun)) K.OnGun[B] = 1;
 				const LandKit::Part& P = M.Parts[static_cast<size_t>(Bo.Part)];
 				if (P.Radius > 0.12 && std::find(M.Wheels.begin(), M.Wheels.end(), Bo.Part) != M.Wheels.end())
 				{
@@ -406,6 +442,9 @@ namespace LandHulk
 			for (size_t I = 0; I < K.Opens.size() && I < 32; ++I)
 			{
 				if (!((H.Open >> I) & 1u)) continue;
+				// (a thrown turret's hatches and doors slammed shut as it went up or jammed as it fell: open, one lying on
+				// its side or its roof would stand on a door or a lid, its steel a metre over the grass)
+				if (H.bTurretOff && Under(M, K.Opens[I], M.Turret)) continue;
 				const LandKit::Part& P = M.Parts[static_cast<size_t>(K.Opens[I])];
 				S[static_cast<size_t>(K.Opens[I])].Turn = (P.bLimits && P.Hi > 0.0 ? P.Hi : 90.0) * OpenShare(H, I);
 				if (K.Lifts[I] >= 0)
@@ -453,8 +492,11 @@ namespace LandHulk
 		 * - Rubber (a road wheel's ring): charred black with grey ash, the ash washed away, the steel under it rusting;
 		 *   a lorry's tyre is gone to its rim (ToRim), the rim steel.
 		 * - Low on her: the field's own earth splashed up, and after half a year a green stain where the weeds stand.
+		 * - Snowed: the snow fallen on her since she burnt (SnowSince): white on what faces up, the steel showing through
+		 *   where it lies thin; the earth and the weeds' stain under it.
 		 */
-		Rgb8 Burn(const uint8_t* Paint, double Soot, const V3& At, double UpZ, double High, const Hulk& H, const Tone& Burnt, const Tone& Earth, Stuff What, bool bRing)
+		Rgb8 Burn(const uint8_t* Paint, double Soot, const V3& At, double UpZ, double High, const Hulk& H, const Tone& Burnt, const Tone& Earth, Stuff What, bool bRing,
+			double Snowed)
 		{
 			const double M = std::max(0.0, H.Months);
 			const uint64_t S = H.Seed;
@@ -503,12 +545,19 @@ namespace LandHulk
 			}
 			// her open turret ring (her turret thrown): black, the fire's own chimney
 			if (bRing) Out = Mixed(Out, Burnt, 0.8);
-			// low on her: the field's earth splashed up, and the weeds' stain once they stand
+			// low on her: the field's earth splashed up, and the weeds' stain once they stand (both under the snow where it
+			// has fallen since she burnt: on a winter field she would otherwise stand brown- and green-footed in clean snow)
 			if (High < 0.45)
 			{
 				const double Low = 1.0 - Clamp01(High / 0.45);
-				Out = Mixed(Out, Earth, 0.3 * Low * (0.4 + 0.6 * std::min(1.0, M / 4.0)));
-				Out = Mixed(Out, Tone(70, 82, 42), 0.18 * Low * Smooth(4.0, 18.0, M));
+				Out = Mixed(Out, Earth, 0.3 * Low * (0.4 + 0.6 * std::min(1.0, M / 4.0)) * (1.0 - Snowed));
+				Out = Mixed(Out, Tone(70, 82, 42), 0.18 * Low * Smooth(4.0, 18.0, M) * (1.0 - Snowed));
+			}
+			// the snow fallen on her since she cooled, on what faces up (her deck, her turret's roof, her track's links
+			// lying flat), the steel showing through in patches where it lies thin (LandSnow's new snow)
+			if (Snowed > 0.0 && UpZ > 0.55)
+			{
+				Out = Mixed(Out, Tone(250, 252, 255), Snowed * Smooth(0.55, 0.9, UpZ) * (0.7 + 0.35 * N1));
 			}
 			return ToRgb(Out);
 		}
@@ -522,6 +571,13 @@ namespace LandHulk
 			const V3 Up(N[A * 3] + N[B * 3] + N[C * 3], N[A * 3 + 1] + N[B * 3 + 1] + N[C * 3 + 1], N[A * 3 + 2] + N[B * 3 + 2] + N[C * 3 + 2]);
 			const bool bFront = (Pb - Pa).Cross(Pc - Pa).Dot(Up) >= 0.0;
 			Out.Triangles.insert(Out.Triangles.end(), { A, bFront ? B : C, bFront ? C : B });
+		}
+
+		/** The snow fallen on a wreck and her patch since she burnt (Snow the field's lying, 0 to 1; white from 0.45, as
+		 * LandSnow whitens a roof): none on a fresh one, whose fire melted it round her, all of it within a month. */
+		double SnowSince(double Snow, double Months)
+		{
+			return Smooth(0.03, 0.45, Snow) * Smooth(0.25, 1.0, Months);
 		}
 
 		uint32_t Point(LandField::Mesh& Out, const V3& At, const V3& Up, const Rgb8& C)
@@ -673,6 +729,16 @@ namespace LandHulk
 			}
 		}
 		F.Ways = OldRuts;
+		// The field telephones' wires (release 2: the recording's, or the scene's -TheaterLandPhones made from the battle
+		// before the wrecks are laid), each lying on the ground along its points: a lineman lays his round a wreck.
+		for (const LandFeed::Wire& W : Rec.Wires)
+		{
+			if (!W.Pts.empty())
+			{
+				F.Wires.push_back(W.Pts);
+			}
+		}
+		F.Snow = G.SnowLying();
 		// The two sides: their zones' middles and nations.
 		const double* A = Rec.Ground.ZoneAtt;
 		const double* D = Rec.Ground.ZoneDef;
@@ -736,9 +802,11 @@ namespace LandHulk
 		DrawnZ = F.DrawnZ;
 		DrawnUp = F.DrawnUp;
 		Colour = F.Colour;
+		Snow = F.Snow;
 		const int Burnt = std::clamp(A.Count, 0, MostCount);
 		const double Months = std::max(0.0, A.Months);
-		Wanted = static_cast<int>(std::lround(Burnt * Left(Months)));
+		// (the Mac's stand-in lays as many as it is asked, at most Most: its months age their look and take none away)
+		Wanted = A.bAsLaid ? Burnt : static_cast<int>(std::lround(Burnt * Left(Months)));
 		const int Target = std::min(Wanted, Most);
 		if (Target <= 0 || F.Fought.empty() || !F.Ground || !F.Open)
 		{
@@ -792,9 +860,13 @@ namespace LandHulk
 			}
 		}
 
-		// Their machines, as the month they burnt in had them (Months before this battle's), each read once a nation.
-		int BurntYear = A.Year, BurntMonth = A.Month;
+		// Their machines, as the month they burnt in had them (Months before this battle's), each read once a nation. The
+		// battle's own models are dressed for this month's coats and kit: taken only where the wrecks burnt this month,
+		// else her own read and dressed for hers (a German wreck of the spring in a summer battle in her spring coat).
+		int BurntYear = A.Year, BurntMonth = A.Month, NowYear = A.Year, NowMonth = A.Month;
 		MonthsBefore(A.Year, A.Month, Months, BurntYear, BurntMonth);
+		MonthsBefore(A.Year, A.Month, 0.0, NowYear, NowMonth);
+		const bool bThisMonth = BurntYear == NowYear && BurntMonth == NowMonth;
 		std::map<std::string, Kit> Kits;
 		std::map<std::string, int> Nth;
 		const auto Load = [&](const std::string& Name, const std::string& Nat, bool bSoft) -> std::string
@@ -810,7 +882,7 @@ namespace LandHulk
 				{
 					return Key;
 				}
-				const LandKit::Model* Got = Have ? Have(Model, Nat) : nullptr;
+				const LandKit::Model* Got = Have && bThisMonth ? Have(Model, Nat) : nullptr;
 				if (!Got && ReadFile)
 				{
 					std::string Text, Why;
@@ -959,7 +1031,7 @@ namespace LandHulk
 		const double AxisHalf = 0.5 * std::min(std::fabs((X1 - X0) / (std::fabs(AxisUx) > 1e-6 ? AxisUx : 1e-6)), std::fabs((Y1 - Y0) / (std::fabs(AxisUy) > 1e-6 ? AxisUy : 1e-6)));
 
 		// What each is kept clear of, by squares.
-		Squares LaneAt(8.0), HedgeAt(8.0), VehicleAt(8.0), ManAt(6.0), BlastAt(8.0), StandAt(8.0), WayAt(8.0), HulkAt(8.0);
+		Squares LaneAt(8.0), HedgeAt(8.0), VehicleAt(8.0), ManAt(6.0), BlastAt(8.0), StandAt(8.0), WayAt(8.0), HulkAt(8.0), WireAt(8.0);
 		for (const auto& L : F.Lanes) LaneAt.AddLine(L, 1.0);
 		for (const auto& L : F.Hedges) HedgeAt.AddLine(L, 1.0);
 		for (const auto& L : F.Vehicles)
@@ -975,13 +1047,19 @@ namespace LandHulk
 		for (const auto& P : F.Blasts) BlastAt.Add(P.first, P.second);
 		for (const Ring& R : F.Standing) StandAt.Add(R.X, R.Y, R.R);
 		for (const auto& L : F.Ways) WayAt.AddLine(L, 1.0);
+		for (const auto& L : F.Wires)
+		{
+			if (L.size() == 1) WireAt.Add(L[0].first, L[0].second);
+			WireAt.AddLine(L, 1.0);
+		}
 
 		// (her scorched patch reaches about two metres past her outline: it is kept off the old ruts too, whose drawn
 		// ruts would show through it)
 		constexpr double PatchReach = 2.0;
 		std::vector<std::pair<double, double>> Paths;
 		// Whether a wreck's outline lies clear: on open ground all round each ring, off the lanes and hedges, the
-		// recorded ways, this battle's blasts, what stands in the open, the old ruts and the other wrecks.
+		// recorded ways, this battle's blasts, what stands in the open, the old ruts, the field telephones' wires and the
+		// other wrecks.
 		const auto Clear = [&](const std::vector<Ring>& Rings, double PatchMargin) -> bool
 		{
 			for (const Ring& R : Rings)
@@ -1002,6 +1080,7 @@ namespace LandHulk
 				if (BlastAt.Near(R.X, R.Y, BlastClear + R.R)) return false;
 				if (StandAt.Near(R.X, R.Y, R.R + 1.0)) return false;
 				if (WayAt.Near(R.X, R.Y, WayClear + R.R + PatchMargin + 0.5)) return false;
+				if (WireAt.Near(R.X, R.Y, WireClear + R.R + 0.5)) return false;
 				if (HulkAt.Near(R.X, R.Y, R.R + Apart)) return false;
 			}
 			// (the cattle's paths last: their pieces are laid as the grass is, dearer to ask than all the rest)
@@ -1025,6 +1104,27 @@ namespace LandHulk
 				}
 			}
 			return true;
+		};
+
+		// Whether her scorched patch lies on open ground, every point of it as Patch lays it (its ragged edge reaches some
+		// 2.4 m past her outline, which Clear reads: on the steppe's first lay three patches crossed a trench's works and
+		// one a garden), the outer rings first.
+		const auto PatchClear = [&](const Hulk& H) -> bool
+		{
+			double Fx, Fy, Rx, Ry;
+			Ways(H.Heading, Fx, Fy, Rx, Ry);
+			double Reach[PatchSpokes];
+			for (int S = 0; S < PatchSpokes; ++S) Reach[S] = SpokeReach(H, S);
+			for (int Ri = PatchRings - 1; Ri >= 1; --Ri)
+			{
+				for (int S = 0; S < PatchSpokes; ++S)
+				{
+					double X = 0.0, Y = 0.0;
+					PatchAt(H, Fx, Fy, Rx, Ry, Ri, S, Reach[S], X, Y);
+					if (!F.Open(X, Y)) return false;
+				}
+			}
+			return F.Open(H.X, H.Y);
 		};
 
 		// A wreck's shape on the field at a place: how she rests (her foot's corners on the ground, sunk where her
@@ -1096,16 +1196,39 @@ namespace LandHulk
 			}
 			// Her turret thrown: off her side, her tail or her bow quarter, a metre or a few off her hull, lying on its
 			// roof, its side or tilted, its gun along its yaw.
+			std::vector<Ring> Thrown;
 			if (H.bTurretOff)
 			{
 				const double Pick = Own.U();
-				const double Side = Own.U() < 0.5 ? -1.0 : 1.0;
+				double Side = Own.U() < 0.5 ? -1.0 : 1.0;
+				// (to her side away from her run-off track where she has one, not onto its links)
+				if (H.TrackOff != 0) Side = H.TrackOff < 0 ? 1.0 : -1.0;
 				const double Bearing = Pick < 0.5 ? Side * Own.U(70.0, 110.0) : Pick < 0.8 ? Own.U(150.0, 210.0) : Side * Own.U(20.0, 50.0);
 				const double Cb = std::cos(Bearing * Rad), Sb = std::sin(Bearing * Rad);
 				const double Edge = 1.0 / std::sqrt((Cb / K.HalfLong) * (Cb / K.HalfLong) + (Sb / K.HalfWide) * (Sb / K.HalfWide));
-				const double Off2 = Edge + K.TurretR + Own.U(0.6, 4.0);
+				double Off2 = Edge + K.TurretR + Own.U(0.6, 4.0);
 				At(K.MidX + Cb * Off2, Sb * Off2, H.TurretX, H.TurretY);
+				// (and 0.6 m clear of her hull's corners, which the ellipse above cuts inside: pushed out along its bearing,
+				// a bow quarter's throw that had lain through her front corner)
+				for (int Push = 0; Push < 40 && FromFoot(H, H.TurretX, H.TurretY) < K.TurretR + 0.4; ++Push)
+				{
+					Off2 += 0.2;
+					At(K.MidX + Cb * Off2, Sb * Off2, H.TurretX, H.TurretY);
+				}
 				H.TurretYaw = Own.U(0.0, 2.0 * Pi);
+				// (its gun turned away from her where it would lie through her hull)
+				const auto GunIn = [&]()
+				{
+					for (const double Share : { 0.6, 1.0 })
+					{
+						if (K.Muzzle <= K.TurretR) break;
+						const double Gx = H.TurretX + std::sin(H.TurretYaw) * K.Muzzle * Share, Gy = H.TurretY + std::cos(H.TurretYaw) * K.Muzzle * Share;
+						if (FromFoot(H, Gx, Gy) < 0.55) return true;
+					}
+					return false;
+				};
+				if (GunIn()) H.TurretYaw = std::fmod(H.TurretYaw + Pi, 2.0 * Pi);
+				if (GunIn()) return false;
 				const double How = Own.U();
 				H.TurretLie = How < 0.35 ? Lie::Upturned : How < 0.6 ? Lie::OnSide : Lie::Tilted;
 				H.TurretTilt = H.TurretLie == Lie::Tilted ? Own.U(8.0, 22.0) * Rad : Own.Bell() * 10.0 * Rad;
@@ -1116,7 +1239,7 @@ namespace LandHulk
 				Ri.X = H.TurretX;
 				Ri.Y = H.TurretY;
 				Ri.R = K.TurretR;
-				H.Rings.push_back(Ri);
+				Thrown.push_back(Ri);
 				for (const double Share : { 0.6, 1.0 })
 				{
 					if (K.Muzzle <= K.TurretR) break;
@@ -1124,8 +1247,9 @@ namespace LandHulk
 					Gun.X = H.TurretX + std::sin(H.TurretYaw) * K.Muzzle * Share;
 					Gun.Y = H.TurretY + std::cos(H.TurretYaw) * K.Muzzle * Share;
 					Gun.R = 0.45;
-					H.Rings.push_back(Gun);
+					Thrown.push_back(Gun);
 				}
+				H.Rings.insert(H.Rings.end(), Thrown.begin(), Thrown.end());
 			}
 			// A track run off: its links laid out flat from her bow along her side and on past her tail, bowing out a
 			// little, as she drove off it.
@@ -1151,6 +1275,15 @@ namespace LandHulk
 				{
 					H.Rings.push_back({ H.Strip[L].first, H.Strip[L].second, Half });
 				}
+				// (her thrown turret and its gun not on the links: a throw over her tail can reach the strip's far end, and
+				// the turret is settled on the ground, not on them)
+				for (const Ring& T : Thrown)
+				{
+					for (const auto& P : H.Strip)
+					{
+						if (std::hypot(P.first - T.X, P.second - T.Y) < T.R + Half) return false;
+					}
+				}
 			}
 			for (const Ring& Ri : H.Rings)
 			{
@@ -1173,6 +1306,12 @@ namespace LandHulk
 			Ground(H.TurretX, H.TurretY, GroundZ, Up);
 			const Quat T = TurretTurn(H, Up);
 			double Rest = -1e9, Lo = 1e9, Hi = -1e9;
+			// (and its reach for the camera, in its own axes along its gun's way: the turret's own bodies a box, its gun's
+			// farthest point the muzzle)
+			double Fx, Fy, Rx, Ry;
+			Ways(H.TurretYaw, Fx, Fy, Rx, Ry);
+			V3 BoxLo(1e9, 1e9, 1e9), BoxHi(-1e9, -1e9, -1e9), AllLo = BoxLo, AllHi = BoxHi, Muzzle;
+			double Reach = -1.0;
 			for (size_t B = 0; B < M.Bodies.size(); ++B)
 			{
 				if (!K.OnTurret[B] || K.Drop[B]) continue;
@@ -1189,10 +1328,30 @@ namespace LandHulk
 					Rest = std::max(Rest, Under - Q.Z);
 					Lo = std::min(Lo, Under);
 					Hi = std::max(Hi, Under);
+					const V3 L(Q.X * Fx + Q.Y * Fy, Q.X * Rx + Q.Y * Ry, Q.Z);
+					AllLo = V3(std::min(AllLo.X, L.X), std::min(AllLo.Y, L.Y), std::min(AllLo.Z, L.Z));
+					AllHi = V3(std::max(AllHi.X, L.X), std::max(AllHi.Y, L.Y), std::max(AllHi.Z, L.Z));
+					if (K.OnGun[B])
+					{
+						if (std::hypot(Q.X, Q.Y) > Reach)
+						{
+							Reach = std::hypot(Q.X, Q.Y);
+							Muzzle = Q;
+						}
+						continue;
+					}
+					BoxLo = V3(std::min(BoxLo.X, L.X), std::min(BoxLo.Y, L.Y), std::min(BoxLo.Z, L.Z));
+					BoxHi = V3(std::max(BoxHi.X, L.X), std::max(BoxHi.Y, L.Y), std::max(BoxHi.Z, L.Z));
 				}
 			}
 			if (Rest < -1e8 || Hi - Lo > 0.5) return false;
 			H.TurretZ = Rest - std::min(0.15, 0.05 + 0.6 * H.Sink);
+			// (a few centimetres more each way: every fourth point read; a turret that is all gun one box)
+			const bool bOwn = BoxHi.X >= BoxLo.X;
+			H.TurretBoxLo = (bOwn ? BoxLo : AllLo) - V3(0.05, 0.05, 0.05);
+			H.TurretBoxHi = (bOwn ? BoxHi : AllHi) + V3(0.05, 0.05, 0.05);
+			H.bTurretGun = bOwn && Reach > 0.0;
+			H.TurretMuzzle = H.bTurretGun ? V3(H.TurretX + Muzzle.X, H.TurretY + Muzzle.Y, H.TurretZ + Muzzle.Z) : V3();
 			return true;
 		};
 
@@ -1283,6 +1442,14 @@ namespace LandHulk
 				H.Group = Group;
 				H.At = W;
 				H.Seed = Mix(A.Seed ? A.Seed : 1, 0x5EED01Dull + Slot);
+				// Her footprint (her model's hull box) and her scorched patch: her length and width and two metres more
+				// (Patch).
+				H.FootLoX = M.HullLo.X;
+				H.FootHiX = M.HullHi.X;
+				H.FootLoY = M.HullLo.Y;
+				H.FootHiY = M.HullHi.Y;
+				H.PatchLong = K.HalfLong + 2.2;
+				H.PatchWide = K.HalfWide + 1.8;
 				// (the last battle's mostly; some an earlier one's, a few months older)
 				H.Months = Own.U() < 0.7 ? Months + Own.U(0.0, 0.5) : Months + Own.U(2.0, 8.0);
 				H.Fire = Own.U(0.8, 1.0);
@@ -1360,14 +1527,12 @@ namespace LandHulk
 					}
 					if (!Shape(Tried, M, K, Own)) continue;
 					if (!Clear(Tried.Rings, PatchReach)) continue;
+					if (!PatchClear(Tried)) continue;
 					if (Tried.bTurretOff && !SettleTurret(Tried, M, K)) continue;
 					H = Tried;
 					bLaid = true;
 				}
 				if (!bLaid) break;
-				// Her scorched patch: her length and width and two metres more (Patch).
-				H.PatchLong = K.HalfLong + 2.2;
-				H.PatchWide = K.HalfWide + 1.8;
 				for (const Ring& Ri : H.Rings) HulkAt.Add(Ri.X, Ri.Y, Ri.R);
 				List.push_back(H);
 				KeyOf.push_back(Key);
@@ -1383,7 +1548,8 @@ namespace LandHulk
 		}
 		NoRoom = Target - static_cast<int>(List.size());
 
-		// The squares Covers reads: each wreck's rings, and its patch while it is fresh (the grass burnt there).
+		// The squares Covers reads: each wreck's rings, her hull's footprint (her rings leave its corners: the grass stood
+		// through 2 to 4 in a hundred of each footprint), and her patch while it is fresh (the grass burnt there).
 		for (size_t K = 0; K < List.size(); ++K)
 		{
 			const Hulk& H = List[K];
@@ -1398,6 +1564,7 @@ namespace LandHulk
 				}
 			};
 			for (size_t R = 0; R < H.Rings.size(); ++R) Mark(H.Rings[R].X, H.Rings[R].Y, H.Rings[R].R, static_cast<int>(R));
+			Mark(H.X, H.Y, std::hypot(std::max(-H.FootLoX, H.FootHiX), std::max(-H.FootLoY, H.FootHiY)) + FootMargin, -2);
 			if (H.Months < 3.0) Mark(H.X, H.Y, std::max(H.PatchLong, H.PatchWide), -1);
 		}
 		return static_cast<int>(List.size());
@@ -1416,6 +1583,10 @@ namespace LandHulk
 			{
 				const Ring& R = H.Rings[static_cast<size_t>(What)];
 				if ((X - R.X) * (X - R.X) + (Y - R.Y) * (Y - R.Y) <= R.R * R.R) return true;
+			}
+			else if (What == -2)
+			{
+				if (FromFoot(H, X, Y) <= FootMargin) return true;
 			}
 			else
 			{
@@ -1447,6 +1618,7 @@ namespace LandHulk
 		const Quat Thrown = TurretTurn(H, TurretUp);
 		const V3 TurretAt(H.TurretX - H.X, H.TurretY - H.Y, H.TurretZ - H.Z);
 		const Tone Burnt(M.BurntColour[0], M.BurntColour[1], M.BurntColour[2]);
+		const double Snowed = SnowSince(Snow, H.Months);
 		Tone Earth(112, 96, 72);
 		if (Colour)
 		{
@@ -1497,7 +1669,7 @@ namespace LandHulk
 				const bool bRing = H.bTurretOff && !bThrown && Posed.Z > M.TurretLo.Z - 0.3
 					&& std::hypot(Posed.X - Ki.TurretPivot.X, Posed.Y - Ki.TurretPivot.Y) < 0.8 * (Ki.TurretR - 0.2);
 				const double Soot = I < Me.Soot.size() ? Me.Soot[I] : 0.8;
-				const Rgb8 C = Burn(&Me.Colours[I * 4], Soot, Rest, Up.Unit().Z, bThrown ? 1.0 : Rest.Z, H, Burnt, Earth, Is, bRing);
+				const Rgb8 C = Burn(&Me.Colours[I * 4], Soot, Rest, Up.Unit().Z, bThrown ? 1.0 : Rest.Z, H, Burnt, Earth, Is, bRing, Snowed);
 				Point(Out, At, Up, C);
 			}
 			// (the files wind a face counter-clockwise from its front in her own axes, which turn into the field's with a
@@ -1545,7 +1717,7 @@ namespace LandHulk
 					const V3 Laid = At[Li] + Along[Li] * Dp.Dot(Tr.Along[Li]) + Up[Li] * (Tr.BMax - Dp.Dot(Tr.Out[Li])) + Across[Li] * Dp.Dot(Side);
 					const V3 Facing = Along[Li] * N.Dot(Tr.Along[Li]) - Up[Li] * N.Dot(Tr.Out[Li]) + Across[Li] * N.Dot(Side);
 					const double Soot = I < Me.Soot.size() ? Me.Soot[I] : 0.8;
-					Index[I] = Point(Out, Laid, Facing, Burn(&Me.Colours[I * 4], Soot, Bo.Pivot + P, Facing.Unit().Z, 0.1, H, Burnt, Earth, Stuff::Link, false));
+					Index[I] = Point(Out, Laid, Facing, Burn(&Me.Colours[I * 4], Soot, Bo.Pivot + P, Facing.Unit().Z, 0.1, H, Burnt, Earth, Stuff::Link, false, Snowed));
 				}
 				for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
 				{
@@ -1565,7 +1737,7 @@ namespace LandHulk
 					for (int E = 0; E < 2; ++E)
 					{
 						const V3 P = At[L] + Across[L] * (E == 0 ? -Half : Half) + Up[L] * Thick;
-						Now[E] = Point(Out, P, Up[L], Burn(Steel, 0.9, V3(static_cast<double>(L) * 0.15, E * 0.4, 0.0), 1.0, 0.1, H, Burnt, Earth, Stuff::Link, false));
+						Now[E] = Point(Out, P, Up[L], Burn(Steel, 0.9, V3(static_cast<double>(L) * 0.15, E * 0.4, 0.0), 1.0, 0.1, H, Burnt, Earth, Stuff::Link, false, Snowed));
 					}
 					if (L > 0)
 					{
@@ -1589,28 +1761,27 @@ namespace LandHulk
 		const double M = std::max(0.0, H.Months);
 		// How it goes with the months: scorched black at first (the burnt grass, her oil and fuel soaked in), the ash
 		// washed into a burnt brown within a few months, then the weeds come up lusher and darker than the field round
-		// it, fading into it over the second year.
-		const double Scorch = M < 1.0 ? 0.9 : 0.9 * std::exp(-(M - 1.0) / 2.5);
-		const double Brown = Smooth(0.5, 3.0, M) * (1.0 - Smooth(6.0, 14.0, M));
-		const double Lush = Smooth(2.0, 8.0, M) * (1.0 - 0.6 * Smooth(18.0, 36.0, M));
-		constexpr int Spokes = 28;
-		const double Rings[] = { 0.0, 0.2, 0.4, 0.6, 0.78, 0.9, 1.0 };
-		constexpr int RingCount = 7;
+		// it, fading into it over the second year. Under the snow fallen since she burnt, none of it: the field's own
+		// snow (Colour) lies over her patch as over the field round it, and only a fresh one shows black through it.
+		const double Snowed = SnowSince(Snow, M);
+		const double Scorch = (M < 1.0 ? 0.9 : 0.9 * std::exp(-(M - 1.0) / 2.5)) * (1.0 - Snowed);
+		const double Brown = Smooth(0.5, 3.0, M) * (1.0 - Smooth(6.0, 14.0, M)) * (1.0 - Snowed);
+		const double Lush = Smooth(2.0, 8.0, M) * (1.0 - 0.6 * Smooth(18.0, 36.0, M)) * (1.0 - Snowed);
+		constexpr int Spokes = PatchSpokes;
+		const double* Rings = PatchRing;
+		constexpr int RingCount = PatchRings;
 		double Reach[Spokes];
 		for (int S = 0; S < Spokes; ++S)
 		{
-			const double Ang = 2.0 * Pi * S / Spokes;
-			Reach[S] = 0.78 + 0.34 * Noise3(std::cos(Ang) * 1.6, std::sin(Ang) * 1.6, 0.5, H.Seed ^ 0xE5ull);
+			Reach[S] = SpokeReach(H, S);
 		}
 		std::vector<uint32_t> Index(static_cast<size_t>(Spokes * RingCount));
 		for (int Ri = 0; Ri < RingCount; ++Ri)
 		{
 			for (int S = 0; S < Spokes; ++S)
 			{
-				const double Ang = 2.0 * Pi * S / Spokes;
-				const double F = Rings[Ri] * Reach[S];
-				const double A = std::cos(Ang) * F * H.PatchLong, B = std::sin(Ang) * F * H.PatchWide;
-				const double X = H.X + Fx * A + Rx * B, Y = H.Y + Fy * A + Ry * B;
+				double X = 0.0, Y = 0.0;
+				PatchAt(H, Fx, Fy, Rx, Ry, Ri, S, Reach[S], X, Y);
 				double Nx = 0.0, Ny = 0.0, Nz = 1.0;
 				if (DrawnUp) DrawnUp(X, Y, Nx, Ny, Nz);
 				Tone Own(96, 108, 60);
@@ -1661,8 +1832,17 @@ namespace LandHulk
 		const long Whole = std::lround(Asked.Months);
 		const std::string When = Whole < 1 ? std::string("under a month") : std::to_string(Whole) + (Whole == 1 ? " month" : " months");
 		char Head[256];
-		std::snprintf(Head, sizeof(Head), "%d laid of %d the scrap men left of %d burnt out here, %s since the last (%.0f%% left; at most %d on a field)",
-			static_cast<int>(List.size()), Wanted, std::clamp(Asked.Count, 0, MostCount), When.c_str(), 100.0 * Left(Asked.Months), Most);
+		if (Asked.bAsLaid)
+		{
+			// (the Mac's stand-in: as many as it asked, their months their look's alone)
+			std::snprintf(Head, sizeof(Head), "%d laid of %d asked (the stand-in: none taken by the scrap men), %s since they burnt (at most %d on a field)",
+				static_cast<int>(List.size()), Wanted, When.c_str(), Most);
+		}
+		else
+		{
+			std::snprintf(Head, sizeof(Head), "%d laid of %d the scrap men left of %d burnt out here, %s since the last (%.0f%% left; at most %d on a field)",
+				static_cast<int>(List.size()), Wanted, std::clamp(Asked.Count, 0, MostCount), When.c_str(), 100.0 * Left(Asked.Months), Most);
+		}
 		std::string Out = Head;
 		std::string Of;
 		for (const auto& [Nat, Kinds] : ByNation)

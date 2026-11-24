@@ -57,8 +57,9 @@ namespace LandHulk
 	 * the wreck's outline; from every man's; from the middle line of a lane and of a hedge, wall or wood's edge; from
 	 * where a shell, bomb or grenade of this battle lands (its hole would open under her); from an old rut; from another. */
 	constexpr double VehicleClear = 8.0, ManClear = 1.5, LaneClear = 6.0, HedgeClear = 3.0, BlastClear = 4.0, WayClear = 2.5, Apart = 2.0;
-	/** And from every piece of a cattle's path's trodden earth (a path is not laid across a wreck). */
-	constexpr double PathClear = 1.0;
+	/** And from every piece of a cattle's path's trodden earth (a path is not laid across a wreck), and from every field
+	 * telephone's wire (a lineman lays his wire round a wreck, not under her). */
+	constexpr double PathClear = 1.0, WireClear = 1.0;
 
 	/**
 	 * The share of a field's burnt-out armour still lying there Months after the battle (the recovery companies took
@@ -123,6 +124,14 @@ namespace LandHulk
 		std::vector<Ring> Rings;
 		/** The scorched patch's half length along her and half width across (metres). */
 		double PatchLong = 0.0, PatchWide = 0.0;
+		/** Her hull's footprint, metres along her and to her right from her anchor (her model's HullLo to HullHi): Covers
+		 * keeps the grass out of her corners, which her rings leave. */
+		double FootLoX = 0.0, FootHiX = 0.0, FootLoY = 0.0, FootHiY = 0.0;
+		/** Her thrown turret's reach, for the camera (the scene's LandSight, as a still machine of its own): a box in its
+		 * own axes about (TurretX, TurretY, TurretZ), x along TurretYaw, y to its right, z up, as it lies (on its side it
+		 * stands as tall as it is wide); and its gun's muzzle on the field where it has one (bTurretGun). */
+		LandKit::V3 TurretBoxLo, TurretBoxHi, TurretMuzzle;
+		bool bTurretGun = false;
 	};
 
 	/** What the field asks of where they lie (the scene's, or the cloud test's laid the same way). */
@@ -148,14 +157,20 @@ namespace LandHulk
 		std::vector<Ring> Standing;
 		/** Mud memory's old ways (their ruts are drawn: a scorched patch is not laid over one). */
 		std::vector<std::vector<std::pair<double, double>>> Ways;
+		/** The field telephones' wires (release 2: the recording's "wires", or the scene's -TheaterLandPhones made from
+		 * the battle), each laid on the ground along its points: kept WireClear off her outline. */
+		std::vector<std::vector<std::pair<double, double>>> Wires;
+		/** The snow lying on the field (LandField::Ground::SnowLying, 0 to 1): her patch and the earth on her low parts
+		 * under it once it has fallen since she burnt, and on what faces up on her. */
+		double Snow = 0.0;
 		/** The two sides' deployment zones' middles (bSides): a side's wrecks lie nearer its own, facing the other. */
 		bool bSides = false;
 		double AttX = 0.0, AttY = 0.0, DefX = 0.0, DefY = 0.0;
 		std::string AttNat, DefNat;
 		/** The cattle's paths' trodden earth in a box (LandField's near clutter, its Trodden pieces; none: no paths). */
 		std::function<void(double X0, double Y0, double X1, double Y1, std::vector<std::pair<double, double>>& Out)> Trodden;
-		/** Where a wreck may lie (a field, a pasture, rough ground: not a lane, a bank, a house, a wall, a yard, a garden,
-		 * a wood, water, marsh, a trench, standing corn or an old shell hole). */
+		/** Where a wreck and her scorched patch may lie (a field, a pasture, rough ground: not a lane, a bank, a house, a
+		 * wall, a yard, a garden, a wood, water, marsh, a trench, standing corn or an old shell hole). */
 		std::function<bool(double X, double Y)> Open;
 		/** The ground (height and its normal), as the battle's vehicles stand on it. */
 		LandKit::GroundFn Ground;
@@ -171,10 +186,11 @@ namespace LandHulk
 	 * points their ways), the way its machines went (LayOldRuts's heading), the shells, bombs and grenades of this
 	 * battle (each round of a mortar, a gun, a tank or an anti-tank gun and each grenade where it lands, each 'shell'
 	 * event, each crater the field keeps), the field's old lines, lanes, banks, walls and woods' edges, what stands in
-	 * the open (every tree, shrub, cart, well and haycock, and a region's kit), the two sides' zones and nations, and
-	 * the ground. Open ground only: a pasture, rough ground, the country beyond, a field of stubble or roots (not standing
-	 * corn), never on an old shell hole or in a dug one's cut (Holes: the field's holes as laid so far, the scars'; null:
-	 * none); OldRuts: mud memory's ways (empty: none). G and Holes must outlive the field's functions.
+	 * the open (every tree, shrub, cart, well and haycock, and a region's kit), the field telephones' wires, the two
+	 * sides' zones and nations, the snow lying, and the ground. Open ground only: a pasture, rough ground, the country
+	 * beyond, a field of stubble or roots (not standing corn), never on an old shell hole or in a dug one's cut (Holes:
+	 * the field's holes as laid so far, the scars'; null: none); OldRuts: mud memory's ways (empty: none). G and Holes
+	 * must outlive the field's functions.
 	 */
 	Field FieldOf(const LandFeed::Recording& Rec, const LandField::Ground& G, const LandCrater::Field* Holes,
 		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
@@ -187,11 +203,15 @@ namespace LandHulk
 		/** Whose they were, as the recording's nats give them, in its order (empty: the battle's two sides, the
 		 * attacker's the odd one). */
 		std::vector<std::pair<std::string, int>> Nats;
-		/** This battle's month: the wrecks' own is Months before it, and their machines and coats that month's. */
+		/** This battle's month: the wrecks' own is Months before it, and their machines and coats that month's (the
+		 * battle's own models, Have, taken only where that is this month: else each read and dressed for hers). */
 		int Year = 1944, Month = 7;
 		/** The field's ground word for the coats (LandKit::Dress::Terrain). */
 		std::string Terrain = "plains";
 		uint64_t Seed = 1;
+		/** Count is how many to lay (the Mac's stand-in, -TheaterLandOldWrecks=N: N laid, at most Most), not how many
+		 * burnt out: no salvage taken off, and Months ages their look only. */
+		bool bAsLaid = false;
 	};
 
 	/** The laid wrecks, their models and how many of each came to lie where (for the scene's log line). */
@@ -203,9 +223,10 @@ namespace LandHulk
 		using HaveFn = std::function<const LandKit::Model*(const std::string& Name, const std::string& Nation)>;
 
 		/**
-		 * Lays them (and forgets any laid before): A.Count's survivors of A.Months' salvage, each nation's share by its
-		 * nats, each machine read by Read (or taken from Have), placed on F. Seeded: the same field, ask and seed lay the
-		 * same wrecks. Returns how many. F's ground functions are kept for Dress and Patch, and must outlive the yard.
+		 * Lays them (and forgets any laid before): A.Count's survivors of A.Months' salvage (A.bAsLaid: A.Count), each
+		 * nation's share by its nats, each machine read by Read (or taken from Have where that is this month's), placed
+		 * on F. Seeded: the same field, ask and seed lay the same wrecks. Returns how many. F's ground functions are kept
+		 * for Dress and Patch, and must outlive the yard.
 		 */
 		int Lay(const Field& F, const Ask& A, const ReadFn& Read, const HaveFn& Have = nullptr);
 
@@ -217,8 +238,8 @@ namespace LandHulk
 		void Dress(size_t K, bool bNear, LandField::Mesh& Out) const;
 		/** The ground under and round hulk K: scorched black while fresh, browning, then greener than the field. */
 		void Patch(size_t K, LandField::Mesh& Out) const;
-		/** Whether the grass and corn round the eye stand at a place (false under a wreck or a thrown turret, on a run-off
-		 * track, and on the scorched patch while it is fresh). */
+		/** Whether the grass and corn round the eye stand at a place (false under a wreck, her hull's corners and all, or a
+		 * thrown turret, on a run-off track, and on the scorched patch while it is fresh). */
 		bool Covers(double X, double Y) const;
 
 		/** What was asked and what came of it, for the scene's log line ("12 laid of 18 left of 30 ..."). */
@@ -240,7 +261,8 @@ namespace LandHulk
 		std::function<double(double, double)> DrawnZ;
 		std::function<void(double, double, double&, double&, double&)> DrawnUp;
 		std::function<LandField::Rgb8(double, double)> Colour;
-		/** Covers' squares (4 m): each wreck's rings, and its patch while it is fresh. */
+		double Snow = 0.0;
+		/** Covers' squares (4 m): each wreck's rings, her hull's footprint, and her patch while it is fresh. */
 		std::map<int64_t, std::vector<std::pair<size_t, int>>> Cover;
 	};
 }

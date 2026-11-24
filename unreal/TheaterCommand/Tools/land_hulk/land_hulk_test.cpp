@@ -5,7 +5,11 @@
 // read where it lies; 8 m and more from every recorded vehicle's way, 1.5 m from every man's; none on another; no more
 // than the cap; fewer as the months go; each nation's share as the recording's nats give it; the recording's key read
 // whatever is missing or odd in it; with no key and no switch, none at all. Then on an old field (two battles' scars
-// and old ruts laid first, as the scene lays them): none on an old shell hole or an old rut. The dressed meshes: every
+// and old ruts laid first, as the scene lays them): none on an old shell hole or an old rut. Every point of each scorched
+// patch on open ground too; the grass kept out of every hull's footprint, her corners and all; each thrown turret clear
+// of her own hull and run-off track, its gun not through her hull, its box for the camera on the ground. The battle's own
+// models taken only for wrecks of its own month; the Mac's stand-in laying as many as it asks; none over a field
+// telephone's wire; on a winter field the patch under the snow and snow on what faces up. The dressed meshes: every
 // number finite, every corner a point, every point near the ground under it, the rust spreading as the months go. Times
 // the laying and the dressing, and paints the field from above with the wrecks on it (placement_<recording>.ppm) and a
 // sheet of four of them as the months go (look_<recording>.ppm), for the art director.
@@ -357,6 +361,14 @@ namespace
 		return Out;
 	}
 
+	/** How far a place on the field lies from a wreck's hull footprint (her model's HullLo to HullHi; 0 on it). */
+	double FromFootprint(const LandHulk::Hulk& H, const LandKit::Model& M, double X, double Y)
+	{
+		const double Fx = std::sin(H.Heading), Fy = std::cos(H.Heading), Rx = std::cos(H.Heading), Ry = -std::sin(H.Heading);
+		const double A = (X - H.X) * Fx + (Y - H.Y) * Fy, B = (X - H.X) * Rx + (Y - H.Y) * Ry;
+		return std::hypot(std::max({ M.HullLo.X - A, 0.0, A - M.HullHi.X }), std::max({ M.HullLo.Y - B, 0.0, B - M.HullHi.Y }));
+	}
+
 	/** One line on a hulk, for the log and the picture's key. */
 	std::string Describe(const LandHulk::Hulk& H)
 	{
@@ -579,6 +591,59 @@ int main(int Argc, char** Argv)
 				const auto Got = Held.emplace(Key, S.K);
 				if (!Got.second && Got.first->second != S.K) ++Shared;
 			}
+			// (her scorched patch on open ground too, every point of it as Patch lays it: its ragged edge reaches some 2.4 m
+			// past her outline, onto a trench's works or a garden on the steppe's first lay)
+			size_t PatchPoints = 0;
+			for (size_t K = 0; K < Y.Hulks().size(); ++K)
+			{
+				const LandHulk::Hulk& Hk = Y.Hulks()[K];
+				LandField::Mesh M;
+				Y.Patch(K, M);
+				for (size_t I = 0; I < M.Colours.size(); ++I)
+				{
+					const double Px = Hk.X + M.Positions[I * 3], Py = Hk.Y + M.Positions[I * 3 + 1];
+					++PatchPoints;
+					const LandField::Drawn What = G.At(Px, Py).What;
+					if (What == LandField::Drawn::Crop && G.CornAt(Px, Py)) ++Wrong["standing corn (a patch)"];
+					else if (!(What == LandField::Drawn::Pasture || What == LandField::Drawn::Rough || What == LandField::Drawn::Beyond || What == LandField::Drawn::Crop))
+						++Wrong[std::string(DrawnWord(What)) + " (a patch)"];
+					if (Holes && (Holes->Bare(Px, Py) || Holes->InCut(Px, Py))) ++OnHole;
+				}
+			}
+			// (the grass kept out of every hull's footprint, her corners and all, every 10 cm; each thrown turret clear of
+			// her own hull and run-off track, its gun not through her hull, and its box for the camera standing on the
+			// ground)
+			size_t FootPoints = 0, FootBare = 0;
+			int Thrown = 0, OwnHit = 0, BadBox = 0;
+			double BoxTop = 0.0;
+			for (size_t K = 0; K < Y.Hulks().size(); ++K)
+			{
+				const LandHulk::Hulk& Hk = Y.Hulks()[K];
+				const LandKit::Model* Mo = Y.ModelOf(K);
+				if (!Mo) continue;
+				const double Fx = std::sin(Hk.Heading), Fy = std::cos(Hk.Heading), Rx = std::cos(Hk.Heading), Ry = -std::sin(Hk.Heading);
+				for (double Along = Mo->HullLo.X; Along <= Mo->HullHi.X; Along += 0.1)
+					for (double Across = Mo->HullLo.Y; Across <= Mo->HullHi.Y; Across += 0.1)
+					{
+						++FootPoints;
+						if (!Y.Covers(Hk.X + Fx * Along + Rx * Across, Hk.Y + Fy * Along + Ry * Across)) ++FootBare;
+					}
+				if (!Hk.bTurretOff) continue;
+				++Thrown;
+				const double TurretHalf = 0.5 * std::hypot(Mo->TurretHi.X - Mo->TurretLo.X, Mo->TurretHi.Y - Mo->TurretLo.Y);
+				bool bHit = FromFootprint(Hk, *Mo, Hk.TurretX, Hk.TurretY) < TurretHalf;
+				for (const auto& P : Hk.Strip) bHit = bHit || std::hypot(P.first - Hk.TurretX, P.second - Hk.TurretY) < TurretHalf;
+				if (Hk.bTurretGun) bHit = bHit || FromFootprint(Hk, *Mo, Hk.TurretMuzzle.X, Hk.TurretMuzzle.Y) < 0.3;
+				OwnHit += bHit ? 1 : 0;
+				const double Under = G.At(Hk.TurretX, Hk.TurretY).Z, Floor = Hk.TurretZ + Hk.TurretBoxLo.Z, Top = Hk.TurretZ + Hk.TurretBoxHi.Z;
+				if (std::fabs(Floor - Under) > 0.75 || Top - Floor < 0.4 || Top - Floor > 3.5 || Hk.TurretBoxHi.X - Hk.TurretBoxLo.X < 0.5) ++BadBox;
+				BoxTop = std::max(BoxTop, Top - Under);
+			}
+			std::printf("%s: %zu points of the scorched patches read with the wrecks'; %zu of %zu points of the hulls' footprints with grass standing; %d thrown turrets, %d on her own hull, track or gun, %d camera boxes amiss (the highest %.1f m over the grass)\n",
+				Label.c_str(), PatchPoints, FootBare, FootPoints, Thrown, OwnHit, BadBox, BoxTop);
+			if (FootBare > 0) Fault(Label + ": grass standing through a wreck's hull");
+			if (OwnHit > 0) Fault(Label + ": a thrown turret on her own hull or run-off track, or its gun through her hull");
+			if (BadBox > 0) Fault(Label + ": a thrown turret's box for the camera off the ground or out of size");
 			// (none across a cattle's path: its trodden pieces under no wreck's outline)
 			int OnPath = 0;
 			std::vector<LandField::Placed> Laid;
@@ -851,7 +916,105 @@ int main(int Argc, char** Argv)
 			if (N0 != 0 || N1 != 0 || Covered != 0 || None.Read != 0) Fault(Name + ": wrecks with none asked");
 		}
 
-		// 5. An old field: two battles' scars and two of old ruts laid first, as the scene lays them; none on a hole or
+		// 5. The battle's own models taken only for wrecks that burnt this month (dressed for its coats and kit); a month
+		// older, each read and dressed for hers. And the Mac's stand-in (-TheaterLandOldWrecks=N): N laid, at most 20,
+		// whatever the months.
+		{
+			const auto Own = [&](const LandHulk::Yard& Y, int& Drawn, int& Held)
+			{
+				Drawn = Held = 0;
+				for (size_t K = 0; K < Y.Hulks().size(); ++K)
+				{
+					const LandKit::Model* Battle = Have(Y.Hulks()[K].Model, Y.Hulks()[K].Nation);
+					Held += Battle ? 1 : 0;
+					Drawn += Battle && Y.ModelOf(K) == Battle ? 1 : 0;
+				}
+			};
+			LandHulk::Yard Now;
+			Now.Lay(F, AskOf(40, 0.0), ReadModel, Have);
+			int NowDrawn = 0, NowHeld = 0, OldDrawn = 0, OldHeld = 0;
+			Own(Now, NowDrawn, NowHeld);
+			Own(Y1, OldDrawn, OldHeld);
+			std::printf("the battle's own models: %d of the %d wrecks of this month whose model it holds drawn from them (%d read); %d of %d a month older (%d read, each dressed for her month)\n",
+				NowDrawn, NowHeld, Now.Read, OldDrawn, OldHeld, Y1.Read);
+			if (NowDrawn != NowHeld || OldDrawn != 0) Fault(Name + ": the battle's own models taken for a wreck of another month, or not for one of this");
+			LandHulk::Ask Q = AskOf(12, 18.0);
+			Q.bAsLaid = true;
+			LandHulk::Yard Stand;
+			const int Twelve = Stand.Lay(F, Q, ReadModel, Have);
+			Q.Count = 40;
+			LandHulk::Yard Forty;
+			const int Capped = Forty.Lay(F, Q, ReadModel, Have);
+			const std::string Said = Stand.Said();
+			std::printf("the stand-in, 18 months on: =12 lays %d (as burnt out, %d), =40 lays %d (at most %d): \"%s\"\n", Twelve, LandHulk::Kept(12, 18.0), Capped, LandHulk::Most,
+				Said.substr(0, Said.find("field)") + 6).c_str());
+			if ((Twelve != 12 && Stand.NoRoom == 0) || Stand.Wanted != 12 || Capped > LandHulk::Most || (Capped != LandHulk::Most && Forty.NoRoom == 0))
+				Fault(Name + ": the stand-in not laying as many as it asks");
+		}
+
+		// 6. The field telephones' wires (release 2; as the scene's -TheaterLandPhones makes them from the battle, before
+		// the wrecks are laid): none laid over one (her outline WireClear off it, her corners a little past her rings).
+		{
+			LandFeed::Recording Phoned = Rec;
+			if (Phoned.Wires.empty()) LandSight::PhonesFromBattle(Phoned);
+			const LandHulk::Field Wired = LandHulk::FieldOf(Phoned, G, nullptr, {});
+			Near WireNear;
+			for (const Line& L : Wired.Wires) WireNear.AddLine(L, 0.25);
+			LandHulk::Yard YW;
+			YW.Lay(Wired, AskOf(40, 1.0), ReadModel, Have);
+			double WireMin = 30.0, WasMin = 30.0;
+			for (const Spot& S : SpotsOf(YW, 3)) WireMin = std::min(WireMin, WireNear.To(S.X, S.Y, 30.0));
+			for (const Spot& S : SpotsOf(Y1, 3)) WasMin = std::min(WasMin, WireNear.To(S.X, S.Y, 30.0));
+			std::printf("with the field telephones (%zu wires): %zu laid; nearest a wire %.1f m (laid without them, %.1f m)\n", Wired.Wires.size(), YW.Hulks().size(), WireMin, WasMin);
+			if (WireMin < LandHulk::WireClear - 0.5) Fault(Name + ": a wreck lying over a field telephone's wire");
+		}
+
+		// 7. A winter field (the same ground with snow lying, as the Ardennes in December), six months on: her patch under
+		// the snow fallen since she burnt (the field's own colour round it), the earth and the weeds' stain off her low
+		// parts, and snow on what faces up on her; against the same field in summer.
+		{
+			LandField::Field Winter = Words;
+			Winter.Snow = 0.9;
+			const LandField::Ground GW(Winter);
+			const LandHulk::Field FW = LandHulk::FieldOf(Rec, GW, nullptr, {});
+			const auto Look = [](const LandHulk::Yard& Y, const LandField::Ground& On, double& PatchOff, double& UpWhite)
+			{
+				double Off = 0.0, Up = 0.0, White = 0.0;
+				size_t N = 0;
+				for (size_t K = 0; K < Y.Hulks().size(); ++K)
+				{
+					const LandHulk::Hulk& Hk = Y.Hulks()[K];
+					LandField::Mesh M;
+					Y.Patch(K, M);
+					for (size_t I = 0; I < M.Colours.size(); ++I)
+					{
+						const LandField::Rgb8 C = M.Colours[I], Fc = On.ColourAt(Hk.X + M.Positions[I * 3], Hk.Y + M.Positions[I * 3 + 1]);
+						Off += std::fabs((C.R + C.G + C.B) - (Fc.R + Fc.G + Fc.B)) / 3.0;
+						++N;
+					}
+					Y.Dress(K, true, M);
+					for (size_t I = 0; I < M.Colours.size(); ++I)
+					{
+						if (M.Normals[I * 3 + 2] < 0.85f) continue;
+						++Up;
+						White += std::min({ M.Colours[I].R, M.Colours[I].G, M.Colours[I].B }) > 190 ? 1.0 : 0.0;
+					}
+				}
+				PatchOff = N > 0 ? Off / static_cast<double>(N) : 0.0;
+				UpWhite = Up > 0.0 ? White / Up : 0.0;
+			};
+			LandHulk::Yard Summer, Snowy;
+			Summer.Lay(F, AskOf(40, 6.0), ReadModel, Have);
+			Snowy.Lay(FW, AskOf(40, 6.0), ReadModel, Have);
+			double SummerOff = 0.0, SummerWhite = 0.0, SnowOff = 0.0, SnowWhite = 0.0;
+			Look(Summer, G, SummerOff, SummerWhite);
+			Look(Snowy, GW, SnowOff, SnowWhite);
+			std::printf("a winter field (snow lying %.2f), six months on: %zu laid; her patch off the field's own colour by %.0f on average (in summer %.0f); %.0f%% of what faces up on her white (in summer %.0f%%)\n",
+				GW.SnowLying(), Snowy.Hulks().size(), SnowOff, SummerOff, 100.0 * SnowWhite, 100.0 * SummerWhite);
+			if (GW.SnowLying() > 0.5 && (SnowOff > 0.5 * SummerOff || SnowWhite < 0.4 || SummerWhite > 0.05)) Fault(Name + ": the wrecks not under the winter's snow");
+		}
+
+		// 8. An old field: two battles' scars and two of old ruts laid first, as the scene lays them; none on a hole or
 		// a rut.
 		LandCrater::Field Holes;
 		Holes.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
