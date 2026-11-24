@@ -19,7 +19,7 @@ import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
-import { unitsDecide } from './units';
+import { UNITS, unitsDecide } from './units';
 import causeData from '../../data/campaign/convoycause.json';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
@@ -443,6 +443,25 @@ function fill(g: Game, n: Nation, turn: number): string[] {
 }
 
 /**
+ * Units decide's start list (data/campaign/units.json startRows; DD 24 Nov 15:53Z, #2 form 'Where it goes'): rows a
+ * nation holds on the first day under that switch only, never in tech.json 'start'. startOpen applies it just before
+ * the opening research, so a later start's staffs count each row once in their catch-up months. Off, nothing.
+ */
+export function openUnitsRows(g: Game): void {
+  if (!techRules(g) || !unitsDecide(g)) return;
+  for (const [nat, ids] of Object.entries(UNITS.startRows)) {
+    const n = g.nations[nat];
+    if (!n) continue;
+    const s = (n.tech ??= fresh(nat));
+    for (const id of ids) {
+      if (!BY_ID[id] || s.done.includes(id)) continue;
+      s.done.push(id);
+      s.work = s.work.filter((w) => w.id !== id);
+    }
+  }
+}
+
+/**
  * When the grand campaign opens: every nation gets the technologies it had when the war began. A campaign that
  * opens in a later year, or a save from before the tree existed, gives each of them the months of research in
  * between, chosen as its own staff would have.
@@ -562,6 +581,18 @@ function shipWords(t: Tech): string | null {
 const CAUSE = causeData as unknown as { cover: number; asv: string; incident: { group: number; lone: number; groupKit: number; loneKit: number; atw: number }; seaLoss: string[] };
 const in100 = (x: number): number => Math.round(x * 100);
 
+/**
+ * What a land row of Units decide does (data/campaign/units.json; DD 24 Nov 15:53Z, #2 form Part 1 2a and 2b), in
+ * words, or null: Field radios adds to the army's command; the training rows climb one ladder, the same for every nation.
+ */
+function unitsWords(id: string): string | null {
+  const L = UNITS.land;
+  if (id === L.radiosRow) return `Its army's command rises ${in100(L.radios)} points in 100.`;
+  if (!L.trainRows.includes(id)) return null;
+  const names = and(L.trainRows.map((x) => BY_ID[x]?.name ?? x));
+  return `Its army's training is at least ${L.ladder[0]} with one of ${names}, ${L.ladder[1]} with two and ${L.ladder[2]} with all three. An army that began the war better trained keeps its own level.`;
+}
+
 /** What a row does in the convoy war by cause (Units decide; data/campaign/convoycause.json), in words, or null. */
 function causeWords(id: string): string | null {
   const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
@@ -595,6 +626,8 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   // (A row of Units decide is in the tree only with that switch, so it always says what it does there.)
   const convoy = cause || t.units ? causeWords(t.id) : null;
   if (convoy) out.push(convoy);
+  const land = t.units ? unitsWords(t.id) : null;
+  if (land) out.push(land);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
   // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
