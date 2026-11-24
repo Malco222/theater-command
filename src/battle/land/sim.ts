@@ -3562,7 +3562,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (!this.warned[s] && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other(s)) : near) >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
         this.warned[s] = true;
         // By what drives the bar (the UI director, 14:44Z); the enemy's stays one plain dispatch, with no fields.
-        const own = !!this.ticket[s].human, why = own ? this.breakCause(s) : undefined;
+        const why = own ? this.breakCause(s) : undefined;
         this.say({ what: 'nearBreak', side: s, text: why ? warnLine(why) : `${this.army(s)} is near breaking.`, ...(why ? { brokeBy: why } : {}) });
       }
       // An army breaks when half its power is running or gone, or when it has bled as much as an army of its side
