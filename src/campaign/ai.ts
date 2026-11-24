@@ -1815,10 +1815,25 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
     const o = g.byName[name];
     if (!o || allied(g, nat, o.ctrl)) return;
     const w = Math.max(3, 14 - 0.5 * k);
-    const d = hops(g, o.id, () => true);
-    for (let i = 0; i < pull.length; i++) if (d[i] >= 0 && d[i] <= 4) pull[i] = Math.max(pull[i], w * Math.pow(0.6, d[i]));
+    // (Speed, the far map: 24 November 2026. Only the ground within four steps of an objective is pulled, so the
+    // search stops there; it walked the whole chart, 2,067 provinces on the far side, for every objective of every
+    // offensive. The same steps and the same pull, province by province.)
+    const near = hopsWithin(g, o.id, 4);
+    for (let n = 0; n < near.length; n += 2) pull[near[n]] = Math.max(pull[near[n]], w * Math.pow(0.6, near[n + 1]));
   });
   return pull;
+}
+
+/** The provinces within `most` steps of `from` over any ground, with their steps, as [province, steps, ...]: hops' first `most` rings. */
+function hopsWithin(g: Game, from: number, most: number): number[] {
+  const out = [from, 0];
+  const seen = new Set<number>([from]);
+  for (let i = 0; i < out.length; i += 2) {
+    const d = out[i + 1];
+    if (d >= most) continue;
+    for (const j of g.regions[out[i]].nb) if (!seen.has(j)) { seen.add(j); out.push(j, d + 1); }
+  }
+  return out;
 }
 
 export const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
