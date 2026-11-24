@@ -117,7 +117,8 @@ namespace LandField
 		std::map<std::string, std::string> Kit;
 		/**
 		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
-		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
+		 * frame rate: words between commas ("houses": the bocage's farmhouses built to the vehicles' detail, LandHouse, kit
+		 * models drawn by level in place of their plain built boxes; "church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
 		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
@@ -439,6 +440,8 @@ namespace LandField
 		int WayGaps = 0;          // hedges opened where the recording's vehicles cross them
 		int Breaches = 0;         // hedgerows blown open where the recording's men went over them in numbers
 		int Houses = 0;           // houses, barns and byres (the church counted apart)
+		int HouseModels = 0;      // the farmhouses built to the vehicles' detail (the trial "houses"), and their kinds
+		int HouseKinds = 0;
 		int Damaged = 0;
 		bool bChurch = false;
 		int Farmsteads = 0;

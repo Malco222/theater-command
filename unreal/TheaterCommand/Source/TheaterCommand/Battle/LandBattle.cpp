@@ -2763,12 +2763,13 @@ void ALandBattle::LayThings()
 			{
 				Plain = FMath::Min(Plain, static_cast<double>(RungShrubPlain));
 			}
-			else if (bHouse && Step >= 0)
+			else if (bHouse)
 			{
 				Plain = FMath::Min(Plain, 300.0);
 			}
-			// (a region's kit: its file's middle level from MidFrom, where it has one and the plain level is well beyond)
-			if (Step >= 0 && !Shape.Mid.Empty() && !Shape.Far.Empty() && Shape.MidFrom * 1.2 < Plain)
+			// (a region's kit: its file's middle level from MidFrom, where it has one and the plain level is well beyond;
+			// and the bocage's farmhouses built to the vehicles' detail, the trial "houses": LandHouse's middle level)
+			if ((Step >= 0 || bHouse) && !Shape.Mid.Empty() && !Shape.Far.Empty() && Shape.MidFrom * 1.2 < Plain)
 			{
 				Further.Add({ &Shape.Mid, static_cast<double>(Shape.MidFrom), true });
 			}

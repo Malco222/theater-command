@@ -12,7 +12,7 @@ PICS="${LAND_CRATER_PICTURES:-$OUT}"
 mkdir -p "$OUT" "$PICS"
 CXX="${CXX:-g++}"
 $CXX ${LAND_CRATER_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
-  "$HERE/crater_sheet.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandScape.cpp" "$SRC/Battle/LandDesert.cpp" "$SRC/Battle/LandMed.cpp" "$SRC/Battle/LandTropic.cpp" "$SRC/Battle/LandFarm.cpp" "$SRC/Battle/LandSnow.cpp" "$SRC/Battle/LandDry.cpp" "$SRC/Battle/LandAsia.cpp" "$SRC/Battle/LandAmerica.cpp" "$SRC/Battle/LandPlain.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
+  "$HERE/crater_sheet.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandHouse.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandScape.cpp" "$SRC/Battle/LandDesert.cpp" "$SRC/Battle/LandMed.cpp" "$SRC/Battle/LandTropic.cpp" "$SRC/Battle/LandFarm.cpp" "$SRC/Battle/LandSnow.cpp" "$SRC/Battle/LandDry.cpp" "$SRC/Battle/LandAsia.cpp" "$SRC/Battle/LandAmerica.cpp" "$SRC/Battle/LandPlain.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
   -pthread -o "$OUT/crater_sheet"
 if [ "$#" -eq 0 ]; then set -- earth sand snow mud blackearth; fi
 STATUS=0

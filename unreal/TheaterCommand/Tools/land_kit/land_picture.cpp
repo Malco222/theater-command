@@ -4,6 +4,7 @@
 // views. Writes one picture a panel (PPM) and a list of captions; land_sheet.py lays them out on the sheet.
 // Usage: land_picture <Content folder> <out folder>
 
+#include "Battle/LandHouse.h"
 #include "Battle/LandKit.h"
 
 #include <algorithm>
@@ -234,7 +235,39 @@ namespace
 		bool bMarks = false, bClose = false;
 		int CloseAmong = 99; // (the close look picks among her first this many marks: the Tiger's hull crosses, not her turret's)
 		int Year = 1944, Month = 7;
+		// A farmhouse's panel instead (release 2, LandHouse, LAND_KIT_HOUSE=1): its damage (0 whole to 3 a shell), its
+		// level (0 near, 1 middle, 2 far), roof and look; the sun's own bearing where given; a close look aimed at a point
+		// from a way (bAim).
+		int House = -1, HouseLevel = 0, HouseRoof = 0;
+		uint64_t HouseKey = 1;
+		double SunBearing = -1000.0;
+		bool bAim = false;
+		V3 AimAt, AimFrom;
+		double AimDistance = 5.0;
 	};
+
+	/** A farmhouse's level as triangles, its floor FloorUp over the plain earth. */
+	void AddHouse(const LandField::Mesh& M, double FloorUp, Scene& S)
+	{
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			Tri Out;
+			for (int K = 0; K < 3; ++K)
+			{
+				const size_t I = M.Triangles[T + static_cast<size_t>(K)];
+				Out.P[K] = V3(M.Positions[I * 3], M.Positions[I * 3 + 1], M.Positions[I * 3 + 2] + FloorUp);
+				Out.N[K] = V3(M.Normals[I * 3], M.Normals[I * 3 + 1], M.Normals[I * 3 + 2]);
+				Out.C[K] = FromPicture(M.Colours[I].R, M.Colours[I].G, M.Colours[I].B);
+				// (only what stands above the earth frames the picture)
+				if (Out.P[K].Z > -0.05)
+				{
+					S.Lo = V3(std::min(S.Lo.X, Out.P[K].X), std::min(S.Lo.Y, Out.P[K].Y), std::min(S.Lo.Z, Out.P[K].Z));
+					S.Hi = V3(std::max(S.Hi.X, Out.P[K].X), std::max(S.Hi.Y, Out.P[K].Y), std::max(S.Hi.Z, Out.P[K].Z));
+				}
+			}
+			S.Tris.push_back(Out);
+		}
+	}
 
 	/** The sun's shadow: depth toward the sun, an orthographic map over everything that casts. */
 	struct ShadowMap
@@ -330,7 +363,7 @@ namespace
 		const int Out = 3; // supersampled three times each way
 		const int W = 560 * Out, H = 420 * Out;
 		// The low sun of a July morning in Normandy, from the camera's right (fifteen degrees up).
-		const double SunBearing = (P.CameraBearing + 62.0) * Rad, SunUp = 15.0 * Rad;
+		const double SunBearing = (P.SunBearing > -999.0 ? P.SunBearing : P.CameraBearing + 62.0) * Rad, SunUp = 15.0 * Rad;
 		const V3 Sun(std::sin(SunBearing) * std::cos(SunUp), std::cos(SunBearing) * std::cos(SunUp), std::sin(SunUp));
 		ShadowMap Shadow;
 		Shadow.Build(S, Sun);
@@ -353,7 +386,13 @@ namespace
 				Close = &K;
 			}
 		}
-		if (Close)
+		if (P.bAim)
+		{
+			Toward = P.AimFrom.Unit();
+			Target = P.AimAt;
+			Distance = P.AimDistance;
+		}
+		else if (Close)
 		{
 			Toward = (Close->Facing.Unit() * 0.85 + Toward * 0.3 + V3(0.0, 0.0, 0.2)).Unit();
 			Target = Close->At;
@@ -367,7 +406,7 @@ namespace
 			Right = Fwd.Cross(V3(0.0, 0.0, 1.0)).Unit();
 			CamUp = Right.Cross(Fwd).Unit();
 		};
-		for (int Pass = 0; Pass < (Close ? 0 : 4); ++Pass)
+		for (int Pass = 0; Pass < (Close || P.bAim ? 0 : 4); ++Pass)
 		{
 			Frame();
 			double X0 = 1e9, X1 = -1e9, Y0 = 1e9, Y1 = -1e9;
@@ -375,6 +414,10 @@ namespace
 			{
 				for (const V3& Q : T.P)
 				{
+					if (Q.Z < -0.05)
+					{
+						continue; // (what is under the earth, a plinth's footing, a heap's rim)
+					}
 					const V3 D = Q - Cam;
 					const double Z = D.Dot(Fwd);
 					const double X = D.Dot(Right) / Z, Y = D.Dot(CamUp) / Z;
@@ -654,6 +697,82 @@ int main(int argc, char** argv)
 		P.CloseAmong = K.CloseAmong;
 		Panels.push_back(P);
 	}
+	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses)
+	const bool bHouseSheet = std::getenv("LAND_KIT_HOUSE") != nullptr;
+	auto HouseSpec = [](const Panel& P)
+	{
+		LandHouse::Spec H;
+		H.Long = 14.0;
+		H.Deep = 7.2;
+		H.Storeys = 2;
+		H.Roof = P.HouseRoof;
+		H.Hurt = P.House;
+		H.Key = P.HouseKey;
+		return H;
+	};
+	if (bHouseSheet)
+	{
+		struct HouseLook
+		{
+			const char* File;
+			int Hurt, Level, Roof;
+			uint64_t Key;
+			double Bearing, Up, Sun;
+			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves
+			double AimDistance;
+			const char* Caption;
+		};
+		const HouseLook Looks[] = {
+			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate" },
+			{ "house_slate_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: gutter, downpipe, water butt" },
+			{ "house_tile", 0, 0, 1, 12, 34.0, 12.0, 110.0, -1, 0.0, "another under flat clay tiles" },
+			{ "house_window", 0, 0, 0, 7, -24.0, 4.0, 62.0, 0, 3.6, "close: quoins, sill, casements, shutters" },
+			{ "house_door", 0, 0, 0, 7, 20.0, 6.0, 80.0, 1, 5.6, "close: the door, its keystone, fanlight and step" },
+			{ "house_eaves", 0, 0, 0, 7, -30.0, 6.0, 60.0, 2, 7.5, "close: chimney, ridge tiles, eaves' kick" },
+			{ "house_roofhole", 1, 0, 0, 7, -38.0, 24.0, 62.0, -1, 0.0, "damage 1: a shell through the roof" },
+			{ "house_gable", 2, 0, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down" },
+			{ "house_shell", 3, 0, 0, 7, -38.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell" },
+			{ "house_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (drawn from about 90 m)" },
+			{ "house_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (drawn from 300 m)" },
+			{ "house_gable_far", 2, 2, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "a gable down, far level" },
+		};
+		for (const HouseLook& K : Looks)
+		{
+			Panel P;
+			P.File = K.File;
+			P.House = K.Hurt;
+			P.HouseLevel = K.Level;
+			P.HouseRoof = K.Roof;
+			P.HouseKey = K.Key;
+			P.CameraBearing = K.Bearing;
+			P.CameraUp = K.Up;
+			P.SunBearing = K.Sun;
+			P.Caption = K.Caption;
+			if (K.Aim >= 0)
+			{
+				std::vector<LandHouse::Hole> Holes;
+				LandHouse::Holes(HouseSpec(P), Holes);
+				V3 At(0.0, 0.0, 0.0);
+				for (const LandHouse::Hole& H : Holes)
+				{
+					if (H.Face == 0 && ((K.Aim == 0 && H.What == 0 && H.Z0 < 2.0) || (K.Aim == 1 && H.What == 1)))
+					{
+						At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
+						break;
+					}
+				}
+				if (K.Aim == 2)
+				{
+					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
+				}
+				P.bAim = true;
+				P.AimAt = At;
+				P.AimFrom = V3(std::sin(K.Bearing * Rad) * std::cos(K.Up * Rad), std::cos(K.Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));
+				P.AimDistance = K.AimDistance;
+			}
+			Panels.push_back(P);
+		}
+	}
 	struct TankLook
 	{
 		const char* Model;
@@ -663,7 +782,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet)
+		if (bMarksSheet || bHouseSheet)
 		{
 			break;
 		}
@@ -698,7 +817,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet)
+	if (!bMarksSheet && !bHouseSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
@@ -739,6 +858,25 @@ int main(int argc, char** argv)
 	}
 	for (Panel& P : Panels)
 	{
+		if (P.House >= 0)
+		{
+			LandHouse::Levels L;
+			LandHouse::Build(HouseSpec(P), L);
+			const LandField::Mesh& M = P.HouseLevel == 0 ? L.Near : P.HouseLevel == 1 ? L.Mid : L.Far;
+			Scene S;
+			AddHouse(M, 0.15, S);
+			S.Feet.push_back({ -7.0, -3.6, 7.0, 3.6 });
+			const std::string Path = OutDir + "/" + P.File + ".ppm";
+			Vehicle None;
+			if (!Paint(S, P, None, Path))
+			{
+				std::printf("cannot write %s\n", Path.c_str());
+				return 1;
+			}
+			std::fprintf(Captions, "%s\t%s (%zu triangles)\n", P.File.c_str(), P.Caption.c_str(), M.Tris());
+			std::printf("  %s (near %zu, middle %zu, far %zu triangles)\n", Path.c_str(), L.Near.Tris(), L.Mid.Tris(), L.Far.Tris());
+			continue;
+		}
 		const Model* M = ModelFor(P.ModelName, P.Nation, P);
 		if (!M)
 		{
