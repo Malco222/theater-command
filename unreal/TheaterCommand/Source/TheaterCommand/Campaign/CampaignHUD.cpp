@@ -13874,13 +13874,19 @@ namespace
 			// The tabs.
 			OpeningTabs->ClearChildren();
 			{
-				const TCHAR* Names[] = { TEXT("THE GRAND CAMPAIGN"), TEXT("HISTORICAL SCENARIOS"), TEXT("OPTIONS") };
-				for (int32 Tab = Opening.Years.Num() > 0 ? 0 : 1; Tab < 3; ++Tab)
+				// (release 2: ONE BATTLE, a battle of your own, stands before OPTIONS; the four pages a little narrower)
+				const TCHAR* Names[] = { TEXT("THE GRAND CAMPAIGN"), TEXT("HISTORICAL SCENARIOS"), TEXT("OPTIONS"), TEXT("ONE BATTLE") };
+				const int32 Order[] = { 0, 1, 3, 2 };
+				for (const int32 Tab : Order)
 				{
+					if (Tab == 0 && Opening.Years.Num() == 0)
+					{
+						continue;
+					}
 					const bool bOn = Opening.Tab == Tab;
-					OpeningTabs->AddSlot().AutoWidth().Padding(5.0f, 0.0f)
+					OpeningTabs->AddSlot().AutoWidth().Padding(4.0f, 0.0f)
 					[
-						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(26.0f, 8.0f)).IsFocusable(false)
+						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(20.0f, 8.0f)).IsFocusable(false)
 						.OnClicked_Lambda([this, Tab]() { if (Controller.IsValid()) { Controller->ShowOpeningTab(Tab); } return FReply::Handled(); })
 						[
 							SNew(STextBlock).Text(FText::FromString(Names[Tab])).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(bOn ? BrightBrass : Muted)
@@ -13904,6 +13910,12 @@ namespace
 			}
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
+
+			if (Opening.Tab == 3)
+			{
+				LayOutCustom(Opening.Custom);
+				return;
+			}
 
 			if (Opening.Tab == 2)
 			{
@@ -14433,6 +14445,401 @@ namespace
 					StartsScroll->ScrollToEnd();
 				}
 			}
+		}
+
+		/**
+		 * (release 2) A battle of your own (Brian, 24 November 18:36Z): the page of the opening screen's ONE BATTLE. The
+		 * battle (land or air; the sea shown and locked), his side and the computer's, the battlefield, the treasury, and
+		 * the two armies bought from one price list, the computer's its own pick unless he chooses it. The foot holds both
+		 * treasuries as bars, why it cannot be fought yet if it cannot, and FIGHT. Every press goes to the controller
+		 * (PressCustom), which asks the rules and draws the page again.
+		 */
+		void LayOutCustom(const FCustomPage& C)
+		{
+			auto Press = [this](const FString& What)
+			{
+				return [this, What]() { if (Controller.IsValid()) { Controller->PressCustom(What); } return FReply::Handled(); };
+			};
+			auto Head = [this](const FString& Text) -> TSharedRef<SWidget>
+			{
+				const TSharedRef<SWidget> Made = SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass);
+				ListHeads.Add(TWeakPtr<SWidget>(Made));
+				return Made;
+			};
+			// A row of chips: the one chosen lit brass; a locked one dim, its tip saying why.
+			auto Chips = [this, &Press](const TArray<FCustomChip>& List, const FString& Verb) -> TSharedRef<SWidget>
+			{
+				TSharedRef<SWrapBox> Box = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.0f, 6.0f));
+				for (const FCustomChip& Chip : List)
+				{
+					Box->AddSlot()
+					[
+						SNew(SButton).ButtonStyle(Chip.bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(14.0f, 7.0f)).IsFocusable(false)
+						.ToolTipText(Chip.Tip)
+						.OnClicked_Lambda(Press(Verb + TEXT(":") + Chip.Id))
+						[
+							SNew(STextBlock).Text(Chip.Name).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Chip.bOn ? BrightBrass : Chip.bLocked ? Faint : Muted)
+						]
+					];
+				}
+				return Box;
+			};
+			// A small button: the step back or on, one fewer or one more.
+			auto Small = [this, &Press](const TCHAR* Label, const FString& What, bool bLive) -> TSharedRef<SWidget>
+			{
+				return SNew(SBox).WidthOverride(28.0f).HeightOverride(26.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(0.0f)).IsFocusable(false).IsEnabled(bLive)
+					.HAlign(HAlign_Center).VAlign(VAlign_Center)
+					.OnClicked_Lambda(Press(What))
+					[
+						SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bLive ? Cream : Faint)
+					]
+				];
+			};
+			// A setting of one side that steps through its choices: the nation, the kit's year, the training.
+			auto Stepper = [this, &Small](const TCHAR* Label, const FText& Value, const FText& Tip, const FString& Verb) -> TSharedRef<SWidget>
+			{
+				return SNew(SHorizontalBox).ToolTipText(Tip)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(74.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						Small(TEXT("‹"), Verb + TEXT(":-1"), true)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).HAlign(HAlign_Center).Padding(6.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(Value).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						Small(TEXT("›"), Verb + TEXT(":1"), true)
+					];
+			};
+			auto Money = [](int32 Units) { return FText::AsNumber(static_cast<int64>(Units) * 100); };
+
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+			[
+				Folding(TEXT("Custom.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+				.Text(FText::FromString(TEXT("One battle, fought in the 3D field or the sky. You lead one side and the computer leads the other. Both armies are bought from the same treasury at the campaign's prices; the kit, the training and the ground decide it, not the flag. Nothing in a campaign changes."))))
+			];
+			if (!C.Last.IsEmpty())
+			{
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+				[
+					Folding(TEXT("Custom.Last"), SNew(STextBlock).Text(C.Last).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(BrightBrass).AutoWrapText(true))
+				];
+			}
+			if (!C.bReady)
+			{
+				Starts->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(C.Problem).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Alarm).AutoWrapText(true)
+				];
+				return;
+			}
+
+			// ---- The battle: land, air or sea; his part in it; in the air, the raid or the fight for the sky.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[Head(TEXT("THE BATTLE"))];
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[Chips(C.Domains, TEXT("domain"))];
+			for (const FCustomChip& Domain : C.Domains)
+			{
+				if (Domain.bLocked && !Domain.Tip.IsEmpty())
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+					[
+						Folding(TEXT("Custom.Locked"), SNew(STextBlock).Text(FText::Format(FText::FromString(TEXT("{0}: {1}")), Domain.Name, Domain.Tip)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true))
+					];
+				}
+			}
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[Chips(C.Roles, TEXT("role"))];
+			if (C.Kinds.Num() > 0)
+			{
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[Chips(C.Kinds, TEXT("kind"))];
+			}
+
+			// ---- The battlefield, and its ground in a line.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)[Head(TEXT("THE BATTLEFIELD"))];
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)[Chips(C.Places, TEXT("place"))];
+			if (!C.PlaceBlurb.IsEmpty())
+			{
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					Folding(TEXT("Custom.Place"), SNew(STextBlock).Text(C.PlaceBlurb).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Muted).AutoWrapText(true))
+				];
+			}
+
+			// ---- The treasury: the same for both sides.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)[Head(TEXT("THE TREASURY, EACH SIDE"))];
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)[Chips(C.Sizes, TEXT("size"))];
+
+			// ---- The two sides: the nation, its kit's year and its training; who chooses the army.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)[Head(TEXT("THE TWO SIDES"))];
+			{
+				TArray<TSharedRef<SWidget>> Cells;
+				for (int32 Side = 0; Side < 2; ++Side)
+				{
+					const FCustomSideView& V = Side == 0 ? C.Mine : C.Theirs;
+					const FString Who = Side == 0 ? TEXT("me") : TEXT("them");
+					const FString Title = Side == 0 ? TEXT("YOU") : TEXT("THE COMPUTER");
+					const FString Part = V.bAttacks ? TEXT("attacks") : TEXT("defends");
+					TSharedRef<SWidget> Choose = Side == 0
+						? StaticCastSharedRef<SWidget>(SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+								.ToolTipText(FText::FromString(TEXT("The computer chooses an army for you that fits your treasury and the ground; you can change it after.")))
+								.OnClicked_Lambda(Press(TEXT("pick:me")))
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("CHOOSE FOR ME"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(Muted)
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth()
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+								.OnClicked_Lambda(Press(TEXT("clear:me")))
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("START EMPTY"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(Muted)
+								]
+							])
+						: StaticCastSharedRef<SWidget>(SNew(SButton).ButtonStyle(V.bComputerPicks ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(V.bComputerPicks
+								? TEXT("The computer picks its own army for this ground, its treasury and your army. Click to choose its army yourself.")
+								: TEXT("You are choosing the computer's army. Click to let it pick its own again.")))
+							.OnClicked_Lambda(Press(TEXT("pick:them")))
+							[
+								SNew(STextBlock).Text(FText::FromString(V.bComputerPicks ? TEXT("IT PICKS ITS OWN ARMY") : TEXT("YOU PICK ITS ARMY"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(V.bComputerPicks ? BrightBrass : Muted)
+							]);
+					Cells.Add(
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(14.0f, 10.0f))
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									MakeFlag(V.Nat, 42.0f)
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), *Title, *Part.ToUpper()))).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(Brass)
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(V.Name).Font(Font(TEXT("Bold"), 15)).ColorAndOpacity(Cream)
+									]
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+							[
+								Stepper(TEXT("Nation"), V.Name, FText::FromString(TEXT("Any nation: its flag gives it no edge here.")), TEXT("nat:") + Who)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+							[
+								Stepper(TEXT("Kit"), V.Kit, V.KitTip, TEXT("kit:") + Who)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+							[
+								Stepper(TEXT("Training"), V.Training, V.TrainingTip, TEXT("train:") + Who)
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f).HAlign(HAlign_Left)
+							[
+								Choose
+							]
+						]);
+				}
+				AddGrid(Cells, 2);
+			}
+
+			// ---- The armies: the price list, with his count and the computer's on each line.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)[Head(TEXT("THE ARMIES"))];
+			{
+				auto Cell = [this, &Small](int32 N, const FString& Who, const FString& Kind, bool bLive) -> TSharedRef<SWidget>
+				{
+					if (!bLive)
+					{
+						return SNew(SBox).WidthOverride(110.0f).HAlign(HAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("—"))).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Faint)
+						];
+					}
+					return SNew(SBox).WidthOverride(110.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							Small(TEXT("−"), FString::Printf(TEXT("buy:%s:%s:-1"), *Who, *Kind), N > 0)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::AsNumber(N)).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(N > 0 ? Cream : Faint)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							Small(TEXT("+"), FString::Printf(TEXT("buy:%s:%s:1"), *Who, *Kind), true)
+						]
+					];
+				};
+				// The heading line of the table.
+				Starts->AddSlot().AutoHeight().Padding(14.0f, 0.0f, 14.0f, 4.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("BOUGHT AT THE CAMPAIGN'S PRICES"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SBox).WidthOverride(90.0f).HAlign(HAlign_Right)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("EACH"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(16.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(110.0f).HAlign(HAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("YOURS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Brass)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(12.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(110.0f).HAlign(HAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("THE COMPUTER'S"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Brass)
+						]
+					]
+				];
+				for (const FCustomBuyRow& Row : C.Buys)
+				{
+					// (the works are the defence's alone: the attacking side's cell is a dash)
+					const bool bMineLive = !Row.bDefenceOnly || !C.Mine.bAttacks;
+					const bool bTheirsLive = !Row.bDefenceOnly || !C.Theirs.bAttacks;
+					const FText Each = Row.bDefenceOnly && Row.Most > 1
+						? FText::Format(FText::FromString(TEXT("{0} next")), Money(Row.Cost))
+						: Money(Row.Cost);
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+					[
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(14.0f, 6.0f)).ToolTipText(Row.Tip)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Text(Row.Name).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream)
+								]
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									Folding(TEXT("Custom.Buy"), SNew(STextBlock).Text(Row.Tip).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true))
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(SBox).WidthOverride(90.0f).HAlign(HAlign_Right)
+								[
+									SNew(STextBlock).Text(Each).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+							[
+								Cell(Row.Mine, TEXT("me"), Row.Kind, bMineLive)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+							[
+								Cell(Row.Theirs, TEXT("them"), Row.Kind, bTheirsLive)
+							]
+						]
+					];
+				}
+			}
+
+			// ---- The foot: both treasuries as bars, why it cannot be fought yet, and FIGHT.
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			auto Bar = [this, &Money](const FString& Who, const FCustomSideView& V) -> TSharedRef<SWidget>
+			{
+				const float Share = V.Budget > 0 ? FMath::Clamp(static_cast<float>(V.Spent) / static_cast<float>(V.Budget), 0.0f, 1.0f) : 0.0f;
+				const bool bOver = V.Spent > V.Budget;
+				return SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Who)).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(Brass)
+						]
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(STextBlock).Text(FText::Format(FText::FromString(TEXT("{0} of {1}")), Money(V.Spent), Money(V.Budget))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bOver ? Alarm : Cream)
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f)
+					[
+						SNew(SBox).HeightOverride(8.0f)
+						[
+							SNew(SBorder).BorderImage(&Solid).BorderBackgroundColor(FLinearColor(FColor::FromHex(TEXT("2A231B")))).Padding(0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(FMath::Max(Share, 0.001f))
+								[
+									SNew(SBorder).BorderImage(&Solid).BorderBackgroundColor(bOver ? Alarm : BrightBrass).Padding(0.0f)
+								]
+								+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Share, 0.001f))
+								[
+									SNew(SSpacer)
+								]
+							]
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(V.Room).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+					];
+			};
+			OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+				[
+					Bar(TEXT("YOUR ARMY"), C.Mine)
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+				[
+					Bar(TEXT("THE COMPUTER'S ARMY"), C.Theirs)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(260.0f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SButton).ButtonStyle(C.bCanFight ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(20.0f, 10.0f)).IsFocusable(false).HAlign(HAlign_Center)
+							.IsEnabled(C.bCanFight)
+							.OnClicked_Lambda(Press(TEXT("fight")))
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT THE BATTLE"))).Font(Font(TEXT("Bold"), 13, 200)).ColorAndOpacity(C.bCanFight ? BrightBrass : Faint)
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(C.bCanFight ? FText::FromString(TEXT("You command your side; the computer commands its own.")) : C.Problem)
+							.Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(C.bCanFight ? Muted : Alarm).AutoWrapText(true)
+						]
+					]
+				]
+			]);
+			OpeningFoot->SetVisibility(EVisibility::Visible);
 		}
 
 		/** (release 2) The practice battle's card: the hedgerows before Le Mesnil, July 1944, fought live as he commands. */

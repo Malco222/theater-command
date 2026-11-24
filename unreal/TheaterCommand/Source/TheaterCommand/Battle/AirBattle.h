@@ -105,6 +105,11 @@ public:
 	/** Opens the live battle for a raid (TC.airStart(kind, target, ids)): Kind "bomb", "superiority" or "ship". */
 	bool BeginLive(FCampaignSession* InSession, const FString& Kind, int32 Target, const TArray<int32>& Ids);
 	/**
+	 * (Release 2) The same, opened by any of the rules' calls that answer { sky, view } as TC.airStart does: a battle of
+	 * your own is TC.customAirStart(spec). False where the call fails or opens nothing.
+	 */
+	bool BeginLiveCall(FCampaignSession* InSession, const FString& Function, const FString& ArgumentsJson);
+	/**
 	 * (Release 1.6) His own raid handed back to the campaign (the controller's FlyLive sets it before BeginLive): run once
 	 * at CONTINUE on the after card, with the table shown again, given TC.battleEnd's answer as the rules gave it (what
 	 * TC.act answers for the raid, its after card beside it), or empty where the battle closed without one.

@@ -66,6 +66,12 @@ describe('a battle of your own: the computer\'s army', () => {
 });
 
 describe('a battle of your own: the checks', () => {
+  it('leaves an empty army empty: only an army left to the computer (null) is picked for it', () => {
+    const c = customCheck(base({ me: { nat: 'GER', kit: 3, train: 2, buys: {} } }));
+    expect(c.ok).toBe(false);
+    expect(c.why).toMatch(/nothing in it yet/);
+    expect(c.them.count).toBeGreaterThan(0);
+  });
   it('refuses an army over its treasury, over its room, with no fighting corps, or two of one nation', () => {
     expect(customCheck(base({ me: { nat: 'GER', buys: { arm: 4 } } })).why).toMatch(/more than the treasury/);
     expect(customCheck(base({ place: 'calabria', size: 'great', me: { nat: 'GER', buys: { mtn: 3 } } })).why).toMatch(/room for 2/);

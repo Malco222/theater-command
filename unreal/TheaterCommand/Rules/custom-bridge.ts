@@ -331,7 +331,8 @@ function settled(spec: CustomSpec): CustomSpec {
   // (the defence's works first: the attack's room for guns follows them)
   const order: ('me' | 'them')[] = spec.role === 'att' ? ['them', 'me'] : ['me', 'them'];
   for (const who of order) {
-    if (out[who].buys && Object.keys(out[who].buys!).length) continue;
+    // (an army left to the computer is null; an empty one is his, with nothing in it yet)
+    if (out[who].buys) continue;
     const a = customArmy(out, who);
     out[who] = { ...out[who], buys: a.buys, works: a.works };
   }

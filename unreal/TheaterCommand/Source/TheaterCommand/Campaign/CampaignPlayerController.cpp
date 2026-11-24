@@ -209,7 +209,11 @@ void ACampaignPlayerController::LoadGrandNations()
 
 void ACampaignPlayerController::ShowOpeningTab(int32 Tab)
 {
-	Opening.Tab = Tab == 2 ? 2 : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	Opening.Tab = Tab == 2 || Tab == 3 ? Tab : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	if (Opening.Tab == 3)
+	{
+		RefreshCustom(); // (release 2: a battle of your own, its page made from the rules' offer)
+	}
 	++Opening.Revision;
 }
 

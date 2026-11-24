@@ -399,12 +399,26 @@ namespace
 		static const TSet<FString> Beside = { TEXT("lessonNow"), TEXT("lessonDeed"), TEXT("lessonAct"), TEXT("notebook"), TEXT("guide") };
 		return Beside.Contains(Function);
 	}
+
+	/**
+	 * (Release 2) A battle of your own (Rules/custom-bridge.ts): its calls, and the air battle's own on the shared clock,
+	 * answered with no war running (the opening screen's door). Its battle is fought on a war of its own in the rules,
+	 * so none of them touches a campaign.
+	 */
+	bool IsOwnBattle(const FString& Function)
+	{
+		static const TSet<FString> Own = {
+			TEXT("customOffer"), TEXT("customArmy"), TEXT("customCheck"), TEXT("customLook"), TEXT("customWhy"), TEXT("customAirStart"),
+			TEXT("battleTick"), TEXT("battleSpeed"), TEXT("battleOrder"), TEXT("battleView"), TEXT("battleEnd"),
+		};
+		return Own.Contains(Function);
+	}
 }
 
 bool FCampaignSession::CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError)
 {
 	Settle(); // (an order still being answered on the rules' thread comes first)
-	if (!bRunning)
+	if (!bRunning && !(bReady && Host.IsValid() && IsOwnBattle(Function)))
 	{
 		OutError = TEXT("no war is running");
 		return false;

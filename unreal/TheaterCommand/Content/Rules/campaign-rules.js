@@ -56806,7 +56806,7 @@
     const out = { ...spec2, me: { ...spec2.me }, them: { ...spec2.them } };
     const order2 = spec2.role === "att" ? ["them", "me"] : ["me", "them"];
     for (const who of order2) {
-      if (out[who].buys && Object.keys(out[who].buys).length) continue;
+      if (out[who].buys) continue;
       const a = customArmy(out, who);
       out[who] = { ...out[who], buys: a.buys, works: a.works };
     }
