@@ -1486,6 +1486,10 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 		return;
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	if (HeldBackSquadron != INDEX_NONE && Id != HeldBackCard)
+	{
+		RejoinHeldBack(); // (another card in place of the one the split was made for)
+	}
 	CloseArsenal();
 	CloseLedger();
 	CloseDiplomacy();
@@ -1504,6 +1508,10 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 
 void ACampaignPlayerController::ClosePage()
 {
+	if (HeldBackSquadron != INDEX_NONE)
+	{
+		RejoinHeldBack(); // (closed without its order)
+	}
 	bPageOpen = false;
 	LessonPageChanged();
 }
@@ -1594,6 +1602,13 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	TArray<FSortie> Sorties;
 	FActExtras Extras;
 	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sorties, &Next, &Extras);
+	// (the attack card's order is its own id; the shelling card "shell:F:R" gives "fleetshell:F:R:troops" or ":city")
+	if (bOk && HeldBackSquadron != INDEX_NONE && (Action == HeldBackCard || Action.StartsWith(TEXT("fleet") + HeldBackCard + TEXT(":"))))
+	{
+		// The card's own order went ahead: the split it was made for stands.
+		HeldBackSquadron = HeldBackFrom = INDEX_NONE;
+		HeldBackCard.Reset();
+	}
 	if (bOk && Extras.Joined != INDEX_NONE && FleetInHand != INDEX_NONE)
 	{
 		FleetInHand = Extras.Joined; // the fleet in hand is part of another now: that one is in hand
@@ -6116,8 +6131,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
 		}
 		else if (!bBusy && !IsAnswering() && PointedPiece && PointedPiece->IsFleet() && PointedPiece->GetForceId() != INDEX_NONE
-			&& GetSession() && PointedPiece->GetNationTag() == GetSession()->GetView().Human)
+			&& GetSession() && GetSession()->GetView().bFleetAttack && PointedPiece->GetNationTag() == GetSession()->GetView().Human)
 		{
+			// (Behind the "Fleets attack fleets" row, the pre-check's read of 24 November: switched off, a press on a fleet
+			// drags the table as it always did, and a plain click picks the fleet up.)
 			// (Release 2; Brian 23 November 2026 22:23Z: "the same way like I do when I'm moving my ground units".) A press on
 			// one of the player's fleets takes hold of it, as a press on a flag takes hold of an army: dragged, it is carried;
 			// let go over a sea it sails there, and over an enemy fleet it attacks. A plain click picks it up, as before.
@@ -7322,12 +7339,13 @@ bool ACampaignPlayerController::AttackFleetWith(int32 Target)
 	// odds and what each side is likely to lose, as an army's face-off does. Where it cannot be sent (out of reach, at
 	// peace, already sent this month) the card says why, in a sentence, and SEND THEM IN is shut.
 	// (Only the lit ships go in: those left behind in the tray are split off first, and stay where they are.)
-	if (!SplitOffStaying())
+	const FString Card = FString::Printf(TEXT("fleetattack:%d:%d"), FleetInHand, Target);
+	if (!SplitOffStaying(Card))
 	{
 		return true;
 	}
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.4f);
-	OpenPage(FString::Printf(TEXT("fleetattack:%d:%d"), FleetInHand, Target));
+	OpenPage(Card);
 	return true;
 }
 
@@ -8298,7 +8316,7 @@ void ACampaignPlayerController::PickGoing(int32 Mode)
 	}
 }
 
-bool ACampaignPlayerController::SplitOffStaying()
+bool ACampaignPlayerController::SplitOffStaying(const FString& ForCard)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || FleetInHand == INDEX_NONE || FleetStaying.Num() == 0)
@@ -8331,13 +8349,23 @@ bool ACampaignPlayerController::SplitOffStaying()
 	{
 		Parts.Add(FString::Printf(TEXT("%s.%d"), *Each.Key, Each.Value));
 	}
-	FString Note;
-	const bool bOk = Session->Act(FString::Printf(TEXT("fleetsplitmany:%d:%s"), FleetInHand, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note);
-	FleetStaying.Reset();
+	FString Note, Next;
+	TArray<FSortie> Sorties;
+	FActExtras Extras;
+	const bool bOk = Session->Act(FString::Printf(TEXT("fleetsplitmany:%d:%s"), FleetInHand, *FString::Join(Parts, TEXT(","))), INDEX_NONE, Note, &Sorties, &Next, &Extras);
 	if (!bOk)
 	{
+		// (the pre-check's read of 24 November: a refused split keeps the picks, so he can change them and try again)
 		Notify(Note.IsEmpty() ? FString(TEXT("Those ships cannot be split off now.")) : Note, 6.0);
 		return false;
+	}
+	FleetStaying.Reset();
+	if (!ForCard.IsEmpty() && Extras.Made != INDEX_NONE)
+	{
+		// Made for a card: taken back if the card is closed without its order (RejoinHeldBack).
+		HeldBackSquadron = Extras.Made;
+		HeldBackFrom = FleetInHand;
+		HeldBackCard = ForCard;
 	}
 	ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	if (!Note.IsEmpty())
@@ -8345,6 +8373,25 @@ bool ACampaignPlayerController::SplitOffStaying()
 		Notify(Note, 6.0);
 	}
 	return true;
+}
+
+void ACampaignPlayerController::RejoinHeldBack()
+{
+	const int32 Squadron = HeldBackSquadron, Into = HeldBackFrom;
+	HeldBackSquadron = HeldBackFrom = INDEX_NONE;
+	HeldBackCard.Reset();
+	FCampaignSession* Session = GetSession();
+	if (!Session || Squadron == INDEX_NONE || Into == INDEX_NONE)
+	{
+		return;
+	}
+	// The card went unanswered: the ships left behind for it join their fleet again, as they were.
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("fleetmerge:%d:%d"), Squadron, Into), INDEX_NONE, Note))
+	{
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+	}
 }
 
 const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
@@ -9679,9 +9726,10 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 		{
 			// An enemy coast its guns can reach: the question is put first, with what the shelling would do. (Release 2:
 			// only the lit ships stand in; those left behind are split off first.)
-			if (SplitOffStaying())
+			const FString Card = FString::Printf(TEXT("shell:%d:%d"), FleetInHand, RegionId);
+			if (SplitOffStaying(Card))
 			{
-				OpenPage(FString::Printf(TEXT("shell:%d:%d"), FleetInHand, RegionId));
+				OpenPage(Card);
 			}
 		}
 		else if (Held && Held->Bases.Contains(RegionId))

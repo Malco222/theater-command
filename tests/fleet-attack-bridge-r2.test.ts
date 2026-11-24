@@ -86,8 +86,13 @@ describe('the fleet attack through the bridge', () => {
     expect(out.note).toMatch(/2 cruisers, 5 destroyers stay behind as/);
     const hand = TC().fleetInHand(out.made) as { cards: { cls: string; count: number }[] };
     expect(hand.cards.map((c) => [c.cls, c.count])).toEqual([['ca', 2], ['dd', 5]]);
+    // A card closed without its order: the squadron left behind for it joins its fleet again, as it was.
+    const back = TC().act(`fleetmerge:${out.made}:${battle}`) as { ok: boolean };
+    expect(back.ok).toBe(true);
+    const whole = TC().fleetInHand(battle) as { cards: { cls: string; count: number }[] };
+    expect(whole.cards.map((c) => [c.cls, c.count])).toEqual([['bb', 2], ['ca', 8], ['dd', 20]]);
     // Every ship left behind: refused, with the rules' reason.
-    const all = TC().act(`fleetsplitmany:${battle}:bb.2,ca.6,dd.15`) as { ok: boolean; note: string };
+    const all = TC().act(`fleetsplitmany:${battle}:bb.2,ca.8,dd.20`) as { ok: boolean; note: string };
     expect(all.ok).toBe(false);
     expect(all.note).toMatch(/Some ships have to stay/);
   });

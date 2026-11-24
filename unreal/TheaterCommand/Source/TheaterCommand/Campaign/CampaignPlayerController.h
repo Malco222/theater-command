@@ -932,7 +932,12 @@ public:
 	 * own, where it is and under its order, so that only the lit ships go. True where the order may go ahead (nothing
 	 * was left behind, or the split was made); false where every ship was left behind or the split was refused.
 	 */
-	bool SplitOffStaying();
+	bool SplitOffStaying(const FString& ForCard = FString());
+	/**
+	 * (Release 2; the pre-check's read of 24 November) A split made for a card (the attack's odds, the shelling's
+	 * question) is taken back if the card is closed without its order: the ships left behind rejoin the fleet.
+	 */
+	void RejoinHeldBack();
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
@@ -1641,6 +1646,8 @@ private:
 	void LayOutLook();
 	FFleetHand FleetHand; // the fleet in hand as the rules describe it
 	TSet<int32> FleetStaying; // (release 2) the fleet tray's cards left behind, by their place in the tray
+	int32 HeldBackSquadron = INDEX_NONE, HeldBackFrom = INDEX_NONE; // (release 2) a split made for a card not yet answered
+	FString HeldBackCard; // that card's id
 	FString FleetStayingFor; // and the fleet they were picked on, with its ships: picked afresh when either changes
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
