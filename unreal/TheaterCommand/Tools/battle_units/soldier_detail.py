@@ -71,8 +71,14 @@ _mesh_from_layers = S.mesh_from_layers
 def mesh_from_layers(name, layers, h, target_tris, **kw):
     """soldier.py's, with the kit's budgets scaled while the kit is made (and the uniform's hem made clean)."""
     t = int(target_tris * SCALE["tris"]) if target_tris else target_tris
-    if name == "bottle":           # (its straps and cup a clean line round the felt: thinned uncut, their edges were
-        kw.setdefault("cut_paints", True)     # teeth that read side-on at 1 m)
+    if name in ("bottle", "shovel"):          # (straps, cup and handle a clean line on the felt and leather: thinned
+        kw.setdefault("cut_paints", True)     # uncut, their edges were teeth that read side-on at 1 m)
+    if name == "shovel":           # (the handle from the carrier's foot, not 2 cm up inside it: thicker than the carrier,
+        cone = layers[1].ops[0][1]            # its top came out through both faces, a cut stick laid on the leather)
+        cone.a = cone.a + (cone.b - cone.a) / np.linalg.norm(cone.b - cone.a) * 0.026
+        cone.c = (cone.a + cone.b) * 0.5
+        cone.lo = np.minimum(cone.a, cone.b) - max(cone.ra, cone.rb)
+        cone.hi = np.maximum(cone.a, cone.b) + max(cone.ra, cone.rb)
     ob = _mesh_from_layers(name, layers, h * SCALE["h"], t, **kw)
     if name == "uniform":
         smooth_hem(ob)
@@ -1047,10 +1053,19 @@ def build_kit(J, spec, body_ls, Z=None):
     if spec.get("y_straps", True):
         g = Geo()                                  # (the front straps run over each breast pocket's outer third, its button
         hw_ = Geo()                                # clear, from their hooks behind the pouches; the back ends meet at the ring)
+        # (the back's points found straight in from behind, not pulled onto the cloth along its field: 5 cm off the back
+        # the field's slope ran up toward the nape, and the straps' ends had stopped 3 cm above the ring, the back strap
+        # a hand's width below them, bare wool between)
+        def on_back(y, z):
+            q, nq = on_surface(tunic, (-0.3, y, z), (1.0, 0.0, 0.0))
+            return tuple(q + nq * 0.001)
+        pr, nr = on_surface(tunic, (-0.3, 0.0, Z(1.245)), (1.0, 0.0, 0.0))
+        zr = float(pr[2])
         for side in (1.0, -1.0):
             ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.09, 0.998), (0.13, 0.1, 1.16), (0.125, 0.118, 1.27), (0.105, 0.127, 1.36),
-                    (0.05, 0.126, 1.445), (-0.02, 0.118, 1.462), (-0.08, 0.104, 1.43), (-0.128, 0.078, 1.36), (-0.143, 0.046, 1.302),
-                    (-0.146, 0.021, 1.259))]
+                    (0.05, 0.126, 1.445), (-0.02, 0.118, 1.462), (-0.08, 0.104, 1.43))]
+            ctrl += [on_back(0.078 * side, Z(1.36)), on_back(0.046 * side, Z(1.302)),
+                     on_back(0.017 * side, zr + 0.012)]          # (its end under the ring's upper half)
             P, N, T, E = lay_strap(g, tunic, S.spline(ctrl, 40), 0.032, 0.004, pockets)
             ystraps.append((P, N, T, 0.032, 0.004))
             front = np.nonzero(P[:, 0] > cx)[0]
@@ -1060,12 +1075,12 @@ def build_kit(J, spec, body_ls, Z=None):
             i = front[np.argmin(np.abs(P[front, 2] - Z(1.378)))]
             q, nq, tq = on_strap(P, N, T, E, i, 0.004)
             ring(hw_, q + nq * 0.0015, nq, 0.011, 0.0018, up=tuple(tq))
-        # (the back strap held straight down his spine, from under the ring to the belt: the cloth's slope had bowed it)
-        lay_strap(g, tunic, S.spline([(-0.145, 0.0, Z(1.234)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.005))], 14), 0.036, 0.004,
-                  keep_y=0.0)
+        # (the back strap held straight down his spine, from the ring's middle to the belt: the cloth's slope had bowed
+        # it; laid 1 mm lower than the two from the shoulders, whose ends lie over its top inside the ring)
+        lay_strap(g, tunic, S.spline([on_back(0.0, zr + 0.006), on_back(0.0, Z(1.13)), on_back(0.0, Z(1.005))], 14), 0.036, 0.004,
+                  keep_y=0.0, gap=0.0015)
         out["straps"] = (g.build("straps"), None)
-        p, nrm = on_surface(tunic, (-0.3, 0.0, Z(1.245)), (1.0, 0.0, 0.0))
-        ring(hw_, p + nrm * 0.008, nrm, 0.016, 0.0024)
+        ring(hw_, pr + nr * 0.008, nr, 0.016, 0.0024)
         out["strap_metal"] = (hw_.build("strap_metal", sharp=50.0), None)
     # ---- the shoulder straps, over the Y-straps, each with its button by the collar
     if LM_.get("shoulder_straps"):
@@ -1340,12 +1355,15 @@ def build_rifle():
     wood.add(RoundBox((0.085, 0.0, 0.012), (0.08, 0.02, 0.03), 0.015), 0.02)                             # round the action
     wood.add(RoundBox((0.395, 0.0, 0.026), (0.245, 0.0172, 0.02), 0.0155), 0.03)                        # fore-end, into the cap
     wood.add(RoundBox((-0.035, 0.0, 0.021), (0.035, 0.0115, 0.008), 0.006), 0.012)                       # up under the receiver
-    wood.add(RoundCone((0.19, 0.0, 0.0515), (0.604, 0.0, 0.0462), 0.0122, 0.0104), 0.006)               # upper handguard
+    wood.add(RoundCone((0.19, 0.0, 0.0515), (0.604, 0.0, 0.0462), 0.0122, 0.0104), 0.011)               # upper handguard
     # (from under the rear sight's base to under the front band: its rounded ends had left wedges of dark barrel
-    # showing, read as cracks in the wood)
+    # showing, read as cracks in the wood; joined to the fore-end over 11 mm, not 6: its sides overhang the fore-end's
+    # rounded top, and the thinning had made the narrow valley under them a black slit by the front band)
     for side in (1.0, -1.0):
         wood.sub(RoundCone((0.2, side * 0.0212, 0.031), (0.37, side * 0.0198, 0.033), 0.0036, 0.0034), 0.0025)   # finger grooves
-    wood.sub(RoundBox((-0.245, 0.0, -0.05), (0.005, 0.03, 0.016), 0.002, rot_euler(0, -4, 0)), 0.001)          # the sling slot
+    for side in (1.0, -1.0):       # the sling slot, a rounded recess each side (cut through, the thinned stock tore
+        wood.sub(RoundBox((-0.245, side * 0.0205, -0.05), (0.0055, 0.0075, 0.0165), 0.004, rot_euler(0, -4, 0)), 0.0015)
+        #                              round it: a ragged hole that read as a split butt at 1 m)
     rifle = _mesh_from_layers("rifle_stock", [wood], 0.0015, 1100, detail=0.004)
     g = Geo()
     st = "steel"
