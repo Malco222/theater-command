@@ -41,6 +41,12 @@ function meet(g: Game, ss: number, dd: number): void {
 }
 /** r, the radar-fitted escorts on stations for each boat trying, read back from the share. */
 const rOf = (fire: number): number => (1 / fire - 1) / C;
+/** With the escorts' losses form unread (convoycause.json 'escorts' null): E and k as the tons ruling set them. */
+function withoutEscorts<T>(f: () => T): T {
+  const keep = CAUSE.escorts;
+  CAUSE.escorts = null;
+  try { return f(); } finally { CAUSE.escorts = keep; }
+}
 /** Run with some of the ruling's figures unread. */
 function without<T>(what: { cycle?: boolean; screen?: boolean }, f: () => T): T {
   const dd = CAUSE.station.dd!, sc = CAUSE.firing.screen!;
@@ -104,9 +110,17 @@ describe('the screen\'s stations (Q2 (b), Q3 (a), Q4 (a))', () => {
     const tries = convoyCount(g, atlantic)!.pack / 0.3;
     expect(many.fire).toBeCloseTo(1 / (1 + (C * screenStations(atlantic)!) / tries), 12);
     expect(more.fire).toBeCloseTo(many.fire!, 12);
-    // (Q4 (a): the escorts beyond the stations still count in the escort's strength, so the contest still feels them.)
-    expect(more.E).toBeGreaterThan(many.E);
-    expect(more.sunk).toBeLessThanOrEqual(many.sunk);
+    // (Q4 (a): while the escorts' losses form is unread, the escorts beyond the stations still count in the escort's
+    // strength, so the contest still feels them.)
+    const unreadE = (dd: number): ReturnType<typeof convoySideOf> => { meet(g, 60, dd); return withoutEscorts(() => convoySideOf(g, 'UK', atlantic)); };
+    const manyU = unreadE(320)!, moreU = unreadE(640)!;
+    expect(moreU.E).toBeGreaterThan(manyU.E);
+    expect(moreU.sunk).toBeLessThanOrEqual(manyU.sunk);
+    // (With it laid, as shipped, they hunt as spare ships and E is the escorts on the stations alone: its Q5,
+    // convoy-escorts-r2.)
+    expect(more.E).toBeCloseTo(screenStations(atlantic)!, 12);
+    expect(many.E).toBeCloseTo(more.E, 12);
+    meet(g, 60, 640);
     // (Uncapped, those escorts would have frustrated far more.)
     expect(without({ screen: true }, () => convoySideOf(g, 'UK', atlantic)!).fire!).toBeLessThan(more.fire!);
   });
