@@ -663,10 +663,30 @@ export function crossingRisk(g: Game, nat: string, path: number[]): number {
 /** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
 export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
   if (!from.seas.length || !to.seas.length) return null;
+  return seaPathTo(seaSearch(g, nat, from, o), to);
+}
+
+/** A search by sea from one coast (seaSearch): what seaPath finds from it, worked out once for every coast it may be asked for. */
+export interface SeaSearch { cost: Float64Array; prev: Int16Array }
+
+/**
+ * (Speed, the far map.) seaPath's search from a coast, which reads nothing of where it is going: every sea's cost
+ * from there, and the way back. Each sea's closing and risk are asked once a search (they were asked again for
+ * every way into it; closedTo and seaRisk only read the war, and nothing changes during a search).
+ */
+export function seaSearch(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean } = {}): SeaSearch {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
-  const shut = (z: number): boolean => !o.surprise && closedTo(g, z, nat);
-  const weight = (z: number): number => 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat));
+  const shutAt = new Int8Array(N).fill(-1), weightAt = new Float64Array(N);
+  const shut = (z: number): boolean => {
+    if (o.surprise) return false;
+    if (shutAt[z] < 0) shutAt[z] = closedTo(g, z, nat) ? 1 : 0;
+    return shutAt[z] === 1;
+  };
+  const weight = (z: number): number => {
+    if (weightAt[z] === 0) weightAt[z] = 1 + (o.surprise ? 0 : 20 * seaRisk(g, z, nat)); // (never 0: at least 1)
+    return weightAt[z];
+  };
   for (const z of from.seas) if (!shut(z)) { cost[z] = weight(z); len[z] = 1; }
   for (;;) {
     let a = -1;
@@ -680,6 +700,12 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
       if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
     }
   }
+  return { cost, prev };
+}
+
+/** The way a search (seaSearch) found to a coast, as the seas crossed in order, or null if there is none. */
+export function seaPathTo(s: SeaSearch, to: Region): number[] | null {
+  const { cost, prev } = s;
   let end = -1;
   for (const z of to.seas) if (cost[z] < 1e9 && (end < 0 || cost[z] < cost[end])) end = z;
   if (end < 0) return null;
@@ -1408,8 +1434,10 @@ export function coastReport(g: Game, att: string): void {
     let seen: { quay: Region; coast: Region; corps: number } | null = null;
     for (const q of quays) {
       let near: Region | null = null, len = Infinity;
+      // (one search from the quay for all the coasts: seaPath's, which reads nothing of where it goes)
+      const from = seaSearch(g, att, q, { max: NAVY.landing.range });
       for (const c of coasts) {
-        const path = seaPath(g, att, q, c, { max: NAVY.landing.range });
+        const path = seaPathTo(from, c);
         if (path && (path.length < len || (path.length === len && near !== null && 2 * c.vp + c.fac + (c.cap ? 8 : 0) > 2 * near.vp + near.fac + (near.cap ? 8 : 0)))) { near = c; len = path.length; }
       }
       if (near) { seen = { quay: q, coast: near, corps: Math.min(idle(q), n.sealift) }; break; }
