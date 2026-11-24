@@ -27,6 +27,7 @@
 #include "Sound/SoundWave.h"
 #include "TheaterCommand.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace SeaUnderParts
@@ -475,16 +476,30 @@ void FSeaUnder::Tick(const SeaShow::Show& Show, double Now, const FVector& EyeAt
 	}
 	// The charges as first seen going down, every frame while the view is on (so one gone under for later is still drawn
 	// from its drop, as the cloud test plays it), and where every boat is for those told on one; into lists kept from frame
-	// to frame. Off, none of it: the eye never goes under.
+	// to frame. Off, none of it: the eye never goes under. (The boats' way set in place, the first the show lists of a
+	// piece kept, and those it no longer lists let go after: no room made or freed while the boats are the same.)
 	if (bOn)
 	{
 		Show.ChargesDown(Down);
-		BoatsMoving.clear();
+		BoatsMovingSeen.clear();
 		for (const SeaShow::ShipOut& Ship : Show.Ships())
 		{
-			if (Ship.Class == "ss" && Ship.Doing != SeaShow::Fate::Gone)
+			if (Ship.Class != "ss" || Ship.Doing == SeaShow::Fate::Gone || std::find(BoatsMovingSeen.begin(), BoatsMovingSeen.end(), Ship.Piece) != BoatsMovingSeen.end())
 			{
-				BoatsMoving.emplace(Ship.Piece, SeaUnder::BoatNow{ SeaUnder::P3(Ship.At.X, Ship.At.Y, -Ship.Keel), ConvoyLook::AheadOf(Ship.Heading) * Ship.Speed });
+				continue;
+			}
+			BoatsMovingSeen.push_back(Ship.Piece);
+			BoatsMoving[Ship.Piece] = SeaUnder::BoatNow{ SeaUnder::P3(Ship.At.X, Ship.At.Y, -Ship.Keel), ConvoyLook::AheadOf(Ship.Heading) * Ship.Speed };
+		}
+		for (auto Moving = BoatsMoving.begin(); Moving != BoatsMoving.end();)
+		{
+			if (std::find(BoatsMovingSeen.begin(), BoatsMovingSeen.end(), Moving->first) == BoatsMovingSeen.end())
+			{
+				Moving = BoatsMoving.erase(Moving);
+			}
+			else
+			{
+				++Moving;
 			}
 		}
 		Sea.Remember(Now, Down, BoatsMoving);

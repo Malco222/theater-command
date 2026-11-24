@@ -168,7 +168,7 @@ namespace
 		// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): the rounds each class fired; those no view the
 		// show had told her gun for, those on another piece than the one told, those of another bore than the one told (or,
 		// none told, of no deck gun's); a boat's fired under or awash; the bores each piece fired; the frames a boat's gun
-		// was told while she was under or awash (held: no round); the small columns thrown, and those of a warship's bore;
+		// was told while she was under or awash (held: no round); the small columns thrown, and those over a deck gun's 140 mm;
 		// the shell hits drawn on each piece, and those on a boat under.
 		int DeckRounds = 0, MerchantRounds = 0, GunRoundsUntold = 0, GunRoundsOff = 0, GunRoundsOdd = 0, DeckRoundsUnder = 0;
 		std::map<int, std::set<long>> GunBores;
@@ -629,11 +629,12 @@ namespace
 				case SeaShow::FxKind::Gun: Out.OpenStreams.insert(E.Key); break;
 				case SeaShow::FxKind::GunStop: Out.OpenStreams.erase(E.Key); break;
 				case SeaShow::FxKind::Splash:
-					// (a boat's deck gun's or a merchant's gun's round: a small column, of a deck gun's bore)
+					// (a boat's deck gun's or a merchant's gun's round: a small column, of a deck gun's bore, 40 to 140 mm as the
+					// bores are held below: a Japanese boat's 14 cm the largest)
 					if (E.What == "small")
 					{
 						++Out.SmallSplashes;
-						if (E.Size >= 130.0) ++Out.SmallSplashesOdd;
+						if (E.Size > 140.0) ++Out.SmallSplashesOdd;
 					}
 					for (const SeaShow::ShipOut& S : Ships)
 						if (S.Doing != SeaShow::Fate::Gone && Inside(E.At, S) > -2.0) { ++Out.SplashOnHull; break; }
@@ -1683,7 +1684,7 @@ int main(int Argc, char** Argv)
 		                       std::to_string(P.MerchantRounds) + " drawn",
 		                   "the same" });
 		Limits.push_back({ "their misses fall as small columns", (Rounds == 0 ? P.SmallSplashes == 0 : P.SmallSplashes > 0 && P.SmallSplashes <= Rounds) && P.SmallSplashesOdd == 0,
-		                   std::to_string(P.SmallSplashes) + " small for " + std::to_string(Rounds) + " rounds, " + std::to_string(P.SmallSplashesOdd) + " of a warship's bore",
+		                   std::to_string(P.SmallSplashes) + " small for " + std::to_string(Rounds) + " rounds, " + std::to_string(P.SmallSplashesOdd) + " over a deck gun's 140 mm",
 		                   "some, one a round at most; none with no round" });
 		// (each hit told matched, in order, to the first shell hit drawn on her piece at or after it and not matched before)
 		// (those told on a piece up when told, by the last frame drawn before it, held to a frame or two: a merchant's last

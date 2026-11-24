@@ -949,6 +949,44 @@ namespace
 		return Text.empty() ? "none" : Text;
 	}
 
+	/** The charges of the pattern the escort (piece EscortPiece) dropped at DropT, as the show laid them (its ChargesDown half
+	 * a second after the drop, before any blow told later could move one): each one's level distance from the boat (piece
+	 * BoatPiece) where the plan's trial had her as it was due to burst (below 0: she was not there then). */
+	std::vector<double> LaidFrom(const SeaFeed::Recording& Rec, const std::vector<StepSeen>& Steps, double DropT, int EscortPiece, int BoatPiece)
+	{
+		std::vector<double> Out;
+		SeaShow::Show Live(Rec.Seed ? Rec.Seed : 239);
+		Live.SetField(Rec.Board);
+		Live.SetMine(MineOf(Rec)); // (as the scene's show)
+		size_t Taken = 0;
+		auto TakeNext = [&]()
+		{
+			const SeaFeed::Frame& V = Rec.Views[Taken++];
+			Live.Take(V.Head.T, V.Pieces, V.Events, V.bZones ? &V.Zones : nullptr, V.Head.Contact);
+		};
+		TakeNext();
+		const double BeginT = Rec.Views.front().Head.T, UntilT = std::min(DropT + 0.5, Rec.Views.back().Head.T);
+		for (int Fr = 0; BeginT + Fr / 30.0 <= UntilT + 1e-9; ++Fr)
+		{
+			const double T = BeginT + Fr / 30.0;
+			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
+			Live.Advance(T);
+			Live.Effects.clear();
+		}
+		int EscortKey = -1;
+		for (const SeaShow::ShipOut& Ship : Live.Ships())
+			if (Ship.Piece == EscortPiece) EscortKey = Ship.Key;
+		std::vector<SeaShow::Show::ChargeDown> Down;
+		Live.ChargesDown(Down);
+		for (const SeaShow::Show::ChargeDown& C : Down)
+		{
+			if (C.Escort != EscortKey || C.Kind != "pattern" || std::fabs(C.Dropped - DropT) > 1e-3) continue;
+			const BoatAt* Her = BoatThen(Steps, BoatPiece, C.Bursts);
+			Out.push_back(Her ? std::hypot(C.At.X - Her->X, C.At.Y - Her->Y) : -1.0);
+		}
+		return Out;
+	}
+
 	/** The director's own rules over one plan. */
 	void Rules(const std::string& How, const SeaFeed::Recording& Rec, const Planned& First, const Planned& Again, const Planned& Fine, bool bStaged)
 	{
@@ -1292,6 +1330,64 @@ int main(int ArgC, char** ArgV)
 			      bAimed && First.NearT >= 0.0 && Hit.Tally.BookedNear >= 1 && Hit.Tally.BookedOff == 0 && Hit.Booked == 1 && Hit.FromOwn >= 0.0 && Hit.FromOwn <= Lethal + 0.5,
 			      Aim + "; " + (First.NearT < 0.0 ? std::string("no charge passed so near her") : "told at " + Num(First.NearT, 2) + " s, the charge " + Num(First.NearFar, 2) + " m from her keel; " +
 			      std::to_string(Hit.Tally.BookedNear) + " booked by her, burst " + Num(Hit.FromOwn, 2) + " m from where it was drawn (" + Num(Hit.OwnFar, 2) + " m from her keel)"));
+			// A pattern is gone under for by where its charges were laid, hit or miss alike (the Director's PatternSeen, from
+			// SeaShow's ChargeBurst Aim and Until): that aimed pattern (its thrown charge laid where she will be) gives a window
+			// on her told as a miss, and told with the blow above (that very charge booked as it nears her keel); the same drop
+			// across 40 m, its charges laid along his track 100 m and more off her, gives none, told as a miss and told with a
+			// blow on her 10 s after the drop (the show puts that one by her, none of his lying near her keel). The other shots'
+			// cuts are left out, so the pattern alone decides.
+			{
+				const std::vector<double> NoCuts;
+				const double Across = 40.0, BlowAfter = 10.0;
+				SeaFeed::Recording Wide, WideStruck;
+				const bool bNearRead = !Laid.Views.empty() && !Struck.Views.empty();
+				const bool bFarRead = bAimed && SeaFeed::ReadRecording(RunOver(Drop, Across, -1.0), Wide, Error) && !Wide.Views.empty() &&
+				                      SeaFeed::ReadRecording(RunOver(Drop, Across, Drop + BlowAfter), WideStruck, Error) && !WideStruck.Views.empty();
+				auto OnHer = [](const Planned& P)
+				{
+					bool bOn = false;
+					for (const Window& W : P.Windows) bOn = bOn || (W.What == Kind::Pattern && W.BoatPiece == 30);
+					return bOn;
+				};
+				// (the nearest laid, how many within PatternSeen m, as "nearest 3.2 m, 1 of 3 within 60 m")
+				auto Nearest = [](const std::vector<double>& Each, int& OutWithin)
+				{
+					double Least = 1e18;
+					OutWithin = 0;
+					for (const double Far : Each)
+					{
+						if (Far < 0.0) continue;
+						Least = std::min(Least, Far);
+						OutWithin += Far <= Director::PatternSeen ? 1 : 0;
+					}
+					return Least;
+				};
+				bool bHolds = bNearRead && bFarRead;
+				std::string Said = bHolds ? std::string() : std::string("a run not read");
+				if (bHolds)
+				{
+					const Replayed FarBlow = Replay(WideStruck);
+					struct Case { const char* Name; const SeaFeed::Recording* Rec; bool bNear; };
+					const Case Cases[] = { { "aimed, a miss", &Laid, true }, { "aimed, the blow", &Struck, true }, { "across 40 m, a miss", &Wide, false },
+					                       { "across 40 m, the blow", &WideStruck, false } };
+					for (const Case& One : Cases)
+					{
+						const Planned P = Plan(*One.Rec, 0.25, &NoCuts, false);
+						const std::vector<double> Each = LaidFrom(*One.Rec, P.Steps, Drop, 20, 30);
+						int Within = 0;
+						const double Least = Nearest(Each, Within);
+						const bool bOn = OnHer(P);
+						bHolds = bHolds && Each.size() == 3 && (One.bNear ? Least <= Director::PatternSeen && bOn : Least >= 100.0 && !bOn);
+						Said += (Said.empty() ? "" : "; ") + std::string(One.Name) + ": laid " + Num(Least, 1) + " m from her at the nearest, " + std::to_string(Within) + " of " +
+						        std::to_string(Each.size()) + " within " + Num(Director::PatternSeen, 0) + " m, " + (bOn ? "gone under" : "no window");
+					}
+					// (the blows were booked: the aimed one by its own charge, the wide one put by her)
+					bHolds = bHolds && Hit.Booked == 1 && FarBlow.Booked == 1 && FarBlow.Tally.LaidOff == 1;
+					Said += "; blows booked " + std::to_string(Hit.Booked) + " and " + std::to_string(FarBlow.Booked) + " (" + std::to_string(FarBlow.Tally.LaidOff) + " put by her)";
+				}
+				Check("a pattern gone under for by where its charges were laid, hit or miss alike: one laid within 60 m of her gives a window, one laid 100 m and more off her none",
+				      bHolds, Said);
+			}
 		}
 	}
 	for (int A = 2; A < ArgC; ++A)

@@ -617,6 +617,11 @@ namespace
 		                      "F.Year >= 1942 ? 102.0 : 76.0) : Nation == \"JAP\" ? 140.0 : 100.0;") != std::string::npos,
 		      "the show's deck-gun bores, by navy, until the battle names one: a German boat's 88 mm, a British boat's 102, an American's 76 to 127 by year, "
 		      "a Japanese boat's 140 (her 14 cm), any other's 100");
+		// (and every such round's miss a small column, to that 14 cm: the sea show's test holds a small column to a deck gun's
+		// 40 to 140 mm, as it holds the bores. The show threw a warship's column from 130 mm until the review of the join of
+		// the view under the water, which a Japanese boat's 14 cm crossed: this pin came with that change.)
+		Check(ShowSource.find("const std::string Splash = bOneGun && Fell.Calibre <= 140.0 ? \"small\" : ") != std::string::npos,
+		      "a boat's deck gun's and a merchant's gun's misses fall as small columns at every bore the show gives them, to a Japanese boat's 140 mm");
 		Check(SceneSource.find("Stage->SocketAt(E.Key, bStern ? TEXT(\"muzzle.turret.Y.1\") : TEXT(\"muzzle.turret.A.1\"), GunMuzzle, GunBore)") != std::string::npos &&
 		          SceneSource.find("const bool bStern = E.What == \"mv\" && Firer->bAftGun;") != std::string::npos &&
 		          SceneSource.find("Stage->TrainGun(Ship.Key, bStern ? TEXT(\"turret.Y\") : TEXT(\"turret.A\"), Ship.Train, Ship.Elevation, Back);") != std::string::npos,

@@ -22,7 +22,8 @@
  * (SeaShow) says when each is seen. Nothing here changes any of it or draws on the battle's luck: the look's own hash
  * (ConvoyLook::Hash01) and the battle's clock are all it uses, so the same recording gives the same look. The camera
  * goes under because a pattern was dropped, never because it kills: whether a charge is the battle's blow is not even
- * handed over (SeaShow::Show::ChargeDown leaves it out), a charge is drawn from where it was first seen going in, and a
+ * handed over (SeaShow::Show::ChargeDown leaves it out) nor read, a pattern is judged by where its charges were laid (the
+ * blow's too, wherever the battle's moment moved it), a charge is drawn from where it was first seen going in, and a
  * boat's end only lengthens a window already chosen. WHO IS FOUND IS THE SHOW'S ALONE: the surface and the water draw by
  * the one rule, SeaShow's SetMine (ShipOut::bShown, the show's own per-step truth, which reads her hunters' heard, the
  * sonar events, the blows and the guns), so a boat is gone under beside only while the show draws her (the player's own
@@ -66,8 +67,8 @@ namespace SeaUnder
 		double Sinking = 0.0, Spread = 0.0, Run = 0.0;          // the drop's: seconds to the burst, metres across, seconds going in
 		int N = 0;                        // charges, or bombs
 		P3 Aim, Track;                    // the pattern's middle; the way the escort ran over it (level, length 1)
-		P3 Near;                          // a pattern's: where its charges that burst near her (within PatternSeen m, the booked
-		                                  //   blow aside) burst from her, on the average (level, from her place at each burst)
+		P3 Near;                          // a pattern's: where its charges laid near her (within PatternSeen m) were set to burst
+		                                  //   from her, on the average (level, from her place as each was due; the blow's too)
 		P3 HerAt;                         // her middle as it opened
 		double Heading = 0.0, Keel = 0.0, Long = 67.0, Beam = 6.2; // hers as it opened
 		int Hand = 1;                     // the eye stands to her starboard (+1) or port (-1)
@@ -150,8 +151,9 @@ namespace SeaUnder
 	 * chooses it); at most Longest s (LongestWithEnd with her end); taken by kind, then time (never by what follows), Apart s
 	 * apart, at most one and one more every EveryMore s; clear of the other shots' cuts by ClearCut s (trimmed, or started
 	 * after one, where enough is left); in a staged scene, inside the one beat it plays in, ScreenLeast s of screen at the
-	 * least; a pattern only where one of its bursts comes within PatternSeen m of her (none farther is seen from beside her; the
-	 * booked blow, which the show bursts at her keel wherever the pattern fell, is not one of its charges seen sinking);
+	 * least; a pattern only where one of its charges was laid within PatternSeen m of her where she was as it was due (none
+	 * farther is seen from beside her; judged where the pattern laid them, SeaShow's ChargeBurst Aim and Until, never where
+	 * the battle's blow burst, so a hit is judged as a miss);
 	 * the boat drawn by the show the whole time (ShipOut::bShown: the trial is the scene's own show, SetMine and all), and
 	 * no boat the show hides, nor one at her gun on the surface, within the clearance (UnheldClearBy) of her (ClearOfUnheld);
 	 * her crew up on deck (CrewUp), or such a boat coming near, ends it there, the eye coming up as they do.
@@ -166,7 +168,8 @@ namespace SeaUnder
 		static constexpr double ShortestUnder = 6.0, ScreenLeast = 3.0;
 		/** The staged scene's pace of a beat, as ASeaBattle::RunMonthScene plays it (SeaParts::FastestWindow). */
 		static constexpr double SlowestBeat = 0.25, FastestBeat = 6.0;
-		/** [EST] A pattern's burst nearest her (level, metres) for the eye beside her to see its charges come down. */
+		/** [EST] A pattern's charge laid nearest her (level, metres, from her as it was due) for the eye beside her to see its
+		 * charges come down. */
 		static constexpr double PatternSeen = 60.0;
 		static double PaceOf(const Beat& B);
 
@@ -184,7 +187,9 @@ namespace SeaUnder
 
 	private:
 		struct Attack { int Escort = -1, Boat = -1; double T = 0.0; };
-		struct Burst { int Escort = -1; double T = 0.0, Depth = 0.0, X = 0.0, Y = 0.0; bool bBooked = false; };
+		/** A charge burst: its escort's ship key, when, how deep; when and where (level) its pattern set it to burst as it went
+		 * in (Due below 0: no pattern laid it); a pattern's, not an ahead salvo's. */
+		struct Burst { int Escort = -1; double T = 0.0, Depth = 0.0, Due = -1.0; P3 Laid; bool bPattern = false; };
 		struct Moment { double T = 0.0; std::vector<BoatAt> Boats; };
 		void Opened(Window& W, const SeaShow::ShipOut& Boat, double T) const;
 		/** Whether a window, trimmed to the beats and the busy cuts, is still worth going under for. */
@@ -202,7 +207,7 @@ namespace SeaUnder
 		Sight Pings;
 		std::vector<Attack> Attacks;   // sea:depthCharge: escort piece on boat piece
 		std::vector<Window> Candidates;
-		std::vector<Burst> Bursts;     // ChargeBurst: escort ship key, when, how deep, where, the battle's booked blow (on her)
+		std::vector<Burst> Bursts;     // ChargeBurst: every charge burst, as laid (never whether it was the battle's blow)
 		std::map<int, double> Ends;    // a boat's ship key: she went down
 		std::vector<Moment> Moments;   // each step: where every boat was
 	};

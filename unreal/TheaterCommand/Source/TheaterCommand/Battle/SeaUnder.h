@@ -178,10 +178,12 @@ private:
 	std::vector<SeaUnder::CeilingPoint> CeilingPoints;
 	TArray<int32> CeilingTriangles;
 	/** What is laid each frame, kept from frame to frame for its room (45 frames a second on the MacBook Air): the hulls about the
-	 * eye, the boats and their way, the water's frame, the looks' sections, the face's points, the creaks. */
+	 * eye, the boats and their way (set in place: the pieces listed this frame), the water's frame, the looks' sections, the
+	 * face's points, the creaks. */
 	std::vector<SeaUnder::Hull> HullsNow;
 	std::vector<SeaUnder::BoatAt> BoatsNow;
 	std::map<int, SeaUnder::BoatNow> BoatsMoving;
+	std::vector<int> BoatsMovingSeen;
 	SeaUnder::Frame InWater;
 	FLaid Laid[LooksSections];
 	TArray<FVector> CeilingPlaces, CeilingNormals;

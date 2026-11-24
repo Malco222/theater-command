@@ -1291,6 +1291,8 @@ namespace SeaShow
 				C.At.Z = -Set;
 				C.Bursts = E.T + Share * Run + Sinks;
 				C.Dropped = E.T;
+				C.Laid = C.At;
+				C.Due = C.Bursts;
 				Charges.push_back(C);
 			}
 			return;
@@ -1922,6 +1924,8 @@ namespace SeaShow
 			Fx& E = Emit(FxKind::ChargeBurst, C.At, C.Kind, C.Escort);
 			E.Size = C.bHit ? 1.0 : 0.0;
 			E.Side = C.Side;
+			E.Aim = C.Laid;
+			E.Until = C.Due;
 			++Check.ChargeBursts;
 			if (C.bHit) ++Check.ChargeBurstsBooked;
 			// (the battle's blow found her where it burst, which is where the picture shows her: SetMine)
@@ -3318,9 +3322,9 @@ namespace SeaShow
 			Hull* On = bOneGun ? NearestAfloatOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y) : NearestOf(Fell.OnPiece, Fell.Fired.X, Fell.Fired.Y);
 			if (!On) continue;
 			const std::string Weapon = Fell.Calibre >= 300.0 ? "shell_heavy" : Fell.Calibre >= 180.0 ? "shell_medium" : "shell_light";
-			// (a boat's deck gun's or a merchant's gun's round, a 4-inch or less, throws a smaller column than a warship's
-			// shell of a bore near it)
-			const std::string Splash = bOneGun && Fell.Calibre < 130.0 ? "small" : Fell.Calibre >= 300.0 ? "heavy" : Fell.Calibre >= 180.0 ? "medium" : "light";
+			// (a boat's deck gun's or a merchant's gun's round, of any bore a deck gun has to a Japanese boat's 14 cm, throws a
+			// smaller column than a warship's shell of a bore near it)
+			const std::string Splash = bOneGun && Fell.Calibre <= 140.0 ? "small" : Fell.Calibre >= 300.0 ? "heavy" : Fell.Calibre >= 180.0 ? "medium" : "light";
 			const double Range = Flat(On->P - Fell.Fired);
 			const Vec Down = (On->P - Fell.Fired) * (1.0 / std::max(1.0, Range));
 			const Vec Across(Down.Y, -Down.X, 0.0);

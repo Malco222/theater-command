@@ -560,7 +560,9 @@ namespace SeaShow
 		ChargeDrop,  // an escort's depth charges going in: Key (the escort), At (her stern), Aim (the pattern's middle), What
 		             //   ("pattern" or "ahead"), Size (charges), Spread (metres across), Sinking (seconds to the burst), Side
 		ChargeBurst, // one charge bursting, at its moment: Key (the escort), At (Z: minus the depth it burst at), What ("pattern"
-		             //   or "ahead"), Size (1: the blow the battle booked on the boat, else 0), Side
+		             //   or "ahead"), Size (1: the blow the battle booked on the boat, else 0), Side; Aim and Until, where and when
+		             //   its pattern set it to burst as it went in (the blow's too, wherever the battle's moment moved it; Until -1
+		             //   for one no pattern laid: the view under the water judges a pattern by where it was laid, SeaUnder's Director)
 		Dive,        // a boat going down or coming up: Key (the boat), At, What ("dive" or "surface"), Text (why), Side
 		Starshell,   // a star shell bursting: Key (its own), At (where it bursts, Z its height), Until (battle time it burns out), Side
 		Rescue,      // a ship picking up survivors: Key (the rescuer), At (her), Aim (where they are), Until (battle time it ends), Side
@@ -952,6 +954,10 @@ namespace SeaShow
 			bool bHit = false;
 			bool bOnBoat = false; // (the battle's blow told before it bursts: it bursts where she is then, Off from her)
 			Vec Off;
+			// (U1 hook (under water): where and when its pattern set it to burst as it went in, kept where the battle's blow
+			// moves it; Due -1 for one no pattern laid, put by her for a blow told with none of hers to take)
+			Vec Laid;
+			double Due = -1.0;
 		};
 
 		Field F;

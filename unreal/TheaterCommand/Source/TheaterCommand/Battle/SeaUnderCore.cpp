@@ -235,7 +235,8 @@ namespace SeaUnder
 			}
 			else if (E.Kind == SeaShow::FxKind::ChargeBurst)
 			{
-				Bursts.push_back(Burst{ E.Key, T, -E.At.Z, E.At.X, E.At.Y, E.Size > 0.5 });
+				// (and where and when its pattern set it to burst as it went in: SeaShow's ChargeBurst Aim and Until)
+				Bursts.push_back(Burst{ E.Key, T, -E.At.Z, E.Until, P3(E.Aim.X, E.Aim.Y, 0.0), E.What == "pattern" });
 			}
 			else if (E.Kind == SeaShow::FxKind::Dive)
 			{
@@ -462,9 +463,13 @@ namespace SeaUnder
 					++Count;
 				}
 				if (W.What == Kind::Pattern && Count == 0) continue;
-				// (a pattern laid off her, none of its bursts within PatternSeen m of her: nothing of it seen from beside her. The
-				// booked blow is not one: the show bursts it at her keel wherever the pattern fell, SeaShow's BurstCharges)
-				// Those that come near her are the ones the eye under her looks toward (EyeOf).
+				// (a pattern laid off her, none of its charges set to burst within PatternSeen m of her where she was as each was
+				// due: nothing of it seen from beside her. Judged where the pattern laid them, never where they burst, so the
+				// battle's blow is neither counted nor left out and a hit is judged as a miss: the show bursts the charge it books
+				// where it is, or moves it that charge's lethal reach toward her keel, or only where none of hers lies so near puts
+				// it by her, SeaShow.cpp's sea:depthChargeHit. A charge no pattern laid (Due below 0: a blow told with none of the
+				// escort's to take) and an ahead salvo's bombs are none of it.) Those laid near her are the ones the eye under her
+				// looks toward (EyeOf).
 				if (W.What == Kind::Pattern)
 				{
 					double Nearest = 1e18;
@@ -472,9 +477,9 @@ namespace SeaUnder
 					int NearCount = 0;
 					for (const Burst& B : Bursts)
 					{
-						if (B.Escort != W.Escort || B.bBooked || B.T < W.Drop || B.T > Latest) continue;
+						if (B.Escort != W.Escort || !B.bPattern || B.Due < 0.0 || B.Due < W.Drop - 0.5 || B.Due > Latest) continue;
 						P3 FromHerAt;
-						const double Far = FromHer(W.Boat, B.T, B.X, B.Y, &FromHerAt);
+						const double Far = FromHer(W.Boat, B.Due, B.Laid.X, B.Laid.Y, &FromHerAt);
 						if (Far < 0.0) continue;
 						Nearest = std::min(Nearest, Far);
 						if (Far <= PatternSeen)
