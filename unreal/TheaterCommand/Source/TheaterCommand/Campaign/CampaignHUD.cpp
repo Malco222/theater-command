@@ -6171,7 +6171,7 @@ namespace
 										SNew(SBox)
 										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetSession() && Controller->GetSession()->GetView().PageIds.Contains(TEXT("spies")) ? EVisibility::Visible : EVisibility::Collapsed; })
 										[
-											MakeDoor(9, TEXT("SPIES"), TEXT("The secret service: your agents, where they are and what they report, and recruiting more."), [this]() { Controller->OpenPage(TEXT("spies")); })
+											MakeDoor(9, TEXT("SPIES"), TEXT("The secret service: your agents, where they are and what they report, and recruiting more. The number is the enemy agents your hunters have uncovered, and your agents newly at work this month."), [this]() { Controller->OpenPage(TEXT("spies")); }, [this]() { return Controller->GetSpiesWaiting(); })
 										]
 									]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(4, TEXT("LEDGER"), TEXT("The ledger: where the money comes from, what the forces cost, and what every province gives. (5)"), [this]() { Controller->OpenLedger(); })]

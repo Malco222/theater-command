@@ -948,6 +948,19 @@ struct FAgentMark
 };
 
 /**
+ * (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) An enemy agent his hunters have
+ * uncovered on his ground and not yet arrested or turned: a piece on the map in its country's colours. A press on it
+ * opens THE SECRET SERVICE, where it is arrested or turned; the rules' sentence is on the pointer over its province.
+ */
+struct FViewFoeAgent
+{
+	int32 Id = INDEX_NONE, Region = INDEX_NONE;
+	FString Nat; // the service it works for
+	bool bWatch = false; // a watcher (it maps his defences) rather than a saboteur
+	FString Text;
+};
+
+/**
  * (Rulings 88, 101 and 102.) The round of armies as the rules count it, the same in both builds: Bright on NEXT
  * ARMY's disc (untouched armies at the front, and armies raised this month with no order), Quiet for the rear, Front
  * for how many of the bright stand at the front, All for every army Tab still goes to, and Idle for the question at
@@ -1136,6 +1149,9 @@ struct FCampaignView
 	// the opening month only, as the columns are, and each working only with the columns on).
 	TArray<FViewDump> Dumps;
 	bool bLorryShiftSet = false, bWagonsSet = false, bDumpsSet = false;
+	// (Release 2, the spies thread of 24 November 2026) The secret war's one switch on the options page: whether any of
+	// release 2's spying is on in this campaign, and whether it can still be switched (its opening month only).
+	bool bSecretWar = false, bSecretWarCan = false;
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain
@@ -1148,6 +1164,8 @@ struct FCampaignView
 	TArray<FViewCut> Cuts; // (rulings 113 and 114) the same, with how each is known and the rules' words for it
 	TArray<FViewAgent> Agents; // (ruling 153) his agents: pieces on the map
 	TArray<FAgentMark> AgentMarks; // (ruling 159) where one of his was caught this month
+	TArray<FViewFoeAgent> FoeAgents; // (release 2) the enemy agents his hunters uncovered, still at large: pieces on the map
+	int32 SpiesWaiting = 0; // (release 2) the number on the SPIES door: those enemy agents, and his agents newly at work this month
 	TArray<FViewFleet> Fleets;
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	FViewRound Round; // (rulings 88, 101, 102) the round of armies

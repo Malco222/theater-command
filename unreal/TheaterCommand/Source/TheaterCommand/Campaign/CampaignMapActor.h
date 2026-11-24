@@ -170,6 +170,14 @@ public:
 	void SetAgentInHand(int32 AgentId);
 	/** The agent the pointer rests on: the ring on his base lights, to say he can be picked up. */
 	void SetAgentHovered(int32 AgentId) { AgentHovered = AgentId; }
+	/**
+	 * (Release 2, the spies thread of 24 November 2026.) An enemy agent his hunters uncovered stands with his own, and
+	 * AgentAtRay gives its piece a number of its own, below any agent's: FoeStand(Id) for the enemy agent Id, which
+	 * IsFoeStand tells apart and FoeOfStand turns back. It is never picked up: a press on it opens the secret service.
+	 */
+	static int32 FoeStand(int32 FoeId) { return -1000 - FoeId; }
+	static bool IsFoeStand(int32 StandId) { return StandId <= -1000; }
+	static int32 FoeOfStand(int32 StandId) { return -1000 - StandId; }
 	/** Carries the agent in hand over this point of the table; and sets him back where he stands. */
 	void CarryAgent(const FVector& GroundPoint);
 	void ReturnAgent();
@@ -889,6 +897,8 @@ private:
 	{
 		int32 Id = INDEX_NONE, Region = INDEX_NONE;
 		bool bMark = false;
+		bool bFoe = false; // (release 2) an enemy agent his hunters uncovered: its rim in its country's colour, lit day and night, and no pool
+		FLinearColor FoeInk = FLinearColor::White; // (its country's colour)
 		FVector Rest = FVector::ZeroVector; // where it stands on the table
 		FVector CarriedAt = FVector::ZeroVector; // in the hand and carried: the point of the table it hangs over
 		bool bCarried = false, bRing = false, bRimLit = false; // (bRimLit: his base's brass rim, lit by night)

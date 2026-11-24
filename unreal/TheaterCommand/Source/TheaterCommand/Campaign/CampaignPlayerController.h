@@ -739,6 +739,8 @@ public:
 	void StopTech(const FString& Id);
 	/** Research teams of the player's with nothing to do, for the badge on the button. */
 	int32 GetIdleTeams() const;
+	/** (Release 2, the spies thread of 24 November 2026.) The number on the SPIES door: enemy agents uncovered and at large, and his agents newly at work this month. */
+	int32 GetSpiesWaiting() const;
 	/** What is still worth doing before the month is ended: the line at this place in the list, or empty. And a press on it. */
 	FString GetToDoText(int32 Index) const;
 	FString GetToDoTip(int32 Index) const;

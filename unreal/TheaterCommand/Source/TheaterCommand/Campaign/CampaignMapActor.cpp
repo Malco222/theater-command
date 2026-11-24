@@ -5512,7 +5512,9 @@ void ACampaignMapActor::UpdateCutLamps(float CameraDistance)
 			}
 			else
 			{
-				Arc(Middle, 0.0, Disc, 0.0, 2.0 * PI, Inked(BrassInk, 1.0f), Inked(BrassInk, 1.0f));
+				// (Release 2: an uncovered enemy agent's rim is its country's colour.)
+				const FLinearColor RimInk = Stand.bFoe ? Stand.FoeInk : BrassInk;
+				Arc(Middle, 0.0, Disc, 0.0, 2.0 * PI, Inked(RimInk, 1.0f), Inked(RimInk, 1.0f));
 				Arc(Nearer(Middle, 1.0), 0.0, Disc - 1.5 * Pixel, 0.0, 2.0 * PI, Inked(DeskInk, 0.97f), Inked(DeskInk, 0.97f));
 			}
 			// The sign, 13 px, from the kit's own drawing on a square of 24: the hat's crown, its brim, the shoulders.
@@ -17191,6 +17193,10 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	{
 		Told += FString::Printf(TEXT("x@%d/%d;"), Mark.Region, ArmiesIn(Mark.Region));
 	}
+	for (const FViewFoeAgent& Foe : View.FoeAgents)
+	{
+		Told += FString::Printf(TEXT("f%d@%d/%d:%s;"), Foe.Id, Foe.Region, ArmiesIn(Foe.Region), *Foe.Nat);
+	}
 	if (Told == AgentSignature)
 	{
 		return;
@@ -17214,6 +17220,10 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	{
 		++CountIn.FindOrAdd(Mark.Region);
 	}
+	for (const FViewFoeAgent& Foe : View.FoeAgents)
+	{
+		++CountIn.FindOrAdd(Foe.Region);
+	}
 	const double High = AgentHigh();
 	UMaterialInterface* RingGlow = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f);
 	// (the brass of the sculpt's own rim, 224 184 114, giving a little light of its own: see section 2 below)
@@ -17221,7 +17231,7 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	// (Release 2: the warm pool at his feet is light added to the ground, in the paint of a burning town's glow (M_Glow),
 	// and one ink serves every agent's pool. Without that paint there is no pool; the log has said so already.)
 	UMaterialInstanceDynamic* PoolInk = bFireGlowAdds && FireGlowInk ? UMaterialInstanceDynamic::Create(FireGlowInk->GetMaterial(), this) : nullptr;
-	auto StandOne = [&](int32 Id, int32 RegionId, bool bMark)
+	auto StandOne = [&](int32 Id, int32 RegionId, bool bMark, const FViewFoeAgent* Foe = nullptr)
 	{
 		if (!Data.Regions.IsValidIndex(RegionId))
 		{
@@ -17231,6 +17241,14 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 		Made.Id = Id;
 		Made.Region = RegionId;
 		Made.bMark = bMark;
+		Made.bFoe = Foe != nullptr;
+		if (Foe)
+		{
+			// (Release 2, the spies thread of 24 November 2026; the art director's brief of 22 November: an uncovered enemy
+			// agent is the same sculpt, its rim in its country's colour, and no pool.)
+			const FCampaignNation* Whose = Data.FindNation(Foe->Nat);
+			Made.FoeInk = Whose ? FLinearColor(Whose->Color) : FLinearColor(FColor(150, 40, 40));
+		}
 		const FVector2D Spot = AgentSpot(RegionId, SlotIn.FindOrAdd(RegionId)++, CountIn[RegionId]);
 		Made.Rest = SurfacePoint(Spot.X, Spot.Y, 0.02);
 		USceneComponent* Holder = NewObject<USceneComponent>(this);
@@ -17303,8 +17321,13 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 				Facing.Add(FVector::UpVector);
 			}
 			Body->CreateMeshSection(2, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
-			Body->SetMaterial(2, RimGlow);
+			// (Release 2: an enemy agent's rim band is its country's colour and is lit by day as well: UpdateAgents shows it.)
+			Body->SetMaterial(2, Made.bFoe ? GetSolidMaterial(Made.FoeInk, 0.4f, 0.0f, 0.9f) : RimGlow);
 			Body->SetMeshSectionVisible(2, false);
+		}
+		if (Made.bFoe)
+		{
+			return; // (no pool at an enemy agent's feet)
 		}
 		// The warm pool on the ground at his feet, which is how he is found on a night map. (The art director's release 2
 		// brief: "the agent lights the fog" is a pool on the ground and not a light on him. The lantern's real light is
@@ -17333,11 +17356,15 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	{
 		StandOne(INDEX_NONE, Mark.Region, true);
 	}
+	for (const FViewFoeAgent& Foe : View.FoeAgents)
+	{
+		StandOne(FoeStand(Foe.Id), Foe.Region, false, &Foe);
+	}
 	if (AgentInHand != INDEX_NONE && !AgentStands.ContainsByPredicate([this](const FAgentStand& Each) { return !Each.bMark && Each.Id == AgentInHand; }))
 	{
 		AgentInHand = INDEX_NONE;
 	}
-	UE_LOG(LogTheater, Log, TEXT("Agents on the map: %d, and %d marks where one was caught"), View.Agents.Num(), View.AgentMarks.Num());
+	UE_LOG(LogTheater, Log, TEXT("Agents on the map: %d, %d marks where one was caught, and %d enemy agents uncovered"), View.Agents.Num(), View.AgentMarks.Num(), View.FoeAgents.Num());
 }
 
 void ACampaignMapActor::SetAgentInHand(int32 AgentId)
@@ -17575,7 +17602,7 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 				Stand.bRing = bRing;
 				Stand.Body->SetMeshSectionVisible(1, bRing);
 			}
-			const bool bRimLit = !Stand.bMark && Dusk >= 0.35f; // (mend 7: the rim stays lit by night)
+			const bool bRimLit = !Stand.bMark && (Stand.bFoe || Dusk >= 0.35f); // (mend 7: the rim stays lit by night; an enemy agent's country colour, always)
 			if (bRimLit != Stand.bRimLit)
 			{
 				Stand.bRimLit = bRimLit;

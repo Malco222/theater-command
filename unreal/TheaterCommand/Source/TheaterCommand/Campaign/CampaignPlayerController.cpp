@@ -347,6 +347,12 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 				Now.bWagonsSet ? TEXT("ON") : TEXT("OFF"), Now.bWagonsSet);
 			Add(TEXT("logistics:dumps"), TEXT("Forward dumps"), *FString::Printf(TEXT("Stock a dump of supplies beyond the railhead, on the SUPPLY COLUMNS page: the armies near it are fed by a shorter road. Enemy bombers burn part of it, and if its ground is lost it is burned.%s%s"), Needs, When),
 				Now.bDumpsSet ? TEXT("ON") : TEXT("OFF"), Now.bDumpsSet);
+			// (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) All of release 2's secret war
+			// under one switch, in the campaign's first month only.
+			Add(TEXT("secretwar"), TEXT("The secret war"), Now.bSecretWarCan
+					? TEXT("Your service opens the war with agents already at work on the map: one on guard at home, one hunting enemy agents on your front, and others watching your likeliest enemies. Every country at war with you sends agents of its own, and the ones your hunters uncover stand on the map to be arrested or turned. Agents can steal the enemy's orders. Off, you recruit and send agents as before, and the enemy's saboteurs are only a chance each month. It can be switched in the campaign's first month only.")
+					: TEXT("Your service opened the war with agents already at work; every country at war with you sends agents of its own, which your hunters can uncover, arrest or turn; agents can steal the enemy's orders. It was set as this campaign opened, and stays as it was set."),
+				Now.bSecretWar ? TEXT("ON") : TEXT("OFF"), Now.bSecretWar);
 		}
 	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
@@ -516,6 +522,25 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			const bool bOn = Id == TEXT("nicknames") ? Session->GetView().bNickFlags : Session->GetView().bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			}
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
+	}
+	else if (Id == TEXT("secretwar"))
+	{
+		// (Release 2, the spies thread of 24 November 2026) The secret war, in the campaign's first month only (the rules say so if not).
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			if (Session->Act(Session->GetView().bSecretWar ? TEXT("secretwar:off") : TEXT("secretwar:on"), INDEX_NONE, Note))
+			{
+				PutDownAgent();
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
 			}
 			if (!Note.IsEmpty())
@@ -2734,6 +2759,12 @@ int32 ACampaignPlayerController::GetIdleTeams() const
 {
 	const FCampaignSession* Session = GetSession();
 	return Session && Session->GetView().bHumanUp ? Session->GetView().IdleTeams : 0;
+}
+
+int32 ACampaignPlayerController::GetSpiesWaiting() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().bHumanUp ? Session->GetView().SpiesWaiting : 0;
 }
 
 const FViewStock* ACampaignPlayerController::GetStock(bool bOil) const
@@ -5990,7 +6021,17 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
 		bAgentHeld = false;
-		if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
+		if (!bBusy && !IsAnswering() && ACampaignMapActor::IsFoeStand(PointedAgent))
+		{
+			// (Release 2, the spies thread of 24 November 2026.) An enemy agent his hunters uncovered is never picked up: a
+			// press on it opens the secret service, where it is arrested or turned.
+			PutDownAgent();
+			OpenPage(TEXT("spies"));
+			// (the press is the agent's, as a press on his own is: its release picks no ground and moves nothing)
+			bAgentWasInHand = false;
+			bAgentHeld = true;
+		}
+		else if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
 		{
 			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
 			bAgentWasInHand = AgentInHand == PointedAgent;
@@ -6145,7 +6186,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	else if (!bBusy && PointedAgent != INDEX_NONE)
 	{
-		Pointer = EMouseCursor::GrabHand;
+		// (release 2: an uncovered enemy agent is pressed, not taken up)
+		Pointer = ACampaignMapActor::IsFoeStand(PointedAgent) ? EMouseCursor::Hand : EMouseCursor::GrabHand;
 	}
 	// (Ruling 163.) With an agent in hand no reach is lit: the province under the pointer and its one ring are edged as
 	// the ground he would watch from there.
@@ -6667,6 +6709,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				if (Mark.Region == TipRegion)
 				{
 					Line += TEXT("\n") + Mark.Text;
+				}
+			}
+			// (Release 2, the spies thread of 24 November 2026.) An enemy agent his hunters uncovered here, in the rules' sentence.
+			for (const FViewFoeAgent& Foe : View.FoeAgents)
+			{
+				if (Foe.Region == TipRegion)
+				{
+					Line += TEXT("\n") + Foe.Text + TEXT(" Click the agent to open the secret service.");
 				}
 			}
 			// (Rulings 163 and 169.) With an agent in hand: what a right-click does here; or, where the rules refuse the

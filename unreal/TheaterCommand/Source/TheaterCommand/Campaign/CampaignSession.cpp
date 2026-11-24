@@ -1200,6 +1200,9 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
+	// (Release 2, the spies thread of 24 November 2026) The secret war's one switch, and whether it can still be thrown.
+	Object->TryGetBoolField(TEXT("secretWar"), Out.bSecretWar);
+	Object->TryGetBoolField(TEXT("secretWarCan"), Out.bSecretWarCan);
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{
@@ -1300,6 +1303,25 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		// (Release 2, the spies thread of 24 November 2026) The enemy agents his hunters uncovered, and the SPIES door's number.
+		const TArray<TSharedPtr<FJsonValue>>* FoesTold = nullptr;
+		if (Object->TryGetArrayField(TEXT("foeAgents"), FoesTold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *FoesTold)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (Entry.IsValid())
+				{
+					FViewFoeAgent& Foe = Out.FoeAgents.AddDefaulted_GetRef();
+					Entry->TryGetNumberField(TEXT("id"), Foe.Id);
+					Entry->TryGetNumberField(TEXT("region"), Foe.Region);
+					Entry->TryGetStringField(TEXT("nat"), Foe.Nat);
+					Entry->TryGetBoolField(TEXT("watch"), Foe.bWatch);
+					Entry->TryGetStringField(TEXT("text"), Foe.Text);
+				}
+			}
+		}
+		Object->TryGetNumberField(TEXT("spiesWaiting"), Out.SpiesWaiting);
 	}
 	{
 		const TArray<TSharedPtr<FJsonValue>>* CutsTold = nullptr;
