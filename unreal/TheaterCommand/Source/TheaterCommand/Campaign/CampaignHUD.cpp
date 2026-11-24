@@ -13792,6 +13792,32 @@ namespace
 		}
 
 		/**
+		 * (Release 1.5, the UI director, 24 November 2026: Brian, "when you click on the country name on the home screen it
+		 * flickers".) A line of the opening card that folds to its width. Slate folds a line that wraps by itself
+		 * (AutoWrapText) only once it has been drawn: a line just laid out stands on one line for its first frame and folds
+		 * on the next, and all under it jumps. Every click on the card lays it out afresh, so every click jumped: the list
+		 * under the year's note, the foot under its three settings, and with them the card's height. Each such line now
+		 * folds, on its first frame, at the width the line in its place had when last drawn, and after that at its own
+		 * width, as before. Until a line in its place has been drawn it folds as it always did.
+		 */
+		TSharedRef<STextBlock> Folding(const FString& Place, const TSharedRef<STextBlock>& Line)
+		{
+			const TWeakPtr<STextBlock> Self = Line;
+			Line->SetWrapTextAt(TAttribute<float>::CreateLambda([this, Self, Place]()
+			{
+				const TSharedPtr<STextBlock> Shown = Self.Pin();
+				const float Had = Shown.IsValid() ? static_cast<float>(Shown->GetTickSpaceGeometry().GetLocalSize().X) : 0.0f;
+				float& Kept = OpeningFolds.FindOrAdd(Place);
+				if (Had > 1.0f)
+				{
+					Kept = Had;
+				}
+				return Kept; // (with AutoWrapText Slate folds at the lesser of this and the width it was last drawn at)
+			}));
+			return Line;
+		}
+
+		/**
 		 * One country to lead in the grand campaign. (The UI director, 18 November 2026, on build 1596.) A compact card:
 		 * the flag and the name only, 93 high in the frame's own measure, seven great powers to
 		 * a row and the others eight; the name wraps onto a second line rather than run past the card. Its status line and
@@ -13822,8 +13848,8 @@ namespace
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 6.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)
-							.AutoWrapText(true).Justification(ETextJustify::Center)
+							Folding(Nation.bMajor ? TEXT("Nation.Great") : TEXT("Nation.Other"), SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)
+							.AutoWrapText(true).Justification(ETextJustify::Center))
 						]
 					]
 				];
@@ -13884,8 +13910,8 @@ namespace
 				// ---- The options: the game's standing choices, each with what it does and a button that changes it.
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
 				[
-					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-					.Text(FText::FromString(TEXT("How the game looks, sounds and handles. What you choose here is remembered the next time you play.")))
+					Folding(TEXT("Options.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("How the game looks, sounds and handles. What you choose here is remembered the next time you play."))))
 				];
 				const TArray<FGameOption> Options = Controller.IsValid() ? Controller->GetOptions() : TArray<FGameOption>();
 				TArray<TSharedRef<SWidget>> Cells;
@@ -13901,11 +13927,11 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Text(Option.Name).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true)
+									Folding(TEXT("Options.Name"), SNew(STextBlock).Text(Option.Name).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true))
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 								[
-									SNew(STextBlock).Text(Option.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+									Folding(TEXT("Options.Blurb"), SNew(STextBlock).Text(Option.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f))
 								]
 							]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -13951,7 +13977,7 @@ namespace
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Line[1])).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+							Folding(TEXT("Options.Control"), SNew(STextBlock).Text(FText::FromString(Line[1])).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true))
 						]
 					];
 				}
@@ -14012,8 +14038,8 @@ namespace
 						];
 						Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
 						[
-							SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-							.Text(FText::FromString(TEXT("Sounds recorded by others and shared on freesound.org and Wikimedia Commons, used under Creative Commons licences and cut and mixed for this game. Every licence and link is in CREDITS.md, in the game's folder.")))
+							Folding(TEXT("Options.Credits"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+							.Text(FText::FromString(TEXT("Sounds recorded by others and shared on freesound.org and Wikimedia Commons, used under Creative Commons licences and cut and mixed for this game. Every licence and link is in CREDITS.md, in the game's folder."))))
 						];
 						const FLinearColor Body(FColor::FromHex(TEXT("B4AB98"))); // (4.5 to 1 or better on the card)
 						for (const FCredited& Each : Credits)
@@ -14041,7 +14067,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom)
 								[
-									SNew(STextBlock).Text(FText::FromString(Said)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Body).AutoWrapText(true)
+									Folding(TEXT("Options.Credit.") + Each.Creator, SNew(STextBlock).Text(FText::FromString(Said)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Body).AutoWrapText(true))
 								]
 							];
 						}
@@ -14055,8 +14081,8 @@ namespace
 				// ---- The grand campaign: a day to take over on, and a country.
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
 				[
-					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-					.Text(FText::FromString(TEXT("Pick a country and a year. From the day you take over, the war is yours to shape."))) // (03:53: one line)
+					Folding(TEXT("Grand.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Pick a country and a year. From the day you take over, the war is yours to shape.")))) // (03:53: one line)
 				];
 				TSharedRef<SHorizontalBox> YearRow = SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
@@ -14087,7 +14113,7 @@ namespace
 					]
 					+ SHorizontalBox::Slot().FillWidth(1.0f)
 					[
-						SNew(STextBlock).Text(Year.Note).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+						Folding(FString::Printf(TEXT("Grand.YearNote.%d"), Opening.YearIndex), SNew(STextBlock).Text(Year.Note).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true))
 					]
 				];
 				Starts->AddSlot().AutoHeight()[YearRow];
@@ -14127,7 +14153,7 @@ namespace
 				{
 					Starts->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 4.0f)
 					[
-						SNew(STextBlock).Text(Opening.GrandNote).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+						Folding(TEXT("Grand.Note"), SNew(STextBlock).Text(Opening.GrandNote).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true))
 					];
 				}
 
@@ -14168,7 +14194,7 @@ namespace
 					];
 					Difficulty->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						Folding(TEXT("Foot.Difficulty"), SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true))
 					];
 				}
 				// (Rules version 66) How deep it is played: three depths, the chosen one lit, with what it means beside them.
@@ -14201,7 +14227,7 @@ namespace
 					];
 					HowDeep->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						Folding(TEXT("Foot.Depth"), SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true))
 					];
 				}
 				// (Rules version 70) The history dial: five stops, the chosen one lit, with what it means beside them.
@@ -14235,7 +14261,7 @@ namespace
 					];
 					Dial->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						Folding(TEXT("Foot.History"), SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true))
 					];
 				}
 				Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
@@ -14372,8 +14398,8 @@ namespace
 			// ---- The scenarios: single campaigns in which the other nations keep to history's plan.
 			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
 			[
-				SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-				.Text(FText::FromString(TEXT("Single campaigns from the war as it was fought. You lead one side; the other nations keep to history's plan. Or watch one play out.")))
+				Folding(TEXT("Scenarios.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+				.Text(FText::FromString(TEXT("Single campaigns from the war as it was fought. You lead one side; the other nations keep to history's plan. Or watch one play out."))))
 			];
 			for (int32 GroupIndex = 0; GroupIndex < Opening.Groups.Num(); ++GroupIndex)
 			{
@@ -14427,13 +14453,13 @@ namespace
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
-					.Text(FText::FromString(TEXT("The hedgerows before Le Mesnil. You are the American general: place your units on your ground, then click a unit and click where it goes or whom it attacks. Your staff fights the units you leave to them.")))
+					Folding(TEXT("Practice.Blurb"), SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("The hedgerows before Le Mesnil. You are the American general: place your units on your ground, then click a unit and click where it goes or whom it attacks. Your staff fights the units you leave to them."))))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
-					.Text(FText::FromString(TEXT("A battle on its own, in the 3D field: nothing in a campaign changes.")))
+					Folding(TEXT("Practice.Aside"), SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("A battle on its own, in the 3D field: nothing in a campaign changes."))))
 				];
 			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
 				.OnClicked_Lambda([this]()
@@ -14469,8 +14495,8 @@ namespace
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 4.0f)
 				[
-					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
-					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle.")))
+					Folding(TEXT("Rules.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle."))))
 				];
 			// (the UI director, 22 November 20:56Z: each line a kit switch, lit brass when on and unlit when off, with ON
 			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
@@ -14535,7 +14561,7 @@ namespace
 							]
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+								Folding(TEXT("Rules.Tip"), SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true))
 							]
 						]
 					]
@@ -14565,13 +14591,13 @@ namespace
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(Side.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+					Folding(TEXT("Start.Blurb"), SNew(STextBlock).Text(Side.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f))
 				];
 			if (!Side.Aims.IsEmpty())
 			{
 				Body->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(Side.Aims).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+					Folding(TEXT("Start.Aims"), SNew(STextBlock).Text(Side.Aims).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f))
 				];
 			}
 			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
@@ -15263,6 +15289,7 @@ namespace
 		TSharedPtr<SBox> OpeningFoot;
 		TSharedPtr<SOverlay> FootSaid; // (item 4: every nation's lines, one over another, the picked one's shown)
 		float FootWide = 0.0f; // (and the width they fold at, as last laid out)
+		TMap<FString, float> OpeningFolds; // (each folding line's width as last drawn, by its place on the card: see Folding)
 		FSlateBrush FootBrush;
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;
