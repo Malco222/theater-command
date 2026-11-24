@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7c92c852 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 726b1e5c 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40389,8 +40389,8 @@
     asv: "asvradar",
     _find: "OEG T2: 41-43% of convoys were attacked. The share of the boats raiding a convoy route's seas that find a convoy and attack it in a month; each is one incident with the convoy's escort.",
     find: 0.42,
-    _incident: "OEG T10: the chance that an incident ends with the boat sunk, answered by a support group (destroyers on hunting duty in that sea) or by the convoy's close escort (destroyers bound to its route). With depth charges alone, and with ahead-throwing weapons and escort-group training together. atw: ahead-throwing weapons alone, without escort-group training, multiply the depth-charge rate by this (OEG T9: Hedgehog 7.5% against depth charges 4.0% per attack in its first half-year at sea, H2 1943; historian/convoy-figures-for-r2-1123.md). The weapon's later rise (2.6-4.7 times in 1944) is crews learning it, a cause not yet laid, never the month.",
-    incident: { group: 0.17, lone: 0.05, groupKit: 0.55, loneKit: 0.12, atw: 1.9 },
+    _incident: "OEG 51 ch. 11 Table 10 (F; historian/escort-kill-denominator-1124.md): US escorts' attacks in the Atlantic and Mediterranean, the share of incidents assessed sunk. An incident is a U-boat the escorts actually attacked, all attacks on it in one engagement counted once, before or after it fired. Two columns, independent and coordinated (OEG defines neither beyond its title): the game lays coordinated on a support group (destroyers on hunting duty in that sea) and independent on the convoy's close escort (destroyers bound to its route) (D). The record's two rows split by date, Jan 1943-Feb 1944 (0.05, 0.17: the 0.17 is 3 kills in 18, about 4-41% at 95%, D) and Mar 1944-May 1945 (0.12, 0.55: 21 in 38 for the 0.55); the game credits the step between them to kit, escort-group training and coordinated hunting together (D), laid on ahead-throwing weapons with escort-group training, never the date. Read on the count's incidents, the boats that fired: the interim of the radar ruling's Q3 (a), which under-counts where radar frustrates (the boats found and driven off were the ones attacked); the escorts' losses form sets incidents from the boats that try (the design director, 24 November 2026 16:44Z). atw: ahead-throwing weapons alone, without escort-group training, multiply the depth-charge rate by this (OEG T9: Hedgehog 7.5% against depth charges 4.0% per attack in its first half-year at sea, H2 1943; historian/convoy-figures-for-r2-1123.md). The weapon's later rise (2.6-4.7 times in 1944) is crews learning it, a cause not yet laid, never the month.",
+    incident: { coordinated: 0.17, independent: 0.05, coordinatedKit: 0.55, independentKit: 0.12, atw: 1.9 },
     _radar: "Radar on escorts: what sea-search radar adds to a ship's guard and hunting weight. Not laid (the historian's figure from OEG 10.1.2 and the HF/DF record): 0 until it is read.",
     radar: 0,
     _seaLoss: "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
@@ -40399,8 +40399,10 @@
     station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5 },
     _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. sink (k): the tons ruling (naval-battles/convoy-r2/tons-form.md): a convoy the boats attack loses its ships x P / (P + k x E), P the pack's raid strength (the pack x a boat's raid strength on station, its kit, fit and the air over it), E the convoy's share of the route's escort worth (G / convoys sailed); tons = convoys attacked x ships sunk x GRT, both ways, and the share of cargo lost is the share of ships sunk. k is refit once at OEG T2's window so that 2 boats sink 3.75 ships a convoy attacked (D: T2's 80 convoys, 125.6 ships sunk over 33.5 convoys attacked; SC/ONS 4.4, HX/ONF 3.2): 0.137 (D, six AI wars Oct 1942 to May 1943, 48 months: a boat's raid strength on station 0.298, a convoy's escort worth 46.5; the months' median 0.136). Never fitted to a battle; the battle table (wolfpack-r2/history.md, P) is a check only. The month's swing and a fought night act on the ships sunk a convoy attacked, never past its ships (Q3(a)). A surface raider or a fortress astride the route keeps the lanes' form beside it, its tons of the loaded sailings as before; the two shares together at most the lanes' cap (0.95). Null: the boats keep the lanes' form. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
     count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, sink: 0.137, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } },
-    _ceiling: "The boat ceiling (the design director's ruling of 24 November 2026 14:46Z, corrected 14:49Z; naval-battles/convoy-r2/tons-reading-1124.md Finding 3 (a)): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface, so they count only where the sea is calm. The game has no sea state; the builder reads the design director's 'calm sea (weather)' as the sky over the boat's sea clear, and with no weather in the campaign no sea is shown calm (the historian's read: they do not count for one convoy night, D). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M); a IXC carried 10. A boat design or torpedo row would set its own. hit 0.24: the share of torpedoes fired that hit, one figure for every navy, the middle of the US submarines' 0.33 of torpedoes fired (L, claimed, 1941-45) and the British submarines' 39% of attacks at 2.8 torpedoes an attack, about 0.14 (L, Hezlet ch. 33; D) (D, the design director's 14:49Z correction). No German figure was found (U). Torpedo design and a crew's training move it later, never the flag. sinkHit 0.7: the merchant ships a torpedo hit sinks: 183 of 261 hit once sank, 86 of 93 hit twice (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D: 0.7 a hit fits both rows). Counting every hit, overkill too, it is 0.57 (289 ships sunk for 507 or more hits, D); the design director laid 0.7. So a boat sinks at most 12 x 0.24 x 0.7 = 2.0 ships a convoy battle (D), the design director's 'about 2.0, the record's average', and 14 x 0.24 x 0.7 = 2.35 in a calm sea. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 2.0. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before.",
-    ceiling: { inside: 12, outside: 2, hit: 0.24, sinkHit: 0.7 }
+    _ceiling: "The boat ceiling (the design director's rulings of 24 November 2026 14:46Z, corrected 14:49Z, and 16:27Z and 16:31Z on naval-battles/convoy-r2/ceiling-reading-1124.md): the ships one boat sinks in one convoy battle at most on an average night = its torpedoes usable that battle x the share that hit x the ships a hit sinks; a convoy attacked loses at most the pack x that, the pack at least one boat (a convoy attacked has one on it; the count's pack falls under one on Libya, builder's choice of the review). The month's swing and a fought night act around it (mean 1, ruling 241), never past the convoy's ships. inside 12: the torpedoes a VIIC or a IXC carries inside its hull (L, historian/naval-reads-3-1124.md sections 2 and 5: VIIC 5 in the tubes, 6 bow reloads, 1 aft; IXC 6 in the tubes, 6 inside). outside 2: those carried outside the hull in pressure-tight canisters, which a crew can bring inside only in a calm sea and with time on the surface (L). The game has no sea state; the calm sea is read from the sky: with weather, all of them under a clear sky and none under cloud or a closed sky (the builder's reading of 'calm sea (weather)'); with no weather, the share the weather table expects that month, its chance of a clear sky over the sea's zone, and one of two where the table has no sky for the sea (the design director's 16:27Z ruling: the expected value, neither all calm nor all rough). The game builds one boat design; 2 is the VIIC's (L), the type of most boats (M), laid for every boat until a boat design row sets its own (16:27Z); a IXC carried 10. hit 0.45: the share of torpedoes fired that hit, one figure for every boat that fires, in every year (the design director's 16:31Z ruling; D from F: about 4 ships sunk a boat at sea a month, July 1940 to March 1941, OEG 51 chapters 2-3, at 1.4-1.75 hits a ship sunk from about 14 torpedoes; historian/convoy-gap-1940-41-1124.md). The escort's radar acts before a boat fires, not on its hits (historian/torpedo-hits-radar-1124.md: about 70% of attempted attacks frustrated late in 1942, yet about two ships torpedoed in each attack that succeeded, F); how it does waits for its own form, and is never counted on the hit share. sinkHit 0.57: the ships sunk for every hit, overkill and ships hit that survived counted, since the ceiling multiplies every hit: 289 ships sunk for 507 or more hits (Hezlet ch. 33, British and Allied submarines against Axis merchant ships, 1941-45, L; D; the design director's 16:27Z correction of 0.7, which is the chance a single hit sinks). So a boat that fires sinks at most 12 x 0.45 x 0.57 = 3.1 ships a convoy battle (D), and 14 x 0.45 x 0.57 = 3.6 in a calm sea. The record's checks, never fitted: about 1.0 ship sunk a boat a battle, 0.7-1.8 by convoy size (D from OEG T3, F; its row pairs U; wolfpack-r2/history.md), about 2 ships torpedoed in each attack that succeeded (OEG 5.2.1, F), the design director's 2-4 a boat a battle (14:46Z; the historian's 14:50Z read gives 1-3) and the best single boat's 7 (U-100, U-515, L) the tail, against the most a month's swing books, 1.2 x 3.6. Null in inside, hit or sinkHit: no ceiling, the tons ruling as before.",
+    ceiling: { inside: 12, outside: 2, hit: 0.45, sinkHit: 0.57 },
+    _firing: "The escort's radar before a boat fires (the design director's ruling of 24 November 2026 16:35Z on naval-battles/convoy-r2/radar-firing-form.md, (a) on all three; historian/torpedo-hits-radar-1124.md). Radar worked mostly before a boat fired, not on its hits: late in 1942 'about 70 per cent of the attempted attacks were frustrated by the escorts', yet 'about two ships were torpedoed in each successful attack' (OEG 51 section 5.2.1, F). The count's pack is the boats that fired (OEG's 'U-boats attacking each contact', measured at T2 against escorts with radar), so the boats that try are the pack / t2, and those that fire are the tries x 1 / (1 + c x r): r the radar-fitted escorts a convoy (the route's escort vessels whose navy has sea-search radar, at their share on the route, over the convoys sailed a month) for each boat trying, c = (1/t2 - 1) / rT2. 1 with no radar-fitted escort (D: 1940's about 4 ships a boat at sea a month at 0.45 a torpedo). Applied once, on the pack that the contest and the ceiling both read; the escort's kills keep the count's incidents (Q3 (a), for now). t2 0.3: the share that fired at T2 (D from F, 70% frustrated). rT2 1: T2's ratio, the record's, never the game's (the design director: the game has about 3 times the record's boats there, a gap the work-up pipeline answers): about 6.5 escorts a convoy (F, OEG ch. 10 Table 5), nearly all with radar (M), over about 6.7 boats trying (2 / 0.3, D); so c = 7/3 (D). The check, never fitted: HX 229/SC 122, March 1943, boats about 2:1 over the escorts, r about 0.5, a share of about 0.46; 21-22 ships lost (L). Null in either: every boat counted fires, as before.",
+    firing: { t2: 0.3, rT2: 1 }
   };
 
   // ../../src/campaign/tech.ts
@@ -40710,13 +40712,13 @@
   var in100 = (x) => Math.round(x * 100);
   function causeWords(id) {
     const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
-    const kills = `a hunting group sinks the submarine in ${in100(I.groupKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.loneKit)}, against ${in100(I.group)} and ${in100(I.lone)} with depth charges alone`;
+    const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
     const air2 = `submarines in the waters its aircraft reach attack with only ${third} of their strength`;
     if (id === "sonar") return `Its aircraft carry depth charges. With ${BY_ID[CAUSE.asv]?.name.toLowerCase() ?? "sea-search radar"} as well, ${air2}.`;
     if (id === CAUSE.asv) return `With its aircraft's depth charges, ${air2}. Its escorts carry the sets too.`;
     if (id === "patrolaircraft") return "Its aircraft with anti-submarine kit reach all of the seas off its coasts, and the open ocean next to them.";
     if (id === "escortgroups") return `Destroyers sent hunting work as trained support groups. With ahead-throwing weapons too, ${kills}.`;
-    if (id === "hedgehog") return `A convoy's own escort sinks the submarine in ${in100(I.lone * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.group * I.atw)}, against ${in100(I.lone)} and ${in100(I.group)} with depth charges alone. With escort groups too, ${kills}.`;
+    if (id === "hedgehog") return `A convoy's own escort sinks the submarine in ${in100(I.independent * I.atw)} of every 100 attacks it answers, and a hunting group in ${in100(I.coordinated * I.atw)}, against ${in100(I.independent)} and ${in100(I.coordinated)} with depth charges alone. With escort groups too, ${kills}.`;
     return null;
   }
   function techRule(t, g2, nat) {
@@ -45534,8 +45536,8 @@
   var airKit = (k) => k.asdic && k.radar;
   function incidentRate(k, group) {
     const I = CAUSE2.incident;
-    if (k.hedgehog && k.groups) return group ? I.groupKit : I.loneKit;
-    return (group ? I.group : I.lone) * (k.hedgehog ? I.atw : 1);
+    if (k.hedgehog && k.groups) return group ? I.coordinatedKit : I.independentKit;
+    return (group ? I.coordinated : I.independent) * (k.hedgehog ? I.atw : 1);
   }
   var kitEdge = (k, group) => incidentRate(k, group) / incidentRate({ ...k, hedgehog: false }, group);
   var radarKit = (k) => 1 + (k.radar ? CAUSE2.radar : 0);
@@ -45892,24 +45894,45 @@
     return f.stance !== "raid" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
   }
   var LANE_CAP = 0.95;
-  function convoySide(route, count4, boats, G5, each3) {
+  function firingShare(radarEscorts, tries) {
+    const F = CAUSE2.firing;
+    if (!F || F.t2 === null || F.rT2 === null || F.t2 <= 0 || F.rT2 <= 0) return null;
+    const c = (1 / F.t2 - 1) / F.rT2;
+    const r = tries > 0 ? radarEscorts / tries : 0;
+    return 1 / (1 + c * r);
+  }
+  function convoySide(route, count4, boats, G5, each3, radarShips = 0) {
     const K2 = CAUSE2.count, ships = K2.ships[route.id] ?? 0, k = K2.sink;
-    const P = count4.boats > 0 ? count4.pack * boats / count4.boats : 0;
+    const F = CAUSE2.firing;
+    const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+    const tries = laid ? count4.pack / F.t2 : count4.pack;
+    const fire2 = laid ? firingShare(count4.sailed > 0 ? radarShips / count4.sailed : 0, tries) : null;
+    const pack = fire2 === null ? count4.pack : tries * fire2;
+    const P = count4.boats > 0 ? pack * boats / count4.boats : 0;
     const E = count4.sailed > 0 ? G5 / count4.sailed : 0;
     const contest = P > 0 ? ships * P / (P + k * E) : 0;
-    const torps = each3 === null ? void 0 : Math.max(1, count4.pack) * each3;
+    const torps = each3 === null ? void 0 : Math.max(1, pack) * each3;
     const sunk = torps === void 0 ? contest : Math.min(contest, torps);
-    return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0, ...torps !== void 0 ? { torps } : {} };
+    return { P, E, sunk, L: count4.sailed > 0 && ships > 0 ? count4.attacked * sunk / (count4.sailed * ships) : 0, ...torps !== void 0 ? { torps } : {}, ...fire2 !== null ? { fire: fire2, fired: pack } : {} };
+  }
+  var ceilingLaid = () => {
+    const C4 = CAUSE2.ceiling;
+    return !!C4 && C4.inside !== null && C4.hit !== null && C4.sinkHit !== null;
+  };
+  function calmShare(g2, z) {
+    if (weatherOn(g2)) return skyAtSea(g2, z) === "clear" ? 1 : 0;
+    const zone = zoneOfSea(g2, z);
+    const o = zone >= 0 ? oddsOf(zone, g2.turn) : void 0;
+    const all = o ? o[0] + o[1] + o[2] : 0;
+    return o && all > 0 ? o[0] / all : 0.5;
   }
   function boatCeiling(g2, z) {
+    if (!ceilingLaid()) return null;
     const C4 = CAUSE2.ceiling;
-    if (!C4 || C4.inside === null || C4.hit === null || C4.sinkHit === null) return null;
-    const calm = weatherOn(g2) && skyAtSea(g2, z) === "clear";
-    return (C4.inside + (calm ? C4.outside ?? 0 : 0)) * C4.hit * C4.sinkHit;
+    return (C4.inside + calmShare(g2, z) * (C4.outside ?? 0)) * C4.hit * C4.sinkHit;
   }
   function routeCeiling(g2, route) {
-    const C4 = CAUSE2.ceiling;
-    if (!C4 || C4.inside === null || C4.hit === null || C4.sinkHit === null) return null;
+    if (!ceilingLaid()) return null;
     const zones = route.zones.map((k) => zoneOf(g2, k));
     let w = 0, c = 0;
     for (const f of g2.fleets) {
@@ -45930,7 +45953,7 @@
   }
   function routeForces(g2, nat, route) {
     const zones = route.zones.map((k) => zoneOf(g2, k));
-    let raid2 = 0, guard = 0, boats = 0, weighed = 0;
+    let raid2 = 0, guard = 0, boats = 0, weighed = 0, radarShips = 0;
     const raiders = [], escorts = [];
     const cover3 = unitsDecide(g2) ? zones.map((z) => seaCover(g2, nat, z, route.id)) : void 0;
     for (const f of g2.fleets) {
@@ -45950,11 +45973,13 @@
         if (w <= 0) continue;
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === "cv" ? deckWorth(g2, f) : 1);
-        p *= quality(g2, f.nat) * fit2(g2, f) * w * (cover3 ? radarKit(aswKit(g2, f.nat)) : 1);
+        const kit = aswKit(g2, f.nat);
+        p *= quality(g2, f.nat) * fit2(g2, f) * w * (cover3 ? radarKit(kit) : 1);
         if (p > 0) {
           guard += p;
           escorts.push(f);
         }
+        if (kit.radar) radarShips += f.ships.dd * w;
       }
     }
     if (route.base) {
@@ -45965,7 +45990,7 @@
       const G6 = guard * NAVY.convoy.escortWorth;
       const count4 = (CAUSE2.count.sink ?? null) === null ? null : convoyCount(g2, route);
       if (count4) {
-        const side5 = convoySide(route, count4, boats, G6, routeCeiling(g2, route));
+        const side5 = convoySide(route, count4, boats, G6, routeCeiling(g2, route), radarShips);
         const rest = raid2 - weighed;
         const Lo = rest > 1e-12 ? rest / (rest + G6 + NAVY.convoy.ocean) : 0;
         return { zones, raid: raid2, guard, raiders, escorts, G: G6, L: sideLoss(route, side5, Lo, 1).L, cover: cover3, side: side5, Lo };
