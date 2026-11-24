@@ -10,7 +10,7 @@ import { NAVY, navalUpkeep, subScene } from '../src/campaign/navy';
 import type { Game, SubLook as RecordLook } from '../src/campaign/types';
 import {
   AHEAD_RANGE, CLEAR, KILL_NEAR, TRACK_SPARE, factsOf, hisLoss, looksOf, pickScene, scenesOf, seaPlace, stagePick, stageScene, subSceneOf,
-  type MonthFacts, type SeaFact, type Staged, type StagedNote, type SubLook, type SubLookSaved,
+  type MonthFacts, type SeaFact, type Staged, type StagedNote, type SubLook, type SubLookFleet, type SubLookSaved,
 } from '../unreal/TheaterCommand/Rules/sub-scene';
 import { SAMPLES } from '../unreal/TheaterCommand/Tools/sub_scene/sample-facts';
 
@@ -27,6 +27,17 @@ const FOES: Record<string, string[]> = {
 const T = (year: number, month1: number): number => (year - 1939) * 12 + month1 - 9 + 1;
 const month = (human: string, turn: number, facts: SeaFact[], seed = 4242): MonthFacts => ({ human, seed, turn: turn + 1, facts, foes: FOES, names: NAMES });
 const noteOf = (r: Staged): StagedNote => r.field.staged as StagedNote;
+/** A text's length and a 53-bit digest of it (cyrb53), to hold a recording to the bytes it was. */
+function digest(s: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${s.length}:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+// A British convoy's night in the North Atlantic without the record's kit (May 1943, September 1942, October 1940; the
+// kit test's months), as the stager wrote it at f1ce92d8, before its events followed the kit.
+const DIGEST_1943 = '539451:4st6msd5e5', DIGEST_1942 = '642089:22gdvhkyu57', DIGEST_1940 = '409661:7t8ktcw4qr';
 
 // The stager's mirror of the rules' record (sub-scene.ts SubLook) and the record itself (types.ts SubLook, the rules'
 // 21a3a759) are held equal at compile time: npx tsc --noEmit fails here when either moves. Assignable both ways (which
@@ -54,7 +65,7 @@ const asSaved = (x: RecordLook): SubLookSaved => x;
 const keepLook = (g: Game, ...looks: SubLookSaved[]): void => { (g as { subLook?: unknown }).subLook = looks; };
 
 type Unit = Record<string, unknown> & { id: number; extra?: Record<string, unknown> };
-type Ev = { t: number; what: string; unit?: number; extra?: Record<string, unknown> };
+type Ev = { t: number; what: string; unit?: number; text?: string; extra?: Record<string, unknown> };
 type View = { t: number; units: Unit[]; events: Ev[]; zones?: unknown[] };
 
 /** The views as the reader keeps them: each piece whole, what a view leaves out standing as it was last told. */
@@ -678,9 +689,10 @@ describe('the submarine scene stager (form D1)', () => {
     g.headlines.push({ turn: g.turn, week: 1, text: `A submarine torpedoes and sinks a battleship of the Home Fleet in the ${at}: the fleet has too few destroyers to screen its heavy ships.`, kind: 'battle', nat: 'UK', arm: 'sea', lost: 'UK' });
     g.headlines.push({ turn: g.turn, week: 2, text: `Escorts of the Western Approaches sink 2 German submarines in the ${at}, for the loss of 1 destroyer.`, kind: 'battle', nat: 'UK', arm: 'sea', won: 'UK', lost: 'GER' });
     g.headlines.push({ turn: g.turn, week: 3, text: 'The Atlantic convoys: 156,000 tons of shipping sunk this month, 2 submarines destroyed.', kind: 'info', nat: 'UK', arm: 'sea', lost: 'UK' });
-    // Britain's month with Units decide on: each convoy sea's kit, air cover and boats sunk. The scene's sea is the
+    // Britain's month with Units decide on, as a save written before the rules kept each answering navy's kit holds it:
+    // each convoy sea's kit (without group training), air cover and boats sunk, and no kits. The scene's sea is the
     // North Atlantic, where the boats raided; the other seas' kit and cover differ, so a wrong sea would show.
-    const look: SubLook = {
+    const look: SubLookSaved = {
       turn: g.turn, nat: 'UK',
       hunts: [{ zone: natl, hunters: [{ fleet: wa.id, nat: 'UK', n: 5 }], air: 4, quarry: [{ fleet: uboats.id, nat: 'GER', n: 6 }], sunk: 2, cost: 1 }],
       torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', sunk: true, could: [uboats.id], by: uboats.id, couldNat: ['GER'], byNat: 'GER' }],
@@ -722,19 +734,152 @@ describe('the submarine scene stager (form D1)', () => {
     expectReadable(rc);
     expect([(rc.field as any).kit, (rc.field as any).cover]).toEqual([{ UK: { asdic: true, radar: false, hedgehog: true, groups: false } }, 'shore']);
     // The same month with the record's kit and cover taken away (Units decide off, an older save): neither key, and
-    // the recording otherwise byte for byte the same.
+    // the rows' night. The record's kit gives the British escorts an ahead-thrower that September 1939's row has not,
+    // and the escorts follow the kit; so the night without it is byte for byte the night of a kit that agrees with the
+    // row (no radar, no ahead-thrower), less the two keys.
     keepLook(g, { ...look, convoys: look.convoys.map((c) => ({ ...c, seas: c.seas.map(({ kit, cover, ...s }) => s) })) });
     const without = subSceneOf(g, NAVY.convoys);
     const r0 = JSON.parse(without.recording!) as Staged;
     expect(['kit' in r0.field, 'cover' in r0.field]).toEqual([false, false]);
-    delete rc.field.kit; delete rc.field.cover;
-    expect(JSON.stringify(rc)).toBe(without.recording);
+    const aheadRun = (r: Staged): boolean => eventsOf(r).some((e) => e.what === 'sea:depthCharge' && e.extra!.kind === 'ahead');
+    expect([aheadRun(rc), aheadRun(r0)]).toEqual([true, false]);
+    keepLook(g, { ...look, convoys: look.convoys.map((c) => ({ ...c, seas: c.seas.map((s) => (s.zone === natl ? { ...s, kit: { ...s.kit!, hedgehog: false } } : s)) })) });
+    const asRow = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+    delete asRow.field.kit; delete asRow.field.cover;
+    expect(JSON.stringify(asRow)).toBe(without.recording);
     expect(without.pick).toEqual(withKit.pick);
     // 'none' is the record's word for a sea without air cover, not a missing word: it reaches the field as it stands,
     // where a record without the word leaves the scene to the historian's mix.
     keepLook(g, { ...look, convoys: look.convoys.map((c) => ({ ...c, seas: c.seas.map((s) => (s.zone === natl ? { ...s, cover: 'none' as const } : s)) })) });
     const bare = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
     expect([(bare.field as any).kit, (bare.field as any).cover]).toEqual([{ UK: { asdic: true, radar: false, hedgehog: true, groups: false } }, 'none']);
+    // A kit without kits that has group training keeps it, still keyed by the guard's nation.
+    const trained = { ...convoy, kit: { ...convoy.kit!, groups: true } };
+    expect(stageScene({ ...m, facts: [trained] })!.field.kit).toEqual({ UK: { asdic: true, radar: false, hedgehog: true, groups: true } });
+  });
+
+  it('keys a convoy night\'s kit by each navy that answered, as the record\'s kits hold them, with their group training', () => {
+    const g = startOpen(createGame(5, 'UK'));
+    const zone = (k: string): number => g.seas.findIndex((z) => z.key === k);
+    const [wapp, natl] = ['wapp', 'natl'].map(zone);
+    const fleet = (nat: string, name: string) => g.fleets.find((f) => f.nat === nat && f.name === name)!;
+    const wa = fleet('UK', 'Western Approaches Fleet'), uboats = fleet('GER', 'U-boat Fleet');
+    g.headlines.push({ turn: g.turn, week: 3, text: 'The Atlantic convoys: 156,000 tons of shipping sunk this month, 2 submarines destroyed.', kind: 'info', nat: 'UK', arm: 'sea', lost: 'UK' });
+    // Britain's month as the rules write it since they keep each answering navy's kit: in the North Atlantic, the
+    // scene's sea, British and American escorts answered, each navy with its own research; in the Western Approaches,
+    // the British alone, with other kit, so that a wrong sea would show. `kit` is the navy with most destroyers
+    // answering there (here the Americans, whose hunting groups there are not the convoy's escorts): the scene keys by kits.
+    const KIT = { asdic: true, hfdf: false };
+    const uk = { ...KIT, radar: true, hedgehog: true, groups: true }, usa = { ...KIT, radar: false, hedgehog: false, groups: false };
+    const look = (escorts: SubLookFleet[], kits: Record<string, typeof uk> = { UK: { ...uk }, USA: { ...usa } }, kit = { ...usa }): SubLook => ({
+      turn: g.turn, nat: 'UK', hunts: [], torpedoes: [],
+      convoys: [{ route: 'atlantic', tons: 156000, seas: [
+        { zone: wapp, raiders: [], escorts: [{ fleet: wa.id, nat: 'UK', n: 9 }], air: 6, tons: 0, kit: { ...uk, radar: false }, kits: { UK: { ...uk, radar: false } }, cover: 'carrier', lost: 0 },
+        { zone: natl, raiders: [{ fleet: uboats.id, nat: 'GER', n: 6, heavy: 0 }], escorts, air: 2, tons: 156000, kit, kits, cover: 'shore', lost: 2 }] }],
+    });
+    keepLook(g, look([{ fleet: wa.id, nat: 'UK', n: 3 }, { fleet: 9002, nat: 'USA', n: 2 }]));
+    const m = factsOf(g, NAVY.convoys);
+    const convoy = m.facts.find((f) => f.kind === 'convoy')!;
+    expect([convoy.sea, convoy.kit, convoy.kits]).toEqual(['natl', usa, { UK: uk, USA: usa }]);
+    // Staged: one entry for each navy that answered, its own kit and group training, without the direction finder;
+    // the navy whose escorts are drawn (the most there, British) has its entry.
+    const want = { UK: { asdic: true, radar: true, hedgehog: true, groups: true }, USA: { asdic: true, radar: false, hedgehog: false, groups: false } };
+    const drawn = (r: Staged): string[] => [...new Set([...playOut(r)[0].units.values()].filter((u) => u.side === 'def' && u.kind === 'dd').map((u) => u.nat as string))];
+    const rc = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+    expectReadable(rc);
+    expect([(rc.field as any).def.nat, (rc.field as any).kit, drawn(rc)]).toEqual(['UK', want, ['UK']]);
+    // With more American destroyers there, American escorts are drawn, and the kit is the same by navy.
+    keepLook(g, look([{ fleet: wa.id, nat: 'UK', n: 3 }, { fleet: 9002, nat: 'USA', n: 5 }]));
+    const ru = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+    expect([(ru.field as any).def.nat, (ru.field as any).kit, drawn(ru)]).toEqual(['UK', want, ['USA']]);
+    // The escorts drawn are always a navy that answered. American destroyers that only guard the route loosely in the
+    // sea (on patrol there, or escorting another route) are in its escorts but did not answer: the British close escort,
+    // staged in the Western Approaches, is drawn, and the field's kit is the British alone.
+    keepLook(g, look([{ fleet: 9002, nat: 'USA', n: 30 }], { UK: { ...uk } }, { ...uk }));
+    const rl = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+    expect([(rl.field as any).def.nat, (rl.field as any).kit, drawn(rl)]).toEqual(['UK', { UK: want.UK }, ['UK']]);
+    // Where the sea names no escort of its own and more than one navy answered (close escorts staged in the route's
+    // other seas), the navy whose kit is the record's kit (the one with most destroyers answering) is drawn, whichever
+    // comes first in the kits.
+    for (const [kit, nat] of [[usa, 'USA'], [uk, 'UK']] as const) {
+      keepLook(g, look([], { UK: { ...uk }, USA: { ...usa } }, { ...kit }));
+      const rk = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+      expect([(rk.field as any).kit, drawn(rk)]).toEqual([want, [nat]]);
+    }
+  });
+
+  it('stages the drawn escorts\' radar and ahead-throwers by their own navy\'s kit where the record has one, and by the rows as before where it has none', () => {
+    const KIT = { asdic: true, hfdf: false, groups: false };
+    const bare = { ...KIT, radar: false, hedgehog: false }, full = { ...KIT, radar: true, hedgehog: true };
+    const night = (year: number, m1: number, extra: Partial<SeaFact> = {}, seed = 1): MonthFacts => {
+      const t = T(year, m1);
+      return month('UK', t, [{ kind: 'convoy', sea: 'natl', turn: t, week: 2, by: '', on: 'UK', route: 'atlantic', routeName: 'the Atlantic convoys', tons: 60000, boats: 3, escortsLost: 0, boatsAt: { GER: 10 }, hunters: { ships: 6, aircraft: 0 }, ...extra }], seed);
+    };
+    // (early: the surfaced boats that fired and crash-dived before their fans' first hit could tell them to, 2 s after
+    // the first torpedo's run; only a screen with radar, turning on them as they fire, sends them down that soon)
+    const tally = (r: Staged) => {
+      const ev = eventsOf(r);
+      const fans = ev.filter((e) => e.what === 'sea:torpedo'), firstHit = Math.min(...fans.map((e) => e.t + (e.extra!.running as number)));
+      return {
+        radar: ev.filter((e) => e.what === 'sea:sonar' && e.extra!.kind === 'radar').length,
+        dive: ev.filter((e) => e.what === 'sea:dive' && e.extra!.why === 'radar').length,
+        early: ev.filter((e) => e.what === 'sea:dive' && e.text!.endsWith('crash-dives.') && fans.some((x) => x.unit === e.unit) && e.t < firstHit + 1.5).length,
+        ahead: ev.filter((e) => e.what === 'sea:depthCharge' && e.extra!.kind === 'ahead').map((e) => e.text),
+        star: ev.filter((e) => e.what === 'sea:starshell').length,
+      };
+    };
+    const drawn = (r: Staged): string[] => [...new Set([...playOut(r)[0].units.values()].filter((u) => u.side === 'def' && u.kind === 'dd').map((u) => u.nat as string))];
+    const staged = (m: MonthFacts): Staged => { const r = stageScene(m)!; expectReadable(r); expectKillsAsBooked(r, 3); expectInsideTracks(r); return r; };
+    /** The recording less its kit: what the events and pieces were. */
+    const less = (r: Staged): string => { const x = JSON.parse(JSON.stringify(r)) as Staged; delete x.field.kit; return JSON.stringify(x); };
+    // Without a kit: the rows, byte for byte as before this change (the recordings' digests as the stager wrote them
+    // at f1ce92d8). May 1943's British row has radar and Hedgehog, September 1942's radar only, October 1940's neither.
+    const before: [number, number, string][] = [[1943, 5, DIGEST_1943], [1942, 9, DIGEST_1942], [1940, 10, DIGEST_1940]];
+    for (const [y, m1, d] of before) expect(`${y}-${m1} ${digest(JSON.stringify(staged(night(y, m1))))}`).toBe(`${y}-${m1} ${d}`);
+    const row = staged(night(1943, 5));
+    const r0 = tally(row);
+    expect([r0.radar > 0, r0.dive > 0, r0.early > 0, r0.ahead.length > 0, r0.star > 0]).toEqual([true, true, true, true, true]);
+    expect(r0.ahead.every((x) => x === 'A frigate fires her Hedgehog.')).toBe(true);
+    // The British kit without radar or hedgehog: no radar contact, no boat diving for radar or going down before her
+    // hits tell, no ahead-thrower run; the starshell is the row's still (the record's kit says nothing of it).
+    const none = staged(night(1943, 5, { kits: { UK: bare } })), t1 = tally(none);
+    expect([t1.radar, t1.dive, t1.early, t1.ahead, t1.star > 0]).toEqual([0, 0, 0, [], true]);
+    expect([noteOf(none).looks.radar, noteOf(none).looks.ahead, none.field.kit]).toEqual([false, null, { UK: { asdic: true, radar: false, hedgehog: false, groups: false } }]);
+    // A kit that agrees with the row stages the row's night: the same bytes but for the field's kit.
+    expect(less(staged(night(1943, 5, { kits: { UK: full } })))).toBe(JSON.stringify(row));
+    // The drawn escorts' own navy's: American escorts drawn (the most there) follow the American kit, British the British.
+    expect(tally(staged(night(1943, 5, { escorts: ['USA', 'UK'], kits: { UK: full, USA: bare } })))).toMatchObject({ radar: 0, dive: 0, early: 0, ahead: [] });
+    expect(tally(staged(night(1943, 5, { escorts: ['UK', 'USA'], kits: { UK: bare, USA: full } })))).toMatchObject({ radar: 0, dive: 0, early: 0, ahead: [] });
+    expect(less(staged(night(1943, 5, { escorts: ['UK', 'USA'], kits: { UK: full, USA: bare } })))).toBe(less(staged(night(1943, 5, { escorts: ['UK', 'USA'] }))));
+    // An older record's kit (no kits) is the guard's: it holds for British escorts, not for American ones drawn there.
+    expect(tally(staged(night(1943, 5, { kit: { asdic: true, radar: false, hedgehog: false, hfdf: false } })))).toMatchObject({ radar: 0, dive: 0, early: 0, ahead: [] });
+    const ally = night(1943, 5, { escorts: ['USA'], kit: { ...bare } });
+    expect(less(staged(ally))).toBe(JSON.stringify(staged(night(1943, 5, { escorts: ['USA'] }))));
+    expect(stageScene(ally)!.field.kit).toEqual({ UK: { asdic: true, radar: false, hedgehog: false, groups: false } });
+    // A navy the record's kits leave out is not drawn: neither one that only guards the route loosely in the sea, nor
+    // the guard where only an ally answered. The escorts drawn are a navy that answered, with its own kit, and the
+    // field names only the navies that answered.
+    for (const [extra, nat] of [[{ escorts: ['USA'], kits: { UK: bare } }, 'UK'], [{ kits: { USA: bare } }, 'USA']] as [Partial<SeaFact>, string][]) {
+      const left = staged(night(1943, 5, extra));
+      expect([drawn(left), Object.keys(left.field.kit as object), tally(left)]).toMatchObject([[nat], [nat], { radar: 0, dive: 0, early: 0, ahead: [] }]);
+    }
+    // With hedgehog where the row has no ahead-thrower (September 1942's corvettes): ahead-thrower runs, in plain words.
+    const hh = tally(staged(night(1942, 9, { kits: { UK: full } })));
+    expect(tally(staged(night(1942, 9))).ahead).toEqual([]);
+    expect(hh.ahead.length).toBeGreaterThan(0);
+    expect(hh.ahead.every((x) => x === 'A corvette fires her ahead-throwing weapon.')).toBe(true);
+    // With radar where the row has none (October 1940's corvettes): radar contacts and boats diving for it.
+    expect(tally(staged(night(1940, 10)))).toMatchObject({ radar: 0, dive: 0, early: 0 });
+    const rr = tally(staged(night(1940, 10, { kits: { UK: { ...bare, radar: true } } })));
+    expect([rr.radar > 0, rr.dive > 0, rr.early > 0, rr.ahead]).toEqual([true, true, true, []]);
+    // A fleet's own screen and a hunt keep their looks whatever kit a fact made by hand carries.
+    for (const f of [
+      { kind: 'torpedo', sea: 'natl', turn: T(1943, 5), week: 4, by: '', on: 'UK', cls: 'bb', fleet: 'the Home Fleet', ships: { bb: 3, dd: 8 }, boatsAt: { GER: 2 } },
+      { kind: 'hunt', sea: 'natl', turn: T(1943, 5), week: 2, by: 'UK', on: 'GER', boats: 2, escortsLost: 0 },
+    ] as SeaFact[]) {
+      const own = stageScene(month('UK', T(1943, 5), [f]))!, made = stageScene(month('UK', T(1943, 5), [{ ...f, kit: { ...bare }, kits: { UK: bare } }]));
+      expect([noteOf(own).case, JSON.stringify(made)]).toEqual([f.kind === 'hunt' ? 'hunt' : 'heavyLost', JSON.stringify(own)]);
+    }
   });
 
   it('holds to the record\'s own word (review of 22 November): the picked attacker, one fleet a scene, who raided, the boats lost, whose kills', () => {
