@@ -20,7 +20,7 @@ import { clamp } from '../core/math';
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
-import { skyAtSea, skySupport, weatherOn } from './weather';
+import { oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { capOver, deckWorth, syncWings, wingShare } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
@@ -2031,7 +2031,7 @@ export const CAUSE = causeData as unknown as {
   station: Partial<Record<ShipClass, { patrol: number | null; passage: number | null; refit: number | null }>> & { raid: number | null };
   /** The convoy-side count's figures; a route with a null in 'ships' or 'grt' keeps the per-boat share ('find'). */
   count: { attacked: number; sighted: number; boatsT2: number; perAttack: number; ways: number; t2: { convoys: number; months: number }; sink: number | null; ships: Record<string, number | null>; grt: Record<string, number | null> };
-  /** The boat ceiling: a boat's torpedoes inside its hull and outside it (used only in a calm sea), the share that hit, the ships a hit sinks. A null in inside, hit or sinkHit: no ceiling. */
+  /** The boat ceiling: a boat's torpedoes inside its hull and outside it (used only in a calm sea), the share of those fired that hit, the ships sunk a hit. A null in inside, hit or sinkHit: no ceiling. */
   ceiling: { inside: number | null; outside: number | null; hit: number | null; sinkHit: number | null };
 };
 
@@ -2549,24 +2549,43 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0, ...(torps !== undefined ? { torps } : {}) };
 }
 
+/** True where every figure of the boat ceiling is laid. */
+const ceilingLaid = (): boolean => {
+  const C = CAUSE.ceiling;
+  return !!C && C.inside !== null && C.hit !== null && C.sinkHit !== null;
+};
+
 /**
- * The boat ceiling (the design director's ruling of 24 November 2026, 14:46Z and 14:49Z): the ships one boat can sink in
- * one convoy battle on an average night, in a sea. Its torpedoes inside the hull, and those carried outside it only where
- * the sea is calm (the sky over it clear; with no weather in the campaign, no sea is shown calm), x the share of
- * torpedoes that hit, one figure for every navy, x the ships a hit sinks. Nothing in it reads the flag or the date. Null
- * where a figure is not laid.
+ * The share of the torpedoes carried outside the hull a boat can use in a sea this month: those need a calm sea (the
+ * design director's ruling of 24 November 2026 14:49Z). With weather, all of them under a clear sky and none under cloud
+ * or a closed sky; with no weather, the sea's sky as the weather table expects it this month, the chance of a clear sky
+ * (the ruling of 16:27Z: the expected value, neither all calm nor all rough), and one of two where the table has no sky
+ * for the sea.
+ */
+export function calmShare(g: Game, z: number): number {
+  if (weatherOn(g)) return skyAtSea(g, z) === 'clear' ? 1 : 0;
+  const zone = zoneOfSea(g, z);
+  const o = zone >= 0 ? oddsOf(zone, g.turn) : undefined;
+  const all = o ? o[0] + o[1] + o[2] : 0;
+  return o && all > 0 ? o[0] / all : 0.5;
+}
+
+/**
+ * The boat ceiling (the design director's rulings of 24 November 2026, 14:46Z, 14:49Z, 16:27Z and 16:31Z): the ships one
+ * boat that fires can sink in one convoy battle on an average night, in a sea. Its torpedoes inside the hull, and those
+ * carried outside it as far as the sea is calm (calmShare), x the share of torpedoes fired that hit, one figure for every
+ * boat that fires (the escort's radar acts before a boat fires, not on its hits), x the ships sunk a hit. Nothing in it
+ * reads the flag or the date. Null where a figure is not laid.
  */
 export function boatCeiling(g: Game, z: number): number | null {
+  if (!ceilingLaid()) return null;
   const C = CAUSE.ceiling;
-  if (!C || C.inside === null || C.hit === null || C.sinkHit === null) return null;
-  const calm = weatherOn(g) && skyAtSea(g, z) === 'clear';
-  return (C.inside + (calm ? C.outside ?? 0 : 0)) * C.hit * C.sinkHit;
+  return (C.inside! + calmShare(g, z) * (C.outside ?? 0)) * C.hit! * C.sinkHit!;
 }
 
 /** The boat ceiling on a route, over the boats on station on its seas as the count counts them (convoyCount): null where it is not laid or no boat is on station. */
 function routeCeiling(g: Game, route: ConvoyRoute): number | null {
-  const C = CAUSE.ceiling;
-  if (!C || C.inside === null || C.hit === null || C.sinkHit === null) return null;
+  if (!ceilingLaid()) return null;
   const zones = route.zones.map((k) => zoneOf(g, k));
   let w = 0, c = 0;
   for (const f of g.fleets) {
