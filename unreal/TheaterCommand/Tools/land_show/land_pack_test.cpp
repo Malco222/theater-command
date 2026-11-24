@@ -1,9 +1,11 @@
 // The riders without their packs (Effects, R2: Crowd::AddRider's bNoPack beside bBareHead; the soldiers thread's
 // pack_tris, claude/project-thread-labtrr fc61734e: "Leave that run out and draw nothing in its place, because the cloth
 // under it is whole"). Reads every soldier file in a folder (the men, their gore twins, the tankers) and checks:
-//   read    each level's pack_tris as the file writes it (Soldier::PackFirst, PackCount), lying within its triangles
-//           and (reported) ending where his helmet's run begins; made-up runs not whole numbers or out of the level's
-//           triangles are left alone (0), a whole one read
+//   read    each level's pack_tris as the file writes it (Soldier::PackFirst, PackCount), lying within its triangles,
+//           never reaching into his helmet's run (failed: the read leaves such a run alone) and (reported) ending where
+//           it begins; made-up runs not whole numbers, out of the level's triangles or reaching into the helmet's are
+//           left alone (0), a whole one read; (reported, not failed) the helmet's paint at his collar and shoulders in
+//           the run, badges and the like the soldiers' note keeps drawn (CollarInRun)
 //   cut     in every file that marks its pack, at every level, four riders of one seed and ride: whole (as before),
 //           bareheaded (as before), no pack, bareheaded and no pack. Each one's look is the file's triangles without
 //           the runs (none; the helmet's; the pack's; both at once), in the file's order, to the last index: the pack's
@@ -97,6 +99,34 @@ namespace
 		const int Idle = S.ClipIndex("idle");
 		return Idle >= 0 ? Idle : 0;
 	}
+
+	/** Whether a run [First, First + Count) reaches into his helmet's at that level (helmet_tris). */
+	bool IntoHelmet(const Soldier& S, int L, int First, int Count)
+	{
+		return Count > 0 && S.HelmetCount[L] > 0 && First < S.HelmetFirst[L] + S.HelmetCount[L] && S.HelmetFirst[L] < First + Count;
+	}
+
+	/** The near pack run's triangles in the helmet's paint (5) at his collar and shoulders: on the neck, the head, a
+	 * collarbone (the gore twins') or an upper arm, or on the chest's front (x > 0 at rest). In fc61734e these are the
+	 * collar tabs (UK, POL, FRA, GER, CHN, JAP), the Italian's collar patches and the snow suit's hood's front hem
+	 * (SOV_snow), which pack_range.py took for kit though the soldiers' note keeps badges drawn; the helmet's paint lower
+	 * down (the German's gas-mask can on his hip, the pieces on the American's back) is kit and not counted. Reported,
+	 * not failed: the files' to mend. */
+	int CollarInRun(const Soldier& S)
+	{
+		const Mesh& M = S.Meshes[Near];
+		int Out = 0;
+		for (int T = S.PackFirst[Near]; T < S.PackFirst[Near] + S.PackCount[Near]; ++T)
+		{
+			const uint32_t P = M.Triangles[static_cast<size_t>(T) * 3];
+			if (M.Paint[P] != 5 || M.Part[P] >= S.Bones.size()) continue;
+			const std::string& Bone = S.Bones[M.Part[P]].Name;
+			const bool bFront = M.At[static_cast<size_t>(P) * 3] > 0.f;
+			const bool bShoulder = Bone == "clavicle_l" || Bone == "clavicle_r" || Bone == "upperarm_l" || Bone == "upperarm_r";
+			Out += Bone == "neck" || Bone == "head" || bShoulder || (Bone == "chest" && bFront) ? 1 : 0;
+		}
+		return Out;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -112,9 +142,10 @@ int main(int Argc, char** Argv)
 
 	// ---- Read, and cut: every file of the folder, one at a time (some 7 MB each).
 	const std::map<std::string, std::string> Paths = SoldierFiles(Argv[1]);
-	int Read = 0, Packed = 0, Twins = 0, EndsAtHelmet = 0, Levelled = 0;
+	int Read = 0, Packed = 0, Twins = 0, EndsAtHelmet = 0, Levelled = 0, ReachesHelmet = 0;
 	int Riders = 0, LeastPackTris = 1 << 30, MostPackTris = 0;
 	std::vector<std::string> Unpacked;
+	std::string Collars;
 	for (const auto& KV : Paths)
 	{
 		const std::string Text = ReadFile(KV.second);
@@ -129,6 +160,16 @@ int main(int Argc, char** Argv)
 			const LandJson::Value& R = Raw[Levels[L]];
 			const int RawFirst = R.At(0).Int(0), RawCount = R.At(1).Int(0);
 			const int Tris = static_cast<int>(S->Meshes[L].Triangles.size() / 3);
+			// (a run reaching into his helmet's would take part of a crewman's helmet with his pack: the file's fault, left
+			// alone by the read, so he is drawn with his pack and all his helmet)
+			if (IntoHelmet(*S, L, RawFirst, RawCount))
+			{
+				++ReachesHelmet;
+				Fail("soldier_" + KV.first + ".json at " + Levels[L] + ": its pack run " + std::to_string(RawFirst) + ", " + std::to_string(RawCount) + " reaches into his helmet's "
+					+ std::to_string(S->HelmetFirst[L]) + ", " + std::to_string(S->HelmetCount[L]));
+				if (S->PackCount[L] != 0) Fail("soldier_" + KV.first + ".json at " + Levels[L] + ": a pack run reaching into his helmet's read all the same");
+				continue;
+			}
 			if (S->PackFirst[L] != RawFirst || S->PackCount[L] != RawCount)
 				Fail("soldier_" + KV.first + ".json at " + Levels[L] + ": pack_tris read " + std::to_string(S->PackFirst[L]) + ", " + std::to_string(S->PackCount[L])
 					+ ", the file " + std::to_string(RawFirst) + ", " + std::to_string(RawCount));
@@ -145,6 +186,8 @@ int main(int Argc, char** Argv)
 		}
 		if (!bPack) { Unpacked.push_back(KV.first); continue; }
 		++Packed;
+		const int Collar = CollarInRun(*S);
+		if (Collar > 0) Collars += (Collars.empty() ? "" : ", ") + KV.first + " " + std::to_string(Collar);
 
 		// Four riders of one seed and ride: whole, bareheaded, no pack, both.
 		Crowd C;
@@ -211,8 +254,11 @@ int main(int Argc, char** Argv)
 		if (!S->Cuts.empty()) ++Twins;
 		std::printf("  soldier_%s.json: no pack: %s\n", KV.first.c_str(), Line.c_str());
 	}
-	std::printf("  %d files read, %d mark their pack (%d gore twins), at %d levels, %d of them ending where the helmet begins; near runs %d to %d triangles\n",
-		Read, Packed, Twins, Levelled, EndsAtHelmet, Packed ? LeastPackTris : 0, MostPackTris);
+	std::printf("  %d files read, %d mark their pack (%d gore twins), at %d levels, %d of them ending where the helmet begins, %d reaching into it; near runs %d to %d "
+		"triangles\n", Read, Packed, Twins, Levelled, EndsAtHelmet, ReachesHelmet, MostPackTris > 0 ? LeastPackTris : 0, MostPackTris);
+	if (Packed > 0)
+		std::printf("  helmet paint at his collar and shoulders in the near pack run (collar tabs, collar patches, a hood's hem: not kit; reported, not failed, the "
+			"files' to mend): %s\n", Collars.empty() ? "none" : Collars.c_str());
 	if (!Unpacked.empty())
 	{
 		std::string Names;
@@ -223,29 +269,56 @@ int main(int Argc, char** Argv)
 		std::printf("  %d riders checked: no pack, and bareheaded and no pack, their pack's run left out at every level with nothing in its place, only its own points dropped, "
 			"every kept point as the whole man's; whole and bareheaded as before\n", Riders);
 
-	// ---- A run not whole, or out of the level's triangles, is left alone; a whole one read (made up on a copy).
+	// ---- A run not whole, out of the level's triangles or reaching into his helmet's, is left alone; a whole one read
+	// (made up on a copy).
 	if (!Paths.empty())
 	{
 		const std::string Base = ReadFile(Paths.begin()->second);
 		std::string Stripped = Base;
 		const size_t Key = Stripped.find("\"pack_tris\"");
 		if (Key != std::string::npos) Stripped.replace(Key, 11, "\"pack_tris_was\""); // (the file's own run put by)
-		const struct { const char* Run; int First, Count; } Cases[] = {
-			{ "[12, 30]", 12, 30 }, { "[-1, 5]", 0, 0 }, { "[12, 99999999]", 0, 0 }, { "[12.5, 3]", 0, 0 }, { "[12, 0]", 0, 0 },
+		struct Case
+		{
+			std::string Run;
+			int First, Count;
+		};
+		std::vector<Case> Cases = { { "[12, 30]", 12, 30 }, { "[-1, 5]", 0, 0 }, { "[12, 99999999]", 0, 0 }, { "[12.5, 3]", 0, 0 }, { "[12, 0]", 0, 0 },
 			{ "[12]", 0, 0 }, { "[12, 3, 4]", 0, 0 }, { "\"x\"", 0, 0 }, { "[12, -3]", 0, 0 } };
+		// (against his helmet's run: ending where it begins, read; one triangle into it, inside it, or its last, none;
+		// just after it, read)
+		Soldier Plain;
+		int Helmet = 0;
+		if (Plain.Load(Stripped, Err) && Plain.HelmetCount[Near] > 30 && Plain.HelmetFirst[Near] > 30)
+		{
+			const int H = Plain.HelmetFirst[Near], N = Plain.HelmetCount[Near], T = static_cast<int>(Plain.Meshes[Near].Triangles.size() / 3);
+			const auto Run = [](int F, int C) { return "[" + std::to_string(F) + ", " + std::to_string(C) + "]"; };
+			Cases.push_back({ Run(H - 30, 30), H - 30, 30 });
+			Cases.push_back({ Run(H - 30, 31), 0, 0 });
+			Cases.push_back({ Run(H + 2, 5), 0, 0 });
+			Cases.push_back({ Run(H + N - 1, 1), 0, 0 });
+			Helmet = 4;
+			if (H + N < T)
+			{
+				Cases.push_back({ Run(H + N, 1), H + N, 1 });
+				++Helmet;
+			}
+		}
+		else
+			Fail("the made-up pack_tris' base file " + Paths.begin()->first + ": no helmet run at near to set runs against");
 		int Right = 0;
-		for (const auto& Cs : Cases)
+		for (const Case& Cs : Cases)
 		{
 			std::string Made = Stripped;
-			Made.insert(Made.find('{') + 1, std::string("\"pack_tris\": {\"near\": ") + Cs.Run + "}, ");
+			Made.insert(Made.find('{') + 1, "\"pack_tris\": {\"near\": " + Cs.Run + "}, ");
 			Soldier S;
-			if (!S.Load(Made, Err)) { Fail(std::string("a made-up pack_tris ") + Cs.Run + ": " + Err); continue; }
+			if (!S.Load(Made, Err)) { Fail("a made-up pack_tris " + Cs.Run + ": " + Err); continue; }
 			const bool bOk = S.PackFirst[Near] == Cs.First && S.PackCount[Near] == Cs.Count && S.PackCount[Mid] == 0 && S.PackCount[Far] == 0;
-			if (!bOk) Fail(std::string("a made-up pack_tris ") + Cs.Run + ": read " + std::to_string(S.PackFirst[Near]) + ", " + std::to_string(S.PackCount[Near]));
+			if (!bOk) Fail("a made-up pack_tris " + Cs.Run + ": read " + std::to_string(S.PackFirst[Near]) + ", " + std::to_string(S.PackCount[Near]));
 			Right += bOk ? 1 : 0;
 		}
-		std::printf("  %d of %zu made-up pack_tris read as they should be (a whole run within the triangles read; not whole, short, long, negative or past the end: none)\n",
-			Right, sizeof(Cases) / sizeof(Cases[0]));
+		std::printf("  %d of %zu made-up pack_tris read as they should be (a whole run within the triangles read; not whole, short, long, negative or past the end: none; "
+			"%d set against his helmet's run in soldier_%s: ending where it begins or just after it, read; reaching into it, none)\n",
+			Right, Cases.size(), Helmet, Paths.begin()->first.c_str());
 	}
 
 	// ---- Plain: a folder without pack_tris (today's Content) draws a rider with no pack as before, to the byte.
@@ -319,8 +392,9 @@ int main(int Argc, char** Argv)
 			if (!bCrewOk) Fail(std::string("CrewDress(") + Nation + "): " + W.File + (W.bNoPack ? ", no pack" : ""));
 			const Soldier* Pf = C.SoldierFile(P.File);
 			const Soldier* Wf = C.SoldierFile(W.File);
-			std::printf("  the %s pilot down: %s%s%s%s; a crewman out of her: %s%s%s\n", Nation, P.File.empty() ? "no file" : ("soldier_" + P.File).c_str(),
-				P.bBareHead ? ", bareheaded" : "", P.bNoPack ? (Pf && Pf->PackCount[Near] > 0 ? ", no pack" : ", no pack asked (his file marks none)") : "",
+			// (how he is dressed said only of a man drawn: no file here, no helmet or pack to speak of)
+			std::printf("  the %s pilot down: %s%s%s%s; a crewman out of her: %s%s%s\n", Nation, P.File.empty() ? "no file (none drawn)" : ("soldier_" + P.File).c_str(),
+				Pf && P.bBareHead ? ", bareheaded" : "", Pf && P.bNoPack ? (Pf->PackCount[Near] > 0 ? ", no pack" : ", no pack asked (his file marks none)") : "",
 				P.bTankers ? " (tankers')" : "", W.File.empty() ? "no file (none drawn)" : ("soldier_" + W.File).c_str(),
 				W.bNoPack && Wf ? (Wf->PackCount[Near] > 0 ? ", no pack" : ", no pack asked (his file marks none)") : "", W.bTankers ? " (tankers')" : "");
 		}

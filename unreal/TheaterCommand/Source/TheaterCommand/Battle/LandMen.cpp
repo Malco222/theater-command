@@ -902,11 +902,14 @@ namespace LandMen
 			HelmetFirst[L] = static_cast<int>(Ht.Number(0, 0.0));
 			HelmetCount[L] = static_cast<int>(Ht.Number(1, 0.0));
 			// (Effects (R2): his pack and webbing's run, pack_tris, as helmet_tris; one that is not two whole numbers
-			// lying within the level's triangles is left alone, so a man without his pack is drawn whole)
+			// lying within the level's triangles, or that reaches into his helmet's run, is left alone, so a man without
+			// his pack is drawn whole, and a crewman with his helmet on keeps all of it)
 			const J& Pk = Root["pack_tris"][LodNames[L]];
 			const double First = Pk.Number(0, -1.0), Count = Pk.Number(1, 0.0);
 			const double Tris = static_cast<double>(Meshes[L].Triangles.size() / 3);
-			if (Pk.Size() == 2 && First >= 0.0 && Count >= 1.0 && First == std::floor(First) && Count == std::floor(Count) && First + Count <= Tris)
+			const double HelmetFrom = static_cast<double>(HelmetFirst[L]), HelmetTo = HelmetFrom + static_cast<double>(HelmetCount[L]);
+			const bool bIntoHelmet = HelmetCount[L] > 0 && First < HelmetTo && HelmetFrom < First + Count;
+			if (Pk.Size() == 2 && First >= 0.0 && Count >= 1.0 && First == std::floor(First) && Count == std::floor(Count) && First + Count <= Tris && !bIntoHelmet)
 			{
 				PackFirst[L] = static_cast<int>(First);
 				PackCount[L] = static_cast<int>(Count);

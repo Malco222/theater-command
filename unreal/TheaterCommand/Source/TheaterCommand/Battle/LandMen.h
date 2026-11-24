@@ -207,7 +207,8 @@ namespace LandMen
 		/** Effects (R2): his pack and webbing at each level (pack_tris, the soldiers thread's pack_range.py, in
 		 * helmet_tris's shape: one run of triangles [first, count], ending where his helmet's begins), left out of a man
 		 * with no pack (AddRider's bNoPack) with nothing drawn in its place (the cloth under it is whole). 0 where the
-		 * file has none, or where its run is not whole numbers lying within the level's triangles (then ignored). */
+		 * file has none, or where its run is not whole numbers lying within the level's triangles, or reaches into his
+		 * helmet's run (then ignored: drawn with his pack, and a crewman with his helmet on keeps all of it). */
 		int PackFirst[LodCount] = { 0, 0, 0 }, PackCount[LodCount] = { 0, 0, 0 };
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */

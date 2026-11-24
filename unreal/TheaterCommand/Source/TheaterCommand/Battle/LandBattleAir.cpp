@@ -543,11 +543,13 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 					Him.File = "-";
 				}
 				MenDrawn.SetNum(S.Men->Count());
-				// (his pack goes only where his file marks it, pack_tris; a file without it draws him with it, as before)
+				// (his pack goes only where his file marks it, pack_tris; a file without it draws him with it, as before. How
+				// he is dressed is said only of a man drawn: no file here, "-", no man, no helmet or pack to speak of)
 				const LandMen::Soldier* Worn = Him.Man >= 0 ? S.Men->SoldierFile(Him.File) : nullptr;
 				const bool bPackOff = Dressed.bNoPack && Worn && Worn->PackCount[LandMen::Near] > 0;
 				UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d is down%s, a man of the crowd (%s%s%s)"), C.Key, C.bHard ? TEXT(" hard") : TEXT(""), *AirWide(Him.File),
-					Dressed.bBareHead ? TEXT(", bareheaded") : TEXT(""), bPackOff ? TEXT(", no pack") : Dressed.bNoPack ? TEXT(", his pack on (his file marks none)") : TEXT(""));
+					Worn && Dressed.bBareHead ? TEXT(", bareheaded") : TEXT(""),
+					!Worn ? TEXT("") : bPackOff ? TEXT(", no pack") : Dressed.bNoPack ? TEXT(", his pack on (his file marks none)") : TEXT(""));
 			}
 			const LandMen::Soldier* Sol = Him.Man >= 0 ? S.Men->SoldierFile(Him.File) : nullptr;
 			const int Clip = Sol && !C.bInMesh ? Sol->ClipIndex(C.Clip) : -1;
