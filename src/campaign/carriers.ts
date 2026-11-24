@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
@@ -770,7 +770,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
     const here = bestBlow(g, nat, lead, escorts, hit, false, trade);
     if (here) { send(here); continue; }
     // In harbour with nothing in reach: a sortie, into a sea where its side would be much the stronger with it there.
-    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready) continue;
+    if (atSea(c) || !(A.sortie > 0) || c.duty === 'raid' || c.ready < FLEETS.ai.ready || keptByHand(g, c)) continue;
     const power = fleetPower(g, c);
     const keep = { zone: c.zone, stance: c.stance };
     let at = -1, plan: Blow | null = null;

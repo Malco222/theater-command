@@ -81,6 +81,8 @@ import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
+import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
+import { orderRearguard, rearguardsLapse, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -166,6 +168,10 @@ export function beginHuman(g: Game): void {
   quietNews(g);
   // A field of his that has become crowded since last month: the month card says so once (b448).
   crowdedNews(g);
+  // His task forces come in to refit or go back to their jobs (release 2, taskforce.ts): before his admirals' month.
+  taskForcesMonth(g, current(g));
+  // His rearguards of last month stand down (release 2, rearguard.ts).
+  rearguardsLapse(g, current(g));
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }
@@ -1490,16 +1496,71 @@ const myFleet = (g: Game, id: number): Fleet | null => {
   return f && f.nat === g.human && current(g) === f.nat ? f : null;
 };
 
+/**
+ * A fleet the player has given an order himself is his from then on: where his admirals run the navy for him they
+ * leave it where he sent it, and do not order it back to its old beat next month (1.5.1; Brian, 24 November 2026
+ * 18:32Z: "when i move my navy they go right back to where they were before the next turn").
+ */
+const hisOrder = (f: Fleet, ok: boolean): boolean => {
+  if (ok) f.ordered = true;
+  return ok;
+};
+
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && sail(g, f, zone, stance);
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
+  // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
+  if (ok) retask(g, f!);
+  return ok;
 }
 
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && rebase(g, f, g.regions[region]);
+  return !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+}
+
+/** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
+export const fleetKeptByHand = (g: Game, id: number): boolean => g.fleets.some((f) => f.id === id && f.nat === g.human && f.ordered === true);
+
+/** Hands one of the player's fleets back to his admirals: they sail it again from their next month's orders. A task force is released. */
+export function handBackFleet(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || !f.ordered) return false;
+  delete f.ordered;
+  delete f.task;
+  return true;
+}
+
+/** Why one of the player's corps cannot be ordered to hold as a rearguard now, or null (release 2, rearguard.ts). */
+export const whyNotRearguardOf = (g: Game, id: number): string | null => whyNotRearguard(g, g.corps.find((c) => c.id === id && !c.dead));
+
+/** Orders one of the player's corps to hold where it stands as a rearguard until his next month (release 2, rearguard.ts). */
+export function orderHoldRear(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead);
+  return !!c && orderRearguard(g, c);
+}
+
+/** Stands one of the player's rearguards down: in the month it was ordered, it has its marching back (release 2). */
+export function orderStandDown(g: Game, id: number): boolean {
+  const c = g.corps.find((x) => x.id === id && !x.dead && x.nat === g.human);
+  return !!c && current(g) === c.nat && standRearDown(g, c);
+}
+
+/** Why one of the player's fleets cannot be made a task force now, or null (release 2, taskforce.ts). */
+export const whyNotTaskForce = (g: Game, id: number): string | null => whyNotTask(g, g.fleets.find((f) => f.id === id));
+
+/** Makes one of the player's fleets a task force on the job it is doing now (release 2, taskforce.ts). */
+export function orderTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && makeTask(g, f);
+}
+
+/** Releases one of the player's task forces: it stays where it is, under his orders (release 2, taskforce.ts). */
+export function releaseTaskForce(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && releaseTask(g, f);
 }
 
 /** A fleet sent at the enemy this month stays where the battle left it until the next (release 2, fleetattack.ts). */
@@ -1512,7 +1573,13 @@ export const whyNotAttackFleet = (g: Game, id: number, target: number): string |
 export const previewFleetAttack = (g: Game, id: number, target: number): FleetAttackPlan | null => (myFleet(g, id) ? planFleetAttack(g, id, target) : null);
 
 /** Sends one of the player's fleets straight at an enemy fleet, fought at once (release 2, fleetattack.ts). */
-export const orderFleetAttackNow = (g: Game, id: number, target: number): FleetAttackResult | null => orderFleetAttack(g, id, target);
+export function orderFleetAttackNow(g: Game, id: number, target: number): FleetAttackResult | null {
+  const out = orderFleetAttack(g, id, target);
+  // His order too: the admirals leave it where the battle left it, and do not send it back to its old beat (1.5.1).
+  const f = out ? g.fleets.find((x) => x.id === id && x.nat === g.human) : undefined;
+  if (f) f.ordered = true;
+  return out;
+}
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
 
@@ -1590,7 +1657,9 @@ export function previewEscort(g: Game, id: number, lane: string): EscortPlan | n
 /** Binds one of the player's fleets to a shipping lane as its escort. */
 export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && escortLane(g, f, lane);
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
+  if (ok) retask(g, f!);
+  return ok;
 }
 
 /** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */
@@ -1614,7 +1683,10 @@ export function whyNotSplit(g: Game, id: number, ships: Partial<Ships>): string 
 /** Splits ships off from one of the player's fleets as a squadron of their own. Returns the new fleet's id, or -1. */
 export function orderSplit(g: Game, id: number, ships: Partial<Ships>, name?: string): number {
   const f = myFleet(g, id);
-  return (f && detach(g, f, ships, name)?.id) || -1;
+  const sq = f ? detach(g, f, ships, name) : null;
+  // The squadron is of his own making: it stays where it was split off until he orders it (1.5.1).
+  if (sq) sq.ordered = true;
+  return sq?.id || -1;
 }
 
 /** Joins one of the player's fleets to another in the same harbour or the same sea. */

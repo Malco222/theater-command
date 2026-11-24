@@ -113,3 +113,18 @@ export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack'
 // is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
 /** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
 export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
+
+// Task forces (release 2; Brian 24 November 2026 18:24Z, taskforce.ts): the grand campaigns opened while this is true
+// carry the flag 'taskForce'. Forced by TC_TASKFORCE.
+/** True where new grand campaigns open with the player able to make task forces of his fleets (stage.json 'taskForce'). */
+export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');
+
+// The admirals' reasons (release 2; fleetwhy.ts): the grand campaigns opened while this is true carry the flag
+// 'fleetWhy'. Forced by TC_FLEETWHY.
+/** True where new grand campaigns open with the admirals giving a reason for each fleet they order (stage.json 'fleetWhy'). */
+export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');
+
+// Rearguards (release 2; Brian 24 November 2026 18:24Z, rearguard.ts): the grand campaigns opened while this is true
+// carry the flag 'rearguard'. Forced by TC_REARGUARD.
+/** True where new grand campaigns open with the player able to order rearguards (stage.json 'rearguard'). */
+export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');

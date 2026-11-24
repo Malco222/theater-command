@@ -490,6 +490,11 @@ export interface Corps extends Storied {
   part?: number;
   /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
   whole?: number[];
+  /**
+   * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, and the weeks of marching
+   * it gave up for it (given back if it is stood down in the same month). Gone at the start of its side's next month.
+   */
+  rear?: [number, number];
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -623,6 +628,8 @@ export interface BattleReport {
    * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
    */
   paid?: { att: string; def: string; sign?: 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
+  /** Weeks of their month every attacking corps lost to a rearguard holding the field (release 2, rearguard.ts). */
+  rearguard?: number;
 }
 
 // ---- The war at sea ---------------------------------------------------------------------
@@ -731,6 +738,19 @@ export interface Fleet extends Storied {
    * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
    */
   stars?: Partial<Record<ShipClass, number[][]>>;
+  /**
+   * The player gave this fleet an order himself (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go
+   * right back to where they were before the next turn"). While his admirals run the navy for him (depth.ts) they leave
+   * it where he sent it, until he hands it back to them or hands them the navy afresh. Never set on a computer's fleet.
+   */
+  ordered?: true;
+  /**
+   * A task force's standing job (release 2, taskforce.ts): the sea and what it does there, or the lane it escorts. It
+   * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
+   */
+  task?: { zone: number; stance: Stance; lane?: string };
+  /** The month the player's admirals last ordered it and their reason, in a sentence (release 2, fleetwhy.ts). */
+  why?: [number, string];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

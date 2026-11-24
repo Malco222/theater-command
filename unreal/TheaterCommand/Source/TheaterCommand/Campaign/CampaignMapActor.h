@@ -285,6 +285,31 @@ public:
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 	const TMap<int32, TObjectPtr<AArmyPiece>>& GetFleetPieces() const { return FleetPieces; }
 	/**
+	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) Whether
+	 * a fleet that has changed its sea, or come in or gone out of harbour, sails there along a way by water (OPTIONS,
+	 * "Ships sail on the map"); off, it is simply found where it now is. ForgetFleetPlaces drops where each fleet was,
+	 * so that the fleets of a war just opened are laid out, not sailed from the last war's places.
+	 */
+	void SetShipsSail(bool bSail) { bShipsSail = bSail; }
+	bool GetShipsSail() const { return bShipsSail; }
+	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); ForgetWakes(); }
+	/**
+	 * (Release 2: fading wakes; Brian 24 November 2026 18:24Z, "i like these".) An enemy fleet seen to move leaves a
+	 * faint trail of foam on the sea, the way it went by water, for a month: brightest where it is now and fading back
+	 * to where it came from, fainter again the month after, then gone. OPTIONS "Fading wakes" (the options key "wakes").
+	 * Off, none is laid. A fleet only reported, not seen, leaves none; nor do the player's own fleets or his allies'.
+	 */
+	void SetWakes(bool bOn);
+	bool GetWakes() const { return bWakes; }
+	void ForgetWakes();
+	/**
+	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
+	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
+	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
+	 * was before ships sailed, and never sails over the land.
+	 */
+	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
+	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
 	 * folded up, the piece that is shown and how many are put away behind it.
@@ -1671,6 +1696,28 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<AArmyPiece>> AirPieces;
+	// (Release 2: ships that sail.) Where each fleet lay when the fleets were last laid out: its sea and its harbour
+	// (INDEX_NONE at sea), and the point on the map.
+	bool bShipsSail = false;
+	TMap<int32, FIntPoint> FleetPlaces;
+	TMap<int32, FVector2D> FleetSpots;
+	// (Release 2: fading wakes.) Each wake laid: whose fleet, the month it was seen to move, and its way on the map.
+	struct FWakeTrail
+	{
+		int32 Fleet = INDEX_NONE;
+		int32 Turn = 0;
+		TArray<FVector2D> Points;
+	};
+	bool bWakes = false;
+	TArray<FWakeTrail> Wakes;
+	int32 WakesLaidFor = INDEX_NONE; // the month the foam was last laid for
+	bool bWakesDirty = false;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WakeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WakeInk;
+	/** Lays the foam of the wakes still to be seen in this month, fading with their age and back along their way. */
+	void LayWakes(int32 Turn);
 
 	/** The same pieces by "region|nation". */
 	UPROPERTY(Transient)

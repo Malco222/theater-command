@@ -148,6 +148,11 @@ struct FViewCorps
 	FString BreakWhy;
 	int32 RejoinId = INDEX_NONE;
 	FString RejoinName;
+	// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) Where rearguards are on, for his own corps: whether it
+	// holds as one now, and why it cannot be ordered to (RearWhy empty where it can).
+	bool bRearKnown = false;
+	bool bRear = false;
+	FString RearWhy;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -1196,6 +1201,9 @@ struct FCampaignView
 	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
+	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
+	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
+	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

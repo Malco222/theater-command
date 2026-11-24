@@ -1280,6 +1280,7 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	bSailing = false; // (SailAlong sets it again after)
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
 	RouteMarks.Add(0.0);
@@ -1302,6 +1303,28 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 	}
 	SetActorLocation(Route[0]);
 	SetActorTickEnabled(true);
+}
+
+void AArmyPiece::SailAlong(const TArray<FVector>& Waypoints, float TableYaw)
+{
+	MarchAlong(Waypoints, false, false);
+	if (!bMarching || RouteMarks.Num() < 2)
+	{
+		return;
+	}
+	bSailing = true;
+	SailEndYaw = TableYaw;
+	// (slower than a piece carried by hand: the eye should follow the ships out of one sea and into the next)
+	MarchTime = FMath::Clamp(1.1 + RouteMarks.Last() / 3800.0, 1.4, 3.6);
+}
+
+void AArmyPiece::FaceTable(float Yaw)
+{
+	SailEndYaw = Yaw;
+	if (!IsSailing())
+	{
+		SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+	}
 }
 
 void AArmyPiece::Tick(float DeltaSeconds)
@@ -1334,11 +1357,33 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
 	SetActorLocation(Position);
+	if (bSailing)
+	{
+		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
+		// she comes in: turned a little each frame, never snapped.
+		const FVector Heading = Route[Segment] - Route[Segment - 1];
+		double Want = SailEndYaw;
+		if (Progress < 0.84 && Heading.SizeSquared2D() > 1.0e-4)
+		{
+			Want = FMath::RadiansToDegrees(FMath::Atan2(-Heading.X, Heading.Y));
+		}
+		const double Now = GetActorRotation().Yaw;
+		const double Turn = FRotator::NormalizeAxis(Want - Now);
+		// (The last turn, round to the table, quickens as the time left runs out: on the shortest sail it is all but
+		// done by the time she comes in, and what is left at the end is too little to see snap.)
+		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
+		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
+	}
 
 	if (Progress >= 1.0)
 	{
 		bMarching = false;
 		SetActorTickEnabled(false);
+		if (bSailing)
+		{
+			bSailing = false;
+			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
+		}
 		if (bHasWake && Body)
 		{
 			Body->SetMeshSectionVisible(1, true);

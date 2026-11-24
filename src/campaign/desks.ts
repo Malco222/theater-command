@@ -527,6 +527,8 @@ export function staffMonth(g: Game): void {
 export function handOver(g: Game, desk: DeskId, staff: boolean, now = false): boolean {
   if (!setDesk(g, desk, staff)) return false;
   const nat = g.human;
+  // Handed the navy afresh, the admirals take every fleet, those he had kept under his own orders too (1.5.1).
+  if (desk === 'navy' && staff) for (const f of g.fleets) delete f.ordered;
   if (staff && now && nat !== null && g.nations[nat]?.alive && !deskRan(g, desk)) runDesk(g, nat, desk);
   return true;
 }

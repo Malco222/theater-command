@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1c16b0f 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e6366a45 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -897,7 +897,13 @@
     _breakUp: `Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed"; src/campaign/breakup.ts, data/campaign/breakup.json). The player picks divisions of one of his corps and splits them off as a corps of their own where it stands; a part rejoins the corps it came from. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'breakUp' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_BREAKUP=1 or TC_BREAKUP=0.`,
     breakUp: false,
     _marked: "The marked army (release 2; Brian 24 November 2026 18:01Z, 'yes to all', the third idea of the enemy's month near you; src/campaign/marked.ts): the enemy corps that takes one of the player's towns wears a red tag on the table, and its card says what it took, until he beats it; beating it, or its end, clears the mark with a line of news. No more than three at once. A mark changes no number. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'marked' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_MARKED=1 or TC_MARKED=0.",
-    marked: false
+    marked: false,
+    _taskForce: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these'; src/campaign/taskforce.ts, data/campaign/taskforce.json). One of the player's fleets at sea on a job is made a task force: each month it comes in to refit when worn and goes back to its job when fit, until he changes it. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'taskForce' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_TASKFORCE=1 or TC_TASKFORCE=0.",
+    taskForce: false,
+    _fleetWhy: "The admirals' reasons (release 2; Brian 24 November 2026 18:32Z, 'the navy needs a lot of work and attention', and the plan sent to him: 'the admirals don't explain themselves'; src/campaign/fleetwhy.ts). Where the player's admirals run the navy for him, each fleet they order carries one sentence saying why it is where it is, on its page and its panel. It changes nothing in the war. Off: nothing is written. On: the grand campaigns opened from now on carry the flag 'fleetWhy' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETWHY=1 or TC_FLEETWHY=0.",
+    fleetWhy: false,
+    _rearguard: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'; src/campaign/rearguard.ts, data/campaign/rearguard.json). A small corps of the player's is ordered to hold where it stands until his next month; an enemy army that attacks it loses weeks of its month, and under Units decide it screens the corps falling back behind it from the pursuit. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'rearguard' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_REARGUARD=1 or TC_REARGUARD=0.",
+    rearguard: false
   };
 
   // ../../src/campaign/stage.ts
@@ -937,6 +943,9 @@
   var DUMPS_STAGE = staged("TC_DUMPS", "dumps");
   var FLEETATTACK_STAGE = staged("TC_FLEETATTACK", "fleetAttack");
   var BREAKUP_STAGE = staged("TC_BREAKUP", "breakUp");
+  var TASKFORCE_STAGE = staged("TC_TASKFORCE", "taskForce");
+  var FLEETWHY_STAGE = staged("TC_FLEETWHY", "fleetWhy");
+  var REARGUARD_STAGE = staged("TC_REARGUARD", "rearguard");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -30910,7 +30919,7 @@
         send2(here);
         continue;
       }
-      if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready) continue;
+      if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready || keptByHand(g2, c)) continue;
       const power = fleetPower(g2, c);
       const keep2 = { zone: c.zone, stance: c.stance };
       let at4 = -1, plan = null;
@@ -32021,7 +32030,7 @@
         if (best2) bombard(g2, f, best2, aim(best2));
         continue;
       }
-      if (f.duty === "raid" || !(FLEETS.ai.sortie > 0)) continue;
+      if (f.duty === "raid" || !(FLEETS.ai.sortie > 0) || keptByHand(g2, f)) continue;
       const mine4 = fleetPower(g2, f);
       let at4 = -1, best = null, bv = 0;
       for (const z of fleetReach(g2, f)) {
@@ -32559,6 +32568,9 @@
     if (FLEETATTACK_STAGE) g2.flags.fleetAttack = 1;
     if (BREAKUP_STAGE) g2.flags.breakUp = 1;
     if (MARKED_STAGE) g2.flags.marked = 1;
+    if (TASKFORCE_STAGE) g2.flags.taskForce = 1;
+    if (FLEETWHY_STAGE) g2.flags.fleetWhy = 1;
+    if (REARGUARD_STAGE) g2.flags.rearguard = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -44452,6 +44464,20 @@
     return fc;
   }
 
+  // ../../src/campaign/fleetwhy.ts
+  var fleetWhyOn = (g2) => g2.flags.open === 1 && g2.flags.fleetWhy === 1;
+  function setFleetWhy(g2, on) {
+    if (on) g2.flags.fleetWhy = 1;
+    else {
+      delete g2.flags.fleetWhy;
+      for (const f of g2.fleets) delete f.why;
+    }
+  }
+  function fleetWhy(g2, f) {
+    if (!fleetWhyOn(g2) || f.nat !== g2.human || f.ordered || !f.why || f.why[0] !== g2.turn) return "";
+    return `Your admirals: ${f.why[1]}`;
+  }
+
   // ../../src/campaign/navy.ts
   var worldMap2 = FAR_STAGE ? world_whole_default : world_americas_default;
   var NAVY = navy_default;
@@ -46774,17 +46800,26 @@
     const ev = FLEETS.harbour?.[nat];
     return !!ev && g2.flags.open === 1 && nat !== g2.human && !!g2.flags[ev];
   }
+  var keptByHand = (g2, f) => f.ordered === true && f.nat === g2.human;
   function navalAI(g2, nat, orders2) {
     if (byHand(g2, nat, "navy")) return;
     const n = g2.nations[nat];
     let cross = null;
     let theirs = null;
+    const says = nat === g2.human && fleetWhyOn(g2);
     for (const f of fleetsOf(g2, nat)) {
-      const home = () => {
+      if (keptByHand(g2, f)) continue;
+      const say = (why) => {
+        if (says) f.why = [g2.turn, why];
+      };
+      const where = (z) => seaWhere(g2.seas[z]?.name ?? "sea");
+      const what = (z) => seaWhat(g2.seas[z]?.name ?? "sea");
+      const home = (why) => {
         sail(g2, f, f.home, "port");
+        if (why) say(why);
       };
       if (!n.atWar.length || !shipCount(f.ships) || f.duty !== "raid" && keepsHarbour(g2, nat)) {
-        home();
+        home("At peace, it lies in harbour.");
         continue;
       }
       const o = orders2?.find((x) => x.fleet === f.name);
@@ -46793,7 +46828,7 @@
         continue;
       }
       if (f.ready < 0.5 || !atSea(f) && f.ready < NAVY.ready.sortieAt) {
-        home();
+        home(`Worn down (readiness ${Math.round(f.ready * 100)}%), it refits in harbour until it is fit for sea again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
         continue;
       }
       if (f.duty === "raid") {
@@ -46802,51 +46837,80 @@
           const from2 = f.port;
           if (rebase(g2, f, to)) {
             headline(g2, "info", `${cap8(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[f.station].name)}.`, nat, to.id);
+            say(`It moved its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`);
             continue;
           }
         }
-        if (!sail(g2, f, f.station, "raid")) home();
+        if (sail(g2, f, f.station, "raid")) say(`A raider, it goes for the enemy's merchant ships ${where(f.station)}, its hunting ground.`);
+        else home(`Its hunting ground ${where(f.station)} is out of its reach, so it waits in harbour.`);
         continue;
       }
       const lane = seaWar(g2) ? laneOnBeat(g2, f) : null;
       const tied = tiedNow(g2, f);
-      if (lane && tied && escort(g2, f, lane.id)) continue;
+      if (lane && tied && escort(g2, f, lane.id)) {
+        say(`Tied to ${lane.name}, it sails with the convoys.`);
+        continue;
+      }
       const mine4 = fleetPower(g2, f);
       const reach3 = fleetReach(g2, f);
       cross ?? (cross = crossings(g2, nat));
       theirs ?? (theirs = cross.off.size || cross.way.size ? { off: /* @__PURE__ */ new Set(), way: /* @__PURE__ */ new Set() } : alliesCrossings(g2, nat));
       const beat = /* @__PURE__ */ new Set([f.station, ...g2.seas[f.station].adj]);
       let best = -1, bv = 0;
+      let bestWhy = "", shy2 = 0;
       for (const z of tied ? [f.station] : reach3) {
         const e = seaSide(g2, z, nat, true);
         const own = seaSide(g2, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine4);
         const invaded = invadedHere(g2, z, nat) && own >= 0.5 * e.total;
-        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) continue;
+        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) {
+          shy2++;
+          continue;
+        }
         if (f.struck && f.struck[2] === z && g2.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded && carrierRules(g2)) continue;
         let quarry = 0;
         for (const x of g2.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g2, x.nat, nat)) quarry += fleetPower(g2, x);
         let v = 0;
-        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry;
-        if (landedLately(g2, z, nat) && own >= e.total) v += 30;
-        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
-        if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) v += theirs.off.has(z) ? 40 : 25;
-        if (invaded) v += 60;
-        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) v += SIEGE.ai.sea.blockade;
-        if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) v += 5;
+        let top = 0, why = "";
+        const sea = says ? what(z) : "", at4 = says ? where(z) : "";
+        const add = (w, words) => {
+          v += w;
+          if (says && w > top) {
+            top = w;
+            why = words();
+          }
+        };
+        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.`);
+        if (landedLately(g2, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`);
+        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
+        if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
+        if (invaded) add(60, () => `It patrols ${sea}: the enemy is invading the homeland across it.`);
+        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to close the sea off a port your army is besieging.`);
+        if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) add(5, () => `It patrols ${sea}, its usual beat: no other sea in its reach needs it more.`);
         if (v > bv) {
           bv = v;
           best = z;
+          bestWhy = why;
         }
       }
-      if (lane && f.duty === "patrol" && bv <= 5 && laneLoss(g2, lane.to, lane.zones, lane.id).raid > 0 && escort(g2, f, lane.id)) continue;
+      if (lane && f.duty === "patrol" && bv <= 5 && laneLoss(g2, lane.to, lane.zones, lane.id).raid > 0 && escort(g2, f, lane.id)) {
+        say(`It guards ${lane.name}: there is no enemy fleet to fight, and raiders are sinking the cargoes on its beat.`);
+        continue;
+      }
       if (seaWar(g2) && f.duty === "patrol" && !f.tied && bv <= 5) {
         const clear = (z2) => !(airOver(g2, z2, nat, true) - airOver(g2, z2, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z2 && g2.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g2));
         const bare = FLEETS.ai.guard ? laneUnguarded(g2, f, reach3.filter(clear)) : null;
-        if (bare && escort(g2, f, bare.id)) continue;
+        if (bare && escort(g2, f, bare.id)) {
+          say(`It guards ${bare.name}: raiders are sinking its cargoes and no other ship of your side guards it.`);
+          continue;
+        }
         const z = FLEETS.ai.hunt ? huntingGround(g2, f, [...beat].filter((x) => reach3.includes(x) && clear(x))) : -1;
-        if (z >= 0 && sail(g2, f, z, "hunt")) continue;
+        if (z >= 0 && sail(g2, f, z, "hunt")) {
+          say(`Its destroyers hunt the submarines at work ${where(z)}, on its beat.`);
+          continue;
+        }
       }
-      if (best < 0 || !sail(g2, f, best, "patrol")) home();
+      if (best >= 0 && sail(g2, f, best, "patrol")) say(bestWhy || `It patrols ${what(best)}.`);
+      else home(shy2 > 0 ? "Enemy bombers command the seas in its reach, so it waits in harbour." : "Nothing in its reach is worth the risk this month, so it waits in harbour.");
     }
   }
   function laneUnguarded(g2, f, seas) {
@@ -51335,6 +51399,72 @@
     }
   };
 
+  // ../../data/campaign/rearguard.json
+  var rearguard_default = {
+    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps of the player's ('most' divisions at most) is ordered to hold where it stands until his next month: it marches no further this month. Any enemy army that attacks its province before then loses 'weeksPerDiv' weeks of its month for each division of the rearguards there, 'weeks' at most, after the fight (whether it carries the ground or not): it cannot press on as far. Under Units decide, corps of the rearguard's side falling back into its province are screened: the pursuit takes none of their men. The combat itself is untouched. PROPOSAL figures for the design director's ruling.",
+    most: 2,
+    weeksPerDiv: 1,
+    weeks: 2,
+    screen: true
+  };
+
+  // ../../src/campaign/rearguard.ts
+  var REARGUARD = rearguard_default;
+  var rearguardOn = (g2) => g2.flags.open === 1 && g2.flags.rearguard === 1;
+  function setRearguard(g2, on) {
+    if (on) g2.flags.rearguard = 1;
+    else {
+      delete g2.flags.rearguard;
+      for (const c of g2.corps) if (c.rear) standDown2(g2, c);
+    }
+  }
+  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var isRearguard = (g2, c) => rearguardOn(g2) && !!c.rear && !c.dead;
+  function whyNotRearguard(g2, c) {
+    if (!rearguardOn(g2)) return "Rearguards are ordered only where that is switched on.";
+    if (!c || c.dead) return "There is no such corps.";
+    if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    if (c.rear) return "It holds as a rearguard already.";
+    if (c.kind === "fort") return "Fortress troops hold their works already.";
+    if (c.town !== void 0) return "A garrison holds its town already.";
+    if (c.joint !== void 0) return "It marches with an ally's army, and takes that army's orders.";
+    if (c.leave !== void 0) return "It is at home, out of the line.";
+    if (c.divs > REARGUARD.most) return `A rearguard is a small force: ${REARGUARD.most} divisions at most. Split some off first.`;
+    return null;
+  }
+  function orderRearguard(g2, c) {
+    if (whyNotRearguard(g2, c) !== null) return false;
+    c.rear = [g2.turn, c.ap];
+    c.ap = 0;
+    return true;
+  }
+  function standDown2(g2, c) {
+    if (!c.rear) return false;
+    if (c.rear[0] === g2.turn && hisMonth(g2) && c.nat === g2.human) c.ap = Math.max(c.ap, c.rear[1]);
+    delete c.rear;
+    return true;
+  }
+  function rearguardsLapse(g2, nat) {
+    for (const c of g2.corps) if (c.nat === nat && c.rear && c.rear[0] < g2.turn) delete c.rear;
+  }
+  function rearguardsAt(g2, r, foe) {
+    if (!rearguardOn(g2)) return [];
+    return r.units.filter((c) => isRearguard(g2, c) && c.reg === r.id && c.town === void 0 && foe(c.nat));
+  }
+  function rearguardWeeks(rears) {
+    const divs = rears.reduce((n, c) => n + c.divs, 0);
+    return Math.min(REARGUARD.weeks, divs * REARGUARD.weeksPerDiv);
+  }
+  function chargeDelay(attackers2, weeks) {
+    if (weeks <= 0) return 0;
+    for (const c of attackers2) if (!c.dead) c.ap = Math.max(0, c.ap - weeks);
+    return weeks;
+  }
+  function screened(g2, c, to, friend2) {
+    if (!rearguardOn(g2) || !REARGUARD.screen) return false;
+    return to.units.some((u) => u !== c && !u.dead && isRearguard(g2, u) && u.town === void 0 && friend2(u.nat));
+  }
+
   // ../../src/campaign/game.ts
   var EASTERN = east_default;
   var DESERT = desert_default;
@@ -53110,6 +53240,7 @@
   }
   function pursuitTakes(g2, c, to, chasers) {
     if (!unitsDecide(g2) || !afoot(c)) return 0;
+    if (screened(g2, c, to, (nat) => nat === c.nat || allied(g2, nat, c.nat))) return 0;
     const mine4 = pace(g2, c, to);
     if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) < mine4)) return 0;
     return PURSUIT.share * (1 - lifted(c));
@@ -53194,7 +53325,7 @@
     if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
     const banned = new Set(attackers2.map((c) => c.reg));
     for (const c of [...a.defenders]) {
-      if (!c.yields || c.gaveWay) continue;
+      if (!c.yields || c.gaveWay || isRearguard(g2, c)) continue;
       const to = retreatTarget(g2, c, target, banned);
       if (!to) continue;
       const unit = reportUnit(c);
@@ -53297,6 +53428,7 @@
   function resolveBattle(g2, attackers2, target, opts = {}) {
     let a = assess(g2, attackers2, target, opts);
     const town = !!opts.town, sieges2 = siegeRules(g2);
+    const rears = town || opts.breakout ? [] : rearguardsAt(g2, target, (nat) => atWar(g2, nat, armyOf(attackers2[0])));
     const gone = town ? [] : giveWay(g2, a, attackers2, target);
     if (gone.length) {
       if (!hostileUnits(g2, target, armyOf(attackers2[0])).length) return walkIn(g2, attackers2, target, opts, a, gone);
@@ -53568,6 +53700,15 @@
     const fight2 = town ? win ? "storm" : "repulsed" : inField2 || relief || opts.sally ? "streets" : "field";
     const hurt2 = battleHit(g2, target, fight2, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === "art" ? u.divs : 0), 0));
     if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
+    if (rears.length) {
+      const weeks = chargeDelay(attackers2, rearguardWeeks(rears));
+      if (weeks > 0) {
+        const who = rears.map((c) => c.name).join(" and ");
+        rep.lines.push({ label: "Rearguard", value: `${who} held the attack up`, effect: `Every attacking corps lost ${weeks} week${weeks === 1 ? "" : "s"} of its month` });
+        rep.rearguard = weeks;
+        headline(g2, "info", `The rearguard at ${target.name} held the enemy up: every corps of his that attacked there lost ${weeks} week${weeks === 1 ? "" : "s"} of its month.`, rears[0].nat, target.id);
+      }
+    }
     g2.reports.push(rep);
     const scar = (g2.scars ?? (g2.scars = {}))[target.id];
     const muddy = groundWeather(g2, target) === "mud";
@@ -54969,6 +55110,7 @@
     fieldRepairView: () => fieldRepairView2,
     fieldRules: () => fieldRules2,
     fieldworksLeft: () => fieldworksLeft,
+    fleetKeptByHand: () => fleetKeptByHand,
     fleetOptions: () => fleetOptions,
     fleetView: () => fleetView,
     fleetsInSight: () => fleetsInSight,
@@ -54983,6 +55125,7 @@
     governmentOf: () => governmentOf,
     guardOnly: () => guardOnly,
     gunsLeftAlone: () => gunsLeftAlone,
+    handBackFleet: () => handBackFleet,
     headWantedOf: () => headWantedOf,
     historyStops: () => historyStops,
     humanUp: () => humanUp,
@@ -55063,6 +55206,7 @@
     orderGroupJob: () => orderGroupJob,
     orderHero: () => orderHero,
     orderHistory: () => orderHistory,
+    orderHoldRear: () => orderHoldRear,
     orderJoin: () => orderJoin,
     orderJoinAll: () => orderJoinAll,
     orderKeepPeace: () => orderKeepPeace,
@@ -55104,6 +55248,7 @@
     orderStaffCap: () => orderStaffCap,
     orderStance: () => orderStance,
     orderStandBy: () => orderStandBy,
+    orderStandDown: () => orderStandDown,
     orderStopResearch: () => orderStopResearch,
     orderStopWork: () => orderStopWork,
     orderStorm: () => orderStorm,
@@ -55111,6 +55256,7 @@
     orderTake: () => orderTake,
     orderTakeBack: () => orderTakeBack,
     orderTakeField: () => orderTakeField,
+    orderTaskForce: () => orderTaskForce,
     orderTeams: () => orderTeams,
     orderTrade: () => orderTrade,
     orderTurn: () => orderTurn,
@@ -55145,6 +55291,7 @@
     raidMenuOne: () => raidMenuOne,
     raidTargetsFor: () => raidTargetsFor,
     reach: () => reach2,
+    releaseTaskForce: () => releaseTaskForce,
     repairAllOutlook: () => repairAllOutlook,
     rivalStaff: () => rivalStaff,
     rivalStaffs: () => rivalStaffs,
@@ -55204,6 +55351,7 @@
     whyNotOrderPromise: () => whyNotOrderPromise,
     whyNotOrderResearch: () => whyNotOrderResearch,
     whyNotOrderWinterPeace: () => whyNotOrderWinterPeace,
+    whyNotRearguardOf: () => whyNotRearguardOf,
     whyNotRecruitAgent: () => whyNotRecruitAgent,
     whyNotSallyOut: () => whyNotSallyOut,
     whyNotSendAgent: () => whyNotSendAgent,
@@ -55214,6 +55362,7 @@
     whyNotStandByGeneral: () => whyNotStandByGeneral,
     whyNotStormTown: () => whyNotStormTown,
     whyNotTakeBackPromise: () => whyNotTakeBackPromise,
+    whyNotTaskForce: () => whyNotTaskForce,
     whyNotTurnAgent: () => whyNotTurnAgent,
     whyNotWreckPrize: () => whyNotWreckPrize,
     wingsOfFleet: () => wingsOfFleet,
@@ -60286,6 +60435,7 @@
   function handOver(g2, desk, staff, now = false) {
     if (!setDesk(g2, desk, staff)) return false;
     const nat = g2.human;
+    if (desk === "navy" && staff) for (const f of g2.fleets) delete f.ordered;
     if (staff && now && nat !== null && g2.nations[nat]?.alive && !deskRan(g2, desk)) runDesk(g2, nat, desk);
     return true;
   }
@@ -60516,6 +60666,107 @@
     }
   }
 
+  // ../../data/campaign/taskforce.json
+  var taskforce_default = {
+    _about: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea: 'a squadron you split off keeps a standing job, like guarding a convoy lane, until you change it'). src/campaign/taskforce.ts. One of the player's fleets at sea on a job (a patrol, a raid or a submarine hunt in a sea, or the escort of a shipping lane) is made a task force, and the job is written down with it. At the start of each of his months a task force worn below 'refit' readiness comes into harbour to refit; one in harbour at 'back' readiness or better goes back to its job; one driven off its job (a battle lost) goes back the same way once fit. A new order of his rewrites the job, and an order into harbour ends it. 'refit' and 'back' are a computer admiral's own figures (navy.ts navalAI: home under 0.5, out again at NAVY.ready.sortieAt).",
+    refit: 0.5,
+    back: 0.75
+  };
+
+  // ../../src/campaign/taskforce.ts
+  var TASKFORCE = taskforce_default;
+  var taskForceOn = (g2) => g2.flags.open === 1 && g2.flags.taskForce === 1;
+  function setTaskForce(g2, on) {
+    if (on) g2.flags.taskForce = 1;
+    else {
+      delete g2.flags.taskForce;
+      for (const f of g2.fleets) delete f.task;
+    }
+  }
+  var hisMonth2 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  function jobNow(f) {
+    if (!atSea(f)) return null;
+    if (f.stance === "escort") return f.lane !== void 0 ? { zone: f.zone, stance: "escort", lane: f.lane } : null;
+    return f.stance === "patrol" || f.stance === "raid" || f.stance === "hunt" ? { zone: f.zone, stance: f.stance } : null;
+  }
+  function onJob(f) {
+    const t = f.task, now = jobNow(f);
+    if (!t || !now) return false;
+    return t.stance === "escort" ? now.stance === "escort" && now.lane === t.lane : now.stance === t.stance && now.zone === t.zone;
+  }
+  function whyNotTask(g2, f) {
+    if (!taskForceOn(g2)) return "Task forces are made only where that is switched on.";
+    if (!f || !shipCount(f.ships)) return "There is no such fleet.";
+    if (f.nat !== g2.human || !hisMonth2(g2)) return "Only your own fleets, in your own month.";
+    if (f.task) return "It is a task force already.";
+    if (!g2.nations[f.nat].atWar.length) return "In peace a fleet keeps to harbour: a task force is made in a war.";
+    if (!jobNow(f)) return "Send it out on a job first: a patrol, a raid, a submarine hunt or a convoy escort. That job becomes its standing order.";
+    return null;
+  }
+  function makeTask(g2, f) {
+    if (whyNotTask(g2, f) !== null) return false;
+    f.task = jobNow(f);
+    f.ordered = true;
+    return true;
+  }
+  function releaseTask(g2, f) {
+    if (!f.task || f.nat !== g2.human) return false;
+    delete f.task;
+    return true;
+  }
+  function retask(g2, f) {
+    if (!f.task || !taskForceOn(g2)) return;
+    const now = jobNow(f);
+    if (now) f.task = now;
+    else if (!atSea(f)) delete f.task;
+  }
+  function jobWords(g2, t) {
+    if (t.stance === "escort") return `guards ${seaRoutes(g2).find((r) => r.id === t.lane)?.name ?? "its lane"}`;
+    const sea = g2.seas[t.zone]?.name ?? "its sea";
+    return t.stance === "raid" ? `raids shipping in the ${sea}` : t.stance === "hunt" ? `hunts submarines in the ${sea}` : `patrols the ${sea}`;
+  }
+  function whyNotBack(g2, f) {
+    const t = f.task;
+    if (!t) return "It has no standing job.";
+    const reach3 = fleetReach(g2, f);
+    if (t.stance === "escort") {
+      const why = whyNotEscort(g2, f, t.lane ?? "");
+      if (why) return why;
+      const rt = seaRoutes(g2).find((r) => r.id === t.lane);
+      return rt && rt.zones.some((z) => reach3.includes(z)) ? null : `No sea of ${rt?.name ?? "its lane"} is in its reach from ${f.port}.`;
+    }
+    if (t.stance === "hunt" && !seaWar(g2)) return "Submarines are hunted only in the grand campaign.";
+    return reach3.includes(t.zone) ? null : `The ${g2.seas[t.zone]?.name ?? "sea"} is out of its reach from ${f.port}.`;
+  }
+  function taskForcesMonth(g2, nat) {
+    if (!taskForceOn(g2) || nat !== g2.human) return;
+    for (const f of g2.fleets) {
+      if (f.nat !== nat || !f.task) continue;
+      if (!shipCount(f.ships)) {
+        delete f.task;
+        continue;
+      }
+      if (!g2.nations[nat].atWar.length) continue;
+      const job = jobWords(g2, f.task);
+      if (atSea(f) && f.ready < TASKFORCE.refit) {
+        if (sail(g2, f, f.home, "port")) headline(g2, "info", `Task force ${f.name} comes into ${f.port} to refit. It goes back to its job, it ${job}, once it is fit for sea.`, nat);
+        continue;
+      }
+      if (onJob(f) || f.ready < TASKFORCE.back) continue;
+      const back = f.task.stance === "escort" ? escort(g2, f, f.task.lane ?? "") : sail(g2, f, f.task.zone, f.task.stance);
+      if (back) headline(g2, "info", `Task force ${f.name} is back on its job: it ${job}.`, nat);
+    }
+  }
+  function taskLine(g2, f) {
+    if (!taskForceOn(g2) || !f.task) return "";
+    const job = jobWords(g2, f.task);
+    if (onJob(f)) return `Task force: it ${job}. It comes into harbour to refit when worn, and goes back when fit.`;
+    if (atSea(f)) return `Task force: it ${job}, and goes back to that next month.`;
+    const why = whyNotBack(g2, f);
+    if (why) return `Task force: it ${job}, but cannot go back to it now. ${why}`;
+    return f.ready < TASKFORCE.back ? `Task force refitting: it ${job}, and goes back at ${Math.round(TASKFORCE.back * 100)}% readiness (now ${Math.round(f.ready * 100)}%).` : `Task force: it ${job}, and goes back to it next month.`;
+  }
+
   // ../../src/campaign/facing.ts
   var GUNS_UNKNOWN = { sign: "scouted", text: "Not scouted: their guns are unknown.", unknown: true };
   var GUNS_AND_MINES_UNKNOWN = { sign: "scouted", text: "Not scouted: their guns and mines are unknown.", unknown: true };
@@ -60609,6 +60860,8 @@
     noteReadings(g2);
     quietNews(g2);
     crowdedNews(g2);
+    taskForcesMonth(g2, current(g2));
+    rearguardsLapse(g2, current(g2));
     staffMonth(g2);
   }
   function endHuman(g2) {
@@ -61381,18 +61634,55 @@
     const f = g2.fleets.find((x) => x.id === id);
     return f && f.nat === g2.human && current(g2) === f.nat ? f : null;
   };
+  var hisOrder = (f, ok2) => {
+    if (ok2) f.ordered = true;
+    return ok2;
+  };
   function orderFleet(g2, id, zone, stance2) {
     const f = myFleet(g2, id);
-    return !!f && !heldAfterAttack(g2, f) && sail(g2, f, zone, stance2);
+    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, sail(g2, f, zone, stance2));
+    if (ok2) retask(g2, f);
+    return ok2;
   }
   function orderRebase(g2, id, region) {
     const f = myFleet(g2, id);
-    return !!f && !heldAfterAttack(g2, f) && rebase(g2, f, g2.regions[region]);
+    return !!f && !heldAfterAttack(g2, f) && hisOrder(f, rebase(g2, f, g2.regions[region]));
+  }
+  var fleetKeptByHand = (g2, id) => g2.fleets.some((f) => f.id === id && f.nat === g2.human && f.ordered === true);
+  function handBackFleet(g2, id) {
+    const f = myFleet(g2, id);
+    if (!f || !f.ordered) return false;
+    delete f.ordered;
+    delete f.task;
+    return true;
+  }
+  var whyNotRearguardOf = (g2, id) => whyNotRearguard(g2, g2.corps.find((c) => c.id === id && !c.dead));
+  function orderHoldRear(g2, id) {
+    const c = g2.corps.find((x) => x.id === id && !x.dead);
+    return !!c && orderRearguard(g2, c);
+  }
+  function orderStandDown(g2, id) {
+    const c = g2.corps.find((x) => x.id === id && !x.dead && x.nat === g2.human);
+    return !!c && current(g2) === c.nat && standDown2(g2, c);
+  }
+  var whyNotTaskForce = (g2, id) => whyNotTask(g2, g2.fleets.find((f) => f.id === id));
+  function orderTaskForce(g2, id) {
+    const f = myFleet(g2, id);
+    return !!f && makeTask(g2, f);
+  }
+  function releaseTaskForce(g2, id) {
+    const f = myFleet(g2, id);
+    return !!f && releaseTask(g2, f);
   }
   var heldAfterAttack = (g2, f) => f.attacked === g2.turn;
   var whyNotAttackFleet = (g2, id, target) => whyNotFleetAttack(g2, id, target);
   var previewFleetAttack = (g2, id, target) => myFleet(g2, id) ? planFleetAttack(g2, id, target) : null;
-  var orderFleetAttackNow = (g2, id, target) => orderFleetAttack(g2, id, target);
+  function orderFleetAttackNow(g2, id, target) {
+    const out = orderFleetAttack(g2, id, target);
+    const f = out ? g2.fleets.find((x) => x.id === id && x.nat === g2.human) : void 0;
+    if (f) f.ordered = true;
+    return out;
+  }
   var capitalPlans = (g2) => plansView(g2);
   function fleetView(g2, id) {
     const f = g2.fleets.find((x) => x.id === id);
@@ -61428,7 +61718,9 @@
   }
   function orderEscort(g2, id, lane) {
     const f = myFleet(g2, id);
-    return !!f && !heldAfterAttack(g2, f) && escortLane(g2, f, lane);
+    const ok2 = !!f && !heldAfterAttack(g2, f) && hisOrder(f, escortLane(g2, f, lane));
+    if (ok2) retask(g2, f);
+    return ok2;
   }
   function previewBombard(g2, id, region, what) {
     const f = myFleet(g2, id);
@@ -61444,7 +61736,9 @@
   }
   function orderSplit(g2, id, ships, name) {
     const f = myFleet(g2, id);
-    return f && detach(g2, f, ships, name)?.id || -1;
+    const sq = f ? detach(g2, f, ships, name) : null;
+    if (sq) sq.ordered = true;
+    return sq?.id || -1;
   }
   function orderMerge(g2, id, into) {
     const a = myFleet(g2, id), b = myFleet(g2, into);
@@ -86337,11 +86631,11 @@
     if (on) g2.flags.breakUp = 1;
     else delete g2.flags.breakUp;
   }
-  var hisMonth = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
+  var hisMonth3 = (g2) => g2.human !== null && g2.order[g2.phase] === g2.human;
   function whyNotBreakUp(g2, c, slots) {
     if (!breakUpOn(g2)) return "Corps are broken up only where that is switched on.";
     if (!c || c.dead) return "There is no such corps.";
-    if (c.nat !== g2.human || !hisMonth(g2)) return "Only your own corps can be broken up, in your own month.";
+    if (c.nat !== g2.human || !hisMonth3(g2)) return "Only your own corps can be broken up, in your own month.";
     if (c.kind === "fort") return "Fortress troops stay together in their works.";
     if (c.divs < 2) return "A single division cannot be broken up any further.";
     if (c.town !== void 0) return "A garrison is broken up in the field: order it out of the town first.";
@@ -86419,7 +86713,7 @@
   function whyNotRejoin(g2, part, into) {
     if (!breakUpOn(g2)) return "Corps are put back together only where that is switched on.";
     if (!part || !into || part.dead || into.dead || part === into) return "There is nothing to put back together.";
-    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth(g2)) return "Only your own corps, in your own month.";
+    if (part.nat !== g2.human || into.nat !== g2.human || !hisMonth3(g2)) return "Only your own corps, in your own month.";
     const root = part.part ?? part.id;
     if (!(into.id === root || into.part === root || (into.part ?? into.id) === root)) return "A part rejoins only the corps it was split from, or another part of it.";
     if (part.reg !== into.reg || part.town !== void 0 || into.town !== void 0) return "The two must stand together in the field, in the same province.";
@@ -88607,6 +88901,9 @@
             const to = up ? rejoinTargets(s, c)[0] : void 0;
             return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? "" : "It is not your month.", rejoinId: to?.id ?? -1, rejoinName: to?.name ?? "" };
           })() : {},
+          // (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) Where rearguards are on: whether it holds as one now,
+          // and why it cannot be ordered to ('' if it can).
+          ...c.nat === s.human && rearguardOn(s) ? { rear: isRearguard(s, c), rearWhy: c.rear ? "" : up ? whyNotRearguardOf(s, c.id) ?? "" : "It is not your month." } : {},
           ...c.nat === s.human || s.human && c.joint === s.human ? cardOf(s, c) : {}
         };
       }),
@@ -88905,6 +89202,12 @@
       fleetAttack: fleetAttackOn(s),
       // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
       breakUp: breakUpOn(s),
+      // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
+      taskForce: taskForceOn(s),
+      // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
+      fleetWhy: fleetWhyOn(s),
+      // (Release 2, rearguard.ts) Whether the player can order a small corps to hold as a rearguard.
+      rearguard: rearguardOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -92040,8 +92343,19 @@ ${next.text}` : ""}` : next ? next.also : "";
           options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here, why: here ? "It is doing so now." : notNow });
         }
         options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
+        if (staffRunsDesk(s, "navy") && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: "Hand it back to your admirals", detail: HAND_BACK_TIP, ok: up, why: notNow });
+        if (taskForceOn(s)) {
+          if (f2.task) options.push({ key: `fleet:${id}:untask`, label: "Release the task force", detail: RELEASE_TIP, ok: up, why: notNow });
+          else {
+            const why2 = whyNotTaskForce(s, id);
+            options.push({ key: `fleet:${id}:task`, label: "Make it a task force", detail: TASK_TIP, ok: up && !why2, why: why2 ?? notNow });
+          }
+        }
       }
-      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2], options };
+      const who = mine5 ? whoSails(s, id) : "";
+      const task = mine5 ? taskLine(s, f2) : "";
+      const why = mine5 ? fleetWhy(s, f2) : "";
+      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...why ? [why] : [], ...task ? [task] : [], ...who ? [who] : []], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
@@ -92077,11 +92391,21 @@ ${next.text}` : ""}` : next ? next.also : "";
       options
     };
   }
+  function whoSails(s, id) {
+    if (!staffRunsDesk(s, "navy")) return "";
+    return fleetKeptByHand(s, id) ? "Under your own orders: your admirals leave it where you send it." : "Your admirals sail it each month. Give it an order yourself and it stays where you send it.";
+  }
+  var HAND_BACK_TIP = "Your admirals sail it again from next month, with the rest of the navy.";
+  var TASK_TIP = "Its job now becomes its standing order: each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order.";
+  var RELEASE_TIP = "It stays where it is, under your orders, with no standing job.";
   function forceOrder(key7) {
     const s = game();
     const [what, id, a, b] = key7.split(":");
     let ok2 = false;
-    if (what === "fleet") ok2 = orderFleet(s, Number(id), Number(a), b);
+    if (what === "fleet" && a === "staff") ok2 = handBackFleet(s, Number(id));
+    else if (what === "fleet" && a === "task") ok2 = orderTaskForce(s, Number(id));
+    else if (what === "fleet" && a === "untask") ok2 = releaseTaskForce(s, Number(id));
+    else if (what === "fleet") ok2 = orderFleet(s, Number(id), Number(a), b);
     else if (what === "fleetbase") ok2 = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok2 = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok2 = orderAirBase(s, Number(id), Number(a));
@@ -92887,13 +93211,20 @@ ${next.text}` : ""}` : next ? next.also : "";
       return { nat: card.nat, title: f?.name ?? "A fleet", lines: [f ? `${f.ships} ships. ${f.doing}.` : ""], buttons: [{ label: "JOIN IT", act: `fleetmerge:${id}:${other4}`, ok: up, tip: "The two become one fleet under the other's flag and orders." }] };
     });
     const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : "";
+    const who = whoSails(s, id);
+    const fl = s.fleets.find((x) => x.id === id);
+    const task = fl ? taskLine(s, fl) : "";
+    const why = fl ? fleetWhy(s, fl) : "";
+    const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
     return {
       id: `fleet:${id}`,
       title: card.name.toUpperCase(),
       headline: `${card.doing}`,
-      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.`,
+      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
         { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
+        ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
+        ...taskForceOn(s) && fl ? [fl.task ? { label: "RELEASE TASK FORCE", act: `taskforce:${id}:off`, ok: up, tip: RELEASE_TIP } : { label: "MAKE IT A TASK FORCE", act: `taskforce:${id}:on`, ok: up && !whyTask, tip: whyTask ?? TASK_TIP }] : [],
         ...wingsOfFleet(s, id).length ? [{ label: "CARRIER AIRCRAFT", act: `open:wings:${id}`, ok: true, tip: "The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour." }] : []
       ],
       sections: [
@@ -94186,6 +94517,51 @@ ${standing5}`,
       note4 = !ok2 ? "The secret war can be switched only in the campaign's first month." : secretWarOn(s) ? "The secret war is on: your service opens the war with agents at work on the map, hunts the enemy's agents on your ground, steals orders and can turn enemy agents, and every country at war with you spies on you." : "The secret war is off: you recruit and send agents as before, and the enemy's saboteurs are only a chance each month.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "rearguardrule") {
+      setRearguard(s, part[1] === "on");
+      ok2 = true;
+      note4 = rearguardOn(s) ? `Rearguards are on: a corps of ${REARGUARD.most} divisions or fewer can be ordered to HOLD AS REARGUARD from its card. It holds where it stands until your next month, and an enemy who attacks it loses time.` : "Rearguards are off: every rearguard stands down.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "rearguard") {
+      const id = Number(part[1]);
+      const name = s.corps.find((c) => c.id === id)?.name ?? "The corps";
+      if (part[2] === "off") {
+        ok2 = orderStandDown(s, id);
+        note4 = ok2 ? `${name} stands down: it is free to march again.` : "It is not a rearguard.";
+      } else {
+        const why = whyNotRearguardOf(s, id);
+        ok2 = !why && orderHoldRear(s, id);
+        note4 = ok2 ? `${name} holds as a rearguard until your next month: it marches no further, and an enemy who attacks it loses time.` : why ?? "It cannot be ordered to hold now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "fleetwhyrule") {
+      setFleetWhy(s, part[1] === "on");
+      ok2 = true;
+      note4 = fleetWhyOn(s) ? "The admirals give their reasons: from their next month each fleet they order says on its page why it is where it is." : "The admirals give no reasons: their month ends in one line of news, as before.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "taskforcerule") {
+      setTaskForce(s, part[1] === "on");
+      ok2 = true;
+      note4 = taskForceOn(s) ? "Task forces are on: send a fleet out on a job, then MAKE IT A TASK FORCE on its page. It refits when worn and goes back to that job when fit, until you change it." : "Task forces are off: every fleet does what you last told it, and no more.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
+    if (part[0] === "taskforce") {
+      const id = Number(part[1]);
+      const name = s.fleets.find((x) => x.id === id)?.name ?? "The fleet";
+      if (part[2] === "off") {
+        ok2 = releaseTaskForce(s, id);
+        note4 = ok2 ? `${name} is no longer a task force: it stays where it is, under your orders.` : "It is not a task force.";
+      } else {
+        const why = whyNotTaskForce(s, id);
+        ok2 = !why && orderTaskForce(s, id);
+        const f = s.fleets.find((x) => x.id === id);
+        note4 = ok2 && f ? `${name} is a task force: ${taskLine(s, f).replace(/^Task force: /, "")}` : why ?? "It cannot be made a task force now.";
+      }
+      return { ok: ok2, note: note4, fly: fly2, flies, open: `fleet:${part[1]}`, view: view2() };
+    }
     if (part[0] === "breakuprule") {
       setBreakUp(s, part[1] === "on");
       ok2 = true;
@@ -94389,6 +94765,10 @@ ${standing5}`,
     } else if (part[0] === "fleet") {
       ok2 = orderFleet(s, Number(part[1]), Number(part[2]), part[3]);
       note4 = ok2 ? `${fleetView(s, Number(part[1]))?.doing ?? "The order is given"}.` : "That order cannot be given now.";
+      return { ok: ok2, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
+    } else if (part[0] === "fleetstaff") {
+      ok2 = handBackFleet(s, Number(part[1]));
+      note4 = ok2 ? `${fleetView(s, Number(part[1]))?.name ?? "The fleet"} is your admirals' to sail again from next month.` : "It cannot be handed back now.";
       return { ok: ok2, note: note4, fly: fly2, flies: [], open: `fleet:${part[1]}`, view: view2() };
     } else if (part[0] === "fleetescort") {
       ok2 = orderEscort(s, Number(part[1]), part.slice(2).join(":"));
@@ -95389,6 +95769,21 @@ ${standing5}`,
     const s = game();
     setFleetAttack(s, !!on);
     return { on: fleetAttackOn(s) };
+  };
+  globalThis.TC.rearguard = (on) => {
+    const s = game();
+    setRearguard(s, !!on);
+    return { on: rearguardOn(s) };
+  };
+  globalThis.TC.fleetWhy = (on) => {
+    const s = game();
+    setFleetWhy(s, !!on);
+    return { on: fleetWhyOn(s) };
+  };
+  globalThis.TC.taskForce = (on) => {
+    const s = game();
+    setTaskForce(s, !!on);
+    return { on: taskForceOn(s) };
   };
   globalThis.TC.breakUp = (on) => {
     const s = game();

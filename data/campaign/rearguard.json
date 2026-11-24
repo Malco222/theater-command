@@ -1,0 +1,7 @@
+{
+  "_about": "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps of the player's ('most' divisions at most) is ordered to hold where it stands until his next month: it marches no further this month. Any enemy army that attacks its province before then loses 'weeksPerDiv' weeks of its month for each division of the rearguards there, 'weeks' at most, after the fight (whether it carries the ground or not): it cannot press on as far. Under Units decide, corps of the rearguard's side falling back into its province are screened: the pursuit takes none of their men. The combat itself is untouched. PROPOSAL figures for the design director's ruling.",
+  "most": 2,
+  "weeksPerDiv": 1,
+  "weeks": 2,
+  "screen": true
+}
