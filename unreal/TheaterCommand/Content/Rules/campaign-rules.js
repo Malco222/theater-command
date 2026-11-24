@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d60ea9cb 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6b11ce72 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51024,6 +51024,42 @@
     cost += lineDrag(g2, c, to);
     return cost;
   }
+  var supplyBooks = /* @__PURE__ */ new WeakMap();
+  var supplyCheckEnv = globalThis.TC_SUPPLY_CHECK ?? globalThis.process?.env?.TC_SUPPLY_CHECK;
+  var supplyCheck = supplyCheckEnv !== void 0 && !!supplyCheckEnv && supplyCheckEnv !== "0";
+  var sameBytes = (a, b) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
+    const size = g2.regions.length;
+    const ok2 = new Uint8Array(size);
+    const q = [];
+    let east = false, desert = false;
+    for (const at4 of seeds) {
+      ok2[at4] = wide3 ? 2 : 1;
+      q.push(at4);
+      if (deep[at4]) east = true;
+      if (sand[at4]) desert = true;
+    }
+    for (let i = 0; i < q.length; i++) {
+      for (const j of g2.regions[q[i]].nb) {
+        if (ok2[j] || !pass[j]) continue;
+        ok2[j] = 1;
+        q.push(j);
+        if (deep[j]) east = true;
+        if (sand[j]) desert = true;
+      }
+    }
+    const reach3 = east ? reachInto(g2, id, ok2, long, deep, rail2) : new Float32Array(size);
+    if (desert) {
+      const head = new Float32Array(size).fill(-1);
+      for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
+      desertLines(g2, ok2, head, sand, reach3);
+    }
+    return { ok: ok2, reach: reach3, east };
+  }
   function computeSupply(g2) {
     const active = new Set(g2.corps.map((c) => c.nat));
     const lanes2 = /* @__PURE__ */ new Map();
@@ -51054,16 +51090,31 @@
       }
       road[r.id] = k;
       if (long.includes(r.owner)) deep[r.id] = 1;
-      if (inDesert(r)) sand[r.id] = 1;
+      sand[r.id] = (r.overseas ? 1 : 0) | (sandRules(r) ? 2 : 0);
       if (r.port || r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g2.flags["depot:" + r.id])) sources.push(r.id);
     }
+    const w = weather(g2), bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+    const step2 = new Float64Array(size), home = new Uint8Array(size);
+    for (let j = 0; j < size; j++) {
+      if (!deep[j]) continue;
+      const r = g2.regions[j];
+      if (EASTERN.deepOwners.includes(r.owner)) home[j] = 1;
+      step2[j] = (g2.turn - lineSince(g2, j, r.since) >= EASTERN.convertAfter && !railCut(g2, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+    }
+    let book3 = supplyBooks.get(g2);
+    const longKey = `${long.join("|")}/${DESERT.step}`;
+    if (!book3 || book3.size !== size || book3.wide !== wide3 || book3.long !== longKey || !sameBytes(book3.deep, deep) || !sameBytes(book3.sand, sand)) {
+      book3 = { size, wide: wide3, long: longKey, deep, sand, rail: { step: step2, home }, drawn: /* @__PURE__ */ new Map() };
+      supplyBooks.set(g2, book3);
+    }
+    let rail2 = book3.rail;
+    if (!sameBytes(rail2.step, step2) || !sameBytes(rail2.home, home)) book3.rail = rail2 = { step: step2, home };
+    const railHolds = (then) => !then || then === rail2 || sameBytes(then.step, rail2.step) && sameBytes(then.home, rail2.home);
     for (const id of active) {
       const friend2 = new Uint8Array(holders.length);
       for (let k = 0; k < holders.length; k++) if (allied(g2, id, holders[k])) friend2[k] = 1;
-      const ok2 = new Uint8Array(size);
-      const q = [];
+      const seeds = [];
       const heads = [];
-      let east = false, desert = false;
       const sunk = convoyDrag(g2, id);
       const open2 = lanesOf(id);
       let mates = null;
@@ -51071,8 +51122,8 @@
         if (!friend2[road[at4]]) continue;
         const r = g2.regions[at4];
         const shut = !!field4 && field4[r.id] !== r.ctrl;
-        const home = !shut && r.ctrl === id && r.owner === id;
-        const depot = home && (r.cap || r.fac >= 3 || !!g2.flags["depot:" + r.id]);
+        const home2 = !shut && r.ctrl === id && r.owner === id;
+        const depot = home2 && (r.cap || r.fac >= 3 || !!g2.flags["depot:" + r.id]);
         let quay = !!open2 && r.port && r.seas.some((z) => open2[z]);
         if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) {
           const theirs = lanesOf(r.ctrl);
@@ -51088,28 +51139,26 @@
         }
         if (!depot && !quay) continue;
         if (field4 && r.ctrl === id && pocketDry(g2, r, id)) continue;
-        ok2[r.id] = wide3 ? 2 : 1;
-        q.push(r.id);
+        seeds.push(r.id);
         heads.push(r.id, depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk);
-        if (deep[r.id]) east = true;
-        if (sand[r.id]) desert = true;
       }
-      for (let i = 0; i < q.length; i++) {
-        for (const j of g2.regions[q[i]].nb) {
-          if (ok2[j] || !friend2[road[j]]) continue;
-          ok2[j] = 1;
-          q.push(j);
-          if (deep[j]) east = true;
-          if (sand[j]) desert = true;
+      const pass = new Uint8Array(size);
+      for (let j = 0; j < size; j++) pass[j] = friend2[road[j]];
+      const from2 = `${seeds.join(",")}/${heads.join(",")}`;
+      const kept2 = book3.drawn.get(id);
+      if (kept2 && kept2.from === from2 && railHolds(kept2.rail) && sameBytes(kept2.pass, pass)) {
+        if (supplyCheck) {
+          const fresh5 = drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2);
+          if (!sameBytes(fresh5.ok, kept2.ok) || !sameBytes(fresh5.reach, kept2.reach)) throw new Error(`supply picture kept for ${id} in month ${g2.turn} differs from a fresh one`);
         }
+        g2.supply[id] = kept2.ok;
+        g2.reach[id] = kept2.reach;
+        continue;
       }
-      g2.supply[id] = ok2;
-      g2.reach[id] = east ? reachInto(g2, id, ok2) : new Float32Array(size);
-      if (desert) {
-        const head = new Float32Array(size).fill(-1);
-        for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
-        desertLines(g2, ok2, head, g2.reach[id]);
-      }
+      const drawn = drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2);
+      g2.supply[id] = drawn.ok;
+      g2.reach[id] = drawn.reach;
+      book3.drawn.set(id, { pass, from: from2, ...drawn, rail: drawn.east ? rail2 : null });
     }
     for (const c of g2.corps) c.supplied = !g2.nations[c.nat].atWar.length || !!g2.supply[c.nat]?.[c.reg];
     if (field4) siegeSupply(g2);
@@ -51121,7 +51170,7 @@
     const m = g2.convoys[DESERT.route.id];
     return m && g2.turn - m.turn <= 1 ? DESERT.route.perTenth * 10 * (m.loss ?? 0) : 0;
   }
-  function desertLines(g2, ok2, head, out) {
+  function desertLines(g2, ok2, head, sand, out) {
     const d = new Float32Array(g2.regions.length).fill(1e6);
     const q = [];
     for (let i = 0; i < head.length; i++) if (head[i] >= 0) {
@@ -51132,35 +51181,30 @@
       const a = q[i];
       for (const j of g2.regions[a].nb) {
         if (!ok2[j]) continue;
-        const far = d[a] + (sandRules(g2.regions[j]) ? DESERT.step : 0);
+        const far = d[a] + (sand[j] & 2 ? DESERT.step : 0);
         if (far < d[j] - 1e-6) {
           d[j] = far;
           q.push(j);
         }
       }
     }
-    for (const r of g2.regions) if (inDesert(r) && ok2[r.id] && d[r.id] < 1e6) out[r.id] = d[r.id];
+    for (let i = 0; i < d.length; i++) if (sand[i] && ok2[i] && d[i] < 1e6) out[i] = d[i];
   }
-  function reachInto(g2, id, ok2) {
+  function reachInto(g2, id, ok2, long, deep, rail2) {
     const d = new Float32Array(g2.regions.length);
-    const long = lineOwners(g2);
     if (long.includes(id)) return d;
-    const deep = (r) => long.includes(r.owner);
-    const quay = (r) => ok2[r.id] === 2 && !EASTERN.deepOwners.includes(r.owner);
-    const w = weather(g2);
-    const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+    const quay = (j) => ok2[j] === 2 && !rail2.home[j];
     d.fill(1e6);
     const q = [];
-    for (const r of g2.regions) if (ok2[r.id] && (!deep(r) || quay(r))) {
-      d[r.id] = 0;
-      q.push(r.id);
+    for (let j = 0; j < d.length; j++) if (ok2[j] && (!deep[j] || quay(j))) {
+      d[j] = 0;
+      q.push(j);
     }
     for (let i = 0; i < q.length; i++) {
       const a = q[i];
       for (const j of g2.regions[a].nb) {
-        const r = g2.regions[j];
-        if (!ok2[j] || !deep(r)) continue;
-        const step2 = (g2.turn - lineSince(g2, j, r.since) >= EASTERN.convertAfter && !railCut(g2, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+        if (!ok2[j] || !deep[j]) continue;
+        const step2 = rail2.step[j];
         if (d[a] + step2 < d[j] - 1e-6) {
           d[j] = d[a] + step2;
           q.push(j);
