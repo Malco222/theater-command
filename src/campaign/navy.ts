@@ -19,7 +19,7 @@ import { clamp } from '../core/math';
 /** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
 const worldMap = FAR_STAGE ? wholeMap : americasMap;
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, CARRIERS, assessAir, carrierRules, skyDenies, skyOver, skyReach } from './air';
+import { AIR, CARRIERS, airPool, assessAir, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { dayShare, oddsOf, skyAtSea, skySupport, weatherOn, zoneOfSea } from './weather';
 import { galeConvoyLoss, galeLaneLoss, galeSeas } from './heavyseas';
 import { capOver, deckWorth, fleetKnown, syncWings, wingShare } from './carriers';
@@ -35,7 +35,7 @@ import { techMul, techNotes } from './research';
 import { dcOf, hasTech, techTraits } from './tech';
 import { PLANS } from './plans';
 import { unitsDecide } from './units';
-import { patrolAircraft, patrolFigures, patrolOn, watchAgainst, watchFor } from './seapatrol';
+import { patrolLoss, patrolOn, watchAgainst, watchFor } from './seapatrol';
 import causeData from '../../data/campaign/convoycause.json';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
@@ -2528,6 +2528,8 @@ function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
     if (!quarry.length) continue;
     const rng = seaRng(g, `patrol:${nat}:${z}`);
     let n = 0;
+    // (The boats sunk in this sea, by their nation, for the month's words.)
+    const here: Record<string, number> = {};
     for (const f of quarry) {
       const w = watchAgainst(g, z, f.nat);
       const mine = w?.by[nat] ?? 0;
@@ -2539,25 +2541,28 @@ function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
       f.ships.ss -= k; f.lost.ss += k; n += k;
       loseStars(f, 'ss', k);
       rec[f.nat] = (rec[f.nat] ?? 0) + k;
+      here[f.nat] = (here[f.nat] ?? 0) + k;
     }
     if (!n) continue;
     sunk[z] = (sunk[z] ?? 0) + n;
     seas[z] = n;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
-    const subs = `${n} ${g.nations[quarry[0].nat].adj} submarine${n === 1 ? '' : 's'}`;
-    if (told) routineNews(g, `patrol:${nat}:${z}`, 'battle', `${g.nations[nat].adj} aircraft on patrol sink ${subs} ${seaWhere(g.seas[z].name)}.`, `${subs} sunk from the air ${seaWhere(g.seas[z].name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
+    // (Each nation's boats by its own name: "1 German and 2 Italian submarines". The news is tagged with the nation
+    // that lost the most, the first of them on a tie.)
+    const boats = Object.keys(here);
+    const subs = `${andList(boats.map((x) => `${here[x]} ${g.nations[x].adj}`))} submarine${n === 1 ? '' : 's'}`;
+    const most = boats.reduce((a, b) => (here[b] > here[a] ? b : a));
+    if (told) routineNews(g, `patrol:${nat}:${z}`, 'battle', `${g.nations[nat].adj} aircraft on patrol sink ${subs} ${seaWhere(g.seas[z].name)}.`, `${subs} sunk from the air ${seaWhere(g.seas[z].name)}`, nat, undefined, { arm: 'sea', won: nat, lost: most });
   }
   (g.patrolSunk ??= {})[nat] = { turn: g.turn, sunk: rec, seas };
-  // (Q6 (a): the aircraft lost on patrol, after the month's hunt: an operational share of those on patrol where it is
-  // laid, and the enemy's fighters where they reach the sea, met as they meet a strike there (air.ts assessAir).)
-  const lost = patrolFigures()?.lost ?? null;
+  // (Q6 (a): the aircraft lost on patrol, after the month's hunt, and only these two: an operational share of those on
+  // patrol where it is laid, and the enemy's fighters where they reach the sea and meet it, as they meet a strike there
+  // (seapatrol.ts patrolLoss). Booked to the group's and the nation's losses, as a raid's are.)
   for (const f of g.airFleets) {
     if (f.nat !== nat || f.mission !== 'seapatrol' || !g.seas[f.target] || f.bmr <= 0) continue;
-    let x = lost !== null ? patrolAircraft(g, f, f.target) * lost : 0;
-    const a = assessAir(g, [f], 'seapatrol', f.target);
-    if (!a.why) x += a.B * a.bomberLoss;
-    const k = Math.min(f.bmr, seaRng(g, `patrol:lost:${nat}:${f.id}`).roll(x));
-    if (k > 0) f.bmr -= k;
+    const x = patrolLoss(g, f, f.target);
+    const k = Math.min(f.bmr, seaRng(g, `patrol:lost:${nat}:${f.id}`).roll(x.op + x.fighters));
+    if (k > 0) { f.bmr -= k; f.lost.bmr += k; airPool(g, f.nat).lostBmr += k; }
   }
 }
 
@@ -3334,7 +3339,12 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
     if (!atSea(f)) continue;
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
-      raid += raidPower(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * (cover ? cover[zones.indexOf(f.zone)] : 1);
+      const c = cover ? cover[zones.indexOf(f.zone)] : 1;
+      const p = raidPower(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c;
+      // (Release 2, the sea patrol, as on a convoy route (routeForces): boats kept down by aircraft without kit raid the
+      // lane only for their time up. 1 where none watch, or the patrol is not laid, and then the raid is as before.)
+      const up = cover ? keptUp(g, f.nat, f.zone) : 1;
+      raid += up === 1 ? p : p - boatRaid(g, f, !!cover) * quality(g, f.nat) * fit(g, f) * raidShare(f) * c * (1 - up);
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;

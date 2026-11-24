@@ -4307,7 +4307,8 @@ function force(kind: string, id: number) {
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
   const base = s.regions[f.base];
-  const targetName = (m: AirMission, t: number) => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+  // (A strike on shipping and a sea patrol against submarines are aimed at a sea; every other mission at a province.)
+  const targetName = (m: AirMission, t: number) => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
   const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ''}.`;
   const mine = f.nat === s.human;
   if (mine) {
@@ -4889,7 +4890,8 @@ function lastActPage(s: Game): Page | null {
 // ---- The air war: airfields, the groups on them, and the planning of a raid --------------------------------
 
 const craftOf = (ftr: number, bmr: number): string => [ftr >= 1 ? `${Math.round(ftr).toLocaleString('en-US')} fighters` : '', bmr >= 1 ? `${Math.round(bmr).toLocaleString('en-US')} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
-const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+/** Where a group's mission is aimed: a sea for a strike on shipping and a sea patrol against submarines, else a province. */
+const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' || m === 'seapatrol' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
 const airDoing = (s: Game, f: Game['airFleets'][number]): string => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ''}`;
 const RAID_TITLE: Record<string, string> = { bomb: 'A BOMBING RAID BY DAY', night: 'RAIDS BY NIGHT', superiority: 'A FIGHT FOR THE SKY', strike: 'A STRIKE ON SHIPPING' };
 
