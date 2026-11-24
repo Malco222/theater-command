@@ -2067,6 +2067,23 @@ int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 			return Id;
 		}
 	}
+	// (Release 2, the whole world.) So is the mound the world's own sheet raises for one of the Pacific's islets, which
+	// is all he sees of it from the high view: a click anywhere on the speck is a click on the island. Where a fine
+	// sheet stands the island is drawn at its own size, and only its own ground is the island.
+	if (Data.bWorld && WorldTerrain.NX > 0)
+	{
+		const double X = WrapX(P.X);
+		if ((X < 0.0 || P.Y < 0.0 || X > Data.Width || P.Y > Data.Height) && !FineSheetAt(X, P.Y) && WorldTerrain.CoverageAt(X, P.Y) >= 0.5f)
+		{
+			const int32 I = FMath::Clamp(FMath::RoundToInt32((X - WorldTerrain.OriginX) / WorldTerrain.Cell), 0, WorldTerrain.NX - 1);
+			const int32 J = FMath::Clamp(FMath::RoundToInt32((P.Y - WorldTerrain.OriginY) / WorldTerrain.Cell), 0, WorldTerrain.NY - 1);
+			const int16 Id = WorldTerrain.Region[WorldTerrain.Index(I, J)];
+			if (Id >= 0 && Data.Regions.IsValidIndex(Id) && Data.Regions[Id].bIslet)
+			{
+				return Id;
+			}
+		}
+	}
 	return INDEX_NONE;
 }
 

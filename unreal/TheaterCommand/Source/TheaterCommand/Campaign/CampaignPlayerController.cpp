@@ -1517,6 +1517,16 @@ void ACampaignPlayerController::BeginPlay()
 				// (and from west to east it runs right round: the eye's place is kept within half a world of the map's own middle)
 				const double HalfWorld = World.WorldWidth * 0.5 * Map->UnitScale;
 				Eye->SetWrap(-HalfWorld, HalfWorld);
+				if (World.bFar && World.Charted.bIsValid)
+				{
+					// (Release 2, the far side.) The whole world's chart has its own seam, at 141 W in the Yukon, and lays
+					// Hawaii and Alaska at its east end, beyond Japan. Everything laid once at its place on the chart (a
+					// town, a plate, an army, a fleet) is under the eye only while the eye is counted in the chart's own
+					// turn of the world; half a world either side of Europe stops at about 162 W, and over Pearl Harbor
+					// the eye stood a whole world west of the town. So the eye comes round at the chart's seam.
+					const double West = Map->MapToWorld(World.Charted.Min.X, 0.0).Y;
+					Eye->SetWrap(West, West + World.WorldWidth * Map->UnitScale);
+				}
 				// (and at the chart's north and south edges the table beyond it fills no more than about a fifth of the screen)
 				Eye->SetEdgeHold(0.2f, 0.2f);
 			}
@@ -4302,6 +4312,25 @@ void ACampaignPlayerController::PlayYearCard(const FYearCard& Year)
 	Speak(YearAloud(Year.Year) + TEXT(". ") + HeadingAloud(Year.Title), TEXT("Daniel"), 160, 2);
 }
 
+/**
+ * Where a view of "the whole map" looks. Europe's own middle, as it always has; but on the whole world with the far side
+ * (release 2) the map has no one middle, and Japan's month is not told over Europe: there it is the player's own capital.
+ */
+static FVector2D WideViewMiddle(const FCampaignMapData& Data, const FString& Human)
+{
+	if (Data.bFar && !Human.IsEmpty())
+	{
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			if (Region.bCapital && Region.Owner == Human)
+			{
+				return Region.Center;
+			}
+		}
+	}
+	return FVector2D(Data.Width * 0.5, Data.Height * 0.48);
+}
+
 void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards, int32 Kind)
 {
 	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
@@ -4330,7 +4359,8 @@ void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<F
 		// The month's newsreel is film: black and white, and its title is shown over the whole map.
 		Eye->SetNewsreel(true);
 		const FCampaignMapData& Data = Map->GetData();
-		Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.92f);
+		const FVector2D Wide = WideViewMiddle(Data, GetPlayerTag());
+		Eye->GoTo(Map->MapToWorld(Wide.X, Wide.Y), 0.92f);
 		CampaignSounds::Play(this, TEXT("newsreel"), 0.6f);
 	}
 	else if (Kind == 1)
@@ -4373,7 +4403,8 @@ void ACampaignPlayerController::NextNewsCard()
 		}
 		else
 		{
-			Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.8f);
+			const FVector2D Wide = WideViewMiddle(Data, GetPlayerTag());
+			Eye->GoTo(Map->MapToWorld(Wide.X, Wide.Y), 0.8f);
 		}
 	}
 	if (Newsreel.Kind == 0)
