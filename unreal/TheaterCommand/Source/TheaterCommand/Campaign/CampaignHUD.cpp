@@ -15055,6 +15055,16 @@ namespace
 					];
 				}
 			}
+			else if (!Card.bLook && !Card.bUnknown && !Card.BreakWhy.IsEmpty() && Card.Divisions >= 2)
+			{
+				// (the pre-check's read, 24 November: where breaking up is on and this corps cannot be, the card says why,
+				// faint, in place of the hint: a garrison, a corps at home or marching with an ally, another's month)
+				bBreakRow = true;
+				BreakRow->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Card.BreakWhy)).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Faint).AutoWrapText(true)
+				];
+			}
 			if (!Card.bLook && Card.RejoinId != INDEX_NONE && Controller.IsValid())
 			{
 				bBreakRow = true;

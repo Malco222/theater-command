@@ -286,6 +286,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's card comes first when a month ends, and the tour of the map and the newsreel are a press away on it. On: the other countries' moves, the newsreel and the great moments play before the card."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
+	// (The 1.5 patch; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".)
+	Add(TEXT("sail"), TEXT("Ships sail on the map"), TEXT("A fleet sent to another sea, into harbour or out of it sails there by water, round the land, its bows the way it goes, in two or three seconds. Off, it is simply found where it now is. Fleets only reported, not seen, are never shown sailing."), bShipsSail ? TEXT("ON") : TEXT("OFF"), bShipsSail);
 	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
@@ -345,6 +347,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("moments"))
 	{
 		bMoments = !bMoments;
+	}
+	else if (Id == TEXT("sail")) // (release 2: ships that sail)
+	{
+		bShipsSail = !bShipsSail;
+		if (Map.IsValid())
+		{
+			Map->SetShipsSail(bShipsSail);
+		}
 	}
 	else if (Id == TEXT("askend"))
 	{
@@ -471,7 +481,8 @@ void ACampaignPlayerController::SaveOptions() const
 	const FString Text = FString::Printf(
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
-	FFileHelper::SaveStringToFile(Text, *OptionsFile());
+	// (The 1.5 patch) "Ships sail on the map", kept with the rest.
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"sail\":%s}\n"), Word(bShipsSail)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -515,6 +526,11 @@ void ACampaignPlayerController::LoadOptions()
 	bAskAtMonthsEnd = Yes(TEXT("askEnd"), true);
 	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
+	bShipsSail = Yes(TEXT("sail"), true); // (the 1.5 patch: ships that sail, on unless switched off)
+	if (Map.IsValid())
+	{
+		Map->SetShipsSail(bShipsSail);
+	}
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);

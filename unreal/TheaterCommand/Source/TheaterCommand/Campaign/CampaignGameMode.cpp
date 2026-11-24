@@ -258,6 +258,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->SetTowns(Session->Towns());
 		Table->SetInkAllowed(false); // (the table laid out as the campaign stands: nothing seeps in)
 		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
+		Table->ForgetFleetPlaces(); // (the 1.5 patch, ships that sail: the fleets of the war laid out are found where they are, not sailed there)
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
 		Table->ShowAgents(Session->GetView()); // (ruling 153: his agents, in a campaign taken up again)
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
