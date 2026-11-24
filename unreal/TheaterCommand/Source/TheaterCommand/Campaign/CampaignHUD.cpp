@@ -9900,6 +9900,110 @@ namespace
 			}
 			EndRows();
 
+			// 1b. AIR DEFENCE (release 2; Brian, 23 November: "what anti-aircraft capabilities they have"): the guns as a
+			// count, the share of a raid they stop on a bar, the fighters that would come up over the town, who holds the
+			// sky, and ADD GUNS with its price, the arsenal's own order placed here.
+			if (Shelves.Air.bValid)
+			{
+				const FGlanceAir& Air = Shelves.Air;
+				ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+				[
+					ShelfHead(TEXT("aa"), TEXT("AIR DEFENCE"), Air.Level > 0 ? FString::Printf(TEXT("guns level %d"), Air.Level) : FString(TEXT("no guns built")))
+				];
+				TSharedRef<SVerticalBox> Inside = SNew(SVerticalBox);
+				Inside->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Cream).AutoWrapText(true)
+					.Text(FText::FromString(Air.Heavy > 0
+						? FString::Printf(TEXT("%s heavy guns  \u00B7  %s light guns"), *FText::AsNumber(Air.Heavy).ToString(), *FText::AsNumber(Air.Light).ToString())
+						: FString::Printf(TEXT("%s light guns, no heavy ones"), *FText::AsNumber(Air.Light).ToString())))
+				];
+				Inside->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(Air.Stop > 0
+						? FString::Printf(TEXT("Stop %d%% of a bombing raid on the town and its railway."), Air.Stop)
+						: FString(TEXT("Light flak alone: it brings down a few bombers but stops none of a raid."))))
+				];
+				Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Air.Stop / 100.0f, BrightBrass)];
+				if (Air.bWatch)
+				{
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 6.0f, 0.0f)
+						[
+							SignBox(TEXT("ftr"), Air.Fighters > 0 ? Cream : Muted, 12.0f)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Air.Fighters > 0 ? Cream : Muted).AutoWrapText(true)
+							.Text(FText::FromString(Air.Foe.IsEmpty() ? FString(TEXT("At peace: no enemy to come up against."))
+								: Air.Fighters > 0 ? FString::Printf(TEXT("%s fighters would come up against a %s raid."), *FText::AsNumber(Air.Fighters).ToString(), *Air.Foe)
+								: FString::Printf(TEXT("No fighters cover it against a %s raid."), *Air.Foe)))
+						]
+					];
+				}
+				if (!Air.Sky.IsEmpty())
+				{
+					const bool bOurs = Air.Sky == TEXT("ours");
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(bOurs ? BrightBrass : Alarm).AutoWrapText(true)
+						.Text(FText::FromString(bOurs ? FString::Printf(TEXT("The %s air force holds the sky over it."), *Air.SkyBy)
+							: FString::Printf(TEXT("The enemy holds the sky over it: the %s air force."), *Air.SkyBy)))
+					];
+				}
+				if (Air.Going > 0)
+				{
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+						.Text(FText::FromString(FString::Printf(TEXT("%d more level%s of guns going up."), Air.Going, Air.Going == 1 ? TEXT("") : TEXT("s"))))
+					];
+				}
+				if (Shelves.bOwn && Air.bCanAdd && !Air.AddKey.IsEmpty())
+				{
+					const bool bCan = Air.AddWhy.IsEmpty();
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(9.0f, 3.0f)).IsFocusable(false).IsEnabled(bCan)
+							.ToolTipText(FText::FromString(bCan ? FString::Printf(TEXT("Guns %s: each level stops a further share of a bombing raid and brings down more of the bombers."), *Air.AddSize) : Air.AddWhy))
+							.OnClicked_Lambda([this, Key = Air.AddKey]()
+							{
+								if (Controller.IsValid())
+								{
+									Controller->OrderHere(Key);
+								}
+								return FReply::Handled();
+							})
+							[
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(bCan ? BrightBrass : Faint)
+								.Text(FText::FromString(FString::Printf(TEXT("ADD GUNS  %s"), *FText::AsNumber(Air.AddCost).ToString())))
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+						[
+							MonthsDisc(Air.AddMonths)
+						]
+					];
+					if (!bCan)
+					{
+						Inside->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Air.AddWhy)).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Faint).AutoWrapText(true)
+						];
+					}
+				}
+				ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(8.0f, 6.0f))[Inside]
+				];
+			}
+
 			// 2. ON ORDER HERE.
 			ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[ShelfHead(TEXT("hourglass"), TEXT("ON ORDER HERE"), Shelves.Orders.Num() > 0 ? FString::FromInt(Shelves.Orders.Num()) : FString())];
 			if (Shelves.Orders.Num() == 0 && Shelves.Arriving.Num() == 0)
@@ -10028,6 +10132,84 @@ namespace
 				ProvinceBox->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 8.0f, 0.0f, 0.0f)[Buttons];
 			}
 
+			// 2b. CAN BUILD HERE (release 2; Brian, 23 November: "what units that city can build"): every order the
+			// arsenal would raise, base, lay down or build in this very town, as signs in rows by arm, each with its
+			// price and months; one press orders it here. What waits on a year, a technology or a harbour stays on ORDER.
+			if (Shelves.bOwn && Shelves.Can.Num() > 0)
+			{
+				int32 Ready = 0;
+				for (const FGlanceCan& Can : Shelves.Can)
+				{
+					Ready += Can.Why.IsEmpty() ? 1 : 0;
+				}
+				ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+				[
+					ShelfHead(TEXT("scaffold"), TEXT("CAN BUILD HERE"), Ready > 0 ? FString::Printf(TEXT("%d ready to order"), Ready) : FString(TEXT("treasury short")))
+				];
+				static const TCHAR* const Groups[][2] = { { TEXT("army"), TEXT("ARMY") }, { TEXT("air"), TEXT("AIR") }, { TEXT("navy"), TEXT("NAVY") }, { TEXT("works"), TEXT("WORKS") } };
+				for (const auto& Group : Groups)
+				{
+					TSharedRef<SWrapBox> Chips = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(4.0f, 4.0f));
+					int32 Count = 0;
+					for (const FGlanceCan& Can : Shelves.Can)
+					{
+						if (Can.Group != Group[0])
+						{
+							continue;
+						}
+						++Count;
+						const bool bCan = Can.Why.IsEmpty();
+						const FString Tip = Can.Size.IsEmpty() ? Can.Label : FString::Printf(TEXT("%s: %s"), *Can.Label, *Can.Size);
+						Chips->AddSlot()
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 3.0f)).IsFocusable(false).IsEnabled(bCan)
+							.ToolTipText(FText::FromString(bCan ? Tip + TEXT(". Order it here.") : Tip + TEXT(". ") + Can.Why))
+							.OnClicked_Lambda([this, Key = Can.Key]()
+							{
+								if (Controller.IsValid())
+								{
+									Controller->OrderHere(Key);
+								}
+								return FReply::Handled();
+							})
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(22.0f).HAlign(HAlign_Center)
+									[
+										SignBox(Can.Sign, !bCan ? Faint : Can.bStar ? BrightBrass : Cream, 14.0f)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(Can.Label)).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(bCan ? Cream : Faint)
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bCan ? Muted : Faint)
+										.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d mo"), *FText::AsNumber(Can.Cost).ToString(), Can.Months)))
+									]
+								]
+							]
+						];
+					}
+					if (Count == 0)
+					{
+						continue;
+					}
+					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 2.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Group[1])).Font(SmallCaps()).ColorAndOpacity(Muted)
+					];
+					ProvinceBox->AddSlot().AutoHeight()[Chips];
+				}
+				Note(Ready > 0 ? TEXT("One press orders it here. Hold the pointer on one for what it delivers.") : TEXT("The treasury is short for all of them this month. Hold the pointer on one to see by how much."), Faint);
+			}
+
 			// 3. BUILDING AND REPAIRS.
 			ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[ShelfHead(TEXT("factory"), TEXT("BUILDING AND REPAIRS"), Shelves.BuildHead)];
 			if (Shelves.Tiles.Num() == 0 && Shelves.Rows.Num() == 0)
@@ -10059,6 +10241,14 @@ namespace
 				[
 					SNew(STextBlock).Text(FText::FromString(Tile.Line)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bHurt ? Alarm : Muted).AutoWrapText(true)
 				];
+				if (!Tile.Does.IsEmpty())
+				{
+					// (release 2; Brian, 23 November: "the value they provide")
+					Inside->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Tile.Does)).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(bUp ? Muted : Cream.CopyWithNewOpacity(0.85f)).AutoWrapText(true)
+					];
+				}
 				if (bUp || bHurt)
 				{
 					Inside->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Tile.Share, bHurt ? Alarm : BrightBrass)];

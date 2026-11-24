@@ -236,6 +236,40 @@ struct FGlanceTile
 	int32 Cost = 0; // a repair's price, where he can order it
 	FString Key; // what pressing it does: a works key for the rules ("work:repair"), "plots" for the town plan, or empty
 	FString Cause; // why it is damaged, or why it cannot be ordered
+	FString Does; // (release 2, Brian's 23 November ask) what a building gives: what stands does now, or what the level going up will do
+};
+
+/**
+ * (Release 2; Brian, 23 November: "what anti-aircraft capabilities they have".) The town's AIR DEFENCE shelf: the level
+ * of guns built round it, the guns as a count, the share of a bombing raid they stop, the fighters that would come up
+ * over it, who holds the sky, and the next level of guns with its price.
+ */
+struct FGlanceAir
+{
+	bool bValid = false;
+	int32 Level = 0;
+	int32 Heavy = 0, Light = 0; // the guns as a count, as the raid card counts them
+	int32 Stop = 0; // the share of a bombing raid they stop, in hundredths
+	int32 Going = 0; // levels of guns on order here
+	bool bWatch = false; // his side's town: the fighters over it are known
+	int32 Fighters = 0; // the fighters that would come up over it against Foe
+	FString Foe; // the enemy they would come up against, as an adjective ("Polish"), or empty at peace
+	FString Sky; // "ours", "theirs" or empty: who holds the sky over it lately
+	FString SkyBy; // whose sky it is, as an adjective
+	bool bCanAdd = false; // the next level of guns is offered here
+	FString AddKey, AddSize, AddWhy; // the arsenal's key ("work:aa"), "level 2", and why it cannot be ordered now (empty when it can)
+	int32 AddCost = 0, AddMonths = 0;
+};
+
+/** (Release 2; Brian, 23 November: "what units that city can build".) One order the arsenal would raise, base, lay down or build in this very town. */
+struct FGlanceCan
+{
+	FString Key; // the arsenal's key: "corps:inf", "air:ftr", "ship:dd", "work:factory"
+	FString Group; // army, air, navy or works
+	FString Sign, Label, Size;
+	bool bStar = false; // the nation's special formation
+	int32 Cost = 0, Months = 0;
+	FString Why; // why it cannot be ordered now (the treasury short), or empty when it can
 };
 
 /** (Release 2) A ship or air group mending at its base: refit in harbour, resting. */
@@ -262,6 +296,8 @@ struct FCityShelves
 	int32 Agents = 0; // his agents in the town
 	bool bOnGuard = false; // one of them on guard against the enemy's
 	FString Rail; // open, cut, none, or empty when unknown
+	FGlanceAir Air; // (release 2) AIR DEFENCE
+	TArray<FGlanceCan> Can; // (release 2) CAN BUILD HERE: his own towns only
 };
 
 /** The player's treasury. */

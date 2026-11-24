@@ -1124,6 +1124,8 @@ public:
 	void OpenArsenal();
 	void CloseArsenal();
 	void OrderFromArsenal(const FString& Key);
+	/** (Release 2, the city at a glance) Orders from the arsenal in the town the panel shows: CAN BUILD HERE and ADD GUNS. */
+	void OrderHere(const FString& Key);
 
 	/** Closes the ledger and looks at one of its provinces on the table. */
 	void ShowProvince(int32 RegionId);

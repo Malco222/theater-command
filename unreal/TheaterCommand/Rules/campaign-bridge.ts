@@ -96,7 +96,7 @@ import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown } from '../..
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
-import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
+import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
@@ -1254,24 +1254,28 @@ function glanceShelves(s: Game, id: number) {
   }
   // BUILDING AND REPAIRS: the town's plots as tiles (going up, standing, free), the arsenal's works going up, the
   // damage with its repair, and the fleets refitting and air groups resting here as rows under them.
-  const tiles: { kind: string; sign: string; name: string; line: string; share: number; months: number; cost: number; key: string; cause: string }[] = [];
+  // (Release 2; Brian, 23 November 2026: "the buildings that you can build have very poor graphics of what the
+  // buildings are and the value they provide". Each building wears the sign of its line, as the town plan's cards do,
+  // and says what it gives: what the levels standing do now, or what the level going up will do.)
+  const tiles: { kind: string; sign: string; name: string; line: string; share: number; months: number; cost: number; key: string; cause: string; does: string }[] = [];
   let t: ReturnType<typeof townBuildings> = null;
   try { t = see.own || see.ally ? townBuildings(s, id) : null; } catch { t = null; }
   for (const p of t?.plots ?? []) {
-    if (!p.line) { tiles.push({ kind: 'free', sign: '', name: 'Free plot', line: 'choose a building', share: 0, months: 0, cost: 0, key: 'plots', cause: '' }); continue; }
+    if (!p.line) { tiles.push({ kind: 'free', sign: '', name: 'Free plot', line: 'choose a building', share: 0, months: 0, cost: 0, key: 'plots', cause: '', does: '' }); continue; }
     if (p.building) {
       const q = s.nations[r.ctrl]?.queue.find((b) => b.what === 'civic' && b.region === id && b.item === p.line);
       const share = q && q.eta > q.ordered ? Math.min(1, Math.max(0, (s.turn - q.ordered) / (q.eta - q.ordered))) : 0;
-      tiles.push({ kind: 'up', sign: 'scaffold', name: p.label || p.name, line: p.level > 0 ? `level ${p.level} \u2192 ${p.level + 1}` : 'new, level 1', share, months: Math.max(0, (p.due ?? s.turn) - s.turn), cost: 0, key: '', cause: '' });
+      const next = t?.offers.find((o) => o.line === p.line)?.effect ?? '';
+      tiles.push({ kind: 'up', sign: `civic-${p.line}`, name: p.label || p.name, line: p.level > 0 ? `level ${p.level} \u2192 ${p.level + 1}` : 'new, level 1', share, months: Math.max(0, (p.due ?? s.turn) - s.turn), cost: 0, key: '', cause: '', does: next ? `When built: ${next}` : '' });
     } else {
-      tiles.push({ kind: 'stands', sign: 'factory', name: p.label || p.name, line: `${p.name}, level ${p.level}`, share: 1, months: 0, cost: 0, key: '', cause: '' });
+      tiles.push({ kind: 'stands', sign: `civic-${p.line}`, name: p.label || p.name, line: `${p.name}, level ${p.level}`, share: 1, months: 0, cost: 0, key: '', cause: '', does: p.does });
     }
   }
-  for (const w of works) tiles.push({ kind: 'up', sign: 'scaffold', name: w.name, line: w.line, share: w.share, months: w.months, cost: 0, key: '', cause: '' });
+  for (const w of works) tiles.push({ kind: 'up', sign: 'scaffold', name: w.name, line: w.line, share: w.share, months: w.months, cost: 0, key: '', cause: '', does: '' });
   const hurt = glanceDamage(s, id, see, seen);
   if (hurt?.ruin) {
     const why = hurt.ruin.why;
-    tiles.push({ kind: 'damaged', sign: 'wrench', name: hurt.ruin.town, line: `${hurt.ruin.pct}% wrecked`, share: 1 - hurt.ruin.damage, months: 0, cost: see.own && why === null ? shown(hurt.ruin.cost) : 0, key: see.own && why === null ? 'work:repair' : '', cause: hurt.ruin.hit ? 'hit this month' : '' });
+    tiles.push({ kind: 'damaged', sign: 'wrench', name: hurt.ruin.town, line: `${hurt.ruin.pct}% wrecked`, share: 1 - hurt.ruin.damage, months: 0, cost: see.own && why === null ? shown(hurt.ruin.cost) : 0, key: see.own && why === null ? 'work:repair' : '', cause: hurt.ruin.hit ? 'hit this month' : '', does: '' });
   }
   if (hurt && hurt.lost > 0) {
     // (a wrecked factory is put back to work by engineers standing here: the order, where one of his can take it)
@@ -1284,7 +1288,7 @@ function glanceShelves(s: Game, id: number) {
     }
     let cause = '';
     try { cause = ruinedAt(s, r) > 0 ? 'bombed' : 'burnt'; } catch { cause = ''; }
-    tiles.push({ kind: 'damaged', sign: 'wrench', name: hurt.lost === 1 ? 'A factory' : `${hurt.lost} factories`, line: `${hurt.lost} of ${hurt.fac} wrecked`, share: 1 - hurt.lost / Math.max(1, hurt.fac), months: 0, cost: 0, key, cause: see.own && !key ? 'engineers rebuild it' : cause });
+    tiles.push({ kind: 'damaged', sign: 'wrench', name: hurt.lost === 1 ? 'A factory' : `${hurt.lost} factories`, line: `${hurt.lost} of ${hurt.fac} wrecked`, share: 1 - hurt.lost / Math.max(1, hurt.fac), months: 0, cost: 0, key, cause: see.own && !key ? 'engineers rebuild it' : cause, does: '' });
   }
   const rows: { name: string; line: string; share: number; sign: string }[] = [];
   if (see.own) {
@@ -1298,12 +1302,76 @@ function glanceShelves(s: Game, id: number) {
     for (const a of s.intel.agents) if (a.nat === me && a.reg === id) { agents++; if (a.mission === 'guard') onGuard = true; }
   } catch { /* no secret war in this game */ }
   try { const n = railNote(s, id); rail = !n ? '' : !n.line ? 'none' : n.cut ? 'cut' : 'open'; } catch { rail = ''; }
+  const up = humanUp(s) && !onEve(s);
   return {
     own: see.own, spied: see.spied, agent: see.agent, ago: see.spied ? see.ago : -1,
     garrHead, garrison, orders, arriving, ordersHead: orders.length,
     buildHead: [upN ? `${upN} going up` : '', hurtN ? `${hurtN} damaged` : ''].filter(Boolean).join(' \u00B7 '),
     tiles, rows, agents, onGuard, rail,
+    air: glanceAir(s, id, see, up),
+    can: see.own ? glanceCan(s, id, up) : [],
   };
+}
+
+/**
+ * (Release 2; Brian, 23 November 2026: "when you click on a city, it should be very easy to see ... what anti-aircraft
+ * capabilities they have".) The town's AIR DEFENCE shelf: the level of guns built round it, the guns as a count (heavy
+ * and light, as the raid card counts them), the share of a bombing raid they stop, the fighters that would come up
+ * over it against the enemy, who holds the sky over it, and the next level of guns with its price. His own towns and
+ * his allies' in full; an enemy town his agent watches, its guns alone (where the enemy's fighters are is not his to
+ * know from a town's panel). Null where nothing of it is known. Display only: ADD GUNS is the arsenal's own order.
+ */
+function glanceAir(s: Game, id: number, see: GlanceSight, up: boolean) {
+  const me = s.human, r = s.regions[id];
+  if (!me || !r || !(see.own || see.ally || see.agent)) return null;
+  try {
+    const level = gunsRound(s, id), guns = flakGuns(level);
+    const ours = see.own || see.ally;
+    const foe = ours ? (s.nations[r.ctrl]?.atWar ?? []).find((n) => s.nations[n]?.alive) ?? null : null;
+    const fighters = foe ? Math.round(fightersOver(s, id, foe)) : 0;
+    const sky = skyOver(s, id);
+    const going = s.nations[r.ctrl]?.queue.filter((b) => b.what === 'work' && b.item === 'aa' && b.region === id).length ?? 0;
+    const o = see.own ? arsenalOffers(s, id).find((x) => x.key === 'work:aa' && x.at === id) : undefined;
+    const short = o && up && o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : '';
+    return {
+      level, heavy: guns.heavy, light: guns.light, stop: Math.round(gunsStop(level) * 100), going,
+      fighters, watch: ours, foe: foe ? s.nations[foe]?.adj ?? foe : '',
+      sky: !sky ? '' : sky === me || allied(s, sky, me) ? 'ours' : 'theirs', skyBy: sky ? s.nations[sky]?.adj ?? sky : '',
+      add: o ? { key: o.key, size: o.size, cost: shown(o.cost), months: o.months, why: !up ? 'It is not your month.' : short || (o.why ?? '') } : null,
+    };
+  } catch { return null; }
+}
+
+/** The sign of an arsenal offer on the city's shelf: the order badges' own pictures, and the UI kit's for works. */
+function offerSign(s: Game, key: string, kind?: string): string {
+  const [group, item = ''] = key.split(':');
+  if (group === 'corps') return item;
+  if (group === 'elite') return eliteOf(s.human ?? '')?.kind ?? 'inf';
+  if (group === 'cadre') return kind ?? 'inf';
+  if (group === 'para') return 'para';
+  if (group === 'air') return item;
+  if (group === 'ship') return item === 'cv' || item === 'ss' || item === 'tp' ? item : 'hull';
+  return ({ factory: 'factory', fort: 'defence', yard: 'hull', aa: 'aa', field: 'ftr', strip: 'ftr', repair: 'wrench' } as Record<string, string>)[item] ?? 'scaffold';
+}
+
+/**
+ * (Release 2; Brian, 23 November 2026: "easier user interface of what units that city can build".) The town's CAN BUILD
+ * HERE shelf: every order of the arsenal that would be raised, based, laid down or built in this very town, with its
+ * sign, what it delivers, its price and its months, and why not where it cannot be ordered now. The guns have their own
+ * shelf, and a repair its own tile. One press orders it here (the arsenal's own order, orderArsenal with this town).
+ */
+function glanceCan(s: Game, id: number, up: boolean) {
+  const me = s.human;
+  if (!me) return [];
+  let all: ReturnType<typeof arsenalOffers> = [];
+  try { all = arsenalOffers(s, id); } catch { all = []; }
+  const purse = inHand(s.nations[me].pp);
+  // (only what can be ordered here now, or would be with the money: an order that waits on a year, a technology or a
+  // harbour the town has not got stays on the ORDER page, which says why)
+  return all.filter((o) => o.at === id && o.key !== 'work:aa' && o.key !== 'work:repair' && (o.why === null || o.poor)).map((o) => ({
+    key: o.key, group: o.group, sign: offerSign(s, o.key, o.kind), star: o.key === 'elite', label: o.label, size: o.size, cost: shown(o.cost), months: o.months,
+    why: !up ? 'It is not your month.' : o.poor && shown(o.cost) > purse ? `${(shown(o.cost) - purse).toLocaleString('en')} short: the treasury holds ${purse.toLocaleString('en')}.` : o.why ?? '',
+  }));
 }
 
 /** Something on order, as a line: what, where, when it is due, and whether the order can still be taken back. */

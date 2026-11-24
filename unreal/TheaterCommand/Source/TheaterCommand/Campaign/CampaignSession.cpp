@@ -688,6 +688,7 @@ namespace
 				Entry->TryGetNumberField(TEXT("cost"), Tile.Cost);
 				Entry->TryGetStringField(TEXT("key"), Tile.Key);
 				Entry->TryGetStringField(TEXT("cause"), Tile.Cause);
+				Entry->TryGetStringField(TEXT("does"), Tile.Does);
 			}
 		}
 		List = nullptr;
@@ -710,6 +711,55 @@ namespace
 		Object->TryGetNumberField(TEXT("agents"), Out.Agents);
 		Object->TryGetBoolField(TEXT("onGuard"), Out.bOnGuard);
 		Object->TryGetStringField(TEXT("rail"), Out.Rail);
+		// (Release 2) AIR DEFENCE, and CAN BUILD HERE.
+		const TSharedPtr<FJsonObject>* AirObject = nullptr;
+		if (Object->TryGetObjectField(TEXT("air"), AirObject) && AirObject && (*AirObject).IsValid())
+		{
+			const TSharedPtr<FJsonObject>& Air = *AirObject;
+			Out.Air.bValid = true;
+			Air->TryGetNumberField(TEXT("level"), Out.Air.Level);
+			Air->TryGetNumberField(TEXT("heavy"), Out.Air.Heavy);
+			Air->TryGetNumberField(TEXT("light"), Out.Air.Light);
+			Air->TryGetNumberField(TEXT("stop"), Out.Air.Stop);
+			Air->TryGetNumberField(TEXT("going"), Out.Air.Going);
+			Air->TryGetBoolField(TEXT("watch"), Out.Air.bWatch);
+			Air->TryGetNumberField(TEXT("fighters"), Out.Air.Fighters);
+			Air->TryGetStringField(TEXT("foe"), Out.Air.Foe);
+			Air->TryGetStringField(TEXT("sky"), Out.Air.Sky);
+			Air->TryGetStringField(TEXT("skyBy"), Out.Air.SkyBy);
+			const TSharedPtr<FJsonObject>* AddObject = nullptr;
+			if (Air->TryGetObjectField(TEXT("add"), AddObject) && AddObject && (*AddObject).IsValid())
+			{
+				Out.Air.bCanAdd = true;
+				(*AddObject)->TryGetStringField(TEXT("key"), Out.Air.AddKey);
+				(*AddObject)->TryGetStringField(TEXT("size"), Out.Air.AddSize);
+				(*AddObject)->TryGetStringField(TEXT("why"), Out.Air.AddWhy);
+				(*AddObject)->TryGetNumberField(TEXT("cost"), Out.Air.AddCost);
+				(*AddObject)->TryGetNumberField(TEXT("months"), Out.Air.AddMonths);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("can"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceCan& Can = Out.Can.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("key"), Can.Key);
+				Entry->TryGetStringField(TEXT("group"), Can.Group);
+				Entry->TryGetStringField(TEXT("sign"), Can.Sign);
+				Entry->TryGetStringField(TEXT("label"), Can.Label);
+				Entry->TryGetStringField(TEXT("size"), Can.Size);
+				Entry->TryGetBoolField(TEXT("star"), Can.bStar);
+				Entry->TryGetNumberField(TEXT("cost"), Can.Cost);
+				Entry->TryGetNumberField(TEXT("months"), Can.Months);
+				Entry->TryGetStringField(TEXT("why"), Can.Why);
+			}
+		}
 		return Out;
 	}
 

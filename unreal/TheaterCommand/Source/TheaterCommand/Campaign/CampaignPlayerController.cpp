@@ -2982,6 +2982,40 @@ void ACampaignPlayerController::OrderFromArsenal(const FString& Key)
 	RefreshRegionPanel(SelectedRegion);
 }
 
+void ACampaignPlayerController::OrderHere(const FString& Key)
+{
+	// (Release 2; Brian, 23 November: "what units that city can build". The city panel's own press, with no arsenal
+	// open: the order is the arsenal's, placed in the town the panel shows, which must be his.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || Key.IsEmpty())
+	{
+		return;
+	}
+	const FCampaignView& View = Session->GetView();
+	if (!View.RegionHolder.IsValidIndex(SelectedRegion) || View.RegionHolder[SelectedRegion] != View.Human)
+	{
+		return;
+	}
+	FString Name;
+	if (Session->OrderArsenal(Key, SelectedRegion, Name))
+	{
+		Notify(FString::Printf(TEXT("Ordered: %s."), *Name), 5.0);
+		CampaignSounds::Play(this, TEXT("coins"), 0.6f);
+		CampaignSounds::PlayLater(this, CampaignSounds::OfOrder(Key), 0.35f, 0.35f);
+	}
+	else
+	{
+		Notify(TEXT("That could not be ordered."), 4.0);
+	}
+	if (bArsenalOpen)
+	{
+		const int32 Revision = Arsenal.Revision + 1;
+		Arsenal = Session->Arsenal(SelectedRegion);
+		Arsenal.Revision = Revision;
+	}
+	RefreshRegionPanel(SelectedRegion);
+}
+
 void ACampaignPlayerController::ShowProvince(int32 RegionId)
 {
 	CloseLedger();
