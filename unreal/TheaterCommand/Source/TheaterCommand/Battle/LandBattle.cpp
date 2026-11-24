@@ -4959,11 +4959,14 @@ void ALandBattle::HideTheTable()
 			// (the engine lays this colour over the sky's lower half only when the lower half is a solid colour, which
 			// the flag the engine still calls "black" says: with it off, as it was, the colour was ignored and the lower
 			// half was the table's cubemap's dark ground, so the hull's shaded side stayed 18-22 on the Mac at Valdai,
-			// 9ebf1fcc. Turned on where snow lies; elsewhere the lower half stays the cubemap's, as every other look
-			// passed with. "-TheaterLandSnowBelowOld" keeps the cubemap's on snow too, to set the two side by side)
-			const bool bSolidBelow = Snowed > 0.0 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
+			// 9ebf1fcc. Turned on where snow lies as the campaign names a snowy field (0.25 and more, FieldLookAt's
+			// "+snow"); elsewhere the lower half stays the cubemap's, as every other look passed with. Its alpha is set
+			// to 1, as the air battle's light from below (AirBattle.cpp): the scalings above carry into the alpha (0.78 at
+			// full snow, past 1 above 1.15) and the engine may weigh the colour by it. "-TheaterLandSnowBelowOld" keeps
+			// the cubemap's on snow too, to set the two side by side)
+			const bool bSolidBelow = Snowed >= 0.25 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSnowBelowOld"));
 			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f; snow's strength %.2f, -TheaterLandSnowBelow=), %s"), Field.R, Field.G, Field.B, Snowed, SnowBelow,
-				bSolidBelow ? TEXT("laid as a solid colour") : Snowed > 0.0 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (no snow)"));
+				bSolidBelow ? TEXT("laid as a solid colour") : Snowed >= 0.25 ? TEXT("the cubemap's own (-TheaterLandSnowBelowOld)") : TEXT("the cubemap's own (little or no snow)"));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
@@ -4975,7 +4978,7 @@ void ALandBattle::HideTheTable()
 				if (Below > 0.0)
 				{
 					Sky->bLowerHemisphereIsBlack = bSolidBelow;
-					Sky->SetLowerHemisphereColor(Field);
+					Sky->SetLowerHemisphereColor(FLinearColor(Field.R, Field.G, Field.B, 1.0f));
 					Sky->RecaptureSky();
 				}
 			}
