@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -227,6 +228,12 @@ namespace
 		double SootShare = 0.0;
 		double CameraBearing = 40.0, CameraUp = 16.0; // degrees: from her toward the camera (0 ahead of her), and above
 		bool bFullRecoil = false;                      // find the moment the barrel is fully back
+		// National marks (release 2, LandKit's Dress::bMarks): painted on her skin by the game's own code, in her owner's
+		// period marking for the month (the British flash, then star); bClose looks at the mark that faces the camera most,
+		// close enough that it fills nearly half the picture's height.
+		bool bMarks = false, bClose = false;
+		int CloseAmong = 99; // (the close look picks among her first this many marks: the Tiger's hull crosses, not her turret's)
+		int Year = 1944, Month = 7;
 	};
 
 	/** The sun's shadow: depth toward the sun, an orthographic map over everything that casts. */
@@ -332,9 +339,26 @@ namespace
 		const double Fov = 28.0 * Rad;
 		const double F = (H * 0.5) / std::tan(Fov * 0.5);
 		const double Bearing = (P.CameraBearing) * Rad + V.Heading, Up = P.CameraUp * Rad;
-		const V3 Toward(std::sin(Bearing) * std::cos(Up), std::cos(Bearing) * std::cos(Up), std::sin(Up));
+		V3 Toward(std::sin(Bearing) * std::cos(Up), std::cos(Bearing) * std::cos(Up), std::sin(Up));
 		V3 Target = (S.Lo + S.Hi) * 0.5;
 		double Distance = 20.0;
+		// (a close look at one mark: the one facing the camera most, seen a little from her quarter and above)
+		std::vector<MarkPlace> Places;
+		V.MarksNow(Places);
+		const MarkPlace* Close = nullptr;
+		for (const MarkPlace& K : Places)
+		{
+			if (P.bClose && &K - Places.data() < P.CloseAmong && (!Close || K.Facing.Unit().Dot(Toward) > Close->Facing.Unit().Dot(Toward)))
+			{
+				Close = &K;
+			}
+		}
+		if (Close)
+		{
+			Toward = (Close->Facing.Unit() * 0.85 + Toward * 0.3 + V3(0.0, 0.0, 0.2)).Unit();
+			Target = Close->At;
+			Distance = Close->Radius / (0.42 * std::tan(Fov * 0.5));
+		}
 		V3 Cam, Fwd, Right, CamUp;
 		auto Frame = [&]()
 		{
@@ -343,7 +367,7 @@ namespace
 			Right = Fwd.Cross(V3(0.0, 0.0, 1.0)).Unit();
 			CamUp = Right.Cross(Fwd).Unit();
 		};
-		for (int Pass = 0; Pass < 4; ++Pass)
+		for (int Pass = 0; Pass < (Close ? 0 : 4); ++Pass)
 		{
 			Frame();
 			double X0 = 1e9, X1 = -1e9, Y0 = 1e9, Y1 = -1e9;
@@ -550,9 +574,9 @@ int main(int argc, char** argv)
 		OutNormal = V3(0.0, 0.0, 1.0);
 	};
 	std::map<std::string, std::unique_ptr<Model>> Models;
-	auto ModelFor = [&](const std::string& Name, const std::string& Nation) -> const Model*
+	auto ModelFor = [&](const std::string& Name, const std::string& Nation, const Panel& For) -> const Model*
 	{
-		const std::string Key = Name + "|" + Nation;
+		const std::string Key = Name + "|" + Nation + (For.bMarks ? "|marks " + std::to_string(For.Year * 100 + For.Month) : std::string());
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -564,6 +588,9 @@ int main(int argc, char** argv)
 			auto M = std::make_unique<Model>();
 			Dress D;
 			D.Nation = Nation;
+			D.bMarks = For.bMarks;
+			D.Year = For.Year;
+			D.Month = For.Month;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -575,6 +602,58 @@ int main(int argc, char** argv)
 	};
 
 	std::vector<Panel> Panels;
+	// (LAND_KIT_MARKS=1: the national marks' own sheet instead, release 2's -TheaterLandMarks)
+	const bool bMarksSheet = std::getenv("LAND_KIT_MARKS") != nullptr;
+	struct MarkLook
+	{
+		const char* File;
+		const char* Model;
+		const char* Nation;
+		int Year, Month;
+		bool bClose;
+		double Bearing, Up, Soot, DeathAge;
+		const char* Caption;
+		int CloseAmong = 99;
+	};
+	const MarkLook MarkLooks[] = {
+		{ "marks_sherman", "Sherman", "USA", 1944, 7, false, 42.0, 15.0, 0.0, -1.0, "M4 Sherman, American, July 1944: the white star, hull and turret" },
+		{ "marks_sherman_close", "Sherman", "USA", 1944, 7, true, 42.0, 15.0, 0.0, -1.0, "the Sherman's hull star, close" },
+		{ "marks_tiger", "Tiger", "GER", 1944, 7, false, -128.0, 16.0, 0.0, -1.0, "Tiger, German, July 1944: the beam cross, hull and turret" },
+		{ "marks_tiger_close", "Tiger", "GER", 1944, 7, true, -128.0, 12.0, 0.0, -1.0, "the Tiger's hull cross, close", 2 },
+		{ "marks_t34", "T34", "SOV", 1943, 7, false, 42.0, 16.0, 0.0, -1.0, "T-34, Soviet, July 1943: the plain red star on the turret" },
+		{ "marks_t34_close", "T34", "SOV", 1943, 7, true, 42.0, 14.0, 0.0, -1.0, "the T-34's red star on her sloped turret" },
+		{ "marks_sexton", "Sexton", "UK", 1944, 7, false, 42.0, 15.0, 0.0, -1.0, "Sexton, British, July 1944: the Allies' white star" },
+		{ "marks_light_uk_1942", "LightTank", "UK", 1942, 5, true, 42.0, 14.0, 0.0, -1.0, "light tank, British, May 1942: the white-red-white flash" },
+		{ "marks_semovente", "Semovente", "ITA", 1942, 10, true, 42.0, 14.0, 0.0, -1.0, "Semovente, Italian, October 1942: the company's red patch" },
+		{ "marks_light_jap", "LightTank", "JAP", 1942, 1, true, 42.0, 14.0, 0.0, -1.0, "light tank, Japanese, January 1942: the army's yellow star" },
+		{ "marks_jeep", "Jeep", "USA", 1944, 7, false, 42.0, 22.0, 0.0, -1.0, "jeep, American: bonnet and side stars" },
+		{ "marks_truck", "Truck", "GER", 1944, 7, true, 42.0, 14.0, 0.0, -1.0, "the lorry in German hands: the cross on her door" },
+		{ "marks_panther", "Panther", "GER", 1944, 7, false, 42.0, 16.0, 0.0, -1.0, "Panther, German, July 1944: the turret cross" },
+		{ "marks_tiger_burnt", "Tiger", "GER", 1944, 7, true, -128.0, 12.0, 1.0, 3.5, "a burnt-out Tiger: the cross chars with her paint", 2 },
+		{ "marks_stug", "StuG3", "GER", 1943, 7, false, 42.0, 15.0, 0.0, -1.0, "StuG III, German, July 1943: the hull's crosses" },
+	};
+	for (const MarkLook& K : MarkLooks)
+	{
+		if (!bMarksSheet)
+		{
+			break;
+		}
+		Panel P;
+		P.File = K.File;
+		P.ModelName = K.Model;
+		P.Nation = K.Nation;
+		P.Year = K.Year;
+		P.Month = K.Month;
+		P.bMarks = true;
+		P.bClose = K.bClose;
+		P.CameraBearing = K.Bearing;
+		P.CameraUp = K.Up;
+		P.SootShare = K.Soot;
+		P.Pin.DeathAge = K.DeathAge;
+		P.Caption = K.Caption;
+		P.CloseAmong = K.CloseAmong;
+		Panels.push_back(P);
+	}
 	struct TankLook
 	{
 		const char* Model;
@@ -584,6 +663,10 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
+		if (bMarksSheet)
+		{
+			break;
+		}
 		Panel A;
 		A.File = std::string(T.Model) + "_a";
 		A.ModelName = T.Model;
@@ -615,6 +698,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
+	if (!bMarksSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
@@ -655,7 +739,7 @@ int main(int argc, char** argv)
 	}
 	for (Panel& P : Panels)
 	{
-		const Model* M = ModelFor(P.ModelName, P.Nation);
+		const Model* M = ModelFor(P.ModelName, P.Nation, P);
 		if (!M)
 		{
 			return 1;
@@ -682,7 +766,10 @@ int main(int argc, char** argv)
 		Scene S;
 		AddVehicle(V, P.SootShare, S);
 		const size_t Unmarked = S.Tris.size();
-		AddMarks(V, S);
+		if (!P.bMarks)
+		{
+			AddMarks(V, S); // (the pictures' own flat marks, where the game's are off)
+		}
 		// (a fire chars the marks with the paint round them)
 		const Colour Burnt = FromPicture(M->BurntColour[0], M->BurntColour[1], M->BurntColour[2]);
 		for (size_t I = Unmarked; I < S.Tris.size(); ++I)

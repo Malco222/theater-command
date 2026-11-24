@@ -241,6 +241,7 @@ namespace LandKit
 		V3 At, Facing;     // model frame
 		double Radius = 0.2;
 		int Part = 0;
+		double Dust = 0.0; // 0 to 100: how much of her dust and grime lies over the paint (the file's "dust")
 	};
 
 	/** One level of detail of one body. */
@@ -298,6 +299,9 @@ namespace LandKit
 		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
 		 * that choice; any other is let be. */
 		std::map<std::string, std::string> Choose;
+		/** National marks (release 2, "-TheaterLandMarks"): her owner's plain period marking painted on her skin at each
+		 * of her file's mark places (Model::Marks). Off: none, as before. */
+		bool bMarks = false;
 	};
 
 	class Model
@@ -791,6 +795,9 @@ namespace LandKit
 		/** Any block marked captured, whatever the switch: stands in for every tank block of the attacker taken from the
 		 * defender's model (the Mac's off/on line, "-TheaterLandCapturedTest"). Set before Load. */
 		bool bCapturedTest = false;
+		/** National marks (release 2, Brian's 24 Nov ask for the tanks' country markings): on, every vehicle wears her
+		 * owner's plain period marking at her file's mark places (Dress::bMarks). Off unless set; set before Load. */
+		bool bMarks = false;
 
 	private:
 		std::vector<Vehicle> All;

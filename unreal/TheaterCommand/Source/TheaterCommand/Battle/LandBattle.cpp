@@ -4082,6 +4082,12 @@ void ALandBattle::MakeArmour()
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: captured kit ON%s"), Armour->bCapturedTest ? TEXT(" (test: every other attacker tank block taken from the defender)") : TEXT(""));
 	}
+	// National marks (release 2, "-TheaterLandMarks", off until the art director and a Mac reading pass; Brian, 24
+	// November, the tanks' country markings): every vehicle wears her owner's plain period marking at her file's mark
+	// places, painted on her skin (LandKit's Dress::bMarks): the Germans' beam cross, the Allies' white star, the Red
+	// Army's red star, the British flash before July 1943. Off: none, as before.
+	Armour->bMarks = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMarks"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: national marks %s"), Armour->bMarks ? TEXT("painted on (-TheaterLandMarks, release 2)") : TEXT("off"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther

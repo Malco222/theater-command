@@ -1304,6 +1304,609 @@ namespace LandKit
 		}
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// National marks (release 2, Dress::bMarks).
+
+	namespace
+	{
+		/** One flat piece of a mark in one paint: a rectangle (filled in a grid) or a convex outline (fanned from its
+		 * first corner), in the mark's radii, across (+ to her right as you face the plate) and up; the layers stack a
+		 * few millimetres apart, the higher over the lower. */
+		struct MarkPiece
+		{
+			std::vector<std::pair<double, double>> Outline;
+			bool bBox = false;
+			uint8_t R = 0, G = 0, B = 0;
+			int Layer = 0;
+		};
+		struct MarkPaint
+		{
+			uint8_t R, G, B;
+		};
+		// (sRGB, as the files' own colours: the white the captured kit's stars wear, the black of its crosses, the tank
+		// files' own red, A82020)
+		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 24, 24, 24 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 188, 156, 72 },
+			MarkBlue{ 40, 58, 120 };
+
+		void MarkBox(std::vector<MarkPiece>& Out, double A0, double U0, double A1, double U1, const MarkPaint& C, int Layer)
+		{
+			MarkPiece P;
+			P.Outline = { { A0, U0 }, { A1, U0 }, { A1, U1 }, { A0, U1 } };
+			P.bBox = true;
+			P.R = C.R;
+			P.G = C.G;
+			P.B = C.B;
+			P.Layer = Layer;
+			Out.push_back(std::move(P));
+		}
+		void MarkDisc(std::vector<MarkPiece>& Out, double Size, const MarkPaint& C, int Layer)
+		{
+			MarkPiece P;
+			for (int K = 0; K < 24; ++K)
+			{
+				P.Outline.push_back({ Size * std::cos(K * Pi / 12.0), Size * std::sin(K * Pi / 12.0) });
+			}
+			P.R = C.R;
+			P.G = C.G;
+			P.B = C.B;
+			P.Layer = Layer;
+			Out.push_back(std::move(P));
+		}
+		/** A ring from Inner to Outer, as 24 four-sided pieces (each convex) on the bottom layer. */
+		void MarkRing(std::vector<MarkPiece>& Out, double Inner, double Outer, const MarkPaint& C)
+		{
+			for (int K = 0; K < 24; ++K)
+			{
+				const double A0 = K * Pi / 12.0, A1 = (K + 1) * Pi / 12.0;
+				MarkPiece P;
+				P.Outline = { { Inner * std::cos(A0), Inner * std::sin(A0) }, { Outer * std::cos(A0), Outer * std::sin(A0) }, { Outer * std::cos(A1), Outer * std::sin(A1) },
+					{ Inner * std::cos(A1), Inner * std::sin(A1) } };
+				P.R = C.R;
+				P.G = C.G;
+				P.B = C.B;
+				Out.push_back(std::move(P));
+			}
+		}
+		/** A five-pointed star, a point straight up: its middle pentagon and the five points, each convex. */
+		void MarkStar(std::vector<MarkPiece>& Out, double Size, const MarkPaint& C, int Layer)
+		{
+			const double Inner = Size * 0.382;
+			auto Corner = [](double R, double Deg) { return std::pair<double, double>(R * std::cos(Deg * Rad), R * std::sin(Deg * Rad)); };
+			MarkPiece Middle;
+			for (int K = 0; K < 5; ++K)
+			{
+				Middle.Outline.push_back(Corner(Inner, 90.0 + 36.0 + 72.0 * K));
+			}
+			Middle.R = C.R;
+			Middle.G = C.G;
+			Middle.B = C.B;
+			Middle.Layer = Layer;
+			for (int K = 0; K < 5; ++K)
+			{
+				const double Tip = 90.0 + 72.0 * K;
+				MarkPiece Point = Middle;
+				Point.Outline = { Corner(Inner, Tip - 36.0), Corner(Size, Tip), Corner(Inner, Tip + 36.0) };
+				Out.push_back(std::move(Point));
+			}
+			Out.push_back(std::move(Middle));
+		}
+
+		/** Which mark her owner painted in the battle's month: each nation's plain period marking, never a party emblem
+		 * (the art director's rule). The file's own "mark_months" rows for her nation first (the British: none, then the
+		 * recognition flash from November 1941, the Allies' white star from July 1943); "none" where her army painted none
+		 * that the art director has ruled on. */
+		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months)
+		{
+			const int Key = Year * 12 + Month;
+			auto KeyOf = [](const std::string& Text, int Otherwise)
+			{
+				int Y = 0, M = 0;
+				return std::sscanf(Text.c_str(), "%d-%d", &Y, &M) == 2 ? Y * 12 + M : Otherwise;
+			};
+			const Json::Value Rows = Months[Nation];
+			for (size_t I = 0; I < Rows.Count(); ++I)
+			{
+				const Json::Value Row = Rows.At(I);
+				if (KeyOf(Row["from"].Str(), -1) <= Key && Key <= KeyOf(Row["to"].Str(), 1 << 30))
+				{
+					const std::string Kind = Row["mark"].Str("none");
+					return Kind == "star" ? std::string("white star") : Kind;
+				}
+			}
+			if (Nation == "GER")
+			{
+				return "cross";
+			}
+			if (Nation == "USA" || Nation == "FFR")
+			{
+				return "white star";
+			}
+			if (Nation == "SOV")
+			{
+				return "red star";
+			}
+			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || (Nation == "POL" && Year >= 1940))
+			{
+				return Key >= 1943 * 12 + 7 ? "white star" : Key >= 1941 * 12 + 11 ? "flash" : "none";
+			}
+			if (Nation == "ITA")
+			{
+				return "rectangle";
+			}
+			if (Nation == "JAP")
+			{
+				return "army star";
+			}
+			if (Nation == "FRA")
+			{
+				return "roundel";
+			}
+			return "none";
+		}
+
+		/** A mark's pieces, bottom layer first. */
+		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out)
+		{
+			Out.clear();
+			if (Kind == "cross")
+			{
+				// The straight-armed beam cross, black edged in white (the art director: "the plain beam cross only"), laid
+				// as one coat of pieces side by side: a layer of black over white stood off a stepped plate (the Tiger's
+				// welded seams) let the white show through in cracks.
+				const double E = 1.0, B = 0.91, W = 0.36, K = 0.27;
+				MarkBox(Out, -K, -B, K, B, MarkBlack, 0);
+				MarkBox(Out, -B, -K, -K, K, MarkBlack, 0);
+				MarkBox(Out, K, -K, B, K, MarkBlack, 0);
+				MarkBox(Out, -E, -W, -B, W, MarkWhite, 0);
+				MarkBox(Out, B, -W, E, W, MarkWhite, 0);
+				MarkBox(Out, -W, B, W, E, MarkWhite, 0);
+				MarkBox(Out, -W, -E, W, -B, MarkWhite, 0);
+				MarkBox(Out, -B, K, -K, W, MarkWhite, 0);
+				MarkBox(Out, -B, -W, -K, -K, MarkWhite, 0);
+				MarkBox(Out, K, K, B, W, MarkWhite, 0);
+				MarkBox(Out, K, -W, B, -K, MarkWhite, 0);
+				MarkBox(Out, -W, W, -K, B, MarkWhite, 0);
+				MarkBox(Out, K, W, W, B, MarkWhite, 0);
+				MarkBox(Out, -W, -B, -K, -W, MarkWhite, 0);
+				MarkBox(Out, K, -B, W, -W, MarkWhite, 0);
+			}
+			else if (Kind == "white star")
+			{
+				MarkStar(Out, 1.0, MarkWhite, 0); // the Allies' plain white star
+			}
+			else if (Kind == "red star")
+			{
+				MarkStar(Out, 1.0, MarkRed, 0); // the Red Army's plain red star
+			}
+			else if (Kind == "flash")
+			{
+				// The British recognition flash: white, red, white, upright bars side by side.
+				MarkBox(Out, -0.9, -0.75, -0.3, 0.75, MarkWhite, 0);
+				MarkBox(Out, -0.3, -0.75, 0.3, 0.75, MarkRed, 0);
+				MarkBox(Out, 0.3, -0.75, 0.9, 0.75, MarkWhite, 0);
+			}
+			else if (Kind == "rectangle")
+			{
+				// The Italians' company rectangle, the first company's red, with the first platoon's one white bar (their
+				// tanks wore no national cockade on their sides).
+				MarkBox(Out, -1.0, -0.62, -0.11, 0.62, MarkRed, 0);
+				MarkBox(Out, -0.11, -0.62, 0.11, 0.62, MarkWhite, 0);
+				MarkBox(Out, 0.11, -0.62, 1.0, 0.62, MarkRed, 0);
+			}
+			else if (Kind == "army star")
+			{
+				MarkStar(Out, 0.7, MarkYellow, 0); // the Japanese army's small yellow star
+			}
+			else if (Kind == "roundel")
+			{
+				// The French tricolour roundel of 1940, blue outside.
+				MarkRing(Out, 0.66, 1.0, MarkBlue);
+				MarkRing(Out, 0.33, 0.66, MarkWhite);
+				MarkDisc(Out, 0.33, MarkRed, 0);
+			}
+		}
+
+		/**
+		 * Paints one mark on one level of a body (Out: its points from Pivot, model axes) at At (model frame), facing
+		 * out along Facing, Radius metres: each piece cut into a grid of about Step metres, every point carried in along
+		 * the facing onto her own skin (the outermost of her triangles there that faces out) and stood Lift metres off
+		 * it (a layer a little more), so a mark on a rounded turret lies on the round as a painted one. Where her file's
+		 * place would hang the mark over an edge (a wheel arch, a body's top lip, a step in a plate), it is moved the
+		 * least that sets the whole of it on one face of her skin (up to six tenths of its radius), else made smaller
+		 * (to seven tenths); what still finds no skin is left out. Each point takes some of the skin's own colour under
+		 * it (more where her file's "dust" says the mark is dusty: 0 to 100) and the skin's soot, so it weathers and
+		 * burns as she does. Gives the triangles added (Moved: how far it was moved, metres; Scale: its size kept).
+		 */
+		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
+			double Dust, double Step, double Lift, uint64_t Seed, double* Moved = nullptr, double* Scale = nullptr)
+		{
+			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
+			// (on a wall its top is toward the sky; on a roof, toward her front)
+			const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+			const V3 Up = (Hint - F * F.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+			const V3 Across = Up.Cross(F).Unit(V3(0.0, 1.0, 0.0));
+			const V3 Place = At - Pivot;
+			const double Front = 0.04, Back = 0.06 + 0.25 * Radius, Shift = 0.6 * Radius;
+			double Reach = 0.0;
+			for (const MarkPiece& P : Pieces)
+			{
+				for (const auto& C : P.Outline)
+				{
+					Reach = std::max(Reach, std::max(std::fabs(C.first), std::fabs(C.second)) * Radius);
+				}
+			}
+			const double Around = Reach + Shift + 0.02;
+			// Her triangles about the place: within the mark's reach (and the most it may move) across and up, and Front
+			// before to Back behind it.
+			struct Tri
+			{
+				V3 A, E1, E2;
+				uint32_t I0, I1, I2;
+			};
+			std::vector<Tri> Near;
+			auto PointOf = [&Out](uint32_t I) { return V3(Out.Points[I * 3], Out.Points[I * 3 + 1], Out.Points[I * 3 + 2]); };
+			for (size_t T = 0; T + 2 < Out.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Out.Triangles[T], I1 = Out.Triangles[T + 1], I2 = Out.Triangles[T + 2];
+				const V3 A = PointOf(I0), B = PointOf(I1), C = PointOf(I2);
+				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+				for (const V3& P : { A, B, C })
+				{
+					const V3 D = P - Place;
+					const double Co[3] = { D.Dot(Across), D.Dot(Up), D.Dot(F) };
+					for (int K = 0; K < 3; ++K)
+					{
+						Lo[K] = std::min(Lo[K], Co[K]);
+						Hi[K] = std::max(Hi[K], Co[K]);
+					}
+				}
+				if (Hi[0] < -Around || Lo[0] > Around || Hi[1] < -Around || Lo[1] > Around || Hi[2] < -Back || Lo[2] > Front)
+				{
+					continue;
+				}
+				Near.push_back({ A, B - A, C - A, I0, I1, I2 });
+			}
+			// The ray in against the facing from Front before Flat (Moller and Trumbore's), to the outermost skin that faces
+			// out (the inside of a plate behind it is passed by): how far behind Flat it lies, and where.
+			struct Hit
+			{
+				const Tri* T = nullptr;
+				double U = 0.0, V = 0.0, Behind = 0.0;
+			};
+			auto Cast = [&Near, &Out, &F, Front, Back](const V3& Flat)
+			{
+				Hit Best;
+				double Nearest = Front + Back;
+				const V3 From = Flat + F * Front;
+				const V3 Way = -F;
+				for (const Tri& T : Near)
+				{
+					const V3 Pv = Way.Cross(T.E2);
+					const double Det = T.E1.Dot(Pv);
+					if (std::fabs(Det) < 1e-12)
+					{
+						continue;
+					}
+					const double Inv = 1.0 / Det;
+					const V3 S = From - T.A;
+					const double Bu = S.Dot(Pv) * Inv;
+					if (Bu < -1e-6 || Bu > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const V3 Qv = S.Cross(T.E1);
+					const double Bv = Way.Dot(Qv) * Inv;
+					if (Bv < -1e-6 || Bu + Bv > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const double Far = T.E2.Dot(Qv) * Inv;
+					if (Far < 0.0 || Far >= Nearest)
+					{
+						continue;
+					}
+					const V3 Face = T.E1.Cross(T.E2);
+					const V3 N0(Out.Normals[T.I0 * 3], Out.Normals[T.I0 * 3 + 1], Out.Normals[T.I0 * 3 + 2]);
+					if ((Face.Dot(N0) >= 0.0 ? Face : -Face).Unit().Dot(F) < 0.2)
+					{
+						continue;
+					}
+					Nearest = Far;
+					Best.T = &T;
+					Best.U = Bu;
+					Best.V = Bv;
+					Best.Behind = Far - Front;
+				}
+				return Best;
+			};
+
+			// Where it fits: the place, or the nearest move (then a smaller size) that has every sample of the mark on her
+			// skin, on one face of it (the depth under it spread no more than its round allows).
+			std::vector<std::pair<double, double>> Samples;
+			for (int J = -6; J <= 6; ++J)
+			{
+				for (int I = -6; I <= 6; ++I)
+				{
+					const double A = I / 6.0, U = J / 6.0;
+					bool bIn = false;
+					for (const MarkPiece& P : Pieces)
+					{
+						bool bInside = true;
+						for (size_t K = 0; K < P.Outline.size() && bInside; ++K)
+						{
+							const auto& C0 = P.Outline[K];
+							const auto& C1 = P.Outline[(K + 1) % P.Outline.size()];
+							bInside = (C1.first - C0.first) * (U - C0.second) - (C1.second - C0.second) * (A - C0.first) >= -1e-9;
+						}
+						bIn = bIn || bInside;
+					}
+					if (bIn)
+					{
+						Samples.push_back({ A, U });
+					}
+				}
+			}
+			auto Fits = [&](const V3& Middle, double Size)
+			{
+				double Lo = 1e9, Hi = -1e9;
+				for (const auto& Sm : Samples)
+				{
+					const Hit H = Cast(Middle + Across * (Sm.first * Size) + Up * (Sm.second * Size));
+					if (!H.T)
+					{
+						return false;
+					}
+					Lo = std::min(Lo, H.Behind);
+					Hi = std::max(Hi, H.Behind);
+				}
+				return Hi - Lo <= 0.02 + 0.2 * Size;
+			};
+			V3 Middle = Place;
+			double Size = Radius;
+			bool bFound = Fits(Middle, Size);
+			for (const double Shrink : { 1.0, 0.85, 0.7 })
+			{
+				for (int Ring = bFound ? 7 : 1; Ring <= 6 && !bFound; ++Ring)
+				{
+					const double By = Shift * Ring / 6.0;
+					// (up and down first: a mark keeps its place along her side; then across, then the corners)
+					for (const auto& Way : { std::pair<double, double>(0.0, 1.0), { 0.0, -1.0 }, { 1.0, 0.0 }, { -1.0, 0.0 }, { 0.7071, 0.7071 }, { -0.7071, 0.7071 },
+							 { 0.7071, -0.7071 }, { -0.7071, -0.7071 } })
+					{
+						const V3 Try = Place + Across * (Way.first * By) + Up * (Way.second * By);
+						if (Fits(Try, Radius * Shrink))
+						{
+							Middle = Try;
+							Size = Radius * Shrink;
+							bFound = true;
+							break;
+						}
+					}
+				}
+				if (!bFound && Shrink > 0.7 && Fits(Place, Radius * Shrink * 0.85))
+				{
+					Size = Radius * Shrink * 0.85;
+					bFound = true;
+				}
+			}
+			if (Moved)
+			{
+				*Moved = (Middle - Place).Length();
+			}
+			if (Scale)
+			{
+				*Scale = Size / Radius;
+			}
+
+			const double DustShare = 0.1 + 0.3 * Clamp(Dust / 100.0, 0.0, 1.0);
+			const uint32_t FirstPoint = static_cast<uint32_t>(Out.Count());
+			const size_t FirstTriangle = Out.Triangles.size();
+			std::vector<uint8_t> Missed;
+			// One point of the mark: carried onto the skin, coloured, kept.
+			auto Point = [&](double A, double U, int Layer, const MarkPiece& P)
+			{
+				const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
+				const Hit H = Cast(Flat);
+				const double Raise = Lift * (1.0 + 0.75 * Layer);
+				V3 Where = Flat + F * Raise, Normal = F;
+				double R = P.R, G = P.G, B = P.B;
+				float Soot = 0.7f;
+				const double Grime = Clamp(DustShare + 0.14 * (Noise(Flat * 9.0, Seed) - 0.5) + 0.1 * (Noise(Flat * 31.0, Seed + 1) - 0.5), 0.0, 0.6);
+				if (H.T)
+				{
+					const uint32_t Ix[3] = { H.T->I0, H.T->I1, H.T->I2 };
+					const double Wt[3] = { 1.0 - H.U - H.V, H.U, H.V };
+					V3 Nm;
+					double Sk[3] = { 0.0, 0.0, 0.0 };
+					double Burnt = 0.0;
+					for (int K = 0; K < 3; ++K)
+					{
+						Nm += V3(Out.Normals[Ix[K] * 3], Out.Normals[Ix[K] * 3 + 1], Out.Normals[Ix[K] * 3 + 2]) * Wt[K];
+						for (int Ch = 0; Ch < 3; ++Ch)
+						{
+							Sk[Ch] += Out.Colours[Ix[K] * 4 + Ch] * Wt[K];
+						}
+						Burnt += Out.Soot[Ix[K]] * Wt[K];
+					}
+					Normal = Nm.Unit(F);
+					if (Normal.Dot(F) < 0.2)
+					{
+						Normal = F;
+					}
+					// (the outermost of the skin about the point, half a grid's step each way (a fifth of a small mark's
+					// size): the mark rides over a weld bead or a ridge narrower than its grid, up to a centimetre proud, as a
+					// coat of paint would, and none pokes through it)
+					double Behind = H.Behind;
+					const double Half = std::min(0.5 * Step, 0.2 * Size);
+					for (const V3& Off : { Across * Half, Across * -Half, Up * Half, Up * -Half })
+					{
+						const Hit Round = Cast(Flat + Off);
+						if (Round.T && Round.Behind < Behind && Round.Behind > H.Behind - 0.01)
+						{
+							Behind = Round.Behind;
+						}
+					}
+					Where = Flat - F * Behind + Normal * Raise;
+					R = Lerp(R, Sk[0], Grime);
+					G = Lerp(G, Sk[1], Grime);
+					B = Lerp(B, Sk[2], Grime);
+					Soot = static_cast<float>(Burnt);
+				}
+				Missed.push_back(H.T ? 0 : 1);
+				Out.Points.insert(Out.Points.end(), { static_cast<float>(Where.X), static_cast<float>(Where.Y), static_cast<float>(Where.Z) });
+				Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Normal.X), static_cast<float>(Normal.Y), static_cast<float>(Normal.Z) });
+				Out.Colours.insert(Out.Colours.end(), { static_cast<uint8_t>(Clamp(R, 0.0, 255.0) + 0.5), static_cast<uint8_t>(Clamp(G, 0.0, 255.0) + 0.5),
+					static_cast<uint8_t>(Clamp(B, 0.0, 255.0) + 0.5), 255 });
+				Out.Soot.push_back(Soot);
+				return static_cast<uint32_t>(Out.Soot.size() - 1);
+			};
+			// (counter-clockwise seen from before her facing, as her files wind theirs: across, up, out is right-handed; a
+			// triangle with a corner that found no skin is left out)
+			size_t Added = 0;
+			auto Face = [&Out, &Added, &Missed, FirstPoint](uint32_t A, uint32_t B, uint32_t C)
+			{
+				if (Missed[A - FirstPoint] || Missed[B - FirstPoint] || Missed[C - FirstPoint])
+				{
+					return;
+				}
+				Out.Triangles.insert(Out.Triangles.end(), { A, B, C });
+				++Added;
+			};
+			// The rectangles are cut on lines shared by all of them (every rectangle's edges, and a grid about Step apart from
+			// the middle), so pieces side by side meet point for point and no crack opens between them on a stepped plate.
+			std::vector<double> CutA, CutU;
+			for (const MarkPiece& P : Pieces)
+			{
+				if (P.bBox)
+				{
+					CutA.insert(CutA.end(), { P.Outline[0].first, P.Outline[2].first });
+					CutU.insert(CutU.end(), { P.Outline[0].second, P.Outline[2].second });
+				}
+			}
+			const double Grid = Step / std::max(Size, 1e-3);
+			for (int K = -static_cast<int>(1.05 / Grid); K <= static_cast<int>(1.05 / Grid); ++K)
+			{
+				CutA.push_back(K * Grid);
+				CutU.push_back(K * Grid);
+			}
+			for (std::vector<double>* Cuts : { &CutA, &CutU })
+			{
+				std::sort(Cuts->begin(), Cuts->end());
+				Cuts->erase(std::unique(Cuts->begin(), Cuts->end(), [](double X, double Y) { return std::fabs(X - Y) < 1e-6; }), Cuts->end());
+			}
+			auto Within = [](const std::vector<double>& Cuts, double Lo, double Hi)
+			{
+				std::vector<double> Kept;
+				for (double C : Cuts)
+				{
+					if (C >= Lo - 1e-6 && C <= Hi + 1e-6)
+					{
+						Kept.push_back(C);
+					}
+				}
+				return Kept;
+			};
+			for (const MarkPiece& P : Pieces)
+			{
+				if (P.bBox)
+				{
+					const std::vector<double> As = Within(CutA, P.Outline[0].first, P.Outline[2].first), Us = Within(CutU, P.Outline[0].second, P.Outline[2].second);
+					const int NA = static_cast<int>(As.size()) - 1, NU = static_cast<int>(Us.size()) - 1;
+					if (NA < 1 || NU < 1)
+					{
+						continue;
+					}
+					const uint32_t First = static_cast<uint32_t>(Out.Count());
+					for (int J = 0; J <= NU; ++J)
+					{
+						for (int I = 0; I <= NA; ++I)
+						{
+							Point(As[static_cast<size_t>(I)], Us[static_cast<size_t>(J)], P.Layer, P);
+						}
+					}
+					for (int J = 0; J < NU; ++J)
+					{
+						for (int I = 0; I < NA; ++I)
+						{
+							const uint32_t C00 = First + static_cast<uint32_t>(J * (NA + 1) + I), C10 = C00 + 1;
+							const uint32_t C01 = C00 + static_cast<uint32_t>(NA + 1), C11 = C01 + 1;
+							Face(C00, C10, C11);
+							Face(C00, C11, C01);
+						}
+					}
+					continue;
+				}
+				// A convex outline: fanned from its first corner, each fan's triangle cut into N by N.
+				for (size_t K = 1; K + 1 < P.Outline.size(); ++K)
+				{
+					const auto& Ca = P.Outline[0];
+					const auto& Cb = P.Outline[K];
+					const auto& Cc = P.Outline[K + 1];
+					const double Longest = std::max({ std::hypot(Cb.first - Ca.first, Cb.second - Ca.second), std::hypot(Cc.first - Cb.first, Cc.second - Cb.second),
+						std::hypot(Ca.first - Cc.first, Ca.second - Cc.second) }) * Size;
+					const int Cuts = std::max(1, static_cast<int>(std::ceil(Longest / Step)));
+					// (rows from corner a: row J holds J + 1 points between the a-b and a-c edges)
+					std::vector<uint32_t> Row, Last;
+					for (int J = 0; J <= Cuts; ++J)
+					{
+						Row.clear();
+						for (int I = 0; I <= J; ++I)
+						{
+							const double Tb = static_cast<double>(J - I) / Cuts, Tc = static_cast<double>(I) / Cuts;
+							Row.push_back(Point(Ca.first + (Cb.first - Ca.first) * Tb + (Cc.first - Ca.first) * Tc,
+								Ca.second + (Cb.second - Ca.second) * Tb + (Cc.second - Ca.second) * Tc, P.Layer, P));
+						}
+						if (J > 0)
+						{
+							for (int I = 0; I < J; ++I)
+							{
+								Face(Last[static_cast<size_t>(I)], Row[static_cast<size_t>(I)], Row[static_cast<size_t>(I) + 1]);
+								if (I + 1 < J)
+								{
+									Face(Last[static_cast<size_t>(I)], Row[static_cast<size_t>(I) + 1], Last[static_cast<size_t>(I) + 1]);
+								}
+							}
+						}
+						Last.swap(Row);
+					}
+				}
+			}
+			// (the points that found no skin, and so no triangle, taken out again)
+			std::vector<int64_t> NewIndex(Out.Count() - FirstPoint, -1);
+			for (size_t T = FirstTriangle; T < Out.Triangles.size(); ++T)
+			{
+				NewIndex[Out.Triangles[T] - FirstPoint] = 0;
+			}
+			uint32_t Next = FirstPoint;
+			for (size_t K = 0; K < NewIndex.size(); ++K)
+			{
+				if (NewIndex[K] < 0)
+				{
+					continue;
+				}
+				const size_t From = FirstPoint + K;
+				NewIndex[K] = Next;
+				if (From != Next)
+				{
+					std::copy_n(&Out.Points[From * 3], 3, &Out.Points[Next * 3]);
+					std::copy_n(&Out.Normals[From * 3], 3, &Out.Normals[Next * 3]);
+					std::copy_n(&Out.Colours[From * 4], 4, &Out.Colours[Next * 4]);
+					Out.Soot[Next] = Out.Soot[From];
+				}
+				++Next;
+			}
+			Out.Points.resize(static_cast<size_t>(Next) * 3);
+			Out.Normals.resize(static_cast<size_t>(Next) * 3);
+			Out.Colours.resize(static_cast<size_t>(Next) * 4);
+			Out.Soot.resize(Next);
+			for (size_t T = FirstTriangle; T < Out.Triangles.size(); ++T)
+			{
+				Out.Triangles[T] = static_cast<uint32_t>(NewIndex[Out.Triangles[T] - FirstPoint]);
+			}
+			return Added;
+		}
+	}
+
 	bool Model::Load(const std::string& Text, const Dress& D, std::string& OutError)
 	{
 		Json Doc;
@@ -1639,6 +2242,7 @@ namespace LandKit
 			Out.Facing = ReadV3(S["facing"], V3(1.0, 0.0, 0.0)).Unit(V3(1.0, 0.0, 0.0));
 			Out.Radius = S["radius"].Num(0.2);
 			Out.Part = std::max(0, PartIndex(S["part"].Str()));
+			Out.Dust = S["dust"].Num(0.0);
 			Marks.push_back(Out);
 		}
 
@@ -2187,6 +2791,31 @@ namespace LandKit
 				if (Plate(RoofPart, 2, 1.0, 0.3, At)) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, At, V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
 				const int BackPart = PartIndex("hull");
 				if (Plate(BackPart, 0, -1.0, 0.25, At)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
+			}
+
+			// National marks (release 2, Dress::bMarks, "-TheaterLandMarks"; Brian, 24 November, the tanks' country
+			// markings): her owner's plain period marking at each place her file gives (a "_" place, a lorry's door, is
+			// whoever owns her; any other is her maker's spot, and her owner's mark goes there), painted onto her own skin
+			// at both levels (the far one coarser and a little further off its coarser skin). A captured vehicle keeps the
+			// captor's big marks above; a captor the captured kit has no mark for (the British, the Italians) wears his own
+			// here, half as big again, as the captured kit's are.
+			const bool bCaptorMarked = bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV");
+			if (D.bMarks && !bCaptorMarked && !Marks.empty())
+			{
+				std::vector<MarkPiece> Pieces;
+				MarkPieces(MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"]), Pieces);
+				for (size_t I = 0; I < Marks.size() && !Pieces.empty(); ++I)
+				{
+					const Mark& Mk = Marks[I];
+					const Part& Pt = Parts[static_cast<size_t>(Mk.Part)];
+					if (Pt.Body < 0 || !Pt.bShown || Bodies[static_cast<size_t>(Pt.Body)].bTrack)
+					{
+						continue;
+					}
+					Body& Bo = Bodies[static_cast<size_t>(Pt.Body)];
+					PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0), Mk.Dust,
+						Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull));
+				}
 			}
 		}
 
@@ -5321,6 +5950,7 @@ namespace LandKit
 		D.Terrain = Terrain;
 		D.Captured = Captured;
 		D.Choose = Choose;
+		D.bMarks = bMarks;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{

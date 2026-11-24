@@ -2,6 +2,8 @@
 # Brian's picture sheet of the ground battle's vehicles, painted from LandKit's own bodies and poses (no engine): builds
 # the painter, paints each panel, then lays them out on one sheet 1600 pixels wide (needs python3 with Pillow).
 # Usage: Tools/land_kit/pictures.sh <sheet.png>   (the panels go to ${LAND_KIT_OUT:-$TMPDIR/land_kit}/pictures)
+# LAND_KIT_MARKS=1 paints the national marks' own sheet instead (release 2, -TheaterLandMarks: each owner's period
+# marking as the game paints it on her skin, whole vehicles and close looks).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
