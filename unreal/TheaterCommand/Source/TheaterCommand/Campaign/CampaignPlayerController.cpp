@@ -336,6 +336,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("nicknames"), TEXT("Earned names"), TEXT("A corps that wins three hard fights (an attack carried at poor odds, a line held against the odds, or a win bought dear) is given a name by its own army, in its country's own way, and the name is lettered over its flag. Every country's corps can earn one. A name changes nothing in the war. It can be switched in any month."),
 				Now.bNickFlags ? TEXT("ON") : TEXT("OFF"), Now.bNickFlags);
 			// (Release 2, fleetattack.ts; Brian 23 November 2026 22:23Z) Fleets dropped on an enemy fleet attack it at once.
+			// (Release 2, marked.ts; Brian 24 November 2026 18:01Z) The marked army.
+			Add(TEXT("marked"), TEXT("The marked army"), TEXT("An enemy army that takes one of your towns is marked: it wears a red tag on its flagpole, lettered with the town, and its card says what it took, until you beat it (throw back its attack, or drive it off the field). Beating it, or its end, takes the mark off with a line in the month's news. No more than three are marked at once. A mark changes nothing in the war. It can be switched in any month."),
+				Now.bMarkedOn ? TEXT("ON") : TEXT("OFF"), Now.bMarkedOn);
 			Add(TEXT("fleetattackrule"), TEXT("Fleet attacks"), TEXT("Drop one of your fleets on an enemy fleet in its reach, at sea or in his harbour, and the battle is fought at once, at any odds: the card gives the odds and the likely losses first. A fleet attacks once a month, and stays where the battle leaves it. Off, fleets meet only at the month's end, where an admiral thinks the odds good enough. It can be switched in any month."),
 				Now.bFleetAttack ? TEXT("ON") : TEXT("OFF"), Now.bFleetAttack);
 			// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Divisions split off a corps, and put back.
@@ -371,6 +374,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("enemymoves"), TEXT("Enemy moves near you"), TEXT("On: when you end the month, the eye goes to each place where another country's army came up to your land or attacked your troops, draws the moves as arrows (red at war with you, amber at peace, a ring where your troops were attacked) and says what happened, then the month's news comes. Space or SKIP ends it. Off: nothing plays before the news, and the whole tour of the map is a press away on the month's card."), bEnemyMoves ? TEXT("ON") : TEXT("OFF"), bEnemyMoves);
 	// (Release 2, the enemy's month near you, round 2; Brian, 24 November 2026 18:01Z: "yes to all")
 	Add(TEXT("alliesnear"), TEXT("Allies' battles near you"), TEXT("On: the watch of the enemy's month near you also stops where your allies fought next to your land: a smaller steel ring round the place, a red arrow where an ally was attacked, a blue one where an ally attacked, and a sentence of their own. Off: only what touched you is shown."), bAlliesNear ? TEXT("ON") : TEXT("OFF"), bAlliesNear);
+	Add(TEXT("takeme"), TEXT("Take me there"), TEXT("On: each stop of the enemy's month near you has a TAKE ME THERE button (or press G). It ends the watch at that place, keeps the eye on it and puts your nearest army in your hand, ready to answer. The month's news comes as usual."), bTakeMeThere ? TEXT("ON") : TEXT("OFF"), bTakeMeThere);
+	Add(TEXT("cornerpings"), TEXT("Corner pings"), TEXT("On: while the enemy's month near you plays, the small map in the corner marks each of its stops: the ones still to come pulse (red where you were attacked, amber or deep red where an army came up to you, steel for your allies' battles), the one on screen stands in a brass ring, the ones seen fade to a dot. Off: the small map stays as it is."), bCornerPings ? TEXT("ON") : TEXT("OFF"), bCornerPings);
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's news comes first when a month ends (as seals along the map's edge, or its card if 'Month report: open by itself' is on), and the tour of the map and the newsreel are a press away on the card. On: the other countries' moves, the newsreel and the great moments play first."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
 	// (Release 2, news at the map's edge; ruling 131: merge by hand)
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
@@ -443,6 +448,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("alliesnear")) // (release 2, the enemy's month near you, round 2)
 	{
 		bAlliesNear = !bAlliesNear;
+	}
+	else if (Id == TEXT("takeme")) // (release 2, the enemy's month near you, round 2)
+	{
+		bTakeMeThere = !bTakeMeThere;
+	}
+	else if (Id == TEXT("cornerpings")) // (release 2, the enemy's month near you, round 2)
+	{
+		bCornerPings = !bCornerPings;
 	}
 	else if (Id == TEXT("cardself")) // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	{
@@ -532,14 +545,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -633,7 +646,7 @@ void ACampaignPlayerController::SaveOptions() const
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
 	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear)), *OptionsFile());
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"takeMe\":%s,\"cornerPings\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bTakeMeThere), Word(bCornerPings)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -680,6 +693,8 @@ void ACampaignPlayerController::LoadOptions()
 	bMonthReportOpens = Yes(TEXT("reportOpens"), false); // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	bEnemyMoves = Yes(TEXT("enemyMoves"), true); // (Release 2, the enemy's month near you)
 	bAlliesNear = Yes(TEXT("alliesNear"), true); // (Release 2, the enemy's month near you, round 2)
+	bTakeMeThere = Yes(TEXT("takeMe"), true);
+	bCornerPings = Yes(TEXT("cornerPings"), true);
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -1094,6 +1109,13 @@ void ACampaignPlayerController::EnterCampaign()
 	FaceOff = FFaceOff();
 	CloseDocument();
 	bWatching = false;
+	// ---- (release 2, the enemy's month near you; the 3D pre-check's tidy, 24 Nov 18:14Z) nor a watch's arrows
+	ClearStepArrows();
+	bWatchNear = false;
+	TakeRegion = INDEX_NONE;
+	NearStopPlaces.Reset();
+	NearStopInks.Reset();
+	// ---- (end release 2)
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
 	// (The code checker, 17 November.) Nor is anything of the campaign just left carried into this one: a fleet or an
@@ -1268,6 +1290,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
 	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACampaignPlayerController::ToggleWealth);
+	InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACampaignPlayerController::TakeMeThere); // (release 2: the enemy's month near you, TAKE ME THERE)
 	InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACampaignPlayerController::ToggleDayNight);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACampaignPlayerController::ToggleFrame);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
@@ -7457,6 +7480,39 @@ void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D
 	}
 }
 
+void ACampaignPlayerController::GetWatchPings(TArray<FWatchPing>& OutPings) const
+{
+	OutPings.Reset();
+	if (!bCornerPings || !bEnemyMoves || !bWatching || !bWatchNear || !Map.IsValid())
+	{
+		return;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	// (the small map's frame, as its marks have it: the map's own box, or the whole world where the world is attached)
+	const bool bWhole = Data.bWorld && Data.WorldWidth > 0.0;
+	const double FrameX = bWhole ? Data.WorldMinX : 0.0, FrameY = bWhole ? Data.WorldMinY : 0.0;
+	const double FrameWide = bWhole ? Data.WorldWidth : Data.Width, FrameHigh = bWhole ? Data.WorldHeight : Data.Height;
+	if (!(FrameWide > 0.0) || !(FrameHigh > 0.0))
+	{
+		return;
+	}
+	for (int32 Stop = 0; Stop < NearStopPlaces.Num() && Stop < NearStopInks.Num(); ++Stop)
+	{
+		const int32 Place = NearStopPlaces[Stop];
+		if (!Data.Regions.IsValidIndex(Place))
+		{
+			continue;
+		}
+		FWatchPing& Ping = OutPings.AddDefaulted_GetRef();
+		const FVector2D At = Data.Regions[Place].Center;
+		Ping.Share = FVector2D((At.X - FrameX) / FrameWide, (At.Y - FrameY) / FrameHigh);
+		Ping.Ink = NearStopInks[Stop];
+		// (NearShown counts the stop on screen: the first is shown once it is 1)
+		Ping.State = static_cast<uint8>(Stop + 1 < NearShown ? 0 : Stop + 1 == NearShown ? 1 : 2);
+		Ping.Order = Stop;
+	}
+}
+
 bool ACampaignPlayerController::IsMinimapWorld() const
 {
 	return Map.IsValid() && Map->GetData().bWorld && Map->GetData().WorldWidth > 0.0;
@@ -8168,6 +8224,7 @@ void ACampaignPlayerController::LayOutLook()
 			Card.Stale = Unit.Stale;
 			Card.Carry = Unit.Carry; // (Version 84: an identified corps' weapons are known with it)
 			Card.Nickname = FText::FromString(Unit.Nickname);
+			Card.Marked = Unit.Marked; // (release 2, the marked army)
 			Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 			Card.Honours = Unit.Honours;
 			Card.Parts = Unit.Parts;
@@ -11746,6 +11803,40 @@ void ACampaignPlayerController::CloseFaceOff()
 	}
 }
 
+namespace
+{
+	/** (Release 2, the enemy's month near you, round 2) A stop's arrows as the watch draws them: his allies' battles only with their switch on. */
+	TArray<FStepArrow> NearStopArrows(const FMonthStep& Step, bool bAllies)
+	{
+		TArray<FStepArrow> Drawn = Step.Arrows;
+		if (!bAllies)
+		{
+			Drawn.RemoveAll([](const FStepArrow& Arrow) { return Arrow.bAlly; });
+		}
+		return Drawn;
+	}
+
+	/** Their kinds, for TheaterEnemyMoves::Worst and PingInk (where they lie is not needed there). */
+	std::vector<TheaterEnemyMoves::FArrow> NearStopKinds(const TArray<FStepArrow>& Arrows)
+	{
+		std::vector<TheaterEnemyMoves::FArrow> Kinds;
+		Kinds.reserve(static_cast<size_t>(Arrows.Num()));
+		for (const FStepArrow& Arrow : Arrows)
+		{
+			TheaterEnemyMoves::FArrow Kind;
+			Kind.Kind = Arrow.Kind == 1 ? TheaterEnemyMoves::EKind::Attack : Arrow.Kind == 2 ? TheaterEnemyMoves::EKind::Fell : TheaterEnemyMoves::EKind::Move;
+			Kind.bWar = Arrow.bWar;
+			Kind.bAway = Arrow.bAway;
+			Kind.bTaken = Arrow.bTaken;
+			Kind.bSiege = Arrow.bSiege;
+			Kind.bAlly = Arrow.bAlly;
+			Kind.bOurs = Arrow.bOurs;
+			Kinds.push_back(Kind);
+		}
+		return Kinds;
+	}
+}
+
 void ACampaignPlayerController::EndMonth()
 {
 	if (LiveBattle.IsValid())
@@ -11919,11 +12010,23 @@ void ACampaignPlayerController::EndMonth()
 	const bool bWatchEvery = (bAlwaysWatch && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
 	NearCount = 0;
 	NearShown = 0;
+	NearStopPlaces.Reset();
+	NearStopInks.Reset();
 	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bAlwaysWatch && bNearPictures)))
 	{
 		for (const FMonthStep& Step : Month.Steps)
 		{
-			NearCount += IsNearStep(Step) ? 1 : 0;
+			if (IsNearStep(Step))
+			{
+				++NearCount;
+				// (round 2: each stop's place and ink, for TAKE ME THERE and the corner pings)
+				const TArray<FStepArrow> Drawn = NearStopArrows(Step, bAlliesNear);
+				const std::vector<TheaterEnemyMoves::FArrow> Kinds = NearStopKinds(Drawn);
+				const int32 Pick = TheaterEnemyMoves::Worst(Kinds);
+				const TheaterEnemyMoves::FInk Ink = Pick >= 0 ? TheaterEnemyMoves::PingInk(Kinds[static_cast<size_t>(Pick)]) : TheaterEnemyMoves::FInk();
+				NearStopPlaces.Add(Pick >= 0 ? Drawn[Pick].To : INDEX_NONE);
+				NearStopInks.Add(FColor(Ink.R, Ink.G, Ink.B, 255));
+			}
 		}
 	}
 	bWatchNear = NearCount > 0;
@@ -11992,15 +12095,25 @@ void ACampaignPlayerController::WatchNextStep()
 	NearShown += bWatchNear ? 1 : 0;
 	WatchNation = Step.Nation;
 	ClearStepArrows();
+	TakeRegion = INDEX_NONE;
 	if (bEnemyMoves && Step.Arrows.Num() > 0 && Map.IsValid())
 	{
-		ArrowsShown = Step.Arrows;
-		if (!bAlliesNear) // (round 2: his allies' battles only with their switch on)
+		ArrowsShown = NearStopArrows(Step, bAlliesNear); // (round 2: his allies' battles only with their switch on)
+		// (round 2, TAKE ME THERE: the stop's place is where its worst arrow ends: an attack on him, then an army
+		// coming at him, then whatever else is drawn)
+		const int32 Pick = TheaterEnemyMoves::Worst(NearStopKinds(ArrowsShown));
+		TakeRegion = Pick >= 0 ? ArrowsShown[Pick].To : INDEX_NONE;
+		if (bWatchNear)
 		{
-			ArrowsShown.RemoveAll([](const FStepArrow& Arrow) { return Arrow.bAlly; });
+			ArrowsSince = FPlatformTime::Seconds() + 0.3; // (the eye sets off first)
+			bArrowsGrowing = true;
 		}
-		ArrowsSince = FPlatformTime::Seconds() + 0.3; // (the eye sets off first)
-		bArrowsGrowing = true;
+		else
+		{
+			// (the 3D pre-check, 24 Nov 18:14Z: the whole month's tour stays at a step under a second, too short to watch
+			// an arrow grow: there they are laid whole at once)
+			Map->ShowStepArrows(ArrowsShown, 1.0f);
+		}
 	}
 	// ---- (end release 2)
 	// The armies are seen to march: every corps that stands somewhere new since the last step goes there on the table.
@@ -12184,6 +12297,58 @@ void ACampaignPlayerController::ClearStepArrows()
 	}
 }
 
+void ACampaignPlayerController::TakeMeThere()
+{
+	FCampaignSession* Session = GetSession();
+	if (!CanTakeMeThere() || !Session || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(TakeRegion))
+	{
+		return;
+	}
+	const int32 Place = TakeRegion;
+	SkipWatching(); // (the rest of the month is laid at once, and its news comes as usual)
+	const FCampaignView& View = Session->GetView();
+	const TArray<FCampaignRegion>& Regions = Map->GetData().Regions;
+	const FVector2D At = Regions[Place].Center;
+	// His nearest army that can take an order (the field before a town's garrison, as a pick-up has it).
+	int32 Nearest = INDEX_NONE;
+	double NearestSquared = TNumericLimits<double>::Max();
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Nation != View.Human || !Unit.bCanOrder || !Regions.IsValidIndex(Unit.Region))
+		{
+			continue;
+		}
+		const double Squared = FVector2D::DistSquared(Regions[Unit.Region].Center, At) + (Unit.bInTown ? 1.0 : 0.0);
+		if (Squared < NearestSquared)
+		{
+			NearestSquared = Squared;
+			Nearest = Unit.Region;
+		}
+	}
+	// The eye takes in the place and the army together.
+	std::vector<TheaterEnemyMoves::FPoint> Ends{ TheaterEnemyMoves::FPoint{ At.X, At.Y } };
+	if (Nearest != INDEX_NONE)
+	{
+		Ends.push_back(TheaterEnemyMoves::FPoint{ Regions[Nearest].Center.X, Regions[Nearest].Center.Y });
+	}
+	const TheaterEnemyMoves::FFrame Seen = TheaterEnemyMoves::Frame(Ends);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const double TakeZoom = TheaterEnemyMoves::ZoomFor(Seen.Reach, Map->UnitScale, Eye->MinDistance, Eye->MaxDistance);
+		Eye->GoTo(Map->MapToWorld(Seen.Middle.X, Seen.Middle.Y), static_cast<float>(FMath::Min(TakeZoom, 0.5)));
+	}
+	if (Nearest != INDEX_NONE)
+	{
+		SelectRegion(Nearest);
+		PickUpArmyIn(Nearest);
+		CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+	}
+	else
+	{
+		SelectRegion(Place);
+	}
+}
+
 FString ACampaignPlayerController::GetWatchHeading() const
 {
 	if (!bWatching || !bWatchNear || NearShown <= 0 || !Map.IsValid())
@@ -12250,6 +12415,9 @@ void ACampaignPlayerController::FinishMonth()
 	// ---- (release 2, the enemy's month near you) the last step's arrows go with the watch
 	ClearStepArrows();
 	bWatchNear = false;
+	TakeRegion = INDEX_NONE;
+	NearStopPlaces.Reset();
+	NearStopInks.Reset();
 	// ---- (end release 2)
 	// (and with the new month it is morning again)
 	for (TActorIterator<ACampaignEnvironment> Room(GetWorld()); Room; ++Room)

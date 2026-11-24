@@ -72,6 +72,7 @@ struct FTrayCard
 	bool bPicked = false; // going with the army, or left behind
 	bool bCanOrder = false;
 	FText Nickname; // empty until the corps has earned one
+	FString Marked; // (release 2, the marked army) an enemy corps that took one of his towns: that town
 	FString NoOrders; // (ruling 176(c)) why it never takes orders, in the rules' sentence
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
@@ -160,6 +161,19 @@ struct FNewsreelShow
 	TArray<FNewsCard> Cards;
 	int32 Index = -1;
 	double Until = 0.0; // when the story on the screen gives way to the next
+};
+
+/**
+ * (Release 2, the enemy's month near you, round 2; Brian, 24 November 2026 18:01Z: corner pings.) A stop of the watch
+ * near him, marked on the small map in the corner: where (a share of the small map's picture, as its marks are), its
+ * ink, and whether it has been seen, is on screen or is still to come (TheaterEnemyMoves::EPing).
+ */
+struct FWatchPing
+{
+	FVector2D Share = FVector2D::ZeroVector;
+	FColor Ink = FColor::White;
+	uint8 State = 2; // 0 seen, 1 on screen, 2 to come
+	int32 Order = 0; // which stop it is, from 0
 };
 
 /** The army the player has picked up: its general, and its corps as cards. */
@@ -639,6 +653,9 @@ public:
 	FString GetWatchHeading() const;
 	/** Whose month the watch is showing, for the flag beside the heading. */
 	const FString& GetWatchNation() const { return WatchNation; }
+	/** (round 2, Brian 18:01Z) TAKE ME THERE: the watch ends at the stop on screen, the eye stays on it and his nearest army is put in his hand (G). */
+	void TakeMeThere();
+	bool CanTakeMeThere() const { return bWatching && bWatchNear && bTakeMeThere && TakeRegion != INDEX_NONE; }
 	// ---- (end release 2)
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
@@ -936,6 +953,8 @@ public:
 	bool IsMinimapWorld() const;
 	/** Where the eye looks, as a share of the way round the whole world's small map (0 at its west edge, 1 at its east). */
 	double GetMinimapCentre() const;
+	/** (Release 2, round 2: corner pings) While the watch near him runs, its stops on the small map; none otherwise or with the option off. */
+	void GetWatchPings(TArray<FWatchPing>& OutPings) const;
 	/** The name plates of the towns in view, the ones that matter most first. */
 	void GetTownPlates(TArray<FTownPlate>& Out) const;
 	/** The names of the countries and the seas, letter by letter, lying on the map. */
@@ -1529,6 +1548,11 @@ private:
 	// arrows of the one up as they grow (from ArrowsSince).
 	bool bEnemyMoves = true;
 	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
+	bool bTakeMeThere = true; // (round 2) the TAKE ME THERE button on each stop (OPTIONS)
+	int32 TakeRegion = INDEX_NONE; // the stop's place: where its worst arrow ends
+	bool bCornerPings = true; // (round 2) the watch's stops pulse on the small map in the corner (OPTIONS)
+	TArray<int32> NearStopPlaces; // each stop's place, in the watch's order (INDEX_NONE where it has nothing to draw), set as the month ends
+	TArray<FColor> NearStopInks;
 	bool bWatchNear = false;
 	int32 NearCount = 0, NearShown = 0;
 	FString WatchNation;

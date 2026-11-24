@@ -8,6 +8,7 @@
 #include "Campaign/CampaignSession.h"
 #include "Campaign/EdgeNewsLayer.h" // (Release 2, news at the map's edge: merge by hand)
 #include "Campaign/EdgeSeals.h" // (Release 2, the seal signs read as the screen is built: merge by hand)
+#include "Campaign/EnemyMoves.h" // (Release 2, the enemy's month near you: the corner pings)
 #include "Battle/LandBattle.h"
 #include "Battle/LandLive.h"
 #include "EngineUtils.h"
@@ -4603,6 +4604,7 @@ namespace
 			FBox2D Looking(ForceInit);
 			Controller->GetMinimapMarks(Dots, Looking);
 			const bool bWorld = Controller->IsMinimapWorld();
+			double Slide = 0.0; // (how far round the whole world's picture is slid, for the marks laid over it)
 			if (bWorld)
 			{
 				// The whole world, centred on the longitude the eye is over: the world slides under a box that stays
@@ -4624,6 +4626,7 @@ namespace
 				}
 				double Shift = Centre - 0.5;
 				Shift -= FMath::FloorToDouble(Shift);
+				Slide = Shift;
 				// (the picture in two parts: from the shift to its east edge on the left, from its west edge to the shift on the right)
 				const double Left = (1.0 - Shift) * Size.X;
 				West.SetUVRegion(FBox2f(FVector2f(static_cast<float>(Shift), 0.0f), FVector2f(1.0f, 1.0f)));
@@ -4676,7 +4679,54 @@ namespace
 				Box.Add(A);
 				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(), Box, ESlateDrawEffect::None, FLinearColor(1.0f, 0.9f, 0.55f, 0.95f), true, 1.5f);
 			}
-			return LayerId + 2;
+			// ---- (release 2, the enemy's month near you, round 2; Brian, 24 November 2026 18:01Z: corner pings) While
+			// the watch near him runs, its stops: the ones to come pulse, the one on screen stands in a brass ring, the
+			// ones seen are a faint dot (Campaign/EnemyMoves, Ping). Each on a dark edge, so that it reads on any ground.
+			TArray<FWatchPing> Pings;
+			Controller->GetWatchPings(Pings);
+			if (Pings.Num() == 0)
+			{
+				return LayerId + 2;
+			}
+			auto Round = [&OutDrawElements, &Geometry](const FVector2D& Middle, double Radius, float Thick, const FLinearColor& Colour, int32 Layer)
+			{
+				TArray<FVector2D> Rim;
+				Rim.Reserve(29);
+				for (int32 K = 0; K <= 28; ++K)
+				{
+					const double Turn = 2.0 * UE_DOUBLE_PI * K / 28.0;
+					Rim.Add(Middle + FVector2D(FMath::Cos(Turn), FMath::Sin(Turn)) * Radius);
+				}
+				FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), Rim, ESlateDrawEffect::None, Colour, true, Thick);
+			};
+			const double Clock = FPlatformTime::Seconds();
+			const FLinearColor PingBrass(FColor(224, 184, 114)); // (the art director's brass of a place that held)
+			const double Smaller = bWorld ? 0.75 : 1.0; // (the whole world's small map is the smaller)
+			for (const FWatchPing& Ping : Pings)
+			{
+				double Across = Ping.Share.X;
+				if (bWorld)
+				{
+					Across -= Slide;
+					Across -= FMath::FloorToDouble(Across);
+				}
+				const FVector2D Spot(Across * Size.X, Ping.Share.Y * Size.Y);
+				const TheaterEnemyMoves::FPingLook Look = TheaterEnemyMoves::Ping(static_cast<TheaterEnemyMoves::EPing>(Ping.State), Clock, Ping.Order);
+				const FLinearColor Ink(Ping.Ink);
+				if (Look.RingAlpha > 0.01)
+				{
+					const FLinearColor RingInk = Look.bBrassRing ? PingBrass : Ink;
+					const double RingRadius = Look.Ring * Smaller;
+					Round(Spot, RingRadius, static_cast<float>(Look.RingThick + 1.6), FLinearColor(0.03f, 0.02f, 0.015f, static_cast<float>(0.7 * Look.RingAlpha)), LayerId + 3);
+					Round(Spot, RingRadius, static_cast<float>(Look.RingThick), RingInk.CopyWithNewOpacity(static_cast<float>(Look.RingAlpha)), LayerId + 4);
+				}
+				// (the dot: a ring as thick as its radius, round its middle)
+				const double DotRadius = Look.Dot * Smaller;
+				Round(Spot, DotRadius * 0.5 + 0.4, static_cast<float>(DotRadius + 1.6), FLinearColor(0.03f, 0.02f, 0.015f, static_cast<float>(0.75 * Look.DotAlpha)), LayerId + 3);
+				Round(Spot, DotRadius * 0.5, static_cast<float>(DotRadius), Ink.CopyWithNewOpacity(static_cast<float>(Look.DotAlpha)), LayerId + 4);
+			}
+			return LayerId + 4;
+			// ---- (end release 2)
 		}
 
 		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
@@ -6427,7 +6477,8 @@ namespace
 						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(24.0f, 10.0f))
 						.Visibility_Lambda([this]()
 						{
-							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+							// (release 2: while the watch near him offers TAKE ME THERE, its button can be pressed; the rest stays out of the pointer's way)
+							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? (Controller->CanTakeMeThere() ? EVisibility::SelfHitTestInvisible : EVisibility::HitTestInvisible) : EVisibility::Collapsed;
 						})
 						[
 							SNew(SVerticalBox)
@@ -6457,7 +6508,19 @@ namespace
 								// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
 								.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+								.Visibility(EVisibility::HitTestInvisible)
 							]
+							// ---- (release 2, the enemy's month near you, round 2; Brian 18:01Z) TAKE ME THERE: the watch ends at this
+							// place with his nearest army in hand.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanTakeMeThere() ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									MapButton(TEXT("TAKE ME THERE  \u00B7  G"), TEXT("End the watch here: the eye stays on this place and your nearest army is put in your hand."), [this]() { Controller->TakeMeThere(); })
+								]
+							]
+							// ---- (end release 2)
 						])
 					]
 
@@ -6671,7 +6734,7 @@ namespace
 						[
 							Edge(SmallMapPiece, SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
-							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
+							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else. While the enemy's month near you plays, its stops are marked here: the pulsing rings are the places still to come.")))
 							[
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
@@ -18387,6 +18450,14 @@ namespace
 						[
 							MakeRibbons(Card.Honours, 4)
 						]
+						// ---- (release 2, the marked army; marked.ts) An enemy army that took one of his towns: in red, the town.
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Visibility(Card.Marked.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+							.Text(FText::FromString(FString::Printf(TEXT("TOOK %s"), *Card.Marked.ToUpper()))).Font(SmallCaps()).ColorAndOpacity(FLinearColor(FColor(226, 64, 44)))
+							.ToolTipText(FText::FromString(FString::Printf(TEXT("Marked: this army took %s from you. It wears a red tag on its flagpole until you beat it: throw back its attack, or drive it off the field."), *Card.Marked)))
+						]
+						// ---- (end release 2)
 						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 						[

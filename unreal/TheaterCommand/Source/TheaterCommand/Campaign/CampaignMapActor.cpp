@@ -238,6 +238,8 @@ ACampaignMapActor::ACampaignMapActor()
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 	PointerMesh = MakeMesh(TEXT("Pointer"), false);
 	PointerMesh->SetTranslucentSortPriority(1); // (over the ground's washes and the reach; under the table's signs)
+	MovesMesh = MakeMesh(TEXT("EnemyMoves"), false); // (release 2, the enemy's month near you)
+	MovesMesh->SetTranslucentSortPriority(1);
 
 	auto MakeMarkers = [this](const TCHAR* Name)
 	{
@@ -13011,7 +13013,11 @@ namespace
 
 void ACampaignMapActor::ShowStepArrows(const TArray<FStepArrow>& Arrows, float Grow)
 {
-	OrdersMesh->ClearMeshSection(11);
+	if (!MovesMesh)
+	{
+		return;
+	}
+	MovesMesh->ClearAllMeshSections();
 	if (Arrows.Num() == 0 || Grow <= 0.0f || !Data.IsLoaded())
 	{
 		return;
@@ -13052,7 +13058,7 @@ void ACampaignMapActor::ShowStepArrows(const TArray<FStepArrow>& Arrows, float G
 			Buffers.AddTriangleFacingUp(A, B, C);
 		}
 	}
-	Buffers.Commit(OrdersMesh, 11, HighlightMaterial);
+	Buffers.Commit(MovesMesh, 0, HighlightMaterial);
 }
 
 bool ACampaignMapActor::FrameStepArrows(const TArray<FStepArrow>& Arrows, FVector2D& OutMiddle, double& OutReach) const

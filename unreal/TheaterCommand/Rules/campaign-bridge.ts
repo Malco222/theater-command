@@ -148,6 +148,8 @@ import { seaWhere } from '../../../src/campaign/sea-words';
 import { bargainCalls } from './bargains-look';
 import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } from '../../../src/campaign/columns';
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
+import { markedOn, setMarked } from '../../../src/campaign/marked';
+import { thePlace } from '../../../src/campaign/bombers';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
 import { fuelMet } from '../../../src/campaign/resources';
@@ -486,6 +488,9 @@ function drawView() {
   const fields = airfieldsSeen(s);
   const fieldSize = new Map(fields.map((a) => [a.region, a.size] as const));
   const fieldHidden = new Set(fields.filter((a) => a.groups < 0).map((a) => a.region));
+  // (Release 2, the marked army; marked.ts) An enemy corps that took one of his towns, where he knows who it is: the town it took.
+  const marks = markedOn(s);
+  const markOf = (c: Corps): { mark?: string } => (marks && c.mark && s.human && c.nat !== s.human ? { mark: thePlace(s.regions[c.mark.place]?.name ?? '') } : {});
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -647,7 +652,7 @@ function drawView() {
         // Known from a report some months old: its name and its arm, and its strength only as a band.
         const card = corpsKnownAs(s, c);
         const lo = card?.strLo ?? c.str, hi = card?.strHi ?? c.str, mid = (lo + hi) / 2;
-        return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c) };
+        return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c), ...markOf(c) };
       }
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
@@ -674,6 +679,7 @@ function drawView() {
       school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
       // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
       wear: wearOf(c), fresh: c.fresh ?? 0,
+      ...markOf(c),
       // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
       // divisions split off now ('' if it can), and the corps it could rejoin here, the first of them.
       ...(c.nat === s.human && breakUpOn(s) ? (() => {
@@ -903,6 +909,8 @@ function drawView() {
     dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
+    // (Release 2, marked.ts) Whether the armies that took his towns are marked in red.
+    markedOn: markedOn(s),
     // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
     fleetAttack: fleetAttackOn(s),
     // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
@@ -6180,6 +6188,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     }
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'marked') {
+    // (Release 2, marked.ts) The marked army, switched by the player in any month: a mark is only a mark.
+    setMarked(s, part[1] === 'on');
+    ok = true;
+    note = markedOn(s)
+      ? 'The marked army is on: an enemy army that takes one of your towns wears a red tag on the map until you beat it.'
+      : 'The marked army is off: no army is marked, and none is shown marked. The marks already given are kept.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'nicknames') {
     // (Release 2, nicknames.ts) Earned nicknames on the flags, switched by the player in any month: a name is only a name.
     setNicknames(s, part[1] === 'on');
@@ -7306,6 +7323,10 @@ function find(name: string) {
 // start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
+// (Release 2, the marked army; Brian 24 November 2026 18:01Z) TC.marked(on) at any time: the corps that takes a town of
+// the player's wears a red tag until he beats it (marked.ts). The options page uses act('marked:on') and act('marked:off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).marked = (on: boolean) => { const s = game(); setMarked(s, !!on); return { on: markedOn(s) }; };
+
 // (Release 2) Earned nicknames and supply columns, each its own switch: TC.nicknames(on) at any time (a name is only a
 // name), TC.columns(on) only in a campaign's opening month ('set' false otherwise). The options page uses act('nicknames:on'
 // and so on) instead, which answers with the view.

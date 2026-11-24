@@ -865,6 +865,11 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.bKeep = Shot.bWatch = true;
 			Shot.Wait = -0.4f; // (2.6 s in: the eye arrived, the arrows grown, the sentence up)
 		}
+		// (round 2: with "-TheaterR2Marked", the army that took a town of his, close, its red tag on its pole)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")))
+		{
+			Add(TEXT("60f-marked-army"), TEXT("@marked"), 0.3f).bKeep = true;
+		}
 	}
 	// ---- (end release 2)
 
@@ -1065,6 +1070,26 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 					break;
 				}
 			}
+		}
+	}
+	if (Shot.Region == TEXT("@marked") && Controller->GetSession())
+	{
+		// (Release 2, the marked army) The first army piece whose corps carry a mark: an army that took a town of his.
+		for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+		{
+			if (Unit.Marked.IsEmpty())
+			{
+				continue;
+			}
+			for (const TObjectPtr<AArmyPiece>& Piece : Table->GetPieces())
+			{
+				if (Piece && Piece->GetRegionId() == Unit.Region && !Piece->IsHidden())
+				{
+					At = Table->WorldToMap(Piece->GetRestLocation());
+					break;
+				}
+			}
+			break;
 		}
 	}
 	if (Shot.Region.StartsWith(TEXT("@train")))

@@ -457,4 +457,75 @@ namespace TheaterEnemyMoves
 		}
 		return std::max({ Hold, Raids, Sinkings });
 	}
+
+	int Worst(const std::vector<FArrow>& Arrows)
+	{
+		for (size_t K = 0; K < Arrows.size(); ++K)
+		{
+			if (Arrows[K].Kind == EKind::Attack && !Arrows[K].bAlly)
+			{
+				return static_cast<int>(K);
+			}
+		}
+		for (size_t K = 0; K < Arrows.size(); ++K)
+		{
+			if (Arrows[K].Kind == EKind::Move && !Arrows[K].bAway)
+			{
+				return static_cast<int>(K);
+			}
+		}
+		return Arrows.empty() ? -1 : 0;
+	}
+
+	FPingLook Ping(EPing State, double Seconds, int Order)
+	{
+		FPingLook Look;
+		switch (State)
+		{
+		case EPing::Seen:
+			Look.Dot = 2.0;
+			Look.DotAlpha = 0.45;
+			break;
+		case EPing::Now:
+			Look.Dot = 3.0;
+			Look.DotAlpha = 1.0;
+			Look.Ring = 7.5;
+			Look.RingAlpha = 1.0;
+			Look.RingThick = 2.0;
+			Look.bBrassRing = true;
+			break;
+		case EPing::ToCome:
+		{
+			// (each a third of a swell after the one before, so that the eye reads them in their order)
+			double Phase = std::fmod(Seconds - 0.45 * std::max(Order, 0), PingSeconds);
+			Phase = (Phase < 0.0 ? Phase + PingSeconds : Phase) / PingSeconds;
+			const double Rest = 1.0 - Phase;
+			Look.Dot = 2.6;
+			Look.DotAlpha = 1.0;
+			Look.Ring = 3.0 + 9.0 * (1.0 - Rest * Rest);
+			Look.RingAlpha = 0.95 * Rest * std::sqrt(Rest);
+			Look.RingThick = 1.6;
+			break;
+		}
+		}
+		return Look;
+	}
+
+	FInk PingInk(const FArrow& Arrow)
+	{
+		if (Arrow.bAlly)
+		{
+			return AllyRingInk;
+		}
+		switch (Arrow.Kind)
+		{
+		case EKind::Attack:
+			return AttackInk;
+		case EKind::Fell:
+			return OwnInk;
+		case EKind::Move:
+			break;
+		}
+		return Arrow.bWar ? WarInk : PeaceInk;
+	}
 }

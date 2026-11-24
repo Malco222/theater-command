@@ -335,6 +335,49 @@ int main(int Count, char** Args)
 		Check(Pause(0, 0, 1, 6.0, 0.0) == 6.0, "a raid keeps the time it takes to fly");
 		std::printf("pauses: moves 1 %.1f s, moves 5 %.1f s, attack held %.1f s, attack lost %.1f s, three attacks %.1f s\n", Pause(0, 0, 1, 0, 0), Pause(0, 0, 5, 0, 0), Pause(1, 0, 0, 0, 0), Pause(1, 1, 0, 0, 0), Pause(3, 1, 0, 0, 0));
 	}
+	// (Round 2) Where a stop happened: the attack on him first, then an army coming at him, then the first arrow.
+	{
+		FArrow Going, Coming, Hit, AllyHit;
+		Going.bAway = true;
+		Hit.Kind = EKind::Attack;
+		AllyHit.Kind = EKind::Attack;
+		AllyHit.bAlly = true;
+		Check(Worst({}) == -1, "no arrows, no place");
+		Check(Worst({ Going, AllyHit, Coming, Hit }) == 3, "the stop's place is where he was attacked");
+		Check(Worst({ Going, AllyHit, Coming }) == 2, "else where an army came at him, before an allies' battle");
+		Check(Worst({ Going, AllyHit }) == 0, "else the first arrow drawn");
+	}
+	// (Round 2, corner pings) The stops to come pulse, each after the one before; the one on screen stands still in brass; the seen ones are faint.
+	{
+		const FPingLook Seen = Ping(EPing::Seen, 3.0, 0), Now = Ping(EPing::Now, 3.0, 1), Again = Ping(EPing::Now, 3.7, 1);
+		Check(Seen.RingAlpha == 0.0 && Seen.DotAlpha < 0.6 && Seen.Dot < Now.Dot, "a stop seen: a faint small dot, no ring");
+		Check(Now.bBrassRing && Now.RingAlpha == 1.0 && Now.Ring == Again.Ring, "the stop on screen: a still brass ring");
+		double Smallest = 1e9, Largest = 0.0, Faintest = 1.0, Boldest = 0.0;
+		bool bInside = true, bFadesAsItGrows = true;
+		for (int K = 0; K < 140; ++K)
+		{
+			const double At = 100.0 + K * 0.01;
+			const FPingLook One = Ping(EPing::ToCome, At, 2), Next = Ping(EPing::ToCome, At + 0.004, 2);
+			Smallest = std::min(Smallest, One.Ring);
+			Largest = std::max(Largest, One.Ring);
+			Faintest = std::min(Faintest, One.RingAlpha);
+			Boldest = std::max(Boldest, One.RingAlpha);
+			bInside = bInside && One.RingAlpha >= 0.0 && One.RingAlpha <= 1.0 && One.DotAlpha == 1.0 && !One.bBrassRing;
+			bFadesAsItGrows = bFadesAsItGrows && (Next.Ring < One.Ring || Next.RingAlpha <= One.RingAlpha + 1e-9);
+		}
+		Check(bInside && Smallest < 4.0 && Largest > 10.0 && Faintest < 0.05 && Boldest > 0.8, "a stop to come: a ring that swells from the dot and fades");
+		Check(bFadesAsItGrows, "the ring fades as it swells");
+		Check(std::fabs(Ping(EPing::ToCome, 50.0, 1).Ring - Ping(EPing::ToCome, 50.0, 2).Ring) > 1.0, "the stops to come pulse one after another, not together");
+		Check(std::fabs(Ping(EPing::ToCome, 50.0, 1).Ring - Ping(EPing::ToCome, 50.0 + PingSeconds, 1).Ring) < 1e-6, "a ring swells once in its time, again and again");
+		FArrow Hit, Peace, AllyHit;
+		Hit.Kind = EKind::Attack;
+		Peace.bWar = false;
+		AllyHit.Kind = EKind::Attack;
+		AllyHit.bAlly = true;
+		Check(PingInk(Hit).R > 200 && PingInk(Hit).G < 60, "a stop where he was attacked pings red");
+		Check(PingInk(Peace).G > 120 && PingInk(Peace).R > 200, "an army at peace with him pings amber");
+		Check(PingInk(AllyHit).B > 180 && PingInk(AllyHit).B > PingInk(AllyHit).R, "his allies' battle pings steel");
+	}
 	// Arrows from a file, laid whole, for the picture.
 	if (Count >= 3)
 	{

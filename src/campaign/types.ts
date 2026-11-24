@@ -380,9 +380,20 @@ export interface Storied {
   nick?: string;
 }
 
+/**
+ * (Release 2, the marked army; marked.ts) An enemy corps that took one of the player's towns: where, and in which month.
+ * It wears a red tag on the table until he beats it.
+ */
+export interface CorpsMark {
+  place: number;
+  turn: number;
+}
+
 export interface Corps extends Storied {
   id: number;
   nat: string;
+  /** (Release 2, the marked army; marked.ts) It took one of the player's towns, and is marked until he beats it. */
+  mark?: CorpsMark;
   name: string;
   kind: Kind;
   divs: number;

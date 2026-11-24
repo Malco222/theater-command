@@ -45,7 +45,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
@@ -149,6 +149,8 @@ export function startOpen(g: Game, wide = true): Game {
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
   // Breaking a corps up into its divisions (release 2, breakup.ts).
   if (BREAKUP_STAGE) g.flags.breakUp = 1;
+  // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
+  if (MARKED_STAGE) g.flags.marked = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);

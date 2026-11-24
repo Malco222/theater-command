@@ -24,6 +24,7 @@ import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
 import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
+import { markBattle, markFallen, marksMonth } from './marked';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -448,6 +449,8 @@ export function storyBattle(g: Game, rep: BattleReport, target: Region, preOdds:
   } finally { publish(g); }
   // Earned nicknames (release 2, nicknames.ts): a corps that has won enough hard fights is given a name by its own army.
   if (nicknamesOn(g)) hardFights(g, rep, target, preOdds, attackers, defenders);
+  // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
+  markBattle(g, rep, target, attackers, defenders);
 }
 
 /**
@@ -544,6 +547,7 @@ function rivals(g: Game, mine: Corps[], theirs: Corps[], won: boolean, target: R
  * or are broken up to make other formations, are not written here.
  */
 export function storyFallen(g: Game, c: Corps, how: Fallen['how'], by: string, reg: number): void {
+  markFallen(g, c, by, reg); // (release 2, marked.ts: a marked corps' end is told, and its mark comes off)
   if (c.kind === 'fort') return;
   const S = g.stories;
   note(g, c, how, reg);
@@ -760,6 +764,7 @@ export function storyMonth(g: Game, nat: string): void {
   bondsMonth(g, nat);
   valourMonth(g, nat);
   if (!mine) return;
+  marksMonth(g); // (release 2, marked.ts: a peace clears the marks of that country's corps)
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
   // (A corps at sea on a long passage is not lost: its rivalry and its meetings wait for it to land.)
