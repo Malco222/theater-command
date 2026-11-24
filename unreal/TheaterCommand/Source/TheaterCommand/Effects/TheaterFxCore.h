@@ -121,8 +121,9 @@ namespace TheaterFx
 		double CoolFrom = 0.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
-		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
-		double AgeFade = 0.0, AgeFadePow = 1.0;
+		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner;
+		// AgeFadeFrom over 0: its age counted for this only from that many seconds, so it holds whole until then)
+		double AgeFade = 0.0, AgeFadePow = 1.0, AgeFadeFrom = 0.0;
 		// (smoke that goes slowly, Battle::Lingering. bTail: past Hold it is in its cloud's tail, and goes as smoke does
 		// into the air. Of the smoke the cloud had when thick, the depth of it the eye looks through, TailThird is
 		// left a third of the way through the tail and TailTwoThirds at two thirds, falling evenly between (as a
@@ -1168,6 +1169,7 @@ namespace TheaterFx
 			// and the length of its plume down the wind, metres)
 			bool bGrenade = false;
 			double GrenadeStart = 0.0, GrenadePlume = 0.0;
+			double NextJet = 0.0, NextSeat = 0.0, NextShade = 0.0; // (a grenade's own clocks: its jet, its billow, its shadow; GrenadeLumps)
 			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
 			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
 			Vec Vel;
@@ -1670,6 +1672,7 @@ namespace TheaterFx
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		/** A smoke screen's wall (Kind 6): its lumps laid up to Now. */
 		void ScreenLumps(Source& S, double Now);
+		void GrenadeLumps(Source& S, double Now);
 		// (a smoke screen laid at sea, ScreenLay: one a ship's screen. Last, At, Vel: her last call; Owed, the seconds since
 		// the last puff; N, the next puff's number; Wander, the screen's slow drift across the wind)
 		struct SeaScreen

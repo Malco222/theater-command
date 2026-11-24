@@ -11872,8 +11872,13 @@ namespace TheaterFx
 			Dice Dg(S.Seed ^ 0x6E7ADEull);
 			S.bGrenade = true;
 			S.GrenadeStart = std::min(S.Across, std::max(0.5, Range(G + "start_m", 3.0, 5.0).Pick(Dg)));
-			S.GrenadePlume = std::max(5.0, Range(G + "plume_m", 30.0, 60.0).Pick(Dg));
-			S.End = S.Flames + std::max(1.0, Num(G + "most_life_s", 30.0) * 1.15);
+			S.GrenadePlume = std::max(5.0, Range(G + "plume_m", 85.0, 100.0).Pick(Dg));
+			S.End = S.Flames + std::max(1.0, Num(G + "most_life_s", 45.0) * 1.15);
+			// (its own clocks: the jet at once, the billow, the plume and its shadow a moment later; GrenadeLumps)
+			S.NextJet = Now;
+			S.NextSeat = Now + std::max(0.0, Num(G + "billow_from_s", 0.8));
+			S.NextSmoke = Now + std::max(0.0, Num(G + "plume_from_s", 1.0));
+			S.NextShade = Now + std::max(0.0, Num(G + "shadow.from_s", 1.5));
 		}
 		const Rgb White = Picture(P + "colour", Rgb::FromPicture(232, 233, 230));
 		const Rgb Shadow = Picture(P + "shadow_colour", Rgb::FromPicture(170, 173, 176));
@@ -11994,6 +11999,11 @@ namespace TheaterFx
 
 	void Battle::ScreenLumps(Source& S, double Now)
 	{
+		if (S.bGrenade)
+		{
+			GrenadeLumps(S, Now); // (a tank commander's smoke grenade: its own jet, billow, plume and shadow)
+			return;
+		}
 		// The wall: a lump every every_s from one of its seats, laid low, swelling as it goes down the wind, and some
 		// spread across it, so the screen stands as one through its middle with rags at its edges. It thickens over its
 		// first build_s (a phosphorus round's at once) and thins over the last of its time from thin_from.
@@ -12014,68 +12024,33 @@ namespace TheaterFx
 		const Vec Aside(-Down.Y, Down.X, 0.0);
 		const double Breeze = std::hypot(Wind.X, Wind.Y);
 		const double Creep = Num(P + "creep_mps", 0.6); // (on a still day a screen still creeps)
-		// (a grenade's, smoke_screen.grenade: gushing at once, 3 to 5 m across by 2 s and swelling to its full width at the
-		// canister by swell_s; each lump as wide as the cloud is then at the canister, widening tail_grow times as it goes
-		// and living as long as the wind takes to carry it its plume's length, so the plume is that long whatever the
-		// wind; grey-white, denser; thinning only over its last thin_last_s)
-		const std::string G = P + "grenade.";
-		const bool bG = S.bGrenade;
-		const double Laid = std::max(S.Flames - S.Start, 0.1);
-		const double GBuild = std::max(0.1, Num(G + "build_s", 1.0));
-		const double GFade = std::clamp(1.0 - Num(G + "thin_last_s", 15.0) / Laid, 0.3, 0.97);
-		const double GSwell = std::max(2.5, Num(G + "swell_s", 10.0));
-		const double GGrey = Clamp01(Num(G + "grey", 0.15));
-		const double GGrow = std::max(1.0, Num(G + "tail_grow", 1.8));
-		const double GLeast = std::max(1.0, Num(G + "least_life_s", 8.0)), GMost = std::max(GLeast, Num(G + "most_life_s", 30.0));
-		const Span GAlpha = Range(G + "alpha", 0.65, 0.85);
-		const Span GRise = Range(G + "rise_mps", 0.04, 0.15);
-		const double GLumpR = Num(G + "lump_k", 1.0), GAcross = Num(G + "across_k", 0.18), GHold = Clamp01(Num(G + "hold", 0.15));
-		const double GLife = std::clamp(S.GrenadePlume / std::max(0.9 * Breeze, Creep), GLeast, GMost);
 		while (S.NextSmoke <= Now && S.NextSmoke < S.Flames)
 		{
 			const double T = S.NextSmoke;
 			Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0x9E3779B97F4A7C15ull + 0x5C2Eull));
 			const double Since = T - S.Start;
 			const double X = Since / std::max(S.Flames - S.Start, 0.1);
-			const double Fade_ = bG ? GFade : Fade;
-			const double Full = Clamp01((Since + 0.3) / (bG ? GBuild : Build)) * (X < Fade_ ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade_) / (1.0 - Fade_)));
-			const double Sw = Clamp01((Since - 2.0) / (GSwell - 2.0));
-			const double Width = !bG ? S.Across : Since < 2.0 ? S.GrenadeStart * (0.3 + 0.7 * Since / 2.0)
-				: S.GrenadeStart + (S.Across - S.GrenadeStart) * Sw * Sw * (3.0 - 2.0 * Sw);
+			const double Full = Clamp01((Since + 0.3) / Build) * (X < Fade ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade) / (1.0 - Fade)));
+			const double Width = S.Across;
 			const Vec Seat = S.Heads.empty() ? S.At : S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
 			Bit B;
 			B.Born = T;
-			B.Life = bG ? GLife * D.U(0.85, 1.15) : Life.Pick(D);
-			if (bG)
-			{
-				B.R0 = std::max(0.3, LumpR.Pick(D) * GLumpR * Width * (0.6 + 0.4 * Full));
-				B.R1 = GGrow * B.R0;
-				B.Grow = 0.6;
-			}
-			else
-			{
-				B.R1 = LumpR.Pick(D) * S.Across * (0.7 + 0.3 * Full);
-				B.R0 = std::max(0.6, 0.35 * B.R1);
-				B.Grow = 0.35;
-			}
-			// (a grenade's lumps spread across the wind, so its cloud is wide and low, not a ball)
-			const auto GrenadeOff = [&]()
-			{
-				const double Ba = D.Bell(), Bb = D.Bell();
-				return Aside * (Ba * GAcross * Width) + Down * (Bb * 0.06 * Width);
-			};
-			const Vec Off = bG ? GrenadeOff() : Vec(D.Bell(), D.Bell(), 0.0) * (0.06 * Width);
+			B.Life = Life.Pick(D);
+			B.R1 = LumpR.Pick(D) * S.Across * (0.7 + 0.3 * Full);
+			B.R0 = std::max(0.6, 0.35 * B.R1);
+			B.Grow = 0.35;
+			const Vec Off = Vec(D.Bell(), D.Bell(), 0.0) * (0.06 * Width);
 			const double Z = Height(Seat.X + Off.X, Seat.Y + Off.Y);
 			B.From = Vec(Seat.X + Off.X, Seat.Y + Off.Y, (Z == Z ? Z : Seat.Z) + 0.6 * B.R0 + D.U(0.0, 0.6));
 			B.Windage = D.U(0.8, 1.0);
 			B.Vel = Aside * (D.Bell() * Spread * Width / B.Life) + (Breeze < Creep ? Down * (Creep - Breeze) : Vec());
-			B.Rise = bG ? GRise.Pick(D) : Rise.Pick(D);
+			B.Rise = Rise.Pick(D);
 			const double Tone = D.U(0.93, 1.03);
-			B.Col = White.Mix(Shadow, bG ? GGrey : 0.0) * Tone;
-			B.Col2 = White.Mix(Shadow, 0.35 + (bG ? GGrey : 0.0)) * Tone;
-			B.Alpha = (bG ? GAlpha.Pick(D) : Alpha.Pick(D)) * (0.5 + 0.5 * Full);
-			B.FadeIn = bG ? 0.3 : 0.6;
-			B.Hold = bG ? GHold : 0.4; // (a grenade's: thinning from early on, so its plume thins down the wind)
+			B.Col = White.Mix(Shadow, 0.0) * Tone;
+			B.Col2 = White.Mix(Shadow, 0.35) * Tone;
+			B.Alpha = Alpha.Pick(D) * (0.5 + 0.5 * Full);
+			B.FadeIn = 0.6;
+			B.Hold = 0.4;
 			B.Heart = 0.7;
 			B.HeartEnd = 0.3;
 			B.Inner = 0.55;
@@ -12089,6 +12064,279 @@ namespace TheaterFx
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			Bits.push_back(B);
 			S.NextSmoke += Every / std::max(0.35, Full);
+		}
+	}
+
+	void Battle::GrenadeLumps(Source& S, double Now)
+	{
+		// A tank commander's smoke grenade, smoke_screen.grenade (the art director's notes of 24 November 02:18Z). Four
+		// kinds of piece, each by its own clock and its own dice:
+		// - its jet, over its first jet_s: small lumps hissing out of the canister down the wind, slowed by the air within
+		//   jet_reach_m, so the first thing seen is one short jet off the canister, never a puff and a dot;
+		// - its billow, from billow_from_s: big lumps rolling about the canister and carried off slowly (billow_windage),
+		//   so a dense rolling mass stands where it gushes;
+		// - its plume, from plume_from_s: lumps carried down the wind, climbing rise_per_m metres for each metre they go
+		//   and widening tail_grow times as they go, each as thick as laid for its first solid_m metres and then thinner
+		//   by e for every fade_m metres more (as the power fade_pow), so the plume is solid near the canister and thins
+		//   steadily down the wind, about a fifth as thick 40 to 60 m down, and gone by plume_m; wisp_share of them torn
+		//   wisps off its top edge (wisp_up) and sides (wisp_out), thinner, rougher, quicker, climbing wisp_climb faster;
+		// - its shadow, from shadow.from_s: soft dark marks on the ground under its dense part, laid away from the sun,
+		//   carried with it for shadow.reach_m.
+		// Grey-white: lit toward the sun shade_k, its underside and lee going lee_k of the way to lee_colour. It gushes
+		// at once (build_s), start_m across by 2 s and the caller's width at the canister by swell_s, and thins over its
+		// last thin_last_s. The pieces of a wall (ScreenLumps) are not touched by any of this.
+		const std::string P = "smoke_screen.";
+		const std::string G = P + "grenade.";
+		const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Aside(-Down.Y, Down.X, 0.0);
+		const double Breeze = std::hypot(Wind.X, Wind.Y);
+		const double Creep = Num(P + "creep_mps", 0.6);
+		const Vec Crept = Breeze < Creep ? Down * (Creep - Breeze) : Vec(); // (on a still day it still creeps)
+		const Vec Seat = S.Heads.empty() ? S.At : S.Heads.front();
+		const double Laid = std::max(S.Flames - S.Start, 0.1);
+		const double Build = std::max(0.1, Num(G + "build_s", 1.0));
+		const double Fade = std::clamp(1.0 - Num(G + "thin_last_s", 15.0) / Laid, 0.3, 0.97);
+		const double Swell = std::max(2.5, Num(G + "swell_s", 10.0));
+		const Rgb White = Picture(P + "colour", Rgb::FromPicture(232, 233, 230));
+		const Rgb Shadow = Picture(P + "shadow_colour", Rgb::FromPicture(170, 173, 176));
+		const double Grey = Clamp01(Num(G + "grey", 0.4));
+		const Rgb Lee = Picture(G + "lee_colour", Rgb::FromPicture(140, 146, 156));
+		const double LeeK = Clamp01(Num(G + "lee_k", 0.95));
+		const double ShadeK = std::clamp(Num(G + "shade_k", 1.7), 0.0, 3.0);
+		const int Lumps = static_cast<int>(std::clamp(Num(P + "lumps", 3.0), 0.0, 8.0));
+		const double LumpsPx = Num(P + "lumps_px", 120.0);
+		const double Rough = std::clamp(Num(G + "rough", 0.35), 0.0, 0.9);
+		const double Rest = std::clamp(Num(G + "rest", 0.85), 0.0, 1.5);
+		// (how fast its plume runs down the wind, metres a second, a lump's windage taken as 0.92: by this a length down the
+		// wind is a time, whatever the wind)
+		const double Go = std::max(0.92 * Breeze, Creep);
+		// (its share of its fullness at T: gushing at once, thinning over its last seconds; and its width at the canister)
+		const auto FullAt = [&](double Since)
+		{
+			const double X = Since / Laid;
+			return Clamp01((Since + 0.3) / Build) * (X < Fade ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade) / (1.0 - Fade)));
+		};
+		const auto WidthAt = [&](double Since)
+		{
+			const double Sw = Clamp01((Since - 2.0) / (Swell - 2.0));
+			return Since < 2.0 ? S.GrenadeStart * (0.3 + 0.7 * Since / 2.0) : S.GrenadeStart + (S.Across - S.GrenadeStart) * Sw * Sw * (3.0 - 2.0 * Sw);
+		};
+		const auto DiceAt = [&](double T, uint64_t Salt)
+		{
+			return Dice(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0x9E3779B97F4A7C15ull + Salt));
+		};
+		const auto Ground = [&](double X, double Y)
+		{
+			const double Z = Height(X, Y);
+			return Z == Z ? Z : Seat.Z - 0.2;
+		};
+		// (what every lump of smoke shares: its colours, light and shade, its lumpy face)
+		const auto Smoke = [&](Bit& B, Dice& D, double Full)
+		{
+			const double Tone = D.U(0.95, 1.03);
+			B.Col = White.Mix(Shadow, Grey) * Tone;
+			B.Col2 = White.Mix(Shadow, 0.3 + Grey) * Tone;
+			B.ShadeK = ShadeK;
+			B.ShadowCol = Lee;
+			B.ShadowK = LeeK;
+			B.Heart = 0.75;
+			B.HeartEnd = 0.45;
+			B.Inner = 0.55;
+			B.Rough = Rough;
+			B.Rest = Rest;
+			B.Lumps = Lumps;
+			B.LumpsPx = LumpsPx;
+			B.LumpsAlpha = 0.85;
+			B.LumpsLight = 0.6;
+			B.LumpsRim = 0.8;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.Alpha *= 0.5 + 0.5 * Full;
+		};
+
+		// The jet: one short jet off the canister, down the wind
+		{
+			const double JetFor = std::max(0.0, Num(G + "jet_s", 2.0));
+			const double Every = std::max(0.02, Num(G + "jet_every_s", 0.05));
+			const Span Speed = Range(G + "jet_mps", 1.6, 2.4), Reach = Range(G + "jet_reach_m", 0.5, 1.0);
+			const Span R0 = Range(G + "jet_r_m", 0.12, 0.2), R1 = Range(G + "jet_grown_m", 0.6, 0.9);
+			const Span Life = Range(G + "jet_life_s", 1.5, 2.0), Alpha = Range(G + "jet_alpha", 0.6, 0.8);
+			const double Windage = Clamp01(Num(G + "jet_windage", 0.35));
+			while (S.NextJet <= Now && S.NextJet < std::min(S.Flames, S.Start + JetFor))
+			{
+				const double T = S.NextJet;
+				Dice D = DiceAt(T, 0x6A37ull);
+				Bit B;
+				B.Born = T;
+				B.Life = Life.Pick(D);
+				B.R0 = R0.Pick(D);
+				B.R1 = R1.Pick(D);
+				B.Grow = 0.5;
+				const double V = Speed.Pick(D);
+				B.Vel = Down * V + Aside * (0.15 * V * D.U(-1.0, 1.0)) + Crept;
+				B.Drag = V / std::max(0.1, Reach.Pick(D)); // (it goes Vel over Drag metres before the air has stopped it)
+				B.Windage = Windage;
+				B.From = Vec(Seat.X, Seat.Y, Ground(Seat.X, Seat.Y) + 0.15 + B.R0);
+				B.Rise = 0.25;
+				B.Alpha = Alpha.Pick(D);
+				B.FadeIn = 0.05;
+				B.Hold = 0.5;
+				Smoke(B, D, 1.0);
+				B.Lumps = 0; // (too small for lumps of its own)
+				B.Rest = 0.0;
+				Bits.push_back(B);
+				S.NextJet += Every;
+			}
+		}
+
+		// The billow: big lumps rolling about the canister, carried off slowly
+		{
+			const double Every = std::max(0.05, Num(G + "billow_every_s", 0.3));
+			const Span R = Range(G + "billow_r", 0.18, 0.24), Life = Range(G + "billow_life_s", 3.0, 5.0);
+			const Span Windage = Range(G + "billow_windage", 0.25, 0.45), Alpha = Range(G + "billow_alpha", 0.7, 0.9);
+			const Span Roll = Range(G + "billow_roll", 0.15, 0.35);
+			const double Grow = std::max(1.0, Num(G + "billow_grow", 1.3));
+			while (S.NextSeat <= Now && S.NextSeat < S.Flames)
+			{
+				const double T = S.NextSeat;
+				Dice D = DiceAt(T, 0xB111ull);
+				const double Since = T - S.Start, Full = FullAt(Since), Width = WidthAt(Since);
+				Bit B;
+				B.Born = T;
+				B.Life = Life.Pick(D);
+				B.R0 = std::max(0.3, R.Pick(D) * Width * (0.6 + 0.4 * Full));
+				B.R1 = Grow * B.R0;
+				B.Grow = 0.5;
+				const double Ba = D.Bell(), Bb = D.Bell();
+				const Vec Off = Aside * (Ba * 0.15 * Width) + Down * (Bb * 0.08 * Width);
+				B.From = Vec(Seat.X + Off.X, Seat.Y + Off.Y, Ground(Seat.X + Off.X, Seat.Y + Off.Y) + 0.5 * B.R0 + D.U(0.0, 0.3));
+				B.Windage = Windage.Pick(D);
+				B.Vel = Crept;
+				B.Rise = 0.15;
+				B.Alpha = Alpha.Pick(D);
+				B.FadeIn = 0.3;
+				B.Hold = 0.45;
+				B.TurnRate = Roll.Pick(D) * (D.U() < 0.5 ? -1.0 : 1.0); // (its lumps roll over)
+				Smoke(B, D, Full);
+				Bits.push_back(B);
+				S.NextSeat += Every / std::max(0.35, Full);
+			}
+		}
+
+		// The plume: down the wind, climbing and widening, thinning steadily as it goes; some of it torn wisps
+		{
+			const double Every = std::max(0.05, Num(G + "every_s", 0.26));
+			const Span LumpR = Range(P + "lump_r", 0.24, 0.36);
+			const double LumpK = Num(G + "lump_k", 0.8), Across = Num(G + "across_k", 0.2), Spread = Num(G + "spread", 0.3);
+			const double TailGrow = std::max(1.0, Num(G + "tail_grow", 2.0));
+			const Span Climb = Range(G + "rise_per_m", 0.12, 0.2), Alpha = Range(G + "alpha", 0.6, 0.8);
+			const double FadeM = std::max(1.0, Num(G + "fade_m", 12.0)), FadePow = std::clamp(Num(G + "fade_pow", 1.0), 0.5, 4.0);
+			const double SolidM = std::max(0.0, Num(G + "solid_m", 9.0));
+			const double Hold = Clamp01(Num(G + "hold", 0.85));
+			const double Least = std::max(1.0, Num(G + "least_life_s", 8.0)), Most = std::max(Least, Num(G + "most_life_s", 45.0));
+			const double WispShare = Clamp01(Num(G + "wisp_share", 0.3));
+			const Span WispOut = Range(G + "wisp_out", 0.2, 0.5), WispWindage = Range(G + "wisp_windage", 1.05, 1.2);
+			const double WispR = Num(G + "wisp_r", 0.4), WispAlpha = Num(G + "wisp_alpha", 0.6), WispLife = Num(G + "wisp_life", 0.6);
+			const double WispRough = std::clamp(Num(G + "wisp_rough", 0.5), 0.0, 0.9);
+			const Span WispUp = Range(G + "wisp_up", 0.8, 1.5); // (how high it is laid, in the plume's lump's radius)
+			const double WispClimb = std::max(0.0, Num(G + "wisp_climb", 1.4)); // (and how much faster it climbs)
+			const double Life = std::clamp(S.GrenadePlume / Go, Least, Most);
+			while (S.NextSmoke <= Now && S.NextSmoke < S.Flames)
+			{
+				const double T = S.NextSmoke;
+				Dice D = DiceAt(T, 0x5C2Eull);
+				const double Since = T - S.Start, Full = FullAt(Since), Width = WidthAt(Since);
+				// (each step lays one lump of the plume's body, and wisp_share of the steps a torn wisp as well, so the body
+				// never has a gap where wisps happened to fall together)
+				const auto Lump = [&](bool bWisp)
+				{
+					Bit B;
+					B.Born = T;
+					B.Life = Life * D.U(0.85, 1.15) * (bWisp ? WispLife : 1.0);
+					B.R0 = std::max(0.3, LumpR.Pick(D) * LumpK * Width * (0.6 + 0.4 * Full)) * (bWisp ? WispR : 1.0);
+					B.R1 = TailGrow * B.R0;
+					B.Grow = 0.6;
+					const double Ba = D.Bell(), Bb = D.Bell();
+					const double Side = D.U() < 0.5 ? -1.0 : 1.0;
+					const Vec Off = bWisp ? Aside * (Side * WispOut.Pick(D) * Width) + Down * (Bb * 0.06 * Width)
+						: Aside * (Ba * Across * Width) + Down * (Bb * 0.06 * Width);
+					// (a wisp off its top edge, where the eye sees it torn off against the sky)
+					const double Up = bWisp ? D.U(WispUp.A, WispUp.B) * B.R0 / std::max(WispR, 0.1) : D.U(0.0, 0.4);
+					B.From = Vec(Seat.X + Off.X, Seat.Y + Off.Y, Ground(Seat.X + Off.X, Seat.Y + Off.Y) + 0.5 * B.R0 + Up);
+					B.Windage = bWisp ? WispWindage.Pick(D) : D.U(0.85, 1.0);
+					B.Vel = Aside * (D.Bell() * Spread * Width / B.Life) + Crept;
+					const double Runs = B.Windage * Breeze + std::max(0.0, Creep - Breeze); // (its own pace down the wind)
+					B.Rise = std::clamp(Runs * Climb.Pick(D) * (bWisp ? WispClimb : 1.0), 0.03, 1.0);
+					B.Alpha = Alpha.Pick(D) * (bWisp ? WispAlpha : 1.0);
+					B.AgeFade = FadeM / std::max(Runs, 0.1);
+					B.AgeFadePow = FadePow;
+					B.AgeFadeFrom = SolidM / std::max(Runs, 0.1);
+					B.FadeIn = 0.3;
+					B.Hold = Hold;
+					B.TurnRate = D.U(-0.08, 0.08);
+					Smoke(B, D, Full);
+					if (bWisp)
+					{
+						B.Rough = WispRough;
+						B.Lumps = 0;
+						B.Rest = 0.0;
+						B.Stretch = 1.6; // (torn out along the wind)
+						B.Along = Down;
+					}
+					Bits.push_back(B);
+				};
+				Lump(false);
+				if (D.U() < WispShare)
+				{
+					Lump(true);
+				}
+				S.NextSmoke += Every / std::max(0.35, Full);
+			}
+		}
+
+		// Its shadow: soft dark marks on the ground under its dense part, away from the sun
+		{
+			const std::string Sh = G + "shadow.";
+			const double Every = std::max(0.1, Num(Sh + "every_s", 0.5));
+			const double Reach = std::max(1.0, Num(Sh + "reach_m", 18.0)), Over = std::max(0.0, Num(Sh + "over_m", 2.5));
+			const Span R = Range(Sh + "r", 0.3, 0.4), Alpha = Range(Sh + "alpha", 0.12, 0.16);
+			const Rgb Dark = Picture(Sh + "colour", Rgb::FromPicture(30, 32, 34));
+			// (the sun's last way: its shadow lies Over metres' height of smoke away from it, no further than three times that)
+			const Vec Sun = LastSun.Unit(ZUp);
+			const Vec Away = Sun.Z > 0.1 ? Vec(-Sun.X, -Sun.Y, 0.0) * (Over / Sun.Z) : Vec();
+			const Vec Cast = Away.Length() > 3.0 * Over ? Away.Unit() * (3.0 * Over) : Away;
+			while (S.NextShade <= Now && S.NextShade < S.Flames)
+			{
+				const double T = S.NextShade;
+				Dice D = DiceAt(T, 0x54ADull);
+				const double Since = T - S.Start, Full = FullAt(Since), Width = WidthAt(Since);
+				Bit B;
+				B.Form = Bit::Shape::Flat;
+				B.Born = T;
+				B.Life = std::clamp(Reach / Go, 3.0, 15.0);
+				B.R0 = R.Pick(D) * Width;
+				B.R1 = 1.6 * B.R0;
+				B.Grow = 0.6;
+				B.Stretch = 1.3; // (drawn out down the wind)
+				B.Spin = std::atan2(Down.Y, Down.X);
+				const double Ba = D.Bell();
+				const Vec At = Seat + Cast + Aside * (Ba * 0.1 * Width) + Down * (0.15 * Width);
+				B.From = Vec(At.X, At.Y, Ground(At.X, At.Y));
+				B.bHug = true;
+				B.Windage = 0.92;
+				B.Vel = Crept;
+				B.Col = B.Col2 = Dark;
+				B.Alpha = Alpha.Pick(D) * Full;
+				B.FadeIn = 1.0;
+				B.Hold = 0.4;
+				B.Heart = 0.85;
+				B.Inner = 0.5;
+				B.Rim = 0.0; // (soft from its middle out: a shadow has no rim)
+				B.ShadeK = 0.0;
+				B.Nearer = -30.0; // (drawn first, under the smoke)
+				Bits.push_back(B);
+				S.NextShade += Every;
+			}
 		}
 	}
 
@@ -14868,7 +15116,7 @@ namespace TheaterFx
 		}
 		if (B.AgeFade > 0.0)
 		{
-			A *= std::exp(-std::pow(Age / B.AgeFade, B.AgeFadePow)); // (a funnel's puff thins by its age, see Bit::AgeFade)
+			A *= std::exp(-std::pow(std::max(0.0, Age - B.AgeFadeFrom) / B.AgeFade, B.AgeFadePow)); // (a funnel's puff thins by its age, see Bit::AgeFade)
 		}
 		double RollShadeNow = 0.0, RollLiftNow = 0.0; // (a funnel's puff on its plume's roll: this much darker and this many metres higher, see Bit::EvenRollLift)
 		if (B.Even >= 0)
