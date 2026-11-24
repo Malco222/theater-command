@@ -5,6 +5,7 @@
 import { FORT_XP, crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
 import capData from '../../data/campaign/capitulations.json';
 import { mapDist2 } from './wrap';
+import { AFV_PER_DIV } from '../battle/land/wrecks';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -689,6 +690,59 @@ function capturedKit(g: Game, rep: BattleReport, target: Region): void {
   const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
   const book = (g.captured ??= {});
   book[winner] = [...(book[winner] ?? []).filter((k) => g.turn - k.turn < 6).slice(-2), { from, n, turn: g.turn }];
+}
+
+/**
+ * Old wrecks (release 2, looks only; Brian, 23 November 20:09Z): the armoured vehicles a land battle leaves burnt out or
+ * knocked out on its field, for the next battle there. Estimated from the losses the battle booked, so no die is thrown:
+ * an armoured division fields about 'per.arm' armoured vehicles and a motorised one about 'per.mot' (battle/land/wrecks.ts),
+ * and a corps loses them in the share of its men it lost. The side that holds the field after it tows 'towed' of its own
+ * away to be mended; the side that leaves it leaves all of its. A ticket shows at most 'most' (the 3D game's own cap). Nothing in any fight reads it.
+ */
+export const WRECKS = { per: AFV_PER_DIV as Partial<Record<Kind, number>>, towed: 0.5, most: 60 } as const;
+
+/** One battle's wrecks, by nation, booked on its region (and the month of the last battle that left any). */
+export function wreckBump(g: Game, rep: BattleReport): void {
+  if (rep.yielded) return;
+  const attHolds = rep.level.endsWith('victory');
+  const left: Record<string, number> = {};
+  const side = (us: ReportUnit[], holds: boolean) => {
+    for (const u of us) {
+      const per = WRECKS.per[u.kind] ?? 0;
+      if (!per || u.guard || u.divs <= 0 || u.men <= 0 || u.lost <= 0) continue;
+      left[u.nat] = (left[u.nat] ?? 0) + per * u.divs * Math.min(1, u.lost / u.men) * (holds ? 1 - WRECKS.towed : 1);
+    }
+  };
+  side(rep.attackers, attHolds);
+  side(rep.defenders, !attHolds);
+  const whole = Object.entries(left).map(([nat, n]) => [nat, Math.round(n)] as const).filter(([, n]) => n > 0);
+  if (!whole.length) return;
+  const was = (g.wrecks ??= {})[rep.region];
+  const n = { ...(was?.n ?? {}) };
+  for (const [nat, k] of whole) n[nat] = (n[nat] ?? 0) + k;
+  g.wrecks[rep.region] = { n, last: Math.max(was?.last ?? rep.turn, rep.turn) };
+}
+
+/**
+ * A region's old wrecks as the battle ticket carries them: both sides' together, at most WRECKS.most, each nation's share
+ * of that (largest remainders, so they add up to the count), and the months since the last battle that left any.
+ */
+export function wreckLook(w: { n: Record<string, number>; last: number } | undefined, turn: number): { count: number; months: number; nats: Record<string, number> } | null {
+  if (!w) return null;
+  const rows = Object.entries(w.n).filter(([, k]) => k > 0).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const all = rows.reduce((s2, [, k]) => s2 + k, 0);
+  if (all <= 0) return null;
+  const count = Math.min(WRECKS.most, Math.round(all));
+  const exact = rows.map(([nat, k]) => [nat, (k * count) / all] as const);
+  const nats: Record<string, number> = {};
+  let given = 0;
+  for (const [nat, x] of exact) { nats[nat] = Math.floor(x); given += nats[nat]; }
+  for (const [nat, x] of [...exact].sort((a, b) => (b[1] - Math.floor(b[1])) - (a[1] - Math.floor(a[1])) || (a[0] < b[0] ? -1 : 1))) {
+    if (given >= count) break;
+    nats[nat] += 1; given += 1;
+  }
+  for (const nat of Object.keys(nats)) if (nats[nat] <= 0) delete nats[nat];
+  return { count, months: Math.max(0, turn - w.last), nats };
 }
 
 export function weather(g: Game): { mud: boolean; winter: boolean; text: string } {
@@ -2651,6 +2705,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
   // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
   if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (old wrecks: the armoured vehicles it left burnt out on the field, by nation, for the next battle there)
+  wreckBump(g, rep);
   // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
   // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
   capturedKit(g, rep, target);

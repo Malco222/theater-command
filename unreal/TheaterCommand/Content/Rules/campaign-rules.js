@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 13463732 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9fa93f40 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -48992,6 +48992,9 @@
     ]
   };
 
+  // ../../src/battle/land/wrecks.ts
+  var AFV_PER_DIV = { arm: 150, mot: 40 };
+
   // ../../data/campaign/nations.json
   var nations_default = {
     _about: "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late, and a failed assault is not renewed the same month. maxAttack is the most corps a nation's staffs can bring into one battle. seaSupply lets an army be supplied through any friendly port. sealift is how many corps a nation's shipping can carry across the sea in a month; a nation with sea lift can also be supplied through any friendly port its ships can still reach. dormant marks a nation that takes no part until an event in diplomacy.json brings it in. offmap is for a country whose homeland is off the map: 'sea' is the sea its convoys come in by, which counts as its home port, and 'industry' is the factories it has at home, which no enemy can reach. Its armies arrive as expeditions in setup-1939.json; it raises nothing on the map.",
@@ -50835,6 +50838,48 @@
     const book3 = g2.captured ?? (g2.captured = {});
     book3[winner] = [...(book3[winner] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-2), { from: from2, n, turn: g2.turn }];
   }
+  var WRECKS = { per: AFV_PER_DIV, towed: 0.5, most: 60 };
+  function wreckBump(g2, rep) {
+    if (rep.yielded) return;
+    const attHolds = rep.level.endsWith("victory");
+    const left = {};
+    const side5 = (us, holds4) => {
+      for (const u of us) {
+        const per = WRECKS.per[u.kind] ?? 0;
+        if (!per || u.guard || u.divs <= 0 || u.men <= 0 || u.lost <= 0) continue;
+        left[u.nat] = (left[u.nat] ?? 0) + per * u.divs * Math.min(1, u.lost / u.men) * (holds4 ? 1 - WRECKS.towed : 1);
+      }
+    };
+    side5(rep.attackers, attHolds);
+    side5(rep.defenders, !attHolds);
+    const whole2 = Object.entries(left).map(([nat, n2]) => [nat, Math.round(n2)]).filter(([, n2]) => n2 > 0);
+    if (!whole2.length) return;
+    const was = (g2.wrecks ?? (g2.wrecks = {}))[rep.region];
+    const n = { ...was?.n ?? {} };
+    for (const [nat, k] of whole2) n[nat] = (n[nat] ?? 0) + k;
+    g2.wrecks[rep.region] = { n, last: Math.max(was?.last ?? rep.turn, rep.turn) };
+  }
+  function wreckLook(w, turn2) {
+    if (!w) return null;
+    const rows = Object.entries(w.n).filter(([, k]) => k > 0).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+    const all = rows.reduce((s2, [, k]) => s2 + k, 0);
+    if (all <= 0) return null;
+    const count4 = Math.min(WRECKS.most, Math.round(all));
+    const exact = rows.map(([nat, k]) => [nat, k * count4 / all]);
+    const nats = {};
+    let given3 = 0;
+    for (const [nat, x] of exact) {
+      nats[nat] = Math.floor(x);
+      given3 += nats[nat];
+    }
+    for (const [nat, x] of [...exact].sort((a, b) => b[1] - Math.floor(b[1]) - (a[1] - Math.floor(a[1])) || (a[0] < b[0] ? -1 : 1))) {
+      if (given3 >= count4) break;
+      nats[nat] += 1;
+      given3 += 1;
+    }
+    for (const nat of Object.keys(nats)) if (nats[nat] <= 0) delete nats[nat];
+    return { count: count4, months: Math.max(0, turn2 - w.last), nats };
+  }
   function weather(g2) {
     const m = turnToDate(g2.turn).month;
     if (EASTERN.mud.includes(m)) return { mud: true, winter: false, text: "Mud in the east slows every army there." };
@@ -52489,6 +52534,7 @@
       g2.scars[target.id].mudN = (scar?.mudN ?? 0) + 1;
       g2.scars[target.id].mudLast = g2.turn;
     }
+    wreckBump(g2, rep);
     capturedKit(g2, rep, target);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
@@ -58606,6 +58652,8 @@
       // its scars back from its reports when loaded.
       scars: g2.flags.open === 1 ? g2.scars : void 0,
       captured: g2.flags.open === 1 ? g2.captured : void 0,
+      // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
+      wrecks: g2.flags.open === 1 ? g2.wrecks : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -58772,6 +58820,8 @@
         const was = (g2.scars ?? (g2.scars = {}))[r.region];
         g2.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
       }
+    if (d.wrecks && typeof d.wrecks === "object") g2.wrecks = d.wrecks;
+    else for (const r of g2.reports ?? []) wreckBump(g2, r);
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -85232,6 +85282,8 @@
         const ticket = { ...t };
         if (scar && scar.n > 0) ticket.scars = { count: scar.n, months: Math.max(0, g2.turn - scar.last) };
         if (scar?.mudN && scar.mudLast !== void 0) ticket.oldRuts = { count: scar.mudN, months: Math.max(0, g2.turn - scar.mudLast) };
+        const wrecks = wreckLook(g2.wrecks?.[to], g2.turn);
+        if (wrecks) ticket.oldWrecks = wrecks;
         const wx = groundWeather(g2, g2.regions[to]);
         if (wx && !ticket.weather) ticket.weather = wx;
         const took = (nat) => (g2.captured?.[nat] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-1)[0];

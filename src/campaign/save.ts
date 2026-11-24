@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from './game';
+import { atWar, capitalDistances, computeSupply, createGame, openTheatres, wreckBump } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
@@ -101,6 +101,8 @@ export function saveGame(g: Game): string {
     // its scars back from its reports when loaded.
     scars: g.flags.open === 1 ? g.scars : undefined,
     captured: g.flags.open === 1 ? g.captured : undefined,
+    // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
+    wrecks: g.flags.open === 1 ? g.wrecks : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -270,6 +272,8 @@ export function loadGame(text: string): Game | null {
       const was = (g.scars ??= {})[r.region];
       g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
     }
+  if (d.wrecks && typeof d.wrecks === 'object') g.wrecks = d.wrecks;
+  else for (const r of g.reports ?? []) wreckBump(g, r);
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);
