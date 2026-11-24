@@ -6,7 +6,7 @@
 // the escort's kills keep the count's incidents. Nothing in it reads the flag or the date.
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
-import { CAUSE, NAVY, boatCeiling, convoyCount, convoySideOf, firingShare, huntExpected, zoneOf } from '../src/campaign/navy';
+import { CAUSE, FLEETS, NAVY, boatCeiling, convoyCount, convoyMeeting, convoySideOf, firingShare, huntExpected, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { grantTech } from '../src/campaign/tech';
 import type { Fleet, Game, Ships } from '../src/campaign/types';
@@ -38,6 +38,13 @@ function unread<T>(f: () => T): T {
   const keep = CAUSE.firing.t2;
   CAUSE.firing.t2 = null;
   try { return f(); } finally { CAUSE.firing.t2 = keep; }
+}
+/** As first built, before the escorts' cycle and the screen's stations (tested in convoy-screen-r2): escorts bound over convoys sailed. */
+function firstBuilt<T>(f: () => T): T {
+  const dd = CAUSE.station.dd!, sc = CAUSE.firing.screen!;
+  const keep = { crossing: dd.crossing, ships: sc.shipsAColumn };
+  dd.crossing = null; sc.shipsAColumn = null;
+  try { return f(); } finally { dd.crossing = keep.crossing; sc.shipsAColumn = keep.ships; }
 }
 
 describe('the figures', () => {
@@ -76,15 +83,47 @@ describe('a convoy attacked', () => {
     expect(few.fire!).toBeLessThan(1);
     expect(more.fire!).toBeLessThan(few.fire!);
     expect(most.fire!).toBeLessThan(more.fire!);
-    // (The share is the ruled form of the escorts a convoy for each boat trying.)
     const c = convoyCount(g, atlantic)!;
-    const tries = c.pack / 0.3;
-    const r = (1 / most.fire! - 1) / (7 / 3);
-    expect(most.fired).toBeCloseTo(tries * most.fire!, 12);
-    expect(r).toBeGreaterThan(0);
+    expect(most.fired).toBeCloseTo((c.pack / 0.3) * most.fire!, 12);
     const before = at(60, 80);
     grantTech(g, 'GER', 'asvradar');
     expect(at(60, 80)).toEqual(before);
+  });
+
+  it('r is the ruled one: the radar-fitted escorts at their share on the route, over the convoys sailed, for each boat trying', () => {
+    const g = open(true);
+    grantTech(g, 'UK', 'asvradar');
+    meet(g, 60, 80);
+    // (A second escort, patrolling one of the route's seas: distant cover, at 'loose' of its destroyers.)
+    sea(g, 'Dover Fleet', 'natl', { dd: 40 }, 'patrol');
+    firstBuilt(() => {
+      const c = convoyCount(g, atlantic)!, s = convoySideOf(g, 'UK', atlantic)!;
+      const r = ((80 + 40 * FLEETS.escort.loose) / c.sailed) / (c.pack / 0.3);
+      expect(FLEETS.escort.loose).toBeLessThan(1);
+      expect(s.fire).toBeCloseTo(1 / (1 + (7 / 3) * r), 12);
+    });
+  });
+
+  it('with radar, the contest and the ceiling both read the fired pack, the share applied once', () => {
+    const g = open(true);
+    grantTech(g, 'UK', 'asvradar');
+    meet(g, 60, 80);
+    const c = convoyCount(g, atlantic)!, s = convoySideOf(g, 'UK', atlantic)!, was = unread(() => convoySideOf(g, 'UK', atlantic)!);
+    expect(s.fire!).toBeLessThan(1);
+    expect(s.fired).toBeCloseTo((c.pack / 0.3) * s.fire!, 12);
+    expect(s.P).toBeCloseTo((was.P * s.fired!) / c.pack, 12);
+    expect(s.torps).toBeCloseTo(Math.max(1, s.fired!) * boatCeiling(g, zoneOf(g, 'natl'))!, 12);
+  });
+
+  it('the card says the boats that fire, so its boats each and its torpedoes agree', () => {
+    const g = open(true);
+    grantTech(g, 'UK', 'asvradar');
+    meet(g, 60, 80);
+    const s = convoySideOf(g, 'UK', atlantic)!, k = convoyMeeting(g, 'UK', atlantic).count!;
+    expect(k.fired).toBeCloseTo(s.fired!, 2);
+    expect(k.torps).toBeCloseTo(Math.max(1, k.fired!) * boatCeiling(g, zoneOf(g, 'natl'))!, 1);
+    // (Unread, the card carries the count's pack and no fired, as before.)
+    expect(unread(() => convoyMeeting(g, 'UK', atlantic).count!.fired)).toBeUndefined();
   });
 
   it('at T2\'s own ratio gives the count\'s pack back, so T2 is as the tons ruling fitted it', () => {
