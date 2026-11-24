@@ -42,7 +42,7 @@ function unread<T>(f: () => T): T {
 
 describe('the figures', () => {
   it('lays 0.3 of the boats that try firing at T2\'s ratio of about one radar-fitted escort to each boat trying: c = 7/3', () => {
-    expect(CAUSE.firing).toEqual({ t2: 0.3, rT2: 1 });
+    expect(CAUSE.firing).toMatchObject({ t2: 0.3, rT2: 1 });
     expect(firingShare(1, 1)).toBeCloseTo(0.3, 12);
     expect(firingShare(6.5, 6.5)).toBeCloseTo(0.3, 12);
     expect(firingShare(1, 1 / 0.3)).toBeCloseTo(1 / (1 + (7 / 3) * 0.3), 12);
