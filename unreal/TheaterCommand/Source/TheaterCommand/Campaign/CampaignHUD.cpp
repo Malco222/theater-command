@@ -3814,7 +3814,8 @@ namespace
 			// click would open, ringed round its grass in the warm brass: desk-950 under brass-300, as the lessons' clamps
 			// are, drawn first so that the towns' plates and the badges lie over it.
 			{
-				const TArray<FVector2D>& FieldRing = Controller->GetFieldOutline();
+				TArray<FVector2D> FieldRing;
+				Controller->GetFieldOutline(FieldRing);
 				if (FieldRing.Num() == 4)
 				{
 					const float RingScale = FMath::Max(Geometry.Scale, 0.01f);

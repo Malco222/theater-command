@@ -809,7 +809,7 @@ public:
 	 * (Release 2; the art director's airfield spec of 24 November, item 2.) The four corners of the airfield a click
 	 * would open, in the window's own pixels, for its brass outline; empty where there is none.
 	 */
-	const TArray<FVector2D>& GetFieldOutline() const { return FieldOutline; }
+	void GetFieldOutline(TArray<FVector2D>& Out) const;
 	/** (The same spec, item 3.) The province panel's airfield row: opens the picked province's airfield. */
 	void OpenSelectedAirfield();
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
@@ -1195,7 +1195,7 @@ public:
 	void OrderTo(int32 RegionId, const FVector* CarriedFrom = nullptr);
 
 	/** A click on a territory, as the mouse makes it: for scripts. */
-	void ClickRegion(int32 RegionId) { ClickOnTable(nullptr, RegionId); }
+	void ClickRegion(int32 RegionId) { PointedField = INDEX_NONE; ClickOnTable(nullptr, RegionId); } // (a step's click on a province is never the airfield the real pointer happens to rest by)
 	// ---- For the playtester's click-through (CampaignStepPlayer: a development tool) ----
 	/** What the player has in front of him: the card or page on top, the words he is shown, and what is in hand. */
 	void DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const;
@@ -1740,7 +1740,7 @@ private:
 	bool bPointerInOverlap = false; // the pointer is where a town's ring and an airfield's overlap
 	bool bOverlapSwapped = false; // and a click there has turned it to the other, until the pointer moves off
 	FVector2D OverlapClickAt = FVector2D(-1.0e6, -1.0e6);
-	TArray<FVector2D> FieldOutline; // (item 2) the airfield a click would open, its corners on the screen
+	TArray<FVector> FieldOutline; // (item 2) the airfield a click would open, its corners on the table
 	int32 HoverTipField = INDEX_NONE;
 	int32 StagedHover = INDEX_NONE;
 	bool bStagedField = false; // (for the photographer: the staged pointer rests on that province's airfield)
