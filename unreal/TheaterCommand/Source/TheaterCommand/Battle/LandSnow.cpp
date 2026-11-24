@@ -299,6 +299,9 @@ namespace LandScape
 			default:
 				// the open field: smooth white; where the cover is thin, the ground through it (on the steppe its dead grass
 				// grey-buff in the scoured patches, no plough's lands: the colour's bands taken out)
+				// (rice country's frozen plots, painted dark grey ice by their region: only a dusting holds on them, the art
+				// director, 06:57Z)
+				if (Under == Look::Rice) Hide -= 0.72 * Smooth(66.0, 50.0, Lum(C));
 				Out = Mixed(bOpenCountry ? Mixed(C, Buff, 0.7) : C, White, Clamp01(Hide));
 				Out = Trampled(Out, S);
 				break;

@@ -600,6 +600,24 @@ namespace LandScape
 			}
 			// (the post, the snow pole and the snow fence are built here in KitPlain: no file to read or to miss)
 			bool KitBuilt(int K) const override { return K == KPost || K == KMarker || K == KDrift; }
+			// (the trial "houses": the east's log izba, its plank roof or its thatch, LandHouse's Kind 7; the south's whitewashed
+			// khata under its hipped thatch, Kind 8; and the burnt-out house its chimney stands for, Kind 9, at its own size: an
+			// izba's footprint, its logs burnt down, in Russia; a khata's, its clay walls standing roofless, in the south)
+			bool KitHouse(int K, LandHouse::Spec& Out) const override
+			{
+				if (!bEast || (K != KIzba && K != KIzbaThatch && K != KKhata && K != KChimney)) return false;
+				if (K == KChimney)
+				{
+					Out.Kind = 9;
+					Out.Roof = bRussia ? 0 : 1;
+					Out.Long = bRussia ? 7.5 : 9.18;
+					Out.Deep = bRussia ? 7.2 : 6.46;
+					return true;
+				}
+				Out.Kind = K == KKhata ? 8 : 7;
+				Out.Roof = K == KIzba ? 0 : 1;
+				return true;
+			}
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
 				switch (K)

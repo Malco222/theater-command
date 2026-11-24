@@ -22,6 +22,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
 | `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. A man is (block, k, j): j is a follower of key man k in the drill's sections (0 the key man), with the roles leader, loader and crew besides the key men's. The scene plays the crowd thrifty (`SetThrift`: a man away from the eye posed every 2nd to 4th frame by distance, his place, shots and falls every frame) and skins the men who moved over all the cores (`ParallelFor`; a body's first skin, which reads the ground, on the game thread). 698 men: about 1 ms a frame on 4 cores. |
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
+| `LandAir.h/.cpp` | The fighters on call (release 2, `-TheaterLandAirSupport`): each leg's planes down their run, the ground's guns and the lost plane's fall, from the rules' air notes. Plain C++; drawn by `LandBattleAir.cpp`. |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
 | `LandBattleScreen.h/.cpp` | `SLandBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
@@ -380,6 +381,419 @@ log says it all in its `Land battle look:` lines.
 5. An overcast try: `-TheaterLandWeather=0.95,1`: soft shadows, flatter light, a grey deck, greyer haze.
 6. The `Land battle sky` lines every 30 s: how often the clouds turned and what a turn cost (about 1.4 ms on average
    in the cloud test).
+
+## The wind, the clouds' shadows and the sun's shafts (release 2, off until passed)
+
+Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and epic?" There are three switches,
+each off until the art director and the Mac's 45 fps pass it; `-TheaterLandEpic` turns on all three. The art director's
+round 1 notes are in. Every battlefield is treated alike (the bocage, the steppe, the desert, Italy, the jungle, rice,
+the farms, the plains): nothing is set per place. Build the materials once on the Mac:
+`TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks`. They read
+`Tools/land_look/T_LandCloudWind.png`, made by `make_sky_textures.py`: red is how far inside a cloud's shadow, blue is
+the cloud's order, green is the gusts.
+
+### The wind
+
+`-TheaterLandWind`, or `=strength`: 1 is as worked out from the recording's wind, 0 is off.
+
+- Gusts of 20 to 75 m run downwind over the field at about 1.3 times the wind's speed. A calm day, under a metre a
+  second, stands near still.
+- The grass, the flowers and a region's blades lean from the root, about 8 degrees in a gust at a fresh breeze.
+- The ripe wheat bends toward the ear and nods back over about 1.7 s. The corn's and the gaoliang's stalks do the same,
+  taller.
+- A region's low leafy plants and the bushes lean less.
+- An oak, an elm or a shrub bends toward its top, some 20 cm at 18 m, slowly, and each leaf card shakes 2 to 3 cm.
+- Poplars, birches, willows and bamboo move two to three times as much, with quicker leaves.
+- Palms' fronds lift and toss.
+- Every copy swings on its own beat (the materials' PerInstanceRandom).
+- Each gust runs over the grass and the corn as a light patch, and each lull as a darker one, moving with the lean.
+  This sheen is 6 per cent on grass and 11 on ripe grain (wheat, and the ground's gold fields by their colour). There
+  is none on earth, sand or snow.
+
+The new material `M_LandBlades` is M_MapSurface with the sway and the sheen; the campaign's M_MapSurface is untouched.
+M_LandLeaves and M_LandStalks also carry the sway, but stay still unless the C++ sets it. Each kind of tree's leaves get
+their own copy of the leaf ink, so they sway with their wood. Things bend only within 250 m of the eye
+(`-TheaterLandSwayTo=`; the clutter within 120 m). Each swaying copy's shadow is kept as cached (VSM `Rigid`), so the
+shadows are not redrawn for every leaf. With the wind off, the leaves' and stalks' copies are told not to move.
+
+### The clouds' shadows
+
+`-TheaterLandCloudShadows`, or `=darkness`: the sun's share left under a cloud, 0.2. That leaves a shadowed field about
+0.49 of sunlit in game: the sky's light of 0.36, plus 0.2 of the sun's remaining 0.64. A tree's cast shadow stays
+darker, at 0.36, and cast shadows fade under a cloud as they should.
+
+- The light function `M_LandCloudShade` on the battle's sun lays the fair-weather cumulus seen from below. The clouds
+  are lobed, cauliflower outlines 150 to 600 m across with a 30 m soft edge, with sun between.
+- The day's cover decides how many clouds are drawn, not how big they are: four fifths of the cover, never more than
+  0.4 of the field.
+- The picture's clear disc (280 m) is laid at the start over what the opening shot looks at (`Anchor`, from the
+  director's first pose; the field's middle if it has none). Six clouds ring the disc, first in the day's order, so the
+  opening's first frame already shows a few patches on its flanks and far fields while its middle stands in sun. A
+  simulation of the opening (170 m up, FOV 48) gives 17 to 40 per cent of the visible ground shaded at full cover, and
+  7 to 33 at a thin day's. The shadows come over the middle as the clouds drift: DrawSky sets the drift every frame,
+  the same drift as the clouds drawn.
+- It takes the sun off everything under a cloud (the ground, the hedges, the tanks, the men), never the paint.
+- There are none on an overcast day, a clear one, or with `-TheaterLandNoClouds`.
+- The table's sun is put back as it was when the battle ends.
+
+### The sun's shafts
+
+`-TheaterLandSunShafts`, or `=bloom`: 0.2. This is light-shaft occlusion and bloom on the sun, only on a fair day with
+the sun under 25 degrees. When the sun stands before the lens, rays come through the crowns, the hedges, the smoke and
+the dust. The bloom starts only above the engine's threshold of 8, so it comes from the sun's disc, fires and flashes,
+never as a milky film.
+
+### Checking it
+
+The log reports each one at load ("the wind ON ...", "the clouds' shadows ON ...", "the sun's shafts ON ..."). The
+field painter shows the clouds' shadows and the gusts' sheen in its stills with `LAND_FIELD_CLOUD_SHADE=0.2` and
+`LAND_FIELD_SHEEN=0.06`. Only the game shows the wind's motion and the shafts.
+
+The art director's Mac shots:
+
+- The opening wide and a low eye in the corn, with `-TheaterLandEpic` against without (the A/B).
+- The wide on an overcast day.
+- 30 s of shadows crossing, from the wide.
+- 20 s of wind with wheat, a hedge, poplars and palms, plus 10 s at top wind and 10 s on a calm day.
+- A low-sun shaft shot, plus a midday frame.
+- The frame rate for each look alone and for all three, against the 45 fps gate.
+
+## A burning tank as a film shows it (release 2, off until passed)
+
+Brian, 23 November: "the tank on fire doesnt look realistic". Before this, every kill lit the same single bonfire, about
+3 m across, that roared unchanged until the battle's end. `-TheaterLandFilmFire` gives each wreck its own story instead
+(`LandBurn`), chosen by how the fates table says she ended, her size, and her own dice:
+
+- **A brew-up** (or her turret thrown): flame jets out of her hatches for half a second and the fuel ball rolls into
+  black smoke. Then the open turret ring (or the commander's hatch) roars like a blowtorch for one to two minutes. Her
+  rounds cook off in pops for minutes, one or two of them jetting 4 to 6 m. Her deck burns under a black column to the
+  battle's end: at its height for six to twelve minutes, then low, with small flames in her hatches and a grey stream
+  of smoke from them.
+- **An engine fire:** the deck catches at once, or after a minute of thickening smoke if she "burns later". The flames
+  reach her hatches a minute or two on, and some rounds cook off. It goes out after 10 to 20 minutes and smoulders. A
+  table that picked no fate burns this way.
+- **A small fire put out:** low flames for a minute or two, then grey smoke.
+- **Not burning** (her crew bailed out or were killed, a track off): grey smoke from a hatch or the engine for one to
+  three minutes, or none.
+- **Lorries and cars:** they burn only if the table says so (`soft.burns`, or flipped half the time); otherwise they
+  smoke. **Guns:** a gun whose ready rounds were hit pops them off.
+
+The kit gains `Vent`: flame forced out of an opening, which never melts into the deck's fire and lays no column of its
+own. There are two new steam rows, `smoulder` and `smoke`. The switch also lays `Content/Effects/battle-fx-film.json`
+over the recipe for that battle (`FBattleEffects::LayOver`): the art director's round 1 for the deck's flames, the
+column, the burn-down (`fire.late`), the lamp's flicker, the fuel ball and the cook-offs. With the switch off the
+recipe is as it was. Keep `tools/battle-fx/fx-film.json` and that file the same. Effects (R2) blocks in `PlayArmourEvents` play each plan
+and leave out the clip's own fire and smoke loops; the clip's brew-up jets, magazine blast and hatch blown open stay.
+The log names each wreck's story ("Land battle: Tiger's wreck (tank.brew_up, heavy): ..."). The effects preview plays
+the same plan: `FX_SCRIPT=film FX_FATE=tank.engine_fire FX_CLASS=heavy`, with `flatten.py fx-film.json` appended to
+its recipe.
+
+Not yet: the scorch spreading from the vents (her soot still blackens every kill over 30 s), heat shimmer, embers.
+
+The art director's Mac shots, with `-TheaterLandFilmFire` against without: a brew-up at 1 s, 90 s, 5 min and 15 min,
+from 50 m and from 300 m, plus a frame at dusk; an engine fire at the same times. Also the frame rate in a battle with
+eight wrecks or more, against the 45 fps gate.
+
+## A knocked-out tank's crew getting out (release 2, off until passed)
+
+Brian, 23 November: "if a tank gets hit people try and get out before it explosdes". Before this, nobody left a
+knocked-out tank: her commander, if he was up, died in his hatch, and the rest of her crew were never seen; and a
+brew-up blew at the instant of the kill, so there was no time to get out. `-TheaterLandBailOut` plays the fates table's
+own `crew_out` steps (how many, when, running or crawling, to her rear, to cover or to a crater) and its `crew_in`
+(a crew that bails out and climbs back in), with `LandBail`:
+
+- **The wait.** A brew-up's ammunition now goes 5.5 to 10 life seconds after the hit (the table's 5 to 10), by her own
+  dice (`LandKit::Battle::BrewWaitLeast/Most`, each vehicle's `BrewWait`). Until then she plays `knocked_out` (hatch
+  blown, smoke, bail-out); then `brew_up`. Her fire, column and cook-offs start at the blast. With the switch off both
+  are 0 and the kill is as it was.
+- **Getting out.** Each man climbs out of his hatch (the commander's, the driver's, then the loader's and hull gunner's
+  beside them), steps to the hull's edge on the side away from the enemy, drops to the ground and goes. First he runs
+  straight back in her lee, 8 to 12 m (a crawler 3 to 5), past her rear as the enemy sees her and into the shadow her
+  hull casts, never through it. Then he breaks for her rear (18 to 38 m further), for cover, or crawls to a crater. A
+  man staying by her crouches in her lee.
+- **Who doesn't make it.** A man still climbing out when the ammunition goes is thrown 2 to 5 m and lies dead; a man
+  who had not yet started is lost inside. Everyone on the ground within 15 m of her flinches flat for a second or two
+  as it goes, then carries on. While the fight goes on round her, a runner in the open is hit about one time in six
+  when her nearest living enemy is within 150 m, falling to one in sixty at 600 m or with none on the field (a crawler
+  half that; a little over half of those hit are killed, the rest left crawling). A man crouching in her lee is never
+  hit. In at most about one burning wreck in eight, the first man out is on fire, his clothes alight in patches with
+  smoke trailing from him. He runs a few weaving steps and falls; his flames die to a smoulder over 10 to 15 s. About
+  one in three rolls them out in a few seconds and lives, lying wounded and smoking.
+- **The men.** Tankers where the army has them (the art director: "riflemen climbing out of a Tiger would break it at
+  once"). They are the crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`:
+  those files' infantry clips carry one). An army without a tankers' file (UK, SOV, ITA, JAP, FRA for now) bails out
+  in its own infantry figure, rifle hidden, pack still on (no file carries the pack on a bone of its own): her second
+  note, "a man with a pack is a far smaller fault than no one getting out". The log says so once per army, until the
+  soldiers' thread makes its tankers' file (own uniform, no pack; the Soviets' padded tank helmet, the British beret
+  or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
+  `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
+  asked of the soldiers' thread; until they come these stand in.
+- **The soldiers' bail clips** (labtrr 42bb946f, in all 19 files with a `bail_clips` block). Where a crew's file has all
+  four (`LandBail::Wreck::bClips`), he climbs out in `bail_climb_out` (1.5 s, his boots 0.92 m under the hatch's point,
+  facing so the clip's step to his right is the side he drops from; her roof's own height over the clip's 0.95 m, a
+  Panzer IV 0.82, a Tiger 0.97, a Sherman 1.07, made up from 0.8 s). Then (the soldiers' 18:52Z, ea211cc5) he turns out
+  and scrambles, crouched and quick (the art director, 19:33Z: the ground battle's `advance` played at 2.25 m a second,
+  never an upright walk on a burning tank), over her turret's roof to its edge (`Wreck::TurretHalf`, else
+  a third of her width), steps down onto her deck in `bail_step_down` (0.73 s, off at 0.10 s, 0.42 m out and 0.95 m
+  down, her own drop made up between 0.10 and 0.55 s), scrambles to her hull's edge and drops in `bail_jump_down` (1.60 s,
+  off at 0.44 s, 1.71 m out and 1.5 m down, her own height made up between 0.44 and 1.09 s). The step is only where
+  her roof stands 0.45 m or more over her deck and his file has the clip (`Wreck::bStep`); a man out of a hatch on her
+  deck scrambles straight to its edge. He goes off the side away from her enemy (the art director); with her enemy
+  about dead ahead or behind, the side toward where he runs. Where that side is blocked (`Wreck::Blocked`: the scene
+  marks a side, her back or her bow blocked where another vehicle, living or a wreck, stands within 4.5 m of her hull
+  there), the other side if her enemy is ahead or behind, else off the end of her nearest his hatch (over her turret's
+  back onto her engine deck) so long as that end does not face her enemy and she is not burning (never over the
+  grilles of a burning engine), else the other side. A man down on the side her enemy sees runs straight along her
+  flank to past her end first, then breaks for his cover. Where her deck beside her turret is narrower than the step he jumps from where he
+  lands (at most 0.05 m past where the jump stands), and steps from nearer her middle if he must. His way over her is
+  laid by `LandBail::LayWayOff`. A man on fire falls before the end of his way (a crawler's short way, run). A man on
+  fire runs in `burning_run` (its stride, 7.35 m a loop, by the ground he covers) and falls in `burning_fall_roll`,
+  living or not. The clips' roots move him: his seat is moved on where each ends, `Crowd::Ride::bOwnRoot` keeps the
+  root the new clip's through the blend, and `Pose::Root` is where his body is (a burning man's flames go with it,
+  each clip's root as the soldiers' tracks run). The clips take longer to the ground (3.6 to 5.2 s against 2.05 s:
+  `Man::ClipsS`), so each man starts up that much sooner (not before 0.3 s after her kill) and every man goes as he did
+  without them (the test, run both ways: the same tallies). Without the clips, the same crew to the last number.
+  Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
+  `/mnt/project-files/battle-fx/bail-out/bail-clips-r6.jpg`: three-quarters on, from her front, off her back, the
+  smoke grenade thrown from her front, and the man on fire).
+- **Smoke to cover them** (`-TheaterLandBailSmoke`, with `-TheaterLandBailOut`; release 2, off until the art director
+  and a 45 fps reading pass; Brian, 23 November 20:09Z). With her enemy close and in sight (`Wreck::Threat` 0.5 or
+  more), the fight going on and her ammunition not about to go (no brew-up), six crews in ten have the first man out,
+  her commander, stand in his hatch and throw a smoke grenade toward her enemy (`throw_grenade`: it leaves his hand at
+  0.95 s, he holds its follow-through 0.25 s, turns to the way he climbs over 0.25 s and ducks into his climb, 1.45 s
+  up in his hatch in all; the art director, 24 November 02:04Z: he is the most exposed man on the field). It lands 9 to
+  14 m off toward her enemy, past her hull, and 1 to 3 m upwind of that line (`Wreck::Wind`, the battle's own wind), so
+  its drift lies between her enemy and her crew's way back, about 0.9 s later (`Crew::SmokeAt`), and gushes grey-white
+  from the ground (the kit's `SmokeScreen`, Kind "grenade", `smoke_screen.grenade`, `Battle::GrenadeLumps`; round 2
+  by the art director's notes of 24 November 02:18Z: one short jet off the canister, 0.5 to 1 m down the wind, growing
+  into a dense rolling billow there, 3 to 5 m across within 2 s and 10 to 15 m by 10 s; then a plume leaning up down
+  the wind, its middle climbing about 1.3 m in 10 m, widening, with torn wisps off its top; solid for its first 15 m,
+  then thinning steadily, 0.4 thick at 40 m and 0.1 to 0.2 at 50 to 60 m; a sunlit grey-white top, 212-232 in the
+  cloud picture, a cool grey underside and lee, 164-185; a soft shadow on the ground under its dense part, laid away
+  from the sun; laid until its last 15 s, then thinning) for 60 to 90 s. A man on the
+  ground 2.5 s or more after it lands is hit half as often (the test: 0.078 against 0.175 in the open). Its own dice
+  (`Wreck::Seed` with its own salt): with the switch off every crew goes to the last number as before. Without the
+  bail clips the grenade still lands; he is unseen in her until he climbs out.
+
+None of it changes who lives and dies in the battle's numbers (the fates table's rule: looks only). Its dice are its
+own, by the wreck's seed, so the same battle bails out the same way each time. The log names each crew ("Land battle:
+Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/land_bail/run.sh` plays every land way
+with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips, then with
+the clips and smoke (`LAND_BAIL_SMOKE=1`: thrown only where it may be, by her first man, toward her enemy, about six
+crews in ten, half the hits under it); `LAND_BREW_WAIT=5.5,10` runs the kit's
+own test with the wait.
+
+The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
+crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
+`-TheaterLandFilmFire` as well. Also the frame rate in a battle with eight kills or more, against the 45 fps gate.
+With `-TheaterLandBailSmoke` too: a tank knocked out with her enemy close (her commander's throw from 30 m, the screen
+coming up between her and the enemy from 150 m, with some wind so the plume shows), and the frame rate with four or more
+screens up. The plume's own picture: `Tools/land_look/smoke_screen_picture.cpp` (the kit's three kinds from 120 m across
+the wind; the grenade's also at 30 s from 40 m square across its plume at a 1.5 m eye and from the game's camera 25 m
+up, with its shadow alone, and measured down its plume: how solid, how high, its top's and underside's own colour;
+`/mnt/project-files/battle-fx/bail-out/smoke-plume-r2.jpg`, round 2, against round 1's `smoke-plume-r1.jpg`).
+For the Mac shot of round 2: the plume from the side at 40 m and from 150 m, a still at 2 s close to (the jet), and
+the frame rate with four screens up (each now at most about 150 pieces, round 1's 58).
+
+## Shell holes each their own (release 2, off until passed)
+
+Brian, 23 November: "make the explosion craters different varations so its not always the same". Before this, every
+round of a kind left the same hole: every 105's 2.8 m across and 0.7 m deep, round, its soil thrown evenly all round,
+only its ragged outline its own. `-TheaterLandCraterVariety` (`LandCrater::Field::bVariety`) gives each round its own:
+
+- **Its size:** a quarter bigger or smaller, and one in ten a big one (up to half as big again); its depth, rim and
+  clods with it.
+- **Its fuze:** most burst at once on the ground. One in eight is a delay that bursts under the ground: deeper,
+  narrower, a high rim, big clods, little soot. One in ten grazes: a shallow, wide, sooty scoop, longer.
+- **Its slant, along the way its round came** (the scene passes `LandPlay::Effect::Way`). A tank's or anti-tank gun's
+  high explosive comes in nearly flat and leaves a long hole (1.35 to 1.8 times as long as wide), most of its soil
+  thrown forward and out in two wings to either side, little behind. A field gun's or howitzer's shell leaves a
+  slightly oval hole with some wings. A mortar bomb falls nearly straight down and leaves a round one. A round of no
+  known way (a blast in the record with no round) is turned by its own dice.
+- **The burst's soot:** four to nine soft-sided rays of blackened soil over the thrown soil, each its own width,
+  length and darkness, the longest thrown downrange by a tank's slanting burst. The thin edge itself always stays the
+  ground's own colour (soot on it drew a grey halo with straight sides on the snow).
+- **The subsoil:** a deep hole throws lighter soil from under the topsoil onto its crest in patches. Normandy's
+  yellow-brown clay, the steppe's loess, paler sand, a town's plaster dust.
+- **The ground:** mud slumps wide and low with its soot smothered, sand sprays wide and shallow, and on snow the dark
+  earth reaches further.
+- **Overlapping holes:** a new hole's thrown soil stops at an older hole's rim and steps down into it, rather than
+  lying across the older bowl as a sheet. Where it reaches over an older hole's thrown soil it lies on it, in that
+  soil's colour and light at its thin edge (`Field::SoilAt`), so the newer edge never shows as a white sheet over
+  the older soil.
+
+The art director's round 1 (23 November) mended four things, all inside the switch:
+
+- **No straight edges:** each hole has 40% more points round it, and the thrown soil's outer band is broken from side
+  to side, thick where a ray or wing threw it and thinning early elsewhere, so the dark soil runs out in tongues of
+  uneven length.
+- **The spray:** specks of soil and torn turf thrown past the thick soil and beyond the thin edge, thinning as they
+  go, most along the rays and into the wings; on snow and sand some are blackened. They are laid as clods are, so a
+  body lies on them.
+- **A smooth bowl:** the bowl's points a quarter as jittered and its tone smoothed from side to side, so the sand's
+  bowls no longer fan into pie slices.
+- **Puddles in mud:** about half the deep holes in mud hold water, a flat disc at a quarter to a half of the bowl's
+  depth, the grey of the sky in its middle, darker at its edge, under a dark wet ring on the bowl's side. A man wades
+  in it: `TopAt` reads the bowl under it, not the water.
+
+Cost: a varied hole has about twice the points and 1.7 times the triangles (a 105's about 580 points and 750
+triangles, a mortar's 360 and 490). Laying 500 holes takes half a second in the cloud with the switch on, against a
+fifth of a second off, so the Mac's speed gate must check it.
+
+It is all drawn from each hole's own dice, so the same battle lays the same holes. It applies to scarred ground's old
+holes too. With the switch off every hole is laid as before to the byte: checked on 500 holes of every name and
+ground, including old ones, against the code before it. `Tools/land_crater/run.sh` checks it (each hole its own
+size, the long ones along their rounds' way, a body still lies on every hole's face but a puddle's water, no hole
+through the world) and
+paints a barrage's holes on earth, sand, snow, mud and black earth, switch off and on, from a man's height and from
+above.
+
+The art director's Mac shots, with `-TheaterLandCraterVariety` against without: a barrage's field from 40 m up and
+from a man's height, on the bocage and on snow or sand. A field after tanks have shot high explosive at a hedge line
+should show the long holes pointing back at the guns.
+
+## Each gun its own flash (release 2, off until passed)
+
+Brian, 23 November: "how does the gun fire look when they shoot? can we make the mussel flash realistic?" Behind
+`-TheaterLandGunFlash`. Off: every gun draws its row's flash as before (the kit's preview draws the same frames, byte
+for byte, with the switch off).
+
+- **Who has which.** `LandPlay::World::GunLook` (set in `ALandBattle::Open` only when on) names each shot's look by the
+  shooter: `star`, the German MG 42 or MG 34 (squad and heavy); `cone`, a flash hider's narrow cone (the Bren, the DP,
+  the BAR, the Type 96 and 99); `open`, a long tongue (heavy guns: the M1919, the Maxim, the Vickers; the Italian and
+  French squad guns); `tank`, a tank's machine guns; `smg`, a squad leader drawn with a sub-machine gun (his figure's
+  `_smg` or `_nco` file): a burst of 4 (the PPSh 5) at 9 to 15 a second, no tracer, as his clip's cue sounds it;
+  `rifle`, every other rifleman; `brake`, a main gun with a muzzle brake by her model (Tiger, Panther, Panzer IV, StuG,
+  ZiS-3, SU-76, Sexton). The kit is told "mg:star": the row `mg` as ever, with the look's pieces laid after it.
+- **The looks** are `muzzle.look.<look>` in `Content/Effects/battle-fx-guns.json` (`tools/battle-fx/fx-guns.json`),
+  laid over the recipe for that battle only. Each can narrow or lengthen the flame, add a star of spikes round the bore,
+  a brake's two side jets and the dust they blow aside, a pale haze that hangs, a kick of the ground's dust under a
+  muzzle lower than `prone_under_m`, and a small lamp on the firer's face at dusk and night (`bNightOnly`).
+- **The art director's round 1** (23 November, 17:06Z; the cone, tongue, SMG, tank MG and brake passed): the MG 42's
+  star is 4 to 6 short straight tapered spikes, yellow-white, leaning 70 degrees off the bore, rolled anew each round
+  (one star a round: a burst's first round is the Shots', so `Muzzle` drops its own); by day a look is drawn at `day_k`
+  of its size and `day_pale` toward pale yellow-white (`View.SmokeLight`); the rifle's haze is a thin puff gone in 1 to
+  2 s; the prone kick is tan on dry ground (half to full by the ground's dust share), white on snow, none on mud, water
+  or marsh; rifles and sub-machine guns draw no tracer (`tracer 0`); machine-gun tracer is a short travelling streak even
+  close in (`streak 1`); the face lamp is 2 to 3 m and lit on the flash's own frame alone (`Flash::bOneFrame`). Round 2
+  (17:19Z) PASSED, with two carries made: the kick off snow a bright bluish-white (`snow_kick`), and each spike white at
+  its root running out to a yellow tip (`Bit::Hub`), so the star sits with the flash at dusk.
+- **Cost.** A shot lays at most 2 haze puffs, 3 dust puffs, 6 spikes or 4 jets, 10 brake dust puffs and one lamp; a
+  burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
+- **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
+  `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
+
+## Shell and tank hits take limbs off (release 2, off until passed)
+
+Brian, 22 November: "make more graphic animations if a guy gets shot or blown up", "with limbs coming off"; and the
+effects brief of 23 November: shell and tank hits throw men and take limbs off. Behind `-TheaterLandGore`. Off: no twin
+is read and every man falls as before (the cloud test plays its battle with the twins added and the switch off, fall
+for fall and skin for skin the same as with none).
+
+- **The twins.** The soldiers thread's gore twins, `soldier_<ARMY>_gore.json` beside each file in
+  `Content/Models/Soldiers`: the same bones, the skin split at the eight cuts (shoulder, elbow, hip, knee, left and
+  right) with the stump and limb caps hidden inside the body till a limb goes, the paints wound, bone and blood, and the
+  deaths thread's gore falls (`deaths_gore[stance][kind]`: `die_blast_a` to `d`, thrown with a limb gone;
+  `die_arm_off_a`, `b`; `die_leg_off_a`, `b`), whose cut bone flies and lands on its own move track. `ALandBattle` reads
+  the twin of each file it read, when the switch is on, and gives it to the crowd (`LandMen::Crowd::AddGore`), which keeps
+  the twin's mesh, faces and helmets with the file's own clips and sockets, the gore falls after them, so a man swapped
+  to it mid-battle keeps every clip number he had. A twin with no gore falls is passed over, and said in the log.
+- **Who.** A man killed by a field gun's or a howitzer's shell, a tank's gun, a mortar's bomb or a grenade
+  (`KillWeapon`), by how far he stood from its burst (the round's x, y, as the drill writes a shell's). The art
+  director's round 1 (23 Nov 17:52Z): rarer and stronger, about 1 shell kill in 8 to 10. Within 2 m of the burst 0.55
+  of them for a gun's shell, 0.35 for a tank's or a mortar's, 0.25 for a grenade's, falling away by e every 1.5 m past
+  2 m to none past 8 m (gun), 6 m (tank, mortar) or 2 m (grenade). The rules lay most bursts on the man they kill (8 in
+  10 shell kills read 0 m), which says nothing of how close the shell truly fell: such a man 0.2 (gun) or 0.12. A man
+  lying or in cover half that. Measured on the rules' Normandy and Prokhorovka, shell blasts off and on: 1 shell kill
+  in 7.6 to 11. His own dice, so the same battle gores the same men. On the frame he is struck the crowd swaps him to
+  his file's twin (`Impl::ToTwin`: his mesh at each level, his face, no bank), then picks his fall from the twin's gore
+  falls. Which side: where the burst was 1.5 m or more off, by its side against his facing (front, back, side, so a
+  fall of kind `back` throws him away from a burst in front of him); nearer, by the gun's. The big throw (`thrown`,
+  `die_blast_*`) is a field gun's or a howitzer's; a tank's, a mortar's or a grenade's mostly knocks him down an arm or
+  a leg short. A replay from the start gives him his own file back.
+- **Whole joints stay whole** (the art director's PASS, 18:34Z: the caps hidden till his limb goes). The twin's skin is
+  split hard at the eight cuts, which opens a crack of up to 20 cm at a bent shoulder or hip with its red caps inside.
+  Its `gore.joined` lists, per level, the points at each joint with the man's own weights and the cuts they sit at:
+  `Crowd::Skin` skins those so while none of their cuts is off (a cut is off once its bone has left the joint its
+  parent holds by over a centimetre), the twin's hard weights after. The twin's `gore.cuts` are read as
+  `Soldier::Cuts` (each cut's bone, its caps' points per level), `gore.joined` as `Soldier::Joins`; a joined list with a
+  point or a bone out of range is dropped for that level, and he falls cracked as before.
+- **The scene.** His mesh's number changes at the swap (`Crowd::MeshNo`); `DrawMen` then makes his triangles and
+  colours again, as for a new level (`FManDrawn::MeshNo`). His fall's `limb_off` events come with the rest of the men's
+  (`Crowd::Events`, at the stump's socket); no blood is drawn from them yet (Brian has not ruled on blood).
+- **Cost.** A gored man is posed and skinned as any falling man; at rest he is frozen as any body. The twins are read
+  only with the switch on (about 6 MB of json each).
+- **Test**: `Tools/land_gore/run.sh [twins folder] [out folder]`: the off, on, same and replay checks above (with
+  rifle never, none past reach, nearer more often, the man a burst was laid on less often than one within 2 m, the
+  burst's side), no whole joint of a gored man open on its caps (his twin's seam copies within 2 mm of the points they
+  copy, skinned; without the joined skin 225 mm), a note for each limb resting under 1 m from its joint or flying over
+  3 m high (the art director's asks; the clips' own to mend), and `gore_falls.ppm`, six gored men from the hit to rest,
+  no army's clip twice. Pictures: `/mnt/project-files/battle-fx/gore/` (r3: the joined skin, fresh twins 29ad7cfe).
+- **Owed.** The deaths thread's re-runs of the falls (USA and GER `die_leg_off_a`, GER `die_arm_off_b` rest under 1 m
+  from the joint; USA and GER `die_blast_a` throw a limb 3.6 to 3.7 m up), gore falls in every army's twin, and the Mac
+  shots behind the switch.
+
+## The fighters on call over the field (release 2, off until passed)
+
+The effects brief of 23 November (Brian's ask through the coordinator): the ground-attack fighters on call "fired on"
+from the ground, "rarely shot down", and they "crash". Behind `-TheaterLandAirSupport`. Off: nothing of them is read
+past the feed or drawn (the feed keeps the notes in `Recording::Air` either way; nothing else reads them).
+
+- **The rules decide.** Which side calls a strike and when, each leg's run down a strip (`land:air-in`, then
+  `land:strafe`: from, to, width, its time in battle seconds), its bombs (`land:bomb-drop`: each burst a shell of
+  calibre bomb, drawn by the scene as ever) and the planes it cost (`air:lost`: explode, burn or spin) as the run
+  ends. `LandFeed::AirNote` reads the four; nothing here changes any of them.
+- **The plan** (`LandAir.h/.cpp`, plain C++). A leg's planes come in one behind another down the run's line, high, push
+  over into a dive aimed at their lane's middle, their guns opening at the machine's range from the lane's start and
+  walking it to its end, pull out, climb away and break left and right in turn, each 6 to 12 s behind the one before
+  (each dive its own beat), at a real machine's speed along its way (105 to 140 m/s). The shapes are the art director's
+  (23 November, 19:08Z): a fighter from 700 to 800 m in a 25 degree dive, guns from 900 m to 250 m slant, out at 45 m;
+  a Stuka from 1,800 m rolled into a 75 degree dive, its two guns a short burst (1,100 to 700 m), out at 300 m; an Il-2
+  from 160 m at 8 degrees, guns from 700 to 200 m, out at 15 m. A lane starts at least 150 m past its own side's front
+  (the rules' strip is unchanged; only where the rounds are seen to strike moves on). The machine by nation and year
+  (`MachineOf`): Mustang or Warhawk, Stuka (to 1943) or Fw 190 (1944 on), Spitfire or Hurricane, the Il-2, Zero, else a plain fighter in the
+  nation's paint. The ground's guns: the other side's four blocks nearest the run, two guns a block, ragged bursts,
+  aimed short of the lead so that the tracers fall behind. A plane lost is the last of its leg not yet lost: blown apart
+  in its pass, or hit climbing away and going down on fire in a long shallow dive, or spinning in (about 3 s from 150 m);
+  it burns where it struck the rest of the battle.
+- **The scene** (`LandBattleAir.cpp`, `ALandBattle::FlyOver`, each frame after `PlayEffects`). Each plane a mesh of its
+  model's far form (`FMiniatureMesh`; the plain fighter sized to its span where there is none), on `SteelInk`. Its wing
+  guns on the kit's `AirGun` (flash, smoke, the nation's tracer, carried with the plane), and `Shots`' dust spurts over
+  the last 6 m where the rounds go in (no tracer of its own seen). The ground's guns on `AirGun` from where they stand
+  (the defender's tracer; `hmg` for American guns, `rifle` for the rest). A hit: `AirHit`, `AirFall` (explode, burn,
+  spin) and a `fire` or `smoke` trail moved with it; into the ground: `FuelBall` 18 m, `ShellOfSize` `gun75` (an
+  exploded one's pieces `mortar`) and a fire (`Burn` 5 m, 2.5 for the pieces) for the rest of the battle. Ids: the
+  planes' guns 90000 on, the ground's 95000 on (`GunIdOf`, `GunnerIdOf`), a plane's fall, trail and fire `1 << 25` on.
+  A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
+  was hit begins where it is. A replay from the start tells it all again.
+- **Downed pilots** (`-TheaterLandChutes`, with `-TheaterLandAirSupport`; release 2, off until the art director and a
+  45 fps reading pass; Brian, 23 November 20:09Z). The rules say whether a pilot got out (air:lost's chutes: half the
+  burning and spinning planes', never a plane blown apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1
+  to 2 s after the hit (out of a spin 0.5 to 0.9 s), never in her last 0.8 s, and where she is under 60 m by then at the
+  highest she is after the hit; falls free 1 to 1.6 s (pulling at once under 70 m), his way off her dying fast; his
+  canopy blossoms over 1 s and he comes down at 5 to 6.5 m/s, drifting with the battle's wind, swinging under it (14
+  degrees, 3.2 s a swing, dying away). In the air he and his canopy are one small mesh (`LandBattleAir.cpp`,
+  `ChuteShape`: a 7 m canopy, eight lines, a man in his harness 4.1 m under it, its pivot the canopy so he swings),
+  built again only as it blossoms. Down, he goes flat as he lands (`go_prone`), lies 1.5 to 3.5 s, gets up
+  (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block at 4.2 to 5 m/s (`run`), and goes to
+  ground there (`go_prone`, held): a man of the crowd in his army's infantry clips with no rifle (`RiderFileOf`). His
+  canopy falls in over 2.5 s and lies flat 4 m downwind of where he landed, its lines back to there (`HeapShape`).
+  Its own dice: the planes fly as before.
+- **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
+  has only its heavy row).
+- **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
+  from before the run, at a fighter's speed, never under 5 m over the ground, smooth, the Stuka steep and the Il-2 low
+  while firing, the art director's dive angles, bottoms and gun ranges), the guns (each lane from the strip's start to
+  its end, aimed on the ground, each plane 6 to 12 s after the one before, a lane 150 m past its own side's front), the losses (each falls as its note says, burns where it struck, no other falls), the ground's fire (only the
+  other side's blocks, each stream ending in the air near a plane), the same (built twice, grown note by note, rounds
+  the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
+  (`paths.py`); the chutes (a pilot out of the burning and the spinning plane, none out of the one blown apart; out
+  after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
+  up, running from the enemy, flat; his canopy 4 m downwind; the same twice), `chutes.py` drawing them side-on and
+  down from above. Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`).
+- **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
+  With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
+  lying on the field.
 
 ## Packaging
 

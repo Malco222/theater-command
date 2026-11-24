@@ -3,6 +3,9 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandAir.h"
+#include "Battle/LandBail.h"
+#include "Battle/LandBurn.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
@@ -19,7 +22,9 @@
 #include "Battle/LandWalkPan.h"
 #include "Battle/Fates.h"
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,6 +39,11 @@ struct FLandBattleState
 	LandPlay::Replay Play;
 	LandSound::Mixer Mix;
 	LandEye::Director Eye;
+	/** (Camera specials, release 2) -TheaterLandWhistle: the attack's officer blows his whistle as he steps off, the
+	 * film opening on him (LandEye WhistleAt, WhistleMan); and whether it has sounded. */
+	bool bWhistleOn = false, bWhistleBlown = false;
+	/** The earned names by block id, for the film's card (-TheaterLandNickCard): empty strings where none. */
+	TMap<int32, FString> NickOfBlock;
 	/** The walk pan's plan once chosen (-TheaterLandWalkPan, the Mac recipe's look 7; it asks EyeWorld below). */
 	LandWalkPan::Plan Pan;
 	LandDesk::Desk Desk;
@@ -51,6 +61,38 @@ struct FLandBattleState
 	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
+	/** Effects (R2): the wrecks' film fire, -TheaterLandFilmFire (LandBurn). */
+	LandBurn::Director Burns;
+	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
+	LandBail::Book Bails;
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
+	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
+	struct FAirSupport
+	{
+		bool bAsked = false, bOn = false, bMade = false;
+		LandAir::Sky Sky;
+		size_t Built = 0;                // the recording's air notes the plan was made from
+		double Told = -1.0;              // the battle time the kit was last told up to (under 0: not yet)
+		std::vector<LandAir::Plane> Planes;
+		std::vector<LandAir::Gunner> Guns;
+		std::vector<LandAir::Happen> Happens;
+		std::set<int> Firing, Gunning;   // the kit's guns firing now: the planes' (GunIdOf) and the ground's (GunnerIdOf)
+		std::set<int> Falling, Hit, Struck; // planes by key: going down with a trail, hit, into the ground
+		/** Effects (R2): the downed pilots (-TheaterLandChutes): each one now, by his plane's key the shape his mesh was
+		 * last built to (his canopy's open share in the air; 2 and its slump once down), and once down his man in the
+		 * crowd and the clips he is blended between. */
+		bool bChutes = false;
+		std::vector<LandAir::Chute> ChutesNow;
+		struct FChuteMan
+		{
+			double Shape = -1.0;
+			int Man = -1;
+			std::string File, Clip, WasClip;
+			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0;
+		};
+		std::map<int, FChuteMan> ChuteMen;
+	};
+	FAirSupport AirSupport;
 	Fates::Table FatesTable;
 
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
@@ -97,6 +139,34 @@ struct FLandBattleState
 	 */
 	bool bTrucks = false;
 	std::vector<int> LorryRider;
+
+	/**
+	 * The men who ride the light cars and motorcycles (release 2: the art director's rule, none moves empty): her driver,
+	 * and the seats her kind fills (a car's front passenger, a jeep's gunner at her gun, a sidecar's gunner or rider, a
+	 * pillion where the machine has no sidecar seat), each from his army's infantry file's seat clips (the soldiers
+	 * thread's ride_clips: a clip whose places name her model and that socket). He sits his seat's loop and slumps by its
+	 * death clip from the moment she is knocked out (SeatLight, RideLight).
+	 */
+	struct FSeated
+	{
+		int Vehicle = -1, Man = -1;
+		std::string Socket;
+		/** His seat's loop and his death in it (-1: none), and each one's root offset from the socket. */
+		int Clip = -1, Death = -1;
+		LandMen::Vec3 Offset, DeathOffset;
+		float Phase = 0.f;              // his own offset into the loop (life seconds)
+	};
+	std::vector<FSeated> Seated;
+	/** Each vehicle looked at for seats yet (her men seated, or none to seat). */
+	std::vector<uint8_t> SeatedDone;
+
+	/**
+	 * The carriers' benches as they stand this frame (the lorries and half-tracks whose models have bench seats,
+	 * rider.1 to rider.10: LandKit::BenchesNow), for the lorried men aboard (LandMen's SeatFn, LandKit::BenchFor; Brian,
+	 * 23 November 14:10Z: "troops are stuck under the truck"). Made before the men are posed (SeatCarriers); read by the
+	 * men's posing threads at once, never written then.
+	 */
+	std::vector<LandKit::Benches> Carriers;
 
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;

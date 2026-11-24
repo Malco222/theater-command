@@ -412,6 +412,36 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		Write(Said, X, Size.Y - 92.0 - CardsH, SaidFace, BrightBrass, 7);
 	}
 
+	// ---- (Camera specials, release 2, -TheaterLandNickCard) A corps' earned name on the picture while the film holds
+	// on its first kill: low on the left, in quotes, old gold on a dark scroll with brass edges, as the map letters it over
+	// the flag; up in a quarter second, down as the shot is left. ----
+	{
+		const FString* Earned = S.Pose.Card >= 0 && !bGeneral ? S.NickOfBlock.Find(S.Pose.Card) : nullptr;
+		if (!Earned || Earned->IsEmpty())
+		{
+			CardUp = -1;
+		}
+		else
+		{
+			if (CardUp != S.Pose.Card)
+			{
+				CardUp = S.Pose.Card;
+				CardSince = S.Real;
+			}
+			const float Up = static_cast<float>(FMath::Clamp((S.Real - CardSince) / 0.25, 0.0, 1.0));
+			const FString Said = FString::Printf(TEXT("\u201C%s\u201D"), **Earned);
+			const FSlateFontInfo NameFace = Serif(TEXT("Bold"), 22.0f);
+			const double Wd = WideOf(Said, NameFace) + 36.0, Ht = 40.0;
+			const double X = FMath::Max(24.0, Size.X * 0.07), Y = Size.Y - 150.0 - CardsH - Ht;
+			const FLinearColor Fade(1.0f, 1.0f, 1.0f, Up);
+			Fill(X, Y, Wd, Ht, Brass * Fade, 8);
+			Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, Leather * FLinearColor(1.0f, 1.0f, 1.0f, 0.92f * Up), 9);
+			Fill(X + 4.0, Y + 4.0, Wd - 8.0, 1.0, Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f * Up), 10);
+			Fill(X + 4.0, Y + Ht - 5.0, Wd - 8.0, 1.0, Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f * Up), 10);
+			Write(Said, X + 18.0, Y + 6.0, NameFace, BrightBrass * Fade, 11);
+		}
+	}
+
 	// ---- The strip, bottom right: the speeds, a new shot, this shot held (and, the film over a battle of his, the map
 	// again). The general's own bar stands there instead while his map is up. ----
 	if (!S.bCard && !bGeneral)

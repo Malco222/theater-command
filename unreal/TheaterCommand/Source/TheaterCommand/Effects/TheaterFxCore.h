@@ -121,8 +121,9 @@ namespace TheaterFx
 		double CoolFrom = 0.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
-		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
-		double AgeFade = 0.0, AgeFadePow = 1.0;
+		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner;
+		// AgeFadeFrom over 0: its age counted for this only from that many seconds, so it holds whole until then)
+		double AgeFade = 0.0, AgeFadePow = 1.0, AgeFadeFrom = 0.0;
 		// (smoke that goes slowly, Battle::Lingering. bTail: past Hold it is in its cloud's tail, and goes as smoke does
 		// into the air. Of the smoke the cloud had when thick, the depth of it the eye looks through, TailThird is
 		// left a third of the way through the tail and TailTwoThirds at two thirds, falling evenly between (as a
@@ -538,6 +539,15 @@ namespace TheaterFx
 		 * never joins another fire (fire.join), however small, low or still it is: the kit cannot tell a deck from the
 		 * ground, and a scene's ground under a ship is her deck. The pre-check of 22 November. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1, bool bOnShip = false);
+		/** A burning opening (release 2, Brian 23 November: "the tank on fire doesnt look realistic"): flame and smoke
+		 * forced out of a hatch or a grille Across metres wide at At, for Seconds, then a thinning grey column as Burn's.
+		 * It is a fire as Burn's (put out by BurnOut, moved by BurnMove, burning down by fire.late) with three
+		 * differences: it never joins another fire nor takes one in (fire.join), so a wreck's hatches burn as hatches
+		 * and never melt into one bonfire on her deck; it never founds a column of its own (the deck's fire carries the
+		 * wreck's column); and its flames are fire.vent_tongues where the recipe has that row (narrow, tall, roaring
+		 * out of the hole), else fire.land_tongues as a small fire on land. Without fire.vent_tongues.every_s it is a
+		 * Burn that does not join. */
+		void Vent(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
 		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
 		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
 		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
@@ -609,7 +619,11 @@ namespace TheaterFx
 		 * trailing its own white smoke and curling over as it falls, and the wall built from where they came down;
 		 * "canister" (a burning smoke bomb's or a base-ejection shell's, the British and German): no burst, a gush of
 		 * white from the ground that thickens into the wall over its first seconds. Never a crater, never a black or
-		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it. */
+		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it.
+		 * Kind "grenade" (release 2: a tank commander's smoke grenade covering his crew's bail-out; the art director, 24
+		 * November): one canister gushing grey-white, 3 to 5 m across within 2 s, swelling to Across at the canister,
+		 * densest there, and drawn down the wind into a plume 30 to 60 m long that widens and thins with distance; laid
+		 * until the last 15 s of Seconds, then thinning out (smoke_screen.grenade). */
 		void Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind = "wp", int Id = -1);
 		/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; nothing to do with Screen above, a
 		 * smoke round on land). Every frame while she lays it: Id, her own number for this screen; At, where the smoke
@@ -758,6 +772,40 @@ namespace TheaterFx
 		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
+		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "how does the gun fire look when they shoot? can we make
+		 *  the mussel flash realistic?"): a gun's own look, muzzle.look.<look> (laid over from battle-fx-guns.json), named
+		 *  after its row as "mg:star" in Muzzle and Shots. Every number has its row's or the old look's meaning when left
+		 *  out; a name with no colon is drawn as ever. Its pieces have their own dice, laid after the row's. */
+		struct GunLook
+		{
+			bool bOn = false;
+			double FlameM = 0.0;            // flame_m: its flame's length (0: the row's)
+			double Narrow = 1.0;            // narrow: its flame's width as a share of the row's (a flash hider's cone: under 1)
+			double LicksK = 1.0;            // licks: its licks thrown sideways, as a share of the row's
+			bool bFlicker = false;          // flicker: each round of a burst flickers at the muzzle (Shots), as a machine gun's
+			double HotM = 0.0;              // hot_m: a round's close flame in a burst (0: muzzle.hot.mg_flame_m)
+			double FarK = 1.0;              // far_k: a round's far flicker's size, a share of the machine gun's
+			bool bTracer = true;            // tracer: 0, its rounds lay no tracer (a sub-machine gun's pistol rounds)
+			int Star = 0;                   // star: spikes thrown out round the bore (the MG 42's star), 0 none
+			double StarM = 0.0, StarWide = 0.12, StarLean = 75.0, StarFarM = 0.0; // star_m, star_wide, star_lean (degrees off the bore), star_far_m
+			int Jets = 0;                   // jets: a muzzle brake's side jets, left and right (2), 0 none
+			double JetM = 0.0, JetBackM = 0.15, JetWide = 0.2, JetDust = 0.0; // jet_m, jet_back_m, jet_wide, jet_dust (its dust thrown aside)
+			double Haze = 0.0, HazeR = 0.6, HazeWithinM = 200.0; // haze (most opaque), haze_r, haze_within_m: a pale puff that hangs
+			Span HazeS{ 2.5, 4.0 };         // haze_s
+			double ProneUnderM = 0.0, ProneDust = 0.0, DustWithinM = 150.0; // prone_under_m, prone_dust, dust_within_m
+			double LampW = 0.0, LampBackM = 0.4, LampR = 3.0, LampWithinM = 150.0; // lamp_w, lamp_back_m, lamp_r, lamp_within_m: its glow on the firer, dusk and night only
+			// (the art director's round 1, 17:06Z: by day a flash barely shows: day_k its size in full day as a share of
+			// dusk's, day_pale how far its colours go toward a pale yellow-white; streak 1, its tracer a short travelling
+			// streak even close in, never the whole path at once)
+			double DayK = 1.0, DayPale = 0.0;
+			bool bStreak = false;
+		};
+		bool GunLookOf(const std::string& Look, GunLook& Out_) const; // (false: no muzzle.look.<look>.on in the recipe)
+		double LookDay = 0.0; // (how much the last Draw's hour was day, DayOf its SmokeLight: a look's flash by day)
+		double LookDayK(const GunLook& L) const { return 1.0 - (1.0 - L.DayK) * LookDay; }
+		/** A look's own after-pieces: the haze that hangs, the dust a low muzzle or a brake kicks up, its lamp. */
+		void LookLaid(double Now, const Vec& At, const Vec& Fw, const GunLook& L, const char* Ground);
+		void LookLamp(double Now, const Vec& At, const Vec& Fw, const GunLook& L);
 		/** A ground gun's flash close to the eye (muzzle.hot, art director 07:08Z): lit from within, a yellow-white root
 		 *  and an orange body, as the air guns' close flash. */
 		struct HotFlash
@@ -773,7 +821,14 @@ namespace TheaterFx
 			// (yellow_over; 0: a share of the root's, as before), and the root's glow is the kit's own soft halo, HaloM
 			// past the root all round and Halo opaque at the root's edge, never the game's bloom)
 			double YellowOver = 0.0, Halo = 0.0, HaloM = 0.0;
+			GunLook Look; // (Effects (R2): a gun's own look's spikes and jets, laid after the rest; off, none)
 		};
+		/** Effects (R2): a look's own flame pieces, its star's spikes and its brake's side jets, lit as the close flash (H)
+		 *  or, H null, as the far one. */
+		void LookFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const GunLook& L, const HotFlash* H, Dice& D);
+		/** Effects (R2): a look's close flash by day (the art director's round 1): its colours Pale of the way toward a
+		 *  pale yellow-white, the root kept. */
+		static void PaleHot(HotFlash& H, double Pale);
 		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
 		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
 		 *  tongues, red-orange only at their ends, with short licks thrown sideways and a thin glow round it. Its length
@@ -943,6 +998,7 @@ namespace TheaterFx
 			Rgb Col;
 			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
 			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
+			bool bOneFrame = false; // (Effects (R2): lit on the flash's own frame alone, not half the next)
 			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 		};
 		struct Knock
@@ -1109,6 +1165,11 @@ namespace TheaterFx
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off, 6 a smoke screen
 			bool bPhos = false; // (a smoke screen: a phosphorus round's, its wall laid from where its streamers fell, Heads; Flames is when it is laid no more)
+			// (a smoke screen, Kind "grenade": a tank commander's smoke grenade, smoke_screen.grenade; its width at 2 s, metres,
+			// and the length of its plume down the wind, metres)
+			bool bGrenade = false;
+			double GrenadeStart = 0.0, GrenadePlume = 0.0;
+			double NextJet = 0.0, NextSeat = 0.0, NextShade = 0.0; // (a grenade's own clocks: its jet, its billow, its shadow; GrenadeLumps)
 			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
 			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
 			Vec Vel;
@@ -1133,6 +1194,7 @@ namespace TheaterFx
 			bool bMoverSet = false;
 			double NextGlow = 0.0; // (a burning thing's warm glow on the ground, fire.glow, by the clock)
 			bool bLandColumn = false; // (a big fire's own column, Kind 3, that stands over a burning vehicle on land: fire.land_column)
+			bool bVent = false; // (a burning thing: a burning opening, Vent: never joined, no column of its own, fire.vent_tongues)
 		};
 		struct Paint
 		{
@@ -1586,13 +1648,14 @@ namespace TheaterFx
 		OilRow OilRowOf(const std::string& Kind) const;
 		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
 		bool JoinBurn(double Now, const Vec& At, double Across, double Seconds, int Id); // (fire.join: a fire lit by one already burning joins it; true when it did)
+		void Burning(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip, bool bVent); // (Burn and Vent: a burning thing, joined or not)
 		int OwnColumn(double Now, const Source& Fire, bool bLand = false); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
 		SteamRow SteamRowOf(const std::string& Kind) const; // (the row, every dial held to a sane span)
 		CookRow CookRowOf() const;
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
-		TongueRow TongueRowOf(bool bLand = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues)
+		TongueRow TongueRowOf(bool bLand = false, bool bVent = false) const; // (bLand: fire.land_tongues where the recipe has that row, else fire.tongues; bVent: fire.vent_tongues before either)
 		/** A burning thing on land under a ship's size (a tank's, not a ship's): no wider than fire.smoke_column.from_m,
 		 * no higher over the ground than fire.land_column.above_m, and not under way. The test OwnColumn's land column
 		 * makes, without its from_m and from_s; fire.land_tongues and fire.lamp.land_strength are for these. */
@@ -1609,6 +1672,7 @@ namespace TheaterFx
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		/** A smoke screen's wall (Kind 6): its lumps laid up to Now. */
 		void ScreenLumps(Source& S, double Now);
+		void GrenadeLumps(Source& S, double Now);
 		// (a smoke screen laid at sea, ScreenLay: one a ship's screen. Last, At, Vel: her last call; Owed, the seconds since
 		// the last puff; N, the next puff's number; Wander, the screen's slow drift across the wind)
 		struct SeaScreen
@@ -1746,7 +1810,7 @@ namespace TheaterFx
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
-		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn);
+		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look = nullptr);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
 		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)

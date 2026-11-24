@@ -428,6 +428,42 @@ export class LandBattle implements BattleSim<LandUnit> {
    * { trucks: true }, the Battle rules card's Men in lorries row): off, all get down at once where they sat.
    */
   trucks = false;
+  /**
+   * Armoured infantry (release 2; Brian, 23 November 07:01Z): an armoured block draws its division's riflemen riding
+   * behind its tanks in their army's carriers, half-tracks or lorries, who get down near the enemy (Drill.addMech;
+   * DRILL.mech). Looks only: the drill reads it, the fight never. Off unless turned on (the bridge's { mech: true }, the
+   * Battle rules card's Armoured infantry row).
+   */
+  mech = false;
+  /**
+   * Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to "a tank destroyer and a self-propelled gun for each
+   * major army"): some of a battery's guns are drawn as its army's self-propelled howitzer, with no tractor and no crew
+   * on foot (Drill.spgOf; DRILL.spg). Looks only. Off unless turned on (the bridge's { spg: true }, the Battle rules
+   * card's Self-propelled guns row); a campaign battle's only (set pieces stay as the historian drew them).
+   */
+  spg = false;
+  /**
+   * Tank destroyers (release 2, the same yes; the design director, 23 November 07:28Z, (a)): one model in an armoured
+   * block's mix is drawn as its army's tank destroyer or assault gun, the block's own figures and fight unchanged
+   * (Drill.tdOf; DRILL.td). Looks only. Off unless turned on (the bridge's { td: true }, the Battle rules card's Tank
+   * destroyers row); a campaign battle's only.
+   */
+  td = false;
+  /**
+   * Armoured cars and AA vehicles (release 2; Brian, 23 November 07:01Z, item 3; the design director, 07:47Z): a block's
+   * armoured cars out ahead on its flanks till it meets the enemy, then behind it; its AA vehicles behind it (Drill.addEscorts;
+   * DRILL.cars, DRILL.aa). Looks only. Off unless turned on (the bridge's { cars: true } and { aa: true }, the Battle rules
+   * card's Armoured cars and AA vehicles rows); a campaign battle's only.
+   */
+  cars = false;
+  aa = false;
+  /**
+   * Jeeps, field cars and motorcycles (release 2; Brian, 23 November 07:01Z, item 3; the historian's rows, 08:18Z): a
+   * block's light vehicles out ahead with its screen or parked behind it, a motorcycle there riding despatch
+   * (Drill.lightOf; DRILL.light). Looks only. Off unless turned on (the bridge's { light: true }, the Battle rules card's
+   * Jeeps and motorcycles row); a campaign battle's only.
+   */
+  light = false;
   /** Overrun (LAND.overrun): each foot block overrun in its contact now, and the tank block that drove through it. */
   readonly overrun = new Map<number, number>();
   /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
@@ -2767,6 +2803,8 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** Whether a block's foot carries its own anti-tank weapon in the battle's month (LAND.overrun.at, by its army). */
   private ownAntiTank(u: LandUnit): boolean {
+    // ("Units decide": what its corps carries, where the campaign says; else the history start's, by its army and month)
+    if (u.kit?.at !== undefined) return u.kit.at;
     const O = LAND.overrun, d = turnToDate(this.ticket.turn), when = d.year + d.month / 12;
     const nat = O.commonwealth.includes(u.nat) ? 'UK' : u.nat;
     return (O.at[nat] ?? []).some(([from, to]) => when >= from && when < to);
@@ -2782,6 +2820,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (e.kind === 'art') return gunsOf(e).closeAt;
     if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
     return null;
+  }
+
+  /**
+   * Whether an enemy weapon that can pierce a hull reaches a block now (tankReach: a tank's, a gun's over open sights, a
+   * fort's, foot with its own anti-tank weapon), the overrun's threat test. Looks only for the drill: armoured infantry
+   * aboard their half-tracks ride on till one does (the design director, 23 November 07:06Z(2); Drill.think).
+   */
+  hullThreat(u: LandUnit): boolean {
+    for (const e of this.units) {
+      if (e.side === u.side || !fighting(e)) continue;
+      const r = this.tankReach(e);
+      if (r !== null && this.gap(u, e) <= r) return true;
+    }
+    return false;
   }
 
   /** The tank blocks that may, begin their overruns (each tick, before the blocks move). */

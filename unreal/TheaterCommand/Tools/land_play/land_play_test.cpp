@@ -73,6 +73,9 @@ namespace
 		int Crossed = 0, Edged = 0;
 		double CutReal = 0.0;
 		double LostSince = -1.0, LostLongest = 0.0, LostAt = 0.0;
+		/** The special shot the longest lost spell ended in, and the shot's kind (the special shots' diagnosis). */
+		LandEye::Special LostSp = LandEye::Special::None;
+		LandEye::Kind LostKind = LandEye::Kind::Open;
 		double Next = 0.0;
 		// (the look's way: yaw and pitch, degrees; its swing a frame ago, degrees a second)
 		bool bWay = false, bSwing = false;
@@ -314,7 +317,14 @@ namespace
 			if (bMan && bUp && P.Shot != LandEye::Kind::Tank && P.Shot != LandEye::Kind::Track && D.Lost(B))
 			{
 				if (LostSince < 0.0) LostSince = R;
-				if (R - LostSince > LostLongest) { LostLongest = R - LostSince; LostAt = B; }
+				if (R - LostSince > LostLongest) { LostLongest = R - LostSince; LostAt = B; LostSp = P.Sp; LostKind = P.Shot; }
+				if (std::getenv("LAND_PLAY_LOST") && R - LostSince >= 3.9 && R - LostSince < 4.15)
+				{
+					std::printf("  lost 4 s at battle %.2f (real %.2f): %s on %d, held %.2f s; falls near:", B, R, LandEye::NameOf(P.Shot), P.Subject, R - CutReal);
+					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+						if (Rec->Tracks[I].Fell >= B - 3.0 && Rec->Tracks[I].Fell <= B + 3.0) std::printf(" %zu@%.2f", I, Rec->Tracks[I].Fell);
+					std::printf("\n");
+				}
 			}
 			else LostSince = -1.0;
 		}
@@ -330,6 +340,7 @@ namespace
 				Label, Bursts, BurstsKept, Set.OwnClear * 0.8, 100.0 * OwnNear / std::max(1, OwnFrames), OwnFrames, 100.0 * Set.OwnMost,
 				100.0 * OwnFilled / std::max(1, OwnLooks), 100.0 * Crossed * Share, 100.0 * Edged * Share, LostLongest, LostAt, Kick, KickAt, Kick999,
 				PanKick, PanKickAt, Knocked, KnockedSeen);
+			if (LostSp != LandEye::Special::None) std::printf(" (in a %s shot, %s)", LandEye::NameOf(LostSp), LandEye::NameOf(LostKind));
 			std::printf("; in the fight %.0f%% at a soldier's eye level (2.2 m or under), %.0f%% on the film's own section", 100.0 * EyeLevel / std::max(1, FightFrames),
 				100.0 * OnSquad / std::max(1, FightFrames));
 			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
@@ -800,6 +811,36 @@ int main(int argc, char** argv)
 	// (the choice's share by steps alone, so a run is the same on any machine; LAND_PLAY_CHOOSE_MS=ms tries the clock's
 	// share as the game has it, ms a frame)
 	ES.ChooseMs = std::getenv("LAND_PLAY_CHOOSE_MS") ? std::atof(std::getenv("LAND_PLAY_CHOOSE_MS")) : 0.0;
+	// The first bail-out (LAND_PLAY_BAIL=1, as the scene with -TheaterLandBailOut): every tank's crew may get out; at her
+	// kill (BailOut, below) five crews in six do, as the effects thread's LandBail plays them.
+	const bool bBailTest = std::getenv("LAND_PLAY_BAIL") != nullptr;
+	if (bBailTest) EW.Bails = [&Rec](int T) { return Rec.Tracks[static_cast<size_t>(T)].Role == "tank"; };
+	// The special shots (Brian's yes, 23 November 19:52Z; each as the scene's own switch): LAND_PLAY_WHISTLE=1 the
+	// whistle start, LAND_PLAY_NICK=1 a nickname for every infantry and armoured block (=side: one a side), LAND_PLAY_STAND=1 the last stand.
+	const bool bWhistleTest = std::getenv("LAND_PLAY_WHISTLE") != nullptr;
+	const bool bNickTest = std::getenv("LAND_PLAY_NICK") != nullptr;
+	const bool bStandTest = std::getenv("LAND_PLAY_STAND") != nullptr;
+	ES.bWhistle = bWhistleTest;
+	ES.bLastStand = bStandTest;
+	// (LAND_PLAY_WHISTLE=hidden: the attacker's foot hidden from the player all battle, the officer among them: the whistle
+	// cannot be shown, and the film must still open on its aerial. A check of its own: the ride film, on those hidden men,
+	// fails its gates in it)
+	const bool bWhistleHidden = bWhistleTest && std::string(std::getenv("LAND_PLAY_WHISTLE")) == "hidden";
+	if (bWhistleHidden)
+		EW.Hidden = [&Rec](int B)
+		{
+			const LandFeed::Block* Bk = Rec.BlockOf(B);
+			return Bk && Bk->Side == 0 && Bk->Kind == "inf";
+		};
+	if (bNickTest)
+		EW.Nickname = [&Rec](int B)
+		{
+			// (LAND_PLAY_NICK=side: one name for every block of a side, as a corps' name carried by all its blocks)
+			const char* How = std::getenv("LAND_PLAY_NICK");
+			const LandFeed::Block* Bk = Rec.BlockOf(B);
+			if (!Bk || (Bk->Kind != "inf" && Bk->Kind != "arm")) return std::string();
+			return How && std::string(How) == "side" ? "Side " + std::to_string(Bk->Side) : "Nick " + std::to_string(B);
+		};
 	LandEye::Director Eye;
 	Eye.Begin(Rec, EW, ES);
 	LandDesk::Desk Desk;
@@ -860,6 +901,21 @@ int main(int argc, char** argv)
 	bool bFocusWas = false;
 	double FocusPullMost = 0.0, FocusWas = 0.0, FocusShotAt = -1.0;
 	std::vector<double> FocusOff;
+	// (the first bail-out: the crews that got out, those on a bail watch then, the hold's lens at her hit, and the tanks'
+	// ends the hold kept the film from)
+	int BailCrews = 0, BailWatched = 0, BailEndsPassed = 0;
+	// (the special shots: each one's frames held, its card's frames, and the lens at its moment: the step-off, the kill's
+	// landing, the middle of the stand)
+	struct SpecialSeen
+	{
+		int HoldFrames = 0, CardFrames = 0, MenIn = 0;
+		bool bLooked = false, bIn = false;
+		double Off = 0.0, Up = 0.0;
+	};
+	std::vector<SpecialSeen> SpSeen;
+	bool bBailLensSeen = false;
+	double BailLensOff = 0.0, BailLensUp = 0.0;
+	bool bBailInPicture = false;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -1569,13 +1625,76 @@ int main(int argc, char** argv)
 		Takes.clear();
 		Play.Step(From, Battle, Fx, Noises, Losses);
 		PlaceMovers(Battle);
+		// (the scene's call at a tank's kill, before the camera's frame: five crews in six get out, the first man up 0.6 to
+		// 2.4 life seconds after the hit, every second one brewing up 5.5 to 10 s after it; battle seconds to the camera)
+		if (bBailTest)
+		{
+			for (size_t I = 0; I < Rec.Tracks.size(); ++I)
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[I];
+				if (Tr.Role != "tank" || Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= Battle)) continue;
+				const uint64_t H = (static_cast<uint64_t>(I) + 1) * 0x9E3779B97F4A7C15ull ^ Rec.Seed;
+				const double U1 = static_cast<double>((H >> 11) % 1000) / 1000.0, U2 = static_cast<double>((H >> 23) % 1000) / 1000.0;
+				const bool bOut = (H >> 37) % 6 != 0, bBrew = (H >> 41) % 2 == 0;
+				if (bOut)
+				{
+					++BailCrews;
+					if (Pose.Subject == static_cast<int>(I) && Eye.BailWatchNow() && Eye.BailBeats().empty()) ++BailWatched;
+				}
+				if (!Eye.BailBeats().empty() && Eye.BailBeats().back().Left < 0.0) ++BailEndsPassed;
+				if (std::getenv("LAND_PLAY_BAILS")) std::printf("  bail-out: track %zu at %.1f, %s, the film %s on %d%s\n", I, Tr.Fell, bOut ? "her crew gets out" : "nobody gets out",
+					LandEye::NameOf(Pose.Shot), Pose.Subject, Eye.BailWatchNow() ? " (a bail watch)" : "");
+				Eye.BailOut(static_cast<int>(I), bOut ? (0.6 + 1.8 * U1) / Life : -1.0, bBrew ? (5.5 + 4.5 * U2) / Life : -1.0);
+			}
+		}
 		const auto E0 = std::chrono::steady_clock::now();
 		const long Steps0 = Eye.Steps();
 		Pose = Eye.Update(Battle, Real, Dt);
+		if (bBailTest && !bBailLensSeen && !Eye.BailBeats().empty() && Eye.BailBeats().front().Hit >= 0.0)
+		{
+			// (the lens as she is hit: how far off her and how high, and whether she is in the picture)
+			bBailLensSeen = true;
+			const LandFeed::Track& Tb = Rec.Tracks[static_cast<size_t>(Eye.BailBeats().front().Track)];
+			const LandFeed::Spot S = LandFeed::SpotAt(Tb, Battle);
+			const LandEye::Vec At(S.X, S.Y, GroundAt(S.X, S.Y) + 1.3);
+			BailLensOff = std::hypot(Pose.Eye.X - S.X, Pose.Eye.Y - S.Y);
+			BailLensUp = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
+			bBailInPicture = LandEye::InPicture(Pose, At);
+		}
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
 		StepsByFrame.push_back(FrameSteps);
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
+		if (Pose.bCut && std::getenv("LAND_PLAY_CUTS")) std::printf("  cut at %.2f (real %.2f) to %s on %d%s%s, the last left for %s\n", Battle, Real, LandEye::NameOf(Pose.Shot), Pose.Subject,
+			Pose.Sp != LandEye::Special::None ? ", " : "", Pose.Sp != LandEye::Special::None ? LandEye::NameOf(Pose.Sp) : "", LandEye::NameOf(Eye.LastWhy()));
+		if (bWhistleTest || bNickTest || bStandTest)
+		{
+			const std::vector<LandEye::Director::SpecialBeat>& Sb = Eye.SpecialBeats();
+			SpSeen.resize(Sb.size());
+			for (size_t K = 0; K < Sb.size(); ++K)
+			{
+				const LandEye::Director::SpecialBeat& B = Sb[K];
+				SpecialSeen& M = SpSeen[K];
+				if (B.CutReal < 0.0) continue;
+				const bool bInHold = Real >= B.CutReal && Real < B.CutReal + B.Hold && (B.Left < 0.0 || Real < B.Left);
+				if (!bInHold) continue;
+				++M.HoldFrames;
+				if (B.Sp == LandEye::Special::Nick && Pose.Card == B.Block) ++M.CardFrames;
+				const bool bMoment = B.Sp == LandEye::Special::Stand ? Real >= B.CutReal + 0.5 * B.Hold : Battle >= B.At;
+				if (M.bLooked || !bMoment) continue;
+				M.bLooked = true;
+				const LandFeed::Track& Tw = Rec.Tracks[static_cast<size_t>(B.Who)];
+				const LandFeed::Spot S = LandFeed::SpotAt(Tw, Battle);
+				M.Off = std::hypot(Pose.Eye.X - S.X, Pose.Eye.Y - S.Y);
+				M.Up = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
+				M.bIn = LandEye::InPicture(Pose, LandEye::Vec(S.X, S.Y, GroundAt(S.X, S.Y) + (Tw.IsVehicle() ? 1.3 : 0.9)));
+				for (const int Mn : B.Men)
+				{
+					const LandFeed::Spot Sm = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Mn)], Battle);
+					if (LandEye::InPicture(Pose, LandEye::Vec(Sm.X, Sm.Y, GroundAt(Sm.X, Sm.Y) + 0.8))) ++M.MenIn;
+				}
+			}
+		}
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
 		{
@@ -3039,10 +3158,99 @@ int main(int argc, char** argv)
 		const int Calls = Eye.RadioCalls(), Went = static_cast<int>(Eye.RadioBeats().size());
 		std::printf("radio call, then the barrage: %d fresh calls for fire, the film went to %d of the callers (%.0f s apart at the least), %d salvos cut to or held for, %d of them in the picture as they landed\n",
 			Calls, Went, RadioGapLeast < 1e8 ? RadioGapLeast : 0.0, RadioBarrages, RadioSeen);
+		if (std::getenv("LAND_PLAY_RADIO"))
+			for (const LandEye::Director::RadioBeat& Bt : Eye.RadioBeats()) std::printf("  radio: call at %.1f by %d, its salvo at %.1f, %s\n", Bt.T, Bt.Caller, Bt.Land, Bt.bBarrage ? "cut to or held for" : "MISSED");
 		if (Calls >= 3 && Went == 0) Fault("the film went to none of the radio calls");
 		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
 		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
 		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
+	// The first bail-out (the effects thread's ask, 23 November): with crews getting out, the film's first bail watch on a
+	// crew that does is held for it, 10 to 15 s from her hit, from 18 to 45 m off her and no higher than 2.6 m, she in
+	// the picture; left early only for a shell or fuel ball at the lens, a man at it, or the scene's own cut; once.
+	if (!bOnlyGen && bBailTest)
+	{
+		const std::vector<LandEye::Director::BailBeat>& Bb = Eye.BailBeats();
+		const LandEye::Director::BailBeat* B0 = Bb.empty() ? nullptr : &Bb.front();
+		const double HeldFor = B0 && B0->Hit >= 0.0 ? (B0->Left >= 0.0 ? B0->Left : Real) - B0->Hit : 0.0;
+		std::printf("bail-out: %d crews got out, %d bail watches placed, %d of the crews on one as they were hit; ", BailCrews, Eye.BailWatches(), BailWatched);
+		if (B0) std::printf("the first held on track %d for %.1f s of %.1f asked (left for %s), the lens %.0f m off her, %.1f m up, she %s the picture; %d tanks' ends passed in the hold\n",
+			B0->Track, HeldFor, B0->Hold, B0->Left >= 0.0 ? LandEye::NameOf(B0->LeftWhy) : "the battle's end", BailLensOff, BailLensUp, bBailInPicture ? "in" : "NOT in", BailEndsPassed);
+		else std::printf("none held\n");
+		if (BailWatched > 0 && !B0) Fault("a bail watch on a crew getting out was not held for it");
+		if (Bb.size() > 1) Fault("more than one bail-out was held");
+		if (B0 && (B0->Hold < ES.BailLeast - 1e-6 || B0->Hold > ES.BailMost + 1e-6)) Fault("a bail-out's hold was asked outside BailLeast to BailMost");
+		if (B0 && B0->Left >= 0.0 && HeldFor > B0->Hold + 0.25) Fault("a bail-out was held past its hold");
+		const bool bRescue = B0 && (B0->LeftWhy == LandEye::Why::Burst || B0->LeftWhy == LandEye::Why::Rescue || B0->LeftWhy == LandEye::Why::Dark || B0->LeftWhy == LandEye::Why::Gone);
+		if (B0 && B0->Left >= 0.0 && HeldFor < B0->Hold - 0.25 && !bRescue) Fault("a bail-out's hold was cut short by the film's own wants");
+		if (B0 && bBailLensSeen && (BailLensOff < 18.0 || BailLensOff > 45.0 || BailLensUp > 2.6 || !bBailInPicture)) Fault("a bail-out's lens was not 18 to 45 m off her, low, with her in the picture as she was hit");
+	}
+	// The special shots (Brian's yes, 23 November 19:52Z, release 2): each held firm for its own time from its cut, left
+	// sooner only for a rescue (a shell, a fuel ball, a man or a thing at the lens, a dark picture, its man gone); the
+	// whistle on its officer in the picture as he steps off, the film opened on it followed by the opening aerial; a
+	// nickname's card on the picture all its hold, its shooter in it as the kill lands, at most NickMost, NickEvery apart;
+	// one last stand, at least two of its men in the picture at its middle.
+	if (!bOnlyGen && (bWhistleTest || bNickTest || bStandTest))
+	{
+		const std::vector<LandEye::Director::SpecialBeat>& Sb = Eye.SpecialBeats();
+		SpSeen.resize(Sb.size());
+		int Whistles = 0, Cards = 0, Stands = 0, NamesAgain = 0;
+		double LastCard = -1e9, CardGap = 1e9;
+		std::vector<std::string> Carded;
+		for (size_t K = 0; K < Sb.size(); ++K)
+		{
+			const LandEye::Director::SpecialBeat& B = Sb[K];
+			const SpecialSeen& M = SpSeen[K];
+			const double HeldFor = B.CutReal < 0.0 ? 0.0 : (B.Left >= 0.0 ? B.Left : Real) - B.CutReal;
+			std::printf("%s: %s at %.1f on track %d (block %d)", LandEye::NameOf(B.Sp), B.Sp == LandEye::Special::Whistle ? "step-off" : B.Sp == LandEye::Special::Nick ? "first kill lands" : "stand",
+				B.At, B.Who, B.Block);
+			if (B.CutReal < 0.0)
+			{
+				std::printf(", MISSED (nothing fit on him, or no cut in time)\n");
+				continue;
+			}
+			std::printf(", cut at %.2f to %s, held %.1f s of %.1f (left for %s)", B.Cut, LandEye::NameOf(B.Shot), HeldFor, B.Hold, B.Left >= 0.0 ? LandEye::NameOf(B.LeftWhy) : "the battle's end");
+			if (M.bLooked) std::printf("; the lens %.0f m off him, %.1f m up, he %s the picture", M.Off, M.Up, M.bIn ? "in" : "NOT in");
+			else std::printf("; left before its moment");
+			if (B.Sp == LandEye::Special::Nick) std::printf("; card on %d of %d frames", M.CardFrames, M.HoldFrames);
+			if (B.Sp == LandEye::Special::Stand && M.bLooked) std::printf("; %d of its %zu men in the picture at its middle", M.MenIn, B.Men.size());
+			if (B.Sp == LandEye::Special::Stand) std::printf("; its end %.1f", B.To);
+			std::printf("\n");
+			const bool bRescue = B.LeftWhy == LandEye::Why::Burst || B.LeftWhy == LandEye::Why::Rescue || B.LeftWhy == LandEye::Why::Dark || B.LeftWhy == LandEye::Why::Gone || B.LeftWhy == LandEye::Why::Lost;
+			if (B.Left >= 0.0 && HeldFor < B.Hold - 0.25 && !bRescue) Fault("a special shot's hold was cut short by the film's own wants");
+			if (B.Left >= 0.0 && HeldFor > B.Hold + 0.25) Fault("a special shot was held past its hold");
+			if (M.bLooked && !M.bIn && B.Sp != LandEye::Special::Stand) Fault("a special shot's man was not in the picture at its moment");
+			if (B.Sp == LandEye::Special::Whistle)
+			{
+				++Whistles;
+				const auto& Lg = Eye.Log();
+				if (B.At <= ES.WhistleOpen && (Lg.size() < 2 || Lg[1].second != LandEye::Kind::Open || B.Cut > 1.0)) Fault("the film opening on the whistle was not followed by the opening aerial");
+			}
+			if (B.Sp == LandEye::Special::Nick)
+			{
+				++Cards;
+				const std::string Name = EW.Nickname ? EW.Nickname(B.Block) : std::string();
+				if (std::find(Carded.begin(), Carded.end(), Name) != Carded.end()) ++NamesAgain;
+				Carded.push_back(Name);
+				CardGap = std::min(CardGap, B.CutReal - LastCard);
+				LastCard = B.CutReal;
+				if (M.CardFrames < M.HoldFrames * 9 / 10) Fault("a nickname's card was not on the picture through its hold");
+			}
+			if (B.Sp == LandEye::Special::Stand)
+			{
+				++Stands;
+				if (M.bLooked && M.MenIn < 2) Fault("a last stand's men were not in the picture");
+			}
+		}
+		std::printf("special shots: %d whistle, %d nickname cards, %d last stands (the whistle's step-off %.1f on track %d)\n", Whistles, Cards, Stands, Eye.WhistleAt(), Eye.WhistleMan());
+		if (bWhistleTest && !bWhistleHidden && Eye.WhistleAt() >= 0.0 && Whistles == 0) Fault("the whistle start was not shot");
+		if (bWhistleHidden && Whistles > 0) Fault("a whistle was shot on an officer hidden from the player");
+		if (bWhistleHidden && !Eye.Log().empty() && Eye.Log()[0].first < 1.0) Fault("the film did not open on its aerial with the whistle's officer hidden");
+		if (Whistles > 1) Fault("more than one whistle");
+		if (Cards > ES.NickMost) Fault("more nickname cards than NickMost");
+		if (Cards > 1 && CardGap < ES.NickEvery - 1e-6) Fault("two nickname cards nearer than NickEvery");
+		if (Stands > 1) Fault("more than one last stand");
+		if (NamesAgain > 0) Fault("one nickname carded twice in a battle");
 	}
 	// The film's shallow focus (the graphics audit's E9, Brian's D3): the close follow shots in it, never a wide, never
 	// switched in the middle of a shot, the distance held near its man (the Mac's cost is paid only in these frames).

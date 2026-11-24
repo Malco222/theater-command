@@ -76,14 +76,17 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface(name="M_MapSurface", soot=False, crowd=False):
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
     paint taken toward "BurntColour" by its soot weight, the mesh's first texture coordinate's U, times how far her
     burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)
     (SO1: with crowd, M_LandCrowd, the ground battle's mid and far men as instances in the pose bank's poses: see
-    crowd_poses.)"""
+    crowd_poses.)
+    (With sway, M_LandBlades, the ground battle's grass, corn, shrubs and trees that the wind bends: the same surface,
+    leaning and springing with the gusts (wind_sway), and the gusts' sheen over its colour (wind_sheen). Brian, 23
+    November: "can we make the grass, trees, and sky more visually realistic and epic?")"""
     m = new_material(name)
     # (the air battle draws its aircraft past 300 m with this surface by instancing, AS1; the ground battle its hedges,
     # trees and grass)
@@ -205,6 +208,9 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False):
                                                times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
+    if sway:
+        tinted = times(m, tinted, wind_sheen(m, -900, 3200), 1000, -950)
+        to_property(wind_sway(m, -900, 3600), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
     # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
@@ -2134,6 +2140,108 @@ def land_texture(name, cut_out=False):
     return texture
 
 
+_AIR = {}  # (the air's picture, brought in once a run)
+
+
+def wind_gust(m, x, y, vertex):
+    """THE WIND'S GUSTS (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually realistic
+    and epic?"). How hard the wind blows at a point now, 0 (a lull) to 1 (a gust): T_LandCloudWind's green
+    (Tools/land_look/make_sky_textures.py), "GustSize" metres a repeat, carried downwind ("WindWay", the world's X and
+    Y) at "WindTravel" metres a second on the game's clock, so the gusts run over the field as they do over corn.
+    vertex: read for World Position Offset (its smallest picture never taken, as a vertex has no footprint; the point
+    where it stands before any offset)."""
+    air = _AIR.get("picture") or _AIR.setdefault("picture", land_texture("T_LandCloudWind"))
+    where = node(m, unreal.MaterialExpressionWorldPosition, x, y)
+    if vertex:
+        where.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    metres = times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, x + 150, y, r=True, g=True, b=False, a=False), 0.01, x + 300, y)
+    way = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "WindWay", (0.91, 0.41, 0.0, 0.0), x, y + 120), x + 150, y + 120,
+                    r=True, g=True, b=False, a=False)
+    run = times(m, times(m, way, scalar(m, "WindTravel", 5.0, x + 150, y + 220), x + 300, y + 150), node(m, unreal.MaterialExpressionTime, x + 300, y + 250), x + 450, y + 150)
+    uv = over(m, plus(m, metres, times(m, run, -1.0, x + 600, y + 150), x + 750, y + 50), scalar(m, "GustSize", 150.0, x + 750, y + 200), x + 900, y + 50)
+    gust = node(m, unreal.MaterialExpressionTextureSample, x + 1050, y, texture=air, sampler_type=sampler_for(air))
+    if vertex:
+        gust.set_editor_property("mip_value_mode", unreal.TextureMipValueMode.TMVM_MIP_LEVEL)
+        gust.set_editor_property("const_mip_value", 0)
+    connect(uv, "", gust, "UVs")
+    return (gust, "G"), metres, way
+
+
+def wind_sway(m, x, y, leaves=False):
+    """The World Position Offset of a thing the wind bends: grass, corn, a shrub or a tree, about its foot (the instance's
+    own origin; its height read in its own space, so a man or a house never moves, as their materials have none).
+    It leans downwind by "Bend" (radians at a full gust; nothing unless C++ says, so the battle without the wind is as
+    before) times the day's calm share ("WindCalm") and the gust over it, and springs back and forth a little in the gust
+    ("Spring" of it, "SpringHz" a second). A blade leans as a whole from its root; a tree bends more toward its top
+    ("BendCurve" 1: the lean grows as its height over "BendHeight" metres). leaves: each card also flutters on its own
+    ("Flutter" metres at a gust, about "FlutterHz" a second)."""
+    gust, metres, way = wind_gust(m, x, y, True)
+    where = node(m, unreal.MaterialExpressionWorldPosition, x, y + 500)
+    where.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    own = node(m, unreal.MaterialExpressionTransformPosition, x + 150, y + 500,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(where, "", own, "")
+    high = node(m, unreal.MaterialExpressionMax, x + 450, y + 500)
+    _feed(m, high, "A", times(m, node_from(m, unreal.MaterialExpressionComponentMask, own, x + 300, y + 500, r=False, g=False, b=True, a=False), 0.01, x + 400, y + 560))
+    _feed(m, high, "B", 0.0)
+    reach = times(m, high, lerp(m, 1.0, over(m, high, scalar(m, "BendHeight", 12.0, x + 450, y + 650), x + 600, y + 600),
+                                scalar(m, "BendCurve", 0.0, x + 600, y + 700), x + 750, y + 600), x + 900, y + 550)
+    time = node(m, unreal.MaterialExpressionTime, x + 1050, y + 300)
+    along = node(m, unreal.MaterialExpressionDotProduct, x + 1050, y + 400)
+    connect(metres, "", along, "A")
+    connect(way, "", along, "B")
+    spring = node(m, unreal.MaterialExpressionSine, x + 1350, y + 350, period=1.0)
+    # (each copy on its own beat: a tree, a tuft, a sheaf of corn swings out of step with its neighbours; the art
+    # director's round 1, 23 November)
+    own_beat = node(m, unreal.MaterialExpressionPerInstanceRandom, x + 1050, y + 480)
+    connect(plus(m, plus(m, times(m, time, scalar(m, "SpringHz", 0.55, x + 1050, y + 200), x + 1200, y + 300), times(m, along, 0.04, x + 1200, y + 400), x + 1300, y + 350),
+                 own_beat, x + 1300, y + 450), "", spring, "")
+    push = plus(m, lerp(m, scalar(m, "WindCalm", 0.3, x + 1200, y + 100), 1.0, gust, x + 1350, y + 100),
+                times(m, times(m, spring, scalar(m, "Spring", 0.25, x + 1350, y + 450), x + 1500, y + 400), gust, x + 1650, y + 400), x + 1800, y + 200)
+    lean = times(m, times(m, times(m, push, scalar(m, "Bend", 0.0, x + 1800, y + 300), x + 1950, y + 250), reach, x + 2100, y + 300), 100.0, x + 2250, y + 300)
+    offset = pair(m, times(m, way, lean, x + 2400, y + 250), node(m, unreal.MaterialExpressionConstant, x + 2400, y + 400, r=0.0), x + 2550, y + 300)
+    if leaves:
+        # (each card on its own: three slow beats out of step, by where its corners stand)
+        whole = times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, x + 150, y + 800, r=True, g=True, b=True, a=False), 0.01, x + 300, y + 800)
+        beats = []
+        for k, (rate, ax, ay, az, share) in enumerate(((1.0, 1.7, 0.9, 2.3, 1.0), (0.83, 0.8, 2.1, 1.3, 0.8), (1.21, 2.6, 1.4, 0.7, 0.6))):
+            phase = node(m, unreal.MaterialExpressionDotProduct, x + 450, y + 800 + 120 * k)
+            connect(whole, "", phase, "A")
+            connect(node(m, unreal.MaterialExpressionConstant3Vector, x + 300, y + 880 + 120 * k, constant=unreal.LinearColor(ax, ay, az, 0.0)), "", phase, "B")
+            beat = node(m, unreal.MaterialExpressionSine, x + 900, y + 800 + 120 * k, period=1.0)
+            connect(plus(m, times(m, time, times(m, scalar(m, "FlutterHz", 2.2, x + 450, y + 1200), rate, x + 600, y + 1200 + 40 * k), x + 750, y + 800 + 120 * k), phase, x + 800, y + 800 + 120 * k), "", beat, "")
+            beats.append(times(m, beat, share, x + 1050, y + 800 + 120 * k))
+        shake = pair(m, pair(m, beats[0], beats[1], x + 1200, y + 850), beats[2], x + 1350, y + 900)
+        strength = times(m, times(m, scalar(m, "Flutter", 0.0, x + 1350, y + 1000), lerp(m, 0.4, 1.0, gust, x + 1350, y + 1100), x + 1500, y + 1000), 100.0, x + 1650, y + 1000)
+        offset = plus(m, offset, times(m, shake, strength, x + 1800, y + 900), x + 2700, y + 500)
+    return offset
+
+
+def windy(name, make):
+    """The wind's part of a material that stood before it (M_LandSurface, M_LandLeaves, M_LandStalks): made, or, if
+    anything in it goes wrong, told and left out, so the material is built as it was without the wind."""
+    import traceback
+    try:
+        return make()
+    except Exception:
+        unreal.log_error(f"Theater Command: {name} built without the wind:\n" + traceback.format_exc())
+        return None
+
+
+def wind_sheen(m, x, y, ripe=None):
+    """What a gust does to a field's look from afar: the grass and the corn bent over show their paler sides, so each
+    gust runs over a field as a light patch and each lull as a darker one, moving with the lean (the same gusts). A
+    share about 1, by "Sheen" (nothing unless C++ says). ripe: where the paint is ripe grain (0..1), by "SheenRipe"
+    there instead (the art director's round 1: ripe wheat, barley, gaoliang show it most)."""
+    gust, _, _ = wind_gust(m, x, y, False)
+    amount = scalar(m, "Sheen", 0.0, x + 1050, y + 100)
+    if ripe is not None:
+        amount = lerp(m, amount, scalar(m, "SheenRipe", 0.0, x + 1050, y + 200), ripe, x + 1200, y + 150)
+    return plus(m, times(m, plus(m, gust, -0.5, x + 1200, y), times(m, amount, 2.0, x + 1350, y + 100), x + 1500, y), 1.0, x + 1650, y)
+
+
+
 def build_land_surface():
     """THE GROUND BATTLE'S GROUND (release 2; Brian on the first pictures of Normandy: "the graphics for the terrain
     need a lot of work"). The pastures and bare fields read as felt: one flat colour. This is M_MapSurface's ground
@@ -2236,7 +2344,12 @@ def build_land_surface():
     patch = times(m, plus(m, (patch_a, "RGB"), (patch_b, "RGB"), -2000, 1150), 0.5, -1850, 1150)
     patch_value = times(m, plus(m, mask(patch, "R", -1700, 1100), -0.5, -1550, 1100), scalar(m, "PatchValue", 0.8, -1550, 1000), -1400, 1100)
     patch_warm = times(m, plus(m, mask(patch, "G", -1700, 1250), -0.5, -1550, 1250), scalar(m, "PatchWarmth", 1.0, -1550, 1350), -1400, 1250)
-    patch_on = times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400)
+    # (snow lies even: its paint near white, its blue high, the broad lie all but gone from it, so the lie's cool
+    # patches are not blue-grey blotches over a snowfield (the art director's camouflage, Manchuria in January, 23
+    # November); "PatchSnow" how much of it the snow loses)
+    snowy = sat(times(m, plus(m, (colour, "B"), -0.7, -1700, 1480), 8.0, -1550, 1480), -1400, 1480)
+    unsnowed = plus(m, times(m, snowy, times(m, scalar(m, "PatchSnow", 0.85, -1550, 1560), -1.0, -1400, 1560), -1250, 1500), 1.0, -1100, 1500)
+    patch_on = times(m, times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400), unsnowed, -1100, 1420)
     # Tussocks: the 40 m reading's, and fewer from the turned reading (larger there, a rank patch rather than a clump),
     # thick where the turned reading is lush (its warmth low), none where it is dry; on grass only.
     lush = sat(plus(m, times(m, (patch_b, "G"), -4.0, -1700, 1500), 3.0, -1550, 1500), -1400, 1500)
@@ -2264,7 +2377,18 @@ def build_land_surface():
     base = lerp(m, to_linear, vector(m, "WornColour", (0.17, 0.14, 0.085, 1.0), -2200, -150), worn, -1900, 0)
     base = times(m, times(m, times(m, base, broad, -650, 0), tinted_by, -500, 0), factor, -350, 0)
     lit_top = plus(m, times(m, sat(skyward, -500, -200), scalar(m, "TopLight", 0.26, -500, -120), -350, -200), 1.0, -200, -200)
-    to_property(times(m, base, lit_top, -200, 0), "", unreal.MaterialProperty.MP_BASE_COLOR)
+    # The wind's gusts running over the grass and the corn as a sheen (wind_sheen; nothing unless C++ says "Sheen"):
+    # where the paint is a plant's, green or ripe gold (its green well over its blue, against its green), never bare
+    # earth, sand, snow or a lane's dust; only where it faces up.
+    plant = sat(plus(m, times(m, over(plus(m, (colour, "G"), times(m, (colour, "B"), -1.0, -2400, -2100), -2250, -2100),
+                                      plus(m, (colour, "G"), 0.02, -2250, -2000), -2100, -2050), 5.0, -1950, -2050), -1.5, -1800, -2050), -1650, -2050)
+    # (ripe grain's gold, its red well over its green; a green sward's red is under its green)
+    ripe = sat(times(m, plus(m, over((colour, "R"), plus(m, (colour, "G"), 0.01, -2400, -2300), -2250, -2300), -0.9, -2100, -2300), 3.3, -1950, -2300), -1800, -2300)
+    sheen = windy("M_LandSurface", lambda: wind_sheen(m, -3600, -2600, ripe=ripe))
+    lit = times(m, base, lit_top, -200, 0)
+    if sheen is not None:
+        lit = times(m, lit, lerp(m, 1.0, sheen, times(m, plant, up, -1500, -2050), -1350, -2100), -100, -100)
+    to_property(lit, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     # Which way it leans: the sward's lean or the soil's (red and green, or blue and alpha, of the bump picture), each
     # read as the grain is, the turned reading's lean turned back. Added to the mesh's own normal; flattened with
@@ -2313,6 +2437,11 @@ def build_land_leaves():
                 "", unreal.MaterialProperty.MP_OPACITY_MASK)
     to_property(scalar(m, "Roughness", 0.75, -200, 600), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.3, -200, 700), "", unreal.MaterialProperty.MP_SPECULAR)
+    # (the wind: the tree or the shrub bends as its wood does, M_LandBlades with the same numbers, and each card
+    # flutters besides; nothing unless C++ says. Brian, 23 November: grass, trees and sky "more visually realistic")
+    sway = windy("M_LandLeaves", lambda: wind_sway(m, -1800, 1000, leaves=True))
+    if sway is not None:
+        to_property(sway, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     finish(m)
 
 
@@ -2336,6 +2465,12 @@ def build_land_stalks():
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
     connect(colour, "", to_linear, "Base")
     painted = times(m, to_linear, scalar(m, "Value", 1.0, -700, 150), -500, 50)
+    # (the wind, as the corn's bundles beyond: M_LandBlades' numbers; nothing unless C++ says)
+    sheen = windy("M_LandStalks", lambda: wind_sheen(m, -2400, 1400))
+    sway = windy("M_LandStalks", lambda: wind_sway(m, -2400, 1800)) if sheen is not None else None
+    if sheen is not None and sway is not None:
+        painted = times(m, painted, sheen, -450, 0)
+        to_property(sway, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
                     scalar(m, "ThroughStrength", 0.5, -500, 350), -200, 250)
@@ -2462,6 +2597,81 @@ def build_land_leaves_or_tell():
                 eal.delete_asset(f"{MATERIALS}/M_LandLeaves")
         except Exception:
             unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_cloud_shade():
+    """THE CLOUDS' SHADOWS ON THE FIELD (release 2; Brian, 23 November: "can we make the grass, trees, and sky more
+    visually realistic and epic?"; the art director's round 1 the same day). The light function on the battle's sun: on
+    a fair day the cumulus' shadows lie on the field, on the hedges, the trees, the tanks and the men alike (it takes
+    the sun's light away, not the paint), and slide over it as the wind carries the clouds. Its number is the share of
+    the sun let through: 1 in the open, "Dark" under a cloud.
+
+    Where a point's sun ray ("SunWay", the way to the sun in the world) meets the clouds' base ("CloudBase", metres of
+    the world's height), carried back by the clouds' drift ("Drift", metres in the world's X and Y, the same carry as
+    the clouds drawn), T_LandCloudWind is read, "ShadeSize" metres a repeat, moved by "Anchor" (repeats: the C++ lays
+    the picture's clear disc over the field's middle at the start). Its red is how far inside a cloud's shadow the point
+    is ("Reach" metres either side of 0.5; make_sky_textures.py), so the edge is blurred over "Feather" metres the
+    same all round every cloud. Its blue is the cloud's place in the day's order: only clouds under "Cover" /
+    "FullCover" (the share the picture's clouds shade in all, make_sky_textures.py's FULL_COVER) are drawn, so a day of
+    less cover has fewer clouds, not smaller ones. "Strength" takes it from none (0, the default: the sun as before) to
+    all (1)."""
+    m = new_material("M_LandCloudShade")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_LIGHT_FUNCTION)
+    air = _AIR.get("picture") or _AIR.setdefault("picture", land_texture("T_LandCloudWind"))
+    where = times(m, node(m, unreal.MaterialExpressionWorldPosition, -2400, 0), 0.01, -2250, 0)
+    sun = vector(m, "SunWay", (0.3, 0.5, 0.8, 0.0), -2400, 200)
+    sun_up = node(m, unreal.MaterialExpressionMax, -2100, 300)
+    _feed(m, sun_up, "A", (sun, "B"))
+    _feed(m, sun_up, "B", 0.15)
+    rise = plus(m, scalar(m, "CloudBase", 900.0, -2250, 400), times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, -2100, 450, r=False, g=False, b=True, a=False), -1.0, -1950, 450), -1800, 400)
+    climb = over(m, rise, sun_up, -1650, 350)
+    sun_flat = node_from(m, unreal.MaterialExpressionComponentMask, sun, -2100, 200, r=True, g=True, b=False, a=False)
+    at = plus(m, plus(m, node_from(m, unreal.MaterialExpressionComponentMask, where, -2100, 0, r=True, g=True, b=False, a=False), times(m, sun_flat, climb, -1500, 250), -1350, 100),
+              times(m, node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "Drift", (0.0, 0.0, 0.0, 0.0), -1650, 550), -1500, 550, r=True, g=True, b=False, a=False), -1.0, -1350, 550), -1200, 200)
+    anchor = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "Anchor", (0.0, 0.0, 0.0, 0.0), -1200, 650), -1050, 650, r=True, g=True, b=False, a=False)
+    shade = node(m, unreal.MaterialExpressionTextureSample, -750, 200, texture=air, sampler_type=sampler_for(air))
+    connect(plus(m, over(m, at, scalar(m, "ShadeSize", 4000.0, -1200, 350), -1050, 250), anchor, -900, 300), "", shade, "UVs")
+    # (how far inside, in metres; the edge's blur; the clouds the day's cover keeps)
+    inside = times(m, plus(m, (shade, "R"), -0.5, -600, 200), times(m, scalar(m, "Reach", 400.0, -750, 450), 2.0, -600, 450), -450, 250)
+    feather = scalar(m, "Feather", 30.0, -600, 550)
+    ramp = one_in(m, unreal.MaterialExpressionSaturate, plus(m, over(m, inside, feather, -300, 300), 0.5, -150, 300), 0, 300)
+    smooth = times(m, times(m, ramp, ramp, 150, 300), plus(m, 3.0, times(m, ramp, -2.0, 150, 450), 300, 450), 450, 350)
+    keep_to = over(m, scalar(m, "Cover", 0.3, -600, 700), scalar(m, "FullCover", 0.41, -600, 800), -450, 750)
+    kept = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, keep_to, times(m, (shade, "B"), -1.0, -450, 850), -300, 800), 255.0, -150, 800), 0, 800)
+    lit = lerp(m, 1.0, scalar(m, "Dark", 0.2, 450, 500), times(m, smooth, kept, 600, 600), 750, 450)
+    to_property(lerp(m, 1.0, lit, scalar(m, "Strength", 0.0, 750, 650), 900, 450), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+def build_land_blades_or_tell():
+    """M_LandBlades (M_MapSurface with the wind's sway and sheen) is the ground battle's alone, and the battle draws its
+    grass, corn and trees on M_MapSurface without it (still in the wind, said once): whatever goes wrong in it is told,
+    and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandBlades", sway=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandBlades was not built (the grass and trees stand still in the wind):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandBlades"):
+                eal.delete_asset(f"{MATERIALS}/M_LandBlades")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_cloud_shade_or_tell():
+    """M_LandCloudShade is the ground battle's alone, and the battle lays no cloud shadows without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_cloud_shade()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandCloudShade was not built (no cloud shadows on the ground battle's field):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandCloudShade"):
+                eal.delete_asset(f"{MATERIALS}/M_LandCloudShade")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandCloudShade could not be removed:\n" + traceback.format_exc())
 
 
 def build_land_surface_or_tell():
@@ -2593,7 +2803,11 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
 # (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
 # Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
+# (The wind and the clouds' shadows, release 2, 23 November: M_LandBlades, the grass, corn and trees the wind bends, and
+# M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
+# Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
+# once, and again after make_sky_textures.py.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

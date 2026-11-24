@@ -241,6 +241,7 @@ namespace LandKit
 		V3 At, Facing;     // model frame
 		double Radius = 0.2;
 		int Part = 0;
+		double Dust = 0.0; // 0 to 100: how much of her dust and grime lies over the paint (the file's "dust")
 	};
 
 	/** One level of detail of one body. */
@@ -297,6 +298,13 @@ namespace LandKit
 		/** Swaps chosen over the month's and the nation's (swap group -> choice), where the model has that choice: Men in
 		 * lorries (the Battle rules card's row) carries her men with the Truck's tilt stowed ("tilt" -> "off"). */
 		std::map<std::string, std::string> Force;
+		/** Swaps the rules pick for her (release 2, the track's "sw": a motorcycle's sidecar, a staff jeep's gun put
+		 * away): {swap, choice}, taken before her month's row, by_nation and default where her model has that swap and
+		 * that choice; any other is let be. */
+		std::map<std::string, std::string> Choose;
+		/** National marks (release 2, "-TheaterLandMarks"): her owner's plain period marking painted on her skin at each
+		 * of her file's mark places (Model::Marks). Off: none, as before. */
+		bool bMarks = false;
 	};
 
 	class Model
@@ -312,6 +320,10 @@ namespace LandKit
 		std::vector<Body> Bodies;
 		std::vector<Socket> Sockets;
 		std::vector<Mark> Marks;
+		/** Where her national marks were painted (release 2, Dress::bMarks): her file's places, less those her owner's
+		 * army left bare (the Tiger's and Panther's turrets carried a number, not the cross), plus those it painted that
+		 * her file lacks (the Panther's hull sides; the Japanese star on her front plate). Empty with the marks off. */
+		std::vector<Mark> Painted;
 		std::map<std::string, Clip> Clips;
 		/** The sooty black-brown a burnt-out wreck goes to (8-bit sRGB): lerp each point toward it by its Soot times the
 		 * vehicle's Vehicle::Soot (0 to 1 over 30 s of burning). */
@@ -401,6 +413,8 @@ namespace LandKit
 		int Block = 0, K = 0;
 		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
+		std::string Model;                   // her own model where not her block's (ml): a carrier (empty, the lorry), an SP gun, a TD
+		std::map<std::string, std::string> Swaps; // swaps the rules picked for her (sw, release 2): {swap, choice}
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;
 		std::vector<double> Shots;
@@ -501,6 +515,15 @@ namespace LandKit
 		double Died = -1.0;      // battle time knocked out, -1 never
 		double BurnFrom = -1.0;  // battle time the fire takes hold (-1 never): it burns to BurnUntil
 		double BurnUntil = 0.0;
+		/** Effects (R2): battle seconds her brew-up waits after her kill, her knocked_out clip playing first while her
+		 * crew get out (LandBail, -TheaterLandBailOut; Brian, 23 November: "if a tank gets hit people try and get out
+		 * before it explosdes"). 0: at once, as before. Battle::BrewWaitLeast and Most give it, before Build. */
+		double BrewWait = 0.0;
+		/** Tanks rolling smoothly (R2, Brian 23 November 15:24Z: "have the tanks move more smooth and not rigid and zig
+		 * zagging"; -TheaterLandSmoothTanks): a tank's place and facing each step the recording's blended over this many
+		 * battle seconds either way (a bell's spread, at most about 0.45: the steps worked out again behind a live battle's
+		 * newest piece). 0: the recording's places, joined straight, as before. Set before Build (Battle::SmoothTanks). */
+		double SmoothTanks = 0.0;
 
 		// The pose now (after Update).
 		double Now = 0.0;
@@ -593,7 +616,7 @@ namespace LandKit
 			double Carriage = 0.0;                           // a gun's carriage, and whether her crew are swinging it
 			bool bShifting = false;
 			bool bOn = false;                                // moving off and stopping
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
 			size_t MoveOffs = 0, Stops = 0;
 			double Turret = 0.0, Lay = 0.0, Trav = 0.0, Steer = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 			double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
@@ -650,6 +673,7 @@ namespace LandKit
 		int Id = 0;
 		std::string Side, Nation, Kind, Model, Cal;
 		std::string Captured;   // the nation her vehicles were taken from (the recording's "captured"); empty: her own
+		std::vector<std::string> Extra; // models her vehicles are drawn with besides her own (the header's "mls", release 2): read before her men come; "Jeep|mg=off": with those swaps
 	};
 
 	/**
@@ -672,6 +696,40 @@ namespace LandKit
 	 * (fire) and U2 (blast), each 0..1.
 	 */
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2);
+
+	/**
+	 * A carrier's bench seats as she stands now: a lorry's or a half-track's rider.1 to rider.10, where the lorried men
+	 * aboard sit (they were drawn kneeling on the ground where the rules seat them, so under the lorry: Brian, 23
+	 * November 14:10Z, "troops are stuck under the truck"). Her root and axes on the field, and her seats each side front
+	 * to back, each its top and its inboard way (field metres; x east, y north, z up).
+	 */
+	struct Benches
+	{
+		int Block = -1, K = -1;      // whose: her block and her number in it (the rules' vehicle)
+		V3 At, Forward, Right;
+		int Left = 0, Righted = 0;   // Seat[0, Left) down her left side, Seat[Left, Left + Righted) down her right
+		V3 Seat[10], Way[10];
+	};
+	/** Her benches now (after her Update): false where her model is no carrier with bench seats (a lorry or a
+	 * half-track, "carrier", with rider.1 and on). */
+	bool BenchesNow(const Vehicle& V, Benches& Out);
+	/** A man aboard's seat: its top, the bed's floor beside it (0.5 m under it), his heading on it (radians clockwise
+	 * from north: inboard), and bBench false where the benches are full (he kneels in the bed's middle at her front,
+	 * facing aft; At the floor there). */
+	struct BenchSeat
+	{
+		V3 At;
+		double Floor = 0.0, Heading = 0.0;
+		bool bBench = true;
+	};
+	/**
+	 * The seat of a man aboard. Where the rules say his vehicle and seat (Block, SeatOn: her k; Seat: two abreast, the odd
+	 * ones on her right, front to back): that seat of hers, or the bed's middle past her benches. Else by his field place
+	 * (the rules' place for him): the nearest carrier whose bed he is on (within 1.6 m of her middle line, 5 m aft to 3 m
+	 * forward of her root), and his bench by where the drill seats him (a row each 0.6 m aft from 1.4 m forward of her
+	 * root, his side his bench's). False where he is on none.
+	 */
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out);
 
 	class Battle
 	{
@@ -719,6 +777,12 @@ namespace LandKit
 		 * half of it): the vehicles' clips and their crews' hands timed in life's seconds. 1, the default, is as before.
 		 * Set before Load. */
 		double Life = 1.0;
+		/** Effects (R2): life's seconds a brew-up waits after her kill, the least and the most (each vehicle her own
+		 * between, by her number), her knocked_out clip first so her crew can get out (Vehicle::BrewWait; LandBail,
+		 * -TheaterLandBailOut). 0: at once, as before. Set before Load. */
+		double BrewWaitLeast = 0.0, BrewWaitMost = 0.0;
+		/** Tanks rolling smoothly (R2; Vehicle::SmoothTanks, battle seconds): 0 off, as before. Set before Load. */
+		double SmoothTanks = 0.0;
 		int Year = 1944, Month = 7;
 		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
 		 * dressed for it (Dress::Terrain). Read by Load. */
@@ -746,6 +810,9 @@ namespace LandKit
 		/** Any block marked captured, whatever the switch: stands in for every tank block of the attacker taken from the
 		 * defender's model (the Mac's off/on line, "-TheaterLandCapturedTest"). Set before Load. */
 		bool bCapturedTest = false;
+		/** National marks (release 2, Brian's 24 Nov ask for the tanks' country markings): on, every vehicle wears her
+		 * owner's plain period marking at her file's mark places (Dress::bMarks). Off unless set; set before Load. */
+		bool bMarks = false;
 
 	private:
 		std::vector<Vehicle> All;
@@ -774,11 +841,14 @@ namespace LandKit
 
 		const Block* BlockOf(int Id) const;
 		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
-		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
+		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier = std::string(),
+			const std::map<std::string, std::string>& Choose = {});
 		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
 		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
 		 * Rounds: those that struck her, the killing one among them. */
 		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew);
+		/** Effects (R2): vehicle V's brew-up wait, battle seconds (BrewWaitLeast, BrewWaitMost). */
+		double BrewWaitOf(size_t V) const;
 	};
 
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */

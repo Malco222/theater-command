@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <tuple>
 #include <unordered_map>
 
 namespace LandKit
@@ -1304,6 +1305,910 @@ namespace LandKit
 		}
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// National marks (release 2, Dress::bMarks).
+
+	namespace
+	{
+		/** One flat piece of a mark in one paint: a rectangle (filled in a grid) or a convex outline (fanned from its
+		 * first corner), in the mark's radii, across (+ to her right as you face the plate) and up; the layers stack a
+		 * few millimetres apart, the higher over the lower. */
+		struct MarkPiece
+		{
+			std::vector<std::pair<double, double>> Outline;
+			bool bBox = false;
+			uint8_t R = 0, G = 0, B = 0;
+			int Layer = 0;
+		};
+		struct MarkPaint
+		{
+			uint8_t R, G, B;
+		};
+		// (sRGB, as the files' own colours: the white the captured kit's stars wear, the black of its crosses, the tank
+		// files' own red, A82020; the Japanese star a period ochre, the art director's mend of 24 November: lemon read
+		// too bright)
+		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 20, 20, 20 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 172, 134, 58 },
+			MarkBlue{ 40, 58, 120 };
+
+		void MarkBox(std::vector<MarkPiece>& Out, double A0, double U0, double A1, double U1, const MarkPaint& C, int Layer)
+		{
+			MarkPiece P;
+			P.Outline = { { A0, U0 }, { A1, U0 }, { A1, U1 }, { A0, U1 } };
+			P.bBox = true;
+			P.R = C.R;
+			P.G = C.G;
+			P.B = C.B;
+			P.Layer = Layer;
+			Out.push_back(std::move(P));
+		}
+		void MarkDisc(std::vector<MarkPiece>& Out, double Size, const MarkPaint& C, int Layer)
+		{
+			MarkPiece P;
+			for (int K = 0; K < 24; ++K)
+			{
+				P.Outline.push_back({ Size * std::cos(K * Pi / 12.0), Size * std::sin(K * Pi / 12.0) });
+			}
+			P.R = C.R;
+			P.G = C.G;
+			P.B = C.B;
+			P.Layer = Layer;
+			Out.push_back(std::move(P));
+		}
+		/** A ring from Inner to Outer, as 24 four-sided pieces (each convex) on the bottom layer. */
+		void MarkRing(std::vector<MarkPiece>& Out, double Inner, double Outer, const MarkPaint& C)
+		{
+			for (int K = 0; K < 24; ++K)
+			{
+				const double A0 = K * Pi / 12.0, A1 = (K + 1) * Pi / 12.0;
+				MarkPiece P;
+				P.Outline = { { Inner * std::cos(A0), Inner * std::sin(A0) }, { Outer * std::cos(A0), Outer * std::sin(A0) }, { Outer * std::cos(A1), Outer * std::sin(A1) },
+					{ Inner * std::cos(A1), Inner * std::sin(A1) } };
+				P.R = C.R;
+				P.G = C.G;
+				P.B = C.B;
+				Out.push_back(std::move(P));
+			}
+		}
+		/** A five-pointed star, a point straight up: its middle pentagon and the five points, each convex. */
+		void MarkStar(std::vector<MarkPiece>& Out, double Size, const MarkPaint& C, int Layer)
+		{
+			const double Inner = Size * 0.382;
+			auto Corner = [](double R, double Deg) { return std::pair<double, double>(R * std::cos(Deg * Rad), R * std::sin(Deg * Rad)); };
+			MarkPiece Middle;
+			for (int K = 0; K < 5; ++K)
+			{
+				Middle.Outline.push_back(Corner(Inner, 90.0 + 36.0 + 72.0 * K));
+			}
+			Middle.R = C.R;
+			Middle.G = C.G;
+			Middle.B = C.B;
+			Middle.Layer = Layer;
+			for (int K = 0; K < 5; ++K)
+			{
+				const double Tip = 90.0 + 72.0 * K;
+				MarkPiece Point = Middle;
+				Point.Outline = { Corner(Inner, Tip - 36.0), Corner(Size, Tip), Corner(Inner, Tip + 36.0) };
+				Out.push_back(std::move(Point));
+			}
+			Out.push_back(std::move(Middle));
+		}
+
+		/** Which mark her owner painted in the battle's month: each nation's plain period marking, never a party emblem
+		 * (the art director's rule). The file's own "mark_months" rows for her nation first (the British: none, then the
+		 * recognition flash from November 1941, the Allies' white star from July 1943); "none" where her army painted none
+		 * that the art director has ruled on. */
+		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months)
+		{
+			const int Key = Year * 12 + Month;
+			auto KeyOf = [](const std::string& Text, int Otherwise)
+			{
+				int Y = 0, M = 0;
+				return std::sscanf(Text.c_str(), "%d-%d", &Y, &M) == 2 ? Y * 12 + M : Otherwise;
+			};
+			const Json::Value Rows = Months[Nation];
+			for (size_t I = 0; I < Rows.Count(); ++I)
+			{
+				const Json::Value Row = Rows.At(I);
+				if (KeyOf(Row["from"].Str(), -1) <= Key && Key <= KeyOf(Row["to"].Str(), 1 << 30))
+				{
+					const std::string Kind = Row["mark"].Str("none");
+					return Kind == "star" ? std::string("white star") : Kind;
+				}
+			}
+			if (Nation == "GER")
+			{
+				return "cross";
+			}
+			if (Nation == "USA" || Nation == "FFR")
+			{
+				return "white star";
+			}
+			if (Nation == "SOV")
+			{
+				return "red star";
+			}
+			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || (Nation == "POL" && Year >= 1940))
+			{
+				return Key >= 1943 * 12 + 7 ? "white star" : Key >= 1941 * 12 + 11 ? "flash" : "none";
+			}
+			if (Nation == "ITA")
+			{
+				return "rectangle";
+			}
+			if (Nation == "JAP")
+			{
+				return "army star";
+			}
+			if (Nation == "FRA")
+			{
+				return "roundel";
+			}
+			return "none";
+		}
+
+		/** Whether her crews painted the mark by hand (the Soviet star, the British flash, the Italian patch, the Japanese
+		 * star: slightly uneven brushed edges) rather than through a stencil (the German cross, the American star, the
+		 * French roundel: sharp edges, scuffed); the art director, 24 November. */
+		bool MarkByHand(const std::string& Kind)
+		{
+			return Kind == "red star" || Kind == "flash" || Kind == "rectangle" || Kind == "army star";
+		}
+
+		/** A mark's pieces, bottom layer first. */
+		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out)
+		{
+			Out.clear();
+			if (Kind == "cross")
+			{
+				// The straight-armed beam cross (the art director: "the plain beam cross only"): a black cross over a
+				// slightly wider white one of the same length, so the white shows only along the arms' sides and each arm
+				// is black right to its end (the art director's mend of 24 November). Laid as one coat of pieces side by
+				// side: a layer of black over white stood off a stepped plate (the Tiger's welded seams) let the white show
+				// through in cracks.
+				const double E = 1.0, W = 0.36, K = 0.27;
+				MarkBox(Out, -K, -E, K, E, MarkBlack, 0);
+				MarkBox(Out, -E, -K, -K, K, MarkBlack, 0);
+				MarkBox(Out, K, -K, E, K, MarkBlack, 0);
+				// (the white along the upright arms' sides, the four inside corners with them; then along the level arms')
+				MarkBox(Out, K, K, W, E, MarkWhite, 0);
+				MarkBox(Out, -W, K, -K, E, MarkWhite, 0);
+				MarkBox(Out, K, -E, W, -K, MarkWhite, 0);
+				MarkBox(Out, -W, -E, -K, -K, MarkWhite, 0);
+				MarkBox(Out, W, K, E, W, MarkWhite, 0);
+				MarkBox(Out, W, -W, E, -K, MarkWhite, 0);
+				MarkBox(Out, -E, K, -W, W, MarkWhite, 0);
+				MarkBox(Out, -E, -W, -W, -K, MarkWhite, 0);
+			}
+			else if (Kind == "white star")
+			{
+				MarkStar(Out, 1.0, MarkWhite, 0); // the Allies' plain white star
+			}
+			else if (Kind == "red star")
+			{
+				MarkStar(Out, 1.0, MarkRed, 0); // the Red Army's plain red star
+			}
+			else if (Kind == "flash")
+			{
+				// The British recognition flash: white, red, white, upright bars side by side.
+				MarkBox(Out, -0.9, -0.75, -0.3, 0.75, MarkWhite, 0);
+				MarkBox(Out, -0.3, -0.75, 0.3, 0.75, MarkRed, 0);
+				MarkBox(Out, 0.3, -0.75, 0.9, 0.75, MarkWhite, 0);
+			}
+			else if (Kind == "rectangle")
+			{
+				// The Italians' company rectangle, the first company's red, with the first platoon's one white bar (their
+				// tanks wore no national cockade on their sides).
+				MarkBox(Out, -1.0, -0.62, -0.11, 0.62, MarkRed, 0);
+				MarkBox(Out, -0.11, -0.62, 0.11, 0.62, MarkWhite, 0);
+				MarkBox(Out, 0.11, -0.62, 1.0, 0.62, MarkRed, 0);
+			}
+			else if (Kind == "army star")
+			{
+				MarkStar(Out, 0.7, MarkYellow, 0); // the Japanese army's small yellow star
+			}
+			else if (Kind == "roundel")
+			{
+				// The French tricolour roundel of 1940, blue outside.
+				MarkRing(Out, 0.66, 1.0, MarkBlue);
+				MarkRing(Out, 0.33, 0.66, MarkWhite);
+				MarkDisc(Out, 0.33, MarkRed, 0);
+			}
+		}
+
+		/**
+		 * Paints one mark on one level of a body (Out: its points from Pivot, model axes) at At (model frame), facing
+		 * out along Facing, Radius metres: each piece cut into a grid of about Step metres, every point carried in along
+		 * the facing onto her own skin (the outermost of her triangles there that faces out) and stood Lift metres off
+		 * it (a layer a little more), so a mark on a rounded turret lies on the round as a painted one. Where her file's
+		 * place would hang the mark over an edge (a wheel arch, a body's top lip, a step in a plate), it is moved the
+		 * least that sets the whole of it on one face of her skin (up to six tenths of its radius), else made smaller
+		 * (to seven tenths); what still finds no skin is left out. Each point takes some of the skin's own colour under
+		 * it (more where her file's "dust" says the mark is dusty: 0 to 100) and the skin's soot, so it weathers and
+		 * burns as she does. Gives the triangles added (Moved: how far it was moved, metres; Scale: its size kept).
+		 *
+		 * The art director's mends of 24 November ("a mark should never be cleaner than the paint around it"): where Skin
+		 * gives her own dirt, each point of the mark takes exactly what her skin under it took over its paint (her file's
+		 * road dust, haze, chips to the metal, creases' shade and exhaust soot, or the game's own dust and chipped edges);
+		 * its lower third takes more of the track's dust; it is chipped back to her paint here and there (most at a plate's
+		 * edge and round a bolt or a weld); a stencilled mark is scuffed in streaks and a hand-painted one (bHand) has
+		 * slightly uneven brushed edges. bMustFit: none at all where no place within reach takes the whole of it.
+		 */
+		struct MarkSkin
+		{
+			const std::vector<uint32_t>* Raw = nullptr; // her body's points' places in her file's mesh
+			const std::vector<float>* Dirt = nullptr;   // per file point: what her paint was scaled by, then what was added (linear rgb)
+			size_t Count = 0;                           // her own points (before any mark)
+			Lin DustColour = Lin(0.33, 0.27, 0.15);
+		};
+		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
+			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
+			double* Moved = nullptr, double* Scale = nullptr)
+		{
+			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
+			// (on a wall its top is toward the sky; on a roof, toward her front)
+			const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+			const V3 Up = (Hint - F * F.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+			const V3 Across = Up.Cross(F).Unit(V3(0.0, 1.0, 0.0));
+			const V3 Place = At - Pivot;
+			const double Front = 0.04, Back = 0.06 + 0.25 * Radius, Shift = 0.6 * Radius;
+			double Reach = 0.0;
+			for (const MarkPiece& P : Pieces)
+			{
+				for (const auto& C : P.Outline)
+				{
+					Reach = std::max(Reach, std::max(std::fabs(C.first), std::fabs(C.second)) * Radius);
+				}
+			}
+			const double Around = Reach + Shift + 0.02;
+			// Her triangles about the place: within the mark's reach (and the most it may move) across and up, and Front
+			// before to Back behind it.
+			struct Tri
+			{
+				V3 A, E1, E2;
+				uint32_t I0, I1, I2;
+			};
+			std::vector<Tri> Near;
+			auto PointOf = [&Out](uint32_t I) { return V3(Out.Points[I * 3], Out.Points[I * 3 + 1], Out.Points[I * 3 + 2]); };
+			for (size_t T = 0; T + 2 < Out.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Out.Triangles[T], I1 = Out.Triangles[T + 1], I2 = Out.Triangles[T + 2];
+				if (Skin.Count > 0 && std::max({ I0, I1, I2 }) >= Skin.Count)
+				{
+					continue; // (another mark's: only her own skin takes one)
+				}
+				const V3 A = PointOf(I0), B = PointOf(I1), C = PointOf(I2);
+				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+				for (const V3& P : { A, B, C })
+				{
+					const V3 D = P - Place;
+					const double Co[3] = { D.Dot(Across), D.Dot(Up), D.Dot(F) };
+					for (int K = 0; K < 3; ++K)
+					{
+						Lo[K] = std::min(Lo[K], Co[K]);
+						Hi[K] = std::max(Hi[K], Co[K]);
+					}
+				}
+				if (Hi[0] < -Around || Lo[0] > Around || Hi[1] < -Around || Lo[1] > Around || Hi[2] < -Back || Lo[2] > Front)
+				{
+					continue;
+				}
+				Near.push_back({ A, B - A, C - A, I0, I1, I2 });
+			}
+			// The ray in against the facing from Front before Flat (Moller and Trumbore's), to the outermost skin that faces
+			// out (the inside of a plate behind it is passed by): how far behind Flat it lies, and where.
+			struct Hit
+			{
+				const Tri* T = nullptr;
+				double U = 0.0, V = 0.0, Behind = 0.0;
+			};
+			auto Cast = [&Near, &Out, &F, Front, Back](const V3& Flat)
+			{
+				Hit Best;
+				double Nearest = Front + Back;
+				const V3 From = Flat + F * Front;
+				const V3 Way = -F;
+				for (const Tri& T : Near)
+				{
+					const V3 Pv = Way.Cross(T.E2);
+					const double Det = T.E1.Dot(Pv);
+					if (std::fabs(Det) < 1e-12)
+					{
+						continue;
+					}
+					const double Inv = 1.0 / Det;
+					const V3 S = From - T.A;
+					const double Bu = S.Dot(Pv) * Inv;
+					if (Bu < -1e-6 || Bu > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const V3 Qv = S.Cross(T.E1);
+					const double Bv = Way.Dot(Qv) * Inv;
+					if (Bv < -1e-6 || Bu + Bv > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const double Far = T.E2.Dot(Qv) * Inv;
+					if (Far < 0.0 || Far >= Nearest)
+					{
+						continue;
+					}
+					const V3 Face = T.E1.Cross(T.E2);
+					const V3 N0(Out.Normals[T.I0 * 3], Out.Normals[T.I0 * 3 + 1], Out.Normals[T.I0 * 3 + 2]);
+					if ((Face.Dot(N0) >= 0.0 ? Face : -Face).Unit().Dot(F) < 0.2)
+					{
+						continue;
+					}
+					Nearest = Far;
+					Best.T = &T;
+					Best.U = Bu;
+					Best.V = Bv;
+					Best.Behind = Far - Front;
+				}
+				return Best;
+			};
+
+			// Where it fits: the place, or the nearest move (then a smaller size) that has every sample of the mark on her
+			// skin, on one face of it (the depth under it spread no more than its round allows).
+			std::vector<std::pair<double, double>> Samples;
+			for (int J = -6; J <= 6; ++J)
+			{
+				for (int I = -6; I <= 6; ++I)
+				{
+					const double A = I / 6.0, U = J / 6.0;
+					bool bIn = false;
+					for (const MarkPiece& P : Pieces)
+					{
+						bool bInside = true;
+						for (size_t K = 0; K < P.Outline.size() && bInside; ++K)
+						{
+							const auto& C0 = P.Outline[K];
+							const auto& C1 = P.Outline[(K + 1) % P.Outline.size()];
+							bInside = (C1.first - C0.first) * (U - C0.second) - (C1.second - C0.second) * (A - C0.first) >= -1e-9;
+						}
+						bIn = bIn || bInside;
+					}
+					if (bIn)
+					{
+						Samples.push_back({ A, U });
+					}
+				}
+			}
+			auto Fits = [&](const V3& Middle, double Size)
+			{
+				double Lo = 1e9, Hi = -1e9;
+				for (const auto& Sm : Samples)
+				{
+					const Hit H = Cast(Middle + Across * (Sm.first * Size) + Up * (Sm.second * Size));
+					if (!H.T)
+					{
+						return false;
+					}
+					Lo = std::min(Lo, H.Behind);
+					Hi = std::max(Hi, H.Behind);
+				}
+				return Hi - Lo <= 0.02 + 0.2 * Size;
+			};
+			V3 Middle = Place;
+			double Size = Radius;
+			bool bFound = Fits(Middle, Size);
+			for (const double Shrink : { 1.0, 0.85, 0.7 })
+			{
+				for (int Ring = bFound ? 7 : 1; Ring <= 6 && !bFound; ++Ring)
+				{
+					const double By = Shift * Ring / 6.0;
+					// (up and down first: a mark keeps its place along her side; then across, then the corners)
+					for (const auto& Way : { std::pair<double, double>(0.0, 1.0), { 0.0, -1.0 }, { 1.0, 0.0 }, { -1.0, 0.0 }, { 0.7071, 0.7071 }, { -0.7071, 0.7071 },
+							 { 0.7071, -0.7071 }, { -0.7071, -0.7071 } })
+					{
+						const V3 Try = Place + Across * (Way.first * By) + Up * (Way.second * By);
+						if (Fits(Try, Radius * Shrink))
+						{
+							Middle = Try;
+							Size = Radius * Shrink;
+							bFound = true;
+							break;
+						}
+					}
+				}
+				if (!bFound && Shrink > 0.7 && Fits(Place, Radius * Shrink * 0.85))
+				{
+					Size = Radius * Shrink * 0.85;
+					bFound = true;
+				}
+			}
+			if (!bFound && bMustFit)
+			{
+				return 0;
+			}
+			if (Moved)
+			{
+				*Moved = (Middle - Place).Length();
+			}
+			if (Scale)
+			{
+				*Scale = Size / Radius;
+			}
+
+			const double DustShare = 0.1 + 0.3 * Clamp(Dust / 100.0, 0.0, 1.0);
+			const uint32_t FirstPoint = static_cast<uint32_t>(Out.Count());
+			const size_t FirstTriangle = Out.Triangles.size();
+			std::vector<uint8_t> Missed;
+			const bool bDirt = Skin.Raw && Skin.Dirt && !Skin.Dirt->empty();
+			// One point of the mark: carried onto the skin, coloured, kept.
+			// (her dirt's colour as a picture's: the track's dust, and the darker grime a rain streak carries down)
+			const double DustPic[3] = { static_cast<double>(ToPicture(Skin.DustColour.R)), static_cast<double>(ToPicture(Skin.DustColour.G)),
+				static_cast<double>(ToPicture(Skin.DustColour.B)) };
+			auto Point = [&](double A0, double U0, int Layer, const MarkPiece& P, double Streak = 0.0)
+			{
+				// (a hand-painted mark's edges wander a little, a few hundredths of its size, as a brush leaves them: every
+				// point is moved by the same smooth noise of its place on the mark, so pieces side by side still meet point
+				// for point)
+				double A = A0, U = U0;
+				if (bHand)
+				{
+					const V3 On(A0 * Size, U0 * Size, 0.0);
+					A += 0.025 * (Noise(On * 8.0 + V3(0.0, 0.0, 0.5), Seed + 11) - 0.5) + 0.03 * (Noise(On * 30.0 + V3(0.0, 0.0, 1.5), Seed + 12) - 0.5);
+					U += 0.025 * (Noise(On * 8.0 + V3(0.0, 0.0, 2.5), Seed + 13) - 0.5) + 0.03 * (Noise(On * 30.0 + V3(0.0, 0.0, 3.5), Seed + 14) - 0.5);
+				}
+				const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
+				const Hit H = Cast(Flat);
+				const double Raise = Lift * (1.0 + 0.4 * Layer);
+				V3 Where = Flat + F * Raise, Normal = F;
+				double R = P.R, G = P.G, B = P.B;
+				float Soot = 0.7f;
+				if (H.T)
+				{
+					const uint32_t Ix[3] = { H.T->I0, H.T->I1, H.T->I2 };
+					const double Wt[3] = { 1.0 - H.U - H.V, H.U, H.V };
+					V3 Nm;
+					double Sk[3] = { 0.0, 0.0, 0.0 };
+					double Burnt = 0.0;
+					for (int K = 0; K < 3; ++K)
+					{
+						Nm += V3(Out.Normals[Ix[K] * 3], Out.Normals[Ix[K] * 3 + 1], Out.Normals[Ix[K] * 3 + 2]) * Wt[K];
+						for (int Ch = 0; Ch < 3; ++Ch)
+						{
+							Sk[Ch] += Out.Colours[Ix[K] * 4 + Ch] * Wt[K];
+						}
+						Burnt += Out.Soot[Ix[K]] * Wt[K];
+					}
+					Normal = Nm.Unit(F);
+					if (Normal.Dot(F) < 0.2)
+					{
+						Normal = F;
+					}
+					// (the outermost of the skin about the point, half a grid's step each way (a fifth of a small mark's
+					// size): the mark rides over a weld bead or a ridge narrower than its grid, up to a centimetre proud, as a
+					// coat of paint would, and none pokes through it)
+					double Behind = H.Behind;
+					const double Half = std::min(0.5 * Step, 0.2 * Size);
+					for (const V3& Off : { Across * Half, Across * -Half, Up * Half, Up * -Half })
+					{
+						const Hit Round = Cast(Flat + Off);
+						if (Round.T && Round.Behind < Behind && Round.Behind > H.Behind - 0.01)
+						{
+							Behind = Round.Behind;
+						}
+					}
+					Where = Flat - F * Behind + Normal * Raise;
+					if (bDirt)
+					{
+						// Her own dirt over the mark's paint, as over hers (dust, haze, chips to the metal, her creases' shade,
+						// soot), as a share of the way to the dirt's own colour, mixed as the eye mixes paint: never her paint's
+						// own colours, so no camouflage shows through a mark, and a black stays black (the art director's
+						// mends of 24 November, rounds 1 and 2).
+						double Kept = 0.0, Ad[3] = { 0.0, 0.0, 0.0 };
+						for (int K = 0; K < 3; ++K)
+						{
+							const size_t RawK = Ix[K] < Skin.Raw->size() ? (*Skin.Raw)[Ix[K]] : 0;
+							for (int Ch = 0; Ch < 3; ++Ch)
+							{
+								Kept += (*Skin.Dirt)[RawK * 6 + static_cast<size_t>(Ch)] * Wt[K] / 3.0;
+								Ad[Ch] += (*Skin.Dirt)[RawK * 6 + 3 + static_cast<size_t>(Ch)] * Wt[K];
+							}
+						}
+						// (at most six tenths of the way: a mark under a caked hull still reads as hers)
+						const double Share = Clamp(1.0 - Kept, 0.0, 0.6);
+						if (Share > 0.002)
+						{
+							R = Lerp(R, ToPicture(Ad[0] / Share), Share);
+							G = Lerp(G, ToPicture(Ad[1] / Share), Share);
+							B = Lerp(B, ToPicture(Ad[2] / Share), Share);
+						}
+						// Its own dust, fine and even, graded up from its foot (the track's dust thrown up the plate), a
+						// little by her file's word for the mark.
+						const double Low = Smooth(-0.15, -1.0, U0);
+						const double Dusted = Clamp(0.03 + 0.1 * Clamp(Dust / 100.0, 0.0, 1.0) + 0.25 * Low + 0.04 * (Noise(Flat * 70.0, Seed + 17) - 0.5), 0.0, 0.5);
+						R = Lerp(R, DustPic[0], Dusted);
+						G = Lerp(G, DustPic[1], Dusted);
+						B = Lerp(B, DustPic[2], Dusted);
+						// (a rain streak: grime carried down, weaker on a dark paint)
+						if (Streak > 0.0)
+						{
+							const double By = Streak * (0.1 + 0.22 * (R + G + B) / 765.0);
+							R = Lerp(R, 0.66 * DustPic[0], By);
+							G = Lerp(G, 0.66 * DustPic[1], By);
+							B = Lerp(B, 0.66 * DustPic[2], By);
+						}
+						// (no mark brighter than the Sherman's star, 184, 177, 157 at its brightest, the art director's mend of
+						// 24 November: the British flash on a clean light tank read the brightest thing on her)
+						const double Down = std::min({ 1.0, 184.0 / std::max(R, 1.0), 177.0 / std::max(G, 1.0), 157.0 / std::max(B, 1.0) });
+						R *= Down;
+						G *= Down;
+						B *= Down;
+					}
+					else
+					{
+						const double Grime = Clamp(DustShare + 0.14 * (Noise(Flat * 9.0, Seed) - 0.5) + 0.1 * (Noise(Flat * 31.0, Seed + 1) - 0.5), 0.0, 0.6);
+						R = Lerp(R, Sk[0], Grime);
+						G = Lerp(G, Sk[1], Grime);
+						B = Lerp(B, Sk[2], Grime);
+					}
+					Soot = static_cast<float>(Burnt);
+				}
+				Missed.push_back(H.T ? 0 : 1);
+				Out.Points.insert(Out.Points.end(), { static_cast<float>(Where.X), static_cast<float>(Where.Y), static_cast<float>(Where.Z) });
+				Out.Normals.insert(Out.Normals.end(), { static_cast<float>(Normal.X), static_cast<float>(Normal.Y), static_cast<float>(Normal.Z) });
+				Out.Colours.insert(Out.Colours.end(), { static_cast<uint8_t>(Clamp(R, 0.0, 255.0) + 0.5), static_cast<uint8_t>(Clamp(G, 0.0, 255.0) + 0.5),
+					static_cast<uint8_t>(Clamp(B, 0.0, 255.0) + 0.5), 255 });
+				Out.Soot.push_back(Soot);
+				return static_cast<uint32_t>(Out.Soot.size() - 1);
+			};
+			// (counter-clockwise seen from before her facing, as her files wind theirs: across, up, out is right-handed; a
+			// triangle with a corner that found no skin is left out)
+			size_t Added = 0;
+			auto Face = [&Out, &Added, &Missed, FirstPoint](uint32_t A, uint32_t B, uint32_t C)
+			{
+				if (Missed[A - FirstPoint] || Missed[B - FirstPoint] || Missed[C - FirstPoint])
+				{
+					return;
+				}
+				Out.Triangles.insert(Out.Triangles.end(), { A, B, C });
+				++Added;
+			};
+			// The rectangles are cut on lines shared by all of them (every rectangle's edges, and a grid about Step apart from
+			// the middle), so pieces side by side meet point for point and no crack opens between them on a stepped plate.
+			std::vector<double> CutA, CutU;
+			for (const MarkPiece& P : Pieces)
+			{
+				if (P.bBox)
+				{
+					CutA.insert(CutA.end(), { P.Outline[0].first, P.Outline[2].first });
+					CutU.insert(CutU.end(), { P.Outline[0].second, P.Outline[2].second });
+				}
+			}
+			const double Grid = Step / std::max(Size, 1e-3);
+			for (int K = -static_cast<int>(1.05 / Grid); K <= static_cast<int>(1.05 / Grid); ++K)
+			{
+				CutA.push_back(K * Grid);
+				CutU.push_back(K * Grid);
+			}
+			for (std::vector<double>* Cuts : { &CutA, &CutU })
+			{
+				std::sort(Cuts->begin(), Cuts->end());
+				Cuts->erase(std::unique(Cuts->begin(), Cuts->end(), [](double X, double Y) { return std::fabs(X - Y) < 1e-6; }), Cuts->end());
+			}
+			auto Within = [](const std::vector<double>& Cuts, double Lo, double Hi)
+			{
+				std::vector<double> Kept;
+				for (double C : Cuts)
+				{
+					if (C >= Lo - 1e-6 && C <= Hi + 1e-6)
+					{
+						Kept.push_back(C);
+					}
+				}
+				return Kept;
+			};
+			for (const MarkPiece& P : Pieces)
+			{
+				if (P.bBox)
+				{
+					const std::vector<double> As = Within(CutA, P.Outline[0].first, P.Outline[2].first), Us = Within(CutU, P.Outline[0].second, P.Outline[2].second);
+					const int NA = static_cast<int>(As.size()) - 1, NU = static_cast<int>(Us.size()) - 1;
+					if (NA < 1 || NU < 1)
+					{
+						continue;
+					}
+					const uint32_t First = static_cast<uint32_t>(Out.Count());
+					for (int J = 0; J <= NU; ++J)
+					{
+						for (int I = 0; I <= NA; ++I)
+						{
+							Point(As[static_cast<size_t>(I)], Us[static_cast<size_t>(J)], P.Layer, P);
+						}
+					}
+					for (int J = 0; J < NU; ++J)
+					{
+						for (int I = 0; I < NA; ++I)
+						{
+							const uint32_t C00 = First + static_cast<uint32_t>(J * (NA + 1) + I), C10 = C00 + 1;
+							const uint32_t C01 = C00 + static_cast<uint32_t>(NA + 1), C11 = C01 + 1;
+							Face(C00, C10, C11);
+							Face(C00, C11, C01);
+						}
+					}
+					continue;
+				}
+				// A convex outline: fanned from its first corner, each fan's triangle cut into N by N.
+				for (size_t K = 1; K + 1 < P.Outline.size(); ++K)
+				{
+					const auto& Ca = P.Outline[0];
+					const auto& Cb = P.Outline[K];
+					const auto& Cc = P.Outline[K + 1];
+					const double Longest = std::max({ std::hypot(Cb.first - Ca.first, Cb.second - Ca.second), std::hypot(Cc.first - Cb.first, Cc.second - Cb.second),
+						std::hypot(Ca.first - Cc.first, Ca.second - Cc.second) }) * Size;
+					const int Cuts = std::max(1, static_cast<int>(std::ceil(Longest / Step)));
+					// (rows from corner a: row J holds J + 1 points between the a-b and a-c edges)
+					std::vector<uint32_t> Row, Last;
+					for (int J = 0; J <= Cuts; ++J)
+					{
+						Row.clear();
+						for (int I = 0; I <= J; ++I)
+						{
+							const double Tb = static_cast<double>(J - I) / Cuts, Tc = static_cast<double>(I) / Cuts;
+							Row.push_back(Point(Ca.first + (Cb.first - Ca.first) * Tb + (Cc.first - Ca.first) * Tc,
+								Ca.second + (Cb.second - Ca.second) * Tb + (Cc.second - Ca.second) * Tc, P.Layer, P));
+						}
+						if (J > 0)
+						{
+							for (int I = 0; I < J; ++I)
+							{
+								Face(Last[static_cast<size_t>(I)], Row[static_cast<size_t>(I)], Row[static_cast<size_t>(I) + 1]);
+								if (I + 1 < J)
+								{
+									Face(Last[static_cast<size_t>(I)], Row[static_cast<size_t>(I) + 1], Last[static_cast<size_t>(I) + 1]);
+								}
+							}
+						}
+						Last.swap(Row);
+					}
+				}
+			}
+			// Wear laid over the paint, on the near level (the art director's mends of 24 November, round 2): small chips with
+			// hard edges, one to three centimetres across, back to the primer and the metal (most at a plate's edge, a bolt
+			// or a weld and along the mark's own edges), and a few rain streaks run down from its top. (None on a mark under
+			// ten centimetres across its middle, a motorcycle's: a flake would take a whole arm of it.)
+			if (bDirt && Step < 0.06 && Size >= 0.1)
+			{
+				auto PaintAt = [&Pieces](double A, double U) -> const MarkPiece*
+				{
+					for (const MarkPiece& Pc : Pieces)
+					{
+						bool bInside = true;
+						for (size_t K = 0; K < Pc.Outline.size() && bInside; ++K)
+						{
+							const auto& C0 = Pc.Outline[K];
+							const auto& C1 = Pc.Outline[(K + 1) % Pc.Outline.size()];
+							bInside = (C1.first - C0.first) * (U - C0.second) - (C1.second - C0.second) * (A - C0.first) >= -1e-9;
+						}
+						if (bInside)
+						{
+							return &Pc;
+						}
+					}
+					return nullptr;
+				};
+				auto Rough = [&](double A, double U)
+				{
+					const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
+					const Hit H = Cast(Flat);
+					// (a plate's edge or a bend: the skin there turned from the mark's facing; a bolt or a weld: a step in it)
+					double Most = H.T ? Clamp((0.97 - std::fabs(H.T->E1.Cross(H.T->E2).Unit(F).Dot(F))) / 0.12, 0.0, 1.0) : 1.0;
+					for (const V3& Off : { Across * 0.012, Across * -0.012, Up * 0.012, Up * -0.012 })
+					{
+						const Hit Round = Cast(Flat + Off);
+						Most = std::max(Most, Round.T && H.T ? Clamp((std::fabs(Round.Behind - H.Behind) - 0.002) / 0.006, 0.0, 1.0) : 1.0);
+					}
+					return Most;
+				};
+				uint64_t Roll = Mix(Seed, 0xC41Bull);
+				auto Next = [&Roll]()
+				{
+					Roll = Mix(Roll, 0x9E37ull);
+					return Unit01(Roll);
+				};
+				MarkPiece Primer;
+				Primer.R = 86;
+				Primer.G = 72;
+				Primer.B = 62;
+				const double Edge = 0.06;
+				// (by the mark's area: some sixteen on a Sherman's star, one on a motorcycle's cross)
+				const int Wanted = static_cast<int>(std::lround((bHand ? 12.0 : 16.0) * (Size / 0.2) * (Size / 0.2)));
+				int Chips = 0;
+				for (int Try = 0; Try < 12 * Wanted && Chips < Wanted; ++Try)
+				{
+					const double A = Next() * 2.0 - 1.0, U = Next() * 2.0 - 1.0;
+					if (!PaintAt(A, U))
+					{
+						continue;
+					}
+					const bool bEdge = !PaintAt(A + Edge, U) || !PaintAt(A - Edge, U) || !PaintAt(A, U + Edge) || !PaintAt(A, U - Edge);
+					if (Next() > 0.15 + (bEdge ? 0.45 : 0.0) + 0.5 * Rough(A, U))
+					{
+						continue;
+					}
+					// (an irregular six-sided flake, half a centimetre to one and a half from its middle, all of it on the mark)
+					const double Across1 = std::min(0.005 + 0.01 * Next(), 0.12 * Size) / Size, Squash = 0.6 + 0.4 * Next();
+					std::array<std::pair<double, double>, 6> Corner;
+					bool bOn = true;
+					for (int K = 0; K < 6; ++K)
+					{
+						const double Ang = (K + 0.35 * Next()) * Pi / 3.0, Spoke = Across1 * (0.55 + 0.6 * Next());
+						Corner[static_cast<size_t>(K)] = { A + Spoke * std::cos(Ang), U + Spoke * std::sin(Ang) * Squash };
+						bOn = bOn && PaintAt(Corner[static_cast<size_t>(K)].first, Corner[static_cast<size_t>(K)].second);
+					}
+					if (!bOn)
+					{
+						continue;
+					}
+					const uint32_t Mid = Point(A, U, 2, Primer);
+					uint32_t Ring[6];
+					for (int K = 0; K < 6; ++K)
+					{
+						Ring[K] = Point(Corner[static_cast<size_t>(K)].first, Corner[static_cast<size_t>(K)].second, 2, Primer);
+					}
+					for (int K = 0; K < 6; ++K)
+					{
+						Face(Mid, Ring[K], Ring[(K + 1) % 6]);
+					}
+					++Chips;
+				}
+				const int Streaks = 2 + static_cast<int>(Next() * 3.0);
+				for (int K = 0; K < Streaks; ++K)
+				{
+					const double A = Next() * 1.6 - 0.8;
+					double Top = 1.0;
+					while (Top > -1.0 && !PaintAt(A, Top))
+					{
+						Top -= 0.02;
+					}
+					if (Top <= -1.0)
+					{
+						continue;
+					}
+					// (a centimetre or so wide, narrowing as it runs down a third to four fifths of the mark, fading out)
+					const double Long = 0.3 + 0.5 * Next(), Wide = (0.004 + 0.004 * Next()) / Size;
+					const int Rows = std::max(2, static_cast<int>(std::ceil(Long * Size / Step)));
+					std::vector<uint32_t> Last;
+					for (int J = 0; J <= Rows; ++J)
+					{
+						const double T = static_cast<double>(J) / Rows, U = Top - 0.01 - Long * T, W = Wide * (1.0 - 0.5 * T);
+						const MarkPiece* Under = PaintAt(A, U);
+						if (!Under || !PaintAt(A - W, U) || !PaintAt(A + W, U))
+						{
+							break;
+						}
+						const double Strength = 0.9 * (1.0 - T) * (0.7 + 0.3 * Next());
+						const std::vector<uint32_t> Row = { Point(A - W, U, 1, *Under, Strength), Point(A + W, U, 1, *Under, Strength) };
+						if (!Last.empty())
+						{
+							// (the row below is lower: across, then up, as the grid's triangles)
+							Face(Row[0], Row[1], Last[1]);
+							Face(Row[0], Last[1], Last[0]);
+						}
+						Last = Row;
+					}
+				}
+			}
+			// (the points that found no skin, and so no triangle, taken out again)
+			std::vector<int64_t> NewIndex(Out.Count() - FirstPoint, -1);
+			for (size_t T = FirstTriangle; T < Out.Triangles.size(); ++T)
+			{
+				NewIndex[Out.Triangles[T] - FirstPoint] = 0;
+			}
+			uint32_t Next = FirstPoint;
+			for (size_t K = 0; K < NewIndex.size(); ++K)
+			{
+				if (NewIndex[K] < 0)
+				{
+					continue;
+				}
+				const size_t From = FirstPoint + K;
+				NewIndex[K] = Next;
+				if (From != Next)
+				{
+					std::copy_n(&Out.Points[From * 3], 3, &Out.Points[Next * 3]);
+					std::copy_n(&Out.Normals[From * 3], 3, &Out.Normals[Next * 3]);
+					std::copy_n(&Out.Colours[From * 4], 4, &Out.Colours[Next * 4]);
+					Out.Soot[Next] = Out.Soot[From];
+				}
+				++Next;
+			}
+			Out.Points.resize(static_cast<size_t>(Next) * 3);
+			Out.Normals.resize(static_cast<size_t>(Next) * 3);
+			Out.Colours.resize(static_cast<size_t>(Next) * 4);
+			Out.Soot.resize(Next);
+			for (size_t T = FirstTriangle; T < Out.Triangles.size(); ++T)
+			{
+				Out.Triangles[T] = static_cast<uint32_t>(NewIndex[Out.Triangles[T] - FirstPoint]);
+			}
+			return Added;
+		}
+
+		/** The broadest flat plate of a part's skin that faces Toward (its outward facing within MinDot of it), among
+		 * those within Window metres of the part's outermost that way: where an army painted a mark her file gives no
+		 * place for (the Panther's hull sides, a Japanese tank's front plate). At is on the plate (model frame) and
+		 * Facing its outward facing. False where the part has no such plate. */
+		bool FindPlate(const RawMesh& Raw, int PartIx, const V3& Toward, double MinDot, double Window, V3& OutAt, V3& OutFacing)
+		{
+			struct Bit
+			{
+				V3 Mid, Normal;
+				double Area = 0.0, Out = 0.0;
+			};
+			std::vector<Bit> Bits;
+			double Outermost = -1e9;
+			for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Raw.Triangles[T], I1 = Raw.Triangles[T + 1], I2 = Raw.Triangles[T + 2];
+				if (Raw.Parts[I0] != PartIx || Raw.Parts[I1] != PartIx || Raw.Parts[I2] != PartIx)
+				{
+					continue;
+				}
+				const V3 A(Raw.Points[I0 * 3], Raw.Points[I0 * 3 + 1], Raw.Points[I0 * 3 + 2]);
+				const V3 B(Raw.Points[I1 * 3], Raw.Points[I1 * 3 + 1], Raw.Points[I1 * 3 + 2]);
+				const V3 C(Raw.Points[I2 * 3], Raw.Points[I2 * 3 + 1], Raw.Points[I2 * 3 + 2]);
+				const V3 Cr = (B - A).Cross(C - A);
+				const double Area = 0.5 * Cr.Length();
+				if (Area < 1e-7)
+				{
+					continue;
+				}
+				// (wound as her files wind theirs, counter-clockwise about the outward facing; checked against the points' own)
+				V3 Normal = Cr * (0.5 / Area);
+				const V3 Own(Raw.Facings[I0 * 3] + Raw.Facings[I1 * 3] + Raw.Facings[I2 * 3], Raw.Facings[I0 * 3 + 1] + Raw.Facings[I1 * 3 + 1] + Raw.Facings[I2 * 3 + 1],
+					Raw.Facings[I0 * 3 + 2] + Raw.Facings[I1 * 3 + 2] + Raw.Facings[I2 * 3 + 2]);
+				if (Normal.Dot(Own) < 0.0)
+				{
+					Normal = -Normal;
+				}
+				if (Normal.Dot(Toward) < MinDot)
+				{
+					continue;
+				}
+				const V3 Mid = (A + B + C) * (1.0 / 3.0);
+				Bits.push_back({ Mid, Normal, Area, Mid.Dot(Toward) });
+				Outermost = std::max(Outermost, Mid.Dot(Toward));
+			}
+			// (one plate: one facing to a tenth, one plane to three centimetres)
+			std::map<std::tuple<long, long, long, long>, std::array<double, 7>> Plates; // area; area-weighted mid; area-weighted facing
+			for (const Bit& Bt : Bits)
+			{
+				if (Bt.Out < Outermost - Window)
+				{
+					continue;
+				}
+				const auto Key = std::make_tuple(std::lround(Bt.Normal.X * 10.0), std::lround(Bt.Normal.Y * 10.0), std::lround(Bt.Normal.Z * 10.0),
+					std::lround(Bt.Mid.Dot(Bt.Normal) / 0.03));
+				std::array<double, 7>& P = Plates[Key];
+				P[0] += Bt.Area;
+				P[1] += Bt.Area * Bt.Mid.X;
+				P[2] += Bt.Area * Bt.Mid.Y;
+				P[3] += Bt.Area * Bt.Mid.Z;
+				P[4] += Bt.Area * Bt.Normal.X;
+				P[5] += Bt.Area * Bt.Normal.Y;
+				P[6] += Bt.Area * Bt.Normal.Z;
+			}
+			const std::array<double, 7>* Best = nullptr;
+			for (const auto& Pl : Plates)
+			{
+				if (!Best || Pl.second[0] > (*Best)[0])
+				{
+					Best = &Pl.second;
+				}
+			}
+			if (!Best || (*Best)[0] < 0.02)
+			{
+				return false;
+			}
+			OutAt = V3((*Best)[1], (*Best)[2], (*Best)[3]) * (1.0 / (*Best)[0]);
+			OutFacing = V3((*Best)[4], (*Best)[5], (*Best)[6]).Unit(Toward);
+			return true;
+		}
+	}
+
 	bool Model::Load(const std::string& Text, const Dress& D, std::string& OutError)
 	{
 		Json Doc;
@@ -1474,7 +2379,9 @@ namespace LandKit
 			{
 				continue;
 			}
-			std::string Pick = ChoiceIn(Row, Group);
+			// (release 2: a choice the rules picked for her, where her model has it: a motorcycle's sidecar, a staff jeep's gun)
+			const auto Chosen = D.Choose.find(Group);
+			std::string Pick = Chosen != D.Choose.end() && S["choices"][Chosen->second].IsObject() ? Chosen->second : ChoiceIn(Row, Group);
 			// (a swap the battle chooses: Men in lorries, the Truck's tilt stowed)
 			if (const auto Forced = D.Force.find(Group); Forced != D.Force.end() && S["choices"][Forced->second].IsObject())
 			{
@@ -1642,6 +2549,7 @@ namespace LandKit
 			Out.Facing = ReadV3(S["facing"], V3(1.0, 0.0, 0.0)).Unit(V3(1.0, 0.0, 0.0));
 			Out.Radius = S["radius"].Num(0.2);
 			Out.Part = std::max(0, PartIndex(S["part"].Str()));
+			Out.Dust = S["dust"].Num(0.0);
 			Marks.push_back(Out);
 		}
 
@@ -1846,6 +2754,11 @@ namespace LandKit
 		const double GreenAt = bCamouflage ? Threshold(Seed, 0.26) : 0.5;
 		const double BrownAt = bCamouflage ? Threshold(BrownSeed, 0.17) : 0.5;
 
+		// (where her national marks go, found on the near level and kept for the far one; those the army painted where
+		// her file gives no place, each only if it fits whole on her near skin)
+		std::vector<uint8_t> PaintedMade;
+		Painted.clear();
+
 		// Each level of detail painted and cut into the bodies.
 		for (int Level = 0; Level < 2; ++Level)
 		{
@@ -1863,6 +2776,7 @@ namespace LandKit
 			const std::vector<float> Edge = Edges(Raw);
 			std::vector<uint8_t> Colour(N * 4, 255);
 			std::vector<float> Burn(N, 0.0f);
+			std::vector<float> Dirt(D.bMarks ? N * 6 : 0, 0.0f);
 			for (size_t K = 0; K < N; ++K)
 			{
 				const int PaintK = std::max(0, std::min(Raw.Paints[K], static_cast<int>(Paint.size()) - 1));
@@ -1910,55 +2824,73 @@ namespace LandKit
 				// (captured: her maker's coat, where the captor's brush missed it, in strokes and patches, most low down
 				// on the running gear and the lower hull, and at the edges where the new paint has chipped)
 				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
-				if (bCaptured && bCoat)
+				// (everything done to her paint from here: worn edges, dust, soot, her creases' shade; a scale and an addition
+				// to the paint, which the national marks read to take on her own dirt, Dress::bMarks)
+				auto Finish = [&](Lin Cv)
 				{
-					// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
-					// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
-					// lower hull behind the wheels; the art director's mend, 23 November)
-					const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
-					// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
-					// its few corners would each carry a stripe of the old coat down the whole plate)
-					const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
-					const double At0 = 0.71 - 0.17 * Reach;
-					const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
-					C = Mix(C, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
-				}
-				if (bFileDust)
-				{
-					if (bCoat && Raw.Wear[K] > 0)
+					if (bCaptured && bCoat)
 					{
-						// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
-						// third of it shows the old coat through)
-						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
+						// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
+						// lower hull behind the wheels; the art director's mend, 23 November)
+						const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
+						// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
+						// its few corners would each carry a stripe of the old coat down the whole plate)
+						const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
+						const double At0 = 0.71 - 0.17 * Reach;
+						const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
+						Cv = Mix(Cv, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
 					}
-				}
-				else if (bCoat && Edge[K] > 0.0f)
+					if (bFileDust)
+					{
+						if (bCoat && Raw.Wear[K] > 0)
+						{
+							// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
+							// third of it shows the old coat through)
+							Cv = Mix(Cv, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						}
+					}
+					else if (bCoat && Edge[K] > 0.0f)
+					{
+						const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
+						Cv = bCaptured ? Mix(Cv, Old, 0.25 * Chip) : Mix(Cv, Cv * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					}
+					// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
+					if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
+					{
+						const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
+						Cv = Mix(Cv, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
+					}
+					// Exhaust soot as the file lays it.
+					if (Raw.SootIn[K] > 4)
+					{
+						Cv = Mix(Cv, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
+					}
+					if (bFileDust)
+					{
+						// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
+						// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
+						// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
+						// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
+						const double DustBy = bCaptured ? 0.5 : 1.0;
+						Cv = Mix(Cv, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+						Cv = Mix(Cv, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
+						Cv = Cv * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
+					}
+					return Cv;
+				};
+				if (D.bMarks)
 				{
-					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
-					C = bCaptured ? Mix(C, Old, 0.25 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					const Lin Added = Finish(Lin()), Whole = Finish(Lin(1.0, 1.0, 1.0));
+					float* To = &Dirt[K * 6];
+					To[0] = static_cast<float>(Whole.R - Added.R);
+					To[1] = static_cast<float>(Whole.G - Added.G);
+					To[2] = static_cast<float>(Whole.B - Added.B);
+					To[3] = static_cast<float>(Added.R);
+					To[4] = static_cast<float>(Added.G);
+					To[5] = static_cast<float>(Added.B);
 				}
-				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
-				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
-				{
-					const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
-					C = Mix(C, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
-				}
-				// Exhaust soot as the file lays it.
-				if (Raw.SootIn[K] > 4)
-				{
-					C = Mix(C, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
-				}
-				if (bFileDust)
-				{
-					// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
-					// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
-					// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
-					// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
-					const double DustBy = bCaptured ? 0.5 : 1.0;
-					C = Mix(C, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
-					C = Mix(C, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
-					C = C * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
-				}
+				C = Finish(C);
 				Colour[K * 4] = ToPicture(C.R);
 				Colour[K * 4 + 1] = ToPicture(C.G);
 				Colour[K * 4 + 2] = ToPicture(C.B);
@@ -2191,6 +3123,115 @@ namespace LandKit
 				const int BackPart = PartIndex("hull");
 				if (Plate(BackPart, 0, -1.0, 0.25, At)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
 			}
+
+			// National marks (release 2, Dress::bMarks, "-TheaterLandMarks"; Brian, 24 November, the tanks' country
+			// markings).
+			const bool bCaptorMarked = bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV");
+			if (D.bMarks && !bCaptorMarked && !Marks.empty())
+			{
+				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"]);
+				std::vector<MarkPiece> Pieces;
+				MarkPieces(MarkKind, Pieces);
+				if (Level == 0 && !Pieces.empty())
+				{
+					// Where her owner's army painted it (the art director's mends of 24 November): her file's places, but
+					// the Tiger's and the Panther's crews painted the cross on the hull's sides and a number on the turret
+					// (the Panther's file has only turret places, so hers go on her hull's sides, on its broadest plate),
+					// and the Japanese army's star went on the front plate, not the sides.
+					const bool bNumbered = MarkKind == "cross" && (Name.compare(0, 5, "Tiger") == 0 || Name.compare(0, 7, "Panther") == 0);
+					const int TurretPart = PartIndex("turret"), HullPart = PartIndex("hull");
+					double Biggest = 0.0, DustOf = 0.0;
+					for (const Mark& Mk : Marks)
+					{
+						Biggest = std::max(Biggest, Mk.Radius);
+						DustOf = std::max(DustOf, Mk.Dust);
+						if (MarkKind == "army star" || (bNumbered && Mk.Part == TurretPart))
+						{
+							continue;
+						}
+						Painted.push_back(Mk);
+						PaintedMade.push_back(0);
+					}
+					auto OnPlate = [&](int PartIx, const V3& Toward, double MinDot, double Window, double Radius)
+					{
+						V3 At, Facing;
+						if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0 || !FindPlate(Raw, PartIx, Toward, MinDot, Window, At, Facing))
+						{
+							return false;
+						}
+						Mark Mk;
+						Mk.Tag = "_";
+						Mk.At = At;
+						Mk.Facing = Facing;
+						Mk.Radius = Radius;
+						Mk.Part = PartIx;
+						Mk.Dust = DustOf;
+						Painted.push_back(Mk);
+						PaintedMade.push_back(1);
+						return true;
+					};
+					if (bNumbered)
+					{
+						for (const double Side : { -1.0, 1.0 })
+						{
+							bool bHas = false;
+							for (const Mark& Mk : Painted)
+							{
+								bHas = bHas || (Mk.Part == HullPart && Mk.Facing.Y * Side > 0.5);
+							}
+							if (!bHas)
+							{
+								OnPlate(HullPart, V3(0.0, Side, 0.0), 0.6, 0.3, std::max(0.2, Biggest));
+							}
+						}
+					}
+					if (MarkKind == "army star" && !OnPlate(HullPart, V3(1.0, 0.0, 0.0), 0.75, 0.5, Biggest))
+					{
+						OnPlate(TurretPart, V3(1.0, 0.0, 0.0), 0.75, 0.3, Biggest);
+					}
+				}
+				// Her owner's plain period marking at each of those places (a "_" place, a lorry's door, is whoever owns
+				// her; any other is her maker's spot, and her owner's mark goes there), painted onto her own skin at both
+				// levels (the far one coarser and a little further off its coarser skin), under her own dirt. A captured
+				// vehicle keeps the captor's big marks above; a captor the captured kit has no mark for (the British, the
+				// Italians) wears his own here, half as big again, as the captured kit's are.
+				std::vector<uint8_t> Kept(Painted.size(), 1);
+				for (size_t I = 0; I < Painted.size() && !Pieces.empty(); ++I)
+				{
+					const Mark& Mk = Painted[I];
+					const Part& Pt = Parts[static_cast<size_t>(Mk.Part)];
+					if (Pt.Body < 0 || !Pt.bShown || Bodies[static_cast<size_t>(Pt.Body)].bTrack)
+					{
+						continue;
+					}
+					Body& Bo = Bodies[static_cast<size_t>(Pt.Body)];
+					MarkSkin Skin;
+					Skin.Raw = &Members[static_cast<size_t>(Pt.Body)];
+					Skin.Dirt = &Dirt;
+					Skin.Count = Members[static_cast<size_t>(Pt.Body)].size();
+					Skin.DustColour = bFileDust ? DustColour : Dust;
+					// (a file that gives no dust for its mark: as dusty as the files' middling marks, 45)
+					const size_t Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0),
+						Mk.Dust > 0.0 ? Mk.Dust : 45.0, Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull),
+						Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I]);
+					Kept[I] = Added > 0 || !(Level == 0 && PaintedMade[I]) ? 1 : 0;
+				}
+				if (Level == 0)
+				{
+					size_t To = 0;
+					for (size_t I = 0; I < Painted.size(); ++I)
+					{
+						if (Kept[I])
+						{
+							Painted[To] = Painted[I];
+							PaintedMade[To] = PaintedMade[I];
+							++To;
+						}
+					}
+					Painted.resize(To);
+					PaintedMade.resize(To);
+				}
+			}
 		}
 
 		// Bodies of one shape (a side's road wheels): drawn from one mesh.
@@ -2265,12 +3306,13 @@ namespace LandKit
 		}
 		else
 		{
-			// Wheels on the ground (their lowest point at the ground), and a gun's spades.
+			// Wheels on the ground (their lowest point at the ground), and a gun's spades. (Not a wheel her swaps leave off: a
+			// solo motorcycle's sidecar wheel.)
 			std::vector<V3> Contacts;
 			for (int P : Wheels)
 			{
 				const Part& W = Parts[static_cast<size_t>(P)];
-				if (W.Pivot.Z - W.Radius < 0.05)
+				if (W.bShown && W.Pivot.Z - W.Radius < 0.05)
 				{
 					Contacts.emplace_back(W.Pivot.X, W.Pivot.Y, 0.0);
 				}
@@ -2893,6 +3935,9 @@ namespace LandKit
 		{
 			std::vector<uint8_t> bAimed, bAstern, Going;
 			std::vector<double> AimX, AimY, Way, RawV, RawW, V, W;
+			// (tanks rolling smoothly: the recording's places a step, blended, and the steps she was put at, counted)
+			std::vector<double> PlainX, PlainY, PlainF, BlendX, BlendY, BlendF, Bell;
+			std::vector<uint32_t> PutUpTo;
 		};
 		PassLists& Lists()
 		{
@@ -3043,16 +4088,100 @@ namespace LandKit
 		// are worked from the recording's below), and from there she eases onto the new line: a kept point that comes
 		// late, or a provisional one, may move her line under the screen by a tenth of a metre or a few degrees.
 		const size_t Hold = Given > -1e299 ? std::max(From, std::min(Seen, Had)) : From;
+		// Tanks rolling smoothly (R2, SmoothTanks; Brian, 23 November 15:24Z: "have the tanks move more smooth and not rigid
+		// and zig zagging"): the drill's tank makes for a place it picks again twice a second, so the recording's line
+		// zigzags a few metres either way of her road and turns sharp at its corners, and her hull swings at one steady
+		// rate, starting and stopping dead. Her place and her facing each step are the recording's blended over
+		// SmoothTanks battle seconds either way by a bell: her line rounds its corners and loses its zigzag (0.06 m off
+		// the rules' line on average at 0.4 s, under 0.8 m for 99 steps in 100), and her hull eases into and out of a
+		// turn. Only her facing's own blend, never her line's way, turns her, so a live battle's provisional points move
+		// her no more than they do unblended. Never blended across a place she was put at (a step over 2 m), and less and
+		// less toward her end, so she dies on the very spot, facing as she did.
+		const double Sigma = bTank ? SmoothTanks : 0.0;
+		const size_t Reach = Sigma > 0.0 ? std::min<size_t>(LookAhead - 3, static_cast<size_t>(std::ceil(2.5 * Sigma / Step))) : 0;
+		const size_t PlainFrom = From >= Reach + 2 ? From - Reach - 2 : 0;
+		std::vector<double>& PlainX = Li.PlainX;
+		std::vector<double>& PlainY = Li.PlainY;
+		std::vector<double>& PlainF = Li.PlainF;
+		std::vector<double>& BlendX = Li.BlendX;
+		std::vector<double>& BlendY = Li.BlendY;
+		std::vector<double>& BlendF = Li.BlendF;
+		std::vector<double>& Bell = Li.Bell;
+		std::vector<uint32_t>& PutUpTo = Li.PutUpTo;
+		if (Reach > 0)
+		{
+			const size_t Count = N + Reach + 2 - PlainFrom;
+			PlainX.resize(Count);
+			PlainY.resize(Count);
+			PlainF.resize(Count);
+			BlendX.resize(Count);
+			BlendY.resize(Count);
+			BlendF.resize(Count);
+			PutUpTo.resize(Count + 1);
+			Bell.resize(Reach + 1);
+			for (size_t K = 0; K <= Reach; ++K)
+			{
+				const double U = static_cast<double>(K) * Step / Sigma;
+				Bell[K] = std::exp(-0.5 * U * U);
+			}
+			PutUpTo[0] = 0;
+			for (size_t R = 0; R < Count; ++R)
+			{
+				PlaceAt(TimeOf(PlainFrom + R), PlainX[R], PlainY[R], PlainF[R]);
+				const bool bPut = R > 0 && std::hypot(PlainX[R] - PlainX[R - 1], PlainY[R] - PlainY[R - 1]) > 2.0;
+				PutUpTo[R + 1] = PutUpTo[R] + (bPut ? 1u : 0u);
+			}
+			for (size_t R = 0; R < Count; ++R)
+			{
+				double SX = 0.0, SY = 0.0, SW = 0.0, SS = 0.0, SC = 0.0;
+				const size_t A = R >= Reach ? R - Reach : 0, B = std::min(Count - 1, R + Reach);
+				for (size_t Q = A; Q <= B; ++Q)
+				{
+					const double Wt = Bell[Q > R ? Q - R : R - Q];
+					SX += PlainX[Q] * Wt;
+					SY += PlainY[Q] * Wt;
+					SW += Wt;
+					const double Turned = Wrap(PlainF[Q] - PlainF[R]);
+					SS += std::sin(Turned) * Wt;
+					SC += std::cos(Turned) * Wt;
+				}
+				BlendX[R] = SX / SW;
+				BlendY[R] = SY / SW;
+				BlendF[R] = std::atan2(SS, SC); // (her facing's blend, as a turn from her own facing that step)
+			}
+		}
+		auto Placed = [&](size_t I, double& OutX, double& OutY, double& OutF)
+		{
+			if (Reach == 0 || I < PlainFrom || I - PlainFrom + 1 >= BlendX.size())
+			{
+				PlaceAt(TimeOf(I), OutX, OutY, OutF);
+				return;
+			}
+			const size_t R = I - PlainFrom;
+			OutX = PlainX[R];
+			OutY = PlainY[R];
+			OutF = PlainF[R];
+			const double T = TimeOf(I);
+			const size_t A = R >= Reach ? R - Reach : 0, B = std::min(BlendX.size() - 1, R + Reach);
+			if ((Died >= 0.0 && T >= Died) || R == 0 || PutUpTo[B + 1] != PutUpTo[A + 1])
+			{
+				return;
+			}
+			const double Tail = Died >= 0.0 ? Clamp((Died - T) / (static_cast<double>(Reach) * Step), 0.0, 1.0) : 1.0;
+			OutX += (BlendX[R] - OutX) * Tail;
+			OutY += (BlendY[R] - OutY) * Tail;
+			OutF = Wrap(OutF + BlendF[R] * Tail);
+		};
 		double EaseX = 0.0, EaseY = 0.0, EaseF = 0.0;
 		for (size_t I = From; I < N; ++I)
 		{
 			if (I >= Hold)
 			{
-				PlaceAt(TimeOf(I), X[I], Y[I], F[I]);
+				Placed(I, X[I], Y[I], F[I]);
 				continue;
 			}
 			double NX = 0.0, NY = 0.0, NF = 0.0;
-			PlaceAt(TimeOf(I), NX, NY, NF);
+			Placed(I, NX, NY, NF);
 			F[I] = bTank ? F[I] : NF;
 			if (I + 1 == Hold)
 			{
@@ -3065,7 +4194,7 @@ namespace LandKit
 		{
 			// (still easing from the last time, or none of the steps worked out again shown yet)
 			double NX = 0.0, NY = 0.0, NF = 0.0;
-			PlaceAt(TimeOf(Hold - 1), NX, NY, NF);
+			Placed(Hold - 1, NX, NY, NF);
 			EaseX = X[Hold - 1] - NX;
 			EaseY = Y[Hold - 1] - NY;
 			EaseF = bTank ? Wrap(F[Hold - 1] - NF) : 0.0;
@@ -3290,6 +4419,12 @@ namespace LandKit
 
 		// When she moves off and stops (a tenth of a second of going to move off, three tenths of standing to stop, so a
 		// halt of a moment in the recording does not jerk her). Each is dated back to when she began to go or to stand.
+		// A turn on the spot alone must hold TurnHolds to move her off: in a live battle the reader dates a provisional
+		// point at its piece's own time, so a hull wandering inside the keeper's own slack (KEEP_F, 0.05 rad) over the
+		// 0.2 to 0.4 s before the next kept point reads as 0.2 rad/s, over the turning threshold below, and a vehicle
+		// standing still gave an engine note, a brake and a puff of dust she never gave in the battle read whole (the
+		// pre-check's find of 23 November, an M4 at 247.65 s). A real turn on the spot of under half a second is a
+		// twitch nobody sees; one that lasts is still dated back to where it began.
 		// (Worked out again: her moving off and stopping by Given are as the screen showed them, and so is she through
 		// those steps, while the new words still count how long she has been going or standing; one that the new words
 		// date by Given, too late to be shown then, comes at the first step after it.)
@@ -3299,7 +4434,8 @@ namespace LandKit
 			const double Soonest = TimeOf(Seen);
 			auto ShownOf = [Given](const std::vector<double>& L) { return static_cast<size_t>(std::upper_bound(L.begin(), L.end(), Given) - L.begin()); };
 			bool bOn = false;
-			double OnFor = 0.0, OffFor = 0.0;
+			double OnFor = 0.0, OffFor = 0.0, RollFor = 0.0;
+			constexpr double TurnHolds = 0.45;
 			size_t KeepOffs = ShownOf(MoveOffs), KeepStops = ShownOf(Stops);
 			if (From > 0)
 			{
@@ -3307,6 +4443,7 @@ namespace LandKit
 				bOn = R.bOn;
 				OnFor = R.OnFor;
 				OffFor = R.OffFor;
+				RollFor = R.RollFor;
 				KeepOffs = std::max(KeepOffs, R.MoveOffs);
 				KeepStops = std::max(KeepStops, R.Stops);
 			}
@@ -3323,6 +4460,7 @@ namespace LandKit
 					R.bOn = bOn;
 					R.OnFor = OnFor;
 					R.OffFor = OffFor;
+					R.RollFor = RollFor;
 					R.MoveOffs = MoveOffs.size();
 					R.Stops = Stops.size();
 				}
@@ -3333,7 +4471,8 @@ namespace LandKit
 					continue; // (knocked out for good: nothing moves her again)
 				}
 				const bool bTurning = !bGun && std::fabs(W[I]) > 0.12;
-				const bool bGo = std::fabs(V[I]) > 0.35 || bTurning;
+				const bool bRolling = std::fabs(V[I]) > 0.35;
+				const bool bGo = bRolling || bTurning;
 				const bool bStill = std::fabs(V[I]) < 0.15 && (bGun || std::fabs(W[I]) < 0.06);
 				if (I <= Seen || I == From)
 				{
@@ -3355,18 +4494,22 @@ namespace LandKit
 					{
 						bOn = bNow;
 						OnFor = bOn ? OnFor : 0.0;
+						RollFor = bOn ? RollFor : 0.0;
 						OffFor = bOn ? 0.0 : OffFor;
 					}
 				}
+				// (RollFor: how long of this run of going she has rolled, not only turned; a run that breaks clears it)
 				if (I < Seen)
 				{
 					OnFor = !bOn && bGo ? OnFor + Step : 0.0;
+					RollFor = !bOn && bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
 					OffFor = bOn && bStill ? OffFor + Step : 0.0;
 				}
 				else if (!bOn)
 				{
 					OnFor = bGo ? OnFor + Step : 0.0;
-					if (OnFor > 0.1 - 1e-9)
+					RollFor = bGo ? (bRolling ? RollFor + Step : RollFor) : 0.0;
+					if (OnFor > 0.1 - 1e-9 && (RollFor > 0.0 || OnFor > TurnHolds - 1e-9))
 					{
 						bOn = true;
 						OffFor = 0.0;
@@ -3380,6 +4523,7 @@ namespace LandKit
 					{
 						bOn = false;
 						OnFor = 0.0;
+						RollFor = 0.0;
 						Stops.push_back(std::max(Soonest, T - OffFor + Step));
 					}
 				}
@@ -3691,7 +4835,7 @@ namespace LandKit
 		BurnUntil = std::max(End, LoopsUntil);
 		if (Died >= 0.0)
 		{
-			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2) / Life); // (0.6 or 1.2 s of life after the hit)
+			BurnFrom = std::min(End, Died + (bBrewUp ? BrewWait + 0.6 / Life : 1.2 / Life)); // (0.6 or 1.2 s of life after the hit, or the blast)
 		}
 
 		// What she shows the effects and the sound, worked out ahead. (Worked out again: what falls by Given, the last
@@ -3839,7 +4983,16 @@ namespace LandKit
 		}
 		if (Died >= 0.0)
 		{
-			AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			if (bBrewUp && BrewWait > 0.0)
+			{
+				// Effects (R2): knocked out first, her crew getting out, then her ammunition going (BrewWait)
+				AddClip("knocked_out", Died, Died + BrewWait, false, BurnUntil, KillRound, Kill);
+				AddClip("brew_up", Died + BrewWait, End, false, BurnUntil, 0, nullptr);
+			}
+			else
+			{
+				AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
+			}
 			if (BurnFrom >= 0.0)
 			{
 				AddClip("burn", BurnFrom, End, true, BurnUntil, 0, nullptr);
@@ -4093,9 +5246,11 @@ namespace LandKit
 		}
 		if (bDeadNow)
 		{
-			if (const Clip* C = M.FindClip(bBrewUp ? "brew_up" : "knocked_out"))
+			// (Effects (R2): a brew-up that waits, BrewWait, is knocked out until her ammunition goes)
+			const bool bBlownNow = bBrewUp && T >= Died + BrewWait;
+			if (const Clip* C = M.FindClip(bBlownNow ? "brew_up" : "knocked_out"))
 			{
-				PlayDeath(M, *C, (T - Died) * Life, S); // (life's seconds, as her death's events are planned)
+				PlayDeath(M, *C, (T - Died - (bBlownNow ? BrewWait : 0.0)) * Life, S); // (life's seconds, as her death's events are planned)
 			}
 			if (BurnFrom >= 0.0 && T >= BurnFrom)
 			{
@@ -4406,6 +5561,131 @@ namespace LandKit
 		return true;
 	}
 
+	bool BenchesNow(const Vehicle& V, Benches& Out)
+	{
+		const Model& M = V.Look();
+		if (M.Kind != "carrier" || M.SocketIndex("rider.1") < 0)
+		{
+			return false;
+		}
+		Out = Benches();
+		Out.Block = V.Words().Block;
+		Out.K = V.Words().K;
+		Out.At = V.Root.At;
+		const V3 Up = V.Root.Way(V3(0.0, 0.0, 1.0)).Unit();
+		const V3 Ahead = V.Root.Way(V3(1.0, 0.0, 0.0));
+		Out.Forward = (Ahead - Up * Ahead.Dot(Up)).Unit(V3(std::sin(V.Heading), std::cos(V.Heading), 0.0));
+		Out.Right = Out.Forward.Cross(Up);
+		// (each side's seats front to back, whatever her model's numbering)
+		struct One { double Along; V3 At, Way; };
+		std::vector<One> Left, Right;
+		static const char* const Names[10] = { "rider.1", "rider.2", "rider.3", "rider.4", "rider.5", "rider.6", "rider.7", "rider.8", "rider.9", "rider.10" };
+		for (const char* Name : Names)
+		{
+			One S;
+			if (!V.SocketNow(Name, S.At, S.Way))
+			{
+				continue;
+			}
+			const V3 D = S.At - Out.At;
+			S.Along = D.Dot(Out.Forward);
+			(D.Dot(Out.Right) >= 0.0 ? Right : Left).push_back(S);
+		}
+		const auto Front = [](const One& A, const One& B) { return A.Along > B.Along; };
+		std::sort(Left.begin(), Left.end(), Front);
+		std::sort(Right.begin(), Right.end(), Front);
+		for (const One& S : Left)
+		{
+			Out.Seat[Out.Left] = S.At;
+			Out.Way[Out.Left] = S.Way;
+			++Out.Left;
+		}
+		for (const One& S : Right)
+		{
+			Out.Seat[Out.Left + Out.Righted] = S.At;
+			Out.Way[Out.Left + Out.Righted] = S.Way;
+			++Out.Righted;
+		}
+		return Out.Left + Out.Righted > 0;
+	}
+
+	bool BenchFor(const std::vector<Benches>& All, double X, double Y, int Block, int SeatOn, int Seat, BenchSeat& Out)
+	{
+		const Benches* Best = nullptr;
+		double BestD = 1e18, Along = 0.0, Across = 0.0;
+		int Row = -1;
+		bool bRightSide = false;
+		// (the rules' own word: her, and his seat)
+		if (SeatOn >= 0 && Seat >= 0)
+		{
+			for (const Benches& B : All)
+			{
+				if (B.Block == Block && B.K == SeatOn)
+				{
+					Best = &B;
+					break;
+				}
+			}
+			if (Best)
+			{
+				Row = Seat / 2;
+				bRightSide = Seat % 2 == 1;
+				const double Dx = X - Best->At.X, Dy = Y - Best->At.Y;
+				Across = Dx * Best->Right.X + Dy * Best->Right.Y;
+			}
+		}
+		if (!Best) for (const Benches& B : All)
+		{
+			const double Dx = X - B.At.X, Dy = Y - B.At.Y, D = Dx * Dx + Dy * Dy;
+			if (D > 36.0 || D >= BestD)
+			{
+				continue;
+			}
+			const double A = Dx * B.Forward.X + Dy * B.Forward.Y, R = Dx * B.Right.X + Dy * B.Right.Y;
+			if (std::fabs(R) > 1.6 || A < -5.0 || A > 3.0)
+			{
+				continue;
+			}
+			Best = &B;
+			BestD = D;
+			Along = A;
+			Across = R;
+		}
+		if (!Best)
+		{
+			return false;
+		}
+		// (by his place: the drill's seat, two abreast 0.55 m either side, rows 0.6 m apart from 1.4 m forward of her root;
+		// a far block's men a row each 1.1 m from 0.5 m sit as near their rows as these give)
+		if (Row < 0)
+		{
+			Row = std::max(0, static_cast<int>(std::lround((1.4 - Along) / 0.6)));
+			bRightSide = Across >= 0.0;
+		}
+		const bool bRight = bRightSide ? Best->Righted > 0 : Best->Left == 0;
+		const int First = bRight ? Best->Left : 0, Count = bRight ? Best->Righted : Best->Left;
+		if (Row < Count)
+		{
+			const V3& At = Best->Seat[First + Row];
+			const V3& Way = Best->Way[First + Row];
+			Out.At = At;
+			Out.Floor = At.Z - 0.5;
+			Out.Heading = std::atan2(Way.X, Way.Y);
+			Out.bBench = true;
+			return true;
+		}
+		// (no bench left for him: kneeling in the bed's middle at her front, facing aft, a little to his own side)
+		const V3& Front = Best->Seat[0];
+		const double FrontAlong = (Front - Best->At).Dot(Best->Forward);
+		const double Back = 0.55 * static_cast<double>(Row - Count);
+		const V3 At = Best->At + Best->Forward * (FrontAlong - Back) + Best->Right * (bRightSide ? 0.22 : -0.22);
+		Out.Floor = Front.Z - 0.5;
+		Out.At = V3(At.X, At.Y, Out.Floor);
+		Out.Heading = std::atan2(-Best->Forward.X, -Best->Forward.Y);
+		Out.bBench = false;
+		return true;
+	}
+
 	bool Vehicle::SocketAt(const std::string& Name, double T, V3& OutAt, V3& OutFacing) const
 	{
 		if (!Shape)
@@ -4473,7 +5753,7 @@ namespace LandKit
 		{
 			return;
 		}
-		for (const Mark& K : Shape->Marks)
+		for (const Mark& K : Shape->Painted.empty() ? Shape->Marks : Shape->Painted)
 		{
 			const Part& P = Shape->Parts[static_cast<size_t>(K.Part)];
 			if (!P.bShown)
@@ -4575,6 +5855,16 @@ namespace LandKit
 	namespace
 	{
 		bool IsVehicle(const std::string& Role) { return Role == "tank" || Role == "gun" || Role == "lorry"; }
+
+		/** A track's swaps the rules picked (release 2, "sw": {swap: choice}); none where it says none. */
+		void ReadSwaps(const Json::Value& Sw, std::map<std::string, std::string>& Out)
+		{
+			Out.clear();
+			for (size_t I = 0; Sw.IsObject() && I < Sw.Count(); ++I)
+			{
+				Out[Sw.Name(I)] = Sw.At(I).Str("");
+			}
+		}
 
 		/** A change of a track: [t, pose, cover, aimX | null, aimY | null, hidden, buttoned]. */
 		Change ReadChange(const Json::Value& C)
@@ -4966,6 +6256,11 @@ namespace LandKit
 			B.Model = V["model"].Str("");
 			B.Cal = V["cal"].Str("");
 			B.Captured = V["captured"].Str("");
+			const Json::Value Mls = V["mls"];
+			for (size_t J = 0; Mls.IsArray() && J < Mls.Count(); ++J)
+			{
+				B.Extra.push_back(Mls.At(J).Str(""));
+			}
 			OutBlocks.push_back(B);
 		}
 		const Json::Value Men = R["men"];
@@ -4983,6 +6278,8 @@ namespace LandKit
 			W.K = Man["k"].Int();
 			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
+			W.Model = Man["ml"].Str("");
+			ReadSwaps(Man["sw"], W.Swaps);
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
 			{
@@ -5031,19 +6328,26 @@ namespace LandKit
 		return FindBlock(BlockList, Id);
 	}
 
-	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError)
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError, const std::string& Carrier,
+		const std::map<std::string, std::string>& Choose)
 	{
 		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
-		// she wears her owner's coat)
-		const std::string ModelName = Role == "lorry" ? "Truck" : B.Model;
+		// she wears her owner's coat. Release 2: where the recording names a vehicle's own model (ml), she is drawn as
+		// that: an armoured infantry's carrier, a half-track of her army's or the lorry; a battery's self-propelled gun;
+		// an armoured block's tank destroyer)
+		const std::string ModelName = !Carrier.empty() ? Carrier : Role == "lorry" ? std::string("Truck") : B.Model;
 		if (ModelName.empty())
 		{
 			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
 			return false;
 		}
 		// (captured kit, on its switch: the captor's coat over the maker's, a look of her own)
-		const std::string Captured = Role != "lorry" && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
+		const std::string Captured = Role != "lorry" && Carrier.empty() && (bCapturedLook || bCapturedTest) ? B.Captured : std::string();
 		OutKey = ModelName + "|" + B.Nation + (Captured.empty() ? "" : "|from " + Captured);
+		for (const auto& Sw : Choose)
+		{
+			OutKey += "|" + Sw.first + "=" + Sw.second; // (her swaps the rules picked: a look of her own)
+		}
 		if (Looks.count(OutKey))
 		{
 			return true;
@@ -5063,7 +6367,8 @@ namespace LandKit
 				bLight = bLight || ModelName.find(L) != std::string::npos;
 			}
 			std::vector<std::string> Near;
-			if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			if (Role == "lorry") Near = { "Truck" }; // (a carrier not in the game yet: the lorry)
+			else if (B.Kind == "art" && Carrier.empty()) Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
 			else if (bLight || N == "JAP") Near = { "LightTank" };
 			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
 			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
@@ -5096,6 +6401,8 @@ namespace LandKit
 		{
 			D.Force["tilt"] = "off";
 		}
+		D.Choose = Choose;
+		D.bMarks = bMarks;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -5173,7 +6480,10 @@ namespace LandKit
 		// a self-propelled gun: the fates' tank ways name theirs, blow, burn or still). The table then picks how that end
 		// looks.
 		const Block* Of = BlockOf(W.Block);
-		const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+		// (by the model's file name, as performance-land.json keys it: her own where the recording names it, a tank
+		// destroyer's or a self-propelled gun's, else her block's)
+		const std::string Named = !W.Model.empty() && W.Role != "lorry" ? W.Model : Of ? Of->Model : M.Name;
+		const auto Odds = Fires.find(Named);
 		if (Kill && (Kill->Fate == "out" || Kill->Fate == "burn" || Kill->Fate == "blow"))
 		{
 			Bl.How = Kill->Fate == "out" ? "still" : Kill->Fate;
@@ -5197,11 +6507,22 @@ namespace LandKit
 			Bl.How.clear();
 			F = Picker->Choose(Bl);
 		}
-		Ends.push_back({ Index, Of ? Of->Model : M.Name, Bl.Aspect, Drawn, F.Key });
+		Ends.push_back({ Index, Named, Bl.Aspect, Drawn, F.Key });
 		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
 		return F.Key;
 	}
 
+
+	double Battle::BrewWaitOf(size_t V) const
+	{
+		// Effects (R2): her own wait between the least and the most, by her number (life's seconds, made the battle's)
+		if (!(BrewWaitMost > 0.0) || !(Life > 0.0))
+		{
+			return 0.0;
+		}
+		const double U = Unit01(Mix(FateSeed ^ 0xB5E3A17ull, static_cast<uint64_t>(V) + 1u, 0x5EC5u));
+		return std::max(0.0, BrewWaitLeast + (BrewWaitMost - BrewWaitLeast) * U) / Life;
+	}
 
 	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2)
 	{
@@ -5281,7 +6602,7 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError))
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError, Tracks[I].Model, Tracks[I].Swaps))
 			{
 				return false;
 			}
@@ -5289,13 +6610,34 @@ namespace LandKit
 		if (bLive)
 		{
 			// A live battle's header has no men yet: the models its blocks name are read now (and the lorry of a side
-			// with guns to tow), so its first pieces do not wait on them.
+			// with guns to tow; release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn
+			// with, "mls"), so its first pieces do not wait on them.
 			for (const Block& B : BlockList)
 			{
 				std::string Key;
 				if (!B.Model.empty() && (!LoadLook(B, "tank", Key, OutError) || (B.Kind == "art" && !LoadLook(B, "lorry", Key, OutError))))
 				{
 					return false;
+				}
+				for (const std::string& Look : B.Extra)
+				{
+					// ("Jeep|mg=off": the model and the swaps the rules pick for her)
+					std::map<std::string, std::string> Choose;
+					size_t Bar = Look.find('|');
+					const std::string Ml = Look.substr(0, Bar);
+					while (Bar != std::string::npos)
+					{
+						const size_t Next = Look.find('|', Bar + 1), Eq = Look.find('=', Bar + 1);
+						if (Eq != std::string::npos && Eq < Next)
+						{
+							Choose[Look.substr(Bar + 1, Eq - Bar - 1)] = Look.substr(Eq + 1, Next == std::string::npos ? std::string::npos : Next - Eq - 1);
+						}
+						Bar = Next;
+					}
+					if (!Ml.empty() && !LoadLook(B, Ml == "Truck" ? "lorry" : "tank", Key, OutError, Ml, Choose))
+					{
+						return false;
+					}
 				}
 			}
 		}
@@ -5324,6 +6666,8 @@ namespace LandKit
 		{
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
+			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
+			All[I].SmoothTanks = SmoothTanks;
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
@@ -5403,6 +6747,8 @@ namespace LandKit
 					W.K = Man["k"].Int();
 					W.J = std::max(0, Man["j"].Int(0));
 					W.Role = Role;
+					W.Model = Man["ml"].Str("");
+					ReadSwaps(Man["sw"], W.Swaps);
 					const Block* B = BlockOf(W.Block);
 					if (!B)
 					{
@@ -5410,7 +6756,7 @@ namespace LandKit
 						return false;
 					}
 					std::string Key;
-					if (!LoadLook(*B, Role, Key, OutError))
+					if (!LoadLook(*B, Role, Key, OutError, W.Model, W.Swaps))
 					{
 						return false;
 					}
@@ -5584,6 +6930,8 @@ namespace LandKit
 			Vehicle& Ve = All[V];
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
+			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
+			Ve.SmoothTanks = SmoothTanks;
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)

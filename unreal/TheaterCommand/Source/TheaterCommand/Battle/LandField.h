@@ -117,7 +117,8 @@ namespace LandField
 		std::map<std::string, std::string> Kit;
 		/**
 		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
-		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
+		 * frame rate: words between commas ("houses": the bocage's farmhouses, barns and byres built to the vehicles' detail, LandHouse, kit
+		 * models drawn by level in place of their plain built boxes; "church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
 		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
@@ -286,6 +287,55 @@ namespace LandField
 		Kit13,
 		Kit14,
 		Kit15,
+		Kit16,
+		Kit17,
+		Kit18,
+		Kit19,
+		Kit20,
+		Kit21,
+		Kit22,
+		Kit23,
+		Kit24,
+		Kit25,
+		Kit26,
+		Kit27,
+		Kit28,
+		Kit29,
+		Kit30,
+		Kit31,
+		Kit32,
+		Kit33,
+		Kit34,
+		Kit35,
+		Kit36,
+		Kit37,
+		Kit38,
+		Kit39,
+		Kit40,
+		Kit41,
+		Kit42,
+		Kit43,
+		Kit44,
+		Kit45,
+		Kit46,
+		Kit47,
+		Kit48,
+		Kit49,
+		Kit50,
+		Kit51,
+		Kit52,
+		Kit53,
+		Kit54,
+		Kit55,
+		Kit56,
+		Kit57,
+		Kit58,
+		Kit59,
+		Kit60,
+		Kit61,
+		Kit62,
+		Kit63,   // (the last kit slot: KitSlots in all, one after another from Kit0, before Haycock and the clutter; a region
+		         // names Kit0 to Kit19, the bocage's houses built to the vehicles' detail (the trial "houses") take any of them)
 		Haycock, // a mown meadow's hay forked into cocks to make, 1.2 to 1.6 m, in loose rows (the bocage's July)
 		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
@@ -311,6 +361,14 @@ namespace LandField
 		Clut5,
 		Count
 	};
+	/** The kit's slots, Kit0 to Kit63 one after another (a region names its slot K as Kit0 + K, from its first twenty; the
+	 * bocage's farmhouses, barns, byres, church and village houses built to the vehicles' detail, the trial "houses", one a
+	 * slot, from the first). */
+	constexpr int KitSlots = 64;
+	static_assert(static_cast<int>(Base::Kit0) + KitSlots == static_cast<int>(Base::Haycock), "the kit's slots run on from Kit0 to the haycock");
+	/** The tallest a region's low kit stands, metres (Region::KitLow: a balk's ridge, a bund): a man steps over it and a
+	 * tank rolls over it, so it may lie across a recorded men's way. */
+	constexpr double LowKitHigh = 0.25;
 
 	struct BaseMesh
 	{
@@ -440,6 +498,8 @@ namespace LandField
 		int WayGaps = 0;          // hedges opened where the recording's vehicles cross them
 		int Breaches = 0;         // hedgerows blown open where the recording's men went over them in numbers
 		int Houses = 0;           // houses, barns and byres (the church counted apart)
+		int HouseModels = 0;      // the farmhouses, barns, byres and church built to the vehicles' detail (the trial "houses"), and their kinds
+		int HouseKinds = 0;
 		int Damaged = 0;
 		bool bChurch = false;
 		int Farmsteads = 0;

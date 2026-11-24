@@ -118,6 +118,12 @@ public:
 	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
 	 */
 	TFunction<void(const FString&)> HandBack;
+	/**
+	 * (release 2, camera specials) The names corps have earned (nicknames.ts), by the campaign's corps id, where the map
+	 * shows them on the flags: given by the campaign before the battle opens. With -TheaterLandNickCard the film cards a
+	 * corps' name on its first kill it can show (LandEye World::Nickname, by the block's corps). Empty: no card.
+	 */
+	TMap<int32, FString> CorpsNicknames;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
@@ -185,6 +191,43 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/**
+	 * The wind (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually realistic and
+	 * epic?"), on with "-TheaterLandWind" (or "=strength", 1 as worked out from the recording's wind) or
+	 * "-TheaterLandEpic": the grass, the corn and a region's blades (BladeInk), its low leafy plants and bushes (BushInk)
+	 * and the shrubs' and trees' wood (WoodInk) on M_LandBlades (build_content.py), each bent by the gusts running over
+	 * the field, as the leaves (LeafInk) and the corn's stalks (StalkInk) are, and the gusts' sheen over the grass and
+	 * the corn (and the ground's, GroundInk). None, and nothing moves, with the wind off or M_LandBlades missing.
+	 */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BladeInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BushInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WoodInk;
+	/** The art director's round 1 (23 November): the ripe grain's own (GrainInk: the wheat, bending toward the ear and
+	 * nodding back, its sheen stronger), the lively trees' (LivelyInk and their leaves LivelyLeafInk: poplars, birches,
+	 * willows, bamboo, two to three times an oak's sway, their leaves quicker) and the palms' (PalmInk, PalmLeafInk:
+	 * the fronds lifting and tossing). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GrainInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LivelyLeafInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PalmLeafInk;
+	/** The clouds' shadows on the field (M_LandCloudShade, the light function on the battle's sun), on with
+	 * "-TheaterLandCloudShadows" (or "=darkness", the sun's share left under a cloud, 0.2) or "-TheaterLandEpic". */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudShadeInk;
+	bool bWindOn = false;
+	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low (under 25 degrees) before the
+	 * lens ("-TheaterLandSunShafts", or "=bloom", 0.2; or "-TheaterLandEpic"). */
+	bool bSunShafts = false;
+	float SunShaftBloom = 0.2f;
 
 	// ---- The ground (LandField) ----
 	/** One drawn square of the field (or of the far ring): its ground at two levels, what stands on it, and the
@@ -320,6 +363,9 @@ private:
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> CraterMeshes;
+	/** Effects (R2): the fighters on call, one mesh a plane by its key (FlyOver). */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UProceduralMeshComponent>> AirSupportMeshes;
 	/** The track marks (LandCrater::Ruts), the same way: one mesh a 64 m patch, a section for each 48 pieces, sent again
 	 * a quarter second after a piece is laid in it. */
 	UPROPERTY()
@@ -366,6 +412,8 @@ private:
 		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
 		int32 BankCopy = -1, BankSlot = -1;
 		float BankFrame[12] = {};
+		/** Effects (R2): his crowd mesh's number when his triangles were made (LandMen::Crowd::MeshNo: a gore fall swaps it). */
+		uint32 MeshNo = 0;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
@@ -546,7 +594,9 @@ private:
 	TObjectPtr<UTexture2D> FlagDefence;
 
 	// ---- What the table had before the battle took its place (as the air battle keeps it) ----
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White;
+		// (the wind and the clouds' shadows, 23 November: the sun's light function and shafts as the table had them)
+		TWeakObjectPtr<UMaterialInterface> Function; float FunctionFade = 0.0f, FunctionDisabled = 0.0f; bool bShaftBloom = false, bShaftOcclusion = false; float BloomScale = 0.0f, BloomThreshold = 0.0f, ShaftDark = 0.0f; FColor BloomTint = FColor::White; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = true; FLinearColor Lower = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -679,6 +729,12 @@ private:
 	};
 	TArray<FShot> Shots;
 	int32 ShotsTaken = 0;
+	/** The camera specials in a picture run (release 2): the special on the screen now (LandEye::Special as a number, -1
+	 * none), since when (real seconds), whether its still is taken, and how many were. */
+	int32 SpStillKind = -1;
+	double SpStillFrom = 0.0;
+	bool bSpStillTaken = false;
+	int32 SpStills = 0;
 	double QuitAt = -1.0, CardShotAt = -1.0;
 	bool bCardShot = false;
 
@@ -810,6 +866,18 @@ private:
 	 * over her tailboard, and her tailboard dropped as her first man gets down (after the vehicles are posed, before the
 	 * men are updated). */
 	void RideLorries();
+	/** Effects (R2): the crews of knocked-out tanks getting out, -TheaterLandBailOut (LandBail). */
+	void BailOut();
+	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; Battle/LandBattleAir.cpp):
+	 * each plane drawn where the plan has it, its guns, the ground's guns firing up at it, and the one lost going down. */
+	void FlyOver();
+	/** The men on each light car and motorcycle from FromVehicle on (release 2's jeeps, field cars and motorcycles): a
+	 * rider in the crowd for each seat her kind fills that his army's infantry file has a clip for. */
+	void SeatLight(int32 FromVehicle);
+	/** Each of them seated and posed for this frame (with RideTanks). */
+	void RideLight();
+	/** The lorries' and half-tracks' benches as they stand now, for the men aboard (FLandBattleState::Carriers). */
+	void SeatCarriers();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

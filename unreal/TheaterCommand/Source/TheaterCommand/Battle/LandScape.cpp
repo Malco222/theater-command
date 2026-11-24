@@ -171,6 +171,9 @@ namespace LandScape
 		case Look::Island: return "island";
 		case Look::Farmland: return "farmland";
 		case Look::Dry: return "drysteppe";
+		case Look::Rice: return "rice";
+		case Look::America: return "america";
+		case Look::Plain: return "plain";
 		default: return "";
 		}
 	}
@@ -182,6 +185,9 @@ namespace LandScape
 		if (Word == "mediterranean" || Word == "drysouth" || Word == "italy") return Look::Med;
 		if (Word == "pacific" || Word == "beach" || Word == "atoll") return Look::Island;
 		if (Word == "dry" || Word == "mongolia" || Word == "khalkhin") return Look::Dry;
+		if (Word == "paddy" || Word == "paddies" || Word == "china" || Word == "monsoon") return Look::Rice;
+		if (Word == "usa" || Word == "midwest" || Word == "cornbelt" || Word == "northamerica") return Look::America;
+		if (Word == "dryplain" || Word == "manchuria" || Word == "northchina" || Word == "india") return Look::Plain;
 		return Look::Count;
 	}
 
@@ -209,6 +215,23 @@ namespace LandScape
 		if (F.Steppe.bOn) return Look::Steppe;
 		const char* C = ClimateAt(F.Lat, F.Lon);
 		if (F.Terrain == "desert" || Is(C, "desert")) return Look::Desert;
+		// Rice country (release 2, on trial "rice" until the art director passes it and the Mac holds its frame rate):
+		// central and southern China north of the Burma and Indochina boxes, Korea, Japan south of Hokkaido and the
+		// Ryukyus; a beach or an islet there keeps the island's. Burma's, Siam's, Tonkin's and the Mekong's paddies stay
+		// the jungle's mainland look.
+		if (F.Tried("rice") && F.Terrain != "island" && F.Terrain != "beach" &&
+			((Is(C, "monsoon") && F.Lat >= 22.0 && F.Lon >= 98.0) || (Is(C, "temperate") && F.Lon > 124.0 && F.Lon < 131.5 && F.Lat > 33.0 && F.Lat < 42.0)))
+			return Look::Rice;
+		// The dry plains (release 2, on trial "plain"): the North China plain, the Indus and the plains of India (the
+		// climate's dry plain) and Manchuria's prairie; a beach or an islet keeps the island's.
+		if (F.Tried("plain") && F.Terrain != "island" && F.Terrain != "beach" &&
+			(Is(C, "dryplain") || (Is(C, "prairie") && F.Lon > 118.0 && F.Lon < 132.0 && F.Lat > 40.0 && F.Lat < 50.0)))
+			return Look::Plain;
+		// North America's farm country (release 2, on trial "america"): the temperate belt from the Pacific coast to
+		// Newfoundland; a beach or an islet keeps the island's.
+		if (F.Tried("america") && F.Lon > -125.0 && F.Lon < -52.0 && F.Lat > 28.0 && F.Lat < 56.0 &&
+			(Is(C, "temperate") || Is(C, "prairie")) && F.Terrain != "island" && F.Terrain != "beach")
+			return Look::America;
 		if (Is(C, "drysouth")) return Look::Med;
 		if (Is(C, "jungle") || Is(C, "monsoon") || Is(C, "savanna"))
 		{
@@ -236,7 +259,7 @@ namespace LandScape
 
 	bool LeaflessOf(const LandField::Field& F, Look L)
 	{
-		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland) return false;
+		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland && L != Look::Rice && L != Look::America && L != Look::Plain) return false;
 		if (F.Month < 1 || F.Month > 12) return false;
 		const double Lat = std::fabs(F.Lat);
 		if (Lat < 28.0) return false;
@@ -263,6 +286,13 @@ namespace LandScape
 		else if (F.Terrain == "hills") W += 0.1;
 		if (L == Look::Med) W = F.Terrain == "mountain" ? 0.6 : F.Terrain == "hills" ? 0.3 : 0.0;
 		if (L == Look::Dry) W *= 0.75; // (the dry steppe's winter is hard, but its snow thin and blown)
+		// (rice country's winter by its latitude alone: none on the Yangtze's delta, a cold January in Korea and north Honshu)
+		if (L == Look::Rice) W = Smooth(30.0, 44.0, Lat) + (F.Terrain == "mountain" ? 0.3 : F.Terrain == "hills" ? 0.1 : 0.0);
+		// (the American farm belt's winter: continental, snow from Iowa and Ohio north, thinner and blown on the plains)
+		if (L == Look::America)
+			W = Smooth(35.0, 45.0, Lat) * (Lon < -96.5 ? 0.85 : 1.0) + (F.Terrain == "mountain" ? 0.3 : F.Terrain == "hills" ? 0.1 : 0.0);
+		// (the dry plains: Manchuria's long hard winter; the North China plain's dry and mostly bare; none in India)
+		if (L == Look::Plain) W = (Lon < 95.0 ? 0.0 : Smooth(37.0, 47.0, Lat)) + (F.Terrain == "mountain" ? 0.3 : F.Terrain == "hills" ? 0.1 : 0.0);
 		const int M = F.Month;
 		const double ByMonth = (M == 12 || M == 1 || M == 2) ? 1.0 : (M == 11 || M == 3) ? (W > 0.85 ? 0.9 : 0.5) : (M == 10 || M == 4) ? (W > 0.95 ? 0.4 : 0.0) : 0.0;
 		const double Cold = W * ByMonth;
@@ -335,6 +365,36 @@ namespace LandScape
 			A.bSet = true;
 			A.SkyLift = 3.2; // (the art director on 849c1bc1: Voronezh's zenith 63,71,85 under a sun 52 degrees up)
 			break;
+		case Look::Rice:
+			// (monsoon.json's A0A898 at 3,500 m: a damp grey-green haze over the paddies, the hills behind in steps; a
+			// grade between the jungle's and the bocage's, a little more contrast than the jungle's steam)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.62, 0.66, 0.60);
+			Ink(A.HazeOvercast, 0.52, 0.54, 0.52);
+			A.HazeDensity = 0.0072;
+			A.SkyDust = 0.55;
+			Grade(0.55, 0.62, 1.25, -0.35, 0.5, 1.0, 1.0);
+			break;
+		case Look::America:
+			// (the farm belt's summer: a clear blue-grey continental haze over the corn, the sight long; more contrast
+			// than the bocage's, the gain a touch warm)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.66, 0.70, 0.76);
+			Ink(A.HazeOvercast, 0.54, 0.56, 0.58);
+			A.HazeDensity = 0.0045;
+			A.SkyDust = 0.7;
+			Grade(0.52, 0.60, 1.3, -0.45, 0.55, 1.01, 0.98);
+			break;
+		case Look::Plain:
+			// (dryplain.json's C4B898 at 4,000 m: the loess's dust in the air, a warm yellow haze over the plain; a grade
+			// a little warm, more contrast than the rice country's)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.77, 0.72, 0.60);
+			Ink(A.HazeOvercast, 0.62, 0.60, 0.55);
+			A.HazeDensity = 0.006;
+			A.SkyDust = 1.0;
+			Grade(0.53, 0.62, 1.28, -0.5, 0.55, 1.02, 0.97);
+			break;
 		case Look::Dry:
 			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
 			// sight long, some 8,500 m (the art director's Khalkhin Gol read: a third less haze, so the Khalkha bluffs carry);
@@ -372,6 +432,8 @@ namespace LandScape
 			A.Stops = Lerp(A.Stops, -0.7, K);
 			A.Toe = Lerp(A.Toe, 0.55, K);
 		}
+		// (the farm belt's winter air dry and clear: the windbreaks and the elevator carry over the snow)
+		if (L == Look::America) A.HazeDensity = std::min(A.HazeDensity, 0.0072);
 		return A;
 	}
 
@@ -389,6 +451,9 @@ namespace LandScape
 		switch (Which())
 		{
 		case Look::Jungle: return 1;
+		case Look::Rice: return 1;
+		case Look::America: return 2;
+		case Look::Plain: return 1;
 		case Look::Farmland: return Fd.Lat > 55.0 ? 3 : 2;
 		case Look::Med: return Fd.Terrain.find("mount") != std::string::npos ? 4 : 0;
 		default: return 0;
@@ -452,7 +517,7 @@ namespace LandScape
 		const std::unique_ptr<Region> R = Make(Pick(F), F, F.Seed);
 		if (!R) return false;
 		OutFolder = R->Folder();
-		for (int K = 0; K < 16; ++K)
+		for (int K = 0; K < LandField::KitSlots; ++K)
 			if (const char* Name = R->KitName(K); Name && !R->KitBuilt(K))
 				if (std::find(OutNames.begin(), OutNames.end(), Name) == OutNames.end()) OutNames.push_back(Name);
 		return !OutFolder.empty() && !OutNames.empty();
@@ -468,6 +533,9 @@ namespace LandScape
 		case Look::Island: return MakeTropic(F, S, true);
 		case Look::Farmland: return MakeFarm(F, S);
 		case Look::Dry: return MakeDry(F, S);
+		case Look::Rice: return MakeAsia(F, S);
+		case Look::America: return MakeAmerica(F, S);
+		case Look::Plain: return MakePlain(F, S);
 		default: return nullptr;
 		}
 	}

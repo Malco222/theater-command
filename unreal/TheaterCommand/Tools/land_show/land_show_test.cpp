@@ -1313,6 +1313,121 @@ int main(int Argc, char** Argv)
 			"up in the hatch or at the roof gun, his head's top %.2f to %.2f m over the rim\n", Checked, Crews.size(), TopLo, TopHi);
 	}
 
+	// The men on the light cars and motorcycles (release 2: Crowd::AddRider with RiderFileOf, as ALandBattle::SeatLight
+	// seats them): in each infantry file with seat clips, every model's driver has a loop and a death; each seat clip on
+	// its seat sits him there (his head over the seat, never sunk under it or far off it), his gun as the clip says, nothing
+	// NaN; and a rider's file is his army's own, else its stand-in, in the battle's dress.
+	{
+		std::printf("\nTHE MEN ON THE LIGHT CARS AND MOTORCYCLES (riders)\n");
+		Crowd C4;
+		C4.SetLife(Life);
+		for (const auto& KV : Files) C4.AddSoldier(KV.first, KV.second);
+		C4.ReadArmies(ReadFile(Argv[3]), Err);
+		C4.Build(RecText, GroundAt, Err);
+		const int Before = C4.Count();
+		static const char* const Pieces[] = { "Jeep", "Kubelwagen", "GAZ67", "Fiat508", "Kurogane", "FieldCar", "R75", "M72", "Rikuo", "WLA", "M20", "Alce", "Motorcycle" };
+		int Checked = 0, Riders = 0, Seats = 0, WaysOut = 0;
+		double SitLo = 1e9, SitHi = -1e9;
+		for (const auto& KV : Files)
+		{
+			const Soldier& S = *KV.second;
+			bool bAny = false;
+			for (const Clip& Cl : S.Clips) bAny = bAny || !Cl.Seats.empty();
+			if (!bAny) { std::printf("  soldier_%s.json: no seat clips yet: passed over\n", KV.first.c_str()); continue; }
+			// (every model's driver: his loop and his death)
+			for (const char* P : Pieces)
+			{
+				bool bLoop = false, bDeath = false;
+				for (const Clip& Cl : S.Clips)
+					for (const Clip::Seat& St : Cl.Seats)
+						if (St.Piece == P && St.Socket == "driver") (Cl.bLoop ? bLoop : bDeath) = true;
+				if (!bLoop || !bDeath) Fail("soldier_%s.json: the %s's driver has %s", KV.first.c_str(), P, !bLoop ? "no seat loop" : "no death");
+			}
+			const int Man = C4.AddRider(KV.first, KV.first.substr(0, 3), 0x11E7ull + static_cast<uint64_t>(Riders));
+			if (Man < 0 || !C4.IsRider(Man)) { Fail("soldier_%s.json: no rider made", KV.first.c_str()); continue; }
+			++Riders;
+			const int Head = S.BoneIndex("head"), Hips = S.BoneIndex("pelvis");
+			const int Gun = S.WeaponBone();
+			for (size_t Ci = 0; Ci < S.Clips.size(); ++Ci)
+			{
+				const Clip& Cl = S.Clips[Ci];
+				if (Cl.Seats.empty()) continue;
+				++Seats;
+				// (on its first seat: the socket facing east, 1.0 m up; his root the socket moved by the offset)
+				const Clip::Seat& St = Cl.Seats.front();
+				const double SX = 300.0, SY = 200.0, SZ = 1.0;
+				Crowd::Ride R;
+				R.bShown = true;
+				R.Clip = static_cast<int>(Ci);
+				float* M = R.Seat.R;
+				M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;    // forward east, right south, up
+				M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+				M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+				R.Seat.T[0] = static_cast<float>(SX + St.Offset.X);
+				R.Seat.T[1] = static_cast<float>(SY - St.Offset.Y);
+				R.Seat.T[2] = static_cast<float>(SZ + St.Offset.Z);
+				const float Times[3] = { 0.1f, Cl.Long * 0.5f, Cl.Long - 0.05f };
+				for (int Ti = 0; Ti < 3; ++Ti)
+				{
+					R.Time = Times[Ti];
+					C4.SetRide(Man, R);
+					C4.Update(1.0 + 0.1 * Ti);
+					++Checked;
+					if (!C4.Visible(Man)) { Fail("%s %s on %s: not shown", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str()); continue; }
+					const Xform* F = C4.FramesOf(Man);
+					const Vec3 HeadAt = F[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+					const Vec3 HipsAt = F[Hips].Point(S.Bones[static_cast<size_t>(Hips)].Head);
+					if (!Finite(HeadAt) || !Finite(HipsAt)) { Fail("%s %s: NaN posed", KV.first.c_str(), Cl.Name.c_str()); continue; }
+					const double Over = HeadAt.Z - R.Seat.T[2];
+					if (Cl.bLoop) { SitLo = std::min(SitLo, Over); SitHi = std::max(SitHi, Over); }
+					// (a way out, the soldiers thread's out_tail, out_door(s) and bail_ clips: he leaves his seat by design, his
+					// root going with him to the ground or onto the hull, so only his start is on his seat)
+					const bool bWayOut = Cl.Name.rfind("out_", 0) == 0 || Cl.Name.rfind("bail_", 0) == 0;
+					if (bWayOut && Ti > 0)
+					{
+						++WaysOut;
+					}
+					// (sitting, his head some 0.6 to 0.9 m over his seat; the jeep's gunner standing on her floor, 1.5 m and more;
+					// slumped, lower, never under the seat by more than a car's door)
+					else if (Cl.bLoop ? (Over < 0.35 || Over > 1.95) : (Over < -0.6 || Over > 1.95))
+						Fail("%s %s on %s at %.2f s: his head %.2f m over the seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti], Over);
+					if (!(bWayOut && Ti > 0) && (std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]) > 1.1 || std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]) > 0.8))
+						Fail("%s %s on %s at %.2f s: his head %.2f m and hips %.2f m off his seat", KV.first.c_str(), Cl.Name.c_str(), St.Piece.c_str(), Times[Ti],
+							std::hypot(HeadAt.X - R.Seat.T[0], HeadAt.Y - R.Seat.T[1]), std::hypot(HipsAt.X - R.Seat.T[0], HipsAt.Y - R.Seat.T[1]));
+					const bool bStowed = Gun >= 0 && F[Gun].R[0] == 0.f && F[Gun].R[4] == 0.f && F[Gun].R[8] == 0.f;
+					if (Gun >= 0 && bStowed != (Cl.Weapon == "none"))
+						Fail("%s %s: his gun %s, the clip's weapon \"%s\"", KV.first.c_str(), Cl.Name.c_str(), bStowed ? "put away" : "drawn", Cl.Weapon.c_str());
+					for (int L = 0; L < LodCount; ++L)
+					{
+						const int P = C4.PointsOf(Man, static_cast<Lod>(L));
+						std::vector<float> SkAt(static_cast<size_t>(P) * 3), SkFa(static_cast<size_t>(P) * 3);
+						C4.Skin(Man, static_cast<Lod>(L), SkAt.data(), SkFa.data());
+						for (const float V : SkAt) if (!std::isfinite(V)) { Fail("%s %s: NaN skinned", KV.first.c_str(), Cl.Name.c_str()); break; }
+					}
+				}
+			}
+			Crowd::Ride Off;
+			C4.SetRide(Man, Off);
+			C4.Update(3.0);
+			if (C4.Visible(Man)) Fail("%s: a seated man shown when the scene hides him", KV.first.c_str());
+		}
+		// (a rider's file: his army's own where it is here, else armies.json's stand-in or the Pole's; always one here)
+		for (const char* Army : { "GER", "USA", "SOV", "UK", "ITA", "JAP", "FIN", "HUN" })
+		{
+			std::string Row;
+			const std::string File = C4.RiderFileOf(Army, Row);
+			if (File.empty() || !C4.SoldierFile(File)) Fail("RiderFileOf(%s): \"%s\", not a file here", Army, File.c_str());
+			else if (Files.count(Army) && File.rfind(Army, 0) != 0) Fail("RiderFileOf(%s): %s, not his own", Army, File.c_str());
+			else std::printf("  a %s rider wears soldier_%s, painted by armies.json's \"%s\"\n", Army, File.c_str(), Row.c_str());
+		}
+		bool bSame = true;
+		for (int Man = 0; Man < Before && bSame; ++Man) bSame = !C4.IsRider(Man);
+		if (!bSame || C4.Count() != Before + Riders) Fail("the seated men changed the battle's men (%d men, %d before)", C4.Count(), Before);
+		if (Riders > 0)
+			std::printf("  %d poses of %d seat clips in %d files checked (on his seat, his gun as the clip says, shown as told; %d poses of a way out off it by design); sitting, his head %.2f to %.2f m over the seat\n",
+				Checked, Seats, Riders, WaysOut, SitLo, SitHi);
+	}
+
 	// Frame time.
 	{
 		double Sum = 0.0;

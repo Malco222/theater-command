@@ -1,0 +1,146 @@
+{
+ "made": "2026-11-23T18:49:36Z",
+ "jump": {
+  "takeoff": 0.44,
+  "touchdown": 1.094
+ },
+ "hatch": [
+  {
+   "at": "Sherman commander",
+   "deepest_m": 0.0171,
+   "where": [
+    0.05,
+    "hand_l",
+    [
+     0.088,
+     0.278,
+     1.251
+    ]
+   ],
+   "points_past_1.2cm": 36,
+   "grip_gap_m": 0.0,
+   "ring_m": 0.03,
+   "ring_at": [
+    0.7,
+    "fingers_l"
+   ]
+  },
+  {
+   "at": "PanzerIV commander",
+   "deepest_m": 0.0225,
+   "where": [
+    0.1,
+    "spine_02",
+    [
+     -0.056,
+     0.042,
+     1.195
+    ]
+   ],
+   "points_past_1.2cm": 262,
+   "grip_gap_m": 0.0,
+   "ring_m": 0.0311,
+   "ring_at": [
+    0.5,
+    "pelvis"
+   ]
+  },
+  {
+   "at": "Tiger commander",
+   "deepest_m": 0.0218,
+   "where": [
+    0.1,
+    "chest",
+    [
+     0.052,
+     0.0,
+     1.448
+    ]
+   ],
+   "points_past_1.2cm": 107,
+   "grip_gap_m": 0.0,
+   "ring_m": 0.0349,
+   "ring_at": [
+    0.65,
+    "thumb_r"
+   ]
+  }
+ ],
+ "ground": {
+  "bail_climb_out": {
+   "lowest_m": -0.0108,
+   "at": [
+    0.933,
+    "calf_r"
+   ]
+  },
+  "bail_step_down": {
+   "lowest_m": -0.0069,
+   "at": [
+    0.533,
+    "ball_r"
+   ],
+   "landed_highest_m": 0.0
+  },
+  "bail_jump_down": {
+   "lowest_m": -0.0014,
+   "at": [
+    1.1,
+    "foot_r"
+   ],
+   "landed_highest_m": 0.0
+  },
+  "burning_run": {
+   "lowest_m": -0.0176,
+   "at": [
+    0.933,
+    "ball_l"
+   ]
+  },
+  "burning_fall_roll": {
+   "lowest_m": -0.0338,
+   "at": [
+    0.8,
+    "calf_l"
+   ]
+  }
+ },
+ "ground_pass": true,
+ "fastest_turn": {
+  "bail_climb_out": [
+   38.4,
+   [
+    0.667,
+    "calf_r"
+   ]
+  ],
+  "bail_step_down": [
+   22.1,
+   [
+    0.567,
+    "calf_r"
+   ]
+  ],
+  "bail_jump_down": [
+   35.4,
+   [
+    0.367,
+    "thumb_r"
+   ]
+  ],
+  "burning_run": [
+   56.5,
+   [
+    1.433,
+    "hand_l"
+   ]
+  ],
+  "burning_fall_roll": [
+   63.2,
+   [
+    0.967,
+    "hand_r"
+   ]
+  ]
+ }
+}

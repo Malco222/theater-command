@@ -7,7 +7,7 @@
 // card's odds are the field's.
 
 import type { CrewMarks } from './crews';
-import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
+import type { Calibre, ForceKit, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
 import { LAND, TEAMS, type Kind, type Team } from './rules';
 import { turnToDate } from '../../core/ticket';
@@ -128,6 +128,8 @@ export interface LandUnit extends UnitBase {
   worth?: number;
   /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
   crew?: CrewMarks;
+  /** What its corps carries, as its nation built and researched it ("Units decide", ForceKit); absent, the history start's mix. */
+  kit?: ForceKit;
   /**
    * What its guns throw, as the explosions sheet sizes it (shells.ts): data for the 3D game, never read by the fight.
    * None where it has only small arms.
@@ -377,6 +379,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         ...(f.cross === false ? { dry: true } : {}),
         ...(f.wear !== undefined ? { wear: f.wear } : {}),
         ...(f.fresh ? { fresh: f.fresh } : {}),
+        ...(f.kit ? { kit: f.kit } : {}),
       });
     }
   });

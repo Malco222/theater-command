@@ -96,6 +96,19 @@ namespace
 		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
 		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
 		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
+		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
+		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
+		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },
+		// (Self-propelled guns and tank destroyers, release 2: Brian, 23 November 07:01Z, yes to "a tank destroyer and a
+		// self-propelled gun for each major army"; looks only, a campaign battle's only, off until the Mac and the art
+		// director pass them)
+		{ TEXT("spg"), TEXT("Self-propelled guns"), TEXT("Some of an army's field guns are drawn as its self-propelled howitzers (the American M7, the British Sexton, the German Hummel, the Soviet SU-76), driving with the battery instead of towed. Campaign battles only. Off: every gun is towed."), TEXT("TheaterLandNoSpg"), false, TEXT("TheaterLandRuleSpg") },
+		{ TEXT("td"), TEXT("Tank destroyers"), TEXT("One vehicle in some armoured units is drawn as its army's tank destroyer or assault gun (the M10, the SU-85, the Semovente), fighting as its unit does. Campaign battles only. Off: the tanks alone."), TEXT("TheaterLandNoTd"), false, TEXT("TheaterLandRuleTd") },
+		// (Armoured cars and AA vehicles, release 2: the same yes, item 3; looks only, a campaign battle's only, off until the
+		// Mac and the art director pass them)
+		{ TEXT("cars"), TEXT("Armoured cars"), TEXT("Some units bring their army's armoured cars (the German Sd.Kfz. 222, the American M8, the rest a generic car), out ahead on the flanks until the enemy is near, then back behind the unit. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoCars"), false, TEXT("TheaterLandRuleCars") },
+		{ TEXT("aa"), TEXT("AA vehicles"), TEXT("Some units and batteries bring their army's anti-aircraft vehicles (the American M16, the German flak half-track, the rest a flak lorry), kept behind them. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoAa"), false, TEXT("TheaterLandRuleAa") },
+		{ TEXT("light"), TEXT("Jeeps and motorcycles"), TEXT("Units bring their army's jeeps, field cars and motorcycles (the Willys jeep, the Kubelwagen, the BMW with its sidecar and more), riding out ahead with the screen or parked behind, despatch riders coming and going. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoLight"), false, TEXT("TheaterLandRuleLight") },
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		// (Men in lorries, release 1.5: Brian, 23 November 14:10Z, "troops are stuck under the truck", and 15:50Z "yes" to the
 		// ride and the hop out in 1.5 if it passes the pre-check and his Mac in time. The drill seats each lorried man on

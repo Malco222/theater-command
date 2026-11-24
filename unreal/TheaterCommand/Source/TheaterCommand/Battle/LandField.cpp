@@ -1,5 +1,7 @@
 #include "Battle/LandField.h"
 
+#include "Battle/LandHouse.h"
+
 #include "Battle/LandScape.h"
 #include "Battle/LandSteppe.h"
 
@@ -484,8 +486,9 @@ namespace LandField
 			uint64_t Key = 0;
 			double Floor = 0.0, Foot = 0.0;
 			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
-			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit15)
+			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit19)
 			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
+			int Model = -1;      // (the trial "houses": the kit slot of the farmhouse built to the vehicles' detail standing here)
 		};
 
 		/** A farmstead's yard: its frame (U along the lane, V away from it) and its box in that frame. */
@@ -532,6 +535,8 @@ namespace LandField
 		// The plots the parcels are cut from (one lattice of blocks over the field, the band and the ring, the same
 		// everywhere): the frame's turn.
 		double Theta0 = 0.0;
+		// (a region's survey grid: the plots square to the compass, unwarped, in half-mile blocks cut square at their halves)
+		bool bSurvey = false;
 		std::vector<YardBox> Yards;
 		std::vector<V2> OrchardAt;
 
@@ -545,6 +550,14 @@ namespace LandField
 		std::vector<House> Houses;
 		std::vector<Footing> Footings;      // the kit houses' (SeatKitHouses)
 		std::vector<Col> FootingPaints;     // and each one's colour
+		/** The farmhouses, barns, byres, church and village houses built to the vehicles' detail (the trial "houses"), one a kind: kit slot HouseSlot0 + K is HouseModels[K]
+		 * (HouseSlot0 the bocage's 0; a region's the first slot after its own kit's). */
+		std::vector<LandHouse::Spec> HouseModels;
+		int HouseSlot0 = 0;
+		/** A house slot that stands for a region's kit it set down as a thing (the east's burnt-out houses): that kit's slot (-1
+		 * none) and the scale it was planted at, so the slot keeps the thing's shape in sight. */
+		std::vector<int> HouseFrom;
+		std::vector<double> HouseFromScale, HouseFromScaleZ;
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
 		std::vector<int> WayOf;       // each way piece's way (Fd.Ways' index)
@@ -669,6 +682,15 @@ namespace LandField
 		void MakeRaster();
 		void MakeWays();
 		double WayRoom(V2 P, bool bVehicles = false) const;
+		/** Whether B is a slot of the region's kit it calls low (Region::KitLow). */
+		bool KitLowAt(Base B) const
+		{
+			const int K = static_cast<int>(B) - static_cast<int>(Base::Kit0);
+			return Rg && K >= 0 && K < KitSlots && Rg->KitLow(K);
+		}
+		/** A region's low kit standing taller than LowKitHigh after all, once its models are built: taken up where it lies
+		 * on a recorded men's way. */
+		void TakeUpTallLowKit();
 		void MakeSites();
 		struct House ChurchYard(V2 C, double Yaw) const;
 		void LayChurch(V2 C, double Yaw, int Hurt);
@@ -1433,7 +1455,8 @@ namespace LandField
 			// Wander: long slow bends of up to a dozen metres either way over some 250 m (within the rules' road cells
 			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
 			// little in the village, whose houses front the lane.
-			const double Total = LineLength(L);
+			// (none where the land was surveyed: its roads run the section lines straight)
+			const double Total = LineLength(L), Wanders = Rg && Rg->Surveyed() ? 0.0 : 1.0;
 			Line W(L.size());
 			double S = 0.0;
 			for (size_t K = 0; K < L.size(); ++K)
@@ -1443,7 +1466,7 @@ namespace LandField
 				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
 				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
 				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
-				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
+				W[K] = L[K] + Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
 			}
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
@@ -1655,6 +1678,21 @@ namespace LandField
 			}
 		return Room;
 	}
+
+	void Ground::Impl::TakeUpTallLowKit()
+	{
+		if (!Rg) return;
+		for (int K = 0; K < KitSlots; ++K)
+		{
+			if (!Rg->KitLow(K)) continue;
+			const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
+			const double High = Bases[static_cast<size_t>(B)].Height;
+			std::vector<Placed>& L = Inst[static_cast<size_t>(B)];
+			const size_t Was = L.size();
+			L.erase(std::remove_if(L.begin(), L.end(), [&](const Placed& P) { return High * P.ScaleZ > LowKitHigh && WayRoom({ P.X, P.Y }) < 0.8; }), L.end());
+			Count.Instances -= Was - L.size();
+		}
+	}
 }
 
 namespace LandField
@@ -1665,6 +1703,8 @@ namespace LandField
 	{
 		/** The plots' blocks: a lattice this far apart (along and across the frame), each corner jittered. */
 		constexpr double BlockU = 560.0, BlockV = 500.0, BlockJitter = 0.22;
+		/** The survey's blocks (Region::Surveyed): half a mile, square to the compass. */
+		constexpr double SurveyBlock = 804.67;
 		/**
 		 * A plot is cut again while it is larger than a size drawn between these (square metres): fields of some 2 to 5
 		 * hectares, so that at a man's eye each closes in at 100 to 200 m across (the art director's sight lines).
@@ -1685,6 +1725,9 @@ namespace LandField
 	void Ground::Impl::MakePlots()
 	{
 		Theta0 = (Unit(Hash(Seed, 0x7E7A)) < 0.5 ? 0.25 : 0.75) * Pi + (Unit(Hash(Seed, 0x7E7B)) - 0.5) * (Pi / 6.0);
+		// (North America's township survey: the fields square to the compass on the half-mile grid; Region::Surveyed)
+		bSurvey = Rg && Rg->Surveyed();
+		if (bSurvey) Theta0 = 0.0;
 	}
 
 	/**
@@ -1693,6 +1736,7 @@ namespace LandField
 	 */
 	V2 Ground::Impl::PlotFrame(double X, double Y) const
 	{
+		if (bSurvey) return { X, Y };
 		const double WX = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A01) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A02);
 		const double WY = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A03) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A04);
 		const double QX = X + WX, QY = Y + WY, C = std::cos(Theta0), S = std::sin(Theta0);
@@ -1719,11 +1763,13 @@ namespace LandField
 			return (Id % 120000) * 8 + Crop;
 		}
 		const V2 P = PlotFrame(X, Y);
-		auto Corner = [this](int64_t I, int64_t J) {
+		// (the survey's: half-mile blocks, square, their corners where the survey put them)
+		const double BU = bSurvey ? SurveyBlock : BlockU, BV = bSurvey ? SurveyBlock : BlockV, Jit = bSurvey ? 0.0 : BlockJitter;
+		auto Corner = [this, BU, BV, Jit](int64_t I, int64_t J) {
 			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
-			return V2{ (static_cast<double>(I) + 2.0 * BlockJitter * (Unit(H) - 0.5)) * BlockU, (static_cast<double>(J) + 2.0 * BlockJitter * (Unit(Mix(H)) - 0.5)) * BlockV };
+			return V2{ (static_cast<double>(I) + 2.0 * Jit * (Unit(H) - 0.5)) * BU, (static_cast<double>(J) + 2.0 * Jit * (Unit(Mix(H)) - 0.5)) * BV };
 		};
-		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BlockU)), J0 = static_cast<int64_t>(std::floor(P.Y / BlockV));
+		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BU)), J0 = static_cast<int64_t>(std::floor(P.Y / BV));
 		V2 Q[4];
 		int64_t BI = I0, BJ = J0;
 		double BestIn = -1e18;
@@ -1752,8 +1798,9 @@ namespace LandField
 			bool bTurn = L13 > L02;
 			if (std::max(L02, L13) < 1.3 * std::min(L02, L13) && Unit(Hash(Key, 2)) < 0.3) bTurn = !bTurn;
 			const V2 R[4] = { Q[bTurn ? 1 : 0], Q[bTurn ? 2 : 1], Q[bTurn ? 3 : 2], Q[bTurn ? 0 : 3] };
-			const double A = 0.34 + 0.32 * Unit(Hash(Key, 3));
-			const double B = std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
+			// (the survey cuts a block square at its half: the eighty, the forty, the twenty)
+			const double A = bSurvey ? 0.5 : 0.34 + 0.32 * Unit(Hash(Key, 3));
+			const double B = bSurvey ? 0.5 : std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
 			const V2 Cut0 = Lerp2(R[0], R[1], A), Cut1 = Lerp2(R[3], R[2], B);
 			const bool bFirst = Cross2(Cut1 - Cut0, P - Cut0) * Cross2(Cut1 - Cut0, R[0] - Cut0) >= 0.0;
 			if (bFirst)
@@ -1810,7 +1857,9 @@ namespace LandField
 	 */
 	int Ground::Impl::CropOf(int SeedIndex, int Kind) const
 	{
-		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(Kind)));
+		// (a surveyed field one crop whatever the rules' ground under it: its open, rough and field parts drawn alike)
+		const int KindKey = bSurvey && (Kind == RgOpen || Kind == RgRough) ? static_cast<int>(RgField) : Kind;
+		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(KindKey)));
 		if (Rg && (Kind == RgField || Kind == RgOpen || Kind == RgRough)) return CpRegion + std::clamp(Rg->CropOf(Kind, U), 0, 63);
 		if (Sp && SeedIndex >= 0 && (Kind == RgField || Kind == RgOpen))
 		{
@@ -3448,11 +3497,12 @@ namespace LandField
 	{
 		// Nothing stands on a recorded way, a man's or a vehicle's: no stem, trunk or prop within its half width and the
 		// thing's own body besides (the planting's coarse marks miss a stem by a pixel's corner now and then). The gates are
-		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only.
+		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only,
+		// and so is a region's low kit (Region::KitLow: a balk's ridge a man steps over; TakeUpTallLowKit holds it to that).
 		if (B != Base::Gate)
 		{
 			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : B == Base::Haycock ? 1.0 : 0.8;
-			if (WayRoom({ X, Y }, bThrough) < Body) return;
+			if (WayRoom({ X, Y }, bThrough || KitLowAt(B)) < Body) return;
 		}
 		Placed P;
 		P.Kind = B;
@@ -3649,6 +3699,110 @@ namespace LandField
 		{
 			// A region plants its own: its woods, trees, scrub and rocks, and the kit's things its sites set down; then its
 			// kit houses on their floors.
+			// (the trial "houses", release 2: the kit houses LandHouse builds to the vehicles' detail where the region asks
+			// it (its KitHouse), four looks of each kind, each look a slot of its own after the region's kit; each house
+			// turned end for end where need be so its door, or its gable where it stands gable on, faces the nearest lane)
+			if (Fd.Tried("houses"))
+			{
+				HouseSlot0 = 0;
+				for (int K = 0; K < KitSlots; ++K)
+					if (Rg->KitName(K) || Rg->KitBuilt(K)) HouseSlot0 = K + 1;
+				for (House& H : Houses)
+				{
+					if (!H.bKit) continue;
+					LandHouse::Spec S;
+					const int K = static_cast<int>(H.KitB) - static_cast<int>(Base::Kit0);
+					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S)) continue;
+					S.Long = H.Long;
+					S.Deep = H.Deep;
+					S.Hurt = 0;
+					const uint64_t Look = static_cast<uint64_t>(std::min(3.0, 4.0 * Unit(Hash(H.Key, 0x1D8A))));
+					S.Key = Hash(0xEA57ull + static_cast<uint64_t>(S.Kind * 4 + S.Roof), Look);
+					S.Below = std::max(1.0, H.Floor - H.Foot);
+					int Slot = -1;
+					for (size_t J = 0; J < HouseModels.size(); ++J)
+					{
+						const LandHouse::Spec& O = HouseModels[J];
+						if (O.Kind == S.Kind && O.Long == S.Long && O.Deep == S.Deep && O.Roof == S.Roof && O.Hurt == S.Hurt && O.Key == S.Key) Slot = static_cast<int>(J);
+					}
+					if (Slot < 0 && HouseSlot0 + static_cast<int>(HouseModels.size()) < KitSlots)
+					{
+						Slot = static_cast<int>(HouseModels.size());
+						HouseModels.push_back(S);
+					}
+					if (Slot < 0) continue;
+					HouseModels[static_cast<size_t>(Slot)].Below = std::max(HouseModels[static_cast<size_t>(Slot)].Below, S.Below);
+					H.Model = Slot;
+					H.KitB = static_cast<Base>(static_cast<int>(Base::Kit0) + HouseSlot0 + Slot);
+					double Best = 1e18;
+					V2 Near = H.C;
+					for (const Lane& Ln : Lanes)
+						for (const V2& Q : Ln.P)
+						{
+							const double D2 = (Q.X - H.C.X) * (Q.X - H.C.X) + (Q.Y - H.C.Y) * (Q.Y - H.C.Y);
+							if (D2 < Best)
+							{
+								Best = D2;
+								Near = Q;
+							}
+						}
+					const double Dx = (Near.X - H.C.X) * std::cos(H.Yaw) + (Near.Y - H.C.Y) * std::sin(H.Yaw);
+					const double Dy = -(Near.X - H.C.X) * std::sin(H.Yaw) + (Near.Y - H.C.Y) * std::cos(H.Yaw);
+					if (std::fabs(Dx) > std::fabs(Dy) ? Dx < 0.0 : Dy < 0.0) H.Yaw += Pi;
+					++Count.HouseModels;
+				}
+				// (and a region's kit it set down as a thing but builds as a house of its own size: the east's burnt-out
+				// houses, their stove and chimney standing over the ashes, LandHouse's Kind 9; four looks of each, chosen by
+				// where each stands, each planted where its thing was at its full size, turned as it was; its ash bed's skirt
+				// run down past the ground's fall under its footprint. Where it stood and what stands in sight there as before.)
+				for (RegionKit& RK : RegionKits)
+				{
+					const int K = static_cast<int>(RK.K.B) - static_cast<int>(Base::Kit0);
+					LandHouse::Spec S;
+					if (K < 0 || K >= KitSlots || !Rg->KitHouse(K, S)) continue;
+					S.Hurt = 0;
+					const uint64_t Where = Hash(static_cast<uint64_t>(std::llround(RK.K.P.X * 8.0)) ^ 0x5EEDull, static_cast<uint64_t>(std::llround(RK.K.P.Y * 8.0)));
+					const uint64_t Look = static_cast<uint64_t>(std::min(3.0, 4.0 * Unit(Hash(Where, 0x1D8B))));
+					S.Key = Hash(0xEA57ull + static_cast<uint64_t>(S.Kind * 4 + S.Roof), Look);
+					const double Cy = std::cos(RK.K.Yaw), Sy = std::sin(RK.K.Yaw), Mid = Top(RK.K.P.X, RK.K.P.Y, nullptr);
+					double Low = Mid;
+					for (int A = -1; A <= 1; A += 2)
+						for (int Bq = -1; Bq <= 1; Bq += 2)
+						{
+							const double U = (0.5 * S.Long + 0.55) * A, V = (0.5 * S.Deep + 0.55) * Bq;
+							Low = std::min(Low, Top(RK.K.P.X + U * Cy - V * Sy, RK.K.P.Y + U * Sy + V * Cy, nullptr));
+						}
+					S.Below = std::clamp(Mid - Low + 0.3, 0.6, 5.0);
+					int Slot = -1;
+					for (size_t J = 0; J < HouseModels.size(); ++J)
+					{
+						const LandHouse::Spec& O = HouseModels[J];
+						if (O.Kind == S.Kind && O.Long == S.Long && O.Deep == S.Deep && O.Roof == S.Roof && O.Hurt == S.Hurt && O.Key == S.Key) Slot = static_cast<int>(J);
+					}
+					if (Slot < 0 && HouseSlot0 + static_cast<int>(HouseModels.size()) < KitSlots)
+					{
+						Slot = static_cast<int>(HouseModels.size());
+						HouseModels.push_back(S);
+					}
+					if (Slot < 0) continue;
+					const size_t Sl = static_cast<size_t>(Slot);
+					HouseModels[Sl].Below = std::max(HouseModels[Sl].Below, S.Below);
+					if (HouseFrom.size() < HouseModels.size())
+					{
+						HouseFrom.resize(HouseModels.size(), -1);
+						HouseFromScale.resize(HouseModels.size(), 1.0);
+						HouseFromScaleZ.resize(HouseModels.size(), 1.0);
+					}
+					HouseFrom[Sl] = K;
+					HouseFromScale[Sl] = RK.K.Scale;
+					HouseFromScaleZ[Sl] = RK.K.ScaleZ;
+					RK.K.B = static_cast<Base>(static_cast<int>(Base::Kit0) + HouseSlot0 + Slot);
+					RK.K.Scale = 1.0;
+					RK.K.ScaleZ = 1.0;
+					++Count.HouseModels;
+				}
+				Count.HouseKinds = static_cast<int>(HouseModels.size());
+			}
 			for (const RegionKit& RK : RegionKits) Plant(RK.K.B, RK.K.P.X, RK.K.P.Y, RK.K.Yaw, RK.K.Scale, RK.K.ScaleZ, RK.Tint);
 			for (const House& H : Houses)
 			{
@@ -3663,6 +3817,64 @@ namespace LandField
 			for (const std::vector<Placed>& L : Inst) Count.Instances += L.size();
 			return;
 		}
+		// The bocage's farmhouses built to the vehicles' detail (release 2, the trial "houses", LandHouse): each kind of
+		// farmhouse (its size, roof and damage, and one of two looks) a kit slot, planted on its floor, turned so its door
+		// faces as LandField laid it; its plain built box left out of the tiles. Then the village church whole (LandHouse's
+		// Kind 3: its nave, chancel and tower one model, planted at the nave; all three parts leave the tiles), then its
+		// farm's barn and byre (Kind 1 and 2), then the village's houses (Kind 6), each its own (no two of the same size).
+		// Where the slots run out, as before.
+		if (!Sp && Fd.Tried("houses"))
+			for (int Pass = 0; Pass < 5; ++Pass)
+			for (size_t I = 0; I < Houses.size(); ++I)
+			{
+				House& H = Houses[I];
+				const int Want[5] = { HtFarmhouse, HtChurch, HtBarn, HtByre, HtHouse }, KindOf[5] = { 0, 3, 1, 2, 6 };
+				if (H.bKit || H.bWhite || H.Type != Want[Pass]) continue;
+				// (a church's chancel and tower stand on as LayChurch put them, after its nave)
+				const bool bChurch = H.Type == HtChurch;
+				if (bChurch && (H.Part != 0 || I + 2 >= Houses.size() || Houses[I + 1].Type != HtChurch || Houses[I + 1].Part != 1 || Houses[I + 2].Type != HtChurch || Houses[I + 2].Part != 2)) continue;
+				LandHouse::Spec S;
+				S.Kind = KindOf[Pass];
+				S.Long = H.Long;
+				S.Deep = H.Deep;
+				S.Storeys = H.Storeys;
+				S.Roof = H.Roof;
+				S.Hurt = bChurch ? std::min(H.Hurt, static_cast<int>(DmRoofHole)) : H.Hurt;
+				// (a farmhouse's two looks by its roof and damage, as before; a barn's, a byre's and a church's their own)
+				S.Key = Pass == 0 ? Hash(0xFA4A0ull, static_cast<uint64_t>(H.Roof * 8 + H.Hurt), H.Key & 1)
+				        : Pass == 4 ? Hash(0xFA4A6ull, H.Key, static_cast<uint64_t>(S.Roof * 8 + S.Hurt)) // (a village house's look its own)
+				                    : Hash(0xFA4A0ull + static_cast<uint64_t>(S.Kind), static_cast<uint64_t>(S.Roof * 8 + S.Hurt), H.Key & 1);
+				S.Below = std::max(1.0, H.Floor - H.Foot); // (its plinth down past the lowest ground under it, as BuildHouse's walls)
+				if (bChurch)
+					for (size_t J = I + 1; J <= I + 2; ++J) S.Below = std::max(S.Below, Houses[I].Floor - Houses[J].Foot);
+				int Slot = -1;
+				for (size_t K = 0; K < HouseModels.size(); ++K)
+				{
+					const LandHouse::Spec& O = HouseModels[K];
+					if (O.Kind == S.Kind && O.Long == S.Long && O.Deep == S.Deep && O.Storeys == S.Storeys && O.Roof == S.Roof && O.Hurt == S.Hurt && O.Key == S.Key) Slot = static_cast<int>(K);
+				}
+				if (Slot < 0 && static_cast<int>(HouseModels.size()) < KitSlots)
+				{
+					Slot = static_cast<int>(HouseModels.size());
+					HouseModels.push_back(S);
+				}
+				if (Slot < 0) continue;
+				// (houses of a kind share its model: its plinth runs as deep as the deepest of them needs)
+				HouseModels[static_cast<size_t>(Slot)].Below = std::max(HouseModels[static_cast<size_t>(Slot)].Below, S.Below);
+				H.Model = Slot;
+				if (bChurch) Houses[I + 1].Model = Houses[I + 2].Model = Slot;
+				Placed P;
+				P.Kind = static_cast<Base>(static_cast<int>(Base::Kit0) + Slot);
+				P.X = static_cast<float>(H.C.X);
+				P.Y = static_cast<float>(H.C.Y);
+				P.Z = static_cast<float>(H.Floor);
+				P.Yaw = static_cast<float>(H.Yaw + (H.Front < 0 ? Pi : 0.0));
+				const double Tone = 0.97 + 0.06 * Unit(Hash(H.Key, 0x7147));
+				P.Tint = Tint8(Tone, Tone, Tone);
+				Inst[static_cast<size_t>(P.Kind)].push_back(P);
+				++Count.HouseModels;
+			}
+		Count.HouseKinds = static_cast<int>(HouseModels.size());
 		auto Clear = [this](double X, double Y, uint8_t Bits) {
 			if (!InRaster(X, Y)) return false;
 			const size_t P = Pix(X, Y);
@@ -5393,7 +5605,7 @@ namespace LandField
 		// The buildings (the steppe's cottages are the kit's, planted).
 		for (const House& H : Houses)
 		{
-			if (H.bKit) continue;
+			if (H.bKit || H.Model >= 0) continue;
 			Tile* T = TileOf(H.C.X, H.C.Y);
 			if (T) BuildHouse(T->Built, H);
 		}
@@ -6297,7 +6509,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Kit16", "Kit17", "Kit18", "Kit19", "Kit20", "Kit21", "Kit22", "Kit23", "Kit24", "Kit25", "Kit26", "Kit27", "Kit28", "Kit29", "Kit30", "Kit31", "Kit32", "Kit33", "Kit34", "Kit35", "Kit36", "Kit37", "Kit38", "Kit39", "Kit40", "Kit41", "Kit42", "Kit43", "Kit44", "Kit45", "Kit46", "Kit47", "Kit48", "Kit49", "Kit50", "Kit51", "Kit52", "Kit53", "Kit54", "Kit55", "Kit56", "Kit57", "Kit58", "Kit59", "Kit60", "Kit61", "Kit62", "Kit63", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -6963,7 +7175,7 @@ namespace LandField
 		// not given) and its own clutter.
 		if (Rg)
 		{
-			for (int K = 0; K < 16; ++K)
+			for (int K = 0; K < KitSlots; ++K)
 			{
 				const char* Name = Rg->KitName(K);
 				if (!Name) continue;
@@ -6984,13 +7196,50 @@ namespace LandField
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
 			for (int K = static_cast<int>(Base::Tuft); K < static_cast<int>(Base::Clut0); ++K) Rg->OwnClutter(static_cast<Base>(K), At(static_cast<Base>(K)));
 		}
+		// The farmhouses, barns, byres, church and village houses built to the vehicles' detail (the trial "houses"): their three levels in the kit's slots, drawn as
+		// buildings (near, the middle from 90 m, plain from 300 m).
+		for (size_t K = 0; K < HouseModels.size(); ++K)
+		{
+			BaseMesh& M = At(static_cast<Base>(static_cast<int>(Base::Kit0) + HouseSlot0 + static_cast<int>(K)));
+			LandHouse::Levels L;
+			// (an east house built under the snow lying, its roof's blanket its own; the bocage's left to the snow's tint)
+			LandHouse::Spec Hs = HouseModels[K];
+			if (Hs.Kind >= 7 && SnowLay) Hs.Snow = SnowIs;
+			LandHouse::Build(Hs, L);
+			M.Near = std::move(L.Near);
+			M.Mid = std::move(L.Mid);
+			M.Far = std::move(L.Far);
+			M.MidFrom = 90.0f;
+			M.FarFrom = 300.0f;
+			M.Class = BaseMesh::Draw::House;
+			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
+			static const char* const Kinds[10] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata", "Burnt" };
+			const int Kd = std::clamp(HouseModels[K].Kind, 0, 9);
+			const char* const Roofs = Kd == 9 ? (HouseModels[K].Roof == 1 ? "Clay" : "Logs") : Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
+			M.Name = std::string(Kinds[Kd]) + Roofs + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
+		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not
 		// reach, dropped: its near level is drawn to its far one).
 		if (SnowLay)
 			for (size_t K = 0; K < Bases.size(); ++K)
 			{
+				// (a house built to the vehicles' detail, the trial "houses", keeps its middle level, the snow laid on it
+				// as on its near one: its near drawn out to 300 m would be some 25 thousand triangles a house)
+				const int Slot = static_cast<int>(K) - static_cast<int>(Base::Kit0) - HouseSlot0;
+				const bool bBuilt = Slot >= 0 && Slot < static_cast<int>(HouseModels.size());
+				// (a burnt-out house's snow is its own: laid as it is built, scoured off its ashes in patches)
+				if (bBuilt && HouseModels[static_cast<size_t>(Slot)].Kind == 9) continue;
+				Mesh Kept = bBuilt ? std::move(Bases[K].Mid) : Mesh();
 				Bases[K].Mid = Mesh();
 				SnowLay->Base(static_cast<Base>(K), Bases[K]);
+				if (bBuilt)
+				{
+					BaseMesh Lay;
+					Lay.Name = Bases[K].Name;
+					Lay.Near = std::move(Kept);
+					SnowLay->Base(static_cast<Base>(K), Lay);
+					Bases[K].Mid = std::move(Lay.Near);
+				}
 			}
 		// (no snow, but the winter's months: the broadleaf trees and the hedges bare all the same)
 		else if (LandScape::LeaflessOf(Fd, LookIs))
@@ -6999,10 +7248,24 @@ namespace LandField
 			for (size_t K = 0; K < Bases.size(); ++K) Bare->Leafless(static_cast<Base>(K), Bases[K]);
 		}
 		for (BaseMesh& B : Bases) Measure(B);
+		// (a burnt-out house in sight as the kit's thing it stands for was: the same shape, its stove and chimney, not its
+		// whole footprint; the size it was planted at kept)
+		for (size_t K = 0; K < HouseFrom.size() && K < HouseModels.size(); ++K)
+		{
+			if (HouseFrom[K] < 0) continue;
+			const BaseMesh& Was = Bases[static_cast<size_t>(Base::Kit0) + static_cast<size_t>(HouseFrom[K])];
+			BaseMesh& M = Bases[static_cast<size_t>(Base::Kit0) + static_cast<size_t>(HouseSlot0) + K];
+			if (!Was.bSight || M.Height <= 0.0f || M.Radius <= 0.0f) continue;
+			M.bSight = true;
+			M.SightMid = static_cast<float>(Was.SightMid * Was.Height * HouseFromScaleZ[K] / M.Height);
+			M.SightHalf = static_cast<float>(Was.SightHalf * Was.Height * HouseFromScaleZ[K] / M.Height);
+			M.SightAcross = static_cast<float>(Was.SightAcross * Was.Radius * HouseFromScale[K] / M.Radius);
+			M.SightTrunk = static_cast<float>(Was.SightTrunk * HouseFromScale[K]);
+		}
 		// A region's kit slots' classes for the game's far draw, where its KitLook set none: a tree as it marked it, a
 		// slot it laid as a house a house, else a tall thing big and a low one a shrub (the frame budget's classes).
 		if (Rg)
-			for (int K = 0; K < 16; ++K)
+			for (int K = 0; K < KitSlots; ++K)
 			{
 				const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
 				BaseMesh& M = At(B);
@@ -7051,6 +7314,7 @@ namespace LandField
 		const auto T1 = Clock::now();
 		MakeBases();
 		SeatKitHouses();
+		TakeUpTallLowKit();
 		MakeTiles();
 		MakeRing();
 		// (snow on the roofs and the walls' tops)

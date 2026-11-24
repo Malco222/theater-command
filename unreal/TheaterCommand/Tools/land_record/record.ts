@@ -203,7 +203,24 @@ function ticketOf(p: SetPiece, seed: number): FieldTicket<LandPlace> {
     reckoning: { A, D: A / p.odds, odds: p.odds, dice: [0.8, 1.2], even: 1.2 },
     lines: [], limit: LAND.limit,
   };
+  // Effects (R2): the fighters on call (LAND_RECORD_AIR=1, for the scene's -TheaterLandAirSupport): the attacker's two
+  // strikes of four, the first losing one; the defender's one strike of four, losing one. Off: the ticket as before.
+  if (process.env.LAND_RECORD_AIR) {
+    t.att.air = { share: 0.12, strikes: 2, groups: [
+      { id: 901, name: `${p.att.adj} fighter group`, nat: p.att.nat, planes: 4, lose: 1 },
+      { id: 902, name: `${p.att.adj} fighter group, second`, nat: p.att.nat, planes: 4, lose: 0 }] };
+    t.def.air = { share: 0.08, strikes: 1, groups: [{ id: 911, name: `${p.def.adj} fighter group`, nat: p.def.nat, planes: 4, lose: 1 }] };
+  }
   return withTeams(t);
+}
+
+/** Effects (R2), a look test only (the art director, 19:16Z: never kept as that battle's shot): LAND_RECORD_AIR_YEAR=1942
+ * writes the defender's strikes as flown that year (a 1942 German's Stuka over Normandy), nothing else changed. */
+function airYear<T>(e: T): T {
+  const y = Number(process.env.LAND_RECORD_AIR_YEAR ?? '');
+  const ev = e as unknown as { what?: string; side?: string; extra?: Record<string, unknown> };
+  if (!y || ev.what !== 'land:air-in' || ev.side !== 'def' || !ev.extra) return e;
+  return { ...ev, extra: { ...ev.extra, year: y } } as unknown as T;
 }
 
 /** Rounded to tenths (metres) or thousandths (radians), as the bridge rounds. */
@@ -215,6 +232,8 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 interface Track {
   /** Block, figure, and his place in the figure's section (absent for the key man). */
   b: number; k: number; j?: number; r: string;
+  /** A carrier of armoured infantry (release 2, sim.mech): the model the 3D game draws her with (absent: the lorry). */
+  ml?: string;
   /** Kept points: [t, x, y, f]. */
   at: number[][];
   /** Changes: [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1]. */
@@ -254,7 +273,7 @@ class TrackKeeper {
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
     const ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
     if (!tr) {
-      tr = { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}) };
+      tr = { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}) };
       this.tracks.set(key, tr);
       this.pending.set(key, []);
     } else {
@@ -553,7 +572,7 @@ function fight(p: SetPiece, seed: number): Fought {
     keeper.gone(t, seen);
     for (const r of drill.rounds()) if (!rounds.has(r.n)) rounds.set(r.n, r);
     const v = sim.view();
-    for (const e of v.events) events.push(e);
+    for (const e of v.events) events.push(airYear(e));
     // The blocks every battle second (and the last view), for the screen's words, bars and the camera's choice.
     if (Math.floor(t) !== lastView || v.over) {
       lastView = Math.floor(t);

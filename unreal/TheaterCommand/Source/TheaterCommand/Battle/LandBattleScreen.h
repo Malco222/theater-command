@@ -72,6 +72,10 @@ private:
 	};
 	mutable TArray<FButton> Buttons;
 	mutable double LastTopShare = 0.0;
+	/** (Camera specials, release 2) The earned name carded on the picture (the pose's Card, a block id; -1 none) and the
+	 * real second it came up, for its fade. */
+	mutable int32 CardUp = -1;
+	mutable double CardSince = 0.0;
 	/** The tags as drawn this frame, for a click on one (local units). */
 	struct FTagBox
 	{

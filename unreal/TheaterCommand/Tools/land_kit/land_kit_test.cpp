@@ -12,6 +12,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -229,6 +231,327 @@ namespace
 		std::sort(L.begin(), L.end());
 		return L[std::min(L.size() - 1, static_cast<size_t>(P * static_cast<double>(L.size() - 1) + 0.5))];
 	}
+	// ---- National marks (release 2, Dress::bMarks, "-TheaterLandMarks").
+
+	/** The nearest point of triangle A, B, C to P (Ericson's). */
+	V3 NearestOnTriangle(const V3& P, const V3& A, const V3& B, const V3& C)
+	{
+		const V3 AB = B - A, AC = C - A, AP = P - A;
+		const double D1 = AB.Dot(AP), D2 = AC.Dot(AP);
+		if (D1 <= 0.0 && D2 <= 0.0) return A;
+		const V3 BP = P - B;
+		const double D3 = AB.Dot(BP), D4 = AC.Dot(BP);
+		if (D3 >= 0.0 && D4 <= D3) return B;
+		const double VC = D1 * D4 - D3 * D2;
+		if (VC <= 0.0 && D1 >= 0.0 && D3 <= 0.0) return A + AB * (D1 / (D1 - D3));
+		const V3 CP = P - C;
+		const double D5 = AB.Dot(CP), D6 = AC.Dot(CP);
+		if (D6 >= 0.0 && D5 <= D6) return C;
+		const double VB = D5 * D2 - D1 * D6;
+		if (VB <= 0.0 && D2 >= 0.0 && D6 <= 0.0) return A + AC * (D2 / (D2 - D6));
+		const double VA = D3 * D6 - D5 * D4;
+		if (VA <= 0.0 && (D4 - D3) >= 0.0 && (D5 - D6) >= 0.0) return B + (C - B) * ((D4 - D3) / ((D4 - D3) + (D5 - D6)));
+		const double Denom = 1.0 / (VA + VB + VC);
+		return A + AB * (VB * Denom) + AC * (VC * Denom);
+	}
+
+	/**
+	 * Every battle model with mark places, worn by her own nation (a "_" file by the Americans and the Germans), and
+	 * the owners whose marks change with the month (the British flash, then star; none before the flash) or who wear
+	 * another's kit: loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
+	 * (none where the owner paints none) at both levels, every point within its lift of her own skin (the near level
+	 * within 12 mm, the far within 35 mm), facing out, its triangles wound to face out, in the owner's paint (by area).
+	 * Gives the failures.
+	 */
+	int CheckMarks(const std::string& Content)
+	{
+		std::printf("NATIONAL MARKS (release 2, -TheaterLandMarks: each owner's period marking painted onto her skin)\n");
+		struct Case
+		{
+			std::string Model, Nation;
+			int Year = 1944, Month = 7;
+			std::string Expect; // white (the star), cross, red (the star), flash, rectangle, yellow (the army star), none
+		};
+		auto Expected = [](const std::string& Nation, int Year, int Month)
+		{
+			const int Key = Year * 12 + Month;
+			if (Nation == "GER") return std::string("cross");
+			if (Nation == "USA") return std::string("white");
+			if (Nation == "SOV") return std::string("red");
+			if (Nation == "UK") return std::string(Key >= 1943 * 12 + 7 ? "white" : Key >= 1941 * 12 + 11 ? "flash" : "none");
+			if (Nation == "ITA") return std::string("rectangle");
+			if (Nation == "JAP") return std::string("yellow");
+			return std::string("none");
+		};
+		std::vector<Case> Cases;
+		std::vector<std::string> Files;
+		for (const auto& Entry : std::filesystem::directory_iterator(Content + "/Models/Battle"))
+		{
+			if (Entry.path().extension() == ".json")
+			{
+				Files.push_back(Entry.path().stem().string());
+			}
+		}
+		std::sort(Files.begin(), Files.end());
+		for (const std::string& Name : Files)
+		{
+			std::string Text, Error;
+			Json Doc;
+			if (!ReadFile(Content + "/Models/Battle/" + Name + ".json", Text) || !Doc.Parse(Text, Error) || Doc.Root()["marks"].Count() == 0)
+			{
+				continue;
+			}
+			std::string Own = Doc.Root()["nation"].Str();
+			if (Own == "any" || Own.empty())
+			{
+				Cases.push_back({ Name, "USA", 1944, 7, "white" });
+				Own = "GER";
+			}
+			Cases.push_back({ Name, Own, 1944, 7, Expected(Own, 1944, 7) });
+		}
+		for (const Case& C : std::vector<Case>{ { "LightTank", "UK", 1942, 5, "flash" }, { "LightTank", "UK", 1941, 6, "none" }, { "Sexton", "UK", 1943, 2, "flash" },
+				 { "Sherman", "UK", 1944, 7, "white" }, { "Sherman", "SOV", 1944, 7, "red" }, { "LightTank", "JAP", 1942, 1, "yellow" },
+				 { "LightTank", "ITA", 1942, 10, "rectangle" }, { "Truck", "SOV", 1943, 7, "red" } })
+		{
+			Cases.push_back(C);
+		}
+		int Failures = 0;
+		size_t AllAdded = 0, AllCases = 0;
+		for (const Case& C : Cases)
+		{
+			std::string Text, Error;
+			if (!ReadFile(Content + "/Models/Battle/" + C.Model + ".json", Text))
+			{
+				std::printf("  FAIL cannot read %s.json\n", C.Model.c_str());
+				++Failures;
+				continue;
+			}
+			Dress D;
+			D.Nation = C.Nation;
+			D.Year = C.Year;
+			D.Month = C.Month;
+			Model Off, On;
+			const auto T0 = Clock::now();
+			const bool bOff = Off.Load(Text, D, Error);
+			const auto T1 = Clock::now();
+			D.bMarks = true;
+			const bool bOn = bOff && On.Load(Text, D, Error);
+			const auto T2 = Clock::now();
+			if (!bOn || Off.Bodies.size() != On.Bodies.size())
+			{
+				std::printf("  FAIL %s (%s): %s\n", C.Model.c_str(), C.Nation.c_str(), Error.c_str());
+				++Failures;
+				continue;
+			}
+			++AllCases;
+			std::string Why;
+			size_t Added[2] = { 0, 0 }, AddedTris[2] = { 0, 0 }, OnSkin[2] = { 0, 0 }, Bad = 0, Wound = 0, Tris = 0;
+			double Worst[2] = { 0.0, 0.0 };
+			double White = 0.0, Black = 0.0, Red = 0.0, Yellow = 0.0, AreaAll = 0.0;
+			for (size_t B = 0; B < On.Bodies.size(); ++B)
+			{
+				// (her places on this body, in its frame)
+				std::vector<std::pair<V3, V3>> Places;
+				for (const Mark& Mk : On.Painted)
+				{
+					if (On.Parts[static_cast<size_t>(Mk.Part)].Body == static_cast<int>(B))
+					{
+						Places.push_back({ Mk.At - On.Bodies[B].Pivot, Mk.Facing.Unit() });
+					}
+				}
+				for (int Level = 0; Level < 2; ++Level)
+				{
+					const Mesh& Was = Level == 0 ? Off.Bodies[B].Near : Off.Bodies[B].Far;
+					const Mesh& Now = Level == 0 ? On.Bodies[B].Near : On.Bodies[B].Far;
+					const size_t N0 = Was.Count(), T0n = Was.Triangles.size();
+					if (Now.Count() < N0 || Now.Triangles.size() < T0n || !std::equal(Was.Points.begin(), Was.Points.end(), Now.Points.begin())
+						|| !std::equal(Was.Triangles.begin(), Was.Triangles.end(), Now.Triangles.begin())
+						|| !std::equal(Was.Colours.begin(), Was.Colours.end(), Now.Colours.begin()))
+					{
+						Why = On.Bodies[B].Name + ": her own mesh changed under the marks";
+						continue;
+					}
+					if (Now.Count() == N0)
+					{
+						if (!Places.empty() && C.Expect != "none" && !Was.Triangles.empty())
+						{
+							Why = On.Bodies[B].Name + (Level == 0 ? " near" : " far") + ": a mark place but no mark";
+						}
+						continue;
+					}
+					if (Places.empty() || C.Expect == "none")
+					{
+						Why = On.Bodies[B].Name + ": a mark where none belongs";
+						continue;
+					}
+					Added[Level] += Now.Count() - N0;
+					AddedTris[Level] += (Now.Triangles.size() - T0n) / 3;
+					auto PointOf = [](const Mesh& M, size_t I) { return V3(M.Points[I * 3], M.Points[I * 3 + 1], M.Points[I * 3 + 2]); };
+					auto FacingAt = [&Places](const V3& P)
+					{
+						double Best = 1e18;
+						V3 Out(1.0, 0.0, 0.0);
+						for (const auto& Pl : Places)
+						{
+							const V3 Gap = P - Pl.first;
+							if (Gap.Dot(Gap) < Best)
+							{
+								Best = Gap.Dot(Gap);
+								Out = Pl.second;
+							}
+						}
+						return Out;
+					};
+					// (her own triangles about the marks: those whose box comes within 5 cm of the marks' points)
+					V3 Lo(1e9, 1e9, 1e9), Hi(-1e9, -1e9, -1e9);
+					for (size_t I = N0; I < Now.Count(); ++I)
+					{
+						const V3 P = PointOf(Now, I);
+						Lo = V3(std::min(Lo.X, P.X), std::min(Lo.Y, P.Y), std::min(Lo.Z, P.Z));
+						Hi = V3(std::max(Hi.X, P.X), std::max(Hi.Y, P.Y), std::max(Hi.Z, P.Z));
+					}
+					std::vector<size_t> Skin;
+					for (size_t T = 0; T + 2 < T0n; T += 3)
+					{
+						const V3 A = PointOf(Was, Was.Triangles[T]), Bv = PointOf(Was, Was.Triangles[T + 1]), Cv = PointOf(Was, Was.Triangles[T + 2]);
+						if (std::max({ A.X, Bv.X, Cv.X }) < Lo.X - 0.05 || std::min({ A.X, Bv.X, Cv.X }) > Hi.X + 0.05 || std::max({ A.Y, Bv.Y, Cv.Y }) < Lo.Y - 0.05
+							|| std::min({ A.Y, Bv.Y, Cv.Y }) > Hi.Y + 0.05 || std::max({ A.Z, Bv.Z, Cv.Z }) < Lo.Z - 0.05 || std::min({ A.Z, Bv.Z, Cv.Z }) > Hi.Z + 0.05)
+						{
+							continue;
+						}
+						Skin.push_back(T);
+					}
+					const double Within = Level == 0 ? 0.012 : 0.035;
+					for (size_t I = N0; I < Now.Count(); ++I)
+					{
+						const V3 P = PointOf(Now, I);
+						double Near2 = 1e18;
+						for (size_t T : Skin)
+						{
+							const V3 Q = NearestOnTriangle(P, PointOf(Was, Was.Triangles[T]), PointOf(Was, Was.Triangles[T + 1]), PointOf(Was, Was.Triangles[T + 2]));
+							Near2 = std::min(Near2, (P - Q).Dot(P - Q));
+						}
+						const double Off2 = std::sqrt(Near2);
+						Worst[Level] = std::max(Worst[Level], Off2);
+						OnSkin[Level] += Off2 <= Within ? 1 : 0;
+						const V3 Nm(Now.Normals[I * 3], Now.Normals[I * 3 + 1], Now.Normals[I * 3 + 2]);
+						if (!(Nm.Dot(FacingAt(P)) > 0.2) || !std::isfinite(P.X + P.Y + P.Z))
+						{
+							++Bad;
+						}
+					}
+					for (size_t T = T0n; T + 2 < Now.Triangles.size(); T += 3)
+					{
+						const V3 A = PointOf(Now, Now.Triangles[T]), Bv = PointOf(Now, Now.Triangles[T + 1]), Cv = PointOf(Now, Now.Triangles[T + 2]);
+						const V3 Face = (Bv - A).Cross(Cv - A);
+						if (Face.Length() < 1e-9)
+						{
+							continue;
+						}
+						++Tris;
+						Wound += Face.Unit().Dot(FacingAt((A + Bv + Cv) * (1.0 / 3.0))) > 0.0 ? 1 : 0;
+						if (Level == 0)
+						{
+							// (the paint by area: each triangle's mean colour)
+							double Rgb[3] = { 0.0, 0.0, 0.0 };
+							for (int K = 0; K < 3; ++K)
+							{
+								for (int Ch = 0; Ch < 3; ++Ch)
+								{
+									Rgb[Ch] += Now.Colours[Now.Triangles[T + static_cast<size_t>(K)] * 4 + static_cast<size_t>(Ch)] / 3.0;
+								}
+							}
+							const double R = Rgb[0], G = Rgb[1], Bc = Rgb[2], Area = 0.5 * Face.Length();
+							// (her own paint under it, the nearest of her skin's triangles: a mark under her dust reads
+							// against her paint, a white lighter and a black darker than it, however dusty both are)
+							const V3 Mid = (A + Bv + Cv) * (1.0 / 3.0);
+							double Under = 1e18, SkinSum = 0.0;
+							for (size_t Ts : Skin)
+							{
+								const V3 Q = NearestOnTriangle(Mid, PointOf(Was, Was.Triangles[Ts]), PointOf(Was, Was.Triangles[Ts + 1]), PointOf(Was, Was.Triangles[Ts + 2]));
+								if ((Mid - Q).Dot(Mid - Q) < Under)
+								{
+									Under = (Mid - Q).Dot(Mid - Q);
+									SkinSum = 0.0;
+									for (int K = 0; K < 3; ++K)
+									{
+										for (int Ch = 0; Ch < 3; ++Ch)
+										{
+											SkinSum += Was.Colours[Was.Triangles[Ts + static_cast<size_t>(K)] * 4 + static_cast<size_t>(Ch)] / 3.0;
+										}
+									}
+								}
+							}
+							AreaAll += Area;
+							White += (std::min({ R, G, Bc }) >= 120 && (R + G + Bc) >= 420) || (std::min({ R, G, Bc }) >= 90 && R + G + Bc >= SkinSum + 60.0) ? Area : 0.0;
+							Black += std::max({ R, G, Bc }) <= 80 || R + G + Bc <= SkinSum - 60.0 ? Area : 0.0;
+							Red += R >= 90 && R >= 1.6 * G ? Area : 0.0;
+							Yellow += R >= 140 && G >= 110 && Bc <= 0.75 * G ? Area : 0.0;
+						}
+					}
+				}
+			}
+			const double Share = Added[0] ? static_cast<double>(OnSkin[0]) / Added[0] : 1.0, FarShare = Added[1] ? static_cast<double>(OnSkin[1]) / Added[1] : 1.0;
+			const double Near = std::max(AreaAll, 1e-9);
+			if (Why.empty() && C.Expect != "none" && (Added[0] == 0 || Added[1] == 0))
+			{
+				Why = "no marks added";
+			}
+			if (Why.empty() && (Share < 0.97 || FarShare < 0.9))
+			{
+				Why = "only " + std::to_string(Share) + " of the near points (" + std::to_string(FarShare) + " far) on her skin";
+			}
+			if (Why.empty() && Bad > 0)
+			{
+				Why = std::to_string(Bad) + " points not facing out";
+			}
+			if (Why.empty() && Tris > 0 && Wound < Tris * 99 / 100)
+			{
+				Why = std::to_string(Tris - Wound) + " of " + std::to_string(Tris) + " triangles wound inward";
+			}
+			// (where the army painted it, the art director's mends of 24 November: no cross on a Tiger's or a Panther's
+			// turret, and the cross on both her hull's sides; the Japanese star on her front, not her sides)
+			const int TurretIx = On.PartIndex("turret"), HullIx = On.PartIndex("hull");
+			const bool bBig = C.Expect == "cross" && (On.Name.compare(0, 5, "Tiger") == 0 || On.Name.compare(0, 7, "Panther") == 0);
+			int Sides[2] = { 0, 0 };
+			for (const Mark& Mk : On.Painted)
+			{
+				if (bBig && Mk.Part == TurretIx && Why.empty())
+				{
+					Why = "a cross on her turret";
+				}
+				if (Mk.Part == HullIx && std::fabs(Mk.Facing.Y) > 0.5)
+				{
+					++Sides[Mk.Facing.Y < 0.0 ? 0 : 1];
+				}
+				if (C.Expect == "yellow" && Mk.Facing.X < 0.7 && Why.empty())
+				{
+					Why = "the Japanese star not on her front";
+				}
+			}
+			if (bBig && (Sides[0] == 0 || Sides[1] == 0) && Why.empty())
+			{
+				Why = "no cross on one of her hull's sides";
+			}
+			const double Wh = White / Near, Bl = Black / Near, Rd = Red / Near, Ye = Yellow / Near;
+			// (the cross: black over a white one a little wider, of the same length: about a fifth of it white along its
+			// arms' sides; the marks under her own dust, chipped and scuffed)
+			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.1 && Bl > 0.35)
+				|| (C.Expect == "red" && Rd > 0.8) || (C.Expect == "flash" && Wh > 0.45 && Rd > 0.2) || (C.Expect == "rectangle" && Rd > 0.6 && Wh > 0.05)
+				|| (C.Expect == "yellow" && Ye > 0.8);
+			if (Why.empty() && !bPaint)
+			{
+				Why = "not her owner's paint";
+			}
+			AllAdded += AddedTris[0];
+			std::printf("  %-11s %-3s %04d-%02d %-9s near %4zu triangles (%5.1f%% of points on her skin, worst %4.1f mm)  far %3zu (%5.1f%%, worst %4.1f mm)  white %3.0f%% black %3.0f%% red %3.0f%% yellow %3.0f%%  +%.0f ms  %s\n",
+				C.Model.c_str(), C.Nation.c_str(), C.Year, C.Month, C.Expect.c_str(), AddedTris[0], Share * 100.0, Worst[0] * 1000.0, AddedTris[1], FarShare * 100.0,
+				Worst[1] * 1000.0, Wh * 100.0, Bl * 100.0, Rd * 100.0, Ye * 100.0, Ms(T1, T2) - Ms(T0, T1), Why.empty() ? "ok" : ("FAIL " + Why).c_str());
+			Failures += Why.empty() ? 0 : 1;
+		}
+		std::printf("  %zu looks checked, %zu mark triangles near in all: %s\n", AllCases, AllAdded, Failures ? "FAIL" : "ok");
+		return Failures;
+	}
 }
 
 int main(int argc, char** argv)
@@ -397,6 +720,12 @@ int main(int argc, char** argv)
 		}
 	}
 
+	Failures += CheckMarks(Content);
+	if (std::getenv("LAND_KIT_ONLY_MARKS"))
+	{
+		return Failures ? 1 : 0;
+	}
+
 	// ---- The battle.
 	std::string Recording, FatesText, Error;
 	if (!ReadFile(RecordingPath, Recording))
@@ -420,6 +749,19 @@ int main(int argc, char** argv)
 	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
 	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
+	// (LAND_BREW_WAIT=least,most: release 2's brew-up wait, life's seconds (LandBail, -TheaterLandBailOut))
+	if (const char* Wait = std::getenv("LAND_BREW_WAIT"))
+	{
+		B.BrewWaitLeast = std::atof(Wait);
+		const char* Comma = std::strchr(Wait, ',');
+		B.BrewWaitMost = Comma ? std::atof(Comma + 1) : B.BrewWaitLeast;
+	}
+	// (LAND_SMOOTH_TANKS=seconds: release 2's tanks rolling smoothly, -TheaterLandSmoothTanks)
+	if (const char* Smooth = std::getenv("LAND_SMOOTH_TANKS"))
+	{
+		B.SmoothTanks = std::atof(Smooth);
+		std::printf("  tanks rolling smoothly: %.2f s\n", B.SmoothTanks);
+	}
 	// (the vehicles' measured fire odds, by the face struck: Content/Data/Battle/performance-land.json)
 	std::map<std::string, FireOdds> Fires;
 	{

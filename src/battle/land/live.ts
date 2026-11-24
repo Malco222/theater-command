@@ -40,19 +40,24 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 /** Angle difference the short way round. */
 const turn = (a: number, b: number): number => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
-/** A point [t, x, y, f] and a change [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1], as the recording writes them. */
+/** A point [t, x, y, f] and a change [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1], as the recording
+ * writes them; a man aboard adds his vehicle's k and his seat in her bed [..., seatOn, seat] (MenOut.sv). */
 type Pt = number[];
 type Ch = (number | string | null)[];
 
 /** One man's track as the scene reads it (the recording's men[]). */
 export interface TrackOut {
   b: number; k: number; j?: number; r: string; at: Pt[]; ch: Ch[]; s: number[]; d?: number; mk?: unknown[]; out?: number; fo?: 1;
+  /** The model the 3D game draws her with where it is not her block's (release 2, looks only): a carrier of armoured infantry (absent: the lorry), a self-propelled gun, a tank destroyer. */
+  ml?: string;
+  /** Her model's swaps the rules pick (release 2, looks only): a motorcycle's sidecar, a staff jeep's gun. */
+  sw?: Record<string, string>;
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
 export interface TrackDelta {
   n: number;
-  b?: number; k?: number; j?: number; r?: string; fo?: 1;
+  b?: number; k?: number; j?: number; r?: string; fo?: 1; ml?: string; sw?: Record<string, string>;
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
@@ -93,7 +98,7 @@ const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' :
 
 interface Kept {
   n: number;
-  who: { b: number; k: number; j?: number; r: string; fo?: 1 };
+  who: { b: number; k: number; j?: number; r: string; fo?: 1; ml?: string; sw?: Record<string, string> };
   /** The last kept point (the line test's start), and the points seen since. */
   last: Pt;
   pend: Pt[];
@@ -117,14 +122,14 @@ export class LiveKeeper {
   see(t: number, b: number, m: MenOut, fo: boolean): void {
     const key = keyOf(b, m, fo);
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
-    const ch: (number | string | null)[] = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
+    const ch: Ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
     // (aboard a lorry, with Men in lorries on: [..., her k, his seat, 1 while he gets down] (MenOut.sv), which older
     // readers never read)
     if (m.sv) ch.push(...m.sv);
     let k = this.men.get(key);
     if (!k) {
       k = {
-        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}) },
+        n: this.order.length, who: { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, ...(fo ? { fo: 1 as const } : {}), ...(m.ml ? { ml: m.ml } : {}), ...(m.sw ? { sw: m.sw } : {}) },
         last: p, pend: [], ch, shot: undefined, newAt: [p], newCh: [ch], newS: [], sentWho: false, sentD: false, sentMk: false, sentOut: undefined, sentTail: null,
       };
       this.men.set(key, k);
@@ -210,7 +215,7 @@ export class LiveKeeper {
       if (dl.reset) tracks.length = 0;
       for (const d of dl.men) {
         let tr = tracks[d.n];
-        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}) }; }
+        if (!tr) { tr = tracks[d.n] = { b: d.b!, k: d.k!, ...(d.j !== undefined ? { j: d.j } : {}), r: d.r!, at: [], ch: [], s: [], ...(d.fo ? { fo: 1 as const } : {}), ...(d.ml ? { ml: d.ml } : {}), ...(d.sw ? { sw: d.sw } : {}) }; }
         if (d.at) tr.at.push(...d.at);
         if (d.ch) tr.ch.push(...d.ch);
         if (d.s) tr.s.push(...d.s);
@@ -356,6 +361,18 @@ export interface LiveOpts {
   wet?: boolean;
   /** Old wrecks (release 2, looks only): the armour the campaign's earlier battles here left burnt out; off, none are sent. */
   wrecks?: boolean;
+  /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
+  mech?: boolean;
+  /** Self-propelled guns (release 2, looks only; sim.spg): some of a battery's guns drawn self-propelled. A campaign battle's only; off unless true. */
+  spg?: boolean;
+  /** Tank destroyers (release 2, looks only; sim.td): one model in an armoured block's mix a tank destroyer. A campaign battle's only; off unless true. */
+  td?: boolean;
+  /** Armoured cars (release 2, looks only; sim.cars): out ahead of a block on its flanks till it meets the enemy. A campaign battle's only; off unless true. */
+  cars?: boolean;
+  /** AA vehicles (release 2, looks only; sim.aa): behind a block, moving with it. A campaign battle's only; off unless true. */
+  aa?: boolean;
+  /** Jeeps and motorcycles (release 2, looks only; sim.light): out ahead with a block's screen or behind it. A campaign battle's only; off unless true. */
+  light?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -462,6 +479,14 @@ export class LiveBattle {
     for (const s of ['att', 'def'] as Side[]) sim.command({ do: 'auto', side: s, on: true }, s);
     if (this.me && opts.staff !== false) sim.perUnit = true;
     if (this.me && opts.radio !== false) sim.radio = true;
+    // (armoured infantry: before the drill is made, which draws them with their blocks)
+    if (opts.mech === true) sim.mech = true;
+    // (self-propelled guns and tank destroyers: a campaign battle's, set pieces stay as the historian drew them)
+    if (opts.spg === true && !piece) sim.spg = true;
+    if (opts.td === true && !piece) sim.td = true;
+    if (opts.cars === true && !piece) sim.cars = true;
+    if (opts.aa === true && !piece) sim.aa = true;
+    if (opts.light === true && !piece) sim.light = true;
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
@@ -513,6 +538,9 @@ export class LiveBattle {
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
         ...(u.joined !== undefined ? { joins: true } : {}), ...(took ? { captured: took.from } : {}),
+        // (release 2: the half-tracks, self-propelled guns and tank destroyers its men are drawn with, for the 3D game to
+        // read before the battle opens)
+        ...((mls) => (mls.length ? { mls } : {}))(this.drill.modelsFor(u)),
       };
     });
     this.look();

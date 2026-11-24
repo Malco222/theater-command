@@ -128,5 +128,97 @@
     "moving": 0.4,
     "pace": [1.2, 4.5],
     "clear": {"ahead": 10, "behind": 3, "half": 2.3, "out": 3.6, "enemyAhead": 2.5, "crush": 4, "crushHalf": 1.4, "dodge": 1.5, "within": 60}
+  },
+  "mech": {
+    "_about": "Armoured infantry (release 2; Brian, 23 November 07:01Z, yes to 'half-tracks carrying armoured infantry'; LandBattle.mech, off unless turned on; looks only). An armoured block draws the riflemen of its division riding behind its tanks, a section to each carrier, who get down near the enemy as lorried infantry do. 'rows': the historian's (23 November 07:05Z, historian/halftracks-td-spg-movers-1123.md, M unless said), each army's carriers to a block of four tanks, [from, until, models] by the battle's year (a fraction for the month), drawn in that order and as many as the block's tray over four of them (one at least); an army with no row draws none. Britain's Universal Carrier is not modelled: its row draws the lorries beside it (the known list). The Soviet tank riders and the minor armies wait for their own rows. Units decide (the design director, 07:19Z): these rows are only the history start's mix; where the campaign says what a corps carries, 'kit' draws it. 'commonwealth': drawn as Britain's. 'armoured': carriers whose riders a bullet cannot reach while they are aboard (the design director, 07:06Z(2): struck through the vehicle's armour; a man aboard is not the next to fall to small arms). 'share': the riflemen's share of an armoured block's men, so a scaled battle draws as many as its men at that scale (an armoured division about 0.3, M). 'back': metres behind the block's tray their middle keeps. 'base': their k from this up (the 3D game tells a man by block, k and j).",
+    "rows": {
+      "USA": [[1942, 9999, ["M3Halftrack", "M3Halftrack", "M3Halftrack"]]],
+      "GER": [[1940, 9999, ["Hanomag", "Truck", "Hanomag", "Truck"]]],
+      "UK": [[1940, 1943, ["Truck", "Truck"]], [1943, 9999, ["M3Halftrack", "Truck", "Truck"]]],
+      "ITA": [[1940, 9999, ["Truck", "Truck"]]],
+      "JAP": [[1937, 9999, ["Truck", "Truck"]]]
+    },
+    "commonwealth": ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"],
+    "kit": {
+      "_about": "Units decide (the design director, 23 November 07:19Z): where the campaign says what a corps carries (ForceKit.halftracks, its share of half-tracks), the rows above set only the history start's mix. 'per': carriers to four tanks; 'models': an army's own half-track; an army with none of its own draws the stand-in in its own coat (the Axis' the Sd.Kfz. 251, the rest the M3), said on the known list.",
+      "per": 3,
+      "models": {"GER": "Hanomag", "USA": "M3Halftrack", "UK": "M3Halftrack"},
+      "axis": ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"],
+      "axisStand": "Hanomag",
+      "stand": "M3Halftrack"
+    },
+    "armoured": ["Hanomag", "M3Halftrack"],
+    "share": 0.3,
+    "back": 24,
+    "base": 500
+  },
+  "spg": {
+    "_about": "Self-propelled guns (release 2; Brian, 23 November 07:01Z, yes to 'a tank destroyer and a self-propelled gun for each major army'; LandBattle.spg, off unless turned on; looks only; a campaign battle's only, set pieces stay as the historian drew them). Some of a battery's guns are drawn as its army's self-propelled howitzer: no tractor, no crew on foot, firing when the battery fires and moving with it. 'rows': the historian's (23 November 07:05Z, historian/halftracks-td-spg-movers-1123.md, H): [from, until, models, per, with] by the battle's year (a fraction for the month): its side's blocks of that army of a kind in 'with' each bring 'per' of them (the US an M7 battery behind each armoured block; Britain's Priests, then Sextons, behind theirs; Germany's Hummel battery of six in a panzer division; the Soviet SU-76 regiment of each rifle division), taken from that army's batteries in the order of their blocks, a battery's first guns first (they stand longest), the models in turn. An army with no row draws none (Italy's Semovente is drawn as a tank destroyer; Japan had none worth drawing). Units decide (the design director, 23 November 07:19Z): these rows are only the history start's mix; where the campaign says what a corps has (ForceKit.spg, its share of its guns self-propelled), 'kit' draws it, its army's own model or the stand-in in its coat.",
+    "rows": {
+      "USA": [[1943, 9999, ["M7"], 3, ["arm"]]],
+      "UK": [[1942.75, 1943.75, ["M7"], 1.5, ["arm"]], [1943.75, 1944.67, ["Sexton", "M7"], 1.5, ["arm"]], [1944.67, 9999, ["Sexton"], 1.5, ["arm"]]],
+      "GER": [[1943.5, 9999, ["Hummel"], 0.5, ["arm"]]],
+      "SOV": [[1943, 9999, ["SU76"], 0.5, ["inf"]]]
+    },
+    "kit": {"models": {"USA": "M7", "UK": "Sexton", "GER": "Hummel", "SOV": "SU76"}, "axisStand": "Hummel", "stand": "M7"}
+  },
+  "td": {
+    "_about": "Tank destroyers (release 2, the same yes; LandBattle.td, off unless turned on; looks only; a campaign battle's only). The design director, 23 November 07:28Z, (a): a tank destroyer may be one model in an armoured block's mix, as the StuG is; the block keeps its own figures and fights as ever; a whole block of them waits for Units decide to give corps tank-destroyer battalions with figures of their own. ForceKit.td reads first (its share of the block's tanks), its army's own model ('kit') or the stand-in in its coat; else the historian's rows (23 November 07:05Z, H), [from, until, models, share] by the battle's year: the Soviet SU-85 with the tank blocks from August 1943, Italy's Semovente with the armoured blocks to its armistice. The tanks drawn so are spread through the block (a share of a quarter: its fourth tank of each four). Germany's StuG is in its stand-in mix already; the American and British M10 went with the infantry, so they come by the kit.",
+    "rows": {
+      "SOV": [[1943.58, 1945, ["SU85"], 0.25]],
+      "ITA": [[1941, 1943.75, ["Semovente"], 0.25]]
+    },
+    "kit": {"models": {"USA": "M10", "UK": "M10", "GER": "StuG3", "SOV": "SU85", "ITA": "Semovente"}, "axisStand": "StuG3", "stand": "M10"}
+  },
+  "cars": {
+    "_about": "Armoured cars (release 2; Brian, 23 November 07:01Z, yes to armoured cars, jeeps, motorcycles and AA; LandBattle.cars, off unless turned on; looks only; a campaign battle's only; the design director, 07:47Z, accepted as proposed). A block's cars are a view of it: out 'ahead' metres before its front, 'side' metres beyond each flank, while it has not met the enemy ('contact' metres) and is not fighting; then back 'back' metres behind its tray. They see nothing the block does not (no ticket words say they scout), fire never, and are lost as the block's strength goes. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md, H for where, M for the counts): [from, until, model, {kind: per block}] by the battle's year; 'per' below one is 1 in so many of the side's blocks of that army and kind, in the order of their blocks (a half: every other one). Every row of the month counts. Units decide: ForceKit.cars (its corps' cars per block) reads first, its army's own model or the stand-in; the rows are only the history start's.",
+    "rows": {
+      "GER": [[1939, 1943, "SdKfz222", {"arm": 0.5, "mot": 1}], [1943, 9999, "SdKfz222", {"arm": 0.5, "mot": 0.5}]],
+      "USA": [[1943.75, 9999, "M8", {"arm": 1, "inf": 0.3334}]],
+      "UK": [[1940, 1941, "ArmouredCar", {"arm": 1, "mot": 0.5}], [1941, 9999, "ArmouredCar", {"arm": 1, "mot": 0.5, "inf": 0.3334}]],
+      "FRA": [[1939, 1940.75, "ArmouredCar", {"arm": 1, "mot": 1}]],
+      "SOV": [[1939, 1942, "ArmouredCar", {"arm": 0.5, "inf": 0.25}], [1942, 9999, "ArmouredCar", {"arm": 0.5}]],
+      "ITA": [[1941, 9999, "ArmouredCar", {"arm": 0.5, "mot": 0.5}]]
+    },
+    "kit": {"models": {"GER": "SdKfz222", "USA": "M8"}, "axisStand": "SdKfz222", "stand": "ArmouredCar"},
+    "ahead": 160, "side": 18, "back": 30, "contact": 700
+  },
+  "aa": {
+    "_about": "AA vehicles (release 2, the same yes; LandBattle.aa, off unless turned on; looks only; a campaign battle's only). A block's AA vehicles are a view of it, kept 'back' metres behind its tray (a battery's behind its tractors, 'battery' more), moving with it; lost as its strength goes. They hit nothing the rules do not take, and a strike's losses stay the rules'; until the 3D game aims them upward they ride and park. 'rows': the historian's (23 November 07:47Z, historian/armoured-cars-aa-1123.md), read as the cars' are ('art': a battery, not a support team). Units decide: ForceKit.aa (its corps' AA vehicles per block) reads first.",
+    "rows": {
+      "USA": [[1943, 9999, "M16", {"arm": 1, "inf": 0.3334}]],
+      "GER": [[1939, 9999, "FlakHalftrack", {"arm": 1, "mot": 0.5}], [1939, 9999, "FlakTruck", {"inf": 0.3334}]],
+      "UK": [[1941, 9999, "FlakTruck", {"art": 1, "arm": 0.5}]],
+      "SOV": [[1939, 9999, "FlakTruck", {"art": 1}], [1944, 9999, "M16", {"arm": 0.3334}]],
+      "ITA": [[1939, 9999, "FlakTruck", {"art": 1, "arm": 0.5}]],
+      "JAP": [[1937, 9999, "FlakTruck", {"art": 0.5}]]
+    },
+    "kit": {"models": {"USA": "M16", "GER": "FlakHalftrack"}, "axisStand": "FlakHalftrack", "stand": "FlakTruck"},
+    "back": 40, "battery": 40
+  },
+  "light": {
+    "_about": "Jeeps, field cars and motorcycles (release 2; Brian, 23 November 07:01Z, yes to armoured cars, jeeps, motorcycles and AA; LandBattle.light, off unless turned on; looks only; a campaign battle's only; as the armoured cars, the design director's 07:47Z ruling). A block's light vehicles are a view of it: those 'ahead' ride out on its flanks ('ahead' metres before its front, 'side' beyond each flank) while it has not met the enemy (the armoured cars' 'contact'), then keep behind it; those behind park at its rear corners ('back'), and a motorcycle there rides despatch, back 'run' metres and up again each 'every' seconds. They see nothing the block does not, fire never, and are lost as the block's strength goes; never more than 'most' to a block, cars first. 'cars' and 'bikes' rows: the historian's (23 November 08:18Z, historian/light-cars-motorcycles-1123.md; H for where, M for most counts): by army ('_' every army not named), [from, until, models (taken in turn), {kind: per block}, {kind: 'ahead'} (else behind)]; 'per' below one is 1 in so many of the side's blocks of that army and kind, in the order of their blocks. 'kit': each army's own model where the campaign says what the corps has (ForceKit.jeeps, ForceKit.bikes); 'stand' the rest's, in their own coat. 'sw': the swaps a model is drawn with by army ('sidecar' on for the Poles, French, Hungarians and Romanians); a car riding ahead keeps her machine gun, one behind is a staff car without it.",
+    "cars": {
+      "USA": [[1939, 1942, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 1, "art": 1}, {"arm": "ahead"}], [1942, 9999, ["Jeep"], {"arm": 1, "mot": 1, "inf": 1, "art": 1}, {"arm": "ahead"}]],
+      "UK": [[1939, 1942, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}], [1942, 9999, ["Jeep"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}]],
+      "GER": [[1939, 1940.5, ["FieldCar"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}], [1940.5, 9999, ["Kubelwagen"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.5}, {}]],
+      "SOV": [[1941, 1943, ["GAZ67"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}], [1943, 9999, ["GAZ67", "Jeep"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]],
+      "ITA": [[1939, 9999, ["Fiat508"], {"arm": 0.5, "mot": 0.5, "inf": 0.3334, "art": 0.3334}, {}]],
+      "JAP": [[1936, 9999, ["Kurogane"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]],
+      "_": [[1939, 9999, ["FieldCar"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {}]]
+    },
+    "bikes": {
+      "GER": [[1939, 1943, ["R75"], {"arm": 1, "mot": 1, "inf": 0.5, "art": 0.3334}, {"arm": "ahead", "mot": "ahead"}], [1943, 9999, ["R75"], {"arm": 0.5, "mot": 0.5, "inf": 0.5, "art": 0.3334}, {}]],
+      "SOV": [[1939, 1941, ["Motorcycle"], {"arm": 0.5, "mot": 0.5, "inf": 0.25}, {"arm": "ahead", "mot": "ahead", "inf": "ahead"}], [1941, 9999, ["M72"], {"arm": 0.5, "mot": 0.5, "inf": 0.25}, {"arm": "ahead", "mot": "ahead", "inf": "ahead"}]],
+      "USA": [[1941, 9999, ["WLA"], {"arm": 0.3334, "mot": 0.3334, "inf": 0.3334, "art": 0.25}, {}]],
+      "UK": [[1939, 9999, ["M20"], {"arm": 0.5, "mot": 0.5, "inf": 0.5, "art": 0.3334}, {}]],
+      "ITA": [[1939, 9999, ["Alce"], {"arm": 1, "mot": 1, "inf": 0.3334, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]],
+      "JAP": [[1937, 9999, ["Rikuo"], {"arm": 0.5, "mot": 0.5, "inf": 0.3334, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]],
+      "_": [[1939, 9999, ["Motorcycle"], {"arm": 0.5, "mot": 0.5, "inf": 0.25, "art": 0.25}, {"arm": "ahead", "mot": "ahead"}]]
+    },
+    "kit": {"cars": {"models": {"USA": "Jeep", "UK": "Jeep", "GER": "Kubelwagen", "SOV": "GAZ67", "ITA": "Fiat508", "JAP": "Kurogane"}, "axisStand": "FieldCar", "stand": "FieldCar"},
+      "bikes": {"models": {"GER": "R75", "SOV": "M72", "USA": "WLA", "UK": "M20", "ITA": "Alce", "JAP": "Rikuo"}, "axisStand": "Motorcycle", "stand": "Motorcycle"}},
+    "sw": {"Motorcycle": {"sidecar": {"POL": "on", "FRA": "on", "HUN": "on", "ROM": "on", "_": "off"}}},
+    "most": 2, "ahead": 110, "side": 45, "back": 25, "run": 220, "every": 60
   }
 }

@@ -585,6 +585,20 @@ void ALandBattle::MapLive(int32 TracksFrom, int32 VehiclesFrom, bool bReset, boo
 		{
 			MakeBodies(NewFrom);
 		}
+		// The riders: after a reset the crowd's men were all made again, its riders gone with them, so the tank
+		// commanders and the light cars' and motorcycles' men are seated afresh (never a stale number posing another
+		// man); else the new light cars' and motorcycles' men.
+		if (bReset)
+		{
+			S.Seated.clear();
+			S.SeatedDone.clear();
+			MakeRiders();
+			SeatLight(0);
+		}
+		else
+		{
+			SeatLight(FMath::Max(0, VehiclesFrom));
+		}
 	}
 }
 

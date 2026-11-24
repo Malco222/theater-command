@@ -468,6 +468,40 @@ namespace LandFeed
 			Row.bArmour = E["armour"].Truth(false);
 		}
 
+		/** Effects (R2): an event's note of the fighters on call (AirNote), if it is one. */
+		void ReadAir(const Json& E, std::vector<AirNote>& Out)
+		{
+			const std::string& What = E["what"].Str();
+			if (What != "land:air-in" && What != "land:strafe" && What != "land:bomb-drop" && What != "air:lost") return;
+			const Json& X = E["extra"];
+			AirNote N;
+			N.T = E["t"].Num(0.0);
+			N.What = What;
+			N.Side = SideOf(E["side"].Str());
+			N.X = E["x"].Num(0.0);
+			N.Y = E["y"].Num(0.0);
+			N.Flight = X["flight"].Int(-1);
+			for (size_t K = 0; K < 4 && What == "land:air-in"; ++K) N.Run[K] = X["run"].At(K).Num(0.0);
+			if (What == "land:strafe")
+			{
+				N.Run[0] = X["from"].At(0).Num(0.0); N.Run[1] = X["from"].At(1).Num(0.0);
+				N.Run[2] = X["to"].At(0).Num(0.0); N.Run[3] = X["to"].At(1).Num(0.0);
+			}
+			N.Models = X["models"].Int(4);
+			N.Alt = X["alt"].Num(0.0);
+			N.Nat = X["nat"].Str("");
+			N.Year = X["year"].Int(1944);
+			N.Heading = X["heading"].Num(0.0);
+			N.Secs = X["secs"].Num(0.0);
+			N.Width = X["width"].Num(60.0);
+			N.At = X["at"].Num(-1.0);
+			N.To[0] = X["to"]["x"].Num(0.0);
+			N.To[1] = X["to"]["y"].Num(0.0);
+			N.Kind = X["kind"].Str("");
+			N.Chutes = X["chutes"].Int(0);
+			if (N.Flight >= 0) Out.push_back(std::move(N));
+		}
+
 		void ReadRound(const Json& R, Round& Row)
 		{
 			Row.N = R["n"].Int(0);
@@ -766,6 +800,7 @@ namespace LandFeed
 			Event Row;
 			ReadEvent(E, Row);
 			Out.Events.push_back(std::move(Row));
+			ReadAir(E, Out.Air); // (Effects (R2): the fighters on call)
 		}
 		ReadCuts(Root["cuts"], Out.Cuts);
 		for (const Json& R : Root["rounds"].Items)
@@ -956,6 +991,7 @@ namespace LandFeed
 			Event Row;
 			ReadEvent(E, Row);
 			R.Events.push_back(std::move(Row));
+			ReadAir(E, R.Air); // (Effects (R2): the fighters on call)
 		}
 		ReadCuts(Root["cuts"], R.Cuts);
 		ReadLines(Root, R);

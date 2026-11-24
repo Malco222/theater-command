@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Battle/LandField.h"
+#include "Battle/LandHouse.h"
 
 #include <cmath>
 #include <cstdint>
@@ -26,6 +27,14 @@
  *   Farmland the open fields of central and eastern Europe (the steppe's country where no recording lays it)
  *   Dry      the dry steppe east of the Volga: Mongolia and Khalkhin Gol, Kazakhstan, Iran, the Horn of Africa: short dry
  *            grass, sand, no farms, yurts
+ *   Rice     central and southern China, Korea, Japan, the Ryukyus: paddies by the season behind their bunds, terraces,
+ *            tile-roofed villages facing south, bamboo, pine hills, grave mounds (release 2, on trial "rice")
+ *   America  the farm country of North America (Iowa, Kansas, Ohio, Pennsylvania): fields on the survey's square mile,
+ *            corn, wheat, oats and hay, red barns and silos, wire and rail fences, a main street and its grain elevator
+ *            (release 2, on trial "america")
+ *   Plain    the dry plains of north China, Manchuria and India: the loess, gaoliang, millet, wheat and soybeans in their
+ *            strips, poplar-lined cart tracks sunk in the earth, flat-roofed villages in rows, grave mounds, the towns'
+ *            rammed-earth walls; India's monsoon crops and its winter wheat and mustard (release 2, on trial "plain")
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -47,6 +56,9 @@ namespace LandScape
 		Island,
 		Farmland,
 		Dry,      // LandDry: the dry steppe (Khalkhin Gol, 1939)
+		Rice,     // LandAsia: rice country (China, Korea, Japan; release 2, on trial "rice")
+		America,  // LandAmerica: North America's farm country (release 2, on trial "america")
+		Plain,    // LandPlain: the dry plains of north China, Manchuria and India (release 2, on trial "plain")
 		Count
 	};
 	const char* NameOf(Look L);
@@ -228,7 +240,7 @@ namespace LandScape
 		virtual bool Free(double X, double Y, double Room, bool bManMay = false) const = 0;
 		/** Plant one of a base (a tree, a kit model, a rock): its foot on the surface drawn. Off a recorded way, else not. */
 		virtual void Plant(LandField::Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, LandField::Rgb8 Tint) = 0;
-		/** A building from the region's kit (B one of Kit0..Kit15): its floor levelled, its footprint (Long along Yaw,
+		/** A building from the region's kit (B one of Kit0..Kit19): its floor levelled, its footprint (Long along Yaw,
 		 * Deep across) kept clear and stood on, planted. False where it does not fit. */
 		virtual bool House(LandField::Base B, double X, double Y, double Yaw, double Long, double Deep) = 0;
 		/** A building of the ground's own builder (the bocage's stone houses: walls, roof, door and windows; the
@@ -291,6 +303,10 @@ namespace LandScape
 		/** Whether the far ring carries the bocage's tree-lined field edges for its first kilometre (dark ridges with
 		 * crowns standing up from them, the layers to the horizon): France 1940's poplar rows might; the desert not. */
 		virtual bool FarRows() const { return false; }
+		/** Whether the land is laid out by a survey's grid (North America's townships): the plots' blocks square to the
+		 * compass, half a mile on a side, unwarped, cut square at their halves into fields of 80, 40 and 20 acres (LandField
+		 * Plot); PlotMin and PlotMax still say where the cutting stops. */
+		virtual bool Surveyed() const { return false; }
 		/** A parcel's crop (the region's own number, 0 to 63) for its kind (KOpen, KField, KRough) and a number U. */
 		virtual int CropOf(int Kind, double U) const = 0;
 		/** Its word for sheets and tests. */
@@ -328,10 +344,10 @@ namespace LandScape
 			return false;
 		}
 
-		// ---- the kit: Kit0..Kit15 from a region's battle models, Clut0..Clut5 its clutter
+		// ---- the kit: Kit0..Kit19 (LandField::KitSlots) from a region's battle models, Clut0..Clut5 its clutter
 		/** The kit's folder: Content/Models/<Folder> in the game, battle-models/<folder> in the shared folder. */
 		virtual const char* Folder() const { return ""; }
-		/** The model file (without .json) drawn for a kit slot (0..15), or null where the slot is unused. */
+		/** The model file (without .json) drawn for a kit slot (0..19), or null where the slot is unused. */
 		virtual const char* KitName(int Slot) const { (void)Slot; return nullptr; }
 		/** A kit slot after it is read (or plainly drawn where its file is missing): its far level's distance, its shape for
 		 * the men's and the camera's sight (BaseMesh::Sight*). */
@@ -340,6 +356,14 @@ namespace LandScape
 		virtual void KitPlain(int Slot, LandField::BaseMesh& M) const;
 		/** A kit slot the region builds itself in KitPlain (a yurt, a cairn), with no file to read or to miss. */
 		virtual bool KitBuilt(int Slot) const { (void)Slot; return false; }
+		/** A kit slot whose model lies low, LandField::LowKitHigh or less as planted (a balk's ridge, a bund: a man steps
+		 * over it, a tank rolls over it): it may lie across a recorded men's way, never a vehicles'. One that stands
+		 * taller after all (its model read or built higher) is taken up off the men's ways once the models are built. */
+		virtual bool KitLow(int Slot) const { (void)Slot; return false; }
+		/** The trial "houses" (release 2): a kit slot whose houses LandHouse builds to the vehicles' detail instead of its
+		 * model (Out its kind and roof; LandField gives each house's footprint and look): false where the slot keeps its
+		 * model. */
+		virtual bool KitHouse(int Slot, LandHouse::Spec& Out) const { (void)Slot; (void)Out; return false; }
 		/** How many steps down the frame budget's ladder of nearer far-draw distances the game takes for this ground (0,
 		 * GS9's own, to 4; production/theatre-budgets-1122/budgets.md section B): its dense woods' trees and shrubs turn
 		 * plain, to crowns and out sooner. By its look unless the region says. */
@@ -402,12 +426,16 @@ namespace LandScape
 	std::unique_ptr<Region> Make(Look L, const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
-	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandSnow.cpp).
+	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandAsia.cpp,
+	// LandAmerica.cpp, LandPlain.cpp, LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
 	std::unique_ptr<Region> MakeFarm(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeDry(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeAsia(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeAmerica(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakePlain(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */
