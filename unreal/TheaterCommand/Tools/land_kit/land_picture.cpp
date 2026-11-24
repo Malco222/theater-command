@@ -896,6 +896,7 @@ int main(int argc, char** argv)
 			{ "village_roofhole", 1, 0, 0, 10, 150.0, 22.0, 62.0, -1, 0.0, "damage 1: a shell through the roof (from behind)", 6, 12.4, 6.8, 2 },
 			{ "village_gable", 2, 0, 0, 10, -36.0, 16.0, 62.0, -1, 0.0, "damage 2: a gable down", 6, 12.4, 6.8, 2 },
 			{ "village_broken_top", 2, 0, 0, 10, -30.0, 10.0, 62.0, 15, 6.5, "close: its broken top, the render gone in a band", 6, 12.4, 6.8, 2 },
+			{ "village_top_above", 2, 0, 0, 10, -15.0, 20.0, 62.0, 15, 3.0, "close, from above: the broken top's stones", 6, 12.4, 6.8, 2 },
 			{ "village_shell", 3, 0, 0, 10, -36.0, 18.0, 62.0, -1, 0.0, "damage 3: burnt out to a shell", 6, 12.4, 6.8, 2 },
 			{ "village_mid", 0, 1, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 6, 12.4, 6.8, 2 },
 			{ "village_far", 0, 2, 0, 10, -36.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 6, 12.4, 6.8, 2 },
@@ -908,6 +909,8 @@ int main(int argc, char** argv)
 			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
 			{ "zz_roof_front", 1, 0, 0, 10, -36.0, 22.0, 62.0, -1, 0.0, "", 6, 12.4, 6.8, 2 },
 			{ "zz_attic", 1, 0, 0, 10, -120.0, 25.0, 62.0, 16, 9.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_top_b", 2, 0, 0, 10, 20.0, 35.0, 62.0, 15, 3.0, "", 6, 12.4, 6.8, 2 },
+			{ "zz_farm_top", 2, 0, 0, 7, -30.0, 10.0, 62.0, 15, 6.5, "", 0, 14.0, 7.2, 2 },
 		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
