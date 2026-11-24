@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 95e10d4b 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 13463732 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51705,7 +51705,7 @@
         for (const j of target.nb) {
           const r = g2.regions[j];
           if (!fallsOn(g2, c, r, banned)) continue;
-          const by2 = attackers2.find((u) => chaser(u) && pace(g2, u, r) < pace(g2, c, r));
+          const by2 = attackers2.find((u) => chaser(u) && chasePace(g2, u, c, r) < pace(g2, c, r));
           if (by2 && (!chasedBy || KIND[by2.kind].mobile && !KIND[chasedBy.kind].mobile)) chasedBy = by2;
         }
       }
@@ -51979,9 +51979,9 @@
     }
     return best;
   }
-  function pace(g2, c, to) {
-    let cost = KIND[c.kind].move + groundMarch(g2, c.kind, to);
-    if (to.terrain === "mountain" && c.kind !== "mtn") cost += 1;
+  function pace(g2, c, to, kind = c.kind) {
+    let cost = KIND[kind].move + groundMarch(g2, kind, to);
+    if (to.terrain === "mountain" && kind !== "mtn") cost += 1;
     if (to.terrain === "marsh") cost += 1;
     if (weather(g2).mud && EAST.has(to.owner)) cost += 1;
     if (frozen(g2, c.nat, to) && cmdWinter(g2, c) >= 1) cost += 1;
@@ -51990,6 +51990,7 @@
   var lifted = (c) => c.kind === "mot" || c.kind === "arm" ? 1 : 0;
   var afoot = (c) => !KIND[c.kind].mobile && c.kind !== "fort";
   var chaser = (c) => fights(c) && c.supplied && c.str >= 0.15;
+  var chasePace = (g2, u, c, to) => u.org < c.org && KIND[u.kind].mobile ? pace(g2, u, to, "inf") : pace(g2, u, to);
   function roadsCut(g2, c, from2, winner, banned, blocks, pay = true, open2) {
     const cut2 = /* @__PURE__ */ new Set();
     if (!unitsDecide(g2) || !afoot(c) && lifted(c) >= 1) return cut2;
@@ -51999,7 +52000,7 @@
       const mine4 = pace(g2, c, r);
       const held3 = blocks.get(j);
       if (held3) {
-        if (pace(g2, held3, r) < mine4) cut2.add(j);
+        if (chasePace(g2, held3, c, r) < mine4) cut2.add(j);
         continue;
       }
       const taken2 = new Set([...blocks.values()].map((u) => u.id));
@@ -52008,13 +52009,13 @@
         if (k === from2.id) continue;
         for (const u of g2.regions[k].units) {
           if (taken2.has(u.id) || u.kind !== "mot" && u.kind !== "arm" || !allied(g2, u.nat, winner) || !atWar(g2, u.nat, c.nat) || !chaser(u)) continue;
-          const cost = pace(g2, u, r);
-          if (cost < mine4 && u.ap >= cost && (!by2 || cost < pace(g2, by2, r))) by2 = u;
+          const cost = chasePace(g2, u, c, r);
+          if (cost < mine4 && u.ap >= cost && (!by2 || cost < chasePace(g2, by2, c, r))) by2 = u;
         }
       }
       if (by2) {
         blocks.set(j, by2);
-        if (pay) by2.ap -= pace(g2, by2, r);
+        if (pay) by2.ap -= chasePace(g2, by2, c, r);
         cut2.add(j);
       }
     }
@@ -52023,7 +52024,7 @@
   function pursuitTakes(g2, c, to, chasers) {
     if (!unitsDecide(g2) || !afoot(c)) return 0;
     const mine4 = pace(g2, c, to);
-    if (!chasers.some((u) => chaser(u) && pace(g2, u, to) < mine4)) return 0;
+    if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) < mine4)) return 0;
     return PURSUIT.share * (1 - lifted(c));
   }
   function onTheRoad(g2, u, road, fight2) {
