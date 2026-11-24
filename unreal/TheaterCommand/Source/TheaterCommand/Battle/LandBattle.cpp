@@ -4980,10 +4980,23 @@ void ALandBattle::HideTheTable()
 	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = LookAir.bSet ? LookAir.SkyDust : 0.6, HazeOver = 1.0;
 	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
 	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
+	// The sky overhead lifted as the sun climbs (the art director on 849c1bc1: Baghdad's zenith 50,59,74 with the sun 61
+	// degrees up, "a night storm over Iraq", and Voronezh's 63,71,85 at 52; it should be a pale hazy blue, about
+	// 120,145,185, near white at the horizon). The field's light grows with the sun's height (Whole, in Day's lamps) while
+	// the sky the engine draws from the key does not, so under a high sun the field outshone its own sky. The sky's own
+	// pixels only (SkyLuminanceFactor: not the haze over the far ground, and not the sky light, which is the table's
+	// cubemap): as it was to a sun 25 degrees up, rising to SkyLift times at 60 and over. Only the looks that ask it (the
+	// dry steppe's and the farmland's, LandScape's Air); the others' skies keep 1, as they were. "-TheaterLandSkyLift=1"
+	// leaves the sky as it was.
+	double SkyLift = LookAir.SkyLift;
+	LandLook::Asked(TEXT("TheaterLandSkyLift="), { &SkyLift });
+	const double SunDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.Z, -1.0, 1.0)));
+	const float Lift = static_cast<float>(1.0 + (FMath::Max(1.0, SkyLift) - 1.0) * FMath::SmoothStep(25.0, 60.0, SunDeg));
 	TArray<USkyAtmosphereComponent*> Atmospheres;
 	GetComponents(Atmospheres);
 	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
 	{
+		Atmosphere->SetSkyLuminanceFactor(FLinearColor(Lift, Lift, Lift));
 		Atmosphere->SetMieAnisotropy(0.75f);
 		Atmosphere->SetRayleighScatteringScale(static_cast<float>(0.0331 * FMath::Max(0.0, SkyAir)));
 		Atmosphere->SetMieScatteringScale(static_cast<float>(0.003996 * FMath::Max(0.0, SkyDust)));
@@ -5008,9 +5021,9 @@ void ALandBattle::HideTheTable()
 	}
 	LightTheBattle();
 	LaySky();
-	UE_LOG(LogTheater, Display, TEXT("Land battle look: %s, cover %.2f (overcast %.2f), clouds from %.0f m; the sun %.0f degrees up; key %.2f, the sky's fill %.2f at %.0f K and the sky light %.2f, shaded open ground %.2f of sunlit in light before the grade; the haze from %.0f m, %.4f at the ground (%.0f m), falloff %.3f, at most %.2f; the sky %.2f bright, air %.2f, dust %.2f, haze over it %.2f (%d skies)"),
+	UE_LOG(LogTheater, Display, TEXT("Land battle look: %s, cover %.2f (overcast %.2f), clouds from %.0f m; the sun %.0f degrees up; key %.2f, the sky's fill %.2f at %.0f K and the sky light %.2f, shaded open ground %.2f of sunlit in light before the grade; the haze from %.0f m, %.4f at the ground (%.0f m), falloff %.3f, at most %.2f; the sky %.2f bright (its own pixels %.2f, for the sun's height), air %.2f, dust %.2f, haze over it %.2f (%d skies)"),
 		Day.bDeck ? TEXT("a deck") : TEXT("cumulus"), Day.Cover, Day.Overcast, Day.Base, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.Z, -1.0, 1.0))),
-		Day.Key, Day.Fill, Day.FillKelvin, Day.SkyLight, Day.Shade, HazeStart, HazeDensity, GroundMean, HazeFalloff, HazeMost, SkyShine, SkyAir, SkyDust, HazeOver, Atmospheres.Num());
+		Day.Key, Day.Fill, Day.FillKelvin, Day.SkyLight, Day.Shade, HazeStart, HazeDensity, GroundMean, HazeFalloff, HazeMost, SkyShine, Lift, SkyAir, SkyDust, HazeOver, Atmospheres.Num());
 }
 
 void ALandBattle::LightTheBattle()
