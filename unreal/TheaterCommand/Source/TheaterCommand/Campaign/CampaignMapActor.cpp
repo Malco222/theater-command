@@ -13110,6 +13110,19 @@ int32 ACampaignMapActor::AirfieldNear(const FVector2D& MapPoint) const
 	return Best;
 }
 
+void ACampaignMapActor::AirfieldsWithin(const FVector2D& MapPoint, double Reach, TArray<TPair<int32, FVector2D>>& Out) const
+{
+	Out.Reset();
+	const double Far = Reach * Reach;
+	for (const TPair<int32, FVector2D>& Field : AirfieldSpots)
+	{
+		if (FVector2D::DistSquared(Field.Value, MapPoint) <= Far)
+		{
+			Out.Add(Field);
+		}
+	}
+}
+
 void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 {
 	if (!GetWorld() || (!Sortie.bFromSea && !Data.Regions.IsValidIndex(Sortie.From)))

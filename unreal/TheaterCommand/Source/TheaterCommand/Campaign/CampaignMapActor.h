@@ -311,6 +311,11 @@ public:
 	/** Where a province's airfield lies on the map (or where it would), and the province whose airfield is at a point, if one is. */
 	FVector2D AirfieldSpot(int32 RegionId) const;
 	int32 AirfieldNear(const FVector2D& MapPoint) const;
+	/**
+	 * (1.5.1; Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) Every
+	 * airfield within Reach map units of a point, with its spot: for the pointer, which then measures each on the screen.
+	 */
+	void AirfieldsWithin(const FVector2D& MapPoint, double Reach, TArray<TPair<int32, FVector2D>>& Out) const;
 
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
