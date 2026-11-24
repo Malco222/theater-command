@@ -8481,9 +8481,42 @@ namespace
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
 								[
 									SNew(SVerticalBox)
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+									+ SVerticalBox::Slot().AutoHeight()
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(Cream)
+										SNew(SOverlay)
+										+ SOverlay::Slot().HAlign(HAlign_Center)
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(Cream)
+										]
+										// (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".)
+										// SAVE and LOAD on the title band, at its right, clear of the title: SAVE over a war under way
+										// keeps a copy of it and opens the saved wars; LOAD opens them, where there are any. (The row of
+										// pages and CONTINUE below is full at Brian's frame: they are not put there.)
+										+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Center)
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+												.ToolTipText(FText::FromString(TEXT("Keep a copy of this war as it stands, beside the one the game keeps by itself each month. Keep as many as you like.")))
+												.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bCanReturn ? EVisibility::Visible : EVisibility::Collapsed; })
+												.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->SaveWar(); } return FReply::Handled(); })
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("SAVE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(BrightBrass)
+												]
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+											[
+												SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+												.ToolTipText(FText::FromString(TEXT("The wars you have saved: load one, or throw one away.")))
+												.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().SavedWars.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+												.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ShowSavedWars(); } return FReply::Handled(); })
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("LOAD"))).Font(Font(TEXT("Bold"), 11, 160))
+													.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->GetOpening().Tab == 3 ? BrightBrass : Cream); })
+												]
+											]
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
 									[
@@ -8678,7 +8711,7 @@ namespace
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible && Controller->GetOpening().AskKind != 0 ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							SNew(SBox).WidthOverride(640.0f)
+							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetOpening().AskKind == 5 ? 840.0f : 640.0f); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 26.0f))
 								[
@@ -8718,7 +8751,20 @@ namespace
 											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerBegin(true); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("START THE NEW ONE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+												// (release 1.5.1: before a saved war is loaded over it, "LOAD ANYWAY")
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+												.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->GetOpening().AskKind == 5 ? TEXT("LOAD ANYWAY") : TEXT("START THE NEW ONE")); })
+											]
+										]
+										// (Release 1.5.1.) Before a saved war is loaded over the campaign kept by itself, a third answer that
+										// loses nothing: that campaign is kept as a saved war, and then the other is loaded.
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().AskKind == 5 ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerLoadKeeping(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("SAVE IT, THEN LOAD"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Cream)
 											]
 										]
 									]
@@ -16147,6 +16193,157 @@ namespace
 			}
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
+
+			if (Opening.Tab == 3)
+			{
+				// ---- (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The saved
+				// wars, the newest first: each its line as CONTINUE says it, when it was saved, LOAD and DELETE. DELETE asks on
+				// the row first, and KEEP IT is its lit answer (ruling 134(f)).
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+				[
+					ListHead(TEXT("SAVED WARS"))
+				];
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+				[
+					Folding(TEXT("Saves.Intro"), SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(Opening.bCanReturn
+						? TEXT("Each SAVE keeps a copy of the war as it stands, as many as you like. The game still keeps the war you are playing by itself each month, for CONTINUE.")
+						: TEXT("The wars you have kept with SAVE, the newest first. CONTINUE is the war the game keeps by itself each month."))))
+				];
+				if (Opening.SavedWars.Num() > 0)
+				{
+					// (Release 2; the 1.5.1 pre-check of 24 November 2026: each SAVE is a whole copy of the war, and there is
+					// no cap.) What the saved wars take, and the room left on the computer; in the kit's amber, the colour of
+					// something due, once that room is under half a gigabyte, with the way to make more.
+					auto Size = [](int64 Count) -> FString
+					{
+						const double Megabytes = static_cast<double>(FMath::Max<int64>(Count, 0)) / (1024.0 * 1024.0);
+						return Megabytes >= 1024.0 ? FString::Printf(TEXT("%.1f GB"), Megabytes / 1024.0)
+							: Megabytes >= 10.0 ? FString::Printf(TEXT("%d MB"), FMath::RoundToInt32(Megabytes)) : FString::Printf(TEXT("%.1f MB"), Megabytes);
+					};
+					const bool bShort = Opening.FreeBytes >= 0 && Opening.FreeBytes < 512ll * 1024 * 1024;
+					FString Room = FString::Printf(TEXT("%d saved %s, %s on this computer."), Opening.SavedWars.Num(), Opening.SavedWars.Num() == 1 ? TEXT("war") : TEXT("wars"), *Size(Opening.SavesBytes));
+					if (bShort)
+					{
+						Room += FString::Printf(TEXT(" Room is short: %s free. Each SAVE is a whole copy of the war, so DELETE the ones you no longer need."), *Size(Opening.FreeBytes));
+					}
+					else if (Opening.FreeBytes >= 0)
+					{
+						Room += FString::Printf(TEXT(" %s free."), *Size(Opening.FreeBytes));
+					}
+					const FLinearColor RoomAmber(FColor::FromHex(TEXT("E0A13C")));
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+					[
+						Folding(TEXT("Saves.Room"), SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(bShort ? RoomAmber : Muted).AutoWrapText(true)
+						.Text(FText::FromString(Room)))
+					];
+				}
+				if (!Opening.SavesNote.IsEmpty())
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+					[
+						Folding(TEXT("Saves.Note"), SNew(STextBlock).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Opening.JustSaved.IsEmpty() ? Cream : BrightBrass).AutoWrapText(true)
+						.Text(Opening.SavesNote))
+					];
+				}
+				if (Opening.SavedWars.Num() == 0)
+				{
+					Starts->AddSlot().AutoHeight()
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+						.Text(FText::FromString(TEXT("No saved wars yet. During a war, open this menu with Esc and press SAVE.")))
+					];
+					return;
+				}
+				static const TCHAR* const MonthNames[] = { TEXT("January"), TEXT("February"), TEXT("March"), TEXT("April"), TEXT("May"), TEXT("June"),
+					TEXT("July"), TEXT("August"), TEXT("September"), TEXT("October"), TEXT("November"), TEXT("December") };
+				TArray<TSharedRef<SWidget>> Cells;
+				for (const FSavedWar& War : Opening.SavedWars)
+				{
+					const FString Id = War.Id;
+					const bool bJust = Id == Opening.JustSaved, bAsk = Id == Opening.AskDelete;
+					const FString When = War.When.GetYear() > 1
+						? FString::Printf(TEXT("Saved %d %s %d, %02d:%02d"), War.When.GetDay(), MonthNames[FMath::Clamp(War.When.GetMonth(), 1, 12) - 1], War.When.GetYear(), War.When.GetHour(), War.When.GetMinute())
+						: FString(TEXT("Saved"));
+					TSharedRef<SHorizontalBox> Answers = SNew(SHorizontalBox);
+					if (bAsk)
+					{
+						Answers->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("Throw this saved war away for good?"))).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream)
+						];
+						Answers->AddSlot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(16.0f, 7.0f)).IsFocusable(false)
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerDeleteWar(false); } return FReply::Handled(); })
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("KEEP IT"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(BrightBrass)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ESC"), BrightBrass)]
+							]
+						];
+						Answers->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 7.0f)).IsFocusable(false)
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AnswerDeleteWar(true); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("DELETE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
+							]
+						];
+					}
+					else
+					{
+						Answers->AddSlot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SBox).WidthOverride(112.0f)
+							[
+								SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(6.0f, 7.0f)).IsFocusable(false).HAlign(HAlign_Center)
+								.ToolTipText(FText::FromString(TEXT("Lay this war on the table again, as it stood when it was saved.")))
+								.OnClicked_Lambda([this, Id]() { if (Controller.IsValid()) { Controller->AskToLoadWar(Id); } return FReply::Handled(); })
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("LOAD"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(BrightBrass)
+								]
+							]
+						];
+						Answers->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(112.0f)
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 7.0f)).IsFocusable(false).HAlign(HAlign_Center)
+								.OnClicked_Lambda([this, Id]() { if (Controller.IsValid()) { Controller->AskToDeleteWar(Id); } return FReply::Handled(); })
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("DELETE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
+								]
+							]
+						];
+					}
+					Cells.Add(
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(14.0f, 9.0f, 10.0f, 10.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									Folding(TEXT("Saves.Line"), SNew(STextBlock).Text(FText::FromString(War.Line)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true))
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(bJust ? BrightBrass : Muted)
+									.Text(FText::FromString(bJust ? When + TEXT("  \u00B7  JUST SAVED") : When))
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Answers]
+						]);
+				}
+				AddGrid(Cells, 1);
+				return;
+			}
 
 			if (Opening.Tab == 2)
 			{

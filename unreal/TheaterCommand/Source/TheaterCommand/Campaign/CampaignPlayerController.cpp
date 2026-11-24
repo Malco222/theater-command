@@ -161,6 +161,7 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	}
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
+	ReadSavedWars(); // (release 1.5.1)
 	Opening.Door = Rules->LessonDoor(); // (rules 84.3.3: FIRST COMMAND's words, lit until the ten are done)
 	Opening.bCanReturn = Rules->IsRunning();
 	if (bShow && !Opening.bVisible)
@@ -269,7 +270,8 @@ void ACampaignPlayerController::TakeGrandNations(TArray<FGrandNation>&& Listed)
 
 void ACampaignPlayerController::ShowOpeningTab(int32 Tab)
 {
-	Opening.Tab = Tab == 2 ? 2 : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	Opening.Tab = Tab == 2 || Tab == 3 ? Tab : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	Opening.AskDelete.Empty(); // (a DELETE left unanswered is not carried to another page)
 	++Opening.Revision;
 }
 
@@ -1037,6 +1039,134 @@ void ACampaignPlayerController::AnswerBegin(bool bBegin)
 	{
 		BeginFirstCommand();
 	}
+	else if (Kind == 5)
+	{
+		LoadWar(Opening.AskLoad);
+	}
+}
+
+void ACampaignPlayerController::ReadSavedWars()
+{
+	ACampaignGameMode* Mode = GetMode();
+	Opening.SavedWars = Mode ? Mode->SavedWars() : TArray<FSavedWar>();
+	Opening.SavesBytes = Mode ? Mode->SavedWarsBytes() : 0;
+	Opening.FreeBytes = Mode ? Mode->FreeDiskBytes() : -1;
+}
+
+void ACampaignPlayerController::ShowSavedWars()
+{
+	ReadSavedWars();
+	Opening.SavesNote = FText::GetEmpty();
+	ShowOpeningTab(3);
+}
+
+void ACampaignPlayerController::SaveWar()
+{
+	// (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) A copy of the war
+	// as it stands, kept beside the campaign the game keeps by itself; the page of saved wars opens with it at the top.
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = GetSession();
+	if (!Mode || !Rules || !Rules->IsRunning() || !Opening.bCanReturn)
+	{
+		return;
+	}
+	FSavedWar War;
+	if (Mode->SaveWarAs(War))
+	{
+		Opening.JustSaved = War.Id;
+		Opening.SavesNote = FText::FromString(FString::Printf(TEXT("Saved: %s."), *War.Line));
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+	else
+	{
+		Opening.SavesNote = FText::FromString(TEXT("The war could not be saved."));
+	}
+	ReadSavedWars();
+	Opening.AskDelete.Empty();
+	Opening.Tab = 3;
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::AskToLoadWar(const FString& Id)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (!Mode || Opening.bWorking)
+	{
+		return;
+	}
+	Opening.AskDelete.Empty();
+	Opening.AskLoad = Id;
+	// (Ruling 130: nothing replaces the campaign kept by itself without asking. Loading lays this war where that one
+	// was, and the game keeps this one in its place from then on; where that one is kept as a saved war too, word for
+	// word, nothing is lost and nothing is asked.)
+	if (Opening.SavedLine.IsEmpty() || Mode->IsAutosaveKept())
+	{
+		LoadWar(Id);
+		return;
+	}
+	Opening.AskKind = 5;
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::AnswerLoadKeeping()
+{
+	// (the question's third answer: the campaign kept by itself is kept as a saved war, and then the other is loaded)
+	ACampaignGameMode* Mode = GetMode();
+	if (Opening.AskKind != 5 || !Mode)
+	{
+		return;
+	}
+	Opening.AskKind = 0;
+	FSavedWar Kept;
+	if (!Mode->KeepAutosaveAsWar(Kept))
+	{
+		Opening.SavesNote = FText::FromString(TEXT("Your campaign could not be kept as a saved war, so the other was not loaded."));
+		ReadSavedWars();
+		++Opening.Revision;
+		return;
+	}
+	LoadWar(Opening.AskLoad);
+}
+
+void ACampaignPlayerController::LoadWar(const FString& Id)
+{
+	ACampaignGameMode* Mode = GetMode();
+	FString Why;
+	if (Mode && Mode->LoadSavedWar(Id, Why))
+	{
+		Opening.SavesNote = FText::GetEmpty();
+		Opening.JustSaved.Empty();
+		Opening.AskLoad.Empty();
+		EnterCampaign();
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		return;
+	}
+	Opening.SavesNote = FText::FromString(Why.IsEmpty() ? FString(TEXT("That saved war could not be read.")) : Why);
+	ReadSavedWars();
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::AskToDeleteWar(const FString& Id)
+{
+	Opening.AskDelete = Id;
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::AnswerDeleteWar(bool bDelete)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (bDelete && Mode && !Opening.AskDelete.IsEmpty())
+	{
+		Mode->DeleteSavedWar(Opening.AskDelete);
+		if (Opening.JustSaved == Opening.AskDelete)
+		{
+			Opening.JustSaved.Empty();
+			Opening.SavesNote = FText::GetEmpty();
+		}
+	}
+	Opening.AskDelete.Empty();
+	ReadSavedWars();
+	++Opening.Revision;
 }
 
 void ACampaignPlayerController::BeginFirstCommand()
@@ -1065,6 +1195,9 @@ void ACampaignPlayerController::BeginFirstCommand()
 void ACampaignPlayerController::OpenMenu()
 {
 	Opening.AskKind = 0; // (a question left unanswered is not carried to the next time the screen opens)
+	Opening.AskDelete.Empty();
+	Opening.JustSaved.Empty();
+	Opening.SavesNote = FText::GetEmpty();
 	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (bWatching || FaceOff.bVisible)
 	{
@@ -5482,6 +5615,10 @@ void ACampaignPlayerController::Escape()
 	else if (Opening.bVisible && Opening.AskKind != 0)
 	{
 		AnswerBegin(false); // (ruling 134(f): the safe answer is the default. Esc keeps the saved campaign.)
+	}
+	else if (Opening.bVisible && !Opening.AskDelete.IsEmpty())
+	{
+		AnswerDeleteWar(false); // (release 1.5.1, ruling 134(f): Esc keeps the saved war)
 	}
 	else if (Opening.bVisible)
 	{
@@ -11508,6 +11645,11 @@ void ACampaignPlayerController::EndMonth()
 	if (Opening.bVisible && Opening.AskKind != 0)
 	{
 		AnswerBegin(false);
+		return;
+	}
+	if (Opening.bVisible && !Opening.AskDelete.IsEmpty())
+	{
+		AnswerDeleteWar(false); // (release 1.5.1: Enter keeps the saved war, as KEEP IT)
 		return;
 	}
 	// (The UI director's 84.3 check, item 6.) On the door Enter is BEGIN AS ..., its lit button, once the door has been
