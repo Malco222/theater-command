@@ -78,6 +78,13 @@ def pieces(T, n):
 def classify(d, lod):
     """(B, W, pack: the triangle indices in [B, W) that are webbing, notes)."""
     names = [b["name"] for b in d["bones"]]
+    # (a file may name more of his cloth, {paint: [bones] or [] for any}: the detailed rifleman's shoulder straps and
+    #  collar patches wear the helmet's paint on the neck and arm bones, his buttons a paint of their own; all sewn
+    #  on the tunic, not webbing. The gas-mask can wears the helmet's paint too, on the pelvis: still kit)
+    cloth = {int(k): set(v) for k, v in d.get("pack_cloth", {}).items()}
+
+    def body(paint, bone):
+        return paint in BODY or (paint in cloth and (not cloth[paint] or bone in cloth[paint]))
     m = d[lod]
     T = np.array(m["triangles"]).reshape(-1, 3)
     pa = np.array(m["paints"])
@@ -107,7 +114,7 @@ def classify(d, lod):
             continue
         bone_ = names[np.bincount(part[np.unique(T[tr].ravel())]).argmax()]
         paint_ = Counter(first[tr].tolist()).most_common(1)[0][0]
-        if not inside.all() and (bone_ in NOT_KIT_BONES or paint_ in BODY or paint_ == 5):
+        if not inside.all() and (bone_ in NOT_KIT_BONES or body(paint_, bone_) or paint_ == 5):
             continue                              # (the snow suit's hood, run on into the helmet's: not his kit, kept)
         if not inside.all():
             raise SystemExit(f"{lod}: a piece runs across the kit's edge at {B} or {W} "
@@ -117,7 +124,7 @@ def classify(d, lod):
                      "bone": names[np.bincount(part[v]).argmax()], "lo": X[v].min(0), "hi": X[v].max(0)})
     for r in rows:
         r["size"] = float((r["hi"] - r["lo"]).max())
-        r["kit"] = (r["bone"] not in NOT_KIT_BONES or r["bone"] in own) and r["paint"] not in BODY
+        r["kit"] = (r["bone"] not in NOT_KIT_BONES or r["bone"] in own) and not body(r["paint"], r["bone"])
     big = [r for r in rows if r["kit"] and r["size"] > SMALL]
     from scipy.spatial import cKDTree               # (run with scipy: the bpy environment's python has it)
     # each surface read as points over its triangles (a 7 x 7 grid in each): the distance to a surface, not to its
