@@ -74,16 +74,19 @@ struct FLandBattleState
 		std::set<int> Firing, Gunning;   // the kit's guns firing now: the planes' (GunIdOf) and the ground's (GunnerIdOf)
 		std::set<int> Falling, Hit, Struck; // planes by key: going down with a trail, hit, into the ground
 		/** Effects (R2): the downed pilots (-TheaterLandChutes): each one now, by his plane's key the shape his mesh was
-		 * last built to (his canopy's open share in the air; 2 and its slump once down), and once down his man in the
-		 * crowd and the clips he is blended between. */
+		 * last built to (his canopy's open share in the air; 2 and its slump once down; and how far over he had gone
+		 * there, his chute's mesh drawing him, else less than nothing), and once down his man in the crowd and the clips
+		 * he is blended between (each one's time and how fast it was going: the art director's notes, 24 November). */
 		bool bChutes = false;
 		std::vector<LandAir::Chute> ChutesNow;
 		struct FChuteMan
 		{
-			double Shape = -1.0;
+			double Shape = -1.0, Lying = -9.0;
+			int Made = 0, Moved = 0;     // his mesh made, and moved in place (for the 45 fps reading; told once, bCounted)
+			bool bCounted = false;
 			int Man = -1;
 			std::string File, Clip, WasClip;
-			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0;
+			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0, WasRate = 1.0, NowRate = 1.0;
 		};
 		std::map<int, FChuteMan> ChuteMen;
 	};

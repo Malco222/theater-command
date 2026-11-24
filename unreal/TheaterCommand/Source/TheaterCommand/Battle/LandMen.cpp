@@ -1709,6 +1709,9 @@ namespace LandMen
 			const Soldier* OwnS = nullptr;
 			bool bGore = false;
 			uint32_t MeshNo = 0;
+			// Effects (R2): a rider drawn bareheaded, his file's own helmet left off and no finish drawn in its place (a
+			// downed pilot in an infantry file: AddRider's bBareHead).
+			bool bBareHead = false;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
@@ -2347,7 +2350,7 @@ namespace LandMen
 			return R;
 		}
 
-		bool OwnHelmet(const Man& M) const { return M.Info.Finish < 0; }
+		bool OwnHelmet(const Man& M) const { return M.Info.Finish < 0 && !M.bBareHead; }
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Poses of the rules, drawn.
@@ -5224,7 +5227,7 @@ namespace LandMen
 		return File;
 	}
 
-	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row)
+	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row, bool bBareHead)
 	{
 		Impl& I = *Inner;
 		const auto Sol = I.Soldiers.find(FileArmy);
@@ -5258,16 +5261,18 @@ namespace LandMen
 		Mn.Info.FileArmy = FileArmy;
 		const Soldier& S = *Mn.S;
 		Mn.Info.Face = S.Faces.empty() ? 0 : static_cast<int>(Mix(Seed ^ 0xFACEull) % 8ull) % static_cast<int>(S.Faces.size());
-		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them)
+		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them.
+		// Bareheaded, not even his file's own: a downed pilot in his army's infantry file, who wears no steel helmet)
 		Mn.Info.Finish = -1;
+		Mn.bBareHead = bBareHead;
 		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
 		Mn.StylePick = static_cast<float>(Unit01(Seed ^ 0x5717E5ull));
 		Mn.bVisible = false;
 		RestPose(Mn.Now);
 		for (int L = 0; L < LodCount; ++L)
 		{
-			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, true, L, Mn.Info.Face);
-			Mn.Var[L] = &I.VariantOf(Mn.S, true, L);
+			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, !bBareHead, L, Mn.Info.Face);
+			Mn.Var[L] = &I.VariantOf(Mn.S, !bBareHead, L);
 		}
 		return static_cast<int>(I.Men.size()) - 1;
 	}

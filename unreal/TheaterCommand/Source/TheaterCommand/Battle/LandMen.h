@@ -457,9 +457,11 @@ namespace LandMen
 		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
 		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Row: armies.json's row he is painted
 		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
-		 * after Build); -1 where the file was not added.
+		 * after Build); -1 where the file was not added. bBareHead (Effects, R2): his file's own helmet left off and no
+		 * finish drawn over him, for a downed pilot in his army's infantry file (the art director, 02:26Z 24 November:
+		 * a flier wears no steel helmet); false, as before.
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string());
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string(), bool bBareHead = false);
 		/**
 		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
 		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert

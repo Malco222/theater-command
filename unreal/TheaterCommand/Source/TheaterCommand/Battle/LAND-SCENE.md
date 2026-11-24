@@ -769,18 +769,65 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   A live battle's notes plan it again as they come (the legs flown the same); a loss whose note comes after its plane
   was hit begins where it is. A replay from the start tells it all again.
 - **Downed pilots** (`-TheaterLandChutes`, with `-TheaterLandAirSupport`; release 2, off until the art director and a
-  45 fps reading pass; Brian, 23 November 20:09Z). The rules say whether a pilot got out (air:lost's chutes: half the
-  burning and spinning planes', never a plane blown apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1
-  to 2 s after the hit (out of a spin 0.5 to 0.9 s), never in her last 0.8 s, and where she is under 60 m by then at the
-  highest she is after the hit; falls free 1 to 1.6 s (pulling at once under 70 m), his way off her dying fast; his
-  canopy blossoms over 1 s and he comes down at 5 to 6.5 m/s, drifting with the battle's wind, swinging under it (14
-  degrees, 3.2 s a swing, dying away). In the air he and his canopy are one small mesh (`LandBattleAir.cpp`,
-  `ChuteShape`: a 7 m canopy, eight lines, a man in his harness 4.1 m under it, its pivot the canopy so he swings),
-  built again only as it blossoms. Down, he goes flat as he lands (`go_prone`), lies 1.5 to 3.5 s, gets up
-  (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block at 4.2 to 5 m/s (`run`), and goes to
-  ground there (`go_prone`, held): a man of the crowd in his army's infantry clips with no rifle (`RiderFileOf`). His
-  canopy falls in over 2.5 s and lies flat 4 m downwind of where he landed, its lines back to there (`HeapShape`).
-  Its own dice: the planes fly as before.
+  45 fps reading pass; Brian, 23 November 20:09Z; redone to the art director's notes of 24 November, 02:26Z). The
+  rules say whether a pilot got out (air:lost's chutes: half the burning and spinning planes', never a plane blown
+  apart's); `LandAir::Sky::Chutes` says how. He goes over the side 1 to 2 s after the hit (out of a spin 0.5 to 0.9 s),
+  never in her last 0.8 s, and where she is under 60 m by then at the highest she is after the hit. (`Sky::Build` plans
+  them whenever `-TheaterLandAirSupport` is on, on dice of their own, so the planes fly the same either way; only
+  `FlyOver` reads `-TheaterLandChutes`, and draws nothing of them without it.)
+  - *In the air* (her first and second notes, and her answers). He leaves her with her way across but none of her
+    climb, and falls free on gravity alone, so he is never above where he left her and always at least half g t
+    squared under it. His way through the air (across, the wind's taken off) dies as a falling man's does (his drag at
+    the 55 m/s a man falls at) and then on his canopy as it fills; the wind is not a push from rest, he is in it from
+    the first. He pulls after 1 to 1.6 s (sooner out of a plane already diving: once he has fallen as far as a man from
+    rest would have), and his canopy fills over the next 45 to 50 m of his fall, so that he drops about 50 m before the
+    wind takes him (within 1 m/s of it). He comes down at 5 to 6.5 m/s (one man in five heavy: 6 to 7), drifting with
+    the battle's wind, swinging under it about 4 s a swing, from 14 degrees settling to a gentle 5 that never quite
+    dies. Out under 60 m (her fifth) he pulls at once and his canopy is still filling as he lands: a hard landing (his
+    way still spent: 8 m/s through the air at most).
+  - *His canopy* (her sixth, and her answers): a dome 5 to 5.5 m across in the air (7 m is only its size lying flat)
+    and about half as deep, on 24 to 28 gores, her off-white for every nation (0.86, 0.85, 0.80, each chute about 4%
+    warmer or cooler). `LandAir::CanopyShape` and `HeapShape` make it (plain C++, both its faces): the seams faint
+    darker lines and the hem a little darker, in the points' colours, so they cost nothing a frame; a line from each
+    seam to his four risers. Its glow against the sun is one number a frame: `LandAir::Glow` (a little seen from under
+    it, most against the sun, none with the sun behind the eye or at night), by the key light against a clear day's,
+    given as `FigureFill` (and `FigureSun`, the pieces' rim) to the silk's own copy of the things' ink (M_MapSurface: no
+    new material). The mesh is made once for each make it has (him falling free; him, his lines and silk; down, him
+    going over; once the crowd's man has him, his lines and silk) and otherwise moved in place where it can be
+    (`UpdateMeshSection`: its points, facings and colours, no new proxy; its makings' storage kept from frame to frame),
+    never a frame for its look (`LandAir::SilkMoved`, `ManMoved`). In the air the silk is moved in place as it fills
+    (by 0.02 of its open share): a dome filling never folds a triangle over. Down it is made again, by 0.05 of its
+    falling in: the scene winds each triangle by where its points are, and the heap's rumple folds about one in fifty
+    over within a step (a sixth by the time it lies flat), which moved in place would show their inside's shading. His
+    part (him going over, by 0.05, and his lines) is moved in place. At 45 fps a pilot's mesh is now made 23 times (20
+    of them as his canopy falls in) and moved in place 41 to 59, against 84 to 101 makes before (a review of 24
+    November); the log tells each pilot's count once his canopy lies flat, for the 45 fps reading.
+  - *Down* (her third, fourth and fifth notes). Seconds are real seconds from his landing. His chute's mesh draws him
+    going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
+    scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
+    `GER_panzer`, with their own heads), else its infantry's (`RiderFileOf`) bareheaded (`AddRider`'s new `bBareHead`:
+    his file's helmet left off, no finish drawn), unarmed. So that nobody sees him pop: the crowd's man is a rider, in
+    `go_prone` held at its end with its end offset not taken back (`StepRider`), so his hips lie 0.59 m forward of his
+    feet, 0.14 m to his right and 0.14 m up (every soldier file's `end_offset` and pelvis, within a centimetre); the
+    mesh's man pitches 84 degrees about his feet and is moved so that flat his hips lie there (`LandAir::OverShift`,
+    by his own file's end offset once it is known). He had been moved back 0.9 m and lay 0.7 m short, and the crowd's
+    man jumped forward in plain view (a review of 24 November). And the mesh keeps him until the crowd's man has been
+    posed with his ride: the crowd is posed before `FlyOver`, so a ride set there shows the frame after, and he had gone
+    for a frame; where no man of the crowd can be made he stays lying in the mesh. In a wind over 4 m/s his canopy
+    drags him 1 to 2 m downwind first (at 1 to 1.5 m/s). He lies 1.5 to 3.5 s (after a hard landing 3 to 5 s), gets up
+    onto his knees (`go_prone` played back from 1.9 s to 0.95 s, over 1 s; 1.4 s after a hard landing), works his
+    harness free kneeling, his hands at his chest, for 1 to 1.5 s (`kneel_down` held at its end, 0.5 s, which is
+    `stand_up`'s first pose), stands (`stand_up`, turning to his way) and runs 20 to 40 m from the nearest enemy block
+    (`run`), and goes to ground there (`go_prone`, held). After a hard landing he limps: there is no limp clip, so `run`
+    slowed to 0.65 of its pace and hurried off his right leg (a hitch of 0.45 of the loop's pace either way), his feet
+    kept to its stride, and only 0.6 as far (whole half-loops). `Chute::Rate` says how fast each clip goes (less than
+    nothing played back) for the scene's blends, and `Chute::Blend` over how long: 0.25 s, but 0.5 s into his harness's
+    kneel, `go_prone` on his knees being far from `kneel_down`'s last pose (his pelvis 55 degrees off it, his right
+    thigh 68 to 72, his pelvis 0.18 m on; no time of `go_prone` nearer than 45 degrees), so that he settles into it
+    rather than lurching. His canopy falls in over 2.5 s and lies flat 4 m downwind of him, its lines back to his
+    harness where he lay (from the half of its skirt behind its middle, the same lines all the while:
+    `LandAir::LineBack`; they had changed halves as it fell past him).
+  - Its own dice (`0xC47E1` as before; the notes' draws on `0xC47E3`): the planes fly as before, frame for frame.
 - **Not yet.** The engines' and guns' sound (the sound director's), the bombs seen falling, light flak's puffs (the kit
   has only its heavy row).
 - **Test**: `Tools/land_air/run.sh [out folder]` (`LAND_AIR_OUT`): the feed, the machines, the plan, the flight (drawn
@@ -791,11 +838,45 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   the same however the frames fall) and no NaN; `air_paths.png`, three strikes side-on and from above
   (`paths.py`); the chutes (a pilot out of the burning and the spinning plane, none out of the one blown apart; out
   after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
-  up, running from the enemy, flat; his canopy 4 m downwind; the same twice), `chutes.py` drawing them side-on and
-  down from above. Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`).
+  up onto his knees, his harness, up, running from the enemy, flat; his canopy 4 m downwind; the same twice). The art
+  director's notes, on that field's pilots and on a second, windy one's (5.7 m/s, an Il-2 losing her pilot 35 m up):
+  falling free never above where he left her and at least half g t squared under it (first); with the air (within
+  1 m/s of the wind) within 3 s of his pull, his way only dying away against the air, with the wind still 3 s after
+  his canopy is full, which is 40 to 75 m under where he left her (second);
+  drawn in his chute's mesh till he lies flat under his falling canopy, then the crowd's man (third); up onto his
+  knees, kneeling 1 to 1.5 s, then `stand_up`, and in a wind over 4 m/s dragged 1 to 2 m downwind first, none in a
+  light one (fourth); out under 60 m a hard landing, his canopy still filling, lying 3 to 5 s and limping off slower,
+  the rest soft (fifth); his swing about 4 s, 14 degrees settling to about 5; his canopy 5 to 5.5 m across, about half
+  as deep, 24 to 28 gores, faint seams, a line at each, both faces, her off-white within 4%, and its glow (sixth). And
+  a review's of 24 November: the scene's mesh at 45 fps, made at most 30 times and never in the air once his canopy is
+  out; at the swap he is drawn every frame, in the mesh or as the crowd's man, never both (the crowd posed first); a
+  canopy filling never folds a triangle over, and his lines run back from the same half of its skirt; flat in the
+  mesh his hips lie where the crowd's man's do in every soldier file that has `go_prone`'s end offset (18 of 19; read
+  from `Content/Models/Soldiers`, `LAND_AIR_SOLDIERS`); each clip blended into over 0.25 s, the harness's kneel 0.5 s;
+  he lies the way he faced as he landed. The planes' hash is printed against release 1's (`e258eaf3320235ff`).
+  `chutes.py` draws each pilot's first seconds, his way through the air and his seconds on the field, and the canopy
+  as the scene draws it (with its glow and without).
+  Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`, `chutes_r2.png`). The bareheaded rider:
+  `Tools/land_show/run.sh` (every infantry file's rider without his helmet at each level, none drawn in its place).
 - **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
   With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
-  lying on the field.
+  lying on the field; and for the notes of 24 November: one from below at 100 m with the sun behind the canopy (its
+  glow and its seams), a pilot falling free and his canopy filling, a hard landing out of a low Il-2, the swap from his
+  chute's mesh to the crowd's man (shot 7: that the man lying prone in `go_prone` lies where the mesh's man went over,
+  no jump and no frame without him; the numbers are tested, the look is not), his harness kneeling (shot 8: that he
+  settles into his kneel off `go_prone` without a lurch) and the drag in a wind over 4 m/s, the limp, and an infantry
+  file's rider bareheaded (its scalp under the helmet is the file's own skin). The 45 fps reading counts each pilot's
+  mesh made and moved in place (the log, once his canopy lies flat: 23 and 41 to 59 here).
+  - *Her second note, as read* (her words: "Pilot 11 drops about 50 m straight down before the wind takes him. Once
+    his own way is spent, he drifts with the air within 2-3 s. The wind isn't a push that builds from rest."). Its
+    first sentence is release 1's fault, as her first note's first sentence is (his way died against the ground, so he
+    fell straight down and the wind then pushed him from rest). As built his way dies against the air from the first,
+    so he never falls straight down: the test's pilots are with the air 2.2 to 3.0 s after their pull (2.5 to 4.3 s
+    after leaving her, carried 50 to 240 m across first), and the test holds that to 3 s. The 40 to 75 m to a full
+    canopy is its opening's loss, kept. Her Mac shot of a pilot falling free and filling judges it.
+  - *Not done of her third note:* "no pack". The infantry fallback still wears his pack and webbing: the soldier files
+    have only a helmet range to leave off (`HelmetFirst`, `HelmetCount`), none for a pack. Owed: a pack range from the
+    soldiers' thread, or a flier's own file.
 
 ## Packaging
 
