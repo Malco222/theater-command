@@ -647,6 +647,54 @@ describe("step 1b's keys", () => {
     }
   });
 
+  it("the trace's flank and rear adds are the loss on the blows that landed there, by each blow's own aspect; a block struck only on its front adds nothing", () => {
+    // The arm the gate reads (the data's m: flank and rear at the army), with fighters on call and guns. The reading
+    // here is made apart from the ledger's own: from what blow() returns (its aspect, and the weight rules.ts gives that
+    // aspect), as fsx/brk/causes.ts read it, never from the parts the ledger is handed.
+    const t0 = onCall('normandy-1944', 1);
+    type Blown = { dmg: number; aspect: 'front' | 'flank' | 'rear' };
+    type Suffer = (t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][], blind: boolean, bare: boolean, mArmy: number, nerveBuilt: number, parts?: Partial<Record<NervePart, number>>) => void;
+    type Traced = { blow(u: LandUnit, t: LandUnit): Blown; suffer: Suffer; power: Record<Side, number> };
+    const b = new LandBattle(withSpread(t0, spreadKeys(t0, { level: true, ledger: true }))), A = b as unknown as Traced, blow = A.blow.bind(b), suffer = A.suffer.bind(b);
+    // This tick's blows by the block struck, as returned (the step settles each one's weight before the block suffers).
+    let tick = new Map<number, Blown[]>();
+    A.blow = (u, t) => { const r = blow(u, t); tick.set(t.id, [...(tick.get(t.id) ?? []), r]); return r; };
+    const want = { att: { loss: 0, flank: 0, rear: 0 }, def: { loss: 0, flank: 0, rear: 0 } };
+    const seen = { front: 0, flank: 0, rear: { att: 0, def: 0 } };
+    A.suffer = (t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt, parts) => {
+      const before = t.str;
+      suffer(t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt, parts);
+      const s = t.side, lost = (before - t.str) / t.str0;
+      const k = (t.power0 * lost * LAND.nerve.perLoss[s] * Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * (t0[s].general?.level ?? 0))) / A.power[s];
+      want[s].loss += k;
+      // The tick's blows on it (air harm and kept harm landing have no striker, and no flank or rear of their own).
+      if (!from.length || bare) { expect(parts?.flank).toBeUndefined(); expect(parts?.rear).toBeUndefined(); return; }
+      const rs = tick.get(t.id)!, d = rs.reduce((a, r) => a + r.dmg, 0);
+      if (!(d > 0)) return;
+      const at = (p: 'flank' | 'rear'): number => rs.reduce((a, r) => a + r.dmg * (r.aspect === p ? LAND.aspect[p][1] : 1), 0) / d;
+      const wf = at('flank'), wr = at('rear');
+      expect(Math.abs(parts!.flank! - wf)).toBeLessThan(1e-12);
+      expect(Math.abs(parts!.rear! - wr)).toBeLessThan(1e-12);
+      // Struck only on its front this tick: each weight is 1 exactly, so nothing is added.
+      if (rs.every((r) => r.aspect === 'front')) { expect(parts!.flank).toBe(1); expect(parts!.rear).toBe(1); if (lost > 0) seen.front++; }
+      if (lost > 0 && rs.some((r) => r.aspect === 'flank' && r.dmg > 0)) seen.flank++;
+      if (lost > 0 && rs.some((r) => r.aspect === 'rear' && r.dmg > 0)) seen.rear[s]++;
+      want[s].flank += k * (wf - 1); want[s].rear += k * (wr - 1);
+    };
+    for (let i = 0; i < 400000 && !b.over && (b.contactAt === null || b.t < b.contactAt + 180); i++) { tick = new Map(); b.step(); }
+    expect(seen.front).toBeGreaterThan(0);
+    expect(seen.flank).toBeGreaterThan(0);
+    const T = b.ledgerTrace()!;
+    const near = (a: number, x: number): void => expect(Math.abs(a - x)).toBeLessThan(1e-9 * Math.max(1e-6, Math.abs(x)));
+    for (const s of SIDES) {
+      expect(want[s].loss).toBeGreaterThan(0);
+      near(T[s].loss, want[s].loss); near(T[s].flank, want[s].flank); near(T[s].rear, want[s].rear);
+    }
+    expect(SIDES.some((s) => want[s].flank > 0)).toBe(true);
+    // Flank and rear are read apart: a side has a rear add only if a blow landed on a rear of its own, else 0 exactly.
+    for (const s of SIDES) { if (seen.rear[s] > 0) expect(T[s].rear).toBeGreaterThan(0); else expect(T[s].rear).toBe(0); }
+  });
+
   it('the residual by what is read', () => {
     const base = lodz(2);
     const sig = (t: T, k: SpreadReckoning): number[] => {
