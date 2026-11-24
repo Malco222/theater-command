@@ -608,7 +608,7 @@ public:
 	 * each in turn and puts a new army in his hand. The plate is said once nothing else holds the screen.
 	 */
 	void ShowReady();
-	bool CanShowReady() const { return bReadyNotice && !bWatching && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
+	bool CanShowReady() const { return bReadyNotice && !bWatching && !IsFightingLive() && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
 	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
 	/** The brass heading over the plate while it is up ("READY FOR ORDERS · 1 OF 2"); empty otherwise. */
 	FString GetReadyHeading() const { return CanShowReady() ? ReadyHeading : FString(); }

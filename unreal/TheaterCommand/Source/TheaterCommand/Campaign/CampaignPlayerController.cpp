@@ -5240,7 +5240,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	// (Release 1.5.1, new units ready) The READY plate, once nothing else holds the screen (the month's card closed) and
 	// the month's own notice ("June 1941. Your orders.") has gone.
-	if (bReadyDue && !bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !bPageOpen && FPlatformTime::Seconds() >= NoticeUntil)
+	// (The 1.5 pre-check, 24 November 19:18Z: not under a battle or a raid being fought, where it would run out unseen.)
+	if (bReadyDue && !bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !bPageOpen && !IsFightingLive() && FPlatformTime::Seconds() >= NoticeUntil)
 	{
 		SayReady();
 	}

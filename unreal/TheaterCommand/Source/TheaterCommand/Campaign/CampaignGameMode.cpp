@@ -379,6 +379,9 @@ bool ACampaignGameMode::WriteSavedWar(const FString& Text, FSavedWar& Out)
 	if (!FFileHelper::SaveStringToFile(Text, *(Folder / (Id + TEXT(".json"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("The war could not be saved to %s"), *(Folder / (Id + TEXT(".json"))));
+		// (The 1.5 pre-check, 24 November 19:18Z.) A write cut short (a full disk) leaves no part-written war behind, to be
+		// listed as a saved war that will not load.
+		IFileManager::Get().Delete(*(Folder / (Id + TEXT(".json"))), false, true, true);
 		return false;
 	}
 	FFileHelper::SaveStringToFile(Line, *(Folder / (Id + TEXT(".txt"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
