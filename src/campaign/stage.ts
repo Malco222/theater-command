@@ -113,3 +113,8 @@ export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack'
 // is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
 /** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
 export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
+
+// Conquered towns settle (release 2; Brian 24 November 2026 18:13Z, buildings.ts): the grand campaigns opened while
+// this is true carry the flag 'settledTowns'. Forced by TC_SETTLEDTOWNS.
+/** True where new grand campaigns open with conquered towns able to build everything once settled (stage.json 'settledTowns'). */
+export const SETTLEDTOWNS_STAGE: boolean = staged('TC_SETTLEDTOWNS', 'settledTowns');

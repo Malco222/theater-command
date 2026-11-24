@@ -27,7 +27,7 @@ import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
-import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
+import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
@@ -3540,6 +3540,7 @@ function nearestFriendly(g: Game, c: Corps): Region | null {
 export function capitulate(g: Game, nat: string, by: string): void {
   const X = g.nations[nat];
   if (!X.alive) return;
+  const was = holdersNow(g); // settled towns (release 2): ground handed over here starts settling this month
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
   recordFall(g, nat, by, 'beaten');
@@ -3620,6 +3621,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
       if (to) { place(g, c, to); c.ap = 0; } else removeCorps(g, c);
     }
   }
+  handedOver(g, was);
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
   // The grand campaign: this fall may have put another country's capital into the hands of that country's friends.
@@ -4561,6 +4563,7 @@ export function sovietEvent(g: Game): void {
     const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
     if (lost < 5) return;
   }
+  const was = holdersNow(g); // settled towns (release 2): the pact's ground starts settling this month
   g.flags.sovietMove = 1;
   g.week = 3;
   for (const r of g.regions) {
@@ -4590,5 +4593,6 @@ export function sovietEvent(g: Game): void {
   g.supplyDirty = true;
   headline(g, 'event', 'The Red Army crosses into eastern Poland under the pact with Germany.', 'SOV');
   g.week = 4;
+  handedOver(g, was);
   if (!fallen) checkCollapse(g, 'POL', 'GER');
 }
