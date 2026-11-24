@@ -37,7 +37,8 @@ import { EASTERN, addCorps, capture, frozen, resolveBattle } from '../src/campai
 import { fronts } from '../src/campaign/staff';
 import { deliver } from '../src/campaign/economy';
 import { campXp } from '../src/campaign/buildings';
-import { STORIES, cashHonour, designation, drafted, fameOf, guardsWords, raisedXp, storyWalk, titledName, training, whyNotCash } from '../src/campaign/stories';
+import { STORIES, cashHonour, designation, drafted, fameOf, guardsWords, raisedXp, titledName, training, whyNotCash } from '../src/campaign/stories';
+import { turnToDate } from '../src/core/ticket';
 import { VALOUR, sendHero, sendWorth, whyNotSend } from '../src/campaign/valour';
 import { eliteCount, eliteOf, eliteRule, traitDefence, whyNoElite } from '../src/campaign/traits';
 import { SUPPORT, antiTank, armourOfTheDay, gunsOfRows, gunsYear, type Facing } from '../src/campaign/support';
@@ -1092,7 +1093,7 @@ describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Pa
     expect(titledName(ger)).toBe(`XIX ${designation('GER')} Panzer Corps`);
     expect(titledName({ ...sov, guards: undefined })).toBe('III Corps');
     expect(titledName({ ...sov, name: 'I Guards Corps' })).toBe('I Guards Corps');
-    expect(guardsWords(sov)).toBe('III Guards Corps: its men earned the title in battle in September 1939, with experience of 50 or more and 3 provinces taken. A name only: what they have learned already counts in its strength.');
+    expect(guardsWords(sov)).toBe('III Guards Corps: its men earned the title in September 1939, with experience of 50 or more and 3 provinces taken. A name only: what they have learned already counts in its strength.');
     expect(guardsWords({ ...sov, guards: undefined })).toBe('');
     // The card: the corps row and the army's card give the titled name and say what the title is.
     expect(page).toContain('<span class="nm">${esc(titledName(c))}');
@@ -1104,17 +1105,31 @@ describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Pa
   });
 
   it('counts ground walked into after the defenders gave way, as its record\'s \'taken\' does, and says provinces taken', () => {
-    const g = open(true);
-    const c = g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!;
-    c.xp = 0.5; c.rec = { taken: 2 };
-    storyWalk(g, [c], g.regions[c.reg]);
-    expect(c.rec.taken).toBe(3);
-    earnGuards(g, [c]);
-    expect(c.guards).toBe(g.turn);
-    expect(guardsWords(c)).toContain(`with experience of ${Math.round(UNITS.land.guards.xp * 100)} or more and ${UNITS.land.guards.won} provinces taken.`);
-    for (const w of [guardsWords(c), whyNoElite(g, 'SOV')!]) { expect(w).not.toMatch(/attacks won|0\.5/); }
+    // A real walk-in: the Poles give the ground up, and the province the Germans march into is their third.
+    const f = poznan(true, 0.5, 0.2);
+    for (const c of f.def) c.yields = true;
+    for (const c of f.att) c.rec = { taken: 2 };
+    const rep = resolveBattle(f.g, f.att, f.target);
+    expect(rep.yielded).toBe(true);
+    for (const c of f.att) {
+      expect(c.rec!.taken, c.name).toBe(3);
+      expect(c.guards, c.name).toBe(f.g.turn);
+      expect(c.elite).toBeUndefined();
+    }
+    const c = f.att[0];
+    expect(guardsWords(c)).toContain(`with experience of ${Math.round(UNITS.land.guards.xp * 100)} or more and ${UNITS.land.guards.taken} provinces taken.`);
+    // A walk-in is not a battle, so the card does not say the title was earned in one.
+    expect(guardsWords(c)).toContain(`its men earned the title in ${turnToDate(f.g.turn).label},`);
+    for (const w of [guardsWords(c), whyNoElite(f.g, 'SOV')!]) { expect(w).not.toMatch(/attacks won|0\.5/); }
     expect(units.land._guards).toContain('provinces taken');
     expect(units.land._guards).not.toContain('attack wins only');
+    expect(units.land.guards).not.toHaveProperty('won');
+    // Off, the same walk-in counts the province and writes no title.
+    const o = poznan(false, 0.5, 0.2);
+    for (const c of o.def) c.yields = true;
+    for (const c of o.att) c.rec = { taken: 2 };
+    expect(resolveBattle(o.g, o.att, o.target).yielded).toBe(true);
+    for (const c of o.att) { expect(c.rec!.taken).toBe(3); expect('guards' in c).toBe(false); }
   });
 
   it('wears the word once on the corps row where the corps is also named in the order of the day', () => {
@@ -1333,7 +1348,7 @@ describe('the slice\'s new code names no nation', () => {
     const src = unitsSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(src).not.toMatch(/['"`](GER|SOV|FRA|UK|USA|ITA|JAP|SWE|NOR|FIN|HUN|POL)['"`]/);
     const L = UNITS.land;
-    expect(L.guards).toEqual({ xp: 0.5, won: 3, elite: ['guards'] });
+    expect(L.guards).toEqual({ xp: 0.5, taken: 3, elite: ['guards'] });
     expect(L.raisedBy).toEqual({ heavy: 'heavies' });
   });
 });

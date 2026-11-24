@@ -98,7 +98,7 @@ export function grade(xp: number): string {
 export const designation = (nat: string): string => STORIES.designation[nat] ?? STORIES.designation._default;
 
 /**
- * A corps' name as its card gives it. A corps whose men earned the Guards title in battle (Units decide, c.guards; DD
+ * A corps' name as its card gives it. A corps whose men earned the Guards title (Units decide, c.guards; DD
  * 24 Nov 15:53Z, #2 form Part 1 section 1, Part 2 section 4) carries its nation's word for such a formation after its
  * number: "III Guards Corps". The name it is known by in the orders and the record is unchanged; this is the title
  * only, and it adds nothing to the corps' strength.
@@ -115,7 +115,7 @@ export function titledName(c: Corps): string {
 export function guardsWords(c: Corps): string {
   if (c.guards === undefined) return '';
   const G = UNITS.land.guards;
-  return `${titledName(c)}: its men earned the title in battle in ${turnToDate(c.guards).label}, with experience of ${Math.round(G.xp * 100)} or more and ${G.won} provinces taken. A name only: what they have learned already counts in its strength.`;
+  return `${titledName(c)}: its men earned the title in ${turnToDate(c.guards).label}, with experience of ${Math.round(G.xp * 100)} or more and ${G.taken} provinces taken. A name only: what they have learned already counts in its strength.`;
 }
 
 /** The honours a unit carries, oldest first. */

@@ -2418,6 +2418,9 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   // Ground walked into in a theatre that opened late is kept out of everyone else's count of battles.
   if (lateTheatre(target)) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags.lateWalks = (g.flags.lateWalks ?? 0) + 1; }
   storyWalk(g, attackers, target);
+  // (Units decide: ground walked into is a province taken, so the title is earned here too, DD 24 Nov 15:53Z, #2 form
+  // Part 1 section 1. Off, nothing.)
+  earnGuards(g, attackers);
   for (const d of new Set(gone.map((u) => u.nat))) checkCollapse(g, d, attNat);
   return rep;
 }

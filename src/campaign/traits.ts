@@ -490,7 +490,7 @@ export function traitCardRule(t: Trait, scale: number, units: boolean): string {
  */
 function earnedWords(): string {
   const G = UNITS.land.guards;
-  return `Not raised: the title is earned in battle. A corps of any army with experience of ${Math.round(G.xp * 100)} or more that has taken ${G.won} provinces earns it, as a name only, since its experience already counts in its strength.`;
+  return `Not raised: the title is earned in battle. A corps of any army with experience of ${Math.round(G.xp * 100)} or more that has taken ${G.taken} provinces earns it, as a name only, since its experience already counts in its strength.`;
 }
 
 /**

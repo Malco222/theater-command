@@ -463,8 +463,8 @@ export interface Corps extends Storied {
   elite?: string;
   /**
    * Units decide (DD 24 Nov 15:53Z, #2 form Part 1 section 1, Part 2 section 4), written only under that switch: the
-   * month its men earned the Guards title in battle (units.ts earnGuards). A name only: its name and card read it, and
-   * nothing else does. Never 'elite'.
+   * month its men earned the Guards title, after a battle or on ground walked into (units.ts earnGuards). A name only:
+   * its name and card read it, and nothing else does. Never 'elite'.
    */
   guards?: number;
   /** Morale, 0 to 1 (the grand campaign). A corps in a historical scenario carries none. See morale.json. */

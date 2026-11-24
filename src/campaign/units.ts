@@ -88,7 +88,7 @@ export interface UnitsData {
     byOrders: { need: number; stop: number; main: number };
     xp: { won: number; repulsed: number; held: number; beaten: number };
     label: { share: number; cap: number };
-    guards: { xp: number; won: number; elite: string[] };
+    guards: { xp: number; taken: number; elite: string[] };
     raisedBy: Record<string, string>;
     antiTank: { rows: string[]; years: number[] };
     ways: LandWay[];
@@ -374,7 +374,7 @@ export const landSchools = (g: Game, kind: 'corps' | 'air' | 'fleet'): boolean =
 export function earnGuards(g: Game, cs: readonly Corps[]): void {
   if (!unitsDecide(g)) return;
   const G = UNITS.land.guards;
-  for (const c of cs) if (!c.dead && c.guards === undefined && c.xp >= G.xp - EPS && (c.rec?.taken ?? 0) >= G.won) c.guards = g.turn;
+  for (const c of cs) if (!c.dead && c.guards === undefined && c.xp >= G.xp - EPS && (c.rec?.taken ?? 0) >= G.taken) c.guards = g.turn;
 }
 
 /**
