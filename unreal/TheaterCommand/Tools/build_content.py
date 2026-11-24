@@ -581,6 +581,9 @@ def build_stage_sea():
     # ("FarCount" of the share near), so that the specks are as few as the art director passed in v2 and bright by
     # their size.
     run = scalar(m, "FoamRun", 1.8, -2350, 5000)
+    # (how long a whitecap's foam lasts behind it, times its 3 to 6 s: "TailLife", 1 for Pearl; little foam in a light
+    # breeze, grey-white foam for 10 to 20 s in a strong one, within the read's cycle)
+    tail_life = scalar(m, "TailLife", 1.0, -1450, 5500)
     depth = node(m, unreal.MaterialExpressionPixelDepth, -3200, 4300)
 
     def beyond(start, span, x, y):
@@ -594,6 +597,10 @@ def build_stage_sea():
     close = one_in(m, unreal.MaterialExpressionOneMinus, blend, -2400, 4400)
     fade = one_in(m, unreal.MaterialExpressionOneMinus, beyond(scalar(m, "FoamFadeFrom", 400000.0, -3200, 4200), scalar(m, "FoamFadeSpan", 600000.0, -3200, 4280), -3000, 4200), -2400, 4200)
     gather = times(m, times(m, fetched, fade, -2250, 4250), one_in(m, SAT, times(m, plus(m, gusty, -0.6, -1700, 4400), 1.6, -1550, 4400), -1400, 4400), -1250, 4300)
+    # (how many of them break, by the wind: "CapShare", 1 for Pearl's trade wind, the fleet battle's own wind setting
+    # it by the share of the sea whitecaps cover, Monahan's 3.84e-6 U^3.41, against the trade wind's; the art
+    # director's fleet water targets, 21 November 23:44Z)
+    gather = times(m, gather, scalar(m, "CapShare", 1.0, -1400, 4150), -1100, 4250)
     count = times(m, gather, lerp(m, 1.0, scalar(m, "FarCount", 0.12, -1400, 4500), blend, -1250, 4500), -1100, 4400)
     share = lerp(m, 1.0, scalar(m, "FarShare", 0.75, -1400, 4600), blend, -1250, 4600)
     run_close = times(m, run, close, -2200, 5000)
@@ -642,7 +649,7 @@ def build_stage_sea():
         connect(head_lace, "", behind, "B")
         laced = lerp(m, 1.0, mottle, times(m, one_in(m, SAT, behind, -1150, y + 520), close, -1000, y + 520), -850, y + 520)
         head = times(m, foam, times(m, times(m, times(m, fresh, rising, -1000, y + 440), laced, -850, y + 480), share, -850, y + 440), -700, y + 300)
-        life = lerp(m, 3.0, 6.0, one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 7.31, -1600, y + 560), -1450, y + 560), -1300, y + 560)
+        life = times(m, lerp(m, 3.0, 6.0, one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 7.31, -1600, y + 560), -1450, y + 560), -1300, y + 560), tail_life, -1200, y + 560)
         fading = node(m, unreal.MaterialExpressionDivide, -1300, y + 640)
         connect(age, "", fading, "A")
         connect(life, "", fading, "B")
@@ -656,6 +663,14 @@ def build_stage_sea():
     # (the two reads laid over each other: where both have foam, the more of it)
     head = lerp(m, head_a, 1.0, head_b, -250, 5300)
     tail = lerp(m, tail_a, 1.0, tail_b, -250, 5700)
+    # (near the eye the whitecaps fade, to "CapNearKeep" of themselves nearer than "CapNearFrom", wholly back
+    # "CapNearSpan" beyond it: close up their picture showed as flat white patches with hard edges, the art director on
+    # the Mac's Samar frames of 22 November, 01, 04, 05 and 07; the fleet action's stage sets 30 m, 60 m and 0.3, and
+    # elsewhere, as made, they keep all of themselves: Pearl's sea as it was)
+    near_keep = lerp(m, scalar(m, "CapNearKeep", 1.0, -700, 5900), 1.0,
+                     beyond(scalar(m, "CapNearFrom", 3000.0, -1000, 5960), scalar(m, "CapNearSpan", 6000.0, -1000, 6040), -900, 5980), -500, 5940)
+    head = times(m, head, near_keep, -100, 5300)
+    tail = times(m, tail, near_keep, -100, 5700)
     # THE SURF on an open reef or shore (the art director: "a broken surf line on the reef"): a band about 90 m wide
     # about the edge, more on the reef than off it, where the shore lies open to the ocean, broken into sections
     # some hundreds of metres long that come and go ("SurfRead": the waves picture's slow unevenness, alpha, and its
@@ -691,6 +706,72 @@ def build_stage_sea():
     painted = lerp(m, painted, vector(m, "ReefColour", (0.021, 0.30, 0.26, 1.0), -650, -1000), times(m, reef, scalar(m, "ReefShare", 0.6, -800, -900), -650, -900), -400, -950)
     painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, coral, scalar(m, "CoralDark", 0.45, -800, -1250), -650, -1200), -500, -1200), -300, -1000)
     painted = times(m, painted, lerp(m, scalar(m, "SlickLight", 1.12, -550, -800), scalar(m, "GustDark", 0.88, -550, -700), gust, -400, -750), -250, -600)
+    # THE SKY ON THE WATER (the sea battle's low eye, Brian, 21 November 23:37Z: "make the water more realistic"; the
+    # art director's fleet water targets, 23:44Z). Water mirrors the sky, more the lower it is looked at (Schlick's
+    # Fresnel, a fiftieth straight down). But the sea is rough: of its facets, a low eye sees those leaning toward it
+    # (the others hide behind them), which mirror higher, darker sky, and less of it. So each point is seen as a facet
+    # leaning toward the eye by "SkyTilt" (radians: the wind's slopes, Cox and Munk's, set by the game), less the lower
+    # it is looked at ("SkyTiltFall"), and by the drawn waves' own slope toward the eye at "SkyLean" of it (so near
+    # water keeps dark faces and bright backs). The sky it mirrors falls off above the horizon: "SkyColour" there,
+    # going to "SkyHigh" over "SkyBend" radians up (both light, as the engine takes it, not a still's pixels). Far off
+    # the air between lifts the sea toward "HazeTop" of the sky's colour (half way at "HazeReach", in the world's
+    # units), so the horizon stays a line, a little darker than the sky, and the wave detail is gone into it. Fitted
+    # to the Mac's first frames (22 November): the sea 0.85 of the sky at the horizon, 0.5 to 0.7 of it where the
+    # ships are, a third to a half of it near. "SkyReflect" how much (0 for Pearl, which keeps the engine's own
+    # reflection alone); the foam covers it.
+    reflect = scalar(m, "SkyReflect", 0.0, -650, 1400)
+    eye = node(m, unreal.MaterialExpressionCameraVectorWS, -900, 1650)
+    low = node(m, unreal.MaterialExpressionMax, -600, 1650, const_b=0.0)
+    connect(node_from(m, MASK, eye, -750, 1650, r=False, g=False, b=True, a=False), "", low, "A")
+    eye_flat = node_from(m, MASK, eye, -750, 1800, r=True, g=True, b=False, a=False)
+    flat_sq = node(m, DOT, -600, 1800)
+    connect(eye_flat, "", flat_sq, "A")
+    connect(eye_flat, "", flat_sq, "B")
+    flat_len = node(m, unreal.MaterialExpressionMax, -300, 1800, const_b=0.2)
+    connect(one_in(m, unreal.MaterialExpressionSquareRoot, flat_sq, -450, 1800), "", flat_len, "A")
+    lean_dot = node(m, DOT, -600, 1950)
+    connect(slope, "", lean_dot, "A")
+    connect(eye_flat, "", lean_dot, "B")
+    toward = node(m, unreal.MaterialExpressionDivide, -300, 1950)
+    connect(lean_dot, "", toward, "A")
+    connect(flat_len, "", toward, "B")
+    unseen = node(m, unreal.MaterialExpressionMax, -150, 1700, const_b=0.0)
+    connect(plus(m, scalar(m, "SkyTilt", 0.124, -600, 1550), times(m, low, times(m, scalar(m, "SkyTiltFall", 0.1, -600, 1500), -1.0, -450, 1500), -300, 1550), -200, 1600), "", unseen, "A")
+    tilt = plus(m, unseen, times(m, toward, scalar(m, "SkyLean", 0.5, -300, 2050), -150, 1950), 0, 1750)
+    graze_low = node(m, unreal.MaterialExpressionMax, 250, 1650, const_b=0.002)
+    connect(plus(m, low, tilt, 150, 1650), "", graze_low, "A")
+    graze = node(m, unreal.MaterialExpressionMin, 350, 1650, const_b=1.5)
+    connect(graze_low, "", graze, "A")
+    # (the sine of the grazing angle, to its cube)
+    sine = times(m, graze, plus(m, times(m, times(m, graze, graze, 450, 1750), -1.0 / 6.0, 600, 1750), 1.0, 750, 1750), 900, 1650)
+    fifth = node(m, unreal.MaterialExpressionPower, 1200, 1650, const_exponent=5.0)
+    connect(one_in(m, SAT, one_in(m, unreal.MaterialExpressionOneMinus, sine, 1000, 1650), 1100, 1650), "", fifth, "Base")
+    schlick = plus(m, times(m, fifth, 0.98, 1300, 1650), 0.02, 1400, 1650)
+    rise = node(m, unreal.MaterialExpressionMax, 300, 1900, const_b=0.0)
+    connect(plus(m, low, times(m, tilt, 2.0, 150, 1950), 200, 1900), "", rise, "A")
+    bend = node(m, unreal.MaterialExpressionDivide, 450, 1900)
+    connect(rise, "", bend, "A")
+    connect(scalar(m, "SkyBend", 0.105, 300, 2000), "", bend, "B")
+    open_sky = node(m, unreal.MaterialExpressionDivide, 750, 1900, const_a=1.0)
+    connect(plus(m, times(m, bend, bend, 600, 1950), 1.0, 650, 1900), "", open_sky, "B")
+    sky_colour = vector(m, "SkyColour", (0.56, 0.60, 0.70, 1.0), 900, 2100)
+    sky_at = lerp(m, vector(m, "SkyHigh", (0.095, 0.12, 0.16, 1.0), 900, 2000), sky_colour, open_sky, 1050, 1950)
+    seen = times(m, sky_at, schlick, 1500, 1800)
+    reach = node(m, unreal.MaterialExpressionDivide, 300, 2200)
+    connect(node(m, unreal.MaterialExpressionPixelDepth, 150, 2200), "", reach, "A")
+    connect(scalar(m, "HazeReach", 500000.0, 150, 2300), "", reach, "B")
+    reach_sq = times(m, reach, reach, 450, 2200)
+    hazed = node(m, unreal.MaterialExpressionDivide, 750, 2200)
+    connect(reach_sq, "", hazed, "A")
+    connect(plus(m, reach_sq, 1.0, 600, 2250), "", hazed, "B")
+    lit = lerp(m, seen, times(m, sky_colour, scalar(m, "HazeTop", 0.6, 1050, 2300), 1200, 2250), hazed, 1650, 1900)
+    mirrored = one_in(m, SAT, times(m, schlick, reflect, 1500, 1450), 1600, 1450)
+    painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, mirrored, -400, -300), -300, -450)
+    # (the air between dims the water's own colour as it lifts it)
+    painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, hazed, one_in(m, SAT, reflect, -500, -250), -450, -250), -350, -250), -250, -350)
+    # (a whitecap's tail "TailShare" as strong: Pearl's from high up whole; the fleet camera's low look at a darker sea
+    # wants it faint, the water +15 to +40 at first, the art director's targets)
+    tail = times(m, tail, scalar(m, "TailShare", 1.0, -400, -550), -300, -550)
     painted = lerp(m, painted, vector(m, "TailColour", (0.50, 0.62, 0.62, 1.0), -250, -450), tail, -100, -500)
     painted = lerp(m, painted, vector(m, "HeadColour", (0.79, 0.81, 0.82, 1.0), -100, -350), head, 50, -450)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
@@ -702,6 +783,8 @@ def build_stage_sea():
     rough = times(m, lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650),
                   lerp(m, scalar(m, "SlickRough", 0.3, -500, 800), scalar(m, "GustRough", 1.35, -500, 900), gust, -300, 850), -200, 700)
     frothy = lerp(m, head, 1.0, times(m, tail, 0.8, -300, 1000), -150, 950)
+    sky = times(m, times(m, lit, reflect, 1800, 1800), one_in(m, unreal.MaterialExpressionOneMinus, frothy, 1800, 1900), 1950, 1850)
+    to_property(sky, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     to_property(lerp(m, rough, 0.6, frothy, -100, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(lerp(m, scalar(m, "SlickSpecular", 0.7, -500, 1100), scalar(m, "GustSpecular", 0.4, -500, 1200), gust, -300, 1150),
                 "", unreal.MaterialProperty.MP_SPECULAR)
@@ -2769,6 +2852,30 @@ def build_glow():
     finish(m)
 
 
+def build_under_sea():
+    """The sea's face seen from under it (U1, the underwater war-film view, Battle/SeaUnder): one sheet laid just under
+    the sea about the eye, its paint the light coming down through the face (Snell's window, the sun in it, the dark
+    outside it) in vertex colour, sRGB as M_StageSea's is (raised to 2.2 here), times Brightness and Tint. Unlit and
+    opaque, so it hides the sky that the stage's sea (one-sided, facing up) cannot from below, and takes the height fog
+    like any solid thing, so it fades into the murk with distance. Two-sided: it is only ever seen from below, and the
+    scene winds it to face down anyway."""
+    m = new_material("M_UnderSea")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    bright = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(to_linear, "", bright, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", bright, "B")
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(bright, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, 250), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
 def build_flak_lit():
     """Flak smoke inside a searchlight's beam: the painted shape again, as light added where the smoke is."""
     m = new_material("M_FlakLit")
@@ -2807,7 +2914,7 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
 # Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
 # once, and again after make_sky_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

@@ -128,6 +128,7 @@ import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
+import { subSceneOf } from './sub-scene'; // D1 (ruling 241): the month's submarine scene, staged; look only
 import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
@@ -7647,10 +7648,15 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
   // (release 2 and the 1.5.1 patch: the general's battle of a garrison in hand is looked at, and settled, with it out of its town)
   battleLook: lookOut(battleTable.battleLook), battleSettleLand: goOut(battleTable.battleSettleLand),
 };
+// D1 (ruling 241), the stager's one pass-through: TC.subScene(from?, view?) gives { mark, pick, recording } for the month's
+// submarine scene (Rules/sub-scene.ts subSceneOf): `recording` is the staged recording's JSON text for SeaFeed, or null.
+// It reads the game (and its record g.subLook) and writes nothing. `from` is the headline mark to count from (the last
+// call's `mark`); `view` the viewer's card setting: 'all' (the default), 'mine' (his losses only) or 'never'.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subScene = (from?: number, view?: 'all' | 'mine' | 'never') => subSceneOf(game(), NAVY.convoys, from, view);
 // D1 (ruling 241), the viewing setting `subScene`: TC.subSceneOn(on) turns the rules' record of each month at sea on or off
-// (navy.ts subScene; g.subLook, this month and last, read by no rule). On, the sea scene's stager reads the record; off, nothing
-// is written and every save is as before. The setting is the viewer's and lives outside the save: the screen sets it at
-// start and again after every load.
+// (navy.ts subScene; g.subLook, this month and last, read by no rule). On, the stager above reads the record; off, nothing
+// is written and every save is as before, and the stager stands in from its data rows. The setting is the viewer's and
+// lives outside the save: the screen sets it at start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
 // (Release 2, the marked army; Brian 24 November 2026 18:01Z) TC.marked(on) at any time: the corps that takes a town of

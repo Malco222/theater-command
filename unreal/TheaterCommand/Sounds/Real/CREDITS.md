@@ -240,6 +240,15 @@ The game is for personal use only.
 | `b17_formation_drone_loop` | `b17_formation_drone_loop.wav` | [B-17 fly-over](https://www.dvidshub.net/video/600861) | DVIDS | Public domain | A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video) |
 | `b17_interior_loop` | `b17_interior_whiteman_loop.wav` | [Wings Over Whiteman B-roll](https://www.dvidshub.net/video/531502) | DVIDS | Public domain | SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video) |
 | `b17_interior_loop` | `b17_interior_sioux_loop.wav` | [CAF brings Flying Fortress to Sioux City](https://www.dvidshub.net/video/852294) | DVIDS | Public domain | SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video) |
+| `ship_gun_heavy` | `ship_gun_heavy.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
+| `shell_splash` | `shell_splash.wav` | [Big Water Splash](https://freesound.org/people/qubodup/sounds/442773/) | Freesound | CC0 | none |
+| `dive_bomber` | `dive_bomber.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `sea_day_loop` | `sea_day_loop.wav` | [Ship bow wave](https://freesound.org/people/kirkrcarter/sounds/744955/) | Freesound | CC BY 4.0 | kirkrcarter |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll](https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [G54-02-Bow Wave.wav](https://freesound.org/people/craigsmith/sounds/438837/) | Freesound | CC0 | none |
 
 ## Credits owed
 
@@ -257,6 +266,7 @@ The game is for personal use only.
 - **Huggy13ear** "parachute 2" · CC BY 4.0
 - **J.Zazvurek** "Body fall in grass CLOSE.mp3" · CC BY 4.0
 - **juskiddink** "Nearby explosion with debris.wav" · CC BY 4.0
+- **kirkrcarter** "Ship bow wave" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
 - **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav" · CC BY 4.0

@@ -681,6 +681,13 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
 		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
 		bool bAircraft = false, bNationPaint = false;
+		// (A warship or a merchant from tools/battle-models (kind "ship"): the file gives each paint's own colour, by its
+		// paint names (hull, upper, deck, steel, black, canvas, glass, ...), and at each point how worn and rust-streaked
+		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
+		bool bShip = false;
+		TArray<int32> Salt;
+		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
+		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
 		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
 		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
 		bool bPiece = false;
@@ -923,6 +930,54 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						}
 					}
 				}
+				if (KindOfModel == TEXT("ship"))
+				{
+					Raw->bShip = true;
+					const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
+					if (File->TryGetArrayField(TEXT("colours"), ColourList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+						{
+							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+						}
+					}
+					FString Hexed;
+					if (File->TryGetStringField(TEXT("rust"), Hexed))
+					{
+						Raw->Rust = FLinearColor(FColor::FromHex(Hexed));
+					}
+					auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
+					{
+						const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+						if ((*Part)->TryGetArrayField(Field, List))
+						{
+							Into.Reserve(List->Num());
+							for (const TSharedPtr<FJsonValue>& Value : *List)
+							{
+								Into.Add(static_cast<int32>(Value->AsNumber()));
+							}
+						}
+					};
+					Numbers(TEXT("wear"), Raw->Wear);
+					Numbers(TEXT("soot"), Raw->Soot);
+					Numbers(TEXT("salt"), Raw->Salt);
+					// (each file names its own paints: a sub's 24 and 25 are upper.on and hull.on, a merchant's tarp and crate;
+					// the pre-check's list, 23 November)
+					static const TSet<FString> Metal = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("flight"), TEXT("boot"), TEXT("antifoul"), TEXT("steel"),
+						TEXT("black"), TEXT("boat"), TEXT("roof"), TEXT("torn"), TEXT("brass"), TEXT("line"), TEXT("red"), TEXT("white"), TEXT("door"), TEXT("seam"),
+						TEXT("upper.on"), TEXT("hull.on"), TEXT("helmet"), TEXT("plane") };
+					static const TSet<FString> Coat = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("roof"), TEXT("door"), TEXT("seam"), TEXT("upper.on"), TEXT("hull.on") };
+					const TArray<TSharedPtr<FJsonValue>>* NameList = nullptr;
+					if (File->TryGetArrayField(TEXT("paint_names"), NameList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *NameList)
+						{
+							const FString Paint = Value->AsString();
+							Raw->ShipMetal.Add(Metal.Contains(Paint));
+							Raw->ShipPainted.Add(Coat.Contains(Paint));
+						}
+					}
+				}
 				if (KindOfModel == TEXT("aircraft"))
 				{
 					Raw->bAircraft = true;
@@ -1075,7 +1130,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	// (kept by its country and by which of the country's dated marks stands: see UnitTable::MarkEra)
 	const int32 Era = UnitTable::MarkEra(Tag);
 	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
-	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
+	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip;
 	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours)
 	const int32 Livery = Raw->bAircraft ? SchemeStanding(Raw->SchemeFrom) : 0;
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
@@ -1099,9 +1154,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		{
 			Fresh.Dust = FColor(124, 102, 74);
 		}
-		if (Raw->bPiece)
+		if (Raw->bPiece || Raw->bShip)
 		{
-			Fresh.DustAmount = 0.0f;
+			Fresh.DustAmount = 0.0f; // (no dust of the road on a ship)
 		}
 		// An aircraft's paints are its own: the file gives the colour of each. (A plain machine built for any nation takes
 		// that nation's colour for its upper surfaces, a darker one for the patches, and darker again for its nose.)
@@ -1177,6 +1232,33 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
+			if (Raw->bShip && Raw->PaintColours.Num() > 0)
+			{
+				// (The ship modeller's paints, by the file's own names (hull, upper, deck, planks, steel, black, canvas, glass, ...),
+				// each in the file's own colour. Painted steel is metal and chips where the file says it is worn, in her rust's
+				// own streaks; soot from her funnels and guns darkens what it lies on; dried salt whitens her sides low down.
+				// Wood, canvas, rope, cork, lino, glass, a tarpaulin, a crate: not metal.)
+				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
+				const bool bShipSteel = Raw->ShipMetal.IsValidIndex(Kind) && Raw->ShipMetal[Kind];
+				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Fresh.Finish = bShipSteel ? static_cast<uint8>(128 - Worn / 2) : 255;
+				FLinearColor Coat = Raw->PaintColours[Kind];
+				const bool bPainted = Raw->ShipPainted.IsValidIndex(Kind) && Raw->ShipPainted[Kind];
+				if (bPainted && Worn > 0)
+				{
+					Coat = FMath::Lerp(Coat, Raw->Rust, 0.55f * Worn / 100.0f);
+				}
+				if (Raw->Salt.IsValidIndex(K) && Raw->Salt[K] > 0 && bPainted)
+				{
+					Coat = FMath::Lerp(Coat, FLinearColor(FColor(214, 210, 198)), 0.45f * FMath::Min(Raw->Salt[K], 100) / 100.0f);
+				}
+				if (Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 4 && Raw->PaintColours.Num() > 8)
+				{
+					Coat = FMath::Lerp(Coat, Raw->PaintColours[8], 0.6f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
+				continue;
+			}
 			if (Raw->bAircraft && PlanePaints.Num() > 0)
 			{
 				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, PlanePaints.Num() - 1);
@@ -1425,7 +1507,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			}
 		}
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
-		if (!bFigure && !Raw->bAircraft && !Raw->bPiece)
+		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip)
 		{
 			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
@@ -1485,7 +1567,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				}
 			}
 		}
-		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bBattle)
+		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bBattle && !Raw->bShip)
 		{
 			Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
 		}

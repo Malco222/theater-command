@@ -3,6 +3,8 @@
 #include "Battle/AirBattle.h"
 #include "Battle/LandBattle.h"
 #include "Battle/AirStage.h"
+#include "Battle/MonthSeaScene.h"
+#include "Battle/SeaBattle.h"
 
 #include "Campaign/CampaignFlags.h"
 #include "ImageUtils.h"
@@ -187,7 +189,8 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	const bool bSceneTakesThem = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterAirBattle=")) != nullptr
 		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr
 		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandBattle=")) != nullptr
-		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandLive=")) != nullptr;
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandLive=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterSeaBattle=")) != nullptr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder) && !bSceneTakesThem)
 	{
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
@@ -249,6 +252,27 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		{
 			Land->LiveTicketWhenReady(LiveLook);
 		}
+	}
+
+	// "-TheaterSeaBattle=two-lines" (or "light-ships", "samar") plays a recorded fleet action in the 3D scene (the ship
+	// behaviour plan's B0; the recordings are Content/Data/SeaBattles, written by tools/sea-record): with
+	// "-TheaterSeaBattleShots=<folder>" it takes the art director's pictures there and quits. (No campaign-screen button:
+	// the live battle comes with the shared wiring.)
+	FString SeaKey;
+	if (ASeaBattle::WantsReplay(SeaKey))
+	{
+		if (ASeaBattle* Sea = World->SpawnActor<ASeaBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Sea->ReplayWhenReady(SeaKey);
+		}
+	}
+
+	// (D1, ruling 241) The month's submarine scene, opened with the month in a played campaign (Battle/MonthSeaScene): the
+	// rules asked as the month's card lies open, the scene played once it is put away. "-TheaterSubScene=all|mine|never|off"
+	// sets the viewer's setting for a run (Saved/Campaign/subscene.json keeps the player's), and asks for it in a test run.
+	if (AMonthSeaScene::IsWanted())
+	{
+		World->SpawnActor<AMonthSeaScene>(FVector::ZeroVector, FRotator::ZeroRotator);
 	}
 }
 
@@ -820,7 +844,7 @@ float ACampaignGameMode::NowVolume() const
 	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying && !bBattleSceneUp ? 6.7f : 1.0f;
 	// (a battle scene's score at the level it asks for: under the fight's thick, back up in a lull)
 	const float Battle = bBattleScore ? FMath::Pow(10.0f, BattleScoreDb / 20.0f) : 1.0f;
-	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked ? 0.3f : 1.0f) * Battle;
+	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked || bSceneDucked ? 0.3f : 1.0f) * Battle;
 }
 
 void ACampaignGameMode::SetMusicMood(const FString& InMood)
@@ -1108,6 +1132,19 @@ void ACampaignGameMode::DuckMusic(bool bDown)
 		return;
 	}
 	bMusicDucked = bDown;
+	if (Music && bMusicOn)
+	{
+		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());
+	}
+}
+
+void ACampaignGameMode::DuckForScene(bool bDown)
+{
+	if (bDown == bSceneDucked)
+	{
+		return;
+	}
+	bSceneDucked = bDown;
 	if (Music && bMusicOn)
 	{
 		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());

@@ -1,0 +1,576 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+/**
+ * The month's submarine scene, its looks (ruling 241, Part D1: look only; the sea scene thread's d1-hooks.md, section 3,
+ * the list of what is ours): a boat surfaced, at periscope depth or deep, and her going down and coming up; a depth
+ * charge pattern going in and each charge's burst; a starshell drifting down under its parachute; a boat's end crushed
+ * (her air coming up) or scuttled (brought up, riding high); the scrambling nets the sea scene's men climb a rescuer's
+ * side by. Plain C++, no engine: ASeaBattle's marked hooks (Battle/ConvoyLooks) turn what is worked out here into the
+ * effects kit's calls, one small mesh and a lamp or two, and the cloud test (Tools/convoy_looks/run.sh) checks it.
+ *
+ * LOOKS ONLY. The show (SeaShow, the sea scene thread's) says where every boat is, how deep (Keel, eased so that a dive
+ * takes 25 to 30 s), when a pattern goes in and when each charge bursts, where a starshell bursts and when it burns out,
+ * how a boat ends and who picks up survivors. Nothing here changes any of that or draws from the battle's luck: what is
+ * decided here is only how it looks, with the look's own hash dice from the keys the show gives. The men in the water,
+ * their rafts and boats, the oil and the wreckage at every sinking, a boat's too, are the sea scene's (SeaShow's wreck
+ * model, drawn by ASeaBattle): nothing here draws them, and the looks only agree with them (a boat's deck where her men
+ * go over it, a rescuer's nets where they climb her side).
+ *
+ * Places are in board metres (X east, Y north, Z up from the sea), the show's own; headings are degrees clockwise from
+ * north (the show's ShipOut.Heading). Time is the battle's clock, in seconds.
+ *
+ * Numbers: [OEG] US Navy OEG Report 51 as naval-battles/wolfpack-r2/history.md gives them; [P] a published figure there;
+ * [FSR] the field note (field-side-read.md section 3); [SHOW] the sea scene's show (SeaShow.cpp), which these looks
+ * must agree with; [EST] this lane's own estimate, where the history has none. Each is marked where it is set, in
+ * ConvoyLooksCore.cpp.
+ */
+namespace ConvoyLook
+{
+	/** A point or a way, board metres. */
+	struct P3
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		P3() = default;
+		P3(double InX, double InY, double InZ) : X(InX), Y(InY), Z(InZ) {}
+		P3 operator+(const P3& O) const { return P3(X + O.X, Y + O.Y, Z + O.Z); }
+		P3 operator-(const P3& O) const { return P3(X - O.X, Y - O.Y, Z - O.Z); }
+		P3 operator*(double S) const { return P3(X * S, Y * S, Z * S); }
+	};
+
+	/** Level, along a heading (degrees clockwise from north), and to its right. */
+	P3 AheadOf(double HeadingDeg);
+	P3 RightOf(double HeadingDeg);
+	/** The heading (degrees clockwise from north) of a level way; Else where it has no length. */
+	double HeadingOf(const P3& Way, double Else);
+	/** A number from 0 to under 1 fixed by a whole number: the look's own hash, never the battle's dice. */
+	double Hash01(uint64_t N);
+	/** 0 below A, 1 above B, smooth between. */
+	double Smooth(double A, double B, double X);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// The boat
+
+	/**
+	 * A boat's model as the stage draws her: AirStage lays a boat as "Submarine:<her navy>" (its KindOf), and with no
+	 * Content/Models/Submarine.json among the game's sculpted models the kit builds her in code (Campaign/CampaignShips.cpp,
+	 * Submarine(): 67 m by 6.2 for Germany, 95 by 8.3 for the United States, 80 by 6.2 for any other navy; no navy, the
+	 * kit's German). Metres in her own frame, along her forward from amidships and up from her waterline: the length and
+	 * width of her bounds (AirStage's FitHull stretches these to AirFeed::HullOf's size: the hull and the stem's rake of
+	 * 2 m forward of it), the casing's deck amidships, the bridge's top and the places along her of its top's fore and
+	 * aft ends, the jumping wire's head on its front, the anti-aircraft gun's muzzles abaft it, her two periscopes (FIXED
+	 * rods standing up from the bridge's top: the taller, the one that shows, 1.5 m forward of the shorter), her highest
+	 * point, and her stem at the waterline.
+	 */
+	struct BoatModel
+	{
+		std::string Name;
+		double Long = 69.0, Wide = 6.2;
+		double Deck = 1.65, TowerTop = 6.25, TowerFore = 5.4, TowerAft = -4.6;
+		double WireAlong = 5.0, WireTop = 6.5, GunAlong = -5.4, GunTop = 6.14;
+		double ScopeAlong = 1.5, ScopeTop = 10.65, LowAlong = 0.0, LowTop = 9.15;
+		double Top = 10.65;
+		double BowAlong = 34.5;
+		/** Her ensign staff's foot (the sockets' "ensign", abaft her bridge's periscope standard): metres along her from
+		 * amidships, and over her waterline. Where a boat that strikes runs up her white flag (FlagAt). */
+		double EnsignAlong = -4.6, EnsignTop = 6.45;
+		/**
+		 * Her casing where her crew stand when she strikes (sea:surrender), [SHOW] SeaShow::DeckOf's rows, fitted to the
+		 * battle modeller's files where her men stand (Tools/convoy_looks checks both): its height Casing on her middle line
+		 * amidships, rising Rise a metre forward of RiseFrom, falling Fall times the square of the way across, out to Edge
+		 * from her middle line before her saddle tanks fall away (CasingAt); the stretches of it forward and aft of her tower
+		 * where they stand (ForeFrom to ForeTo, AftFrom to AftTo), and her deck gun's length along her, its mount and its
+		 * barrel stowed (GunFrom to GunTo), which they keep clear of.
+		 */
+		double Casing = 1.65, RiseFrom = 0.0, Rise = 0.0, Fall = 0.0, Edge = 1.0;
+		double ForeFrom = 7.0, ForeTo = 12.0, AftFrom = -15.0, AftTo = -8.0, GunFrom = 0.0, GunTo = 0.0;
+		/** Her fore and after hatches on her casing, metres along her from amidships ([SHOW] SeaShow::DeckOf's, where her
+		 * crew come up): where her scuttling charges go off, below them (StepBoat's Scuttle and Puff). */
+		double ForeHatch = 9.5, AftHatch = -11.5;
+	};
+	/** The row of the stage's model for a navy (the stage's own nation tag): "GER" or none, "USA", any other. */
+	BoatModel ModelOf(const std::string& Nation);
+	/**
+	 * The row of the battle modeller's boat the stage now draws where the game has her (Content/Models/Ships, by
+	 * AirStage's ShipFileOf; Brian, 23 November 2026: every navy's ships to the B-17's bar): "Submarine_GER" (a Type VIIC,
+	 * 67 m), "Submarine_USA" (a fleet boat, 95 m) or "Submarine" (any other navy, 80 m), by the file's name. Measured off
+	 * the files (their bounds, the bridge's rim, the casing amidships, the sockets): her attack periscope stands raised as
+	 * Tools/battle_ships_in.py leaves it, her other one housed; the jumping wire's head is the top of her periscope
+	 * standard (a fleet boat's, of her shears), the highest of her bridge but her periscopes. Empty Name: no such row.
+	 */
+	BoatModel SculptedOf(const std::string& File);
+	/** Her casing's height over her waterline at a place on it (her own frame: metres along her from amidships, across to
+	 * starboard), as the row has it. */
+	double CasingAt(const BoatModel& M, double Along, double Across);
+
+	/** How the stage draws her model: stretched along to the length it fits her to, and across and up by the beam's
+	 * share (AirStage's FitHull, to AirFeed::HullOf's size). */
+	struct Drawn
+	{
+		double Along = 1.0, Up = 1.0;
+	};
+	Drawn DrawnOf(const BoatModel& M, double HullLong, double HullBeam);
+
+	/** How far her taller periscope stands out of the still sea at periscope depth with it "up" (metres, as drawn): at
+	 * most ScopeShows, and low enough that the shorter one stays under. */
+	double ScopeClearOf(const BoatModel& M, const Drawn& D);
+
+	/** What the show says of her this frame (ShipOut: Dive, Keel, Dived, bScope, her heave on the swell, already
+	 * fading as she goes down, her trim (Pitch, degrees, plus bow up: what the stage turns her model by about her
+	 * waterline amidships), her speed, place and heading), the show's periscope depth (its header's subs.scope), and how
+	 * much light falls on the sea over her (0 dark to 1 day: LitBy, SkyLit). */
+	struct BoatIn
+	{
+		double T = 0.0;
+		std::string Dive;       // "surfaced", "periscope", "deep"
+		double Keel = 4.7;      // metres from the surface down to her keel
+		double Dived = 0.0;     // metres her hull lies below her surfaced trim
+		bool bScope = false;    // her periscope is up
+		double Heave = 0.0;     // the swell's lift (metres)
+		double Pitch = 0.0;     // degrees, plus bow up
+		double Speed = 0.0;     // metres a second through the water
+		P3 At;                  // her waterline amidships (Z is the show's, not read)
+		double Heading = 0.0;   // degrees
+		double ScopeKeel = 13.0;
+		double Lit = 0.0;
+		/** In the player's sight (SeaShow's ShipOut::bShown: an enemy boat not yet found is not): out of it, she throws
+		 * nothing on the sea, while her ride and her clocks go on as in sight, so that found she is where she would be. */
+		bool bShown = true;
+	};
+
+	/** A faint swirl on the sea over a boat running deep, where light falls on it: where, when, how strong (0 to 1). */
+	struct Swirl
+	{
+		P3 At;
+		double T0 = 0.0, Strength = 0.0;
+	};
+
+	/** What she keeps from frame to frame. */
+	struct BoatState
+	{
+		bool bBegun = false;
+		double T = 0.0;
+		double Heave = 0.0;      // as drawn (metres): eased toward its mark, never faster than HeaveRate
+		double Sub = 0.0;        // how far under her surfaced trim she is (the show's Dived), last frame
+		double SubRate = 0.0;    // its rate (metres a second, plus: going down), smoothed
+		double Raise = 0.0;      // the periscope: 0 down (all of her under), 1 up (her taller periscope out), before easing
+		double Feather = 0.0;    // 0 to 1
+		double SwellLast = 0.0;  // the show's heave last frame (for the bow's plunge)
+		double NextFeather = 0.0, NextWash = 0.0, NextBow = 0.0, NextSwirl = 0.0;
+		bool bTowerUnder = false;
+		/** Forced up (a scuttling): from when, and from how far under; below 0 never. */
+		double ForcedAt = -1.0, ForcedFrom = 0.0;
+		/** Her tanks blown (Blow): she rides high, not awash; how far she has come to it (0 to 1, eased). */
+		bool bBlown = false;
+		double Blown = 0.0;
+		/** Scuttled after she struck (OpenVents): when her main vents were opened (below 0 never), when the next spurt from
+		 * them is due, and how many have come (each from the other side). */
+		double VentsAt = -1.0, NextVent = 0.0;
+		int Vents = 0;
+		/** Her scuttling charges gone off since (ScuttleChargeAt's times after her vents were opened). */
+		int Charges = 0;
+		std::vector<Swirl> Swirls;
+	};
+
+	enum class SplashKind
+	{
+		Feather, // the periscope's feather: a low spurt of spray along her course (the kit's Skip on water)
+		Wash,    // water running off her casing as she goes down or comes up (the kit's churn)
+		Swirl,   // where her bridge went under: the last of the wash, its foam left as the swirl (the kit's churn)
+		Bow,     // surfaced and fast: her bow plunging into the swell throws spray ahead (the kit's Skip on water)
+		Vent,    // scuttled after she struck: the air roaring out of her opened main vents with spray, straight up off her
+		         // saddle tank where it is out of the sea (the kit's Steam, a vent's white jet), white water where it is under
+		Scuttle, // a scuttling charge gone off inside her, under a hatch: a low, muffled heave of white water alongside abreast
+		         // it (the kit's churn: no flash)
+		Puff,    // the same charge's smoke puffing out of the open hatch over it (the kit's CookOff, one pop, no jet), or white
+		         // water where the hatch is already under
+	};
+	struct BoatSplash
+	{
+		SplashKind Kind = SplashKind::Wash;
+		P3 At;            // on the sea (Z 0); a Vent's and a Puff's where it leaves her, as she rides and goes down
+		P3 Way;           // level, which way it is thrown; a Vent's and a Puff's its way out of her, mostly up
+		double T = 0.0;   // battle time it is due
+	};
+	/** The kit's call for a boat's splash (FConvoyLooks hands it on as it is): a spout of a size row on the water, a low
+	 * spurt along the sea, a white jet or a smoke puff. */
+	enum class KitCall
+	{
+		Spout, // ShellOfSize(Where, Row, "water")
+		Spurt, // Skip(Where, Way, "water")
+		Jet,   // Steam(Id, Where, Way, Across, Seconds, "vent")
+		Puff,  // CookOff(Where, Way, Across, 1, Seconds, 0): one pop, no jet
+	};
+	struct SplashKit
+	{
+		KitCall Call = KitCall::Spout;
+		P3 Where, Way;            // board metres, Z over the still sea; Way of length one
+		std::string Row;          // a spout's size row
+		double Across = 0.0;      // a jet's or a puff's mouth (metres)
+		double Seconds = 0.0;     // how long a jet blows, or a puff's pop takes
+	};
+	SplashKit KitOf(const BoatSplash& Sp);
+
+	struct BoatOut
+	{
+		double Heave = 0.0;      // what the stage is steered with: her waterline over the still sea (metres)
+		/** As the stage draws her model this frame (metres over the still sea, her trim counted): the bridge's highest
+		 * point (its top, the wire's head on it, the gun's muzzles), and the heads of her taller and shorter periscopes. */
+		double BridgeZ = 0.0, ScopeZ = 0.0, LowZ = 0.0;
+		/** Her casing's deck amidships over the still sea, as drawn (her heave on the swell in it). */
+		double DeckZ = 0.0;
+		/** Her taller periscope alone out of the sea (her bridge under): where it stands, from the bridge's top to its head
+		 * (the model's own rod: the looks draw none). */
+		bool bScopeShown = false;
+		P3 ScopeFoot, ScopeHead;
+		double Feather = 0.0;
+		bool bTowerUnder = false;
+		std::vector<BoatSplash> Splashes;
+	};
+
+	/** One frame of a boat (from her state and what the show says), in the stage's drawing of her model. */
+	BoatOut StepBoat(BoatState& S, const BoatIn& In, const BoatModel& M, const Drawn& D);
+	/** A scuttling: blow her tanks now, so that she is up in ForcedUpFor seconds wherever the show still has her. */
+	void ForceUp(BoatState& S, double T, double Sub);
+	/**
+	 * Her tanks blown (bOn: the show's surfacing "forced", or her scuttling, her crew getting out) or flooded again (a dive):
+	 * blown, she rides high on the surface, her model's own waterline at the sea and her deck some 2.2 m out, not awash
+	 * (the sea scene's men go over her side from her deck's height, its 2.5 m: SeaShow's CompanyOf "ss"); eased over
+	 * BlowFor seconds either way.
+	 */
+	void Blow(BoatState& S, bool bOn);
+	double BlowFor();
+	/** Seconds a boat forced up takes to come up. */
+	double ForcedUpFor();
+	/** Scuttled after she struck (the show's Sink "scuttled" for a boat its ShipOut has struck): her main vents opened now,
+	 * the air coming out of her tanks along her sides for VentFor seconds as she floods (StepBoat's Vent splashes). Her
+	 * going down is the stage's, by the stern; nothing here moves her. Opened once. */
+	void OpenVents(BoatState& S, double T);
+	double VentFor();
+	/** Scuttled after she struck: her scuttling charges (the after one, then the fore one, under her hatches), each so many
+	 * seconds after her vents were opened (K 0 or 1; below 0 for any other), when her crew are all over her side. */
+	constexpr int ScuttleCharges = 2;
+	double ScuttleChargeAt(int K);
+	/**
+	 * The stage's way "sink" with its end "stern" (AirStage::MoveShip, at its look's usual pace), T seconds after the stage
+	 * was told it, as SeaShow::StageSink has it: how far down her waterline goes (metres) and her trim (degrees, plus bow up)
+	 * as she goes by the stern (bByStern), or none where her end is her look's own. High: her model's top over her waterline
+	 * (BoatModel::Top, as drawn). What a struck boat's vents and charges throw comes from her as the stage takes her down.
+	 * Tools/convoy_looks holds this to the stage's own lines, read from its source.
+	 */
+	void StageSinking(double T, double High, bool bByStern, double& OutDepth, double& OutPitch);
+
+	/**
+	 * A boat's white flag when she strikes (sea:surrender; ShipOut's Struck and Lowered): a plain off-white sheet on a staff
+	 * stepped at her ensign's place abaft her bridge (her own art: no insignia, no ship's or navy's marks), run up in its
+	 * first FlagRaiseFor seconds and hauled down over FlagLowerFor seconds once she is taken or goes. It streams to
+	 * leeward of the air over her (the wind less her own way), drooping as the air falls light, its fly rippling in waves
+	 * that run out from the staff, quicker in a stronger wind; in a calm it hangs down beside the staff, never below its
+	 * foot. Her own hash sets its phase, nothing else: the same moment draws the same flag. [EST] throughout.
+	 */
+	struct FlagIn
+	{
+		P3 Foot;                    // the staff's foot in the world (metres), as she rides now (EnsignAt)
+		P3 Up = P3(0.0, 0.0, 1.0);  // her own up, as her trim tips it (UpOf)
+		P3 Air;                     // the air's way over her (metres a second): the wind, less her own way
+		double Since = -1.0;        // seconds since she struck, as the show has her up (below 0: she has not)
+		double Lowered = -1.0;      // seconds since it began to come down (below 0: it has not)
+		uint64_t Seed = 0;
+	};
+	/** The sheet's points: along its fly out from the staff, and down its hoist from its head. */
+	constexpr int FlagAlong = 7, FlagDown = 4;
+	struct FlagOut
+	{
+		bool bShown = false;
+		P3 Head;                         // the staff's head
+		P3 Point[FlagDown][FlagAlong];   // the sheet, [down its hoist][out along its fly]
+	};
+	/** The staff (2 m: a boat-hook's length, stepped at her ensign's place), the sheet's fly and hoist (metres), and the
+	 * seconds to run it up and to haul it down. */
+	double FlagStaff();
+	double FlagFly();
+	double FlagHoist();
+	double FlagRaiseFor();
+	double FlagLowerFor();
+	/** Her own up, her heading (degrees) and trim (degrees, plus bow up) given: tipped aft as her bow rises. */
+	P3 UpOf(double HeadingDeg, double PitchDeg);
+	/** Her ensign staff's foot in the world as the stage draws her model this frame (her own row, how it is drawn, what the
+	 * show says of her and how the looks ride her: her heave and her trim). */
+	P3 EnsignAt(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out);
+	/** Her flag at the battle's moment Now. */
+	FlagOut FlagAt(const FlagIn& In, double Now);
+	/** What her flag is flown with this frame (FConvoyLooks::Lay; Tools/convoy_looks/convoy_looks_show the same): from her
+	 * row, how it is drawn, what the show says of her and how the looks ride her (In, Out), the wind over the sea (metres a
+	 * second), the show's Struck and Lowered and her key. False where none flies: she has not struck, or she is out of the
+	 * player's sight. */
+	bool FlagInputsOf(const BoatModel& M, const Drawn& D, const BoatIn& In, const BoatOut& Out, const P3& Wind, double Struck, double Lowered, int Key, FlagIn& OutFlag);
+	/** A swirl Age seconds old: its radius (metres) and how much of it shows (0 to 1, times its strength); false once
+	 * it is gone. */
+	bool SwirlAt(const Swirl& W, double T, double& OutRadius, double& OutShown);
+	/** Seconds a swirl lasts. */
+	double SwirlLife();
+
+	// -------------------------------------------------------------------------------------------------------------
+	// Depth charges
+
+	/** A charge's weight, kg of TNT or its like, by the event's kind: "pattern" the stern and throwers' charge (the
+	 * Mk VII's 290 lb), "ahead" the ahead-thrown bomb (the Hedgehog's, about 30 lb of a stronger filling). */
+	double ChargeKg(const std::string& Kind);
+
+	/** What a burst shows on the sea, by how deep it was set and how big it was: the white dome over it (when after the
+	 * burst, how high, how wide: deeper, it is later, lower and broader), the column the gas throws up after it (when,
+	 * and how high: none when deep), and the boil when the gas of a deep one reaches the sea (when; below 0 none). */
+	struct BurstLook
+	{
+		double DomeAt = 0.0, DomeHigh = 0.0, DomeWide = 0.0;
+		double ColumnAt = 0.0, ColumnHigh = 0.0;
+		double BoilAt = -1.0;
+	};
+	BurstLook BurstOf(double DepthM, double Kg);
+
+	/** The effects kit's size row for a column of water that high (its rows' crowns: how105 8-12 m, how150 12-20, bomb250
+	 * 30-45, bomb500 45-60), or empty for a column too low to throw (under ColumnLeast metres). */
+	std::string ColumnRow(double High);
+	double ColumnLeast();
+	/** The lowest dome drawn as the kit's churn (metres); a lower one is a ring of low spurts thrown outward, and one
+	 * under DomeLeast is not seen at all. */
+	double ChurnLeast();
+	double DomeLeast();
+
+	/** One call to the kit: Dt seconds after the burst, Dx and Dy metres from it (east, north), of row Row: "churn" (the
+	 * kit's quiet white water: a dome, a boil), a column's own size row, or "skip" (the kit's low spurt on water, thrown
+	 * along WayX, WayY). */
+	struct KitSpout
+	{
+		double Dt = 0.0, Dx = 0.0, Dy = 0.0;
+		std::string Row;
+		double WayX = 0.0, WayY = 0.0;
+	};
+	/** A burst's calls, in time order: its dome (one to three churns, or a ring of low spurts when it is low, nothing
+	 * when it is lower still), its column and its boil. bHit: the burst the battle booked on the boat (its kill or its damage): a boil of her air follows,
+	 * inside Lethal metres (the charge's lethal radius). */
+	std::vector<KitSpout> SpoutsOf(const BurstLook& B, bool bHit, double Lethal, uint64_t Seed);
+	/** The most churns one burst asks of the kit (its foam lasts most of a minute). */
+	int MostChurns();
+
+	/** A pattern as it goes in (the ChargeDrop event): its kind, how many, how wide (metres), seconds from the drop to the
+	 * burst, seconds it takes to go in (Until), where they go in (At, the show's: her stern for a pattern, her forecastle
+	 * for "ahead"), the pattern's middle (Aim), the escort's velocity (metres a second), and her length and beam. */
+	struct DropIn
+	{
+		std::string Kind = "pattern";
+		int N = 10;
+		double Spread = 120.0, Sinking = 22.0, Until = 0.0;
+		P3 At, Aim, Vel;
+		double Long = 95.0, Beam = 10.0;
+	};
+	/** One charge of it, absolute: fired Dt seconds after the drop, from From (rolled off her stern's rails, thrown from
+	 * a thrower on her side, or the ahead thrower on her forecastle), into the sea at To after Flight seconds, High metres
+	 * over the higher end at the top of its arc. Side: 0 the rails, -1 or +1 the port or starboard thrower, 2 ahead. */
+	struct DropShot
+	{
+		double Dt = 0.0, Flight = 0.5, High = 0.0;
+		int Side = 0;
+		P3 From, To;
+	};
+	std::vector<DropShot> DropPlan(const DropIn& In, uint64_t Seed);
+	/** Where a thrown charge is, Age seconds into its flight from From to To, High metres over the higher end at its top. */
+	P3 Arc(const P3& From, const P3& To, double High, double Flight, double Age);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// Starshell
+
+	struct StarIn
+	{
+		P3 Burst;           // where it burst (Z its height)
+		double T0 = 0.0;    // when
+		double Until = 0.0; // when it burns out
+		P3 Wind;            // metres a second, the way it blows toward
+		uint64_t Seed = 1;
+	};
+	struct StarOut
+	{
+		bool bShown = false;   // the flare (or, a moment after it burns out, its dead candle) in the sky
+		bool bBurning = false;
+		P3 Flare, Chute;       // the candle, and the parachute's crown above it
+		double Light = 0.0;    // 0 to 1 of its full light: ignites, falls as it burns down and sinks, flickers, dies
+	};
+	StarOut StarAt(const StarIn& In, double T);
+	/** How fast it sinks (metres a second): its parachute's rate, slowed if that would bring it down to the sea before it
+	 * burns out. */
+	double StarFall(double Height, double Burn);
+	/** Seconds a starshell burns where the show gives no burn-out time. */
+	double StarBurnUsual();
+	/** The share of a burning flare's light (0 to 1) that falls on the sea at At. */
+	double LitBy(const StarOut& O, const P3& At);
+	/** The sky's own light on the sea (0 to 1): bLight, whether the recording gives its light; the sun's and the moon's
+	 * height (degrees) and the moon's lit share. A recording without light is a day's. */
+	double SkyLit(bool bLight, double SunUp, double MoonUp, double MoonLit);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// Ends and rescue
+
+	/** A boat crushed deep: her air coming up as a hump of white water over where she was, then boils dwindling (her oil
+	 * and the few pieces of her that come up with it are the scene's wreck model's). Dt after the end, Dx, Dy from her
+	 * last place. */
+	struct BoilShot
+	{
+		double Dt = 0.0, Dx = 0.0, Dy = 0.0;
+	};
+	std::vector<BoilShot> CrushPlan(uint64_t Seed);
+
+	/**
+	 * A rescue. The men in the water are the sea scene's (SeaShow's wreck model: every ship's crew over her side, a boat's
+	 * too), and so is who swims to a ship standing by and climbs her side, where, and how high. The looks only hang the
+	 * scrambling nets they climb: nets where each of the scene's men climbs her side, and where each one swimming for it
+	 * will (at stations NetWide apart, side by side), while she stands by as the scene has it (stopped, under StandBy metres a second, the rescue's time not over:
+	 * its swimmers give her up otherwise), or while one of them is still on it; hauled in once she is under way and no one
+	 * is on it. Each net NetWide across, from her rail (the scene's height of her deck, FreeOf her class: where its men
+	 * climb to) into the sea, close against her side where the scene's men climb it.
+	 */
+	/** The scene's height of a ship's deck over the sea by her class (its men climb a rescuer's side to it) [SHOW]. */
+	double FreeOf(const std::string& Class);
+	/** [SHOW] SeaShow.cpp BoatFreeOf: a boat's casing as the scene has her men go over it, by her navy (the battle
+	 * modeller's boats: SculptedOf's Deck). */
+	double BoatFreeOf(const std::string& Nation);
+	/** Whether a rescuer at this speed (metres a second) stands by, as the scene has it [SHOW]. */
+	bool StandsBy(double Speed);
+	/** A rescuer as the show gives her (ShipOut): her waterline amidships, heading (degrees), length, beam, speed. */
+	struct RescuerIn
+	{
+		P3 At;
+		double Heading = 0.0, Long = 100.0, Beam = 10.0, Speed = 0.0;
+	};
+	/** A man of the scene's as it gives him (ManOut): where, the way he faces (radians clockwise from north, the show's
+	 * own), swimming, climbing a ship's side, or anything else. */
+	enum class ManDoing
+	{
+		Swim,
+		Climb,
+		Other,
+	};
+	struct ManIn
+	{
+		P3 At;
+		double Heading = 0.0;
+		ManDoing Doing = ManDoing::Other;
+	};
+	/** Where on a rescuer's side a man of the scene climbs it now (bOutClimbing), or, swimming for it, will reach it: metres
+	 * along her from amidships, and her side (+1 starboard, -1 port); false where he does neither. */
+	bool ClimbPlace(const RescuerIn& R, const ManIn& M, double& OutAlong, double& OutSide, bool& bOutClimbing);
+	/** A net over her side: which side, its middle along her from amidships, how far down it is (0 in, 1 down). */
+	struct NetHung
+	{
+		double Side = 1.0, Along = 0.0, Out = 0.0;
+	};
+	/** Whether a man climbing at a place on her side is on her nets (all his hold on it within nets down at least Least). */
+	bool OnNets(const std::vector<NetHung>& Nets, double Side, double Along, double Least);
+	/** Seconds a net takes to go down her side, or to come in. */
+	double NetDropFor();
+	/** A rescuer's nets, a step on (Dt seconds): Men the scene's men near her, bRescue her rescue's time not over. */
+	void StepNets(std::vector<NetHung>& Nets, const RescuerIn& R, const std::vector<ManIn>& Men, bool bRescue, double Dt);
+	/** One net's ropes (From, To), board metres: Ship her waterline amidships, her heading (degrees) and the beam it hangs
+	 * against (the show's, or the stage's drawn hull where that is wider), Free her deck's height (FreeOf), the net's
+	 * side, middle and how far down. */
+	struct NetIn
+	{
+		P3 Ship;
+		double Heading = 0.0, Beam = 10.0, Free = 5.0, Side = 1.0, Along = 0.0, Out = 1.0;
+	};
+	struct Rope
+	{
+		P3 From, To;
+	};
+	std::vector<Rope> NetOf(const NetIn& In);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// A gun's crew
+
+	/**
+	 * A gun's mount on the battle modeller's model the stage draws her with, where the stage trains it (AirStage's
+	 * TrainGun: a boat's deck gun, the model's turret.A; a merchant's bow gun, turret.A, and her stern gun, turret.Y): the
+	 * file's name (as the stage names it, without "Ships/"), the part, the mount's middle along her forward from amidships
+	 * (metres, the file's own), the deck its crew stand on there (metres over her waterline: a boat's casing, a merchant's
+	 * gun platform), how far its crew may stand from the mount's middle (Room) and from her middle line (HalfWide) and stay
+	 * on that deck, where a merchant's gun shield ends behind the mount (Shield, metres; 0, a boat's gun with none: her
+	 * crew stand beside it), the bearing it lies stowed at (degrees off her bow) and how far its mount turns either way.
+	 * Measured off the files; Tools/convoy_looks checks each row against its file. Empty File: no such row.
+	 */
+	struct GunMount
+	{
+		std::string File, Part;
+		double Along = 0.0, Deck = 0.0, Room = 2.0, HalfWide = 1.0, Shield = 0.0, Rest = 0.0, Arc = 145.0;
+	};
+	/** The mount of a model's gun: bStern, a merchant's stern gun (turret.Y); else her gun forward of the two (turret.A: a
+	 * boat's deck gun, an American fleet boat's aft of her tower though it is). */
+	GunMount MountOf(const std::string& File, bool bStern);
+
+	/** What the show says of her gun this frame (ShipOut): whether it is laid (bGunLaid: told on a ship she can fire at,
+	 * she up and her casing clear), her Dive ("surfaced", "periscope", "deep"; a merchant's empty) and Dived (metres under
+	 * her surfaced trim), its Train (degrees off her bow), when a shell last struck her or fell close aboard her (ShakenAt;
+	 * below 0, never), the battle's clock (T), and her key (for each man's own hash). */
+	struct CrewIn
+	{
+		bool bLaid = false;
+		std::string Dive;
+		double Dived = 0.0, Train = 0.0, ShakenAt = -1.0, T = 0.0;
+		int Key = 0;
+	};
+	/** One man of a gun's crew: where he stands (metres toward her bow and to her starboard from the mount's middle, on its
+	 * deck), the way he faces (degrees off her bow, clockwise), whether he crouches, and how far into his clip he is
+	 * (seconds, his own: no two of a crew move as one). */
+	struct CrewMan
+	{
+		double Fore = 0.0, Right = 0.0, Facing = 0.0, Clip = 0.0;
+		bool bDuck = false;
+	};
+	/** At most this many men at a gun [EST]; how long each crouches after a shell strikes her or falls close aboard
+	 * (seconds) [EST], each a fraction of a second after it as he hears it (at most DuckLate). */
+	constexpr int CrewMost = 4;
+	constexpr double DuckFor = 2.5, DuckLate = 0.3;
+	/**
+	 * A gun's crew [EST]: up to CrewMost men at its mount, turned with it as it trains: at a boat's gun its layer and
+	 * trainer to either side of it, a loader behind its breech and a man with the next round behind him; at a merchant's,
+	 * two by two in its platform behind its shield. All on its deck (within Room of its middle and HalfWide of her middle
+	 * line). Only while her gun is laid and she is up: none from the diving alarm (told down: below before the hatch
+	 * shuts) or once her gun is dropped. Each crouches for DuckFor seconds after a shell strikes her or falls close aboard
+	 * her, and stands to it else. The show says whether the gun is laid and when she was struck; nothing here changes either.
+	 */
+	std::vector<CrewMan> GunCrewOf(const GunMount& M, const CrewIn& In);
+
+	// -------------------------------------------------------------------------------------------------------------
+	// A hit's looks on a boat and a merchant
+
+	/** Whether a boat's hits' looks are put out this frame (the stage's PutOut: what they had still to come gives way,
+	 * their fires out under the sea), as the show has her (ShipOut's Dive and Dived, metres under her surfaced trim): each
+	 * frame she is told down ("periscope", "deep": at the diving alarm, her casing still awash) or is under, her casing
+	 * more than a metre down. The scene asks it each frame for each boat; the sea show's cloud test holds the show's hits to
+	 * it (nothing of a hit's look left burning on a boat under). */
+	bool PutsOutLooks(const std::string& Dive, double Dived);
+	/** The looks table's family for a hit on a ship (Battle/Fates, its "sea" rows), from her own (FamilyOf's: her class)
+	 * and the table's weapon for the strike: a merchant ("mv", the convoy battle's, which the table has no rows for) struck
+	 * by a shell (a boat's deck gun's, "shell_light" and the like) takes the transports' and merchants' ("ap": a gun hit's
+	 * fire, splinters and smoke); her torpedo and bomb hits keep her own family, as before the deck gun (no look of the
+	 * table's: the sea show's own way down shows them). Any other ship keeps her own. */
+	std::string HitLookFamily(const std::string& Family, const std::string& Weapon);
+
+	/**
+	 * A mesh section's shape as it was last made: its point count, then its triangles' corners. While a section keeps
+	 * its shape (a hung net, a burning flare: the same points and triangles, moved), only where its points are, which way
+	 * they face and their paint need sending; it is made afresh only when its shape changes (the pre-check's note of
+	 * 22 November on the cost of making the looks' mesh every frame, as the sea scene now does for its wreck mesh).
+	 */
+	struct MeshShape
+	{
+		std::vector<int> Kept;
+		/** Whether a section of Points points and these triangles' corners (Count of them) has the shape last kept: never with none kept. */
+		bool Holds(int Points, const int* Corners, int Count) const;
+		/** Keeps the shape a section was made with. */
+		void Keep(int Points, const int* Corners, int Count);
+		/** Forgets it (the section cleared). */
+		void Forget() { Kept.clear(); }
+	};
+}
