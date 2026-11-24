@@ -133,3 +133,13 @@ export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');
 // this is true carry the flag 'settledTowns'. Forced by TC_SETTLEDTOWNS.
 /** True where new grand campaigns open with conquered towns able to build everything once settled (stage.json 'settledTowns'). */
 export const SETTLEDTOWNS_STAGE: boolean = staged('TC_SETTLEDTOWNS', 'settledTowns');
+
+// Shadowing, the voyage log, and rearguards that blow the bridges (release 2; Brian 24 November 2026 19:47Z, "yes to
+// all"; shadow.ts, voyage.ts, rearguard.ts): the grand campaigns opened while each is true carry its flag. Forced by
+// TC_SHADOW, TC_VOYAGELOG and TC_REARBRIDGES.
+/** True where new grand campaigns open with fleets able to shadow an enemy fleet (stage.json 'shadow'). */
+export const SHADOW_STAGE: boolean = staged('TC_SHADOW', 'shadow');
+/** True where new grand campaigns open with each fleet keeping a voyage log (stage.json 'voyageLog'). */
+export const VOYAGELOG_STAGE: boolean = staged('TC_VOYAGELOG', 'voyageLog');
+/** True where new grand campaigns open with rearguards blowing the bridges behind them (stage.json 'rearBridges'). */
+export const REARBRIDGES_STAGE: boolean = staged('TC_REARBRIDGES', 'rearBridges');

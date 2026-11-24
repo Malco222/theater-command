@@ -82,6 +82,8 @@ import { claimsView, historyMonth, type ClaimView } from './claims';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { makeTask, releaseTask, retask, taskForcesMonth, whyNotTask } from './taskforce';
+import { aiShadows, orderShadow, shadowOn, shadowTargets, shadowsFollow, stopShadow, whyNotShadow } from './shadow';
+import { logVoyages } from './voyage';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
@@ -119,6 +121,8 @@ function closePhase(g: Game, nat: string): void {
     sidesAtPeace(g);
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
+    // Each fleet's voyage log has the month's line (release 2, voyage.ts; nothing with that switch off).
+    logVoyages(g);
     g.phase = 0; g.turn++; g.week = 1;
     // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
     fieldsMonth(g);
@@ -152,9 +156,15 @@ export function stepAI(g: Game): string {
   const nat = current(g);
   g.week = 1;
   startPhase(g, nat);
+  // Every shadow follows its quarry as a country's month opens (release 2, shadow.ts; nothing with that switch off).
+  shadowsFollow(g, nat);
   // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
   yieldMonth(g, nat);
-  if (g.nations[nat].alive) runAI(g, nat);
+  if (g.nations[nat].alive) {
+    runAI(g, nat);
+    // The computer's admirals set their shadows, after their other orders (release 2, shadow.ts).
+    aiShadows(g, nat);
+  }
   closePhase(g, nat);
   return nat;
 }
@@ -163,6 +173,8 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // Every shadow follows its quarry, and his report where it is (release 2, shadow.ts; nothing with that switch off).
+  shadowsFollow(g, current(g));
   // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
   yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
@@ -1531,13 +1543,17 @@ export function orderFleet(g: Game, id: number, zone: number, stance: Stance): b
   const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
   // A task force given a new job keeps that one as its standing order; sent into harbour, it is released (release 2).
   if (ok) retask(g, f!);
+  // A new order ends a shadow (release 2, shadow.ts).
+  if (ok) stopShadow(f!);
   return ok;
 }
 
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  return !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+  const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
+  if (ok) stopShadow(f!);
+  return ok;
 }
 
 /** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
@@ -1549,7 +1565,26 @@ export function handBackFleet(g: Game, id: number): boolean {
   if (!f || !f.ordered) return false;
   delete f.ordered;
   delete f.task;
+  delete f.shadow;
   return true;
+}
+
+/** Why one of the player's fleets cannot be set to shadow an enemy fleet now, or null (release 2, shadow.ts). */
+export const whyNotShadowFleet = (g: Game, id: number, target: number): string | null => whyNotShadow(g, id, target);
+
+/** Sets one of the player's fleets to shadow an enemy fleet: it follows it and reports where it goes (release 2, shadow.ts). */
+export function orderShadowFleet(g: Game, id: number, target: number): boolean {
+  const f = myFleet(g, id);
+  if (!f || heldAfterAttack(g, f)) return false;
+  const ok = orderShadow(g, id, target);
+  if (ok) delete f.task;
+  return ok;
+}
+
+/** Ends one of the player's fleets' shadow: it stays where it is, under his orders (release 2, shadow.ts). */
+export function stopShadowFleet(g: Game, id: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && stopShadow(f);
 }
 
 /** Why one of the player's corps cannot be ordered to hold as a rearguard now, or null (release 2, rearguard.ts). */
@@ -1641,6 +1676,8 @@ export interface FleetOptions {
   attack?: number[];
   /** Why it stays where it is this month, having been sent at the enemy (release 2): there only then. */
   held?: string;
+  /** Enemy fleets it can be set to shadow now (release 2, shadow.ts): there only where that is switched on. */
+  shadow?: number[];
 }
 
 /** Everything one of the player's fleets could be told to do this month. Null if it is not theirs to order now. */
@@ -1658,6 +1695,7 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
     split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
+  if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
   if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
   return out;
 }
@@ -1678,6 +1716,7 @@ export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
   const ok = !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
   if (ok) retask(g, f!);
+  if (ok) stopShadow(f!);
   return ok;
 }
 

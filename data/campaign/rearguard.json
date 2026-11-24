@@ -8,5 +8,7 @@
   "ai": {
     "odds": 1.5,
     "perMonth": 2
-  }
+  },
+  "_bridges": "Rearguards blow the bridges (release 2; Brian 24 November 2026 19:47Z, 'yes to all'; its own switch, stage.json 'rearBridges', and only with rearguards on). A rearguard's engineers lay charges on the bridges behind it as it takes up its position. When the province it held is lost, the bridges over each river between it and its side's ground beyond go up 'bridges' of the time, the charges being laid already, in place of the usual chance (engineering.json blow: 0.25 with the far bank unguarded, 0.65 guarded, 0.95 with engineers there, each 0.35 less where fast enemy troops reach the bridges first). Held, nothing is blown. The same rule for every country's rearguards. The figure is the thread's proposal, to the design director.",
+  "bridges": 0.95
 }
