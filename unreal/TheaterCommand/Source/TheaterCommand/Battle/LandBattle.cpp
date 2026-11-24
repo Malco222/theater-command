@@ -1773,6 +1773,7 @@ bool ALandBattle::Open()
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
 	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
+	S.Ruts.Snow = FieldPtr->SnowLying();
 	{
 		const LandCrater::Field* DugHoles = &S.Holes;
 		S.Ruts.DugAt = [DugHoles](double X, double Y) { return DugHoles->InCut(X, Y); };
@@ -4901,7 +4902,17 @@ void ALandBattle::HideTheTable()
 			// side and a hedge's underside catch. The art director on cut 4, fix 2. "-TheaterLandSkyBelow=0" keeps it black)
 			double Below = 0.3;
 			LandLook::Asked(TEXT("TheaterLandSkyBelow="), { &Below });
-			const FLinearColor Field = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			// (on snow the bounce is the snow's, white and strong: lit snow is near as bright as the sky over it, and lights
+			// whatever faces it. The art director on Valdai, 24 Nov: a hull's shaded side read black, 18-22 against snow at
+			// 165, where the snow lifts it to 55-75. "-TheaterLandSnowBelow=" its strength at full snow, 0.85; the snow
+			// lying, 0 to 1, takes it from the field's colour to the snow's)
+			const double Snowed = State.IsValid() && State->Field ? FMath::Clamp(State->Field->SnowLying(), 0.0, 1.0) : 0.0;
+			double SnowBelow = 0.85;
+			LandLook::Asked(TEXT("TheaterLandSnowBelow="), { &SnowBelow });
+			const FLinearColor Bare = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
+			const FLinearColor Snowy = FLinearColor::FromSRGBColor(FColor(214, 220, 232)) * static_cast<float>(FMath::Clamp(SnowBelow, 0.0, 1.0));
+			const FLinearColor Field = FMath::Lerp(Bare, Snowy, static_cast<float>(Snowed));
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky's lower half (the ground's bounce) %.3f, %.3f, %.3f (the snow lying %.2f)"), Field.R, Field.G, Field.B, Snowed);
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();

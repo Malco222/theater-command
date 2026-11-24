@@ -2715,6 +2715,7 @@ int main(int Argc, char** Argv)
 		// (the game's own heights: HeightAt, At's height alone)
 		R.Begin([&G](double X, double Y) { return G.HeightAt(X, Y); }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
 		R.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
+		R.Snow = G.SnowLying();
 		const LandCrater::Ruts::KindFn Kind = LandCrater::Ruts::KindOn(G);
 		uint64_t S = 0x7aac5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
