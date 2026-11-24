@@ -5852,7 +5852,7 @@ function seaNotes(): string {
     const m = g.convoys[route.id];
     if (!m || (me && me !== route.to && !atWar(g, me, route.to))) continue;
     const share = m.raid + m.guard > 0 ? m.raid / (m.raid + m.guard * NAVY.convoy.escortWorth) : 0;
-    out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
+    out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'}${m.byAircraft !== undefined && m.subsLost > 0 ? ` (aircraft sank ${m.byAircraft}, the convoys' escorts ${m.byEscorts ?? 0}, hunting groups ${Math.max(0, m.subsLost - m.byAircraft - (m.byEscorts ?? 0))})` : ''} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
       <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. ${seaWar(g) ? 'Fleets ordered to escort the route cut the losses most; destroyers sent to hunt in its seas sink the submarines.' : 'More escorts and patrolling fleets on the route cut the losses.'}${desertNote(route)}</span></div>`;
   }
   const ore = oreRoute(g);
@@ -6173,6 +6173,7 @@ function missionText(f: AirFleet): string {
     case 'harbour': return `raiding the harbour of ${where}`;
     case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
     case 'airfield': return `bombing the airfield at ${where}`;
+    case 'seapatrol': return `patrolling ${g.seas[f.target] ? seaWhat(g.seas[f.target].name) : 'the sea'} against submarines`;
   }
 }
 

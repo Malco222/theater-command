@@ -89,6 +89,8 @@ export function saveGame(g: Game): string {
     ac: g.ac,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
+    // The sea patrol's record (release 2, Units decide, once its figures are laid): absent otherwise, so such a save is written as it always was.
+    patrolSunk: g.patrolSunk,
     // The month's lorry columns (release 2, columns.ts): absent while the switch is off, so such a save is written as it always was.
     columns: g.columns,
     // Forward dumps and the front the lorries go to first (release 2, logistics.ts): absent while those switches are off.
@@ -264,6 +266,7 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
+  if (d.patrolSunk && typeof d.patrolSunk === 'object') g.patrolSunk = d.patrolSunk;
   if (d.columns && typeof d.columns === 'object') g.columns = d.columns;
   if (Array.isArray(d.dumps) && d.dumps.length) g.dumps = d.dumps;
   if (d.lorryFirst && typeof d.lorryFirst === 'object') g.lorryFirst = d.lorryFirst;

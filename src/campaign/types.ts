@@ -864,8 +864,10 @@ export interface ConvoyMonth {
   fought?: 'field' | 'clamped';
   /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
   byEscorts?: number;
+  /** Release 2, with Units decide and the sea patrol laid (seapatrol.ts), record only: of subsLost, the boats the receiving nation's aircraft on patrol sank in the route's seas. */
+  byAircraft?: number;
   /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort, the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. */
-  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number };
+  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number; watched?: number };
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
@@ -887,7 +889,7 @@ export interface SubLook {
   torpedoes: { fleet: number; zone: number; cls: ShipClass; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
   /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
   /** With Units decide only (the convoy war by cause): the kit of the navy with most destroyers answering attacks in the sea (HF/DF has no rule yet, so always false), the air cover's kind, and the boats its escorts sank there. */
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range'; lost?: number }[] }[];
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range' | 'patrol'; lost?: number }[] }[];
 }
 
 export interface Headline {
@@ -1176,7 +1178,8 @@ export interface PlanPhase {
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
 /** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
 /** 'airfield' is a raid on one enemy airfield (airfields as targets, behind its switch): its runway, hangars and the aircraft parked there. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield';
+/** 'seapatrol' is a standing patrol of one sea against submarines (release 2, Units decide, once its figures are laid; seapatrol.ts): its target is the sea. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield' | 'seapatrol';
 
 export interface AirLeader {
   name: string;
@@ -1273,7 +1276,7 @@ export interface AirFleet extends Storied {
   /** The strength it is kept at. */
   est: { ftr: number; bmr: number };
   mission: AirMission;
-  /** A region for superiority and bombing, a sea for a strike on shipping, -1 for none. */
+  /** A region for superiority and bombing, a sea for a strike on shipping or a sea patrol, -1 for none. */
   target: number;
   /** 0..1: how fit the fleet is to fly. */
   ready: number;
@@ -1606,6 +1609,8 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  /** Release 2, with Units decide and the sea patrol laid (seapatrol.ts), record only: the boats each nation's aircraft on patrol sank in its month, by the boats' nation. */
+  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number> }>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
   /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */

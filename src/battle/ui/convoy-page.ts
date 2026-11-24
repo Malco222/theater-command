@@ -500,7 +500,7 @@ function paintBar(): void {
   const k = t.place.card?.count;
   // (The boats that fire a convoy where the escort's radar before a boat fires is laid, so the line agrees with the torpedoes.)
   const by = k ? k.fired ?? k.pack : 0;
-  app.querySelector('[data-facts]')!.innerHTML = k ? `${facts} · <span class="nw">of about ${Math.round(k.sailed)} convoys this month, ${Math.round(k.sighted)} sighted, ${Math.round(k.attacked)} attacked${by > 0 ? `, by about ${by < 10 ? by.toFixed(1) : Math.round(by)} boats each` : ''}${k.sunk !== undefined ? `, losing about ${k.sunk < 10 ? k.sunk.toFixed(1) : Math.round(k.sunk)} ships each${k.torps !== undefined && k.sunk >= k.torps - 0.01 ? ', as many as their torpedoes sink on an average night' : ''}` : ''}</span>` : facts;
+  app.querySelector('[data-facts]')!.innerHTML = k ? `${facts} · <span class="nw">of about ${Math.round(k.sailed)} convoys this month, ${Math.round(k.sighted)} sighted, ${Math.round(k.attacked)} attacked${by > 0 ? `, by about ${by < 10 ? by.toFixed(1) : Math.round(by)} boats each` : ''}${k.watched !== undefined ? `, aircraft watching about ${Math.round(k.watched * 100)}% of its waters` : ''}${k.sunk !== undefined ? `, losing about ${k.sunk < 10 ? k.sunk.toFixed(1) : Math.round(k.sunk)} ships each${k.torps !== undefined && k.sunk >= k.torps - 0.01 ? ', as many as their torpedoes sink on an average night' : ''}` : ''}</span>` : facts;
   app.querySelector('[data-score]')!.innerHTML = score;
   app.querySelector('[data-log]')!.innerHTML = log;
   paintClock();
