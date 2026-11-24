@@ -4564,16 +4564,16 @@ namespace LandHouse
 		 * A barn's or a byre's broken top as its middle level draws it (the art director's barn round 2: not square notches,
 		 * nor standing taller than the near level's): every 0.3 m the lowest the near level's top comes within 0.3 m of
 		 * there (the near lays a stone only where the top clears its whole length), straight between; NaN where the wall
-		 * stands whole there (its own top then), and none for the farmhouse, nor a shell's last gable (already a line).
+		 * stands whole there (its own top then), and none for the church, nor a shell's last gable (already a line).
 		 */
 		constexpr double MidStep = 0.3;
 		std::vector<double> MidLine(const Plan& P, int F)
 		{
 			const Face Fc = FaceOf(P, F);
 			std::vector<double> Z;
-			// (a barn's or a byre's; and a village house's, the art director's village round 1: its shell's middle stepped
-			// in square notches where the near's line runs ragged)
-			if ((P.Kind != 1 && P.Kind != 2 && !P.bVillage) || P.Hurt < 2 || KeptGable(P, Fc)) return Z;
+			// (a barn's or a byre's; a village house's, the art director's village round 1: its shell's middle stepped
+			// in square notches where the near's line runs ragged; and so the farmhouse's, the village round 2 carry)
+			if (P.Kind > 2 || P.Hurt < 2 || KeptGable(P, Fc)) return Z;
 			const int N = static_cast<int>(std::ceil(Fc.Len / MidStep));
 			for (int I = 0; I <= N; ++I)
 			{
@@ -5395,7 +5395,9 @@ namespace LandHouse
 					const double XA = P.Broken > 0 ? -IX : -XEnd, XB = P.Broken > 0 ? XEnd : IX;
 					B.Box(V3{ 0.5 * (XA + XB), 0.0, Z - 0.12 }, V3{ 0.5 * (XB - XA), 0.0, 0.0 }, V3{ 0.0, IY, 0.0 }, V3{ 0.0, 0.0, 0.12 }, P.K.Boards, 0);
 				}
-				Heap(B, P, V3{ P.Broken * (0.5 * P.L + 1.1), 0.0, -0.15 }, 2.3, 0.5 * P.D + 0.9, 1.5, 0.0, bMid ? 12 : 8, bMid ? 4 : 2, P.Key ^ 0x4EA9, false);
+				// (the middle's with its broken stones on it, as the shells' foot heaps, so it is no smooth dark dome: the art
+				// director's village round 2 carry, the farmhouse's middle)
+				Heap(B, P, V3{ P.Broken * (0.5 * P.L + 1.1), 0.0, -0.15 }, 2.3, 0.5 * P.D + 0.9, 1.5, 0.0, bMid ? 12 : 8, bMid ? 4 : 2, P.Key ^ 0x4EA9, bMid, 3.0, 1.5);
 			}
 			if (P.Hurt == 3)
 			{
