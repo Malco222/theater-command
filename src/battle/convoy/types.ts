@@ -9,7 +9,7 @@
 // courses, depths and looks act them out for the screens and the 3D sea scene, in the names that scene reads
 // (naval-battles/wolfpack-r2/field-side-read.md §3; form.md §5).
 
-import type { FieldTicket, Side, UnitBase } from '../core/types';
+import type { BattleView, FieldTicket, Side, UnitBase } from '../core/types';
 import type { ConvoyCountRecord } from '../../campaign/navy';
 
 /** The kinds on a convoy's night: a boat, an escort, a merchant. A separate table from the fleet action's (form §3). */
@@ -43,6 +43,7 @@ export interface ConvoyLight {
   vis: number;
   /** Hours from sunset to sunrise. */
   hours: number;
+  /** The day of the month, 1 to 31. */
   day: number;
 }
 
@@ -54,6 +55,7 @@ export interface ConvoyPlace {
   seaName: string;
   lat: number;
   lon: number;
+  /** The night's month, 0 for January (as the campaign's turnToDate gives it). */
   when: { year: number; month: number };
   light: ConvoyLight;
   /** Merchants in the convoy. */
@@ -122,6 +124,7 @@ export type ConvoyCommand =
   | { do: 'convoy:screen'; units: number[] }
   | { do: 'convoy:rescue'; units: number[]; target: number }
   | { do: 'convoy:starshell'; units: number[]; x: number; y: number }
+  /** under: true attacks submerged, false on the surface; left out, the boat keeps the depth her commander last chose (or the one she is at). */
   | { do: 'convoy:attack'; units: number[]; target?: number; under?: boolean }
   | { do: 'convoy:dive'; units: number[]; deep?: boolean }
   | { do: 'convoy:surface'; units: number[] }
@@ -134,3 +137,36 @@ export interface ConvoyCounts { ss: Record<number, number>; dd: Record<number, n
 
 /** Each count's rank against the computer's own nights for the card, 0 to 1 (calibrate.ts). */
 export interface ConvoyRanks { ss: Record<number, number>; dd: Record<number, number>; mv: number }
+
+/** What the night did, measured only (the after card's lines; nothing books them). */
+export interface ConvoyTally {
+  attacks: number; hunts: number; salvoes: number; hits: number;
+  /** Boats forced to the surface, and those of them that dived again and got away. */
+  forcedUp: number; escaped: number;
+  /** How the boats lost went: these add up to the boats lost. */
+  scuttled: number; rammed: number; shelled: number; crushed: number; captured: number;
+}
+
+/** A piece of the other side that a side has lost touch with: where and when it last knew of her (the faded 'last seen' mark). */
+export interface ConvoySpot { id: number; name: string; cls: ConvoyClass; x: number; y: number; t: number; dive?: Dive; kind?: Echo['kind'] }
+
+/** The night as one side sees it (ConvoySim.view): the core's picture, the marks of pieces lately lost from sight, and the pack's size. */
+export interface ConvoyView extends BattleView<ConvoyUnit> {
+  /** The other side's pieces lost from sight in the last three minutes, at their last known spots (none in the whole picture). */
+  lastSeen: ConvoySpot[];
+  /** Every boat the night's card brings, those still to come and those gone included (the pack's score counts them all). */
+  pack: number;
+}
+
+/** What the night's end carries for the after card (FieldResult.extra). */
+export interface ConvoyOverExtra {
+  counts: ConvoyCounts;
+  /** The whole night's measures: after a hand-over, the staff's share of the rest is in them too, split the same way. */
+  tally: ConvoyTally;
+  handed: boolean;
+  /** Where the player handed the night over: the battle second, and the staff's share of the rest as its dice fell. */
+  handedAt?: number;
+  staff?: { counts: ConvoyCounts; tally: ConvoyTally };
+  /** Battle seconds each side was commanded by its player (0: the staff had it all night). */
+  steered: Record<Side, number>;
+}
