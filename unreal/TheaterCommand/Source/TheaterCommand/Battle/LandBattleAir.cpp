@@ -395,11 +395,12 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 	// (its first section), his canopy's silk on its own copy of it (its second), so that its glow against the sun is
 	// one number a frame and its seams are in its points' colours (the art director's sixth note, 24 November 02:26Z:
 	// cheaply, no mesh made again a frame and no new material). In the air its pivot is his canopy, so that he swings
-	// under it; it is moved in place only as his canopy fills (its open share by 0.02). Down, his canopy falls in where
-	// it lies (made again by 0.05 of its slump: LandAir::SilkMoved says why), and his chute's mesh draws him going over
-	// flat under it (moved in place); there he is swapped for a man of the crowd (her third note): in his army's tank
-	// crews' file where it has one, with its own head, else its infantry's, bareheaded; unarmed, in the clips LandAir
-	// says, at the rates and blends it says.
+	// under it; it is moved in place only as his canopy fills (its open share by 0.02). Down, his canopy tips over and
+	// falls in downwind, lying in long loose folds laid on the ground under it (made again by 0.05 of its slump:
+	// LandAir::SilkMoved says why; the art director's verdict of 24 November 14:34Z), and his chute's mesh draws him
+	// going over flat under it (moved in place); there he is swapped for a man of the crowd (her third note): in his
+	// army's tank crews' file where it has one, with its own head, else its infantry's, bareheaded; unarmed, in the
+	// clips LandAir says, at the rates and blends it says.
 	if (A.bChutes)
 	{
 		A.Sky.Chutes(T, A.ChutesNow);
@@ -453,7 +454,7 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 				Make.Silk.Clear();
 				if (C.bDown)
 				{
-					LandAir::HeapShape(C, SilkAt - 2.0, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), Make.Silk);
+					LandAir::HeapShape(C, SilkAt - 2.0, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), Make.Silk, Ground);
 				}
 				else if (SilkAt > 0.0)
 				{
@@ -480,7 +481,7 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 					HangingShape(Make.Built, Make.Silk, U);
 				}
 				// (his part moved in place while its make is the same; his silk in the air too, but down made again, its
-				// rumple folding some of its triangles over: LandAir::SilkMoved)
+				// folds turning some of its triangles over: LandAir::SilkMoved)
 				bool bMade = PutSection(Mesh, 0, Make.Built, true);
 				if (bSilk)
 				{

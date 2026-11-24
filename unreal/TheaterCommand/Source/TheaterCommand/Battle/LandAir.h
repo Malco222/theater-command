@@ -133,11 +133,16 @@ namespace LandAir
 		// how long the scene takes to blend into his clip from the one before (real seconds).
 		std::string Clip;
 		double Time = 0.0, Rate = 1.0, Blend = 0.25;
-		// His canopy: up over him (Slump 0) to fallen in and flat on the ground (1), where it lies then (Heap, its
+		// His canopy: up over him (Slump 0) to fallen in and lying on the ground (1), where it lies then (Heap, its
 		// middle) and the way it lies from where its lines end (degrees); Landed, where they end: him as he lies, dragged
 		// with it in a wind, else where he landed
 		V3 Heap, Landed;
 		double HeapHeading = 0.0, Slump = 0.0;
+		// (the art director's verdict of 24 November 14:34Z) The way his canopy's silk lies once down, a number of his
+		// own (its length, its folds, how much air its far end holds: no two pilots' alike), and the battle's wind
+		// (metres a second: a stronger one stretches it and fills its far end more)
+		uint32_t Folds = 0;
+		double Wind = 0.0;
 		// (the art director's notes, 24 November 02:26Z) Whether his chute's mesh draws him: in the air, and down until
 		// he is swapped for the crowd's man as he lies under his falling canopy; there, how far he has gone over from his
 		// feet to flat (0 to 1). A hard landing (out too low for his canopy to fill); how far his canopy has dragged him
@@ -171,6 +176,9 @@ namespace LandAir
 	V3 OverShift(double Fallen, double EndX, double EndY);
 	/** Where his hips are then (metres: forward, right and up of his feet); flat, EndX, EndY and ProneHips. */
 	V3 OverHips(double Fallen, double EndX, double EndY);
+	/** Where his harness is then, where his lines meet him (metres: forward, right and up of his feet): at his chest,
+	 * 1 m up him, as the scene's chute mesh puts it (LandBattleAir's DownShape). */
+	V3 OverHarness(double Fallen, double EndX, double EndY);
 
 	/**
 	 * A canopy's silk as the scene draws it (Effects, R2; the art director's sixth note, 24 November 02:26Z), in the
@@ -187,16 +195,32 @@ namespace LandAir
 		std::vector<int> Seams;         // its skirt's point at each gore's seam (its outer face's): where a line ends
 		void Clear();
 	};
-	/** His canopy in the air, its origin the middle of its skirt: Open 0 a streamer of silk over him, to 1 a full dome
-	 * Across wide and Deep deep, its gores' seams faint darker lines. */
+	/**
+	 * His canopy in the air, its origin the middle of its skirt: Open 0 a streamer of silk over him, to 1 a full canopy
+	 * Across wide at its widest and Deep deep, its gores' seams faint darker lines. Side-on it is widest WidestDown of
+	 * its depth under its crown and curves in below that to a hem HemIn as wide, pulled in toward its lines (the art
+	 * director's verdict of 24 November 14:34Z: its skirt had dropped straight, "like a jelly mould").
+	 */
+	constexpr double HemIn = 0.85, WidestDown = 0.38;
 	void CanopyShape(const Chute& C, double Open, SilkMesh& Out);
-	/** His canopy once he is down, its origin where its lines end (his feet), x the way it falls (the wind's): from as it
-	 * was as he landed (Slump 0) it falls in downwind and settles into a low rumpled heap Off metres off (1), its 7 m of
-	 * silk lying on the field. */
-	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out);
+	/**
+	 * His canopy once he is down, its origin where its lines end (his feet as he lies), x the way it falls (the wind's),
+	 * y to its right, z up: from as it was as he landed (Slump 0) it tips forward on its lines, loses its air and blows
+	 * downwind, and lies (1) stretched out along the wind with its middle Off metres off (the art director's verdict of
+	 * 24 November 14:34Z: it had lain a flat oval with even scallops, "a doily"): two to three times as long as it is
+	 * wide, in a few long loose folds running mostly downwind, uneven and his own (Chute::Folds), its far end lifted a
+	 * little on the air it still holds, its near end gathered a metre or so past his harness, where its lines run back
+	 * to him. Ground (board metres, as Sky's; none: a flat field) lays it on the field as it lies under it, so that none
+	 * of it is under the ground on a slope; the mesh is placed at Chute::Landed, turned to HeapHeading.
+	 */
+	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out, const GroundFn& Ground = GroundFn());
+	/** How far his canopy's middle lies downwind of where its lines end once it is down (metres; Sky puts Chute::Heap
+	 * there): its near end a metre or so past his harness, which lies the way he faces (Face, degrees, against Way,
+	 * the way it falls), and half its length on. */
+	double HeapOff(uint32_t Folds, double Across, double Wind, double Face, double Way);
 	/** Down, whether a line runs back to him from the Seam-th of Seams seams (SilkMesh::Seams' order): the half of its
 	 * skirt behind its middle the way it falls, toward where its lines end. Chosen by its place round the skirt, not by
-	 * where its rumple puts it, so that the same lines are drawn all the while it falls in (the mesh keeping its make). */
+	 * where its folds put it, so that the same lines are drawn all the while it falls in (the mesh keeping its make). */
 	bool LineBack(size_t Seam, size_t Seams);
 
 	/**
@@ -207,8 +231,8 @@ namespace LandAir
 	 * has moved by a step: Shape (his canopy's open share in the air; 2 and its slump once down) by OpenStep in the air,
 	 * SlumpStep down, or to full or flat, or down from the air (SilkMoved). In the air it is moved in place: a dome
 	 * filling never folds. Down it is made again, and by a coarser step: the scene winds each triangle by where its
-	 * points are, and the heap's rumple folds some over as it falls in (about one in fifty within a step, its crown's
-	 * and its hem's most; a sixth by the time it lies flat), which kept as first wound would show their inside's
+	 * points are, and some fold over as his canopy tips, falls in and lies in its folds (a few in a thousand within a
+	 * step, about one in two hundred by the time it lies), which kept as first wound would show their inside's
 	 * shading. His part (him going over and his lines) is built again when Lying (how far over he has gone in it, from 0
 	 * on his feet to 1 flat; less than nothing once the crowd's man has him) has moved by LyingStep, or to flat, or he is
 	 * handed over (ManMoved), or with the silk; it is moved in place while its make is the same. The Was values are
@@ -281,6 +305,9 @@ namespace LandAir
 			double Silk[3] = { 0.86, 0.85, 0.80 };
 			int Gores = 26;
 			double Across = 5.2, Deep = 2.5, SwingSide = 1.0;
+			// (the verdict of 24 November 14:34Z: the way his canopy lies once down, and the battle's wind)
+			uint32_t Folds = 0;
+			double Wind = 0.0;
 			double OpenDown = 1.0;
 			bool bHard = false, bLimp = false;
 			double FallS = 0.5, SwapS = 0.9, DragS = 0.0, Rise = 0.0, UpS = 1.0, ReleaseS = 1.2, Pace = 1.0;

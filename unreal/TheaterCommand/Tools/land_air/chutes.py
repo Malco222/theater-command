@@ -10,10 +10,13 @@ he is with it within a few seconds of his canopy filling); and down, his seconds
 (her third, fourth and fifth: over flat in his chute's mesh, swapped for the crowd's man, dragged, up onto his knees,
 his harness, up, running or limping, down).
 
-Its last row: his canopy as the scene draws it (land_air_test's chute_silk.txt, LandAir's own mesh), shaded much as
+Its last rows: his canopy as the scene draws it (land_air_test's chute_silk.txt, LandAir's own mesh), shaded much as
 the pieces' paint is (the sun's light, and on the side turned from the sun the share of its own colour the scene gives
-back, its glow): side-on in the sun, from under it 100 m off with the sun behind it with its glow and without, and
-fallen in on the field.
+back, its glow): side-on in the sun through a long lens (the art director's verdict of 24 November 14:34Z, (c): its hem
+pulled in toward its lines), from under it 100 m off with the sun behind it with its glow and without, and falling in
+a quarter at a time across the wind; and lying on the field (her verdict, (b)): from 40 m at a man's eye height, and
+from above, his and a second pilot's. Each down view draws him lying (a dark bar) and his lines back to him.
+It measures in the picture what she asked for, from the pixels it drew, and prints it (and writes it under each view).
 Usage: chutes.py <air_paths.txt> <chute_silk.txt> <out.png>"""
 import math
 import sys
@@ -45,7 +48,11 @@ for line in open(SILK):
     if not w:
         continue
     if w[0] == 'mesh':
-        cur = meshes.setdefault(int(w[1]), {'p': [], 'n': [], 'c': [], 't': [], 'gores': int(w[2])})
+        cur = meshes.setdefault(int(w[1]), {'p': [], 'n': [], 'c': [], 't': [], 'gores': int(w[2]), 's': [], 'h': None})
+    elif w[0] == 'h':
+        cur['h'] = [float(a) for a in w[1:5]]
+    elif w[0] == 's':
+        cur['s'].append(int(w[1]))
     elif w[0] == 'p':
         v = [float(a) for a in w[1:]]
         cur['p'].append(v[0:3])
@@ -60,7 +67,7 @@ PHASE_FILL = {'over': (170, 170, 160), 'lies': (110, 110, 100), 'knees': (220, 1
               'stands': (40, 140, 60), 'runs': (40, 90, 200), 'limps': (120, 60, 160), 'down': (60, 60, 60)}
 ROW = 250
 keys = sorted(chutes)
-W, H = 1640, 60 + ROW * len(keys) + 330
+W, H = 1640, 60 + ROW * len(keys) + 360 + 400
 im = Image.new('RGB', (W, H), PAPER)
 d = ImageDraw.Draw(im)
 d.text((20, 12), "Downed pilots, release 2 (-TheaterLandChutes with -TheaterLandAirSupport): the art director's notes of 24 November, 02:26Z, "
@@ -243,7 +250,7 @@ for row, key in enumerate(keys):
 # The canopy's look: LandAir's own silk, shaded much as the pieces' paint shades it.
 ly = 60 + ROW * len(keys)
 d.text((20, ly), "his canopy as the scene draws it (LandAir's mesh: %d gores, its seams and hem a little darker in its points' colours; "
-       "both its faces; shaded here much as the pieces' paint is)" % meshes[0]['gores'], fill=INK)
+       "both its faces; shaded here much as the pieces' paint is). Measured in the picture, from the pixels drawn." % meshes[0]['gores'], fill=INK)
 
 
 def norm(v):
@@ -269,15 +276,32 @@ def glow(eye, at, sun):
     return day * (0.15 * under + 0.75 * smooth((dot(way, s) - 0.3) / 0.65))
 
 
-def render(mesh, eye, at, sun, fill, box, scale, title, ground=None):
-    x0, y0, x1, y1 = box
-    if ground:
-        d.rectangle((x0 + 1, y0 + 1, x1 - 1, y1 - 1), fill=ground)
-    d.rectangle(box, outline=GREY)
-    fwd = norm([a - b for a, b in zip(at, eye)])
-    right = norm(cross(fwd, [0.0, 0.0, 1.0]))
-    up = cross(right, fwd)
-    cxm, cym = (x0 + x1) / 2.0, (y0 + y1) / 2.0 + 10
+def srgb(lin):
+    return tuple(int(255 * min(1.0, max(0.0, c)) ** (1 / 2.2)) for c in lin)
+
+
+class View:
+    """A camera: eye, looking at at, scale pixels a radian, centred in box (hint: which way is up in it)."""
+
+    def __init__(self, eye, at, scale, box, hint=(0.0, 0.0, 1.0)):
+        self.eye, self.scale, self.box = eye, scale, box
+        self.fwd = norm([a - b for a, b in zip(at, eye)])
+        self.right = norm(cross(self.fwd, list(hint)))
+        self.up = cross(self.right, self.fwd)
+        x0, y0, x1, y1 = box
+        self.cx, self.cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0 + 10
+
+    def at(self, v):
+        rel = [v[k] - self.eye[k] for k in range(3)]
+        z = dot(rel, self.fwd)
+        return (self.cx + dot(rel, self.right) / z * self.scale, self.cy - dot(rel, self.up) / z * self.scale)
+
+    def depth(self, v):
+        return dot([v[k] - self.eye[k] for k in range(3)], self.fwd)
+
+
+def silk_polys(mesh, view, sun, fill):
+    """Each triangle of the silk's face toward the eye, projected and shaded, far first."""
     L = norm(sun)
     tris = []
     P = mesh['p']
@@ -285,37 +309,239 @@ def render(mesh, eye, at, sun, fill, box, scale, title, ground=None):
         a, b, c = (P[i] for i in t)
         mid = [(a[k] + b[k] + c[k]) / 3.0 for k in range(3)]
         n = norm([sum(mesh['n'][i][k] for i in t) for k in range(3)])
-        if dot(n, [e - m for e, m in zip(eye, mid)]) <= 0.0:
+        if dot(n, [e - m for e, m in zip(view.eye, mid)]) <= 0.0:
             continue   # (the face of the silk turned from the eye: its other face, on the other side, is drawn)
         col = [sum(mesh['c'][i][k] for i in t) / 3.0 for k in range(3)]
         lit = dot(n, L)
         shade = 0.22 + 0.78 * max(0.0, lit) + (fill * min(1.0, -lit * 1.4) if lit < 0.0 else 0.0)
-        rgb = tuple(int(255 * min(1.0, max(0.0, col[k] * shade)) ** (1 / 2.2)) for k in range(3))
-        poly = []
-        for v in (a, b, c):
-            rel = [v[k] - eye[k] for k in range(3)]
-            z = dot(rel, fwd)
-            poly.append((cxm + dot(rel, right) / z * scale, cym - dot(rel, up) / z * scale))
-        tris.append((dot([m - e for m, e in zip(mid, eye)], fwd), poly, rgb))
+        tris.append((view.depth(mid), [view.at(v) for v in (a, b, c)], srgb([col[k] * shade for k in range(3)])))
     tris.sort(key=lambda e: -e[0])
-    for _, poly, rgb in tris:
-        d.polygon(poly, fill=rgb)
+    return tris
+
+
+def panel(box, title, ground=None):
+    x0, y0, x1, y1 = box
+    if ground:
+        d.rectangle((x0 + 1, y0 + 1, x1 - 1, y1 - 1), fill=ground)
+    d.rectangle(box, outline=GREY)
     d.text((x0 + 6, y0 + 4), title, fill=INK)
 
 
+def paint(tris, box, onto=None):
+    """Draws the triangles clipped to the box (onto: an image of their own, for a layer); returns the silk's mask."""
+    x0, y0, x1, y1 = box
+    mask = Image.new('L', (W, H), 0)
+    md = ImageDraw.Draw(mask)
+    dd = ImageDraw.Draw(onto) if onto is not None else d
+    for _, poly, rgb in tris:
+        md.polygon(poly, fill=255)
+        dd.polygon(poly, fill=rgb + ((255,) if onto is not None else ()))
+    clip = Image.new('L', (W, H), 0)
+    ImageDraw.Draw(clip).rectangle((x0 + 1, y0 + 22, x1 - 1, y1 - 1), fill=255)
+    return Image.composite(mask, Image.new('L', (W, H), 0), clip)
+
+
+def extent(mask):
+    """The mask's columns and rows with silk in them: per row (left, right), per column (top, bottom)."""
+    px = mask.load()
+    bbox = mask.getbbox()
+    rows, cols = {}, {}
+    if not bbox:
+        return rows, cols, bbox
+    for y in range(bbox[1], bbox[3]):
+        xs = [x for x in range(bbox[0], bbox[2]) if px[x, y]]
+        if xs:
+            rows[y] = (xs[0], xs[-1])
+    for x in range(bbox[0], bbox[2]):
+        ys = [y for y in range(bbox[1], bbox[3]) if px[x, y]]
+        if ys:
+            cols[x] = (ys[0], ys[-1])
+    return rows, cols, bbox
+
+
+SUIT, CORD = srgb((0.30, 0.26, 0.19)), srgb((0.70, 0.68, 0.62))
+
+
+def man_and_lines(mesh, view, dd=None):
+    """Him lying (his feet at the mesh's origin, the way he faces), and his lines from his harness to the seams."""
+    dd = dd or d
+    hx, hy, hz, turn = mesh['h']
+    t = math.radians(turn)
+    fwd, side = (math.cos(t), math.sin(t)), (-math.sin(t), math.cos(t))
+    feet, head = (0.0, 0.0, 0.14), (1.7 * fwd[0], 1.7 * fwd[1], 0.16)
+    a, b = view.at(feet), view.at(head)
+    wide = max(2, int(0.34 * view.scale / max(1.0, view.depth([0.85 * fwd[0], 0.85 * fwd[1], 0.15]))))
+    dd.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=wide)
+    for s in mesh['s']:
+        p = mesh['p'][s]
+        u, v = view.at([hx, hy, hz]), view.at(p)
+        dd.line((u[0], u[1], v[0], v[1]), fill=CORD, width=1)
+
+
+def luma(rgb):
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+
+
+printed = []
+
+
+def say(box, row, words):
+    d.text((box[0] + 6, box[3] - 16 - 13 * row), words, fill=INK)
+    printed.append(words)
+
+
 bw = (W - 40) // 4 - 10
-boxes = [(20 + k * (bw + 13), ly + 22, 20 + k * (bw + 13) + bw, ly + 312) for k in range(4)]
-SKY, FIELD = (196, 208, 220), (150, 160, 120)
-# (1) side-on, the sun high to one side
-side_eye, sun_high = [0.0, -40.0, 1.2], [0.5, -0.6, 0.62]
-g1 = glow(side_eye, [0.0, 0.0, 1.2], sun_high)
-render(meshes[0], side_eye, [0.0, 0.0, 1.2], sun_high, g1, boxes[0], 1400.0, "side-on, the sun high on its near side: glow %.2f" % g1, SKY)
+r1 = [(20 + k * (bw + 13), ly + 22, 20 + k * (bw + 13) + bw, ly + 352) for k in range(4)]
+SKY, FIELD, PALE = (196, 208, 220), (150, 160, 120), (232, 228, 206)
+sun_high = [0.5, -0.6, 0.62]
+
+# (1) side-on through a long lens (200 m off: its sides as they are, no perspective to speak of), the sun high on its
+# near side; measured: its widest and its hem across, where its widest is down it
+panel(r1[0], "side-on, full (200 m off, long lens), his lines to him: glow %.2f" % glow([0.0, -200.0, -1.0], [0.0, 0.0, -1.0], sun_high), SKY)
+v1 = View([0.0, -200.0, -1.0], [0.0, 0.0, -1.0], 6500.0, r1[0])
+m1 = paint(silk_polys(meshes[0], v1, sun_high, glow(v1.eye, [0.0, 0.0, -1.0], sun_high)), r1[0])
+rows, cols, bb = extent(m1)
+mpp = 200.0 / v1.scale
+widths = {y: r - l + 1 for y, (l, r) in rows.items()}
+most = max(widths.values())
+wide_rows = [y for y, w in widths.items() if w >= most - 1]
+wide_row = sum(wide_rows) / len(wide_rows)
+top, bottom = min(rows), max(rows)
+# (its hem seen nearly edge on: its width two rows up from the silhouette's lowest, which is only its nearest point)
+hem_row = bottom - 2
+hem = widths[hem_row]
+# (his lines from each seam to his risers 3.3 m under its skirt, and him 4.1 m under it, his feet 1.1 m under that)
+seams0 = [k for k in range(0, 4 * meshes[0]['gores'], 4)]
+riser = v1.at([0.0, 0.0, -3.3])
+for k in seams0:
+    q = v1.at(meshes[0]['p'][k])
+    d.line((q[0], q[1], riser[0], riser[1]), fill=(120, 118, 110), width=1)
+a, b = v1.at([0.0, 0.0, -3.4]), v1.at([0.1, 0.0, -5.2])
+d.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=6)
+for y in (wide_row, hem_row):
+    l, r = rows[int(round(y))]
+    d.line((l - 12, y, l - 3, y), fill=RED)
+    d.line((r + 3, y, r + 12, y), fill=RED)
+side_words = ["widest %.2f m across, %.2f of its %.2f m depth down from its crown" % (most * mpp, (wide_row - top) / (bottom - top), (bottom - top + 1) * mpp),
+              "its hem %.2f m across: %.2f of its widest (her 0.8 to 0.9)" % (hem * mpp, hem / most)]
+say(r1[0], 1, side_words[0])
+say(r1[0], 0, side_words[1])
+
 # (2) and (3) from under it 100 m off (60 along, 80 up), the sun just behind it
 eye, sun_behind = [3.0, -60.0, -80.0], norm([0.06, 0.62, 0.78])
 g2 = glow(eye, [0.0, 0.0, 1.2], sun_behind)
-render(meshes[0], eye, [0.0, 0.0, 1.2], sun_behind, g2, boxes[1], 3600.0, "from under it 100 m off, the sun behind it: glow %.2f" % g2, (232, 228, 206))
-render(meshes[0], eye, [0.0, 0.0, 1.2], sun_behind, 0.0, boxes[2], 3600.0, "the same with no glow (release 1's plain silk)", (232, 228, 206))
-# (4) fallen in on the field, from 12 m off and 6 up
-render(meshes[1], [-6.0, -10.0, 6.0], [4.0, 0.0, 0.2], sun_high, 0.0, boxes[3], 520.0, "fallen in on the field, 4 m downwind of him", FIELD)
+panel(r1[1], "from under it 100 m off, the sun behind it: glow %.2f" % g2, PALE)
+v2 = View(eye, [0.0, 0.0, 1.2], 3600.0, r1[1])
+paint(silk_polys(meshes[0], v2, sun_behind, g2), r1[1])
+panel(r1[2], "the same with no glow (release 1's plain silk)", PALE)
+v3 = View(eye, [0.0, 0.0, 1.2], 3600.0, r1[2])
+paint(silk_polys(meshes[0], v3, sun_behind, 0.0), r1[2])
+
+# (4) falling in, across the wind 30 m off: as he landed, and a quarter, a half and three quarters fallen in (paler
+# the earlier), and lying
+panel(r1[3], "falling in, across the wind 30 m off (paler earlier)", FIELD)
+v4 = View([4.5, -30.0, 2.0], [4.5, 0.0, 3.0], 1150.0, r1[3])
+x0, y0, x1, y1 = r1[3]
+gy = v4.at([4.5, 0.0, 0.0])[1]
+d.rectangle((x0 + 1, y0 + 22, x1 - 1, int(gy)), fill=SKY)
+layers = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+mids = []
+for k, which in enumerate((3, 4, 5, 6, 1)):
+    layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    paint(silk_polys(meshes[which], v4, sun_high, 0.0), r1[3], onto=layer)
+    alpha = layer.getchannel('A').point(lambda a, k=k: int(a * (0.35 + 0.65 * k / 4.0)))
+    layer.putalpha(alpha)
+    layers = Image.alpha_composite(layers, layer)
+    pts = meshes[which]['p']
+    mids.append(sum(p[0] for p in pts) / len(pts))
+clipped = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+clipped.paste(layers.crop((x0 + 1, y0 + 22, x1 - 1, y1 - 1)), (x0 + 1, y0 + 22))
+im.paste(clipped, (0, 0), clipped)
+d = ImageDraw.Draw(im)
+man_and_lines(meshes[1], v4)
+say(r1[3], 0, "its middle %s m downwind of his feet" % ', '.join('%.1f' % m for m in mids))
+
+# Lying on the field (her verdict, (b)).
+ly2 = ly + 372
+wide_box = (20, ly2, 20 + 2 * bw + 13, ly2 + 360)
+r2 = [wide_box, (20 + 2 * (bw + 13), ly2, 20 + 2 * (bw + 13) + bw, ly2 + 360), (20 + 3 * (bw + 13), ly2, 20 + 3 * (bw + 13) + bw, ly2 + 360)]
+lie = meshes[1]
+P = lie['p']
+half = len(P) // 2
+xs, ys = [p[0] for p in P[:half]], [p[1] for p in P[:half]]
+mid_x, mid_y = (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+
+# (5) from 40 m at a man's eye height (1.7 m), across the wind, the sun high on the near side
+panel(wide_box, "lying, from 40 m at a man's eye height (1.7 m), across the wind (its far end to the right)", FIELD)
+look_x = (min(xs) + max(xs) + min(0.0, min(xs))) / 2.0 - 0.6
+v5 = View([look_x, mid_y - 40.0, 1.7], [look_x, mid_y, 0.3], 2900.0, wide_box)
+x0, y0, x1, y1 = wide_box
+horizon = v5.cy - math.tan(math.atan2(1.4, 40.0)) * v5.scale
+d.rectangle((x0 + 1, y0 + 22, x1 - 1, max(y0 + 22, int(horizon))), fill=SKY)
+tris5 = silk_polys(lie, v5, sun_high, 0.0)
+m5 = paint(tris5, wide_box)
+man_and_lines(lie, v5)
+rows, cols, bb = extent(m5)
+left, right = min(cols), max(cols)
+span = right - left
+ground_row = v5.at([look_x, mid_y, 0.0])[1]
+far_cols = [x for x in cols if x >= left + 0.75 * span]
+near_cols = [x for x in cols if x <= left + 0.25 * span]
+far_up = (ground_row - min(cols[x][0] for x in far_cols)) * 40.0 / v5.scale
+near_up = (ground_row - min(cols[x][0] for x in near_cols)) * 40.0 / v5.scale
+long5 = span * 40.0 / v5.scale
+pix = im.load()
+silk_px = [pix[x, y] for x in range(bb[0], bb[2]) for y in range(bb[1], bb[3]) if m5.getpixel((x, y))]
+lum = sorted(luma(c) for c in silk_px)
+say(wide_box, 2, "%.1f m long along the wind; its far quarter stands %.2f m up at most (her 0.3 to 0.8), its near quarter %.2f "
+    "(heights at 40 m, within 4%% for its depth)" % (long5, far_up, near_up))
+say(wide_box, 1, "its silk here sRGB luma %.0f to %.0f (a tenth and nine tenths), median %.0f; his lines and him at its near end (left)" % (
+    lum[len(lum) // 10], lum[9 * len(lum) // 10], lum[len(lum) // 2]))
+
+
+# (6) and (7) from above (150 m straight up, the wind to the right), his and the second pilot's
+def from_above(mesh, box, who):
+    P = mesh['p']
+    half = len(P) // 2
+    xs, ys = [p[0] for p in P[:half]], [p[1] for p in P[:half]]
+    cx, cy = (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+    panel(box, "lying, from above, %s (wind to the right)" % who, FIELD)
+    v = View([cx, cy, 150.0], [cx, cy, 0.0], 5000.0, box, hint=(0.0, 1.0, 0.0))
+    m = paint(silk_polys(mesh, v, sun_high, 0.0), box)
+    man_and_lines(mesh, v)
+    rows, cols, bb = extent(m)
+    mpp = 150.0 / v.scale
+    along = (max(cols) - min(cols) + 1) * mpp
+    across = (max(rows) - min(rows) + 1) * mpp
+    pix = im.load()
+    # (its folds: luma across it at its middle, from one edge to the other: ridges lit, troughs and their far sides darker)
+    mx = int((min(cols) + max(cols)) / 2)
+    raw = [luma(pix[mx, y]) for y in range(cols[mx][0] + 2, cols[mx][1] - 1)]
+    line = [sum(raw[max(0, k - 2):k + 3]) / len(raw[max(0, k - 2):k + 3]) for k in range(len(raw))]
+    # (its light ridges: rises of 10 or more of luma over the darker on either side, smoothed over 5 pixels)
+    peaks = []
+    for k in range(1, len(line) - 1):
+        if line[k] < line[k - 1] or line[k] <= line[k + 1]:
+            continue
+        lo_l = min(line[:k]) if k else line[k]
+        lo_r = min(line[k + 1:])
+        j = k
+        while j > 0 and line[j - 1] <= line[j]:
+            j -= 1
+        lo_l = line[j]
+        j = k
+        while j + 1 < len(line) and line[j + 1] <= line[j]:
+            j += 1
+        lo_r = line[j]
+        if line[k] - max(lo_l, lo_r) >= 10.0:
+            peaks.append(k)
+    say(box, 2, "%.1f m along the wind by %.1f across: %.2f to 1 (her 2 to 3)" % (along, across, along / across))
+    say(box, 1, "across its middle sRGB luma %.0f to %.0f, %d light ridges" % (min(line), max(line), len(peaks)))
+    return along / across
+
+
+panel_ratio = [from_above(meshes[1], r2[1], "his"), from_above(meshes[2], r2[2], "the second pilot's")]
 im.save(DST)
+for words in printed:
+    print('measured:', words)
 print('wrote', DST)

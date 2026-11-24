@@ -628,9 +628,14 @@ namespace LandAir
 		D.Lie = Dc.U(1.5, 3.5);
 		D.OpenDown = Open;
 		D.bHard = Open < 1.0;
-		// (his canopy falls in downwind of him, its lines run out: about 4 m off, the way the wind goes, or his own)
+		// (his canopy falls in downwind of him, the way the wind goes, or his own, and lies stretched out along it, its
+		// middle HeapOff on: the art director's verdict of 24 November 14:34Z, on dice of its own, so that the rest is
+		// drawn as it was)
 		const double Wh = Wind.X * Wind.X + Wind.Y * Wind.Y > 0.04 ? std::atan2(Wind.X, Wind.Y) / Rad : Heading;
-		D.Heap = Plus(Pos, Times(Ahead(Wh), 4.0));
+		Dice Dl(static_cast<uint64_t>(P.Flight) * 52711ull + static_cast<uint64_t>(Slot) * 7919ull + 0xC47E5ull);
+		D.Folds = static_cast<uint32_t>(Dl.U() * 4294967295.0);
+		D.Wind = std::hypot(Wind.X, Wind.Y);
+		D.Heap = Plus(Pos, Times(Ahead(Wh), HeapOff(D.Folds, D.Across, D.Wind, D.Face, Wh)));
 		D.Heap.Z = GroundZ(D.Heap.X, D.Heap.Y);
 		// Down, real seconds from his landing. He goes over flat (sooner after a hard landing), and the scene swaps him
 		// for the crowd's man as he lies under his falling canopy (her third note: so that nobody sees him pop). In a wind
@@ -682,6 +687,8 @@ namespace LandAir
 				C.Gores = D.Gores;
 				C.Across = D.Across;
 				C.Deep = D.Deep;
+				C.Folds = D.Folds;
+				C.Wind = D.Wind;
 				C.bHard = D.bHard;
 				if (Tau < D.Landed)
 				{
@@ -823,79 +830,88 @@ namespace LandAir
 			Under = (LinesLong - 0.8) * (1.0 - K);
 		}
 
-		/** How far out a dome's widest is, its gores' billow and all, for a radius of 1 (so that a canopy's across is
-		 * the art director's across at its widest, not its seams'). */
-		double Widest()
+		V3 Minus(const V3& A, const V3& B) { return { A.X - B.X, A.Y - B.Y, A.Z - B.Z }; }
+		V3 Cross(const V3& A, const V3& B) { return { A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X }; }
+		V3 Unit(const V3& A, const V3& Else)
 		{
-			return std::cos(0.1) * (1.0 + 0.035 * std::cos(0.1));
+			const double Long = Length(A);
+			return Long > 1e-12 ? Times(A, 1.0 / Long) : Else;
 		}
 
-		/** A number from 0 to 1 for a point of a heap's rumple, the same each time it is built. */
-		double Crumple(int Ring, int Column)
-		{
-			uint64_t Z = (static_cast<uint64_t>(Ring) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(Column) * 0xC2B2AE3D27D4EB4Full);
-			Z = (Z ^ (Z >> 30)) * 0xBF58476D1CE4E5B9ull;
-			Z = (Z ^ (Z >> 27)) * 0x94D049BB133111EBull;
-			return static_cast<double>((Z ^ (Z >> 31)) >> 11) * (1.0 / 9007199254740992.0);
-		}
+		/** How far out a canopy's widest is, its gores' billow and all, for a radius of 1 (so that a canopy's across is
+		 * the art director's across at its widest, not its seams'): its ring at its widest, a gore's middle. */
+		double Widest() { return 1.035; }
+
+		/** Where its hem is on a gore (Gore's Phi there), and how its skirt curls in (the higher, the more of its drawing
+		 * in is near its hem). */
+		double HemPhi() { return std::acos(HemIn); }
+		constexpr double Curl = 2.5;
 
 		/**
-		 * A dome of silk on its gores (the art director's sixth note: 24 to 28 panels, their seams faint): its skirt's
-		 * middle at Base, Rx along x and Ry across (radii at its widest), Deep from its skirt to its crown, its skirt
-		 * drawn in a little under its widest. Each gore billows out a little between its seams, which are faint darker
-		 * lines (the silk doubled there, which is what shows most against the sun), its hem a little darker too. Rumple
-		 * (metres) crumples it, silk lying on the field. Both its faces, each facing out of the silk on its own side.
+		 * A point of a canopy's gore for a widest radius of 1 and a depth of 1 (the art director's verdict of 24 November
+		 * 14:34Z): Phi from -HemPhi at its hem, through 0 at its widest, WidestDown under its crown, to Pi / 2 at its
+		 * crown. Over its widest a quarter-ellipse, its crown; under it its skirt, drawn in more and more toward its hem
+		 * (by the Curl-th power of the way down it) to a hem HemIn as wide, its silk there heading in toward its lines (a
+		 * round canopy's hem pulled in by them, not dropped straight). How far out (R) and how high over its hem (Z), and
+		 * its outer face's facing out and up for a canopy A wide and D deep: (Nr / A, Nz / D).
 		 */
-		void Dome(SilkMesh& Out, const V3& Base, double Rx, double Ry, double Deep, double Rumple, int Gores, const double Silk[3])
+		void Gore(double Phi, double& R, double& Z, double& Nr, double& Nz)
 		{
-			static const double Rings[] = { -0.18, 0.1, 0.4, 0.7, 0.98, 1.22, 1.42 };
-			constexpr int Ringed = 7;
-			const int Cols = std::max(8, Gores) * 4;
-			const double Lift = std::sin(0.18), Dz = std::max(0.05, Deep) / (1.0 + Lift), Ax = std::max(0.02, Rx), Ay = std::max(0.02, Ry);
+			if (Phi >= 0.0)
+			{
+				R = std::cos(Phi);
+				Z = 1.0 - WidestDown + WidestDown * std::sin(Phi);
+				Nr = std::cos(Phi);
+				Nz = std::sin(Phi) / WidestDown;
+				return;
+			}
+			const double T = std::min(1.0, -Phi / HemPhi()), Low = 1.0 - WidestDown;
+			R = 1.0 - (1.0 - HemIn) * std::pow(T, Curl);
+			Z = Low * (1.0 - T);
+			Nr = Low;
+			Nz = -(1.0 - HemIn) * Curl * std::pow(T, Curl - 1.0);
+		}
+
+		/** A gore's four columns (its seam, beside it, its middle, beside the next): the way round its Col-th point is
+		 * (radians from x), and how far its silk billows out there for a radius of 1 at its widest. */
+		double Round(int Col, int Cols)
+		{
+			const int Q = Col % 4;
+			return 2.0 * Pi * (Col / 4 + (Q == 0 ? 0.0 : Q == 1 ? 0.2 : Q == 2 ? 0.5 : 0.8)) / (Cols / 4);
+		}
+		double Billow(int Col) { return Col % 4 == 2 ? 0.035 : Col % 4 == 0 ? 0.0 : 0.02; }
+		/** Its shade at a point: its seams faint darker lines (the silk doubled there, which is what shows most against
+		 * the sun), its hem a little darker too. */
+		double Hemmed(int Ring, int Col) { return (Col % 4 == 0 ? 0.88 : 1.0) * (Ring == 0 ? 0.93 : 1.0); }
+
+		/**
+		 * The rest of a canopy's silk once its outer face's points are in Out (Ringed rings of Cols points, its hem
+		 * first, then its crown; their facings and colours): its inner face, the same points facing the other way, so
+		 * that it is seen from under it; each face's triangles, each facing out of the silk on its own side; and its
+		 * skirt's seams.
+		 */
+		void Sew(SilkMesh& Out, int Ringed, int Cols)
+		{
+			const int Each = Ringed * Cols + 1;
+			const size_t Half = static_cast<size_t>(Each);
+			Out.Points.reserve(2 * Half);
+			Out.Facings.reserve(2 * Half);
+			Out.Colours.reserve(6 * Half);
+			for (size_t K = 0; K < Half; ++K)
+			{
+				Out.Points.push_back(Out.Points[K]);
+				Out.Facings.push_back(Times(Out.Facings[K], -1.0));
+				for (size_t Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(Out.Colours[K * 3 + Ch]);
+			}
+			auto Tri = [&Out](int A, int B, int C2)
+			{
+				Out.Triangles.insert(Out.Triangles.end(), { A, B, C2 });
+				const V3 Sum = Plus(Plus(Out.Facings[static_cast<size_t>(A)], Out.Facings[static_cast<size_t>(B)]), Out.Facings[static_cast<size_t>(C2)]);
+				Out.Outward.push_back(Times(Sum, 1.0 / std::max(1e-9, Length(Sum))));
+			};
 			for (int Side = 0; Side < 2; ++Side)
 			{
-				const int First = static_cast<int>(Out.Points.size());
-				const double Way = Side == 0 ? 1.0 : -1.0;
-				for (int R = 0; R < Ringed; ++R)
-				{
-					const double Phi = Rings[R];
-					for (int Col = 0; Col < Cols; ++Col)
-					{
-						// (four to a gore: its seam, beside it, its middle, beside the next)
-						const int Q = Col % 4;
-						const double Theta = 2.0 * Pi * (Col / 4 + (Q == 0 ? 0.0 : Q == 1 ? 0.2 : Q == 2 ? 0.5 : 0.8)) / (Cols / 4);
-						const double Billow = (Q == 2 ? 0.035 : Q == 0 ? 0.0 : 0.02) * std::cos(Phi);
-						const double Out1 = std::cos(Phi) * (1.0 + Billow) * (R == 0 ? 0.97 : 1.0) / Widest();
-						V3 At{ Base.X + Ax * Out1 * std::cos(Theta), Base.Y + Ay * Out1 * std::sin(Theta), Base.Z + Dz * (std::sin(Phi) + Lift) };
-						if (Rumple > 0.0)
-						{
-							At.Z += Rumple * Crumple(R, Col);
-							At.X += Rumple * 0.6 * (Crumple(R + 17, Col) - 0.5);
-							At.Y += Rumple * 0.6 * (Crumple(R + 31, Col) - 0.5);
-						}
-						V3 N{ std::cos(Phi) * std::cos(Theta) / Ax, std::cos(Phi) * std::sin(Theta) / Ay, std::sin(Phi) / Dz };
-						N = Times(N, Way / std::max(1e-9, Length(N)));
-						const double Shade = (Q == 0 ? 0.88 : 1.0) * (R == 0 ? 0.93 : 1.0);
-						if (Side == 0 && R == 0 && Q == 0) Out.Seams.push_back(static_cast<int>(Out.Points.size()));
-						Out.Points.push_back(At);
-						Out.Facings.push_back(N);
-						for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K] * Shade);
-					}
-				}
-				const int Crown = static_cast<int>(Out.Points.size());
-				Out.Points.push_back({ Base.X, Base.Y, Base.Z + Dz * (1.0 + Lift) + (Rumple > 0.0 ? Rumple * 0.5 : 0.0) });
-				Out.Facings.push_back({ 0.0, 0.0, Way });
-				for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K]);
-				auto Facing = [&Out](int A, int B, int C2)
-				{
-					const V3 Sum = Plus(Plus(Out.Facings[static_cast<size_t>(A)], Out.Facings[static_cast<size_t>(B)]), Out.Facings[static_cast<size_t>(C2)]);
-					return Times(Sum, 1.0 / std::max(1e-9, Length(Sum)));
-				};
-				auto Tri = [&Out, &Facing](int A, int B, int C2)
-				{
-					Out.Triangles.insert(Out.Triangles.end(), { A, B, C2 });
-					Out.Outward.push_back(Facing(A, B, C2));
-				};
+				const int First = Side * Each;
 				for (int R = 0; R + 1 < Ringed; ++R)
 				{
 					for (int Col = 0; Col < Cols; ++Col)
@@ -907,9 +923,117 @@ namespace LandAir
 				}
 				for (int Col = 0; Col < Cols; ++Col)
 				{
-					Tri(First + (Ringed - 1) * Cols + Col, First + (Ringed - 1) * Cols + (Col + 1) % Cols, Crown);
+					Tri(First + (Ringed - 1) * Cols + Col, First + (Ringed - 1) * Cols + (Col + 1) % Cols, First + Ringed * Cols);
 				}
 			}
+			for (int Col = 0; Col < Cols; Col += 4) Out.Seams.push_back(Col);
+		}
+
+		/**
+		 * A canopy in the air (the art director's sixth note, 24 to 28 panels, their seams faint; and her verdict of 24
+		 * November 14:34Z, its hem pulled in): its skirt's middle at Base, Rx along x and Ry across (radii at its widest),
+		 * Deep from its skirt to its crown, on Gore's curve. Each gore billows out a little between its seams. Its eight
+		 * rings: its hem, two as its skirt curls in, its widest, and four up to its crown.
+		 */
+		void Dome(SilkMesh& Out, const V3& Base, double Rx, double Ry, double Deep, int Gores, const double Silk[3])
+		{
+			const double Rings[] = { -HemPhi(), -0.75 * HemPhi(), -0.45 * HemPhi(), 0.0, 0.4, 0.8, 1.15, 1.42 };
+			constexpr int Ringed = 8;
+			const int Cols = std::max(8, Gores) * 4;
+			const double Dz = std::max(0.05, Deep), Ax = std::max(0.02, Rx), Ay = std::max(0.02, Ry);
+			for (int R = 0; R < Ringed; ++R)
+			{
+				double Gr = 0.0, Gz = 0.0, Nr = 0.0, Nz = 0.0;
+				Gore(Rings[R], Gr, Gz, Nr, Nz);
+				for (int Col = 0; Col < Cols; ++Col)
+				{
+					const double Theta = Round(Col, Cols), Out1 = Gr * (1.0 + Billow(Col) * Gr) / Widest();
+					Out.Points.push_back({ Base.X + Ax * Out1 * std::cos(Theta), Base.Y + Ay * Out1 * std::sin(Theta), Base.Z + Dz * Gz });
+					Out.Facings.push_back(Unit({ Nr * std::cos(Theta) / Ax, Nr * std::sin(Theta) / Ay, Nz / Dz }, { 0.0, 0.0, 1.0 }));
+					for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K] * Hemmed(R, Col));
+				}
+			}
+			Out.Points.push_back({ Base.X, Base.Y, Base.Z + Dz });
+			Out.Facings.push_back({ 0.0, 0.0, 1.0 });
+			for (int K = 0; K < 3; ++K) Out.Colours.push_back(Silk[K]);
+			Sew(Out, Ringed, Cols);
+		}
+
+		/**
+		 * How a pilot's canopy lies once down (the art director's verdict of 24 November 14:34Z: "Stretch it 2-3x
+		 * downwind in loose folds, the far end lifting a little, lines running back to him"), drawn from his own number
+		 * (Chute::Folds) and the wind: its length along the wind (a canopy 5 to 5.5 m across lies 6.3 to 8.5 m long, a
+		 * stronger wind stretching it), its width (2.45 to 2.85 times shorter), how far past his harness its near end is
+		 * gathered, how high its far end stands on the air it still holds (0.3 to 0.62 m, more in a stronger wind) and
+		 * how much that swells it; its axis's bend and where its far end lies across; its four or five long folds, each
+		 * along it from near its near end to some way on, its place across (the gaps between them graded, one up to
+		 * twice another and more, in no order), its drift and wander across as it goes, its width and its height (one
+		 * big fold and the rest smaller, in no order); each edge's waver and swell; and two creases across it, where it
+		 * bunched as it fell.
+		 */
+		struct Lay
+		{
+			double Long = 7.0, Wide = 2.8, Gap = 1.0, Lift = 0.5, Bulb = 0.0, Bend = 0.0, FarSide = 0.0;
+			int Ridges = 4;
+			double At[5] = {}, Drift[5] = {}, Wave[5] = {}, Phase[5] = {}, Width[5] = {}, High[5] = {}, From[5] = {}, To[5] = {};
+			double EdgeWave[2] = {}, EdgePhase[2] = {}, EdgeSwell[2] = {}, Crease[2] = {}, CreaseHigh[2] = {};
+			double Loose = 0.0;
+		};
+		Lay LayOf(uint32_t Folds, double Across, double Wind)
+		{
+			Lay L;
+			Dice D(Folds);
+			const double Blow = std::clamp(Wind / 6.0, 0.0, 1.0);
+			L.Long = Across * (1.25 + 0.15 * Blow + D.U(0.0, 0.15));
+			L.Wide = L.Long / D.U(2.45, 2.85);
+			L.Gap = D.U(0.8, 1.2);
+			L.Lift = std::min(0.62, 0.3 + 0.25 * Blow + D.U(0.0, 0.12));
+			L.Bulb = D.U(0.0, 0.12);
+			L.Bend = D.U(-0.35, 0.35);
+			L.FarSide = D.U(-0.3, 0.3);
+			L.Ridges = D.U() < 0.5 ? 4 : 5;
+			// (their heights, and the gaps between them, graded and dealt out across it in no order, a big fold broader than
+			// a small one, and none so near the next that the two run into one; across it, a share of its half-width, from
+			// its middle)
+			int Order[5] = { 0, 1, 2, 3, 4 }, Spaced[4] = { 0, 1, 2, 3 };
+			constexpr double Heights[5] = { 0.27, 0.18, 0.13, 0.1, 0.085 };
+			for (int K = L.Ridges - 1; K > 0; --K) std::swap(Order[K], Order[std::min(K, static_cast<int>(D.U() * (K + 1)))]);
+			for (int K = L.Ridges - 2; K > 0; --K) std::swap(Spaced[K], Spaced[std::min(K, static_cast<int>(D.U() * (K + 1)))]);
+			for (int K = 0; K < L.Ridges; ++K)
+			{
+				L.High[K] = Heights[Order[K]] * D.U(0.9, 1.1);
+				L.Width[K] = (0.04 + 0.28 * L.High[K]) * D.U(0.85, 1.15);
+				L.Drift[K] = D.U(-0.2, 0.2);
+				L.Wave[K] = D.U(0.6, 1.6);
+				L.Phase[K] = D.U();
+				L.From[K] = D.U(0.0, 0.08);
+				L.To[K] = D.U(0.55, 1.0);
+			}
+			double Gaps[4] = {}, Span = 0.0;
+			for (int K = 0; K + 1 < L.Ridges; ++K)
+			{
+				Gaps[K] = (1.0 + 1.4 * Spaced[K] / (L.Ridges - 2.0)) * D.U(0.92, 1.08);
+				Span += Gaps[K];
+			}
+			const double Wide = D.U(1.0, 1.25);
+			double Across2 = 0.0;
+			for (int K = 0; K < L.Ridges; ++K)
+			{
+				L.At[K] = Across2;
+				if (K + 1 < L.Ridges) Across2 += std::max(Gaps[K] * Wide / Span, 1.8 * (L.Width[K] + L.Width[K + 1]));
+			}
+			const double Shift = -0.5 * L.At[L.Ridges - 1] + D.U(-0.12, 0.12);
+			for (int K = 0; K < L.Ridges; ++K) L.At[K] += Shift;
+			for (int K = 0; K < 2; ++K)
+			{
+				L.EdgeWave[K] = D.U(0.8, 2.0);
+				L.EdgePhase[K] = D.U();
+				L.EdgeSwell[K] = D.U(-0.08, 0.08);
+				L.Crease[K] = D.U(0.25, 0.75);
+				L.CreaseHigh[K] = D.U(0.03, 0.08);
+			}
+			L.Loose = D.U();
+			return L;
 		}
 	}
 
@@ -918,27 +1042,151 @@ namespace LandAir
 		Out.Clear();
 		double Radius = 0.0, Deep = 0.0, Under = 0.0;
 		Filling(C, Open, Radius, Deep, Under);
-		Dome(Out, { 0.0, 0.0, -Under }, Radius, Radius, Deep, 0.0, C.Gores, C.Silk);
+		Dome(Out, { 0.0, 0.0, -Under }, Radius, Radius, Deep, C.Gores, C.Silk);
 	}
 
-	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out)
+	double HeapOff(uint32_t Folds, double Across, double Wind, double Face, double Way)
+	{
+		const Lay L = LayOf(Folds, Across, Wind);
+		const V3 H = OverHarness(1.0, ProneEndX, ProneEndY);
+		const double Turn = (Face - Way) * Rad;
+		return H.X * std::cos(Turn) - H.Y * std::sin(Turn) + L.Gap + 0.5 * L.Long;
+	}
+
+	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out, const GroundFn& Ground)
 	{
 		Out.Clear();
-		// (from as it was as he landed, over him on its lines, falling in downwind: spread out long the way it falls,
-		// its 7 m of silk lying in a low crumpled heap Off metres off)
 		const double K = std::clamp(Slump, 0.0, 1.0);
+		const Lay L = LayOf(C.Folds, C.Across, C.Wind);
+		// As it was as he landed: over him on its lines, its skirt LinesLong over his harness (the air's canopy, on more
+		// rings: five as its skirt curls in, its widest, eight up to its crown).
+		const double Hem = HemPhi();
+		const double Rings[] = { -Hem, -0.8 * Hem, -0.6 * Hem, -0.4 * Hem, -0.2 * Hem, 0.0, 0.3, 0.54, 0.735, 0.9, 1.05, 1.19, 1.32, 1.445 };
+		constexpr int Ringed = 14;
+		const int Cols = std::max(8, C.Gores) * 4;
 		double Radius = 0.0, Deep = 0.0, Under = 0.0;
 		Filling(C, C.Open, Radius, Deep, Under);
-		const V3 Base{ Off * K, 0.0, (LinesLong + HangFeet - Under) * (1.0 - K) };
-		const double Lying = std::max(Radius, C.Across * 0.5);
-		const double Rx = Radius + (Lying * 1.35 - Radius) * K, Ry = Radius + (Lying * 0.7 - Radius) * K;
-		Dome(Out, Base, Rx, Ry, Deep * (1.0 - K) + 0.35 * K, 0.25 * K, C.Gores, C.Silk);
+		const double Skirt = LinesLong + HangFeet - Under, Dz = std::max(0.05, Deep), Ax = std::max(0.02, Radius);
+		// (the field under it in its own space, its origin his feet on the ground)
+		const V3 Fw = Ahead(C.HeapHeading), Rt = RightOf(C.HeapHeading);
+		auto Field = [&](double X, double Y)
+		{
+			return Ground ? Ground(C.Landed.X + Fw.X * X + Rt.X * Y, C.Landed.Y + Fw.Y * X + Rt.Y * Y) - C.Landed.Z : 0.0;
+		};
+		// (his harness as he lies, where its lines meet him: its near end is gathered Gap past it)
+		const V3 H = OverHarness(1.0, ProneEndX, ProneEndY);
+		const double Turn = (C.Face - C.HeapHeading) * Rad;
+		const double Hx = H.X * std::cos(Turn) - H.Y * std::sin(Turn), Hy = H.X * std::sin(Turn) + H.Y * std::cos(Turn);
+		const double Nx = std::max(Off - 0.5 * L.Long, Hx + 0.5), Ny = 0.7 * Hy;
+		// Falling in: it loses its air over the first half, its crown sinking and its silk flapping (Sag), and tips
+		// forward on its lines about his harness (Tip, to a quarter turn), so that it falls in downwind of him and down;
+		// and it settles into how it lies, streaming out along the wind (Stream) a little ahead of coming down (Lie).
+		// Nothing of it comes nearer the ground than Clear (metres: its silk's own loft, and a field's hummocks between
+		// its points).
+		const double Sag = Smooth(K / 0.5), Tip = 0.5 * Pi * Smooth(K), Lie = Smooth((K - 0.1) / 0.9), Stream = Smooth(K / 0.7);
+		const double Flap = Sag * (1.0 - Lie), Clear = 0.03;
+		const double Pivot = HangFeet;
+		auto Falling = [&](double X, double Y, double Z, double Theta, double U)
+		{
+			// (X, Y, Z: its place from its skirt's middle as it was; Theta its place round it, U up it)
+			const double Flutter = 0.45 * Flap * (0.6 * std::sin(3.0 * Theta + 6.0 * L.Loose + 4.0 * U) + 0.4 * std::sin(7.0 * Theta + 11.0 * L.Loose + 9.0 * U));
+			const double Rx = (X + Flutter * std::cos(Theta)) * (1.0 + 0.1 * Sag), Ry = (Y + Flutter * std::sin(Theta)) * (1.0 + 0.1 * Sag);
+			const double Rz = Skirt - Pivot + (Z + 0.5 * Flutter) * (1.0 - 0.6 * Sag);
+			return V3{ Rx * std::cos(Tip) + Rz * std::sin(Tip), Ry, Pivot - Rx * std::sin(Tip) + Rz * std::cos(Tip) };
+		};
+		// How it lies, at U along it (0 its hem, gathered, 1 its crown, downwind) and Theta round it as it was (0 the
+		// front of it, which falls under; Pi its back, toward him, which lies on top): its two layers of silk, a few long
+		// folds in its top one running along it and two creases across it, its far end rounded and standing on the air
+		// it holds; over the field.
+		auto Folds = [&L](double U, double Across)
+		{
+			double F = 0.0;
+			for (int R = 0; R < L.Ridges; ++R)
+			{
+				const double Along = Smooth((U - L.From[R]) / 0.08) * (1.0 - Smooth((U - L.To[R]) / 0.15));
+				const double Mid = L.At[R] + L.Drift[R] * (U - 0.5) + 0.05 * std::sin(2.0 * Pi * (L.Wave[R] * U + L.Phase[R]));
+				const double Aside = (Across - Mid) / L.Width[R];
+				F += L.High[R] * Along * (0.8 + 0.2 * std::sin(2.0 * Pi * (0.7 * L.Wave[R] * U + 1.3 * L.Phase[R]))) * std::exp(-Aside * Aside);
+			}
+			return F;
+		};
+		auto Lying = [&](double U, double Theta)
+		{
+			const double Sn = std::sin(Theta), Cs = std::cos(Theta), Top = 0.5 * (1.0 - Cs);
+			const int Edge = Sn >= 0.0 ? 0 : 1;
+			const double End = U > 0.8 ? std::sqrt(std::max(0.0, 1.0 - std::pow((U - 0.8) / 0.22, 2.0))) : 1.0;
+			const double Pocket = Smooth((U - 0.5) / 0.3);
+			const double Waver = 1.0 + L.EdgeSwell[Edge] * std::sin(Pi * U) + 0.08 * std::sin(2.0 * Pi * (L.EdgeWave[Edge] * U + L.EdgePhase[Edge]))
+				+ 0.04 * std::sin(2.0 * Pi * (2.7 * L.EdgeWave[Edge] * U + L.Loose));
+			const double Half = 0.5 * L.Wide * (0.3 + 0.7 * Smooth(U / 0.35)) * (1.0 + L.Bulb * Pocket) * End * Waver;
+			const double Axis = Ny * (1.0 - Smooth(U / 0.5)) + L.FarSide * U + L.Bend * std::sin(Pi * U);
+			const double X = Nx + L.Long * U + (0.05 + 0.15 * (1.0 - U)) * Cs, Y = Axis + Half * Sn;
+			const double F = Folds(U, Sn) * (1.0 - 0.85 * Pocket);
+			double Crease = 0.0;
+			for (int R = 0; R < 2; ++R)
+			{
+				const double Off2 = (U - L.Crease[R]) / 0.04;
+				Crease += L.CreaseHigh[R] * std::exp(-Off2 * Off2) * (0.6 + 0.4 * std::sin(5.0 * Sn + R));
+			}
+			const double Bunch = 0.08 * (1.0 - Smooth(U / 0.15));
+			const double Loose = 0.03 * std::sin(2.0 * Pi * (1.3 * U + L.Loose)) * std::cos(1.5 * Pi * Sn + L.Loose * 5.0);
+			const double Arch = std::sqrt(std::max(0.0, 1.0 - Sn * Sn));
+			const double High = 0.045 + Bunch + F + Crease + std::max(0.0, Loose) + L.Lift * Pocket * Arch * End;
+			const double Low = Clear + 0.3 * (F + Crease) + 0.05 * Pocket * Arch;
+			return V3{ X, Y, Low + (High - Low) * Top + Field(X, Y) };
+		};
+		for (int R = 0; R < Ringed; ++R)
+		{
+			double Gr = 0.0, Gz = 0.0, Nr = 0.0, Nz = 0.0;
+			Gore(Rings[R], Gr, Gz, Nr, Nz);
+			// (its place along it as it lies: its ends' rings closer together, its gathered near end and its far end's
+			// rounding)
+			const double T = static_cast<double>(R) / Ringed, U = T - 0.4 / (2.0 * Pi) * std::sin(2.0 * Pi * T);
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const double Theta = Round(Col, Cols), Out1 = Gr * (1.0 + Billow(Col) * Gr) / Widest();
+				const V3 Was = Falling(Ax * Out1 * std::cos(Theta), Ax * Out1 * std::sin(Theta), Dz * Gz, Theta, Gz), Lies = Lying(U, Theta);
+				V3 At{ Was.X + (Lies.X - Was.X) * Stream, Was.Y + (Lies.Y - Was.Y) * Stream, Was.Z + (Lies.Z - Was.Z) * Lie };
+				At.Z = std::max(At.Z, Field(At.X, At.Y) + Clear);
+				Out.Points.push_back(At);
+				Out.Facings.push_back({ 0.0, 0.0, 1.0 });
+				for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch] * Hemmed(R, Col));
+			}
+		}
+		{
+			// (its crown at its far end's tip, a third of the way up the air it holds there)
+			const V3 Was = Falling(0.0, 0.0, Dz, 0.0, 1.0);
+			const double Tx = Nx + L.Long;
+			const V3 Lies{ Tx, L.FarSide, 0.03 + 0.35 * L.Lift + Field(Tx, L.FarSide) };
+			V3 At{ Was.X + (Lies.X - Was.X) * Stream, Was.Y + (Lies.Y - Was.Y) * Stream, Was.Z + (Lies.Z - Was.Z) * Lie };
+			At.Z = std::max(At.Z, Field(At.X, At.Y) + Clear);
+			Out.Points.push_back(At);
+			Out.Facings.push_back({ 0.0, 0.0, 1.0 });
+			for (int Ch = 0; Ch < 3; ++Ch) Out.Colours.push_back(C.Silk[Ch]);
+		}
+		// (each point's facing from where the points about it are: round its ring by up it toward its crown)
+		const auto P = [&Out, Cols](int R, int Col) -> const V3& { return Out.Points[static_cast<size_t>(R * Cols + (Col + Cols) % Cols)]; };
+		const V3 Crown = Out.Points[static_cast<size_t>(Ringed * Cols)];
+		for (int R = 0; R < Ringed; ++R)
+		{
+			for (int Col = 0; Col < Cols; ++Col)
+			{
+				const V3 Way = Minus(P(R, Col + 1), P(R, Col - 1));
+				const V3 Up = Minus(R + 1 < Ringed ? P(R + 1, Col) : Crown, P(R > 0 ? R - 1 : R, Col));
+				Out.Facings[static_cast<size_t>(R * Cols + Col)] = Unit(Cross(Way, Up), { 0.0, 0.0, 1.0 });
+			}
+		}
+		V3 Sum;
+		for (int Col = 0; Col < Cols; ++Col) Sum = Plus(Sum, Cross(Minus(P(Ringed - 1, Col), Crown), Minus(P(Ringed - 1, Col + 1), Crown)));
+		Out.Facings[static_cast<size_t>(Ringed * Cols)] = Unit(Sum, { 0.0, 0.0, 1.0 });
+		Sew(Out, Ringed, Cols);
 	}
 
 	bool LineBack(size_t Seam, size_t Seams)
 	{
-		// (Dome's seams go round from x, the way it falls: those whose place round it is behind its middle; one just
-		// abreast of it is left out, its rumple putting it either side)
+		// (Dome's seams go round from x, the way it falls: those whose place round it is behind its middle, which tip
+		// back toward him as it falls in and lie on top of it, toward him, gathered at its near end; one just abreast
+		// of it is left out)
 		return Seams > 0 && std::cos(2.0 * Pi * static_cast<double>(Seam) / static_cast<double>(Seams)) < -1e-9;
 	}
 
@@ -952,6 +1200,12 @@ namespace LandAir
 	{
 		const double F = std::clamp(Fallen, 0.0, 1.0), Over = OverPitch * F * Rad;
 		return Plus({ OverHip * std::sin(Over), 0.0, OverHip * std::cos(Over) }, OverShift(F, EndX, EndY));
+	}
+
+	V3 OverHarness(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0), Over = OverPitch * F * Rad;
+		return Plus({ std::sin(Over), 0.0, std::cos(Over) }, OverShift(F, EndX, EndY));
 	}
 
 	bool SilkMoved(double Shape, double WasShape)
