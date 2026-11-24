@@ -7,6 +7,7 @@ import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
+import { attackTargets, fleetAttackOn, orderFleetAttack, planFleetAttack, whyNotFleetAttack, type FleetAttackPlan, type FleetAttackResult } from './fleetattack';
 import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
@@ -1492,13 +1493,13 @@ const hisOrder = (f: Fleet, ok: boolean): boolean => {
 /** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
 export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
   const f = myFleet(g, id);
-  return !!f && hisOrder(f, sail(g, f, zone, stance));
+  return !!f && !heldAfterAttack(g, f) && hisOrder(f, sail(g, f, zone, stance));
 }
 
 /** Moves one of the player's fleets to a new home port. */
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
-  return !!f && hisOrder(f, rebase(g, f, g.regions[region]));
+  return !!f && !heldAfterAttack(g, f) && hisOrder(f, rebase(g, f, g.regions[region]));
 }
 
 /** True for one of the player's fleets that he has ordered himself, which his admirals leave where he sent it. */
@@ -1510,6 +1511,24 @@ export function handBackFleet(g: Game, id: number): boolean {
   if (!f || !f.ordered) return false;
   delete f.ordered;
   return true;
+}
+
+/** A fleet sent at the enemy this month stays where the battle left it until the next (the 1.5.1 patch, fleetattack.ts). */
+const heldAfterAttack = (g: Game, f: Fleet): boolean => f.attacked === g.turn;
+
+/** Why one of the player's fleets cannot be sent at an enemy fleet now, or null if it can (the 1.5.1 patch, fleetattack.ts). */
+export const whyNotAttackFleet = (g: Game, id: number, target: number): string | null => whyNotFleetAttack(g, id, target);
+
+/** One of the player's fleets sent at an enemy fleet, weighed up before the order: odds, win chance, likely losses (read-only). */
+export const previewFleetAttack = (g: Game, id: number, target: number): FleetAttackPlan | null => (myFleet(g, id) ? planFleetAttack(g, id, target) : null);
+
+/** Sends one of the player's fleets straight at an enemy fleet, fought at once (the 1.5.1 patch, fleetattack.ts). */
+export function orderFleetAttackNow(g: Game, id: number, target: number): FleetAttackResult | null {
+  const out = orderFleetAttack(g, id, target);
+  // His order too: the admirals leave it where the battle left it, and do not send it back to its old beat.
+  const f = out ? g.fleets.find((x) => x.id === id && x.nat === g.human) : undefined;
+  if (f) f.ordered = true;
+  return out;
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
@@ -1549,6 +1568,10 @@ export interface FleetOptions {
   merge: number[];
   /** True when it has more than one ship, so that some can be split off. */
   split: boolean;
+  /** Enemy fleets it can be sent straight at now (the 1.5.1 patch, fleetattack.ts): there only where that is switched on. */
+  attack?: number[];
+  /** Why it stays where it is this month, having been sent at the enemy (the 1.5.1 patch): there only then. */
+  held?: string;
 }
 
 /** Everything one of the player's fleets could be told to do this month. Null if it is not theirs to order now. */
@@ -1556,14 +1579,18 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   const f = myFleet(g, id);
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
-  return {
-    seas: war ? seaOptions(g, f, f.nat) : [],
-    lanes: war ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+  const held = heldAfterAttack(g, f);
+  const out: FleetOptions = {
+    seas: war && !held ? seaOptions(g, f, f.nat) : [],
+    lanes: war && !held ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
-    ports: baseTargets(g, f).map((r) => r.id),
+    ports: held ? [] : baseTargets(g, f).map((r) => r.id),
     merge: mergeTargets(g, f).map((x) => x.id),
     split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
+  if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
+  if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  return out;
 }
 
 /** The shipping lanes the player has a stake in guarding, with the escorts bound to each. */
@@ -1580,7 +1607,7 @@ export function previewEscort(g: Game, id: number, lane: string): EscortPlan | n
 /** Binds one of the player's fleets to a shipping lane as its escort. */
 export function orderEscort(g: Game, id: number, lane: string): boolean {
   const f = myFleet(g, id);
-  return !!f && hisOrder(f, escortLane(g, f, lane));
+  return !!f && !heldAfterAttack(g, f) && hisOrder(f, escortLane(g, f, lane));
 }
 
 /** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */

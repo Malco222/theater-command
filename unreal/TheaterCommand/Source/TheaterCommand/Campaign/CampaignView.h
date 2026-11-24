@@ -280,6 +280,11 @@ struct FFleetHand
 	TArray<FFleetShipClass> Classes;
 	TArray<FFleetSea> Seas;
 	TArray<int32> Coasts; // enemy coasts it could shell from where it is
+	// (The 1.5.1 patch, fleetattack.ts) Dropped on an enemy fleet, it attacks at once: the enemy fleets it can be sent at now,
+	// whether that is switched on, and why it stays where it is this month once it has attacked.
+	bool bFleetAttack = false;
+	TArray<int32> Attack;
+	FString Held;
 };
 
 /** What else came of something pressed in a room, beyond its words. */
@@ -288,6 +293,9 @@ struct FActExtras
 	int32 Shell = INDEX_NONE; // a coast just shelled
 	int32 Made = INDEX_NONE; // a squadron just split off
 	int32 Joined = INDEX_NONE; // the fleet another was just joined to
+	int32 SeaFight = INDEX_NONE; // (the 1.5.1 patch) the sea a fleet's attack was just fought in, or made in
+	FString Outcome; // (the 1.5.1 patch) what came of it: fought, missed (not found), declined (he made for port)
+	TArray<FSinking> Sinkings; // (the 1.5.1 patch) the ships that went down in it
 };
 
 /** Aircraft seen leaving for their target when a raid is ordered. */
@@ -996,6 +1004,8 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	bool bBreakUp = false; // (the 1.5 patch, breakup.ts) divisions can be split off a corps in the tray, and put back
 	bool bBreakUpCan = false; // (the 1.5 patch) a grand campaign: the OPTIONS row for it is shown
+	bool bFleetAttack = false; // (the 1.5.1 patch, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
+	bool bFleetAttackCan = false; // (the 1.5.1 patch) a grand campaign: the OPTIONS row for it is shown
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain

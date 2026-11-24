@@ -867,6 +867,11 @@ public:
 	void FleetToNewBase(int32 RegionId);
 	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */
 	void OrderFleetTo(int32 Zone);
+	/**
+	 * (The 1.5.1 patch, fleetattack.ts) The fleet in hand set down on an enemy fleet: the attack card, with the odds first, as
+	 * an army's face-off. False where fleet attacks are off, and the caller does what it did before.
+	 */
+	bool AttackFleetWith(int32 Target);
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
@@ -1364,6 +1369,11 @@ private:
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
 	TWeakObjectPtr<AArmyPiece> HoverPiece; // the piece the pointer rests on, if it can be picked up
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
+	// (The 1.5.1 patch; Brian 23 November 2026 22:23Z) One of the player's fleets the left button went down on: carried like a
+	// flag, and let go over a sea it sails there, or over an enemy fleet it attacks it (the attack card first). And
+	// whether it was the fleet in hand already, so a plain click on it puts it down.
+	TWeakObjectPtr<AArmyPiece> HeldFleetPiece;
+	bool bFleetWasInHand = false;
 
 	FFaceOff FaceOff;
 	/** Works out FaceOff.FieldOffer, once a card and pick (CanFightLive). */

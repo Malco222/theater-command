@@ -87,7 +87,7 @@ const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const oneDp = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
 
 /** The share of its ships a side loses when the two sides' strengths stand at `r` after the dice (ours to his). */
-function shares(r: number): { ours: number; theirs: number } {
+export function shares(r: number): { ours: number; theirs: number } {
   const won = r >= 1, edge = won ? r : 1 / r;
   const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
   return won ? { ours: light, theirs: hard } : { ours: hard, theirs: light };
@@ -97,7 +97,7 @@ function shares(r: number): { ours: number; theirs: number } {
  * The ships of each class a side should lose at that share. The fight rolls for each fleet and class about this
  * figure, to the whole number below it or above: `to` rounds each fleet's figure the same way, for the fewest and the most.
  */
-function lossAt(fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
+export function lossAt(fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
   const out = zero();
   for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * NAVY.classes[c].tough));
   return out;

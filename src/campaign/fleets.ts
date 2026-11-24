@@ -473,6 +473,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   };
   if (f.stance === 'escort' && f.lane !== undefined) sq.lane = f.lane;
   if (f.shelled !== undefined) sq.shelled = f.shelled;
+  // A squadron split from a fleet that attacked this month has attacked with it (the 1.5.1 patch, fleetattack.ts).
+  if (f.attacked !== undefined) sq.attacked = f.attacked;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   g.fleets.push(sq);
@@ -500,6 +502,7 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;
+  if (a.attacked !== undefined && (b.attacked ?? -1) < a.attacked) b.attacked = a.attacked;
   b.fought = Math.max(b.fought, a.fought);
   for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ??= {})[k] = t;
   if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || (b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1]))) b.struck = [a.struck[0], a.struck[1], a.struck[2]];

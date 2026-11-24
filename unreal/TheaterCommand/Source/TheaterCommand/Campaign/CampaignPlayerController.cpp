@@ -279,6 +279,13 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			Add(TEXT("breakuprule"), TEXT("Break up corps"), TEXT("Pick up an army and every division of each corps is a tile on its card. Click the tiles of the divisions you want apart and press SPLIT OFF: they become a corps of their own where the army stands, and stay behind when the army moves. REJOIN puts a part back into the corps it came from. Nothing is lost or gained, and no corps grows bigger than it was. It can be switched in any month."),
 				Now.bBreakUp ? TEXT("ON") : TEXT("OFF"), Now.bBreakUp);
 		}
+		// (The 1.5.1 patch, fleetattack.ts; Brian 23 November 2026 22:23Z and 24 November 19:47Z) Fleets dropped on an enemy
+		// fleet attack it at once: on in a grand campaign unless switched off here, in any month.
+		if (Session->IsRunning() && Now.bFleetAttackCan)
+		{
+			Add(TEXT("fleetattackrule"), TEXT("Fleets attack fleets"), TEXT("Drop one of your fleets on an enemy fleet in its reach, at sea or in his harbour, and the battle is fought at once, at any odds: the card gives the odds and the likely losses first. A fleet attacks once a month, and stays where the battle leaves it. Off, fleets meet only at the month's end, where an admiral thinks the odds good enough. It can be switched in any month."),
+				Now.bFleetAttack ? TEXT("ON") : TEXT("OFF"), Now.bFleetAttack);
+		}
 	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
 	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
@@ -422,6 +429,24 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		{
 			FString Note;
 			Session->Act(Session->GetView().bOfficeSecure ? TEXT("cabinet:office:fall") : TEXT("cabinet:office:secure"), INDEX_NONE, Note);
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
+	}
+	else if (Id == TEXT("fleetattackrule"))
+	{
+		// (The 1.5.1 patch, fleetattack.ts) Fleets sent straight at the enemy, switched in any month; kept by the campaign.
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			if (Session->Act(Session->GetView().bFleetAttack ? TEXT("fleetattackrule:off") : TEXT("fleetattackrule:on"), INDEX_NONE, Note))
+			{
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			}
 			if (!Note.IsEmpty())
 			{
 				Notify(Note, 6.0);
@@ -1539,6 +1564,38 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		{
 			const FVector2D At = Map->GetData().Regions[Extras.Shell].Center;
 			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.3f, 0.45f));
+		}
+		ClosePage();
+		return;
+	}
+	if (bOk && Extras.SeaFight != INDEX_NONE && Map.IsValid() && Map->GetData().Seas.IsValidIndex(Extras.SeaFight))
+	{
+		// (The 1.5.1 patch, fleetattack.ts) A fleet sent straight at the enemy: the room is put away, and where it was fought the
+		// guns are seen and heard over the water, with the ships that went down, as in the month's own fights at sea.
+		if (Extras.Outcome == TEXT("fought"))
+		{
+			Map->AddSeaBattle(Extras.SeaFight);
+			static const TCHAR* Order[] = { TEXT("bb"), TEXT("cv"), TEXT("ca"), TEXT("dd"), TEXT("ss") };
+			int32 Shown = 0;
+			for (const TCHAR* Class : Order)
+			{
+				for (const FSinking& Sinking : Extras.Sinkings)
+				{
+					for (int32 Each = 0; Sinking.Zone >= 0 && Sinking.Class == Class && Each < FMath::Min(Sinking.Count, 2) && Shown < 6; ++Each)
+					{
+						Map->AddSinking(Sinking.Zone, Sinking.Nation, Sinking.Class, Shown++);
+					}
+				}
+			}
+			Remember(Extras.Sinkings); // (Brian's memorial card: the battleships and carriers among them, by name)
+			CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
+			CampaignSounds::PlayLater(this, TEXT("explosion"), 0.9f, 0.4f);
+			BattleMusicUntil = FPlatformTime::Seconds() + 10.0;
+		}
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			const FVector2D At = Map->GetData().Seas[Extras.SeaFight].Center;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.42f, 0.6f));
 		}
 		ClosePage();
 		return;
@@ -5614,7 +5671,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		if (bHaveMouse && !bScripted && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
 		{
 			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
-			AimedPiece = (PointedPiece && PointedPiece == HeldPiece.Get()) ? Map->PieceAtRay(RayOrigin, RayDirection, nullptr, PointedPiece) : PointedPiece;
+			AimedPiece = (PointedPiece && (PointedPiece == HeldPiece.Get() || PointedPiece == HeldFleetPiece.Get())) ? Map->PieceAtRay(RayOrigin, RayDirection, nullptr, PointedPiece) : PointedPiece;
 			// (Ruling 153; the art director's ruling of 17 November.) An agent's piece: a small thing among large ones.
 			// He is taken hold of from a little way round him; but over an army's flag or base the army wins, unless
 			// the pointer is on his own body.
@@ -5748,8 +5805,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		if (!bTurning && !bBusy && !IsAnswering() && !bRightGameOnPanel)
 		{
-			// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
-			RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
+			// (The 1.5.1 patch, fleetattack.ts) A right-click on an enemy fleet with a fleet in hand is the order to attack it, as on
+			// an enemy army with an army in hand: the card, odds first. Where fleet attacks are off it is a sea order, as before.
+			const FCampaignSession* Now = GetSession();
+			const bool bOnEnemyFleet = FleetInHand != INDEX_NONE && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE && Now && AimedPiece->GetNationTag() != Now->GetView().Human;
+			if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())))
+			{
+				// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
+				RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
+			}
 		}
 		bRightHeld = false;
 		bTurning = false;
@@ -5765,13 +5829,30 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		PressPosition = Mouse;
 		PressGate = HoverGate; // (latched now: while the button is held the hover says no padlock)
 		HeldPiece.Reset();
+		HeldFleetPiece.Reset();
 		bHeldWasInHand = false;
+		bFleetWasInHand = false;
 		bAgentHeld = false;
 		if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
 		{
 			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
 			bAgentWasInHand = AgentInHand == PointedAgent;
 			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
+		}
+		else if (!bBusy && !IsAnswering() && PointedPiece && PointedPiece->IsFleet() && PointedPiece->GetForceId() != INDEX_NONE
+			&& GetSession() && GetSession()->GetView().bFleetAttack && PointedPiece->GetNationTag() == GetSession()->GetView().Human)
+		{
+			// (Behind the "Fleets attack fleets" row: switched off, a press on a fleet drags the table as it always did, and a
+			// plain click picks the fleet up.)
+			// (The 1.5.1 patch; Brian 23 November 2026 22:23Z: "the same way like I do when I'm moving my ground units".) A press on
+			// one of the player's fleets takes hold of it, as a press on a flag takes hold of an army: dragged, it is carried;
+			// let go over a sea it sails there, and over an enemy fleet it attacks. A plain click picks it up, as before.
+			bFleetWasInHand = FleetInHand == PointedPiece->GetForceId();
+			StopLooking();
+			if (bFleetWasInHand || PickUpFleet(PointedPiece->GetForceId()))
+			{
+				HeldFleetPiece = PointedPiece;
+			}
 		}
 		else if (!bBusy && !IsAnswering())
 		{
@@ -5792,6 +5873,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			if (bOnTable)
 			{
 				HeldPiece->Carry(PointerWorld);
+			}
+			if (ViewWidth > 0 && ViewHeight > 0)
+			{
+				const double Margin = 0.045 * ViewHeight;
+				FVector2D Push = FVector2D::ZeroVector;
+				if (Mouse.X < Margin) Push.X -= 1.0;
+				if (Mouse.X > ViewWidth - Margin) Push.X += 1.0;
+				if (Mouse.Y < Margin) Push.Y += 1.0;
+				if (Mouse.Y > ViewHeight - Margin) Push.Y -= 1.0;
+				Eye->Pan(Push * 0.8, DeltaTime);
+			}
+		}
+		else if (bDragging && HeldFleetPiece.IsValid())
+		{
+			// (The 1.5.1 patch) The fleet is in the hand: it follows the pointer over the table, and the table slides along at the
+			// edge of the view, as an army's flag does.
+			if (bOnTable)
+			{
+				HeldFleetPiece->Carry(PointerWorld);
 			}
 			if (ViewWidth > 0 && ViewHeight > 0)
 			{
@@ -5853,6 +5953,26 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			bAgentHeld = false;
 		}
+		else if (HeldFleetPiece.IsValid())
+		{
+			if (bDragging)
+			{
+				// (The 1.5.1 patch) Let go over an enemy fleet: the attack card, odds first. Over the sea: it sails there. Anywhere
+				// else: it goes back where it lay, still in hand. (The carried piece goes back either way: the map moves it
+				// once the order is given.)
+				HeldFleetPiece->ReturnToRest();
+				const FCampaignSession* Now = GetSession();
+				const bool bOnEnemyFleet = AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE && Now && AimedPiece->GetNationTag() != Now->GetView().Human;
+				if (!(bOnEnemyFleet && AttackFleetWith(AimedPiece->GetForceId())) && bOnTable && bPointerOnWater)
+				{
+					OrderFleetTo(SeaNear(PointerMap));
+				}
+			}
+			else if (bFleetWasInHand)
+			{
+				PutDownFleet(); // (a plain click on the fleet already in hand puts it down again)
+			}
+		}
 		else if (HeldPiece.IsValid())
 		{
 			if (bDragging)
@@ -5902,6 +6022,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bDragging = false;
 		PressGate = INDEX_NONE;
 		HeldPiece.Reset();
+		HeldFleetPiece.Reset();
 	}
 
 	// A flag the pointer rests on shows it can be picked up.
@@ -5945,7 +6066,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			const FCampaignSession* Now = GetSession();
 			const FViewFleet* Held = Now ? Now->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
-			if (Held && bPointerOnWater)
+			if (Held && FleetHand.bFleetAttack && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetNationTag() != Now->GetView().Human)
+			{
+				// (The 1.5.1 patch) Over an enemy fleet it can be sent at: the sights. Over one out of reach: the bar.
+				Pointer = FleetHand.Attack.Contains(AimedPiece->GetForceId()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
+			}
+			else if (Held && bPointerOnWater)
 			{
 				Pointer = Held->Reach.Contains(SeaNear(PointerMap)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
 			}
@@ -6457,8 +6583,23 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				const int32* BarredBy = Held->Reach.Contains(Sea) ? nullptr : Held->Barred.Find(Sea);
 				const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
 				HoverTipMarked = Bar ? FText::FromString(FString::Printf(TEXT("<Red>%s</>"), *PlainInMarked(Bar->Shut))) : FText::GetEmpty();
-				HoverTip = FText::FromString(Held->Reach.Contains(Sea)
-					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s."), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"))
+				// (The 1.5.1 patch, fleetattack.ts) An enemy fleet here it can be sent at: dropped on it, the fleet attacks at once.
+				// And a fleet that attacked this month stays where the battle left it.
+				FString Attack;
+				if (FleetHand.bFleetAttack)
+				{
+					for (const FViewFleet& Other : Session->GetView().Fleets)
+					{
+						if (Other.Zone == Sea && FleetHand.Attack.Contains(Other.Id))
+						{
+							Attack = FString::Printf(TEXT("\nDrop %s on %s to attack it now, odds first."), *Held->Name, *Other.Name);
+							break;
+						}
+					}
+				}
+				HoverTip = FText::FromString(!FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s\n%s"), *Name, *Known, *FleetHand.Held)
+					: Held->Reach.Contains(Sea)
+					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s.%s"), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"), *Attack)
 					: Bar ? Name
 					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
 			}
@@ -6794,6 +6935,20 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 	FleetHoverSea = INDEX_NONE;
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.35f);
 	RefreshOrders();
+	return true;
+}
+
+bool ACampaignPlayerController::AttackFleetWith(int32 Target)
+{
+	if (FleetInHand == INDEX_NONE || Target == INDEX_NONE || !FleetHand.bValid || !FleetHand.bFleetAttack)
+	{
+		return false;
+	}
+	// (The 1.5.1 patch, fleetattack.ts; Brian 23 November 2026 22:23Z) Set down on an enemy fleet: the card asks first, with the
+	// odds and what each side is likely to lose, as an army's face-off does. Where it cannot be sent (out of reach, at
+	// peace, already sent this month) the card says why, in a sentence, and SEND THEM IN is shut.
+	CampaignSounds::Play(this, TEXT("ship_horn"), 0.4f);
+	OpenPage(FString::Printf(TEXT("fleetattack:%d:%d"), FleetInHand, Target));
 	return true;
 }
 
@@ -7146,6 +7301,12 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 		}
 		if (Piece->IsFleet())
 		{
+			// (The 1.5.1 patch) With a fleet in hand, a click on an enemy fleet is the order to attack it: the card, odds first.
+			if (FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() && GetSession() && Piece->GetNationTag() != GetSession()->GetView().Human
+				&& AttackFleetWith(Piece->GetForceId()))
+			{
+				return;
+			}
 			// One of the player's fleets is picked up like an army; a click on the fleet in hand puts it down.
 			if (FleetInHand == Piece->GetForceId())
 			{
