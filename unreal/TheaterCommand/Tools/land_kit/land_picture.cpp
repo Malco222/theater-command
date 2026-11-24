@@ -753,6 +753,7 @@ int main(int argc, char** argv)
 	const bool bFarmSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "farm";
 	const bool bChurchSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "church";
 	const bool bVillageSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "village";
+	const bool bEastSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "east";
 	auto HouseSpec = [](const Panel& P)
 	{
 		LandHouse::Spec H;
@@ -762,8 +763,9 @@ int main(int argc, char** argv)
 		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : P.HouseKind == 3 ? 18.0 : 14.0;
 		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : P.HouseKind == 3 ? 8.6 : 7.2;
 		H.Storeys = P.HouseKind == 0 ? 2 : 1;
-		// (a village house: its own footprint and storeys, as LandField lays them along the village's lanes)
-		if (P.HouseKind == 6)
+		// (a village house: its own footprint and storeys, as LandField lays them along the village's lanes; the east's houses
+		// their own footprints)
+		if (P.HouseKind >= 6)
 		{
 			H.Long = P.HouseLong;
 			H.Deep = P.HouseDeep;
@@ -789,7 +791,7 @@ int main(int argc, char** argv)
 			         // place up its front where its render has come away, 14 its strikes there at their thickest
 			double AimDistance;
 			const char* Caption;
-			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba
 			double Long = 12.4, Deep = 6.8; // (a village house's)
 			int Storeys = 2;
 		};
@@ -918,9 +920,35 @@ int main(int argc, char** argv)
 			{ "zz_top_b", 2, 0, 0, 10, 20.0, 35.0, 62.0, 15, 3.0, "", 6, 12.4, 6.8, 2 },
 			{ "zz_farm_top", 2, 0, 0, 7, -30.0, 10.0, 62.0, 15, 6.5, "", 0, 14.0, 7.2, 2 },
 		};
+		// (the east's houses: LAND_KIT_HOUSE=east; the izba, Kind 7, Roof 0 planks or 1 thatch, its footprint LandFarm's 7.5 by
+		// 7.2 m; aim 17 its street gable's windows, 18 its front corner's log ends, 19 its ridge's end at the street gable)
+		const HouseLook EastLooks[] = {
+			{ "izba_planks", 0, 0, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the east: a log izba, carved frames, plank roof", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch", 0, 0, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "another: thatched, other paint", 7, 7.5, 7.2, 1 },
+			{ "izba_back", 0, 0, 0, 7, 205.0, 12.0, 250.0, -1, 0.0, "from behind: the woodpile along the back wall", 7, 7.5, 7.2, 1 },
+			{ "izba_porch", 0, 0, 0, 7, -32.0, 9.0, 62.0, -1, 0.0, "from the other side: the porch, the plank door", 7, 7.5, 7.2, 1 },
+			{ "izba_window", 0, 0, 0, 7, 18.0, 4.0, 62.0, 0, 3.4, "close: a carved frame, its shutters, the curtain", 7, 7.5, 7.2, 1 },
+			{ "izba_gable", 0, 0, 0, 7, 80.0, 6.0, 62.0, 17, 7.0, "close: the street gable, three windows, its towel", 7, 7.5, 7.2, 1 },
+			{ "izba_door", 0, 0, 0, 7, -18.0, 6.0, 62.0, 1, 5.5, "close: the porch on its posts, the door", 7, 7.5, 7.2, 1 },
+			{ "izba_corner", 0, 0, 0, 7, 48.0, 8.0, 62.0, 18, 2.8, "close: the corner, log ends, rings, boulders", 7, 7.5, 7.2, 1 },
+			{ "izba_horse", 0, 0, 0, 7, 62.0, 14.0, 62.0, 19, 3.6, "close: the ridge log's horse head, the barge boards", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_close", 0, 0, 1, 3, 60.0, 16.0, 110.0, 19, 4.5, "close: the thatch's courses, the straw ridge, poles", 7, 7.5, 7.2, 1 },
+			{ "izba_mid", 0, 1, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 7, 7.5, 7.2, 1 },
+			{ "izba_far", 0, 2, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_mid", 0, 1, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "thatched, middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_far", 0, 2, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "thatched, far level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch90_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: near level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch90_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch300_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "", 7, 7.5, 7.2, 1 }, // (not laid out: for measuring)
+			{ "izba_switch300_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_switch300_far", 0, 2, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: far level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_near", 0, 0, 1, 3, 38.0, 4.0, 110.0, 3, 55.0, "thatched at 90 m: near level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_mid", 0, 1, 1, 3, 38.0, 4.0, 110.0, 3, 55.0, "thatched at 90 m: middle level", 7, 7.5, 7.2, 1 },
+		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
-		const std::vector<HouseLook> Looks = bVillageSheet ? std::vector<HouseLook>(std::begin(VillageLooks), std::end(VillageLooks))
+		const std::vector<HouseLook> Looks = bEastSheet ? std::vector<HouseLook>(std::begin(EastLooks), std::end(EastLooks))
+			: bVillageSheet ? std::vector<HouseLook>(std::begin(VillageLooks), std::end(VillageLooks))
 			: bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
 			: bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
 		for (const HouseLook& K : Looks)
@@ -989,6 +1017,10 @@ int main(int argc, char** argv)
 				}
 				if (K.Aim == 15) At = V3(0.5 * K.Long - 1.2, 0.5 * K.Deep, 0.15 + 4.2);
 				if (K.Aim == 16) At = V3(-0.5 * K.Long, 0.0, 0.15 + 6.9);
+				// (the izba's: its street gable, the +x one, at its windows' tops; its front corner there; its ridge's end)
+				if (K.Aim == 17) At = V3(0.5 * K.Long - 0.4, -0.3, 0.15 + 2.6);
+				if (K.Aim == 18) At = V3(0.5 * K.Long - 0.45, 0.5 * K.Deep - 0.9, 0.15 + 1.2);
+				if (K.Aim == 19) At = V3(0.5 * K.Long - 0.3, -0.3, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.6);
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);

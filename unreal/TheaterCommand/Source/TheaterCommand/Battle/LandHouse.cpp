@@ -5881,14 +5881,1551 @@ namespace LandHouse
 				Append(Out.Far, One.Far, Pa.X);
 			}
 		}
+
+		// ================================================================== the east's houses
+
+		/**
+		 * The izba (Kind 7; release 2, the same trial: Brian 24 November, every theatre's houses to the vehicles' detail): a
+		 * Russian village's log house as the east's villages lay it (LandFarm's KIzba and KIzbaThatch, its footprint 7.5 by
+		 * 7.2 m). Round logs of pine laid in thirteen courses, each sitting in the groove of the one below, saddle-notched at
+		 * the corners where their ends run on past the walls, the end grain pale with its rings and a check; a foundation of
+		 * field boulders under them; windows small, three to the gable on the street, each in its carved frame (a pediment
+		 * over its frieze, an apron with scallops under its sill), its sash in a T, a white curtain behind the glass, its two
+		 * painted shutters open on the logs (now and then shut); a boarded gable with its attic window, carved barge boards
+		 * and a hanging towel board at the apex; a porch on two posts before the plank door; the roof of overlapping planks
+		 * under a ridge log carved at its end into a horse's head (Roof 0), or of thick thatch in courses under a straw ridge
+		 * held by crossed poles (Roof 1); a brick chimney; a woodpile stacked along the back wall, a bench by the door, a
+		 * barrel. Its own frame as the others': x along its length, y across (the porch on the +y side), z up from the
+		 * ground at its middle; the walls stand a little back from the middle so the porch keeps inside the footprint.
+		 */
+		namespace Izb
+		{
+			/** An opening in a wall: its face (0 front, 1 the -x gable, 2 back, 3 the +x gable), its middle along the wall
+			 * (U, the wall's own way), width, sill and head; what it is (0 a window, 1 the door, 2 an attic window). */
+			struct Gap
+			{
+				int Face = 0;
+				double U = 0.0, W = 0.7, Z0 = 1.3, Z1 = 2.3;
+				int What = 0;
+				bool bShut = false;
+			};
+
+			struct Plan
+			{
+				Spec S;
+				bool bThatch = false;
+				double A = 3.3, Bh = 2.85, Yc = -0.3; // half the long walls and the gables between the corners' logs; the walls' middle across
+				double R = 0.12, Hc = 0.2, Z0 = 0.54; // a log's radius, a course's rise, the lowest long-wall log's middle
+				double Ext = 0.28;                    // how far the logs run on past the corners
+				double OvE = 0.5, OvG = 0.2;          // the roof out past the long walls, and past the logs' ends at the gables
+				int Courses = 13;
+				double Tan = 0.87, CosP = 0.75, SinP = 0.66, Ridge = 5.8, Thick = 0.1;
+				double Zt = 3.1, Zg = 3.0; // the long walls' top and the gables' last log's crown
+				double Xr = 4.0, Se = 3.5, Qe = 4.6; // the roof's half-length, its eaves out from the ridge across and down its slope
+				double Chx = -0.6;
+				Col Log, LogEnd, Paint, Carve, Shutter, Plank, Thatch, Brick, Stone, Glass, Sky, Door, Dark;
+				std::vector<Gap> Gaps;
+			};
+
+			struct Wall
+			{
+				V3 C, T, N;      // its middle on the line of the logs' middles; along it; out from it
+				double Half = 3; // to the corners' logs' middles
+				double ZOff = 0; // its courses: the gables' half a course above the long walls'
+			};
+			Wall WallOf(const Plan& P, int F)
+			{
+				Wall W;
+				switch (F)
+				{
+				case 0: W = { V3{ 0.0, P.Yc + P.Bh, 0.0 }, V3{ 1.0, 0.0, 0.0 }, V3{ 0.0, 1.0, 0.0 }, P.A, 0.0 }; break;
+				case 2: W = { V3{ 0.0, P.Yc - P.Bh, 0.0 }, V3{ 1.0, 0.0, 0.0 }, V3{ 0.0, -1.0, 0.0 }, P.A, 0.0 }; break;
+				case 1: W = { V3{ -P.A, P.Yc, 0.0 }, V3{ 0.0, 1.0, 0.0 }, V3{ -1.0, 0.0, 0.0 }, P.Bh, 0.5 * P.Hc }; break;
+				default: W = { V3{ P.A, P.Yc, 0.0 }, V3{ 0.0, 1.0, 0.0 }, V3{ 1.0, 0.0, 0.0 }, P.Bh, 0.5 * P.Hc }; break;
+				}
+				return W;
+			}
+			V3 On(const Wall& W, double U, double Z, double D) { return W.C + W.T * U + W.N * D + V3{ 0.0, 0.0, Z }; }
+			double CourseZ(const Plan& P, const Wall& W, int K) { return P.Z0 + W.ZOff + K * P.Hc; }
+			/** The seam over course K (an opening's sill or head stands on one). */
+			double Seam(const Plan& P, const Wall& W, int K) { return CourseZ(P, W, K) + 0.5 * P.Hc; }
+			uint64_t LogSeed(const Plan& P, int F, int K) { return Hash(P.S.Key ^ 0x1D6, static_cast<uint64_t>(F * 64 + K)); }
+			/** The courses a wall has: a gable one fewer, its last log half a course under the long walls' top. */
+			int CoursesOf(const Plan& P, int F) { return F == 1 || F == 3 ? P.Courses - 1 : P.Courses; }
+			/** How far past its corner's middle a log at Z may run (Want) before the roof's slope takes it: the gables' top
+			 * logs cut back under the eaves (never short of the corner's crossing). */
+			double EndReach(const Plan& P, int F, double Z, double Want)
+			{
+				if (F == 0 || F == 2) return Want;
+				const double S = (P.Ridge - 0.5 * P.Thick / P.CosP - 0.03 - Z - P.R) / P.Tan;
+				return std::max(P.R + 0.02, std::min(Want, S - P.Bh));
+			}
+
+			/** How far the porch's floor stands out from the front's logs; how many steps down from its floor at Zf. */
+			const double PorchOut = 0.9;
+			int PorchSteps(double Zf) { return std::max(2, static_cast<int>(std::round(Zf / 0.2))); }
+
+			Plan Make(const Spec& S)
+			{
+				Plan P;
+				P.S = S;
+				P.bThatch = S.Roof == 1;
+				Rng Rg(S.Key ^ 0x12BA);
+				P.R = 0.112 + 0.016 * Rg.Next();
+				P.Hc = 1.72 * P.R;
+				P.Ext = 0.24 + 0.08 * Rg.Next();
+				// (all of it inside its footprint: the roof's verges at its ends; across it the porch, 0.9 m out, at the front and
+				// the woodpile, half a metre, at the back)
+				P.OvG = S.Roof == 1 ? 0.3 : 0.2;
+				P.A = std::max(2.4, 0.5 * S.Long - P.R - P.Ext - P.OvG - 0.05);
+				const double Half = 0.5 * S.Deep - 0.03;
+				P.Bh = std::max(2.2, 0.5 * (2.0 * Half - 2.0 * P.R - PorchOut - 0.5));
+				P.Yc = Half - P.Bh - P.R - PorchOut;
+				P.Z0 = 0.4 + P.R;
+				const double Pitch = (P.bThatch ? 46.0 : 41.0) * Pi / 180.0;
+				P.Tan = std::tan(Pitch);
+				P.CosP = std::cos(Pitch);
+				P.SinP = std::sin(Pitch);
+				P.Zt = P.Z0 + (P.Courses - 1) * P.Hc + P.R;
+				P.Zg = P.Zt - 0.5 * P.Hc; // (the gables' last log under the long walls' top one, the roof clear of its ends)
+				P.Thick = P.bThatch ? 0.34 : 0.12;
+				P.Ridge = P.Zt + P.Thick + (P.Bh + P.R) * P.Tan;
+				P.OvE = 0.5;
+				P.Se = P.Bh + P.R + P.OvE;
+				P.Qe = P.Se / P.CosP;
+				P.Xr = P.A + P.R + P.Ext + P.OvG;
+				P.Chx = -0.25 * P.A + 0.3 * (Rg.Next() - 0.5);
+				// Its colours: the logs grey-brown, weathered silver on some, browner on others; the carved frames white (most),
+				// pale or deep blue, or ochre; the shutters blue, green, oxblood, ochre or white; the planks silver-grey.
+				const double UWood = Rg.Next(), UPaint = Rg.Next(), UShut = Rg.Next();
+				P.Log = UWood < 0.4 ? Rgb(118, 110, 98) : UWood < 0.75 ? Rgb(110, 98, 84) : Rgb(100, 84, 66);
+				P.LogEnd = Mixed(P.Log, Rgb(176, 160, 132), 0.55);
+				P.Paint = UPaint < 0.6 ? Rgb(222, 218, 206) : UPaint < 0.78 ? Rgb(150, 180, 196) : UPaint < 0.9 ? Rgb(74, 118, 150) : Rgb(196, 166, 92);
+				P.Carve = UPaint < 0.6 ? Rgb(70, 112, 134) : Rgb(226, 222, 210);
+				P.Shutter = UShut < 0.35 ? Rgb(70, 118, 134) : UShut < 0.55 ? Rgb(72, 108, 76) : UShut < 0.72 ? Rgb(118, 58, 44) : UShut < 0.86 ? Rgb(190, 160, 86) : Rgb(214, 210, 198);
+				P.Plank = Rgb(112, 107, 98);
+				const double UThatch = Rg.Next(), UBrick = Rg.Next();
+				P.Thatch = UThatch < 0.5 ? Rgb(134, 118, 90) : UThatch < 0.8 ? Rgb(122, 112, 94) : Rgb(146, 126, 88); // (old grey-brown, greyer, newer)
+				P.Brick = UBrick < 0.55 ? Rgb(128, 80, 64) : Rgb(198, 194, 184); // (bare old brick, or limewashed)
+				P.Stone = Rgb(124, 118, 108);
+				P.Glass = Rgb(30, 34, 38);
+				P.Sky = Rgb(150, 160, 170);
+				P.Door = Rgb(96, 78, 60);
+				P.Dark = Rgb(30, 26, 22);
+				// The openings: the door near the front's -x end under its porch, two windows to its +x; three to the +x gable
+				// (the street's), one each to the -x gable and the back; an attic window in each gable.
+				const Wall WF = WallOf(P, 0), WB = WallOf(P, 2), WG = WallOf(P, 3), WH = WallOf(P, 1);
+				auto Win = [&](int F, const Wall& W, double U) {
+					Gap G;
+					G.Face = F;
+					G.U = U;
+					G.W = 0.66 + 0.06 * Rg.Next();
+					G.Z0 = Seam(P, W, 3);
+					G.Z1 = Seam(P, W, 8);
+					G.bShut = Rg.Next() < 0.1;
+					P.Gaps.push_back(G);
+				};
+				Gap D;
+				D.Face = 0;
+				D.U = -(P.A - 0.95);
+				D.W = 0.88;
+				D.Z0 = Seam(P, WF, 0);
+				D.Z1 = Seam(P, WF, 9);
+				D.What = 1;
+				P.Gaps.push_back(D);
+				// (each window spans its frame and its two shutters open, about 1.7 m: the front's two between the door's frame and
+				// the corner, the gable's three as far apart as it allows, or two)
+				const double Lo = D.U + 0.5 * D.W + 0.15, Hi = P.A - P.R - 0.05, Mf = 0.5 * (Lo + Hi);
+				Win(0, WF, Mf - 0.88);
+				Win(0, WF, Mf + 0.88);
+				const double G3 = std::min(1.8, P.Bh - 1.0);
+				if (G3 >= 1.7)
+				{
+					Win(3, WG, -G3);
+					Win(3, WG, 0.0);
+					Win(3, WG, G3);
+				}
+				else
+				{
+					Win(3, WG, -0.88);
+					Win(3, WG, 0.88);
+				}
+				Win(1, WH, 0.25 * P.Bh);
+				Win(2, WB, 0.35 * P.A);
+				for (int F : { 1, 3 })
+				{
+					Gap At;
+					At.Face = F;
+					At.U = 0.0;
+					At.W = 0.46;
+					At.Z0 = P.Zg + 0.5;
+					At.Z1 = P.Zg + 1.08;
+					At.What = 2;
+					P.Gaps.push_back(At);
+				}
+				return P;
+			}
+
+			/** A point on the roof's top: along its length X, down its slope Q from the ridge, Lift off it, on side Sd. */
+			V3 RoofAt(const Plan& P, int Sd, double X, double Q, double Lift)
+			{
+				return V3{ X, P.Yc + Sd * (Q * P.CosP + Lift * P.SinP), P.Ridge - Q * P.SinP + Lift * P.CosP };
+			}
+			V3 RoofN(const Plan& P, int Sd) { return V3{ 0.0, Sd * P.SinP, P.CosP }; }
+			/** The roof's underside over a place across (S out from the ridge). */
+			double UnderAt(const Plan& P, double S) { return P.Ridge - S * P.Tan - P.Thick / P.CosP; }
+
+			/** The thatch's straw at a place on its slope: along it X, down from the ridge Q, on side Sd (greyer toward the
+			 * eaves, moss in patches, more on the back, a newer patch here and there). */
+			Col StrawCol(const Plan& P, int Sd, double X, double Q)
+			{
+				Col C = Scaled(P.Thatch, 0.9 + 0.2 * Noise01(X / 0.35, Q / 0.25, P.S.Key ^ 0x57A0));
+				C = Mixed(C, Rgb(110, 102, 88), 0.3 * Smooth(0.3 * P.Qe, P.Qe, Q));
+				C = Mixed(C, Rgb(92, 98, 70), (Sd < 0 ? 0.35 : 0.15) * Smooth(0.62, 0.85, Noise01(X / 1.1, Q / 0.9, P.S.Key ^ 0x57A1)));
+				return Mixed(C, Rgb(150, 132, 98), 0.25 * Smooth(0.72, 0.9, Noise01(X / 0.8, Q / 0.6, P.S.Key ^ 0x57A2)));
+			}
+			/** A roof plank's colour at a place on it: its own C, grained, lichen and moss in patches, darker to the eaves. */
+			Col PlankCol(const Plan& P, int Sd, const Col& C, uint64_t Seed, double Xp, double Q)
+			{
+				Col Cp = Scaled(C, 0.94 + 0.1 * Noise01(Xp / 0.15, Q / 1.2, Seed));
+				Cp = Mixed(Cp, Rgb(96, 104, 74), (Sd < 0 ? 0.55 : 0.3) * Smooth(0.55, 0.85, Noise01(Xp / 0.9, Q / 0.8, P.S.Key ^ 0x3055)));
+				return Mixed(Cp, Rgb(70, 64, 56), 0.25 * Smooth(P.Qe - 0.8, P.Qe, Q));
+			}
+			/** The roof's planks as the near level lays them, one side's: each plank's run across (Xa to Xb), its foot, its
+			 * lift, whether it is an upper one, its own colour and seed. */
+			struct RoofPlank
+			{
+				double Xa, Xb, Foot, Lift;
+				bool bUpper;
+				Col C;
+				uint64_t Seed;
+			};
+			std::vector<RoofPlank> PlanksOf(const Plan& P, int Sd)
+			{
+				std::vector<RoofPlank> Out;
+				Rng Rp(Hash(P.S.Key ^ 0x9A4C, static_cast<uint64_t>(Sd + 2)));
+				double X = -P.Xr;
+				int K = 0;
+				while (X < P.Xr - 0.02)
+				{
+					RoofPlank Pk;
+					Pk.bUpper = K % 2 == 1;
+					const double Wd = Pk.bUpper ? Rp.Range(0.2, 0.27) : Rp.Range(0.1, 0.14);
+					Pk.Xa = X - (Pk.bUpper ? 0.04 : 0.0);
+					Pk.Xb = std::min(P.Xr, X + Wd + (Pk.bUpper ? 0.04 : 0.0));
+					Pk.Foot = P.Qe + Rp.Range(-0.05, 0.05);
+					Pk.Lift = Pk.bUpper ? 0.03 : 0.0;
+					Pk.Seed = Hash(P.S.Key ^ 0x9A4D, static_cast<uint64_t>(K * 4 + Sd + 2));
+					Pk.C = Varied(P.Plank, 0.84 + 0.24 * Unit(Pk.Seed), 0.03 * (Unit(Pk.Seed ^ 1) - 0.5));
+					Out.push_back(Pk);
+					X += Wd;
+					++K;
+				}
+				return Out;
+			}
+
+			/** A log's colour at a place along it (T) and round it (Ang, 0 out, up positive), at its height Z. */
+			Col LogCol(const Plan& P, uint64_t Seed, double T, double Ang, double Z)
+			{
+				Col C = Varied(P.Log, 0.9 + 0.18 * Unit(Seed), 0.04 * (Unit(Seed ^ 3) - 0.5));
+				C = Scaled(C, 0.93 + 0.12 * Noise01(T / 0.8, 1.7, Seed));
+				C = Mixed(C, Rgb(150, 146, 138), 0.18 * Smooth(0.2, 1.2, Ang) * Noise01(T / 1.6, 3.1, Seed ^ 9)); // (silvered on top)
+				C = Scaled(C, 0.8 + 0.2 * Smooth(-1.4, 0.2, Ang));                                                  // (the crease under it)
+				C = Mixed(C, Rgb(72, 64, 54), 0.35 * Smooth(1.0, 0.45, Z));                                          // (splash at the foot)
+				C = Mixed(C, Rgb(84, 92, 66), 0.25 * Smooth(0.9, 0.6, Z) * Smooth(0.55, 0.8, Noise01(T / 0.7, Z / 0.3, Seed ^ 21))); // (moss low down)
+				return C;
+			}
+			double LogRad(const Plan& P, uint64_t Seed, double T) { return P.R * (0.96 + 0.08 * Unit(Seed ^ 5)) * (1.0 + 0.045 * Noise(T / 1.1, 0.4, Seed ^ 0x77)); }
+			V3 LogBend(uint64_t Seed, double T, V3 Out) { return V3{ 0.0, 0.0, 0.007 * Noise(T / 1.7, 0.9, Seed ^ 0x51) } + Out * (0.006 * Noise(T / 1.3, 2.2, Seed ^ 0x52)); }
+
+			/** Part of a log's round, along Ax from T0 to T1 (metres from O), its angles A0 to A1 in NA facets. */
+			void Round(Pen& B, const Plan& P, V3 O, V3 Ax, V3 Out, double T0, double T1, double A0, double A1, int NA, uint64_t Seed, double Step = 0.55)
+			{
+				if (T1 - T0 < 0.01) return;
+				const V3 UpV = Cross(Ax, Out) * -1.0; // (up, as Out turns toward it)
+				const V3 Upx = Dot(UpV, Up) < 0.0 ? UpV * -1.0 : UpV;
+				const int NT = std::max(1, static_cast<int>(std::ceil((T1 - T0) / Step)));
+				std::vector<uint32_t> Prev, Cur;
+				for (int I = 0; I <= NT; ++I)
+				{
+					const double T = T0 + (T1 - T0) * I / NT;
+					const double Rr = LogRad(P, Seed, T);
+					const V3 Mid = O + Ax * T + LogBend(Seed, T, Out);
+					Cur.clear();
+					for (int J = 0; J <= NA; ++J)
+					{
+						const double An = A0 + (A1 - A0) * J / NA;
+						const V3 Rd = Out * std::cos(An) + Upx * std::sin(An);
+						Cur.push_back(B.Vert(Mid + Rd * Rr, Rd, LogCol(P, Seed, T, std::atan2(std::sin(An), std::cos(An) + 1e-9), Mid.Z)));
+					}
+					if (I > 0)
+						for (int J = 0; J < NA; ++J)
+						{
+							const double An = A0 + (A1 - A0) * (J + 0.5) / NA;
+							const V3 Rd = Out * std::cos(An) + Upx * std::sin(An);
+							B.Tri(Prev[static_cast<size_t>(J)], Cur[static_cast<size_t>(J)], Cur[static_cast<size_t>(J) + 1], Rd);
+							B.Tri(Prev[static_cast<size_t>(J)], Cur[static_cast<size_t>(J) + 1], Prev[static_cast<size_t>(J) + 1], Rd);
+						}
+					std::swap(Prev, Cur);
+				}
+				// (its checks: a dark split along it here and there on its upper side; and a knot or two)
+				Rng Rk(Seed ^ 0xC4EC);
+				const int Checks = static_cast<int>((T1 - T0) / 1.4 + Rk.Next());
+				for (int K = 0; K < Checks; ++K)
+				{
+					const double Ta = Rk.Range(T0, std::max(T0, T1 - 0.6)), Tb = std::min(T1, Ta + Rk.Range(0.4, 1.3)), An = Rk.Range(0.05, 0.75);
+					if (An < A0 || An > A1) continue;
+					const V3 Rd = Out * std::cos(An) + Upx * std::sin(An);
+					const V3 Side = Cross(Ax, Rd);
+					const V3 Ma = O + Ax * Ta + LogBend(Seed, Ta, Out) + Rd * (LogRad(P, Seed, Ta) + 0.0015);
+					const V3 Mb = O + Ax * Tb + LogBend(Seed, Tb, Out) + Rd * (LogRad(P, Seed, Tb) + 0.0015);
+					const double W = Rk.Range(0.003, 0.007);
+					B.Quad1(Ma - Side * W, Mb - Side * (0.3 * W), Mb + Side * (0.3 * W), Ma + Side * W, Rgb(46, 40, 34), Rd);
+				}
+				const int Knots = static_cast<int>((T1 - T0) / 1.1 + Rk.Next());
+				for (int K = 0; K < Knots; ++K)
+				{
+					const double Tk = Rk.Range(T0 + 0.05, std::max(T0 + 0.06, T1 - 0.05)), An = Rk.Range(-0.4, 0.6);
+					if (An < A0 || An > A1) continue;
+					const V3 Rd = Out * std::cos(An) + Upx * std::sin(An);
+					const V3 Side = Cross(Ax, Rd);
+					const V3 Mk = O + Ax * Tk + LogBend(Seed, Tk, Out) + Rd * (LogRad(P, Seed, Tk) + 0.002);
+					const double Kr = Rk.Range(0.012, 0.026);
+					const uint32_t Cn = B.Vert(Mk, Rd, Rgb(54, 44, 34));
+					std::vector<uint32_t> Rim;
+					for (int J = 0; J <= 6; ++J)
+					{
+						const double Th = 2.0 * Pi * J / 6;
+						Rim.push_back(B.Vert(Mk + Ax * (1.4 * Kr * std::cos(Th)) + Side * (Kr * std::sin(Th)), Rd, Rgb(74, 62, 48)));
+					}
+					for (int J = 0; J < 6; ++J) B.Tri(Cn, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], Rd);
+				}
+			}
+			/** A log's end grain at T along Ax (the end facing Ax): pale, its pith dark, its rings, a check from the middle out. */
+			void EndGrain(Pen& B, const Plan& P, V3 O, V3 Ax, V3 Out, double T, uint64_t Seed)
+			{
+				const V3 UpV = Cross(Ax, Out) * -1.0;
+				const V3 Upx = Dot(UpV, Up) < 0.0 ? UpV * -1.0 : UpV;
+				const double Rr = LogRad(P, Seed, T);
+				const V3 Mid = O + Ax * T + LogBend(Seed, T, Out);
+				Col C = Varied(P.LogEnd, 0.88 + 0.2 * Unit(Seed ^ 0xE1), 0.0);
+				C = Mixed(C, Rgb(96, 92, 86), 0.4 * Unit(Seed ^ 0xE2)); // (greyed by the years on some)
+				const int N = 10;
+				const uint32_t Pith = B.Vert(Mid + Ax * 0.004, Ax, Scaled(C, 0.62));
+				std::vector<uint32_t> In, Rim;
+				for (int J = 0; J <= N; ++J)
+				{
+					const double Th = 2.0 * Pi * J / N;
+					const V3 Rd = Out * std::cos(Th) + Upx * std::sin(Th);
+					In.push_back(B.Vert(Mid + Ax * 0.003 + Rd * (0.45 * Rr), Ax, Scaled(C, 0.92 + 0.08 * std::cos(3.0 * Th))));
+					Rim.push_back(B.Vert(Mid + Rd * Rr, Ax, Scaled(C, 0.78)));
+				}
+				for (int J = 0; J < N; ++J)
+				{
+					B.Tri(Pith, In[static_cast<size_t>(J)], In[static_cast<size_t>(J) + 1], Ax);
+					B.Tri(In[static_cast<size_t>(J)], Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], Ax);
+					B.Tri(In[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], In[static_cast<size_t>(J) + 1], Ax);
+				}
+				const double Th = 2.0 * Pi * Unit(Seed ^ 0xE3);
+				const V3 Rd = Out * std::cos(Th) + Upx * std::sin(Th), Sd = Cross(Ax, Rd);
+				B.Tri1(Mid + Ax * 0.005 + Sd * 0.004, Mid + Ax * 0.005 - Sd * 0.004, Mid + Ax * 0.005 + Rd * (0.95 * Rr), Rgb(40, 34, 28), Ax);
+			}
+
+			/** The walls' logs: each course its log, cut at the openings, running on past the corners to its end grain. */
+			void Logs(Pen& B, const Plan& P)
+			{
+				for (int F = 0; F < 4; ++F)
+				{
+					const Wall W = WallOf(P, F);
+					for (int K = 0; K < CoursesOf(P, F); ++K)
+					{
+						const uint64_t Seed = LogSeed(P, F, K);
+						const double Z = CourseZ(P, W, K);
+						const V3 O = W.C + V3{ 0.0, 0.0, Z };
+						// (the stretches between the openings it passes)
+						std::vector<std::pair<double, double>> Cut;
+						for (const Gap& G : P.Gaps)
+							if (G.Face == F && G.What != 2 && Z > G.Z0 && Z < G.Z1) Cut.push_back({ G.U - 0.5 * G.W, G.U + 0.5 * G.W });
+						std::sort(Cut.begin(), Cut.end());
+						double From = -W.Half + P.R;
+						const bool bTop = K == P.Courses - 1;
+						for (size_t I = 0; I <= Cut.size(); ++I)
+						{
+							const double To = I < Cut.size() ? Cut[I].first : W.Half - P.R;
+							Round(B, P, O, W.T, W.N, From, To, -0.5 * Pi, bTop ? 0.85 * Pi : 0.5 * Pi, bTop ? 7 : 5, Seed);
+							if (I < Cut.size()) From = Cut[I].second;
+						}
+						// (its two ends past the corners, round all about, and their end grain)
+						for (int E = -1; E <= 1; E += 2)
+						{
+							const double Run = P.Ext * (0.82 + 0.36 * Unit(Seed ^ static_cast<uint64_t>(E + 7)));
+							const double T0 = E * (W.Half - P.R), T1 = E * (W.Half + EndReach(P, F, Z, P.R + Run));
+							Round(B, P, O, W.T, W.N, std::min(T0, T1), std::max(T0, T1), -Pi, Pi, 8, Seed, 0.3);
+							EndGrain(B, P, O, W.T * static_cast<double>(E), W.N, std::fabs(T1), Seed ^ static_cast<uint64_t>(E + 3));
+						}
+					}
+					// (the gables' gap under their first log, half a course over the long walls' first, filled by a half log)
+					if (F == 1 || F == 3)
+					{
+						const uint64_t Seed = LogSeed(P, F, 63);
+						const V3 O = W.C + V3{ 0.0, 0.0, P.Z0 - 0.5 * P.Hc };
+						Round(B, P, O, W.T, W.N, -W.Half + P.R, W.Half - P.R, -0.5 * Pi, 0.2 * Pi, 3, Seed);
+					}
+				}
+			}
+
+			/** A field boulder along a wall, its middle Uc, length L: an egg lying in the earth (flat at its back against the
+			 * wall's line), its crown at Zt, Rv its half height, Dd proud of D0. */
+			void Boulder(Pen& B, const Wall& W, double Uc, double L, double Zt, double Rv, double Dd, const Col& C, uint64_t Seed)
+			{
+				const double Zc = Zt - Rv, D0 = 0.05;
+				const double Ang[5] = { -0.5 * Pi, -0.25 * Pi, 0.0, 0.25 * Pi, 0.5 * Pi };
+				const double Lat[5] = { -0.42 * Pi, -0.2 * Pi, 0.0, 0.2 * Pi, 0.38 * Pi };
+				std::vector<uint32_t> Ring[5];
+				std::vector<V3> At[5];
+				auto Tone = [&](double Z, double Nz, uint64_t K) {
+					Col Cc = Scaled(C, 0.88 + 0.22 * Unit(Seed ^ K) + 0.06 * Nz);
+					Cc = Mixed(Cc, Rgb(146, 148, 124), 0.45 * Smooth(0.66, 0.88, Unit(Hash(Seed, K ^ 0x11)))); // (lichen)
+					return Mixed(Cc, Rgb(66, 58, 48), 0.5 * Smooth(0.12, -0.05, Z));                             // (the earth on its foot)
+				};
+				for (int R = 0; R < 5; ++R)
+					for (int I = 0; I < 5; ++I)
+					{
+						const double Bt = Lat[R], Jit = 1.0 + 0.28 * (Unit(Hash(Seed, static_cast<uint64_t>(R * 8 + I))) - 0.5);
+						const double Cu = std::sin(Ang[I]) * std::cos(Bt), Cd = std::cos(Ang[I]) * std::cos(Bt), Cz = std::sin(Bt);
+						const double Z = Zc + Rv * Cz * (R == 0 ? 1.0 : Jit);
+						const V3 Pt = On(W, Uc + 0.5 * L * Cu * Jit, Z, D0 + Dd * Cd * Jit);
+						const V3 Nn = Norm(W.T * (Cu / (0.5 * L)) + W.N * (Cd / Dd) + Up * (Cz / Rv));
+						Ring[R].push_back(B.Vert(Pt, Nn, Tone(Z, Cz, static_cast<uint64_t>(R * 8 + I))));
+						At[R].push_back(Pt);
+					}
+				// (each facet turned out from its middle)
+				const V3 Mc = On(W, Uc, Zc, D0 - 0.02);
+				auto Out = [&](V3 A, V3 Bb, V3 Cc) { return (A + Bb + Cc) * (1.0 / 3.0) - Mc; };
+				for (int R = 0; R < 4; ++R)
+					for (size_t I = 0; I < 4; ++I)
+					{
+						B.Tri(Ring[R][I], Ring[R][I + 1], Ring[R + 1][I + 1], Out(At[R][I], At[R][I + 1], At[R + 1][I + 1]));
+						B.Tri(Ring[R][I], Ring[R + 1][I + 1], Ring[R + 1][I], Out(At[R][I], At[R + 1][I + 1], At[R + 1][I]));
+					}
+				const V3 Ct = On(W, Uc, Zt, D0 + 0.2 * Dd);
+				const uint32_t Cap = B.Vert(Ct, Up, Tone(Zt, 1.0, 0x77));
+				for (size_t I = 0; I < 4; ++I) B.Tri(Ring[4][I], Ring[4][I + 1], Cap, Out(At[4][I], At[4][I + 1], Ct));
+			}
+
+			/** The boulders along a wall's foot as the near level lays them: each one's middle along it, length, crown, half
+			 * height, how far proud, colour and seed; and the foot's top and its run past the corners. */
+			struct Stone
+			{
+				double Uc, L, Zt, Rv, Dd;
+				Col C;
+				uint64_t Seed;
+			};
+			double FootTop(const Plan& P, const Wall& W) { return P.Z0 + W.ZOff - P.R * 0.8; }
+			double FootRun(const Plan& P, const Wall& W) { return W.Half + P.R + 0.12; }
+			std::vector<Stone> StonesOf(const Plan& P, int F)
+			{
+				const Wall W = WallOf(P, F);
+				const double Top = FootTop(P, W), Run = FootRun(P, W);
+				std::vector<Stone> Out;
+				Rng Rs(Hash(P.S.Key ^ 0xF0071, static_cast<uint64_t>(F)));
+				double U = -Run;
+				int K = 0;
+				while (U < Run - 0.08)
+				{
+					const double L = std::min(Rs.Range(0.45, 0.8), Run - U + 0.06), Zt = Top - Rs.Range(0.0, 0.1);
+					const double Tn = Rs.Next(), Hu = Rs.Next(), Rv = 0.5 * (Zt + 0.12) * Rs.Range(0.9, 1.1), Dd = Rs.Range(0.1, 0.17);
+					Out.push_back({ U + 0.5 * L, L + 0.08, Zt, Rv, Dd, Varied(P.Stone, 0.58 + 0.28 * Tn, 0.06 * (Hu - 0.5)), Hash(P.S.Key ^ 0xB0D, static_cast<uint64_t>(F * 64 + K++)) });
+					U += L;
+				}
+				return Out;
+			}
+
+			/** Field boulders under the logs, packed close along each wall and out under the corners, the earth between them. */
+			void Footing(Pen& B, const Plan& P)
+			{
+				for (int F = 0; F < 4; ++F)
+				{
+					const Wall W = WallOf(P, F);
+					const double Top = FootTop(P, W), Bot = -std::max(0.2, P.S.Below), Run = FootRun(P, W);
+					B.Quad1(On(W, -Run, Bot, 0.05), On(W, Run, Bot, 0.05), On(W, Run, Top - 0.02, 0.05), On(W, -Run, Top - 0.02, 0.05), Rgb(62, 56, 48), W.N);
+					for (const Stone& St : StonesOf(P, F)) Boulder(B, W, St.Uc, St.L, St.Zt, St.Rv, St.Dd, St.C, St.Seed);
+				}
+			}
+
+			/** A box from its middle and its three half sizes along a wall's own ways (along, out, up). */
+			void WBox(Pen& B, const Wall& W, double U, double Z, double D, double HU, double HD, double HZ, const Col& C, int Skip = 4)
+			{
+				B.Box(On(W, U, Z, D), W.T * HU, W.N * HD, V3{ 0.0, 0.0, HZ }, C, Skip);
+			}
+
+			/** A window, its carved frame, its sash and glass and curtain, its shutters. */
+			void Window(Pen& B, const Plan& P, const Gap& G, uint64_t Seed)
+			{
+				const Wall W = WallOf(P, G.Face);
+				const double U0 = G.U - 0.5 * G.W, U1 = G.U + 0.5 * G.W, Z0 = G.Z0, Z1 = G.Z1, F = P.R; // (the logs' crowns)
+				const bool bAttic = G.What == 2;
+				const Col Pt = Varied(P.Paint, 0.96 + 0.06 * Unit(Seed), 0.0), Cv = P.Carve;
+				const double Sash = bAttic ? F - 0.06 : 0.0;
+				// (its reveal: the jamb boards round it, from the sash out to the frame)
+				const Col Jamb = Scaled(Pt, 0.8);
+				B.Quad1(On(W, U0, Z0, Sash), On(W, U0, Z1, Sash), On(W, U0, Z1, F + 0.02), On(W, U0, Z0, F + 0.02), Jamb, W.T);
+				B.Quad1(On(W, U1, Z0, Sash), On(W, U1, Z1, Sash), On(W, U1, Z1, F + 0.02), On(W, U1, Z0, F + 0.02), Jamb, W.T * -1.0);
+				B.Quad1(On(W, U0, Z1, Sash), On(W, U1, Z1, Sash), On(W, U1, Z1, F + 0.02), On(W, U0, Z1, F + 0.02), Scaled(Jamb, 0.7), V3{ 0.0, 0.0, -1.0 });
+				B.Quad1(On(W, U0, Z0, Sash), On(W, U1, Z0, Sash), On(W, U1, Z0, F + 0.02), On(W, U0, Z0, F + 0.02), Jamb, Up);
+				// (the glass: the sky in its upper panes, a white curtain behind the lower)
+				const double ZT = Z0 + 0.64 * (Z1 - Z0);
+				auto Pane = [&](double A0, double A1, double Za, double Zb, bool bCurtain) {
+					const double M = 0.25 + 0.35 * Noise01(G.U * 3.0 + A0, Za, Seed);
+					const Col Hi = Mixed(P.Glass, P.Sky, M + 0.2), Lo = Mixed(P.Glass, P.Sky, M * 0.6);
+					if (!bCurtain)
+					{
+						B.Quad(On(W, A0, Za, Sash - 0.01), On(W, A1, Za, Sash - 0.01), On(W, A1, Zb, Sash - 0.01), On(W, A0, Zb, Sash - 0.01), Lo, Lo, Hi, Hi, W.N);
+						return;
+					}
+					const double Zc = Za + 0.62 * (Zb - Za);
+					const Col Cu = Mixed(Rgb(176, 172, 162), P.Sky, 0.15);
+					B.Quad(On(W, A0, Za, Sash - 0.01), On(W, A1, Za, Sash - 0.01), On(W, A1, Zc, Sash - 0.01), On(W, A0, Zc, Sash - 0.01), Scaled(Cu, 0.78), Scaled(Cu, 0.78), Cu, Cu, W.N);
+					B.Quad(On(W, A0, Zc, Sash - 0.01), On(W, A1, Zc, Sash - 0.01), On(W, A1, Zb, Sash - 0.01), On(W, A0, Zb, Sash - 0.01), Lo, Lo, Hi, Hi, W.N);
+				};
+				if (G.bShut)
+				{
+					B.Quad1(On(W, U0, Z0, Sash - 0.01), On(W, U1, Z0, Sash - 0.01), On(W, U1, Z1, Sash - 0.01), On(W, U0, Z1, Sash - 0.01), P.Glass, W.N);
+				}
+				else if (bAttic)
+				{
+					Pane(U0, G.U, Z0, Z1, false);
+					Pane(G.U, U1, Z0, Z1, false);
+				}
+				else
+				{
+					Pane(U0, G.U, Z0, ZT, true);
+					Pane(G.U, U1, Z0, ZT, true);
+					Pane(U0, U1, ZT, Z1, false);
+				}
+				// (its sash in a T: the frame round it, its middle bar, its transom)
+				const Col Sb = Scaled(Pt, 0.92);
+				const double Bw = 0.022;
+				WBox(B, W, U0 + Bw, 0.5 * (Z0 + Z1), Sash + 0.012, Bw, 0.02, 0.5 * (Z1 - Z0), Sb);
+				WBox(B, W, U1 - Bw, 0.5 * (Z0 + Z1), Sash + 0.012, Bw, 0.02, 0.5 * (Z1 - Z0), Sb);
+				WBox(B, W, G.U, 0.5 * (Z0 + Z1), Sash + 0.012, 0.6 * Bw, 0.02, 0.5 * (Z1 - Z0), Sb);
+				WBox(B, W, G.U, Z1 - Bw, Sash + 0.012, 0.5 * G.W, 0.02, Bw, Sb);
+				WBox(B, W, G.U, Z0 + Bw, Sash + 0.012, 0.5 * G.W, 0.02, Bw, Sb);
+				if (!bAttic) WBox(B, W, G.U, ZT, Sash + 0.012, 0.5 * G.W, 0.02, 0.6 * Bw, Sb);
+				// (its carved frame on the logs: the side boards, the frieze and its cornice, the pediment with its diamond, the
+				// sill and the apron under it with its scallops)
+				const double Fd = F + 0.012, Sw = bAttic ? 0.09 : 0.12;
+				WBox(B, W, U0 - 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Pt);
+				WBox(B, W, U1 + 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Pt);
+				const double Fh = bAttic ? 0.1 : 0.15, Ew = bAttic ? 0.12 : 0.2;
+				WBox(B, W, G.U, Z1 + 0.03 + 0.5 * Fh, Fd + 0.004, 0.5 * G.W + Ew, 0.015, 0.5 * Fh, Pt);
+				// (the frieze's carving: a band of small diamonds in the other paint)
+				const int ND = bAttic ? 3 : 5;
+				for (int K = 0; K < ND; ++K)
+				{
+					const double Uk = U0 - Ew + 0.1 + (G.W + 2.0 * Ew - 0.2) * (K + 0.5) / ND, Zk = Z1 + 0.03 + 0.5 * Fh, Rk = 0.38 * Fh;
+					B.Quad1(On(W, Uk - Rk, Zk, Fd + 0.021), On(W, Uk, Zk - Rk, Fd + 0.021), On(W, Uk + Rk, Zk, Fd + 0.021), On(W, Uk, Zk + Rk, Fd + 0.021), Cv, W.N);
+				}
+				const double Zc0 = Z1 + 0.03 + Fh, Cw = 0.5 * G.W + Ew + 0.05;
+				WBox(B, W, G.U, Zc0 + 0.022, Fd + 0.03, Cw, 0.045, 0.022, Scaled(Pt, 1.02), 4);
+				// (teeth hung under the cornice)
+				const int NTe = static_cast<int>(2.0 * Cw / 0.07);
+				for (int K = 0; K < NTe; ++K)
+				{
+					const double Ua = G.U - Cw + 2.0 * Cw * K / NTe, Ub = G.U - Cw + 2.0 * Cw * (K + 1) / NTe;
+					B.Tri1(On(W, Ua, Zc0, Fd + 0.07), On(W, Ub, Zc0, Fd + 0.07), On(W, 0.5 * (Ua + Ub), Zc0 - 0.035, Fd + 0.07), Pt, W.N);
+				}
+				const double Ph = bAttic ? 0.14 : 0.22, Pz = Zc0 + 0.044;
+				const V3 PA = On(W, G.U - Cw + 0.04, Pz, Fd + 0.02), PB = On(W, G.U + Cw - 0.04, Pz, Fd + 0.02), PC = On(W, G.U, Pz + Ph, Fd + 0.02);
+				B.Tri1(PA, PB, PC, Pt, W.N);
+				B.Quad1(PA, PC, PC + W.N * -0.03, PA + W.N * -0.03, Scaled(Pt, 0.9), Cross(W.N, PC - PA) * -1.0 + Up * 0.1);
+				B.Quad1(PB, PC, PC + W.N * -0.03, PB + W.N * -0.03, Scaled(Pt, 0.9), Cross(PC - PB, W.N) * -1.0 + Up * 0.1);
+				{
+					const double Zd = Pz + 0.38 * Ph, Rd = 0.26 * Ph;
+					B.Quad1(On(W, G.U - 1.3 * Rd, Zd, Fd + 0.022), On(W, G.U, Zd - Rd, Fd + 0.022), On(W, G.U + 1.3 * Rd, Zd, Fd + 0.022), On(W, G.U, Zd + Rd, Fd + 0.022), Cv, W.N);
+				}
+				// (the pediment's own little cornice along its rakes, a ridge of paint)
+				WBox(B, W, G.U - 0.5 * (Cw - 0.04), Pz + 0.5 * Ph, Fd + 0.03, 0.5 * (Cw - 0.04) + 0.02, 0.02, 0.01, Scaled(Pt, 0.95), 4);
+				if (bAttic) return;
+				// sill, apron, scallops
+				WBox(B, W, G.U, Z0 - 0.018, F + 0.035, 0.5 * G.W + 0.1, 0.05, 0.018, Scaled(Pt, 1.03), 0);
+				const double Ah = 0.12;
+				WBox(B, W, G.U, Z0 - 0.036 - 0.5 * Ah, Fd, 0.5 * G.W + Sw, 0.013, 0.5 * Ah, Pt);
+				const int NS = 4;
+				for (int K = 0; K < NS; ++K)
+				{
+					const double Ua = U0 - Sw + (G.W + 2.0 * Sw) * K / NS, Ub = U0 - Sw + (G.W + 2.0 * Sw) * (K + 1) / NS, Um = 0.5 * (Ua + Ub);
+					const double Zb = Z0 - 0.036 - Ah, Lr = 0.5 * (Ub - Ua);
+					const uint32_t Cn = B.Vert(On(W, Um, Zb, Fd + 0.013), W.N, Pt);
+					std::vector<uint32_t> Rim;
+					for (int J = 0; J <= 4; ++J)
+					{
+						const double Th = Pi * J / 4;
+						Rim.push_back(B.Vert(On(W, Um - Lr * std::cos(Th), Zb - 0.55 * Lr * std::sin(Th), Fd + 0.013), W.N, Pt));
+					}
+					for (int J = 0; J < 4; ++J) B.Tri(Cn, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], W.N);
+				}
+				// shutters: open flat on the logs either side (or shut across the window), each with its painted diamond, its
+				// rails and its strap hinges
+				const double Lw = 0.5 * G.W + 0.01, Lh = Z1 - Z0 + 0.04, Sd = F + 0.035;
+				const Col Sc = Varied(P.Shutter, 0.95 + 0.08 * Unit(Seed ^ 0x51), 0.0);
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					double Um;
+					double Dd = Sd;
+					if (G.bShut) Um = G.U + Side * 0.5 * Lw, Dd = F + 0.03;
+					else Um = (Side < 0 ? U0 - Sw - 0.5 * Lw : U1 + Sw + 0.5 * Lw);
+					const double Zm = 0.5 * (Z0 + Z1);
+					WBox(B, W, Um, Zm, Dd, 0.5 * Lw - 0.004, 0.012, 0.5 * Lh, Sc);
+					WBox(B, W, Um, Zm + 0.5 * Lh - 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Sc, 0.9));
+					WBox(B, W, Um, Zm - 0.5 * Lh + 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Sc, 0.9));
+					const double Rd = 0.32 * Lw;
+					B.Quad1(On(W, Um - Rd, Zm, Dd + 0.0125), On(W, Um, Zm - 1.5 * Rd, Dd + 0.0125), On(W, Um + Rd, Zm, Dd + 0.0125), On(W, Um, Zm + 1.5 * Rd, Dd + 0.0125), Pt, W.N);
+					const double Hu = G.bShut ? G.U + Side * (Lw - 0.08) : (Side < 0 ? U0 - Sw - 0.08 : U1 + Sw + 0.08);
+					for (double Zh : { Z0 + 0.12, Z1 - 0.12 })
+						WBox(B, W, 0.5 * (Hu + Um), Zh, Dd + 0.015, 0.5 * std::fabs(Um - Hu) + 0.04, 0.004, 0.012, Rgb(40, 38, 36));
+				}
+			}
+
+			/** The door: a ledged plank door in its frame, its ring, its sill board. */
+			void Door(Pen& B, const Plan& P, const Gap& G)
+			{
+				const Wall W = WallOf(P, G.Face);
+				const double U0 = G.U - 0.5 * G.W, U1 = G.U + 0.5 * G.W, F = P.R;
+				const Col Jamb = Scaled(P.Door, 0.85);
+				B.Quad1(On(W, U0, G.Z0, -0.02), On(W, U0, G.Z1, -0.02), On(W, U0, G.Z1, F + 0.02), On(W, U0, G.Z0, F + 0.02), Jamb, W.T);
+				B.Quad1(On(W, U1, G.Z0, -0.02), On(W, U1, G.Z1, -0.02), On(W, U1, G.Z1, F + 0.02), On(W, U1, G.Z0, F + 0.02), Jamb, W.T * -1.0);
+				B.Quad1(On(W, U0, G.Z1, -0.02), On(W, U1, G.Z1, -0.02), On(W, U1, G.Z1, F + 0.02), On(W, U0, G.Z1, F + 0.02), Scaled(Jamb, 0.7), V3{ 0.0, 0.0, -1.0 });
+				Rng Rd(P.S.Key ^ 0xD00F);
+				const int N = 6;
+				for (int K = 0; K < N; ++K)
+				{
+					const double Ua = U0 + G.W * K / N, Ub = U0 + G.W * (K + 1) / N;
+					const Col C = Varied(P.Door, 0.88 + 0.2 * Rd.Next(), 0.0);
+					WBox(B, W, 0.5 * (Ua + Ub), 0.5 * (G.Z0 + G.Z1), 0.0 + 0.004 * (K % 2), 0.5 * (Ub - Ua) - 0.003, 0.018, 0.5 * (G.Z1 - G.Z0), C);
+				}
+				for (double Zl : { G.Z0 + 0.25, G.Z1 - 0.3 })
+					WBox(B, W, G.U, Zl, 0.03, 0.5 * G.W - 0.06, 0.012, 0.06, Scaled(P.Door, 0.9));
+				const V3 Ring = On(W, U1 - 0.12, G.Z0 + 1.0, 0.05);
+				B.Tube(Ring - W.N * 0.02, Ring + W.N * 0.01, 0.025, 0.025, 6, Rgb(36, 34, 32), true);
+				// (its frame boards on the logs)
+				WBox(B, W, U0 - 0.06, 0.5 * (G.Z0 + G.Z1), F + 0.012, 0.06, 0.013, 0.5 * (G.Z1 - G.Z0) + 0.06, P.Paint);
+				WBox(B, W, U1 + 0.06, 0.5 * (G.Z0 + G.Z1), F + 0.012, 0.06, 0.013, 0.5 * (G.Z1 - G.Z0) + 0.06, P.Paint);
+				WBox(B, W, G.U, G.Z1 + 0.09, F + 0.014, 0.5 * G.W + 0.15, 0.015, 0.07, P.Paint);
+			}
+
+			/** The porch before the door: its floor and steps, two posts with their bellies, the rails and balusters, its little
+			 * gabled roof of planks with carved barge boards. */
+			void Porch(Pen& B, const Plan& P, const Gap& G)
+			{
+				const Wall W = WallOf(P, G.Face);
+				const double F = P.R, Zf = G.Z0 - 0.02, Hw = 0.82, Out = PorchOut;
+				const Col Wd = Rgb(118, 104, 86), Wd2 = Rgb(104, 92, 78);
+				// (its floor of planks across, on its sill logs)
+				for (int K = 0; K < 5; ++K)
+				{
+					const double D0 = F + Out * K / 5, D1 = F + Out * (K + 1) / 5;
+					WBox(B, W, G.U, Zf - 0.02, 0.5 * (D0 + D1), Hw, 0.5 * (D1 - D0) - 0.004, 0.022, Varied(Wd, 0.92 + 0.04 * (K % 3), 0.0), 0);
+				}
+				WBox(B, W, G.U, 0.5 * (Zf - 0.04), F + 0.5 * Out, Hw - 0.04, 0.5 * Out - 0.04, 0.5 * (Zf - 0.04), Scaled(Wd2, 0.7), 0);
+				// (its steps down at its +x side, along the wall)
+				const int Steps = PorchSteps(Zf);
+				for (int K = 1; K <= Steps; ++K)
+				{
+					const double Ztop = Zf - Zf * K / (Steps + 1.0), Us = G.U + Hw + 0.13 + 0.26 * (K - 1);
+					WBox(B, W, Us, 0.5 * Ztop, F + 0.5 * (Out - 0.05), 0.13, 0.5 * (Out - 0.05), 0.5 * Ztop, Varied(Wd, 0.9 + 0.05 * K, 0.0), 0);
+				}
+				// (its two posts at the floor's outer corners, a bulge carved midway up each)
+				const double Zr = std::min(G.Z1 + 0.42, P.Zt - 0.15), Zp = Zr, Zrl = Zf + 0.85;
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					const double Up0 = G.U + Side * (Hw - 0.07), Dp = F + Out - 0.07;
+					WBox(B, W, Up0, 0.5 * (Zf + Zp), Dp, 0.055, 0.055, 0.5 * (Zp - Zf), Wd, 16);
+					WBox(B, W, Up0, Zf + 0.55 * (Zp - Zf), Dp, 0.075, 0.075, 0.16, Varied(Wd, 1.04, 0.0), 0);
+					WBox(B, W, Up0, Zf + 0.55 * (Zp - Zf) + 0.19, Dp, 0.065, 0.065, 0.03, Varied(Wd, 1.04, 0.0), 0);
+					WBox(B, W, Up0, Zf + 0.55 * (Zp - Zf) - 0.19, Dp, 0.065, 0.065, 0.03, Varied(Wd, 1.04, 0.0), 0);
+				}
+				// (its rails: along its -x side and across its front, the flat balusters under them sawn to a shape; open at its
+				// +x side to the steps)
+				WBox(B, W, G.U - (Hw - 0.07), Zrl, F + 0.5 * (Out - 0.07), 0.035, 0.5 * (Out - 0.07), 0.03, Wd, 0);
+				for (int K = 0; K < 4; ++K)
+				{
+					const double Db = F + 0.1 + (Out - 0.3) * K / 3.0;
+					WBox(B, W, G.U - (Hw - 0.07), 0.5 * (Zf + Zrl), Db, 0.012, 0.045, 0.5 * (Zrl - Zf) - 0.03, Varied(P.Paint, 0.9, 0.0), 0);
+					WBox(B, W, G.U - (Hw - 0.07), 0.5 * (Zf + Zrl), Db, 0.014, 0.065, 0.06, Varied(P.Paint, 0.94, 0.0), 0);
+				}
+				WBox(B, W, G.U, Zrl, F + Out - 0.07, Hw - 0.07, 0.035, 0.03, Wd, 0);
+				for (int K = 0; K < 8; ++K)
+				{
+					const double Ub = G.U - Hw + 0.2 + (2.0 * Hw - 0.4) * K / 7.0;
+					WBox(B, W, Ub, 0.5 * (Zf + Zrl), F + Out - 0.07, 0.045, 0.012, 0.5 * (Zrl - Zf) - 0.03, Varied(P.Paint, 0.9, 0.0), 0);
+					WBox(B, W, Ub, 0.5 * (Zf + Zrl), F + Out - 0.07, 0.065, 0.014, 0.06, Varied(P.Paint, 0.94, 0.0), 0);
+				}
+				// (the beams the roof sits on, out from the wall to the posts' heads, and across them)
+				for (int Side = -1; Side <= 1; Side += 2)
+					WBox(B, W, G.U + Side * (Hw - 0.07), Zp + 0.05, F + 0.5 * (Out + 0.1), 0.06, 0.5 * (Out + 0.1), 0.05, Wd2, 0);
+				WBox(B, W, G.U, Zp + 0.05, F + Out - 0.07, Hw + 0.02, 0.06, 0.05, Wd2, 0);
+				// (its roof: two slopes of planks, the ridge running out from the wall)
+				const double Rw = Hw + 0.2, Rise = 0.32, Ro = Out + 0.1, Zb = Zp + 0.1;
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					const int N = 6;
+					for (int K = 0; K < N; ++K)
+					{
+						const double D0 = F + Ro * K / N, D1 = F + Ro * (K + 1) / N;
+						const Col C = Varied(P.Plank, 0.9 + 0.1 * ((K * 7 + Side) % 3) / 2.0, 0.0);
+						const V3 A0 = On(W, G.U, Zb + Rise, D0), A1 = On(W, G.U, Zb + Rise, D1), B1 = On(W, G.U + Side * Rw, Zb, D1), B0 = On(W, G.U + Side * Rw, Zb, D0);
+						B.Quad1(A0, A1, B1, B0, C, Up + W.T * (Side * 0.4));
+						B.Quad1(A0 + V3{ 0, 0, -0.03 }, A1 + V3{ 0, 0, -0.03 }, B1 + V3{ 0, 0, -0.03 }, B0 + V3{ 0, 0, -0.03 }, Scaled(Wd2, 0.6), V3{ 0, 0, -1 });
+					}
+					const V3 E0 = On(W, G.U + Side * Rw, Zb, F), E1 = On(W, G.U + Side * Rw, Zb, F + Ro);
+					B.Quad1(E0, E1, E1 + V3{ 0, 0, -0.03 }, E0 + V3{ 0, 0, -0.03 }, Scaled(P.Plank, 0.7), W.T * static_cast<double>(Side));
+					// (its barge board at the open end, teeth along its foot)
+					const V3 Ta = On(W, G.U, Zb + Rise - 0.02, F + Ro + 0.01), Tb = On(W, G.U + Side * Rw, Zb - 0.02, F + Ro + 0.01);
+					const V3 Dn{ 0.0, 0.0, -0.16 };
+					B.Quad1(Ta, Tb, Tb + Dn, Ta + Dn, P.Paint, W.N);
+					for (int K = 0; K < 7; ++K)
+					{
+						const V3 Pa = Ta + (Tb - Ta) * (K / 7.0) + Dn, Pb = Ta + (Tb - Ta) * ((K + 1) / 7.0) + Dn;
+						B.Tri1(Pa, Pb, (Pa + Pb) * 0.5 + V3{ 0, 0, -0.06 }, P.Paint, W.N);
+					}
+				}
+			}
+
+			/** A gable's boards over its last log, up under the roof: boards and battens, its attic window cut in, a cornice
+			 * along its foot. */
+			void Gable(Pen& B, const Plan& P, int F, uint64_t Seed)
+			{
+				const Wall W = WallOf(P, F);
+				const double Df = P.R + 0.01;
+				const double Reach = (P.Ridge - P.Thick / P.CosP - P.Zg) / P.Tan; // (out from the ridge to where its rake meets its foot)
+				const Gap* At = nullptr;
+				for (const Gap& G : P.Gaps)
+					if (G.Face == F && G.What == 2) At = &G;
+				Rng Rb(Seed);
+				const double Bw = 0.2;
+				const int N = static_cast<int>(std::ceil(2.0 * Reach / Bw));
+				const double Zf = P.Zg - 0.04;
+				auto Rake = [&](double U) { return UnderAt(P, std::fabs(U)) - 0.01; };
+				for (int K = 0; K < N; ++K)
+				{
+					const double U0 = -Reach + 2.0 * Reach * K / N, U1 = -Reach + 2.0 * Reach * (K + 1) / N;
+					const double Tn = Rb.Next(), Hu = Rb.Next();
+					const Col C = Mixed(Varied(P.Plank, 0.86 + 0.2 * Tn, 0.03 * (Hu - 0.5)), Rgb(82, 76, 68), 0.2);
+					auto Piece = [&](double Za0, double Za1, double Zb0, double Zb1) {
+						if (Za1 - Za0 < 0.02 && Zb1 - Zb0 < 0.02) return;
+						B.Quad(On(W, U0, Za0, Df), On(W, U1, Zb0, Df), On(W, U1, Zb1, Df), On(W, U0, Za1, Df), Scaled(C, 0.86), Scaled(C, 0.86), C, C, W.N);
+					};
+					const double T0 = std::max(Zf, Rake(U0)), T1 = std::max(Zf, Rake(U1));
+					if (At && U1 > At->U - 0.5 * At->W - 0.1 && U0 < At->U + 0.5 * At->W + 0.1)
+					{
+						Piece(Zf, At->Z0 - 0.05, Zf, At->Z0 - 0.05);
+						Piece(At->Z1 + 0.32, T0, At->Z1 + 0.32, T1);
+					}
+					else Piece(Zf, T0, Zf, T1);
+					// (a batten over its joint)
+					if (K > 0)
+					{
+						const double Tb = Rake(U0);
+						if (Tb > Zf + 0.05)
+						{
+							const bool bCut = At && std::fabs(U0 - At->U) < 0.5 * At->W + 0.1;
+							if (bCut)
+							{
+								WBox(B, W, U0, 0.5 * (Zf + At->Z0 - 0.05), Df + 0.014, 0.025, 0.012, 0.5 * (At->Z0 - 0.05 - Zf), Scaled(C, 0.95), 4);
+								if (Tb > At->Z1 + 0.35) WBox(B, W, U0, 0.5 * (At->Z1 + 0.32 + Tb), Df + 0.014, 0.025, 0.012, 0.5 * (Tb - At->Z1 - 0.32), Scaled(C, 0.95), 4);
+							}
+							else WBox(B, W, U0, 0.5 * (Zf + Tb), Df + 0.014, 0.025, 0.012, 0.5 * (Tb - Zf), Scaled(C, 0.95), 4);
+						}
+					}
+				}
+				// (the cornice along its foot, between the long walls' top logs where their ends come through)
+				const double Cu = W.Half - P.R - 0.01;
+				WBox(B, W, 0.0, P.Zg + 0.03, P.R + 0.05, Cu, 0.05, 0.06, Scaled(P.Plank, 0.95), 4);
+				B.Quad1(On(W, -Cu, P.Zg + 0.09, P.R), On(W, Cu, P.Zg + 0.09, P.R), On(W, Cu, P.Zg + 0.09, P.R + 0.1), On(W, -Cu, P.Zg + 0.09, P.R + 0.1), P.Plank, Up);
+				if (At) Window(B, P, *At, Seed ^ 0xA77);
+			}
+
+			/** The barge boards along a gable's two rakes (carved teeth along their feet) and the towel board at its apex. */
+			void Barge(Pen& B, const Plan& P, int End)
+			{
+				const double X = End * (P.Xr + 0.015);
+				const V3 Nx{ static_cast<double>(End), 0.0, 0.0 };
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const V3 Ta = RoofAt(P, Sd, X, 0.0, -0.02), Tb = RoofAt(P, Sd, X, P.Qe + 0.02, -0.02);
+					const V3 Dn{ 0.0, 0.0, -0.24 };
+					B.Box((Ta + Tb + Dn) * 0.5, (Tb - Ta) * 0.5, Nx * 0.018, Dn * 0.5, P.Paint, 0);
+					const int NT = static_cast<int>(std::floor(Dot(Tb - Ta, Tb - Ta) > 0 ? std::sqrt(Dot(Tb - Ta, Tb - Ta)) / 0.12 : 1));
+					for (int K = 0; K < NT; ++K)
+					{
+						const V3 Pa = Ta + (Tb - Ta) * (static_cast<double>(K) / NT) + Dn, Pb = Ta + (Tb - Ta) * (static_cast<double>(K + 1) / NT) + Dn;
+						const V3 Pc = (Pa + Pb) * 0.5 + V3{ 0.0, 0.0, -0.065 };
+						B.Tri1(Pa + Nx * 0.018, Pb + Nx * 0.018, Pc + Nx * 0.018, P.Paint, Nx);
+						B.Tri1(Pa - Nx * 0.018, Pb - Nx * 0.018, Pc - Nx * 0.018, Scaled(P.Paint, 0.85), Nx * -1.0);
+					}
+				}
+				// (the towel board, hung at the apex, its foot cut in three teeth, a sun carved on it)
+				const V3 Ap = V3{ X + End * 0.02, P.Yc, P.Ridge - 0.08 };
+				const double Tw = 0.13, Tl = 0.95;
+				B.Box(Ap + V3{ 0.0, 0.0, -0.5 * Tl }, Nx * 0.016, V3{ 0.0, Tw, 0.0 }, V3{ 0.0, 0.0, 0.5 * Tl }, P.Paint, 0);
+				for (int K = 0; K < 3; ++K)
+				{
+					const double Ya = P.Yc - Tw + 2.0 * Tw * K / 3.0, Yb = P.Yc - Tw + 2.0 * Tw * (K + 1) / 3.0;
+					B.Tri1(V3{ Ap.X + End * 0.017, Ya, Ap.Z - Tl }, V3{ Ap.X + End * 0.017, Yb, Ap.Z - Tl }, V3{ Ap.X + End * 0.017, 0.5 * (Ya + Yb), Ap.Z - Tl - 0.09 }, P.Paint, Nx);
+				}
+				const V3 Sun = Ap + V3{ End * 0.018, 0.0, -0.42 };
+				const uint32_t Cn = B.Vert(Sun, Nx, P.Carve);
+				std::vector<uint32_t> Rim;
+				for (int J = 0; J <= 12; ++J)
+				{
+					const double Th = 2.0 * Pi * J / 12, Rr = (J % 2 ? 0.07 : 0.1);
+					Rim.push_back(B.Vert(Sun + V3{ 0.0, Rr * std::cos(Th), Rr * std::sin(Th) }, Nx, P.Carve));
+				}
+				for (int J = 0; J < 12; ++J) B.Tri(Cn, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], Nx);
+			}
+
+			/** The roof of planks: two layers, the upper's over the lower's joints and standing proud, each plank warped a
+			 * little, its foot ragged at the eaves, lichen and moss on them (more on the back); boards along the ridge under the
+			 * ridge log, carved at its +x end into a horse's head. */
+			void Planks(Pen& B, const Plan& P)
+			{
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const V3 Nr = RoofN(P, Sd);
+					for (const RoofPlank& Pk : PlanksOf(P, Sd))
+					{
+						const bool bUpper = Pk.bUpper;
+						const double Xa = Pk.Xa, Xb = Pk.Xb, Foot = Pk.Foot, Lift = Pk.Lift, X = Xa;
+						const uint64_t Seed = Pk.Seed;
+						const Col C = Pk.C;
+						auto Paint = [&](double Xp, double Q) { return PlankCol(P, Sd, C, Seed, Xp, Q); };
+						const int NQ = 4;
+						for (int I = 0; I < NQ; ++I)
+						{
+							const double Q0 = 0.05 + (Foot - 0.05) * I / NQ, Q1 = 0.05 + (Foot - 0.05) * (I + 1) / NQ;
+							const double W0 = Lift + 0.008 * Noise(Q0 / 0.9, X, Seed), W1 = Lift + 0.008 * Noise(Q1 / 0.9, X, Seed);
+							const V3 A0 = RoofAt(P, Sd, Xa, Q0, W0), A1 = RoofAt(P, Sd, Xb, Q0, W0), A2 = RoofAt(P, Sd, Xb, Q1, W1), A3 = RoofAt(P, Sd, Xa, Q1, W1);
+							B.Quad(A0, A1, A2, A3, Paint(Xa, Q0), Paint(Xb, Q0), Paint(Xb, Q1), Paint(Xa, Q1), Nr);
+							if (bUpper)
+							{
+								B.Quad1(A0, A3, RoofAt(P, Sd, Xa, Q1, 0.0), RoofAt(P, Sd, Xa, Q0, 0.0), Scaled(C, 0.7), V3{ -1.0, 0.0, 0.0 });
+								B.Quad1(A1, A2, RoofAt(P, Sd, Xb, Q1, 0.0), RoofAt(P, Sd, Xb, Q0, 0.0), Scaled(C, 0.7), V3{ 1.0, 0.0, 0.0 });
+							}
+						}
+						// (its foot, the plank's end grain, a little dark)
+						const V3 E0 = RoofAt(P, Sd, Xa, Foot, Lift), E1 = RoofAt(P, Sd, Xb, Foot, Lift);
+						B.Quad1(E0, E1, RoofAt(P, Sd, Xb, Foot, Lift - 0.03), RoofAt(P, Sd, Xa, Foot, Lift - 0.03), Scaled(C, 0.6), V3{ 0.0, Sd * P.CosP, -P.SinP });
+					}
+					// (the roof's underside out past the walls: the eaves', and the gables' over the logs' ends)
+					const Col Un = Rgb(62, 56, 48);
+					const double Qw = (P.Bh + P.R) / P.CosP;
+					B.Quad1(RoofAt(P, Sd, -P.Xr, Qw, -P.Thick), RoofAt(P, Sd, P.Xr, Qw, -P.Thick), RoofAt(P, Sd, P.Xr, P.Qe, -0.04), RoofAt(P, Sd, -P.Xr, P.Qe, -0.04), Un, Nr * -1.0);
+					for (int End = -1; End <= 1; End += 2)
+					{
+						const double Xi = End * (P.A + P.R), Xo = End * P.Xr;
+						B.Quad1(RoofAt(P, Sd, Xi, 0.0, -0.04), RoofAt(P, Sd, Xo, 0.0, -0.04), RoofAt(P, Sd, Xo, Qw, -0.04), RoofAt(P, Sd, Xi, Qw, -0.04), Un, Nr * -1.0);
+					}
+					// (the eaves' fascia board)
+					const V3 F0 = RoofAt(P, Sd, -P.Xr, P.Qe - 0.02, -0.03), F1 = RoofAt(P, Sd, P.Xr, P.Qe - 0.02, -0.03);
+					B.Quad1(F0, F1, F1 + V3{ 0.0, 0.0, -0.14 }, F0 + V3{ 0.0, 0.0, -0.14 }, Scaled(P.Plank, 0.85), V3{ 0.0, static_cast<double>(Sd), 0.0 });
+					// (the ridge's boards, either side)
+					B.Box((RoofAt(P, Sd, 0.0, 0.0, 0.05) + RoofAt(P, Sd, 0.0, 0.24, 0.05)) * 0.5, V3{ P.Xr + 0.02, 0.0, 0.0 }, (RoofAt(P, Sd, 0.0, 0.24, 0.05) - RoofAt(P, Sd, 0.0, 0.0, 0.05)) * 0.5, Nr * 0.016, Varied(P.Plank, 0.92, 0.0), 0);
+				}
+				// (the ridge log, split, its round up; its +x end a horse's head)
+				const uint64_t Seed = Hash(P.S.Key, 0x0C47);
+				Plan Q = P;
+				Q.R = 0.13;
+				Round(B, Q, V3{ 0.0, P.Yc, P.Ridge + 0.07 }, V3{ 1.0, 0.0, 0.0 }, V3{ 0.0, 1.0, 0.0 }, -P.Xr - 0.08, P.Xr + 0.06, 0.0, Pi, 6, Seed, 0.9);
+				EndGrain(B, Q, V3{ 0.0, P.Yc, P.Ridge + 0.07 }, V3{ -1.0, 0.0, 0.0 }, V3{ 0.0, 1.0, 0.0 }, P.Xr + 0.08, Seed ^ 1);
+				const Col Hc = Varied(P.Log, 1.05, 0.0);
+				auto Piece = [&](std::initializer_list<std::pair<double, double>> Poly) {
+					std::vector<std::pair<double, double>> Pp(Poly);
+					const V3 O{ P.Xr + 0.04, P.Yc, P.Ridge + 0.02 };
+					auto At = [&](size_t I, double S) { return O + V3{ Pp[I].first, S * 0.055, Pp[I].second }; };
+					double Cx = 0.0, Cz = 0.0;
+					for (const auto& Pq : Pp)
+					{
+						Cx += Pq.first / Pp.size();
+						Cz += Pq.second / Pp.size();
+					}
+					for (size_t I = 1; I + 1 < Pp.size(); ++I)
+					{
+						B.Tri1(At(0, 1.0), At(I, 1.0), At(I + 1, 1.0), Hc, V3{ 0.0, 1.0, 0.0 });
+						B.Tri1(At(0, -1.0), At(I, -1.0), At(I + 1, -1.0), Scaled(Hc, 0.9), V3{ 0.0, -1.0, 0.0 });
+					}
+					for (size_t I = 0; I < Pp.size(); ++I)
+					{
+						const size_t J = (I + 1) % Pp.size();
+						const V3 Mid = (At(I, 0.0) + At(J, 0.0)) * 0.5;
+						B.Quad1(At(I, 1.0), At(J, 1.0), At(J, -1.0), At(I, -1.0), Scaled(Hc, 0.92), Mid - (O + V3{ Cx, 0.0, Cz }));
+					}
+				};
+				Piece({ { -0.05, -0.02 }, { 0.3, -0.02 }, { 0.5, 0.2 }, { 0.22, 0.32 }, { -0.05, 0.14 } });
+				Piece({ { 0.42, 0.13 }, { 0.66, 0.2 }, { 0.73, 0.3 }, { 0.6, 0.39 }, { 0.43, 0.36 } });
+				Piece({ { 0.46, 0.34 }, { 0.53, 0.5 }, { 0.57, 0.36 } });
+			}
+
+			/** The roof of thatch: courses of straw, each lapping the one below with its butt end showing, tufts sticking out
+			 * of it, darker and mossy toward the eaves and on the back; a thick ragged eave; a straw ridge held by crossed
+			 * poles; its verges at the gables rolled thick. */
+			void Thatch(Pen& B, const Plan& P)
+			{
+				const double Step = 0.34, Cell = 0.3, Lip = 0.045;
+				const int NQ = static_cast<int>(std::ceil(P.Qe / Step)), NX = static_cast<int>(std::ceil(2.0 * P.Xr / Cell));
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const V3 Nr = RoofN(P, Sd);
+					auto Straw = [&](double X, double Q) { return StrawCol(P, Sd, X, Q); };
+					auto Ragged = [&](double X, double Q) { return 0.035 * Noise(X / 0.3, Q / 0.3, P.S.Key ^ 0x57A3); };
+					for (int I = 0; I < NQ; ++I)
+					{
+						const double Q0 = P.Qe * I / NQ, Q1 = P.Qe * (I + 1) / NQ;
+						for (int J = 0; J < NX; ++J)
+						{
+							const double X0 = -P.Xr + 2.0 * P.Xr * J / NX, X1 = -P.Xr + 2.0 * P.Xr * (J + 1) / NX;
+							const double L0 = Ragged(X0, Q0), L1 = Ragged(X1, Q0), L2 = Ragged(X1, Q1) + Lip, L3 = Ragged(X0, Q1) + Lip;
+							const V3 A0 = RoofAt(P, Sd, X0, Q0, L0), A1 = RoofAt(P, Sd, X1, Q0, L1), A2 = RoofAt(P, Sd, X1, Q1, L2), A3 = RoofAt(P, Sd, X0, Q1, L3);
+							B.Quad(A0, A1, A2, A3, Straw(X0, Q0), Straw(X1, Q0), Scaled(Straw(X1, Q1), 1.05), Scaled(Straw(X0, Q1), 1.05), Nr);
+							// (the course's butt ends, a lip down to the next)
+							if (I + 1 < NQ)
+							{
+								const V3 B2 = RoofAt(P, Sd, X1, Q1, Ragged(X1, Q1)), B3 = RoofAt(P, Sd, X0, Q1, Ragged(X0, Q1));
+								B.Quad1(A3, A2, B2, B3, Mixed(Straw(X0, Q1), Rgb(168, 150, 112), 0.25), V3{ 0.0, Sd * P.CosP, -P.SinP });
+							}
+							// (its straws: wisps lying down the slope, paler and darker, some loose)
+							Rng Rt(Hash(P.S.Key ^ 0x7F7, static_cast<uint64_t>((I * 64 + J) * 2 + (Sd > 0))));
+							for (int K = 0; K < 4; ++K)
+							{
+								const double Xt = Rt.Range(X0, X1), Qt = Rt.Range(Q0 - 0.1 * Step, Q1 - 0.3 * Step);
+								const double Ln = Rt.Range(0.18, 0.36), Wd = Rt.Range(0.012, 0.03), Lt = Ragged(Xt, Qt) + 0.012 + Lip * (Qt - Q0) / Step;
+								const V3 Bt = RoofAt(P, Sd, Xt, Qt, Lt);
+								const double Dx = Rt.Range(-0.04, 0.04), Dl = Rt.Range(0.0, 0.05), Pale = Rt.Range(0.0, 0.35), Tone = Rt.Range(0.78, 1.12);
+								const V3 Tt = RoofAt(P, Sd, Xt + Dx, Qt + Ln, Lt + Dl);
+								B.Tri1(Bt + V3{ -Wd, 0.0, 0.0 }, Bt + V3{ Wd, 0.0, 0.0 }, Tt, Scaled(Mixed(Straw(Xt, Qt), Rgb(176, 156, 114), Pale), Tone), Nr);
+							}
+						}
+					}
+					// (the eave: the thatch's thickness, its foot ragged with straws hanging)
+					for (int J = 0; J < NX * 2; ++J)
+					{
+						const double X0 = -P.Xr + P.Xr * J / NX, X1 = -P.Xr + P.Xr * (J + 1) / NX;
+						const V3 A0 = RoofAt(P, Sd, X0, P.Qe, Ragged(X0, P.Qe)), A1 = RoofAt(P, Sd, X1, P.Qe, Ragged(X1, P.Qe));
+						const V3 Dn{ 0.0, 0.0, -0.28 };
+						const V3 B0 = A0 + Dn + V3{ 0.0, -Sd * 0.1, 0.0 }, B1 = A1 + Dn + V3{ 0.0, -Sd * 0.1, 0.0 };
+						B.Quad1(A0, A1, B1, B0, Scaled(Straw(X0, P.Qe), 0.66), V3{ 0.0, static_cast<double>(Sd), -0.3 });
+						const double Hang = 0.06 + 0.1 * Noise01(X0 / 0.2, 7.0, P.S.Key ^ 0x57A4);
+						B.Tri1(B0, B1, (B0 + B1) * 0.5 + V3{ 0.0, 0.0, -Hang }, Scaled(Straw(X0, P.Qe), 0.6), V3{ 0.0, static_cast<double>(Sd), 0.0 });
+						B.Quad1(B0, B1, RoofAt(P, Sd, X1, (P.Bh + P.R) / P.CosP, -P.Thick), RoofAt(P, Sd, X0, (P.Bh + P.R) / P.CosP, -P.Thick), Rgb(58, 52, 44), Nr * -1.0);
+					}
+					// (the verges: the thatch rolled thick over each gable's edge)
+					for (int End = -1; End <= 1; End += 2)
+						for (int I = 0; I < NQ; ++I)
+						{
+							const double Q0 = P.Qe * I / NQ, Q1 = P.Qe * (I + 1) / NQ;
+							const V3 A0 = RoofAt(P, Sd, End * P.Xr, Q0, Ragged(End * P.Xr, Q0) + 0.6 * Lip), A1 = RoofAt(P, Sd, End * P.Xr, Q1, Ragged(End * P.Xr, Q1) + 0.6 * Lip);
+							B.Quad1(A0, A1, A1 + V3{ 0.0, 0.0, -0.3 }, A0 + V3{ 0.0, 0.0, -0.3 }, Scaled(Straw(End * P.Xr, Q0), 0.85), V3{ static_cast<double>(End), 0.0, 0.0 });
+							B.Quad1(A0 + V3{ 0.0, 0.0, -0.3 }, A1 + V3{ 0.0, 0.0, -0.3 }, A1 + V3{ -End * 0.5, 0.0, -0.3 }, A0 + V3{ -End * 0.5, 0.0, -0.3 }, Rgb(58, 52, 44), V3{ 0.0, 0.0, -1.0 });
+						}
+				}
+				// (the ridge: a roll of straw, and the crossed poles pegged over it)
+				{
+					const int NXr = static_cast<int>(std::ceil((2.0 * P.Xr + 0.1) / 0.3)), NA = 7;
+					const V3 Rc{ 0.0, P.Yc, P.Ridge + 0.02 };
+					std::vector<uint32_t> Prev, Cur;
+					for (int I = 0; I <= NXr; ++I)
+					{
+						const double X = -P.Xr - 0.05 + (2.0 * P.Xr + 0.1) * I / NXr;
+						Cur.clear();
+						for (int J = 0; J <= NA; ++J)
+						{
+							const double An = -0.12 * Pi + 1.24 * Pi * J / NA;
+							const double Rr = 0.2 * (1.0 + 0.08 * Noise(X / 0.4, J * 0.7, P.S.Key ^ 0x2D6E));
+							const V3 Rd{ 0.0, std::cos(An), std::sin(An) };
+							const Col C = Scaled(Mixed(P.Thatch, Rgb(112, 104, 90), 0.35), 0.88 + 0.22 * Noise01(X / 0.15, J * 0.9, P.S.Key ^ 0x2D6F));
+							Cur.push_back(B.Vert(Rc + V3{ X, 0.0, 0.0 } + Rd * Rr, Rd, C));
+						}
+						if (I > 0)
+							for (size_t J = 0; J < static_cast<size_t>(NA); ++J)
+							{
+								const double An = -0.12 * Pi + 1.24 * Pi * (static_cast<double>(J) + 0.5) / NA;
+								const V3 Rd{ 0.0, std::cos(An), std::sin(An) };
+								B.Tri(Prev[J], Cur[J], Cur[J + 1], Rd);
+								B.Tri(Prev[J], Cur[J + 1], Prev[J + 1], Rd);
+							}
+						if (I == 0 || I == NXr)
+						{
+							const V3 Ax{ I == 0 ? -1.0 : 1.0, 0.0, 0.0 };
+							const uint32_t Mc = B.Vert(Rc + V3{ X, 0.0, 0.0 } + Ax * 0.04, Ax, Scaled(P.Thatch, 0.8));
+							for (size_t J = 0; J < static_cast<size_t>(NA); ++J) B.Tri(Mc, Cur[J], Cur[J + 1], Ax);
+						}
+						Prev = Cur;
+					}
+				}
+				const int Pairs = static_cast<int>(2.0 * P.Xr / 0.75);
+				for (int K = 0; K <= Pairs; ++K)
+				{
+					const double X = -P.Xr + 0.15 + (2.0 * P.Xr - 0.3) * K / Pairs;
+					for (int Sd = -1; Sd <= 1; Sd += 2)
+					{
+						const V3 Foot = RoofAt(P, Sd, X, 0.55, 0.03), Top = V3{ X, P.Yc - Sd * 0.2, P.Ridge + 0.42 };
+						B.Beam(Foot, Top, 0.045, 0.045, Rgb(96, 82, 64), Up, 0);
+					}
+				}
+			}
+
+			/** The brick chimney through the roof, course by course, corbelled at its top and sooted. */
+			void Chimney(Pen& B, const Plan& P)
+			{
+				const double X = P.Chx, Y = P.Yc + 0.32, H = 0.27;
+				const double Base = UnderAt(P, std::fabs(Y - P.Yc)) - 0.05, Top = P.Ridge + (P.bThatch ? 0.75 : 0.6);
+				const double Ch = 0.077;
+				const int N = static_cast<int>((Top - Base) / Ch);
+				for (int K = 0; K < N; ++K)
+				{
+					const double Z0 = Base + K * Ch, Z1 = Z0 + Ch;
+					const bool bCap = K >= N - 2;
+					const double Hh = H + (bCap ? 0.035 : 0.0);
+					Col C = Varied(P.Brick, 0.88 + 0.18 * Unit(Hash(P.S.Key ^ 0xB71C, static_cast<uint64_t>(K))), 0.03);
+					C = Mixed(C, Rgb(40, 36, 32), 0.6 * Smooth(Top - 0.5, Top, Z1));
+					const Col Mortar = Mixed(Rgb(168, 160, 146), Rgb(50, 46, 42), 0.6 * Smooth(Top - 0.5, Top, Z1));
+					for (int F = 0; F < 4; ++F)
+					{
+						const double Th = 0.5 * Pi * F;
+						const V3 Nn{ std::cos(Th), std::sin(Th), 0.0 }, Tt{ -std::sin(Th), std::cos(Th), 0.0 };
+						const V3 Cn = V3{ X, Y, 0.0 } + Nn * Hh;
+						B.Quad1(Cn + Tt * -Hh + V3{ 0, 0, Z0 + 0.011 }, Cn + Tt * Hh + V3{ 0, 0, Z0 + 0.011 }, Cn + Tt * Hh + V3{ 0, 0, Z1 }, Cn + Tt * -Hh + V3{ 0, 0, Z1 }, C, Nn);
+						B.Quad1(Cn + Tt * -Hh + V3{ 0, 0, Z0 } - Nn * 0.006, Cn + Tt * Hh + V3{ 0, 0, Z0 } - Nn * 0.006, Cn + Tt * Hh + V3{ 0, 0, Z0 + 0.011 } - Nn * 0.006, Cn + Tt * -Hh + V3{ 0, 0, Z0 + 0.011 } - Nn * 0.006, Mortar, Nn);
+					}
+				}
+				const double Zt = Base + N * Ch;
+				B.Quad1(V3{ X - H - 0.035, Y - H - 0.035, Zt }, V3{ X + H + 0.035, Y - H - 0.035, Zt }, V3{ X + H + 0.035, Y + H + 0.035, Zt }, V3{ X - H - 0.035, Y + H + 0.035, Zt }, Rgb(46, 42, 38), Up);
+				B.Quad1(V3{ X - 0.12, Y - 0.12, Zt + 0.002 }, V3{ X + 0.12, Y - 0.12, Zt + 0.002 }, V3{ X + 0.12, Y + 0.12, Zt + 0.002 }, V3{ X - 0.12, Y + 0.12, Zt + 0.002 }, Rgb(14, 12, 10), Up);
+			}
+
+			/** Along the back wall: firewood split and stacked, its ends out, under two planks; a bench by the door; a barrel
+			 * at the porch's corner. */
+			void Yard(Pen& B, const Plan& P)
+			{
+				const Wall W = WallOf(P, 2);
+				Rng Rw(P.S.Key ^ 0x60D);
+				const double U0 = -0.8 * P.A, U1 = 0.1 * P.A, Hp = 1.35, D0 = P.R + 0.1, D1 = D0 + 0.38;
+				WBox(B, W, 0.5 * (U0 + U1), 0.5 * Hp, 0.5 * (D0 + D1), 0.5 * (U1 - U0), 0.5 * (D1 - D0) - 0.01, 0.5 * Hp, Rgb(48, 40, 32), 0);
+				for (double Z = 0.07; Z < Hp - 0.05; Z += 0.125)
+				{
+					double U = U0 + Rw.Range(0.0, 0.05);
+					while (U < U1 - 0.06)
+					{
+						const double Rr = Rw.Range(0.05, 0.075), Uc = U + Rr;
+						const Col C = Mixed(Rgb(156, 128, 92), Rgb(118, 110, 98), Rw.Range(0.1, 0.9));
+						const double Dz = Rw.Range(-0.01, 0.01), Dd = Rw.Range(-0.03, 0.02);
+						const V3 Cn = On(W, Uc, Z + Dz, D1 + Dd);
+						const int Sides = 5;
+						const double Rot = Rw.Range(0.0, 2.0 * Pi);
+						const uint32_t Mid = B.Vert(Cn, W.N, Scaled(C, 0.86));
+						std::vector<uint32_t> Rim;
+						for (int J = 0; J <= Sides; ++J)
+						{
+							const double Th = Rot + 2.0 * Pi * J / Sides;
+							Rim.push_back(B.Vert(Cn + W.T * (Rr * std::cos(Th)) + V3{ 0.0, 0.0, 0.85 * Rr * std::sin(Th) }, W.N, C));
+						}
+						for (int J = 0; J < Sides; ++J) B.Tri(Mid, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], W.N);
+						U += 2.0 * Rr + 0.006;
+					}
+				}
+				for (int K = 0; K < 2; ++K) WBox(B, W, 0.5 * (U0 + U1), Hp + 0.02 + 0.02 * K, D0 + 0.1 + 0.2 * K, 0.5 * (U1 - U0) + 0.12, 0.11, 0.012, Varied(P.Plank, 0.9 + 0.06 * K, 0.0), 0);
+				// (the bench by the door)
+				const Wall WF = WallOf(P, 0);
+				for (const Gap& G : P.Gaps)
+					if (G.What == 1)
+					{
+						const double Ub = G.U + 0.82 + 0.26 * PorchSteps(G.Z0 - 0.02) + 0.75;
+						WBox(B, WF, Ub, 0.45, P.R + 0.25, 0.6, 0.15, 0.025, Rgb(116, 100, 82), 0);
+						for (int Side = -1; Side <= 1; Side += 2) WBox(B, WF, Ub + Side * 0.48, 0.21, P.R + 0.25, 0.03, 0.12, 0.21, Rgb(96, 84, 70), 16);
+						// (and the barrel beyond the bench)
+						const V3 Bc = On(WF, Ub + 1.0, 0.0, P.R + 0.4);
+						B.Tube(Bc, Bc + V3{ 0.0, 0.0, 0.82 }, 0.3, 0.3, 10, Rgb(98, 80, 62), true);
+						for (double Zh : { 0.16, 0.66 }) B.Tube(Bc + V3{ 0.0, 0.0, Zh }, Bc + V3{ 0.0, 0.0, Zh + 0.04 }, 0.305, 0.305, 10, Rgb(50, 46, 42), false);
+						B.Quad1(Bc + V3{ -0.26, -0.26, 0.76 }, Bc + V3{ 0.26, -0.26, 0.76 }, Bc + V3{ 0.26, 0.26, 0.76 }, Bc + V3{ -0.26, 0.26, 0.76 }, Rgb(24, 28, 30), Up);
+					}
+			}
+
+			/** The eaves' frieze along the long walls under the roof: a board, its foot cut in teeth. */
+			void Frieze(Pen& B, const Plan& P)
+			{
+				for (int F : { 0, 2 })
+				{
+					const Wall W = WallOf(P, F);
+					const double Zb = P.Zt - 0.3, Half = W.Half + P.R;
+					WBox(B, W, 0.0, Zb + 0.12, P.R + 0.012, Half, 0.012, 0.12, P.Paint, 4);
+					const int NT = static_cast<int>(2.0 * Half / 0.14);
+					for (int K = 0; K < NT; ++K)
+					{
+						const double Ua = -Half + 2.0 * Half * K / NT, Ub = -Half + 2.0 * Half * (K + 1) / NT;
+						B.Tri1(On(W, Ua, Zb, P.R + 0.025), On(W, Ub, Zb, P.R + 0.025), On(W, 0.5 * (Ua + Ub), Zb - 0.07, P.R + 0.025), P.Paint, W.N);
+					}
+				}
+			}
+
+			// ---------------------------------------------------------------- the middle and far levels
+
+			/** The middle level (from 90 m): each log a bent strip of two facets, its ends at the corners as stubs, the
+			 * openings their paint and glass, the gables' boards in strips, the roof in bands, porch, chimney and woodpile as
+			 * boxes. */
+			void Mid(Pen& B, const Plan& P)
+			{
+				for (int F = 0; F < 4; ++F)
+				{
+					const Wall W = WallOf(P, F);
+					for (int K = 0; K < CoursesOf(P, F); ++K)
+					{
+						const uint64_t Seed = LogSeed(P, F, K);
+						const double Z = CourseZ(P, W, K);
+						const double Ex = EndReach(P, F, Z, P.R + P.Ext * 0.9);
+						std::vector<std::pair<double, double>> Cut;
+						for (const Gap& G : P.Gaps)
+							if (G.Face == F && G.What != 2 && Z > G.Z0 && Z < G.Z1) Cut.push_back({ G.U - 0.5 * G.W, G.U + 0.5 * G.W });
+						std::sort(Cut.begin(), Cut.end());
+						double From = -W.Half - Ex;
+						for (size_t I = 0; I <= Cut.size(); ++I)
+						{
+							const double To = I < Cut.size() ? Cut[I].first : W.Half + Ex;
+							const double Ang[3] = { -0.45 * Pi, 0.0, 0.45 * Pi };
+							std::vector<uint32_t> Row[3];
+							const int NT = std::max(1, static_cast<int>((To - From) / 2.0));
+							for (int A = 0; A < 3; ++A)
+								for (int J = 0; J <= NT; ++J)
+								{
+									const double T = From + (To - From) * J / NT;
+									const V3 Rd = W.N * std::cos(Ang[A]) + Up * std::sin(Ang[A]);
+									Row[A].push_back(B.Vert(On(W, T, Z, 0.0) + Rd * P.R, Rd, LogCol(P, Seed, T, Ang[A], Z)));
+								}
+							for (int A = 0; A < 2; ++A)
+								for (int J = 0; J < NT; ++J)
+								{
+									const V3 Rd = W.N * std::cos(0.5 * (Ang[A] + Ang[A + 1])) + Up * std::sin(0.5 * (Ang[A] + Ang[A + 1]));
+									B.Tri(Row[A][static_cast<size_t>(J)], Row[A][static_cast<size_t>(J) + 1], Row[A + 1][static_cast<size_t>(J) + 1], Rd);
+									B.Tri(Row[A][static_cast<size_t>(J)], Row[A + 1][static_cast<size_t>(J) + 1], Row[A + 1][static_cast<size_t>(J)], Rd);
+								}
+							if (I < Cut.size()) From = Cut[I].second;
+						}
+						// (its ends' grain at the corners)
+						for (int E = -1; E <= 1; E += 2)
+						{
+							const double T = E * (W.Half + Ex);
+							const V3 C0 = On(W, T, Z, 0.0);
+							const Col Eg = Varied(P.LogEnd, 0.85, 0.0);
+							const V3 Tn = W.T * static_cast<double>(E);
+							B.Quad1(C0 + W.N * P.R + V3{ 0, 0, -0.75 * P.R }, C0 + W.N * P.R + V3{ 0, 0, 0.75 * P.R }, C0 - W.N * P.R + V3{ 0, 0, 0.75 * P.R }, C0 - W.N * P.R + V3{ 0, 0, -0.75 * P.R }, Eg, Tn);
+						}
+					}
+				}
+				// (the openings: the door in its frame; each window's carved frame and pediment, its curtain under the sky in its
+				// glass, its sash's T, its shutters open beside it or shut over it)
+				for (const Gap& G : P.Gaps)
+				{
+					const Wall W = WallOf(P, G.Face);
+					const double F = P.R + 0.01, Sw = G.What == 2 ? 0.09 : 0.12;
+					auto Flat = [&](double U0, double U1, double Za, double Zb, double D, const Col& C) {
+						B.Quad1(On(W, U0, Za, D), On(W, U1, Za, D), On(W, U1, Zb, D), On(W, U0, Zb, D), C, W.N);
+					};
+					if (G.What == 1)
+					{
+						Flat(G.U - 0.5 * G.W - 0.12, G.U + 0.5 * G.W + 0.12, G.Z0, G.Z1 + 0.16, F, P.Paint);
+						Flat(G.U - 0.5 * G.W, G.U + 0.5 * G.W, G.Z0, G.Z1, F + 0.005, Scaled(P.Door, 0.8));
+						continue;
+					}
+					Flat(G.U - 0.5 * G.W - Sw, G.U + 0.5 * G.W + Sw, G.Z0 - 0.15, G.Z1 + 0.22, F, P.Paint);
+					B.Tri1(On(W, G.U - 0.5 * G.W - Sw - 0.04, G.Z1 + 0.22, F), On(W, G.U + 0.5 * G.W + Sw + 0.04, G.Z1 + 0.22, F), On(W, G.U, G.Z1 + 0.22 + (G.What == 2 ? 0.14 : 0.22), F), P.Paint, W.N);
+					const double U0 = G.U - 0.5 * G.W, U1 = G.U + 0.5 * G.W, Lw = 0.5 * G.W + 0.01;
+					if (G.bShut)
+					{
+						Flat(U0, U1, G.Z0 - 0.02, G.Z1 + 0.02, F + 0.03, P.Shutter);
+						continue;
+					}
+					const Col Gl = Mixed(P.Glass, P.Sky, 0.36), Cu = Mixed(Rgb(176, 172, 162), P.Sky, 0.15);
+					const double ZT = G.Z0 + 0.64 * (G.Z1 - G.Z0);
+					if (G.What == 2) Flat(U0, U1, G.Z0, G.Z1, F + 0.005, Gl);
+					else
+					{
+						const double Zc = G.Z0 + 0.62 * (ZT - G.Z0);
+						Flat(U0, U1, G.Z0, Zc, F + 0.005, Scaled(Cu, 0.88));
+						Flat(U0, U1, Zc, G.Z1, F + 0.005, Gl);
+						const Col Sb = Scaled(P.Paint, 0.92);
+						Flat(G.U - 0.016, G.U + 0.016, G.Z0, G.Z1, F + 0.008, Sb);
+						Flat(U0, U1, ZT - 0.016, ZT + 0.016, F + 0.008, Sb);
+					}
+					if (G.What == 2) continue;
+					for (int Side = -1; Side <= 1; Side += 2)
+					{
+						const double Ua = Side < 0 ? U0 - Sw - Lw : U1 + Sw, Ub = Ua + Lw;
+						Flat(Ua, Ub, G.Z0 - 0.02, G.Z1 + 0.02, F + 0.03, P.Shutter);
+					}
+				}
+				// (the eaves' frieze along the long walls, its teeth half its colour)
+				for (int F : { 0, 2 })
+				{
+					const Wall W = WallOf(P, F);
+					const double Zb = P.Zt - 0.3, Half = W.Half + P.R;
+					B.Quad1(On(W, -Half, Zb, P.R + 0.02), On(W, Half, Zb, P.R + 0.02), On(W, Half, Zb + 0.24, P.R + 0.02), On(W, -Half, Zb + 0.24, P.R + 0.02), P.Paint, W.N);
+					B.Quad(On(W, -Half, Zb - 0.07, P.R + 0.025), On(W, Half, Zb - 0.07, P.R + 0.025), On(W, Half, Zb, P.R + 0.025), On(W, -Half, Zb, P.R + 0.025), Mixed(P.Paint, P.Log, 0.55), Mixed(P.Paint, P.Log, 0.55), P.Paint, P.Paint, W.N);
+				}
+				// (the gables' boards above the last log, in strips, a batten's shadow down each joint, the cornice at their foot)
+				for (int F : { 1, 3 })
+				{
+					const Wall W = WallOf(P, F);
+					const double Reach = (P.Ridge - P.Thick / P.CosP - P.Zg) / P.Tan;
+					const int N = 8;
+					for (int K = 0; K < N; ++K)
+					{
+						const double U0 = -Reach + 2.0 * Reach * K / N, U1 = -Reach + 2.0 * Reach * (K + 1) / N;
+						const Col C = Scaled(Varied(Mixed(P.Plank, Rgb(82, 76, 68), 0.2), K % 2 ? 0.92 : 1.0, 0.0), 0.93);
+						B.Quad(On(W, U0, P.Zg, P.R + 0.01), On(W, U1, P.Zg, P.R + 0.01), On(W, U1, std::max(P.Zg, UnderAt(P, std::fabs(U1))), P.R + 0.01), On(W, U0, std::max(P.Zg, UnderAt(P, std::fabs(U0))), P.R + 0.01), Scaled(C, 0.86), Scaled(C, 0.86), C, C, W.N);
+					}
+					const double Cu = W.Half - P.R - 0.01;
+					B.Quad1(On(W, -Cu, P.Zg - 0.03, P.R + 0.1), On(W, Cu, P.Zg - 0.03, P.R + 0.1), On(W, Cu, P.Zg + 0.09, P.R + 0.1), On(W, -Cu, P.Zg + 0.09, P.R + 0.1), Scaled(P.Plank, 0.95), W.N);
+				}
+				// (the roof: each plank as the near lays it, in two lengths down the slope, the under ones in the upper ones'
+				// shadow; or the thatch in its courses, its straws' paleness in its colour)
+				const double Qw = (P.Bh + P.R) / P.CosP;
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const V3 Nr = RoofN(P, Sd);
+					if (!P.bThatch)
+						for (const RoofPlank& Pk : PlanksOf(P, Sd))
+						{
+							const Col C = Pk.bUpper ? Pk.C : Scaled(Pk.C, 0.8);
+							const double Qm = 0.5 * Pk.Foot, Lift = Pk.Lift + 0.012;
+							for (int I = 0; I < 2; ++I)
+							{
+								const double Q0 = I == 0 ? 0.05 : Qm, Q1 = I == 0 ? Qm : Pk.Foot;
+								B.Quad(RoofAt(P, Sd, Pk.Xa, Q0, Lift), RoofAt(P, Sd, Pk.Xb, Q0, Lift), RoofAt(P, Sd, Pk.Xb, Q1, Lift), RoofAt(P, Sd, Pk.Xa, Q1, Lift), PlankCol(P, Sd, C, Pk.Seed, Pk.Xa, Q0), PlankCol(P, Sd, C, Pk.Seed, Pk.Xb, Q0), PlankCol(P, Sd, C, Pk.Seed, Pk.Xb, Q1), PlankCol(P, Sd, C, Pk.Seed, Pk.Xa, Q1), Nr);
+							}
+						}
+					else
+					{
+						const int NX = 14, NQ = static_cast<int>(std::ceil(P.Qe / 0.34));
+						auto Sc = [&](double X, double Q) { return Mixed(StrawCol(P, Sd, X, Q), Rgb(170, 150, 110), 0.1); };
+						for (int J = 0; J < NX; ++J)
+							for (int I = 0; I < NQ; ++I)
+							{
+								const double X0 = -P.Xr + 2.0 * P.Xr * J / NX, X1 = -P.Xr + 2.0 * P.Xr * (J + 1) / NX, Q0 = P.Qe * I / NQ, Q1 = P.Qe * (I + 1) / NQ;
+								B.Quad(RoofAt(P, Sd, X0, Q0, 0.03), RoofAt(P, Sd, X1, Q0, 0.03), RoofAt(P, Sd, X1, Q1, 0.06), RoofAt(P, Sd, X0, Q1, 0.06), Sc(X0, Q0), Sc(X1, Q0), Scaled(Sc(X1, Q1), 0.9), Scaled(Sc(X0, Q1), 0.9), Nr);
+							}
+					}
+					const double Ed = P.bThatch ? 0.3 : 0.12;
+					const V3 E0 = RoofAt(P, Sd, -P.Xr, P.Qe, 0.02), E1 = RoofAt(P, Sd, P.Xr, P.Qe, 0.02);
+					B.Quad1(E0, E1, E1 + V3{ 0, 0, -Ed }, E0 + V3{ 0, 0, -Ed }, Scaled(P.bThatch ? P.Thatch : P.Plank, 0.65), V3{ 0.0, static_cast<double>(Sd), 0.0 });
+					B.Quad1(E0 + V3{ 0, 0, -Ed }, E1 + V3{ 0, 0, -Ed }, RoofAt(P, Sd, P.Xr, Qw, -P.Thick), RoofAt(P, Sd, -P.Xr, Qw, -P.Thick), Rgb(58, 52, 44), Nr * -1.0);
+					for (int End = -1; End <= 1; End += 2)
+					{
+						const V3 V0 = RoofAt(P, Sd, End * P.Xr, 0.0, 0.02), V1 = RoofAt(P, Sd, End * P.Xr, P.Qe, 0.02);
+						B.Quad1(V0, V1, V1 + V3{ 0, 0, -0.24 }, V0 + V3{ 0, 0, -0.24 }, P.bThatch ? Scaled(StrawCol(P, Sd, End * P.Xr, 0.5 * P.Qe), 0.85) : P.Paint, V3{ static_cast<double>(End), 0.0, 0.0 });
+						B.Quad1(V0 + V3{ 0, 0, -0.24 }, V1 + V3{ 0, 0, -0.24 }, RoofAt(P, Sd, End * (P.A + P.R), P.Qe, -0.1), RoofAt(P, Sd, End * (P.A + P.R), 0.0, -0.1), Rgb(58, 52, 44), V3{ 0.0, 0.0, -1.0 });
+					}
+				}
+				// (the ridge log, or the straw roll and its crossed poles)
+				const double Rr = P.bThatch ? 0.2 : 0.13;
+				for (int A = 0; A < 4; ++A)
+				{
+					const double An0 = Pi * A / 4.0, An1 = Pi * (A + 1) / 4.0;
+					const V3 R0{ 0.0, std::cos(An0), std::sin(An0) }, R1{ 0.0, std::cos(An1), std::sin(An1) };
+					const V3 C0{ -P.Xr - 0.05, P.Yc, P.Ridge + 0.06 }, C1{ P.Xr + 0.05, P.Yc, P.Ridge + 0.06 };
+					const Col C = P.bThatch ? Mixed(P.Thatch, Rgb(112, 104, 90), 0.35) : P.Log;
+					B.Quad1(C0 + R0 * Rr, C1 + R0 * Rr, C1 + R1 * Rr, C0 + R1 * Rr, Scaled(C, 0.9 + 0.1 * std::sin(0.5 * (An0 + An1))), (R0 + R1) * 0.5);
+				}
+				if (!P.bThatch)
+				{
+					// (the horse's head at the ridge log's +x end, its two flat sides; the towel board at each gable's apex)
+					const Col Hc = Varied(P.Log, 1.05, 0.0);
+					const V3 O{ P.Xr + 0.04, P.Yc, P.Ridge + 0.02 };
+					auto Piece = [&](std::initializer_list<std::pair<double, double>> Poly) {
+						std::vector<std::pair<double, double>> Pp(Poly);
+						for (size_t I = 1; I + 1 < Pp.size(); ++I)
+							for (int Sd = -1; Sd <= 1; Sd += 2)
+							{
+								auto At = [&](size_t J) { return O + V3{ Pp[J].first, Sd * 0.055, Pp[J].second }; };
+								B.Tri1(At(0), At(I), At(I + 1), Sd > 0 ? Hc : Scaled(Hc, 0.9), V3{ 0.0, static_cast<double>(Sd), 0.0 });
+							}
+					};
+					Piece({ { -0.05, -0.02 }, { 0.3, -0.02 }, { 0.5, 0.2 }, { 0.22, 0.32 }, { -0.05, 0.14 } });
+					Piece({ { 0.42, 0.13 }, { 0.66, 0.2 }, { 0.73, 0.3 }, { 0.6, 0.39 }, { 0.43, 0.36 } });
+					for (int End = -1; End <= 1; End += 2)
+					{
+						const double X = End * (P.Xr + 0.035);
+						B.Quad1(V3{ X, P.Yc - 0.13, P.Ridge - 1.03 }, V3{ X, P.Yc + 0.13, P.Ridge - 1.03 }, V3{ X, P.Yc + 0.13, P.Ridge - 0.08 }, V3{ X, P.Yc - 0.13, P.Ridge - 0.08 }, P.Paint, V3{ static_cast<double>(End), 0.0, 0.0 });
+					}
+				}
+				else
+				{
+					const int Pairs = static_cast<int>(2.0 * P.Xr / 0.75);
+					for (int K = 0; K <= Pairs; ++K)
+					{
+						const double X = -P.Xr + 0.15 + (2.0 * P.Xr - 0.3) * K / Pairs;
+						for (int Sd = -1; Sd <= 1; Sd += 2)
+						{
+							const V3 Foot = RoofAt(P, Sd, X, 0.55, 0.03), Top = V3{ X, P.Yc - Sd * 0.2, P.Ridge + 0.42 };
+							B.Quad1(Foot + V3{ -0.025, 0, 0 }, Foot + V3{ 0.025, 0, 0 }, Top + V3{ 0.025, 0, 0 }, Top + V3{ -0.025, 0, 0 }, Rgb(96, 82, 64), V3{ 0.0, Sd * 0.6, 0.8 });
+						}
+					}
+				}
+				// (the porch: its floor and steps, its posts, its rails' balusters in their paint, its little roof and barge
+				// board)
+				for (const Gap& G : P.Gaps)
+					if (G.What == 1)
+					{
+						const Wall W = WallOf(P, 0);
+						const double F = P.R, Zf = G.Z0 - 0.02, Hw = 0.82, Out = PorchOut;
+						const Col Wd = Rgb(118, 104, 86), Wd2 = Rgb(104, 92, 78);
+						WBox(B, W, G.U, 0.5 * Zf, F + 0.5 * Out, Hw, 0.5 * Out, 0.5 * Zf, Scaled(Wd2, 0.7), 16);
+						B.Quad1(On(W, G.U - Hw, Zf + 0.002, F), On(W, G.U + Hw, Zf + 0.002, F), On(W, G.U + Hw, Zf + 0.002, F + Out), On(W, G.U - Hw, Zf + 0.002, F + Out), Wd, Up);
+						const double Sr = 0.26 * PorchSteps(Zf);
+						B.Quad1(On(W, G.U + Hw, Zf, F + 0.05), On(W, G.U + Hw, Zf, F + Out), On(W, G.U + Hw + Sr, 0.0, F + Out), On(W, G.U + Hw + Sr, 0.0, F + 0.05), Scaled(Wd, 0.85), W.T + Up);
+						B.Tri1(On(W, G.U + Hw, Zf, F + Out), On(W, G.U + Hw + Sr, 0.0, F + Out), On(W, G.U + Hw, 0.0, F + Out), Scaled(Wd2, 0.7), W.N);
+						const double Zp = std::min(G.Z1 + 0.42, P.Zt - 0.15), Zrl = Zf + 0.85;
+						const Col Rl = Mixed(P.Paint, Scaled(Wd2, 0.5), 0.5);
+						for (int Side = -1; Side <= 1; Side += 2)
+						{
+							const double Up0 = G.U + Side * (Hw - 0.07);
+							WBox(B, W, Up0, 0.5 * (Zf + Zp), F + Out - 0.07, 0.06, 0.06, 0.5 * (Zp - Zf), Wd, 16);
+							const double Rw = Hw + 0.2, Rise = 0.32, Ro = Out + 0.1, Zb = Zp + 0.1;
+							B.Quad1(On(W, G.U, Zb + Rise, F), On(W, G.U, Zb + Rise, F + Ro), On(W, G.U + Side * Rw, Zb, F + Ro), On(W, G.U + Side * Rw, Zb, F), P.Plank, Up + W.T * (Side * 0.4));
+							B.Quad1(On(W, G.U, Zb + Rise, F), On(W, G.U, Zb + Rise, F + Ro), On(W, G.U + Side * Rw, Zb, F + Ro), On(W, G.U + Side * Rw, Zb, F), Scaled(Wd2, 0.6), V3{ 0.0, 0.0, -1.0 });
+							B.Quad1(On(W, G.U, Zb + Rise - 0.02, F + Ro + 0.01), On(W, G.U + Side * Rw, Zb - 0.02, F + Ro + 0.01), On(W, G.U + Side * Rw, Zb - 0.21, F + Ro + 0.01), On(W, G.U, Zb + Rise - 0.21, F + Ro + 0.01), P.Paint, W.N);
+						}
+						const double Ur = G.U - (Hw - 0.07);
+						B.Quad1(On(W, Ur, Zf, F + 0.05), On(W, Ur, Zf, F + Out - 0.1), On(W, Ur, Zrl, F + Out - 0.1), On(W, Ur, Zrl, F + 0.05), Rl, W.T * -1.0);
+						B.Quad1(On(W, Ur, Zf, F + 0.05), On(W, Ur, Zf, F + Out - 0.1), On(W, Ur, Zrl, F + Out - 0.1), On(W, Ur, Zrl, F + 0.05), Scaled(Rl, 0.9), W.T);
+						B.Quad1(On(W, G.U - Hw + 0.1, Zf, F + Out - 0.07), On(W, G.U + Hw - 0.1, Zf, F + Out - 0.07), On(W, G.U + Hw - 0.1, Zrl, F + Out - 0.07), On(W, G.U - Hw + 0.1, Zrl, F + Out - 0.07), Rl, W.N);
+					}
+				// (the chimney, its top sooted; the woodpile along the back under its planks)
+				{
+					const double X = P.Chx, Y = P.Yc + 0.32, H = 0.27;
+					const double Base = UnderAt(P, std::fabs(Y - P.Yc)) - 0.05, Top = P.Ridge + (P.bThatch ? 0.75 : 0.6);
+					const Col Cb = Mixed(P.Brick, Rgb(168, 160, 146), 0.12);
+					B.Box(V3{ X, Y, 0.5 * (Base + Top - 0.4) }, V3{ H, 0, 0 }, V3{ 0, H, 0 }, V3{ 0, 0, 0.5 * (Top - 0.4 - Base) }, Cb, 16 | 32);
+					B.Box(V3{ X, Y, Top - 0.2 }, V3{ H + 0.01, 0, 0 }, V3{ 0, H + 0.01, 0 }, V3{ 0, 0, 0.2 }, Mixed(Cb, Rgb(40, 36, 32), 0.4), 16);
+				}
+				{
+					const Wall W = WallOf(P, 2);
+					const double U0 = -0.8 * P.A, U1 = 0.1 * P.A;
+					WBox(B, W, 0.5 * (U0 + U1), 0.675, P.R + 0.29, 0.5 * (U1 - U0), 0.19, 0.675, Rgb(132, 114, 90), 16);
+					WBox(B, W, 0.5 * (U0 + U1), 1.39, P.R + 0.3, 0.5 * (U1 - U0) + 0.12, 0.21, 0.02, P.Plank, 16);
+				}
+				// (the footing: each boulder as the near lays it, its face, its crown and its ends in facets, the earth behind)
+				for (int F = 0; F < 4; ++F)
+				{
+					const Wall W = WallOf(P, F);
+					const double Top = FootTop(P, W), Run = FootRun(P, W);
+					B.Quad1(On(W, -Run, -0.25, 0.05), On(W, Run, -0.25, 0.05), On(W, Run, Top - 0.02, 0.05), On(W, -Run, Top - 0.02, 0.05), Rgb(62, 56, 48), W.N);
+					for (const Stone& St : StonesOf(P, F))
+					{
+						const double Ua = St.Uc - 0.5 * St.L, Ub = St.Uc + 0.5 * St.L, Ia = St.Uc - 0.3 * St.L, Ib = St.Uc + 0.3 * St.L;
+						const double Zm = St.Zt - St.Rv, Zs = St.Zt - 0.45 * St.Rv, D0 = 0.05, D1 = 0.05 + St.Dd;
+						const V3 FA = On(W, Ia, -0.06, D1), FB = On(W, Ib, -0.06, D1), FC = On(W, Ib, Zs, D1), FD = On(W, Ia, Zs, D1);
+						const V3 TA = On(W, St.Uc - 0.25 * St.L, St.Zt, D0 + 0.35 * St.Dd), TB = On(W, St.Uc + 0.25 * St.L, St.Zt, D0 + 0.35 * St.Dd);
+						const V3 LA = On(W, Ua, Zm, D0), RA = On(W, Ub, Zm, D0);
+						B.Quad1(FA, FB, FC, FD, Mixed(St.C, Rgb(70, 62, 50), 0.15), W.N);
+						B.Quad1(FD, FC, TB, TA, Scaled(St.C, 1.04), W.N + Up);
+						B.Quad1(LA, FA, FD, TA, Scaled(St.C, 0.9), W.N - W.T);
+						B.Quad1(FB, RA, TB, FC, Scaled(St.C, 0.9), W.N + W.T);
+					}
+				}
+			}
+
+			/** A band of the roof's slope as the near level paints it, averaged: down from Q0 to Q1 on side Sd. */
+			Col RoofTone(const Plan& P, int Sd, double Q0, double Q1)
+			{
+				double R = 0.0, G = 0.0, Bl = 0.0, Wt = 0.0;
+				auto Add = [&](const Col& C, double W) {
+					R += W * C.R;
+					G += W * C.G;
+					Bl += W * C.B;
+					Wt += W;
+				};
+				if (!P.bThatch)
+				{
+					for (const RoofPlank& Pk : PlanksOf(P, Sd))
+						for (int J = 0; J < 4; ++J)
+						{
+							const double Q = Q0 + (Q1 - Q0) * (J + 0.5) / 4.0;
+							Add(PlankCol(P, Sd, Pk.bUpper ? Pk.C : Scaled(Pk.C, 0.8), Pk.Seed, 0.5 * (Pk.Xa + Pk.Xb), Q), Pk.Xb - Pk.Xa);
+						}
+				}
+				else
+					for (int I = 0; I < 16; ++I)
+						for (int J = 0; J < 4; ++J)
+							Add(Mixed(StrawCol(P, Sd, -P.Xr + 2.0 * P.Xr * (I + 0.5) / 16.0, Q0 + (Q1 - Q0) * (J + 0.5) / 4.0), Rgb(170, 150, 110), 0.1), 1.0);
+				return Rgb(R / Wt, G / Wt, Bl / Wt);
+			}
+
+			/** The far level (from 300 m): the walls in bands of the logs' tone (their creases in it), the footing's stone, the
+			 * windows in their frames, the eaves' frieze, the gables, the roof's two slopes in bands of its own tone, the barge
+			 * boards, ridge, chimney and porch. */
+			void Far(Pen& B, const Plan& P)
+			{
+				for (int F = 0; F < 4; ++F)
+				{
+					const Wall W = WallOf(P, F);
+					const double Z0 = P.Z0 + W.ZOff - P.R, Z1 = F % 2 == 0 ? P.Zt : P.Zg;
+					const int NB = 4;
+					for (int K = 0; K < NB; ++K)
+					{
+						const double Za = Z0 + (Z1 - Z0) * K / NB, Zb = Z0 + (Z1 - Z0) * (K + 1) / NB;
+						const Col C = Scaled(LogCol(P, LogSeed(P, F, K * 3), 0.0, 0.15, 0.5 * (Za + Zb)), 0.84);
+						const double Ex = F % 2 == 0 ? P.R + P.Ext : EndReach(P, F, Zb - P.R, P.R + P.Ext);
+						B.Quad1(On(W, -W.Half - Ex, Za, P.R), On(W, W.Half + Ex, Za, P.R), On(W, W.Half + Ex, Zb, P.R), On(W, -W.Half - Ex, Zb, P.R), C, W.N);
+					}
+					const double Run = FootRun(P, W);
+					B.Quad1(On(W, -Run, -0.2, P.R + 0.08), On(W, Run, -0.2, P.R + 0.08), On(W, Run, Z0, P.R + 0.08), On(W, -Run, Z0, P.R + 0.08), Mixed(Scaled(P.Stone, 0.72), Rgb(62, 56, 48), 0.3), W.N);
+				}
+				for (const Gap& G : P.Gaps)
+				{
+					const Wall W = WallOf(P, G.Face);
+					const double F = P.R + 0.015;
+					auto Flat = [&](double U0, double U1, double Za, double Zb, double D, const Col& C) {
+						B.Quad1(On(W, U0, Za, D), On(W, U1, Za, D), On(W, U1, Zb, D), On(W, U0, Zb, D), C, W.N);
+					};
+					if (G.What == 1)
+					{
+						Flat(G.U - 0.5 * G.W - 0.12, G.U + 0.5 * G.W + 0.12, G.Z0, G.Z1 + 0.16, F, P.Paint);
+						Flat(G.U - 0.5 * G.W, G.U + 0.5 * G.W, G.Z0, G.Z1, F + 0.005, Scaled(P.Door, 0.8));
+						continue;
+					}
+					const double Sw = 0.12;
+					Flat(G.U - 0.5 * G.W - Sw, G.U + 0.5 * G.W + Sw, G.Z0 - 0.15, G.Z1 + 0.3, F, P.Paint);
+					const Col Gl = G.What == 2 ? Mixed(P.Glass, P.Sky, 0.36) : Mixed(Mixed(P.Glass, P.Sky, 0.36), Rgb(176, 172, 162), 0.35);
+					Flat(G.U - 0.5 * G.W, G.U + 0.5 * G.W, G.Z0, G.Z1, F + 0.005, G.bShut ? P.Shutter : Gl);
+					if (G.What == 2 || G.bShut) continue;
+					for (int Side = -1; Side <= 1; Side += 2)
+					{
+						const double Ua = Side < 0 ? G.U - 0.5 * G.W - Sw - 0.5 * G.W : G.U + 0.5 * G.W + Sw, Ub = Ua + 0.5 * G.W;
+						Flat(Ua, Ub, G.Z0, G.Z1, F + 0.01, P.Shutter);
+					}
+				}
+				for (int F : { 0, 2 })
+				{
+					const Wall W = WallOf(P, F);
+					const double Zb = P.Zt - 0.33, Half = W.Half + P.R;
+					B.Quad1(On(W, -Half, Zb, P.R + 0.02), On(W, Half, Zb, P.R + 0.02), On(W, Half, Zb + 0.27, P.R + 0.02), On(W, -Half, Zb + 0.27, P.R + 0.02), P.Paint, W.N);
+				}
+				for (int F : { 1, 3 })
+				{
+					const Wall W = WallOf(P, F);
+					const double Reach = (P.Ridge - P.Thick / P.CosP - P.Zg) / P.Tan;
+					B.Tri1(On(W, -Reach, P.Zg, P.R + 0.01), On(W, Reach, P.Zg, P.R + 0.01), On(W, 0.0, UnderAt(P, 0.0), P.R + 0.01), Scaled(Mixed(P.Plank, Rgb(82, 76, 68), 0.2), 0.87), W.N);
+				}
+				const double Qw = (P.Bh + P.R) / P.CosP;
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const double Qm = 0.5 * P.Qe;
+					B.Quad1(RoofAt(P, Sd, -P.Xr, 0.0, 0.03), RoofAt(P, Sd, P.Xr, 0.0, 0.03), RoofAt(P, Sd, P.Xr, Qm, 0.03), RoofAt(P, Sd, -P.Xr, Qm, 0.03), RoofTone(P, Sd, 0.0, Qm), RoofN(P, Sd));
+					B.Quad1(RoofAt(P, Sd, -P.Xr, Qm, 0.03), RoofAt(P, Sd, P.Xr, Qm, 0.03), RoofAt(P, Sd, P.Xr, P.Qe, 0.03), RoofAt(P, Sd, -P.Xr, P.Qe, 0.03), RoofTone(P, Sd, Qm, P.Qe), RoofN(P, Sd));
+					const double Ed = P.bThatch ? 0.3 : 0.12;
+					const V3 E0 = RoofAt(P, Sd, -P.Xr, P.Qe, 0.03), E1 = RoofAt(P, Sd, P.Xr, P.Qe, 0.03);
+					B.Quad1(E0, E1, E1 + V3{ 0, 0, -Ed }, E0 + V3{ 0, 0, -Ed }, Scaled(P.bThatch ? P.Thatch : P.Plank, 0.65), V3{ 0.0, static_cast<double>(Sd), 0.0 });
+					B.Quad1(E0 + V3{ 0, 0, -Ed }, E1 + V3{ 0, 0, -Ed }, RoofAt(P, Sd, P.Xr, Qw, -P.Thick), RoofAt(P, Sd, -P.Xr, Qw, -P.Thick), Rgb(58, 52, 44), RoofN(P, Sd) * -1.0);
+					for (int End = -1; End <= 1; End += 2)
+					{
+						const V3 V0 = RoofAt(P, Sd, End * P.Xr, 0.0, 0.03), V1 = RoofAt(P, Sd, End * P.Xr, P.Qe, 0.03);
+						B.Quad1(V0, V1, V1 + V3{ 0, 0, -0.24 }, V0 + V3{ 0, 0, -0.24 }, P.bThatch ? Scaled(P.Thatch, 0.8) : P.Paint, V3{ static_cast<double>(End), 0.0, 0.0 });
+					}
+					// (the ridge's roll or log, its two upper facets)
+					const double Rr = P.bThatch ? 0.2 : 0.13;
+					const V3 C0{ -P.Xr - 0.05, P.Yc, P.Ridge + 0.06 }, C1{ P.Xr + 0.05, P.Yc, P.Ridge + 0.06 };
+					const V3 R0{ 0.0, Sd * 0.7, 0.7 }, R1{ 0.0, static_cast<double>(Sd), 0.0 };
+					B.Quad1(C0 + V3{ 0, 0, Rr }, C1 + V3{ 0, 0, Rr }, C1 + R1 * Rr, C0 + R1 * Rr, P.bThatch ? Mixed(P.Thatch, Rgb(112, 104, 90), 0.35) : P.Log, R0);
+				}
+				{
+					const double X = P.Chx, Y = P.Yc + 0.32, H = 0.27;
+					const double Base = UnderAt(P, std::fabs(Y - P.Yc)) - 0.05, Top = P.Ridge + (P.bThatch ? 0.75 : 0.6);
+					B.Box(V3{ X, Y, 0.5 * (Base + Top) }, V3{ H, 0, 0 }, V3{ 0, H, 0 }, V3{ 0, 0, 0.5 * (Top - Base) }, Mixed(Mixed(P.Brick, Rgb(168, 160, 146), 0.12), Rgb(40, 36, 32), 0.12), 16);
+				}
+				for (const Gap& G : P.Gaps)
+					if (G.What == 1)
+					{
+						const Wall W = WallOf(P, 0);
+						const double F = P.R, Zf = G.Z0 - 0.02, Hw = 0.82, Out = PorchOut;
+						WBox(B, W, G.U, 0.5 * Zf, F + 0.5 * Out, Hw, 0.5 * Out, 0.5 * Zf, Rgb(88, 78, 66), 16);
+						const double Sr = 0.26 * PorchSteps(Zf);
+						B.Quad1(On(W, G.U + Hw, Zf, F + 0.05), On(W, G.U + Hw, Zf, F + Out), On(W, G.U + Hw + Sr, 0.0, F + Out), On(W, G.U + Hw + Sr, 0.0, F + 0.05), Rgb(100, 88, 74), W.T + Up);
+						const double Zp = std::min(G.Z1 + 0.42, P.Zt - 0.15), Zb = Zp + 0.1;
+						const Col Rl = Mixed(P.Paint, Rgb(52, 46, 39), 0.5);
+						B.Quad1(On(W, G.U - Hw + 0.07, Zf, F + Out - 0.05), On(W, G.U - Hw + 0.07, Zf, F + 0.05), On(W, G.U - Hw + 0.07, Zf + 0.85, F + 0.05), On(W, G.U - Hw + 0.07, Zf + 0.85, F + Out - 0.05), Rl, W.T * -1.0);
+						B.Quad1(On(W, G.U - Hw + 0.1, Zf, F + Out - 0.07), On(W, G.U + Hw - 0.1, Zf, F + Out - 0.07), On(W, G.U + Hw - 0.1, Zf + 0.85, F + Out - 0.07), On(W, G.U - Hw + 0.1, Zf + 0.85, F + Out - 0.07), Rl, W.N);
+						for (int Side = -1; Side <= 1; Side += 2)
+							B.Quad1(On(W, G.U, Zb + 0.32, F), On(W, G.U, Zb + 0.32, F + Out + 0.1), On(W, G.U + Side * 1.02, Zb, F + Out + 0.1), On(W, G.U + Side * 1.02, Zb, F), P.Plank, Up + W.T * (Side * 0.4));
+						B.Quad1(On(W, G.U - 1.02, Zb - 0.2, F + Out + 0.11), On(W, G.U + 1.02, Zb - 0.2, F + Out + 0.11), On(W, G.U + 1.02, Zb, F + Out + 0.11), On(W, G.U - 1.02, Zb, F + Out + 0.11), Mixed(P.Paint, Rgb(70, 62, 52), 0.4), W.N);
+					}
+			}
+
+			void Build(const Spec& S, Levels& Out)
+			{
+				Out = Levels();
+				const Plan P = Make(S);
+				{
+					Pen B(Out.Near);
+					Footing(B, P);
+					Logs(B, P);
+					for (const Gap& G : P.Gaps)
+					{
+						if (G.What == 0) Window(B, P, G, Hash(P.S.Key ^ 0x3171, static_cast<uint64_t>(G.Face * 16) + static_cast<uint64_t>(std::llround(G.U * 10.0 + 100.0))));
+						if (G.What == 1)
+						{
+							Door(B, P, G);
+							Porch(B, P, G);
+						}
+					}
+					Gable(B, P, 1, P.S.Key ^ 0x6AB1);
+					Gable(B, P, 3, P.S.Key ^ 0x6AB3);
+					Frieze(B, P);
+					if (P.bThatch) Thatch(B, P);
+					else
+					{
+						Planks(B, P);
+						Barge(B, P, -1);
+						Barge(B, P, 1);
+					}
+					Chimney(B, P);
+					Yard(B, P);
+				}
+				{
+					Pen B(Out.Mid);
+					Mid(B, P);
+				}
+				{
+					Pen B(Out.Far);
+					Far(B, P);
+				}
+			}
+		}
 	}
 
-	double EavesOf(const Spec& S) { return MakePlan(S).E; }
-	double RidgeOf(const Spec& S) { return MakePlan(S).Ridge; }
+	double EavesOf(const Spec& S) { return S.Kind == 7 ? Izb::Make(S).Zt : MakePlan(S).E; }
+	double RidgeOf(const Spec& S) { return S.Kind == 7 ? Izb::Make(S).Ridge : MakePlan(S).Ridge; }
 
 	void Holes(const Spec& S, std::vector<Hole>& Out)
 	{
 		Out.clear();
+		if (S.Kind == 7)
+		{
+			const Izb::Plan Q = Izb::Make(S);
+			for (const Izb::Gap& G : Q.Gaps)
+			{
+				const Izb::Wall W = Izb::WallOf(Q, G.Face);
+				const V3 M = Izb::On(W, G.U, 0.0, Q.R);
+				Hole H;
+				H.Face = G.Face;
+				H.X = M.X;
+				H.Y = M.Y;
+				H.Z0 = G.Z0;
+				H.Z1 = G.Z1;
+				H.Wide = G.W;
+				H.What = G.What;
+				Out.push_back(H);
+			}
+			return;
+		}
 		const Plan P = MakePlan(S);
 		for (const Opening& O : P.Ops)
 		{
@@ -5927,6 +7464,11 @@ namespace LandHouse
 		if (S.Kind == 3)
 		{
 			BuildChurch(S, Out);
+			return;
+		}
+		if (S.Kind == 7)
+		{
+			Izb::Build(S, Out);
 			return;
 		}
 		Out = Levels();
