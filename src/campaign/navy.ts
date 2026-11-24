@@ -2026,7 +2026,7 @@ export function placeBoats(g: Game, nat: string): void {
 
 export const CAUSE = causeData as unknown as {
   cover: number; asv: string; find: number; radar: number; seaLoss: string[];
-  incident: { group: number; lone: number; groupKit: number; loneKit: number; atw: number };
+  incident: { coordinated: number; independent: number; coordinatedKit: number; independentKit: number; atw: number };
   /** The on-station share's days by class (null: not read), and a boat's raid weight on station refit with it at T2 (null: 1). */
   station: Partial<Record<ShipClass, { patrol: number | null; passage: number | null; refit: number | null }>> & { raid: number | null };
   /** The convoy-side count's figures; a route with a null in 'ships' or 'grt' keeps the per-boat share ('find'). */
@@ -2050,12 +2050,12 @@ export function aswKit(g: Game, nat: string): AswKit {
 /** True where a navy's aircraft carry anti-submarine kit: depth charges and the radar to find a boat (convoycause.json 'asv'). */
 export const airKit = (k: AswKit): boolean => k.asdic && k.radar;
 
-/** The chance that one attack on a convoy ends with the boat sunk, by a support group or by the convoy's close escort, with this kit (OEG T10). */
+/** The chance that one attack on a convoy ends with the boat sunk, by a support group (OEG T10's coordinated column) or by the convoy's close escort (its independent column), with this kit. */
 export function incidentRate(k: AswKit, group: boolean): number {
   const I = CAUSE.incident;
-  if (k.hedgehog && k.groups) return group ? I.groupKit : I.loneKit;
+  if (k.hedgehog && k.groups) return group ? I.coordinatedKit : I.independentKit;
   // Ahead-throwing weapons alone: the depth-charge rate times OEG T9's first half-year edge.
-  return (group ? I.group : I.lone) * (k.hedgehog ? I.atw : 1);
+  return (group ? I.coordinated : I.independent) * (k.hedgehog ? I.atw : 1);
 }
 
 /** What a ship's kit makes of each attack against depth charges alone: 1 without ahead-throwing weapons. */
