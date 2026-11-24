@@ -18,7 +18,7 @@
 // nothing here is read (the design director's mark of 15:14Z: never remove a working cause before its replacement is
 // laid): no order is offered, the staffs send no group, and the flat air term and the cover from coasts held stand.
 // Off (no Units decide) none of it exists. Nothing in it reads the flag or the date.
-import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, seaRoutes, zoneOf } from './navy';
+import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaRoutes, zoneOf } from './navy';
 import { AIRWAR, CARRIERS, airRange, assessAir, cover, deckBred, forecastAir, kmToSea, setMission, whyNotMission } from './air';
 import { allied, atWar } from './game';
 import { railsAt } from './rails';
@@ -26,6 +26,8 @@ import { bombingFor } from './difficulty';
 import { unitsDecide } from './units';
 import { grounded, skyAtSea, skySupport, weatherOn } from './weather';
 import type { AirFleet, Game } from './types';
+
+type ConvoyRoute = (typeof NAVY.convoys)[number];
 
 /** The sea patrol's figures, all laid: a0, the attacks and kill shares by kit. */
 interface Laid { a0: number; attacks: { kit: number; none: number }; kill: { kit: number; none: number }; lost: number | null }
@@ -136,33 +138,46 @@ function boatsOnStation(g: Game, nat: string, z: number): number {
 }
 
 /**
- * What one more group on patrol over a sea is worth to a staff, on its raid scoring's own scale (aircraft): the enemy
- * boats its side's patrols would sink there besides, at a strike's worth of a submarine, and the cargoes they would save
- * on its side's convoy routes through the sea, at a strike's worth of trade (the share of the receiving nation's goods
- * the route carries, times 3000 for the whole), by last month's losses on the route a boat on station; less the
- * aircraft it would lose on patrol where that is laid.
+ * Where the enemy's raiding boats on a route's seas would be this month, as their own staffs set their beats (navy.ts
+ * quieterBeat: out of waters aircraft without kit watch, where that keeps them up on station longer; aircraft with kit
+ * move no boat): each fleet's boats x its time up on station there (onWatch), by sea. A fleet its own player commands
+ * stays on its beat.
  */
-function patrolWorth(g: Game, nat: string, f: AirFleet, z: number): number {
+function boatsExpected(g: Game, nat: string, zs: number[]): Map<number, number> {
+  const at = new Map<number, number>();
+  for (const q of g.fleets) {
+    if (!atSea(q) || q.ships.ss <= 0 || q.stance !== 'raid' || !atWar(g, q.nat, nat) || !zs.includes(q.station)) continue;
+    const moved = quieterBeat(g, q);
+    const z = moved >= 0 ? moved : q.station;
+    at.set(z, (at.get(z) ?? 0) + q.ships.ss * onWatch(g, q, z));
+  }
+  return at;
+}
+
+/**
+ * What one more group on patrol over a sea of a route is worth to a staff, on its raid scoring's own scale (aircraft),
+ * for the boats that would be in that sea as things stand (boatsExpected): those its side's patrols would sink there
+ * besides, at a strike's worth of a submarine, and the cargoes saved on the route by those it would keep down or cut
+ * (T7) there, by last month's losses on the route a boat on station, at a strike's worth of trade (the share of the
+ * receiving nation's goods the route carries, times 3000 for the whole); less the aircraft it would lose on patrol where
+ * that is laid. Where the boats then move, the next group goes after them.
+ */
+function patrolWorth(g: Game, nat: string, f: AirFleet, z: number, route: ConvoyRoute, B: number, all: number): number {
   const F = patrolFigures();
-  if (!F) return 0;
+  if (!F || B <= 0) return 0;
   const side = (n: string): boolean => allied(g, n, nat);
-  const before = watchFor(g, z, side);
+  const w0 = watchFor(g, z, side);
   const was = { m: f.mission, t: f.target };
   f.mission = 'seapatrol'; f.target = z;
-  let after: Watch | null;
-  try { after = watchFor(g, z, side); } finally { f.mission = was.m; f.target = was.t; }
-  if (!after) return 0;
-  const k0 = before ? before.s * before.kills : 0, n0 = before?.none ?? 0, c0 = before?.kit ?? 0;
-  const B = boatsOnStation(g, nat, z);
-  let v = B * (after.s * after.kills - k0) * (CARRIERS.strike.value.ss ?? 0);
-  // (The cargoes: a boat-month kept down saves what a boat on station sank last month; one watched with kit, T7's share of it.)
-  const kept = (after.none - n0) + (after.kit - c0) * (1 - CAUSE.cover);
-  for (const r of NAVY.convoys) {
-    const rz = r.zones.map((k) => zoneOf(g, k));
-    const rec = g.convoys[r.id];
-    if (!rz.includes(z) || !allied(g, r.to, nat) || !rec?.loss || !rec.count?.boats) continue;
-    v += 3000 * r.share * rec.loss * ((B * kept) / rec.count.boats);
-  }
+  let w1: Watch | null;
+  try { w1 = watchFor(g, z, side); } finally { f.mission = was.m; f.target = was.t; }
+  if (!w1) return 0;
+  let v = B * (w1.s * w1.kills - (w0 ? w0.s * w0.kills : 0)) * (CARRIERS.strike.value.ss ?? 0);
+  // (Kept down without kit; with it, T7's share of what they would sink cut.)
+  const kept = (w1.none - (w0?.none ?? 0)) + (w1.kit - (w0?.kit ?? 0)) * (1 - CAUSE.cover);
+  const rec = g.convoys[route.id];
+  const boats = rec?.count?.boats || all;
+  if (rec?.loss && boats > 0) v += 3000 * route.share * rec.loss * ((B * kept) / boats);
   if (F.lost !== null) v -= F.lost * f.bmr;
   return v;
 }
@@ -192,26 +207,42 @@ function raidWorth(g: Game, nat: string, f: AirFleet): number {
 }
 
 /**
- * The computer's air staff and the sea patrol (Q7 (a)): each month, before its raids, over each sea of its side's
- * convoy routes where enemy boats are on station, the most enemy boats first, it sends its land bomber groups in reach,
- * the best placed first, while one more is worth more than the raid it would fly, and at least what a raid must be
- * worth to be flown. Its orders stand till its next month (the hunt and the convoys read them at its start).
+ * The computer's air staff and the sea patrol (Q7 (a)): each month, before its raids, over each of its side's convoy
+ * routes with enemy boats on station on its seas, the most boats first, it sends its land bomber groups one at a time
+ * to the sea of the route where the boats would be (boatsExpected: their staffs move out of waters aircraft without
+ * kit watch), the most boats first, the best placed group first, while one more is worth more than the raid it would
+ * fly, and at least what a raid must be worth to be flown. So its patrols follow the boats' best answer and spread over
+ * the route, rather than chasing last month's boats from sea to sea (the builder's reading of Q7 (a), for the design
+ * director). Its orders stand till its next month (the hunt and the convoys read them at its start).
  */
 export function patrolStaff(g: Game, nat: string, mine: AirFleet[]): void {
   if (!patrolOn(g)) return;
   const R = AIRWAR.ai.raids;
-  const seas = new Map<number, number>();
+  const free = (f: AirFleet): boolean => f.flew !== g.turn && f.mission === 'support' && !f.close && !deckBred(f) && f.kind !== 'ftr' && f.bmr > 0 && f.ready >= R.ready;
+  const routes: { r: ConvoyRoute; zs: number[]; boats: number }[] = [];
   for (const r of NAVY.convoys) {
     const to = g.nations[r.to];
     if (!to?.alive || !to.atWar.length || !allied(g, r.to, nat)) continue;
-    for (const k of r.zones) { const z = zoneOf(g, k); if (z >= 0 && !seas.has(z)) seas.set(z, boatsOnStation(g, nat, z)); }
+    const zs = [...new Set(r.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0))];
+    const boats = zs.reduce((a, z) => a + boatsOnStation(g, nat, z), 0);
+    if (boats > 0) routes.push({ r, zs, boats });
   }
-  const order = [...seas.entries()].filter(([, b]) => b > 0).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
-  for (const [z] of order) {
-    const fit = mine.filter((f) => f.flew !== g.turn && f.mission === 'support' && !f.close && !deckBred(f) && f.kind !== 'ftr' && f.bmr > 0 && f.ready >= R.ready && whyNotMission(g, f, 'seapatrol', z) === null);
-    fit.sort((a, b) => patrolAircraft(g, b, z) - patrolAircraft(g, a, z) || a.id - b.id);
-    for (const f of fit) {
-      const v = patrolWorth(g, nat, f, z);
+  routes.sort((a, b) => b.boats - a.boats || a.zs[0] - b.zs[0]);
+  for (const { r, zs } of routes) {
+    for (;;) {
+      const at = boatsExpected(g, nat, zs);
+      const all = [...at.values()].reduce((x, y) => x + y, 0);
+      let z = -1, most = 0, fit: AirFleet[] = [];
+      for (const s of zs) {
+        const b = at.get(s) ?? 0;
+        if (b <= most + 1e-12) continue;
+        const can = mine.filter((f) => free(f) && whyNotMission(g, f, 'seapatrol', s) === null);
+        if (can.length) { z = s; most = b; fit = can; }
+      }
+      if (z < 0) break;
+      fit.sort((a, b) => patrolAircraft(g, b, z) - patrolAircraft(g, a, z) || a.id - b.id);
+      const f = fit[0];
+      const v = patrolWorth(g, nat, f, z, r, most, all);
       if (v <= R.worth || v <= raidWorth(g, nat, f)) break;
       setMission(g, f, 'seapatrol', z);
     }

@@ -286,3 +286,25 @@ describe('the save', () => {
     expect(h.patrolSunk).toEqual(g.patrolSunk);
   });
 });
+
+describe('the staff follows the boats\' best answer, not last month\'s boats', () => {
+  beforeEach(() => lay({ ...FIG, attacks: { kit: 6, none: 6 }, kill: { kit: 1, none: 1 } }));
+
+  it('without kit it follows the boats\' best answer: its patrols spread over the route, and the boats\' best sea there is worse for them', () => {
+    const g = open(), wapp = zoneOf(g, 'wapp');
+    const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+    f.duty = 'raid'; f.station = wapp; f.tied = false;
+    g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
+    const zs = atlantic.zones.map((k) => zoneOf(g, k));
+    const best = (): number => Math.max(...zs.map((z) => onWatch(g, f, z)));
+    const before = best();
+    const mine = g.airFleets.filter((x) => x.nat === 'UK');
+    patrolStaff(g, 'UK', mine);
+    const sent = mine.filter((x) => x.mission === 'seapatrol');
+    // (The first group goes where the boats are; the boats would then move, and the next goes after them.)
+    expect(sent.map((x) => x.target)[0]).toBe(wapp);
+    expect(new Set(sent.map((x) => x.target)).size).toBe(sent.length);
+    expect(sent.length).toBeGreaterThan(1);
+    expect(best()).toBeLessThan(before);
+  });
+});
