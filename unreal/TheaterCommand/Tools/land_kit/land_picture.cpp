@@ -790,10 +790,12 @@ int main(int argc, char** argv)
 			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them); the
 			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet,
 			         // 8 the tower's south face under its lower string course; a village house's: 9 its shop, 13 the biggest
-			         // place up its front where its render has come away, 14 its strikes there at their thickest
+			         // place up its front where its render has come away, 14 its strikes there at their thickest; the izba's 17,
+			         // 18, 19, the khata's 20, 21 and the burnt-out house's 22, 23, 24 (as set below)
 			double AimDistance;
 			const char* Caption;
-			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba, 8 the
+			          // steppe's khata, 9 a burnt-out house
 			double Long = 12.4, Deep = 6.8; // (a village house's)
 			int Storeys = 2;
 			double Snow = 0.0; // (the east's: the snow lying on its roof, 0 to 1)
@@ -971,6 +973,25 @@ int main(int argc, char** argv)
 			{ "khata_switch300_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "", 8, 9.18, 6.46, 1 }, // (not laid out: for measuring)
 			{ "khata_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: middle level", 8, 9.18, 6.46, 1 },
 			{ "khata_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: far level", 8, 9.18, 6.46, 1 },
+			// (the burnt-out house, Kind 9: Roof 0 an izba burnt down on the izba's footprint, 1 a khata roofless on the khata's;
+			// aim 22 its stove's mouth, 23 its chimney's broken top, 24 its front corner at the ground)
+			{ "burnt_logs", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "burnt out: an izba's logs, its stove standing", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "a khata burnt out: its clay walls, roofless", 9, 9.18, 6.46, 1 },
+			{ "burnt_other", 0, 0, 0, 4, -40.0, 16.0, 62.0, -1, 0.0, "another: the stove the other way", 9, 7.5, 7.2, 1 },
+			{ "burnt_stove", 0, 0, 0, 7, 20.0, 8.0, 62.0, 22, 3.2, "close: the stove's mouth, its plaster fallen", 9, 7.5, 7.2, 1 },
+			{ "burnt_chimney", 0, 0, 0, 7, 40.0, 10.0, 62.0, 23, 3.0, "close: the chimney's broken top", 9, 7.5, 7.2, 1 },
+			{ "burnt_corner", 0, 0, 0, 7, 48.0, 18.0, 62.0, 24, 3.4, "close: charred logs in the ashes", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay_corner", 0, 0, 1, 7, 48.0, 14.0, 62.0, 24, 3.8, "close: the clay wall's burnt top", 9, 9.18, 6.46, 1 },
+			{ "burnt_snow", 0, 0, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "in winter", 9, 7.5, 7.2, 1, 1.0 },
+			{ "burnt_clay_snow", 0, 0, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "the khata's, in winter", 9, 9.18, 6.46, 1, 1.0 },
+			{ "burnt_mid", 0, 1, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 9, 7.5, 7.2, 1 },
+			{ "burnt_far", 0, 2, 0, 7, 36.0, 14.0, 62.0, -1, 0.0, "the far level (from 300 m)", 9, 7.5, 7.2, 1 },
+			{ "burnt_clay_mid", 0, 1, 1, 7, 36.0, 14.0, 62.0, -1, 0.0, "the khata's, middle level", 9, 9.18, 6.46, 1 },
+			{ "burnt_switch90_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "burnt out at 90 m: near level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch90_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "burnt out at 90 m: middle level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch300_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "", 9, 7.5, 7.2, 1 }, // (not laid out: for measuring)
+			{ "burnt_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: middle level", 9, 7.5, 7.2, 1 },
+			{ "burnt_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "burnt out at 300 m: far level", 9, 7.5, 7.2, 1 },
 		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
@@ -1052,6 +1073,13 @@ int main(int argc, char** argv)
 				// (the khata's: its eaves' front corner over the +x end; a hip by the ridge's end)
 				if (K.Aim == 20) At = V3(0.5 * K.Long - 0.7, 0.5 * K.Deep - 0.7, 0.15 + LandHouse::EavesOf(HouseSpec(P)) - 0.3);
 				if (K.Aim == 21) At = V3(0.5 * K.Long - 2.2, 0.0, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.5);
+				// (the burnt-out house's: its stove's mouth, its chimney's top, its front corner at the ground)
+				for (const LandHouse::Hole& H : Holes)
+				{
+					if (K.Aim == 22 && H.What == 15) At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
+					if (K.Aim == 23 && H.What == 16) At = V3(H.X, H.Y, 0.15 + H.Z1 - 0.35);
+				}
+				if (K.Aim == 24) At = V3(0.5 * K.Long - 0.6, 0.5 * K.Deep - 0.6, 0.15 + 0.35);
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);

@@ -77,7 +77,9 @@ namespace LandHouse
 		double Below = 2.2; // how far its plinth runs down below its floor (the ground falls away under it on a slope)
 		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these),
 		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1), 6 a village house (HtHouse),
-		                  // 7 the east's log izba (Roof 0 planks, 1 thatch; Storeys, Hurt unread)
+		                  // 7 the east's log izba (Roof 0 planks, 1 thatch; Storeys, Hurt unread), 8 the steppe's whitewashed khata
+		                  // (its hipped thatch; Roof, Storeys, Hurt unread), 9 a burnt-out house, its stove and chimney standing
+		                  // (Roof 0 an izba's logs burnt down, 1 a khata's clay walls roofless; Storeys, Hurt unread)
 		double Snow = 0.0; // the snow lying (LandField's cover, 0 to 1): an east house's roof built under its blanket of snow
 	};
 
@@ -94,7 +96,8 @@ namespace LandHouse
 	 * (its own frame), its sill and head heights, its width, and what it is (0 a window, 1 the door, 2 an attic window; the
 	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window;
  * a church's, its nave's only: 9 a round-headed window, 10 its door; a village house's shop: 12 its front; and on a
- * village house's render, 13 where it has come away to the rubble, 14 a strike in it). */
+ * village house's render, 13 where it has come away to the rubble, 14 a strike in it; a burnt-out house's, 15 its stove's
+ * mouth, 16 its chimney from where its plaster ends to its top). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x

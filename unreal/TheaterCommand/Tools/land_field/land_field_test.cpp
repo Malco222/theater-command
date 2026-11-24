@@ -1204,6 +1204,49 @@ int main(int Argc, char** Argv)
 		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 15000 && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
 		      "the trial \"houses\": the east's izbas and khatas at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
+	// The east's burnt-out houses (the same trial): the kit's chimney a burnt-out izba or khata at the vehicles' detail
+	// (LandHouse's Kind 9) on its house's footprint, its ash bed's skirt run down into the ground; four looks of each; in
+	// sight with the chimney's own shape; within its footprint (its ashes 0.55 m past it) and its triangle budgets.
+	if (F.Tried("houses") && LookLaid == "farmland" && F.Lon >= 15.5)
+	{
+		size_t Standing = 0, NearMost = 0, MidMost = 0, FarMost = 0, NearFew = static_cast<size_t>(-1);
+		int Kinds = 0;
+		std::string Bad;
+		for (int K = 0; K < LandField::KitSlots; ++K)
+		{
+			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			if (Bm.Name.rfind("Burnt", 0) != 0 || Bm.Class != LandField::BaseMesh::Draw::House) continue;
+			++Kinds;
+			const bool bClay = Bm.Name.rfind("BurntClay", 0) == 0;
+			const float HalfX = (bClay ? 4.59f : 3.75f) + 0.6f, HalfY = (bClay ? 3.23f : 3.6f) + 0.6f;
+			Standing += G.Instances(B).size();
+			NearFew = std::min(NearFew, Bm.Near.Tris());
+			NearMost = std::max(NearMost, Bm.Near.Tris());
+			MidMost = std::max(MidMost, Bm.Mid.Tris());
+			FarMost = std::max(FarMost, Bm.Far.Tris());
+			std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m; in sight %s, %.2f m across\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(), Bm.MidFrom, Bm.FarFrom, Bm.bSight ? "yes" : "no", Bm.SightAcross * Bm.Radius);
+			if (std::getenv("LAND_FIELD_HOUSES"))
+				for (const LandField::Placed& P : G.Instances(B)) std::printf("      at %.0f, %.0f, %.1f m up, turned %.0f degrees\n", P.X, P.Y, P.Z, std::fmod(P.Yaw * 180.0 / 3.14159265358979 + 720.0, 360.0));
+			if (Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || !Bm.bSight || Bm.SightAcross * Bm.Radius > 9.0f) Bad += " " + Bm.Name + " (its levels or its sight)";
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+			{
+				bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+				for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+				{
+					const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+					const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > HalfX || std::fabs(Y) > HalfY || Z < -5.5f || Z > 6.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+				}
+				for (const uint32_t Ix : M->Triangles)
+					if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+				if (!bOk) Bad += " " + Bm.Name + " (a point)";
+			}
+		}
+		std::printf("  the east's burnt-out houses at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles, middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost);
+		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 8000 && NearMost <= 30000 && MidMost <= 3000 && FarMost <= 200,
+		      "the trial \"houses\": the east's burnt-out houses at the vehicles' detail, three levels within budget, in sight as the chimney", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.
 	{
