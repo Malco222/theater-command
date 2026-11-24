@@ -407,6 +407,29 @@ namespace LandFeed
 				R.OldRutCount = std::max(0, Root["oldRuts"]["count"].Int(0));
 				R.OldRutMonths = std::max(0.0, Root["oldRuts"]["months"].Num(0.0));
 			}
+			if (Root["oldWrecks"].IsObject())
+			{
+				// (any part may be missing or odd: a count over 60 is the campaign's cap, a nation's count must be a
+				// number over 0, and a months that is not a number is none)
+				const Json& W = Root["oldWrecks"];
+				const auto Whole = [](const Json& J) -> int
+				{
+					const double V = J.IsNumber() ? J.Num(0.0) : 0.0;
+					return V == V ? static_cast<int>(std::clamp(std::floor(V + 0.5), 0.0, 60.0)) : 0;
+				};
+				R.OldWreckCount = Whole(W["count"]);
+				const double Months = W["months"].IsNumber() ? W["months"].Num(0.0) : 0.0;
+				R.OldWreckMonths = Months == Months && Months > 0.0 ? std::min(Months, 1200.0) : 0.0;
+				const Json& Nats = W["nats"];
+				if (Nats.IsObject())
+				{
+					for (size_t K = 0; K < Nats.Keys.size() && K < Nats.Values.size(); ++K)
+					{
+						const int N = Whole(Nats.Values[K]);
+						if (!Nats.Keys[K].empty() && N > 0) R.OldWreckNats.emplace_back(Nats.Keys[K], N);
+					}
+				}
+			}
 		}
 
 		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or

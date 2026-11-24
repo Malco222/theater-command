@@ -502,6 +502,16 @@ namespace LandFeed
 		 */
 		int OldRutCount = 0;
 		double OldRutMonths = 0.0;
+		/**
+		 * Old wrecks (release 2, Brian 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the
+		 * next battle there; looks only, as the scars): root "oldWrecks" {"count": the armoured vehicles burnt out here
+		 * before (60 at most), "months": since the last of those battles, "nats": {"GER": n, ...} whose they were}.
+		 * Count 0 where none is given (none burnt here, or the player's "Old wrecks" row off); the nations in the
+		 * order written, each with a count over 0 (none: the scene takes the battle's two sides).
+		 */
+		int OldWreckCount = 0;
+		double OldWreckMonths = 0.0;
+		std::vector<std::pair<std::string, int>> OldWreckNats;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
