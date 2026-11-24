@@ -100,6 +100,8 @@ describe('the desert the old chart\'s desert runs on into', () => {
     expect(drag(7 + DESERT.step)).toBeGreaterThan(0);
     // (From Kharga on into Asyut: plains, and no desert's drag.)
     const d = addCorps(g, 'ITA', 'a test group (Kharga)', 'inf', 1, 'Kharga', { xp: 0.3 });
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.reach.ITA = Float32Array.from(g.reach.ITA);
     g.reach.ITA[g.byName.Kharga.id] = 8;
     expect(lineDrag(g, d, g.byName.Asyut)).toBe(0);
   });

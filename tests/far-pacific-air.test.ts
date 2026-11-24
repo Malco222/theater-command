@@ -1013,6 +1013,8 @@ describe('the air over a far sea (rulings 184 and 187)', () => {
     const f = command(g, 'USA', 'VMF-211 (Wake)')[0];
     expect(f.unfed).toBeUndefined();
     // Cut off: no supply reaches Wake as the picture stands.
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.supply.USA = Uint8Array.from(g.supply.USA);
     const was = g.supply.USA[f.base];
     g.supply.USA[f.base] = 0;
     g.turn = 29;
@@ -1061,7 +1063,8 @@ describe('a land air group is made up only where its field is fed (the director\
   const FEAF = 'Far East Air Force';
   const G5 = '5th Air Group';
   /** The picture drawn, and then one field cut out of it by hand. */
-  const cut = (g: Game, nat: string, f: AirFleet): void => { computeSupply(g); g.supply[nat][f.base] = 0; };
+  // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+  const cut = (g: Game, nat: string, f: AirFleet): void => { computeSupply(g); g.supply[nat] = Uint8Array.from(g.supply[nat]); g.supply[nat][f.base] = 0; };
 
   it('takes nothing from the reserve on an unfed field, whoever it flies for, and is made up again once it is fed', () => {
     const g = pacificWar(3, 29);
@@ -1103,7 +1106,7 @@ describe('a land air group is made up only where its field is fed (the director\
     const f = g.airFleets.find((x) => x.nat === 'USA' && x.ship === undefined && x.est.ftr > 0)!;
     const p = airPool(g, 'USA');
     computeSupply(g);
-    if (g.supply.USA) g.supply.USA[f.base] = 0;
+    if (g.supply.USA) { g.supply.USA = Uint8Array.from(g.supply.USA); g.supply.USA[f.base] = 0; }
     expect(fieldFed(g, f)).toBe(true);
     f.ftr = Math.max(0, f.est.ftr - 5);
     p.ftr = p.pilots = 100;
@@ -1113,7 +1116,7 @@ describe('a land air group is made up only where its field is fed (the director\
     const k = pacificWar(3, 29);
     const wing = k.airFleets.find((x) => x.nat === 'JAP' && x.ship !== undefined)!;
     computeSupply(k);
-    k.supply.JAP.fill(0);
+    k.supply.JAP = new Uint8Array(k.supply.JAP.length);
     expect(fieldFed(k, wing)).toBe(true);
   });
 
@@ -1127,7 +1130,7 @@ describe('a land air group is made up only where its field is fed (the director\
       // (One defender, so that the reckoning can be read off: Manila's squadron is not up.)
       for (const f of command(g, 'USA', 'Philippine Army Air Corps (6th Pursuit Squadron)')) f.mission = 'rest';
       computeSupply(g);
-      if (unfed) g.supply.USA[us.base] = 0;
+      if (unfed) { g.supply.USA = Uint8Array.from(g.supply.USA); g.supply.USA[us.base] = 0; }
       const before = us.ftr;
       const rep = fly(g, 'JAP', 'superiority', us.base, [jp])!;
       return { rep, before, after: us.ftr, est: us.est.ftr, name: us.name };

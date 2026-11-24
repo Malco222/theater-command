@@ -104,6 +104,8 @@ describe('a fleet whose base falls makes for the nearest fed port of its own nat
     port(g, 'Manila').ctrl = 'JAP';
     ring(g);
     const brunei = port(g, 'Brunei');
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.supply.USA = Uint8Array.from(g.supply.USA);
     g.supply.USA[brunei.id] = 0;
     expect(haven(g, f, brunei)).toBe(false);
     navalUpkeep(g, 'USA');
@@ -116,7 +118,8 @@ describe('a fleet whose base falls makes for the nearest fed port of its own nat
     port(g, 'Manila').ctrl = 'JAP';
     ring(g);
     // No port anywhere reads fed for America.
-    g.supply.USA.fill(0);
+    // (On a copy: the picture computeSupply hands out may be kept for its next call, and is never written into.)
+    g.supply.USA = new Uint8Array(g.supply.USA.length);
     expect(g.regions.some((r) => haven(g, f, r))).toBe(false);
     navalUpkeep(g, 'USA');
     expect(g.regions[f.base].name).toBe('Bataan');
