@@ -232,6 +232,21 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		return X + Wd + 6.0;
 	};
 
+	// ---- (1.5.1) The opening held: all black with the raid's title while the scene just made is taken in behind it
+	// (AAirBattle::WarmTick), then eased off over the flyover's first half second. ----
+	const float CurtainA = static_cast<float>(FMath::Clamp(S.Curtain, 0.0, 1.0));
+	auto Curtain = [&](int32 Layer)
+	{
+		Fill(0.0, 0.0, Size.X, Size.Y, FLinearColor(0.0f, 0.0f, 0.0f, CurtainA), Layer);
+		Centred(Wide(W.AimTarget), Size.X * 0.5, Size.Y * 0.5 - 26.0, Serif(TEXT("Bold"), 20.0f), FLinearColor(Cream.R, Cream.G, Cream.B, Cream.A * CurtainA), Layer + 1);
+		Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y * 0.5 + 12.0, Typed(13.0f, true, 30), FLinearColor(Muted.R, Muted.G, Muted.B, Muted.A * CurtainA), Layer + 1);
+	};
+	if (CurtainA >= 0.999f || (CurtainA > 0.0f && S.FlyBars <= 0.0))
+	{
+		Curtain(0);
+		return LayerId + 2;
+	}
+
 	// ---- The flyover before the battle (Brian's, approved 19 November 2026): the picture in a film's frame, black above
 	// and below, the raid's aim as its title and how to take command; nothing else until the frame has drawn back. ----
 	if (S.FlyBars > 0.0)
@@ -245,6 +260,11 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			// (the art director on build 1750: the line under the title 1.3 times its first size, its capitals some 21
 			// pixels at the Mac's 1786; like every word on this screen it grows with the window)
 			Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y - Band + Band * 0.58, Typed(13.0f, true, 30), Muted, 1);
+		}
+		if (CurtainA > 0.0f)
+		{
+			Curtain(2);
+			return LayerId + 4;
 		}
 		return LayerId + 2;
 	}

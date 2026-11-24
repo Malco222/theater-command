@@ -108,6 +108,14 @@ struct FAirBattleState
 	double GlideLong = 2.5;     // 0.8 when a click or a key cut the shots short
 	double FlyBars = 0.0;
 	double FlyEndRealT = -1.0;  // the scene's real clock when it ended
+	/**
+	 * (1.5.1, the opening held: the Mac's cold Rhineland raids, 24 November) The raid's first frames, while the draw
+	 * thread takes in the scene just made (about a second a frame for two frames, every raid), are drawn behind a black
+	 * frame with the raid's title, the clock held; it lifts once the frames come quick again (AAirBattle::WarmTick).
+	 * Curtain 1 is all black, easing to 0 as the flyover begins.
+	 */
+	bool bWarming = false;
+	double Curtain = 0.0;
 	int FlyPictures = 0;        // (the picture run: the flyover's shots taken, one bit each)
 	FVector GlideEye = FVector::ZeroVector;
 	FRotator GlideFacing = FRotator::ZeroRotator;

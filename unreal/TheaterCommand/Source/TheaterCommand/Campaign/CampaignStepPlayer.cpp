@@ -1046,7 +1046,9 @@ bool FStepPlayer::AirWaiting() const
 	}
 	if (AirWait.EndsWith(TEXT("s")))
 	{
-		return !S->bCard && Clock < FCString::Atof(*AirWait.LeftChop(1)); // (real seconds from this step)
+		// (real seconds from this step; 1.5.1: not ended while the raid's opening is held behind its black frame, so that
+		// a still asked for a second into the flyover is not a black one)
+		return !S->bCard && (S->bWarming || S->Curtain > 0.0 || Clock < FCString::Atof(*AirWait.LeftChop(1)));
 	}
 	return !S->bCard && S->BattleT < FCString::Atod(*AirWait);
 }
