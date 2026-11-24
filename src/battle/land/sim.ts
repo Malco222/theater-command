@@ -3366,16 +3366,24 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * How near an army is to breaking, 0 to 1: its whole worn state weighted by strength against what an army of its
-   * side will stand (LAND.spent), or half its power running, whichever is nearer. One block running counts only its
-   * own share, so it never takes the army with it while the rest is fresh (ruling 226(2)). The army bar shows this.
+   * side will stand (LAND.spent, or its drawn break point under the field spread: spentOf), or half its power running,
+   * whichever is nearer. One block running counts only its own share, so it never takes the army with it while the rest
+   * is fresh (ruling 226(2)). The army bar shows this, the true one (b474's pulled bar reads it too); what the other
+   * side's player is shown under the field spread is shownBar.
    */
   breaking(s: Side): number {
     return this.brink(s).bar;
   }
 
+  /**
+   * What an army of this side will stand worn: its drawn break point under the field spread (reckoning.spread.W, form
+   * s6), else LAND.spent, read as it stands (a harness may set LAND.spent).
+   */
+  spentOf(s: Side): number { return this.ticket.reckoning.spread?.W[s] ?? LAND.spent[s]; }
+
   /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
   private brink(s: Side): { bar: number; worn: number; running: number; holding: boolean } {
-    const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / LAND.spent[s];
+    const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / this.spentOf(s);
     // Worn past what it will stand, it still holds while most of it is fresh or has not been in the fight: the bar waits
     // at the brink (b476(1)). A small army held there gives ground with its worn (giveGround).
     const holding = over >= 1 && this.freshShare(s) > LAND.fought;
@@ -3391,13 +3399,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   breakCause(s: Side): BreakCause {
     const r3 = (x: number): number => Math.round(x * 1000) / 1000;
-    const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
+    const b = this.brink(s), w = b.worn / this.spentOf(s), r = b.running / LAND.breaks;
     const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? 'running' : 'worn';
     const on = mine.filter((u) => u.state !== 'withdrawn'), p0 = on.reduce((a, u) => a + weightOf(u), 0);
     const steady = p0 > 0 ? on.filter((u) => u.state === 'steady').reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
     return {
       side: s, bar: r3(b.bar), by: Math.max(w, r) < 1 ? 'none' : nearer, nearer,
-      worn: r3(b.worn), spent: LAND.spent[s], running: r3(b.running), breaks: LAND.breaks,
+      worn: r3(b.worn), spent: this.spentOf(s), running: r3(b.running), breaks: LAND.breaks,
       fresh: r3(this.freshShare(s)), fought: LAND.fought, small: this.freshHold[s],
       holding: b.holding, held: this.heldFor[s] > 0, heldFor: Math.round(this.heldFor[s] * 10) / 10,
       blocks: mine.length, blocksWorn: mine.filter((u) => u.str < u.str0 * LAND.fresh.str).length, wornAt: LAND.fresh.str,
