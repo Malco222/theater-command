@@ -344,6 +344,15 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Divisions split off a corps, and put back.
 			Add(TEXT("breakuprule"), TEXT("Break up corps"), TEXT("Pick up an army and every division of each corps is a tile on its card. Click the tiles of the divisions you want apart and press SPLIT OFF: they become a corps of their own where the army stands, and stay behind when the army moves. REJOIN puts a part back into the corps it came from. Nothing is lost or gained, and no corps grows bigger than it was. It can be switched in any month."),
 				Now.bBreakUp ? TEXT("ON") : TEXT("OFF"), Now.bBreakUp);
+			// (Release 2, taskforce.ts; Brian 24 November 2026 18:24Z) A fleet with a standing job.
+			Add(TEXT("taskforcerule"), TEXT("Task forces"), TEXT("Send a fleet out on a job (a patrol, a raid, a submarine hunt or a convoy escort) and press MAKE IT A TASK FORCE on its page: that job becomes its standing order. Each month it comes into harbour to refit when worn, and goes back to the job when fit, until you give it another order. It can be switched in any month."),
+				Now.bTaskForce ? TEXT("ON") : TEXT("OFF"), Now.bTaskForce);
+			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
+			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
+			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
+				Now.bRearguard ? TEXT("ON") : TEXT("OFF"), Now.bRearguard);
+			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
+				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -381,6 +390,10 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
+	// (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".)
+	Add(TEXT("sail"), TEXT("Ships sail on the map"), TEXT("A fleet sent to another sea, into harbour or out of it sails there by water, round the land, its bows the way it goes, in two or three seconds. Off, it is simply found where it now is. Fleets only reported, not seen, are never shown sailing."), bShipsSail ? TEXT("ON") : TEXT("OFF"), bShipsSail);
+	// (Release 2: fading wakes; Brian 24 November 2026 18:24Z)
+	Add(TEXT("wakes"), TEXT("Fading wakes"), TEXT("An enemy fleet you see move leaves a faint trail of foam on the sea, the way it went: brightest where it is now, fading back to where it came from, fainter again the month after, then gone. Your own fleets and your allies' leave none, nor does a fleet only reported."), bWakes ? TEXT("ON") : TEXT("OFF"), bWakes);
 	// (Release 2, D1: ruling 241) The month at sea: the month's war at sea staged as it opens. The viewer's own, kept in
 	// its own file by the session (Saved/Campaign/subscene.json), not with these options nor in the save. A run that
 	// has it "off" reads as NEVER here.
@@ -469,6 +482,22 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	{
 		bMoments = !bMoments;
 	}
+	else if (Id == TEXT("sail")) // (release 2: ships that sail)
+	{
+		bShipsSail = !bShipsSail;
+		if (Map.IsValid())
+		{
+			Map->SetShipsSail(bShipsSail);
+		}
+	}
+	else if (Id == TEXT("wakes")) // (release 2: fading wakes)
+	{
+		bWakes = !bWakes;
+		if (Map.IsValid())
+		{
+			Map->SetWakes(bWakes);
+		}
+	}
 	else if (Id == TEXT("askend"))
 	{
 		bAskAtMonthsEnd = !bAskAtMonthsEnd;
@@ -545,14 +574,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -645,8 +674,8 @@ void ACampaignPlayerController::SaveOptions() const
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
-	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"takeMe\":%s,\"cornerPings\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bTakeMeThere), Word(bCornerPings)), *OptionsFile());
+	// (Release 2, the enemy's month near you) "Enemy moves near you", kept with the rest; (release 2) "Ships sail on the map" and "Fading wakes" too.
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"enemyMoves\":%s,\"alliesNear\":%s,\"takeMe\":%s,\"cornerPings\":%s,\"sail\":%s,\"wakes\":%s}\n"), Word(bMonthReportOpens), Word(bEnemyMoves), Word(bAlliesNear), Word(bTakeMeThere), Word(bCornerPings), Word(bShipsSail), Word(bWakes)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -695,6 +724,13 @@ void ACampaignPlayerController::LoadOptions()
 	bAlliesNear = Yes(TEXT("alliesNear"), true); // (Release 2, the enemy's month near you, round 2)
 	bTakeMeThere = Yes(TEXT("takeMe"), true);
 	bCornerPings = Yes(TEXT("cornerPings"), true);
+	bShipsSail = Yes(TEXT("sail"), false); // (release 2: ships that sail)
+	bWakes = Yes(TEXT("wakes"), false); // (release 2: fading wakes)
+	if (Map.IsValid())
+	{
+		Map->SetShipsSail(bShipsSail);
+		Map->SetWakes(bWakes);
+	}
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -926,6 +962,10 @@ void ACampaignPlayerController::BeginWar(TFunction<bool(ACampaignGameMode&)>&& S
 		return; // (a war is already being begun)
 	}
 	bNationsAsked = false; // (tc.Speed.NationsAside: a war begun or read in drops a list still being worked out; the screen asks again when it next opens)
+	if (Map.IsValid())
+	{
+		Map->ForgetFleetPlaces(); // (release 2: the fleets of the war begun are laid out where they are, not sailed from the last war's places)
+	}
 	if (!TheaterSpeed::WarSpread() || bScripted || TheaterSpeed::PictureRun())
 	{
 		// At once, as before (and always in a run that only takes pictures, which looks at the war the moment it is begun).
@@ -8702,6 +8742,26 @@ void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
 	RefreshOrders();
 }
 
+void ACampaignPlayerController::HoldAsRearguard(int32 CorpsId, bool bHold)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || CorpsId == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	if (Session->Act(FString::Printf(TEXT("rearguard:%d:%s"), CorpsId, bHold ? TEXT("on") : TEXT("off")), INDEX_NONE, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 6.0);
+	}
+	RefreshOrders();
+}
+
 void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
 {
 	FCampaignSession* Session = GetSession();
@@ -9008,6 +9068,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.BreakWhy = Unit.BreakWhy;
 		Card.RejoinId = Unit.RejoinId;
 		Card.RejoinName = Unit.RejoinName;
+		// (Release 2, rearguard.ts) HOLD AS REARGUARD where it can be ordered now, STAND DOWN where it holds.
+		Card.bCanRear = Unit.bRearKnown && Unit.RearWhy.IsEmpty() && !Unit.bRear;
+		Card.bRear = Unit.bRearKnown && Unit.bRear;
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;

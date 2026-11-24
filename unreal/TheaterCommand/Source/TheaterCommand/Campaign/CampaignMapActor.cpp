@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMapActor.h"
+#include "Algo/Reverse.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "ImageUtils.h"
@@ -8749,6 +8750,12 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			SeaFillInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaFillNight.R, SeaFillNight.G, SeaFillNight.B), Moon));
 			SeaFillInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaFillNight.A, Moon));
 		}
+		if (WakeInk)
+		{
+			// (release 2: the foam of enemy wakes, kept faint by night with the sea's own lines)
+			WakeInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaLineNight.R, SeaLineNight.G, SeaLineNight.B), Moon));
+			WakeInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaLineNight.A, Moon));
+		}
 		if (SightingInk)
 		{
 			// (a place where the enemy was last seen: red crayon, kept findable by night at about 0.35)
@@ -10889,18 +10896,68 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		}
 		++Others;
 		TObjectPtr<AArmyPiece>& Piece = FleetPieces.FindOrAdd(Fleet.Id);
+		const bool bWasLaid = Piece != nullptr;
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
 		}
+		// (Release 2: ships that sail.) A fleet seen where it was and where it is now, that has changed its sea or
+		// come in or gone out of harbour, sails there by water. A fleet only reported (a sighting, not a fleet seen)
+		// does not sail: it is simply found where it is now.
+		const FIntPoint Place(Fleet.Zone, bInHarbour ? Fleet.Base : INDEX_NONE);
+		const FIntPoint* WasPlace = FleetPlaces.Find(Fleet.Id);
+		const FVector2D* WasSpot = FleetSpots.Find(Fleet.Id);
+		const bool bSail = bShipsSail && bWasLaid && WasPlace && WasSpot && *WasPlace != Place && !Fleet.bReport
+			&& FVector2D::DistSquared(*WasSpot, At) > 4.0;
+		// (Release 2: fading wakes.) An enemy fleet seen to change its sea or harbour leaves its wake behind it, the
+		// way it went by water, whether or not ships sail on the map. Not the player's own fleets, nor his allies'.
+		const bool bFriend = Fleet.Nation == View.Human || (View.RegionStanding.IsValidIndex(Fleet.Base)
+			&& (View.RegionStanding[Fleet.Base] == TEXT("own") || View.RegionStanding[Fleet.Base] == TEXT("ally")));
+		if (bWakes && bWasLaid && WasPlace && WasSpot && *WasPlace != Place && !Fleet.bReport && !bFriend
+			&& FVector2D::DistSquared(*WasSpot, At) > 4.0)
+		{
+			TArray<FVector2D> Wake = WaterWay(*WasSpot, At);
+			if (Wake.Num() >= 2)
+			{
+				Wakes.RemoveAll([&Fleet, &View](const FWakeTrail& Old) { return Old.Fleet == Fleet.Id && Old.Turn == View.Turn; });
+				FWakeTrail& Trail = Wakes.AddDefaulted_GetRef();
+				Trail.Fleet = Fleet.Id;
+				Trail.Turn = View.Turn;
+				Trail.Points = MoveTemp(Wake);
+				bWakesDirty = true;
+			}
+		}
+		// (A fleet just let go after being carried by hand is gliding back to where it lay: it sails on from where it is.)
+		const bool bCarried = bWasLaid && Piece && Piece->IsMarching() && !Piece->IsSailing();
+		const FVector2D From = bCarried ? WorldToMap(Piece->GetActorLocation()) : WasSpot ? *WasSpot : At;
 		if (Piece)
 		{
 			Piece->SetFleet(this, *Nation, Fleet);
 			Piece->SetAtAnchor(bInHarbour && !Fleet.bReport);
 			Piece->SetStandard(StandardGrowth, StandardLean);
 			Piece->SetRestLocation(MapToWorld(At.X, At.Y, 0.02));
+			if (bSail)
+			{
+				const FVector Now = Piece->GetActorLocation();
+				TArray<FVector> Way;
+				for (const FVector2D& Point : WaterWay(From, At))
+				{
+					Way.Add(MapToWorld(Point.X, Point.Y, 0.02));
+				}
+				// (No way by water found: it is found at its new place, as before ships sailed, and never crosses land.)
+				if (Way.Num() >= 2)
+				{
+					if (bCarried)
+					{
+						Way[0] = Now; // (down from the hand onto the water as it goes)
+					}
+					Piece->SailAlong(Way, LastPieceYaw);
+				}
+			}
 			Afloat.Add(Fleet.Id);
 		}
+		FleetPlaces.Add(Fleet.Id, Place);
+		FleetSpots.Add(Fleet.Id, At);
 	}
 	for (auto It = FleetPieces.CreateIterator(); It; ++It)
 	{
@@ -10910,8 +10967,15 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			{
 				It.Value()->Destroy();
 			}
+			FleetPlaces.Remove(It.Key());
+			FleetSpots.Remove(It.Key());
 			It.RemoveCurrent();
 		}
+	}
+	// (Release 2: fading wakes) laid again only when one is added or a month has passed.
+	if (bWakesDirty || WakesLaidFor != View.Turn)
+	{
+		LayWakes(View.Turn);
 	}
 
 	// ---- Air fleets, each over its airfields: to the south-west of the town, where the army does not stand.
@@ -10962,6 +11026,240 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+void ACampaignMapActor::SetWakes(bool bOn)
+{
+	bWakes = bOn;
+	if (!bOn)
+	{
+		ForgetWakes();
+	}
+}
+
+void ACampaignMapActor::ForgetWakes()
+{
+	Wakes.Reset();
+	bWakesDirty = false;
+	WakesLaidFor = INDEX_NONE;
+	if (WakeMesh)
+	{
+		WakeMesh->ClearAllMeshSections();
+	}
+}
+
+void ACampaignMapActor::LayWakes(int32 Turn)
+{
+	// (Release 2: fading wakes.) A wake seen this month, and last month's fainter; older ones are gone.
+	Wakes.RemoveAll([Turn](const FWakeTrail& Old) { return Turn - Old.Turn > 1 || Old.Turn > Turn; });
+	WakesLaidFor = Turn;
+	bWakesDirty = false;
+	if (!WakeMesh)
+	{
+		if (!bWakes || Wakes.Num() == 0)
+		{
+			return;
+		}
+		WakeMesh = NewObject<UProceduralMeshComponent>(this);
+		WakeMesh->SetupAttachment(Root);
+		WakeMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WakeMesh->RegisterComponent();
+		WakeMesh->SetCastShadow(false);
+	}
+	WakeMesh->ClearAllMeshSections();
+	if (!bWakes || Wakes.Num() == 0 || !HighlightMaterial)
+	{
+		return;
+	}
+	if (!WakeInk)
+	{
+		WakeInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f; // (laid by night as the other inks of the sea are)
+		SetNight(NightNow, bLamplightNow);
+	}
+	// Foam in short dashes along the way, as a wake breaks up behind a ship: widest and brightest at the head, where
+	// the fleet now lies, thinning back to where it came from. Last month's at half the strength.
+	const double Dash = 2.6, Gap = 1.9;
+	FCampaignMeshBuffers Foam;
+	for (const FWakeTrail& Trail : Wakes)
+	{
+		const float Strength = Turn == Trail.Turn ? 0.42f : 0.2f;
+		TArray<double> Marks = { 0.0 };
+		for (int32 K = 1; K < Trail.Points.Num(); ++K)
+		{
+			Marks.Add(Marks.Last() + FVector2D::Distance(Trail.Points[K - 1], Trail.Points[K]));
+		}
+		const double Length = Marks.Last();
+		if (Length < 1.0)
+		{
+			continue;
+		}
+		auto PointAt = [&](double D) -> FVector2D
+		{
+			int32 K = 1;
+			while (K < Marks.Num() - 1 && Marks[K] < D)
+			{
+				++K;
+			}
+			const double Span = FMath::Max(Marks[K] - Marks[K - 1], 1.0e-6);
+			return FMath::Lerp(Trail.Points[K - 1], Trail.Points[K], FMath::Clamp((D - Marks[K - 1]) / Span, 0.0, 1.0));
+		};
+		// (stopping short of the head, so that the foam does not run under the fleet's own piece)
+		const double End = FMath::Max(0.0, Length - 4.0);
+		for (double D = 0.0; D < End; D += Dash + Gap)
+		{
+			const double To = FMath::Min(D + Dash, End);
+			const double Head = (D + To) * 0.5 / Length; // 0 at the old end, 1 at the fleet
+			const FColor Ink = FLinearColor(0.86f, 0.92f, 0.96f, Strength * static_cast<float>(0.2 + 0.8 * Head)).ToFColor(false);
+			AppendRibbon(Foam, { PointAt(D), PointAt(D + (To - D) * 0.5), PointAt(To) }, 0.18 + 0.22 * Head, 0.16, Ink, false);
+		}
+	}
+	Foam.Commit(WakeMesh, 0, WakeInk ? static_cast<UMaterialInterface*>(WakeInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+}
+
+TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVector2D& To) const
+{
+	// (Release 2: ships that sail.) A search over squares of the chart, in a box round the two points: water is
+	// what the harbour's own way out counts as water (land cover no more than 0.35); a square beside land costs a
+	// little more, which keeps a fleet off the coasts; then the corners are cut where open water lets them be.
+	const double Apart = FVector2D::Distance(From, To);
+	TArray<FVector2D> Way = { From, To };
+	if (Apart < 1.0)
+	{
+		return Way;
+	}
+	auto Wet = [this](double X, double Y) { return CoverAt(X, Y) <= 0.35f; };
+	auto Clear = [&](const FVector2D& A, const FVector2D& B, double Step) -> bool
+	{
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt32(FVector2D::Distance(A, B) / Step));
+		for (int32 K = 1; K < Steps; ++K)
+		{
+			const FVector2D P = FMath::Lerp(A, B, double(K) / Steps);
+			if (!Wet(P.X, P.Y))
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+	const double Margin = FMath::Max(30.0, 0.6 * Apart);
+	const FVector2D Low(FMath::Min(From.X, To.X) - Margin, FMath::Min(From.Y, To.Y) - Margin);
+	const FVector2D High(FMath::Max(From.X, To.X) + Margin, FMath::Max(From.Y, To.Y) + Margin);
+	const double Cell = FMath::Max(1.5, FMath::Max(High.X - Low.X, High.Y - Low.Y) / 120.0); // (speed: at most about 120 squares a side, for a month's end that moves many fleets at once)
+	if (Clear(From, To, Cell * 0.5))
+	{
+		return Way; // (open water all the way)
+	}
+	const int32 NX = FMath::Min(140, FMath::CeilToInt32((High.X - Low.X) / Cell) + 1);
+	const int32 NY = FMath::Min(140, FMath::CeilToInt32((High.Y - Low.Y) / Cell) + 1);
+	auto CellOf = [&](const FVector2D& P) { return FIntPoint(FMath::Clamp(FMath::RoundToInt32((P.X - Low.X) / Cell), 0, NX - 1), FMath::Clamp(FMath::RoundToInt32((P.Y - Low.Y) / Cell), 0, NY - 1)); };
+	auto PointOf = [&](int32 I, int32 J) { return FVector2D(Low.X + I * Cell, Low.Y + J * Cell); };
+	TArray<uint8> Water;
+	Water.SetNumZeroed(NX * NY);
+	for (int32 J = 0; J < NY; ++J)
+	{
+		for (int32 I = 0; I < NX; ++I)
+		{
+			const FVector2D P = PointOf(I, J);
+			Water[J * NX + I] = Wet(P.X, P.Y) ? 1 : 0;
+		}
+	}
+	const FIntPoint Start = CellOf(From), Goal = CellOf(To);
+	Water[Start.Y * NX + Start.X] = 1; // (a fleet lying close in under the coast starts and ends on water)
+	Water[Goal.Y * NX + Goal.X] = 1;
+	auto Coast = [&](int32 I, int32 J) -> bool
+	{
+		for (const FIntPoint& D : { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) })
+		{
+			const int32 X = I + D.X, Y = J + D.Y;
+			if (X >= 0 && Y >= 0 && X < NX && Y < NY && !Water[Y * NX + X])
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	TArray<float> Cost;
+	Cost.Init(TNumericLimits<float>::Max(), NX * NY);
+	TArray<int32> Came;
+	Came.Init(INDEX_NONE, NX * NY);
+	struct FOpen { float Guess; int32 At; };
+	TArray<FOpen> Open;
+	auto Sooner = [](const FOpen& A, const FOpen& B) { return A.Guess < B.Guess; };
+	const int32 StartAt = Start.Y * NX + Start.X, GoalAt = Goal.Y * NX + Goal.X;
+	Cost[StartAt] = 0.0f;
+	Open.HeapPush(FOpen{ 0.0f, StartAt }, Sooner);
+	bool bFound = false;
+	while (Open.Num() > 0)
+	{
+		FOpen Next;
+		Open.HeapPop(Next, Sooner);
+		if (Next.At == GoalAt)
+		{
+			bFound = true;
+			break;
+		}
+		const int32 I = Next.At % NX, J = Next.At / NX;
+		const float Here = Cost[Next.At];
+		if (Next.Guess - FMath::Sqrt(float(FMath::Square(Goal.X - I) + FMath::Square(Goal.Y - J))) > Here + 1.0e-3f)
+		{
+			continue; // (a stale entry: this square was reached more cheaply since)
+		}
+		for (int32 DY = -1; DY <= 1; ++DY)
+		{
+			for (int32 DX = -1; DX <= 1; ++DX)
+			{
+				const int32 X = I + DX, Y = J + DY;
+				if ((DX == 0 && DY == 0) || X < 0 || Y < 0 || X >= NX || Y >= NY || !Water[Y * NX + X])
+				{
+					continue;
+				}
+				if (DX != 0 && DY != 0 && (!Water[J * NX + X] || !Water[Y * NX + I]))
+				{
+					continue; // (no slipping between two corners of land)
+				}
+				const int32 There = Y * NX + X;
+				const float Step = (DX != 0 && DY != 0 ? 1.4142f : 1.0f) * (Coast(X, Y) ? 1.6f : 1.0f);
+				if (Here + Step < Cost[There])
+				{
+					Cost[There] = Here + Step;
+					Came[There] = Next.At;
+					Open.HeapPush(FOpen{ Cost[There] + FMath::Sqrt(float(FMath::Square(Goal.X - X) + FMath::Square(Goal.Y - Y))), There }, Sooner);
+				}
+			}
+		}
+	}
+	if (!bFound)
+	{
+		return TArray<FVector2D>(); // (no way by water in the box: no sailing, rather than a line over the land)
+	}
+	TArray<FVector2D> Squares;
+	for (int32 At = GoalAt; At != INDEX_NONE; At = Came[At])
+	{
+		Squares.Add(PointOf(At % NX, At / NX));
+	}
+	if (Squares.Num() < 2)
+	{
+		return TArray<FVector2D>(); // (the two ends in one square with land between: no sailing either)
+	}
+	Algo::Reverse(Squares);
+	Squares[0] = From;
+	Squares.Last() = To;
+	// Corners cut: from each point kept, on along the squares while open water still lies straight between.
+	Way.Reset();
+	Way.Add(From);
+	int32 Kept = 0;
+	while (Kept < Squares.Num() - 1)
+	{
+		int32 Far = Kept + 1;
+		while (Far + 1 < Squares.Num() && Clear(Squares[Kept], Squares[Far + 1], Cell * 0.5))
+		{
+			++Far;
+		}
+		Way.Add(Squares[Far]);
+		Kept = Far;
+	}
+	return Way;
 }
 
 void ACampaignMapActor::LaySieges()
@@ -16584,7 +16882,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			if (Pair.Value)
 			{
-				Pair.Value->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
+				Pair.Value->FaceTable(CameraYaw); // (a fleet under sail keeps its heading, and turns to this as it comes in)
 			}
 		}
 		for (const auto& Pair : AirPieces)

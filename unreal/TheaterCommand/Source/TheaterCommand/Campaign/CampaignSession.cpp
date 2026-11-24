@@ -1256,6 +1256,9 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
+	Object->TryGetBoolField(TEXT("taskForce"), Out.bTaskForce); // (release 2, taskforce.ts)
+	Object->TryGetBoolField(TEXT("fleetWhy"), Out.bFleetWhy); // (release 2, fleetwhy.ts)
+	Object->TryGetBoolField(TEXT("rearguard"), Out.bRearguard); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -1835,6 +1838,9 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				C.RejoinId = Rejoin >= 0.0 ? static_cast<int32>(Rejoin) : INDEX_NONE;
 				Unit->TryGetStringField(TEXT("rejoinName"), C.RejoinName);
 			}
+			// (Release 2, rearguard.ts) Sent only for his own corps, and only where rearguards are on.
+			C.bRearKnown = Unit->TryGetStringField(TEXT("rearWhy"), C.RearWhy);
+			Unit->TryGetBoolField(TEXT("rear"), C.bRear);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetStringField(TEXT("vol"), C.Vol); // R2 bargains hook: a volunteer legion's home (sent only when set)
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);

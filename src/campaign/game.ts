@@ -65,6 +65,7 @@ import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } fr
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
+import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, screened } from './rearguard';
 import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -2253,6 +2254,8 @@ function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<n
 /** The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share. */
 function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
   if (!unitsDecide(g) || !afoot(c)) return 0;
+  // (Release 2, rearguard.ts) A rearguard of its own side holding the province it falls back into screens it.
+  if (screened(g, c, to, (nat) => nat === c.nat || allied(g, nat, c.nat))) return 0;
   const mine = pace(g, c, to);
   if (!chasers.some((u) => chaser(u) && chasePace(g, u, c, to) < mine)) return 0;
   return PURSUIT.share * (1 - lifted(c));
@@ -2355,7 +2358,8 @@ function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): Re
   if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
   const banned = new Set(attackers.map((c) => c.reg));
   for (const c of [...a.defenders]) {
-    if (!c.yields || c.gaveWay) continue;
+    // (A rearguard holds where it was ordered to: release 2, rearguard.ts.)
+    if (!c.yields || c.gaveWay || isRearguard(g, c)) continue;
     const to = retreatTarget(g, c, target, banned);
     if (!to) continue;
     const unit = reportUnit(c);
@@ -2467,6 +2471,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
+  // (Release 2, rearguard.ts) The rearguards holding the field against this attack: they cost the attackers time.
+  const rears = town || opts.breakout ? [] : rearguardsAt(g, target, (nat) => atWar(g, nat, armyOf(attackers[0])));
   const gone = town ? [] : giveWay(g, a, attackers, target);
   if (gone.length) {
     if (!hostileUnits(g, target, armyOf(attackers[0])).length) return walkIn(g, attackers, target, opts, a, gone);
@@ -2773,6 +2779,17 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';
   const hurt = battleHit(g, target, fight, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === 'art' ? u.divs : 0), 0));
   if (hurt) rep.city = { region: hurt.region, added: hurt.added, now: hurt.now };
+  // (Release 2, rearguard.ts) Held up by a rearguard, win or lose: every attacking corps loses weeks of its month,
+  // and cannot press on as far behind the army that pulled back.
+  if (rears.length) {
+    const weeks = chargeDelay(attackers, rearguardWeeks(rears));
+    if (weeks > 0) {
+      const who = rears.map((c) => c.name).join(' and ');
+      rep.lines.push({ label: 'Rearguard', value: `${who} held the attack up`, effect: `Every attacking corps lost ${weeks} week${weeks === 1 ? '' : 's'} of its month` });
+      rep.rearguard = weeks;
+      headline(g, 'info', `The rearguard at ${target.name} held the enemy up: every corps of his that attacked there lost ${weeks} week${weeks === 1 ? '' : 's'} of its month.`, rears[0].nat, target.id);
+    }
+  }
   g.reports.push(rep);
   // (scarred ground: one more battle fought over this region, this month; a walk-in where the defenders gave ground
   // fought none, so it leaves none)

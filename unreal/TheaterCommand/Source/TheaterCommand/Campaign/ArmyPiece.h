@@ -77,6 +77,16 @@ public:
 	 */
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
+	/**
+	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) A
+	 * fleet sails along the points given, on the water: not lifted, its bows turned the way it goes and its passage wake
+	 * thrown, and turned back to face the table (TableYaw) as it comes to rest. Longer ways take longer, from about a
+	 * second and a half to three and a half.
+	 */
+	void SailAlong(const TArray<FVector>& Waypoints, float TableYaw);
+	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
+	void FaceTable(float Yaw);
+	bool IsSailing() const { return bMarching && bSailing; }
 	bool IsInCamp() const { return What == 0 && bCamp; }
 	int32 GetWorksState() const { return What == 0 ? WorksState : 0; }
 	int32 GetSupplyState() const { return What == 0 ? SupplyState : 0; }
@@ -244,6 +254,8 @@ private:
 	FString MarkedTown; // empty for none
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
+	bool bSailing = false; // (release 2) a fleet under sail: see SailAlong
+	float SailEndYaw = 0.0f; // the table's yaw it turns back to on arrival
 	bool bSelected = false;
 	bool bHovered = false;
 

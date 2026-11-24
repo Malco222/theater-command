@@ -18366,6 +18366,31 @@ namespace
 					];
 				}
 			}
+			else if (!Card.bLook && !Card.bUnknown && !Card.BreakWhy.IsEmpty() && Card.Divisions >= 2)
+			{
+				// (the pre-check's read, 24 November: where breaking up is on and this corps cannot be, the card says why,
+				// faint, in place of the hint: a garrison, a corps at home or marching with an ally, another's month)
+				bBreakRow = true;
+				BreakRow->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Card.BreakWhy)).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Faint).AutoWrapText(true)
+				];
+			}
+			// (Release 2, rearguard.ts) HOLD AS REARGUARD on a small corps of his, or STAND DOWN on one that holds: a row of
+			// its own under SPLIT OFF and REJOIN, so that the three never crowd one line.
+			TSharedRef<SHorizontalBox> RearRow = SNew(SHorizontalBox);
+			const bool bRearRow = !Card.bLook && (Card.bCanRear || Card.bRear) && Controller.IsValid();
+			if (bRearRow)
+			{
+				RearRow->AddSlot().AutoWidth().VAlign(VAlign_Center)
+				[
+					Card.bRear
+						? BreakButton(TEXT("STAND DOWN"), TEXT("It holds as a rearguard until your next month. Stood down in the month it was ordered, it has its marching back."), true,
+							[this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->HoldAsRearguard(Id, false); } })
+						: BreakButton(TEXT("HOLD AS REARGUARD"), TEXT("It holds where it stands until your next month and marches no further. An enemy army that attacks it here loses time, and cannot follow the rest of your army as far."), true,
+							[this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->HoldAsRearguard(Id, true); } })
+				];
+			}
 			if (!Card.bLook && Card.RejoinId != INDEX_NONE && Controller.IsValid())
 			{
 				bBreakRow = true;
@@ -18514,6 +18539,11 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, bBreakRow ? 6.0f : 0.0f, 4.0f, 0.0f)
 					[
 						bBreakRow ? StaticCastSharedRef<SWidget>(BreakRow) : SNullWidget::NullWidget
+					]
+					// (release 2, rearguard.ts) HOLD AS REARGUARD or STAND DOWN
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, bRearRow ? 6.0f : 0.0f, 4.0f, 0.0f)
+					[
+						bRearRow ? StaticCastSharedRef<SWidget>(RearRow) : SNullWidget::NullWidget
 					]
 				];
 			if (!Card.bUnknown)
