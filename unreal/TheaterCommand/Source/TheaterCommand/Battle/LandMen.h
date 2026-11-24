@@ -366,7 +366,7 @@ namespace LandMen
 		float Jitter = 1.f;             // his own play rate on still loops and turns of pose
 		std::string FallClip;           // the fall he took ("settle": a prone man going limp)
 		std::string FallStance, FallKind, FallFrom; // stand|run|kneel|prone|cover; the kind; front|back|side
-		std::string GoreFrom;           // a gored man's burst against him: front|behind|left|right|under (empty: not gored)
+		std::string GoreFrom;           // a gored man's burst (or its gun) against him: front|behind|left|right|under (empty: not gored)
 		double FallStarted = -1.0;      // when his fall began, as played
 		double Rested = -1.0;           // when he came to rest and froze
 	};
@@ -413,13 +413,15 @@ namespace LandMen
 		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
 		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (within 2 m a field
 		 * gun's 0.55, a tank's or a mortar's 0.35, a grenade's 0.25) and fall away to none at its reach (8, 6, 6 and 2 m);
-		 * a man lying or in cover half that. His fall is one whose gore_from is where the burst was against him (front,
-		 * behind, left, right; under within 1 m), of those the ones whose limbs land farthest from it (half a metre or
-		 * more farther than they stood), so he and his limb are thrown away from it; the big throw (die_blast_*) only from
-		 * a field gun's or a howitzer's shell (the round's w "gun"); where his stance's gore falls hold none from that
-		 * side, the kinds weighed as for any man, without the big throw but from a gun or where nothing else is. The same
-		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
-		 * changes. Off unless set: every man falls as before.
+		 * a man lying or in cover half that; none whose stance's gore falls hold none he may take (a man lying: only a
+		 * gun's shell bursting on him). His fall is one whose gore_from is where the burst was against him (front or
+		 * behind within 45 degrees of his nose or his back, left or right between; one within 1 m by the gun's side as
+		 * it fired, or under for a man lying or where the gun is not known), of those the ones whose limbs move half a
+		 * metre or more away from it (or the gun) along the line from it, so he and his limb are thrown away from it;
+		 * the big throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun",
+		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side,
+		 * those he may take, the limbs away again. The same battle gores the same men every time (his own dice). Who dies
+		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */
