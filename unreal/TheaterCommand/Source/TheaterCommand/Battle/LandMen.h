@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -390,6 +391,31 @@ namespace LandMen
 		float Lie = 0.f;
 	};
 
+	/**
+	 * Effects (R2): how the round that killed a gored man struck him, for his gore fall (Crowd::SetGore). Stance: his
+	 * fall's (stand, run, kneel, cover, prone). Side: where its burst was against his facing, in the gore falls' own
+	 * words (front, behind, left, right, under; a burst within 1 m of a man not lying, his gun's side). bAway: he is
+	 * thrown away from a point, the burst or (where it burst on him) the gun, at X, Y in his own axes as struck (x
+	 * forward, y right, metres). bBig: a field gun's, a howitzer's or a heavy gun's shell, which may throw him.
+	 */
+	struct GoreStrike
+	{
+		std::string Stance, Side;
+		bool bAway = false;
+		double X = 0.0, Y = 0.0;
+		bool bBig = false;
+	};
+	/**
+	 * Effects (R2): the gore falls a man of that twin so struck may be given (the crowd weighs these by kind and the
+	 * Fates rule, and no other), each as kind and clip, in his stance's gore falls' order. Those he may take: any that
+	 * is not a throw (kind thrown, or any die_blast_*), a throw only where bBig and (bAway) from his side. Of them the
+	 * ones from his side (gore_from), where any; where he is thrown away from a point, of those the falls whose every
+	 * limb moves half a metre or more away from it (along the line from it to the limb's joint as he was struck, read
+	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take (the art
+	 * director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move farthest so.
+	 */
+	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
+
 	class Crowd
 	{
 	public:
@@ -419,8 +445,9 @@ namespace LandMen
 		 * it fired, or under for a man lying or where the gun is not known), of those the ones whose limbs move half a
 		 * metre or more away from it (or the gun) along the line from it, so he and his limb are thrown away from it;
 		 * the big throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun",
-		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side,
-		 * those he may take, the limbs away again. The same battle gores the same men every time (his own dice). Who dies
+		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side
+		 * he may take, or none of those moves its limbs half a metre away, all he may take, the limbs away again
+		 * (GoreFalls). The same battle gores the same men every time (his own dice). Who dies
 		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);

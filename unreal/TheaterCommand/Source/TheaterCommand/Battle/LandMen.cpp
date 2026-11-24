@@ -1610,6 +1610,135 @@ namespace LandMen
 			Row.bMate = Rd["m"].Num0() != 0.0;
 			return Row;
 		}
+
+		/** A gore fall that is the big throw: of kind thrown, or any die_blast_* (some listed under another kind too). */
+		bool IsThrow(const std::string& Kind, const std::string& Name) { return Kind == "thrown" || Name.rfind("die_blast_", 0) == 0; }
+
+		/** Effects (R2): whether a gored man may take a gore fall of his twin's: any not a throw; a throw only where his
+		 * round may throw him (bBig, Crowd's BigThrow), and where he is thrown away from a point (bAway) only one from
+		 * its side (gore_from is Side). */
+		bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, bool bAway, const std::string& Side)
+		{
+			if (!IsThrow(Kind, Name)) return true;
+			if (!bBig) return false;
+			if (!bAway) return true;
+			const auto From = Tw.GoreFrom.find(Name);
+			return From != Tw.GoreFrom.end() && From->second == Side;
+		}
+
+		/** The kinds of falls a man of stance St takes from a deaths table (ChooseFall's): his stance's, else the
+		 * nearest (cover: kneel; run: stand; prone: kneel), then stand, kneel, the table's first. None from an empty
+		 * table, or for a man lying where it has no prone falls (he goes limp). */
+		const std::map<std::string, std::vector<std::string>>* KindsOf(const std::map<std::string, std::map<std::string, std::vector<std::string>>>& Table,
+			const std::string& St)
+		{
+			if (Table.empty() || (St == "prone" && Table.find("prone") == Table.end())) return nullptr;
+			const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
+			for (const char* Name : Order)
+			{
+				auto Found = Table.find(Name);
+				if (Found != Table.end() && !Found->second.empty()) return &Found->second;
+			}
+			return &Table.begin()->second;
+		}
+	}
+
+	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Tw, const GoreStrike& Strike)
+	{
+		std::vector<std::pair<std::string, std::string>> Out;
+		const std::map<std::string, std::vector<std::string>>* Kinds = KindsOf(Tw.DeathsGore, Strike.Stance);
+		if (!Kinds) return Out;
+		// (the art director, 23 Nov 17:52Z: the limb flies away from the blast; the deaths thread, 20:1xZ: weigh only the
+		// kind matching the burst, the big throw only for guns and howitzers) Those he may take (MayTake: no throw but
+		// a field gun's or a howitzer's, and none from another side of him); of them those whose gore_from is where the
+		// burst was against him (in front, the falls from the front, of kind back; behind, forward; at his left or his
+		// right, the side falls from that side; under him lying, the prone throw), where his stance's gore falls hold any.
+		auto May = [&](const std::string& Kind, const std::string& Name) { return MayTake(Tw, Kind, Name, Strike.bBig, Strike.bAway, Strike.Side); };
+		auto FromBurst = [&](const std::string& Kind, const std::string& Name) {
+			const auto Side = Tw.GoreFrom.find(Name);
+			return Side != Tw.GoreFrom.end() && Side->second == Strike.Side && May(Kind, Name);
+		};
+		bool bMatched = false, bAny = false;
+		for (const auto& KV : *Kinds)
+		{
+			for (const std::string& Name : KV.second)
+			{
+				bMatched = bMatched || FromBurst(KV.first, Name);
+				bAny = bAny || May(KV.first, Name);
+			}
+		}
+		bool bWide = false;
+		auto Base = [&](const std::string& Kind, const std::string& Name) {
+			return !bAny || (bMatched && !bWide ? FromBurst(Kind, Name) : May(Kind, Name));
+		};
+		// (and of those, where he is thrown away from a point (the burst, or the gun), the falls whose every limb moves at
+		// least half a metre away from it, along the line from it to the limb's joint as he was struck, or failing any
+		// the one whose limbs move farthest so: a limb flying across the burst, or through it to land beyond, is not
+		// thrown away from it. A side is a quarter round, and the twins' falls fling a limb off their side's middle (their
+		// standing and running falls from the front a left arm or leg back and to his left, toward a burst 38 degrees or
+		// more round on his left): where none from his side moves its limbs half a metre away, all he may take are
+		// weighed so (the verifier of 35ffc951: never a limb toward the burst for a fall from his side when another he
+		// may take throws it away). Read from the fall's first frame and its last, in his own axes: the same whatever
+		// frame his fall is first played on and however lately he was posed, his own pose as struck within 0.35 m of the
+		// fall's first at a cut, a running man's calf the most)
+		std::map<std::string, double> Gain;
+		double Floor = -1e9;
+		if (Strike.bAway)
+		{
+			const double PX = Strike.X, PY = Strike.Y;
+			Xform AtFirst[MaxBones], AtLast[MaxBones];
+			auto Measure = [&]() {
+				for (const auto& KV : *Kinds)
+				{
+					for (const std::string& Name : KV.second)
+					{
+						const int Ix = Tw.ClipIndex(Name);
+						if (Ix < 0 || !Base(KV.first, Name) || Gain.count(Name)) continue;
+						const Clip& Cl = Tw.Clips[static_cast<size_t>(Ix)];
+						Pose First, End;
+						Sample(Cl, 0.f, First);
+						Sample(Cl, Cl.Long, End);
+						BoneFrames(Tw, First, AtFirst);
+						BoneFrames(Tw, End, AtLast);
+						double Least = 1e9;
+						for (const ClipEvent& E : Cl.Events)
+						{
+							if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
+							const Vec3 Head = Tw.Bones[static_cast<size_t>(E.Bone)].Head;
+							const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
+							const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
+							const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
+								/ std::max(1e-6, std::hypot(OX, OY));
+							Least = std::min(Least, Along);
+						}
+						Gain[Name] = Least;
+					}
+				}
+				Floor = -1e9;
+				for (const auto& G : Gain) Floor = std::max(Floor, std::min(0.5, G.second));
+			};
+			Measure();
+			if (bMatched && Floor < 0.5)
+			{
+				bWide = true;
+				Measure();
+			}
+		}
+		for (const auto& KV : *Kinds)
+		{
+			for (const std::string& Name : KV.second)
+			{
+				if (!Base(KV.first, Name)) continue;
+				if (!Gain.empty())
+				{
+					const auto G = Gain.find(Name);
+					if (G == Gain.end() || G->second < Floor) continue;
+				}
+				std::pair<std::string, std::string> Fall(KV.first, Name);
+				if (std::find(Out.begin(), Out.end(), Fall) == Out.end()) Out.push_back(std::move(Fall));
+			}
+		}
+		return Out;
 	}
 
 	struct Crowd::Impl
@@ -2972,36 +3101,6 @@ namespace LandMen
 			return Found == BlockCal.end() || Found->second != "light";
 		}
 
-		/** A gore fall that is the big throw: of kind thrown, or any die_blast_* (some listed under another kind too). */
-		static bool IsThrow(const std::string& Kind, const std::string& Name) { return Kind == "thrown" || Name.rfind("die_blast_", 0) == 0; }
-
-		/** Effects (R2): whether a gored man may take a gore fall of his twin's: any not a throw; a throw only where his
-		 * round may throw him (BigThrow), and where he is thrown away from a point only one from its side (gore_from). */
-		static bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, const Blast& Bl)
-		{
-			if (!IsThrow(Kind, Name)) return true;
-			if (!bBig) return false;
-			if (!Bl.bAway) return true;
-			const auto Side = Tw.GoreFrom.find(Name);
-			return Side != Tw.GoreFrom.end() && Side->second == Bl.Side;
-		}
-
-		/** The kinds of falls a man of stance St takes from a deaths table (ChooseFall's): his stance's, else the
-		 * nearest (cover: kneel; run: stand; prone: kneel), then stand, kneel, the table's first. None from an empty
-		 * table, or for a man lying where it has no prone falls (he goes limp). */
-		static const std::map<std::string, std::vector<std::string>>* KindsOf(const std::map<std::string, std::map<std::string, std::vector<std::string>>>& Table,
-			const std::string& St)
-		{
-			if (Table.empty() || (St == "prone" && Table.find("prone") == Table.end())) return nullptr;
-			const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
-			for (const char* Name : Order)
-			{
-				auto Found = Table.find(Name);
-				if (Found != Table.end() && !Found->second.empty()) return &Found->second;
-			}
-			return &Table.begin()->second;
-		}
-
 		std::string FromWhere(const Man& M) const
 		{
 			// Where the round that killed him came from, against his facing: front, back or side. A shell from the gun's
@@ -3052,84 +3151,33 @@ namespace LandMen
 				{
 					std::vector<std::pair<std::string, double>> Odds;
 					std::vector<std::string> KindOfPick;
-					// Effects (R2), a gored man (the art director, 23 Nov 17:52Z: the limb flies away from the blast; the
-					// deaths thread, 20:1xZ: weigh only the kind matching the burst, the big throw only for guns and
-					// howitzers): only the falls whose gore_from is where the burst was against him (BlastOf: in front,
-					// the falls from the front, of kind back; behind, forward; at his left or his right, the side falls
-					// from that side; under him lying, the prone throw), the big throw (thrown, die_blast_*) only where his
-					// round may throw him (BigThrow); each kind's weight shared among its falls taken. Where his stance's
-					// gore falls hold none from there he may take, those he may take (MayTake: no throw from another side
-					// of him), the kinds weighed as for any man. Never no fall (GoreTwinFor gores no man whose stance's
-					// gore falls hold none he may take; were it so, all of them).
-					const Blast Bl = M.bGore ? BlastOf(M, St) : Blast();
+					// Effects (R2), a gored man: only the falls GoreFalls gives him (those from where the burst was against him,
+					// BlastOf, of them those whose limbs move away from the burst or the gun; where none from there he may take,
+					// or none of those moves its limbs half a metre away, of all he may take: no throw but a field gun's or a
+					// howitzer's, BigThrow, and none from another side of him), each kind's weight shared among its falls taken,
+					// the kinds weighed as for any man. Never no fall (GoreTwinFor gores no man whose stance's gore falls hold
+					// none he may take; were it so, all of them).
 					const bool bBig = BigThrow(M);
-					auto FromBurst = [&](const std::string& Kind, const std::string& Name) {
-						const auto Side = S.GoreFrom.find(Name);
-						return Side != S.GoreFrom.end() && Side->second == Bl.Side && MayTake(S, Kind, Name, bBig, Bl);
-					};
-					bool bMatched = false, bAny = false;
+					std::vector<std::pair<std::string, std::string>> Given;
 					if (M.bGore)
 					{
-						for (const auto& KV : *Kinds)
+						const Blast Bl = BlastOf(M, St);
+						GoreStrike Strike;
+						Strike.Stance = St;
+						Strike.Side = Bl.Side;
+						Strike.bAway = Bl.bAway;
+						Strike.bBig = bBig;
+						if (Bl.bAway)
 						{
-							for (const std::string& Name : KV.second)
-							{
-								bMatched = bMatched || FromBurst(KV.first, Name);
-								bAny = bAny || MayTake(S, KV.first, Name, bBig, Bl);
-							}
+							// (the point in his own axes: x forward, y right)
+							const double DX = Bl.PX - Bl.X, DY = Bl.PY - Bl.Y, Sf = std::sin(Bl.F), Cf = std::cos(Bl.F);
+							Strike.X = DX * Sf + DY * Cf;
+							Strike.Y = DX * Cf - DY * Sf;
 						}
+						Given = GoreFalls(S, Strike);
 					}
-					auto Base = [&](const std::string& Kind, const std::string& Name) {
-						return !M.bGore || !bAny || (bMatched ? FromBurst(Kind, Name) : MayTake(S, Kind, Name, bBig, Bl));
-					};
-					// (and of those, where he is thrown away from a point (the burst, or the gun), the falls whose every
-					// limb moves at least half a metre away from it, along the line from it to the limb's joint as he was
-					// struck, or failing any the one whose limbs move farthest so: a limb flying across the burst, or
-					// through it to land beyond, is not thrown away from it. A side is a quarter round, and the twins'
-					// falls fling a limb off their side's middle (their standing and running falls from the front a left
-					// arm or leg back and to his left). Read from the fall's first frame and its last, in his own axes: the
-					// same whatever frame his fall is first played on and however lately he was posed, his own pose as
-					// struck within 0.35 m of the fall's first at a cut, a running man's calf the most)
-					std::map<std::string, double> Gain;
-					if (M.bGore && Bl.bAway)
-					{
-						const double DX = Bl.PX - Bl.X, DY = Bl.PY - Bl.Y, Sf = std::sin(Bl.F), Cf = std::cos(Bl.F);
-						const double PX = DX * Sf + DY * Cf, PY = DX * Cf - DY * Sf; // (the point in his own axes: x forward, y right)
-						Xform AtFirst[MaxBones], AtLast[MaxBones];
-						for (const auto& KV : *Kinds)
-						{
-							for (const std::string& Name : KV.second)
-							{
-								const int Ix = S.ClipIndex(Name);
-								if (Ix < 0 || !Base(KV.first, Name) || Gain.count(Name)) continue;
-								const Clip& Cl = S.Clips[static_cast<size_t>(Ix)];
-								Pose First, End;
-								Sample(Cl, 0.f, First);
-								Sample(Cl, Cl.Long, End);
-								BoneFrames(S, First, AtFirst);
-								BoneFrames(S, End, AtLast);
-								double Least = 1e9;
-								for (const ClipEvent& E : Cl.Events)
-								{
-									if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
-									const Vec3 Head = S.Bones[static_cast<size_t>(E.Bone)].Head;
-									const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
-									const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
-									const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
-										/ std::max(1e-6, std::hypot(OX, OY));
-									Least = std::min(Least, Along);
-								}
-								Gain[Name] = Least;
-							}
-						}
-					}
-					double Floor = -1e9;
-					for (const auto& G : Gain) Floor = std::max(Floor, std::min(0.5, G.second));
 					auto Takes = [&](const std::string& Kind, const std::string& Name) {
-						if (!Base(Kind, Name)) return false;
-						if (Gain.empty()) return true;
-						const auto G = Gain.find(Name);
-						return G != Gain.end() && G->second >= Floor;
+						return !M.bGore || std::find(Given.begin(), Given.end(), std::make_pair(Kind, Name)) != Given.end();
 					};
 					size_t Candidates = 0;
 					for (const auto& KV : *Kinds)
@@ -3952,7 +4000,7 @@ namespace LandMen
 				{
 					for (const auto& KV : *Kinds)
 					{
-						for (const std::string& Name : KV.second) bAny = bAny || MayTake(Tw, KV.first, Name, bBig, Bl);
+						for (const std::string& Name : KV.second) bAny = bAny || MayTake(Tw, KV.first, Name, bBig, Bl.bAway, Bl.Side);
 					}
 				}
 				if (!bAny) return nullptr;
