@@ -92,7 +92,16 @@ namespace TheaterEnemyMoves
 	constexpr double GrowSeconds = 0.65;
 	double Grown(double Seconds);
 
-	/** Lays the arrows, each grown to Grow (0 nothing, 1 whole), into Out (cleared first). */
+	/**
+	 * (Art director, 24 Nov, round 2b: at Thessaly an attack and a move up from Salonika ran down one road and crossed
+	 * like a twisted rope.) One arrow for each road and direction: where two arrows (not his own falling back) run between
+	 * the same places the same way, the worse one is kept where the first stood. His own troops attacked beats his allies'
+	 * battle, which beats an army coming at him, which beats one going away; between two moves, war beats peace and their
+	 * corps are added. Lay folds what it is given; the stop's place and its pings still read the arrows as they came.
+	 */
+	std::vector<FArrow> Fold(const std::vector<FArrow>& Arrows);
+
+	/** Lays the arrows (folded first), each grown to Grow (0 nothing, 1 whole), into Out (cleared first). */
 	void Lay(const std::vector<FArrow>& Arrows, double Grow, FDrawing& Out);
 
 	/** Where the eye should look so that every point is in view: the middle of them all, and how far the farthest lies from it. */

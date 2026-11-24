@@ -177,14 +177,14 @@ int main(int Count, char** Args)
 		Check(!Shadows.empty() && EdgeTriangles(D.Under, true) == D.Over.Triangles.size() && Shadows[0].Half > Edges[0].Half && Shadows[0].Ink.A < 80, "a soft contact shadow lies under the arrow and its head, wider than its edge and faint");
 		Check(Grown(0.0) == 0.0 && Grown(GrowSeconds) == 1.0 && Grown(GrowSeconds * 0.5) > 0.5, "the growth is eased: fast at first, whole at its time");
 	}
-	// Two arrows on one road bow apart.
+	// Two arrows on one road both ways bow apart (one road the same way is folded into one: see Fold below).
 	{
-		const std::vector<FArrow> Two{ Make(EKind::Move, 0.0, 0.0, 60.0, 0.0), Make(EKind::Move, 0.0, 0.0, 60.0, 0.0) };
+		const std::vector<FArrow> Two{ Make(EKind::Move, 0.0, 0.0, 60.0, 0.0), Make(EKind::Move, 60.0, 0.0, 0.0, 0.0) };
 		FDrawing D;
 		Lay(Two, 1.0, D);
 		const FStroke& A = D.Over.Strokes[0];
 		const FStroke& B = D.Over.Strokes[1];
-		Check(A.Points[A.Points.size() / 2].Y * B.Points[B.Points.size() / 2].Y < 0.0, "two arrows between the same places bow to either side");
+		Check(A.Points[A.Points.size() / 2].Y * B.Points[B.Points.size() / 2].Y < 0.0, "two arrows between the same places, both ways, bow to either side");
 	}
 	// An attack: its mark lands only as the arrow arrives; lost red and filled, held brass; a landing is the mark alone.
 	{
@@ -377,6 +377,43 @@ int main(int Count, char** Args)
 		Check(PingInk(Hit).R > 200 && PingInk(Hit).G < 60, "a stop where he was attacked pings red");
 		Check(PingInk(Peace).G > 120 && PingInk(Peace).R > 200, "an army at peace with him pings amber");
 		Check(PingInk(AllyHit).B > 180 && PingInk(AllyHit).B > PingInk(AllyHit).R, "his allies' battle pings steel");
+	}
+	// (Art director, round 2b) One arrow for each road and direction.
+	{
+		FArrow Hit;
+		Hit.From = { 0.0, 0.0 };
+		Hit.To = { 65.0, 0.0 };
+		Hit.Kind = EKind::Attack;
+		Hit.Corps = 2;
+		FArrow Up = Hit;
+		Up.Kind = EKind::Move;
+		Up.Corps = 3;
+		Up.To = { 65.3, 0.4 };
+		const std::vector<FArrow> One = Fold({ Up, Hit });
+		Check(One.size() == 1 && One[0].Kind == EKind::Attack && One[0].Corps == 3, "an attack and a move down one road the same way: one arrow, the attack's");
+		FArrow Back = Up;
+		Back.From = Up.To;
+		Back.To = Up.From;
+		Check(Fold({ Up, Back }).size() == 2, "the same road the other way: two arrows");
+		FArrow Calm = Up;
+		Calm.bWar = false;
+		Calm.Corps = 1;
+		const std::vector<FArrow> Moves = Fold({ Calm, Up });
+		Check(Moves.size() == 1 && Moves[0].bWar && Moves[0].Corps == 4, "two moves down one road: one arrow, war over peace, their corps added");
+		FArrow Fell = Hit;
+		Fell.Kind = EKind::Fell;
+		Check(Fold({ Hit, Fell }).size() == 2, "his own falling back is never folded away");
+		FArrow Landing = Hit;
+		Landing.bFrom = false;
+		Check(Fold({ Hit, Landing }).size() == 2, "a landing (no road) is never folded");
+		FArrow Allies = Hit;
+		Allies.bAlly = true;
+		const std::vector<FArrow> Mixed = Fold({ Allies, Hit });
+		Check(Mixed.size() == 1 && !Mixed[0].bAlly, "his own troops attacked beat his allies' battle on one road");
+		FDrawing Folded, Single;
+		Lay({ Up, Hit }, 1.0, Folded);
+		Lay({ Hit }, 1.0, Single);
+		Check(Folded.Over.Strokes.size() == Single.Over.Strokes.size() && Folded.Over.Triangles.size() == Single.Over.Triangles.size(), "Lay folds what it is given");
 	}
 	// Arrows from a file, laid whole, for the picture.
 	if (Count >= 3)

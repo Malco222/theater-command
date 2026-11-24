@@ -859,11 +859,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Before);
 		Add(TEXT("60a-before-the-month-ends"), TEXT("@capital"), 0.6f).Months = FMath::Clamp(Before, 0, 80);
 		static const TCHAR* Names[4] = { TEXT("60b-enemy-moves-month-1"), TEXT("60c-enemy-moves-month-2"), TEXT("60d-enemy-moves-month-3"), TEXT("60e-enemy-moves-month-4") };
+		// (release 2, new units ready: with "-TheaterR2Ready" his month opens with an infantry corps on order at his
+		// capital, due as the first month ended here opens: the READY plate with SHOW ME pressed, then the new army close,
+		// its brass NEW tag on its pole)
+		const bool bReadyPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready"));
 		for (const TCHAR* Name : Names)
 		{
 			FShot& Shot = Add(Name, TEXT("@capital"), 0.6f);
 			Shot.bKeep = Shot.bWatch = true;
 			Shot.Wait = -0.4f; // (2.6 s in: the eye arrived, the arrows grown, the sentence up)
+			if (bReadyPictures && Name == Names[0])
+			{
+				FShot& Plate = Add(TEXT("60g-new-units-ready"), TEXT("@ready"), 0.42f);
+				Plate.bShowReady = Plate.bKeep = true;
+				Plate.Wait = 1.2f; // (the eye there, the plate up)
+				Add(TEXT("60h-new-army-tag"), TEXT("@ready"), 0.25f).bKeep = true;
+			}
 		}
 		// (round 2: with "-TheaterR2Marked", the army that took a town of his, close, its red tag on its pole)
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")))
@@ -1069,6 +1080,33 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 					At = Table->WorldToMap(Piece->GetRestLocation());
 					break;
 				}
+			}
+		}
+	}
+	if (Shot.Region == TEXT("@ready") && Controller->GetSession())
+	{
+		// (Release 2, new units ready) The first unit handed over to him this month, where it stands: the watch still
+		// going from the last picture is finished first, which says the READY plate (at once, for a picture).
+		if (Controller->IsWatching())
+		{
+			Controller->SkipWatching();
+		}
+		const TArray<FReadyUnit>& Ready = Controller->GetReadyUnits();
+		int32 ReadyPlace = Ready.Num() > 0 ? Ready[0].Region : INDEX_NONE;
+		for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+		{
+			if (Ready.Num() > 0 && Unit.Id == Ready[0].Corps)
+			{
+				ReadyPlace = Unit.Region;
+				break;
+			}
+		}
+		for (const TObjectPtr<AArmyPiece>& Piece : Table->GetPieces())
+		{
+			if (ReadyPlace != INDEX_NONE && Piece && Piece->GetRegionId() == ReadyPlace && !Piece->IsHidden())
+			{
+				At = Table->WorldToMap(Piece->GetRestLocation());
+				break;
 			}
 		}
 	}
@@ -1753,6 +1791,10 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (Shot.bShowReady)
+	{
+		Controller->ShowReady(); // (release 2, new units ready: SHOW ME, the eye to the first new unit and it in hand)
 	}
 	if (!Shot.Room.IsEmpty())
 	{

@@ -53,6 +53,7 @@ private:
 		bool bOpening = false; // leave the opening screen up for this picture
 		bool bMenu = false; // open the menu over the campaign
 		bool bRecord = false; // open the service record of the first corps of the army in hand
+		bool bShowReady = false; // (release 2, new units ready) press SHOW ME on the READY FOR ORDERS plate
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
 		bool bSea = false; // switch the army in hand to going by sea

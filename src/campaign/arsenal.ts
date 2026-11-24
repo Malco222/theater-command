@@ -370,7 +370,7 @@ export function smallAirMonth(g: Game): void {
     }
     if (to === g.human && made.length) {
       const from = giver === to ? 'from its own works' : `from ${g.nations[giver].name}`;
-      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id);
+      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id, { ready: 'air' });
     }
   });
   // The month a works opens: one plain line for its own player, never for a works that stands on the first day.
@@ -796,11 +796,12 @@ export function airLine(list: AirDelivery[]): { text: string; region: number } |
 export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery[]): void {
   const n = g.nations[nat];
   const r = g.regions[b.region];
-  const tell = (text: string): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id); };
+  // (release 2: a unit handed over is tagged as ready, so that an interface can say so plainly; Brian, 24 Nov 18:30Z)
+  const tell = (text: string, ready?: 'air' | 'ship'): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id, ready ? { ready } : undefined); };
   if (b.what === 'air') {
     // (A wing bought abroad keeps its own line: the month's one line speaks of the factories.)
     const seller = b.from && g.nations[b.from] ? theName(g.nations[b.from]) : '';
-    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
+    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air && !seller) air.push(d); else headline(g, 'info', d.text, nat, d.region, { ready: 'air' }); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
@@ -834,7 +835,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (hull === 'tp') {
       n.sealift += count;
       g.flags[`wk:tp:${nat}`] = (g.flags[`wk:tp:${nat}`] ?? 0) + 1;
-      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`);
+      tell(`New troopships are ready: the nation can now move ${plural(n.sealift, 'corps', 'corps')} by sea each month.`, 'ship');
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
@@ -846,7 +847,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);
     if (decks) syncWings(g);
-    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`);
+    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`, 'ship');
     return;
   }
   const what = b.item as Work;

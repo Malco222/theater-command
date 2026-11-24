@@ -225,6 +225,20 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	{
 		NewSignature += TEXT("|mk:") + MarkedTown;
 	}
+	// (Release 2, new units ready; Brian, 24 November 2026 18:30Z) One of his corps handed over as this month opened:
+	// a brass NEW tag where an enemy's red mark would hang, for its first month (the option "New units ready").
+	bTagNew = false;
+	if (What == 0 && !bGlimpsed && bReadyTags && MarkedTown.IsEmpty())
+	{
+		for (const FViewCorps& Unit : Corps)
+		{
+			bTagNew |= Unit.bReady && !Unit.bDim;
+		}
+	}
+	if (bTagNew)
+	{
+		NewSignature += TEXT("|new");
+	}
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
@@ -258,6 +272,7 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 
 bool AArmyPiece::bFlockNear = true;
 bool AArmyPiece::bNamesShown = false;
+bool AArmyPiece::bReadyTags = true;
 bool AArmyPiece::bCampsNear = true;
 int32 AArmyPiece::FullWorks = 3;
 
@@ -909,9 +924,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	// towns wears a red tag on its pole until he beats it: hung on the side away from its flag, its top level with the
 	// flag's, swallow-tailed at its free end, edged in near-black, and lettered with the town in cream capitals. A long
 	// name is lettered smaller rather than run wider than the flag.
-	if (What == 0 && !bGlimpsed && !MarkedTown.IsEmpty())
+	// (Release 2, new units ready) His own new army wears the same tag in brass, lettered NEW in near-black.
+	if (What == 0 && !bGlimpsed && (!MarkedTown.IsEmpty() || bTagNew))
 	{
-		const FString MarkShown = MarkedTown.ToUpper();
+		const bool bMarkNew = MarkedTown.IsEmpty();
+		const FString MarkShown = bMarkNew ? FString(TEXT("NEW")) : MarkedTown.ToUpper();
 		const double MarkLetterWanted = PlateHeight * 0.5;
 		const double MarkWanted = MarkLetterWanted * (0.9 + 0.62 * MarkShown.Len());
 		const double MarkWide = FMath::Min(MarkWanted, FlagWidth * 1.1);
@@ -920,7 +937,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		const double MarkTail = MarkHigh * 0.45;
 		const double MarkNear = Pole.Y - 0.2 * U; // (against the pole)
 		const FVector MarkAt(Pole.X, MarkNear - MarkWide * 0.5, FlagAt.Z + FlagHeight * 0.5 - MarkHigh * 0.5);
-		const FLinearColor MarkRed(FColor(176, 30, 26));
+		const FLinearColor MarkRed = bMarkNew ? BrassPaint : FLinearColor(FColor(176, 30, 26)); // (brass for his own new army)
 		const FLinearColor MarkEdge(FColor::FromHex(TEXT("15130F")));
 		Staff.Box(MarkAt - StandardFoot, FVector(0.2 * U, MarkWide, MarkHigh), MarkRed);
 		for (const double MarkEdgeAt : { -0.5, 0.5 })
@@ -942,7 +959,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		MarkLabel->SetupAttachment(Standard);
 		MarkLabel->SetText(FText::FromString(MarkShown));
 		MarkLabel->SetWorldSize(static_cast<float>(MarkLetter));
-		MarkLabel->SetTextRenderColor(FColor::FromHex(TEXT("F4F0E4")));
+		MarkLabel->SetTextRenderColor(FColor::FromHex(bMarkNew ? TEXT("15130F") : TEXT("F4F0E4")));
 		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
 		{
 			MarkLabel->SetTextMaterial(Unlit);

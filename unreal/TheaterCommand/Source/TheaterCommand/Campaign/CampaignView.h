@@ -121,6 +121,7 @@ struct FViewCorps
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
 	FString Marked; // (release 2, the marked army; marked.ts) an enemy corps that took one of his towns: that town ("Paris"); empty otherwise
+	bool bReady = false; // (release 2, new units ready; Brian 24 Nov 18:30Z) his corps handed over as this month opened: NEW on its pole
 	TArray<FHonourRibbon> Honours;
 	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
 	float Morale = -1.0f; // 0 to 1, or -1 where no morale is kept
@@ -1443,6 +1444,20 @@ struct FYearCard
 };
 
 /** Everything that happened between the player ending one month and beginning the next. */
+/**
+ * (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) A unit the player raised or
+ * bought, handed over as his month opened: what it is ("corps", "air", "ship"), the rules' line of news, where it stands,
+ * and for a corps, which one.
+ */
+struct FReadyUnit
+{
+	FString What;
+	FString Text;
+	FString Name;
+	int32 Region = INDEX_NONE;
+	int32 Corps = INDEX_NONE;
+};
+
 struct FMonthResult
 {
 	TArray<FMonthStep> Steps;
@@ -1452,6 +1467,7 @@ struct FMonthResult
 	FString ReelDate; // the month the newsreel is of
 	FYearCard Year; // set when the month that opens is a January
 	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
+	TArray<FReadyUnit> Ready; // (release 2) the units handed over to him as his month opened
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */

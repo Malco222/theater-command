@@ -114,6 +114,8 @@ public:
 	static bool bFlockNear;
 	/** (Release 2, nicknames.ts) Whether the names corps earn are lettered over their army's flag: the map sets it from the picture before it lays the armies. */
 	static bool bNamesShown;
+	/** (Release 2, new units ready; Brian 24 Nov 18:30Z) Whether his corps handed over this month wear a brass NEW tag on their pole (the option "New units ready"). */
+	static bool bReadyTags;
 	/** A fleet lying in harbour is drawn small, at anchor by its port, with no standard over it: a small badge on the port says how many ships are in (the map is the clearer for it). */
 	void SetAtAnchor(bool bInHarbour);
 	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
@@ -242,6 +244,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextRenderComponent> MarkLabel;
 	FString MarkedTown; // empty for none
+	bool bTagNew = false; // (release 2, new units ready) one of his corps handed over this month: a brass NEW tag in the same place
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
 	bool bSelected = false;

@@ -79,7 +79,7 @@ def lay(arrows, regions):
 
 # The corner pings (Campaign/EnemyMoves.cpp Worst, Ping, PingInk), as the small map draws them.
 PING_SECONDS = 1.4
-INKS = {'war': (176, 30, 26), 'peace': (226, 150, 38), 'attack': (214, 38, 24), 'own': (238, 230, 208), 'allyring': (150, 172, 200)}
+INKS = {'war': (176, 30, 26), 'peace': (226, 150, 38), 'attack': (214, 38, 24), 'own': (238, 230, 208), 'allyring': (175, 195, 225)}
 
 
 def worst(arrows):
