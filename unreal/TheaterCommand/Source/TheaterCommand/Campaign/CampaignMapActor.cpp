@@ -7618,7 +7618,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	{
 		if (Field.Groups > 0)
 		{
-			Signature += FString::Printf(TEXT("%d:%s:%d;"), Field.Region, *Field.Nation, Field.Groups);
+			Signature += FString::Printf(TEXT("%d:%s:%d:%d;"), Field.Region, *Field.Nation, Field.Groups, Field.YourGroups);
 		}
 	}
 	if (!Data.IsLoaded() || Signature == ShownAirSigns)
@@ -7661,7 +7661,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 			continue;
 		}
 		const FCampaignNation* Whose = Data.FindNation(Each.Nation);
-		const FLinearColor Livery = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.5f, 0.5f, 0.5f);
+		const FLinearColor HolderLivery = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.5f, 0.5f, 0.5f);
 		const double Turn = Lie->X, Wide = 1.5 + 0.3 * Lie->Y;
 		const FVector At = SurfacePoint(Spot->X, Spot->Y, 0.02);
 		// One small aircraft for each group, drawn up in a row on the grass on the side away from the hangars,
@@ -7671,14 +7671,30 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 		const int32 Parked = Each.Aircraft > 0 ? FMath::Clamp(FMath::CeilToInt32(Each.Aircraft / 25.0f), FMath::Max(Each.Groups, 2), 6) : FMath::Min(Each.Groups, 6);
 		// (These silver ones are what the table shows from working height and above. Close to, each field's aircraft
 		// are its country's own fighters: see ShowParkedPlanes.)
+		// (Brian, 24 November 2026 21:53Z: "when i have a unit on an allied airfield there is no way to know its there".) On a
+		// field another country holds, the player's own groups have their share of the row, at its head, in his own colours,
+		// and a pennant of his colour stands at that end of the row: his aircraft are there, and the eye finds them.
+		const FCampaignNation* Mine = Each.YourGroups > 0 ? Data.FindNation(Each.YourNation) : nullptr;
+		const int32 Yours = !Mine ? 0 : Each.YourGroups >= Each.Groups ? Parked
+			: FMath::Clamp(Each.Aircraft > 0 ? FMath::RoundToInt32(Parked * float(Each.YourAircraft) / float(Each.Aircraft)) : Each.YourGroups, 1, Parked - 1);
 		FParkedField& Kept = ParkedFields.AddDefaulted_GetRef();
 		Kept.Spot = *Spot;
 		Kept.Nation = Each.Nation;
 		Kept.Turn = Turn;
 		Kept.Wide = Wide;
 		Kept.Parked = Parked;
+		Kept.YourNation = Mine ? Each.YourNation : FString();
+		Kept.Yours = Yours;
+		if (Mine)
+		{
+			const FLinearColor His(Mine->Color);
+			const FVector Mast = At + Ahead(Turn, (-1.0 - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field);
+			Model.Pillar(Mast, 0.025 * Field, 0.018 * Field, 0.95 * Field, Dural * 0.7f, 6);
+			Model.Box(Mast + Ahead(Turn, 0.2 * Field, 0.0) + FVector(0.0, 0.0, 0.8 * Field), FVector(0.4, 0.025, 0.26) * Field, His, Turn);
+		}
 		for (int32 K = 0; K < Parked; ++K)
 		{
+			const FLinearColor Livery = (K < Yours && Mine) ? FLinearColor(Mine->Color) : HolderLivery;
 			const FVector Foot = At + Ahead(Turn, (K - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field) + FVector(0.0, 0.0, 0.085 * Field);
 			const double Nose = Turn + 90.0; // across the field, toward the runway
 			Model.Box(Foot + FVector(0.0, 0.0, 0.07 * Field), FVector(0.5, 0.075, 0.075) * Field, Dural, Nose);
@@ -7749,11 +7765,13 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 				return FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, 0.0);
 			};
 			const FString Fighter = FMiniatureMesh::MainFighterOf(Each.Nation);
+			// (the player's own share of an ally's field: his own fighters, at the head of the row; see ShowAirfieldSigns)
+			const FString HisFighter = Each.Yours > 0 ? FMiniatureMesh::MainFighterOf(Each.YourNation) : Fighter;
 			const double Nose = Each.Turn + 90.0; // across the field, toward the runway
 			for (int32 K = 0; K < Each.Parked; ++K)
 			{
 				const FVector Foot = At + Ahead(Each.Turn, (K - (Each.Parked - 1) * 0.5) * 0.62 * Field, -(Each.Wide * 0.5 - 0.42) * Field) + FVector(0.0, 0.0, 0.085 * Field);
-				if (Planes.Vehicle(Fighter, Foot + FVector(0.0, 0.0, 1.35 * Metre), Metre, Nose + 180.0, false))
+				if (Planes.Vehicle(K < Each.Yours ? HisFighter : Fighter, Foot + FVector(0.0, 0.0, 1.35 * Metre), Metre, Nose + 180.0, false))
 				{
 					for (const double Side : { -1.0, 1.0 })
 					{

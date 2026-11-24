@@ -1708,6 +1708,24 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 		Out.AirFleets = MoveTemp(Stood);
+		// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) On a
+		// field another country holds, the player's own groups are counted apart, for the map to show them as his.
+		for (FViewAirfield& Field : Out.Airfields)
+		{
+			if (Out.Human.IsEmpty() || Field.Nation == Out.Human || Field.Groups <= 0)
+			{
+				continue;
+			}
+			for (const FViewAirFleet& Group : Out.AirFleets)
+			{
+				if (Group.Base == Field.Region && Group.Nation == Out.Human)
+				{
+					Field.YourGroups += Group.Groups;
+					Field.YourAircraft += Group.Fighters + Group.Bombers;
+					Field.YourNation = Out.Human;
+				}
+			}
+		}
 	}
 
 	{
