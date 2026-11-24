@@ -2242,6 +2242,50 @@ void ALandBattle::LayThings()
 		RungTreePlain = TreeFarFrom > 0.0f ? 0.0f : Rung.TreePlain;
 		RungShrubPlain = ShrubFarFrom > 0.0f ? 0.0f : Rung.ShrubPlain;
 	}
+	// The bocage (no region, and not the steppe), release 1.5's 45 fps gate: the ladder's third rung as its own draw. The
+	// Mac's A7 on 849c1bc1 drew the old distances at 37 frames a second at 40 s and 60 s of battle, this rung at 46 and 43,
+	// bound by the graphics chip and the draw thread, not by the men; the art director passed its look (24 Nov). Its
+	// hedges' shadows reach 150 m, not the rung's 120: the shadowed foot of the far hedge across a field is what boxes the
+	// field in. "-TheaterLandBocageRung=0..4" draws another rung (-1: the distances above); each "-TheaterLand<name>="
+	// still wins.
+	if (Step < 0 && !State->Rec.Ground.Steppe.bOn)
+	{
+		int32 BocageRung = 2;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandBocageRung="), BocageRung);
+		if (BocageRung >= 0)
+		{
+			const FRung& Rung = Ladder[FMath::Clamp(BocageRung, 0, 4)];
+			auto Said = [](const TCHAR* Key) {
+				float Value = 0.0f;
+				return FParse::Value(FCommandLine::Get(), Key, Value);
+			};
+			if (!Said(TEXT("TheaterLandShrubFarFrom=")))
+			{
+				ShrubFarFrom = Rung.ShrubPlain;
+			}
+			if (!Said(TEXT("TheaterLandTreeFarFrom=")))
+			{
+				TreeFarFrom = Rung.TreePlain;
+			}
+			if (!Said(TEXT("TheaterLandCrownFrom=")))
+			{
+				CrownFrom = Rung.Crown;
+			}
+			if (!Said(TEXT("TheaterLandTreesTo=")))
+			{
+				TreesTo = Rung.Trees;
+			}
+			if (!Said(TEXT("TheaterLandShrubsTo=")))
+			{
+				ShrubsTo = Rung.Shrubs;
+			}
+			if (!Said(TEXT("TheaterLandShrubShadowTo=")))
+			{
+				ShrubShadowTo = FMath::Min(150.0f, ShrubsTo);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the bocage drawn at the ladder's rung %d (-TheaterLandBocageRung=; -1 the old distances)"), FMath::Clamp(BocageRung, 0, 4));
+		}
+	}
 	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
