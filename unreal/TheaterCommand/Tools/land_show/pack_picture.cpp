@@ -2,9 +2,11 @@
 // AddRider's bNoPack; the soldiers thread's pack_tris): a downed pilot and a tank's crewman bailing out of armies with no
 // tankers' file (the Russian and the British), as the crowd draws them, by land_men_picture's painter (its light and
 // ground are stand-ins). Rows: each army's pilot (bareheaded, rifle and pack off), then its crewman (helmet on, rifle
-// and pack off). Columns: near from the front and from behind, standing as he does once up (stand_up's end); mid from
-// behind, running (run); near from behind as before (his pack on), to compare. pack_off.ppm, and pack_off.txt (rows,
-// columns, what each man is drawn with).
+// and pack off). Columns: near from the front, standing as he does once up (stand_up's end), then the same as before
+// (his pack on), to compare what goes from his front (his webbing's straps and pouches, and anything that should not:
+// the review of 24 November found the collar tabs in fc61734e's run); near from behind, standing; mid from behind,
+// running (run); near from behind as before (his pack on), to compare. pack_off.ppm, and pack_off.txt (rows, columns,
+// what each man is drawn with).
 // Usage: Tools/land_show/pack_picture.sh [soldiers folder with pack_tris] [out folder]
 #define main land_men_picture_main
 #include "land_men_picture.cpp"
@@ -48,12 +50,13 @@ int main(int Argc, char** Argv)
 		const char* Clip;
 		float Time;
 	};
-	const Col Cols[] = { { Near, false, false, "stand_up", 0.6f }, { Near, true, false, "stand_up", 0.6f }, { Mid, true, false, "run", 0.25f },
-		{ Near, true, true, "stand_up", 0.6f } };
-	const int NC = 4, NR = 4, CellW = 330, CellH = 540, SheetW = CellW * NC;
+	const Col Cols[] = { { Near, false, false, "stand_up", 0.6f }, { Near, false, true, "stand_up", 0.6f }, { Near, true, false, "stand_up", 0.6f },
+		{ Mid, true, false, "run", 0.25f }, { Near, true, true, "stand_up", 0.6f } };
+	const int NC = static_cast<int>(sizeof(Cols) / sizeof(Cols[0])), NR = 4, CellW = 330, CellH = 540, SheetW = CellW * NC;
 	std::vector<uint8_t> Sheet(static_cast<size_t>(SheetW) * static_cast<size_t>(CellH * NR) * 3, 236);
 	std::ofstream Notes(std::string(Argv[3]) + "/pack_off.txt");
-	Notes << "columns: near from the front (stand_up's end) | near from behind (stand_up's end) | mid from behind (run) | near from behind as before, his pack on\n";
+	Notes << "columns: near from the front (stand_up's end) | near from the front as before, his pack on | near from behind (stand_up's end) | mid from behind (run) | "
+			 "near from behind as before, his pack on\n";
 	double Now = 1.0;
 	for (int R = 0; R < NR; ++R)
 	{
@@ -66,7 +69,7 @@ int main(int Argc, char** Argv)
 		const int Before = C.AddRider(D.File, Rw.Nat, Seed, D.Row, D.bBareHead, false);
 		if (Man < 0 || Before < 0) { std::printf("FAIL: no rider\n"); return 1; }
 		Notes << "row " << R << ": the " << Rw.Nat << " " << (Rw.bPilot ? "pilot down" : "crewman out of her") << ": soldier_" << D.File << (D.bBareHead ? ", bareheaded" : ", his helmet on")
-			  << (D.bNoPack ? ", no pack" : "") << ", no rifle; near " << C.LookOf(Man, Near).Triangles.size() / 3 << " triangles (as before " << C.LookOf(Before, Near).Triangles.size() / 3
+			  << (!D.bNoPack ? "" : S->PackCount[Near] > 0 ? ", no pack" : ", no pack asked (his file marks none)") << ", no rifle; near " << C.LookOf(Man, Near).Triangles.size() / 3 << " triangles (as before " << C.LookOf(Before, Near).Triangles.size() / 3
 			  << "), mid " << C.LookOf(Man, Mid).Triangles.size() / 3 << " (" << C.LookOf(Before, Mid).Triangles.size() / 3 << ")\n";
 		for (int K = 0; K < NC; ++K)
 		{
