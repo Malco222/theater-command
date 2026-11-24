@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d6a815e6 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9b6847da 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -42789,7 +42789,7 @@
     if (a.def.length && a.def.every((x) => x.f.ship !== void 0)) return a.def.every((x) => hasTech(g2, x.f.nat, AIRWAR.sky.radar)) ? 1 : AIR.height.lookouts;
     if (sea) return 0;
     const r = g2.regions[target];
-    return r && r.owner === r.ctrl ? AIR.height.observers : 0;
+    return r && a.def.some((x) => x.f.nat === r.ctrl || allied(g2, x.f.nat, r.ctrl)) ? AIR.height.observers : 0;
   }
   var UD_ROLES = ["close", "top"];
   var udRole = (k) => k < SKY.escort.topFrom ? "close" : UD_ROLES[(k - SKY.escort.topFrom + 1) % UD_ROLES.length];
