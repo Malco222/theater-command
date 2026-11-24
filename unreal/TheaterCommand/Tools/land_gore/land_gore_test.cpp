@@ -20,10 +20,14 @@
 //         (within 1 m, whatever his stance: the deaths thread, 24 Nov) whose stance's gore falls hold one from under he
 //         may take falls in one, or, by a field gun's or a howitzer's shell, in the throw his gun's side gives him (from
 //         that side, every limb as far from the gun as that side's falls set); a fall from under never given a man the
-//         burst was not under. Not held but printed: the falls from under read against his gun (a burst under him is no
-//         point to be thrown away from; about half move his lower leg toward the gun), and the men such a shell offered
-//         both a fall from under and a throw, and how many of them were thrown (the throw weighs 8 to its 3; the Fates
-//         rule, never the last fall again, sways a choice of two too far for a check of the weight). No limb off a man standing or running moves toward the burst (or the gun) as played, from
+//         burst was not under; his gun known, none in a fall from under that moves a limb toward the gun (the test's
+//         reading, from the falls' first frames and last) where another from under he may take does not, nor where all
+//         do in one that moves it more than the least of them (the deaths thread's mirrors of 25 Nov, die_leg_off_f and
+//         die_leg_off_g: before, with one fall from under each stance, about half moved his lower leg toward the gun).
+//         Printed: the falls from under read against his gun as played, and the men such a shell offered both a fall
+//         from under and a throw, and how many of them were thrown (the throw weighs 8 to its 3; the Fates rule, never
+//         the last fall again, sways a choice of two too far for a check of the weight). No limb off a man standing or
+//         running moves toward the burst (or the gun) as played, from
 //         his pose as struck to rest (a note under half a metre: his pose as struck is not the fall's first frame), nor
 //         off a man of any stance whose gore falls hold one from each side that is not a throw (the twins of 24 Nov:
 //         kneeling, in cover and lying too; those before, a note), nor the body (pelvis) of a man standing or running
@@ -52,8 +56,14 @@
 //         take; no limb off a man standing or running moving toward the burst or the gun (the least printed), nor off a
 //         man of a stance whose falls hold one from each side; no fall given a man standing or running moving his body
 //         toward it more than 0.01 m where another he may take moves it away (kneeling, in cover or lying a note); the
-//         burst under him, every fall from under he may take and else only such a shell's throw from his gun's side,
-//         none moving a limb or his body toward the gun (the falls from under read against the gun printed, not held).
+//         burst under him, the falls from under the rule gives and else only such a shell's throw from his gun's side,
+//         none of the throws moving a limb or his body toward the gun. Of the falls from under (a man standing, running,
+//         kneeling or in cover): his gun known, none given moving his limb toward it where one he may take does not; where
+//         every one does (a gap, the falls' own, printed with where his gun was, not a failure), those that move it least
+//         so; his gun not known, every one (both legs, with the mirrors); any stance with one from under (the twins of
+//         24 Nov; lying, the prone throw) it, whatever his gun's side. A table prints, for each stance on his feet or a
+//         knee and each side his gun may be on (or not known), which of them are given and how far each moves his limb
+//         along the line toward the gun.
 //   same  a second crowd gores the same men with the same falls
 //   back  a replay from the start gives every man his own file again; played on, the same men are gored again
 // With an out folder it also paints gore_falls.ppm: six gored men from the side, each from the hit to rest in six steps.
@@ -623,7 +633,8 @@ namespace
 		int UnderThrown = 0;             // of them thrown from his gun's side (a field gun's or a howitzer's shell)
 		int UnderWrong = 0;              // of them in neither, or in a throw his gun's side would not give him
 		int UnderOffered = 0, UnderOfferedThrown = 0; // of them by such a shell offered both a fall from under and a throw (GoreFalls); of those thrown
-		std::map<std::string, Lot> UnderGun; // by stance: of those in a fall from under, his gun known, their limbs and bodies against the gun (not held: a burst under him is no point to be thrown away from)
+		std::map<std::string, Lot> UnderGun; // by stance: of those in a fall from under, his gun known, their limbs and bodies against the gun
+		int UnderLegs = 0, UnderToward = 0; // of those, his falls from under read against the gun; of them in one that moves a limb toward it where another he may take does not, or more than the least of them where all do
 		std::map<std::string, std::array<int, 3>> By; // side: gored, thrown, with no fall from there in his stance's table
 		std::map<std::string, int> None;              // "stance side": no fall from there
 	};
@@ -889,8 +900,9 @@ namespace
 				if (Gf == "under")
 				{
 					++Out.UnderFrom;
-					// (not held, a burst under him being no point to be thrown away from: his limbs and his body read against
-					// his gun, where known, as b470998e read him)
+					// (his limbs and his body read against his gun, where known, as played, as b470998e read him; and his fall
+					// read against it from its first frame and its last, the test's reading: none that moves a limb toward the
+					// gun where another fall from under he may take does not, and where all do none but the least so)
 					if (bGunKnown)
 					{
 						Lot& Ug = Out.UnderGun[In.FallStance];
@@ -898,6 +910,24 @@ namespace
 						char At[200];
 						std::snprintf(At, sizeof(At), "%s %s (%s, %s%s, his gun %s %.0f deg)", In.FileArmy.c_str(), In.FallClip.c_str(), In.FallStance.c_str(),
 							Men[I].W.c_str(), Men[I].bLight ? " light" : "", Gun.c_str(), GunOff * 57.2957795);
+						{
+							double UX = 0.0, UY = 0.0, UBest = -1e9, UMine = 1e9;
+							Own(Men[I].SX, Men[I].SY, UX, UY);
+							for (const FallRead& Fr : Falls)
+							{
+								if (Fr.From != "under" || !MayTakeRead(Fr, bBig, "under")) continue;
+								const double G = LeastAway(Fr, UX, UY);
+								UBest = std::max(UBest, G);
+								if (Fr.Clip == In.FallClip) UMine = std::min(UMine, G);
+							}
+							++Out.UnderLegs;
+							if (UMine < std::min(0.0, UBest) - Slack)
+							{
+								++Out.UnderToward;
+								std::printf("     under toward: %s: his fall from under moves a limb %.2f m away from his gun (less than 0 toward it), the best of his falls "
+									"from under he may take %.2f m\n", At, UMine, UBest);
+							}
+						}
 						const std::vector<Vec3>& U0 = R.Joint[I];
 						const std::vector<Vec3>& U1 = R.End[I];
 						for (size_t L = 0; L < U0.size() && L < U1.size(); ++L)
@@ -1074,8 +1104,8 @@ namespace
 			const auto Found = S.UnderGun.find(St);
 			if (Found == S.UnderGun.end()) continue;
 			const Lot& L = Found->second;
-			std::printf("     %s: %s, the burst under him, in a fall from under, read against his gun (not held: a burst under him is no point to be thrown away from): %d "
-				"men, %d limbs off, %d toward it, the most %.2f m (%s); %d bodies, %d toward it, the most %.2f m (%s)\n", Label, St, L.Men, L.Limbs, L.Toward,
+			std::printf("     %s: %s, the burst under him, in a fall from under, read against his gun as played (held only from the falls' first frames and last, "
+				"none toward where one he may take is not): %d men, %d limbs off, %d toward it, the most %.2f m (%s); %d bodies, %d toward it, the most %.2f m (%s)\n", Label, St, L.Men, L.Limbs, L.Toward,
 				L.Least < 0.0 ? -L.Least : 0.0, L.Least < 0.0 ? L.LeastAt.c_str() : "none", L.Bodies, L.BodyToward, L.BodyLeast < 0.0 ? -L.BodyLeast : 0.0,
 				L.BodyLeast < 0.0 ? L.BodyAt.c_str() : "none");
 		}
@@ -1292,6 +1322,9 @@ int main(int Argc, char** Argv)
 			+ "take falls in one, or by a field gun's or a howitzer's shell in the throw his gun's side gives him (every limb at least as far from the gun as that "
 			+ "side's falls set; " + std::to_string(Sd.Under) + " so struck, " + std::to_string(Sd.UnderFrom) + " from under, " + std::to_string(Sd.UnderThrown)
 			+ " thrown, " + std::to_string(Sd.UnderWrong) + " not)");
+		Check(Sd.UnderToward == 0, L + ": no gored man the burst was under, his gun known, falls from under in a fall that moves a limb toward his gun where another "
+			+ "fall from under he may take does not, nor where all do in one that moves it more than the least of them so (the test's reading, from the falls' first "
+			+ "frames and last; " + std::to_string(Sd.UnderLegs) + " in a fall from under with his gun known, " + std::to_string(Sd.UnderToward) + " so)");
 		Lot Up;
 		for (const char* St : { "stand", "run" })
 		{
@@ -1488,13 +1521,48 @@ int main(int Argc, char** Argv)
 		Lot Band;
 		std::map<std::string, Lot> ByStance;
 		std::map<std::string, std::pair<Lot, Lot>> ByTwin;
-		// (the burst under him: cells; of them with a fall from under he may take, and of those given anything but every
-		// such fall and such a shell's throw from his gun's side where that side's falls give it, and those thrown so (the
+		// (the burst under him: cells; of them with a fall from under he may take, and of those given anything but the falls
+		// from under the rule gives (his gun known, those that move no limb toward it, or where all do the least so; else
+		// every one) and such a shell's throw from his gun's side where that side's falls give it, and those thrown so (the
 		// throws' limbs and bodies against the gun); with none from under he may take, his gun known, and of them given
 		// other than his gun's side gives; with none and his gun not known, and of them given other than all he may take)
 		int UnderCells = 0, UnderThere = 0, UnderWrong = 0, UnderThrew = 0, UnderBack = 0, UnderBackWrong = 0, UnderAll = 0, UnderAllWrong = 0;
 		Lot UnderThrow;
-		std::map<std::string, Lot> UnderFall; // by stance: the cells with a fall from under given, his gun known, read against it (not held)
+		std::map<std::string, Lot> UnderFall; // by stance: the cells with a fall from under given, his gun known, read against it
+		// (the burst under him, a man standing, running, kneeling or in cover, his stance's falls from under he may take
+		// read against his gun: the cells where one moves no limb toward it, and of them those given one that does; the
+		// cells where every one does (gaps, the falls' own: printed, not failures), and of them those given other than the
+		// least so; his gun not known, the cells (with two or more from under) and of them those given other than every
+		// one; any stance with one from under he may take (lying, the prone throw), the cells and of them those not given it)
+		int LegAway = 0, LegToward = 0, LegGaps = 0, LegGapWrong = 0, LegBlind = 0, LegBlindTwo = 0, LegBlindWrong = 0, OneUnder = 0, OneUnderWrong = 0;
+		struct Gap
+		{
+			int Cells = 0;
+			std::set<std::string> Twins;
+			std::map<std::string, int> Given;
+			double Least = 1e9, Most = -1e9; // the given fall's limb toward the gun (m), the least and the most of the cells
+			std::string MostAt;
+			std::set<int> Degs;              // where his gun was, degrees round from his nose (his right above 0)
+		};
+		// (a set of the sweep's degrees, 3 apart, as runs: "-177..-138 138..180")
+		auto Runs = [](const std::set<int>& Degs) {
+			std::string Out;
+			int First = 0, Last = 0;
+			bool bOpen = false;
+			auto Close = [&]() { Out += (Out.empty() ? "" : " ") + std::to_string(First) + (Last != First ? ".." + std::to_string(Last) : std::string()); };
+			for (const int D : Degs)
+			{
+				if (bOpen && D == Last + 3) { Last = D; continue; }
+				if (bOpen) Close();
+				First = Last = D;
+				bOpen = true;
+			}
+			if (bOpen) Close();
+			return Out;
+		};
+		std::map<std::string, Gap> Gaps; // by "stance side"
+		std::map<std::string, int> LegCells;                        // by "stance side" (side none: his gun not known): cells
+		std::map<std::string, std::map<std::string, int>> LegGiven; // of them, given each fall from under
 		// (the burst 1 to 3 m off, by where it fell; his gun 25 or 400 m off, the burst under him and his stance's gore falls
 		// holding none from under he may take, by his gun's side)
 		const double Places[] = { 1.0, 1.5, 2.0, 2.5, 3.0, 25.0, 400.0 };
@@ -1633,15 +1701,29 @@ int main(int Argc, char** Argv)
 							}
 							++UnderThere;
 							const double Floor = Strike.bAway ? FloorRead(Falls, bBig, Strike.Gun, Strike.X, Strike.Y) : 1e9;
-							bool bWrong = false, bThrew = false, bFromUnder = false;
-							double Least = 1e9, BodyLeast = 1e9, UnderLeast = 1e9, UnderBody = 1e9;
+							// (his falls from under he may take, and with his gun known the most any of them moves its every limb
+							// away from it: the floor of those given, 0 where one moves none toward it, else that most)
+							int Unders = 0;
+							double UnderBest = -1e9;
 							for (const FallRead& Fr : Falls)
 							{
-								const bool bDue = Fr.From == "under" && MayTakeRead(Fr, bBig, "under");
-								const bool bGunThrow = !bDue && Fr.bThrow && bBig && Strike.bAway && Fr.From == Strike.Gun && LeastAway(Fr, Strike.X, Strike.Y) >= Floor - 1e-9;
+								if (Fr.From != "under" || !MayTakeRead(Fr, bBig, "under")) continue;
+								++Unders;
+								if (Strike.bAway) UnderBest = std::max(UnderBest, LeastAway(Fr, Strike.X, Strike.Y));
+							}
+							const double UnderFloor = Strike.bAway ? std::min(0.0, UnderBest) : -1e9;
+							bool bWrong = false, bThrew = false, bFromUnder = false;
+							double Least = 1e9, BodyLeast = 1e9, UnderLeast = 1e9, UnderBody = 1e9;
+							std::vector<std::string> UnderGiven;
+							for (const FallRead& Fr : Falls)
+							{
+								const bool bUnder = Fr.From == "under" && MayTakeRead(Fr, bBig, "under");
+								const bool bDue = bUnder && (!Strike.bAway || LeastAway(Fr, Strike.X, Strike.Y) >= UnderFloor - 1e-9);
+								const bool bGunThrow = !bUnder && Fr.bThrow && bBig && Strike.bAway && Fr.From == Strike.Gun && LeastAway(Fr, Strike.X, Strike.Y) >= Floor - 1e-9;
 								const bool bGiven = Has(Falls2, Fr);
 								bWrong = bWrong || bGiven != (bDue || bGunThrow);
-								if (bGiven && bDue && Strike.bAway)
+								if (bGiven && bUnder) UnderGiven.push_back(Fr.Clip);
+								if (bGiven && bUnder && Strike.bAway)
 								{
 									bFromUnder = true;
 									UnderLeast = std::min(UnderLeast, LeastAway(Fr, Strike.X, Strike.Y));
@@ -1653,6 +1735,52 @@ int main(int Argc, char** Argv)
 								BodyLeast = std::min(BodyLeast, BodyAway(Fr, Strike.X, Strike.Y));
 							}
 							UnderWrong += bWrong ? 1 : 0;
+							// (the falls from under alone, by the rule's own words: with one, it whatever his gun's side; a man on
+							// his feet or a knee with his gun known, none toward it where one is not, else the least so (a gap, the
+							// falls' own); his gun not known, every one)
+							const int Given1 = static_cast<int>(UnderGiven.size());
+							if (Unders == 1)
+							{
+								++OneUnder;
+								OneUnderWrong += Given1 == 1 ? 0 : 1;
+							}
+							if (std::strcmp(St, "prone") != 0)
+							{
+								const std::string Cell = std::string(St) + " " + (Strike.bAway ? Strike.Gun : std::string("none"));
+								++LegCells[Cell];
+								for (const std::string& N : UnderGiven) ++LegGiven[Cell][N];
+								if (!Strike.bAway)
+								{
+									++LegBlind;
+									LegBlindTwo += Unders > 1 ? 1 : 0;
+									LegBlindWrong += Given1 == Unders ? 0 : 1;
+								}
+								else if (UnderBest >= 0.0)
+								{
+									++LegAway;
+									LegToward += Given1 > 0 && UnderLeast >= 0.0 ? 0 : 1;
+								}
+								else
+								{
+									++LegGaps;
+									LegGapWrong += Given1 > 0 && UnderLeast >= UnderBest - 1e-9 ? 0 : 1;
+									Gap& Gp = Gaps[Cell];
+									++Gp.Cells;
+									Gp.Twins.insert(KV.first);
+									std::string Names;
+									for (const std::string& N : UnderGiven) Names += (Names.empty() ? "" : "+") + N;
+									++Gp.Given[Names];
+									Gp.Least = std::min(Gp.Least, -UnderBest);
+									if (-UnderBest > Gp.Most)
+									{
+										Gp.Most = -UnderBest;
+										char At[160];
+										std::snprintf(At, sizeof(At), "%s, his gun %.0f m %+d deg, %s", KV.first.c_str(), Far, Deg, Names.c_str());
+										Gp.MostAt = At;
+									}
+									Gp.Degs.insert(Deg);
+								}
+							}
 							if (bFromUnder)
 							{
 								Lot& Uf = UnderFall[St];
@@ -1709,10 +1837,82 @@ int main(int Argc, char** Argv)
 			const auto Found = UnderFall.find(St);
 			if (Found == UnderFall.end()) continue;
 			const Lot& L = Found->second;
-			std::printf("     sweep: the burst under him, %s, the falls from under given read against his gun (not held: a burst under him is no point to be thrown "
-				"away from): %d cells, %d with a limb toward the gun, the most %.2f m (%s); %d with his body toward it, the most %.2f m (%s)\n", St, L.Men, L.Toward,
+			std::printf("     sweep: the burst under him, %s, the falls from under given read against his gun (a limb toward it only where every one he may take "
+				"moves it so, the gaps below): %d cells, %d with a limb toward the gun, the most %.2f m (%s); %d with his body toward it, the most %.2f m (%s)\n", St, L.Men, L.Toward,
 				L.Least < 0.0 ? -L.Least : 0.0, L.Least < 0.0 ? L.LeastAt.c_str() : "none", L.BodyToward, L.BodyLeast < 0.0 ? -L.BodyLeast : 0.0,
 				L.BodyLeast < 0.0 ? L.BodyAt.c_str() : "none");
+		}
+		// (the table: each stance on his feet or a knee and each side his gun may be on, or not known, the burst under him: of
+		// the sweep's cells (every twin, his gun 25 or 400 m off every 3 degrees of that quarter, either shell) how many give
+		// each fall from under; and with his gun 400 m off in that side's middle, a light gun's shell, how many twins are given
+		// each and how far it moves his limb along the line toward the gun, the least and the most of the twins (m; less than
+		// 0 away from it))
+		for (const char* St : { "stand", "run", "kneel", "cover" })
+		{
+			for (const char* Side : { "front", "behind", "left", "right", "none" })
+			{
+				struct Row
+				{
+					int Twins = 0, Given = 0;
+					double Lo = 1e9, Hi = -1e9;
+				};
+				std::map<std::string, Row> Rows;
+				std::vector<std::string> Order;
+				const bool bKnown = std::strcmp(Side, "none") != 0;
+				const int Deg = std::strcmp(Side, "front") == 0 ? 0 : std::strcmp(Side, "behind") == 0 ? 180 : std::strcmp(Side, "left") == 0 ? -90 : 90;
+				for (const auto& KV : TwinOf)
+				{
+					GoreStrike Strike;
+					Strike.Stance = St;
+					Strike.Side = "under";
+					if (bKnown)
+					{
+						Strike.Gun = Side;
+						Strike.bAway = true;
+						Strike.X = 400.0 * std::cos(Deg * 3.14159265358979 / 180.0);
+						Strike.Y = 400.0 * std::sin(Deg * 3.14159265358979 / 180.0);
+					}
+					const std::vector<std::pair<std::string, std::string>> Given2 = GoreFalls(*KV.second, Strike);
+					for (const FallRead& Fr : ReadFalls(*KV.second, St))
+					{
+						if (Fr.From != "under" || !MayTakeRead(Fr, false, "under")) continue;
+						if (Rows.find(Fr.Clip) == Rows.end()) Order.push_back(Fr.Clip);
+						Row& Rw = Rows[Fr.Clip];
+						++Rw.Twins;
+						Rw.Given += Has(Given2, Fr) ? 1 : 0;
+						if (!bKnown) continue;
+						const double Toward = -LeastAway(Fr, Strike.X, Strike.Y);
+						Rw.Lo = std::min(Rw.Lo, Toward);
+						Rw.Hi = std::max(Rw.Hi, Toward);
+					}
+				}
+				const std::string Cell = std::string(St) + " " + Side;
+				std::string Line;
+				for (const std::string& Clip : Order)
+				{
+					const Row& Rw = Rows[Clip];
+					char Buf[240];
+					if (bKnown)
+						std::snprintf(Buf, sizeof(Buf), "%s %s: in its middle given %d of %d twins, toward the gun %+.2f to %+.2f m; in the sweep given in %d of %d cells",
+							Line.empty() ? "" : ";", Clip.c_str(), Rw.Given, Rw.Twins, Rw.Lo, Rw.Hi, LegGiven[Cell][Clip], LegCells[Cell]);
+					else
+						std::snprintf(Buf, sizeof(Buf), "%s %s: given %d of %d twins; in the sweep given in %d of %d cells", Line.empty() ? "" : ";", Clip.c_str(), Rw.Given,
+							Rw.Twins, LegGiven[Cell][Clip], LegCells[Cell]);
+					Line += Buf;
+				}
+				std::printf("     under table: %s, his gun %s%s:%s\n", St, bKnown ? Side : "not known", bKnown ? (Deg == 0 ? " (middle 0 deg)" : Deg == 180 ? " (middle 180 deg)"
+					: Deg < 0 ? " (middle -90 deg)" : " (middle +90 deg)") : "", Line.empty() ? " none from under" : Line.c_str());
+			}
+		}
+		for (const auto& KV : Gaps)
+		{
+			const Gap& Gp = KV.second;
+			std::string TwinWords, GivenWords;
+			for (const std::string& T : Gp.Twins) TwinWords += (TwinWords.empty() ? "" : " ") + T;
+			for (const auto& G : Gp.Given) GivenWords += (GivenWords.empty() ? "" : ", ") + G.first + " " + std::to_string(G.second);
+			std::printf("     gap: %s: %d cells where every fall from under he may take moves his limb toward the gun (his gun at %s deg; %d twins: %s), given the least so "
+				"(%s), %.2f to %.2f m toward it (the most: %s)\n", KV.first.c_str(), Gp.Cells, Runs(Gp.Degs).c_str(), static_cast<int>(Gp.Twins.size()), TwinWords.c_str(),
+				GivenWords.c_str(), Gp.Least, Gp.Most, Gp.MostAt.c_str());
 		}
 		Check(Cells > 0 && NotMay == 0, "sweep: every fall given one of his stance's he may take (no throw but a field gun's or a howitzer's, none from another side, "
 			"none from under but where the burst was under him), never none (" + std::to_string(NotMay) + " not)");
@@ -1744,13 +1944,21 @@ int main(int Argc, char** Argv)
 			Check(Up.BodyWorse == 0, "sweep: no fall given a man standing or running moves his body (his pelvis) toward the burst or the gun more than 0.01 m where "
 				"another he may take moves it away (" + std::to_string(Up.BodyWorse) + " cells so; the least his body moves away " + Least + ")");
 		}
-		Check(UnderWrong == 0 && UnderBackWrong == 0 && UnderAllWrong == 0, "sweep: the burst under him, given every fall from under he may take and else only such "
-			"a shell's throw from his gun's side where its limbs move as far from the gun as that side's falls set; with none from under he may take, what his gun's "
+		Check(UnderWrong == 0 && UnderBackWrong == 0 && UnderAllWrong == 0, "sweep: the burst under him, given the falls from under he may take (his gun known, "
+			"those that move no limb toward it, or where every one does the least so; not known, every one) and else only such a shell's throw from his gun's side where its limbs move as far from the gun as that side's falls set; with none from under he may take, what his gun's "
 			"side gives, or where it is not known all he may take (" + std::to_string(UnderCells) + " cells, " + std::to_string(UnderWrong + UnderBackWrong + UnderAllWrong)
 			+ " not)");
 		Check(UnderThrow.Toward == 0 && UnderThrow.BodyToward == 0, "sweep: the burst under him, no throw from his gun's side moves a limb or his body toward the gun ("
 			+ std::to_string(UnderThrew) + " cells thrown, " + std::to_string(UnderThrow.Toward) + " with a limb toward, " + std::to_string(UnderThrow.BodyToward)
 			+ " with his body)");
+		Check(LegAway > 0 && LegToward == 0, "sweep: the burst under a man standing, running, kneeling or in cover, his gun known, no fall from under given moves his "
+			"limb toward the gun where one he may take does not (" + std::to_string(LegAway) + " cells, " + std::to_string(LegToward) + " so)");
+		Check(LegGapWrong == 0, "sweep: the burst under him so, his gun known, where every fall from under he may take moves his limb toward the gun, given those that "
+			"move it least so (" + std::to_string(LegGaps) + " such cells, the gaps above, " + std::to_string(LegGapWrong) + " not)");
+		Check(LegBlind > 0 && LegBlindWrong == 0, "sweep: the burst under him so, his gun not known, given every fall from under he may take (" + std::to_string(LegBlind)
+			+ " cells, " + std::to_string(LegBlindTwo) + " of them with two or more, " + std::to_string(LegBlindWrong) + " not)");
+		Check(OneUnderWrong == 0, "sweep: the burst under him, any stance with one fall from under he may take (twins of 24 Nov; lying, the prone throw) given it "
+			"whatever his gun's side (" + std::to_string(OneUnder) + " cells, " + std::to_string(OneUnderWrong) + " not)");
 	}
 
 	// ---- The picture: six gored men, each in his own fall, from the side.

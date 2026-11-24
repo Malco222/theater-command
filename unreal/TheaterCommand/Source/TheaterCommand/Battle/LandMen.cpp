@@ -1702,6 +1702,32 @@ namespace LandMen
 			return By;
 		}
 
+		/** Effects (R2): the least any limb a gore fall takes off (its limb_off events') moves away from a point at PX, PY
+		 * in his own axes, along the line from it to the limb's joint as he was struck (m; less than 0 toward it), read
+		 * from the fall's first frame and its last: FallsBySide's half metre, and against his gun GoreFalls' falls from
+		 * under. 1e9 for a fall that takes none off. */
+		double LimbsAway(const Soldier& Tw, const Clip& Cl, double PX, double PY)
+		{
+			Xform AtFirst[MaxBones], AtLast[MaxBones];
+			Pose First, End;
+			Sample(Cl, 0.f, First);
+			Sample(Cl, Cl.Long, End);
+			BoneFrames(Tw, First, AtFirst);
+			BoneFrames(Tw, End, AtLast);
+			double Least = 1e9;
+			for (const ClipEvent& E : Cl.Events)
+			{
+				if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
+				const Vec3 Head = Tw.Bones[static_cast<size_t>(E.Bone)].Head;
+				const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
+				const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
+				const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
+					/ std::max(1e-6, std::hypot(OX, OY));
+				Least = std::min(Least, Along);
+			}
+			return Least;
+		}
+
 		/** Effects (R2): the gore falls he may be given by the side Strike.Side (GoreFalls, but a burst under him read
 		 * there first). */
 		GoreList FallsBySide(const Soldier& Tw, const GoreKinds& Kinds, const GoreStrike& Strike)
@@ -1761,8 +1787,6 @@ namespace LandMen
 			double Floor = -1e9;
 			if (Strike.bAway)
 			{
-				const double PX = Strike.X, PY = Strike.Y;
-				Xform AtFirst[MaxBones], AtLast[MaxBones];
 				auto Measure = [&]() {
 					for (const auto& KV : Kinds)
 					{
@@ -1770,24 +1794,7 @@ namespace LandMen
 						{
 							const int Ix = Tw.ClipIndex(Name);
 							if (Ix < 0 || !Base(KV.first, Name) || Gain.count(Name)) continue;
-							const Clip& Cl = Tw.Clips[static_cast<size_t>(Ix)];
-							Pose First, End;
-							Sample(Cl, 0.f, First);
-							Sample(Cl, Cl.Long, End);
-							BoneFrames(Tw, First, AtFirst);
-							BoneFrames(Tw, End, AtLast);
-							double Least = 1e9;
-							for (const ClipEvent& E : Cl.Events)
-							{
-								if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
-								const Vec3 Head = Tw.Bones[static_cast<size_t>(E.Bone)].Head;
-								const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
-								const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
-								const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
-									/ std::max(1e-6, std::hypot(OX, OY));
-								Least = std::min(Least, Along);
-							}
-							Gain[Name] = Least;
+							Gain[Name] = LimbsAway(Tw, Tw.Clips[static_cast<size_t>(Ix)], Strike.X, Strike.Y);
 						}
 					}
 					Floor = -1e9;
@@ -1838,8 +1845,8 @@ namespace LandMen
 		const GoreKinds* Kinds = KindsOf(Tw.DeathsGore, Strike.Stance);
 		if (!Kinds) return {};
 		// (a burst under him, within 1 m whatever his stance: the deaths thread, 24 Nov, its falls from under, a lower leg
-		// off on his feet or a knee, and lying the throw from under him. Those he may take, none measured: a burst under
-		// him is no point to be thrown away from. A field gun's or a howitzer's shell may throw him too, but only as his
+		// off on his feet or a knee, and lying the throw from under him. Those he may take; a burst under him is no point to
+		// be thrown away from, but his gun is, below. A field gun's or a howitzer's shell may throw him too, but only as his
 		// gun's side would (the falls from there, of them the throws: from that side alone, his limbs and his body thrown
 		// away from the gun, as before); the kind from under weighed as the kind matching the burst is, ChooseFall. Where
 		// his stance's gore falls hold none from under he may take (lying, but for the prone throw, none), by his gun's
@@ -1857,13 +1864,46 @@ namespace LandMen
 					if (IsThrow(Fall.first, Fall.second)) Thrown.push_back(Fall);
 				}
 			}
+			// (his gun known (Gun, and bAway: the gun's place): of his falls from under only those whose limb does not move
+			// toward the gun, along the line from it to the limb's joint as he was struck (LimbsAway, as a limb is read
+			// against a burst), or where every one moves it toward the gun those that move it least so (never none). The
+			// art director, 23 Nov 17:52Z: the limb flies away from the blast; with one fall from under each stance it flew
+			// toward the gun about half the time. The deaths thread's mirrors (die_leg_off_f standing and running,
+			// die_leg_off_g kneeling and in cover: the other leg, flung to the other side) give him one that flies away
+			// from a gun ahead or at either side; with it behind him both legs may fly back toward it (the test prints
+			// those cells). His gun not known, all of them, either leg; a stance with one from under (the twins before;
+			// lying, the prone throw) is given it whatever his gun's side, as before)
+			std::map<std::string, double> Gain;
+			double Floor = -1e9;
+			if (!Strike.Gun.empty() && Strike.bAway)
+			{
+				double Best = -1e9;
+				for (const auto& KV : *Kinds)
+				{
+					for (const std::string& Name : KV.second)
+					{
+						const int Ix = Tw.ClipIndex(Name);
+						if (Ix < 0 || !FromUnder(Tw, KV.first, Name, Strike.bBig) || Gain.count(Name)) continue;
+						const double G = LimbsAway(Tw, Tw.Clips[static_cast<size_t>(Ix)], Strike.X, Strike.Y);
+						Gain[Name] = G;
+						Best = std::max(Best, G);
+					}
+				}
+				Floor = std::min(0.0, Best);
+			}
 			GoreList Out;
 			for (const auto& KV : *Kinds)
 			{
 				for (const std::string& Name : KV.second)
 				{
 					std::pair<std::string, std::string> Fall(KV.first, Name);
-					if (!FromUnder(Tw, KV.first, Name, Strike.bBig) && std::find(Thrown.begin(), Thrown.end(), Fall) == Thrown.end()) continue;
+					const bool bUnder = FromUnder(Tw, KV.first, Name, Strike.bBig);
+					if (!bUnder && std::find(Thrown.begin(), Thrown.end(), Fall) == Thrown.end()) continue;
+					if (bUnder)
+					{
+						const auto G = Gain.find(Name);
+						if (G != Gain.end() && G->second < Floor) continue;
+					}
 					if (std::find(Out.begin(), Out.end(), Fall) == Out.end()) Out.push_back(std::move(Fall));
 				}
 			}
@@ -3341,10 +3381,10 @@ namespace LandMen
 					// BlastOf, of them those whose limbs move away from the burst or the gun; where none from there he may take,
 					// of all he may take: no throw but a field gun's or a howitzer's, BigThrow, and none from another side of
 					// him; where none from there moves its limbs half a metre away, of all he may take but those from the side
-					// opposite; a burst under him, his falls from under, and such a shell's throw from his gun's side), each
-					// kind's weight shared among its falls taken, the kinds weighed as for any man and the kind from under as
-					// below. Never no fall (GoreTwinFor gores no man whose stance's gore falls hold none he may take; were it
-					// so, all of them).
+					// opposite; a burst under him, his falls from under (his gun known, those whose limb flies not toward it,
+					// or where all do the least so), and such a shell's throw from his gun's side), each kind's weight shared
+					// among its falls taken, the kinds weighed as for any man and the kind from under as below. Never no fall
+					// (GoreTwinFor gores no man whose stance's gore falls hold none he may take; were it so, all of them).
 					const bool bBig = BigThrow(M);
 					std::vector<std::pair<std::string, std::string>> Given;
 					if (M.bGore) Given = GoreFalls(S, StrikeOf(M, St, BlastOf(M)));

@@ -426,11 +426,14 @@ namespace LandMen
 	 * toward it (the art director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move
 	 * farthest so. Where his stance's gore falls hold none from his side he may take, all he may take. A burst under
 	 * him (Side under; the deaths thread, 24 Nov: on his feet or a knee, a lower leg off): the falls from under he may
-	 * take (a throw from under, the prone one, only where bBig), none measured (a burst under him is no point to be
-	 * thrown away from), and where bBig the throw his gun's side would give him (the falls from Gun as above, of them
-	 * the throws: from that side alone, his limbs away from the gun); where his stance's gore falls hold none from under
-	 * he may take, the falls from Gun as above, or where it is not known all he may take (no throw: none is from under
-	 * but the prone one).
+	 * take (a throw from under, the prone one, only where bBig); where his gun is known (Gun, and bAway: X, Y the gun's
+	 * place) of them only those whose limb does not move toward the gun (along the line from it to the limb's joint as
+	 * he was struck, read as above), or where every one does those that move it least so (never none: a stance with one
+	 * from under is given it whatever his gun's side), and where it is not known all of them (a burst under him is no
+	 * point to be thrown away from); and where bBig the throw his gun's side would give him (the falls from Gun as
+	 * above, of them the throws: from that side alone, his limbs away from the gun); where his stance's gore falls hold
+	 * none from under he may take, the falls from Gun as above, or where it is not known all he may take (no throw: none
+	 * is from under but the prone one).
 	 */
 	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
 	/** Effects (R2): the side a man of that twin so struck is given his gore falls by (GoreFalls): Side, but for a burst
@@ -469,15 +472,18 @@ namespace LandMen
 		 * block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side he
 		 * may take, all he may take, the limbs away again; where none of those from it moves its limbs half a metre
 		 * away, all he may take but those from the side opposite, which would throw him toward it. A burst under him:
-		 * his stance's falls from under (a lower leg off; lying, the throw from under, a gun's alone), or from such a
+		 * his stance's falls from under (a lower leg off; lying, the throw from under, a gun's alone), where the gun that
+		 * fired it is known only those whose limb does not fly toward it (or where all do, the least so), or from such a
 		 * shell the throw from the side of the gun that fired it (its track as it fired), his limbs away from the gun;
 		 * where his stance's gore falls hold none from under he may take, by the gun's side as for a burst there, or
 		 * where the gun is not known all he may take but a throw (GoreFalls). The kinds weighed as for any man, the kind
 		 * from under three times where the burst was under him, as the kind matching the burst is: where such a shell
 		 * bursting on him is offered a throw, the throw 8 to the fall from under's 3 whatever his stance and his gun's
 		 * side (as when he was read by his gun's side for a man standing with it ahead or behind, or running with it
-		 * ahead; somewhat more often than then otherwise, where the matching kind weighed 3.9 to 6). The fall from under
-		 * is not measured: read against his gun it moves his lower leg toward the gun about half the time. The same
+		 * ahead; somewhat more often than then otherwise, where the matching kind weighed 3.9 to 6). His falls from under
+		 * read against his gun as a limb is against a burst: with one each stance it moved his lower leg toward the gun
+		 * about half the time; with the deaths thread's mirrors (a fall from under for each leg) only one that does not,
+		 * or where both do (his gun behind him: both legs may fly back) the one that moves it least so. The same
 		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
 		 * changes. Off unless set: every man falls as before.
 		 */
