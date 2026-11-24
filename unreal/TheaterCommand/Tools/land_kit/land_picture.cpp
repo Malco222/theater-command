@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -433,6 +434,15 @@ namespace
 			Distance *= Fill;
 		}
 		Frame();
+		// (LAND_KIT_CAMERA=1: where the camera stood and what it looked at, beside the picture, for measuring it)
+		if (std::getenv("LAND_KIT_CAMERA"))
+		{
+			if (std::FILE* Cf = std::fopen((Path + ".camera").c_str(), "wb"))
+			{
+				std::fprintf(Cf, "%.6f %.6f %.6f %.6f %.6f %.6f\n", Cam.X, Cam.Y, Cam.Z, Target.X, Target.Y, Target.Z);
+				std::fclose(Cf);
+			}
+		}
 
 		// The vehicle drawn into a depth, a normal, a colour and a place for every pixel.
 		const size_t Count = static_cast<size_t>(W) * H;
@@ -603,6 +613,40 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A painted panel read back (P6, 8 bits), for laying two side by side. */
+	bool ReadPicture(const std::string& Path, int& W, int& H, std::vector<uint8_t>& Out)
+	{
+		std::FILE* File = std::fopen(Path.c_str(), "rb");
+		if (!File)
+		{
+			return false;
+		}
+		int Most = 0;
+		const bool bOk = std::fscanf(File, "P6 %d %d %d", &W, &H, &Most) == 3 && Most == 255 && std::fgetc(File) != EOF && W > 0 && H > 0;
+		if (bOk)
+		{
+			Out.resize(static_cast<size_t>(W) * H * 3);
+		}
+		const bool bRead = bOk && std::fread(Out.data(), 1, Out.size(), File) == Out.size();
+		std::fclose(File);
+		return bRead;
+	}
+	bool WritePicture(const std::string& Path, int W, int H, const std::vector<uint8_t>& Pixels)
+	{
+		std::FILE* File = std::fopen(Path.c_str(), "wb");
+		if (!File)
+		{
+			return false;
+		}
+		std::fprintf(File, "P6\n%d %d\n255\n", W, H);
+		std::fwrite(Pixels.data(), 1, Pixels.size(), File);
+		std::fclose(File);
+		return true;
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 3)
@@ -718,14 +762,15 @@ int main(int argc, char** argv)
 			int Hurt, Level, Roof;
 			uint64_t Key;
 			double Bearing, Up, Sun;
-			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves
+			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves;
+			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them)
 			double AimDistance;
 			const char* Caption;
 		};
 		const HouseLook Looks[] = {
 			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate" },
 			{ "house_slate_back", 0, 0, 0, 7, 140.0, 12.0, 210.0, -1, 0.0, "from behind: gutter, downpipe, water butt" },
-			{ "house_tile", 0, 0, 1, 12, 34.0, 12.0, 110.0, -1, 0.0, "another under flat clay tiles" },
+			{ "house_tile", 0, 0, 1, 2, 34.0, 12.0, 110.0, -1, 0.0, "another: cream limestone, flat clay tiles" },
 			{ "house_window", 0, 0, 0, 7, -24.0, 4.0, 62.0, 0, 3.6, "close: quoins, sill, casements, shutters" },
 			{ "house_door", 0, 0, 0, 7, 20.0, 6.0, 80.0, 1, 5.6, "close: the door, its keystone, fanlight and step" },
 			{ "house_eaves", 0, 0, 0, 7, -30.0, 6.0, 60.0, 2, 7.5, "close: chimney, ridge tiles, eaves' kick" },
@@ -735,9 +780,30 @@ int main(int argc, char** argv)
 			{ "house_mid", 0, 1, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the middle level (drawn from about 90 m)" },
 			{ "house_far", 0, 2, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "the far level (drawn from 300 m)" },
 			{ "house_gable_far", 2, 2, 0, 7, -38.0, 16.0, 62.0, -1, 0.0, "a gable down, far level" },
+			// (the level switches as the game shows them: the land battle's 70 degree lens on a screen 1,920 wide sees at 90 m
+			// what this painter's 28 degree one, 560 wide, sees at 55 m, and at 300 m what it sees at 184 m; laid in pairs below)
+			{ "switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
+			{ "switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
+			{ "switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" },
+			{ "switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" },
+			{ "switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "" }, // (not laid out: for measuring the far against it)
+			{ "switch90_shell_near", 3, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
+			{ "switch90_shell_mid", 3, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "" },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_shell_close", 3, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
+			{ "zz_shell_mid", 3, 1, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
+			{ "zz_gable_close", 2, 0, 0, 7, -38.0, 14.0, 62.0, 3, 21.0, "" },
 		};
+		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
+		const char* Only = std::getenv("LAND_KIT_ONLY");
 		for (const HouseLook& K : Looks)
 		{
+			if (!Only && K.File[0] == 'z') continue;
+			if (Only && ("," + std::string(Only) + ",").find("," + std::string(K.File) + ",") == std::string::npos
+				&& !(std::strncmp(K.File, "switch", 6) == 0 && ("," + std::string(Only) + ",").find(",switch") != std::string::npos))
+			{
+				continue;
+			}
 			Panel P;
 			P.File = K.File;
 			P.House = K.Hurt;
@@ -764,6 +830,10 @@ int main(int argc, char** argv)
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
+				}
+				if (K.Aim == 3)
+				{
+					At = V3(0.0, 0.0, 0.15 + 0.5 * LandHouse::RidgeOf(HouseSpec(P)));
 				}
 				P.bAim = true;
 				P.AimAt = At;
@@ -873,7 +943,10 @@ int main(int argc, char** argv)
 				std::printf("cannot write %s\n", Path.c_str());
 				return 1;
 			}
-			std::fprintf(Captions, "%s\t%s (%zu triangles)\n", P.File.c_str(), P.Caption.c_str(), M.Tris());
+			if (!P.Caption.empty())
+			{
+				std::fprintf(Captions, "%s\t%s (%zu triangles)\n", P.File.c_str(), P.Caption.c_str(), M.Tris());
+			}
 			std::printf("  %s (near %zu, middle %zu, far %zu triangles)\n", Path.c_str(), L.Near.Tris(), L.Mid.Tris(), L.Far.Tris());
 			continue;
 		}
@@ -925,6 +998,53 @@ int main(int argc, char** argv)
 		}
 		std::fprintf(Captions, "%s\t%s\n", P.File.c_str(), P.Caption.c_str());
 		std::printf("  %s (%zu triangles)\n", Path.c_str(), S.Tris.size());
+	}
+	// The level switches: the house's left half as one level draws it and its right half as the next, at the distance the
+	// game changes from one to the other, the middle of the picture enlarged pixel for pixel (Zoom) so the step shows.
+	if (bHouseSheet)
+	{
+		struct Switch
+		{
+			const char* File;
+			const char* Left;
+			const char* Right;
+			int Zoom;
+			const char* Caption;
+		};
+		const Switch Switches[] = {
+			{ "house_switch90", "switch90_near", "switch90_mid", 2, "at 90 m, enlarged 2x: near | middle" },
+			{ "house_switch300", "switch300_mid", "switch300_far", 4, "at 300 m, enlarged 4x: middle | far" },
+			{ "house_switch90_shell", "switch90_shell_near", "switch90_shell_mid", 2, "the shell at 90 m, 2x: near | middle" },
+		};
+		for (const Switch& K : Switches)
+		{
+			int LW = 0, LH = 0, RW = 0, RH = 0;
+			std::vector<uint8_t> L, R;
+			if (!ReadPicture(OutDir + "/" + K.Left + ".ppm", LW, LH, L) || !ReadPicture(OutDir + "/" + K.Right + ".ppm", RW, RH, R) || LW != RW || LH != RH)
+			{
+				continue;
+			}
+			std::vector<uint8_t> Out(L.size());
+			for (int Y = 0; Y < LH; ++Y)
+			{
+				for (int X = 0; X < LW; ++X)
+				{
+					const int SX = LW / 2 + (X - LW / 2) / K.Zoom - (X < LW / 2 && (X - LW / 2) % K.Zoom ? 1 : 0);
+					const int SY = LH / 2 + (Y - LH / 2) / K.Zoom - (Y < LH / 2 && (Y - LH / 2) % K.Zoom ? 1 : 0);
+					const std::vector<uint8_t>& From = X < LW / 2 ? L : R;
+					for (int C = 0; C < 3; ++C)
+					{
+						Out[(static_cast<size_t>(Y) * LW + X) * 3 + C] = X == LW / 2 ? 235 : From[(static_cast<size_t>(SY) * LW + SX) * 3 + C];
+					}
+				}
+			}
+			if (!WritePicture(OutDir + "/" + K.File + ".ppm", LW, LH, Out))
+			{
+				return 1;
+			}
+			std::fprintf(Captions, "%s\t%s\n", K.File, K.Caption);
+			std::printf("  %s/%s.ppm (%s | %s)\n", OutDir.c_str(), K.File, K.Left, K.Right);
+		}
 	}
 	std::fclose(Captions);
 	return 0;

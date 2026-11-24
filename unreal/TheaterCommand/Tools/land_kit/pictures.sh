@@ -5,7 +5,9 @@
 # LAND_KIT_MARKS=1 paints the national marks' own sheet instead (release 2, -TheaterLandMarks: each owner's period
 # marking as the game paints it on her skin, whole vehicles and close looks).
 # LAND_KIT_HOUSE=1 paints the farmhouse's own sheet instead (release 2, -TheaterLandTrial=houses: the bocage's farmhouse built
-# to the vehicles' detail, whole and in its three hurts, near, middle and far).
+# to the vehicles' detail, whole and in its three hurts, near, middle and far, and stills across its 90 m and 300 m
+# switches as the game's lens shows them). LAND_KIT_ONLY=<panel,panel> paints only those panels (and the zz_ close looks
+# for working on it); LAND_KIT_CAMERA=1 writes each panel's camera beside it, for measuring.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
