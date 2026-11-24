@@ -3438,9 +3438,10 @@ namespace LandHouse
 					if (!bMid || bPlinth) Cut(B, Fc, A0, A1, Z0, Z1, L0, L1, bDressed ? 0.012 : 0.0, Fc.N, WC);
 					if (bInner && Z0 >= -0.01)
 					{
-						// (a barn's or a byre's bare rubble, sooted as the near level's: the art director's barn round 2)
+						// (a barn's or a byre's bare rubble, its stones and mortar sooted as the near level's InnerRubble averages: the
+						// art director's barn round 2, and its carry, not a near-black slab)
 						const bool bBare = P.Kind == 1 || P.Kind == 2;
-						const Col PC = P.Hurt == 3 ? Mixed(bBare ? Scaled(P.K.Plaster, 0.8) : P.K.Plaster, P.K.Soot, bBare ? 0.78 : 0.6) : Mixed(P.K.Plaster, P.K.Soot, 0.2);
+						const Col PC = P.Hurt == 3 ? (bBare ? Mixed(Mixed(P.K.StoneMean, P.K.Mortar, 0.3), P.K.Soot, 0.71) : Mixed(P.K.Plaster, P.K.Soot, 0.6)) : Mixed(P.K.Plaster, P.K.Soot, 0.2);
 						Cut(B, Fc, A0, A1, Z0, Z1, L0, L1, -P.Thick, Fc.N * -1.0, [&](double, double) { return PC; });
 					}
 					if (bCut && TM < Z1 - 1e-6 && TM > Z0 + 1e-6)
@@ -3638,7 +3639,7 @@ namespace LandHouse
 				// (a barn's or a byre's burnt floor: its fallen rubble and ash in patches, flat, as the near level's heaps
 				// read from 90 m)
 				const double CS = bMid ? 1.2 : 3.0;
-				auto FC = [&](double X, double Y) { return Mixed(Mixed(P.K.StoneMean, Rgb(150, 144, 134), 0.5), Rgb(70, 66, 60), 0.15 + 0.35 * Noise01(X / 1.1, Y / 1.1, P.Key ^ 0xF5)); };
+				auto FC = [&](double X, double Y) { return Mixed(Mixed(P.K.StoneMean, Rgb(150, 136, 118), 0.5), Rgb(70, 62, 54), 0.15 + 0.35 * Noise01(X / 1.1, Y / 1.1, P.Key ^ 0xF5)); };
 				for (double X = -IX; X < IX - 1e-6; X += CS)
 					for (double Y = -IY; Y < IY - 1e-6; Y += CS)
 					{
