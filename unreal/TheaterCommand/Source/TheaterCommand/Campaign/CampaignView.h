@@ -1049,6 +1049,10 @@ struct FViewAirfield
 	// shut, a repair in hand, and "strip" or "full" where airfields are targets (empty where the rules do not say).
 	bool bShut = false, bMending = false;
 	FString Tier;
+	// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) The player's
+	// own groups among them, on a field another country holds: how many, their aircraft, and his nation (empty where none).
+	int32 YourGroups = 0, YourAircraft = 0;
+	FString YourNation;
 };
 
 struct FViewAirFleet

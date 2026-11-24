@@ -38,6 +38,20 @@
 
 namespace
 {
+	/**
+	 * (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) On a field
+	 * another country holds, how many of the groups based there are the player's: ", 1 of them yours", ", yours" or "".
+	 */
+	FString YoursAmong(const FViewAirfield& Field)
+	{
+		if (Field.YourGroups <= 0 || Field.Groups <= 0)
+		{
+			return FString();
+		}
+		return Field.YourGroups >= Field.Groups ? FString(Field.Groups == 1 ? TEXT(", yours") : TEXT(", all yours"))
+			: FString::Printf(TEXT(", %d of them yours"), Field.YourGroups);
+	}
+
 	/** (Speed, b414 mark 1: see ACampaignPlayerController::Afterwards.) */
 	TAutoConsoleVariable<int32> CVarPictureFirst(
 		TEXT("tc.Speed.PictureFirst"), 1,
@@ -5925,7 +5939,7 @@ namespace
 	{
 		return Field.Groups < 0 ? FString(TEXT("what flies from it is not known"))
 			: Field.Groups == 0 ? FString(TEXT("no aircraft based here"))
-			: FString::Printf(TEXT("%d air group%s based here"), Field.Groups, Field.Groups == 1 ? TEXT("") : TEXT("s"));
+			: FString::Printf(TEXT("%d air group%s based here%s"), Field.Groups, Field.Groups == 1 ? TEXT("") : TEXT("s"), *YoursAmong(Field));
 	}
 }
 
@@ -6375,11 +6389,23 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				PointedPiece = nullptr;
 			}
+			// (Brian, 24 November 2026 21:53Z: "i cant click on the london airfield".) Where another country's corps stands on
+			// or beside a field, as an ally's do at London, its pole and counters took the pointer from the field. With nothing
+			// in hand, inside an airfield's ring, another country's piece keeps it only on its colours; its pole, counters and
+			// guns leave it to the field. (A click on another country's flag only looks at the ground it stands on.) The
+			// player's own pieces still win.
+			if (PointedPiece && PointedField != INDEX_NONE && bHandsFree && bFieldsKept && GetSession()
+				&& PointedPiece->GetNationTag() != GetSession()->GetView().Human && !PointedPiece->ColoursHitByRay(RayOrigin, RayDirection))
+			{
+				PointedPiece = nullptr;
+				AimedPiece = nullptr;
+			}
 		}
 	}
 
 	// (The same spec.) Inside its ring the airfield wins over the province and the town's plate: the pointer points at the
-	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins.
+	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins
+	// (another country's piece only on its colours, above).
 	if (OnFieldBadge == INDEX_NONE && (PointedPiece || PointedAgent != INDEX_NONE))
 	{
 		PointedField = INDEX_NONE; // (a piece or an agent under the pointer takes the click, so neither the tip nor the card is the airfield's)
@@ -7122,7 +7148,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				// stands there is said first and plainly, and the field's room is never worded as aircraft.)
 				const FString Stands = Field->Groups < 0 ? FString(TEXT("What flies from it is not known."))
 					: Field->Groups == 0 ? FString(TEXT("No aircraft are based here."))
-					: FString::Printf(TEXT("%d air group%s based here: %s aircraft%s."), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
+					: FString::Printf(TEXT("%d air group%s based here%s: %s aircraft%s."), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *YoursAmong(*Field), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\n%s It has room for %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *Stands, *FText::AsNumber(Field->Holds).ToString());
 				FieldSlipEnds = Line.Len();
 				// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 2.) With nothing in
@@ -7157,6 +7183,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 								BasedHere.Add(&BasedGroup);
 							}
 						}
+						// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".)
+						// On a field another country holds, the player's own groups come first, each said to be his.
+						if (Field->YourGroups > 0)
+						{
+							BasedHere.StableSort([&View](const FViewAirFleet& A, const FViewAirFleet& B) { return A.Nation == View.Human && B.Nation != View.Human; });
+						}
 					}
 					const int32 SlotsLeft = 4 - HoverGlance.Lines.Num();
 					for (int32 Slot = 0; Slot < BasedHere.Num(); ++Slot)
@@ -7171,7 +7203,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						FieldSaid.bOrderSign = true;
 						FieldSaid.Sign = BasedHere[Slot]->Bombers > BasedHere[Slot]->Fighters ? TEXT("bmr") : TEXT("ftr");
 						FieldSaid.Figure = FText::AsNumber(BasedHere[Slot]->Fighters + BasedHere[Slot]->Bombers).ToString();
-						FieldSaid.Words = BasedHere[Slot]->Name;
+						FieldSaid.Words = Field->YourGroups > 0 && BasedHere[Slot]->Nation == View.Human ? BasedHere[Slot]->Name + TEXT(", yours") : BasedHere[Slot]->Name;
 					}
 					if (BasedHere.Num() == 0)
 					{
