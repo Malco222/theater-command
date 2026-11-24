@@ -671,6 +671,16 @@ int main(int argc, char** argv)
 	const bool bStandTest = std::getenv("LAND_PLAY_STAND") != nullptr;
 	ES.bWhistle = bWhistleTest;
 	ES.bLastStand = bStandTest;
+	// (LAND_PLAY_WHISTLE=hidden: the attacker's foot hidden from the player all battle, the officer among them: the whistle
+	// cannot be shown, and the film must still open on its aerial. A check of its own: the ride film, on those hidden men,
+	// fails its gates in it)
+	const bool bWhistleHidden = bWhistleTest && std::string(std::getenv("LAND_PLAY_WHISTLE")) == "hidden";
+	if (bWhistleHidden)
+		EW.Hidden = [&Rec](int B)
+		{
+			const LandFeed::Block* Bk = Rec.BlockOf(B);
+			return Bk && Bk->Side == 0 && Bk->Kind == "inf";
+		};
 	if (bNickTest)
 		EW.Nickname = [&Rec](int B)
 		{
@@ -2583,7 +2593,9 @@ int main(int argc, char** argv)
 			}
 		}
 		std::printf("special shots: %d whistle, %d nickname cards, %d last stands (the whistle's step-off %.1f on track %d)\n", Whistles, Cards, Stands, Eye.WhistleAt(), Eye.WhistleMan());
-		if (bWhistleTest && Eye.WhistleAt() >= 0.0 && Whistles == 0) Fault("the whistle start was not shot");
+		if (bWhistleTest && !bWhistleHidden && Eye.WhistleAt() >= 0.0 && Whistles == 0) Fault("the whistle start was not shot");
+		if (bWhistleHidden && Whistles > 0) Fault("a whistle was shot on an officer hidden from the player");
+		if (bWhistleHidden && !Eye.Log().empty() && Eye.Log()[0].first < 1.0) Fault("the film did not open on its aerial with the whistle's officer hidden");
 		if (Whistles > 1) Fault("more than one whistle");
 		if (Cards > ES.NickMost) Fault("more nickname cards than NickMost");
 		if (Cards > 1 && CardGap < ES.NickEvery - 1e-6) Fault("two nickname cards nearer than NickEvery");
