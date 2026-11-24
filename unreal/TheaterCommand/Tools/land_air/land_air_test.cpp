@@ -24,7 +24,9 @@
 //            stretched along the wind in uneven folds of its own, its far end lifted, its near end by his harness,
 //            falling in downwind and never under the ground on a slope; and her note of 17:40Z, from above (FromAbove):
 //            its outline uneven, one side wider, its hem wavy, three or four folds across it, its far end's lift slumped
-//            to one side, a few of its lines across its silk, its luma across its middle about her 126 to 221
+//            to one side, a few of its lines across its silk, its luma across its middle about her 126 to 221; and on a
+//            second look, a few of its lines lying on top across its body, and its far end broken up (its vent off its
+//            middle, a crease across its dome, folded back under at an edge, its seams kinked)
 // With an out folder it writes air_paths.txt for paths.py (the picture: each strike side-on and from above), and the
 // pilots' frames and chute_silk.txt (his canopy's mesh: full, lying, two pilots', and falling in) for chutes.py.
 // Usage: Tools/land_air/run.sh [out folder]
@@ -255,17 +257,41 @@ namespace
 	 * (d) Its far end's slump sideways: over its lifted far end (0.72 to 0.95 of its length) the middle of its lift
 	 *     across it (each cell's height over the lowest there its weight: not its highest cell, which a long fold's
 	 *     ridge takes as often as not), how far to one side of its outline's middle on the mean (metres).
-	 * (e) Its lines as the scene draws them lying (LandBattleAir's DownShape, slack: from his harness as he lies, each in
-	 *     two lengths, its middle let down to the lower end's height and bowed to one side by 0.06 of its length, every
-	 *     other line to the other), short of its own seam's last 10 cm: how many run 0.25 m or more over its silk and on
-	 *     it (their middle no more than 4 mm under the silk's top there: seen, the 12 mm cord's top over it), the most
-	 *     that one does, and how far under the silk's top any line goes at the deepest where it runs over it (a review
-	 *     of 24 November: a line pressed under a flipped gore had been counted across it).
+	 * (e) Its lines as the scene draws them lying (LandBattleAir's DownShape: LineLies' points, slack, from his harness as
+	 *     he lies), short of each one's last 10 cm: how many run 0.2 m or more over its silk and on it (their middle no
+	 *     more than 4 mm under the silk's top there: seen, the 12 mm cord's top over it), the most that one does, and how
+	 *     far under the silk's top any line goes at the deepest where it runs over it (a review of 24 November: a line
+	 *     pressed under a flipped gore had been counted across it). And (her note of 17:40Z, (3), after a second look:
+	 *     they had crossed only the flap at its near end) across its body: each line's length on its silk more than 0.15
+	 *     of its length past where its lines gather; how many run 0.3 m or more so, and the most that one does; of those
+	 *     its silk lies across (LineLies' longer), how high their middle stands over its silk's top where they run over
+	 *     it at the most and on the mean (lying on it: the 12 mm cord within about 2 cm of it), and the longest drawn as a
+	 *     share of its own length (from his harness to its hem in the air, up his riser and along its line, as LandAir
+	 *     draws it: none longer than it is).
+	 * (f) Its far end's breakup (her note of 17:40Z, (2), after a second look: its far end had stayed a neat dome, its
+	 *     seams meeting at its middle): its vent (its tip, where its seams meet) off the middle of its far fifth's silk,
+	 *     a share of its half-width there at the most; a crease across its dome, the deepest its top dips along it, row
+	 *     by row across it 16 cm or more in from its edges from 0.72 of its length on, under the lower of the highest it
+	 *     stands either side (metres); its last two rings folded back under at an edge, how much farther out to one side
+	 *     of its middle its top layer reaches than its edge's seam does (metres, at the most); and its seams over its
+	 *     top's middle across, how far each bends aside ring to ring over its last four rings (the most second
+	 *     difference across it, metres, on the mean over them).
 	 */
 	struct Above
 	{
 		double Side = 0.0, SideTip = 0.0, Off[2] = {}, Hem = 0.0, Slump = 0.0, LumaLo = 0.0, LumaHi = 0.0, CrossMost = 0.0, Buried = 0.0;
 		int Turns[2] = {}, NearTurns = 0, Folds = 0, Bands = 0, Lines = 0, Crossing = 0;
+		double BodyMost = 0.0, FloatMost = 0.0, FloatMean = 0.0, LongShare = 0.0;
+		int BodyLines = 0, Strewn = 0;
+		double Vent = 0.0, Crease = 0.0, Under = 0.0, Kinks = 0.0;
+		/** Its lines across its body off her note (3): none, or a tangle (over four); the longest under 1 m across it or
+		 * over 3 m; floating over it more than 4.5 cm on the mean (the 12 mm cord lying on it within about 2 cm, its
+		 * top's slope allowed for); or one drawn over 1.65 of its own length. */
+		bool BodyOff() const { return BodyLines < 1 || BodyLines > 4 || BodyMost < 1.0 || BodyMost > 3.0 || FloatMean > 0.045 || LongShare > 1.65; }
+		/** Its far end a neat dome, off her note (2) on a second look: not folded back under 0.1 m at an edge, no crease
+		 * 5 cm deep across it, and its vent within 0.15 of its half-width of its middle with its seams bending under 0.1 m
+		 * ring to ring. */
+		bool FarOff() const { return Under < 0.1 || Crease < 0.05 || (Vent < 0.15 && Kinks < 0.1); }
 		/** Any canopy off her note: its outline next to even (under 0.05 more on one side of its wind line, or of the line
 		 * to its tip); its edges next to smooth (both within 2 cm of a smooth line); its hem next to smooth (within 0.2 m
 		 * of a smooth curve) or not turning back; its far end's lift under 0.15 m to one side, or toppled (0.45 m); none
@@ -507,31 +533,122 @@ namespace
 			const V3 H0 = OverHarness(1.0, ProneEndX, ProneEndY);
 			const double Turn2 = (Dn.Face - Dn.HeapHeading) * 3.14159265358979323846 / 180.0;
 			const V3 H{ H0.X * std::cos(Turn2) - H0.Y * std::sin(Turn2), H0.X * std::sin(Turn2) + H0.Y * std::cos(Turn2), H0.Z };
+			const double Body = Gather.X + 0.15 * (MaxX - MinX);
+			const double Ax = Dn.Across * 0.5 * (0.06 + 0.94 * std::pow(Dn.Open, 1.4)), LineLong = 0.8 + std::hypot(Ax * HemIn / 1.035 - 0.25, LinesLong - 0.8);
+			double FloatSum = 0.0, FloatN = 0.0;
 			for (size_t K = 0; K < M.Seams.size(); ++K)
 			{
 				if (!LineBack(K, M.Seams.size())) continue;
 				++A.Lines;
-				const V3& E = M.Points[static_cast<size_t>(M.Seams[K])];
-				const V3 Way = Plus(E, Mul(H, -1.0));
-				const double Flat = std::max(1e-9, std::hypot(Way.X, Way.Y)), Bow = (K % 2 == 0 ? 1.0 : -1.0) * 0.06 * Length(Way);
-				const V3 Mid{ 0.5 * (H.X + E.X) - Way.Y / Flat * Bow, 0.5 * (H.Y + E.Y) + Way.X / Flat * Bow, 0.5 * (H.Z + E.Z) - 0.5 * std::fabs(E.Z - H.Z) };
-				double On = 0.0;
-				for (const auto& Seg : { std::make_pair(H, Mid), std::make_pair(Mid, E) })
+				V3 Way[LinePoints];
+				const int Points = LineLies(M, K, H, 1.0, Way);
+				const V3& E = Way[Points - 1];
+				const bool bStrewn = Points > 3;
+				double On = 0.0, OnBody = 0.0, Drawn = 0.0;
+				for (int Pt = 0; Pt + 1 < Points; ++Pt)
 				{
-					const V3 D = Plus(Seg.second, Mul(Seg.first, -1.0));
+					const V3 D = Plus(Way[Pt + 1], Mul(Way[Pt], -1.0));
+					Drawn += Length(D);
 					const int Steps = std::max(1, static_cast<int>(std::hypot(D.X, D.Y) / 0.01));
 					for (int S = 0; S < Steps; ++S)
 					{
-						const V3 P = Plus(Seg.first, Mul(D, (S + 0.5) / Steps));
+						const V3 P = Plus(Way[Pt], Mul(D, (S + 0.5) / Steps));
 						const int I = static_cast<int>(std::floor((P.X - X0) / Cell)), J = static_cast<int>(std::floor((P.Y - Y0) / Cell));
 						if (I < 0 || J < 0 || I >= Nx || J >= Ny || Top[At(I, J)] < -1e8 || std::hypot(P.X - E.X, P.Y - E.Y) <= 0.1) continue;
-						On += Top[At(I, J)] - P.Z <= 0.004 ? std::hypot(D.X, D.Y) / Steps : 0.0;
+						const double Over = Top[At(I, J)] - P.Z <= 0.004 ? std::hypot(D.X, D.Y) / Steps : 0.0;
+						On += Over;
+						OnBody += P.X > Body ? Over : 0.0;
 						A.Buried = std::max(A.Buried, Top[At(I, J)] - P.Z);
+						if (bStrewn && Over > 0.0 && P.X > Body)
+						{
+							A.FloatMost = std::max(A.FloatMost, P.Z - Top[At(I, J)]);
+							FloatSum += P.Z - Top[At(I, J)];
+							FloatN += 1.0;
+						}
 					}
 				}
 				A.Crossing += On >= 0.2;
 				A.CrossMost = std::max(A.CrossMost, On);
+				A.BodyLines += OnBody >= 0.3;
+				A.BodyMost = std::max(A.BodyMost, OnBody);
+				A.Strewn += bStrewn;
+				if (bStrewn) A.LongShare = std::max(A.LongShare, Drawn / LineLong);
 			}
+			A.FloatMean = FloatN > 0.0 ? FloatSum / FloatN : 0.0;
+		}
+		// (f)
+		{
+			// (its vent, where its seams meet: its tip, off the middle of its far fifth's silk, a share of its half-width
+			// there at the most)
+			double SumY = 0.0, Cells = 0.0, Widest = 0.0;
+			for (int I = Col(0.8); I <= Last; ++I)
+			{
+				if (Lo[static_cast<size_t>(I)] < 0) continue;
+				Widest = std::max(Widest, 0.5 * (Right(I) - Left(I)));
+				for (int J = Lo[static_cast<size_t>(I)]; J <= Hi[static_cast<size_t>(I)]; ++J)
+				{
+					if (Top[At(I, J)] < -1e8) continue;
+					SumY += Yof(J);
+					Cells += 1.0;
+				}
+			}
+			A.Vent = Cells > 0.0 && Widest > 0.0 ? std::fabs(Tip.Y - SumY / Cells) / Widest : 0.0;
+			// (a crease across its far end's dome: along it, row by row across it, away from its edges, the deepest its top
+			// dips under the lower of the highest it stands either side, from 0.72 of its length on)
+			for (int J = 0; J < Ny; ++J)
+			{
+				std::vector<double> Run;
+				const auto Dips = [&Run, &A]()
+				{
+					std::vector<double> Before(Run.size()), After(Run.size());
+					for (size_t K = 0; K < Run.size(); ++K) Before[K] = std::max(K > 0 ? Before[K - 1] : -1e9, Run[K]);
+					for (size_t K = Run.size(); K-- > 0;) After[K] = std::max(K + 1 < Run.size() ? After[K + 1] : -1e9, Run[K]);
+					for (size_t K = 0; K < Run.size(); ++K) A.Crease = std::max(A.Crease, std::min(Before[K], After[K]) - Run[K]);
+					Run.clear();
+				};
+				for (int I = Col(0.72); I <= Last; ++I)
+				{
+					const bool bIn = Lo[static_cast<size_t>(I)] >= 0 && J >= Lo[static_cast<size_t>(I)] + 8 && J <= Hi[static_cast<size_t>(I)] - 8 && Top[At(I, J)] > -1e8;
+					if (bIn) Run.push_back(Top[At(I, J)]);
+					else Dips();
+				}
+				Dips();
+			}
+			// (its last two rings folded back under at an edge: across its top layer from its middle, how much farther out
+			// its silk reaches than its edge does, metres, at the most; and its seams over its top's middle across, ring to
+			// ring from its ninth on, how far each bends aside, on the mean)
+			const int Cols = Dn.Gores * 4, Ringed = static_cast<int>((Half - 1) / static_cast<size_t>(Cols));
+			const auto ThetaOf = [Cols](int Col2)
+			{
+				const int Q = Col2 % 4;
+				return 2.0 * 3.14159265358979323846 * (Col2 / 4 + (Q == 0 ? 0.0 : Q == 1 ? 0.2 : Q == 2 ? 0.5 : 0.8)) / (Cols / 4);
+			};
+			for (int R = Ringed - 2; R < Ringed; ++R)
+			{
+				const double Mid = M.Points[static_cast<size_t>(R * Cols + Cols / 2)].Y;
+				for (int Way = -1; Way <= 1; Way += 2)
+				{
+					const double Edge = Way * (M.Points[static_cast<size_t>(R * Cols + (Way > 0 ? Cols / 4 : 3 * Cols / 4))].Y - Mid);
+					double Out = Edge;
+					for (int Col2 = 0; Col2 < Cols; ++Col2)
+					{
+						const double Theta = ThetaOf(Col2);
+						if (std::cos(Theta) <= 0.0 && Way * std::sin(Theta) > 0.0) Out = std::max(Out, Way * (M.Points[static_cast<size_t>(R * Cols + Col2)].Y - Mid));
+					}
+					A.Under = std::max(A.Under, Out - Edge);
+				}
+			}
+			int SeamsN = 0;
+			for (int Col2 = 0; Col2 < Cols; Col2 += 4)
+			{
+				const double Theta = ThetaOf(Col2);
+				if (std::cos(Theta) > -0.3 || std::fabs(std::sin(Theta)) > 0.45) continue;
+				double Ys[4];
+				for (int R = 0; R < 4; ++R) Ys[R] = M.Points[static_cast<size_t>((Ringed - 4 + R) * Cols + Col2)].Y;
+				A.Kinks += std::max(std::fabs(Ys[0] - 2.0 * Ys[1] + Ys[2]), std::fabs(Ys[1] - 2.0 * Ys[2] + Ys[3]));
+				++SeamsN;
+			}
+			A.Kinks /= std::max(1, SeamsN);
 		}
 		return A;
 	}
@@ -1316,7 +1433,7 @@ int main(int Argc, char** Argv)
 		// him." Each pilot's canopy full (side-on: its rings' radii and heights), and as it lies (the half of its points
 		// that is its outer face: its rings' points round from the way it falls, its back half lying on top).
 		{
-			int SkirtBad = 0, LieBad = 0, FoldBad = 0, SameBad = 0, UnderBad = 0, FallBad = 0, AboveBad = 0;
+			int SkirtBad = 0, LieBad = 0, FoldBad = 0, SameBad = 0, UnderBad = 0, FallBad = 0, AboveBad = 0, BodyBad = 0, FarBad = 0;
 			double Deepest = 0.0, Floats = 0.0, HummockMs = 0.0, HummockMsMost = 0.0;
 			int HummockMakes = 0;
 			const Watched* Other = nullptr;
@@ -1451,6 +1568,10 @@ int main(int Argc, char** Argv)
 				double SlumpLeast = 1e9, SlumpMost = 0.0, SlumpSum = 0.0, LumaLeast = 1e9, LumaMost = 0.0, BuriedMost = 0.0, OnLeast = 1e9, OnMost = 0.0;
 				int TurnsLeast = 99, TurnsMost = 0, FoldsLeast = 99, FoldsMost = 0, BandsLeast = 99, BandsMost = 0, CrossLeast = 99, CrossMost = 0, HemTurnsLeast = 99;
 				int AboveOff = 0, SideLow = 0, FoldsOff = 0, FoldsFew = 0, BandsOne = 0, BandsNone = 0, SlumpLow = 0, CrossSum = 0;
+				int BodyLeast = 99, BodyLinesMost = 0, BodySum = 0, BodyNone = 0, StrewnLeast = 99, StrewnMost = 0, StrewnSum = 0;
+				double BodyLongLeast = 1e9, BodyLongMost = 0.0, BodyLongSum = 0.0, FloatMost = 0.0, FloatMeanMost = 0.0, LongShareMost = 0.0, FloatMeanSum = 0.0;
+				int BodyOffs = 0, FarOffs = 0, VentLow = 0;
+				double VentLeast = 1e9, VentSum = 0.0, CreaseLeast = 1e9, CreaseSum = 0.0, UnderLeast = 1e9, UnderSum = 0.0, KinksLeast = 1e9, KinksSum = 0.0;
 				SilkMesh M;
 				for (int K = 0; K < 300; ++K)
 				{
@@ -1503,6 +1624,31 @@ int main(int Argc, char** Argv)
 					BandsNone += Ab.Bands < 1;
 					SlumpLow += Ab.Slump < 0.2;
 					CrossSum += Ab.Crossing;
+					BodyLeast = std::min(BodyLeast, Ab.BodyLines);
+					BodyLinesMost = std::max(BodyLinesMost, Ab.BodyLines);
+					BodySum += Ab.BodyLines;
+					BodyNone += Ab.BodyLines < 1;
+					BodyLongLeast = std::min(BodyLongLeast, Ab.BodyMost);
+					BodyLongMost = std::max(BodyLongMost, Ab.BodyMost);
+					BodyLongSum += Ab.BodyMost;
+					StrewnLeast = std::min(StrewnLeast, Ab.Strewn);
+					StrewnMost = std::max(StrewnMost, Ab.Strewn);
+					StrewnSum += Ab.Strewn;
+					FloatMost = std::max(FloatMost, Ab.FloatMost);
+					FloatMeanMost = std::max(FloatMeanMost, Ab.FloatMean);
+					LongShareMost = std::max(LongShareMost, Ab.LongShare);
+					FloatMeanSum += Ab.FloatMean;
+					BodyOffs += Ab.BodyOff();
+					FarOffs += Ab.FarOff();
+					VentLow += Ab.Vent < 0.1;
+					VentLeast = std::min(VentLeast, Ab.Vent);
+					VentSum += Ab.Vent;
+					CreaseLeast = std::min(CreaseLeast, Ab.Crease);
+					CreaseSum += Ab.Crease;
+					UnderLeast = std::min(UnderLeast, Ab.Under);
+					UnderSum += Ab.Under;
+					KinksLeast = std::min(KinksLeast, Ab.Kinks);
+					KinksSum += Ab.Kinks;
 					SweepBad += Ln.Bad(Dn.Gores);
 					SweepEven += Ln.Even();
 					Few += Ln.RidgesLeast < 2 || Ln.RidgesMost > 7;
@@ -1530,6 +1676,16 @@ int main(int Argc, char** Argv)
 				std::printf("     over 300 pilots' numbers from above: (a) its silk %.3f to %.3f more on one side of its wind line (%.3f on the mean), %.3f at the least about the line to its tip (%.3f on the mean); (b) its more wavy edge %.1f to %.1f cm off a smooth line (%.1f on the mean), its edges turning back %d to %d times; its hem %.2f m off a smooth curve at the least (%.2f on the mean), turning back %d times at the least; (c) %d to %d folds across it, %d to %d light bands along it; (d) its far end's lift %.2f to %.2f m to one side (%.2f on the mean); (e) %d to %d lines across its silk, the longest across it %.2f to %.2f m, under its top %.3f m at the deepest; across its middle luma %.0f to %.0f at the most; %d off; %d under 0.1 to one side, %d not three or four folds across (%d under two or over five), %d one light band or none (%d none), %d slumped under 0.2 m, %.2f lines across its silk on the mean\n",
 					SideLeast, SideMost, SideSum / 300.0, TipLeast, TipSum / 300.0, WavyLeast * 100.0, WavyMost * 100.0, WavySum / 3.0, TurnsLeast, TurnsMost, HemLeast, HemSum / 300.0, HemTurnsLeast, FoldsLeast, FoldsMost, BandsLeast, BandsMost,
 					SlumpLeast, SlumpMost, SlumpSum / 300.0, CrossLeast, CrossMost, OnLeast, OnMost, BuriedMost, LumaLeast, LumaMost, AboveOff, SideLow, FoldsOff, FoldsFew, BandsOne, BandsNone, SlumpLow, CrossSum / 300.0);
+				std::printf("     over 300 pilots' numbers from above, across its body (her note of 17:40Z, (3), after a second look): (e) %d to %d of its lines 0.3 m or more across it past 0.15 of its length (%.2f on the mean, %d none), the longest so %.2f to %.2f m (%.2f on the mean); %d to %d laid across it (%.2f on the mean), their middle %.3f m over its silk at most (%.3f on the mean at most), drawn %.2f of their length at most\n",
+					BodyLeast, BodyLinesMost, BodySum / 300.0, BodyNone, BodyLongLeast, BodyLongMost, BodyLongSum / 300.0, StrewnLeast, StrewnMost, StrewnSum / 300.0, FloatMost, FloatMeanMost, LongShareMost);
+				std::printf("     over 300 pilots' numbers from above, its far end (her note of 17:40Z, (2), after a second look): (f) its vent %.2f of its half-width off its middle at the least (%.2f on the mean, %d under 0.1), a crease across its dome %.3f m deep at the least (%.3f on the mean), folded back under at an edge %.2f m at the least (%.2f on the mean), its seams bending %.3f m ring to ring at the least (%.3f on the mean); %d with a neat far end, %d with their lines across its body off\n",
+					VentLeast, VentSum / 300.0, VentLow, CreaseLeast, CreaseSum / 300.0, UnderLeast, UnderSum / 300.0, KinksLeast, KinksSum / 300.0, FarOffs, BodyOffs);
+				// (across its body: none off; two of its lines across it on the mean, the longest 1.5 to 2.5 m on the mean, their
+				// middle within 3 cm of its silk on the mean and 0.25 m at most. Its far end: none neat; on the mean its vent
+				// 0.22 of its half-width off its middle (one in fifteen under 0.1), a crease 9 cm deep across it, 0.25 m of it
+				// folded back under at an edge and its seams bending 0.16 m ring to ring)
+				BodyBad += BodyOffs + (BodySum < 600) + (BodyLongSum / 300.0 < 1.5) + (BodyLongSum / 300.0 > 2.5) + (FloatMeanSum / 300.0 > 0.03) + (FloatMost > 0.25);
+				FarBad += FarOffs + (VentSum / 300.0 < 0.22) + (VentLow > 20) + (CreaseSum / 300.0 < 0.09) + (UnderSum / 300.0 < 0.25) + (KinksSum / 300.0 < 0.16);
 				// (none off; three in four with three or four folds across it, one in a hundred under two or over five; two
 				// in three with two light bands or more, one in a hundred none; a twentieth under 0.1 to one side or slumped
 				// under 0.2 m; on the mean 0.2 to one side of either line, its edge 3 cm off a smooth line, its hem 0.28 m off
@@ -1619,13 +1775,19 @@ int main(int Argc, char** Argv)
 				FoldBad += Ln.Even();
 				// (from above: her note of 24 November 17:40Z, FromAbove)
 				const Above Ab = FromAbove(Dn, M);
-				std::printf("        from above: (a) its silk %.3f more on one side of its wind line, %.3f about the line to its tip; (b) its edges %.1f and %.1f cm off a smooth line (right, left), turning back %d and %d times; its hem %.2f m off a smooth curve, turning back %d times; (c) %d folds across it, %d light bands along it, across its middle luma %.0f to %.0f; (d) its far end's lift %.2f m to one side; (e) %d of its %d lines across its silk (%.2f m at most), under its top %.3f m at the deepest\n",
-					Ab.Side, Ab.SideTip, Ab.Off[0] * 100.0, Ab.Off[1] * 100.0, Ab.Turns[0], Ab.Turns[1], Ab.Hem, Ab.NearTurns, Ab.Folds, Ab.Bands, Ab.LumaLo, Ab.LumaHi, Ab.Slump, Ab.Crossing, Ab.Lines, Ab.CrossMost, Ab.Buried);
+				std::printf("        from above: (a) its silk %.3f more on one side of its wind line, %.3f about the line to its tip; (b) its edges %.1f and %.1f cm off a smooth line (right, left), turning back %d and %d times; its hem %.2f m off a smooth curve, turning back %d times; (c) %d folds across it, %d light bands along it, across its middle luma %.0f to %.0f; (d) its far end's lift %.2f m to one side; (e) %d of its %d lines across its silk (%.2f m at most), under its top %.3f m at the deepest; across its body %d 0.3 m or more (%.2f m at most), %d laid across it, their middle %.3f m over its silk at most (%.3f on the mean), drawn %.2f of their length at most\n",
+					Ab.Side, Ab.SideTip, Ab.Off[0] * 100.0, Ab.Off[1] * 100.0, Ab.Turns[0], Ab.Turns[1], Ab.Hem, Ab.NearTurns, Ab.Folds, Ab.Bands, Ab.LumaLo, Ab.LumaHi, Ab.Slump, Ab.Crossing, Ab.Lines, Ab.CrossMost, Ab.Buried,
+					Ab.BodyLines, Ab.BodyMost, Ab.Strewn, Ab.FloatMost, Ab.FloatMean, Ab.LongShare);
 				// (each of the verdict's four: 0.12 or more to one side of either line, its hem 0.25 m off a smooth curve,
 				// three or four folds across, a light band along it, its far end slumped 0.2 m or more, two of its lines
 				// across its silk, its luma across its middle within 6 of her 126 to 221)
 				AboveBad += Ab.Bad() || Ab.Side < 0.12 || Ab.SideTip < 0.12 || Ab.Hem < 0.25 || Ab.Folds < 3 || Ab.Folds > 4 || Ab.Bands < 1 || Ab.Slump < 0.2 || Ab.Crossing < 2 || Ab.LumaLo < 120.0
 					|| Ab.LumaHi > 227.0;
+				// (and two of its lines or more across its body; its far end broken up)
+				std::printf("        its far end from above: (f) its vent %.2f of its half-width off its middle, a crease across its dome %.3f m deep, folded back under at an edge %.2f m, its seams bending %.3f m ring to ring\n",
+					Ab.Vent, Ab.Crease, Ab.Under, Ab.Kinks);
+				BodyBad += Ab.BodyOff() || Ab.BodyLines < 2;
+				FarBad += Ab.FarOff();
 
 				// (two pilots' canopies lie differently: this one's with another's number, his own size and all)
 				if (Other)
@@ -1764,6 +1926,8 @@ int main(int Argc, char** Argv)
 			Check(LieBad == 0, "chutes: down his canopy lies 2 to 3 times as long along the wind as it is wide, its far end up 0.3 to 0.8 m and coming round and down to the ground (its last ring a quarter to three quarters as high, its tip on it), its near end gathered 2 to 3.6 m past his harness, its lines running back to him from it, none longer than they are (her verdict, (b); a review of 24 November)");
 			Check(FoldBad == 0 && SameBad == 0, "chutes: it lies in a few long folds running along it, their heights uneven and their spacing uneven (each on its own bar), and no two pilots' alike (her verdict, (b); a review of 24 November)");
 			Check(AboveBad == 0, "chutes: from above it lies uneven (her note of 24 November 17:40Z): more of its silk on one side of its wind line, its edges and its hem wavy; three or four folds across it, light bands along it; its far end's lift slumped to one side; one to six of its lines across its silk and none under it; its luma across its middle about her 126 to 221 (over 300 pilots' numbers and the verdict's four)");
+			Check(BodyBad == 0, "chutes: from above a few of his lines lie across its body, not only its near end (her note of 24 November 17:40Z, (3), after a second look): one to four 0.3 m or more past 0.15 of its length on each (two on the mean, and on each of the verdict's four), the longest 1 to 3 m, slanted over its silk and down into its folds, lying on it (its middle within 4.5 cm of its top on the mean, never under it by 8 mm), drawn no more than 1.65 of their length (over 300 pilots' numbers and the verdict's four)");
+			Check(FarBad == 0, "chutes: from above its far end is broken up, not a neat dome (her note of 24 November 17:40Z, (2), after a second look): its vent off its middle or its seams kinked over it, a crease across its dome, an edge folded back under (over 300 pilots' numbers and the verdict's four)");
 			Check(FallBad == 0, "chutes: falling in it blows downwind and down, longer along the wind, never back toward him nor rising (her verdict, (b))");
 			Check(UnderBad == 0 && Floats < 0.08, "chutes: none of his canopy is under the ground falling in or lying, its points nor its triangles' edges, on a slope of 1 in 4 either way along the wind or across it, on hummocks, across a hedgerow bank, a step, a ditch, a sharp crest, a crater's rim or along a bank; and lying on a slope its underside on the ground, not floating (her verdict, (b))");
 		}
@@ -1847,6 +2011,18 @@ int main(int Argc, char** Argv)
 					const double Tr = Turn * 3.14159265358979323846 / 180.0;
 					Silk << "h " << H.X * std::cos(Tr) - H.Y * std::sin(Tr) << " " << H.X * std::sin(Tr) + H.Y * std::cos(Tr) << " " << H.Z << " " << Turn << "\n";
 					for (size_t K = 0; K < M.Seams.size(); ++K) if (LineBack(K, M.Seams.size())) Silk << "s " << M.Seams[K] << " " << K << "\n";
+					// (each line's points as the scene draws them lying, LineLies')
+					const V3 Hl{ H.X * std::cos(Tr) - H.Y * std::sin(Tr), H.X * std::sin(Tr) + H.Y * std::cos(Tr), H.Z };
+					for (size_t K = 0; K < M.Seams.size(); ++K)
+					{
+						if (!LineBack(K, M.Seams.size())) continue;
+						V3 Way[LinePoints];
+						const double Sx = std::clamp(((Which - 3) * 0.25 - 0.3) / 0.5, 0.0, 1.0), Slack = Which <= 2 ? 1.0 : Sx * Sx * (3.0 - 2.0 * Sx);
+						const int Points = LineLies(M, K, Hl, Slack, Way);
+						Silk << "l";
+						for (int Pt = 0; Pt < Points; ++Pt) Silk << " " << Way[Pt].X << " " << Way[Pt].Y << " " << Way[Pt].Z;
+						Silk << "\n";
+					}
 				}
 				for (size_t K = 0; K < M.Points.size(); ++K)
 					Silk << "p " << M.Points[K].X << " " << M.Points[K].Y << " " << M.Points[K].Z << " " << M.Facings[K].X << " " << M.Facings[K].Y << " " << M.Facings[K].Z << " " << M.Colours[K * 3] << " " << M.Colours[K * 3 + 1] << " " << M.Colours[K * 3 + 2] << "\n";

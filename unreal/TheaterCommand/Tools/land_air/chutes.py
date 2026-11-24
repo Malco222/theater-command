@@ -57,6 +57,9 @@ for line in open(SILK):
     elif w[0] == 's':
         cur['s'].append(int(w[1]))
         cur.setdefault('k', []).append(int(w[2]) if len(w) > 2 else len(cur['s']) - 1)
+    elif w[0] == 'l':
+        v = [float(a) for a in w[1:]]
+        cur.setdefault('l', []).append([v[k:k + 3] for k in range(0, len(v), 3)])
     elif w[0] == 'p':
         v = [float(a) for a in w[1:]]
         cur['p'].append(v[0:3])
@@ -413,6 +416,13 @@ def man_and_lines(mesh, view, dd=None):
     a, b = view.at(feet), view.at(head)
     wide = max(2, int(0.34 * view.scale / max(1.0, view.depth([0.85 * fwd[0], 0.85 * fwd[1], 0.15]))))
     dd.line((a[0], a[1], b[0], b[1]), fill=SUIT, width=wide)
+    if mesh.get('l'):
+        # (as the scene draws them: LandAir's LineLies points, a rod from each to the next)
+        for pts in mesh['l']:
+            for a, b in zip(pts[:-1], pts[1:]):
+                u, v = view.at(a), view.at(b)
+                dd.line((u[0], u[1], v[0], v[1]), fill=CORD, width=1)
+        return
     for s, k in zip(mesh['s'], mesh.get('k', range(len(mesh['s'])))):
         p = mesh['p'][s]
         way = [p[0] - hx, p[1] - hy, p[2] - hz]

@@ -193,6 +193,12 @@ namespace LandAir
 		std::vector<int> Triangles;     // three a triangle
 		std::vector<V3> Outward;        // one a triangle
 		std::vector<int> Seams;         // its skirt's point at each gore's seam (its outer face's): where a line ends
+		// Down (HeapShape; none in the air), the lines it lies across (LineLies): their seams (places in Seams), and for
+		// each in that order LineVia points its line lies through: its middle on the grass, its seam's point on its hem,
+		// eighteen over its top (lying, 12 mm over the highest of its silk there and wherever the line between two would
+		// dip into it), the edge it goes over and the ground just under that; never under the ground
+		std::vector<int> Across;
+		std::vector<V3> Over;
 		void Clear();
 	};
 	/**
@@ -221,7 +227,14 @@ namespace LandAir
 	 * beside them, running across them: as far as its gathering lets them, about 0.3 m) and one or two tucked under;
 	 * its gores wandering across it as they go; and its lifted far end slumped a little to the side away from its wider
 	 * one and buckled on the other. Where a fold across it is, each point's facing is the way its silk runs on to the
-	 * next ring, so that the fold shades as a darker band and a lighter one.
+	 * next ring, so that the fold shades as a darker band and a lighter one. And (her note again, after a second look:
+	 * its lines had crossed only the flap at its near end, and its far end had been a neat dome, its seams running
+	 * cleanly to a point at its tip) two to four of its lines laid across its body, over its near third to half (1 to 3
+	 * m of each on its silk, slanted and curling, down into its folds and over their crests, lying on its top: Silk's
+	 * Across and Over, LineLies), the rest running to its gathered hem; and its far end broken up: its last rings and
+	 * its vent drawn over toward the side it slumps to, a slanted crease across its dome on its eleventh ring, the
+	 * edge of its narrow side folded back under it over its last two rings, and its seams kinked ring to ring from its
+	 * tenth.
 	 * Ground (board metres, as Sky's; none: a flat field) is the ground it lies on, read once on a grid a quarter of a
 	 * metre square under it: each point laid on it, and every edge of its silk kept over the ground the grid reads (a
 	 * bank, a ditch, a crater's rim; HeapShape lifts both ends of an edge that would cut through one). The mesh is placed
@@ -236,6 +249,17 @@ namespace LandAir
 	 * skirt behind its middle the way it falls, toward where its lines end. Chosen by its place round the skirt, not by
 	 * where its folds put it, so that the same lines are drawn all the while it falls in (the mesh keeping its make). */
 	bool LineBack(size_t Seam, size_t Seams);
+	/**
+	 * Down, the points the scene draws a line through (LandBattleAir's DownShape: a rod from each to the next), from his
+	 * harness (Harness, in the silk's space, metres) to the Seam-th of its seams (SilkMesh::Seams' order), Slack 0 taut
+	 * to 1 lying (DownShape's). Most run in two lengths to their seam's point on its gathered hem, their middle let down
+	 * toward the lower end's height and bowed aside by 0.06 of the line's length, every other line the other way (three
+	 * points). Those its silk lies across (SilkMesh::Across: the art director's note of 24 November 17:40Z, "a few lines
+	 * cross the silk rather than all running to one neat point") go from taut to lying across the grass, over the silk
+	 * and over its edge, through their Over points (LinePoints). Returns how many points it put in Out.
+	 */
+	constexpr int LineVia = 22, LinePoints = LineVia + 1;
+	int LineLies(const SilkMesh& Silk, size_t Seam, const V3& Harness, double Slack, V3 (&Out)[LinePoints]);
 
 	/**
 	 * The scene's chute mesh (the art director's sixth note, 24 November 02:26Z: cheaply, no mesh made again a frame) is
