@@ -66,10 +66,11 @@ const some = (names: string[]): string => (names.length <= 2 ? names.join(' and 
  *  - stood: where every corps stood before the step (by corps id).
  *  - ctrl0: who controlled each province before the step.
  *  - reps: the battle reports the step wrote.
- *  - seen: the player's sight after the step (intel.ts sightOf: 0 none, 1 glimpsed, 2 seen whole).
+ *  - seen: the player's sight after the step (intel.ts sightOf: 0 none, 1 glimpsed, 2 seen whole), or a call that gives it:
+ *    then it is asked for only where a battle or a march near him needs it (the bridge's step works it out only then).
  *  - foes0: who was at war with him before the step (a country beaten in the step makes peace in it, and its last moves were still a war's).
  */
-export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl0: string[], reps: BattleReport[], seen: Uint8Array, foes0: ReadonlySet<string> = new Set()): NearSight {
+export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl0: string[], reps: BattleReport[], seen: Uint8Array | (() => Uint8Array), foes0: ReadonlySet<string> = new Set()): NearSight {
   const me = s.human;
   if (!me || !s.nations[me] || nat === me) return NONE;
   try {
@@ -87,8 +88,9 @@ export function nearMoves(s: Game, nat: string, stood: Map<number, number>, ctrl
     }
     if (!his.size) return NONE;
     const nearTo = (id: number): boolean => id >= 0 && !!s.regions[id] && (his.has(id) || s.regions[id].nb.some((j) => his.has(j)));
-    const sees = (id: number): boolean => id >= 0 && (seen[id] ?? 0) > 0;
-    const whole = (id: number): boolean => id >= 0 && (seen[id] ?? 0) >= 2;
+    const sight = (): Uint8Array => (typeof seen === 'function' ? seen() : seen);
+    const sees = (id: number): boolean => id >= 0 && (sight()[id] ?? 0) > 0;
+    const whole = (id: number): boolean => id >= 0 && (sight()[id] ?? 0) >= 2;
     // A long road (by rail, or a march of more than one province in the month) is drawn one province long, at the end
     // that touches him: as a staff officer's arrow shows from which side an army came, not every mile of its road. Far:
     // the neighbour of At that lies nearest Far (Far itself where they are neighbours already), held by Side or its
