@@ -11,10 +11,12 @@
 # The game's log names the look of every card: "FIGHT IT YOURSELF offered at <region> (<look>)" or "... not offered ...".
 
 bocage
+desert
+med
+drysteppe
 
-# Due this week, once each passes (Mac still, 45 fps, art director):
-# farmland
-# farmland+snow
-# desert
-# med
-# drysteppe
+# Passed 24 November 07:26Z on 9ebf1fcc: the Mac held 45 through the first minute (reshoot-2: desert 58/58/59,
+# med 56/52/58, dry steppe 58/58/59, bocage at the ladder's rung 2 56/46/48) and the art director passed each still.
+# Not yet (each waits on its fix, a Mac still and the art director):
+# farmland          (the clods)
+# farmland+snow     (the tanks' shaded side)
