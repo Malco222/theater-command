@@ -9,7 +9,7 @@ import { ONE_SHOTS } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type ForceTicket, type Side, type Zone } from '../core/types';
+import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type ForceTicket, type NervePart, type Side, type Zone } from '../core/types';
 import { thinkFor, type AttackPlan } from './ai';
 import { STYLE, styleFor, type Style } from './styles';
 import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
@@ -22,6 +22,7 @@ import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
+import { REF_NERVE, ledgerK, nerveSplit, type NerveParts } from './spread';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -244,6 +245,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
   private heldFor: Record<Side, number> = { att: 0, def: 0 };
   /**
+   * The field spread's army nerve ledger (step 1b, reckoning.spread.ledger; form 13A): each side's nerve spent (D), its
+   * reserve (R), K, its draw and the parts of m it reads. Null without the key.
+   */
+  private led: { D: Record<Side, number>; R: Record<Side, number>; K: Record<Side, number>; draw: Record<Side, number>; on: Record<NervePart, boolean> } | null = null;
+  /** Under reckoning.spread.N (step 1b), blocks read the reference army for their own nerve (form s2c). */
+  private refNerve = false;
+  /** The move's factor on the blows (reckoning.spread.move, step 1b); undefined without the key. */
+  private lean: number | undefined = undefined;
+  /**
    * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
    * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
    */
@@ -445,6 +455,24 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.units = [...att, ...def];
     // Corps from next door (release 2): built with the rest, numbered after both armies, held off the field (comeOn).
     const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
+    // The field spread (release 2, step 1b): each key read only where the ticket carries it. Draws nothing.
+    const k = ticket.reckoning.spread;
+    if (k?.ledger) {
+      // The army's nerve reserve from organisation and morale, its blocks' own, before any reads the reference
+      // (power-weighted mor0 less the rout line; form 13A, fsx/brk/causes.ts sideCauses).
+      const R = { att: 0, def: 0 }, P = { att: 0, def: 0 };
+      for (const u of [...this.units, ...joining]) { R[u.side] += u.power0 * (u.mor0 - LAND.nerve.rout); P[u.side] += u.power0; }
+      this.led = {
+        D: { att: 0, def: 0 }, R: { att: R.att / Math.max(1e-9, P.att), def: R.def / Math.max(1e-9, P.def) },
+        K: { att: ledgerK('att'), def: ledgerK('def') }, draw: { ...k.ledger.draw }, on: { ...k.ledger.m },
+      };
+    }
+    if (k?.N) {
+      // Organisation, morale, experience and the general act on staying once, at the army (form s2c): every block
+      // reads the reference army's starting nerve here, and its steadiness in suffer.
+      this.refNerve = true;
+      for (const u of [...this.units, ...joining]) { u.mor0 = REF_NERVE.mor0; u.mor = REF_NERVE.mor0; }
+    }
     this.covered = coveredTanks(ticket, this.units);
     const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
     // A support team (release 2) is no block of the line: a side's count is its divisions' and regiments'.
@@ -507,6 +535,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [d0, d1] = ticket.reckoning.luck ?? ticket.reckoning.dice;
     const roll = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
     this.fortune = 1 + LAND.fortune * (roll - 1);
+    // The field spread's move (step 1b): the causes' price taken off the blows by the factor the field reads the level at.
+    if (k?.move !== undefined) this.lean = k.move;
     // Fighters on call (air support): a side with a share, strikes and a group to fly them. None draws on the dice.
     for (const s of ['att', 'def'] as Side[]) {
       const a = ticket[s].air;
@@ -2453,7 +2483,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean }>();
+    // (dm: under the field spread's army ledger, the tick's damage times the parts of m read at the army.)
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2496,7 +2527,10 @@ export class LandBattle implements BattleSim<LandUnit> {
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
       }
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
-      h.dmg += blow.dmg; h.nerve += blow.nerve;
+      h.dmg += blow.dmg;
+      // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
+      if (this.led && blow.parts) { const sp = nerveSplit(blow.parts, this.led.on); h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; }
+      else h.nerve += blow.nerve;
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
@@ -2509,7 +2543,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
     if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind);
+    // (The ledger reads the damage-weighted m of the tick's blows; the block keeps today's per-blow sum of what it reads.)
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1);
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
@@ -2727,7 +2762,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
    * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
    */
-  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number } {
+  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number; parts?: NerveParts } {
     const gu = coverAt(this.field, u.x, u.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     // Stretcher bearers (release 2): the men out carrying the wounded back strike nothing.
@@ -2741,12 +2776,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Men getting their breath after a run at the double strike softer (direct command, release 2).
     if (u.winded !== undefined && this.t < u.winded) p *= LAND.double.blows;
     let nerveMul = 1;
+    // (Its parts, for the field spread's army ledger: fire from afar and an ambush's first fire.)
+    let fireN = 1, ambushN = 1;
     // An ambush's first fire, from close cover (release 2, LAND.hide.surprise): it shakes men caught moving in the open
     // worst; their mortars, pre-sighted on the gaps, strike what it is firing on harder in those seconds.
     const SP = LAND.hide.surprise;
     if (u.sprung !== undefined && this.t - u.sprung < SP.secs) {
       p *= SP.punch;
-      nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
+      nerveMul *= ambushN = t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
     }
     if (u.team === 'mor' && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== undefined && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
     // Found by its fire but not yet located: the fire back at it is half aimed (LAND.hide.locate).
@@ -2761,7 +2798,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.kind === 'art') {
       const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
       p *= close ? G.close : G.punch;
-      if (!close) nerveMul *= G.nerve;
+      if (!close) nerveMul *= fireN = G.nerve;
       // A support team's bullets and light bombs do little to tanks (release 2).
       if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
     }
@@ -2781,8 +2818,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Upright and running in the open, at the double: struck harder (direct command, release 2).
     if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
-    const dmg = p * am * amx * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
-    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen };
+    // The day's luck, and under the field spread's move (step 1b) its factor beside it.
+    const f = this.lean === undefined ? this.fortune : this.fortune * this.lean;
+    const dmg = p * am * amx * take * luck * (u.side === 'att' ? f : 1 / f) * DT;
+    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen, ...(this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {}) };
   }
 
   /**
@@ -2791,7 +2830,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false): void {
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
     // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
     if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, 'struck');
@@ -2807,8 +2846,15 @@ export class LandBattle implements BattleSim<LandUnit> {
     const before = t.str, had = t.figures;
     t.str = Math.max(0, t.str - share * t.str0);
     const lost = (before - t.str) / t.str0;
-    const steady = 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
+    // (Under the field spread's N, step 1b, a block reads the reference army's steadiness: its quality acts at the army.)
+    const steady = this.refNerve ? REF_NERVE.steady : 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
+    // The field spread's army ledger (step 1b, form 13A): the block's loss at its own experience and its side's general,
+    // weighed by the parts of m read at the army, over its side's power.
+    if (this.led && lost > 0) {
+      const s = t.side;
+      this.led.D[s] += (t.power0 * lost * LAND.nerve.perLoss[s] * mArmy * Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(s))) / this.power[s];
+    }
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
     // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost
@@ -3381,9 +3427,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   spentOf(s: Side): number { return this.ticket.reckoning.spread?.W[s] ?? LAND.spent[s]; }
 
+  /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
+  private ledgerShare(s: Side): number { const L = this.led; return L ? L.D[s] / Math.max(1e-12, L.K[s] * L.R[s] * L.draw[s]) : 0; }
+
   /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
   private brink(s: Side): { bar: number; worn: number; running: number; holding: boolean } {
-    const worn = this.wornShare(s), running = this.brokenShare(s), over = worn / this.spentOf(s);
+    const worn = this.wornShare(s), running = this.brokenShare(s), over = this.led ? this.ledgerShare(s) : worn / this.spentOf(s);
     // Worn past what it will stand, it still holds while most of it is fresh or has not been in the fight: the bar waits
     // at the brink (b476(1)). A small army held there gives ground with its worn (giveGround).
     const holding = over >= 1 && this.freshShare(s) > LAND.fought;
@@ -3399,13 +3448,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   breakCause(s: Side): BreakCause {
     const r3 = (x: number): number => Math.round(x * 1000) / 1000;
-    const b = this.brink(s), w = b.worn / this.spentOf(s), r = b.running / LAND.breaks;
+    const b = this.brink(s), w = this.led ? this.ledgerShare(s) : b.worn / this.spentOf(s), r = b.running / LAND.breaks;
     const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? 'running' : 'worn';
     const on = mine.filter((u) => u.state !== 'withdrawn'), p0 = on.reduce((a, u) => a + weightOf(u), 0);
     const steady = p0 > 0 ? on.filter((u) => u.state === 'steady').reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
     return {
       side: s, bar: r3(b.bar), by: Math.max(w, r) < 1 ? 'none' : nearer, nearer,
-      worn: r3(b.worn), spent: this.spentOf(s), running: r3(b.running), breaks: LAND.breaks,
+      worn: r3(b.worn), spent: this.spentOf(s), ...(this.led ? { ledger: r3(this.ledgerShare(s)) } : {}), running: r3(b.running), breaks: LAND.breaks,
       fresh: r3(this.freshShare(s)), fought: LAND.fought, small: this.freshHold[s],
       holding: b.holding, held: this.heldFor[s] > 0, heldFor: Math.round(this.heldFor[s] * 10) / 10,
       blocks: mine.length, blocksWorn: mine.filter((u) => u.str < u.str0 * LAND.fresh.str).length, wornAt: LAND.fresh.str,
@@ -3833,7 +3882,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const hurt = new Map<number, [number, number]>();
     for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
-    for (const [id, [d, n]] of hurt) this.suffer(this.unit(id)!, d, d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve, []);
+    for (const [id, [d, n]] of hurt) {
+      const w = d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve;
+      // Under the field spread's army ledger with the air part at the army (step 1b), the ledger reads its weight and the block 1.
+      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w); else this.suffer(this.unit(id)!, d, w, []);
+    }
     this.strikes = this.strikes.filter((k) => !k.ended);
   }
 
@@ -4003,7 +4056,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const s of ['att', 'def'] as Side[]) { this.airBank[s].clear(); this.airNerve[s].clear(); this.airLeft[s] = 0; }
     for (const k of this.strikes) { for (const l of k.legs) l.done = Math.max(l.done, 1); k.ended = true; }
-    for (const [id, [d, n]] of hurt) this.suffer(this.unit(id)!, d, d > 0 ? n / d : 1, []);
+    for (const [id, [d, n]] of hurt) {
+      const w = d > 0 ? n / d : 1;
+      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w); else this.suffer(this.unit(id)!, d, w, []);
+    }
   }
 
   /**
