@@ -592,8 +592,10 @@ screens up. The plume's own picture: `Tools/land_look/smoke_screen_picture.cpp` 
 the wind; the grenade's also at 30 s from 40 m square across its plume at a 1.5 m eye and from the game's camera 25 m
 up, with its shadow alone, and measured down its plume: how solid, how high, its top's and underside's own colour;
 `/mnt/project-files/battle-fx/bail-out/smoke-plume-r2.jpg`, round 2, against round 1's `smoke-plume-r1.jpg`).
-For the Mac shot of round 2: the plume from the side at 40 m and from 150 m, a still at 2 s close to (the jet), and
-the frame rate with four screens up (each now at most about 150 pieces, round 1's 58).
+Round 2 passed to the Mac by the art director (24 November 12:51Z). Its Mac shots: the plume from 150 m with some wind,
+the 40 m side view at a man's eye, one from the game camera with men running through it (the screen against figures),
+a still at 2 s close to (the jet), and the frame rate with four screens up (each now at most about 150 pieces, round
+1's 58). Its torn wisps are judged in the Mac clip: if its tail reads as cotton, a feathered edge is the first mend.
 
 ## Shell holes each their own (release 2, off until passed)
 
