@@ -2850,15 +2850,17 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   // convoy's own ratio of radar-fitted escorts to boats trying. At T2's ratio it gives the count's pack back. Applied
   // once, here, on the pack the contest and the ceiling both read; the escort's kills keep the count's incidents. With
   // the eye term laid, 17:13Z, every escort on the stations finds as well, and t2 is the eye's own share at T2's point.)
+  // (The eye term reads only its own figures: a null in radar alone's t2 or rT2 leaves a laid eye running, and a null in
+  // any eye figure falls back to radar alone, as ruled. Review of 24 Nov.)
   const F = CAUSE.firing;
-  const laid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
-  const eye = laid ? eyePair() : null;
-  const tries = laid ? count.pack / (eye ? eye.t2 : F.t2!) : count.pack;
+  const radarLaid = !!F && F.t2 !== null && F.rT2 !== null && F.t2 > 0;
+  const eye = F ? eyePair() : null;
+  const tries = eye ? count.pack / eye.t2 : radarLaid ? count.pack / F.t2! : count.pack;
   let fire: number | null = null;
   if (eye) {
     const on = onStations(route, count, radarShips, escortShips);
     fire = tries > 0 ? 1 / (1 + (eye.ce * on.all + eye.cr * on.radar) / tries) : 1;
-  } else if (laid) fire = firingShare(radarOnStations(route, count, radarShips, escortShips), tries);
+  } else if (radarLaid) fire = firingShare(radarOnStations(route, count, radarShips, escortShips), tries);
   const pack = fire === null ? count.pack : tries * fire;
   // (The pack, times a boat's raid strength on station: its kit, fit and the air over it, as the lanes count them.)
   const P = count.boats > 0 ? (pack * boats) / count.boats : 0;

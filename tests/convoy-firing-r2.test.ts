@@ -132,7 +132,7 @@ describe('a convoy attacked', () => {
     expect(unread(() => convoyMeeting(g, 'UK', atlantic).count!.fired)).toBeUndefined();
   });
 
-  it('at T2\'s own ratio gives the count\'s pack back, so T2 is as the tons ruling fitted it', () => {
+  it('at T2\'s own ratio gives the count\'s pack back (the pack only: the ships sunk there are the ceiling\'s, convoy-load-r2)', () => {
     // (r = 1 radar-fitted escort for each boat trying: the tries x 0.3 are the count's pack.)
     for (const pack of [0.5, 2, 3.5]) expect((pack / 0.3) * firingShare(pack / 0.3, pack / 0.3)!).toBeCloseTo(pack, 12);
   });

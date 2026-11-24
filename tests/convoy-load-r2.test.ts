@@ -117,7 +117,7 @@ describe('the eye term', () => {
     expect(thin.fire!).toBeLessThan(1);
   });
 
-  it('at T2\'s own point the pack comes back, so T2 is as the tons ruling fitted it', () => {
+  it('at T2\'s own point the pack comes back (the pack only: a firing boat\'s ships are the ceiling\'s, below)', () => {
     const p = eyePair()!;
     for (const pack of [0.5, 2, 3.5]) expect((pack / p.t2) / (1 + (p.ce + p.cr) * 0.97)).toBeCloseTo(pack, 12);
   });
@@ -130,12 +130,36 @@ describe('the eye term', () => {
       expect(eyePair()).toBeNull();
       const s = convoySideOf(g, 'UK', atlantic)!;
       expect(s.fire).toBeLessThan(1);
-      expect(s.fire).toBe(firingShare((1 / s.fire! - 1) / (7 / 3) * (convoyCount(g, atlantic)!.pack / 0.3), convoyCount(g, atlantic)!.pack / 0.3));
+      // (The boats that try are the pack / radar alone's t2, and the share is radar alone's; its r is pinned exactly in
+      // convoy-firing-r2 and convoy-screen-r2.)
+      expect(s.fired).toBeCloseTo((convoyCount(g, atlantic)!.pack / 0.3) * s.fire!, 12);
     });
     // (And without radar, unread, every boat fires.)
     const g2 = open(true);
     meet(g2, 60, 320);
     withFigure(eyeUnread, () => expect(convoySideOf(g2, 'UK', atlantic)!.fire).toBe(1));
+  });
+
+  it('the eye reads only its own figures: a null in radar alone\'s t2 or rT2 leaves it running', () => {
+    const g = open(true);
+    grantTech(g, 'UK', 'asvradar');
+    meet(g, 60, 80);
+    const laid = convoySideOf(g, 'UK', atlantic)!;
+    for (const key of ['t2', 'rT2'] as const) {
+      const keep = CAUSE.firing[key];
+      CAUSE.firing[key] = null;
+      try {
+        const s = convoySideOf(g, 'UK', atlantic)!;
+        expect(s.fire).toBeCloseTo(laid.fire!, 12);
+        expect(s.fired).toBeCloseTo(laid.fired!, 12);
+      } finally { CAUSE.firing[key] = keep; }
+    }
+    // (With the eye unread as well, nothing fires short: the count's pack, as before the firing share.)
+    withFigure(eyeUnread, () => {
+      const keep = CAUSE.firing.t2;
+      CAUSE.firing.t2 = null;
+      try { expect(convoySideOf(g, 'UK', atlantic)!.fire).toBeUndefined(); } finally { CAUSE.firing.t2 = keep; }
+    });
   });
 });
 
@@ -169,10 +193,12 @@ describe('the load', () => {
     withFigure(regainAt(0.5), () => {
       const fits = nightFits(g, z);
       expect(fits).toBeGreaterThan(0);
+      const load = withFigure(loadUnread, () => torpedoesInto(g, z));
       for (const fire of [1, 0.6, 0.3]) {
         const t = torpedoesInto(g, z, fire);
         expect(t).toBeGreaterThan(5);
         expect(t).toBeLessThanOrEqual(14);
+        expect(t).toBeCloseTo(5 * salvosInto(fire * fits * 0.5, load / 5), 12);
         expect(boatCeiling(g, z, fire)).toBeCloseTo(t * HIT * SINK, 12);
       }
       // (A weak screen lets a boat back in more often than a strong one.)
@@ -191,6 +217,11 @@ describe('the load', () => {
     const dark = 24 * (1 - dayShare(seaLatitude(g, z), turnToDate(g.turn).month));
     expect(jun).toBeCloseTo(Math.max(0, 1 - 1.25 / dark), 12);
     expect(Math.max(0, 1 - 1.25 / (24 * (1 - dayShare(70, 5))))).toBe(0);
+    // (The game's own northernmost seas under the midnight sun: nightFits itself gives none.)
+    const polar = g.seas.map((s) => s.id).filter((id) => dayShare(seaLatitude(g, id), 5) >= 1);
+    expect(polar.length).toBeGreaterThan(0);
+    g.turn = 10;
+    for (const id of polar) expect(nightFits(g, id)).toBe(0);
   });
 
   it('the load is a cap for a patrol: past what the boats on station hold this month, each convoy\'s share falls alike', () => {
