@@ -1689,6 +1689,20 @@ namespace EdgeSeals
 			return Measure ? Measure->Stroke : 0.0;
 		}
 
+		const std::vector<std::string>& SealSigns()
+		{
+			static const std::vector<std::string> Signs = []()
+			{
+				std::vector<std::string> Out;
+				for (const FSealMeasure& Each : SealMeasures)
+				{
+					Out.emplace_back(Each.Sign);
+				}
+				return Out;
+			}();
+			return Signs;
+		}
+
 		double SignNarrowestGap(const std::string& Sign)
 		{
 			const FSealMeasure* Measure = SealMeasureOf(Sign);

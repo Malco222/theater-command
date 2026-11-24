@@ -7,6 +7,7 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/EdgeNewsLayer.h" // (Release 2, news at the map's edge: merge by hand)
+#include "Campaign/EdgeSeals.h" // (Release 2, the seal signs read as the screen is built: merge by hand)
 #include "Battle/LandBattle.h"
 #include "Battle/LandLive.h"
 #include "EngineUtils.h"
@@ -5517,6 +5518,23 @@ namespace
 					Style->Set("ToolTip.LargerFont", Typed(10.5f));
 					Style->Set("ToolTip.BrightBackground", new FSlateRoundedBoxBrush(Paper, 3.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f));
 					Style->Set("ToolTip.Background", new FSlateRoundedBoxBrush(Paper, 3.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f));
+				}
+			}
+			{
+				// (Release 2, the seal layer's draw cost: merge by hand) The seal set's pictures (EdgeSeals' SealSigns, the
+				// keys of its measures: Content/CityOrders/Seal), read once here as the screen is built, not inside the
+				// paint of the frame that first draws a month's seals, where each new sign was decoded, given its smaller
+				// copies and made a texture (an estimated 2 to 10 ms in that one frame: the map-speed lane's note of 24
+				// November). SealSignBrush keeps each for the life of the game, so the seals draw the same pictures, made
+				// earlier; nothing on the screen changes.
+				static bool bSealSignsRead = false;
+				if (!bSealSignsRead)
+				{
+					bSealSignsRead = true;
+					for (const std::string& Sign : EdgeSeals::Look::SealSigns())
+					{
+						SealSignBrush(FString(UTF8_TO_TCHAR(Sign.c_str())));
+					}
 				}
 			}
 			// (the panels are brown leather with a brass edge; the date is a desk calendar; the dispatches are typed)
