@@ -4,6 +4,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Templates/Function.h"
 #include "Async/Future.h"
+#include "Campaign/CampaignView.h"
 #include "CampaignGameMode.generated.h"
 
 class FCampaignSession;
@@ -79,6 +80,28 @@ public:
 	/** Lays one step of a war being laid; false where none was left (the war is laid). */
 	bool LayNextStep();
 
+	/**
+	 * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The wars the
+	 * player keeps with SAVE, beside the campaign kept by itself (which CONTINUE picks up, and which is written over
+	 * every month as before). SaveWarAs keeps a copy of the war under way; KeepAutosaveAsWar keeps the campaign kept by
+	 * itself as one (before another war is loaded over it); SavedWars lists them, the newest first; LoadSavedWar lays
+	 * one on the table as CONTINUE does (Why says what stopped it); DeleteSavedWar throws one away; IsAutosaveKept says
+	 * whether the campaign kept by itself is kept as a saved war too, word for word, so that loading another loses nothing.
+	 */
+	bool SaveWarAs(FSavedWar& Out);
+	bool KeepAutosaveAsWar(FSavedWar& Out);
+	TArray<FSavedWar> SavedWars() const;
+	bool LoadSavedWar(const FString& Id, FString& Why);
+	bool DeleteSavedWar(const FString& Id);
+	bool IsAutosaveKept(); // (release 2: waits for a save still being written, tc.Speed.SaveAside, before it reads)
+	/**
+	 * (Release 2; the 1.5.1 pre-check of 24 November 2026: each SAVE is a whole copy, with no cap.) What the saved wars
+	 * take on the disk, and the room left on it where the computer says (below nothing where it does not), for the line
+	 * on the page of saved wars.
+	 */
+	int64 SavedWarsBytes() const;
+	int64 FreeDiskBytes() const;
+
 private:
 	void LayOutWar();
 	bool bLayInSteps = false;
@@ -91,6 +114,9 @@ private:
 	TFuture<void> SaveWriting;
 	/** Each save asked for, counted: a save given aside is written only where none was asked after it. */
 	int32 SavesAsked = 0;
+	static FString SavedWarsFolder();
+	static bool IsSavedWarId(const FString& Id);
+	bool WriteSavedWar(const FString& Text, FSavedWar& Out);
 
 	TSharedPtr<FCampaignSession> Session;
 

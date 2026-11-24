@@ -272,7 +272,7 @@ struct FOpening
 	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
 
 	// The grand campaign: any country, taken over on one of a few days, and free to make its own history after.
-	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options
+	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options, 3: the saved wars (release 1.5.1)
 	TArray<FOpeningYear> Years;
 	int32 YearIndex = 0;
 	TArray<FOpeningNation> Nations;
@@ -294,9 +294,19 @@ struct FOpening
 	FText SavedLine; // empty when there is nothing to continue
 	// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be lost. The
 	// beginning that waits on the player's answer: 0 none; 1 the grand campaign, led; 2 the grand campaign,
-	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND.
+	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND; 5 a saved war, loaded (AskLoad, release 1.5.1).
 	int32 AskKind = 0;
 	int32 AskGroup = 0, AskSide = 0;
+	// (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The wars kept with
+	// SAVE, the newest first (the page of saved wars, Tab 3); the one just saved (its row is marked); the one waiting on
+	// ruling 130's question before it is loaded; the one whose DELETE asks on its row first; and the page's word on what
+	// was done ("Saved: Germany, July 1940.") or what went wrong.
+	TArray<FSavedWar> SavedWars;
+	FString JustSaved, AskLoad, AskDelete;
+	FText SavesNote;
+	// (Release 2; the 1.5.1 pre-check: each SAVE is a whole copy.) What the saved wars take on the disk, and the room
+	// left on it (below nothing where the computer does not say), for the page's line under its heading.
+	int64 SavesBytes = 0, FreeBytes = -1;
 	// (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the title band: its words, and whether the ten are done.
 	FLessonDoor Door;
 	int32 Revision = 0;
@@ -627,6 +637,19 @@ public:
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
+	/**
+	 * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) SAVE on the menu
+	 * over a war: a copy of it is kept as a saved war of its own, and the page of saved wars opens on it. LOAD (the
+	 * page). A row's LOAD: where the campaign kept by itself would be written over by it and is not kept as a saved war
+	 * too, ruling 130's question comes first, with a third answer that keeps it and then loads (AnswerLoadKeeping). A
+	 * row's DELETE asks on the row first; KEEP IT is its lit answer, and Enter's and Esc's.
+	 */
+	void SaveWar();
+	void ShowSavedWars();
+	void AskToLoadWar(const FString& Id);
+	void AnswerLoadKeeping();
+	void AskToDeleteWar(const FString& Id);
+	void AnswerDeleteWar(bool bDelete);
 
 	/**
 	 * (Ruling 130.) Begins a new war from the opening screen: at once where no campaign is saved on this computer,
@@ -1336,6 +1359,9 @@ public:
 	void SetFrameOnScreen(TArray<FBox2D>&& Boxes) { FrameOnScreen = MoveTemp(Boxes); }
 
 private:
+	// (Release 1.5.1) The saved wars read afresh for the menu; and one laid on the table.
+	void ReadSavedWars();
+	void LoadWar(const FString& Id);
 	void WheelUp();
 	void WheelDown();
 	void Escape();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/DateTime.h"
 
 /**
  * What the rules tell the game about the state of the campaign: a plain
@@ -2008,4 +2009,16 @@ struct FProvinceInfo
 	TArray<FString> PlacesLines;
 	FString TownKind; // capital, city, town or village
 	int32 YieldTotal = -1; // (release 2, the town card's tiles) what the province pays a month in all; -1 where the rules give none
+};
+
+/**
+ * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) A war the player kept
+ * with SAVE on the menu, beside the campaign the game keeps by itself: as many as he likes, each a copy of the war as
+ * it stood when he pressed it. They are kept in Saved/Campaign/Saves, a .json for the war and a .txt for its line.
+ */
+struct FSavedWar
+{
+	FString Id; // its files' name, without the ending: war-20261124-184012
+	FString Line; // what it is, as CONTINUE says it: "Germany, July 1940, free play"
+	FDateTime When; // when it was saved, by the computer's own clock
 };
