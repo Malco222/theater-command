@@ -15,9 +15,9 @@ import { stopOf } from '../../campaign/history';
 import { techRules } from '../../campaign/tech';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
-import { seenOdds } from '../../campaign/units';
+import { armsOf, seenOdds } from '../../campaign/units';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
-import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 import { bearingOf, streamFor } from './stream';
@@ -30,7 +30,8 @@ export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
 /** The research a computer general's style grows by (data/battle/land-styles.json grow.tech). */
 const DOCTRINES = ['combined', 'deep'];
 
-function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
+/** One side of the field's ticket: `side`, the side it fights on, for its staff's way under Units decide. */
+function sideOf(g: Game, nat: string, side: Side, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
   const N = g.nations[nat];
   const w = cs.map(weigh), tot = w.reduce((a, b) => a + b, 0) || 1;
   const forces: ForceTicket[] = cs.map((c, i) => ({
@@ -48,12 +49,16 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
+  // (Units decide: the side's way from the quality store, by the side it fights on, from which the field works out its
+  // style with its experience, one rule for every nation; the doctrines step no style, keeping their one price in the
+  // card's doctrine, so they are not written. DD 24 Nov 15:53Z, #2 form choice 16; Part 2 sections 2 and 3. Off, no way.)
+  const way = armsOf(g, nat)?.land.way[side].id;
   // What a computer general's style grows by besides its army's experience (styles.ts): the doctrines its nation holds.
   // Read straight off the nation's record, never through techOf, which opens research on a first look: the ticket only reads.
-  const doctrine = techRules(g) ? DOCTRINES.filter((id) => !!N?.tech?.done.includes(id)) : [];
+  const doctrine = !way && techRules(g) ? DOCTRINES.filter((id) => !!N?.tech?.done.includes(id)) : [];
   return {
     nat, adj: N?.adj ?? nat, color: N?.color ?? '#888888', human: nat === g.human, forces, general: lead ? { name: lead.name, level: lead.level } : null,
-    ...(doctrine.length ? { doctrine } : {}),
+    ...(doctrine.length ? { doctrine } : {}), ...(way ? { way } : {}),
   };
 }
 
@@ -139,8 +144,8 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
     // The card's river line counts the corps that cross as those with the river between them and the place (assess in
     // game.ts): the field lays the river before those, and no others.
-    att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
-    def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
+    att: { ...sideOf(g, attNat, 'att', going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
+    def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, 'def', a.defenders, weighDef)), ...onCall(cardAir?.def) },
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact && card === a.odds ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.

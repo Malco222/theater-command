@@ -20,6 +20,7 @@ import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withTeams, wornWords, t
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, corpsOn, pursuitLine } from '../land/ticket';
+import { prisonersOf } from '../../campaign/units';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type CardSaid, type Offer } from './campaign';
 import { drawFrame, signSvg, toField, toScreen, type Scene } from './draw';
@@ -1081,7 +1082,7 @@ function showAfter(): void {
     const sum = (us: typeof rep.attackers): number => us.reduce((s, u) => s + u.men, 0);
     const aLost = Math.max(rep.attLost, rep.attackers.reduce((s, u) => s + u.lost, 0)), dLost = Math.max(rep.defLost, rep.defenders.reduce((s, u) => s + u.lost, 0));
     const pct = (l: number, m: number): string => (m > 0 ? `, ${Math.max(1, Math.round((100 * l) / m))}% of those sent in,` : '');
-    price = `It cost you ${num(aLost)} men${pct(aLost, sum(rep.attackers))} against ${num(dLost)} of theirs${rep.prisoners ? `, and ${num(rep.prisoners)} were taken prisoner` : ''}.`;
+    price = `It cost you ${num(aLost)} men${pct(aLost, sum(rep.attackers))} against ${num(dLost)} of theirs${prisonersOf(rep) ? `, and ${num(prisonersOf(rep))} were taken prisoner` : ''}.`;
     // As the campaign's own report says it: a corps with no fate of its own fell back if its side lost.
     const list = (us: typeof rep.attackers, won: boolean): string => us.map((u) => `<li><b>${esc(u.name)}</b> <span>${facts([`${u.divs} division${u.divs === 1 ? '' : 's'}`, u.lost > 0 ? `lost ${num(u.lost)}` : 'in reserve, lost none', u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && rep.streets ? 'fell back into the heart of the city' : FATE[u.fate] ?? u.fate])}</span></li>`).join('');
     sides = `<div class="aside2"><div><h3 class="tc-label">${esc(A)} attack</h3><ul>${list(rep.attackers, rep.taken)}</ul></div><div><h3 class="tc-label">${esc(D)} defence</h3><ul>${list(rep.defenders, !rep.taken)}</ul></div></div>`;

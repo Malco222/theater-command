@@ -12,6 +12,9 @@
 // infantry's anti-tank guns by the defender's own rows, and winter kit in place of the hardy list. Then the staff's
 // sight and way, and the card (DD 24 Nov 15:53Z, #2 form): a staff reads the card's odds at the sight its command
 // gives, a staff by orders asks odds of its own, and the player's card shows his own staff's reading with its cause.
+// Then the capture label (Part 1 section 7): of the defence's men lost, 0.148 x the worth ratio are booked as prisoners
+// in the report's own field, a split that adds none; and the 3D style worked out from the staff's way and the side's
+// experience by one rule for every nation (choice 16; Part 2 sections 2 and 3).
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -59,6 +62,15 @@ import { oddsBand } from '../src/campaign/intel';
 import { landTicket } from '../src/battle/land/ticket';
 import { commandWords, needAt, seenOdds, staffSight, stopAt, trainingWords, wayWords } from '../src/campaign/units';
 import { GOV, directiveOdds, promiseTerms, threatOdds } from '../src/campaign/government';
+import { capturedOf, prisonersOf } from '../src/campaign/units';
+import { handBack } from '../src/battle/land/ticket';
+import { PATH, STYLE, pickFor, sampleTicket, styleFor, type LandPlace } from '../src/battle/land';
+import { leaningOf, sideXp, stepsOf } from '../src/battle/land/styles';
+import type { FieldResult, FieldTicket, SideTicket } from '../src/battle/core/types';
+import { monthCard, monthMark } from '../src/campaign/monthcard';
+import stylesSource from '../src/battle/land/styles.ts?raw';
+import fieldPage from '../src/battle/ui/page.ts?raw';
+import monthSource from '../src/campaign/monthcard.ts?raw';
 
 const ROWS = ['radios', 'nco', 'battledrill', 'officers'];
 
@@ -1795,5 +1807,200 @@ describe('the cabinet quotes the attack card as the player\'s own staff reads it
     const o = alone(false), oa = assess(o.g, o.att, o.t);
     expect(directiveOdds(o.g, 'SOV', o.t.id)).toBeCloseTo(oa.odds, 9);
     expect(promiseTerms(o.g, 'SOV', o.t.id, GOV.promise.months[0])!.odds).toBeCloseTo(oa.odds, 2);
+  });
+});
+
+// ---- The capture label and the 3D style (DD 24 Nov 15:53Z, #2 form Part 1 section 7 and choice 16; Part 2 sections 2
+// and 3) --------------------------------------------------------------------------------------------------------------
+
+describe('the capture label (#2 form Part 1 section 7)', () => {
+  /** The Volhynia attack as the Soviet player's, so the field can hand it back. */
+  const mine = (f: ReturnType<typeof volhynia>): ReturnType<typeof volhynia> => {
+    f.g.human = 'SOV';
+    f.g.phase = f.g.order.indexOf('SOV');
+    return f;
+  };
+  /** Runs `fight` with the label's share as given, putting it back after. */
+  const withShare = <T>(share: number, fight: () => T): T => {
+    const was = UNITS.land.label.share;
+    UNITS.land.label.share = share;
+    try { return fight(); } finally { UNITS.land.label.share = was; }
+  };
+  /** Every corps' strength, order and experience, and the war's next die: what a battle leaves behind. */
+  const after = (g: Game): string => JSON.stringify({ corps: g.corps.map((c) => [c.id, c.str, c.org, c.xp, c.reg, c.dead ?? false]), die: g.rng.next() });
+  const unlabelled = (r: BattleReport): BattleReport => { const { captured: _, ...rest } = r; return rest as BattleReport; };
+
+  it('books 0.148 x q of the defence\'s men lost as prisoners, at most 0.9, under the switch only', () => {
+    const g = open(true), off = open(false);
+    // The record's fail-or-advance pair at Kursk: q 0.545 with the Soviets attacking, 1.789 with the Germans.
+    expect(capturedOf(g, 0.545, 100000)).toBe(8066);
+    expect(capturedOf(g, 1.789, 100000)).toBe(26477);
+    expect(capturedOf(g, 10, 100000)).toBe(90000);
+    expect(capturedOf(g, 0.545, 0)).toBe(0);
+    expect(capturedOf(g, undefined, 100000)).toBeUndefined();
+    expect(capturedOf(off, 0.545, 100000)).toBeUndefined();
+  });
+
+  it('splits a battle\'s men lost by its own q, for two worth ratios, and never changes a man lost', () => {
+    // A Soviet attack on Poles of better worth a man (q under 1), and a seasoned German attack on green Poles (over 1).
+    const battles: (() => { g: Game; att: Corps[]; t: Region })[] = [
+      () => { const f = volhynia(6, 2); return { g: f.g, att: f.att, t: f.t }; },
+      () => { const f = poznan(true, 0.6, 0); return { g: f.g, att: f.att, t: f.target }; },
+    ];
+    const qs: number[] = [];
+    for (const make of battles) {
+      for (const R of [0.9, 1.6]) {
+        const a = make(), q = assess(a.g, a.att, a.t).q!;
+        const rep = resolveBattle(a.g, a.att, a.t, { fought: R });
+        expect(rep.defLost).toBeGreaterThan(1000);
+        expect(rep.captured).toBe(Math.round(rep.defLost * Math.min(0.9, 0.148 * q)));
+        expect(rep.captured! / rep.defLost).toBeCloseTo(0.148 * q, 3);
+        // The same battle with no label: every man lost, every prisoner, every corps and the next die are the same.
+        const b = make(), bare = withShare(0, () => resolveBattle(b.g, b.att, b.t, { fought: R }));
+        expect(bare.captured).toBe(0);
+        expect(unlabelled(rep)).toEqual(unlabelled(bare));
+        expect(after(a.g)).toBe(after(b.g));
+        qs.push(q);
+      }
+    }
+    expect(qs[0]).toBeLessThan(0.8);
+    expect(qs[2]).toBeGreaterThan(1.2);
+  });
+
+  it('is booked by the same line for a battle the field hands back, from the field\'s own bill', () => {
+    for (const won of [false, true]) {
+      const f = mine(volhynia(6, 2));
+      const q = assess(f.g, f.att, f.t).q!;
+      const result: FieldResult = {
+        winner: won ? 'att' : 'def', how: won ? 'rout' : 'time', seconds: 900, lost: { att: 0.12, def: won ? 0.3 : 0.08 }, men: { att: 0, def: 0 },
+        R: won ? 1.5 : 0.9, level: won ? 'Close victory' : 'Close defeat', lines: [],
+        forces: [...f.att.map((c) => ({ corps: c.id, side: 'att' as const, lost: 0.12 })), ...f.def.map((c) => ({ corps: c.id, side: 'def' as const, lost: won ? 0.3 : 0.08 }))],
+        ...(won ? { broke: 'def' as const } : {}),
+      };
+      const rep = handBack(f.g, f.att, f.t, result)!;
+      expect(rep.defLost).toBeGreaterThan(0);
+      expect(rep.captured).toBe(Math.round(rep.defLost * Math.min(0.9, 0.148 * q)));
+    }
+    // Off: no label, on the card or from the field.
+    const o = mine(volhynia(6, 2, false));
+    const rep = handBack(o.g, o.att, o.t, { winner: 'def', how: 'time', seconds: 900, lost: { att: 0.1, def: 0.05 }, men: { att: 0, def: 0 }, R: 0.9, level: 'Close defeat', lines: [], forces: [] })!;
+    expect('captured' in rep).toBe(false);
+    const c = volhynia(6, 2, false);
+    expect('captured' in resolveBattle(c.g, c.att, c.t)).toBe(false);
+    expect('q' in assess(c.g, c.att, c.t)).toBe(false);
+  });
+
+  it('is its own report field: the cards name it with the prisoners and never count it twice among the men lost', () => {
+    expect(prisonersOf({ prisoners: 2000, captured: 600 })).toBe(2600);
+    expect(prisonersOf({ prisoners: 2000 })).toBe(2000);
+    const g = open(true);
+    g.human = 'SOV';
+    setWar(g, 'SOV', 'POL');
+    const mark = monthMark(g, 'SOV'), at = g.byName['Volhynia'];
+    const unit = (nat: string, lost: number) => ({ name: `${nat} corps`, nat, kind: 'inf' as const, divs: 2, men: 20000, lost, fate: '' as const });
+    const rep = report(g, 'SOV', at.id, { defNat: 'POL', attackers: [unit('SOV', 3000)], defenders: [unit('POL', 10000)], attLost: 3000, defLost: 8000, prisoners: 2000, captured: 600 });
+    g.reports.push(rep);
+    const card = monthCard(g, mark, 'SOV'), row = [card.lead, ...card.rows].find((r) => r?.report?.id === rep.id)!;
+    expect(row.line).toBe('One corps took it, with 2,600 prisoners.');
+    // Theirs is the dead and wounded and the prisoners of the pursuit: the label's men are among the dead and wounded.
+    expect(row.figures).toEqual([{ n: '3,000', label: 'lost' }, { n: '10,000', label: 'theirs' }]);
+    // The campaign's report card and the field's after card say the same count, by the same helper.
+    expect(page).toContain("prisonersOf(r) ? ` · ${num(prisonersOf(r))} prisoners` : ''");
+    expect(fieldPage).toContain("prisonersOf(rep) ? `, and ${num(prisonersOf(rep))} were taken prisoner` : ''");
+    expect(monthSource).toContain('const oursLost = att ? r.attLost : r.defLost + r.prisoners, theirsLost = att ? r.defLost + r.prisoners : r.attLost;');
+  });
+});
+
+describe('the 3D style from the way and the side\'s experience (#2 form choice 16; Part 2 sections 2 and 3)', () => {
+  const WAYS = ['mass', 'methodical', 'bold', 'night', 'last-stand'];
+  const XPS = [0.05, 0.1, 0.2, 0.25, 0.3, 0.45, 0.7];
+  /** The practice ticket with `side` an army of `nat` at experience `xp`, its way and doctrines as given, at stop `hist`. */
+  const ticket = (nat: string, side: 'att' | 'def', o: { xp: number; hist?: number; way?: string; doctrine?: string[] }): FieldTicket<LandPlace> => {
+    const t = sampleTicket('plains', 1.3, { nat: { [side]: nat }, hist: o.hist ?? 3 });
+    const s: SideTicket = { ...t[side], forces: t[side].forces.map((x) => ({ ...x, xp: o.xp })), ...(o.way ? { way: o.way } : {}), ...(o.doctrine ? { doctrine: o.doctrine } : {}) };
+    return { ...t, [side]: s };
+  };
+  const styleOf = (t: FieldTicket<LandPlace>, side: 'att' | 'def'): string | undefined => styleFor(t, side)?.id;
+  /** The form's rule: the higher of the way and the experience's rung; a mass under the raw mark; night and last-stand bold. */
+  const rule = (way: string, xp: number): string => {
+    if (xp < 0.1) return 'mass';
+    const rungs = ['mass', 'methodical', 'bold'];
+    const own = way === 'night' || way === 'last-stand' ? 'bold' : way;
+    return rungs[Math.max(rungs.indexOf(own), xp >= 0.45 ? 2 : xp >= 0.25 ? 1 : 0)];
+  };
+
+  it('is the same for a Soviet, a British and an unlisted nation\'s side with the same way and experience', () => {
+    let n = 0;
+    for (const hist of [1, 2, 3]) for (const side of ['att', 'def'] as const) for (const way of WAYS) for (const xp of XPS) for (const doctrine of [undefined, ['combined'], ['combined', 'deep']]) {
+      const want = rule(way, xp);
+      for (const nat of ['SOV', 'UK', 'GRE', 'USA', 'JAP', 'GER']) { expect(styleOf(ticket(nat, side, { xp, hist, way, doctrine }), side), `${nat} ${side} ${way} ${xp}`).toBe(want); n++; }
+    }
+    expect(n).toBe(3 * 2 * 5 * 7 * 3 * 6);
+    // Stops 4 and 5 still pick by the situation, and a side the player commands has none.
+    const t = ticket('SOV', 'att', { xp: 0.3, hist: 5, way: 'mass' });
+    expect(styleOf(t, 'att')).toBe(pickFor(t, 'att'));
+    expect(styleFor({ ...t, att: { ...t.att, human: true } }, 'att')).toBeNull();
+  });
+
+  it('reads neither the nation\'s path nor its doctrines for a side that carries its way', () => {
+    // Today a Soviet side with Battle groups is methodical at 0.2, and bold with Deep operations too; by its way, a mass.
+    expect(styleOf(ticket('SOV', 'att', { xp: 0.2, doctrine: ['combined'] }), 'att')).toBe('methodical');
+    expect(styleOf(ticket('SOV', 'att', { xp: 0.2, way: 'mass', doctrine: ['combined'] }), 'att')).toBe('mass');
+    expect(styleOf(ticket('SOV', 'att', { xp: 0.15, doctrine: ['combined', 'deep'] }), 'att')).toBe('bold');
+    expect(styleOf(ticket('SOV', 'att', { xp: 0.15, way: 'mass', doctrine: ['combined', 'deep'] }), 'att')).toBe('mass');
+    // A British or Italian side defends bold from 0.45 (today only an American or a Soviet one did).
+    expect(styleOf(ticket('UK', 'def', { xp: 0.5 }), 'def')).toBe('methodical');
+    expect(styleOf(ticket('UK', 'def', { xp: 0.5, way: 'methodical' }), 'def')).toBe('bold');
+    // A listed nation's raw side fights as a mass whatever its way: Germany's at 0.05.
+    expect(styleOf(ticket('GER', 'att', { xp: 0.05 }), 'att')).toBe('bold');
+    expect(styleOf(ticket('GER', 'att', { xp: 0.05, way: 'bold' }), 'att')).toBe('mass');
+    // The rule names no nation and reads no path or doctrine.
+    const body = stylesSource.slice(stylesSource.indexOf('function wayFor'), stylesSource.indexOf('function leanFor'));
+    expect(body.length).toBeGreaterThan(100);
+    expect(body).not.toMatch(/PATH|doctrine|stepsOf|\.nat\b|leaningOf|['"`](GER|SOV|FRA|UK|USA|ITA|JAP)['"`]/);
+  });
+
+  it('with no way on the ticket is today\'s style exactly', () => {
+    /** Today's leanFor, as it stood before the switch's way. */
+    const today = (s: SideTicket, side: 'att' | 'def'): string => {
+      const path = PATH[s.nat];
+      if (path) return path[Math.min(path.length - 1, stepsOf(s))];
+      const own = s.nat !== '_' ? leaningOf(s.nat, side) : null;
+      if (own) return own;
+      return sideXp(s) < STYLE.raw ? 'mass' : leaningOf('_', side) ?? 'methodical';
+    };
+    let n = 0;
+    for (const hist of [1, 2, 3]) for (const side of ['att', 'def'] as const) for (const xp of XPS) for (const doctrine of [undefined, ['combined'], ['deep'], ['combined', 'deep']]) {
+      for (const nat of ['SOV', 'USA', 'UK', 'GER', 'JAP', 'ITA', 'FRA', 'GRE', '_']) {
+        const t = ticket(nat, side, { xp, hist, doctrine });
+        expect('way' in t[side]).toBe(false);
+        expect(styleOf(t, side), `${nat} ${side} ${xp} ${doctrine}`).toBe(today(t[side], side));
+        n++;
+      }
+    }
+    expect(n).toBe(3 * 2 * 7 * 4 * 9);
+  });
+
+  it('is carried on the field\'s ticket from the store by side under the switch, and absent off', () => {
+    const f = volhynia(4, 2);
+    f.g.human = 'SOV';
+    f.g.phase = f.g.order.indexOf('SOV');
+    give(f.g, 'SOV', 'combined');
+    give(f.g, 'POL', 'combined');
+    armsOf(f.g, 'POL')!.land.way.def = { id: 'last-stand', by: 'chosen' };
+    const t = landTicket(f.g, f.att, f.t)!;
+    expect(t.att.way).toBe('mass');
+    expect(t.def.way).toBe('last-stand');
+    // The doctrines step no style under the switch, so the ticket carries none.
+    expect('doctrine' in t.att || 'doctrine' in t.def).toBe(false);
+    expect(styleOf(t, 'def')).toBe(rule('last-stand', sideXp(t.def)));
+    // Off: no way, and the doctrines as today.
+    const o = volhynia(4, 2, false);
+    o.g.human = 'SOV';
+    o.g.phase = o.g.order.indexOf('SOV');
+    give(o.g, 'POL', 'combined');
+    const ot = landTicket(o.g, o.att, o.t)!;
+    expect('way' in ot.att || 'way' in ot.def).toBe(false);
+    expect(ot.def.doctrine).toEqual(['combined']);
   });
 });

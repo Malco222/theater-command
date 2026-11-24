@@ -576,6 +576,13 @@ export interface BattleReport {
   attLost: number;
   defLost: number;
   prisoners: number;
+  /**
+   * Units decide only (the capture label, DD 24 Nov 15:53Z, #2 form Part 1 section 7): of the defence's men lost in the
+   * fight (defLost), those booked as prisoners. A split of defLost, never added to it: the men taken in the pursuit, cut
+   * off or in the town are in prisoners, and a count of the defence's losses is still defLost + prisoners. Read with
+   * prisoners through units.ts prisonersOf. Absent off.
+   */
+  captured?: number;
   /** No battle was fought: the defenders were under orders to give ground and fell back before the attack. */
   yielded?: boolean;
   /** The share of the defence that was dug in and in supply, where any was (the grand campaign): luck ran against the attack by that much. */

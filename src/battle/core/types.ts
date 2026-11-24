@@ -147,6 +147,14 @@ export interface SideTicket {
    */
   doctrine?: string[];
   /**
+   * Land, Units decide only (DD 24 Nov 15:53Z, #2 form choice 16; Part 2 sections 2 and 3): the side's staff way from
+   * the campaign's quality store, by the side it fights on ('mass', 'methodical', 'bold', 'night', 'last-stand'). Where
+   * it is set, the computer general's style at history stops 1 to 3 is worked out from it and the side's experience by
+   * one rule for every nation (styles.ts), and neither the nation's path nor the doctrines are read. Left out (the
+   * switch off, and every ticket not made by the campaign), the style is read as it always was.
+   */
+  way?: string;
+  /**
    * Land: the computer general's style fixed by hand, for tests, the fairness tables and a sandbox's invented pairings:
    * 'bold', 'methodical' or 'mass' (data/battle/land-styles.json). The campaign never sets it. Never the player's.
    */

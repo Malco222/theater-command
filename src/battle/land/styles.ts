@@ -96,8 +96,31 @@ export function stepsOf(s: SideTicket): number {
   return n;
 }
 
-/** Stops 1 to 3: the nation's own leaning, grown along its path; any other nation the table's '_', or mass while raw. */
+/** The styles from the least grown to the most: the rungs a side's experience climbs, and the order 'the higher of two' reads. */
+const RUNGS: StyleId[] = ['mass', 'methodical', 'bold'];
+
+/**
+ * Units decide (DD 24 Nov 15:53Z, #2 form choice 16; Part 2 section 3): the style of a side whose ticket carries its
+ * staff's way, by one rule for every nation. It fights the higher of its way and the rung its experience has reached on
+ * mass, methodical, bold (methodical from grow.xp[0], bold from grow.xp[1], the marks the paths grow by); under the raw
+ * mark it fights as a mass whatever its way. A way not built yet (night, last-stand) is fought as its stand-in, bold
+ * (lean.json standIn). Neither a nation's path nor the doctrines it holds are read: those rows keep their one price in
+ * the card's doctrine, and the nation is read nowhere here.
+ */
+function wayFor(s: SideTicket, way: string): StyleId {
+  const xp = sideXp(s), G = D.grow;
+  if (xp < STYLE.raw) return 'mass';
+  const own = isStyle(way) ? way : L.standIn[way];
+  const rung = xp >= G.xp[1] ? 2 : xp >= G.xp[0] ? 1 : 0;
+  return RUNGS[Math.max(rung, isStyle(own) ? RUNGS.indexOf(own) : RUNGS.indexOf('methodical'))];
+}
+
+/**
+ * Stops 1 to 3: the nation's own leaning, grown along its path; any other nation the table's '_', or mass while raw. A
+ * side whose ticket carries its staff's way (Units decide) fights by that way and its experience instead (wayFor).
+ */
 function leanFor(s: SideTicket, side: Side): StyleId {
+  if (s.way !== undefined) return wayFor(s, s.way);
   const path = PATH[s.nat];
   if (path) return path[Math.min(path.length - 1, stepsOf(s))];
   const own = s.nat !== '_' ? leaningOf(s.nat, side) : null;

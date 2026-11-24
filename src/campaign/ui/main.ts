@@ -69,7 +69,7 @@ import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitCardRule, traitsOf, type Trait } from '../traits';
-import { mostCorps, schoolsOf, unitsDecide } from '../units';
+import { mostCorps, prisonersOf, schoolsOf, unitsDecide } from '../units';
 import { columnsView } from '../columns';
 import { dumpsView } from '../logistics';
 import { nicknamesOn } from '../nicknames';
@@ -7778,7 +7778,7 @@ function reportCard(r: BattleReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${kick} · ${date(r.turn)}, week ${r.week}</div><h2>${title}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told}${went ? ` ${esc(went)}` : ''} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
+      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told}${went ? ` ${esc(went)}` : ''} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${prisonersOf(r) ? ` · ${num(prisonersOf(r))} prisoners` : ''}.`}</div>
       ${paidLine(r)}${spoils}${ruinsLine(r)}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>

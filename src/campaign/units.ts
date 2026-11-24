@@ -14,7 +14,7 @@
 // quality store below, one store for soldiers, pilots and crews (the design director's ruling of 24 Nov 15:53Z on the
 // rules builder's #2 form, rules-builder/release2/soviet/form.md, Part 2).
 
-import type { Air, Arms, Corps, Game, Land, LandWay, Nation, QualityStore, Sea, Way } from './types';
+import type { Air, Arms, BattleReport, Corps, Game, Land, LandWay, Nation, QualityStore, Sea, Way } from './types';
 import unitsData from '../../data/campaign/units.json';
 import leanData from '../../data/battle/lean.json';
 import airData from '../../data/campaign/air.json';
@@ -392,6 +392,35 @@ export const titleEarned = (g: Game, id: string | undefined): boolean => !!id &&
  * none: the year, as today.
  */
 export const raisedBy = (g: Game, id: string): string | undefined => (unitsDecide(g) ? UNITS.land.raisedBy[id] : undefined);
+
+// ---- The capture label (DD 24 Nov 15:53Z, #2 form Part 1 section 7; choice 7) --------------------------------------
+// Of the defence's men lost in a fight, a share is booked as prisoners by the worth of the two sides' men: 0.148 x q,
+// q the attack's per-man attack worth over the defence's per-man defence worth, at most 0.9. One number, fitted to the
+// record's fail-or-advance pair at Kursk; the worth ratio, a cause, carries the difference between the sides. It is a
+// split of men already lost: it adds none, and the men taken in the pursuit, cut off or in the town stay in the
+// report's prisoners. When the field spread's capture ladder lands, that form decides whether the label becomes its
+// first rung or goes; it is never a second price on top of the ladder.
+
+/**
+ * The defence's men lost in a fight (`lost`, the report's defLost) that the capture label books as prisoners:
+ * round(lost x min(0.9, 0.148 x q)) (units.json land.label), never more than were lost. Read once from the final men
+ * lost, after the field's bill where the battle was fought on the field, so a battle the card settles and one the field
+ * hands back are booked by this one rule (#2 form Part 1 section 6). Under Units decide only; off, or with no q, none.
+ */
+export function capturedOf(g: Game, q: number | undefined, lost: number): number | undefined {
+  if (!unitsDecide(g) || q === undefined || !(q >= 0)) return undefined;
+  const C = UNITS.land.label;
+  return Math.max(0, Math.min(lost, Math.round(lost * Math.min(C.cap, C.share * q))));
+}
+
+/**
+ * Every prisoner a battle took, as its cards say it: those taken in the pursuit, with no way out or in the town
+ * (prisoners), and those of the fight's own losses the capture label booked (captured, Units decide only). The cards'
+ * count of men lost never reads this: the label's prisoners are already in defLost, so the loss stays defLost +
+ * prisoners (monthcard.ts). Off, the report's prisoners, as today. One helper for the campaign's report card, the month
+ * card and the field's after card.
+ */
+export const prisonersOf = (r: Pick<BattleReport, 'prisoners' | 'captured'>): number => r.prisoners + (r.captured ?? 0);
 
 // ---- The staff's sight and way, and the card (DD 24 Nov 15:53Z, #2 form Part 1 section 5 and 'On the card'; rulings
 // (1) and (14) amended) -------------------------------------------------------------------------------------------------

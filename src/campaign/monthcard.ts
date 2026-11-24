@@ -47,6 +47,7 @@ import { menRules, raisable } from './manpower';
 import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 import { seaSaid, seaWhere } from './sea-words';
+import { prisonersOf } from './units';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
 /** The eight pictures both builds have (art-director/raid-card/targets). */
@@ -554,7 +555,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const forTown = !!(r.town || r.siege || r.gates || r.relief || r.sally);
     const place = forTown && reg ? townName(reg) : r.regionName;
     const us = att ? r.attackers : r.defenders;
-    // (The defender's loss is his dead and wounded and the men taken prisoner.)
+    // (The defender's loss is his dead and wounded and the men taken prisoner. Under Units decide the capture label's
+    // prisoners, the report's captured, are already among the dead and wounded (defLost), so they are never added here:
+    // the words below name them with the rest through prisonersOf.)
     const oursLost = att ? r.attLost : r.defLost + r.prisoners, theirsLost = att ? r.defLost + r.prisoners : r.attLost;
     const corps = us.filter((u) => !u.guard).length;
     // A siege laid is the field won and the town still to take: good news for the besieger, a warning to the besieged.
@@ -627,14 +630,14 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     } else if (att) {
       row.tag = r.taken ? 'WON' : 'LOST'; row.tone = r.taken ? 'good' : 'bad';
       row.line = r.taken
-        ? (r.gates ? 'The town opened its gates.' : forTown ? `${count(corps)} corps stormed the town.` : r.prisoners >= 1000 ? `${count(corps)} corps took it, with ${num(r.prisoners)} prisoners.` : `${count(corps)} corps took the province.`)
+        ? (r.gates ? 'The town opened its gates.' : forTown ? `${count(corps)} corps stormed the town.` : prisonersOf(r) >= 1000 ? `${count(corps)} corps took it, with ${num(prisonersOf(r))} prisoners.` : `${count(corps)} corps took the province.`)
         : (forTown ? 'The assault on the town was thrown back.' : 'The attack was thrown back.');
       row.head = r.taken ? `${place} is taken` : `The attack on ${place} is thrown back`;
-      row.follows = r.taken ? worth(false) || (r.prisoners > 0 ? `${num(r.prisoners)} prisoners were taken.` : 'The front moves forward.') : `The attack gained no ground${r.works ? `, and their works still stand` : ''}.`;
+      row.follows = r.taken ? worth(false) || (prisonersOf(r) > 0 ? `${num(prisonersOf(r))} prisoners were taken.` : 'The front moves forward.') : `The attack gained no ground${r.works ? `, and their works still stand` : ''}.`;
     } else {
       row.tag = r.taken ? 'LOST' : 'HELD'; row.tone = r.taken ? 'bad' : 'good';
       row.line = r.taken
-        ? (r.gates ? 'The town opened its gates to them.' : forTown ? 'The town fell to assault.' : r.prisoners >= 1000 ? `The line broke: ${num(r.prisoners)} men taken prisoner.` : 'The line broke and the province is lost.')
+        ? (r.gates ? 'The town opened its gates to them.' : forTown ? 'The town fell to assault.' : prisonersOf(r) >= 1000 ? `The line broke: ${num(prisonersOf(r))} men taken prisoner.` : 'The line broke and the province is lost.')
         : (forTown ? 'An assault on the town was thrown back.' : `${an(g.nations[r.attNat]?.adj ?? 'enemy')} attack was thrown back.`);
       row.head = r.taken ? `${place} is lost` : `${place} holds`;
       row.follows = r.taken ? worth(true) || 'The front falls back.' : 'The line holds where it stood.';

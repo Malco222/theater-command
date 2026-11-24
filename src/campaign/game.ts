@@ -41,7 +41,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import pursuitData from '../../data/campaign/pursuit.json';
-import { armyTraining, attackCommand, blitzGate, causeLines, commandOf, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
+import { armyTraining, attackCommand, blitzGate, capturedOf, causeLines, commandOf, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -1336,6 +1336,12 @@ export interface Assessment {
    * multiplier on the defence (dug in, and the works' share of the machine guns). Unset off, and for guns overrun.
    */
   read?: StaffRead;
+  /**
+   * Units decide only: the attack's per-man attack worth over the defence's per-man defence worth (the form's q, as in
+   * read), for the capture label (units.ts capturedOf; #2 form Part 1 section 7), which books it for every battle
+   * fought, guns overrun too. Unset off.
+   */
+  q?: number;
 }
 
 /** What a staff that counts men leaves out of the card (Units decide): see Assessment.read. */
@@ -2077,7 +2083,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art' || isTeam(c)) && defenders.every((c) => c.kind === 'art' || c.kind === 'eng' || isTeam(c));
   if (overrun) lines.push(GUNS_OVERRUN);
   if (overrun) dice = today;
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(eye && !overrun ? { read: { nat: attNat, q, wk } } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, ...(dice !== today ? { luck: today } : {}), prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(eye && !overrun ? { read: { nat: attNat, q, wk } } : {}), ...(eye ? { q } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -2798,6 +2804,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (relief) rep.relief = true;
   if (opts.sally) rep.sally = true;
   if (opts.breakout) rep.breakout = true;
+  // (Units decide, the capture label: of the defence's men lost in the fight, 0.148 x q are booked as prisoners, at most
+  // 0.9, in the report's own field. A split of the final men lost, read after the field's bill where the battle was fought
+  // on the field, so the card and the field's hand-back book it by this one line; it adds no man to the loss. DD 24 Nov
+  // 15:53Z, #2 form Part 1 section 7. Off, nothing.)
+  const captured = capturedOf(g, a.q, defLost);
+  if (captured !== undefined) rep.captured = captured;
   if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
   if (!win && !town && a.wear > 0) { rep.worn = Math.round(a.wear * 10) / 10; rep.works = Math.round(Math.max(0, a.works - a.wear) * 10) / 10; }
   // Who paid, and to what (the grand campaign): the result's line, as the attacker reads it and as the defender does.
