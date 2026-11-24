@@ -76,7 +76,9 @@ namespace LandHouse
 		uint64_t Key = 1; // its look: the stone's tone, the shutters' paint and which stand open, the chimneys, the damage's side
 		double Below = 2.2; // how far its plinth runs down below its floor (the ground falls away under it on a slope)
 		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these),
-		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1), 6 a village house (HtHouse)
+		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1), 6 a village house (HtHouse),
+		                  // 7 the east's log izba (Roof 0 planks, 1 thatch; Storeys, Hurt unread)
+		double Snow = 0.0; // the snow lying (LandField's cover, 0 to 1): an east house's roof built under its blanket of snow
 	};
 
 	struct Levels

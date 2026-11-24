@@ -5923,7 +5923,9 @@ namespace LandHouse
 				double Zt = 3.1, Zg = 3.0; // the long walls' top and the gables' last log's crown
 				double Xr = 4.0, Se = 3.5, Qe = 4.6; // the roof's half-length, its eaves out from the ridge across and down its slope
 				double Chx = -0.6;
-				Col Log, LogEnd, Paint, Carve, Shutter, Plank, Thatch, Brick, Stone, Glass, Sky, Door, Dark;
+				Col Log, LogEnd, Paint, Carve, Shutter, Mark, Bare, Plank, Thatch, Brick, Stone, Glass, Sky, Door, Dark;
+				double Snow = 0.0; // the snow lying on its roof, 0 to 1 (Spec's, eased)
+				bool bBareShut = false; // its shutters bare wood
 				std::vector<Gap> Gaps;
 			};
 
@@ -5995,17 +5997,28 @@ namespace LandHouse
 				P.Qe = P.Se / P.CosP;
 				P.Xr = P.A + P.R + P.Ext + P.OvG;
 				P.Chx = -0.25 * P.A + 0.3 * (Rg.Next() - 0.5);
-				// Its colours: the logs grey-brown, weathered silver on some, browner on others; the carved frames white (most),
-				// pale or deep blue, or ochre; the shutters blue, green, oxblood, ochre or white; the planks silver-grey.
+				// Its colours: the logs grey-brown, weathered silver on some, browner on others. Its paint one colour a house,
+				// years old, gone dull and chalky (a third of the way to chalk): a faded blue, white, a faded green or an
+				// ochre-red; the carving's small cut accents white on a coloured frame, bare wood on a white one; the shutters
+				// bare wood, white, or the frames' colour, each with its diamond in the other (art director, 24 Nov: no
+				// yellow with blue, no new paint). The planks silver-grey; the grey wood the paint flakes to.
 				const double UWood = Rg.Next(), UPaint = Rg.Next(), UShut = Rg.Next();
 				P.Log = UWood < 0.4 ? Rgb(118, 110, 98) : UWood < 0.75 ? Rgb(110, 98, 84) : Rgb(100, 84, 66);
 				P.LogEnd = Mixed(P.Log, Rgb(176, 160, 132), 0.55);
-				P.Paint = UPaint < 0.6 ? Rgb(222, 218, 206) : UPaint < 0.78 ? Rgb(150, 180, 196) : UPaint < 0.9 ? Rgb(74, 118, 150) : Rgb(196, 166, 92);
-				P.Carve = UPaint < 0.6 ? Rgb(70, 112, 134) : Rgb(226, 222, 210);
-				P.Shutter = UShut < 0.35 ? Rgb(70, 118, 134) : UShut < 0.55 ? Rgb(72, 108, 76) : UShut < 0.72 ? Rgb(118, 58, 44) : UShut < 0.86 ? Rgb(190, 160, 86) : Rgb(214, 210, 198);
+				const Col Chalk = Rgb(180, 178, 170);
+				const Col White = Mixed(Rgb(214, 210, 198), Chalk, 0.25);
+				P.Bare = Rgb(124, 118, 106);
+				const bool bWhite = UPaint >= 0.34 && UPaint < 0.58;
+				P.Paint = bWhite ? White : Mixed(UPaint < 0.34 ? Rgb(96, 128, 150) : UPaint < 0.8 ? Rgb(98, 126, 94) : Rgb(140, 72, 52), Chalk, 0.35);
+				P.Carve = bWhite ? P.Bare : White;
+				P.Shutter = UShut < 0.4 ? Rgb(128, 120, 106) : UShut < 0.65 ? White : P.Paint;
+				P.bBareShut = UShut < 0.4;
+				P.Mark = UShut < 0.4 ? P.Paint : bWhite ? P.Bare : UShut < 0.65 ? P.Paint : White;
 				P.Plank = Rgb(112, 107, 98);
 				const double UThatch = Rg.Next(), UBrick = Rg.Next();
-				P.Thatch = UThatch < 0.5 ? Rgb(134, 118, 90) : UThatch < 0.8 ? Rgb(122, 112, 94) : Rgb(146, 126, 88); // (old grey-brown, greyer, newer)
+				// (aged rye straw, grey-brown: old, greyer, newer; the art director's 95 to 115 lit on its sunny slope)
+				P.Thatch = UThatch < 0.5 ? Rgb(96, 90, 78) : UThatch < 0.8 ? Rgb(90, 88, 82) : Rgb(102, 92, 76);
+				P.Snow = Smooth(0.03, 0.5, S.Snow);
 				P.Brick = UBrick < 0.55 ? Rgb(128, 80, 64) : Rgb(198, 194, 184); // (bare old brick, or limewashed)
 				P.Stone = Rgb(124, 118, 108);
 				P.Glass = Rgb(30, 34, 38);
@@ -6066,6 +6079,29 @@ namespace LandHouse
 				return P;
 			}
 
+			/** Paint worn by the years: flaked back toward the grey wood under it, the more the lower and wetter the piece
+			 * (Low, 0 to 1), each piece its own. */
+			Col Worn(const Plan& P, const Col& C, double Low, uint64_t Seed) { return Mixed(C, P.Bare, std::clamp(Low * (0.35 + 0.4 * Unit(Seed)), 0.0, 0.8)); }
+			/** Flakes of paint gone to the wood: N small ragged patches on a painted face (wall W, across U0..U1, up Z0..Z1, D out),
+			 * the more toward its foot. */
+			void Flakes(Pen& B, const Plan& P, const Wall& W, double U0, double U1, double Z0, double Z1, double D, int N, uint64_t Seed)
+			{
+				Rng Rf(Seed);
+				for (int K = 0; K < N; ++K)
+				{
+					const double Uc = Rf.Range(U0 + 0.02, U1 - 0.02), Lo = Rf.Next(), Zc = Z0 + 0.02 + (Z1 - Z0 - 0.04) * Lo * Lo, Rr = Rf.Range(0.012, 0.035);
+					const Col C = Varied(P.Bare, Rf.Range(0.88, 1.06), 0.0);
+					const uint32_t Cn = B.Vert(On(W, Uc, Zc, D), W.N, C);
+					std::vector<uint32_t> Rim;
+					for (int J = 0; J < 6; ++J)
+					{
+						const double Th = 2.0 * Pi * J / 6, Rj = Rr * Rf.Range(0.55, 1.3);
+						Rim.push_back(B.Vert(On(W, Uc + 1.4 * Rj * std::cos(Th), Zc + Rj * std::sin(Th), D), W.N, C));
+					}
+					for (size_t J = 0; J < 6; ++J) B.Tri(Cn, Rim[J], Rim[(J + 1) % 6], W.N);
+				}
+			}
+
 			/** A point on the roof's top: along its length X, down its slope Q from the ridge, Lift off it, on side Sd. */
 			V3 RoofAt(const Plan& P, int Sd, double X, double Q, double Lift)
 			{
@@ -6079,10 +6115,12 @@ namespace LandHouse
 			 * eaves, moss in patches, more on the back, a newer patch here and there). */
 			Col StrawCol(const Plan& P, int Sd, double X, double Q)
 			{
-				Col C = Scaled(P.Thatch, 0.9 + 0.2 * Noise01(X / 0.35, Q / 0.25, P.S.Key ^ 0x57A0));
-				C = Mixed(C, Rgb(110, 102, 88), 0.3 * Smooth(0.3 * P.Qe, P.Qe, Q));
-				C = Mixed(C, Rgb(92, 98, 70), (Sd < 0 ? 0.35 : 0.15) * Smooth(0.62, 0.85, Noise01(X / 1.1, Q / 0.9, P.S.Key ^ 0x57A1)));
-				return Mixed(C, Rgb(150, 132, 98), 0.25 * Smooth(0.72, 0.9, Noise01(X / 0.8, Q / 0.6, P.S.Key ^ 0x57A2)));
+				// (combed straw: its lines down the slope each a little paler or darker; broad weathering over them)
+				Col C = Scaled(P.Thatch, 0.92 + 0.14 * Noise01(X / 0.05, Q / 0.9, P.S.Key ^ 0x57A0));
+				C = Scaled(C, 0.94 + 0.1 * Noise01(X / 0.9, Q / 0.7, P.S.Key ^ 0x57A5));
+				C = Mixed(C, Rgb(124, 116, 102), 0.25 * Smooth(0.3 * P.Qe, P.Qe, Q));
+				C = Mixed(C, Rgb(80, 88, 60), (Sd < 0 ? 0.45 : 0.12) * Smooth(0.6, 0.82, Noise01(X / 1.1, Q / 0.9, P.S.Key ^ 0x57A1)));
+				return Mixed(C, Rgb(170, 150, 110), 0.2 * Smooth(0.72, 0.9, Noise01(X / 0.8, Q / 0.6, P.S.Key ^ 0x57A2)));
 			}
 			/** A roof plank's colour at a place on it: its own C, grained, lichen and moss in patches, darker to the eaves. */
 			Col PlankCol(const Plan& P, int Sd, const Col& C, uint64_t Seed, double Xp, double Q)
@@ -6415,8 +6453,8 @@ namespace LandHouse
 				// (its carved frame on the logs: the side boards, the frieze and its cornice, the pediment with its diamond, the
 				// sill and the apron under it with its scallops)
 				const double Fd = F + 0.012, Sw = bAttic ? 0.09 : 0.12;
-				WBox(B, W, U0 - 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Pt);
-				WBox(B, W, U1 + 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Pt);
+				WBox(B, W, U0 - 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Worn(P, Pt, 0.3, Seed ^ 0xF1));
+				WBox(B, W, U1 + 0.5 * Sw, 0.5 * (Z0 + Z1), Fd, 0.5 * Sw, 0.013, 0.5 * (Z1 - Z0) + 0.03, Worn(P, Pt, 0.3, Seed ^ 0xF2));
 				const double Fh = bAttic ? 0.1 : 0.15, Ew = bAttic ? 0.12 : 0.2;
 				WBox(B, W, G.U, Z1 + 0.03 + 0.5 * Fh, Fd + 0.004, 0.5 * G.W + Ew, 0.015, 0.5 * Fh, Pt);
 				// (the frieze's carving: a band of small diamonds in the other paint)
@@ -6447,21 +6485,23 @@ namespace LandHouse
 				// (the pediment's own little cornice along its rakes, a ridge of paint)
 				WBox(B, W, G.U - 0.5 * (Cw - 0.04), Pz + 0.5 * Ph, Fd + 0.03, 0.5 * (Cw - 0.04) + 0.02, 0.02, 0.01, Scaled(Pt, 0.95), 4);
 				if (bAttic) return;
-				// sill, apron, scallops
-				WBox(B, W, G.U, Z0 - 0.018, F + 0.035, 0.5 * G.W + 0.1, 0.05, 0.018, Scaled(Pt, 1.03), 0);
+				// sill, apron, scallops (the paint flaked most from the sill, where the wet lies, and the apron under it)
+				WBox(B, W, G.U, Z0 - 0.018, F + 0.035, 0.5 * G.W + 0.1, 0.05, 0.018, Worn(P, Pt, 1.0, Seed ^ 0xF3), 0);
 				const double Ah = 0.12;
-				WBox(B, W, G.U, Z0 - 0.036 - 0.5 * Ah, Fd, 0.5 * G.W + Sw, 0.013, 0.5 * Ah, Pt);
+				const Col Ap = Worn(P, Pt, 0.7, Seed ^ 0xF4);
+				WBox(B, W, G.U, Z0 - 0.036 - 0.5 * Ah, Fd, 0.5 * G.W + Sw, 0.013, 0.5 * Ah, Ap);
+				Flakes(B, P, W, U0 - Sw, U1 + Sw, Z0 - 0.036 - Ah, Z0 - 0.036, Fd + 0.0135, 3, Seed ^ 0xF5);
 				const int NS = 4;
 				for (int K = 0; K < NS; ++K)
 				{
 					const double Ua = U0 - Sw + (G.W + 2.0 * Sw) * K / NS, Ub = U0 - Sw + (G.W + 2.0 * Sw) * (K + 1) / NS, Um = 0.5 * (Ua + Ub);
 					const double Zb = Z0 - 0.036 - Ah, Lr = 0.5 * (Ub - Ua);
-					const uint32_t Cn = B.Vert(On(W, Um, Zb, Fd + 0.013), W.N, Pt);
+					const uint32_t Cn = B.Vert(On(W, Um, Zb, Fd + 0.013), W.N, Ap);
 					std::vector<uint32_t> Rim;
 					for (int J = 0; J <= 4; ++J)
 					{
 						const double Th = Pi * J / 4;
-						Rim.push_back(B.Vert(On(W, Um - Lr * std::cos(Th), Zb - 0.55 * Lr * std::sin(Th), Fd + 0.013), W.N, Pt));
+						Rim.push_back(B.Vert(On(W, Um - Lr * std::cos(Th), Zb - 0.55 * Lr * std::sin(Th), Fd + 0.013), W.N, Ap));
 					}
 					for (int J = 0; J < 4; ++J) B.Tri(Cn, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], W.N);
 				}
@@ -6476,11 +6516,14 @@ namespace LandHouse
 					if (G.bShut) Um = G.U + Side * 0.5 * Lw, Dd = F + 0.03;
 					else Um = (Side < 0 ? U0 - Sw - 0.5 * Lw : U1 + Sw + 0.5 * Lw);
 					const double Zm = 0.5 * (Z0 + Z1);
-					WBox(B, W, Um, Zm, Dd, 0.5 * Lw - 0.004, 0.012, 0.5 * Lh, Sc);
-					WBox(B, W, Um, Zm + 0.5 * Lh - 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Sc, 0.9));
-					WBox(B, W, Um, Zm - 0.5 * Lh + 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Sc, 0.9));
+					const uint64_t Sh = Seed ^ (Side < 0 ? 0x5A0 : 0x5A1);
+					WBox(B, W, Um, Zm, Dd, 0.5 * Lw - 0.004, 0.012, 0.5 * Lh, Worn(P, Sc, 0.25, Sh));
+					WBox(B, W, Um, Zm + 0.5 * Lh - 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Worn(P, Sc, 0.3, Sh ^ 1), 0.9));
+					WBox(B, W, Um, Zm - 0.5 * Lh + 0.04, Dd + 0.014, 0.5 * Lw - 0.004, 0.005, 0.03, Scaled(Worn(P, Sc, 0.9, Sh ^ 2), 0.9));
 					const double Rd = 0.32 * Lw;
-					B.Quad1(On(W, Um - Rd, Zm, Dd + 0.0125), On(W, Um, Zm - 1.5 * Rd, Dd + 0.0125), On(W, Um + Rd, Zm, Dd + 0.0125), On(W, Um, Zm + 1.5 * Rd, Dd + 0.0125), Pt, W.N);
+					B.Quad1(On(W, Um - Rd, Zm, Dd + 0.0125), On(W, Um, Zm - 1.5 * Rd, Dd + 0.0125), On(W, Um + Rd, Zm, Dd + 0.0125), On(W, Um, Zm + 1.5 * Rd, Dd + 0.0125), Worn(P, P.Mark, 0.2, Sh ^ 3), W.N);
+					// (a painted shutter's paint flaked to the wood here and there, most toward its foot)
+					if (!P.bBareShut) Flakes(B, P, W, Um - 0.5 * Lw, Um + 0.5 * Lw, Zm - 0.5 * Lh + 0.08, Zm - 0.1 * Lh, Dd + 0.0135, 3, Sh ^ 4);
 					const double Hu = G.bShut ? G.U + Side * (Lw - 0.08) : (Side < 0 ? U0 - Sw - 0.08 : U1 + Sw + 0.08);
 					for (double Zh : { Z0 + 0.12, Z1 - 0.12 })
 						WBox(B, W, 0.5 * (Hu + Um), Zh, Dd + 0.015, 0.5 * std::fabs(Um - Hu) + 0.04, 0.004, 0.012, Rgb(40, 38, 36));
@@ -6646,6 +6689,47 @@ namespace LandHouse
 				if (At) Window(B, P, *At, Seed ^ 0xA77);
 			}
 
+			/** A folk sun rosette cut in a board (facing N, Sd its sideways): a ring, and six petals inside it, each a lens
+			 * from the middle to the ring, as drawn with compasses; Rr the ring's outer radius. */
+			void Rosette(Pen& B, V3 O, V3 N, V3 Sd, double Rr, const Col& C, const Col& Ground)
+			{
+				const V3 Upw = Cross(N, Sd) * (Dot(Cross(N, Sd), Up) < 0.0 ? -1.0 : 1.0);
+				auto At = [&](double A, double R) { return O + Sd * (R * std::cos(A)) + Upw * (R * std::sin(A)); };
+				const int NR = 18;
+				const double Ri = 0.8 * Rr;
+				for (int J = 0; J < NR; ++J)
+				{
+					const double A0 = 2.0 * Pi * J / NR, A1 = 2.0 * Pi * (J + 1) / NR;
+					B.Quad1(At(A0, Ri), At(A1, Ri), At(A1, Rr), At(A0, Rr), C, N);
+				}
+				const double Pr = 0.74 * Rr;
+				for (int K = 0; K < 6; ++K)
+				{
+					const double A = Pi / 2.0 + Pi * K / 3.0;
+					// (a petal: the lens between two arcs, its tips at the middle and at the ring; four steps along it)
+					const V3 Ax = Sd * std::cos(A) + Upw * std::sin(A), Ac = Sd * -std::sin(A) + Upw * std::cos(A);
+					const uint32_t T0 = B.Vert(O + N * 0.001, N, C), T1 = B.Vert(O + Ax * Pr + N * 0.001, N, C);
+					uint32_t L[3], R[3];
+					for (int J = 0; J < 3; ++J)
+					{
+						const double T = (J + 1) / 4.0, W = 0.36 * Pr * std::pow(std::sin(Pi * T), 0.7);
+						L[J] = B.Vert(O + Ax * (Pr * T) + Ac * W + N * 0.001, N, C);
+						R[J] = B.Vert(O + Ax * (Pr * T) - Ac * W + N * 0.001, N, C);
+					}
+					B.Tri(T0, L[0], R[0], N);
+					for (int J = 0; J < 2; ++J)
+					{
+						B.Tri(L[J], R[J], R[J + 1], N);
+						B.Tri(L[J], R[J + 1], L[J + 1], N);
+					}
+					B.Tri(L[2], R[2], T1, N);
+				}
+				// (its middle: a round boss, the board's paint)
+				const uint32_t Bc = B.Vert(O + N * 0.002, N, Ground);
+				for (int J = 0; J < 8; ++J)
+					B.Tri(Bc, B.Vert(At(2.0 * Pi * J / 8, 0.13 * Rr) + N * 0.002, N, Ground), B.Vert(At(2.0 * Pi * (J + 1) / 8, 0.13 * Rr) + N * 0.002, N, Ground), N);
+			}
+
 			/** The barge boards along a gable's two rakes (carved teeth along their feet) and the towel board at its apex. */
 			void Barge(Pen& B, const Plan& P, int End)
 			{
@@ -6674,15 +6758,8 @@ namespace LandHouse
 					const double Ya = P.Yc - Tw + 2.0 * Tw * K / 3.0, Yb = P.Yc - Tw + 2.0 * Tw * (K + 1) / 3.0;
 					B.Tri1(V3{ Ap.X + End * 0.017, Ya, Ap.Z - Tl }, V3{ Ap.X + End * 0.017, Yb, Ap.Z - Tl }, V3{ Ap.X + End * 0.017, 0.5 * (Ya + Yb), Ap.Z - Tl - 0.09 }, P.Paint, Nx);
 				}
-				const V3 Sun = Ap + V3{ End * 0.018, 0.0, -0.42 };
-				const uint32_t Cn = B.Vert(Sun, Nx, P.Carve);
-				std::vector<uint32_t> Rim;
-				for (int J = 0; J <= 12; ++J)
-				{
-					const double Th = 2.0 * Pi * J / 12, Rr = (J % 2 ? 0.07 : 0.1);
-					Rim.push_back(B.Vert(Sun + V3{ 0.0, Rr * std::cos(Th), Rr * std::sin(Th) }, Nx, P.Carve));
-				}
-				for (int J = 0; J < 12; ++J) B.Tri(Cn, Rim[static_cast<size_t>(J)], Rim[static_cast<size_t>(J) + 1], Nx);
+				// (the sun: a folk rosette, six petals in a ring, cut in; never a star)
+				Rosette(B, Ap + V3{ End * 0.018, 0.0, -0.42 }, Nx, V3{ 0.0, 1.0, 0.0 }, 0.1, P.Carve, P.Paint);
 			}
 
 			/** The roof of planks: two layers, the upper's over the lower's joints and standing proud, each plank warped a
@@ -6771,62 +6848,116 @@ namespace LandHouse
 			 * poles; its verges at the gables rolled thick. */
 			void Thatch(Pen& B, const Plan& P)
 			{
-				const double Step = 0.34, Cell = 0.3, Lip = 0.045;
-				const int NQ = static_cast<int>(std::ceil(P.Qe / Step)), NX = static_cast<int>(std::ceil(2.0 * P.Xr / Cell));
+				// Aged rye straw combed down the slope, each course's butts barely proud of the next; the eaves cut in a clean
+				// line, their top rounded over into the cut; the verges rolled round (art director, 24 Nov: soft, never slabs).
+				const double Step = 0.3, Cell = 0.15, Lip = 0.016, Rl = 0.12; // a course; a cell across; a butt's rise; the rolls' radius
+				const double Qt = P.Qe - Rl, Xt = P.Xr - Rl;                  // where the top runs out into the rolls
+				const int NQ = static_cast<int>(std::ceil(Qt / Step)), NX = static_cast<int>(std::ceil(2.0 * Xt / Cell)), NE = 3, NB = 3;
+				const double Ae = 0.5 * Pi - std::atan2(P.SinP, P.CosP); // (the eaves' roll: from the slope's normal round to the level)
+				const double Qw = (P.Bh + P.R) / P.CosP;                  // (the underside back to the wall)
+				// (the butts' rise dies away toward the verges, the roll round them smooth)
+				auto Lift = [&](double X, double Q, double Fr) { return 0.01 * Noise(X / 0.4, Q / 0.3, P.S.Key ^ 0x57A3) + Lip * Fr * Smooth(Xt, Xt - 0.35, std::fabs(X)); };
 				for (int Sd = -1; Sd <= 1; Sd += 2)
 				{
-					const V3 Nr = RoofN(P, Sd);
+					const V3 Nr = RoofN(P, Sd), Dn{ 0.0, Sd * P.CosP, -P.SinP }, Ho{ 0.0, static_cast<double>(Sd), 0.0 };
+					const V3 R0 = RoofAt(P, Sd, 0.0, 0.0, 0.0);
 					auto Straw = [&](double X, double Q) { return StrawCol(P, Sd, X, Q); };
-					auto Ragged = [&](double X, double Q) { return 0.035 * Noise(X / 0.3, Q / 0.3, P.S.Key ^ 0x57A3); };
+					// (how far straight down from a point to the underside)
+					auto Drop = [&](V3 E) { return (Dot(E - R0, Nr) + P.Thick) / P.CosP; };
+					auto Cut = [&](double X, double Z) { return Scaled(Mixed(Straw(X, P.Qe), Rgb(150, 136, 108), 0.3), 0.74 + 0.12 * Noise01(X / 0.05, Z / 0.4, P.S.Key ^ 0x57A6)); };
+					// (the top, course by course, each course's straws a little prouder toward its butt)
 					for (int I = 0; I < NQ; ++I)
 					{
-						const double Q0 = P.Qe * I / NQ, Q1 = P.Qe * (I + 1) / NQ;
+						const double Q0 = Qt * I / NQ, Q1 = Qt * (I + 1) / NQ, F1 = I + 1 < NQ ? 1.0 : 0.0;
 						for (int J = 0; J < NX; ++J)
 						{
-							const double X0 = -P.Xr + 2.0 * P.Xr * J / NX, X1 = -P.Xr + 2.0 * P.Xr * (J + 1) / NX;
-							const double L0 = Ragged(X0, Q0), L1 = Ragged(X1, Q0), L2 = Ragged(X1, Q1) + Lip, L3 = Ragged(X0, Q1) + Lip;
-							const V3 A0 = RoofAt(P, Sd, X0, Q0, L0), A1 = RoofAt(P, Sd, X1, Q0, L1), A2 = RoofAt(P, Sd, X1, Q1, L2), A3 = RoofAt(P, Sd, X0, Q1, L3);
-							B.Quad(A0, A1, A2, A3, Straw(X0, Q0), Straw(X1, Q0), Scaled(Straw(X1, Q1), 1.05), Scaled(Straw(X0, Q1), 1.05), Nr);
-							// (the course's butt ends, a lip down to the next)
+							const double X0 = -Xt + 2.0 * Xt * J / NX, X1 = -Xt + 2.0 * Xt * (J + 1) / NX;
+							const V3 A0 = RoofAt(P, Sd, X0, Q0, Lift(X0, Q0, 0.0)), A1 = RoofAt(P, Sd, X1, Q0, Lift(X1, Q0, 0.0));
+							const V3 A2 = RoofAt(P, Sd, X1, Q1, Lift(X1, Q1, F1)), A3 = RoofAt(P, Sd, X0, Q1, Lift(X0, Q1, F1));
+							B.Quad(A0, A1, A2, A3, Straw(X0, Q0), Straw(X1, Q0), Straw(X1, Q1), Straw(X0, Q1), Nr);
 							if (I + 1 < NQ)
 							{
-								const V3 B2 = RoofAt(P, Sd, X1, Q1, Ragged(X1, Q1)), B3 = RoofAt(P, Sd, X0, Q1, Ragged(X0, Q1));
-								B.Quad1(A3, A2, B2, B3, Mixed(Straw(X0, Q1), Rgb(168, 150, 112), 0.25), V3{ 0.0, Sd * P.CosP, -P.SinP });
+								const V3 B2 = RoofAt(P, Sd, X1, Q1, Lift(X1, Q1, 0.0)), B3 = RoofAt(P, Sd, X0, Q1, Lift(X0, Q1, 0.0));
+								const Col Ca = Scaled(Straw(X0, Q1), 0.84), Cb = Scaled(Straw(X1, Q1), 0.84);
+								B.Quad(A3, A2, B2, B3, Ca, Cb, Cb, Ca, Dn);
 							}
-							// (its straws: wisps lying down the slope, paler and darker, some loose)
-							Rng Rt(Hash(P.S.Key ^ 0x7F7, static_cast<uint64_t>((I * 64 + J) * 2 + (Sd > 0))));
-							for (int K = 0; K < 4; ++K)
+							// (its straws combed down: long thin wisps lying along the slope, paler and darker)
+							Rng Rt(Hash(P.S.Key ^ 0x7F7, static_cast<uint64_t>((I * 128 + J) * 2 + (Sd > 0))));
+							for (int K = 0; K < 2; ++K)
 							{
-								const double Xt = Rt.Range(X0, X1), Qt = Rt.Range(Q0 - 0.1 * Step, Q1 - 0.3 * Step);
-								const double Ln = Rt.Range(0.18, 0.36), Wd = Rt.Range(0.012, 0.03), Lt = Ragged(Xt, Qt) + 0.012 + Lip * (Qt - Q0) / Step;
-								const V3 Bt = RoofAt(P, Sd, Xt, Qt, Lt);
-								const double Dx = Rt.Range(-0.04, 0.04), Dl = Rt.Range(0.0, 0.05), Pale = Rt.Range(0.0, 0.35), Tone = Rt.Range(0.78, 1.12);
-								const V3 Tt = RoofAt(P, Sd, Xt + Dx, Qt + Ln, Lt + Dl);
-								B.Tri1(Bt + V3{ -Wd, 0.0, 0.0 }, Bt + V3{ Wd, 0.0, 0.0 }, Tt, Scaled(Mixed(Straw(Xt, Qt), Rgb(176, 156, 114), Pale), Tone), Nr);
+								const double Xs = Rt.Range(X0, X1), Qs = Rt.Range(Q0, Q1 - 0.08), Ln = Rt.Range(0.12, 0.3), Wd = Rt.Range(0.006, 0.013);
+								const double Dx = Rt.Range(-0.02, 0.02), Pale = Rt.Range(0.0, 0.4), Tone = Rt.Range(0.8, 1.1);
+								const double Qf = std::min(Q1 - 0.01, Qs + Ln);
+								const V3 Bt = RoofAt(P, Sd, Xs, Qs, Lift(Xs, Qs, F1 * (Qs - Q0) / (Q1 - Q0)) + 0.004);
+								const V3 Tt = RoofAt(P, Sd, Xs + Dx, Qf, Lift(Xs + Dx, Qf, F1 * (Qf - Q0) / (Q1 - Q0)) + 0.004);
+								B.Tri1(Bt + V3{ -Wd, 0.0, 0.0 }, Bt + V3{ Wd, 0.0, 0.0 }, Tt, Scaled(Mixed(Straw(Xs, Qs), Rgb(178, 160, 124), Pale), Tone), Nr);
 							}
 						}
 					}
-					// (the eave: the thatch's thickness, its foot ragged with straws hanging)
-					for (int J = 0; J < NX * 2; ++J)
+					// (the eaves: the top rolled over into the cut, the cut straight down to a clean foot, the underside dark)
+					for (int J = 0; J < NX; ++J)
 					{
-						const double X0 = -P.Xr + P.Xr * J / NX, X1 = -P.Xr + P.Xr * (J + 1) / NX;
-						const V3 A0 = RoofAt(P, Sd, X0, P.Qe, Ragged(X0, P.Qe)), A1 = RoofAt(P, Sd, X1, P.Qe, Ragged(X1, P.Qe));
-						const V3 Dn{ 0.0, 0.0, -0.28 };
-						const V3 B0 = A0 + Dn + V3{ 0.0, -Sd * 0.1, 0.0 }, B1 = A1 + Dn + V3{ 0.0, -Sd * 0.1, 0.0 };
-						B.Quad1(A0, A1, B1, B0, Scaled(Straw(X0, P.Qe), 0.66), V3{ 0.0, static_cast<double>(Sd), -0.3 });
-						const double Hang = 0.06 + 0.1 * Noise01(X0 / 0.2, 7.0, P.S.Key ^ 0x57A4);
-						B.Tri1(B0, B1, (B0 + B1) * 0.5 + V3{ 0.0, 0.0, -Hang }, Scaled(Straw(X0, P.Qe), 0.6), V3{ 0.0, static_cast<double>(Sd), 0.0 });
-						B.Quad1(B0, B1, RoofAt(P, Sd, X1, (P.Bh + P.R) / P.CosP, -P.Thick), RoofAt(P, Sd, X0, (P.Bh + P.R) / P.CosP, -P.Thick), Rgb(58, 52, 44), Nr * -1.0);
+						const double Xa = -Xt + 2.0 * Xt * J / NX, Xb = -Xt + 2.0 * Xt * (J + 1) / NX;
+						const V3 Ca = RoofAt(P, Sd, Xa, Qt, Lift(Xa, Qt, 0.0)) - Nr * Rl, Cb = RoofAt(P, Sd, Xb, Qt, Lift(Xb, Qt, 0.0)) - Nr * Rl;
+						for (int K = 0; K < NE; ++K)
+						{
+							const double An0 = Ae * K / NE, An1 = Ae * (K + 1) / NE;
+							const V3 D0 = Nr * std::cos(An0) + Dn * std::sin(An0), D1 = Nr * std::cos(An1) + Dn * std::sin(An1);
+							const Col Sa = Mixed(Straw(Xa, P.Qe), Cut(Xa, 0.0), static_cast<double>(K + 1) / NE), Sb = Mixed(Straw(Xb, P.Qe), Cut(Xb, 0.0), static_cast<double>(K + 1) / NE);
+							B.Quad(Ca + D0 * Rl, Cb + D0 * Rl, Cb + D1 * Rl, Ca + D1 * Rl, Sa, Sb, Sb, Sa, (D0 + D1) * 0.5);
+						}
+						const V3 Ea = Ca + Ho * Rl, Eb = Cb + Ho * Rl, Fa = Ea - Up * Drop(Ea), Fb = Eb - Up * Drop(Eb);
+						B.Quad(Ea, Eb, Fb, Fa, Cut(Xa, Ea.Z), Cut(Xb, Eb.Z), Scaled(Cut(Xb, Fb.Z), 0.8), Scaled(Cut(Xa, Fa.Z), 0.8), Ho);
+						B.Quad1(Fa, Fb, RoofAt(P, Sd, Xb, Qw, -P.Thick), RoofAt(P, Sd, Xa, Qw, -P.Thick), Rgb(58, 52, 44), Nr * -1.0);
 					}
-					// (the verges: the thatch rolled thick over each gable's edge)
+					// (the verges: the top rolled round over each gable's edge into a cut face along the rake, course by course)
 					for (int End = -1; End <= 1; End += 2)
+					{
+						const V3 Xh{ static_cast<double>(End), 0.0, 0.0 };
+						const double Xe = End * Xt;
+						auto Ring = [&](double Q, double Fr, std::vector<V3>& Out) {
+							Out.clear();
+							const V3 C = RoofAt(P, Sd, Xe, Q, Lift(Xe, Q, Fr)) - Nr * Rl;
+							for (int K = 0; K <= NB; ++K)
+							{
+								const double An = 0.5 * Pi * K / NB;
+								Out.push_back(C + (Nr * std::cos(An) + Xh * std::sin(An)) * Rl);
+							}
+						};
+						std::vector<V3> Ra, Rb;
 						for (int I = 0; I < NQ; ++I)
 						{
-							const double Q0 = P.Qe * I / NQ, Q1 = P.Qe * (I + 1) / NQ;
-							const V3 A0 = RoofAt(P, Sd, End * P.Xr, Q0, Ragged(End * P.Xr, Q0) + 0.6 * Lip), A1 = RoofAt(P, Sd, End * P.Xr, Q1, Ragged(End * P.Xr, Q1) + 0.6 * Lip);
-							B.Quad1(A0, A1, A1 + V3{ 0.0, 0.0, -0.3 }, A0 + V3{ 0.0, 0.0, -0.3 }, Scaled(Straw(End * P.Xr, Q0), 0.85), V3{ static_cast<double>(End), 0.0, 0.0 });
-							B.Quad1(A0 + V3{ 0.0, 0.0, -0.3 }, A1 + V3{ 0.0, 0.0, -0.3 }, A1 + V3{ -End * 0.5, 0.0, -0.3 }, A0 + V3{ -End * 0.5, 0.0, -0.3 }, Rgb(58, 52, 44), V3{ 0.0, 0.0, -1.0 });
+							const double Q0 = Qt * I / NQ, Q1 = Qt * (I + 1) / NQ, F1 = I + 1 < NQ ? 1.0 : 0.0;
+							Ring(Q0, 0.0, Ra);
+							Ring(Q1, F1, Rb);
+							const Col Sa = Straw(Xe, Q0), Sb = Straw(Xe, Q1);
+							for (int K = 0; K < NB; ++K)
+							{
+								const double An = 0.5 * Pi * (K + 0.5) / NB;
+								const double Kf = static_cast<double>(K + 1) / NB;
+								B.Quad(Ra[static_cast<size_t>(K)], Rb[static_cast<size_t>(K)], Rb[static_cast<size_t>(K) + 1], Ra[static_cast<size_t>(K) + 1], Sa, Sb, Scaled(Sb, 1.0 - 0.15 * Kf), Scaled(Sa, 1.0 - 0.15 * Kf), Nr * std::cos(An) + Xh * std::sin(An));
+							}
+							const V3 Ea = Ra.back(), Eb = Rb.back(), Fa = Ea - Up * Drop(Ea), Fb = Eb - Up * Drop(Eb);
+							B.Quad(Ea, Eb, Fb, Fa, Scaled(Sa, 0.8), Scaled(Sb, 0.8), Scaled(Sb, 0.66), Scaled(Sa, 0.66), Xh);
+							B.Quad1(Fa, Fb, Fb - Xh * (P.OvG + 0.06), Fa - Xh * (P.OvG + 0.06), Rgb(58, 52, 44), V3{ 0.0, 0.0, -1.0 });
 						}
+						// (the corner, where the eaves' roll and the verge's meet: a quarter of a ball, and its cut below)
+						const V3 C = RoofAt(P, Sd, Xe, Qt, Lift(Xe, Qt, 0.0)) - Nr * Rl;
+						auto Dir = [&](double A, double Bb) { return (Nr * std::cos(A) + Dn * std::sin(A)) * std::cos(Bb) + Xh * std::sin(Bb); };
+						for (int K = 0; K < NE; ++K)
+							for (int L = 0; L < NB; ++L)
+							{
+								const double A0 = Ae * K / NE, A1 = Ae * (K + 1) / NE, B0 = 0.5 * Pi * L / NB, B1 = 0.5 * Pi * (L + 1) / NB;
+								const Col Cc = Mixed(Straw(Xe, P.Qe), Cut(Xe, 0.0), (K + 0.5) / NE);
+								B.Quad1(C + Dir(A0, B0) * Rl, C + Dir(A1, B0) * Rl, C + Dir(A1, B1) * Rl, C + Dir(A0, B1) * Rl, Cc, Dir(0.5 * (A0 + A1), 0.5 * (B0 + B1)));
+							}
+						for (int L = 0; L < NB; ++L)
+						{
+							const double B0 = 0.5 * Pi * L / NB, B1 = 0.5 * Pi * (L + 1) / NB;
+							const V3 Ea = C + Dir(Ae, B0) * Rl, Eb = C + Dir(Ae, B1) * Rl, Fa = Ea - Up * Drop(Ea), Fb = Eb - Up * Drop(Eb);
+							B.Quad1(Ea, Eb, Fb, Fa, Cut(Xe, Ea.Z), Dir(Ae, 0.5 * (B0 + B1)));
+						}
+					}
 				}
 				// (the ridge: a roll of straw, and the crossed poles pegged over it)
 				{
@@ -6964,6 +7095,97 @@ namespace LandHouse
 						const double Ua = -Half + 2.0 * Half * K / NT, Ub = -Half + 2.0 * Half * (K + 1) / NT;
 						B.Tri1(On(W, Ua, Zb, P.R + 0.025), On(W, Ub, Zb, P.R + 0.025), On(W, 0.5 * (Ua + Ub), Zb - 0.07, P.R + 0.025), P.Paint, W.N);
 					}
+				}
+			}
+
+			/** The snow on the roof (Spec's Snow): a blanket over each slope, a little uneven, thinner toward the ridge where the
+			 * wind takes it and by the chimney's warmth; at the eaves it runs on a hand past them and curls over, rounded, at
+			 * the verges it rounds down onto the roof; over the ridge log or the straw roll a cap (the horse's head and the
+			 * poles stand out of it). Cell its grid's size: the near level's 0.25 m, the middle's a metre. */
+			void SnowCap(Pen& B, const Plan& P, double Cell)
+			{
+				if (P.Snow <= 0.0) return;
+				const double D0 = 0.06 + 0.12 * P.Snow, Base = P.bThatch ? 0.025 : 0.05, Over = 0.1, Xs = P.Xr - 0.02;
+				const V3 Ch{ P.Chx, P.Yc + 0.32, 0.0 };
+				const Col White = Rgb(236, 238, 242), Shade = Rgb(204, 210, 220);
+				auto Depth = [&](int Sd, double X, double Q) {
+					double D = D0 * (0.8 + 0.35 * Noise01(X / 1.4, Q / 1.1, P.S.Key ^ 0x5A0F));
+					D *= 0.55 + 0.45 * Smooth(0.0, 0.9, Q);
+					const V3 At = RoofAt(P, Sd, X, Q, 0.0);
+					return D * (0.2 + 0.8 * Smooth(0.3, 1.2, std::hypot(At.X - Ch.X, At.Y - Ch.Y)));
+				};
+				auto Tint = [&](double X, double Q) { return Mixed(White, Shade, 0.4 * Noise01(X / 0.6, Q / 0.5, P.S.Key ^ 0x5A10)); };
+				const int NX = std::max(2, static_cast<int>(std::ceil(2.0 * Xs / Cell))), NQ = std::max(2, static_cast<int>(std::ceil(P.Qe / Cell)));
+				const int NC = Cell < 0.5 ? 4 : 2; // (the eaves' curl, in steps)
+				const double Top = P.bThatch ? 0.27 : 0.23; // (over the straw roll, or the ridge log)
+				std::vector<V3> Ridge[2];
+				for (int Sd = -1; Sd <= 1; Sd += 2)
+				{
+					const V3 Nr = RoofN(P, Sd), Dn{ 0.0, Sd * P.CosP, -P.SinP };
+					// (its top: the slope's grid, and a row past the eaves)
+					std::vector<std::vector<V3>> G(static_cast<size_t>(NQ) + 2);
+					std::vector<double> Qs(static_cast<size_t>(NQ) + 2);
+					for (int I = 0; I <= NQ + 1; ++I)
+					{
+						const double Q = I <= NQ ? P.Qe * I / NQ : P.Qe + Over;
+						Qs[static_cast<size_t>(I)] = Q;
+						for (int J = 0; J <= NX; ++J)
+						{
+							const double X = -Xs + 2.0 * Xs * J / NX;
+							const double D = I <= NQ ? Depth(Sd, X, Q) : 0.85 * Depth(Sd, X, P.Qe);
+							G[static_cast<size_t>(I)].push_back(RoofAt(P, Sd, X, Q, Base + D));
+						}
+					}
+					for (int I = 0; I <= NQ; ++I)
+						for (int J = 0; J < NX; ++J)
+						{
+							const size_t Ii = static_cast<size_t>(I), Jj = static_cast<size_t>(J);
+							const double Xa = -Xs + 2.0 * Xs * J / NX, Xb = -Xs + 2.0 * Xs * (J + 1) / NX;
+							B.Quad(G[Ii][Jj], G[Ii][Jj + 1], G[Ii + 1][Jj + 1], G[Ii + 1][Jj], Tint(Xa, Qs[Ii]), Tint(Xb, Qs[Ii]), Tint(Xb, Qs[Ii + 1]), Tint(Xa, Qs[Ii + 1]), Nr);
+						}
+					Ridge[Sd > 0 ? 1 : 0] = G[0];
+					// (the eaves: the lip curled over and back under to the roof's edge)
+					const std::vector<V3>& E = G[static_cast<size_t>(NQ) + 1];
+					for (int J = 0; J < NX; ++J)
+					{
+						const size_t Jj = static_cast<size_t>(J);
+						const double Xa = -Xs + 2.0 * Xs * J / NX, Xb = -Xs + 2.0 * Xs * (J + 1) / NX;
+						const double Ra = 0.5 * (Dot(E[Jj] - RoofAt(P, Sd, Xa, P.Qe + Over, 0.0), Nr) - Base + 0.04), Rb = 0.5 * (Dot(E[Jj + 1] - RoofAt(P, Sd, Xb, P.Qe + Over, 0.0), Nr) - Base + 0.04);
+						V3 Pa = E[Jj], Pb = E[Jj + 1];
+						for (int K = 1; K <= NC; ++K)
+						{
+							const double An = Pi * K / NC;
+							const V3 Da = (Nr * std::cos(An) + Dn * std::sin(An)) * Ra + E[Jj] - Nr * Ra, Db = (Nr * std::cos(An) + Dn * std::sin(An)) * Rb + E[Jj + 1] - Nr * Rb;
+							const double Am = Pi * (K - 0.5) / NC;
+							const Col C = Mixed(White, Shade, 0.3 + 0.5 * static_cast<double>(K) / NC);
+							B.Quad1(Pa, Pb, Db, Da, C, Nr * std::cos(Am) + Dn * std::sin(Am));
+							Pa = Da;
+							Pb = Db;
+						}
+						B.Quad1(Pa, Pb, RoofAt(P, Sd, Xb, P.Qe - 0.02, Base - 0.01), RoofAt(P, Sd, Xa, P.Qe - 0.02, Base - 0.01), Shade, Nr * -1.0);
+					}
+					// (the verges: rounded down onto the roof's edge)
+					for (int End = -1; End <= 1; End += 2)
+					{
+						const size_t Jj = End < 0 ? 0 : static_cast<size_t>(NX);
+						const V3 Xh{ static_cast<double>(End), 0.0, 0.0 };
+						for (int I = 0; I <= NQ; ++I)
+						{
+							const size_t Ii = static_cast<size_t>(I);
+							auto Mid = [&](size_t K) { return G[K][Jj] + Xh * 0.03 - Nr * (0.45 * Dot(G[K][Jj] - RoofAt(P, Sd, G[K][Jj].X, Qs[K], 0.0), Nr) - 0.45 * Base); };
+							auto Foot = [&](size_t K) { return RoofAt(P, Sd, End * (Xs + 0.045), Qs[K], Base - 0.015); };
+							B.Quad1(G[Ii][Jj], G[Ii + 1][Jj], Mid(Ii + 1), Mid(Ii), White, Nr + Xh);
+							B.Quad1(Mid(Ii), Mid(Ii + 1), Foot(Ii + 1), Foot(Ii), Shade, Xh);
+						}
+					}
+				}
+				// (the ridge: a cap over the log or the roll, from one slope's top row to the other's)
+				for (size_t J = 0; J + 1 < Ridge[0].size(); ++J)
+				{
+					const double Xa = Ridge[0][J].X, Xb = Ridge[0][J + 1].X;
+					const V3 Ta{ Xa, P.Yc, std::max(P.Ridge + Top, 0.5 * (Ridge[0][J].Z + Ridge[1][J].Z) + 0.04) }, Tb{ Xb, P.Yc, std::max(P.Ridge + Top, 0.5 * (Ridge[0][J + 1].Z + Ridge[1][J + 1].Z) + 0.04) };
+					B.Quad1(Ridge[0][J], Ridge[0][J + 1], Tb, Ta, White, V3{ 0.0, -0.4, 1.0 });
+					B.Quad1(Ridge[1][J], Ridge[1][J + 1], Tb, Ta, White, V3{ 0.0, 0.4, 1.0 });
 				}
 			}
 
@@ -7220,10 +7442,15 @@ namespace LandHouse
 					B.Quad1(On(W, -Run, -0.25, 0.05), On(W, Run, -0.25, 0.05), On(W, Run, Top - 0.02, 0.05), On(W, -Run, Top - 0.02, 0.05), Rgb(62, 56, 48), W.N);
 					for (const Stone& St : StonesOf(P, F))
 					{
-						const double Ua = St.Uc - 0.5 * St.L, Ub = St.Uc + 0.5 * St.L, Ia = St.Uc - 0.3 * St.L, Ib = St.Uc + 0.3 * St.L;
-						const double Zm = St.Zt - St.Rv, Zs = St.Zt - 0.45 * St.Rv, D0 = 0.05, D1 = 0.05 + St.Dd;
-						const V3 FA = On(W, Ia, -0.06, D1), FB = On(W, Ib, -0.06, D1), FC = On(W, Ib, Zs, D1), FD = On(W, Ia, Zs, D1);
-						const V3 TA = On(W, St.Uc - 0.25 * St.L, St.Zt, D0 + 0.35 * St.Dd), TB = On(W, St.Uc + 0.25 * St.L, St.Zt, D0 + 0.35 * St.Dd);
+						// (each its own shape, from its own seed: its face wider or narrower and set off its middle, its crown
+						// leaning, one end lower; never a row of the same tooth)
+						const double Sa = Unit(St.Seed ^ 0x1D1), Sb = Unit(St.Seed ^ 0x1D2), Sc = Unit(St.Seed ^ 0x1D3), Se = Unit(St.Seed ^ 0x1D4);
+						const double Ua = St.Uc - 0.5 * St.L, Ub = St.Uc + 0.5 * St.L, Off = 0.12 * (Sa - 0.5) * St.L;
+						const double Ia = St.Uc + Off - (0.22 + 0.14 * Sb) * St.L, Ib = St.Uc + Off + (0.22 + 0.14 * Sc) * St.L;
+						const double Zm = St.Zt - St.Rv, Zs = St.Zt - (0.3 + 0.3 * Se) * St.Rv, D0 = 0.05, D1 = 0.05 + St.Dd;
+						const double Lean = 0.06 * (Sb - Sc) * St.Rv;
+						const V3 FA = On(W, Ia, -0.06, D1), FB = On(W, Ib, -0.06, D1), FC = On(W, Ib, Zs - Lean, D1), FD = On(W, Ia, Zs + Lean, D1);
+						const V3 TA = On(W, St.Uc + Off - (0.15 + 0.15 * Sc) * St.L, St.Zt - std::max(0.0, Lean), D0 + 0.35 * St.Dd), TB = On(W, St.Uc + Off + (0.15 + 0.15 * Sb) * St.L, St.Zt + std::min(0.0, Lean), D0 + 0.35 * St.Dd);
 						const V3 LA = On(W, Ua, Zm, D0), RA = On(W, Ub, Zm, D0);
 						B.Quad1(FA, FB, FC, FD, Mixed(St.C, Rgb(70, 62, 50), 0.15), W.N);
 						B.Quad1(FD, FC, TB, TA, Scaled(St.C, 1.04), W.N + Up);
@@ -7256,7 +7483,7 @@ namespace LandHouse
 					for (int I = 0; I < 16; ++I)
 						for (int J = 0; J < 4; ++J)
 							Add(Mixed(StrawCol(P, Sd, -P.Xr + 2.0 * P.Xr * (I + 0.5) / 16.0, Q0 + (Q1 - Q0) * (J + 0.5) / 4.0), Rgb(170, 150, 110), 0.1), 1.0);
-				return Rgb(R / Wt, G / Wt, Bl / Wt);
+				return Mixed(Rgb(R / Wt, G / Wt, Bl / Wt), Rgb(230, 234, 240), 0.85 * P.Snow);
 			}
 
 			/** The far level (from 300 m): the walls in bands of the logs' tone (their creases in it), the footing's stone, the
@@ -7388,10 +7615,12 @@ namespace LandHouse
 					}
 					Chimney(B, P);
 					Yard(B, P);
+					SnowCap(B, P, 0.25);
 				}
 				{
 					Pen B(Out.Mid);
 					Mid(B, P);
+					SnowCap(B, P, 1.0);
 				}
 				{
 					Pen B(Out.Far);

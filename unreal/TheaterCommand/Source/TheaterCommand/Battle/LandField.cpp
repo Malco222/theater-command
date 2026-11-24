@@ -6984,7 +6984,10 @@ namespace LandField
 		{
 			BaseMesh& M = At(static_cast<Base>(static_cast<int>(Base::Kit0) + HouseSlot0 + static_cast<int>(K)));
 			LandHouse::Levels L;
-			LandHouse::Build(HouseModels[K], L);
+			// (an east house built under the snow lying, its roof's blanket its own; the bocage's left to the snow's tint)
+			LandHouse::Spec Hs = HouseModels[K];
+			if (Hs.Kind >= 7 && SnowLay) Hs.Snow = SnowIs;
+			LandHouse::Build(Hs, L);
 			M.Near = std::move(L.Near);
 			M.Mid = std::move(L.Mid);
 			M.Far = std::move(L.Far);

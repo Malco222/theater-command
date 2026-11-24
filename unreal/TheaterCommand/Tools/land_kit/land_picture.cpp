@@ -243,6 +243,7 @@ namespace
 		int HouseKind = 0; // (0 the farmhouse, 1 its barn, 2 its byre: LAND_KIT_HOUSE=farm; 3 the church; 6 a village house)
 		double HouseLong = 12.4, HouseDeep = 6.8; // (a village house's footprint, LAND_KIT_HOUSE=village)
 		int HouseStoreys = 2;
+		double HouseSnow = 0.0; // (the east's houses: the snow on its roof)
 		uint64_t HouseKey = 1;
 		double SunBearing = -1000.0;
 		bool bAim = false;
@@ -774,6 +775,7 @@ int main(int argc, char** argv)
 		H.Roof = P.HouseRoof;
 		H.Hurt = P.House;
 		H.Key = P.HouseKey;
+		H.Snow = P.HouseSnow;
 		return H;
 	};
 	if (bHouseSheet)
@@ -794,6 +796,7 @@ int main(int argc, char** argv)
 			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church, 6 a village house, 7 the east's izba
 			double Long = 12.4, Deep = 6.8; // (a village house's)
 			int Storeys = 2;
+			double Snow = 0.0; // (the east's: the snow lying on its roof, 0 to 1)
 		};
 		const HouseLook HouseLooks[] = {
 			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate", 0 },
@@ -924,7 +927,7 @@ int main(int argc, char** argv)
 		// 7.2 m; aim 17 its street gable's windows, 18 its front corner's log ends, 19 its ridge's end at the street gable)
 		const HouseLook EastLooks[] = {
 			{ "izba_planks", 0, 0, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the east: a log izba, carved frames, plank roof", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch", 0, 0, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "another: thatched, other paint", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch", 0, 0, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "another: thatched, other paint", 7, 7.5, 7.2, 1 },
 			{ "izba_back", 0, 0, 0, 7, 205.0, 12.0, 250.0, -1, 0.0, "from behind: the woodpile along the back wall", 7, 7.5, 7.2, 1 },
 			{ "izba_porch", 0, 0, 0, 7, -32.0, 9.0, 62.0, -1, 0.0, "from the other side: the porch, the plank door", 7, 7.5, 7.2, 1 },
 			{ "izba_window", 0, 0, 0, 7, 18.0, 4.0, 62.0, 0, 3.4, "close: a carved frame, its shutters, the curtain", 7, 7.5, 7.2, 1 },
@@ -932,18 +935,25 @@ int main(int argc, char** argv)
 			{ "izba_door", 0, 0, 0, 7, -18.0, 6.0, 62.0, 1, 5.5, "close: the porch on its posts, the door", 7, 7.5, 7.2, 1 },
 			{ "izba_corner", 0, 0, 0, 7, 48.0, 8.0, 62.0, 18, 2.8, "close: the corner, log ends, rings, boulders", 7, 7.5, 7.2, 1 },
 			{ "izba_horse", 0, 0, 0, 7, 62.0, 14.0, 62.0, 19, 3.6, "close: the ridge log's horse head, the barge boards", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch_close", 0, 0, 1, 3, 60.0, 16.0, 110.0, 19, 4.5, "close: the thatch's courses, the straw ridge, poles", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_close", 0, 0, 1, 3, 60.0, 16.0, 62.0, 19, 4.5, "close: the thatch's courses, the straw ridge, poles", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_blue", 0, 0, 0, 13, 18.0, 4.0, 62.0, 0, 4.4, "paint, one colour a house, worn: faded blue", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_white", 0, 0, 0, 1, 18.0, 4.0, 62.0, 0, 4.4, "white, its shutters bare wood", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_red", 0, 0, 0, 10, 18.0, 4.0, 62.0, 0, 4.4, "ochre-red, its shutters bare wood", 7, 7.5, 7.2, 1 },
+			{ "izba_paint_green", 0, 0, 0, 26, 18.0, 4.0, 62.0, 0, 4.4, "faded green, its shutters white", 7, 7.5, 7.2, 1 },
+			{ "izba_snow", 0, 0, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "in winter: the snow on its roof", 7, 7.5, 7.2, 1, 1.0 },
+			{ "izba_thatch_snow", 0, 0, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, in winter", 7, 7.5, 7.2, 1, 1.0 },
+			{ "izba_snow_mid", 0, 1, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "in winter, middle level", 7, 7.5, 7.2, 1, 1.0 },
 			{ "izba_mid", 0, 1, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 7, 7.5, 7.2, 1 },
 			{ "izba_far", 0, 2, 0, 7, 42.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch_mid", 0, 1, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "thatched, middle level", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch_far", 0, 2, 1, 3, 38.0, 11.0, 110.0, -1, 0.0, "thatched, far level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_mid", 0, 1, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_far", 0, 2, 1, 3, 38.0, 11.0, 62.0, -1, 0.0, "thatched, far level", 7, 7.5, 7.2, 1 },
 			{ "izba_switch90_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: near level", 7, 7.5, 7.2, 1 },
 			{ "izba_switch90_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 55.0, "izba at 90 m: middle level", 7, 7.5, 7.2, 1 },
 			{ "izba_switch300_near", 0, 0, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "", 7, 7.5, 7.2, 1 }, // (not laid out: for measuring)
 			{ "izba_switch300_mid", 0, 1, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: middle level", 7, 7.5, 7.2, 1 },
 			{ "izba_switch300_far", 0, 2, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: far level", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch_switch90_near", 0, 0, 1, 3, 38.0, 4.0, 110.0, 3, 55.0, "thatched at 90 m: near level", 7, 7.5, 7.2, 1 },
-			{ "izba_thatch_switch90_mid", 0, 1, 1, 3, 38.0, 4.0, 110.0, 3, 55.0, "thatched at 90 m: middle level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_near", 0, 0, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: near level", 7, 7.5, 7.2, 1 },
+			{ "izba_thatch_switch90_mid", 0, 1, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: middle level", 7, 7.5, 7.2, 1 },
 		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
@@ -969,6 +979,7 @@ int main(int argc, char** argv)
 			P.HouseLong = K.Long;
 			P.HouseDeep = K.Deep;
 			P.HouseStoreys = K.Storeys;
+			P.HouseSnow = K.Snow;
 			P.CameraBearing = K.Bearing;
 			P.CameraUp = K.Up;
 			P.SunBearing = K.Sun;
