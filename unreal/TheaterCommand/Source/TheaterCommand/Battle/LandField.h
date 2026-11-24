@@ -376,6 +376,14 @@ namespace LandField
 		Rgb8 Tint;
 	};
 
+	/** A region's kit house's footing (Ground::Footings): the stone under its walls from the lowest ground beneath its
+	 * footprint up to its floor, so a house on a slope stands on the ground all round; its middle, its turn (as its
+	 * model's), half its length and depth, its foot and top (metres). */
+	struct Footing
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, HalfL = 0.0, HalfD = 0.0, Foot = 0.0, Top = 0.0;
+	};
+
 	/** A hedgerow's line as laid (for tests, pictures and maps). Kind: 0 hedgerow, 1 lane-side bank, 2 wood edge, 3 garden hedge, 4 stone wall, 5 far strip. */
 	struct HedgeLine
 	{
@@ -486,6 +494,8 @@ namespace LandField
 		int DrawStep() const;
 		/** Every instance of a base (none for the clutter bases: see Clutter). */
 		const std::vector<Placed>& Instances(Base B) const;
+		/** The kit houses' footings, drawn in the tiles' built meshes (Footing). */
+		const std::vector<Footing>& Footings() const;
 
 		/**
 		 * The near clutter (grass tufts, tall grass, standing corn, poppies, flowers, stones, ferns) in a box: the same
