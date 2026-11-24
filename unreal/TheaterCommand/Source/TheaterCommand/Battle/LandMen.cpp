@@ -1021,6 +1021,28 @@ namespace LandMen
 				}
 			}
 		}
+		// (a gore twin's falls by where each one's burst was against him, gore_from[clip]: front, behind, left, right or
+		// under; a gore fall the map does not name, by its own blast_from. Effects (R2), Crowd::SetGore)
+		GoreFrom.clear();
+		{
+			const J& Gf = Root["gore_from"];
+			for (size_t I = 0; I < Gf.Size() && Gf.K == J::Obj; ++I)
+			{
+				const std::string Side = Gf.Vals[I].Text();
+				if (!Side.empty() && ClipIndex(Gf.Keys[I]) >= 0) GoreFrom[Gf.Keys[I]] = Side;
+			}
+			for (const auto& St : DeathsGore)
+			{
+				for (const auto& Kd : St.second)
+				{
+					for (const std::string& Clip : Kd.second)
+					{
+						const std::string Side = Cs[Clip.c_str()]["blast_from"].Text();
+						if (!Side.empty()) GoreFrom.emplace(Clip, Side);
+					}
+				}
+			}
+		}
 		// (a gore twin's cuts and joined skin: Effects (R2); a point out of its level, or a mask past the cuts, drops
 		// the whole joined list of that level, so the twin falls cracked as before rather than torn)
 		Cuts.clear();
@@ -1610,6 +1632,150 @@ namespace LandMen
 			Row.bMate = Rd["m"].Num0() != 0.0;
 			return Row;
 		}
+
+		/** A gore fall that is the big throw: of kind thrown, or any die_blast_* (some listed under another kind too). */
+		bool IsThrow(const std::string& Kind, const std::string& Name) { return Kind == "thrown" || Name.rfind("die_blast_", 0) == 0; }
+
+		/** Effects (R2): whether a gored man may take a gore fall of his twin's: any not a throw; a throw only where his
+		 * round may throw him (bBig, Crowd's BigThrow), and where he is thrown away from a point (bAway) only one from
+		 * its side (gore_from is Side). */
+		bool MayTake(const Soldier& Tw, const std::string& Kind, const std::string& Name, bool bBig, bool bAway, const std::string& Side)
+		{
+			if (!IsThrow(Kind, Name)) return true;
+			if (!bBig) return false;
+			if (!bAway) return true;
+			const auto From = Tw.GoreFrom.find(Name);
+			return From != Tw.GoreFrom.end() && From->second == Side;
+		}
+
+		/** The kinds of falls a man of stance St takes from a deaths table (ChooseFall's): his stance's, else the
+		 * nearest (cover: kneel; run: stand; prone: kneel), then stand, kneel, the table's first. None from an empty
+		 * table, or for a man lying where it has no prone falls (he goes limp). */
+		const std::map<std::string, std::vector<std::string>>* KindsOf(const std::map<std::string, std::map<std::string, std::vector<std::string>>>& Table,
+			const std::string& St)
+		{
+			if (Table.empty() || (St == "prone" && Table.find("prone") == Table.end())) return nullptr;
+			const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
+			for (const char* Name : Order)
+			{
+				auto Found = Table.find(Name);
+				if (Found != Table.end() && !Found->second.empty()) return &Found->second;
+			}
+			return &Table.begin()->second;
+		}
+	}
+
+	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Tw, const GoreStrike& Strike)
+	{
+		std::vector<std::pair<std::string, std::string>> Out;
+		const std::map<std::string, std::vector<std::string>>* Kinds = KindsOf(Tw.DeathsGore, Strike.Stance);
+		if (!Kinds) return Out;
+		// (the art director, 23 Nov 17:52Z: the limb flies away from the blast; the deaths thread, 20:1xZ: weigh only the
+		// kind matching the burst, the big throw only for guns and howitzers) Those he may take (MayTake: no throw but
+		// a field gun's or a howitzer's, and none from another side of him); of them those whose gore_from is where the
+		// burst was against him (in front, the falls from the front, of kind back; behind, forward; at his left or his
+		// right, the side falls from that side; under him lying, the prone throw), where his stance's gore falls hold any.
+		auto May = [&](const std::string& Kind, const std::string& Name) { return MayTake(Tw, Kind, Name, Strike.bBig, Strike.bAway, Strike.Side); };
+		auto FromBurst = [&](const std::string& Kind, const std::string& Name) {
+			const auto Side = Tw.GoreFrom.find(Name);
+			return Side != Tw.GoreFrom.end() && Side->second == Strike.Side && May(Kind, Name);
+		};
+		bool bMatched = false, bAny = false;
+		for (const auto& KV : *Kinds)
+		{
+			for (const std::string& Name : KV.second)
+			{
+				bMatched = bMatched || FromBurst(KV.first, Name);
+				bAny = bAny || May(KV.first, Name);
+			}
+		}
+		// (where widened past his side's falls, below, never to one from the side opposite it, front and behind, left and
+		// right: such a fall throws him toward the burst, his body and often a limb (the verifier of f6f8b75c: a man
+		// standing with a burst ahead on his left given die_leg_off_b, from behind, his pelvis 1.1 to 1.7 m toward it).
+		// Under is opposite none: the twins' one fall from under is the prone throw, which MayTake gives only a man struck
+		// from under, and a burst under him is no point to be thrown away from, so none is widened then. Widened so, he
+		// keeps his side's own falls, so never none)
+		auto Opposite = [&](const std::string& Name) {
+			const auto From = Tw.GoreFrom.find(Name);
+			if (From == Tw.GoreFrom.end()) return false;
+			const std::string& Fr = From->second;
+			const std::string& Sd = Strike.Side;
+			return (Sd == "front" && Fr == "behind") || (Sd == "behind" && Fr == "front") || (Sd == "left" && Fr == "right") || (Sd == "right" && Fr == "left");
+		};
+		bool bWide = false;
+		auto Base = [&](const std::string& Kind, const std::string& Name) {
+			if (!bAny) return true;
+			if (bMatched && !bWide) return FromBurst(Kind, Name);
+			return May(Kind, Name) && !(bWide && Opposite(Name));
+		};
+		// (and of those, where he is thrown away from a point (the burst, or the gun), the falls whose every limb moves at
+		// least half a metre away from it, along the line from it to the limb's joint as he was struck, or failing any
+		// the one whose limbs move farthest so: a limb flying across the burst, or through it to land beyond, is not
+		// thrown away from it. A side is a quarter round, and the twins' falls fling a limb off their side's middle (their
+		// standing and running falls from the front a left arm or leg back and to his left, toward a burst 38 degrees or
+		// more round on his left): where none from his side moves its limbs half a metre away, all he may take but those
+		// from the opposite side are weighed so (the verifier of 35ffc951: never a limb toward the burst for a fall from
+		// his side when another he may take throws it away). Read from the fall's first frame and its last, in his own
+		// axes: the same whatever frame his fall is first played on and however lately he was posed, his own pose as
+		// struck within 0.35 m of the fall's first at a cut, a running man's calf the most)
+		std::map<std::string, double> Gain;
+		double Floor = -1e9;
+		if (Strike.bAway)
+		{
+			const double PX = Strike.X, PY = Strike.Y;
+			Xform AtFirst[MaxBones], AtLast[MaxBones];
+			auto Measure = [&]() {
+				for (const auto& KV : *Kinds)
+				{
+					for (const std::string& Name : KV.second)
+					{
+						const int Ix = Tw.ClipIndex(Name);
+						if (Ix < 0 || !Base(KV.first, Name) || Gain.count(Name)) continue;
+						const Clip& Cl = Tw.Clips[static_cast<size_t>(Ix)];
+						Pose First, End;
+						Sample(Cl, 0.f, First);
+						Sample(Cl, Cl.Long, End);
+						BoneFrames(Tw, First, AtFirst);
+						BoneFrames(Tw, End, AtLast);
+						double Least = 1e9;
+						for (const ClipEvent& E : Cl.Events)
+						{
+							if (E.Fx != "limb_off" || E.Bone < 0 || E.Bone >= MaxBones) continue;
+							const Vec3 Head = Tw.Bones[static_cast<size_t>(E.Bone)].Head;
+							const Vec3 A = AtFirst[E.Bone].Point(Head), B = AtLast[E.Bone].Point(Head);
+							const double OX = static_cast<double>(A.X) - PX, OY = static_cast<double>(A.Y) - PY;
+							const double Along = ((static_cast<double>(B.X) - static_cast<double>(A.X)) * OX + (static_cast<double>(B.Y) - static_cast<double>(A.Y)) * OY)
+								/ std::max(1e-6, std::hypot(OX, OY));
+							Least = std::min(Least, Along);
+						}
+						Gain[Name] = Least;
+					}
+				}
+				Floor = -1e9;
+				for (const auto& G : Gain) Floor = std::max(Floor, std::min(0.5, G.second));
+			};
+			Measure();
+			if (bMatched && Floor < 0.5)
+			{
+				bWide = true;
+				Measure();
+			}
+		}
+		for (const auto& KV : *Kinds)
+		{
+			for (const std::string& Name : KV.second)
+			{
+				if (!Base(KV.first, Name)) continue;
+				if (!Gain.empty())
+				{
+					const auto G = Gain.find(Name);
+					if (G == Gain.end() || G->second < Floor) continue;
+				}
+				std::pair<std::string, std::string> Fall(KV.first, Name);
+				if (std::find(Out.begin(), Out.end(), Fall) == Out.end()) Out.push_back(std::move(Fall));
+			}
+		}
+		return Out;
 	}
 
 	struct Crowd::Impl
@@ -1771,6 +1937,7 @@ namespace LandMen
 		std::vector<double> TailsRead;
 		std::vector<RoundRow> RoundsRead;
 		std::map<int, std::pair<std::string, std::string>> BlockArmy; // block id -> (army, file army)
+		std::map<int, std::string> BlockCal; // block id -> its guns' calibre as the recording writes it (cal), where it does
 		/** Uniforms that age (release 2, behind its switch, SetWorn): each block's side's months in the line (the
 		 * recording's sides.<side>.worn), the faded rows made from the armies' (one a row and wear, so no more sets of
 		 * men alike), and whether the look is on. */
@@ -2928,17 +3095,85 @@ namespace LandMen
 			return St;
 		}
 
+		/** Effects (R2): a man as the round that killed him struck him, and what a gore fall throws him away from. */
+		struct Blast
+		{
+			double X = 0.0, Y = 0.0, F = 0.0; // where he stood and his heading as it struck him, by his track
+			double PX = 0.0, PY = 0.0;        // the point he is thrown away from (bAway): the burst, or the gun's place
+			bool bAway = false;               // none: the burst under him (a man lying; or the gun not known)
+			std::string Side;                 // front|behind|left|right|under (the gore falls' own words); empty: no round
+		};
+
+		/**
+		 * Effects (R2): where the round that killed him burst against his facing, in the gore falls' own words
+		 * (gore_from), and the point a gore fall throws him and his limb away from. A burst 1 m or more from him: "front"
+		 * or "behind" within 45 degrees of his nose or his back, else "left" or "right" (his right clockwise of his
+		 * heading, as the field's headings run, WorldOf); away from the burst. One within 1 m (the rules lay 8 in 10 shell
+		 * kills on the man, which says nothing of where the shell truly fell): a man lying, "under"; any other by the
+		 * gun's side as it fired (its track at the round, as FromWhere reads it), away from the gun; "under" where the gun
+		 * is not known or stood within 1 m of him. Where he stood and his heading by his track at the round (Dead less his
+		 * lag, as GoreTwinFor reads them), so the same whatever frame his fall is first played on. Read before he is gored
+		 * (GoreTwinFor) and as his fall is laid (StartFall).
+		 */
+		Blast BlastOf(const Man& M, const std::string& St) const
+		{
+			Blast B;
+			B.X = M.X;
+			B.Y = M.Y;
+			B.F = static_cast<double>(M.F);
+			{
+				float F = 0.f, V = 0.f;
+				size_t Cursor = 0;
+				const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
+				if (!Tr.T.empty())
+				{
+					Tr.At(M.Info.Dead - M.Info.Delay, Cursor, B.X, B.Y, F, V);
+					B.F = static_cast<double>(F);
+				}
+			}
+			if (M.KillT < 0.0) return B;
+			B.PX = M.KillX;
+			B.PY = M.KillY;
+			if ((B.PX - B.X) * (B.PX - B.X) + (B.PY - B.Y) * (B.PY - B.Y) < 1.0)
+			{
+				B.Side = "under";
+				if (St == "prone") return B;
+				const auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
+				if (Found == TrackOf.end()) return B;
+				double SX = 0.0, SY = 0.0;
+				size_t Cursor = 0;
+				float F = 0.f, V = 0.f;
+				Tracks[static_cast<size_t>(Found->second)].At(M.KillT, Cursor, SX, SY, F, V);
+				if ((SX - B.X) * (SX - B.X) + (SY - B.Y) * (SY - B.Y) < 1.0) return B;
+				B.PX = SX;
+				B.PY = SY;
+			}
+			B.bAway = true;
+			const double Off = Turn(B.F, std::atan2(B.PX - B.X, B.PY - B.Y)), Eighth = 0.785398163397448;
+			B.Side = std::fabs(Off) < Eighth ? "front" : std::fabs(Off) > 3.0 * Eighth ? "behind" : Off > 0.0 ? "right" : "left";
+			return B;
+		}
+
+		/** Effects (R2): whether the round that killed him may throw him (a gore fall's big throw): a field gun's, a
+		 * howitzer's or a heavy gun's shell (the art director, 23 Nov 17:52Z: die_blast for field guns and howitzers), the
+		 * round's w "gun" from a block whose cal is not "light" (no cal written: a howitzer's, as the Fates table reads
+		 * it, LandKit's WeaponWord). A light gun's, a tank's, a mortar's or a grenade's never. */
+		bool BigThrow(const Man& M) const
+		{
+			if (M.KillWeapon != "gun") return false;
+			const auto Found = BlockCal.find(M.KillBy);
+			return Found == BlockCal.end() || Found->second != "light";
+		}
+
 		std::string FromWhere(const Man& M) const
 		{
 			// Where the round that killed him came from, against his facing: front, back or side. A shell from the gun's
 			// side; with no shooter known, the front (a man faces what he fights).
 			if (M.KillT < 0.0) return "front";
-			// (Effects (R2): a gored man is thrown away from the burst, so its side, where it fell 1.5 m or more off)
-			if (M.bGore && std::hypot(M.KillX - M.X, M.KillY - M.Y) >= 1.5)
-			{
-				const double Off = std::fabs(Turn(M.F, std::atan2(M.KillX - M.X, M.KillY - M.Y)));
-				return Off < 1.22 ? "front" : Off > 1.92 ? "back" : "side";
-			}
+			// (Effects (R2): a gored man is thrown away from the burst, or from the gun where it burst on him: that side,
+			// as StartFall has just read it, BlastOf)
+			const std::string& Burst = M.Info.GoreFrom;
+			if (!Burst.empty() && Burst != "under") return Burst == "front" ? "front" : Burst == "behind" ? "back" : "side";
 			double SX = 0.0, SY = 0.0;
 			bool bKnown = false;
 			auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
@@ -2975,20 +3210,44 @@ namespace LandMen
 				// The physics-baked falls: weigh each kind by how he was struck and how he stood, then each clip of the
 				// kind by the Fates rule (never the last fall again unless it is the only one; the 2nd to 4th last
 				// 0.35, 0.6, 0.85), so a battle's dead never fall twice alike running.
-				const std::map<std::string, std::vector<std::string>>* Kinds = nullptr;
-				const char* Order[] = { St.c_str(), St == "cover" ? "kneel" : St == "run" ? "stand" : St == "prone" ? "kneel" : "stand", "stand", "kneel" };
-				for (const char* Name : Order)
-				{
-					auto Found = Table.find(Name);
-					if (Found != Table.end() && !Found->second.empty()) { Kinds = &Found->second; break; }
-				}
-				if (!Kinds && !Table.empty()) Kinds = &Table.begin()->second;
-				if (Kinds && !(St == "prone" && Table.find("prone") == Table.end()))
+				const std::map<std::string, std::vector<std::string>>* Kinds = KindsOf(Table, St);
+				if (Kinds)
 				{
 					std::vector<std::pair<std::string, double>> Odds;
 					std::vector<std::string> KindOfPick;
+					// Effects (R2), a gored man: only the falls GoreFalls gives him (those from where the burst was against him,
+					// BlastOf, of them those whose limbs move away from the burst or the gun; where none from there he may take,
+					// of all he may take: no throw but a field gun's or a howitzer's, BigThrow, and none from another side of
+					// him; where none from there moves its limbs half a metre away, of all he may take but those from the side
+					// opposite), each kind's weight shared among its falls taken, the kinds weighed as for any man. Never no
+					// fall (GoreTwinFor gores no man whose stance's gore falls hold none he may take; were it so, all of them).
+					const bool bBig = BigThrow(M);
+					std::vector<std::pair<std::string, std::string>> Given;
+					if (M.bGore)
+					{
+						const Blast Bl = BlastOf(M, St);
+						GoreStrike Strike;
+						Strike.Stance = St;
+						Strike.Side = Bl.Side;
+						Strike.bAway = Bl.bAway;
+						Strike.bBig = bBig;
+						if (Bl.bAway)
+						{
+							// (the point in his own axes: x forward, y right)
+							const double DX = Bl.PX - Bl.X, DY = Bl.PY - Bl.Y, Sf = std::sin(Bl.F), Cf = std::cos(Bl.F);
+							Strike.X = DX * Sf + DY * Cf;
+							Strike.Y = DX * Cf - DY * Sf;
+						}
+						Given = GoreFalls(S, Strike);
+					}
+					auto Takes = [&](const std::string& Kind, const std::string& Name) {
+						return !M.bGore || std::find(Given.begin(), Given.end(), std::make_pair(Kind, Name)) != Given.end();
+					};
 					size_t Candidates = 0;
-					for (const auto& KV : *Kinds) Candidates += KV.second.size();
+					for (const auto& KV : *Kinds)
+					{
+						for (const std::string& Name : KV.second) Candidates += Takes(KV.first, Name) ? 1 : 0;
+					}
 					// A section's men fall close together: no fall a body within 15 m already shows, where another will do
 					// (the Fates rule above runs in time; this one on the ground, among neighbours). Only with sections,
 					// so a recording without them falls exactly as it did.
@@ -3004,6 +3263,9 @@ namespace LandMen
 					for (const auto& KV : *Kinds)
 					{
 						const std::string& Kind = KV.first;
+						size_t Taken = 0;
+						for (const std::string& Name : KV.second) Taken += Takes(Kind, Name) ? 1 : 0;
+						if (Taken == 0) continue;
 						double W = Kind == "spin" ? 0.6 : Kind == "thrown" ? 0.2 : Kind == "crawl" ? 0.3 : 1.0;
 						if (From == "front") W *= Kind == "back" ? 3.0 : Kind == "knees" ? 1.5 : Kind == "forward" ? 0.4 : 1.0;
 						if (From == "back") W *= Kind == "forward" ? 3.0 : Kind == "back" ? 0.3 : 1.0;
@@ -3011,15 +3273,17 @@ namespace LandMen
 						if (St == "run") W *= Kind == "forward" ? 2.0 : Kind == "spin" ? 1.3 : 1.0;
 						if (St == "kneel" || St == "cover") W *= Kind == "knees" ? 2.5 : Kind == "side" ? 1.5 : 1.0;
 						if (St == "prone") W *= Kind == "crawl" ? 3.0 : 1.0;
-						// (a gored man: the big throw for a field gun's or a howitzer's shell; a tank's, a mortar's or a
-						// grenade's mostly knocks him down, an arm or a leg off, by where it burst)
-						if (bShell) W *= Kind == "thrown" ? (M.bGore && M.KillWeapon != "gun" ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
+						// (a gored man: the big throw for a field gun's, a howitzer's or a heavy gun's shell; a light gun's, a
+						// tank's, a mortar's or a grenade's knocks him down, an arm or a leg off, by where it burst: its throws
+						// are not taken above)
+						if (bShell) W *= Kind == "thrown" ? (M.bGore && !bBig ? 1.0 : 40.0) : Kind == "spin" || Kind == "side" ? 1.3 : 1.0;
 						if (bCrushed) W *= Kind == "back" || Kind == "forward" ? 6.0 : Kind == "thrown" || Kind == "spin" ? 0.05 : 1.0;
 						if (!M.FallKindWanted.empty() && Kind == M.FallKindWanted) W *= 50.0;
 						for (const std::string& Clip : KV.second)
 						{
+							if (!Takes(Kind, Clip)) continue;
 							const bool bBeside = Candidates > 1 && std::find(Beside.begin(), Beside.end(), Clip) != Beside.end();
-							Odds.push_back({ Clip, W / static_cast<double>(KV.second.size()) * Falls.Weight(Clip, Candidates) * (bBeside ? 0.05 : 1.0) });
+							Odds.push_back({ Clip, W / static_cast<double>(Taken) * Falls.Weight(Clip, Candidates) * (bBeside ? 0.05 : 1.0) });
 							KindOfPick.push_back(Kind);
 						}
 					}
@@ -3080,6 +3344,8 @@ namespace LandMen
 		void StartFall(Man& M, double D)
 		{
 			const std::string St = StanceForFall(M, D);
+			// (Effects (R2): a gored man's burst against him, for FromWhere and ChooseFall; empty for a man not gored)
+			M.Info.GoreFrom = M.bGore ? BlastOf(M, St).Side : std::string();
 			const std::string From = FromWhere(M);
 			M.FallClip = ChooseFall(M, St, From);
 			M.FallAt = D;
@@ -3736,6 +4002,7 @@ namespace LandMen
 			M.FallClip = -1;
 			M.Info.FallClip.clear();
 			M.Info.FallKind.clear();
+			M.Info.GoreFrom.clear();
 			M.Info.FallStarted = M.Info.Rested = -1.0;
 			for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
 			for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
@@ -3771,7 +4038,8 @@ namespace LandMen
 			// or a mortar's 0.35, a grenade's 0.25), falling away steeply past 2 m (by e every 1.5 m) to none past Reach.
 			// The rules lay most bursts on the man they kill (8 in 10 shell kills, his own spot), which says nothing of
 			// how close the shell truly fell: such a man OnHim (a gun's 0.2, the others 0.12). Measured on the rules'
-			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall.
+			// Normandy and Prokhorovka, shell blasts off and on: 1 shell kill in 7.6 to 11 a gore fall, before a man
+			// lying took only a gun's shell bursting on him (below); since, 1 in 13 to 24 as the recordings are.
 			double Near = 0.0, OnHim = 0.0, Reach = 0.0;
 			if (M.KillWeapon == "gun") Near = 0.55, OnHim = 0.2, Reach = 8.0;
 			else if (M.KillWeapon == "tank") Near = 0.35, OnHim = 0.12, Reach = 6.0;
@@ -3779,14 +4047,28 @@ namespace LandMen
 			else if (M.KillW == Weapon::Grenade) Near = 0.25, OnHim = 0.12, Reach = 2.0;
 			else return nullptr;
 			// (where he stood when it struck him, by his track: the same whatever frame his fall is first played on)
-			double X = M.X, Y = M.Y;
-			float F = 0.f, V = 0.f;
-			size_t Cursor = 0;
-			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
-			if (!Tr.T.empty()) Tr.At(M.Info.Dead - M.Info.Delay, Cursor, X, Y, F, V);
-			const double Far = std::hypot(M.KillX - X, M.KillY - Y);
+			const Blast Bl = BlastOf(M, St);
+			const double Far = std::hypot(M.KillX - Bl.X, M.KillY - Bl.Y);
 			double Odds = Far < 0.25 ? OnHim : Far > Reach ? 0.0 : Far <= 2.0 ? Near : Near * std::exp(-(Far - 2.0) / 1.5);
 			if (St == "prone" || St == "cover") Odds *= 0.5; // (lying, or behind cover: his body under the blast)
+			// None where his stance's gore falls hold none he may take (the deaths thread, 20:1xZ: the big throw only for
+			// guns and howitzers, MayTake): the twins' prone falls are the one throw from under him, so a man lying is
+			// gored only by a gun's shell that burst on him, never a tank's or a mortar's or one off to his side. He then
+			// falls as any man; asked before his dice, so no man's dice change.
+			{
+				const Soldier& Tw = *Found->second;
+				const std::map<std::string, std::vector<std::string>>* Kinds = KindsOf(Tw.DeathsGore, St);
+				const bool bBig = BigThrow(M);
+				bool bAny = false;
+				if (Kinds)
+				{
+					for (const auto& KV : *Kinds)
+					{
+						for (const std::string& Name : KV.second) bAny = bAny || MayTake(Tw, KV.first, Name, bBig, Bl.bAway, Bl.Side);
+					}
+				}
+				if (!bAny) return nullptr;
+			}
 			Dice D(Seed ^ Mix(0x60AEull + static_cast<uint64_t>(M.Info.Block) * 1000003ull + static_cast<uint64_t>(M.Info.K))
 				^ (M.Info.J > 0 ? Mix(0x60AE5ull + static_cast<uint64_t>(M.Info.J)) : 0ull));
 			return D.U() < Odds ? Found->second.get() : nullptr;
@@ -4288,6 +4570,7 @@ namespace LandMen
 
 		// Each block's army and the soldier file its men are drawn from.
 		I.BlockArmy.clear();
+		I.BlockCal.clear();
 		I.BlockWorn.clear();
 		I.ArmyWorn.clear();
 		I.AgedRows.clear();
@@ -4298,6 +4581,8 @@ namespace LandMen
 			const std::string Army = B["army"].Text(B["nat"].Text("GER").c_str());
 			std::string File = B["standIn"].Text(Army.c_str());
 			I.BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
+			// (Effects (R2): its guns' calibre, for a gore fall's big throw: BigThrow)
+			if (!B["cal"].Text().empty()) I.BlockCal[static_cast<int>(B["id"].Num0())] = B["cal"].Text();
 			// (uniforms that age: his side's months in the line, the campaign's, where the recording has them)
 			const std::string Side = B["side"].Text();
 			if (!Side.empty())
