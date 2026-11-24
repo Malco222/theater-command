@@ -34,6 +34,7 @@ import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
 import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
+import { flagName } from './flagnames';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -384,7 +385,7 @@ export function pocketNat(g: Game, r: Region): string | null {
 export const inPocket = (g: Game, c: Corps): boolean => g.flags[`pkt:${c.reg}`] !== undefined && pocketNat(g, g.regions[c.reg]) === c.nat;
 
 /** True where a pocket's stores are spent: the province feeds nobody of the nation cut off in it (game.ts, the supply). */
-export const pocketDry = (g: Game, r: Region, nat: string): boolean => g.flags[`pktx:${r.id}`] === 1 && pocketNat(g, r) === nat;
+export const pocketDry = (g: Game, r: Region, nat: string): boolean => g.flags[flagName('pktx:', r.id)] === 1 && pocketNat(g, r) === nat;
 
 function clearPocket(g: Game, r: Region): void {
   delete g.flags[`pkt:${r.id}`];
@@ -638,14 +639,17 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   return null;
 }
 
+/** The moves a corps of the garrison has left once it is out in the field: coming out costs one, and one that went in this month has none. */
+export const apOutOfTown = (g: Game, c: Corps): number => (c.town === g.turn ? 0 : Math.max(0, c.apMax - 1));
+
 /** Brings a corps out of the town into the field. One that went in this month has no marching time left. */
 export function takeField(g: Game, c: Corps): boolean {
   if (whyNotTakeField(g, c)) return false;
   const r = g.regions[c.reg];
-  const fresh = c.town === g.turn;
+  const ap = apOutOfTown(g, c);
   quitTown(g, c);
   r.units.push(c);
-  c.ap = fresh ? 0 : Math.max(0, c.apMax - 1);
+  c.ap = ap;
   return true;
 }
 

@@ -207,6 +207,38 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	{
 		NewSignature += TEXT("|n:") + EarnedName;
 	}
+	// (Release 2, the marked army; marked.ts) The town an enemy army took from him, lettered on a red tag on its pole.
+	// (The rules give it only where he knows who the army is, and only with the switch on.)
+	MarkedTown.Reset();
+	if (What == 0 && !bGlimpsed)
+	{
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.Marked.IsEmpty() && !Unit.bDim)
+			{
+				MarkedTown = Unit.Marked;
+				break;
+			}
+		}
+	}
+	if (!MarkedTown.IsEmpty())
+	{
+		NewSignature += TEXT("|mk:") + MarkedTown;
+	}
+	// (Release 2, new units ready; Brian, 24 November 2026 18:30Z) One of his corps handed over as this month opened:
+	// a brass NEW tag where an enemy's red mark would hang, for its first month (the option "New units ready").
+	bTagNew = false;
+	if (What == 0 && !bGlimpsed && bReadyTags && MarkedTown.IsEmpty())
+	{
+		for (const FViewCorps& Unit : Corps)
+		{
+			bTagNew |= Unit.bReady && !Unit.bDim;
+		}
+	}
+	if (bTagNew)
+	{
+		NewSignature += TEXT("|new");
+	}
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
@@ -240,6 +272,7 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 
 bool AArmyPiece::bFlockNear = true;
 bool AArmyPiece::bNamesShown = false;
+bool AArmyPiece::bReadyTags = true;
 bool AArmyPiece::bCampsNear = true;
 int32 AArmyPiece::FullWorks = 3;
 
@@ -414,6 +447,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	{
 		NameLabel->DestroyComponent();
 		NameLabel = nullptr;
+	}
+	if (MarkLabel)
+	{
+		MarkLabel->DestroyComponent();
+		MarkLabel = nullptr;
 	}
 	if (Mast)
 	{
@@ -882,6 +920,60 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		}
 	}
 
+	// ---- (Release 2, the marked army; marked.ts; Brian, 24 November 2026 18:01Z) An enemy army that took one of his
+	// towns wears a red tag on its pole until he beats it: hung on the side away from its flag, its top level with the
+	// flag's, swallow-tailed at its free end, edged in near-black, and lettered with the town in cream capitals. A long
+	// name is lettered smaller rather than run wider than the flag.
+	// (Release 2, new units ready) His own new army wears the same tag in brass, lettered NEW in near-black.
+	if (What == 0 && !bGlimpsed && (!MarkedTown.IsEmpty() || bTagNew))
+	{
+		const bool bMarkNew = MarkedTown.IsEmpty();
+		const FString MarkShown = bMarkNew ? FString(TEXT("NEW")) : MarkedTown.ToUpper();
+		const double MarkLetterWanted = PlateHeight * 0.5;
+		const double MarkWanted = MarkLetterWanted * (0.9 + 0.62 * MarkShown.Len());
+		const double MarkWide = FMath::Min(MarkWanted, FlagWidth * 1.1);
+		const double MarkLetter = MarkLetterWanted * MarkWide / MarkWanted;
+		const double MarkHigh = FMath::Max(MarkLetter * 1.55, MarkLetterWanted * 1.2);
+		const double MarkTail = MarkHigh * 0.45;
+		const double MarkNear = Pole.Y - 0.2 * U; // (against the pole)
+		const FVector MarkAt(Pole.X, MarkNear - MarkWide * 0.5, FlagAt.Z + FlagHeight * 0.5 - MarkHigh * 0.5);
+		const FLinearColor MarkRed = bMarkNew ? BrassPaint : FLinearColor(FColor(176, 30, 26)); // (brass for his own new army)
+		const FLinearColor MarkEdge(FColor::FromHex(TEXT("15130F")));
+		Staff.Box(MarkAt - StandardFoot, FVector(0.2 * U, MarkWide, MarkHigh), MarkRed);
+		for (const double MarkEdgeAt : { -0.5, 0.5 })
+		{
+			Staff.Box(MarkAt - StandardFoot + FVector(0.0, 0.0, MarkHigh * MarkEdgeAt), FVector(0.24 * U, MarkWide + 0.06 * U, 0.1 * U), MarkEdge);
+		}
+		// The swallow tail: two red points beyond the free end, on the face toward the viewer (-X).
+		const double MarkFace = Pole.X - 0.1 * U, MarkEnd = MarkNear - MarkWide;
+		const FVector MarkOut(-1.0, 0.0, 0.0);
+		const FColor MarkRedPoint = MarkRed.ToFColor(true);
+		auto MarkPoint = [&](double Across, double Up) { return Staff.Add(FVector(MarkFace, Across, MarkAt.Z + Up) - StandardFoot, MarkOut, MarkRedPoint); };
+		{
+			const int32 TopIn = MarkPoint(MarkEnd + 0.01 * U, MarkHigh * 0.5), TopOut = MarkPoint(MarkEnd - MarkTail, MarkHigh * 0.5), Notch = MarkPoint(MarkEnd + 0.01 * U, 0.0);
+			Staff.Face(TopIn, TopOut, Notch, MarkOut);
+			const int32 LowIn = MarkPoint(MarkEnd + 0.01 * U, -MarkHigh * 0.5), LowOut = MarkPoint(MarkEnd - MarkTail, -MarkHigh * 0.5), Middle = MarkPoint(MarkEnd + 0.01 * U, 0.0);
+			Staff.Face(Middle, LowOut, LowIn, MarkOut);
+		}
+		MarkLabel = NewObject<UTextRenderComponent>(this);
+		MarkLabel->SetupAttachment(Standard);
+		MarkLabel->SetText(FText::FromString(MarkShown));
+		MarkLabel->SetWorldSize(static_cast<float>(MarkLetter));
+		MarkLabel->SetTextRenderColor(FColor::FromHex(bMarkNew ? TEXT("15130F") : TEXT("F4F0E4")));
+		if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+		{
+			MarkLabel->SetTextMaterial(Unlit);
+		}
+		MarkLabel->SetHorizontalAlignment(EHTA_Center);
+		MarkLabel->SetVerticalAlignment(EVRTA_TextCenter);
+		MarkLabel->SetCastShadow(false);
+		MarkLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MarkLabel->SetRelativeLocation(MarkAt - StandardFoot - FVector(0.16 * U, 0.0, 0.0));
+		MarkLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+		MarkLabel->RegisterComponent();
+	}
+	// ---- (end release 2)
+
 	// A small pennant under the plate for each ally whose corps march with this army.
 	if (Cloth && What == 0)
 	{
@@ -1205,6 +1297,7 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		return;
 	}
 	Route = Waypoints;
+	bSailing = false; // (SailAlong sets it again after)
 	RouteMarks.Reset(Route.Num());
 	double Length = 0.0;
 	RouteMarks.Add(0.0);
@@ -1227,6 +1320,28 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 	}
 	SetActorLocation(Route[0]);
 	SetActorTickEnabled(true);
+}
+
+void AArmyPiece::SailAlong(const TArray<FVector>& Waypoints, float TableYaw)
+{
+	MarchAlong(Waypoints, false, false);
+	if (!bMarching || RouteMarks.Num() < 2)
+	{
+		return;
+	}
+	bSailing = true;
+	SailEndYaw = TableYaw;
+	// (slower than a piece carried by hand: the eye should follow the ships out of one sea and into the next)
+	MarchTime = FMath::Clamp(1.1 + RouteMarks.Last() / 3800.0, 1.4, 3.6);
+}
+
+void AArmyPiece::FaceTable(float Yaw)
+{
+	SailEndYaw = Yaw;
+	if (!IsSailing())
+	{
+		SetActorRotation(FRotator(0.0f, Yaw, 0.0f));
+	}
 }
 
 void AArmyPiece::Tick(float DeltaSeconds)
@@ -1259,11 +1374,33 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	// A piece that is still in the hand when it arrives comes to rest a little off the table.
 	Position += (HomeLocation() - RestLocation) * Eased;
 	SetActorLocation(Position);
+	if (bSailing)
+	{
+		// Bows the way she goes (a fleet's model has its bows toward its own +Y), and round to face the table again as
+		// she comes in: turned a little each frame, never snapped.
+		const FVector Heading = Route[Segment] - Route[Segment - 1];
+		double Want = SailEndYaw;
+		if (Progress < 0.84 && Heading.SizeSquared2D() > 1.0e-4)
+		{
+			Want = FMath::RadiansToDegrees(FMath::Atan2(-Heading.X, Heading.Y));
+		}
+		const double Now = GetActorRotation().Yaw;
+		const double Turn = FRotator::NormalizeAxis(Want - Now);
+		// (The last turn, round to the table, quickens as the time left runs out: on the shortest sail it is all but
+		// done by the time she comes in, and what is left at the end is too little to see snap.)
+		const double Rate = Progress < 0.84 ? 5.0 : FMath::Max(5.0, 3.0 / FMath::Max(0.05, MarchTime * (1.0 - Progress)));
+		SetActorRotation(FRotator(0.0, Now + Turn * FMath::Min(1.0, DeltaSeconds * Rate), 0.0));
+	}
 
 	if (Progress >= 1.0)
 	{
 		bMarching = false;
 		SetActorTickEnabled(false);
+		if (bSailing)
+		{
+			bSailing = false;
+			SetActorRotation(FRotator(0.0f, SailEndYaw, 0.0f));
+		}
 		if (bHasWake && Body)
 		{
 			Body->SetMeshSectionVisible(1, true);

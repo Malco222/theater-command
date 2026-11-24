@@ -25,6 +25,7 @@
 #include "Async/Async.h"
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/Parse.h"
@@ -443,6 +444,202 @@ FString ACampaignGameMode::DescribeSavedCampaign()
 		return FString();
 	}
 	return Session->DescribeSave(Text);
+}
+
+FString ACampaignGameMode::SavedWarsFolder()
+{
+	// (a run that only takes pictures keeps its own, as it keeps its own campaign)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("Saves-pictures") : TEXT("Saves"));
+}
+
+bool ACampaignGameMode::IsSavedWarId(const FString& Id)
+{
+	// (only a name this game made, "war-" and then figures and dashes: never a path to anywhere else)
+	if (!Id.StartsWith(TEXT("war-")) || Id.Len() > 32)
+	{
+		return false;
+	}
+	for (int32 Index = 4; Index < Id.Len(); ++Index)
+	{
+		if (!FChar::IsDigit(Id[Index]) && Id[Index] != TEXT('-'))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool ACampaignGameMode::WriteSavedWar(const FString& Text, FSavedWar& Out)
+{
+	if (Text.IsEmpty() || !Session.IsValid())
+	{
+		return false;
+	}
+	const FString Folder = SavedWarsFolder();
+	IFileManager::Get().MakeDirectory(*Folder, true);
+	const FDateTime Now = FDateTime::Now();
+	const FString Stamp = Now.ToString(TEXT("war-%Y%m%d-%H%M%S"));
+	FString Id = Stamp;
+	for (int32 Second = 2; IFileManager::Get().FileExists(*(Folder / (Id + TEXT(".json")))); ++Second)
+	{
+		Id = FString::Printf(TEXT("%s-%d"), *Stamp, Second); // (two in the same second)
+	}
+	FString Line = Session->DescribeSave(Text);
+	if (Line.IsEmpty())
+	{
+		Line = TEXT("A saved war");
+	}
+	if (!FFileHelper::SaveStringToFile(Text, *(Folder / (Id + TEXT(".json"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		// (the 1.5.1 pre-check's mend, 24 November 2026: a war that could not be written whole, the disk full, is not
+		// left part-written, so the page never lists a war that will not load)
+		IFileManager::Get().Delete(*(Folder / (Id + TEXT(".json"))), false, false, true);
+		UE_LOG(LogTheater, Warning, TEXT("The war could not be saved to %s"), *(Folder / (Id + TEXT(".json"))));
+		return false;
+	}
+	FFileHelper::SaveStringToFile(Line, *(Folder / (Id + TEXT(".txt"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Out.Id = Id;
+	Out.Line = Line;
+	Out.When = Now;
+	UE_LOG(LogTheater, Display, TEXT("War saved as %s: %s"), *Id, *Line);
+	return true;
+}
+
+bool ACampaignGameMode::SaveWarAs(FSavedWar& Out)
+{
+	if (!Session.IsValid() || !Session->IsRunning())
+	{
+		return false;
+	}
+	return WriteSavedWar(Session->Save(), Out);
+}
+
+bool ACampaignGameMode::KeepAutosaveAsWar(FSavedWar& Out)
+{
+	FString Text;
+	WaitForSave(); // (release 2, tc.Speed.SaveAside: the save is read once it is wholly written)
+	return FFileHelper::LoadFileToString(Text, *SaveFile()) && WriteSavedWar(Text, Out);
+}
+
+TArray<FSavedWar> ACampaignGameMode::SavedWars() const
+{
+	TArray<FSavedWar> Out;
+	const FString Folder = SavedWarsFolder();
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*.json")), true, false);
+	for (const FString& File : Files)
+	{
+		FSavedWar War;
+		War.Id = FPaths::GetBaseFilename(File);
+		if (!IsSavedWarId(War.Id))
+		{
+			continue;
+		}
+		FFileHelper::LoadFileToString(War.Line, *(Folder / (War.Id + TEXT(".txt"))));
+		War.Line.TrimStartAndEndInline();
+		if (War.Line.IsEmpty())
+		{
+			War.Line = TEXT("A saved war");
+		}
+		// (when it was saved, from its name: the computer's own clock, as the player read it)
+		const FString Digits = War.Id.Mid(4, 15);
+		const int32 Year = FCString::Atoi(*Digits.Mid(0, 4)), Month = FCString::Atoi(*Digits.Mid(4, 2)), Day = FCString::Atoi(*Digits.Mid(6, 2));
+		const int32 Hour = FCString::Atoi(*Digits.Mid(9, 2)), Minute = FCString::Atoi(*Digits.Mid(11, 2)), Second = FCString::Atoi(*Digits.Mid(13, 2));
+		if (Digits.Len() == 15 && FDateTime::Validate(Year, Month, Day, Hour, Minute, Second, 0))
+		{
+			War.When = FDateTime(Year, Month, Day, Hour, Minute, Second);
+		}
+		Out.Add(War);
+	}
+	Out.Sort([](const FSavedWar& A, const FSavedWar& B) { return A.When != B.When ? A.When > B.When : A.Id > B.Id; });
+	return Out;
+}
+
+bool ACampaignGameMode::LoadSavedWar(const FString& Id, FString& Why)
+{
+	FString Text;
+	if (!IsSavedWarId(Id) || !Session.IsValid() || !FFileHelper::LoadFileToString(Text, *(SavedWarsFolder() / (Id + TEXT(".json")))))
+	{
+		Why = TEXT("That saved war could not be read.");
+		return false;
+	}
+	// (as CONTINUE: a war saved on the wider world is not laid on a table of Europe alone)
+	if (Text.Contains(TEXT("\"world\":1")) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")))
+	{
+		Why = TEXT("That war was saved on the whole world's map, and this game is laid with Europe alone.");
+		return false;
+	}
+	if (!Session->Load(Text))
+	{
+		Why = TEXT("That saved war could not be read.");
+		return false;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Saved war %s loaded"), *Id);
+	LayOutWar();
+	return true;
+}
+
+bool ACampaignGameMode::DeleteSavedWar(const FString& Id)
+{
+	if (!IsSavedWarId(Id))
+	{
+		return false;
+	}
+	const FString Folder = SavedWarsFolder();
+	IFileManager::Get().Delete(*(Folder / (Id + TEXT(".txt"))), false, false, true);
+	return IFileManager::Get().Delete(*(Folder / (Id + TEXT(".json"))), false, false, true);
+}
+
+int64 ACampaignGameMode::SavedWarsBytes() const
+{
+	const FString Folder = SavedWarsFolder();
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*")), true, false);
+	int64 Bytes = 0;
+	for (const FString& File : Files)
+	{
+		Bytes += FMath::Max<int64>(0, IFileManager::Get().FileSize(*(Folder / File)));
+	}
+	return Bytes;
+}
+
+int64 ACampaignGameMode::FreeDiskBytes() const
+{
+	uint64 Total = 0, Free = 0;
+	return FPlatformMisc::GetDiskTotalAndFreeSpace(FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()), Total, Free) ? static_cast<int64>(Free) : -1;
+}
+
+bool ACampaignGameMode::IsAutosaveKept()
+{
+	FString Kept;
+	WaitForSave(); // (release 2, tc.Speed.SaveAside: the save is read once it is wholly written)
+	const FString Folder = SavedWarsFolder();
+	const int64 Size = IFileManager::Get().FileSize(*SaveFile());
+	if (Size <= 0)
+	{
+		return false;
+	}
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("war-*.json")), true, false);
+	for (const FString& File : Files)
+	{
+		// (only one as long as it is read word for word)
+		FString Text;
+		if (IFileManager::Get().FileSize(*(Folder / File)) == Size && FFileHelper::LoadFileToString(Text, *(Folder / File)))
+		{
+			if (Kept.IsEmpty() && !FFileHelper::LoadFileToString(Kept, *SaveFile()))
+			{
+				return false;
+			}
+			if (Text.Equals(Kept, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 bool ACampaignGameMode::ContinueCampaign()

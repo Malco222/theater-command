@@ -1,0 +1,454 @@
+// The enemy's month near you, its cloud test (Tools/enemy_moves/run.sh): the game's own Campaign/EnemyMoves, no engine.
+// Given a file of arrows (one a line: kind fromX fromY toX toY war away taken siege corps hasFrom), it also writes what
+// the table would lay for them, whole, as JSON for Tools/enemy_moves/picture.py.
+
+#include "Campaign/EnemyMoves.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace TheaterEnemyMoves;
+
+namespace
+{
+	int Checks = 0, Faults = 0;
+
+	void Check(bool bOk, const std::string& What)
+	{
+		++Checks;
+		if (!bOk)
+		{
+			++Faults;
+			std::printf("FAULT: %s\n", What.c_str());
+		}
+	}
+
+	FArrow Make(EKind Kind, double FromX, double FromY, double ToX, double ToY)
+	{
+		FArrow Arrow;
+		Arrow.Kind = Kind;
+		Arrow.From = FPoint{ FromX, FromY };
+		Arrow.To = FPoint{ ToX, ToY };
+		return Arrow;
+	}
+
+	size_t Pieces(const FLayer& Layer)
+	{
+		return Layer.Strokes.size() + Layer.Triangles.size();
+	}
+
+	/** The dark edges in Under (the contact shadows lie lower, under them). */
+	std::vector<FStroke> EdgeStrokes(const FLayer& Under, bool bShadows = false)
+	{
+		std::vector<FStroke> Out;
+		for (const FStroke& S : Under.Strokes)
+		{
+			if ((S.Lift < 0.43) == bShadows)
+			{
+				Out.push_back(S);
+			}
+		}
+		return Out;
+	}
+
+	size_t EdgeTriangles(const FLayer& Under, bool bShadows = false)
+	{
+		size_t Count = 0;
+		for (const FTriangle& T : Under.Triangles)
+		{
+			Count += (T.Lift < 0.43) == bShadows ? 1 : 0;
+		}
+		return Count;
+	}
+
+	/** How near P comes to a line of points. */
+	double NearestOnLine(const std::vector<FPoint>& Line, const FPoint& P)
+	{
+		double Best = 1e18;
+		for (size_t K = 1; K < Line.size(); ++K)
+		{
+			const FPoint& A = Line[K - 1];
+			const FPoint& B = Line[K];
+			const double Dx = B.X - A.X, Dy = B.Y - A.Y;
+			const double Length2 = Dx * Dx + Dy * Dy;
+			const double Share = Length2 > 0.0 ? std::clamp(((P.X - A.X) * Dx + (P.Y - A.Y) * Dy) / Length2, 0.0, 1.0) : 0.0;
+			Best = std::min(Best, std::hypot(P.X - (A.X + Dx * Share), P.Y - (A.Y + Dy * Share)));
+		}
+		return Best;
+	}
+
+	/** The farthest any laid point lies from P. */
+	double Farthest(const FDrawing& Drawing, const FPoint& P)
+	{
+		double Far = 0.0;
+		for (const FLayer* Layer : { &Drawing.Under, &Drawing.Over })
+		{
+			for (const FStroke& Stroke : Layer->Strokes)
+			{
+				for (const FPoint& Q : Stroke.Points)
+				{
+					Far = std::max(Far, std::hypot(Q.X - P.X, Q.Y - P.Y));
+				}
+			}
+			for (const FTriangle& T : Layer->Triangles)
+			{
+				for (const FPoint& Q : { T.A, T.B, T.C })
+				{
+					Far = std::max(Far, std::hypot(Q.X - P.X, Q.Y - P.Y));
+				}
+			}
+		}
+		return Far;
+	}
+
+	/** The point of the arrow's head: the head triangle's first corner in the Over layer. */
+	bool HeadTip(const FDrawing& Drawing, FPoint& Out)
+	{
+		for (const FTriangle& T : Drawing.Over.Triangles)
+		{
+			Out = T.A;
+			return true;
+		}
+		return false;
+	}
+
+	void Write(const FDrawing& Drawing, const std::string& File)
+	{
+		std::ofstream Out(File);
+		auto Ink = [&Out](const FInk& I) { Out << "[" << int(I.R) << "," << int(I.G) << "," << int(I.B) << "," << int(I.A) << "]"; };
+		auto Layer = [&](const FLayer& L)
+		{
+			Out << "{\"strokes\":[";
+			for (size_t K = 0; K < L.Strokes.size(); ++K)
+			{
+				const FStroke& S = L.Strokes[K];
+				Out << (K ? "," : "") << "{\"half\":" << S.Half << ",\"closed\":" << (S.bClosed ? "true" : "false") << ",\"ink\":";
+				Ink(S.Ink);
+				Out << ",\"points\":[";
+				for (size_t J = 0; J < S.Points.size(); ++J)
+				{
+					Out << (J ? "," : "") << "[" << S.Points[J].X << "," << S.Points[J].Y << "]";
+				}
+				Out << "]}";
+			}
+			Out << "],\"triangles\":[";
+			for (size_t K = 0; K < L.Triangles.size(); ++K)
+			{
+				const FTriangle& T = L.Triangles[K];
+				Out << (K ? "," : "") << "{\"ink\":";
+				Ink(T.Ink);
+				Out << ",\"points\":[[" << T.A.X << "," << T.A.Y << "],[" << T.B.X << "," << T.B.Y << "],[" << T.C.X << "," << T.C.Y << "]]}";
+			}
+			Out << "]}";
+		};
+		Out << "{\"under\":";
+		Layer(Drawing.Under);
+		Out << ",\"over\":";
+		Layer(Drawing.Over);
+		Out << "}\n";
+	}
+}
+
+int main(int Count, char** Args)
+{
+	// Growing: nothing at 0, something early, all of it at 1; the head's point moves out along the way and ends short of the place.
+	{
+		const std::vector<FArrow> One{ Make(EKind::Move, 0.0, 0.0, 65.0, 0.0) };
+		FDrawing D;
+		Lay(One, 0.0, D);
+		Check(D.IsEmpty(), "nothing is laid before the arrow begins to grow");
+		Lay(One, 0.2, D);
+		FPoint Early;
+		Check(!D.IsEmpty() && HeadTip(D, Early), "a fifth grown, a shaft and a head are laid");
+		Lay(One, 1.0, D);
+		FPoint Whole;
+		Check(HeadTip(D, Whole), "whole, the head is laid");
+		Check(Whole.X > Early.X + 20.0, "the head's point moves out as the arrow grows");
+		Check(std::fabs(Whole.X - (65.0 - 4.5)) < 0.5 && std::fabs(Whole.Y) < 0.5, "whole, the point stops short of the place it came to, on its line");
+		const std::vector<FStroke> Edges = EdgeStrokes(D.Under), Shadows = EdgeStrokes(D.Under, true);
+		Check(Edges.size() == D.Over.Strokes.size() && EdgeTriangles(D.Under) == D.Over.Triangles.size(), "every ink has its dark edge under it");
+		Check(Edges[0].Half > D.Over.Strokes[0].Half, "the edge shows round the ink");
+		Check(Edges[0].Lift < D.Over.Strokes[0].Lift, "the edge lies under the ink");
+		Check(!Shadows.empty() && EdgeTriangles(D.Under, true) == D.Over.Triangles.size() && Shadows[0].Half > Edges[0].Half && Shadows[0].Ink.A < 80, "a soft contact shadow lies under the arrow and its head, wider than its edge and faint");
+		Check(Grown(0.0) == 0.0 && Grown(GrowSeconds) == 1.0 && Grown(GrowSeconds * 0.5) > 0.5, "the growth is eased: fast at first, whole at its time");
+	}
+	// Two arrows on one road both ways bow apart (one road the same way is folded into one: see Fold below).
+	{
+		const std::vector<FArrow> Two{ Make(EKind::Move, 0.0, 0.0, 60.0, 0.0), Make(EKind::Move, 60.0, 0.0, 0.0, 0.0) };
+		FDrawing D;
+		Lay(Two, 1.0, D);
+		const FStroke& A = D.Over.Strokes[0];
+		const FStroke& B = D.Over.Strokes[1];
+		Check(A.Points[A.Points.size() / 2].Y * B.Points[B.Points.size() / 2].Y < 0.0, "two arrows between the same places, both ways, bow to either side");
+	}
+	// An attack: its mark lands only as the arrow arrives; lost red and filled, held brass; a landing is the mark alone.
+	{
+		FArrow Hit = Make(EKind::Attack, 0.0, 0.0, 70.0, 10.0);
+		Hit.bTaken = true;
+		FDrawing D;
+		Lay({ Hit }, 0.5, D);
+		const size_t Half = Pieces(D.Under) + Pieces(D.Over);
+		Lay({ Hit }, 1.0, D);
+		Check(Pieces(D.Under) + Pieces(D.Over) > Half + 4, "the battle mark is laid as the arrow arrives, not before");
+		bool bFilled = false, bRed = false;
+		for (const FTriangle& T : D.Under.Triangles)
+		{
+			bFilled = bFilled || (T.Ink.R > 200 && T.Ink.A < 100);
+		}
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			bRed = bRed || (S.bClosed && S.Ink.R > 200 && S.Ink.G < 60);
+		}
+		Check(bFilled && bRed, "a place lost: a red ring, faintly filled");
+		// (art director, 24 Nov) crossed sabres in the ring, not an X: blades laid as triangles inside it, red where it was lost
+		size_t Blades = 0;
+		for (const FTriangle& T : D.Over.Triangles)
+		{
+			const bool bInside = std::hypot(T.A.X - Hit.To.X, T.A.Y - Hit.To.Y) < 6.2 && std::hypot(T.C.X - Hit.To.X, T.C.Y - Hit.To.Y) < 6.2;
+			Blades += bInside && T.Ink.R > 200 && T.Ink.G < 60 ? 1 : 0;
+		}
+		Check(Blades >= 40, "the battle mark holds two crossed sabres, red where the place was lost");
+		Hit.bTaken = false;
+		Lay({ Hit }, 1.0, D);
+		bool bBrass = false;
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			bBrass = bBrass || (S.bClosed && S.Ink.R == 224 && S.Ink.G == 184);
+		}
+		Check(bBrass, "a place that held: a brass ring");
+		FArrow Landing = Hit;
+		Landing.bFrom = false;
+		Lay({ Landing }, 1.0, D);
+		Check(Farthest(D, Landing.To) < 10.0, "where it came from is not known: the mark alone, round the place");
+	}
+	// (Brian, 24 Nov 18:01Z) His allies' battles: a smaller steel ring; a blue arrow where his side attacked, red where an ally was attacked.
+	{
+		FArrow Own = Make(EKind::Attack, 0.0, 0.0, 70.0, 0.0), Hit = Own, Strike = Own;
+		Hit.bAlly = true;
+		Strike.bAlly = Strike.bOurs = true;
+		FDrawing D;
+		auto RingOf = [](const FDrawing& Drawing, FInk& Ink, double& Radius)
+		{
+			for (const FStroke& S : Drawing.Over.Strokes)
+			{
+				if (S.bClosed)
+				{
+					Ink = S.Ink;
+					Radius = std::hypot(S.Points[0].X - 70.0, S.Points[0].Y);
+					return;
+				}
+			}
+		};
+		FInk OwnRing, AllyRing, Unused;
+		double OwnRadius = 0.0, AllyRadius = 0.0, Unused2 = 0.0;
+		Lay({ Own }, 1.0, D);
+		RingOf(D, OwnRing, OwnRadius);
+		Lay({ Hit }, 1.0, D);
+		RingOf(D, AllyRing, AllyRadius);
+		Check(AllyRadius < OwnRadius && AllyRing.B > 180 && AllyRing.B > AllyRing.R, "an allies' battle: a smaller steel ring than his own");
+		Check(D.Over.Strokes[0].Ink.R > 200 && D.Over.Strokes[0].Ink.B < 60, "an ally attacked: a red arrow");
+		Lay({ Strike }, 1.0, D);
+		RingOf(D, Unused, Unused2);
+		Check(D.Over.Strokes[0].Ink.B > 150 && D.Over.Strokes[0].Ink.R < 100, "his side attacking: a blue arrow");
+	}
+	// (art director, 24 Nov) His corps' fall-back from a place attacked starts at the ring's rim, not among the sabres.
+	{
+		const std::vector<FArrow> Back{ Make(EKind::Attack, -70.0, 0.0, 0.0, 0.0), Make(EKind::Fell, 0.0, 0.0, 60.0, 0.0) };
+		FDrawing D;
+		Lay(Back, 1.0, D);
+		double Nearest = 1e18;
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (S.Ink.R == 238 && S.Ink.G == 230)
+			{
+				for (const FPoint& P : S.Points)
+				{
+					Nearest = std::min(Nearest, std::hypot(P.X, P.Y));
+				}
+			}
+		}
+		Check(Nearest > 6.2 + 0.75, "a fall-back from a place attacked starts outside the battle ring");
+	}
+	// (art director, 24 Nov) His own corps' fall-back on the same road as an attack keeps clear of it.
+	{
+		const std::vector<FArrow> Road{ Make(EKind::Attack, 0.0, 0.0, 70.0, 0.0), Make(EKind::Fell, 0.0, 0.0, 70.0, 0.0) };
+		FDrawing D;
+		Lay(Road, 1.0, D);
+		std::vector<FPoint> Shaft;
+		double Clear = 1e18;
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (!S.bClosed && S.Ink.R == 214 && S.Points.size() > 4 && Shaft.empty())
+			{
+				Shaft = S.Points;
+			}
+		}
+		for (const FStroke& S : D.Over.Strokes)
+		{
+			if (S.Ink.R == 238 && S.Ink.G == 230)
+			{
+				for (const FPoint& P : S.Points)
+				{
+					Clear = std::min(Clear, NearestOnLine(Shaft, P));
+				}
+			}
+		}
+		Check(!Shaft.empty() && Clear > 2.2, "a fall-back on an attack's road keeps to the other side of it, both reading");
+	}
+	// A move away from him is fainter; his own retreat is dashed; a peace-time army is amber.
+	{
+		FArrow Toward = Make(EKind::Move, 0.0, 0.0, 65.0, 0.0), Away = Toward, Peace = Toward, Fell = Toward;
+		Away.bAway = true;
+		Peace.bWar = false;
+		Fell.Kind = EKind::Fell;
+		FDrawing D;
+		Lay({ Toward }, 1.0, D);
+		const FInk WarInk = D.Over.Strokes[0].Ink;
+		const double WarHalf = D.Over.Strokes[0].Half;
+		Lay({ Away }, 1.0, D);
+		Check(D.Over.Strokes[0].Ink.A < WarInk.A && D.Over.Strokes[0].Half < WarHalf, "an army going away is drawn fainter and thinner");
+		Lay({ Peace }, 1.0, D);
+		Check(D.Over.Strokes[0].Ink.G > WarInk.G + 60, "a country at peace with him is amber, not red");
+		Lay({ Fell }, 1.0, D);
+		Check(D.Over.Strokes.size() > 4, "his own corps falling back: dashes");
+	}
+	// The frame holds every point; the zoom stays in the watch's range and grows with the reach.
+	{
+		const FFrame F = Frame({ FPoint{ 0.0, 0.0 }, FPoint{ 100.0, 0.0 }, FPoint{ 50.0, 80.0 } });
+		Check(F.bValid && std::fabs(F.Middle.X - 50.0) < 1e-9 && std::fabs(F.Middle.Y - 40.0) < 1e-9, "the frame's middle is the middle of the points' box");
+		Check(F.Reach >= std::hypot(50.0, 40.0) - 1e-9, "the frame reaches the farthest point");
+		Check(!Frame({}).bValid, "no points, no frame");
+		const double Near = ZoomFor(20.0, 10.0, 750.0, 30000.0), Wide = ZoomFor(250.0, 10.0, 750.0, 30000.0), Huge = ZoomFor(5000.0, 10.0, 750.0, 30000.0);
+		Check(Near >= 0.40 && Huge <= 0.66 && Wide > Near, "the zoom grows with the reach, within 0.40 to 0.66");
+		std::printf("zoom for a reach of 20, 65, 120, 250 map units: %.3f %.3f %.3f %.3f\n", Near, ZoomFor(65.0, 10.0, 750.0, 30000.0), ZoomFor(120.0, 10.0, 750.0, 30000.0), Wide);
+	}
+	// The pauses: an attack longer than moves alone, a lost place longer still, raids keep their own time.
+	{
+		Check(Pause(1, 0, 0, 0.0, 0.0) > Pause(0, 0, 3, 0.0, 0.0), "an attack is looked at longer than moves");
+		Check(Pause(1, 1, 0, 0.0, 0.0) > Pause(1, 0, 0, 0.0, 0.0), "a place lost longer than one held");
+		Check(Pause(3, 1, 2, 0.0, 0.0) <= 6.0, "even a heavy month moves on within six seconds");
+		Check(Pause(0, 0, 1, 6.0, 0.0) == 6.0, "a raid keeps the time it takes to fly");
+		std::printf("pauses: moves 1 %.1f s, moves 5 %.1f s, attack held %.1f s, attack lost %.1f s, three attacks %.1f s\n", Pause(0, 0, 1, 0, 0), Pause(0, 0, 5, 0, 0), Pause(1, 0, 0, 0, 0), Pause(1, 1, 0, 0, 0), Pause(3, 1, 0, 0, 0));
+	}
+	// (Round 2) Where a stop happened: the attack on him first, then an army coming at him, then the first arrow.
+	{
+		FArrow Going, Coming, Hit, AllyHit;
+		Going.bAway = true;
+		Hit.Kind = EKind::Attack;
+		AllyHit.Kind = EKind::Attack;
+		AllyHit.bAlly = true;
+		Check(Worst({}) == -1, "no arrows, no place");
+		Check(Worst({ Going, AllyHit, Coming, Hit }) == 3, "the stop's place is where he was attacked");
+		Check(Worst({ Going, AllyHit, Coming }) == 2, "else where an army came at him, before an allies' battle");
+		Check(Worst({ Going, AllyHit }) == 0, "else the first arrow drawn");
+	}
+	// (Round 2, corner pings) The stops to come pulse, each after the one before; the one on screen stands still in brass; the seen ones are faint.
+	{
+		const FPingLook Seen = Ping(EPing::Seen, 3.0, 0), Now = Ping(EPing::Now, 3.0, 1), Again = Ping(EPing::Now, 3.7, 1);
+		Check(Seen.RingAlpha == 0.0 && Seen.DotAlpha < 0.6 && Seen.Dot < Now.Dot, "a stop seen: a faint small dot, no ring");
+		Check(Now.bBrassRing && Now.RingAlpha == 1.0 && Now.Ring == Again.Ring, "the stop on screen: a still brass ring");
+		double Smallest = 1e9, Largest = 0.0, Faintest = 1.0, Boldest = 0.0;
+		bool bInside = true, bFadesAsItGrows = true;
+		for (int K = 0; K < 140; ++K)
+		{
+			const double At = 100.0 + K * 0.01;
+			const FPingLook One = Ping(EPing::ToCome, At, 2), Next = Ping(EPing::ToCome, At + 0.004, 2);
+			Smallest = std::min(Smallest, One.Ring);
+			Largest = std::max(Largest, One.Ring);
+			Faintest = std::min(Faintest, One.RingAlpha);
+			Boldest = std::max(Boldest, One.RingAlpha);
+			bInside = bInside && One.RingAlpha >= 0.0 && One.RingAlpha <= 1.0 && One.DotAlpha == 1.0 && !One.bBrassRing;
+			bFadesAsItGrows = bFadesAsItGrows && (Next.Ring < One.Ring || Next.RingAlpha <= One.RingAlpha + 1e-9);
+		}
+		Check(bInside && Smallest < 4.0 && Largest > 10.0 && Faintest < 0.05 && Boldest > 0.8, "a stop to come: a ring that swells from the dot and fades");
+		Check(bFadesAsItGrows, "the ring fades as it swells");
+		Check(std::fabs(Ping(EPing::ToCome, 50.0, 1).Ring - Ping(EPing::ToCome, 50.0, 2).Ring) > 1.0, "the stops to come pulse one after another, not together");
+		Check(std::fabs(Ping(EPing::ToCome, 50.0, 1).Ring - Ping(EPing::ToCome, 50.0 + PingSeconds, 1).Ring) < 1e-6, "a ring swells once in its time, again and again");
+		FArrow Hit, Peace, AllyHit;
+		Hit.Kind = EKind::Attack;
+		Peace.bWar = false;
+		AllyHit.Kind = EKind::Attack;
+		AllyHit.bAlly = true;
+		Check(PingInk(Hit).R > 200 && PingInk(Hit).G < 60, "a stop where he was attacked pings red");
+		Check(PingInk(Peace).G > 120 && PingInk(Peace).R > 200, "an army at peace with him pings amber");
+		Check(PingInk(AllyHit).B > 180 && PingInk(AllyHit).B > PingInk(AllyHit).R, "his allies' battle pings steel");
+	}
+	// (Art director, round 2b) One arrow for each road and direction.
+	{
+		FArrow Hit;
+		Hit.From = { 0.0, 0.0 };
+		Hit.To = { 65.0, 0.0 };
+		Hit.Kind = EKind::Attack;
+		Hit.Corps = 2;
+		FArrow Up = Hit;
+		Up.Kind = EKind::Move;
+		Up.Corps = 3;
+		Up.To = { 65.3, 0.4 };
+		const std::vector<FArrow> One = Fold({ Up, Hit });
+		Check(One.size() == 1 && One[0].Kind == EKind::Attack && One[0].Corps == 3, "an attack and a move down one road the same way: one arrow, the attack's");
+		FArrow Back = Up;
+		Back.From = Up.To;
+		Back.To = Up.From;
+		Check(Fold({ Up, Back }).size() == 2, "the same road the other way: two arrows");
+		FArrow Calm = Up;
+		Calm.bWar = false;
+		Calm.Corps = 1;
+		const std::vector<FArrow> Moves = Fold({ Calm, Up });
+		Check(Moves.size() == 1 && Moves[0].bWar && Moves[0].Corps == 4, "two moves down one road: one arrow, war over peace, their corps added");
+		FArrow Fell = Hit;
+		Fell.Kind = EKind::Fell;
+		Check(Fold({ Hit, Fell }).size() == 2, "his own falling back is never folded away");
+		FArrow Landing = Hit;
+		Landing.bFrom = false;
+		Check(Fold({ Hit, Landing }).size() == 2, "a landing (no road) is never folded");
+		FArrow Allies = Hit;
+		Allies.bAlly = true;
+		const std::vector<FArrow> Mixed = Fold({ Allies, Hit });
+		Check(Mixed.size() == 1 && !Mixed[0].bAlly, "his own troops attacked beat his allies' battle on one road");
+		FDrawing Folded, Single;
+		Lay({ Up, Hit }, 1.0, Folded);
+		Lay({ Hit }, 1.0, Single);
+		Check(Folded.Over.Strokes.size() == Single.Over.Strokes.size() && Folded.Over.Triangles.size() == Single.Over.Triangles.size(), "Lay folds what it is given");
+	}
+	// Arrows from a file, laid whole, for the picture.
+	if (Count >= 3)
+	{
+		std::ifstream In(Args[1]);
+		std::vector<FArrow> Arrows;
+		std::string Line;
+		while (std::getline(In, Line))
+		{
+			std::istringstream Words(Line);
+			int Kind = 0, War = 1, Away = 0, Taken = 0, Siege = 0, Corps = 1, HasFrom = 1;
+			FArrow Arrow;
+			if (Words >> Kind >> Arrow.From.X >> Arrow.From.Y >> Arrow.To.X >> Arrow.To.Y >> War >> Away >> Taken >> Siege >> Corps >> HasFrom)
+			{
+				Arrow.Kind = static_cast<EKind>(Kind);
+				Arrow.bWar = War != 0;
+				Arrow.bAway = Away != 0;
+				Arrow.bTaken = Taken != 0;
+				Arrow.bSiege = Siege != 0;
+				Arrow.Corps = Corps;
+				Arrow.bFrom = HasFrom != 0;
+				int Ally = 0, Ours = 0; // (optional: an allies' battle, and whether his side attacked)
+				if (Words >> Ally >> Ours)
+				{
+					Arrow.bAlly = Ally != 0;
+					Arrow.bOurs = Ours != 0;
+				}
+				Arrows.push_back(Arrow);
+			}
+		}
+		FDrawing D;
+		Lay(Arrows, Count >= 4 ? std::atof(Args[3]) : 1.0, D);
+		Write(D, Args[2]);
+		std::printf("laid %zu arrows: %zu strokes, %zu triangles\n", Arrows.size(), D.Under.Strokes.size() + D.Over.Strokes.size(), D.Under.Triangles.size() + D.Over.Triangles.size());
+	}
+	std::printf("%d checks, %d faults\n", Checks, Faults);
+	return Faults == 0 ? 0 : 1;
+}

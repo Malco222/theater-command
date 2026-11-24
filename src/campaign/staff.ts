@@ -11,7 +11,7 @@ import { FORTS_STAGE } from './stage';
 import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
-import { openTech } from './tech';
+import { openTech, openUnitsRows } from './tech';
 import { openStores } from './resources';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
@@ -23,7 +23,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
-import { openAirWar, openWorldAir, skyDenies } from './air';
+import { openAirWar, openPilots, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
@@ -45,10 +45,11 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
-import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT_STAGE, NICKNAMES_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
+import { BREAKUP_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SHADOW_STAGE, SETTLEDTOWNS_STAGE, VOYAGELOG_STAGE, TASKFORCE_STAGE, UNITS_STAGE, WAGONS_STAGE, WINCHANCE_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
+import { openQuality } from './units';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -146,6 +147,22 @@ export function startOpen(g: Game, wide = true): Game {
   if (DUMPS_STAGE) g.flags.dumps = 1;
   // A fleet sent straight at an enemy fleet (release 2, fleetattack.ts).
   if (FLEETATTACK_STAGE) g.flags.fleetAttack = 1;
+  // Breaking a corps up into its divisions (release 2, breakup.ts).
+  if (BREAKUP_STAGE) g.flags.breakUp = 1;
+  // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
+  if (MARKED_STAGE) g.flags.marked = 1;
+  // Task forces: a fleet with a standing job (release 2, taskforce.ts).
+  if (TASKFORCE_STAGE) g.flags.taskForce = 1;
+  // The admirals' reasons for each fleet they order (release 2, fleetwhy.ts).
+  if (FLEETWHY_STAGE) g.flags.fleetWhy = 1;
+  // Rearguards: a small corps holds a province a month to slow the enemy (release 2, rearguard.ts).
+  if (REARGUARD_STAGE) g.flags.rearguard = 1;
+  // Conquered towns settle (release 2, buildings.ts).
+  if (SETTLEDTOWNS_STAGE) g.flags.settledTowns = 1;
+  // Shadowing, the voyage log, and rearguards that blow the bridges behind them (release 2; shadow.ts, voyage.ts, rearguard.ts).
+  if (SHADOW_STAGE) g.flags.shadow = 1;
+  if (VOYAGELOG_STAGE) g.flags.voyageLog = 1;
+  if (REARBRIDGES_STAGE) g.flags.rearBridges = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -163,6 +180,9 @@ export function startOpen(g: Game, wide = true): Game {
   }
   startEngineers(g);
   openTraits(g);
+  // Units decide's start list (units.json startRows; DD 24 Nov 15:53Z, #2 form): rows held on the first day under that
+  // switch only, laid before the opening research so a later start's catch-up counts each once. Off, nothing.
+  openUnitsRows(g);
   openTech(g);
   // America's air commands stand on their fields before the depots are counted: the stores open with what they burn.
   openWorldAir(g);
@@ -170,6 +190,11 @@ export function startOpen(g: Game, wide = true): Game {
   openAirWar(g);
   openSmallAir(g);
   openCarriers(g);
+  // Units decide's quality store (units.ts; DD 24 Nov 15:53Z, #2 form Part 2): seeded once the wider world, the
+  // opening research, the world's air commands and the carriers are in place. Off, nothing.
+  openQuality(g);
+  // (And every air group's pilots from it: their hours and experience, under the switch only.)
+  openPilots(g);
   openSieges(g);
   openMorale(g);
   openEscorts(g);

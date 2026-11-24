@@ -21,6 +21,7 @@ import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
 import { straitOpen } from './history';
 import { allied, atWar, headline } from './game';
+import { REARGUARD, chargesLaid } from './rearguard';
 import { tieBars, whyTieBars } from './far';
 import { halted } from './history';
 
@@ -192,9 +193,15 @@ export function bridgesOnCapture(g: Game, taken: Region, by: string): void {
     if (!atWar(g, by, far.ctrl)) continue;
     const roll = new Rng(hashString(`bridge:${g.seed}:${g.turn}:${c.a}:${c.b}`)).next();
     const name = riverName(c), holder = g.nations[far.ctrl].adj, captor = g.nations[by].adj;
-    if (roll < blowChance(g, c, taken, by)) {
+    // (Release 2, rearguard.ts) A rearguard of the far bank's side held this province: its charges were laid already.
+    const laid = chargesLaid(g, taken.id, (nat) => nat === far.ctrl || allied(g, nat, far.ctrl));
+    if (roll < (laid ? REARGUARD.bridges : blowChance(g, c, taken, by))) {
       blow(g, c);
-      if (concerns(g, by, far.ctrl) && firstTelling(g, `blow:${name}:${taken.id}:${far.ctrl}`)) headline(g, 'battle', `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id, { arm: 'land' });
+      if (concerns(g, by, far.ctrl) && firstTelling(g, `blow:${name}:${taken.id}:${far.ctrl}`)) {
+        headline(g, 'battle', laid
+          ? `The ${holder} rearguard at ${taken.name} blows the bridges over the ${name} behind it as ${captor} forces break through.`
+          : `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id, { arm: 'land' });
+      }
     } else if (concerns(g, by, far.ctrl) && firstTelling(g, `seize:${name}:${taken.id}:${by}`)) {
       headline(g, 'battle', `${captor} troops seize the bridges over the ${name} at ${taken.name} before they can be blown.`, by, taken.id, { arm: 'land', won: by, lost: far.ctrl });
     }

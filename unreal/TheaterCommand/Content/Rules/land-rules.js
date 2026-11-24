@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of f4445fcb 2026-11-23. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 9fa93f40 2026-11-24. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11137,6 +11137,9 @@
     return { crops: CROPS, crop: crop.join(""), fields: { turn: r3(turn3), cx: w / 2, cy: h / 2, xs: xs.map(r1), ys: ys.map(r1), shift: shift.map(r1), patch: patchOut }, balka: { line: line.map(([x, y]) => [r1(x), r1(y)]), deep }, rail: { line: rail.map(([x, y]) => [r1(x), r1(y)]), bank }, hill: { ...hill, x: r1(hill.x), y: r1(hill.y) } };
   }
 
+  // ../../src/battle/land/wrecks.ts
+  var AFV_PER_DIV = { arm: 150, mot: 40 };
+
   // ../../src/battle/land/live.ts
   var KEEP_M = 0.1;
   var KEEP_F = 0.05;
@@ -11406,8 +11409,13 @@
       __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
-      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground). */
-      __publicField(this, "looks", { worn: true, mud: true, scars: true });
+      /**
+       * Old wrecks: the real armoured vehicles one tank model stands for in this battle (both sides' armour together, at
+       * least 1, to a tenth), so the 3D game lays the old wrecks at the battle's own scale; null where no armour is drawn.
+       */
+      __publicField(this, "wreckPer", null);
+      /** The player's looks switches the header reads (worn uniforms, mud remembered, scarred ground, old wrecks). */
+      __publicField(this, "looks", { worn: true, mud: true, scars: true, wrecks: true });
       __publicField(this, "seen", /* @__PURE__ */ new Set());
       __publicField(this, "roundsNew", []);
       __publicField(this, "phases", /* @__PURE__ */ new Map());
@@ -11449,7 +11457,11 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
-      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false };
+      this.looks = { worn: opts.worn !== false, mud: opts.mud !== false, scars: opts.scars !== false, wrecks: opts.wrecks !== false };
+      const armour = sim.allBlocks().filter((u) => u.kind === "arm" && u.figures0 > 0);
+      const models = armour.reduce((s, u) => s + u.figures0, 0);
+      const real = armour.reduce((s, u) => s + (AFV_PER_DIV.arm ?? 0) * (u.worth ?? u.figures0 / Math.max(1, u.tray)), 0);
+      this.wreckPer = models > 0 && real > 0 ? Math.max(1, Math.round(real / models * 10) / 10) : null;
       const caught = !piece && opts.captured !== false && ticket.captured ? ticket.captured : null;
       const caughtLeft = { att: caught?.att?.n ?? 0, def: caught?.def?.n ?? 0 };
       this.blocks = sim.allBlocks().map((u) => {
@@ -11504,10 +11516,12 @@
         date: t.date,
         turn: t.turn,
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
-        // lays thaw mud from "mud", weathered old craters from the scars, and old ruts from the battles fought in mud)
+        // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
+        // burnt-out armour of the battles here from oldWrecks)
         ...t.weather ? { weather: t.weather } : {},
         ...t.scars && t.scars.count > 0 && this.looks.scars ? { scars: { count: t.scars.count, months: t.scars.months } } : {},
         ...t.oldRuts && t.oldRuts.count > 0 && this.looks.mud ? { oldRuts: { count: t.oldRuts.count, months: t.oldRuts.months } } : {},
+        ...t.oldWrecks && t.oldWrecks.count > 0 && this.looks.wrecks ? { oldWrecks: { count: t.oldWrecks.count, months: t.oldWrecks.months, nats: { ...t.oldWrecks.nats }, ...this.wreckPer ? { per: this.wreckPer } : {} } } : {},
         ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
           att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {}, ...t.att.worn !== void 0 && this.looks.worn ? { worn: t.att.worn } : {} },
@@ -11779,7 +11793,8 @@
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
         mud: opts?.mud !== false,
-        scars: opts?.scars !== false
+        scars: opts?.scars !== false,
+        wrecks: opts?.wrecks !== false
       });
       return live3.header();
     },
@@ -11813,6 +11828,7 @@
         worn: o.worn !== false,
         mud: o.mud !== false,
         scars: o.scars !== false,
+        wrecks: o.wrecks !== false,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},

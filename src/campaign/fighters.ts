@@ -12,6 +12,7 @@ import { techMul } from './research';
 import { treeLevel } from './tech';
 import { hasAircraftWorks } from './arsenal';
 import { designYear } from '../battle/air/doctrine';
+import { armsOf, unitsDecide, wayNow } from './units';
 
 export type Band = 'low' | 'mid' | 'high';
 export type Mix = Record<string, number>;
@@ -56,8 +57,18 @@ export const FIGHTERS = data as unknown as {
 
 const BI: Record<Band, number> = { low: 0, mid: 1, high: 2 };
 
-/** True when the campaign was set up with fighter types. */
-export const fighterTypesOn = (g: Game): boolean => g.flags.ftrtypes === 1;
+/**
+ * True when the campaign was set up with fighter types, or with Units decide, which folds the dogfight switch in
+ * (BO:2093; the #2 form, Part 2): planes, pilots and doctrine decide the fighters' fight under the one switch.
+ */
+export const fighterTypesOn = (g: Game): boolean => g.flags.ftrtypes === 1 || unitsDecide(g);
+
+/**
+ * The law's k as the game reads it: the fitted k under Units decide only (fit-gc-1124.md: one anchor, L). It was fitted
+ * with the store's hours read and the held level leaving a laid pair, so the Fighter types switch alone, which has
+ * neither, keeps no k (the same anchor asks 2.7 of it with the held levels in) and gives no edge.
+ */
+export const lawK = (g: Game): number => (unitsDecide(g) ? FIGHTERS.law.k : 0);
 
 /** Sets the switch. Only at setup, before the first month has been played; returns whether it was set. */
 export function setFighterTypes(g: Game, on: boolean): boolean {
@@ -98,10 +109,10 @@ export function edgeParts(A: TypeRow, B: TypeRow, band: Band): { speed: number; 
  * it is 0 and no edge is given. No cap but the widest anchor. Antisymmetric. `band` is kept for the callers; the
  * law reads one measure a type.
  */
-export function edge(a: string, b: string, band: Band, docA?: Doctrine, docB?: Doctrine): number {
+export function edge(a: string, b: string, band: Band, docA?: Doctrine, docB?: Doctrine, k = FIGHTERS.law.k): number {
   void band;
   const A = FIGHTERS.types[a], B = FIGHTERS.types[b], L = FIGHTERS.law;
-  if (!A || !B || !L.k) return 0;
+  if (!A || !B || !k) return 0;
   const both = (k: keyof NonNullable<TypeRow['laid']>): boolean => !!(A.laid?.[k] && B.laid?.[k]);
   const ln = (x: number | undefined, y: number | undefined): number => (x && y ? Math.log(x / y) : 0);
   let t = both('speed') ? ln(A.top, B.top) : 0;
@@ -112,14 +123,14 @@ export function edge(a: string, b: string, band: Band, docA?: Doctrine, docB?: D
     return 0;
   };
   t += terms(docA, 1) + terms(docB, 1);
-  const e = L.k * t;
+  const e = k * t;
   return L.widest ? clip(e, -L.widest, L.widest) : e;
 }
 
 /** One mix's mean edge over another's, each pair weighted by both shares. */
-export function mixEdge(a: Mix, b: Mix, band: Band, docA?: Doctrine, docB?: Doctrine): number {
+export function mixEdge(a: Mix, b: Mix, band: Band, docA?: Doctrine, docB?: Doctrine, k = FIGHTERS.law.k): number {
   let t = 0, s = 0;
-  for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) { t += sx * sy * edge(x, y, band, docA, docB); s += sx * sy; }
+  for (const [x, sx] of Object.entries(a)) for (const [y, sy] of Object.entries(b)) { t += sx * sy * edge(x, y, band, docA, docB, k); s += sx * sy; }
   return s > 0 ? t / s : 0;
 }
 
@@ -199,7 +210,11 @@ export function typeMix(g: Game, f: AirFleet): Mix | null {
   return mix;
 }
 
-export interface Weighed { f: AirFleet; w: number }
+/**
+ * A group in the fighters' fight with its fighting weight. Under Units decide the caller adds its pilots' mean hours
+ * (h, air.ts hoursOf: null while its school is not read) and its held level (q, air.ts heldOf), which the pair reads.
+ */
+export interface Weighed { f: AirFleet; w: number; h?: number | null; q?: number }
 
 /** The type a great power has in production now, its ladder's largest share: what a wing it sells flies (07:00Z). */
 export function sellerType(g: Game, nat: string): string | null {
@@ -276,28 +291,45 @@ export function stealMark(g: Game, nat: string, from: string, mark: string): boo
   return true;
 }
 
-/** A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). */
+/**
+ * A nation's doctrine in the month, where it is laid; undefined where it is not (07:00Z: held rows are not laid). Under
+ * Units decide, its fighter Way in the quality store, null (no term) where no row is read (#2 form Part 2 section 3).
+ */
 export function doctrineOf(g: Game, nat: string): Doctrine | undefined {
+  if (unitsDecide(g)) { const w = armsOf(g, nat)?.air.fighter; return w ? wayNow(g, w) : undefined; }
   const rows = FIGHTERS.doctrine.rows[nat];
   return rows?.length ? rows[rowAt(rows, g.turn)][1] : undefined;
 }
 
 /** The pilots' edge from training hours before first combat, k times the log ratio; 0 where either side's is not laid. */
-export function hoursEdge(g: Game, a: string, b: string): number {
-  const R = FIGHTERS.hours.rows, k = FIGHTERS.law.k;
+export function hoursEdge(g: Game, a: string, b: string, k = FIGHTERS.law.k): number {
+  const R = FIGHTERS.hours.rows;
   if (!k || !R[a]?.length || !R[b]?.length) return 0;
   return k * Math.log(R[a][rowAt(R[a], g.turn)][1] / R[b][rowAt(R[b], g.turn)][1]);
 }
 
 /**
+ * Under Units decide, the pilots' edge of one group over another (the #2 form, Part 2 section 1): k times the log ratio
+ * of the two groups' mean hours, read from the store, with the held level leaving the pair, since the hours now price
+ * the pilots it stood in for. Only when k > 0 and both groups' hours are laid; in every other pair both sides keep
+ * their level and this is 0.
+ */
+export function pilotsEdge(a: Weighed, d: Weighed, k: number): number {
+  if (!(k > 0) || !a.h || !d.h || !a.q || !d.q) return 0;
+  return k * Math.log(a.h / d.h) - Math.log(a.q / d.q);
+}
+
+/**
  * The edge of the escort's fighters over the defenders', in log units: the mean over every pair of an escorting and a
  * defending group, weighted by both groups' fighting weight, of their mixes' edge at the mission's height. A research
- * lead the count already gives through techMul is taken off first (guard A), so it is not counted twice. 0 when
- * there is nothing to weigh or no height to fight at.
+ * lead the count already gives through techMul is taken off first (guard A), so it is not counted twice. Under Units
+ * decide the pilots' hours come in group by group, and the held level leaves a pair whose hours are both laid
+ * (pilotsEdge). 0 when there is nothing to weigh or no height to fight at.
  */
 export function typeEdge(g: Game, att: Weighed[], def: Weighed[], m: AirMission): number {
   const band = bandOf(m);
   if (!band) return 0;
+  const ud = unitsDecide(g), k = lawK(g);
   const mixes = new Map<AirFleet, Mix | null>();
   const mixOf = (f: AirFleet): Mix | null => { if (!mixes.has(f)) mixes.set(f, typeMix(g, f)); return mixes.get(f)!; };
   let t = 0, s = 0;
@@ -306,7 +338,9 @@ export function typeEdge(g: Game, att: Weighed[], def: Weighed[], m: AirMission)
     for (const d of def) {
       if (d.w <= 0) continue;
       const ma = mixOf(a.f), md = mixOf(d.f);
-      const e = ma && md ? mixEdge(ma, md, band, doctrineOf(g, a.f.nat), doctrineOf(g, d.f.nat)) + hoursEdge(g, a.f.nat, d.f.nat) : 0;
+      const plane = ma && md ? mixEdge(ma, md, band, doctrineOf(g, a.f.nat), doctrineOf(g, d.f.nat), k) : 0;
+      // Under Units decide the pilots come from the store, group by group (pilotsEdge); else the dated rows by nation.
+      const e = ud ? plane + pilotsEdge(a, d, k) : ma && md ? plane + hoursEdge(g, a.f.nat, d.f.nat, k) : 0;
       // M replaces fighterTech in the fighters' worth against each other (06:55Z): the research lead the count gives
       // through techMul is taken off, so the plane is priced once, by its type.
       const lead = Math.log(techMul(g, a.f.nat, 'fighters') / techMul(g, d.f.nat, 'fighters'));

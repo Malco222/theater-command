@@ -4733,6 +4733,43 @@ static void TestGlobe(const char* Folder)
 		LineOf(Rows), LineOf(Boxed), LineOf(RowFlag), LineOf(CardFlag), LineOf(Brush), LineOf(BrushEnd) + 1, LineOf(Watch));
 }
 
+/**
+ * The seal signs the screen reads as it is built (CampaignHUD, from Look::SealSigns): every seal picture in
+ * Content/CityOrders/Seal and nothing else, each once, so that no month's first seal frame decodes one in its paint, and
+ * no key is asked for that has no picture.
+ */
+static void TestSealSignsListed(const char* Folder)
+{
+	const std::vector<std::string>& Signs = Look::SealSigns();
+	std::vector<std::string> Listed(Signs.begin(), Signs.end());
+	std::sort(Listed.begin(), Listed.end());
+	CHECK(!Listed.empty() && std::adjacent_find(Listed.begin(), Listed.end()) == Listed.end() && &Look::SealSigns() == &Signs);
+	bool bMeasured = true;
+	for (const std::string& Sign : Signs)
+	{
+		bMeasured = bMeasured && Look::SignFinest(Sign) == Look::SealFloor && Look::SignThinnest(Sign) > 0.0;
+	}
+	CHECK(bMeasured);
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: the seal signs read at the start were not held to the pictures)\n");
+		return;
+	}
+	std::vector<std::string> Pictures;
+	std::error_code Failed;
+	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(std::filesystem::path(Folder) / "Seal", Failed))
+	{
+		const std::string Name = Entry.path().filename().string();
+		if (Name.size() > 9 && Name.compare(0, 5, "seal-") == 0 && Name.compare(Name.size() - 4, 4, ".png") == 0)
+		{
+			Pictures.push_back(Name.substr(5, Name.size() - 9));
+		}
+	}
+	std::sort(Pictures.begin(), Pictures.end());
+	CHECK(!Failed && Pictures == Listed);
+	std::printf("(the seal signs read as the screen is built: %zu, the same as the %zu seal pictures)\n", Listed.size(), Pictures.size());
+}
+
 static void TestCountFace(const char* Folder)
 {
 	if (!Folder)
@@ -4790,6 +4827,7 @@ int main(int ArgCount, char** Args)
 	TestColours();
 	TestSealLook();
 	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
+	TestSealSignsListed(ArgCount > 1 ? Args[1] : nullptr);
 	TestUnderFrame();
 	TestSealAsk();
 	TestSwords();

@@ -95,6 +95,8 @@ const staged = (env: string, key: string): boolean => {
   const v = forcedBy(env);
   return v !== undefined ? !!v && v !== '0' : (stage as Record<string, unknown>)[key] === true;
 };
+/** True where new grand campaigns open with the marked army (release 2, marked.ts; stage.json 'marked'). Forced by TC_MARKED. */
+export const MARKED_STAGE: boolean = staged('TC_MARKED', 'marked');
 /** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
 export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
 /** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */
@@ -106,3 +108,38 @@ export const DUMPS_STAGE: boolean = staged('TC_DUMPS', 'dumps');
 // campaigns opened while this is true carry the flag 'fleetAttack'. Forced by TC_FLEETATTACK.
 /** True where new grand campaigns open with the player's fleets able to attack an enemy fleet at once (stage.json 'fleetAttack'). */
 export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack');
+
+// Breaking a corps up (release 2; Brian 24 November 2026 18:02Z, breakup.ts): the grand campaigns opened while this
+// is true carry the flag 'breakUp'. Forced by TC_BREAKUP.
+/** True where new grand campaigns open with the player able to split divisions off a corps (stage.json 'breakUp'). */
+export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
+
+// Task forces (release 2; Brian 24 November 2026 18:24Z, taskforce.ts): the grand campaigns opened while this is true
+// carry the flag 'taskForce'. Forced by TC_TASKFORCE.
+/** True where new grand campaigns open with the player able to make task forces of his fleets (stage.json 'taskForce'). */
+export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');
+
+// The admirals' reasons (release 2; fleetwhy.ts): the grand campaigns opened while this is true carry the flag
+// 'fleetWhy'. Forced by TC_FLEETWHY.
+/** True where new grand campaigns open with the admirals giving a reason for each fleet they order (stage.json 'fleetWhy'). */
+export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');
+
+// Rearguards (release 2; Brian 24 November 2026 18:24Z, rearguard.ts): the grand campaigns opened while this is true
+// carry the flag 'rearguard'. Forced by TC_REARGUARD.
+/** True where new grand campaigns open with the player able to order rearguards (stage.json 'rearguard'). */
+export const REARGUARD_STAGE: boolean = staged('TC_REARGUARD', 'rearguard');
+
+// Conquered towns settle (release 2; Brian 24 November 2026 18:13Z, buildings.ts): the grand campaigns opened while
+// this is true carry the flag 'settledTowns'. Forced by TC_SETTLEDTOWNS.
+/** True where new grand campaigns open with conquered towns able to build everything once settled (stage.json 'settledTowns'). */
+export const SETTLEDTOWNS_STAGE: boolean = staged('TC_SETTLEDTOWNS', 'settledTowns');
+
+// Shadowing, the voyage log, and rearguards that blow the bridges (release 2; Brian 24 November 2026 19:47Z, "yes to
+// all"; shadow.ts, voyage.ts, rearguard.ts): the grand campaigns opened while each is true carry its flag. Forced by
+// TC_SHADOW, TC_VOYAGELOG and TC_REARBRIDGES.
+/** True where new grand campaigns open with fleets able to shadow an enemy fleet (stage.json 'shadow'). */
+export const SHADOW_STAGE: boolean = staged('TC_SHADOW', 'shadow');
+/** True where new grand campaigns open with each fleet keeping a voyage log (stage.json 'voyageLog'). */
+export const VOYAGELOG_STAGE: boolean = staged('TC_VOYAGELOG', 'voyageLog');
+/** True where new grand campaigns open with rearguards blowing the bridges behind them (stage.json 'rearBridges'). */
+export const REARBRIDGES_STAGE: boolean = staged('TC_REARBRIDGES', 'rearBridges');

@@ -246,6 +246,12 @@ public:
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
 	/** RouteEnds: 0 a march, 1 a battle at the end of it, 2 a frontier that means war. */
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds = 0);
+	// ---- (release 2, the enemy's month near you; Brian, 24 November 2026)
+	/** Lays the arrows of one step of the others' month, each grown to Grow (0 to 1), as Campaign/EnemyMoves draws them. An empty list clears them. */
+	void ShowStepArrows(const TArray<FStepArrow>& Arrows, float Grow);
+	/** Where to look to see these arrows whole: the middle of their ends, and how far the farthest lies from it (map units). False where there are none. */
+	bool FrameStepArrows(const TArray<FStepArrow>& Arrows, FVector2D& OutMiddle, double& OutReach) const;
+	// ---- (end release 2)
 
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
 	void UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus);
@@ -278,6 +284,31 @@ public:
 
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 	const TMap<int32, TObjectPtr<AArmyPiece>>& GetFleetPieces() const { return FleetPieces; }
+	/**
+	 * (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".) Whether
+	 * a fleet that has changed its sea, or come in or gone out of harbour, sails there along a way by water (OPTIONS,
+	 * "Ships sail on the map"); off, it is simply found where it now is. ForgetFleetPlaces drops where each fleet was,
+	 * so that the fleets of a war just opened are laid out, not sailed from the last war's places.
+	 */
+	void SetShipsSail(bool bSail) { bShipsSail = bSail; }
+	bool GetShipsSail() const { return bShipsSail; }
+	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); ForgetWakes(); }
+	/**
+	 * (Release 2: fading wakes; Brian 24 November 2026 18:24Z, "i like these".) An enemy fleet seen to move leaves a
+	 * faint trail of foam on the sea, the way it went by water, for a month: brightest where it is now and fading back
+	 * to where it came from, fainter again the month after, then gone. OPTIONS "Fading wakes" (the options key "wakes").
+	 * Off, none is laid. A fleet only reported, not seen, leaves none; nor do the player's own fleets or his allies'.
+	 */
+	void SetWakes(bool bOn);
+	bool GetWakes() const { return bWakes; }
+	void ForgetWakes();
+	/**
+	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
+	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
+	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
+	 * was before ships sailed, and never sails over the land.
+	 */
+	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
 	/**
 	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
 	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
@@ -323,6 +354,16 @@ public:
 	/** Where a province's airfield lies on the map (or where it would), and the province whose airfield is at a point, if one is. */
 	FVector2D AirfieldSpot(int32 RegionId) const;
 	int32 AirfieldNear(const FVector2D& MapPoint) const;
+	/**
+	 * (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) Every airfield
+	 * within Reach map units of a point, with its spot: for the pointer, which then measures each on the screen.
+	 */
+	void AirfieldsWithin(const FVector2D& MapPoint, double Reach, TArray<TPair<int32, FVector2D>>& Out) const;
+	/**
+	 * (The same spec, item 2.) The four corners on the table of the ground an airfield covers, its grass and a little
+	 * round it, in order round the field: for the brass outline the pointer lays round it. False where it has none.
+	 */
+	bool GetAirfieldOutline(int32 RegionId, TArray<FVector>& OutCorners) const;
 
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
@@ -1471,6 +1512,14 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> PointerMesh;
 
+	/**
+	 * (Release 2, the enemy's month near you.) The arrows of the watch near him: a mesh of their own, small, laid again each
+	 * frame while they grow (the 3D pre-check, 24 Nov 18:14Z: laid in a section of the orders' mesh they made the
+	 * whole of that mesh's render copy again each frame).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Campaign")
+	TObjectPtr<UProceduralMeshComponent> MovesMesh;
+
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UInstancedStaticMeshComponent> TownMarkers;
 
@@ -1657,6 +1706,28 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<AArmyPiece>> AirPieces;
+	// (Release 2: ships that sail.) Where each fleet lay when the fleets were last laid out: its sea and its harbour
+	// (INDEX_NONE at sea), and the point on the map.
+	bool bShipsSail = false;
+	TMap<int32, FIntPoint> FleetPlaces;
+	TMap<int32, FVector2D> FleetSpots;
+	// (Release 2: fading wakes.) Each wake laid: whose fleet, the month it was seen to move, and its way on the map.
+	struct FWakeTrail
+	{
+		int32 Fleet = INDEX_NONE;
+		int32 Turn = 0;
+		TArray<FVector2D> Points;
+	};
+	bool bWakes = false;
+	TArray<FWakeTrail> Wakes;
+	int32 WakesLaidFor = INDEX_NONE; // the month the foam was last laid for
+	bool bWakesDirty = false;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WakeMesh;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WakeTrailInk;
+	/** Lays the foam of the wakes still to be seen in this month, fading with their age and back along their way. */
+	void LayWakes(int32 Turn);
 
 	/** The same pieces by "region|nation". */
 	UPROPERTY(Transient)

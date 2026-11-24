@@ -5,10 +5,12 @@
 import { FORT_XP, crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
 import capData from '../../data/campaign/capitulations.json';
 import { mapDist2 } from './wrap';
+import { AFV_PER_DIV } from '../battle/land/wrecks';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
+import { flagName } from './flagnames';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
@@ -26,19 +28,20 @@ import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
-import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
+import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, canPass, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, roadsHome, sameSeaState, seaOpenAt, seaSide, seaStarts, setupNavy, shipCorps, type SeaState } from './navy';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
+import pursuitData from '../../data/campaign/pursuit.json';
 import { unitsDecide } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
@@ -63,6 +66,7 @@ import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } fr
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
+import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse, screenWeeks, weeksWords } from './rearguard';
 import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -269,7 +273,7 @@ export function newsWeek(g: Game): number {
 }
 
 /** The two tags on news of fighting (Version 80, display only): the arm that fought, and who had the better and the worse of it. */
-export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
+export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost' | 'ready' | 'unit'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {
@@ -690,6 +694,59 @@ function capturedKit(g: Game, rep: BattleReport, target: Region): void {
   book[winner] = [...(book[winner] ?? []).filter((k) => g.turn - k.turn < 6).slice(-2), { from, n, turn: g.turn }];
 }
 
+/**
+ * Old wrecks (release 2, looks only; Brian, 23 November 20:09Z): the armoured vehicles a land battle leaves burnt out or
+ * knocked out on its field, for the next battle there. Estimated from the losses the battle booked, so no die is thrown:
+ * an armoured division fields about 'per.arm' armoured vehicles and a motorised one about 'per.mot' (battle/land/wrecks.ts),
+ * and a corps loses them in the share of its men it lost. The side that holds the field after it tows 'towed' of its own
+ * away to be mended; the side that leaves it leaves all of its. A ticket shows at most 'most' (the 3D game's own cap). Nothing in any fight reads it.
+ */
+export const WRECKS = { per: AFV_PER_DIV as Partial<Record<Kind, number>>, towed: 0.5, most: 60 } as const;
+
+/** One battle's wrecks, by nation, booked on its region (and the month of the last battle that left any). */
+export function wreckBump(g: Game, rep: BattleReport): void {
+  if (rep.yielded) return;
+  const attHolds = rep.level.endsWith('victory');
+  const left: Record<string, number> = {};
+  const side = (us: ReportUnit[], holds: boolean) => {
+    for (const u of us) {
+      const per = WRECKS.per[u.kind] ?? 0;
+      if (!per || u.guard || u.divs <= 0 || u.men <= 0 || u.lost <= 0) continue;
+      left[u.nat] = (left[u.nat] ?? 0) + per * u.divs * Math.min(1, u.lost / u.men) * (holds ? 1 - WRECKS.towed : 1);
+    }
+  };
+  side(rep.attackers, attHolds);
+  side(rep.defenders, !attHolds);
+  const whole = Object.entries(left).map(([nat, n]) => [nat, Math.round(n)] as const).filter(([, n]) => n > 0);
+  if (!whole.length) return;
+  const was = (g.wrecks ??= {})[rep.region];
+  const n = { ...(was?.n ?? {}) };
+  for (const [nat, k] of whole) n[nat] = (n[nat] ?? 0) + k;
+  g.wrecks[rep.region] = { n, last: Math.max(was?.last ?? rep.turn, rep.turn) };
+}
+
+/**
+ * A region's old wrecks as the battle ticket carries them: both sides' together, at most WRECKS.most, each nation's share
+ * of that (largest remainders, so they add up to the count), and the months since the last battle that left any.
+ */
+export function wreckLook(w: { n: Record<string, number>; last: number } | undefined, turn: number): { count: number; months: number; nats: Record<string, number> } | null {
+  if (!w) return null;
+  const rows = Object.entries(w.n).filter(([, k]) => k > 0).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const all = rows.reduce((s2, [, k]) => s2 + k, 0);
+  if (all <= 0) return null;
+  const count = Math.min(WRECKS.most, Math.round(all));
+  const exact = rows.map(([nat, k]) => [nat, (k * count) / all] as const);
+  const nats: Record<string, number> = {};
+  let given = 0;
+  for (const [nat, x] of exact) { nats[nat] = Math.floor(x); given += nats[nat]; }
+  for (const [nat, x] of [...exact].sort((a, b) => (b[1] - Math.floor(b[1])) - (a[1] - Math.floor(a[1])) || (a[0] < b[0] ? -1 : 1))) {
+    if (given >= count) break;
+    nats[nat] += 1; given += 1;
+  }
+  for (const nat of Object.keys(nats)) if (nats[nat] <= 0) delete nats[nat];
+  return { count, months: Math.max(0, turn - w.last), nats };
+}
+
 export function weather(g: Game): { mud: boolean; winter: boolean; text: string } {
   const m = turnToDate(g.turn).month;
   if (EASTERN.mud.includes(m)) return { mud: true, winter: false, text: 'Mud in the east slows every army there.' };
@@ -774,15 +831,113 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
 
 // ---- Supply -------------------------------------------------------------------------
 
+/**
+ * Each country's last supply picture, kept with what it was drawn from (the map-speed lane's month-end profile, 24 Nov
+ * 2026: the picture was drawn for every country at every country's turn, and almost every time came out the same). A
+ * picture is drawn again only when something it is drawn from has changed: which provinces its roads may run through,
+ * where its stores are and the head start each gives in the desert, and, for a picture reaching into the east, how the
+ * railways there stand. The stores of the ports overseas, which corps are fed, the garrisons and the railheads are worked
+ * out at every call as before. Nothing it gives differs from drawing every picture afresh: TC_SUPPLY_CHECK=1 draws every
+ * kept picture again and stops the run on any difference.
+ * - Each picture keeps the railways it was drawn with, not the last call's: a country with no corps for a while is not
+ *   looked at, and its picture must not outlive a railway that changed meanwhile.
+ * - The railways and the desert are worked out once a call, and the very arrays that key the kept pictures are the ones
+ *   the pictures are drawn from (reachInto, desertLines), so a rule that moves a step cannot miss the key.
+ * - The roads between provinces are not keyed: they change only when the wider world is attached (attachWorld), which
+ *   also adds provinces, and a new number of provinces starts the book afresh.
+ * - A kept picture is handed out again as the same arrays: nothing may write into g.supply or g.reach in place.
+ *
+ * Which provinces a country's roads may pass is a province's holder and whether that holder is the country's friend
+ * (the far chart's profile, 24 Nov 2026: with 65 countries and 2,067 provinces, the provinces were laid out and compared
+ * afresh for every country at every call). So the holders are numbered once for the whole campaign, every call writes
+ * down each province's holder by number, and the book logs the provinces whose holder changed since the call before. A
+ * kept picture remembers the friends it was last found good with and how far the log had got; it still holds when the
+ * friends are the same and every province logged since passes as it did. Both are read afresh at every call: a capture,
+ * a surrender, a hand-over or a change of alliance anywhere is in them at the next call. When the friends differ the
+ * provinces are laid out and compared in full, as before. (Nothing here reads the towns' hand:<id> stamps.)
+ *
+ * The seas each country's ships can use (openSeas) are kept too: with the seas they set out from (seaStarts, worked out
+ * at every call), whether each strait would let them through (canPass, asked at every call), and the answer to every
+ * "is this sea closed to them" the walk asked. While those are all the same, the walk would ask the same and find the
+ * same. Every sea is looked at once a call (SeaPicture.state: its fleets at sea and their weight, the coasts that put
+ * aircraft over it, its sky) and stamped with the call that found it changed; a kept answer is asked again when its sea
+ * has changed since it was last found good, or when who is at war with the country, or its friend, among the nations in
+ * the seas has changed. A country that loses its last port, or the shipyard ground it sails from, sets out from other
+ * seas or none, and so walks again. TC_SUPPLY_CHECK=1 walks the seas afresh as well and stops on any difference.
+ */
+/** The eastern railways as they stand this call: what each Soviet-owned step of the line costs, and whose home it is. */
+interface RailNow { step: Float64Array; home: Uint8Array }
+/**
+ * What a country's roads may pass (mask: 1 where the holder is its friend), with the friends it was last found good
+ * with (by the holders' numbers) and the book's log as far as it had got then.
+ */
+interface RoadsSeen { mask: Uint8Array; friend: Uint8Array; at: number }
+interface SupplyDrawn extends RoadsSeen { seeds: number[]; heads: number[]; ok: Uint8Array; reach: Float32Array; east: boolean; rail: RailNow | null }
+/**
+ * A country's sea lanes, with what its walk set out from, every answer it had on the way, and the call at which those
+ * answers were last found good, with its friends and enemies then among the nations in the seas (rel, over names).
+ */
+interface LanesKept { starts: number[]; gates: Uint8Array; asked: Int16Array; shut: Uint8Array; open: Uint8Array; at: number; rel: Uint8Array; names: string }
+/** The provinces a country's roads join to its capital (roadsHome), by holders (mask: 1 where a friend holds it). */
+interface HomeKept extends RoadsSeen { cap: number; linked: Uint8Array }
+interface SupplyBook {
+  size: number; wide: boolean; long: string; seas: Game['seas']; gates: Game['gates']; deep: Uint8Array; sand: Uint8Array; rail: RailNow; drawn: Map<string, SupplyDrawn>;
+  /** Each province's holder at the last call: on the field (road, as the pictures go) and in the books (own, ctrl). */
+  road: Int16Array; own: Int16Array;
+  /** The provinces whose holder changed from one call to the next, in turn; log[0] is entry number logBase. */
+  log: number[]; logBase: number;
+  lanes: Map<string, LanesKept>; home: Map<string, HomeKept>;
+  /** The calls made on this book, counted; each sea's state when last looked at, and the call that found it changed. */
+  calls: number; seaSeen: (SeaState | null | undefined)[]; seaStamp: Int32Array;
+}
+const supplyBooks = new WeakMap<Game, SupplyBook>();
+/** Every holder a campaign's supply has seen, numbered in the order seen: the numbers never change. */
+const supplyHolders = new WeakMap<Game, { no: Map<string, number>; list: string[] }>();
+const supplyCheckEnv = (globalThis as { TC_SUPPLY_CHECK?: unknown }).TC_SUPPLY_CHECK ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.TC_SUPPLY_CHECK;
+const supplyCheck = supplyCheckEnv !== undefined && !!supplyCheckEnv && supplyCheckEnv !== '0';
+const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+};
+/** The flags' names a call asks after for every province, made once (the same names, without building them again). */
+const depotKeys: string[] = [], storesKeys: string[] = [];
+const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
+const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
+
+/** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
+function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
+  const size = g.regions.length;
+  const ok = new Uint8Array(size);
+  const q: number[] = [];
+  let east = false, desert = false;
+  for (const at of seeds) {
+    // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
+    ok[at] = wide ? 2 : 1; q.push(at);
+    if (deep[at]) east = true;
+    if (sand[at]) desert = true;
+  }
+  for (let i = 0; i < q.length; i++) {
+    for (const j of g.regions[q[i]].nb) {
+      if (ok[j] || !pass[j]) continue;
+      ok[j] = 1; q.push(j);
+      if (deep[j]) east = true;
+      if (sand[j]) desert = true;
+    }
+  }
+  // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
+  // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
+  const reach = east ? reachInto(g, id, ok, long, deep, rail) : new Float32Array(size);
+  if (desert) {
+    const head = new Float32Array(size).fill(-1);
+    for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
+    desertLines(g, ok, head, sand, reach);
+  }
+  return { ok, reach, east };
+}
+
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
-  // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
-  const lanes = new Map<string, Uint8Array | null>();
-  const seasNow = new SeaPicture(g);
-  const lanesOf = (id: string): Uint8Array | null => {
-    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id, seasNow) : null); }
-    return lanes.get(id)!;
-  };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
   const wide = groundRules(g);
@@ -793,42 +948,215 @@ export function computeSupply(g: Game): void {
   // "is he my friend" is asked once a holder and not once a province), and where the long lines of the east and of
   // the desert can run at all. With fifty countries on the chart the picture is drawn fifty times over.
   const size = g.regions.length;
-  const holders: string[] = [], holderNo = new Map<string, number>();
-  const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
-  const long = lineOwners(g);
-  // The provinces that can be anybody's source of supply at all, in order: a port, or a capital, a big industrial
-  // province or a depot standing on its owner's own ground. Every other province only carries the line.
-  const sources: number[] = [];
-  for (const r of g.regions) {
-    const who = field ? field[r.id] : r.ctrl;
+  let named = supplyHolders.get(g);
+  if (!named) supplyHolders.set(g, (named = { no: new Map(), list: [] }));
+  const holderNo = named.no, holders = named.list;
+  // (here: which holders hold anything this call; only theirs is asked after below)
+  const here: number[] = [];
+  let lastWho = '', lastNo = -1;
+  const numberOf = (who: string): number => {
+    if (who === lastWho) return lastNo;
     let k = holderNo.get(who);
     if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
+    if (here[k] !== 1) here[k] = 1;
+    lastWho = who; lastNo = k;
+    return k;
+  };
+  const road = new Int16Array(size), own = field ? new Int16Array(size) : road, deep = new Uint8Array(size), sand = new Uint8Array(size);
+  const long = lineOwners(g);
+  // The provinces that can be anybody's source of supply at all, in order, and whose roads each is on: a port, or a
+  // capital, a big industrial province or a depot standing on its owner's own ground. Every other province only carries the line.
+  const sources: number[] = [], sourceRoad: number[] = [], sourcesBy: number[][] = [];
+  for (const r of g.regions) {
+    const k = numberOf(field ? field[r.id] : r.ctrl);
     road[r.id] = k;
+    if (field) own[r.id] = numberOf(r.ctrl);
     if (long.includes(r.owner)) deep[r.id] = 1;
-    if (inDesert(r)) sand[r.id] = 1;
-    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
+    // Desert ground (2) costs a step of the line; the coast overseas (1) only carries it. Either is the desert's table.
+    sand[r.id] = (r.overseas ? 1 : 0) | (sandRules(r) ? 2 : 0);
+    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]))) { sources.push(r.id); sourceRoad.push(k); (sourcesBy[k] ??= []).push(r.id); }
   }
+  // What each step of the long line costs this month, on Soviet-owned ground: a region held long enough has had its
+  // track relaid (in the grand campaign, unless the line there is torn up), and mud and winter lengthen every step.
+  const w = weather(g), bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  const step = new Float64Array(size), home = new Uint8Array(size);
+  for (let j = 0; j < size; j++) {
+    if (!deep[j]) continue;
+    const r = g.regions[j];
+    if (EASTERN.deepOwners.includes(r.owner)) home[j] = 1;
+    step[j] = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+  }
+  // The pictures kept from the last call hold while the chart, the rules, the long line's owners and the desert are the
+  // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
+  let book = supplyBooks.get(g);
+  const longKey = `${long.join('|')}/${DESERT.step}`;
+  if (!book || book.size !== size || book.wide !== wide || book.long !== longKey || book.seas !== g.seas || book.gates !== g.gates || !sameBytes(book.deep, deep) || !sameBytes(book.sand, sand)) {
+    book = { size, wide, long: longKey, seas: g.seas, gates: g.gates, deep, sand, rail: { step, home }, drawn: new Map(), road, own, log: [], logBase: 0, lanes: new Map(), home: new Map(), calls: 0, seaSeen: [], seaStamp: new Int32Array(g.seas.length) };
+    supplyBooks.set(g, book);
+  } else {
+    // The provinces whose holder has changed since the last call, on the field or in the books.
+    const was = book.road, wasOwn = book.own;
+    for (let j = 0; j < size; j++) if (was[j] !== road[j] || wasOwn[j] !== own[j]) book.log.push(j);
+    book.road = road; book.own = own;
+    // A long log is let go: what was kept from before it is then compared in full, once.
+    if (book.log.length > 4 * size) { book.logBase += book.log.length; book.log = []; }
+  }
+  const kept0 = book;
+  const logEnd = book.logBase + book.log.length;
+  const callNo = ++book.calls;
+  // The railways now: the same object as the last call's while nothing on them has changed, so most checks are one look.
+  let rail = book.rail;
+  if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
+  const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
+  // Each country's friends among the holders, asked afresh at every call (an alliance, a surrender or a hand-over is in
+  // it at once), once a country a call. A holder that holds nothing this call is not asked after (0): no province of
+  // this call's is his, and none is looked at by his number.
+  const friends = new Map<string, Uint8Array>();
+  const friendOf = (id: string): Uint8Array => {
+    let friend = friends.get(id);
+    if (!friend) {
+      friend = new Uint8Array(holders.length);
+      for (let k = 0; k < holders.length; k++) if (here[k] === 1 && allied(g, id, holders[k])) friend[k] = 1;
+      friends.set(id, friend);
+    }
+    return friend;
+  };
+  const maskOf = (friend: Uint8Array, by: Int16Array): Uint8Array => {
+    const mask = new Uint8Array(size);
+    for (let j = 0; j < size; j++) mask[j] = friend[by[j]];
+    return mask;
+  };
+  // True while what a country's roads may pass is what it was: the same friends among this call's holders, and every
+  // province logged since passing as it did (any other province has the same holder as then, so one of this call's);
+  // or, the friends being changed, every province compared. Kept now as good for this call.
+  const roadsHold = (seen: RoadsSeen, friend: Uint8Array, by: Int16Array): boolean => {
+    let same = seen.at >= kept0.logBase && seen.friend.length <= friend.length;
+    for (let k = 0; same && k < seen.friend.length; k++) if (here[k] === 1 && seen.friend[k] !== friend[k]) same = false;
+    if (same) {
+      const log = kept0.log;
+      for (let i = seen.at - kept0.logBase; i < log.length; i++) { const j = log[i]; if (friend[by[j]] !== seen.mask[j]) return false; }
+    } else {
+      for (let j = 0; j < size; j++) if (friend[by[j]] !== seen.mask[j]) return false;
+    }
+    seen.friend = friend; seen.at = logEnd;
+    return true;
+  };
+  // The provinces a country's roads join to its capital, for the harbours it has taken (seaStarts): walked again only
+  // when its capital moves or a province changes from friend's to not or back.
+  const homeOf = (nat: string): Uint8Array => {
+    const cap = g.nations[nat].capital, friend = friendOf(nat);
+    const kept = kept0.home.get(nat);
+    if (kept && kept.cap === cap && roadsHold(kept, friend, own)) return kept.linked;
+    const mask = maskOf(friend, own);
+    const linked = roadsHome(g, nat, mask);
+    kept0.home.set(nat, { cap, mask, friend, at: logEnd, linked });
+    return linked;
+  };
+  // The seas each nation's supply ships can still use, worked out once a call: an ally's overseas ports feed its friends too.
+  const lanes = new Map<string, Uint8Array | null>();
+  const seasNow = new SeaPicture(g);
+  // Each sea as it stands this call, looked at once and set beside its state when last looked at: the call that found it
+  // changed is the sea's stamp. A kept answer about a sea not changed since it was last found good, for a nation whose
+  // friends and enemies are the same, is the answer closed() would give now (SeaPicture.state).
+  const looked = new Uint8Array(g.seas.length);
+  const look = (z: number): void => {
+    if (looked[z]) return;
+    looked[z] = 1;
+    const now = seasNow.state(z), was = kept0.seaSeen[z];
+    if (was === undefined || !sameSeaState(was, now)) { kept0.seaSeen[z] = now; kept0.seaStamp[z] = callNo; }
+  };
+  // The nations closed() can ask about this call: those with a fleet, a coast or the sky in a sea that something could
+  // close (a sea whose state is null is open to everybody, whoever is at war). Every sea is looked at to find them.
+  // (partyKey names them; null if one were no nation, when no kept answer is taken on trust.)
+  let names: string[] | null = null, partyKey: string | null = null;
+  const party: number[] = [];
+  const partiesNow = (): void => {
+    if (names) return;
+    names = Object.keys(g.nations);
+    const no = new Map(names.map((n, i) => [n, i]));
+    const mark = new Uint8Array(names.length);
+    let known = true;
+    const note = (x: string): void => { const i = no.get(x); if (i === undefined) known = false; else mark[i] = 1; };
+    for (let z = 0; z < g.seas.length; z++) {
+      look(z);
+      const st = kept0.seaSeen[z];
+      if (!st) continue;
+      for (const f of st.fleets) note(f.nat);
+      for (const c of st.coasts) { note(c.ctrl); if (c.sky) note(c.sky); }
+    }
+    for (let i = 0; i < mark.length; i++) if (mark[i]) party.push(i);
+    partyKey = known ? `${names.join('|')}#${party.join(',')}` : null;
+  };
+  // Who of them is at war with a nation, and who is its friend, as closed() asks it: (atWar, allied).
+  const relOf = (id: string): Uint8Array => {
+    partiesNow();
+    const rel = new Uint8Array(party.length);
+    for (let i = 0; i < party.length; i++) { const x = names![party[i]]; rel[i] = (atWar(g, x, id) ? 1 : 0) | (allied(g, x, id) ? 2 : 0); }
+    return rel;
+  };
+  const lanesKept = (id: string): Uint8Array => {
+    const starts = seaStarts(g, id, seasNow, homeOf);
+    const gates = new Uint8Array(g.gates.length);
+    for (let i = 0; i < gates.length; i++) if (canPass(g, g.gates[i].a, g.gates[i].b, id)) gates[i] = 1;
+    const kept = kept0.lanes.get(id);
+    let open: Uint8Array | null = null, rel: Uint8Array | null = null;
+    if (kept && sameBytes(kept.starts, starts) && sameBytes(kept.gates, gates)) {
+      rel = relOf(id);
+      const rels = partyKey !== null && kept.names === partyKey && sameBytes(kept.rel, rel);
+      open = kept.open;
+      for (let i = 0; i < kept.asked.length; i++) {
+        const z = kept.asked[i];
+        look(z);
+        if ((!rels || kept0.seaStamp[z] > kept.at) && seasNow.closed(z, id) !== (kept.shut[i] === 1)) { open = null; break; }
+      }
+      if (open) { kept.at = callNo; kept.rel = rel; kept.names = partyKey ?? ''; }
+    }
+    if (!open) {
+      const asked = new Int8Array(g.seas.length).fill(-1);
+      open = openSeas(g, id, seasNow, asked, starts);
+      const at: number[] = [];
+      for (let z = 0; z < asked.length; z++) if (asked[z] >= 0) { at.push(z); look(z); }
+      rel ??= relOf(id);
+      kept0.lanes.set(id, { starts, gates, asked: Int16Array.from(at), shut: Uint8Array.from(at, (z) => asked[z]), open, at: callNo, rel, names: partyKey ?? '' });
+    }
+    if (supplyCheck && !sameBytes(openSeas(g, id, seasNow), open)) throw new Error(`sea lanes kept for ${id} in month ${g.turn} differ from fresh ones`);
+    return open;
+  };
+  const lanesOf = (id: string): Uint8Array | null => {
+    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? lanesKept(id) : null); }
+    return lanes.get(id)!;
+  };
+  // The sources on a country's friends' roads, in order: one friend's own list when only one has any.
+  const sourcesFor = (friend: Uint8Array): number[] => {
+    let one: number[] | null = null;
+    for (let k = 0; k < sourcesBy.length; k++) {
+      if (!sourcesBy[k] || !friend[k]) continue;
+      if (one) {
+        const out: number[] = [];
+        for (let i = 0; i < sources.length; i++) if (friend[sourceRoad[i]]) out.push(sources[i]);
+        return out;
+      }
+      one = sourcesBy[k];
+    }
+    return one ?? [];
+  };
   for (const id of active) {
-    const friend = new Uint8Array(holders.length);
-    for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
-    const ok = new Uint8Array(size);
-    const q: number[] = [];
+    const friend = friendOf(id);
     // Where the supply comes from, and in the desert how much of a head start each base gives: [province, start].
+    const seeds: number[] = [];
     const heads: number[] = [];
-    let east = false, desert = false;
     const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
     let mates: string[] | null = null;
-    for (const at of sources) {
-      if (!friend[road[at]]) continue;
+    for (const at of sourcesFor(friend)) {
       const r = g.regions[at];
       // An army round a town it has not taken holds the beaches beside the harbour and no more: ships can still
       // land its stores there, but the place is no depot of anybody's while the siege lasts.
       const shut = !!field && field[r.id] !== r.ctrl;
       // An army is fed from its own country: its capital, its big industrial regions, its depots.
       const home = !shut && r.ctrl === id && r.owner === id;
-      const depot = home && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]);
+      const depot = home && (r.cap || r.fac >= 3 || !!g.flags[depotKey(r.id)]);
       let quay = !!open && r.port && r.seas.some((z) => open[z]);
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
       if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
@@ -837,35 +1165,34 @@ export function computeSupply(g: Game): void {
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && r.fort) {
-        if (quay) g.flags[`stores:${r.id}`] = g.turn;
-        else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= portKeep(g, r)) quay = true;
+        if (quay) g.flags[storesKey(r.id)] = g.turn;
+        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.
       if (field && r.ctrl === id && pocketDry(g, r, id)) continue;
-      // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
-      ok[r.id] = wide ? 2 : 1; q.push(r.id);
+      seeds.push(r.id);
       heads.push(r.id, depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk);
-      if (deep[r.id]) east = true;
-      if (sand[r.id]) desert = true;
     }
-    for (let i = 0; i < q.length; i++) {
-      for (const j of g.regions[q[i]].nb) {
-        if (ok[j] || !friend[road[j]]) continue;
-        ok[j] = 1; q.push(j);
-        if (deep[j]) east = true;
-        if (sand[j]) desert = true;
+    // Its picture: the one kept, if nothing it was drawn from moved (the provinces its roads may pass are laid out only
+    // to draw it again, or when its friends have changed).
+    const kept = book.drawn.get(id);
+    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && roadsHold(kept, friend, road)) {
+      if (supplyCheck) {
+        const pass = maskOf(friend, road);
+        if (!sameBytes(pass, kept.mask)) throw new Error(`roads kept for ${id} in month ${g.turn} differ from fresh ones`);
+        const fresh = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+        if (!sameBytes(fresh.ok, kept.ok) || !sameBytes(fresh.reach, kept.reach)) throw new Error(`supply picture kept for ${id} in month ${g.turn} differs from a fresh one`);
       }
+      g.supply[id] = kept.ok;
+      g.reach[id] = kept.reach;
+      continue;
     }
-    g.supply[id] = ok;
-    // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
-    // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
-    g.reach[id] = east ? reachInto(g, id, ok) : new Float32Array(size);
-    if (desert) {
-      const head = new Float32Array(size).fill(-1);
-      for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
-      desertLines(g, ok, head, g.reach[id]);
-    }
+    const pass = maskOf(friend, road);
+    const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
+    g.supply[id] = drawn.ok;
+    g.reach[id] = drawn.reach;
+    book.drawn.set(id, { mask: pass, friend, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail : null });
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
@@ -887,7 +1214,7 @@ export function convoyDrag(g: Game, id: string): number {
  * nearest working base, a step for every region of desert on the way. Written into the same
  * table as the line inside the Soviet Union; the two never overlap.
  */
-function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Array): void {
+function desertLines(g: Game, ok: Uint8Array, head: Float32Array, sand: Uint8Array, out: Float32Array): void {
   const d = new Float32Array(g.regions.length).fill(1e6);
   const q: number[] = [];
   for (let i = 0; i < head.length; i++) if (head[i] >= 0) { d[i] = head[i]; q.push(i); }
@@ -895,11 +1222,11 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
     const a = q[i];
     for (const j of g.regions[a].nb) {
       if (!ok[j]) continue;
-      const far = d[a] + (sandRules(g.regions[j]) ? DESERT.step : 0);
+      const far = d[a] + (sand[j] & 2 ? DESERT.step : 0);
       if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
     }
   }
-  for (const r of g.regions) if (inDesert(r) && ok[r.id] && d[r.id] < 1e6) out[r.id] = d[r.id];
+  for (let i = 0; i < d.length; i++) if (sand[i] && ok[i] && d[i] < 1e6) out[i] = d[i];
 }
 
 /**
@@ -908,25 +1235,22 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
  * (Ruling 221, L: on the ground of the other owners of the long line it is counted from the harbours the invader
  * holds there as well, where its ships bring the stores in.)
  */
-function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
+function reachInto(g: Game, id: string, ok: Uint8Array, long: string[], deep: Uint8Array, rail: RailNow): Float32Array {
   const d = new Float32Array(g.regions.length);
-  const long = lineOwners(g);
   if (long.includes(id)) return d; // at home on their own railways
-  const deep = (r: Region): boolean => long.includes(r.owner);
-  const quay = (r: Region): boolean => ok[r.id] === 2 && !EASTERN.deepOwners.includes(r.owner);
-  const w = weather(g);
-  const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  // Off Soviet ground (ruling 221, L), a harbour the invader holds on the long line's ground is a railhead too.
+  const quay = (j: number): boolean => ok[j] === 2 && !rail.home[j];
   d.fill(1e6);
   const q: number[] = [];
-  for (const r of g.regions) if (ok[r.id] && (!deep(r) || quay(r))) { d[r.id] = 0; q.push(r.id); }
+  for (let j = 0; j < d.length; j++) if (ok[j] && (!deep[j] || quay(j))) { d[j] = 0; q.push(j); }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     for (const j of g.regions[a].nb) {
-      const r = g.regions[j];
-      if (!ok[j] || !deep(r)) continue;
-      // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
-      // And a line burned under a scorched earth order is converted only from the month it was made good.
-      const step = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      if (!ok[j] || !deep[j]) continue;
+      // The step's cost (computeSupply): in the grand campaign a line the defenders tore up is not relaid by time
+      // alone, engineers must do it; and a line burned under a scorched earth order is converted only from the month
+      // it was made good.
+      const step = rail.step[j];
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
@@ -1077,6 +1401,7 @@ const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
 /** The honest win chance on land (release 2, auto-resolve fix 1; data/campaign/winchance.json): the record's luck in the field. */
 const WIN = winData as unknown as { field: [number, number]; prepared: number };
+const PURSUIT = pursuitData as unknown as { share: number };
 /**
  * True in a grand campaign opened with the honest win chance on land: its own step inside Units decide (the design
  * director, 23 Nov 2026 10:14Z), so it needs both flags, and the other steps can go on without it.
@@ -1219,6 +1544,8 @@ export interface AttackOpts {
   fought?: number;
   /** With 'fought': what the field cost each corps and each side, so the bill speaks as the field did (ruling 226(6)). */
   field?: FieldBill;
+  /** Units decide (#7 4(b), 12:48Z): a beaten army breaking out through the enemy on its road out. No pursuit follows it. */
+  breakout?: boolean;
 }
 
 /**
@@ -1750,6 +2077,39 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
       : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
+  // Units decide (#7 4(b)): what a beaten defence would lose to the chase, read by both sides before the battle (129(d)).
+  if (unitsDecide(g) && !town && !opts.breakout && defenders.some(fights)) {
+    const ours = g.human !== null && dN.has(g.human);
+    const banned = new Set(attackers.map((c) => c.reg)), blocks = new Map<number, Corps>(), cutAt = new Set<number>();
+    let chasedBy: Corps | null = null;
+    for (const c of defenders) {
+      if (c.str < 0.15 || !afoot(c)) continue;
+      for (const j of roadsCut(g, c, target, attNat, banned, blocks, false)) cutAt.add(j);
+      for (const j of target.nb) {
+        const r = g.regions[j];
+        if (!fallsOn(g, c, r, banned)) continue;
+        const by = attackers.find((u) => chaser(u) && chasePace(g, u, c, r) < pace(g, c, r));
+        if (by && (!chasedBy || KIND[by.kind].mobile && !KIND[chasedBy.kind].mobile)) chasedBy = by;
+      }
+    }
+    const arm = (u: Corps | undefined): string => (u?.kind === 'arm' ? 'armour' : u?.kind === 'mot' ? 'lorried troops' : u?.kind === 'cav' ? 'cavalry' : 'troops');
+    if (cutAt.size) {
+      const at = listAnd([...cutAt].map((j) => g.regions[j].name));
+      lines.push({ label: 'Pursuit', value: `${ours ? 'Our' : 'Their'} road out is cut at ${at}`, effect: `If the line breaks, ${ours ? 'our' : 'their'} men on foot who can go no other way are taken whole by the ${arm(blocks.get([...cutAt][0]))} already there` });
+      // The breakout comes first: against the weakest of the enemy on those roads, by the card's own defence worth there.
+      const breakers = defenders.filter((c) => c.str >= 0.15 && c.kind !== 'fort');
+      let road: Region | null = null, worst = Infinity;
+      for (const j of cutAt) {
+        const u = blocks.get(j), r = g.regions[j];
+        if (!u) continue;
+        const D = onTheRoad(g, u, r, () => assess(g, breakers, r, { breakout: true }).D);
+        if (D < worst) { worst = D; road = r; }
+      }
+      if (road) lines.push({ label: 'Breakout', value: `Breaking out at ${road.name}`, effect: `If the line breaks, ${ours ? 'our' : 'their'} beaten army first attacks the enemy on its road out there; if that fails, ${ours ? 'our' : 'their'} men on foot who can go no other way are taken whole` });
+    } else if (chasedBy) {
+      lines.push({ label: 'Pursuit', value: `${ours ? 'Our foot cannot outrun their' : 'Their foot cannot outrun our'} ${arm(chasedBy)}`, effect: `If the line breaks, about ${Math.round(PURSUIT.share * 100)}% of ${ours ? 'our' : 'their'} men on foot are taken as they fall back` });
+    }
+  }
   if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
     ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
     : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
@@ -1927,9 +2287,10 @@ function fadeWorks(g: Game, nat: string): void {
   if (g.flags.open !== 1) return;
   const idx = Object.keys(g.nations).indexOf(nat), fade = DEFENCE.handover?.fade ?? 1;
   for (const r of g.regions) {
-    const m = g.flags[`fw:${r.id}`];
-    if (m === undefined || g.flags[`fwn:${r.id}`] !== idx) continue;
-    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[`fw:${r.id}`] = Math.round((m - fade) * 100) / 100;
+    const key = flagName('fw:', r.id);
+    const m = g.flags[key];
+    if (m === undefined || g.flags[flagName('fwn:', r.id)] !== idx) continue;
+    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[key] = Math.round((m - fade) * 100) / 100;
   }
 }
 
@@ -2025,6 +2386,134 @@ function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Regi
   return best;
 }
 
+// ---- The pursuit (Units decide, #7 step 4(b); the design director's rulings of 24 Nov 12:41Z and 12:43Z) ---------
+// A beaten army is chased by whoever is faster over the ground it falls back across. Speed is the ground's own, read
+// as moveCost reads it but without the march road, which both sides would share: on open ground tanks and lorries
+// outrun men on foot; in forest tanks do not, though lorries do; in mountain and marsh nobody outruns anybody, and
+// mountain troops outrun tanks in their mountains. The record (historian/prisoner-share-1124.md) only sizes it.
+
+/** How hard this corps finds it to get into a province in a pursuit: the ground's cost to its arm, off the roads. */
+export function pace(g: Game, c: Corps, to: Region, kind: Kind = c.kind): number {
+  let cost = KIND[kind].move + groundMarch(g, kind, to);
+  if (to.terrain === 'mountain' && kind !== 'mtn') cost += 1;
+  if (to.terrain === 'marsh') cost += 1;
+  if (weather(g).mud && EAST.has(to.owner)) cost += 1;
+  if (frozen(g, c.nat, to) && cmdWinter(g, c) >= 1) cost += 1;
+  return cost;
+}
+
+/** The share of a corps that rides: lorries, half-tracks or carriers. By its arm until a corps carries its own lorry share. */
+export const lifted = (c: Corps): number => (c.kind === 'mot' || c.kind === 'arm' ? 1 : 0);
+/** Men on foot: what a pursuit can catch. Horsemen are faster than foot, and tanks and lorries ride. */
+const afoot = (c: Corps): boolean => !KIND[c.kind].mobile && c.kind !== 'fort';
+/** Fit to chase: a fighting arm, fed (no fuel, no chase), at 15 in 100 of its size or more. */
+const chaser = (c: Corps): boolean => fights(c) && c.supplied && c.str >= 0.15;
+/**
+ * A pursuer's pace after a corps it chases: its own, or a man's on foot when it came out of the fight more
+ * disorganised than the men it chases (the design director's 13:10Z: a winner bled to a standstill does not run).
+ */
+const chasePace = (g: Game, u: Corps, c: Corps, to: Region): number => (u.org < c.org && KIND[u.kind].mobile ? pace(g, u, to, 'inf') : pace(g, u, to));
+
+/**
+ * The ways out of the field this beaten corps has lost to a faster enemy (a cut road): a province of its side next
+ * to the field with none of its side standing in it, where a motor corps of the winning side standing next to it
+ * gets there at less cost than this corps does. Each such corps cuts one road and pays the action points; a road
+ * already cut stays cut for every corps it outruns. Off, or nothing cut, an empty set.
+ */
+function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<number>, blocks: Map<number, Corps>, pay = true, open?: Set<number>): Set<number> {
+  const cut = new Set<number>();
+  if (!unitsDecide(g) || !afoot(c) && lifted(c) >= 1) return cut;
+  for (const j of from.nb) {
+    const r = g.regions[j];
+    if (open?.has(j) || !fallsOn(g, c, r, banned) || r.units.some((u) => allied(g, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g, u.nat, c.nat))) continue;
+    const mine = pace(g, c, r);
+    const held = blocks.get(j);
+    if (held) { if (chasePace(g, held, c, r) < mine) cut.add(j); continue; }
+    const taken = new Set([...blocks.values()].map((u) => u.id));
+    let by: Corps | null = null;
+    for (const k of r.nb) {
+      if (k === from.id) continue;
+      for (const u of g.regions[k].units) {
+        if (taken.has(u.id) || (u.kind !== 'mot' && u.kind !== 'arm') || !allied(g, u.nat, winner) || !atWar(g, u.nat, c.nat) || !chaser(u)) continue;
+        const cost = chasePace(g, u, c, r);
+        if (cost < mine && u.ap >= cost && (!by || cost < chasePace(g, by, c, r))) by = u;
+      }
+    }
+    if (by) { blocks.set(j, by); if (pay) by.ap -= chasePace(g, by, c, r); cut.add(j); }
+  }
+  return cut;
+}
+
+/**
+ * The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share.
+ * (Release 2, rearguard.ts; the design director's 19:13Z and 19:22Z) Rearguards act on the race through time only,
+ * never by more than the pursuers lose: 'lost', the time the attackers already lost to rearguards in this fight, as
+ * the fight decided it (half where they broke; not for a rearguard's own pursuers); and a rearguard of its side holding
+ * the province it falls back into, unfought, costs the pursuers pressing the chase its delay, each paying it once a
+ * battle ('paid').
+ */
+function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[], lost = 0, paid?: Set<number>): number {
+  if (!unitsDecide(g) || !afoot(c)) return 0;
+  const mine = pace(g, c, to);
+  const fast = chasers.filter((u) => chaser(u) && chasePace(g, u, c, to) < mine);
+  if (!fast.length) return 0;
+  const held = screenWeeks(g, c, to, (nat) => nat === c.nat || allied(g, nat, c.nat));
+  if (held > 0) for (const u of fast) if (!paid?.has(u.id)) { paid?.add(u.id); u.ap = Math.max(0, u.ap - held); }
+  const slow = lost + held;
+  if (slow > 0 && !fast.some((u) => chasePace(g, u, c, to) + slow < mine)) return 0;
+  return PURSUIT.share * (1 - lifted(c));
+}
+
+/**
+ * A cutting corps stands on the road it cut while a breakout is fought against it there, out of any works; it goes
+ * back to where it came from, as it was, if the fight leaves it standing on that road. (Moved by hand, not marched:
+ * it never left its province on the map, and nothing else about it changes.)
+ */
+function onTheRoad<T>(g: Game, u: Corps, road: Region, fight: () => T): T {
+  const home = g.regions[u.reg], at = home.units.indexOf(u), dug = u.dug;
+  home.units.splice(at, 1); road.units.push(u); u.reg = road.id; if (dug !== undefined) u.dug = false;
+  try { return fight(); }
+  finally {
+    // (Put back in its own place in the list: whoever was reading the list round it reads it unchanged.)
+    if (!u.dead && u.reg === road.id && road.units.includes(u)) {
+      road.units.splice(road.units.indexOf(u), 1); home.units.splice(Math.min(at, home.units.length), 0, u); u.reg = home.id; if (dug !== undefined) u.dug = dug;
+    }
+  }
+}
+
+/**
+ * The breakout (Units decide, #7 4(b); the design director's 12:48Z and 12:49Z): before a cut road takes any corps
+ * whole, the beaten stack's corps still at 15 in 100 or more attack the weakest cutting corps, by the card's defence
+ * worth on the road it cut, once, as an ordinary battle on the card. Won, that road is open again for the whole
+ * stack; lost, the cut stands. Null where no cut would take anybody. The pursuit is off inside it.
+ */
+function breakOut(g: Game, stack: Corps[], from: Region, winner: string, banned: Set<number>, open: Set<number>): BattleReport | null {
+  const dry = new Map<number, Corps>();
+  let doomed = false;
+  for (const c of stack) {
+    if (c.dead || c.reg !== from.id || c.str < 0.15 || !afoot(c)) continue;
+    const outs = from.nb.filter((j) => fallsOn(g, c, g.regions[j], banned));
+    if (!outs.length) continue;
+    const cut = roadsCut(g, c, from, winner, banned, dry, false, open);
+    if (outs.every((j) => cut.has(j))) doomed = true;
+  }
+  if (!doomed) return null;
+  const breakers = stack.filter((c) => !c.dead && c.reg === from.id && c.str >= 0.15 && c.kind !== 'fort');
+  if (!breakers.some(fights)) return null;
+  let road: Region | null = null, block: Corps | null = null, worst = Infinity;
+  for (const [j, u] of dry) {
+    const r = g.regions[j];
+    const D = onTheRoad(g, u, r, () => assess(g, breakers, r, { breakout: true }).D);
+    if (D < worst) { worst = D; road = r; block = u; }
+  }
+  if (!road || !block) return null;
+  const at = road;
+  const goers = limitAttackers(g, breakers, at);
+  const rep = onTheRoad(g, block, at, () => resolveBattle(g, goers.length ? goers : breakers, at, { breakout: true }));
+  if (rep.taken) open.add(at.id);
+  return rep;
+}
+
 /** The winners move in, fastest first. */
 /**
  * An army that closes round a held town has the rest of its month's work there (the grand campaign): the corps that
@@ -2072,7 +2561,8 @@ function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): Re
   if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
   const banned = new Set(attackers.map((c) => c.reg));
   for (const c of [...a.defenders]) {
-    if (!c.yields || c.gaveWay) continue;
+    // (A rearguard holds where it was ordered to: release 2, rearguard.ts.)
+    if (!c.yields || c.gaveWay || isRearguard(g, c)) continue;
     const to = retreatTarget(g, c, target, banned);
     if (!to) continue;
     const unit = reportUnit(c);
@@ -2144,7 +2634,7 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
     const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     const defFrac = defenceLoss(R);
     const stood = win ? 1 : HELD_LOSS;
-    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
     let ours = 0, theirs = 0;
     for (const c of attackers) ours += men(c) * Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight;
@@ -2184,6 +2674,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
+  // (Release 2, rearguard.ts) The rearguards holding the field against this attack: they cost the attackers time.
+  const rears = town || opts.breakout ? [] : rearguardsAt(g, target, (nat) => atWar(g, nat, armyOf(attackers[0])));
   const gone = town ? [] : giveWay(g, a, attackers, target);
   if (gone.length) {
     if (!hostileUnits(g, target, armyOf(attackers[0])).length) return walkIn(g, attackers, target, opts, a, gone);
@@ -2280,10 +2772,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
-  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
+  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
   const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   // The same result at the staff's roll (b476(2)).
-  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
+  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
   const defPlain = (c: Corps): number => defenceLoss(billed) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   const defOut = pulled('def');
   const defK = !opts.field ? 1
@@ -2319,11 +2811,35 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // (Who carried the ground is the throw's; how far, today's run's. Off, they are one and the same.)
   const level: VictoryLevel = win ? (RL >= 3 ? 'Heroic victory' : RL >= 2 ? 'Decisive victory' : attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : RL >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));
+  // (Release 2, rearguard.ts; the design director's 19:18Z) The attackers fought the rearguards in one fight and share
+  // its delay, each losing it once: in full where the rearguards held, half where they were broken. The time is lost
+  // here, before the pursuit is run.
+  const rearWeeks = rears.length ? chargeDelay(attackers, rearguardWeeks(rears, win)) : 0;
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
     let intoWorks = false;
     let back: Region | null = null;
+    // (Units decide, the pursuit: the roads a faster enemy has cut, and by whom; and what the chase takes on the way.)
+    const blocks = new Map<number, Corps>();
+    // (release 2, rearguard.ts: the pursuers who have paid a rearguard's delay in this battle, once each)
+    const paidRear = new Set<number>();
+    const chased = (c: Corps, to: Region, i: number): void => {
+      const share = opts.breakout ? 0 : pursuitTakes(g, c, to, attackers, rears.includes(c) ? 0 : rearWeeks, paidRear);
+      if (share <= 0) return;
+      const before = men(c);
+      c.str *= 1 - share;
+      const took = before - men(c);
+      defU[i].lost += took; defU[i].chased = took; prisoners += took;
+    };
+    const reopened = new Set<number>();
+    const breakout = !opts.breakout && unitsDecide(g) && !town && !overrun ? breakOut(g, defenders, target, attNat, banned, reopened) : null;
     defenders.forEach((c, i) => {
+      // (Units decide: a corps that broke out through the enemy on its road out is already on it, and is chased there.)
+      if (breakout && !c.dead && c.reg !== target.id) {
+        defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = c.reg; c.ap = 0;
+        chased(c, g.regions[c.reg], i);
+        return;
+      }
       // The fortress rows (06:15Z (b)): a beaten fortress crew stays in its works as the town's garrison, taking no room
       // there, until it is stormed or starves, on its own stores and not the town's. Shattered, at under 15 in 100 of its
       // own size, or beaten in the storm of the town itself, it is taken as before.
@@ -2339,7 +2855,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         return;
       }
       // A garrison has nowhere to go.
-      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, banned);
+      const cut = town || overrun || c.str < 0.15 || opts.breakout ? null : roadsCut(g, c, target, attNat, banned, blocks, true, reopened);
+      if (cut?.size) defU[i].roadsCut = [...cut];
+      const outs = cut?.size ? new Set([...banned, ...cut]) : banned;
+      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, outs);
       const N = g.nations[c.nat];
       const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
@@ -2351,7 +2870,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         defU[i].fate = 'sheltered';
         tallySiege(g, 'sheltered');
       }
-      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; }
+      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; chased(c, to, i); }
       else if (away) {
         // Backs to the sea: the navy takes off what it can.
         const dest = refuge(g, c, target);
@@ -2360,9 +2879,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         liftedOut(c, target, dest);
         defU[i].fate = 'evacuated';
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
-      } else if ((back = !town && !overrun && c.str >= 0.15 ? fallThrough(g, c, target, banned) : null)) {
+      } else if ((back = !town && !overrun && c.str >= 0.15 ? fallThrough(g, c, target, outs) : null)) {
         // (Units decide: its side's ground next to the field is full, not lost. It falls back through it, or into it.)
-        place(g, c, back); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = back.id;
+        place(g, c, back); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = back.id; chased(c, back, i);
       } else {
         const left = men(c);
         // (A fortress crew is read against its own size under the fortress rows: a small one taken whole surrenders.)
@@ -2428,6 +2947,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (gates) rep.gates = true;
   if (relief) rep.relief = true;
   if (opts.sally) rep.sally = true;
+  if (opts.breakout) rep.breakout = true;
   if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
   if (!win && !town && a.wear > 0) { rep.worn = Math.round(a.wear * 10) / 10; rep.works = Math.round(Math.max(0, a.works - a.wear) * 10) / 10; }
   // Who paid, and to what (the grand campaign): the result's line, as the attacker reads it and as the defender does.
@@ -2468,6 +2988,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';
   const hurt = battleHit(g, target, fight, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === 'art' ? u.divs : 0), 0));
   if (hurt) rep.city = { region: hurt.region, added: hurt.added, now: hurt.now };
+  // (Release 2, rearguard.ts) Held up by a rearguard, held or broken: each attacking corps lost time of its month
+  // (charged before the pursuit above), and cannot press on as far behind the army that pulled back.
+  if (rearWeeks > 0) {
+    const who = rears.map((c) => c.name).join(' and '), lost = weeksWords(rearWeeks);
+    const how = win ? 'was broken, but held the attack up' : 'held the attack up';
+    rep.lines.push({ label: 'Rearguard', value: `${who} ${how}`, effect: `Each attacking corps lost ${lost} of its month` });
+    rep.rearguard = rearWeeks;
+    headline(g, 'info', `The rearguard at ${target.name} ${win ? 'was broken, but held the enemy up' : 'held the enemy up'}: each corps of his that attacked there lost ${lost} of its month.`, rears[0].nat, target.id);
+    headline(g, 'info', `An enemy rearguard at ${target.name} held our attack up${win ? ' before it broke' : ''}: each corps that attacked there lost ${lost} of its month.`, armyOf(attackers[0]), target.id);
+  }
   g.reports.push(rep);
   // (scarred ground: one more battle fought over this region, this month; a walk-in where the defenders gave ground
   // fought none, so it leaves none)
@@ -2476,6 +3006,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
   // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
   if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (old wrecks: the armoured vehicles it left burnt out on the field, by nation, for the next battle there)
+  wreckBump(g, rep);
   // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
   // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
   capturedKit(g, rep, target);
@@ -3233,6 +3765,7 @@ function nearestFriendly(g: Game, c: Corps): Region | null {
 export function capitulate(g: Game, nat: string, by: string): void {
   const X = g.nations[nat];
   if (!X.alive) return;
+  const was = holdersNow(g); // settled towns (release 2): ground handed over here starts settling this month
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
   recordFall(g, nat, by, 'beaten');
@@ -3313,6 +3846,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
       if (to) { place(g, c, to); c.ap = 0; } else removeCorps(g, c);
     }
   }
+  handedOver(g, was);
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
   // The grand campaign: this fall may have put another country's capital into the hands of that country's friends.
@@ -4041,6 +4575,8 @@ export function endPhase(g: Game, nat: string): void {
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
+  // (Release 2, rearguard.ts) The nation's rearguards of last month stand down, the player's and the staffs' alike.
+  rearguardsLapse(g, nat);
   if (!n.alive) return;
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);
@@ -4254,6 +4790,7 @@ export function sovietEvent(g: Game): void {
     const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
     if (lost < 5) return;
   }
+  const was = holdersNow(g); // settled towns (release 2): the pact's ground starts settling this month
   g.flags.sovietMove = 1;
   g.week = 3;
   for (const r of g.regions) {
@@ -4283,5 +4820,6 @@ export function sovietEvent(g: Game): void {
   g.supplyDirty = true;
   headline(g, 'event', 'The Red Army crosses into eastern Poland under the pact with Germany.', 'SOV');
   g.week = 4;
+  handedOver(g, was);
   if (!fallen) checkCollapse(g, 'POL', 'GER');
 }

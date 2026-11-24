@@ -31,6 +31,7 @@
  */
 import { turnToDate } from '../core/ticket';
 import { airOnFall } from './air';
+import { handedOver, holdersNow } from './buildings';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { allied, atWar, bloc, declareWar, headline, relocate, retreatTarget, sendHome, theName, warning } from './game';
 import { LIB, handBack, recordFall, rejoinWars, warsAtFall } from './liberation';
@@ -150,10 +151,12 @@ function endVichy(g: Game): void {
   fleetsOnFall(g, 'VIC');
   airOnFall(g, 'VIC');
   dropSieges(g, 'VIC');
+  const was = holdersNow(g); // settled towns (release 2): ground handed to France starts settling this month
   for (const r of g.regions) {
     if (r.owner === 'VIC') { r.owner = 'FRA'; r.cap = false; }
     if (r.ctrl === 'VIC') r.ctrl = 'FRA';
   }
+  handedOver(g, was);
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== 'VIC');
   V.atWar = [];
   handBack(g, F);

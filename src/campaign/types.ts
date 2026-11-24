@@ -355,6 +355,8 @@ export interface Build {
   revive?: number;
   /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */
   elite?: string;
+  /** Works or ships ordered in a conquered town that had settled (release 2, buildings.ts settledFor): delivered while the town is held, whatever the switch says by then. */
+  conq?: boolean;
   /** An airborne corps, unlocked by the technology tree (the grand campaign). */
   airborne?: boolean;
   /** A corps raised again round its cadre (the grand campaign): the id of the corps that was folded away. */
@@ -380,9 +382,20 @@ export interface Storied {
   nick?: string;
 }
 
+/**
+ * (Release 2, the marked army; marked.ts) An enemy corps that took one of the player's towns: where, and in which month.
+ * It wears a red tag on the table until he beats it.
+ */
+export interface CorpsMark {
+  place: number;
+  turn: number;
+}
+
 export interface Corps extends Storied {
   id: number;
   nat: string;
+  /** (Release 2, the marked army; marked.ts) It took one of the player's towns, and is marked until he beats it. */
+  mark?: CorpsMark;
   name: string;
   kind: Kind;
   divs: number;
@@ -473,6 +486,18 @@ export interface Corps extends Storied {
   town?: number;
   /** A volunteer legion (legions.ts; release 2): the country at peace whose men these are. It fights in its patron's army under its own name and flag. */
   vol?: string;
+  /** Its divisions' own names in order, [name, short], where they are not the ones its corps' name gives (breakup.ts; release 2). */
+  names?: [string, string][];
+  /** The corps it was split off from (breakup.ts; release 2): it can rejoin that one, or another part split off it. */
+  part?: number;
+  /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
+  whole?: number[];
+  /**
+   * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, the weeks of marching it
+   * gave up for it (given back if it is stood down in the same month), and the province it holds (driven out of it, it
+   * is a rearguard no longer). Gone at the start of its side's next month.
+   */
+  rear?: [number, number, number];
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -545,6 +570,9 @@ export interface ReportUnit {
   /** Ruling 232: the province a beaten field army fell back to, and a field army cut off that laid down its arms. */
   to?: number;
   cut?: boolean;
+  /** Units decide (#7 4(b)): men taken by a faster pursuit as the corps fell back; and the roads out a faster enemy cut first. */
+  chased?: number;
+  roadsCut?: number[];
 }
 
 export interface BattleReport {
@@ -576,6 +604,8 @@ export interface BattleReport {
   works?: number;
   /** The fight was for the town itself: an assault on its garrison (the grand campaign). */
   town?: boolean;
+  /** Units decide (#7 4(b)): a beaten army attacking the enemy on its road out, before a cut road takes it whole. */
+  breakout?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
   /**
@@ -601,6 +631,8 @@ export interface BattleReport {
    * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
    */
   paid?: { att: string; def: string; sign?: 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
+  /** Weeks of their month each attacking corps lost to a rearguard holding the field (release 2, rearguard.ts; may be a part of a week). */
+  rearguard?: number;
 }
 
 // ---- The war at sea ---------------------------------------------------------------------
@@ -655,6 +687,16 @@ export interface Fleet extends Storied {
   lost: Ships;
   /** Units decide (the convoy war by cause), written only under that switch: the boats it had when it first lost any this month and those lost since, for the hunt's monthly cap. Saved, so a month reloaded part-way plays on as the live one. */
   capBook?: { turn: number; had: number; lost: number };
+  /**
+   * Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2), written only under that switch: its crews' level,
+   * in navy.json's quality units, blended by ship count as ships join and leave. Unset, the fleet reads its navy's
+   * crew (QualityStore sea.crew).
+   */
+  crew?: number;
+  /** Its crews' experience, 0 to 1. Not laid yet: nothing writes or reads it. */
+  sxp?: number;
+  /** Boats working up after joining: how many, and the months each batch still has to go. They do not yet count on station. */
+  workup?: [boats: number, months: number][];
   /** Region of the home port, or -1 when the base is off the map. */
   base: number;
   /** What the base is called: Scapa Flow, Wilhelmshaven. */
@@ -699,6 +741,27 @@ export interface Fleet extends Storied {
    * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
    */
   stars?: Partial<Record<ShipClass, number[][]>>;
+  /**
+   * The player gave this fleet an order himself (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go
+   * right back to where they were before the next turn"). While his admirals run the navy for him (depth.ts) they leave
+   * it where he sent it, until he hands it back to them or hands them the navy afresh. Never set on a computer's fleet.
+   */
+  ordered?: true;
+  /**
+   * A task force's standing job (release 2, taskforce.ts): the sea and what it does there, or the lane it escorts. It
+   * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
+   */
+  task?: { zone: number; stance: Stance; lane?: string };
+  /** The month the player's admirals last ordered it and their reason, in a sentence (release 2, fleetwhy.ts). */
+  why?: [number, string];
+  /** The enemy fleet it shadows (release 2, shadow.ts): it follows that fleet each month and keeps it in contact. Written only under that switch. */
+  shadow?: number;
+  /**
+   * Its voyage log (release 2, voyage.ts), oldest first: for each month, what it was doing at the month's end (`s`), the
+   * sea (`z`) or harbour (`p`), and the fleet actions it fought (`f`, a sentence each). A record only, apart from its
+   * diary (`log`, stories.ts). Written only under that switch.
+   */
+  voyage?: { t: number; s: Stance; z: number; p: string; f?: string[] }[];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -797,6 +860,8 @@ export interface ConvoyMonth {
   fought?: 'field' | 'clamped';
   /** Release 2, with Units decide (the convoy war by cause), record only: of subsLost, the boats the convoy's escorts sank in their attacks on it. */
   byEscorts?: number;
+  /** Release 2, with Units decide and the route's convoy count laid (the one-pass ruling), record only: the boats on station on the route, the convoys that sailed (both ways), those sighted and attacked, the incidents with the escort, the boats a convoy attacked (the pack), and, where the tons are counted from the convoys' side, the ships a convoy attacked lost, on average. */
+  count?: { boats: number; sailed: number; sighted: number; attacked: number; incidents: number; pack: number; sunk?: number; torps?: number };
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
@@ -837,6 +902,12 @@ export interface Headline {
   desk?: string;
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
+  /**
+   * (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) News that a unit the
+   * player raised or bought has been handed over and is ready for orders: a corps (its id in `unit`), aircraft, or
+   * ships. Display only: no rule reads it.
+   */
+  ready?: 'corps' | 'air' | 'ship';
   /**
    * A title of its own over a line of news that is no warning ('Britain stands by Canada', 'Britain stays out of
    * Canada's war': ruling 211(b)). An interface heads the news with it.
@@ -1244,6 +1315,13 @@ export interface AirFleet extends Storied {
    * seller's type, flown by this nation's pilots, and never upgrades with the seller's research. The rest is its own.
    */
   bought?: Record<string, number>;
+  /**
+   * Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2), written only under that switch: its pilots' mean
+   * hours before first combat. None while its nation's school (or deck school, for a carrier wing) is not laid.
+   */
+  hours?: number;
+  /** Its one experience counter, 0 to 1, written only under that switch. */
+  fxp?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1410,6 +1488,77 @@ export interface AirWarMemory {
  */
 export interface Voyage { nat: string; corps: Corps; from: number; to: number; due: number }
 
+// ---- Units decide's quality store (release 2; DD 24 Nov 15:53Z, #2 form Part 2) ---------------------------------
+// The nation holds what its schools and staffs know; the unit holds what its own men have lived through. Every arm has
+// the same three parts: a school level per nation, a doctrine per nation, and the unit's own figure (the corps' xp, an
+// air group's hours and fxp, a fleet's crew). Each cause has one price, in one place. Seeded by units.ts openQuality,
+// from data/campaign/units.json and the tables it names; absent while the switch is off.
+
+/**
+ * A doctrine slot. Readers read `id` only: a change ordered by the player, chosen by a staff or taught by a research row
+ * goes in `next`, and takes over in month `ready`, so the old way holds while the new one trains in.
+ */
+export interface Way<T extends string> { id: T; next?: T; ready?: number; by: 'start' | 'chosen' | 'research' }
+
+/** A land staff's way (data/battle/lean.json): 'mass' attacks by orders; night and last-stand are fought as bold until they are built. */
+export type LandWay = 'mass' | 'methodical' | 'bold' | 'night' | 'last-stand';
+
+/** What a nation's army knows. Training rows, command c and the drafts' level are worked out from it and the tree, never stored. */
+export interface Land {
+  /** The army's training at the start (officers, NCOs, drill): a seed only. The level read is the higher of it and the ladder's rung for the training rows held. */
+  train: number;
+  /** Command earned in war, 0 to 1. Command c = the radios row's share if held, plus this, at most 1. */
+  earned: number;
+  /** The drafts' schools: new men and new corps join at the level they give. */
+  school: number;
+  /** The staff's way, attacking and defending. */
+  way: { att: Way<LandWay>; def: Way<LandWay> };
+}
+
+/** What a nation's air arm knows. Nothing reads these slots yet: they wait on the air thread's build. */
+export interface Air {
+  /** Hours before first combat a new pilot leaves school with; null where not laid. */
+  school: number | null;
+  /** The same for carrier pilots, kept apart; null where not laid. */
+  deck: number | null;
+  /** The level read wherever hours are not priced: today's air quality (air.json). */
+  held: number;
+  /** The reserve's mean hours (null while school is) and mean experience. */
+  pool: number | null;
+  poolXp: number;
+  /** Land bombers' training against ships (carriers.json naval.land). */
+  strike: number;
+  /** Fighter doctrine; null where no row is read. */
+  fighter: Way<'turn' | 'dive-zoom'> | null;
+  /** Escort doctrine; null where not laid. */
+  escort: Way<'tied' | 'free'> | null;
+}
+
+/** What a nation's navy knows. Nothing reads these slots yet: they wait on the naval thread's build. */
+export interface Sea {
+  /** A new crew's level from the navy's schools, in navy.json's quality units. */
+  crew: number;
+  /** Night drill and lookouts' training: null, not laid. */
+  night: number | null;
+  lookout: number | null;
+  /** The fleet staff's way. */
+  way: Way<'methodical' | 'bold' | 'mass'>;
+  /** Convoy doctrine: boats hunt alone, are homed from ashore, or are led at sea; and whether they go for warships first. */
+  pack: Way<'alone' | 'homed' | 'led'>;
+  target: Way<'merchants' | 'warships'>;
+}
+
+export interface Arms { land: Land; air: Air; sea: Sea }
+
+export interface QualityStore {
+  /** The month the campaign opened: 1, or a later start's first month (g.flags.openFrom). */
+  from: number;
+  /** Every nation in g.nations, seeded by one rule. */
+  nat: Record<string, Arms>;
+  /** News fired once when a cause passes a mark: '<nat>:<field>:<mark>' to the month it fired. */
+  news: Record<string, number>;
+}
+
 export interface Game {
   seed: number;
   rng: Rng;
@@ -1485,12 +1634,24 @@ export interface Game {
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
   legions?: LegionBook;
   /**
+   * Units decide's quality store (release 2; DD 24 Nov 15:53Z, #2 form Part 2): what each nation's schools and staffs
+   * know, for soldiers, pilots and crews. Absent while the switch is off; read and seeded only through units.ts
+   * qualityStore.
+   */
+  qs?: QualityStore;
+  /**
    * Scarred ground (release 2): for each region a land battle was fought in, how many have been fought there and the
    * month of the last, and of those how many in the mud and the month of the last of them (mud memory), so a battle
    * there is fought over ground already torn up. Kept apart from the reports, which a
    * save keeps only the last of. Absent until the first battle.
    */
   scars?: Record<number, { n: number; last: number; mudN?: number; mudLast?: number }>;
+  /**
+   * Old wrecks (release 2, looks only): for each region a land battle was fought in, the armoured vehicles its battles
+   * left burnt out or knocked out on the field, by nation (game.ts wreckBump), and the month of the last that left any.
+   * Absent until the first; nothing in any fight reads it.
+   */
+  wrecks?: Record<number, { n: Record<string, number>; last: number }>;
   /**
    * Captured kit (release 2, looks only): by nation, the enemy tanks it lately took in a heavy win, whose they were, how
    * many tank blocks they make, and the month; kept six months, the three latest.

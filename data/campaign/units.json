@@ -1,0 +1,68 @@
+{
+  "_about": "Units decide's quality store and the figures its land rules read (the design director's ruling of 24 November 2026 15:53Z on rules-builder/release2/soviet/form.md, the #2 form, with Part 2's one store for soldiers, pilots and crews). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every nation: a nation named here is a seed or a start row, never a rule. Marks as the form uses them: F firm, L likely, D derived from read figures, M from memory, G the rules builder's guess, waiting on the measure, U not laid (the slot exists and nothing reads it).",
+
+  "_startRows": "Rows a nation holds on the first day under Units decide only, never in tech.json 'start' (form, 'Where it goes'): Germany holds Field radios (it holds Staff colleges, tech.json start), and no other nation does; Sweden and Norway hold Winter equipment, so that holding it can stand in for the hardy list (east.json) at its three reads (Part 1 section 1; SOV and FIN already hold it). Applied by startOpen before the opening research (tech.ts openUnitsRows), so a later start's catch-up counts each row once. G.",
+  "startRows": { "GER": ["radios"], "SWE": ["winterkit"], "NOR": ["winterkit"] },
+
+  "land": {
+    "_ladder": "Training is the ladder (ruling 15:53Z (4)): an army's level is the higher of its start seed (land.train) and this rung for one, two or three of the training rows held, the same ladder for every nation. A start never fixes a ceiling. 1.25 is Germany's level (nations.json). G.",
+    "ladder": [0.85, 1.05, 1.25],
+    "_trainRows": "The training rows the ladder counts, held live from the tree (Part 1 2a): NCO schools, Battle drill, Officer schools. Each has no other effect. G.",
+    "trainRows": ["nco", "battledrill", "officers"],
+    "_radios": "Command c = this if the nation holds the row, plus earned, at most 1 (Part 1 2b). Staff colleges, Battle groups and Deep operations keep their one price in techMul and never feed c (choice 15). G.",
+    "radios": 0.15,
+    "radiosRow": "radios",
+    "_earned": "Command earned in war, 0 to 1 (Part 1 2b). seed: the start's c by army, as the design director ruled at 24 Nov 16:06Z (round-2-build-order.md:2159; the form's 'Seeds ruled 16:07Z' under ruling 15:53Z (5)) on the historian's reading of command and signals 1939-41 (historian/prisoners-command-1124.md Part 2, scores D): GER 1, SOV 0 and FRA 0, held (L); POL 0.1 (F/L); ITA 0.25 (L); JAP 0.5 (L); UK 0.5 (F/L); USA 0.5, the range middle, its score leaning on memory until the 1941 manoeuvres are read (M); '_default' 0.5, the range middle, for every army the historian has not read, marked as a stand-in until it is read, never today's 1 (G). No seed is shaved to steer a gate: UK, USA and JAP pass the blitz gate once they research radios (0.5 + 0.15 = 0.65), and that is the cause working. The store holds the seed less 'radios' where the row is held at the start (so GER 0.85), never below 0. The same at every start month: history plays a later start's months with the switch off, and the 1941-42 rises come from the earned test and the radios row in play, never from dates (G). month: added for each month the nation's own attacks take at least 'provinces' provinces from an enemy (one test on the month's battle reports, the player's nation and every computer's alike; sieges, reliefs and sallies left out; a walk-in after the defenders yielded counts; distinct regions). corps: taken off for each corps taken whole (cut off, rule 232, a cut road). All G.",
+    "earned": { "seed": { "_default": 0.5, "GER": 1, "SOV": 0, "FRA": 0, "POL": 0.1, "ITA": 0.25, "JAP": 0.5, "UK": 0.5, "USA": 0.5 }, "month": 0.01, "provinces": 2, "corps": -0.01 },
+    "_attack": "Attack is multiplied by base + perC x c, in place of slowCommand's x0.85 (Part 1 2b): at c 0 today's slow command, at c 1 none. G.",
+    "attack": { "base": 0.85, "perC": 0.15 },
+    "_mostCorps": "Most corps one battle can take: base + perC x c, in place of maxAttack (Part 1 2b; choice 11): 8 at c 0 (today's slow command), 20 at c 1. G.",
+    "mostCorps": { "base": 8, "perC": 12 },
+    "_gates": "Command gates (Part 1 section 1): below 'renewal' a staff renews no failed attack and counter-attacks late (today's slowCommand habits); from 'blitz', with Field radios held, the tempo x1.2, the +1 move, the opening thrust and the armoured spearheads' x1.15, for any nation. G.",
+    "gates": { "renewal": 0.3, "blitz": 0.6 },
+    "_sight": "A staff's sight s = clamp((c - from) / span, 0, 1) (Part 1 section 5). Seen odds = card odds x (q / wk)^(s - 1): at s 0 a staff counts men, kinds and ground, at s 1 it reads the card as today's staff does. The player's card shows the odds as the player's own staff reads them at the player's own sight (ruling 15:53Z (14)). G.",
+    "sight": { "from": 0.6, "span": 0.4 },
+    "_byOrders": "The way 'mass', by orders (Part 1 section 5; ruling 15:53Z (1)): ordinary attacks go in at seen odds 'need' and stop adding corps at 'stop'; attacks in the main effort's sector keep today's stop, 'main' (ai.ts). As sight rises, need blends to the temper's minOdds and stop to 'main'. The doctrine's own content, never refit to Lawrence's 1.42, which is a check. Methodical, bold and night keep today's thresholds. G.",
+    "byOrders": { "need": 0.9, "stop": 1.3, "main": 2.6 },
+    "_xp": "Corps experience by result, each times (1 - xp) (Part 1 2d), in place of today's flat +0.05 attacking and +0.04 defending, win or lose: the attacker that wins, the attacker repulsed, the defender that holds, the defender beaten. Drafts dilute every nation's corps. G.",
+    "xp": { "won": 0.05, "repulsed": 0.02, "held": 0.04, "beaten": 0.02 },
+    "_label": "Captured: of the defender's men lost, share x (attacker's per-man attack worth / defender's per-man defence worth) are booked as prisoners, at most 'cap' (Part 1 section 7). A split of men already lost; it adds none and goes in its own report field. D: fit to the record's fail-or-advance pair at Kursk (F, p. 34), 0.147 and 0.149.",
+    "label": { "share": 0.148, "cap": 0.9 },
+    "_guards": "The Guards title, as a name only, in its own corps field (Part 1 section 1; choice 13): a corps of any nation at xp at least 'xp' with at least 'won' attacks won. Never c.elite. G.",
+    "guards": { "xp": 0.5, "won": 3 },
+    "_ways": "The land ways a staff may hold (Part 2 section 3; data/battle/lean.json). Night and last-stand are fought as bold (lean.json standIn) until they are built.",
+    "ways": ["mass", "methodical", "bold", "night", "last-stand"],
+    "_school": "The drafts' schools: 0 for every nation at every start month, as g.stories.schools holds today (Part 2 section 2). G.",
+    "school": 0
+  },
+
+  "_trainIn": "Months a change of way takes to train in, one time for every arm (Part 2 section 3). U until the historian reads one; the form's guess is 6 (G).",
+  "trainIn": 6,
+
+  "air": {
+    "_scale": "One curve from a pilot's hours to a level, the same for every nation (Part 2 section 1). U: not laid; until it is, every group keeps its held level.",
+    "scale": null,
+    "_school": "Hours before first combat a new pilot leaves school with, by start turn (Part 2 section 2; historian/air-reads-1124.md A). GER about 250 before the cuts (L; the reading dates no cut, so every offered start, 1939-42, takes it: G). RAF and US 350 and 400 are 1944 readings, so null; JAP (land) and SOV not read, null. A nation not listed is null: not laid (no '_default').",
+    "school": { "1": { "GER": 250 } },
+    "_deck": "The same for carrier pilots, kept apart: JAP 500 or more (the navy's carrier school before 1937, F). Others null. By start turn.",
+    "deck": { "1": { "JAP": 500 } },
+    "_fighter": "Fighter doctrines (fighters.ts) and escort doctrines (plan D). No start row is read, so every nation's slot is null (Part 2 section 2).",
+    "fighter": ["turn", "dive-zoom"],
+    "escort": ["tied", "free"],
+    "_aceStep": "An air ace home to train pilots raises his nation's flying school by this many hours (stories.ts cashHonour, valour.ts sendHero), never the land drafts' schools (Part 2 section 6). U: not read; until it is, the school stands.",
+    "aceStep": null,
+    "_head": "A new bomber crew's head start in missions for each hour of its nation's flying school (bombers.ts headStart), the same for every nation, in place of the player's instructors alone (Part 2 section 6). U: not laid; until it is, every crew starts at none.",
+    "head": null
+  },
+
+  "sea": {
+    "_ways": "The fleet staff's ways (battle/sea/types.ts). No 'night' way: lean.json's night is seeded as its stand-in, bold (Part 2 section 2).",
+    "ways": ["methodical", "bold", "mass"],
+    "_pack": "Convoy doctrine, by start turn, from the record (Part 2 section 2; naval-battles/wolfpack-r2/form.md:47-49): 1939 and 1940 every navy hunts alone; 1941 GER and ITA homed from ashore; 1942 GER homed; '_default' is every other navy. L.",
+    "packs": ["alone", "homed", "led"],
+    "pack": { "1": { "_default": "alone" }, "5": { "_default": "alone" }, "17": { "_default": "alone", "GER": "homed", "ITA": "homed" }, "29": { "_default": "alone", "GER": "homed" } },
+    "_target": "Boats go for warships first: JAP (wolfpack form :47); '_default', every other navy, merchants first. L.",
+    "targets": ["merchants", "warships"],
+    "target": { "1": { "_default": "merchants", "JAP": "warships" } }
+  }
+}

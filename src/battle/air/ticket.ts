@@ -5,7 +5,8 @@
 // Nothing in the campaign is changed here; the raid is flown, and paid for, only when the battle hands its result
 // back through launchRaid (see campaign/airfought.ts).
 
-import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, forecastAir, groupAt } from '../../campaign/air';
+import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, forecastAir, fxpOf, groupAt, levelOf } from '../../campaign/air';
+import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
@@ -16,7 +17,7 @@ import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { SKY, type Band } from './book';
-import { bomberOf, designYear, fighterOf } from './doctrine';
+import { bomberOf, designYear, fighterOf, type Role } from './doctrine';
 import { bomberGuns, fighterGuns } from './guns';
 import { groundOf, type AirGround } from './ground';
 import { shipPlace } from './ships';
@@ -95,18 +96,35 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   const att: ForceTicket[] = [], def: ForceTicket[] = [];
   const share = (pow: number, all: number): number => (all > 0 ? pow / all : 0);
   const Atot = a.Epow + a.B * C.bomberDefence, Dtot = a.Dpow;
+  // Units decide, the fighters' own fight by day (air.ts assessAir, a.height): the field shows the height the card
+  // weighed, by where each side starts, all of them airborne. A sweep starts a band above unwarned defenders, level with
+  // half-warned ones, a band under warned ones. An escort starts with its bombers (band 1), its top cover already a
+  // band above them (as it flew the whole way in), and the defenders 2W - 1 bands from the bombers by their warning. The card's
+  // height is taken back out of the worths below, so the field's own bounce makes it (as measured for AIR.height.h)
+  // and it is not counted twice.
+  const H = a.height, sweep = !!H && a.B <= 0;
+  const attBand = (sweep && H!.x > 0 ? 2 : 1) as Band;
+  const defBand = (H ? (sweep ? (H.x < 0 ? 2 : 1) : Math.max(0, Math.min(2, Math.round(2 * H.W)))) : 1) as Band;
+  // The field arms each group from the card's forecast (sim.ts arm), so it is armed from the card's forecast without
+  // the height (the escort's, and over the bombers, plain): its own bounce from the starts above brings the card's
+  // height back, as measured, and not twice.
+  const hx = H ? Math.pow(H.h, H.x) : 1;
+  const armed = H ? forecastAir(g, { ...a, Epow: a.Epow / hx, Dpow: a.Dpow * hx, bomberLoss: H.plain ?? a.bomberLoss }, m, target) : fc;
+  let k = 0;
   a.att.forEach((x) => {
     const [rx] = rot(vec(x.f));
     const sx = clampTo(SKY.target.x + rx * 0.25, 20_000, 80_000);
     const ftr = Math.round(x.f.ftr * x.crowd), bmr = Math.round(x.bmr);
     // Fighters that cannot reach the target (or, at night, do not go) stay out of it, as they count for nothing in the forecast.
     if (x.esc > 0 && ftr > 0) {
-      starts[x.f.id] = { x: sx, y: 1_000, band: 1, fuel: SKY.fuel.full * x.esc, wait: false };
-      att.push(force(x.f, 'ftr', ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
+      // (A group that carries bombers of its own starts with them: its top cover climbs from there.)
+      const top = !!H && !sweep && udRole(k++) === 'top' && bmr <= 0;
+      starts[x.f.id] = { x: sx, y: 1_000, band: top ? 2 : attBand, fuel: SKY.fuel.full * x.esc, wait: false };
+      att.push(force(g, x.f, 'ftr', ftr, share(x.f.ftr * x.esc * x.crowd * (a.E > 0 ? a.Epow / a.E : 1), Atot)));
     }
     if (bmr > 0) {
       starts[x.f.id] = starts[x.f.id] ?? { x: sx, y: 1_000, band: 1, fuel: SKY.fuel.home, wait: false };
-      att.push(force(x.f, 'bmr', bmr, share(bmr * C.bomberDefence, Atot)));
+      att.push(force(g, x.f, 'bmr', bmr, share(bmr * C.bomberDefence, Atot)));
     }
   });
   // Where the raid comes on from, for a fleet's own cover: the bearing from the target to the raid's start.
@@ -121,7 +139,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     if (kind === 'fleet' && x.f.ship !== undefined && x.d <= 0 && raidAt.length) {
       const ahead = STYLES.cap.ahead;
       starts[x.f.id] = { x: SKY.target.x + (rax / rad) * ahead, y: SKY.target.y + (ray / rad) * ahead, band: 1, fuel: SKY.fuel.home, wait: false, over: true };
-      def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+      def.push(force(g, x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
       continue;
     }
     // The campaign has already weighed how far each field is (cover) and whether radar warned it: on the board every
@@ -132,10 +150,23 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const real = Math.hypot(rx, ry), d = SKY.fields.near + Math.min(SKY.fields.far - SKY.fields.near, real * SKY.fields.squeeze);
     const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
     const [bx, by] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
-    starts[x.f.id] = { x: bx, y: by, band: (a.radar ? 1 : 0) as Band, fuel: SKY.fuel.home, wait: !a.radar };
-    def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+    starts[x.f.id] = H ? { x: bx, y: by, band: defBand, fuel: SKY.fuel.home, wait: false } : { x: bx, y: by, band: (a.radar ? 1 : 0) as Band, fuel: SKY.fuel.home, wait: !a.radar };
+    def.push(force(g, x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
   }
 
+  // Warned defenders meet a sweep together, as the card counts every warned fighter up in time (Units decide): each
+  // starts as far from the raid's way in as the farthest of them, along its own line from there. Otherwise a group
+  // whose field lies between the raid and the target meets the sweep alone, the sweep spends its whole fight on it and
+  // goes home before the rest come up, and the field's exchange runs seven times the card's (Kent and London).
+  if (sweep && H!.W >= 0.5 && raidAt.length) {
+    const ex = SKY.target.x + rax, ey = SKY.target.y + ray;
+    const at = [...new Set(def.map((f) => starts[f.corps]))].filter((p) => p && !p.over);
+    const far = Math.max(0, ...at.map((p) => Math.hypot(p.x - ex, p.y - ey)));
+    for (const p of at) {
+      const r = Math.hypot(p.x - ex, p.y - ey);
+      if (r > 0 && r < far) [p.x, p.y] = clampBoard(ex + ((p.x - ex) * far) / r, ey + ((p.y - ey) * far) / r);
+    }
+  }
   const side = (n: string, forces: ForceTicket[], human: boolean): SideTicket => ({
     nat: n, adj: g.nations[n]?.adj ?? n, color: g.nations[n]?.color ?? '#888888', human, forces,
     general: null,
@@ -160,8 +191,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     law: { bombers: L.bombers, power: L.power, most, escort, guns: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
     gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
-    worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
-    forecast: { foe: fc.foeLoss, foeGuns: fc.foeGuns, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+    worth: { att: a.E > 0 ? a.Epow / a.E / hx : 1, def: a.D > 0 ? (a.Dpow / a.D) * hx : 1 },
+    forecast: { foe: armed.foeLoss, foeGuns: armed.foeGuns, ftr: armed.ftrLoss, bmr: armed.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
     reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
     bombs: bombLaw(g, a, m, target),
@@ -181,6 +212,9 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     // where the campaign keeps weather, under the sky its card priced (a.sky, ruling 127).
     cloud: cloudOf(T.x, T.y, when, seed, weatherOn(g) ? a.sky : undefined),
     ...styled,
+    // Units decide: the escort flies the roles the card weighed its height by (air.ts udRole), every nation's alike
+    // until the doctrine store lands (the design director 24 Nov 15:33Z).
+    ...(H && !sweep ? { roles: Object.fromEntries([...new Set([nat, ...att.map((f) => f.nat)])].map((n) => [n, [...UD_ROLES] as Role[]])) } : {}),
     ...(Object.keys(bombers).length ? { bombers } : {}),
   };
   const date = turnToDate(g.turn).label;
@@ -275,10 +309,12 @@ function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
   return decks.length && decks.every(Boolean) ? 'sea' : decks.some(Boolean) ? 'both' : 'land';
 }
 
-function force(f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): ForceTicket {
+function force(g: Game, f: AirFleet, kind: 'ftr' | 'bmr', n: number, share: number): ForceTicket {
+  // Experience: the leader's level, or under Units decide the group's own, read as a level (#2 form Part 2 section 1).
+  const level = unitsDecide(g) ? levelOf(fxpOf(g, f)) : f.leader ? f.leader.level : 0;
   return {
     corps: f.id, name: f.name, nat: f.nat, kind, divs: 0, men: n,
-    str: 1, org: f.ready, xp: f.leader ? f.leader.level / 3 : 0, share,
+    str: 1, org: f.ready, xp: level / 3, share,
   };
 }
 

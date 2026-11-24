@@ -17,12 +17,14 @@ import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, fortRow, headline, relocate, weather, roomless } from './game';
 import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
 import { FORT_XP } from './fortrows';
+import { aceSchool, schoolPilots, unitsDecide } from './units';
 import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
 import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
+import { markBattle, markFallen, marksMonth } from './marked';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -447,6 +449,8 @@ export function storyBattle(g: Game, rep: BattleReport, target: Region, preOdds:
   } finally { publish(g); }
   // Earned nicknames (release 2, nicknames.ts): a corps that has won enough hard fights is given a name by its own army.
   if (nicknamesOn(g)) hardFights(g, rep, target, preOdds, attackers, defenders);
+  // The marked army (release 2, marked.ts): the corps that takes a town of the player's is marked until he beats it.
+  markBattle(g, rep, target, attackers, defenders);
 }
 
 /**
@@ -543,6 +547,7 @@ function rivals(g: Game, mine: Corps[], theirs: Corps[], won: boolean, target: R
  * or are broken up to make other formations, are not written here.
  */
 export function storyFallen(g: Game, c: Corps, how: Fallen['how'], by: string, reg: number): void {
+  markFallen(g, c, by, reg); // (release 2, marked.ts: a marked corps' end is told, and its mark comes off)
   if (c.kind === 'fort') return;
   const S = g.stories;
   note(g, c, how, reg);
@@ -759,6 +764,7 @@ export function storyMonth(g: Game, nat: string): void {
   bondsMonth(g, nat);
   valourMonth(g, nat);
   if (!mine) return;
+  marksMonth(g); // (release 2, marked.ts: a peace clears the marks of that country's corps)
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
   // (A corps at sea on a long passage is not lost: its rivalry and its meetings wait for it to land.)
@@ -941,8 +947,13 @@ export function cashHonour(g: Game, id: number, how: Cash): boolean {
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
     gain = `The bond drive brings in ${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and ${C.bondsPc * fame} political capital.`;
   } else {
-    g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
-    if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    // Under Units decide an air ace trains pilots: the flying school takes his step, not the land drafts' schools, and
+    // the pilots he trains join the reserve at its hours (#2 form Part 2 section 6).
+    if (a.kind === 'air' && unitsDecide(g)) { aceSchool(g, a.nat); schoolPilots(g, a.nat, C.pilots * fame); }
+    else {
+      g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
+      if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
+    }
     gain = 'From now on every draft reaches the front better trained.';
   }
   if (a.kind === 'corps') {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/DateTime.h"
 
 /**
  * What the rules tell the game about the state of the campaign: a plain
@@ -120,6 +121,8 @@ struct FViewCorps
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
+	FString Marked; // (release 2, the marked army; marked.ts) an enemy corps that took one of his towns: that town ("Paris"); empty otherwise
+	bool bReady = false; // (release 2, new units ready; Brian 24 Nov 18:30Z) his corps handed over as this month opened: NEW on its pole
 	TArray<FHonourRibbon> Honours;
 	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
 	float Morale = -1.0f; // 0 to 1, or -1 where no morale is kept
@@ -141,6 +144,17 @@ struct FViewCorps
 	FString SchoolTo; // the grade a month there brings it to ("Veteran")
 	FString SchoolWhy; // the rules' sentence why it cannot go; empty if it can (and for one already there)
 	// ---- (end of the battle schools)
+	// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on, for his own corps: whether
+	// divisions can be split off it now (BreakWhy empty) and the corps it could rejoin here, if any.
+	bool bBreakKnown = false;
+	FString BreakWhy;
+	int32 RejoinId = INDEX_NONE;
+	FString RejoinName;
+	// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) Where rearguards are on, for his own corps: whether it
+	// holds as one now, and why it cannot be ordered to (RearWhy empty where it can).
+	bool bRearKnown = false;
+	bool bRear = false;
+	FString RearWhy;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -1028,6 +1042,10 @@ struct FViewAirfield
 	int32 Holds = 0; // how many aircraft it serves
 	int32 Groups = 0, Aircraft = 0; // -1 where the fog of war hides what flies from it
 	bool bCrowded = false;
+	// (Release 2; the art director's airfield spec of 24 November, item 2.) Where what flies from it is known: its runway
+	// shut, a repair in hand, and "strip" or "full" where airfields are targets (empty where the rules do not say).
+	bool bShut = false, bMending = false;
+	FString Tier;
 };
 
 struct FViewAirFleet
@@ -1186,7 +1204,16 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bMarkedOn = false; // (release 2, marked.ts) the armies that took his towns are marked in red
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
+	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
+	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
+	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
+	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
+	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
+	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
+	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
+	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
@@ -1215,6 +1242,7 @@ struct FCampaignView
 	TArray<FViewGate> Gates; // (ruling 86) the sea gates
 	FViewRound Round; // (rulings 88, 101, 102) the round of armies
 	TArray<FViewAirFleet> AirFleets;
+	TArray<FViewAirFleet> BasedGroups; // (release 2) every air group as the rules list it, before the table's pieces are made one an airfield
 
 	const FViewCorps* FindCorps(int32 Id) const
 	{
@@ -1356,6 +1384,27 @@ struct FAttackResult
 	TArray<FCorpsMove> Moved; // the corps that followed up into the ground they won
 };
 
+/**
+ * (release 2, the enemy's month near you; Brian, 24 November 2026) One arrow the watch of the others' month draws on
+ * the table near the player's ground (Rules/near-moves.ts).
+ */
+struct FStepArrow
+{
+	int32 From = INDEX_NONE; // the province it came from; none where that is not known (a landing)
+	int32 To = INDEX_NONE;
+	FString Nation;
+	uint8 Kind = 0; // 0 a foreign army's move, 1 an attack on his troops, 2 his own corps falling back
+	bool bWar = true; // at war with him (red); at peace (amber)
+	bool bAway = false; // (a move) away from his ground
+	bool bTaken = false; // (an attack) the place was lost
+	bool bSiege = false; // (an attack) the field was lost, the town holds
+	bool bYielded = false; // (an attack) his troops gave ground without a fight, as ordered
+	bool bAlly = false; // (an attack) a battle of his allies near him, not his own (Brian, 24 Nov 18:01Z): shown with its switch on
+	bool bOurs = false; // (an allies' battle) his side attacked
+	int32 Corps = 1;
+	int32 Divs = -1; // where seen whole; -1 where only glimpsed
+};
+
 /** One computer-run nation's month, when it did something worth seeing. */
 struct FMonthStep
 {
@@ -1369,6 +1418,13 @@ struct FMonthStep
 	TArray<FSinking> Sinkings; // (release 1) and the ships that went down in them, where the player's side fought
 	TArray<int32> Shelled; // the coasts shelled from the sea in it
 	bool bMine = false; // the player's own ground or troops were involved
+	// ---- (release 2, the enemy's month near you)
+	bool bNear = false; // it came near his ground, or touched him: the watch of the enemy's month stops here
+	FString NearNote; // what it did near him, in his side's words
+	TArray<FStepArrow> Arrows;
+	bool bNearAllies = false; // his allies fought near him in it (OPTIONS "Allies' battles near you")
+	FString AllyNote; // what those battles were
+	// ---- (end release 2)
 	FCampaignView View; // the war as it stood when that nation had finished
 };
 
@@ -1406,6 +1462,20 @@ struct FYearCard
 };
 
 /** Everything that happened between the player ending one month and beginning the next. */
+/**
+ * (Release 2; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) A unit the player raised or
+ * bought, handed over as his month opened: what it is ("corps", "air", "ship"), the rules' line of news, where it stands,
+ * and for a corps, which one.
+ */
+struct FReadyUnit
+{
+	FString What;
+	FString Text;
+	FString Name;
+	int32 Region = INDEX_NONE;
+	int32 Corps = INDEX_NONE;
+};
+
 struct FMonthResult
 {
 	TArray<FMonthStep> Steps;
@@ -1415,6 +1485,7 @@ struct FMonthResult
 	FString ReelDate; // the month the newsreel is of
 	FYearCard Year; // set when the month that opens is a January
 	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
+	TArray<FReadyUnit> Ready; // (release 2) the units handed over to him as his month opened
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */
@@ -1941,4 +2012,17 @@ struct FProvinceInfo
 	FString PlacesHead;
 	TArray<FString> PlacesLines;
 	FString TownKind; // capital, city, town or village
+	int32 YieldTotal = -1; // (release 2, the town card's tiles) what the province pays a month in all; -1 where the rules give none
+};
+
+/**
+ * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) A war the player kept
+ * with SAVE on the menu, beside the campaign the game keeps by itself: as many as he likes, each a copy of the war as
+ * it stood when he pressed it. They are kept in Saved/Campaign/Saves, a .json for the war and a .txt for its line.
+ */
+struct FSavedWar
+{
+	FString Id; // its files' name, without the ending: war-20261124-184012
+	FString Line; // what it is, as CONTINUE says it: "Germany, July 1940, free play"
+	FDateTime When; // when it was saved, by the computer's own clock
 };

@@ -153,6 +153,16 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, the marked army) -TheaterR2Marked opens them with the armies that take his towns marked
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Marked")) && !Host->Evaluate(TEXT("globalThis.TC_MARKED = 1;"), TEXT("release 2 marked army"), OutError))
+	{
+		return false;
+	}
+	// (Release 2, new units ready) -TheaterR2Ready opens his month with an infantry corps on order at his capital, due next month (for the pictures)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Ready")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("release 2 new units ready"), OutError))
+	{
+		return false;
+	}
 	// -TheaterR2Supply opens them with the columns and all three supply orders: the lorries moved, wagons, dumps
 	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Supply")) && !Host->Evaluate(TEXT("globalThis.TC_COLUMNS = 1; globalThis.TC_LORRYSHIFT = 1; globalThis.TC_WAGONS = 1; globalThis.TC_DUMPS = 1;"), TEXT("release 2 supply"), OutError))
 	{
@@ -1248,7 +1258,16 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("markedOn"), Out.bMarkedOn); // (release 2, the marked army)
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
+	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
+	Object->TryGetBoolField(TEXT("taskForce"), Out.bTaskForce); // (release 2, taskforce.ts)
+	Object->TryGetBoolField(TEXT("fleetWhy"), Out.bFleetWhy); // (release 2, fleetwhy.ts)
+	Object->TryGetBoolField(TEXT("rearguard"), Out.bRearguard); // (release 2, rearguard.ts)
+	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
+	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
+	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
+	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -1661,10 +1680,15 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("groups"), Field.Groups);
 			Entry->TryGetNumberField(TEXT("aircraft"), Field.Aircraft);
 			Entry->TryGetBoolField(TEXT("crowded"), Field.bCrowded);
+			Entry->TryGetBoolField(TEXT("shut"), Field.bShut);
+			Entry->TryGetBoolField(TEXT("mend"), Field.bMending);
+			Entry->TryGetStringField(TEXT("tier"), Field.Tier);
 		}
 	}
+	Out.BasedGroups.Reset();
 	if (Out.Airfields.Num() > 0)
 	{
+		Out.BasedGroups = Out.AirFleets; // (for the airfield's card: each group based there, by name)
 		TArray<FViewAirFleet> Stood;
 		for (const FViewAirFleet& Group : Out.AirFleets)
 		{
@@ -1815,6 +1839,17 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			C.bSchoolKnown = Unit->TryGetBoolField(TEXT("school"), C.bSchool);
 			Unit->TryGetStringField(TEXT("schoolTo"), C.SchoolTo);
 			Unit->TryGetStringField(TEXT("schoolWhy"), C.SchoolWhy);
+			// (Release 2, breakup.ts) Sent only for his own corps, and only where breaking corps up is on.
+			C.bBreakKnown = Unit->TryGetStringField(TEXT("breakWhy"), C.BreakWhy);
+			{
+				double Rejoin = -1.0;
+				Unit->TryGetNumberField(TEXT("rejoinId"), Rejoin);
+				C.RejoinId = Rejoin >= 0.0 ? static_cast<int32>(Rejoin) : INDEX_NONE;
+				Unit->TryGetStringField(TEXT("rejoinName"), C.RejoinName);
+			}
+			// (Release 2, rearguard.ts) Sent only for his own corps, and only where rearguards are on.
+			C.bRearKnown = Unit->TryGetStringField(TEXT("rearWhy"), C.RearWhy);
+			Unit->TryGetBoolField(TEXT("rear"), C.bRear);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetStringField(TEXT("vol"), C.Vol); // R2 bargains hook: a volunteer legion's home (sent only when set)
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
@@ -1832,6 +1867,8 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				Unit->TryGetBoolField(TEXT("digging"), C.bDigging);
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
+			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
+			Unit->TryGetBoolField(TEXT("ready"), C.bReady); // (release 2, new units ready) absent unless handed over as his month opened
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
 				double Morale = -1.0, Rest = -1.0;
@@ -2696,6 +2733,45 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			// ---- (release 2, the enemy's month near you: Rules/near-moves.ts)
+			Entry->TryGetBoolField(TEXT("near"), Step.bNear);
+			Entry->TryGetStringField(TEXT("nearNote"), Step.NearNote);
+			Entry->TryGetBoolField(TEXT("nearAllies"), Step.bNearAllies);
+			Entry->TryGetStringField(TEXT("allyNote"), Step.AllyNote);
+			const TArray<TSharedPtr<FJsonValue>>* Arrows = nullptr;
+			if (Entry->TryGetArrayField(TEXT("arrows"), Arrows))
+			{
+				for (const TSharedPtr<FJsonValue>& Drawing : *Arrows)
+				{
+					const TSharedPtr<FJsonObject>* Arrow = nullptr;
+					if (!Drawing.IsValid() || !Drawing->TryGetObject(Arrow))
+					{
+						continue;
+					}
+					FStepArrow Drawn;
+					double Number = 0.0;
+					Drawn.From = (*Arrow)->TryGetNumberField(TEXT("from"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					Drawn.To = (*Arrow)->TryGetNumberField(TEXT("to"), Number) ? FMath::RoundToInt32(Number) : INDEX_NONE;
+					(*Arrow)->TryGetStringField(TEXT("nat"), Drawn.Nation);
+					FString Kind;
+					(*Arrow)->TryGetStringField(TEXT("kind"), Kind);
+					Drawn.Kind = Kind == TEXT("attack") ? 1 : Kind == TEXT("fell") ? 2 : 0;
+					(*Arrow)->TryGetBoolField(TEXT("war"), Drawn.bWar);
+					(*Arrow)->TryGetBoolField(TEXT("away"), Drawn.bAway);
+					(*Arrow)->TryGetBoolField(TEXT("taken"), Drawn.bTaken);
+					(*Arrow)->TryGetBoolField(TEXT("siege"), Drawn.bSiege);
+					(*Arrow)->TryGetBoolField(TEXT("yielded"), Drawn.bYielded);
+					(*Arrow)->TryGetBoolField(TEXT("ally"), Drawn.bAlly);
+					(*Arrow)->TryGetBoolField(TEXT("ours"), Drawn.bOurs);
+					Drawn.Corps = (*Arrow)->TryGetNumberField(TEXT("corps"), Number) ? FMath::RoundToInt32(Number) : 1;
+					Drawn.Divs = (*Arrow)->TryGetNumberField(TEXT("divs"), Number) ? FMath::RoundToInt32(Number) : -1; // (null: only glimpsed)
+					if (Drawn.To >= 0) // (an arrow to nowhere is not drawn)
+					{
+						Step.Arrows.Add(MoveTemp(Drawn));
+					}
+				}
+			}
+			// ---- (end release 2)
 			const TArray<TSharedPtr<FJsonValue>>* Shelled = nullptr;
 			if (Entry->TryGetArrayField(TEXT("shelled"), Shelled))
 			{
@@ -2759,6 +2835,32 @@ FMonthResult FCampaignSession::EndMonth()
 		}
 	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	// (Release 2; Brian, 24 November 2026 18:30Z) The units handed over to him as his month opened.
+	const TArray<TSharedPtr<FJsonValue>>* ReadyList = nullptr;
+	if (Object->TryGetArrayField(TEXT("ready"), ReadyList))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ReadyList)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FReadyUnit& Unit = Out.Ready.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("what"), Unit.What);
+			Entry->TryGetStringField(TEXT("text"), Unit.Text);
+			Entry->TryGetStringField(TEXT("name"), Unit.Name);
+			double Number = 0.0;
+			if (Entry->TryGetNumberField(TEXT("region"), Number) && Number >= 0.0)
+			{
+				Unit.Region = FMath::RoundToInt32(Number);
+			}
+			if (Entry->TryGetNumberField(TEXT("corps"), Number) && Number >= 0.0)
+			{
+				Unit.Corps = FMath::RoundToInt32(Number);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Announce = nullptr;
 	if (Object->TryGetArrayField(TEXT("announce"), Announce))
 	{
@@ -3332,6 +3434,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		(*Yield)->TryGetNumberField(TEXT("fac"), Factories);
 		(*Yield)->TryGetNumberField(TEXT("capital"), Capital);
 		(*Yield)->TryGetNumberField(TEXT("total"), Total);
+		Info.YieldTotal = Total;
 		TArray<FString> Parts;
 		auto Part = [&Parts](const TCHAR* What, int32 Amount)
 		{

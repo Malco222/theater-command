@@ -609,6 +609,12 @@ namespace EdgeSeals
 		double SignThinnest(const std::string& Sign);
 		double SignNarrowestGap(const std::string& Sign);
 		double SignFinest(const std::string& Sign);
+		/**
+		 * Every sign with a seal picture (Content/CityOrders/Seal/seal-<key>.png), in the table's order: the keys of the
+		 * measures above, so that the screen can read all their pictures once as it is built (CampaignHUD), not in the
+		 * paint of a month's first seal frame. The test holds it to the pictures in the folder.
+		 */
+		const std::vector<std::string>& SealSigns();
 
 		/**
 		 * The seal set's finest part as drawn, in pixels of its pictures (SignPictureW wide): the offset of 8 makes every

@@ -31,6 +31,8 @@ import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type R
 import { isTeam, TEAMS, teamsOn } from './teams';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
+import { REARGUARD, rearguardOn, staffRearguard } from './rearguard';
+import { SIGHT, divisionsBand, sightOf } from './intel';
 import {
   DEFENCE, EASTERN, aidOf, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
@@ -168,6 +170,8 @@ export function runAI(g: Game, nat: string): void {
   // The engineers go to their work before the staff moves anyone.
   aiEngineers(g, nat);
   campaign(g, nat);
+  // (Release 2, rearguard.ts) With the month's moves made, a small corps left facing long odds holds as a rearguard.
+  aiRearguards(g, nat);
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   // Damaged towns are repaired out of their own purse before new corps are bought (repairs.ts): a town repaired pays
@@ -183,6 +187,51 @@ export function runAI(g: Game, nat: string): void {
   // Its ships and aircraft come last of all (rulings 68(b) and 70(a)): after the corps, the guns and the works.
   aiProgramme(g, nat);
   civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
+}
+
+/**
+ * Rearguards (release 2, rearguard.ts; the design director's 19:14Z and 19:22Z: the computer staffs order them by the
+ * player's rule, as staff doctrine, reading the odds at their own sight). With the month's moves made, a small fighting
+ * corps of the staff's ('most' divisions at most) standing in the field with no bigger corps of its side beside it, the
+ * enemy it can see next door at REARGUARD.ai.odds times its side's strength there or more, and a bigger corps of its
+ * side in a province next door that no enemy stands in, holds where it stands until the staff's next month: the longest
+ * odds first, REARGUARD.ai.perMonth at most. The enemy is read as the staff sees it, never the truth: only provinces in
+ * its sight, and their corps as a staff's estimate of divisions counted but not identified (intel.ts divisionsBand),
+ * against its own side's divisions at their strength. Off, nothing.
+ */
+function aiRearguards(g: Game, nat: string): void {
+  if (!rearguardOn(g) || nat === g.human || !g.nations[nat].alive) return;
+  const picks: { c: Corps; odds: number }[] = [];
+  let sight: Uint8Array | null = null;
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.rear || c.town !== undefined || c.divs > REARGUARD.most || !fights(c)) continue;
+    const r = g.regions[c.reg];
+    const side = friendlyUnits(g, r, nat).filter((u) => !u.dead && u.town === undefined);
+    if (side.some((u) => u.divs > REARGUARD.most)) continue;
+    sight ??= sightOf(g, nat);
+    let seen = 0;
+    for (const j of r.nb) {
+      if (sight[j] === SIGHT.none) continue;
+      const foes = hostileUnits(g, g.regions[j], nat).filter((u) => !u.dead && u.kind !== 'fort' && u.town === undefined);
+      if (!foes.length) continue;
+      const band = divisionsBand(g, j, nat, foes);
+      seen += (band.lo + band.hi) / 2;
+    }
+    const own = side.reduce((t, u) => t + u.divs * u.str, 0);
+    if (seen <= 0 || seen < REARGUARD.ai.odds * own) continue;
+    const threat = seen;
+    const behind = r.nb.some((j) => {
+      const q = g.regions[j];
+      return !hostileUnits(g, q, nat).length && friendlyUnits(g, q, nat).some((u) => !u.dead && u.divs > c.divs && fights(u));
+    });
+    if (behind) picks.push({ c, odds: threat / Math.max(1e-9, own) });
+  }
+  picks.sort((x, y) => y.odds - x.odds || x.c.id - y.c.id);
+  let held = 0;
+  for (const p of picks) {
+    if (held >= REARGUARD.ai.perMonth) break;
+    if (staffRearguard(g, p.c)) held++;
+  }
 }
 
 function campaign(g: Game, nat: string): void {
@@ -1766,10 +1815,25 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
     const o = g.byName[name];
     if (!o || allied(g, nat, o.ctrl)) return;
     const w = Math.max(3, 14 - 0.5 * k);
-    const d = hops(g, o.id, () => true);
-    for (let i = 0; i < pull.length; i++) if (d[i] >= 0 && d[i] <= 4) pull[i] = Math.max(pull[i], w * Math.pow(0.6, d[i]));
+    // (Speed, the far map: 24 November 2026. Only the ground within four steps of an objective is pulled, so the
+    // search stops there; it walked the whole chart, 2,067 provinces on the far side, for every objective of every
+    // offensive. The same steps and the same pull, province by province.)
+    const near = hopsWithin(g, o.id, 4);
+    for (let n = 0; n < near.length; n += 2) pull[near[n]] = Math.max(pull[near[n]], w * Math.pow(0.6, near[n + 1]));
   });
   return pull;
+}
+
+/** The provinces within `most` steps of `from` over any ground, with their steps, as [province, steps, ...]: hops' first `most` rings. */
+function hopsWithin(g: Game, from: number, most: number): number[] {
+  const out = [from, 0];
+  const seen = new Set<number>([from]);
+  for (let i = 0; i < out.length; i += 2) {
+    const d = out[i + 1];
+    if (d >= most) continue;
+    for (const j of g.regions[out[i]].nb) if (!seen.has(j)) { seen.add(j); out.push(j, d + 1); }
+  }
+  return out;
 }
 
 export const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;

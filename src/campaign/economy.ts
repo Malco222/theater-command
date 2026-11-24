@@ -12,7 +12,7 @@ import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
 import { addCorps, allied, armySize, fights, headline, roomless } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
-import { campXp, civicSum, deliverCivic, hallShare } from './buildings';
+import { campXp, civicSum, deliverCivic, hallShare, settledFor, settledTownsOn } from './buildings';
 import { dealsOf, tradeIncome } from './trade';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
@@ -559,7 +559,8 @@ function reform(g: Game, c: Corps, at: Region): void {
 
 /** What the next level of fortification would cost in a region, or null if it cannot be fortified further. */
 export function fortCost(g: Game, nat: string, r: Region): number | null {
-  if (!isHome(g, nat, r)) return null;
+  // Home ground, or a conquered town that has settled (release 2, buildings.ts settledFor).
+  if (!isHome(g, nat, r) && !settledFor(g, nat, r)) return null;
   const queued = g.nations[nat].queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const next = (r.fort?.lv ?? 0) + queued + 1;
   return next > 3 ? null : priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[next]);
@@ -572,6 +573,8 @@ export function orderFort(g: Game, nat: string, region: number): Build | null {
   if (!n.alive || cost === null || n.pp < cost) return null;
   n.pp -= cost;
   const b: Build = { id: g.nextBuild++, what: 'fort', name: `Fortifications at ${r.name}`, region, ordered: g.turn, eta: g.turn + PRODUCTION.fort.months, cost };
+  // Ordered in a conquered town that has settled (release 2): finished while the town is held.
+  if (r.owner !== nat) b.conq = true;
   n.queue.push(b);
   return b;
 }
@@ -608,7 +611,8 @@ export function deliver(g: Game, nat: string): void {
     if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b, air); continue; }
     if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
-      if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
+      // The ground was lost before the works were finished. (A conquered town its builder still holds keeps them, release 2.)
+      if (!isHome(g, nat, r) && !((settledTownsOn(g) || b.conq) && r.ctrl === nat)) continue;
       const vs = new Set(r.fort?.vs ?? []);
       vs.add(r.owner);
       for (const j of r.nb) vs.add(g.regions[j].owner);
@@ -626,7 +630,7 @@ export function deliver(g: Game, nat: string): void {
       if (i < 0) continue;
       const c = n.cadres!.splice(i, 1)[0];
       reform(g, c, at);
-      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
       continue;
     }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
@@ -635,10 +639,10 @@ export function deliver(g: Game, nat: string): void {
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
-    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
+    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id, { ready: 'corps', unit: c.id });
   }
   const line = airLine(air);
-  if (line) headline(g, 'info', line.text, nat, line.region);
+  if (line) headline(g, 'info', line.text, nat, line.region, { ready: 'air' });
 }
 
 /**

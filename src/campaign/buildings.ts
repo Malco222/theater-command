@@ -11,6 +11,7 @@ import budgetData from '../../data/campaign/budget.json';
 import { townName, townSize, type TownSize } from './towns';
 import type { Build, Corps, Game, Region, Terrain } from './types';
 import { keepOf } from './citydamage';
+import { flagName } from './flagnames';
 
 export interface CivicLine {
   id: string;
@@ -39,6 +40,8 @@ export const CIVIC = data as unknown as {
   lines: CivicLine[];
   caps: { research: number; drafts: number; trade: number; pc: number; houses: number };
   ai: { share: number; reserve: number; gang: number; mix: Record<string, number> };
+  /** Conquered towns settle (release 2): months a conquered town must be held before every line can go up there. */
+  settle: { months: number };
 };
 
 const LAND = (budgetData as unknown as { land: Record<Terrain, number>; occupied: number }).land;
@@ -46,10 +49,64 @@ const OCCUPIED = (budgetData as unknown as { occupied: number }).occupied;
 const SIZES: TownSize[] = ['village', 'town', 'city', 'capital'];
 const TOP = 3;
 const lineOf = (id: string): CivicLine | undefined => CIVIC.lines.find((l) => l.id === id);
-const key = (line: string, region: number): string => `cv:${line}:${region}`;
+// (Speed, the far map: the same names, made once and kept; civicSum reads every line of every province: flagnames.ts.)
+const key = (line: string, region: number): string => flagName(`cv:${line}:`, region);
 
 /** True when towns can be built up: the grand campaign. */
 export const civicRules = (g: Game): boolean => g.flags.open === 1;
+
+// ---- Conquered towns settle (release 2; Brian 24 November 2026 18:13Z) ----------------------------------------
+// With the switch 'settledTowns', a town its holder took from another country can put up every line of building and
+// the military works once it has been held CIVIC.settle.months since it last changed hands; its buildings then serve
+// the holder as at home. One rule for every country, read from the ground alone. Off: nothing of it is read.
+
+/** True where conquered towns settle: a grand campaign carrying the flag 'settledTowns' (stage.json). */
+export const settledTownsOn = (g: Game): boolean => g.flags.open === 1 && g.flags.settledTowns === 1;
+
+/** Turns the settling of conquered towns on or off. What was built stays built either way. */
+export function setSettledTowns(g: Game, on: boolean): void {
+  if (!on) { delete g.flags.settledTowns; return; }
+  // Turned on in a campaign under way: ground already held by another than its owner starts settling now, since a
+  // country's fall while the switch was off left no record of the month it changed hands (handedOver).
+  if (g.flags.settledTowns !== 1) for (const r of g.regions) if (r.ctrl !== r.owner) g.flags[`hand:${r.id}`] = g.turn;
+  g.flags.settledTowns = 1;
+}
+
+/**
+ * Who holds each province, taken before ground is handed over without a battle (a country's fall, a pact's line,
+ * the last act's handing on): those hand-overs do not move Region.since, which other rules read. Null with the switch
+ * off, so that nothing is written.
+ */
+export const holdersNow = (g: Game): string[] | null => (settledTownsOn(g) ? g.regions.map((r) => r.ctrl) : null);
+
+/** Ground handed over since holdersNow was taken starts settling this month (flag 'hand:<id>', read by settleLeft alone). */
+export function handedOver(g: Game, was: string[] | null): void {
+  if (was) for (const r of g.regions) if (r.ctrl !== was[r.id]) g.flags[`hand:${r.id}`] = g.turn;
+}
+
+/** Months before a conquered town this nation holds has settled: 0 once it has (or where it is not conquered ground). */
+export function settleLeft(g: Game, nat: string, r: Region): number {
+  if (r.ctrl !== nat || r.owner === nat) return 0;
+  const hand = g.flags[`hand:${r.id}`];
+  const from = hand === undefined ? r.since ?? 0 : Math.max(r.since ?? 0, hand);
+  return Math.max(0, CIVIC.settle.months - (g.turn - from));
+}
+
+/** True for conquered ground this nation holds that has settled, with the switch on. */
+export const settledFor = (g: Game, nat: string, r: Region): boolean => settledTownsOn(g) && r.ctrl === nat && r.owner !== nat && settleLeft(g, nat, r) === 0;
+
+/**
+ * Why the military works that go only on a country's own ground (factories, shipyards, fortifications) cannot go up
+ * here, or null when they can: at home, or in a conquered town that has settled. 'home' is what is said without the switch.
+ */
+export function whyNotWorksHere(g: Game, nat: string, r: Region, home: string, never: string | null = null): string | null {
+  if ((r.owner === nat && r.ctrl === nat) || settledFor(g, nat, r)) return null;
+  if (!settledTownsOn(g) || r.ctrl !== nat) return home;
+  // (A reason the wait will not clear, such as a town with no harbour, is said first.)
+  if (never) return never;
+  const left = settleLeft(g, nat, r);
+  return `${townName(r)} is still settling after it was taken: works can go up there in ${left} ${left === 1 ? 'month' : 'months'}.`;
+}
 
 /** The level of one line of building in a province, 0 when there is none. */
 export const civicLevel = (g: Game, line: string, region: number): number => (g.flags['cv:any'] ? g.flags[key(line, region)] ?? 0 : 0);
@@ -82,7 +139,8 @@ function effectOf(g: Game, l: CivicLine, r: Region, nat: string, keeps: boolean)
   if (l.trade) bits.push(`trade agreements worth ${pct(l.trade)} more`);
   if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
   if (l.research) bits.push(`research ${pct(l.research)} faster`);
-  if (l.xp) bits.push('corps raised here start more experienced');
+  // (Corps are raised on home ground only: a training ground in a conquered town speeds replacements, nothing more.)
+  if (l.xp && (own || !settledTownsOn(g))) bits.push('corps raised here start more experienced');
   if (l.drafts) bits.push(`replacements ${pct(l.drafts)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest)} faster`);
   if (own && l.tax) bits.push(`${cash(l.tax * keep)} more tax a month`);
@@ -95,17 +153,19 @@ function effectOf(g: Game, l: CivicLine, r: Region, nat: string, keeps: boolean)
 /** What the levels of a line that stand in a province do for whoever holds it now, in a sentence. */
 function doesOf(g: Game, l: CivicLine, r: Region, lv: number, keeps: boolean): string {
   const own = r.owner === r.ctrl;
+  // A conquered town that has settled serves its holder as at home; its pay stays at the conquered share (release 2).
+  const serve = own || settledFor(g, r.ctrl, r);
   const share = own ? 1 : OCCUPIED;
   const bits: string[] = [];
   const cash = (x: number): string => `${Math.round(x * 100)}`;
   const pct = (x: number): string => `${Math.round(x * 1000) / 10}%`;
   const keep = keepOf(g, r);
   if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep)} a month`);
-  if (own && l.trade) bits.push(`trade agreements worth ${pct(l.trade * lv)} more`);
+  if (serve && l.trade) bits.push(`trade agreements worth ${pct(l.trade * lv)} more`);
   if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
-  if (own && l.research) bits.push(`research ${pct(l.research * lv)} faster`);
+  if (serve && l.research) bits.push(`research ${pct(l.research * lv)} faster`);
   if (own && l.xp) bits.push('corps raised here start more experienced');
-  if (own && l.drafts) bits.push(`replacements ${pct(l.drafts * lv)} faster`);
+  if (serve && l.drafts) bits.push(`replacements ${pct(l.drafts * lv)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest * lv)} faster`);
   if (own && l.tax) bits.push(`${cash(l.tax * lv * keep)} tax a month`);
   if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
@@ -122,7 +182,11 @@ export function whyNotCivic(g: Game, nat: string, r: Region | undefined, line: s
   if (!n?.alive || !r || !l) return 'Nothing can be built there.';
   if (r.ctrl !== nat) return `${r.name} is not yours.`;
   const own = r.owner === nat;
-  if (!own && !l.occupied) return 'Only administration and medicine can be set up on conquered ground.';
+  if (!own && !l.occupied && !settledFor(g, nat, r)) {
+    const left = settledTownsOn(g) ? settleLeft(g, nat, r) : 0;
+    if (left <= 0) return 'Only administration and medicine can be set up on conquered ground.';
+    return `${townName(r)} is still settling after it was taken: every kind of building can go up there in ${left} ${left === 1 ? 'month' : 'months'}. Administration and medicine can be set up now.`;
+  }
   const lv = civicLevel(g, line, r.id);
   if (lv >= TOP) return `The ${l.levels[TOP - 1].toLowerCase()} is as far as this goes.`;
   const size = townSize(g, r);
@@ -253,11 +317,15 @@ export function civicSum(g: Game, nat: string, keeps = false): CivicSum {
       s.count++;
       if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep;
       if (l.sup) { if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED); else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED); }
-      if (!own) continue;
+      // A conquered town that has settled serves its holder as at home (release 2): its learning, training and trade
+      // houses count. Its taxes and political capital stay with home ground: there its administration adds the
+      // conquered share instead (economy.ts), so each is counted once.
+      if (!own && !settledFor(g, nat, r)) continue;
       if (l.trade) s.trade += l.trade * lv;
       if (l.house && lv >= l.house && (r.port || g.nations[nat].capital === r.id)) s.houses++;
       if (l.research) s.research += l.research * lv;
       if (l.drafts) s.drafts += l.drafts * lv;
+      if (!own) continue;
       if (l.tax) s.tax += l.tax * lv * keep;
       if (l.pc) s.pc += l.pc * lv;
     }
@@ -297,7 +365,7 @@ export function civicHouses(g: Game, nat: string): number {
   const cap = g.nations[nat]?.capital;
   for (const r of g.regions) {
     // Only a harbour town or the capital opens one.
-    if (!(r.port || cap === r.id) || r.ctrl !== nat || r.owner !== nat) continue;
+    if (!(r.port || cap === r.id) || r.ctrl !== nat || (r.owner !== nat && !settledFor(g, nat, r))) continue;
     for (const l of CIVIC.lines) {
       if (!l.house) continue;
       const lv = g.flags[key(l.id, r.id)] ?? 0;
