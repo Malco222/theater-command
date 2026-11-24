@@ -2,13 +2,14 @@
 // form, rules-builder/release2/soviet/form.md, Part 2): one store for soldiers, pilots and crews, seeded as a grand
 // campaign opens with the switch, absent without it. Its figures are data/campaign/units.json; the research rows it
 // adds (Field radios and the three training rows) are in the tree only with the switch, and Germany's radios and the
-// Scandinavians' winter kit come from the switch's own start list, never tech.json's.
+// Scandinavians' winter kit come from the switch's own start list, never tech.json's. The armies' earned command seeds
+// are the design director's of 24 Nov 16:06Z (the form's 'Seeds ruled 16:07Z').
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { TECH, grantTech, hasTech, outOfTree, techById, techRule, techView, treeLevel, whyNotResearch } from '../src/campaign/tech';
-import { UNITS, armsOf, openQuality, qualityStore, unitsDecide } from '../src/campaign/units';
+import { UNITS, armsOf, openQuality, qualityStore, setUnitsDecide, unitsDecide } from '../src/campaign/units';
 import { FIELDS } from '../src/campaign/research';
 import type { Game } from '../src/campaign/types';
 import units from '../data/campaign/units.json';
@@ -80,20 +81,28 @@ describe('on: the store as the campaign opens', () => {
     expect(qs.nat.UK.land.train).toBe(1.05);
   });
 
-  it('seeds command earned 1, SOV and FRA 0, less the radios Germany holds: every start c is the seed', () => {
+  // DD 24 Nov 16:06Z (the form's 'Seeds ruled 16:07Z'): the start's c by army from the historian's reading of 1939-41,
+  // every army not yet read at the range middle, 0.5, never today's 1.
+  it('seeds command earned by army as ruled at 16:06Z, less the radios Germany holds: every start c is the seed', () => {
     expect(qs.nat.GER.land.earned).toBeCloseTo(0.85, 12);
     expect(qs.nat.SOV.land.earned).toBe(0);
     expect(qs.nat.FRA.land.earned).toBe(0);
-    expect(qs.nat.UK.land.earned).toBe(1);
-    expect(qs.nat.HUN.land.earned).toBe(1);
+    expect(qs.nat.POL.land.earned).toBe(0.1);
+    expect(qs.nat.ITA.land.earned).toBe(0.25);
+    expect(qs.nat.UK.land.earned).toBe(0.5);
+    expect(qs.nat.USA.land.earned).toBe(0.5);
+    expect(qs.nat.HUN.land.earned).toBe(0.5);
     expect(command(g, 'GER')).toBeCloseTo(1, 12);
     expect(command(g, 'SOV')).toBe(0);
     expect(command(g, 'FRA')).toBe(0);
-    expect(command(g, 'UK')).toBe(1);
-    expect(command(g, 'HUN')).toBe(1);
+    expect(command(g, 'POL')).toBe(0.1);
+    expect(command(g, 'ITA')).toBe(0.25);
+    expect(command(g, 'UK')).toBe(0.5);
+    expect(command(g, 'USA')).toBe(0.5);
+    expect(command(g, 'HUN')).toBe(0.5);
     for (const n of Object.values(g.nations)) {
       expect(qs.nat[n.id].land.school, n.id).toBe(0);
-      expect(command(g, n.id), n.id).toBeCloseTo(['SOV', 'FRA'].includes(n.id) ? 0 : 1, 12);
+      expect(command(g, n.id), n.id).toBeCloseTo(UNITS.land.earned.seed[n.id] ?? UNITS.land.earned.seed._default, 12);
     }
   });
 
@@ -125,7 +134,7 @@ describe('on: the store as the campaign opens', () => {
     const j = armsOf(h, 'JAP')!;
     expect(h.qs!.nat.JAP).toBe(j);
     expect([j.land.way.att.id, j.land.way.def.id]).toEqual(['night', 'last-stand']);
-    expect(j.land).toMatchObject({ train: 1, earned: 1, school: 0 });
+    expect(j.land).toMatchObject({ train: 1, earned: 0.5, school: 0 });
     expect(j.air).toMatchObject({ school: null, deck: 500, strike: 0.4 });
     // Japan's night at sea is fought as its stand-in: the sea has no night way.
     expect(j.sea.way.id).toBe('bold');
@@ -230,13 +239,63 @@ describe('save and load', () => {
   });
 });
 
+describe('setUnitsDecide at setup, after a campaign opened without the switch', () => {
+  it('lays the switch\'s start list and seeds the store from it, as a campaign opened with the switch', () => {
+    const g = open(false);
+    expect(g.turn).toBe(1);
+    expect(setUnitsDecide(g, true)).toBe(true);
+    expect(unitsDecide(g)).toBe(true);
+    expect(hasTech(g, 'GER', 'radios')).toBe(true);
+    expect(hasTech(g, 'SWE', 'winterkit')).toBe(true);
+    expect(hasTech(g, 'NOR', 'winterkit')).toBe(true);
+    for (const nat of Object.keys(g.nations)) expect(hasTech(g, nat, 'radios'), nat).toBe(nat === 'GER');
+    for (const [nat, ids] of Object.entries(UNITS.startRows)) {
+      const s = g.nations[nat].tech!;
+      expect(new Set(s.done).size, nat).toBe(s.done.length);
+      for (const id of ids) expect(s.work.some((w) => w.id === id), `${nat} ${id}`).toBe(false);
+    }
+    expect(g.qs).toBeDefined();
+    expect(armsOf(g, 'GER')!.land.earned).toBeCloseTo(0.85, 12);
+    expect(command(g, 'GER')).toBeCloseTo(1, 12);
+    // The same seeds, nation by nation, as the campaign opened with the switch.
+    const on = open(true);
+    for (const nat of Object.keys(on.nations)) expect(armsOf(g, nat), nat).toEqual(armsOf(on, nat));
+    // Set twice, nothing is laid twice.
+    const done = g.nations.GER.tech!.done.slice();
+    expect(setUnitsDecide(g, true)).toBe(true);
+    expect(g.nations.GER.tech!.done).toEqual(done);
+  });
+
+  it('set off again, takes the store with it and saves none', () => {
+    const g = open(false);
+    setUnitsDecide(g, true);
+    expect(g.qs).toBeDefined();
+    expect(setUnitsDecide(g, false)).toBe(true);
+    expect(unitsDecide(g)).toBe(false);
+    expect('qs' in g).toBe(false);
+    expect(qualityStore(g)).toBeUndefined();
+    expect(hasKey(saveGame(g), 'qs')).toBe(false);
+  });
+
+  it('is refused once the first month has begun, and lays nothing', () => {
+    const g = open(false);
+    g.turn += 1;
+    expect(setUnitsDecide(g, true)).toBe(false);
+    expect(unitsDecide(g)).toBe(false);
+    expect(hasTech(g, 'GER', 'radios')).toBe(false);
+    expect('qs' in g).toBe(false);
+  });
+});
+
 describe('the data', () => {
   it('holds every figure the later steps read, each with its note', () => {
     const L = UNITS.land;
     expect(L.ladder).toEqual([0.85, 1.05, 1.25]);
     expect(L.trainRows).toEqual(['nco', 'battledrill', 'officers']);
     expect(L.radios).toBe(0.15);
-    expect(L.earned).toEqual({ seed: { _default: 1, SOV: 0, FRA: 0 }, month: 0.01, provinces: 2, corps: -0.01 });
+    expect(L.earned).toEqual({ seed: { _default: 0.5, GER: 1, SOV: 0, FRA: 0, POL: 0.1, ITA: 0.25, JAP: 0.5, UK: 0.5, USA: 0.5 }, month: 0.01, provinces: 2, corps: -0.01 });
+    // The switch's start list names rows the tree has.
+    for (const [nat, ids] of Object.entries(UNITS.startRows)) for (const id of ids) expect(techById(id), `${nat} ${id}`).toBeDefined();
     expect(L.byOrders).toEqual({ need: 0.9, stop: 1.3, main: 2.6 });
     expect(L.mostCorps).toEqual({ base: 8, perC: 12 });
     expect(L.attack).toEqual({ base: 0.85, perC: 0.15 });
