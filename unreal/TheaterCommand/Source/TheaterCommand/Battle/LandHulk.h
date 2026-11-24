@@ -37,11 +37,13 @@
  *   LandKit), knocked out and burnt through: her turret turned, or blown off and lying near, upturned or on its side;
  *   her gun drooped to its stop; her hatches open; a track run off beside her, snaking a little and folded back on
  *   itself once; a lorry's canvas burnt off its hoops, her bed's planks charred and some burnt through, her glass gone
- *   and her tyres burnt off to the rims; her aerial and roof gun gone. A patchwork by the fire's heat and the months
- *   (round 2, the art director's notes of 24 November), not one coat: a week on soot black over about half of what
- *   faces the sky, round it her paint scorched to a chalky grey-buff and burnt off to bare grey steel, her own paint
- *   low on her cooler sides, orange only along the edges; a month on the bare steel flash-rusted orange, in runs; by
- *   half a year the soot washed off what faces the sky, the rust old and brown, the scorched paint flaking; settled
+ *   and her tyres burnt off to the rims; her aerial and roof gun gone. A burn laid by where the fire was (the art
+ *   director's last round, 24 November: round 2's patchwork read as camouflage), each coat blending into the next:
+ *   a week on soot black over about half of what faces the sky, densest round where the flames came out and
+ *   streaking downwind, feathered grey; round it by her heat bare grey steel in the hottest centres, her paint
+ *   scorched to a chalky grey-buff round that, a brown fringe, her own paint low on her cooler sides, orange only
+ *   along the edges; a month on the bare steel flash-rusted orange, soft-edged, in runs; by half a year the soot
+ *   washed off what faces the sky, the rust old and brown, the scorched paint flaking and weathering; settled
  *   into the ground; a ragged scorched patch under her, ash black at her engine's end with a brown rim of burnt grass
  *   and her fuel's stain, that greens again, lusher than the field round it. No fire and no smoke: they burnt out long
  *   ago.
@@ -215,7 +217,7 @@ namespace LandHulk
 		const std::vector<std::vector<std::pair<double, double>>>& OldRuts);
 
 	/**
-	 * What a point of a dressed wreck shows (round 2 of her look, the art director's patchwork of 24 November): soot,
+	 * What a point of a dressed wreck shows (the coat on its side of each band's middle where her coats blend): soot,
 	 * scorched paint gone chalky, bare steel, flash rust, old rust, her own paint left, charred rubber, wood or glass, a
 	 * track's links or a rim black-grey through the fire (not yet rusted), the snow fallen on her since, the open hole of
 	 * her turret ring (her turret thrown: the dark of her inside, not soot), or a run of rust down her side from a rusted

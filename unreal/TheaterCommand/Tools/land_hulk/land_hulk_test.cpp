@@ -1021,8 +1021,19 @@ int main(int Argc, char** Argv)
 			{
 				std::vector<uint8_t> Lit[LandHulk::Coats], Patch[LandHulk::Scorches], Side[LandHulk::Coats], ByHue[Hues];
 				size_t LitN = 0, AllN = 0, All[LandHulk::Coats] = {}, PatchN = 0, PatchDark = 0, SideN = 0;
+				/** Her lit faces' edges (the art director's last round: round 2's coats met at hard lines and its patches lay
+				 * anywhere, so she read as camouflage): each pair of side-by-side pixels (across and down) both on her lit
+				 * faces, how many step in luma by more than EdgeHard, and their steps' sum. A plate's own outline against its
+				 * shade or another plate counts too, so it is read against another build's, not against none. */
+				size_t EdgeN = 0, EdgeHardN = 0;
+				double EdgeSum = 0.0;
+				double HardShare() const { return EdgeN > 0 ? 100.0 * static_cast<double>(EdgeHardN) / static_cast<double>(EdgeN) : 0.0; }
+				double MeanStep() const { return EdgeN > 0 ? EdgeSum / static_cast<double>(EdgeN) : 0.0; }
 			};
 			constexpr double LitFrom = 0.75;
+			// (a pixel's luma as the picture shows it: its sRGB numbers weighed as Rec. 709's primaries, sRGB's own)
+			constexpr double EdgeHard = 45.0;
+			const auto Luma = [](const uint8_t* C) { return 0.2126 * C[0] + 0.7152 * C[1] + 0.0722 * C[2]; };
 			const auto Median = [](const std::vector<uint8_t>& V, int Channel)
 			{
 				std::vector<uint8_t> One;
@@ -1062,6 +1073,24 @@ int main(int Argc, char** Argv)
 										{
 											++Into->SideN;
 											Into->Side[Tag - 1].insert(Into->Side[Tag - 1].end(), { C[0], C[1], C[2] });
+										}
+									}
+								}
+								// (her lit faces' step to the pixel across and to the one down, both in the cell, hers and lit)
+								if (Sheet.Lit[Px] >= LitFrom)
+								{
+									for (const int Across : { 1, 0 })
+									{
+										const int Ni = I + Across, Nj = J + 1 - Across;
+										if (Ni >= X0 + CellW || Nj >= Y0 + CellH) continue;
+										const size_t Nx = static_cast<size_t>(Nj) * static_cast<size_t>(Sheet.W) + static_cast<size_t>(Ni);
+										if (Sheet.Tag[Nx] < 1 || Sheet.Tag[Nx] > LandHulk::Coats || !(Sheet.Lit[Nx] >= LitFrom)) continue;
+										const double Step = std::fabs(Luma(C) - Luma(&Sheet.Rgb[Nx * 3]));
+										for (Tally* Into : { &T, &P })
+										{
+											++Into->EdgeN;
+											Into->EdgeHardN += Step > EdgeHard ? 1 : 0;
+											Into->EdgeSum += Step;
 										}
 									}
 								}
@@ -1208,6 +1237,9 @@ int main(int Argc, char** Argv)
 					std::snprintf(Buf, sizeof(Buf), "  %s %.0f%% (%d,%d,%d)", HueName(Hc), Of, R, Gm, B);
 					Hues2 += Buf;
 				}
+				// (her lit faces' edges: the share of side-by-side pairs stepping over EdgeHard in luma, and the mean step)
+				Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",lit edges,hard (luma step over " << EdgeHard << ")," << T.HardShare() << "," << T.EdgeN << ",,,\n";
+				Csv << Name << "," << Sheet << "," << Who << "," << AgeWords[I] << ",lit edges,mean luma step," << T.MeanStep() << "," << T.EdgeN << ",,,\n";
 				std::string Ground;
 				for (int C = 1; C < LandHulk::Scorches; ++C)
 				{
@@ -1229,6 +1261,8 @@ int main(int Argc, char** Argv)
 				{
 					std::printf("     %-18s lit %5zu px:%s\n", AgeWords[I], T.LitN, Line.c_str());
 					std::printf("     %-18s  by colour:%s\n", "", Hues2.c_str());
+					std::printf("     %-18s  hard edges: %.1f%% of %zu side-by-side pairs of her lit pixels step over %.0f in luma; the mean step %.2f\n", "", T.HardShare(), T.EdgeN,
+						EdgeHard, T.MeanStep());
 					if (Sheet == "side") std::printf("     %-18s  her sides %5zu px:%s\n", "", T.SideN, Sides.c_str());
 					if (Sheet == "near") std::printf("     %-18s patch %5zu px:%s\n", "", T.PatchN, Ground.empty() ? "  the field's own" : Ground.c_str());
 				}
@@ -1255,6 +1289,24 @@ int main(int Argc, char** Argv)
 			{
 				std::printf("    %s (wanted: %s)\n", AgeWords[I], Wants[I]);
 				Row(Pooled[static_cast<size_t>(I)], "near", "all four", I, true);
+			}
+			// (her lit faces' hard edges, each of the four and all four at each age, near level: camouflage's hard lines, read
+			// against another build's)
+			{
+				const auto EdgeLine = [&](const std::vector<Tally>& Ts)
+				{
+					std::string Edges;
+					for (int I = 0; I < 5; ++I)
+					{
+						char Buf[120];
+						std::snprintf(Buf, sizeof(Buf), "%s%s %.1f%% (mean step %.2f)", I > 0 ? "; " : "", AgeWords[I], Ts[static_cast<size_t>(I)].HardShare(), Ts[static_cast<size_t>(I)].MeanStep());
+						Edges += Buf;
+					}
+					return Edges;
+				};
+				std::printf("  hard edges of her lit faces (side-by-side pixels stepping over %.0f in luma), near level:\n", EdgeHard);
+				for (size_t R = 0; R < Pick.size(); ++R) std::printf("    %s: %s\n", Aged[0].Hulks()[Pick[R]].Model.c_str(), EdgeLine(Cells[R]).c_str());
+				std::printf("    all four: %s\n", EdgeLine(Pooled).c_str());
 			}
 			// (each wreck's flash rust a month on, by tag and by colour: the art director's 15 to 25 in 100 of her)
 			std::string EachMonth;
