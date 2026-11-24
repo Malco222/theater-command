@@ -687,20 +687,31 @@ bool AAirBattle::BeginReplay(const FString& Key)
 
 bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int32 Target, const TArray<int32>& Ids)
 {
-	Session = InSession;
-	if (!Session)
-	{
-		return false;
-	}
 	TArray<FString> Numbers;
 	for (const int32 Id : Ids)
 	{
 		Numbers.Add(FString::FromInt(Id));
 	}
-	FString Reply, Error;
-	if (!Session->CallBattle(TEXT("airStart"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *FString::Join(Numbers, TEXT(","))), Reply, Error))
+	return BeginLiveCall(InSession, TEXT("airStart"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *FString::Join(Numbers, TEXT(","))));
+}
+
+bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Function, const FString& ArgumentsJson)
+{
+	Session = InSession;
+	if (!Session)
 	{
-		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.airStart failed: %s"), *Error);
+		return false;
+	}
+	FString Reply, Error;
+	if (!Session->CallBattle(Function, ArgumentsJson, Reply, Error))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.%s failed: %s"), *Function, *Error);
+		return false;
+	}
+	if (Reply.IsEmpty() || Reply == TEXT("null"))
+	{
+		// (a battle of your own its rules would not open: the setup page says why, from TC.customWhy)
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.%s opened no battle"), *Function);
 		return false;
 	}
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)

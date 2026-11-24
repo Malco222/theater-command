@@ -298,8 +298,12 @@ void ACampaignPlayerController::TakeGrandNations(TArray<FGrandNation>&& Listed)
 
 void ACampaignPlayerController::ShowOpeningTab(int32 Tab)
 {
-	Opening.Tab = Tab == 2 || Tab == 3 ? Tab : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	Opening.Tab = Tab == 2 || Tab == 3 || Tab == 4 ? Tab : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
 	Opening.AskDelete.Empty(); // (a DELETE left unanswered is not carried to another page)
+	if (Opening.Tab == 4)
+	{
+		RefreshCustom(); // (release 2: a battle of your own, page 4 (3 is 1.5.1's saved wars), its page made from the rules' offer)
+	}
 	++Opening.Revision;
 }
 

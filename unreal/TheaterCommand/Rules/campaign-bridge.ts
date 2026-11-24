@@ -83,6 +83,7 @@ import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
+import { customCalls } from './custom-bridge';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
@@ -7641,6 +7642,8 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
   // own order, his attack or his raid, with what the field reports in place of the dice. Taken as his own deeds, as the
   // same orders given from the map are.
   ...battleTable,
+  // (release 2) A battle of your own (custom-bridge.ts): two sides, a treasury each, fought on a war of their own.
+  ...customCalls({ airStartOn: battleTable.airStartOn }),
   // (release 2 and the 1.5.1 patch: the general's battle of a garrison in hand is looked at, and settled, with it out of its town)
   battleLook: lookOut(battleTable.battleLook), battleSettleLand: goOut(battleTable.battleSettleLand),
 };

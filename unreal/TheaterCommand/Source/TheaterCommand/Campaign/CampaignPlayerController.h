@@ -12,6 +12,7 @@ class ACampaignMapActor;
 class ACampaignCameraPawn;
 class AArmyPiece;
 class FCampaignSession;
+class FJsonObject;
 
 /** What the panel shows about the territory the player has clicked. Worked out once, when the selection changes. */
 struct FRegionPanelInfo
@@ -267,6 +268,87 @@ struct FOpeningGroup
 	TArray<FOpeningSide> Sides;
 };
 
+/**
+ * (Release 2) A battle of your own (Brian, 24 November 18:36Z): one land or air battle, his side against the computer's,
+ * each army bought inside one treasury from the campaign's own price list (Rules/custom-bridge.ts). The page as the
+ * opening screen's fourth door draws it.
+ */
+struct FCustomChip
+{
+	FString Id;
+	FText Name;
+	FText Tip;
+	bool bOn = false;
+	bool bLocked = false; // shown, not offered (the sea, with Tip saying why)
+};
+
+/** One line of the price list: a corps or wing, or the defence's fieldworks or guns ("works"), and how many each side has. */
+struct FCustomBuyRow
+{
+	FString Kind;
+	FText Name;
+	FText Tip;
+	int32 Cost = 0; // one more of it; for "works", the next level's price
+	int32 Mine = 0;
+	int32 Theirs = 0;
+	int32 Most = 0; // works: the most levels (0: no limit but the treasury and the room)
+	bool bDefenceOnly = false;
+};
+
+/** One side of the battle on the page. */
+struct FCustomSideView
+{
+	FString Nat;
+	FText Name;
+	FLinearColor Color = FLinearColor::Gray;
+	FText Kit; // the year its kit is from: "1942 to 1943"
+	FText KitTip;
+	FText Training; // "Seasoned"
+	FText TrainingTip;
+	int32 Spent = 0;
+	int32 Budget = 0;
+	FText Room; // "4 of the 5 corps the ground has room for"
+	bool bComputerPicks = false; // its army is the computer's own pick, made again as the battle changes
+	bool bAttacks = false;
+};
+
+struct FCustomPage
+{
+	bool bReady = false; // the rules' offer is in
+	TArray<FCustomChip> Domains; // land, air, sea
+	TArray<FCustomChip> Places; // the battlefields of the kind chosen, only those that passed the art director and the Mac
+	TArray<FCustomChip> Sizes; // the treasury
+	TArray<FCustomChip> Roles; // attack, defend
+	TArray<FCustomChip> Kinds; // in the air: a bombing raid or a fight for the sky
+	FText PlaceBlurb;
+	FCustomSideView Mine;
+	FCustomSideView Theirs;
+	TArray<FCustomBuyRow> Buys;
+	FText Problem; // why it cannot be fought as it stands (TC.customCheck), empty when it can
+	bool bCanFight = false;
+	FText Last; // how the last battle of his own ended, shown when he is back at the door
+};
+
+/** (Release 2) A battle of your own: what he has chosen so far, as the rules' spec is made from it (CustomSpec). */
+struct FCustomState
+{
+	TSharedPtr<FJsonObject> Offer; // TC.customOffer, read once
+	FString Domain = TEXT("land");
+	FString Place, AirPlace;
+	FString Size = TEXT("battle");
+	FString Role = TEXT("att");
+	FString Kind = TEXT("bomb");
+	int32 Nat[2] = { 0, 1 }; // his and the computer's, as places in the offer's list of nations
+	int32 Kit[2] = { 3, 3 };
+	int32 Train[2] = { 2, 2 }; // 1 raw to 4 veteran
+	TMap<FString, int32> Buys[2];
+	int32 Works[2] = { 0, 0 };
+	bool bTheyPick = true;
+	bool bPicked = false; // his own army has been made at least once
+	FText Last;
+	bool bOpen = false; // a battle of his own is being fought
+};
+
 /** The opening screen: where a campaign can begin and as whom, and the campaign saved on this computer if there is one. */
 struct FOpening
 {
@@ -274,7 +356,7 @@ struct FOpening
 	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
 
 	// The grand campaign: any country, taken over on one of a few days, and free to make its own history after.
-	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options, 3: the saved wars (release 1.5.1)
+	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options, 3: the saved wars (release 1.5.1), 4: a battle of your own (release 2)
 	TArray<FOpeningYear> Years;
 	int32 YearIndex = 0;
 	TArray<FOpeningNation> Nations;
@@ -311,6 +393,8 @@ struct FOpening
 	int64 SavesBytes = 0, FreeBytes = -1;
 	// (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the title band: its words, and whether the ten are done.
 	FLessonDoor Door;
+	// (Release 2) A battle of your own, the fourth door.
+	FCustomPage Custom;
 	int32 Revision = 0;
 };
 
@@ -628,8 +712,15 @@ public:
 	/** Starts the scenario chosen on the opening screen. */
 	void BeginCampaign(int32 GroupIndex, int32 SideIndex);
 
-	/** The opening screen's two pages: 0 is the grand campaign, 1 the historical scenarios. */
+	/** The opening screen's pages: 0 the grand campaign, 1 the historical scenarios, 2 the options, 3 a battle of your own. */
 	void ShowOpeningTab(int32 Tab);
+	/**
+	 * (Release 2) A press on the page of a battle of your own: "domain:land", "place:<id>", "size:<id>", "role:att",
+	 * "kind:bomb", "nat:me:1" (the next nation; -1 the one before; "them" the computer's side), "kit:me:1", "train:them:-1",
+	 * "buy:me:arm:1" (one more; -1 one fewer; "works" the fieldworks or the guns), "pick:me" (the computer chooses his army
+	 * for him, once), "pick:them" (the computer chooses its own, or lets him choose it), "clear:me", "fight".
+	 */
+	void PressCustom(const FString& What);
 	/** The options page: the game's standing choices, and a press on one of them. */
 	TArray<FGameOption> GetOptions() const;
 	void PressOption(const FString& Id);
@@ -1460,6 +1551,15 @@ private:
 	void AirHandBack(const FString& Kind, int32 Target, const FString& EndJson);
 	/** (Release 1.6) The sky of his own raid while it is open (FlyLive). */
 	TWeakObjectPtr<class AAirBattle> LiveRaid;
+	FCustomState Custom;
+	void LoadCustomOffer();
+	/** The spec for the rules (CustomSpec), the computer's army in it if bWithTheirs and it picks its own. */
+	FString CustomSpecJson(bool bWithTheirs) const;
+	/** The page made again from the choices and the rules' check of them (TC.customArmy, TC.customCheck). */
+	void RefreshCustom();
+	void FightCustom();
+	/** A battle of his own handed back (its scene's CONTINUE): the door again, its outcome in a line. */
+	void CustomHandBack(const FString& Domain, const FString& ResultJson);
 	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
 	mutable FString FlyOfferAct;
 	mutable int32 FlyOffer = -1;

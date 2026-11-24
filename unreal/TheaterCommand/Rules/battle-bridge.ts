@@ -501,6 +501,7 @@ import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
 import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
+import { airAct } from '../../../src/campaign/airpages';
 import type { BattleReport, Game } from '../../../src/campaign/types';
 import { groundWeather, wreckLook, type FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
@@ -709,6 +710,36 @@ export function battleCalls(h: BattleHooks) {
     const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
     return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
   };
+  /**
+   * An air battle opened on the shared clock: the raid's ticket on 'g', fought out shown, settled once through 'raid'
+   * with what the battle reports. 'side' flies the raid for 'nat' with his side 'me' (a battle of your own); without it
+   * the raid is his on the grand campaign.
+   */
+  function airBegin(g: Game, kind: string, target: number, ids: number[], side: { nat: string; me: Side } | null, raid: (fought?: FoughtAir) => unknown) {
+    const t = side ? airTicket(g, kind as RaidKind, target, ids, side.nat) : airTicket(g, kind as RaidKind, target, ids);
+    if (!t.ticket) return null;
+    const ticket = side ? { ...t.ticket, att: { ...t.ticket.att, human: side.me === 'att' }, def: { ...t.ticket.def, human: side.me === 'def' } } : t.ticket;
+    // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act out.
+    const sim = new AirSim(ticket, { show: true });
+    // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports (the
+    // campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid. The
+    // after card goes out with its totals, each side's fighters and bombers lost (AirFeed.cpp ReadAfter reads
+    // after.lost), summed from its own rows (afterLost), so the totals and the rows never disagree.
+    const withLost = (out: unknown): unknown => {
+      const after = (out as { after?: AfterCard } | null)?.after;
+      return after ? { ...(out as object), after: { ...after, lost: afterLost(after) } } : out;
+    };
+    const ses = begin(sim, (r) => withLost(raid(r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined)));
+    // The title, the date and the two sides as the 3D game reads them (AirFeed.cpp ReadSky).
+    const sideOut = (x: typeof ticket.att) => ({ nat: x.nat, adj: x.adj, human: x.human });
+    return {
+      sky: {
+        w: SKY.w, h: SKY.h, scale: SKY.scale, target: SKY.target, flakR: SKY.flakR, bands: SKY.bands.alt, place: ticket.place,
+        title: ticket.title, date: ticket.date, att: sideOut(ticket.att), def: sideOut(ticket.def),
+      },
+      view: viewOut(ses, sim.view(ses.me)),
+    };
+  }
   /**
    * The land battles handed back (battleSettleLand), so the same result asked again is settled once: kept by the campaign
    * they were settled in (a load or a new campaign is another game, and starts with none), every one of its month, each
@@ -945,30 +976,15 @@ export function battleCalls(h: BattleHooks) {
     airStart(kind: string, target: number, ids: number[]) {
       const raid = h.raid;
       if (!raid) return null;
-      const t = airTicket(h.game(), kind as RaidKind, target, ids);
-      if (!t.ticket) return null;
-      // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act
-      // out (the air battles thread, 2dc2da46).
-      const sim = new AirSim(t.ticket, { show: true });
-      // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
-      // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
-      // The after card goes out with its totals, each side's fighters and bombers lost (AirFeed.cpp ReadAfter reads
-      // after.lost), summed from its own rows by the rules (afterLost), so the totals and the rows never disagree.
-      const withLost = (out: unknown): unknown => {
-        const after = (out as { after?: AfterCard } | null)?.after;
-        return after ? { ...(out as object), after: { ...after, lost: afterLost(after) } } : out;
-      };
-      const ses = begin(sim, (r) => withLost(raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined)));
-      // The title, the date and the two sides as the 3D game reads them (AirFeed.cpp ReadSky: "the bridge's sky names
-      // them"); without them it shows no title or date, and finds the defender only from the place's models.
-      const side = (x: typeof t.ticket.att) => ({ nat: x.nat, adj: x.adj, human: x.human });
-      return {
-        sky: {
-          w: SKY.w, h: SKY.h, scale: SKY.scale, target: SKY.target, flakR: SKY.flakR, bands: SKY.bands.alt, place: t.ticket.place,
-          title: t.ticket.title, date: t.ticket.date, att: side(t.ticket.att), def: side(t.ticket.def),
-        },
-        view: viewOut(ses, sim.view(ses.me)),
-      };
+      return airBegin(h.game(), kind, target, ids, null, (r) => raid(kind, target, ids, r));
+    },
+    /**
+     * A battle of your own in the air (release 2, custom-bridge.ts): the same battle on a war of only the two air forces,
+     * the raid flown by 'nat' (the computer's when he defends), his side the one he picked, and the raid paid on that war
+     * with its own after card. The grand campaign is not touched.
+     */
+    airStartOn(g: Game, kind: string, target: number, ids: number[], nat: string, me: Side, settle?: (fought?: FoughtAir) => unknown) {
+      return airBegin(g, kind, target, ids, { nat, me }, settle ?? ((r) => airAct(g, `raid:${kind}:${target}:${ids.join('.')}`, r)));
     },
   };
 }
