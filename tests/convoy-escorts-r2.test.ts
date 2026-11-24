@@ -2,14 +2,15 @@
 // 17:58Z on naval-battles/convoy-r2/escort-losses-form.md, (a) on Q1 to Q4 with his notes of 17:59Z and 18:00Z, and Q5,
 // 'price once', from his ruling of 16:58Z). For each convoy attacked the escort meets the boats that try x (1 - f^2): the
 // screen frustrates 1 - f of them and finds those that fire at a = 1 - f, the same contest. An incident is coordinated
-// with the chance spare / (spare + on stations), spare the escorts beyond the close screen's stations and the support
-// groups in the route's seas; independent otherwise. Escort ships sunk keep the flat escortLoss; boats not raiding keep
-// the hunt's curve; nothing is counted twice. The contest's E is the escorts on the stations, k set again once on it at
-// the tons ruling's own record point, on the game's P and E there as the tons ruling solved its own. One switch,
+// with the chance spare / (spare + on stations), spare the escorts with the convoy beyond the close screen's stations
+// and the support groups in the route's seas, shared over the route's convoys at sea at once; independent otherwise.
+// Escort ships sunk keep the flat escortLoss; boats not raiding keep the hunt's curve; nothing is counted twice. The
+// contest's E is the escorts on the stations, k solved once on it at the tons ruling's own record point on the record's
+// own E there (the design director's rulings of 22:24Z: k, 1 (b); the groups shared, 3 (b)). One switch,
 // convoycause.json 'escorts': null, the game is the build before it. Nothing in it reads the date or a nation's flag.
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
-import { CAUSE, FLEETS, NAVY, aswKit, convoyCount, convoyField, convoyMeeting, convoySideOf, convoyWar, escortChance, escortWork, escortsMet, eyePair, fit, huntExpected, huntShareSunk, huntSubs, huntersIn, navalUpkeep, onStation, screenStations, zoneOf } from '../src/campaign/navy';
+import { CAUSE, FLEETS, NAVY, aswKit, convoyCount, convoyField, convoyMeeting, convoySideOf, convoyWar, escortChance, escortWork, escortsAtSea, escortsMet, eyePair, fit, huntExpected, huntShareSunk, huntSubs, huntersIn, navalUpkeep, onStation, screenStations, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { grantTech, techById, techRule } from '../src/campaign/tech';
@@ -66,46 +67,56 @@ function meet(g: Game, ss: number, dd: number): { boats: Fleet; esc: Fleet } {
 afterEach(() => { convoyField.fought = undefined; });
 
 describe('the figures', () => {
-  it('lays the form, ruled into the next bundle, and k on the stations at 0.628', () => {
+  it('lays the form, ruled into the next bundle, and k on the stations at 0.984', () => {
     expect(CAUSE.escorts).toBe(true);
-    expect(CAUSE.count.sinkOnStations).toBe(0.628);
+    expect(CAUSE.count.sinkOnStations).toBe(0.984);
     // (The tons ruling's k stands beside it, for the switch null.)
     expect(CAUSE.count.sink).toBe(0.137);
   });
 
-  it('sets k again once at the tons ruling\'s own record point and in its way, on the game\'s P and E there: 0.596 x (44 / 3.75 - 1) / 10.19', () => {
+  it('solves k once at the tons ruling\'s own record point on the record\'s own E there: 0.596 x (44 / 3.75 - 1) / 6.5 = 0.984', () => {
     // (OEG T2's window: 2 boats sink 3.75 of the convoy's 44 ships a convoy attacked. P the tons ruling's own, 2 boats
-    // x 0.298, a boat's raid strength on station in its six AI wars; E the game's escorts on the stations there, which
-    // are full, so the 44-ship convoy's stations: 6 + (44 / 3.5) / 3.)
-    const P = 2 * 0.298, ships = 44, sunk = 3.75, E = screenStations(atlantic)!;
-    expect(E).toBeCloseTo(6 + 44 / 3.5 / 3, 12);
-    expect(E).toBeCloseTo(10.19, 2);
-    const k = (P * (ships / sunk - 1)) / E;
-    expect(k).toBeCloseTo(0.62775, 5);
-    expect(CAUSE.count.sinkOnStations).toBeCloseTo(k, 3);
-    // The laid figure gives the record point back on the game's E, and the tons ruling's 0.137 is the same point on its
-    // own E, the game's escort worth a convoy there, 46.5.
-    expect((ships * P) / (P + CAUSE.count.sinkOnStations! * E)).toBeCloseTo(3.75, 2);
-    expect((ships * P) / (P + CAUSE.count.sink! * 46.5)).toBeCloseTo(3.75, 1);
-    expect((P * (ships / sunk - 1)) / 46.5).toBeCloseTo(0.1376, 4);
-    // (Named, never laid: the record's T2 had about 6.5 escorts a convoy (eT2 for each of the 2 / 0.3 boats trying),
-    // fewer than the stations. Solved on that E, k would be 0.984, and the game's full stations would then sink 2.47 ships
-    // for T2's 2 boats, not 3.75: the escorts-a-convoy gap.)
+    // x 0.298, a boat's raid strength on station in its six AI wars; E the record's escorts a convoy there, about 6.5,
+    // OEG ch. 10 Table 5, as the eye's T2 point reads them: eT2 for each of the 2 / 0.3 boats trying.)
+    const P = 2 * 0.298, ships = 44, sunk = 3.75, E = 6.5;
+    expect(P).toBeCloseTo(0.596, 12);
+    expect(ships / sunk - 1).toBeCloseTo(10.733333, 6);
     const recordE = CAUSE.firing.eye!.eT2! * (CAUSE.count.perAttack / CAUSE.firing.t2!);
-    expect(recordE).toBeCloseTo(6.5, 1);
-    expect(recordE).toBeLessThan(E);
-    expect((P * (ships / sunk - 1)) / 6.5).toBeCloseTo(0.984, 3);
-    expect((ships * P) / (P + 0.984 * E)).toBeCloseTo(2.47, 2);
+    expect(recordE).toBeCloseTo(6.4667, 4);
+    expect(recordE).toBeCloseTo(E, 1);
+    const k = (P * (ships / sunk - 1)) / E;
+    expect(k).toBeCloseTo(0.596 * 10.733333 / 6.5, 6);
+    expect(k).toBeCloseTo(0.984164, 6);
+    expect(CAUSE.count.sinkOnStations).toBeCloseTo(k, 3);
+    // The laid figure gives the record point back on the record's E.
+    expect((ships * P) / (P + CAUSE.count.sinkOnStations! * E)).toBeCloseTo(3.7506, 4);
+    expect((ships * P) / (P + CAUSE.count.sinkOnStations! * E)).toBeCloseTo(3.75, 2);
   });
 
-  it('the game\'s T2 fills the stations: with about 35 escorts a convoy, E is the stations and 2 boats sink 3.75 ships', () => {
+  it('the game\'s E on the stations is high, the named fault: the 44-ship convoy\'s stations, 10.19, against the record\'s 6.5', () => {
+    const P = 0.596, ships = 44, stations = screenStations(atlantic)!;
+    expect(stations).toBeCloseTo(6 + 44 / 3.5 / 3, 12);
+    expect(stations).toBeCloseTo(10.190476, 6);
+    // (On the game's full stations 2 boats sink 2.47 ships, not 3.75: shown, never tuned.)
+    expect((ships * P) / (P + CAUSE.count.sinkOnStations! * stations)).toBeCloseTo(2.4685, 3);
+    // (Refused: solved on the game's 10.19, k would be 0.628, the fault baked into the constant.)
+    const refused = (P * (ships / 3.75 - 1)) / stations;
+    expect(refused).toBeCloseTo(0.62775, 5);
+    expect(CAUSE.count.sinkOnStations).not.toBeCloseTo(refused, 2);
+    // (Where the form is laid it replaces the tons ruling's 0.137, solved on the game's escort worth a convoy there, 46.5,
+    // with the same inflation; 0.137 stands beside it for the form unread.)
+    expect((P * (ships / 3.75 - 1)) / 46.5).toBeCloseTo(0.137571, 6);
+    expect((ships * P) / (P + CAUSE.count.sink! * 46.5)).toBeCloseTo(3.75, 1);
+  });
+
+  it('the game\'s T2 fills the stations: with about 35 escorts a convoy, E is the stations, and 2 boats sink 2.47 ships there', () => {
     const g = open(true);
     // (About 35 escorts with each Atlantic convoy, as the game has them at T2's window.)
     meet(g, 60, 300);
     const s = bare(() => convoySideOf(g, 'UK', atlantic)!), w = work(g);
     expect(w.on + w.beyond).toBeGreaterThan(30);
     expect(s.E).toBeCloseTo(screenStations(atlantic)!, 12);
-    expect((44 * 0.596) / (0.596 + CAUSE.count.sinkOnStations! * s.E)).toBeCloseTo(3.75, 2);
+    expect((44 * 0.596) / (0.596 + CAUSE.count.sinkOnStations! * s.E)).toBeCloseTo(2.4685, 3);
   });
 });
 
@@ -225,17 +236,19 @@ describe('Q2 (a): who works an incident', () => {
     // the North Atlantic, as the ruling words it, 'the hunting-duty destroyers in the route's seas'.)
     const group = sea(g, 'UK', 'wapp', { dd: 20 }, 'hunt', undefined, [esc, away]);
     expect(group.zone).not.toBe(boats.zone);
-    const w = work(g), ch = escortChance(g, 'UK', w);
+    const w = work(g), ch = escortChance(g, 'UK', w), n = w.convoys;
     expect(w.seas).toEqual(atlantic.zones.map((k) => zoneOf(g, k)));
-    expect(ch.coordinated).toBeCloseTo((w.beyond + 20) / (w.beyond + 20 + w.on), 12);
-    expect(ch.coordinated).toBeGreaterThan(0.5);
-    expect(ch.chance).toBeCloseTo((w.on * 0.05 * fit(g, esc) + 20 * 0.17 * fit(g, group)) / (w.on + 20), 12);
+    // (Shared over the route's convoys at sea at once, one convoy's part of the group.)
+    expect(n).toBeGreaterThan(1);
+    expect(ch.coordinated).toBeCloseTo((w.beyond + 20 / n) / (w.beyond + 20 / n + w.on), 12);
+    expect(ch.coordinated).toBeGreaterThan(0.2);
+    expect(ch.chance).toBeCloseTo((w.on * 0.05 * fit(g, esc) + (20 / n) * 0.17 * fit(g, group)) / (w.on + 20 / n), 12);
     // The boats in the North Atlantic lose more to the convoy's escort for it, and every sea of the route reads alike.
     expect(expectOf(g, boats)).toBeGreaterThan(expectWithout(g, group, boats));
     expect(expectOf(g, boats)).toBeCloseTo(60 * onStation(g, boats, boats.zone) * w.rate * ch.chance, 12);
     give(g, 'UK', ['sonar', 'hedgehog', 'escortgroups']);
     const k = work(g);
-    expect(escortChance(g, 'UK', k).chance).toBeCloseTo((k.on * 0.12 + 20 * 0.55) / (k.on + 20), 12);
+    expect(escortChance(g, 'UK', k).chance).toBeCloseTo((k.on * 0.12 + (20 / k.convoys) * 0.55) / (k.on + 20 / k.convoys), 12);
     // (Nothing is counted twice: the group hunts on the curve only in its own sea, and the pack in the North Atlantic
     // meets it only in its incidents. The look-ahead there is the aircraft's part of the curve and the incidents.)
     const h = huntersIn(g, 'UK', boats.zone);
@@ -255,10 +268,10 @@ describe('Q2 (a): who works an incident', () => {
     expect(fg).toBeLessThan(fit(g, { ...group, ready: 1 }));
     // (The screen counts every allied fleet in the route's seas at its share on the route, as routeForces does: the
     // escort bound to it whole, the group hunting in one of its seas at the loose share. Each ship at its own fit.)
-    const w = work(g), ch = escortChance(g, 'UK', w);
+    const w = work(g), ch = escortChance(g, 'UK', w), n = w.convoys;
     expect(w.beyond).toBe(0);
     expect(w.onRate).toBeCloseTo((0.05 * (30 * fe + 20 * L * fg)) / (30 + 20 * L), 12);
-    expect(ch.chance).toBeCloseTo((w.on * w.onRate + 20 * 0.17 * fg) / (w.on + 20), 12);
+    expect(ch.chance).toBeCloseTo((w.on * w.onRate + (20 / n) * 0.17 * fg) / (w.on + 20 / n), 12);
     // (Past the stations, the spare escorts too at their own fit.)
     meet(g, 60, 300);
     esc.ready = 0.5;
@@ -266,7 +279,7 @@ describe('Q2 (a): who works an incident', () => {
     expect(m.beyond).toBeGreaterThan(0);
     expect(m.onRate).toBeCloseTo((0.05 * (300 * fe + 20 * L * fg)) / (300 + 20 * L), 12);
     expect(m.beyondRate).toBeCloseTo((0.17 * (300 * fe + 20 * L * fg)) / (300 + 20 * L), 12);
-    expect(mc.chance).toBeCloseTo((m.on * m.onRate + m.beyond * m.beyondRate + 20 * 0.17 * fg) / (m.on + m.beyond + 20), 12);
+    expect(mc.chance).toBeCloseTo((m.on * m.onRate + m.beyond * m.beyondRate + (20 / m.convoys) * 0.17 * fg) / (m.on + m.beyond + 20 / m.convoys), 12);
   });
 
   it('kills are the incidents x the column\'s rate: a month\'s expectation, by kit', () => {
@@ -277,7 +290,8 @@ describe('Q2 (a): who works an incident', () => {
       sea(g, 'UK', 'natl', { dd: 20 }, 'hunt', undefined, [esc]);
       const w = work(g), ch = escortChance(g, 'UK', w);
       const k = aswKit(g, 'UK'), ind = k.hedgehog && k.groups ? 0.12 : 0.05 * (k.hedgehog ? 1.9 : 1), co = k.hedgehog && k.groups ? 0.55 : 0.17 * (k.hedgehog ? 1.9 : 1);
-      expect(ch.chance, kit.join(',')).toBeCloseTo((w.on * ind + (w.beyond + 20) * co) / (w.on + w.beyond + 20), 12);
+      const groups = 20 / w.convoys;
+      expect(ch.chance, kit.join(',')).toBeCloseTo((w.on * ind + (w.beyond + groups) * co) / (w.on + w.beyond + groups), 12);
       expect(expectOf(g, boats), kit.join(',')).toBeCloseTo(60 * onStation(g, boats, boats.zone) * w.rate * ch.chance, 12);
     }
   });
@@ -315,6 +329,110 @@ describe('Q2 (a): who works an incident', () => {
         }
       }
     }
+  });
+});
+
+describe('the support groups shared over the route\'s convoys at sea at once (the design director\'s ruling of 22:24Z, 3 (b))', () => {
+  /** The spare ships in one convoy's split, as an incident's coordinated share gives them back: spare = c x on / (1 - c). */
+  const spareOf = (ch: { coordinated: number }, w: { on: number }): number => (ch.coordinated * w.on) / (1 - ch.coordinated);
+  const tons = atlantic.tons;
+  /** Runs with the Atlantic route's tons at this many times its own, so it sails that many times the convoys. */
+  const timesTons = <T>(x: number, f: () => T): T => withRows(() => { atlantic.tons = x * tons; }, () => { atlantic.tons = tons; }, f);
+
+  it('the convoys at sea at once are the count the screen already shares the escorts over; with the cycle unread, the convoys sailed', () => {
+    const g = open(true);
+    meet(g, 60, 300);
+    const c = convoyCount(g, atlantic)!, w = work(g), D = CAUSE.station.dd!;
+    // (The convoys sailed a month x a convoy's crossing over the month's 30 days: about 3.3 on the Atlantic route.)
+    expect(w.convoys).toBeCloseTo((c.sailed * D.crossing!) / 30, 12);
+    expect(w.convoys).toBeCloseTo(3.3, 1);
+    // The escorts with a convoy are the escorts at sea with the convoys over that same count.
+    expect(w.on + w.beyond).toBeCloseTo((300 * escortsAtSea()!) / w.convoys, 9);
+    const crossing = D.crossing;
+    withRows(() => { D.crossing = null; }, () => { D.crossing = crossing; }, () => {
+      const u = work(g);
+      expect(u.convoys).toBe(c.sailed);
+      expect(u.on + u.beyond).toBeCloseTo(300 / c.sailed, 9);
+    });
+  });
+
+  it('a 20-destroyer group over N convoys at sea adds 20 / N spare to each convoy\'s split; over twice the convoys, half', () => {
+    const g = open(true);
+    const { esc } = meet(g, 60, 300);
+    const group = sea(g, 'UK', 'natl', { dd: 20 }, 'hunt', undefined, [esc]);
+    const w = work(g), n = w.convoys, ch = escortChance(g, 'UK', w);
+    expect(n).toBeGreaterThan(1);
+    expect(spareOf(ch, w) - w.beyond).toBeCloseTo(20 / n, 9);
+    expect(ch.coordinated).toBeCloseTo((w.beyond + 20 / n) / (w.on + w.beyond + 20 / n), 12);
+    expect(ch.chance).toBeCloseTo((w.on * w.onRate + w.beyond * w.beyondRate + (20 / n) * 0.17 * fit(g, group)) / (w.on + w.beyond + 20 / n), 12);
+    // (Counted whole with each convoy, as built before, it would be priced n times over.)
+    expect(ch.coordinated).toBeLessThan((w.beyond + 20) / (w.on + w.beyond + 20));
+    // (The screen's loose share of the group among the escorts with each convoy stays as it was: the small overlap.)
+    expect(w.on + w.beyond).toBeCloseTo(((300 + 20 * FLEETS.escort.loose) * escortsAtSea()!) / n, 9);
+    timesTons(2, () => {
+      const w2 = work(g), c2 = escortChance(g, 'UK', w2);
+      expect(w2.convoys).toBeCloseTo(2 * n, 9);
+      expect(spareOf(c2, w2) - w2.beyond).toBeCloseTo(20 / (2 * n), 9);
+      expect(spareOf(c2, w2) - w2.beyond).toBeCloseTo((spareOf(ch, w) - w.beyond) / 2, 9);
+    });
+  });
+
+  it('with no group the split is unchanged, whatever the convoys at sea', () => {
+    const g = open(true);
+    meet(g, 60, 300);
+    const w = work(g), ch = escortChance(g, 'UK', w);
+    expect(ch.coordinated).toBeCloseTo(w.beyond / (w.beyond + w.on), 12);
+    expect(ch.chance).toBeCloseTo((w.on * w.onRate + w.beyond * w.beyondRate) / (w.on + w.beyond), 12);
+    expect(escortChance(g, 'UK', { ...w, convoys: 2 * w.convoys })).toEqual(ch);
+    expect(escortChance(g, 'UK', { ...w, convoys: 0 })).toEqual(ch);
+    // (A group in harbour is no group.)
+    const { esc } = meet(g, 60, 300);
+    const group = sea(g, 'UK', 'natl', { dd: 20 }, 'hunt', undefined, [esc]);
+    group.stance = 'port';
+    expect(escortChance(g, 'UK', work(g))).toEqual(ch);
+  });
+
+  it('with no convoy at sea the groups add nothing, and a group is never more than whole with one convoy', () => {
+    const g = open(true);
+    const { esc } = meet(g, 60, 300);
+    sea(g, 'UK', 'natl', { dd: 20 }, 'hunt', undefined, [esc]);
+    const w = work(g);
+    // (No convoy sailed: no convoy to share the group over, and nothing to divide by.)
+    timesTons(0, () => {
+      const z = work(g);
+      expect(z.convoys).toBe(0);
+      expect(escortChance(g, 'UK', z)).toEqual({ coordinated: 0, chance: 0 });
+    });
+    const none = escortChance(g, 'UK', { ...w, convoys: 0 });
+    expect(none.coordinated).toBeCloseTo(w.beyond / (w.beyond + w.on), 12);
+    expect(none.chance).toBeCloseTo((w.on * w.onRate + w.beyond * w.beyondRate) / (w.on + w.beyond), 12);
+    // (Fewer than one convoy at sea at once: the group is whole with the one, never priced more than once.)
+    const half = escortChance(g, 'UK', { ...w, convoys: 0.5 });
+    expect(half).toEqual(escortChance(g, 'UK', { ...w, convoys: 1 }));
+    expect(spareOf(half, w) - w.beyond).toBeCloseTo(20, 9);
+  });
+
+  it('one rule for every navy: a German group on Italy\'s route and a British one on Britain\'s, each over its own route\'s convoys at sea', () => {
+    const g = open(true);
+    declareWar(g, 'ITA', 'UK');
+    const ger = sea(g, 'GER', 'natl', { ss: 10 }, 'raid');
+    const uk = sea(g, 'UK', 'wapp', { dd: 300 }, 'escort', 'atlantic');
+    const brit = sea(g, 'UK', 'central', { ss: 10 }, 'raid', undefined, [uk]);
+    const gesc = sea(g, 'GER', 'central', { dd: 300 }, 'escort', 'libya', [ger]);
+    const ukg = sea(g, 'UK', 'natl', { dd: 20 }, 'hunt', undefined, [uk, brit]);
+    const gerg = sea(g, 'GER', 'central', { dd: 20 }, 'hunt', undefined, [ger, gesc]);
+    const seen: number[] = [];
+    for (const [nat, route, grp] of [['UK', atlantic, ukg], ['ITA', libya, gerg]] as const) {
+      const c = convoyCount(g, route)!, w = work(g, route, nat), ch = escortChance(g, nat, w);
+      expect(w.convoys, nat).toBeCloseTo((c.sailed * CAUSE.station.dd!.crossing!) / 30, 12);
+      expect(w.convoys, nat).toBeGreaterThan(1);
+      const groups = 20 / w.convoys;
+      expect(spareOf(ch, w) - w.beyond, nat).toBeCloseTo(groups, 9);
+      expect(ch.chance, nat).toBeCloseTo((w.on * w.onRate + w.beyond * w.beyondRate + groups * fit(g, grp) * column(g, grp.nat, true)) / (w.on + w.beyond + groups), 12);
+      seen.push(w.convoys);
+    }
+    // (Each route's own count: the Atlantic's few big convoys, Libya's many small ones.)
+    expect(seen[1]).toBeGreaterThan(2 * seen[0]);
   });
 });
 
@@ -365,14 +483,14 @@ describe('Q3 (a) and Q4 (a): what it leaves alone', () => {
 });
 
 describe('Q5: price once', () => {
-  it('E is the escorts on the close screen\'s stations with the convoy, k 0.628: the contest at exact values', () => {
+  it('E is the escorts on the close screen\'s stations with the convoy, k 0.984: the contest at exact values', () => {
     const g = open(true);
     for (const dd of [30, 300]) {
       meet(g, 60, dd);
       bare(() => {
         const s = convoySideOf(g, 'UK', atlantic)!, w = work(g);
         expect(s.E).toBeCloseTo(w.on, 12);
-        expect(s.sunk).toBeCloseTo((44 * s.P) / (s.P + 0.628 * s.E), 12);
+        expect(s.sunk).toBeCloseTo((44 * s.P) / (s.P + 0.984 * s.E), 12);
         // (The same ships the eye term reads: with no radar-fitted escort, f = 1 / (1 + c_e E / tries). Built as ruled,
         // and noted: E on the stations prices again what the screen prices.)
         expect(s.fire).toBeCloseTo(1 / (1 + (eyePair()!.ce * s.E) / w.tries), 12);

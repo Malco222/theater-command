@@ -2144,8 +2144,8 @@ export const airKit = (k: AswKit): boolean => k.asdic && k.radar;
  * The chance that one attack on a convoy ends with the boat sunk, by a support group (OEG T10's coordinated column) or by
  * the convoy's close escort (its independent column), with this kit. With the escorts' losses form laid (the design
  * director's ruling of 24 November 2026 17:58Z, Q2 (a); escortChance), the coordinated column is worked by the support
- * groups and by a convoy's escorts beyond its close screen's stations, and the independent column by the escorts on the
- * stations.
+ * groups, shared over the route's convoys at sea at once (his ruling of 22:24Z, 3 (b)), and by a convoy's escorts beyond
+ * its close screen's stations, and the independent column by the escorts on the stations.
  */
 export function incidentRate(k: AswKit, group: boolean): number {
   const I = CAUSE.incident;
@@ -2566,9 +2566,9 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
     if (share <= 0) continue;
     // (Units decide: the ships' part of the hunt goes by their kit; a boat raiding a convoy route of this nation's side
     // meets the convoy's escort instead (convoyWar), and here only the aircraft and the ships' share of its time off it.
-    // With the escorts' losses form laid, the support groups in the route's seas work its incidents as coordinated hunts
-    // (escortChance), so the hunt's ships never take a raiding boat's time on the route here as well: nothing is counted
-    // twice, Q4 (a).)
+    // With the escorts' losses form laid, the support groups in the route's seas work its incidents as coordinated hunts,
+    // shared over its convoys at sea at once (escortChance), so the hunt's ships never take a raiding boat's time on the
+    // route here as well: nothing is counted twice, Q4 (a).)
     const parts = h.kit !== undefined && h.weight > 0 ? { air: (share * h.air!) / h.weight, ships: (share * h.kit) / h.weight } : null;
     const rng = seaRng(g, `hunt:${nat}:${z}`);
     // (Release 2, ruling 241 D1, record only: the sea's hunt as the submarine scene stages it, while its setting is on.)
@@ -2690,9 +2690,9 @@ function patrolSubs(g: Game, nat: string, sunk: Record<number, number>): void {
  * them; with Units decide, also those the convoys' escorts there would sink in their attacks (convoyWar). For the fleet
  * orders' look-ahead. Off, it is the boats times the hunt's share, as before. Boats not raiding keep the hunt's curve
  * (its 1 - raiding split); a raiding boat meets the escort, with the escorts' losses form laid by cause (escortWork and
- * escortChance: the incidents from the boats that try, coordinated with the support groups in the route's seas and the
- * escorts beyond the screen's stations, independent with those on them), and the hunt's ships never take it on the curve
- * as well.
+ * escortChance: the incidents from the boats that try, coordinated with the support groups in the route's seas, shared
+ * over its convoys at sea at once, and the escorts beyond the screen's stations, independent with those on them), and
+ * the hunt's ships never take it on the curve as well.
  */
 export function huntExpected(g: Game, nat: string, z: number, quarry: Fleet[]): number {
   const h = huntersIn(g, nat, z);
@@ -2841,8 +2841,10 @@ type ConvoyRoute = (typeof NAVY.convoys)[number];
  * OEG T2's window, and never more than the pack's torpedoes sink on an average night (the boat ceiling, below): torps,
  * where it is laid. With the escorts' losses form laid (its Q5, 'price once', the design director's ruling of 24 November
  * 2026 17:58Z), E is the escorts on the close screen's stations with the convoy (onStations), a count of ships, and k is
- * set again once on it at the same record point and in the same way as the tons ruling set its own: on the game's P and
- * E at OEG T2's window, where the stations are full (count.sinkOnStations); with that figure unread, E and k as above.
+ * set again once on it at the tons ruling's own record point, solved on the record's own E there, OEG T2's 6.5 escorts
+ * a convoy (count.sinkOnStations; the design director's ruling of 24 November 2026 22:24Z, 1 (b)). The game's stations
+ * at T2 (10.19) are more than the record's E because the game has too few convoys at sea, a fault named and never
+ * tuned, so the contest there sinks fewer ships than the record point. With that figure unread, E and k as above.
  * L is the share of the route's ships sunk, both ways, and so of its cargoes.
  */
 export interface ConvoySide { P: number; E: number; sunk: number; L: number; torps?: number; fire?: number; fired?: number }
@@ -2932,6 +2934,17 @@ function onStations(route: ConvoyRoute, count: ConvoyCount, radarShips: number, 
 const radarOnStations = (route: ConvoyRoute, count: ConvoyCount, radarShips: number, escortShips: number): number => onStations(route, count, radarShips, escortShips).radar;
 
 /**
+ * The convoys a route's escorts are shared over at any one time, as onStations counts them: with the escorts' cycle
+ * read, the route's convoys at sea at once, its convoys sailed a month x a convoy's crossing over the month's days (Q1
+ * (d); about 3.3 on the Atlantic at T2); while the cycle is unread, the convoys sailed a month, as first built. 0 where
+ * none sailed. The escorts' losses form shares its support groups over the same count (escortChance).
+ */
+function convoysShared(count: ConvoyCount): number {
+  if (count.sailed <= 0) return 0;
+  return escortsAtSea() === null ? count.sailed : (count.sailed * CAUSE.station.dd!.crossing!) / MONTH_DAYS;
+}
+
+/**
  * The screen contest on a convoy attacked, as the convoy's side reads it: the boats that try, and the share of them that
  * fire (null where no firing share is laid). The escort's radar before a boat fires, ruled 16:35Z: the count's pack is
  * the boats that fired at T2, against escorts with radar, so the boats that try are the pack / t2, and those that fire
@@ -2964,9 +2977,10 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
   const P = count.boats > 0 ? (pack * boats) / count.boats : 0;
   // (The escorts' losses form, its Q5, 'price once' (the design director's ruling of 24 November 2026 17:58Z, from his
   // 16:58Z ruling): the escorts beyond the screen's stations now hunt as spare ships, so E is the escorts on the stations
-  // with the convoy, and k is set again once on it at the tons ruling's own record point, on the game's P and E at T2's
-  // window as the tons ruling solved its own (count.sinkOnStations). With the form or that figure unread, E is the
-  // route's escort worth over the convoys sailed and k the tons ruling's.)
+  // with the convoy, and k is set again once on it at the tons ruling's own record point, solved on the record's own E
+  // there, 6.5 escorts a convoy (count.sinkOnStations; the design director's ruling of 24 November 2026 22:24Z, 1 (b)).
+  // The game's stations at T2 are more than that, for the game has too few convoys at sea: named, never tuned. With the
+  // form or that figure unread, E is the route's escort worth over the convoys sailed and k the tons ruling's.)
   const kOn = escortsLaid() ? K.sinkOnStations ?? null : null;
   const E = kOn !== null ? onStations(route, count, radarShips, escortShips).all : count.sailed > 0 ? G / count.sailed : 0;
   const k = kOn ?? K.sink!;
@@ -2990,9 +3004,12 @@ function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: nu
 
 // ---- The escort's incidents and kills, by cause (release 2, Units decide) -----------------------------------------
 // The design director's ruling of 24 November 2026 17:58Z on naval-battles/convoy-r2/escort-losses-form.md, with his
-// notes of 17:59Z and 18:00Z: (a) on Q1 to Q4, and Q5, 'price once', from his 16:58Z ruling. One switch, convoycause.json
-// 'escorts': laid as shipped; null, the escort meets the count's incidents (T2's 0.21 a boat on station) at the old
-// split, and E and k stand as the tons ruling set them. One rule for every navy; nothing here reads the date or a flag.
+// notes of 17:59Z and 18:00Z: (a) on Q1 to Q4, and Q5, 'price once', from his 16:58Z ruling; and his rulings of 22:24Z
+// on the build's reading: k on the stations solved once on the record's own escorts, 1 (b); the route's seas as built,
+// 2 (a); the support groups shared over the route's convoys at sea at once, 3 (b); the overshoot named, never tuned,
+// 4 (a). One switch, convoycause.json 'escorts': laid as shipped; null, the escort meets the count's incidents (T2's
+// 0.21 a boat on station) at the old split, and E and k stand as the tons ruling set them. One rule for every navy;
+// nothing here reads the date or a flag.
 
 /** True where the escorts' losses form is laid (convoycause.json 'escorts'). */
 const escortsLaid = (): boolean => CAUSE.escorts === true;
@@ -3014,9 +3031,10 @@ export function escortsMet(tries: number, fire: number): { frustrated: number; a
  * the share that fire, the incidents a convoy attacked (escortsMet), the rate a boat on station meets them in the month,
  * and the escorts a convoy on the close screen's stations and beyond them with each group's mean chance that an
  * incident ends with the boat sunk (OEG Table 10, by each fleet's kit and readiness: the independent column on the
- * stations, the coordinated beyond them), and the route's seas, where its support groups hunt (escortChance).
+ * stations, the coordinated beyond them), the route's seas, where its support groups hunt, and the route's convoys at
+ * sea at once, which its escorts and support groups are shared over (convoysShared; escortChance).
  */
-export interface EscortWork { tries: number; fire: number; frustrated: number; after: number; met: number; rate: number; on: number; beyond: number; onRate: number; beyondRate: number; seas: number[] }
+export interface EscortWork { tries: number; fire: number; frustrated: number; after: number; met: number; rate: number; on: number; beyond: number; onRate: number; beyondRate: number; seas: number[]; convoys: number }
 
 /**
  * The escort's work on a route, as the fleets stand now: null where the form, Units decide or the route's count is not
@@ -3048,26 +3066,32 @@ export function escortWork(g: Game, nat: string, route: ConvoyRoute, count: Conv
     rate: count.boats > 0 ? (count.attacked * m.met) / count.boats : 0,
     on: s.all, beyond: Math.max(0, s.with - s.all),
     onRate: all > 0 ? ind / all : 0, beyondRate: all > 0 ? co / all : 0,
-    seas: zones,
+    seas: zones, convoys: convoysShared(count),
   };
 }
 
 /**
  * Who works an incident on a route (Q2 (a)): it is coordinated (OEG Table 10's coordinated column) with the chance
- * spare / (spare + on stations), and independent otherwise. Spare is the escorts a convoy beyond the close screen's
- * stations (they detach to hunt) plus the support groups, its side's destroyers on hunting duty in the route's seas, as
- * the ruling words it (the design director, 24 November 2026 17:58Z): a group hunting in any sea of the route is spare
- * for an incident in any of them, so the chance is the same in all the route's seas. On stations is the escorts filling
- * the close screen. No new figure: each ship at its own navy's column and kit steps (incidentRate) and its readiness.
- * The escorts are counted a convoy, as the screen counts them, and the support groups whole, as the ruling names them.
- * The chance that an incident ends with the boat sunk is the mean over them.
+ * spare / (spare + on stations), and independent otherwise, all counted for one convoy. Spare is the escorts with the
+ * convoy beyond the close screen's stations (they detach to hunt), counted a convoy as the screen counts them, plus the
+ * support groups, its side's destroyers on hunting duty in the route's seas, as the ruling words it (the design
+ * director, 24 November 2026 17:58Z, and accepted at 22:24Z, 2 (a)): a group hunting in any sea of the route is spare
+ * for an incident in any of them, so the chance is the same in all the route's seas. A support group is in one place at
+ * a time, so its ships are shared over the route's convoys at sea at once (w.convoys, the count the screen shares the
+ * escorts over; the design director's ruling of 24 November 2026 22:24Z, 3 (b)), and never more than whole with one
+ * convoy where fewer than one is at sea at once; with no convoy at sea the groups add nothing. A group hunting in one of
+ * the route's seas also counts at the loose share among the escorts with each convoy (escortWork), as the screen has
+ * always counted it: that small overlap remains, as before. On stations is the escorts filling the close screen. No new
+ * figure: each ship at its own navy's column and kit steps (incidentRate) and its readiness. The chance that an
+ * incident ends with the boat sunk is the mean over them.
  */
 export function escortChance(g: Game, nat: string, w: EscortWork): { coordinated: number; chance: number } {
   let H = 0, h = 0;
+  const share = w.convoys > 0 ? 1 / Math.max(1, w.convoys) : 0;
   for (const f of g.fleets) {
     if (!atSea(f) || f.ships.dd <= 0 || f.stance !== 'hunt' || !w.seas.includes(f.zone) || !allied(g, f.nat, nat)) continue;
-    H += f.ships.dd;
-    h += f.ships.dd * fit(g, f) * incidentRate(aswKit(g, f.nat), true);
+    H += f.ships.dd * share;
+    h += f.ships.dd * share * fit(g, f) * incidentRate(aswKit(g, f.nat), true);
   }
   const spare = w.beyond + H, all = spare + w.on;
   return all > 0 ? { coordinated: spare / all, chance: (w.on * w.onRate + w.beyond * w.beyondRate + h) / all } : { coordinated: 0, chance: 0 };
