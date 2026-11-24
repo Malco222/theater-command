@@ -49,7 +49,7 @@ const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', 
 /** A group's lines. On its airfield's own page the crowding is said once, in the page's head, so its rows leave it out (the UI director, build 1668). */
 export function groupLines(x: GroupRow, crowd = true): string[] {
   return [
-    `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.`,
+    `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.${x.pilots ? ` ${x.pilots}` : ''}${x.joined ? ` ${x.joined}` : ''}`,
     `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct(x.crowd)} of it can fly.` : ''}`,
   ];
 }
@@ -105,7 +105,7 @@ function groupPage(g: Game, id: number): Page | null {
   }
   return {
     id: `group:${id}`, title: x.name.toUpperCase(), headline: `${craft(x)} ${deck ? 'aboard the' : x.ashore >= 0 ? 'ashore at' : 'at'} ${x.baseName}`,
-    note: `${groupLines(x).join(' ')}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ''}, ordered ashore: while it is here its carriers fight as empty carriers.` : ''}`,
+    note: `${x.schools ? `${x.schools} ` : ''}${groupLines(x).join(' ')}${x.ashore >= 0 ? ` A carrier wing${x.fleetName ? ` of the ${x.fleetName}` : ''}, ordered ashore: while it is here its carriers fight as empty carriers.` : ''}`,
     top,
     sections: [{ heading: 'STANDING ORDERS', text: 'What it does between raids.', rows: jobs }, { heading: 'RAIDS', text: 'One raid a month. A raid is flown the moment you order it, and the group is away until next month.', rows: raids }],
   };

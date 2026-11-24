@@ -1379,6 +1379,11 @@ export interface AirFleet extends Storied {
   hours?: number;
   /** Its one experience counter, 0 to 1, written only under that switch. */
   fxp?: number;
+  /**
+   * Under that switch: the pilots who joined it in month `on`, how many, and its experience before the first of them
+   * (`was`), for the card's refit note (the UI director 24 Nov 18:10Z).
+   */
+  joined?: { on: number; n: number; was: number };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

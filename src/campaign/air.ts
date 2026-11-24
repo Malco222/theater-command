@@ -23,15 +23,15 @@ import { clamp, tenthPct } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
-import { armsOf, intoPool, unitsDecide } from './units';
+import { fighterMonth, fighterTypesOn, lawK, typeEdge } from './fighters';
+import { armsOf, intoPool, unitsDecide, wayNow } from './units';
 import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, aswKit, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { patrolFigures, patrolMet, patrolOn, patrolReach, patrolStaff } from './seapatrol';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
-import { storyAir, storyEdge } from './stories';
+import { grade, storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
 import { loseStars, mendStars } from './stars';
 import { groundRules } from './ground';
@@ -323,7 +323,41 @@ export function joinPilots(g: Game, f: AirFleet, n: number, kind: 'ftr' | 'bmr',
   const inXp = kind === 'ftr' && how === 'pool' ? A.poolXp : 0;
   const h = kind === 'ftr' ? blend(hoursOf(g, f), f.ftr, inHours, n) : hoursOf(g, f);
   if (h === null) delete f.hours; else f.hours = h;
-  f.fxp = blend(fxpOf(g, f), had, inXp, n) ?? 0;
+  const was = fxpOf(g, f);
+  f.fxp = blend(was, had, inXp, n) ?? 0;
+  // The card's refit note (the UI director 24 Nov 18:10Z): who joined this month, and the experience before the first of them.
+  f.joined = f.joined?.on === g.turn ? { ...f.joined, n: f.joined.n + n } : { on: g.turn, n, was };
+}
+
+const FIGHTER_WAY: Record<'turn' | 'dive-zoom', string> = { turn: 'turning fight', 'dive-zoom': 'dive and climb' };
+
+/**
+ * Under Units decide, a group's pilots in words for its card (the UI director 24 Nov 18:10Z): the grade first, the
+ * part that changes with play, then the hours where its school is read; and, only in the month new pilots took the
+ * grade down a step, how many joined. Off, both are ''. No raw figure and no "not read": an unread clause is left out.
+ */
+export function pilotWords(g: Game, f: AirFleet): { pilots: string; joined: string } {
+  if (!unitsDecide(g)) return { pilots: '', joined: '' };
+  const xp = fxpOf(g, f), h = hoursOf(g, f), j = f.joined;
+  const pilots = `${grade(xp)} pilots${h !== null ? `, ${Math.round(h)} hours' training` : ''}.`;
+  const joined = j && j.on === g.turn && j.n >= 1 && xp < j.was && grade(xp) !== grade(j.was) ? `${Math.round(j.n)} new pilot${Math.round(j.n) === 1 ? '' : 's'} joined this month.` : '';
+  return { pilots, joined };
+}
+
+/**
+ * Under Units decide, the nation's schools and fighter doctrine, said first on each of its group pages (the UI
+ * director 24 Nov 18:10Z: no nation air force page): the carrier school on a carrier wing's, the flying schools on
+ * the rest. An unread school or doctrine leaves its sentence out; a change training in says when it is ready.
+ */
+export function schoolWords(g: Game, f: AirFleet): string {
+  const A = unitsDecide(g) ? armsOf(g, f.nat)?.air : undefined;
+  if (!A) return '';
+  const deck = deckBred(f), h = deck ? A.deck : A.school;
+  const school = h === null ? '' : deck ? `Your carrier school gives ${Math.round(h)} hours before combat.` : `Your flying schools give ${Math.round(h)} hours before combat.`;
+  const w = A.fighter;
+  const training = w && w.next !== undefined && w.ready !== undefined && g.turn < w.ready;
+  const doctrine = !w ? '' : training ? `Fighter doctrine: ${FIGHTER_WAY[w.id]}; ${FIGHTER_WAY[w.next!]} ready in ${turnToDate(w.ready!).label}.` : `Fighter doctrine: ${FIGHTER_WAY[wayNow(g, w)]}.`;
+  return [school, doctrine].filter(Boolean).join(' ');
 }
 
 /** Seeds every group's pilots as a grand campaign opens with Units decide (staff.ts startOpen, after the store). */
@@ -1630,6 +1664,11 @@ export interface AirAssess {
    */
   typeEdge?: number;
   /**
+   * Under Units decide, the pilots' training on the raid card (the UI director 24 Nov 18:10Z), only where it moves
+   * the fight (k > 0) and every group on both sides has its hours read: "Pilots' training: ours 250 hours, theirs 350."
+   */
+  pilotsLine?: string;
+  /**
    * Units decide, the fighters' own fight by day (sweep-height-form-1124.md, escort-height-form-1124.md): the defenders'
    * warning in time W (0 to 1), who is above in bands (x: 1 the attackers, 0 level, -1 the defenders; a sweep's 1 - 2W,
    * an escort's the mean of its groups' by role) and the field's height edge h a band. Set, the escort's flat share is
@@ -1872,6 +1911,16 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const pilots = (f: AirFleet) => (unitsDecide(g) ? { h: hoursOf(g, f), q: heldOf(g, f) } : {});
     const E = typeEdge(g, out.att.map((x) => ({ f: x.f, w: x.ftr * worth(g, x.f), ...pilots(x.f) })), out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w * worth(g, x.f), ...pilots(x.f) })), m);
     out.typeEdge = E;
+    // The raid card's pilots' line: the escort's mean hours against the defenders', each by the fighters that fight.
+    if (lawK(g) > 0) {
+      const mean = (xs: { f: AirFleet; w: number }[]): number | null => {
+        let s = 0, n = 0;
+        for (const x of xs) { if (x.w <= 0) continue; const h = hoursOf(g, x.f); if (h === null) return null; s += x.w * h; n += x.w; }
+        return n > 0 ? s / n : null;
+      };
+      const ours = mean(out.att.map((x) => ({ f: x.f, w: x.ftr }))), theirs = mean(out.def.map((x) => ({ f: x.f, w: x.f.ftr * x.w })));
+      if (ours !== null && theirs !== null) out.pilotsLine = `Pilots' training: ours ${Math.round(ours)} hours, theirs ${Math.round(theirs)}.`;
+    }
     out.Epow *= Math.exp(E / 2);
     out.Dpow *= Math.exp(-E / 2);
     dPlain *= Math.exp(-E / 2);
