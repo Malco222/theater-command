@@ -4,7 +4,7 @@
 // 1 / (1 + c r), r the radar-fitted escorts a convoy for each boat trying, c = 7/3 from the record's T2 ratio of about 1.
 // With no radar-fitted escort every boat that tries fires. Applied once, on the pack the contest and the ceiling read;
 // the escort's kills keep the count's incidents. Nothing in it reads the flag or the date.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { CAUSE, FLEETS, NAVY, boatCeiling, convoyCount, convoyMeeting, convoySideOf, firingShare, huntExpected, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -34,6 +34,10 @@ function meet(g: Game, ss: number, dd: number): Fleet {
   sea(g, 'Home Fleet', 'wapp', { dd }, 'escort', 'atlantic');
   return sea(g, 'U-boat Fleet', 'natl', { ss }, 'raid');
 }
+// (Radar alone, as first ruled: the eye term is unread here, and tested in convoy-load-r2.)
+const eyeKept = CAUSE.firing.eye!.effective41;
+beforeAll(() => { CAUSE.firing.eye!.effective41 = null; });
+afterAll(() => { CAUSE.firing.eye!.effective41 = eyeKept; });
 function unread<T>(f: () => T): T {
   const keep = CAUSE.firing.t2;
   CAUSE.firing.t2 = null;
