@@ -88995,7 +88995,11 @@
       done.push(x);
     }
     const out = inside2.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
-    const settle2 = () => backInside(looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i])));
+    const settle2 = () => {
+      const back = looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i]));
+      backInside(back);
+      return back.length;
+    };
     let result;
     try {
       result = call();
@@ -89003,7 +89007,8 @@
       settle2();
       throw e;
     }
-    settle2();
+    const put = settle2();
+    if (!looks && put > 0 && result && typeof result === "object" && "view" in result) result.view = view2();
     return result;
   }
   var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);
