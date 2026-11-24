@@ -271,8 +271,9 @@ public:
 	void ForgetFleetPlaces() { FleetPlaces.Reset(); FleetSpots.Reset(); }
 	/**
 	 * A way by water from one point of the map to another, as points from the one to the other: round the land, a
-	 * little off the coasts, and straight where the water is open. Where none is found in the box round the two it
-	 * is the straight line between them.
+	 * little off the coasts, and straight where the water is open. Empty where none is found in the box round the
+	 * two (a strait thinner than the search's squares, say): the fleet is then simply found at its new place, as it
+	 * was before ships sailed, and never sails over the land.
 	 */
 	TArray<FVector2D> WaterWay(const FVector2D& From, const FVector2D& To) const;
 	/**

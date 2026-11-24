@@ -10723,11 +10723,15 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 				{
 					Way.Add(MapToWorld(Point.X, Point.Y, 0.02));
 				}
-				if (bCarried && Way.Num() > 0)
+				// (No way by water found: it is found at its new place, as before ships sailed, and never crosses land.)
+				if (Way.Num() >= 2)
 				{
-					Way[0] = Now; // (down from the hand onto the water as it goes)
+					if (bCarried)
+					{
+						Way[0] = Now; // (down from the hand onto the water as it goes)
+					}
+					Piece->SailAlong(Way, LastPieceYaw);
 				}
-				Piece->SailAlong(Way, LastPieceYaw);
 			}
 			Afloat.Add(Fleet.Id);
 		}
@@ -10912,7 +10916,7 @@ TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVect
 	}
 	if (!bFound)
 	{
-		return Way; // (no way by water in the box: the straight line, as before)
+		return TArray<FVector2D>(); // (no way by water in the box: no sailing, rather than a line over the land)
 	}
 	TArray<FVector2D> Squares;
 	for (int32 At = GoalAt; At != INDEX_NONE; At = Came[At])
@@ -10921,7 +10925,7 @@ TArray<FVector2D> ACampaignMapActor::WaterWay(const FVector2D& From, const FVect
 	}
 	if (Squares.Num() < 2)
 	{
-		return Way;
+		return TArray<FVector2D>(); // (the two ends in one square with land between: no sailing either)
 	}
 	Algo::Reverse(Squares);
 	Squares[0] = From;
