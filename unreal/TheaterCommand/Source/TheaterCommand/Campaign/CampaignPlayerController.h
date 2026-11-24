@@ -47,6 +47,10 @@ struct FRegionPanelInfo
 	TArray<FOrderLine> Forming;
 	FString FormingHead; // the total of what is on order here, with its breakdown
 	FCityShelves Glance; // (release 2) the AT A GLANCE page: garrison, on order here, building and repairs
+	// (Release 2, the town card, tc.UI.TownCard.) The province's figures as tiles: what it pays a month (-1 where the
+	// rules give no figure), its industry, its worth and its works' level; and the details line without them.
+	int32 TileYield = -1, TileIndustry = 0, TileWorth = 0, TileWorks = 0;
+	FText DetailsShort;
 	int32 Revision = 0;
 };
 
@@ -896,6 +900,16 @@ public:
 	/** The town's plots as a bar of pictures; whether it is to be shown; a click on a plot; and an order from its choices. */
 	const FTownBar& GetTownBar() const { return TownBar; }
 	bool IsTownBarShown() const;
+	/**
+	 * (Release 2; Brian, 24 November 2026: "lets improve these graphics and UI. its very underwhelming".) The new
+	 * province panel and the town card, under tc.UI.TownCard (off until the art director passes the Mac stills;
+	 * -TheaterTownCard turns it on for a run). With it on, the town's plots are a card the player opens from the
+	 * province panel, not a bar that stands whenever the town is picked; Esc or its close puts it away.
+	 */
+	static bool IsTownCardStyle();
+	void OpenTownCard();
+	void CloseTownCard();
+	bool IsTownCardOpen() const { return bTownCardOpen && IsTownBarShown(); }
 	/** Where the armies' colours and their strength plates are on the screen, in its own pixels: the towns' name plates step aside from them. */
 	void GetColoursOnScreen(TArray<FBox2D>& Out) const;
 	/** Whether the reminder of the keys stands open: through a new player's first month, while the ? key is held, or kept open by a click on its mark. */
@@ -1741,6 +1755,7 @@ private:
 	bool bBySea = false;
 	int32 PanelRevision = 0;
 	FTownBar TownBar;
+	bool bTownCardOpen = false; // (tc.UI.TownCard) the town card stands open over the map
 	int32 SelectedRegion = INDEX_NONE;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;

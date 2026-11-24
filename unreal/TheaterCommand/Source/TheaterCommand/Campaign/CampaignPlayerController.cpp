@@ -1411,9 +1411,55 @@ void ACampaignPlayerController::ProvinceAction(const FString& Action)
 
 void ACampaignPlayerController::OpenTownPlan()
 {
+	if (IsTownCardStyle())
+	{
+		OpenTownCard();
+		return;
+	}
 	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE)
 	{
 		OpenPage(FString::Printf(TEXT("town:%d"), Map->GetSelectedRegion()));
+	}
+}
+
+namespace
+{
+	// (Release 2; Brian, 24 November 2026, of the province panel and the build plots: "lets improve these graphics and
+	// UI. its very underwhelming".) The new province panel and the town card, off until the art director has passed the
+	// Mac's stills of them; -TheaterTownCard turns them on for a run.
+	TAutoConsoleVariable<int32> CVarTownCard(
+		TEXT("tc.UI.TownCard"), 0,
+		TEXT("1 shows the new province panel (the town's street at its head, its figures as tiles) and the town card (the street with its plots, what can go up on each, a picture of each building); 0 the panel and the bar of plots as before (as -TheaterTownCard)."));
+}
+
+bool ACampaignPlayerController::IsTownCardStyle()
+{
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterTownCard"));
+	return bAsked || CVarTownCard.GetValueOnGameThread() != 0;
+}
+
+void ACampaignPlayerController::OpenTownCard()
+{
+	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE && Map->GetSelectedRegion() == TownBar.Region && TownBar.Plots.Num() > 0)
+	{
+		bTownCardOpen = true;
+		if (!TownBar.Plots.IsValidIndex(TownBar.Picked))
+		{
+			// (the first free plot is picked, or the first plot where none is free)
+			const int32 Free = TownBar.Plots.IndexOfByPredicate([](const FTownPlot& Plot) { return Plot.Line.IsEmpty(); });
+			TownBar.Picked = Free != INDEX_NONE ? Free : 0;
+		}
+		++TownBar.Revision;
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	}
+}
+
+void ACampaignPlayerController::CloseTownCard()
+{
+	if (bTownCardOpen)
+	{
+		bTownCardOpen = false;
+		++TownBar.Revision;
 	}
 }
 
@@ -5503,6 +5549,10 @@ void ACampaignPlayerController::Escape()
 	else if (FaceOff.bVisible)
 	{
 		CloseFaceOff();
+	}
+	else if (IsTownCardOpen())
+	{
+		CloseTownCard(); // (tc.UI.TownCard: Esc goes back one card, to the province)
 	}
 	else if (AgentInHand != INDEX_NONE)
 	{
@@ -12257,7 +12307,8 @@ bool ACampaignPlayerController::IsTownBarShown() const
 {
 	// (the bottom of the screen is the army's or the fleet's while one is in hand or being looked at; from release 2,
 	// once the frame folds, a look gives the bottom up when other ground is picked, and that town's plots may take it)
-	return TownBar.Plots.Num() > 0 && !IsTrayShown() && Map.IsValid() && Map->GetSelectedRegion() == TownBar.Region && !bWatching && !Newsreel.bOn && !Opening.bVisible;
+	return TownBar.Plots.Num() > 0 && !IsTrayShown() && Map.IsValid() && Map->GetSelectedRegion() == TownBar.Region && !bWatching && !Newsreel.bOn && !Opening.bVisible
+		&& (bTownCardOpen || !IsTownCardStyle()); // (tc.UI.TownCard: the card stands only once it is opened)
 }
 
 void ACampaignPlayerController::PickTownPlot(int32 Index)
@@ -12296,6 +12347,10 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	{
 		// The town's bar is written afresh with the panel; the plot picked on it is kept while the town is the same.
 		const int32 Kept = TownBar.Region == RegionId ? TownBar.Picked : INDEX_NONE;
+		if (TownBar.Region != RegionId)
+		{
+			bTownCardOpen = false; // (tc.UI.TownCard: the card is of one town; another place picked puts it away)
+		}
 		const int32 Next = TownBar.Revision + 1;
 		TownBar = FTownBar();
 		TownBar.Revision = Next;
@@ -12356,6 +12411,21 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	if (Region.bOre) Lines.Add(TEXT("Iron ore"));
 	if (Region.bDepot) Lines.Add(TEXT("Supply depot"));
 	RegionPanel.Details = FText::FromString(CampaignText::Phrases(FString::Join(Lines, TEXT("   \u00B7   "))));
+	{
+		// (tc.UI.TownCard) The figures go into tiles; the line keeps the rest.
+		RegionPanel.TileIndustry = Region.Factories;
+		RegionPanel.TileWorth = Region.VictoryPoints;
+		RegionPanel.TileWorks = Region.FortLevel;
+		TArray<FString> Short;
+		for (const FString& Line : Lines)
+		{
+			if (!Line.StartsWith(TEXT("Industry ")) && !Line.StartsWith(TEXT("Worth ")) && !Line.StartsWith(TEXT("Fortified, level ")))
+			{
+				Short.Add(Line);
+			}
+		}
+		RegionPanel.DetailsShort = FText::FromString(CampaignText::Phrases(FString::Join(Short, TEXT("   \u00B7   "))));
+	}
 
 	// Who is standing here.
 	TArray<FString> ForceLines;
@@ -12429,7 +12499,9 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			{
 				// (where the province is named for its city, its name has said so already)
 				RegionPanel.Details = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("Chief town %s  \u00B7  %s"), *Province.Town, *RegionPanel.Details.ToString())));
+				RegionPanel.DetailsShort = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("Chief town %s  \u00B7  %s"), *Province.Town, *RegionPanel.DetailsShort.ToString())));
 			}
+			RegionPanel.TileYield = Province.YieldTotal;
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");

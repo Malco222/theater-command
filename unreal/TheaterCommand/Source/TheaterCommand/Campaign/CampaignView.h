@@ -1976,4 +1976,5 @@ struct FProvinceInfo
 	FString PlacesHead;
 	TArray<FString> PlacesLines;
 	FString TownKind; // capital, city, town or village
+	int32 YieldTotal = -1; // (release 2, the town card's tiles) what the province pays a month in all; -1 where the rules give none
 };

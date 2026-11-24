@@ -46,6 +46,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/SCanvas.h"
 #include "Widgets/Text/SRichTextBlock.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -3210,6 +3211,324 @@ namespace
 		}
 		Kept.Add(Key, Brush);
 		return Brush.Get() ? Brush.Get() : OrderSignBrush(Key);
+	}
+
+	// ---- (Release 2, the town card, tc.UI.TownCard; Brian, 24 November 2026, of the province panel and the build plots:
+	// "lets improve these graphics and UI. its very underwhelming".) Its pictures, painted offline from the ground
+	// battles' own houses by Tools/town_card/town_pictures.py, as the art director passed them (round 2, 24 November):
+	// the town's street, each plot's look laid into it (only the pixels that differ, on a clear ground), and each
+	// building alone, 16 to 9 and 4 to 3. No flag is painted on a pole: the province owner's own is laid on it here.
+
+	/** One of the town card's pictures (Content/TownCard/<File>), read once, with its smaller copies; null if it is not there. */
+	const FSlateBrush* TownCardPicture(const FString& File)
+	{
+		static TMap<FString, TSharedPtr<FSlateBrush>> Kept;
+		if (const TSharedPtr<FSlateBrush>* Found = Kept.Find(File))
+		{
+			return Found->Get();
+		}
+		TSharedPtr<FSlateBrush> Brush;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("TownCard") / File;
+		FImage Image;
+		if (FPaths::FileExists(Path) && FImageUtils::LoadImage(*Path, Image) && Image.SizeX > 0 && Image.SizeY > 0)
+		{
+			// (shown at half its size or less: read from the full size alone, its roofs and stones would shimmer)
+			FImage Pixels;
+			Image.CopyTo(Pixels, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+			const TArrayView64<FColor> View = Pixels.AsBGRA8();
+			TArray<FColor> Colours;
+			Colours.Append(View.GetData(), static_cast<int32>(View.Num()));
+			if (UTexture2D* Texture = CampaignTextures::Create(Pixels.SizeX, Pixels.SizeY, Colours, true, false, NAME_None))
+			{
+				Texture->AddToRoot();
+				Brush = MakeShared<FSlateBrush>();
+				Brush->SetResourceObject(Texture);
+				Brush->ImageSize = FVector2D(Pixels.SizeX, Pixels.SizeY);
+				Brush->DrawAs = ESlateBrushDrawType::Image;
+			}
+		}
+		if (!Brush.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("The town card's picture %s could not be read"), *Path);
+		}
+		Kept.Add(File, Brush);
+		return Brush.Get();
+	}
+
+	/** Where each piece of the town card's street goes, as town-card.json gives it (in the painting's pixels). */
+	struct FTownPiece
+	{
+		FVector2D At = FVector2D::ZeroVector, Size = FVector2D::ZeroVector;
+		TArray<FVector4> Flags; // a pole's top, the pixels a metre there, and the way its flag flies (+1 or -1)
+	};
+	struct FTownSpot
+	{
+		FString Rest; // its look in the street picture itself: lot or house
+		TArray<FVector2D> Ground; // the plot's four corners on the ground
+		FVector2D Foot = FVector2D::ZeroVector; // the middle of its front edge
+		TMap<FString, FTownPiece> Pieces; // its other looks: going, market, farm, school, camp, hospital, hall, lot, house
+	};
+	struct FTownStreet
+	{
+		FVector2D Size = FVector2D(1824.0, 568.0);
+		TArray<FTownSpot> Spots;
+	};
+	struct FTownCardMeta
+	{
+		TMap<FString, FTownStreet> Streets; // town (two plots) and city (four)
+		TMap<FString, TArray<FVector4>> Flags; // the poles in each building's own picture, by its file's name
+	};
+
+	const FTownCardMeta& TownCardMeta()
+	{
+		static FTownCardMeta Meta;
+		static bool bRead = false;
+		if (bRead)
+		{
+			return Meta;
+		}
+		bRead = true;
+		FString Text;
+		TSharedPtr<FJsonObject> Root;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("TownCard") / TEXT("town-card.json")))
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("The town card's town-card.json could not be read: its street stands without its plots"));
+			return Meta;
+		}
+		auto Numbers = [](const TSharedPtr<FJsonValue>& Value) -> TArray<double>
+		{
+			TArray<double> Out;
+			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+			if (Value.IsValid() && Value->TryGetArray(List))
+			{
+				for (const TSharedPtr<FJsonValue>& Each : *List)
+				{
+					Out.Add(Each->AsNumber());
+				}
+			}
+			return Out;
+		};
+		auto ReadFlags = [&Numbers](const TSharedPtr<FJsonObject>& Object, TArray<FVector4>& Out)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+			if (Object.IsValid() && Object->TryGetArrayField(TEXT("flags"), List))
+			{
+				for (const TSharedPtr<FJsonValue>& Each : *List)
+				{
+					const TArray<double> F = Numbers(Each);
+					if (F.Num() >= 4)
+					{
+						Out.Add(FVector4(F[0], F[1], F[2], F[3]));
+					}
+				}
+			}
+		};
+		const TSharedPtr<FJsonObject>* Streets = nullptr;
+		if (Root->TryGetObjectField(TEXT("streets"), Streets))
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Streets)->Values)
+			{
+				const TSharedPtr<FJsonObject> Object = Each.Value->AsObject();
+				if (!Object.IsValid())
+				{
+					continue;
+				}
+				FTownStreet& Street = Meta.Streets.Add(Each.Key);
+				const TArray<double> Size = Numbers(Object->TryGetField(TEXT("size")));
+				if (Size.Num() >= 2)
+				{
+					Street.Size = FVector2D(Size[0], Size[1]);
+				}
+				const TArray<TSharedPtr<FJsonValue>>* Spots = nullptr;
+				if (!Object->TryGetArrayField(TEXT("spots"), Spots))
+				{
+					continue;
+				}
+				for (const TSharedPtr<FJsonValue>& SpotValue : *Spots)
+				{
+					const TSharedPtr<FJsonObject> SpotObject = SpotValue->AsObject();
+					FTownSpot& Spot = Street.Spots.AddDefaulted_GetRef();
+					if (!SpotObject.IsValid())
+					{
+						continue;
+					}
+					SpotObject->TryGetStringField(TEXT("rest"), Spot.Rest);
+					const TArray<TSharedPtr<FJsonValue>>* Ground = nullptr;
+					if (SpotObject->TryGetArrayField(TEXT("ground"), Ground))
+					{
+						for (const TSharedPtr<FJsonValue>& Corner : *Ground)
+						{
+							const TArray<double> C = Numbers(Corner);
+							if (C.Num() >= 2)
+							{
+								Spot.Ground.Add(FVector2D(C[0], C[1]));
+							}
+						}
+					}
+					const TArray<double> Foot = Numbers(SpotObject->TryGetField(TEXT("tag")));
+					if (Foot.Num() >= 2)
+					{
+						Spot.Foot = FVector2D(Foot[0], Foot[1]);
+					}
+					const TSharedPtr<FJsonObject>* Pieces = nullptr;
+					if (SpotObject->TryGetObjectField(TEXT("pieces"), Pieces))
+					{
+						for (const TPair<FString, TSharedPtr<FJsonValue>>& PieceValue : (*Pieces)->Values)
+						{
+							const TSharedPtr<FJsonObject> PieceObject = PieceValue.Value->AsObject();
+							const TArray<double> Box = PieceObject.IsValid() ? Numbers(PieceObject->TryGetField(TEXT("box"))) : TArray<double>();
+							if (Box.Num() < 4)
+							{
+								continue;
+							}
+							FTownPiece& Piece = Spot.Pieces.Add(PieceValue.Key);
+							Piece.At = FVector2D(Box[0], Box[1]);
+							Piece.Size = FVector2D(Box[2], Box[3]);
+							ReadFlags(PieceObject, Piece.Flags);
+						}
+					}
+				}
+			}
+		}
+		const TSharedPtr<FJsonObject>* Pictures = nullptr;
+		if (Root->TryGetObjectField(TEXT("pictures"), Pictures))
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Pictures)->Values)
+			{
+				ReadFlags(Each.Value->AsObject(), Meta.Flags.Add(Each.Key));
+			}
+		}
+		return Meta;
+	}
+
+	/** A plot's look in the town card's pictures: lot, going (a first level going up), or its line (market, farm, ...). */
+	FString TownLookOf(const FTownPlot& Plot)
+	{
+		return Plot.Line.IsEmpty() ? FString(TEXT("lot")) : (Plot.bBuilding && Plot.Level <= 0) ? FString(TEXT("going")) : Plot.Line;
+	}
+
+	/** (tc.UI.TownCard) The plots' outlines on the town's street, and the stems from their tags: drawn lines, no hits. */
+	class STownPlotMarks : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(STownPlotMarks) {}
+			SLATE_ARGUMENT(FVector2D, Size)
+		SLATE_END_ARGS()
+
+		struct FMark
+		{
+			TArray<FVector2D> Line;
+			FLinearColor Ink = FLinearColor::White;
+			float Width = 1.0f;
+			bool bClosed = false;
+		};
+		TArray<FMark> Marks;
+
+		void Construct(const FArguments& Args)
+		{
+			Size = Args._Size;
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return Size; }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			for (const FMark& Mark : Marks)
+			{
+				TArray<FVector2D> Points = Mark.Line;
+				if (Mark.bClosed && Points.Num() > 2)
+				{
+					Points.Add(Points[0]);
+				}
+				if (Points.Num() >= 2)
+				{
+					// (a soft halo under the picked plot's line, so it reads on pale gravel and dark grass alike)
+					if (Mark.Width >= 2.0f)
+					{
+						FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), true, Mark.Width + 3.0f);
+					}
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Mark.Ink, true, Mark.Width);
+				}
+			}
+			return LayerId + 2;
+		}
+
+	private:
+		FVector2D Size = FVector2D(1.0, 1.0);
+	};
+
+	/** (tc.UI.TownCard) The fade at the foot of the province panel's picture, into the panel's leather: made once. */
+	const FSlateBrush* TownFadeBrush()
+	{
+		static TSharedPtr<FSlateBrush> Brush;
+		if (!Brush.IsValid())
+		{
+			TArray<FColor> Pixels;
+			const FColor Hide = Leather.ToFColor(true);
+			for (int32 Y = 0; Y < 64; ++Y)
+			{
+				const float T = FMath::Clamp((Y / 63.0f - 0.3f) / 0.7f, 0.0f, 1.0f);
+				FColor C = Hide;
+				C.A = static_cast<uint8>(FMath::RoundToInt32(255.0f * FMath::Pow(T, 1.3f)));
+				Pixels.Add(C);
+			}
+			Brush = MakeShared<FSlateBrush>();
+			if (UTexture2D* Texture = CampaignTextures::Create(1, 64, Pixels, true, false, NAME_None))
+			{
+				Texture->AddToRoot();
+				Brush->SetResourceObject(Texture);
+				Brush->ImageSize = FVector2D(1.0, 64.0);
+				Brush->DrawAs = ESlateBrushDrawType::Image;
+			}
+			else
+			{
+				Brush->DrawAs = ESlateBrushDrawType::NoDrawType;
+			}
+		}
+		return Brush.Get();
+	}
+
+	/** (tc.UI.TownCard) The card's own brushes and buttons, in the UI kit's colours: made once, kept for the game. */
+	struct FTownLook
+	{
+		FSlateRoundedBoxBrush Well, Tile, Tag;
+		FButtonStyle Row, RowOn, Seg, SegOn, Build, Quiet, Close, TagButton, TagButtonOn, Town;
+		FTownLook()
+			: Well(FLinearColor(FColor::FromHex(TEXT("0E0B08"))), 4.0f, FLinearColor(FColor::FromHex(TEXT("8A6B3B"))), 1.0f)
+			, Tile(FLinearColor(FColor::FromHex(TEXT("211A13"))), 4.0f, FLinearColor(FColor::FromHex(TEXT("4B3D2D"))), 1.0f)
+			, Tag(FLinearColor(FColor::FromHex(TEXT("17120D"))).CopyWithNewOpacity(0.88f), 4.0f, FLinearColor(FColor::FromHex(TEXT("8A6B3B"))), 1.0f)
+		{
+			const FLinearColor Desk(FColor::FromHex(TEXT("211A13"))), Lit(FColor::FromHex(TEXT("2D241A"))), Edge(FColor::FromHex(TEXT("4B3D2D"))), Brass700(FColor::FromHex(TEXT("8A6B3B")));
+			const FLinearColor Brass300(FColor::FromHex(TEXT("E0B872"))), Brass200(FColor::FromHex(TEXT("ECC884"))), Ground(FColor::FromHex(TEXT("17120D")));
+			auto Make = [](const FLinearColor& Fill, const FLinearColor& Hover, const FLinearColor& Outline, float Width, const FLinearColor& HoverOutline)
+			{
+				FButtonStyle Style;
+				Style.SetNormal(FSlateRoundedBoxBrush(Fill, 4.0f, Outline, Width));
+				Style.SetHovered(FSlateRoundedBoxBrush(Hover, 4.0f, HoverOutline, Width));
+				Style.SetPressed(FSlateRoundedBoxBrush(Hover, 4.0f, HoverOutline, Width + 0.5f));
+				Style.SetDisabled(FSlateRoundedBoxBrush(Fill, 4.0f, Outline, Width));
+				Style.SetNormalPadding(FMargin(0.0f));
+				Style.SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				return Style;
+			};
+			Row = Make(Desk, Lit, Edge, 1.0f, Brass700);
+			RowOn = Make(Lit, Lit, Brass300, 2.0f, Brass300);
+			Seg = Make(Lit, FLinearColor(FColor::FromHex(TEXT("3A2E22"))), Brass700, 1.0f, Brass300);
+			SegOn = Make(Brass300, Brass200, Brass300, 1.0f, Brass200);
+			Build = Make(Brass300, Brass200, Brass300, 1.0f, Brass200);
+			Quiet = Make(Desk, Lit, Edge, 1.0f, Brass700);
+			Close = Make(Desk, Lit, Brass700, 1.0f, Brass300);
+			TagButton = Make(Ground.CopyWithNewOpacity(0.88f), Lit.CopyWithNewOpacity(0.94f), Cream, 1.0f, Brass300);
+			TagButtonOn = Make(Brass300, Brass200, Brass300, 1.0f, Brass200);
+			Town = Make(Lit, FLinearColor(FColor::FromHex(TEXT("3A2E22"))), Brass300, 2.0f, Brass200);
+		}
+	};
+	const FTownLook& TownLook()
+	{
+		static const FTownLook Look;
+		return Look;
 	}
 
 	/** Where the towns' name plates and their badges were last drawn, in the screen's own units: what a sky's plate steps clear of. */
@@ -6485,9 +6804,18 @@ namespace
 								.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the panel is not the map
 								[
 									SNew(SVerticalBox)
+									// (Release 2, tc.UI.TownCard.) The head of a province with a town of the player's: its street, as
+									// it stands, across the panel's full width, the province's name lettered on it. (The box is laid
+									// out with the town's bar, LayOutTownHero.)
+									+ SVerticalBox::Slot().AutoHeight().Padding(-18.5f, -12.5f, -18.5f, 4.0f)
+									[
+										SAssignNew(TownHeroBox, SBox)
+										.Visibility_Lambda([this]() { return TownHeroShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
+										.Visibility_Lambda([this]() { return TownHeroShown() ? EVisibility::Collapsed : EVisibility::Visible; })
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Name : FText::GetEmpty(); })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -6510,7 +6838,17 @@ namespace
 									[
 										// (check 19: it folds where a dot stands, and the dot goes)
 										SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(340.0f)
-										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Details : FText::GetEmpty(); })
+										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return !Info ? FText::GetEmpty() : ACampaignPlayerController::IsTownCardStyle() ? Info->DetailsShort : Info->Details; })
+									]
+									// (Release 2, tc.UI.TownCard.) The province's figures as tiles, two by two: what it pays a
+									// month, its industry, what it is worth in the war, and its works.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									[
+										SNew(SBox)
+										.Visibility_Lambda([]() { return ACampaignPlayerController::IsTownCardStyle() ? EVisibility::Visible : EVisibility::Collapsed; })
+										[
+											ProvinceTiles(Region)
+										]
 									]
 									// (Release 2, the art director's read of run 2, 22 November: mend 3. Over an enemy's town the list ran
 									// to fourteen lines, its folds left "4)" alone on a line, and it pushed the shelves down. Where the
@@ -6551,8 +6889,9 @@ namespace
 						// back. Only the bar goes: the "?" in the corner stays put away while a town is open, as before.)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 						[
-							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 11.0f, 14.0f, 13.0f))
-							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() && !GlanceTabShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+							Piece(SNew(SBorder).BorderImage(&PanelBrush)
+							.Padding_Lambda([]() { return ACampaignPlayerController::IsTownCardStyle() ? FMargin(22.0f, 20.0f, 22.0f, 20.0f) : FMargin(16.0f, 11.0f, 14.0f, 13.0f); })
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() && (!GlanceTabShown() || ACampaignPlayerController::IsTownCardStyle()) ? EVisibility::Visible : EVisibility::Collapsed; })
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the bar is not the map
 							[
 								SAssignNew(TownBarBox, SVerticalBox)
@@ -9046,7 +9385,12 @@ namespace
 							SNew(STextBlock).Text(Info.PlacesText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
-					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)
+					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0 && ACampaignPlayerController::IsTownCardStyle() && Controller->GetMap() && Controller->GetTownBar().Region == Controller->GetMap()->GetSelectedRegion() && Controller->GetTownBar().Plots.Num() > 0)
+					{
+						// (Release 2, tc.UI.TownCard) The town, as one row that opens its card.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[TownRow(Controller->GetTownBar())];
+					}
+					else if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)
 					{
 						// The town: its building plots as a row of lots, each with what stands on it, and the way to its plan.
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
@@ -9289,6 +9633,7 @@ namespace
 			{
 				ShownTownBar = Controller->GetTownBar().Revision;
 				LayOutTownBar(Controller->GetTownBar());
+				LayOutTownHero(Controller->GetTownBar());
 			}
 
 			// Deal the cards again whenever the army in hand has changed.
@@ -15171,11 +15516,638 @@ namespace
 
 		/** Lays widgets out in rows of so many columns, each column the same width. */
 		/** The town's bar: a picture for every building plot, and above it the choices for the plot that is picked. */
+		/** (tc.UI.TownCard) Whether the province panel opens with its town's street: a province picked whose town has plots. */
+		bool TownHeroShown() const
+		{
+			if (!ACampaignPlayerController::IsTownCardStyle() || !Controller.IsValid() || !Controller->GetMap())
+			{
+				return false;
+			}
+			const FTownBar& Bar = Controller->GetTownBar();
+			return Bar.Plots.Num() > 0 && Bar.Region == Controller->GetMap()->GetSelectedRegion() && Bar.Region == TownHeroRegion && Controller->GetRegionPanel().bVisible;
+		}
+
+		/** (tc.UI.TownCard) The province panel's head, laid out with the town's bar: the street, its foot faded into the panel, the province's name on it. */
+		void LayOutTownHero(const FTownBar& Bar)
+		{
+			if (!TownHeroBox.IsValid())
+			{
+				return;
+			}
+			TownHeroRegion = Bar.Plots.Num() > 0 ? Bar.Region : INDEX_NONE;
+			if (!ACampaignPlayerController::IsTownCardStyle() || Bar.Plots.Num() == 0)
+			{
+				TownHeroBox->SetContent(SNew(SSpacer));
+				return;
+			}
+			const FString Province = Controller.IsValid() ? Controller->GetRegionPanel().Name.ToString() : FString();
+			// (387 of the panel's 390 between its brass edges; the street at 208 high, its church in the middle)
+			const float High = 208.0f, Scale = High / 568.0f;
+			TownHeroBox->SetContent(
+				SNew(SBox).WidthOverride(387.0f).HeightOverride(High)
+				[
+					SNew(SOverlay)
+					+ SOverlay::Slot()[TownStreetView(Bar, Scale, 387.0f, Bar.Plots.Num() <= 2 ? 960.0f : 885.0f, false)]
+					+ SOverlay::Slot().VAlign(VAlign_Bottom)[SNew(SBox).HeightOverride(High * 0.7f)[SNew(SImage).Image(TownFadeBrush())]]
+					+ SOverlay::Slot().VAlign(VAlign_Bottom).Padding(18.5f, 0.0f, 18.5f, 4.0f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(TEXT("PROVINCE"))).Font(SmallCaps()).ColorAndOpacity(Brass)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Province)).Font(Serif(TEXT("Regular"), 25.5f)).ColorAndOpacity(Cream)
+							.ShadowOffset(FVector2D(0.0, 2.0)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f))
+						]
+					]
+				]);
+		}
+
+		/** (tc.UI.TownCard) The province's figures as four tiles, two by two, each with the kit's sign; read from the panel each frame. */
+		TSharedRef<SWidget> ProvinceTiles(TFunction<const FRegionPanelInfo*()> Region)
+		{
+			const FTownLook& Look = TownLook();
+			auto Tile = [this, &Look, Region](const FString& Sign, const FString& Label, TFunction<FString(const FRegionPanelInfo&)> Value, TFunction<bool(const FRegionPanelInfo&)> Lit) -> TSharedRef<SWidget>
+			{
+				return SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(10.0f, 8.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)[TownSign(Sign, 22.0f, Brass)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Bold"), 15.0f))
+								.Text_Lambda([Region, Value]() { const FRegionPanelInfo* Info = Region(); return FText::FromString(Info ? Value(*Info) : FString()); })
+								.ColorAndOpacity_Lambda([Region, Lit]() { const FRegionPanelInfo* Info = Region(); return FSlateColor(Info && Lit(*Info) ? Gain : Cream); })
+							]
+							+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(Muted)]
+						]
+					];
+			};
+			auto Number = [](int32 N) { return FText::AsNumber(N).ToString(); };
+			return SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+					[
+						Tile(TEXT("sign-coin"), TEXT("A MONTH"), [Number](const FRegionPanelInfo& I) { return I.TileYield > 0 ? TEXT("+") + Number(I.TileYield) : FString(TEXT("0")); }, [](const FRegionPanelInfo& I) { return I.TileYield > 0; })
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+					[
+						Tile(TEXT("factory"), TEXT("INDUSTRY"), [Number](const FRegionPanelInfo& I) { return Number(I.TileIndustry); }, [](const FRegionPanelInfo&) { return false; })
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+					[
+						Tile(TEXT("sign-worth"), TEXT("WORTH"), [Number](const FRegionPanelInfo& I) { return Number(I.TileWorth); }, [](const FRegionPanelInfo&) { return false; })
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+					[
+						Tile(TEXT("defence"), TEXT("WORKS LEVEL"), [Number](const FRegionPanelInfo& I) { return Number(I.TileWorks); }, [](const FRegionPanelInfo&) { return false; })
+					]
+				];
+		}
+
+		/** (tc.UI.TownCard) The way into the town card, at the foot of the province's page: its street small, its name and plots, OPEN. */
+		TSharedRef<SWidget> TownRow(const FTownBar& Bar)
+		{
+			const FTownLook& Look = TownLook();
+			const TArray<FTownSpot>* Spots = nullptr;
+			if (const FTownStreet* Street = TownCardMeta().Streets.Find(Bar.Plots.Num() <= 2 ? TEXT("town") : TEXT("city")))
+			{
+				Spots = &Street->Spots;
+			}
+			const float CentreX = Spots && Spots->Num() > 0 ? static_cast<float>((*Spots)[0].Foot.X) : 912.0f;
+			return SNew(SBox).HeightOverride(64.0f)
+				[
+					SNew(SButton).ButtonStyle(&Look.Town).ContentPadding(FMargin(1.0f, 1.0f, 12.0f, 1.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("The town: its street and its building plots, what stands on each and what could go up on it.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenTownCard(); } return FReply::Handled(); })
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[TownStreetView(Bar, 62.0f / 568.0f, 100.0f, CentreX, false)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(12.0f, 0.0f, 8.0f, 0.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(Bar.Title).Font(Serif(TEXT("Bold"), 13.5f)).ColorAndOpacity(Cream)]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(Bar.Sub).Font(Typed(9.75f)).ColorAndOpacity(Muted).AutoWrapText(true)]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("OPEN"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)]
+					]
+				];
+		}
+
+		/**
+		 * (tc.UI.TownCard) The town's street, each plot as it stands in it and the owner's flag on every pole, shown at
+		 * Scale of the painting's pixels through a window ViewW wide whose middle is at CentreX of the painting (the
+		 * province panel's head shows a part of it). With Marks, each plot of the town gets its outline on the ground
+		 * where it is open, and its tag, which picks it.
+		 */
+		TSharedRef<SWidget> TownStreetView(const FTownBar& Bar, float Scale, float ViewW, float CentreX, bool bMarks)
+		{
+			const FTownCardMeta& Meta = TownCardMeta();
+			const FString Set = Bar.Plots.Num() <= 2 ? FString(TEXT("town")) : FString(TEXT("city"));
+			const FTownStreet* Street = Meta.Streets.Find(Set);
+			const FVector2D Painted = Street ? Street->Size : FVector2D(1824.0, 568.0);
+			const FVector2D Full = Painted * Scale;
+			const float Left = FMath::Clamp(ViewW * 0.5f - CentreX * Scale, FMath::Min(0.0f, ViewW - static_cast<float>(Full.X)), 0.0f);
+			const FLinearColor OnBrass(FColor::FromHex(TEXT("1E1608")));
+			const FTownLook& Look = TownLook();
+			TSharedRef<SCanvas> Canvas = SNew(SCanvas);
+			if (const FSlateBrush* Base = TownCardPicture(FString::Printf(TEXT("street-%s.jpg"), *Set)))
+			{
+				Canvas->AddSlot().Position(FVector2D(Left, 0.0)).Size(Full)[SNew(SImage).Image(Base)];
+			}
+			auto Flag = [this, &Canvas, &Bar, Left](const FVector4& Pole, double PixelScale)
+			{
+				// (the cloth the painter would have hung: 1.65 by 1.05 metres from the pole's top, flying the pole's way)
+				const double Ppm = Pole.Z * PixelScale, Way = Pole.W < 0.0 ? -1.0 : 1.0;
+				const double X = Pole.X * PixelScale + (Way > 0.0 ? 0.08 * Ppm : -1.73 * Ppm);
+				Canvas->AddSlot().Position(FVector2D(Left + X, Pole.Y * PixelScale + 0.05 * Ppm)).Size(FVector2D(1.65 * Ppm, 1.05 * Ppm))
+				[
+					SNew(SImage).Image(FlagBrush(Bar.Tag))
+				];
+			};
+			TSharedRef<STownPlotMarks> Marks = SNew(STownPlotMarks).Size(Full);
+			struct FTagAt { int32 Index; FVector2D At; FString Text; };
+			TArray<FTagAt> Tags;
+			const int32 Picked = Bar.Plots.IsValidIndex(Bar.Picked) ? Bar.Picked : 0;
+			for (int32 Index = 0; Street && Index < Street->Spots.Num(); ++Index)
+			{
+				const FTownSpot& Spot = Street->Spots[Index];
+				const bool bPlot = Bar.Plots.IsValidIndex(Index);
+				const FString State = bPlot ? TownLookOf(Bar.Plots[Index]) : FString(TEXT("house")); // (a smaller place's spare plots are houses)
+				const FTownPiece* Piece = State == Spot.Rest ? nullptr : Spot.Pieces.Find(State);
+				if (Piece)
+				{
+					if (const FSlateBrush* Look2 = TownCardPicture(FString::Printf(TEXT("spot-%s-%d-%s.png"), *Set, Index, *State)))
+					{
+						Canvas->AddSlot().Position(FVector2D(Left + Piece->At.X * Scale, Piece->At.Y * Scale)).Size(Piece->Size * Scale)[SNew(SImage).Image(Look2)];
+					}
+					for (const FVector4& Pole : Piece->Flags)
+					{
+						Flag(Pole, Scale);
+					}
+				}
+				if (!bMarks || !bPlot)
+				{
+					continue;
+				}
+				const FTownPlot& Plot = Bar.Plots[Index];
+				const bool bOn = Index == Picked, bOpen = State == TEXT("lot") || State == TEXT("going");
+				const FString Word = State == TEXT("lot") ? FString(TEXT("FREE")) : State == TEXT("going") ? FString(TEXT("GOING UP")) : (Plot.Level > 0 ? Plot.Label : Plot.Name).ToUpper();
+				const FString Text = FString::Printf(TEXT("PLOT %d  ·  %s"), Index + 1, *Word);
+				if (bOpen && Spot.Ground.Num() >= 3)
+				{
+					STownPlotMarks::FMark Outline;
+					double Top = 1e9;
+					for (const FVector2D& Corner : Spot.Ground)
+					{
+						Outline.Line.Add(FVector2D(Left, 0.0) + Corner * Scale);
+						Top = FMath::Min(Top, Corner.Y * Scale);
+					}
+					Outline.bClosed = true;
+					Outline.Ink = bOn ? BrightBrass : Cream.CopyWithNewOpacity(0.85f);
+					Outline.Width = bOn ? 2.5f : 1.25f;
+					Marks->Marks.Add(Outline);
+					// (its tag stands on a stem over the plot's front)
+					const double X = Left + Spot.Foot.X * Scale;
+					STownPlotMarks::FMark Stem;
+					Stem.Line = { FVector2D(X, Top - 24.0), FVector2D(X, Top) };
+					Stem.Ink = Outline.Ink;
+					Stem.Width = 1.25f;
+					Marks->Marks.Add(Stem);
+					Tags.Add({ Index, FVector2D(X, Top - 48.0), Text });
+				}
+				else
+				{
+					// (a building's tag stands over its roof)
+					const double Over = Piece ? Piece->At.Y * Scale : Spot.Foot.Y * Scale - 90.0;
+					Tags.Add({ Index, FVector2D(Left + Spot.Foot.X * Scale, FMath::Max(4.0, Over - 30.0)), Text });
+				}
+			}
+			Canvas->AddSlot().Position(FVector2D::ZeroVector).Size(Full)[Marks];
+			for (const FTagAt& Tag : Tags)
+			{
+				const bool bOn = Tag.Index == Picked;
+				const float Wide = 20.0f + 7.8f * Tag.Text.Len();
+				Canvas->AddSlot().Position(FVector2D(FMath::Clamp(Tag.At.X - Wide * 0.5, 4.0, FMath::Max(4.0, ViewW - Wide - 4.0)), Tag.At.Y)).Size(FVector2D(Wide, 24.0))
+				[
+					SNew(SButton).ButtonStyle(bOn ? &Look.TagButtonOn : &Look.TagButton).ContentPadding(FMargin(8.0f, 0.0f)).IsFocusable(false).HAlign(HAlign_Center).VAlign(VAlign_Center)
+					.ToolTipText(FText::FromString(TEXT("Pick this plot: what stands on it, and what could go up on it.")))
+					.OnClicked_Lambda([this, Index = Tag.Index]() { PickTownCardPlot(Index); return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(Tag.Text)).Font(SmallCaps()).ColorAndOpacity(bOn ? OnBrass : Cream)
+					]
+				];
+			}
+			return SNew(SBox).WidthOverride(ViewW).HeightOverride(static_cast<float>(Full.Y)).Clipping(EWidgetClipping::ClipToBounds)[Canvas];
+		}
+
+		/** (tc.UI.TownCard) A plot picked on the card, by its tag or its button: what could go up on it is laid out. */
+		void PickTownCardPlot(int32 Index)
+		{
+			if (Controller.IsValid() && Index != Controller->GetTownBar().Picked)
+			{
+				TownPickLine.Empty();
+				Controller->PickTownPlot(Index);
+			}
+		}
+
+		/** (tc.UI.TownCard) One of the town card's signs, tinted: the kit's line signs for the six lines, and its others. */
+		TSharedRef<SWidget> TownSign(const FString& Key, float Size, const FLinearColor& Ink)
+		{
+			const FSlateBrush* Brush = Key.StartsWith(TEXT("sign-")) ? TownCardPicture(Key + TEXT(".png")) : GlanceSignBrush(Key);
+			return SNew(SBox).WidthOverride(Size).HeightOverride(Size)[Brush ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Brush).ColorAndOpacity(Ink)) : StaticCastSharedRef<SWidget>(SNew(SSpacer))];
+		}
+
+		/**
+		 * (Release 2, tc.UI.TownCard; Brian, 24 November 2026: "lets improve these graphics and UI. its very
+		 * underwhelming". The UI director's mockup, passed by the art director in two rounds.) The town card: the town's
+		 * street with its plots, a row of plot buttons, the buildings that could go up on the plot picked as a list of
+		 * rows with their pictures, and the one chosen shown large, with what it does, what it costs and its BUILD.
+		 */
+		void LayOutTownCard(const FTownBar& Bar)
+		{
+			const FTownLook& Look = TownLook();
+			const FLinearColor OnBrass(FColor::FromHex(TEXT("1E1608"))), Amber(FColor::FromHex(TEXT("E0A13C"))), Edge700(FColor::FromHex(TEXT("8A6B3B")));
+			const int32 Shown = Bar.Plots.IsValidIndex(Bar.Picked) ? Bar.Picked : 0;
+			if (Shown != TownPickPlot || Bar.Region != TownPickRegion)
+			{
+				TownPickPlot = Shown;
+				TownPickRegion = Bar.Region;
+				TownPickLine.Empty();
+			}
+			const FTownPlot& On = Bar.Plots[Shown];
+			const FString OnLook = TownLookOf(On);
+			const FString Province = Controller.IsValid() ? Controller->GetRegionPanel().Name.ToString() : FString();
+
+			// What could go up on the plot picked: on a free plot every line the town has not got; on a building, its
+			// next level; nothing while one is going up or when it is complete. (The same choices as the bar's.)
+			TArray<const FTownOffer*> Choices;
+			if (Bar.bMine)
+			{
+				for (const FTownOffer& Offer : Bar.Offers)
+				{
+					const bool bStands = Bar.Plots.ContainsByPredicate([&Offer](const FTownPlot& Plot) { return Plot.Line == Offer.Line; });
+					if (On.Line.IsEmpty() ? !bStands : (Offer.Line == On.Line && !On.bBuilding && Offer.Has < 3))
+					{
+						Choices.Add(&Offer);
+					}
+				}
+			}
+			const FTownOffer* Chosen = nullptr;
+			for (const FTownOffer* Each : Choices)
+			{
+				if (Each->Line == TownPickLine) { Chosen = Each; }
+			}
+			for (const FTownOffer* Each : Choices)
+			{
+				if (!Chosen && Each->Why.IsEmpty()) { Chosen = Each; }
+			}
+			if (!Chosen && Choices.Num() > 0)
+			{
+				Chosen = Choices[0];
+			}
+
+			// The head: whose town, its name and size, and the way out.
+			TownBarBox->AddSlot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
+						.Text(FText::FromString(Province.IsEmpty() ? FString(TEXT("THE TOWN")) : FString::Printf(TEXT("THE TOWN  ·  %s"), *Province.ToUpper())))
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(30.0f).HeightOverride(20.0f)[SNew(SImage).Image(FlagBrush(Bar.Tag))]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(Bar.Title).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(Cream)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(14.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Bar.Sub).Font(Typed(10.5f)).ColorAndOpacity(Muted)
+						]
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+				[
+					SNew(SBox).WidthOverride(30.0f).HeightOverride(30.0f)
+					[
+						SNew(SButton).ButtonStyle(&Look.Close).ContentPadding(FMargin(0.0f)).HAlign(HAlign_Center).VAlign(VAlign_Center).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("Close the town (Esc).")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseTownCard(); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("×"))).Font(Serif(TEXT("Regular"), 15.0f)).ColorAndOpacity(Brass)
+						]
+					]
+				]
+			];
+			// (the kit's rule under a card's head: brass for its first 56, then the darker brass)
+			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(56.0f).HeightOverride(2.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass)]]
+				+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SBox).HeightOverride(2.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Edge700)]]
+			];
+
+			// The street.
+			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			[
+				SNew(SBorder).BorderImage(&Look.Well).Padding(FMargin(1.0f))
+				[
+					TownStreetView(Bar, 0.5f, 912.0f, 912.0f, true)
+				]
+			];
+
+			// What to do, and the plots as buttons.
+			TSharedRef<SHorizontalBox> Segments = SNew(SHorizontalBox);
+			for (int32 Index = 0; Index < Bar.Plots.Num(); ++Index)
+			{
+				const bool bOn = Index == Shown;
+				Segments->AddSlot().AutoWidth().Padding(Index > 0 ? 4.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(92.0f).HeightOverride(34.0f)
+					[
+						SNew(SButton).ButtonStyle(bOn ? &Look.SegOn : &Look.Seg).ContentPadding(FMargin(0.0f)).HAlign(HAlign_Center).VAlign(VAlign_Center).IsFocusable(false)
+						.OnClicked_Lambda([this, Index]() { PickTownCardPlot(Index); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("PLOT %d"), Index + 1))).Font(Typed(9.75f, true, 40)).ColorAndOpacity(bOn ? OnBrass : Cream)
+						]
+					]
+				];
+			}
+			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Font(Serif(TEXT("Italic"), 11.25f)).ColorAndOpacity(Muted)
+					.Text(FText::FromString(!Bar.bMine ? FString(TEXT("What stands in the town. It is not yours to build in."))
+						: Bar.Plots.Num() == 1 ? FString(TEXT("The town's one plot, and what could go up on it."))
+						: FString(TEXT("Pick a plot on the street, then choose what goes up on it."))))
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Segments]
+			];
+
+			// The list, on the left.
+			const FString Heading = !Bar.bMine ? FString::Printf(TEXT("WHAT STANDS ON PLOT %d"), Shown + 1)
+				: On.Line.IsEmpty() ? FString::Printf(TEXT("WHAT TO BUILD ON PLOT %d"), Shown + 1)
+				: On.bBuilding ? FString::Printf(TEXT("%s IS GOING UP, DUE %s"), *(On.Level > 0 ? On.Label : On.Name).ToUpper(), *On.Due.ToUpper())
+				: Choices.Num() > 0 ? FString(TEXT("RAISE IT A LEVEL")) : FString(TEXT("COMPLETE: IT CAN BE RAISED NO HIGHER"));
+			TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
+			List->AddSlot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(Heading)).Font(SmallCaps()).ColorAndOpacity(Brass).AutoWrapText(true)];
+			auto Thumb = [](const FString& State, bool bDim) -> TSharedRef<SWidget>
+			{
+				const FSlateBrush* Picture = TownCardPicture(FString::Printf(TEXT("row-%s.jpg"), *State));
+				return SNew(SBox).WidthOverride(75.0f).HeightOverride(56.0f)
+				[
+					Picture ? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Picture).ColorAndOpacity(bDim ? FLinearColor(0.42f, 0.42f, 0.42f, 1.0f) : FLinearColor::White)) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+				];
+			};
+			auto CostLine = [this](int32 Cost, int32 Months, const FLinearColor& Ink, float Size, bool bBold) -> TSharedRef<SWidget>
+			{
+				return SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)[TownSign(TEXT("sign-coin"), Size + 3.0f, Brass)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::AsNumber(Cost)).Font(Typed(Size, bBold)).ColorAndOpacity(Ink)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 5.0f, 0.0f)[TownSign(TEXT("hourglass"), Size + 3.0f, Brass)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%d month%s"), Months, Months == 1 ? TEXT("") : TEXT("s")))).Font(Typed(Size)).ColorAndOpacity(Ink)];
+			};
+			auto ShortWhy = [](const FString& Why)
+			{
+				// (the row has one line for it: the reason up to its colon or full stop, where that is short; the card says it whole)
+				int32 Stop = INDEX_NONE;
+				for (int32 K = 0; K < Why.Len(); ++K)
+				{
+					if (Why[K] == TEXT(':') || Why[K] == TEXT('.')) { Stop = K; break; }
+				}
+				const FString Head = Stop == INDEX_NONE ? Why : Why.Left(Stop);
+				return Head.Len() <= 30 ? Head : FString(TEXT("Cannot be built now"));
+			};
+			for (const FTownOffer* Each : Choices)
+			{
+				const FTownOffer& Offer = *Each;
+				const bool bOn = &Offer == Chosen, bCan = Offer.Why.IsEmpty();
+				List->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).HeightOverride(56.0f)
+					[
+						SNew(SButton).ButtonStyle(bOn ? &Look.RowOn : &Look.Row).ContentPadding(FMargin(0.0f, 0.0f, 10.0f, 0.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(FString::Printf(TEXT("%s: %s\n%s\n%s%s"), *Offer.Name, *Offer.Label, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why))))
+						.OnClicked_Lambda([this, Line = Offer.Line]()
+						{
+							TownPickLine = Line;
+							ShownTownBar = -1; // (laid out again on the next frame, not under the click)
+							return FReply::Handled();
+						})
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Thumb(Offer.Line, !bCan)]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(11.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)[TownSign(TEXT("civic-") + Offer.Line, 16.0f, bCan ? Brass : Faint)]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+									[
+										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Serif(TEXT("Bold"), 13.5f)).ColorAndOpacity(bCan ? Cream : Muted)
+									]
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+								[
+									bCan ? CostLine(Offer.Cost, Offer.Months, Muted, 10.5f, false)
+									: StaticCastSharedRef<SWidget>(SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)[TownSign(TEXT("lock"), 13.5f, Muted)]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(ShortWhy(Offer.Why))).Font(Typed(10.5f)).ColorAndOpacity(Muted)])
+								]
+							]
+						]
+					]
+				];
+			}
+			if (Choices.Num() == 0)
+			{
+				// (nothing to choose: the plot itself, as it stands)
+				const FString Name = On.Line.IsEmpty() ? FString(TEXT("Free plot")) : On.Level > 0 ? On.Label : On.Name;
+				const FString Under = On.Line.IsEmpty() ? FString(TEXT("Nothing built")) : On.bBuilding ? FString::Printf(TEXT("Due %s"), *On.Due) : On.Does;
+				List->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&Look.Tile).Padding(FMargin(0.0f, 0.0f, 10.0f, 0.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Thumb(OnLook, false)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(11.0f, 6.0f, 0.0f, 6.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(Name)).Font(Serif(TEXT("Bold"), 13.5f)).ColorAndOpacity(Cream)]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(FText::FromString(Under)).Font(Typed(10.5f)).ColorAndOpacity(On.bBuilding ? Amber : Muted).AutoWrapText(true)]
+						]
+					]
+				];
+			}
+
+			// The one chosen, large, on the right.
+			const FString BigLook = Chosen ? Chosen->Line : OnLook;
+			const FString BigFile = FString::Printf(TEXT("big-%s.jpg"), *BigLook);
+			TSharedRef<SCanvas> BigCanvas = SNew(SCanvas);
+			if (const FSlateBrush* Picture = TownCardPicture(BigFile))
+			{
+				const bool bDim = Chosen && !Chosen->Why.IsEmpty();
+				BigCanvas->AddSlot().Position(FVector2D::ZeroVector).Size(FVector2D(494.0, 277.0))[SNew(SImage).Image(Picture).ColorAndOpacity(bDim ? FLinearColor(0.42f, 0.42f, 0.42f, 1.0f) : FLinearColor::White)];
+				if (const TArray<FVector4>* Poles = TownCardMeta().Flags.Find(FString::Printf(TEXT("big-%s"), *BigLook)))
+				{
+					for (const FVector4& Pole : *Poles)
+					{
+						const double K = 494.0 / 992.0, Ppm = Pole.Z * K, Way = Pole.W < 0.0 ? -1.0 : 1.0;
+						BigCanvas->AddSlot().Position(FVector2D(Pole.X * K + (Way > 0.0 ? 0.08 * Ppm : -1.73 * Ppm), Pole.Y * K + 0.05 * Ppm)).Size(FVector2D(1.65 * Ppm, 1.05 * Ppm))
+						[
+							SNew(SImage).Image(FlagBrush(Bar.Tag)).ColorAndOpacity(bDim ? FLinearColor(0.42f, 0.42f, 0.42f, 1.0f) : FLinearColor::White)
+						];
+					}
+				}
+			}
+			const FString LineKey = Chosen ? Chosen->Line : On.Line;
+			const FString LineName = Chosen ? Chosen->Name : On.Name;
+			if (!LineName.IsEmpty())
+			{
+				BigCanvas->AddSlot().Position(FVector2D(10.0, 10.0)).Size(FVector2D(26.0 + 7.4 * LineName.Len() + 22.0, 24.0))
+				[
+					SNew(SBorder).BorderImage(&Look.Tag).Padding(FMargin(8.0f, 0.0f)).VAlign(VAlign_Center)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)[TownSign(TEXT("civic-") + LineKey, 14.0f, Brass)]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(LineName.ToUpper())).Font(SmallCaps()).ColorAndOpacity(Cream)]
+					]
+				];
+			}
+			TSharedRef<SVerticalBox> Detail = SNew(SVerticalBox);
+			Detail->AddSlot().AutoHeight()
+			[
+				SNew(SBorder).BorderImage(&Look.Well).Padding(FMargin(1.0f))
+				[
+					SNew(SBox).WidthOverride(494.0f).HeightOverride(277.0f).Clipping(EWidgetClipping::ClipToBounds)[BigCanvas]
+				]
+			];
+			if (Chosen)
+			{
+				const bool bCan = Chosen->Why.IsEmpty();
+				const FString Ladder = Chosen->Level <= 1 ? FString(TEXT("Level 1 of 3: it can be raised twice more on this plot"))
+					: FString::Printf(TEXT("Level %d of 3: it raises the %s"), Chosen->Level, *On.Label.ToLower());
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Chosen->Label)).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(bCan ? Cream : Muted)
+				];
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Ladder)).Font(Typed(10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)
+				];
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Chosen->Effect)).Font(Serif(TEXT("Regular"), 11.25f)).ColorAndOpacity(Cream).AutoWrapText(true).LineHeightPercentage(1.1f)
+					.ToolTipText(FText::FromString(Chosen->Blurb))
+				];
+				if (!bCan)
+				{
+					Detail->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 6.0f, 0.0f)[TownSign(TEXT("lock"), 14.0f, Muted)]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(STextBlock).Text(FText::FromString(Chosen->Why)).Font(Typed(10.5f)).ColorAndOpacity(Muted).AutoWrapText(true)]
+					];
+				}
+				const FString Verb = (Chosen->Level <= 1 ? FString(TEXT("BUILD THE ")) : FString(TEXT("RAISE TO "))) + Chosen->Label.ToUpper();
+				Detail->AddSlot().FillHeight(1.0f)[SNew(SSpacer)];
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[CostLine(Chosen->Cost, Chosen->Months, Cream, 10.5f, true)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).HeightOverride(40.0f)
+						[
+							SNew(SButton).ButtonStyle(bCan ? &Look.Build : &Look.Quiet).ContentPadding(FMargin(18.0f, 0.0f)).VAlign(VAlign_Center).IsFocusable(false)
+							.ToolTipText(FText::FromString(bCan ? FString::Printf(TEXT("Order it: %s, ready in %d month%s."), *FText::AsNumber(Chosen->Cost).ToString(), Chosen->Months, Chosen->Months == 1 ? TEXT("") : TEXT("s")) : Chosen->Why))
+							.OnClicked_Lambda([this, Line = Chosen->Line, bCan, Why = Chosen->Why]()
+							{
+								if (Controller.IsValid())
+								{
+									// (one that cannot be ordered can still be pressed, and says why)
+									if (bCan) { Controller->OrderTownBuilding(Line); } else { Controller->SayWhy(Why); }
+								}
+								return FReply::Handled();
+							})
+							[
+								SNew(STextBlock).Text(FText::FromString(Verb)).Font(Typed(9.75f, true, 40)).ColorAndOpacity(bCan ? OnBrass : Faint)
+							]
+						]
+					]
+				];
+			}
+			else
+			{
+				const FString Name = On.Line.IsEmpty() ? FString(TEXT("Free plot")) : On.Level > 0 ? On.Label : On.Name;
+				const FString Under = On.Line.IsEmpty() ? (Bar.bMine ? FString(TEXT("Every kind of building the town could hold already stands, or is going up.")) : FString(TEXT("Nothing is built on it.")))
+					: On.bBuilding ? FString::Printf(TEXT("Going up, due %s."), *On.Due) : On.Does;
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Name)).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(Cream)
+				];
+				if (On.Level > 0)
+				{
+					Detail->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("Level %d of 3"), On.Level))).Font(Typed(10.5f)).ColorAndOpacity(Muted)
+					];
+				}
+				Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Under)).Font(Serif(TEXT("Regular"), 11.25f)).ColorAndOpacity(On.bBuilding ? Amber : Cream).AutoWrapText(true).LineHeightPercentage(1.1f)
+				];
+			}
+
+			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			[
+				SNew(SBox).HeightOverride(390.0f) // (the heading and six rows; the card stands 850 high, clear of the date at the top of Brian's window)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SBox).WidthOverride(392.0f)[SNew(SScrollBox) + SScrollBox::Slot()[List]]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(24.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(496.0f)[Detail]
+					]
+				]
+			];
+		}
+
 		void LayOutTownBar(const FTownBar& Bar)
 		{
 			TownBarBox->ClearChildren();
 			if (Bar.Plots.Num() == 0)
 			{
+				return;
+			}
+			if (ACampaignPlayerController::IsTownCardStyle())
+			{
+				LayOutTownCard(Bar);
 				return;
 			}
 			auto Picture = [this](const FString& Model, const FVector2D& Size) -> TSharedRef<SWidget>
@@ -17662,6 +18634,12 @@ namespace
 		TSharedPtr<SHorizontalBox> TrayRail;
 		TSharedPtr<SVerticalBox> TownBarBox;
 		int32 ShownTownBar = -1;
+		// (tc.UI.TownCard) The building chosen on the town card, for the plot and the town it was chosen on: the card
+		// shows it large, with its BUILD button; a click on another row chooses that one, and orders nothing.
+		FString TownPickLine;
+		int32 TownPickPlot = INDEX_NONE, TownPickRegion = INDEX_NONE;
+		TSharedPtr<SBox> TownHeroBox; // (tc.UI.TownCard) the province panel's head: the town's street
+		int32 TownHeroRegion = INDEX_NONE; // the town it was last laid out for
 		int32 ShownProvince = -1;
 		TSharedPtr<SVerticalBox> AdviserSteps;
 		int32 ShownAdviser = -1;
