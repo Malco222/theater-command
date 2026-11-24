@@ -5,6 +5,7 @@
 #include "Battle/LandBattleState.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
@@ -964,6 +965,29 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	}
 
+	// ---- The spotter's mark (release 2, -TheaterLandSpotter): looking down on the field, a pale ring on the ground
+	// round each of his fighting units; a hidden enemy inside it is found. Every unit's ring for hidden men; a unit in
+	// hand's brighter, with dashed rings farther out for hidden guns and vehicles, each with its word. ----
+	for (const FLandGeneralShown::SightStroke& R : G.Sights)
+	{
+		TArray<FVector2D> Points;
+		Points.Reserve(static_cast<int32>(R.Points.size()));
+		for (const std::pair<double, double>& P : R.Points)
+		{
+			Points.Add(Local(P.first, P.second));
+		}
+		const FLinearColor Ink = R.bChosen ? BrightBrass * FLinearColor(1.0f, 1.0f, 1.0f, R.Kind == 0 ? 0.95f : 0.7f) : Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f);
+		Lines(Points, Ink, R.bChosen && R.Kind == 0 ? 2.0f : 1.5f, 1);
+	}
+	for (const FLandGeneralShown::SightWord& W : G.SightWords)
+	{
+		const FVector2D At = Local(W.X, W.Y);
+		const FString Words = FString::Printf(TEXT("%s %d m"), W.Kind == 0 ? TEXT("MEN") : W.Kind == 1 ? TEXT("GUNS") : TEXT("VEHICLES"), static_cast<int32>(W.Metres + 0.5));
+		const FSlateFontInfo Face = Typed(10.0f, true, 30);
+		Fill(At.X + 6.0, At.Y - 9.0, WideOf(Words, Face) + 10.0, 18.0, Plate, 2);
+		Write(Words, At.X + 11.0, At.Y - 8.0, Face, BrightBrass, 3);
+	}
+
 	// ---- The routes of his orders: brass, bright for those in hand; dashed and faint while still on the air, solid and
 	// bright once it has landed. ----
 	for (const FLandGeneralShown::Route& R : G.Routes)
@@ -1248,6 +1272,63 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 		Lines(Ring, Ink, 2.0f, 9);
 		Fill(At.X - 2.0, At.Y - 2.0, 4.0, 4.0, Ink, 9);
+	}
+
+	// ---- The film in a corner (release 2, -TheaterLandCorner; Brian, 24 November 20:38Z): the film director's shot in
+	// a small window at the top left while he commands from his own view, in a brass frame; a click on it, or C, gives
+	// the film the whole screen. ----
+	if (UTextureRenderTarget2D* Film = Scene->CornerPicture())
+	{
+		if (CornerBrush.GetResourceObject() != Film)
+		{
+			CornerBrush.SetResourceObject(Film);
+			CornerBrush.ImageSize = FVector2D(480.0f, 270.0f);
+			CornerBrush.DrawAs = ESlateBrushDrawType::Image;
+		}
+		const double Wd = FMath::Clamp(Size.X * 0.22, 240.0, 420.0), Ht = Wd * 9.0 / 16.0, X = 18.0, Y = 82.0;
+		Fill(X - 2.0, Y - 2.0, Wd + 4.0, Ht + 4.0, Brass, 10);
+		Fill(X - 1.0, Y - 1.0, Wd + 2.0, Ht + 2.0, DeskInk, 11);
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 12, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &CornerBrush, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+		// (its name and its key on a small plate at its foot)
+		const FSlateFontInfo FilmFace = Typed(10.0f, true, 30);
+		const FString FilmWords = TEXT("THE FILM: C FILLS THE SCREEN");
+		Fill(X, Y + Ht - 20.0, WideOf(FilmWords, FilmFace) + 14.0, 20.0, Plate, 13);
+		Write(FilmWords, X + 7.0, Y + Ht - 18.0, FilmFace, Cream, 14);
+		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), FString(TEXT("general:film")) });
+	}
+
+	// ---- His kept views (release 2; Brian, 24 November 20:38Z, saved views): four small chips under the clock, each
+	// with its number: lit where he stands at one, plain where one is kept, faint where none is yet. A click flies
+	// there (never kept: it is kept as the view stands); Shift and a click keeps it anew. F1 to F4, or Option with 1
+	// to 4, do the same. ----
+	{
+		const FSlateFontInfo ViewsFace = Typed(10.0f, true, 30);
+		const double ChipW = 24.0, ChipH = 22.0, ChipGap = 4.0;
+		const FString ViewsWord = TEXT("VIEWS");
+		const double ChipsW = ChipW * LandGeneralEye::ViewCount + ChipGap * (LandGeneralEye::ViewCount - 1), WordW = WideOf(ViewsWord, ViewsFace);
+		double X = Size.X - 22.0 - ChipsW;
+		const double Y = 78.0;
+		Fill(X - WordW - 17.0, Y - 4.0, WordW + 17.0 + ChipsW + 6.0, ChipH + 8.0, Plate, 10);
+		Write(ViewsWord, X - WordW - 9.0, Y + 3.0, ViewsFace, Muted, 11);
+		for (int32 K = 0; K < LandGeneralEye::ViewCount; ++K)
+		{
+			const bool bKept = S.GeneralEye.ViewKept(K), bAt = S.GeneralEye.ViewAt() == K;
+			const FLinearColor Ink = bAt ? DeskInk : bKept ? Cream : Muted;
+			Fill(X, Y, ChipW, ChipH, bKept ? Brass : Track, 11);
+			Fill(X + 1.0, Y + 1.0, ChipW - 2.0, ChipH - 2.0, bAt ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, 12);
+			const FString Number = FString::FromInt(K + 1);
+			Write(Number, X + (ChipW - WideOf(Number, ChipFace)) * 0.5, Y + 3.0, ChipFace, Ink, 13);
+			Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + ChipW), static_cast<float>(Y + ChipH)), FString::Printf(TEXT("general:view:%d"), K) });
+			X += ChipW + ChipGap;
+		}
+		// (the spotter's mark's one line, under them, while its rings are up)
+		if (G.bSights)
+		{
+			const FString Line = bHand ? TEXT("RINGS: A HIDDEN ENEMY INSIDE ONE IS FOUND") : TEXT("RINGS: HIDDEN MEN INSIDE ONE ARE FOUND. PICK A UNIT FOR GUNS AND VEHICLES");
+			const double LineW = WideOf(Line, ViewsFace);
+			Fill(Size.X - 22.0 - LineW - 12.0, Y + ChipH + 8.0, LineW + 18.0, 20.0, Plate, 10);
+			Write(Line, Size.X - 22.0 - LineW - 3.0, Y + ChipH + 10.0, ViewsFace, Cream, 11);
+		}
 	}
 
 	// ---- What a click would do, by the pointer. ----
@@ -1660,6 +1741,11 @@ void SLandBattleScreen::Do(const FString& Action)
 		}
 		Scene->SetSpeed(Speed);
 	}
+	else if (Action.StartsWith(TEXT("general:view:")))
+	{
+		// (a kept view's chip: flown to; with Shift, kept anew as the view stands)
+		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("keepview:")) : FString(TEXT("view:"))) + Action.Mid(13));
+	}
 	else if (Action.StartsWith(TEXT("general:")))
 	{
 		Scene->GeneralDo(Action.Mid(8));
@@ -1989,6 +2075,17 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 			}
 			ViewKeys |= Bit;
 			HandViewKeys();
+			return FReply::Handled();
+		}
+		else if (const int32 ViewKey = Key == EKeys::F1 ? 0 : Key == EKeys::F2 ? 1 : Key == EKeys::F3 ? 2 : Key == EKeys::F4 ? 3
+			: !Event.IsAltDown() ? -1 : Key == EKeys::One ? 0 : Key == EKeys::Two ? 1 : Key == EKeys::Three ? 2 : Key == EKeys::Four ? 3 : -1; ViewKey >= 0)
+		{
+			// (his kept views: F1 to F4, or Option with 1 to 4 where the Mac keeps the F keys for itself, fly to one;
+			// with Shift the view as it stands is kept under that number)
+			if (!Event.IsRepeat())
+			{
+				Scene->GeneralDo(FString::Printf(TEXT("%s:%d"), Event.IsShiftDown() ? TEXT("keepview") : TEXT("view"), ViewKey));
+			}
 			return FReply::Handled();
 		}
 		else if (Key == EKeys::SpaceBar)
