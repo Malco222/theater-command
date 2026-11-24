@@ -47,6 +47,9 @@ struct FRegionPanelInfo
 	TArray<FOrderLine> Forming;
 	FString FormingHead; // the total of what is on order here, with its breakdown
 	FCityShelves Glance; // (release 2) the AT A GLANCE page: garrison, on order here, building and repairs
+	// (Release 2; the art director's airfield spec of 24 November, item 3.) The province's airfield as a row of the panel,
+	// "Airfield  \u00B7  3 air groups based here": a click opens it. Empty where the province has none on the table.
+	FText FieldRow;
 	int32 Revision = 0;
 };
 
@@ -774,6 +777,13 @@ public:
 	FText GetHoverTipMarked() const { return HoverTipMarked; }
 	/** (Release 2) The paper card of the city at a glance over the town under the pointer; not valid where there is none. */
 	const FHoverGlance& GetHoverGlance() const { return HoverGlance; }
+	/**
+	 * (Release 2; the art director's airfield spec of 24 November, item 2.) The four corners of the airfield a click
+	 * would open, in the window's own pixels, for its brass outline; empty where there is none.
+	 */
+	const TArray<FVector2D>& GetFieldOutline() const { return FieldOutline; }
+	/** (The same spec, item 3.) The province panel's airfield row: opens the picked province's airfield. */
+	void OpenSelectedAirfield();
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
 	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
 	/** The same at the head of a sentence: "The United States has fallen." (84.2.6) */
@@ -1655,6 +1665,16 @@ private:
 	void LayOutFleet();
 	int32 SeaNear(const FVector2D& MapPoint) const;
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
+	/**
+	 * (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 1.) The airfield whose
+	 * ring, 28 of the screen's units across round the middle of its runway, the pointer is in, at any height of the eye;
+	 * Ground is the province under the pointer, whose town wins where its ring overlaps and its middle is nearer.
+	 */
+	int32 FieldInRing(const FVector2D& Mouse, int32 Ground);
+	bool bPointerInOverlap = false; // the pointer is where a town's ring and an airfield's overlap
+	bool bOverlapSwapped = false; // and a click there has turned it to the other, until the pointer moves off
+	FVector2D OverlapClickAt = FVector2D(-1.0e6, -1.0e6);
+	TArray<FVector2D> FieldOutline; // (item 2) the airfield a click would open, its corners on the screen
 	int32 HoverTipField = INDEX_NONE;
 	int32 StagedHover = INDEX_NONE;
 	bool bStagedField = false; // (for the photographer: the staged pointer rests on that province's airfield)

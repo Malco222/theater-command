@@ -88245,7 +88245,24 @@
       round: roundOf(s),
       // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
       // many groups and aircraft stand on it, or -1 where the fog hides that.
-      airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
+      // (Release 2; the art director's airfield spec of 24 November, item 2: the card says a shut runway, a repair in
+      // hand, and strip or airfield, as the airfield page's reader has them: only where airfields are targets, and the
+      // shut runway and the repair only where the player knows them.)
+      airfields: fields.map((a) => {
+        const v = fieldRepairView(s, a.region, s.human, seen2);
+        return {
+          region: a.region,
+          nat: a.holder,
+          side: a.side,
+          size: a.size,
+          word: a.word,
+          holds: a.holds,
+          groups: a.groups,
+          aircraft: a.aircraft,
+          crowded: a.crowded,
+          ...v ? { shut: v.shut, mend: v.repairing, tier: v.tier } : {}
+        };
+      }),
       air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && f.ship === void 0 && !fieldHidden.has(f.base)).map((f) => ({
         id: f.id,
         nat: f.nat,

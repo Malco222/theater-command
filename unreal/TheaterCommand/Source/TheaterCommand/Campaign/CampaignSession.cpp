@@ -1661,10 +1661,15 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("groups"), Field.Groups);
 			Entry->TryGetNumberField(TEXT("aircraft"), Field.Aircraft);
 			Entry->TryGetBoolField(TEXT("crowded"), Field.bCrowded);
+			Entry->TryGetBoolField(TEXT("shut"), Field.bShut);
+			Entry->TryGetBoolField(TEXT("mend"), Field.bMending);
+			Entry->TryGetStringField(TEXT("tier"), Field.Tier);
 		}
 	}
+	Out.BasedGroups.Reset();
 	if (Out.Airfields.Num() > 0)
 	{
+		Out.BasedGroups = Out.AirFleets; // (for the airfield's card: each group based there, by name)
 		TArray<FViewAirFleet> Stood;
 		for (const FViewAirFleet& Group : Out.AirFleets)
 		{
