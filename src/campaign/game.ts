@@ -2251,14 +2251,23 @@ function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<n
   return cut;
 }
 
-/** The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share. */
-function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
+/**
+ * The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share.
+ * (Release 2, rearguard.ts; the design director's 19:13Z and 19:22Z) Rearguards act on the race through time only,
+ * never by more than the pursuers lose: 'lost', the time the attackers already lost to rearguards in this fight, as
+ * the fight decided it (half where they broke; not for a rearguard's own pursuers); and a rearguard of its side holding
+ * the province it falls back into, unfought, costs the pursuers pressing the chase its delay, each paying it once a
+ * battle ('paid').
+ */
+function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[], lost = 0, paid?: Set<number>): number {
   if (!unitsDecide(g) || !afoot(c)) return 0;
   const mine = pace(g, c, to);
-  // (Release 2, rearguard.ts; the design director's 19:14Z) A rearguard of its own side holding the province it falls
-  // back into acts on the race through time only: each pursuer loses the rearguard's weeks first.
+  const fast = chasers.filter((u) => chaser(u) && chasePace(g, u, c, to) < mine);
+  if (!fast.length) return 0;
   const held = screenWeeks(g, c, to, (nat) => nat === c.nat || allied(g, nat, c.nat));
-  if (!chasers.some((u) => chaser(u) && chasePace(g, u, c, to) + held < mine)) return 0;
+  if (held > 0) for (const u of fast) if (!paid?.has(u.id)) { paid?.add(u.id); u.ap = Math.max(0, u.ap - held); }
+  const slow = lost + held;
+  if (slow > 0 && !fast.some((u) => chasePace(g, u, c, to) + slow < mine)) return 0;
   return PURSUIT.share * (1 - lifted(c));
 }
 
@@ -2619,8 +2628,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     let back: Region | null = null;
     // (Units decide, the pursuit: the roads a faster enemy has cut, and by whom; and what the chase takes on the way.)
     const blocks = new Map<number, Corps>();
+    // (release 2, rearguard.ts: the pursuers who have paid a rearguard's delay in this battle, once each)
+    const paidRear = new Set<number>();
     const chased = (c: Corps, to: Region, i: number): void => {
-      const share = opts.breakout ? 0 : pursuitTakes(g, c, to, attackers);
+      const share = opts.breakout ? 0 : pursuitTakes(g, c, to, attackers, rears.includes(c) ? 0 : rearWeeks, paidRear);
       if (share <= 0) return;
       const before = men(c);
       c.str *= 1 - share;

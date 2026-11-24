@@ -32,6 +32,7 @@ import { isTeam, TEAMS, teamsOn } from './teams';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
 import { REARGUARD, rearguardOn, staffRearguard } from './rearguard';
+import { SIGHT, divisionsBand, sightOf } from './intel';
 import {
   DEFENCE, EASTERN, aidOf, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
@@ -189,24 +190,36 @@ export function runAI(g: Game, nat: string): void {
 }
 
 /**
- * Rearguards (release 2, rearguard.ts; the design director's 19:14Z: the computer staffs order them by the player's
- * rule). With the month's moves made, a small fighting corps of the staff's ('most' divisions at most) standing in the
- * field with no bigger corps of its side beside it, the enemy next door at REARGUARD.ai.odds times its side's defence
- * there or more, and a bigger corps of its side in a province next door that no enemy stands in, holds where it stands
- * until the staff's next month: the longest odds first, REARGUARD.ai.perMonth at most. Off, nothing.
+ * Rearguards (release 2, rearguard.ts; the design director's 19:14Z and 19:22Z: the computer staffs order them by the
+ * player's rule, as staff doctrine, reading the odds at their own sight). With the month's moves made, a small fighting
+ * corps of the staff's ('most' divisions at most) standing in the field with no bigger corps of its side beside it, the
+ * enemy it can see next door at REARGUARD.ai.odds times its side's strength there or more, and a bigger corps of its
+ * side in a province next door that no enemy stands in, holds where it stands until the staff's next month: the longest
+ * odds first, REARGUARD.ai.perMonth at most. The enemy is read as the staff sees it, never the truth: only provinces in
+ * its sight, and their corps as a staff's estimate of divisions counted but not identified (intel.ts divisionsBand),
+ * against its own side's divisions at their strength. Off, nothing.
  */
 function aiRearguards(g: Game, nat: string): void {
   if (!rearguardOn(g) || nat === g.human || !g.nations[nat].alive) return;
   const picks: { c: Corps; odds: number }[] = [];
+  let sight: Uint8Array | null = null;
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead || c.rear || c.town !== undefined || c.divs > REARGUARD.most || !fights(c)) continue;
     const r = g.regions[c.reg];
     const side = friendlyUnits(g, r, nat).filter((u) => !u.dead && u.town === undefined);
     if (side.some((u) => u.divs > REARGUARD.most)) continue;
-    let threat = 0;
-    for (const j of r.nb) for (const u of hostileUnits(g, g.regions[j], nat)) if (!u.dead && u.kind !== 'fort' && u.town === undefined) threat += atkPower(g, u);
-    const own = side.reduce((t, u) => t + defPower(g, u, r), 0);
-    if (threat <= 0 || threat < REARGUARD.ai.odds * own) continue;
+    sight ??= sightOf(g, nat);
+    let seen = 0;
+    for (const j of r.nb) {
+      if (sight[j] === SIGHT.none) continue;
+      const foes = hostileUnits(g, g.regions[j], nat).filter((u) => !u.dead && u.kind !== 'fort' && u.town === undefined);
+      if (!foes.length) continue;
+      const band = divisionsBand(g, j, nat, foes);
+      seen += (band.lo + band.hi) / 2;
+    }
+    const own = side.reduce((t, u) => t + u.divs * u.str, 0);
+    if (seen <= 0 || seen < REARGUARD.ai.odds * own) continue;
+    const threat = seen;
     const behind = r.nb.some((j) => {
       const q = g.regions[j];
       return !hostileUnits(g, q, nat).length && friendlyUnits(g, q, nat).some((u) => !u.dead && u.divs > c.divs && fights(u));

@@ -36,7 +36,7 @@ describe("the admirals' reasons", () => {
         expect(mine.length).toBeGreaterThan(0);
         for (const f of mine) {
           const why = fleetWhy(g, f);
-          expect(why, f.name).toMatch(/^Your admirals: [A-Z].*\.$/);
+          expect(why, f.name).toMatch(/^Your admirals: [a-z].*\.$/);
           expect(why).not.toMatch(/undefined|NaN|\$\{/);
         }
         month(g);
@@ -53,8 +53,8 @@ describe("the admirals' reasons", () => {
         for (const f of fleetsOf(g, nat)) {
           const why = fleetWhy(g, f);
           const foes = g.fleets.filter((x) => x.zone === f.zone && atSea(x) && atWar(g, x.nat, nat) && fleetKnown(g, x, nat) !== 'none');
-          if (/to bring an enemy fleet there to battle/.test(why)) { named++; expect(foes.some((x) => surfaceShips(x) > 0), why).toBe(true); }
-          if (/hunt the submarines at work/.test(why)) { named++; expect(foes.some((x) => x.ships.ss > 0), why).toBe(true); }
+          if (/to bring the enemy fleet sighted there to battle/.test(why)) { named++; expect(foes.some((x) => surfaceShips(x) > 0), why).toBe(true); }
+          if (/hunt the submarines found/.test(why)) { named++; expect(foes.some((x) => x.ships.ss > 0), why).toBe(true); }
         }
         month(g);
       }
