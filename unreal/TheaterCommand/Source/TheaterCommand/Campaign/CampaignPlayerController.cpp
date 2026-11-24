@@ -15,6 +15,10 @@
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Battle/AirBattle.h"
+#include "Battle/LandBattle.h"
+#include "Battle/LandField.h"
+#include "Battle/LandScape.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Layout/WidgetPath.h"
 #include "HAL/IConsoleManager.h"
@@ -25,6 +29,8 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/Parse.h"
 
 namespace
@@ -8621,6 +8627,10 @@ bool ACampaignPlayerController::IsTableBusy() const
 
 bool ACampaignPlayerController::IsAnswering() const
 {
+	if (LiveBattle.IsValid() || LiveRaid.IsValid())
+	{
+		return true; // (his own battle is open: the map takes no order until it is handed back)
+	}
 	if (Afterwards.Num() > 0)
 	{
 		return true;
@@ -9888,6 +9898,10 @@ void ACampaignPlayerController::SendOnlyPicked()
 
 void ACampaignPlayerController::ConfirmAttack()
 {
+	if (LiveBattle.IsValid())
+	{
+		return; // (his own battle is open: the card behind it waits for its result)
+	}
 	// (Rulings 134(f), 138(a) and 177(b).) On the card before a march the key, like the lit button, gives the order
 	// the forecast favours.
 	if (FaceOff.bVisible && !FaceOff.bResolved && (FaceOff.bMarch || FaceOff.bStorm) && FaceOff.bFavourSiege)
@@ -9946,6 +9960,384 @@ void ACampaignPlayerController::ResolveAttack()
 				Me->AfterFight(RegionId, bMarch, bStorm, bSally, Result);
 			}
 		});
+}
+
+bool ACampaignPlayerController::CanFightLive() const
+{
+	// (a plain attack on the card, ready to go in: not a march, a storm, or a sortie, and a pick that can go)
+	const bool bPlain = ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bMarch && !FaceOff.bStorm
+		&& !FaceOff.bSally && FaceOff.Alone.IsEmpty() && PickedCorps.Num() > 0 && !LiveBattle.IsValid();
+	if (!bPlain)
+	{
+		return false;
+	}
+	// (release 1.5, Brian 23 November 05:18Z: only on a battlefield that has passed, and only where the field can fight it;
+	// worked out once a card, the first time it is asked)
+	if (FaceOff.FieldOffer < 0 || FaceOff.FieldPicks != PickedCorps)
+	{
+		const_cast<ACampaignPlayerController*>(this)->WeighFieldOffer();
+	}
+	return FaceOff.FieldOffer > 0;
+}
+
+FString ACampaignPlayerController::FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn)
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return FString();
+	}
+	const FCampaignRegion& R = Data.Regions[RegionId];
+	LandField::Field F;
+	F.Lat = Data.LatitudeAt(R.Center.Y);
+	double Lon = Data.LongitudeAt(R.Center.X);
+	while (Lon > 180.0) Lon -= 360.0;
+	while (Lon < -180.0) Lon += 360.0;
+	F.Lon = Lon;
+	F.Terrain = TCHAR_TO_UTF8(*R.Terrain.ToLower());
+	F.Month = (8 + FMath::Max(1, Turn) - 1) % 12 + 1; // (turn 1 is September 1939)
+	const LandScape::Look L = LandScape::Pick(F);
+	FString Word = UTF8_TO_TCHAR(LandScape::NameOf(L));
+	if (LandScape::SnowOf(F, L) >= 0.25)
+	{
+		Word += TEXT("+snow");
+	}
+	return Word.ToLower();
+}
+
+bool ACampaignPlayerController::FieldLookPassed(const FString& Look)
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterFightEveryLook")))
+	{
+		return true;
+	}
+	TArray<FString> Lines;
+	const FString File = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Rules"), TEXT("fight-yourself-looks.txt"));
+	if (!FFileHelper::LoadFileToStringArray(Lines, *File))
+	{
+		return Look == TEXT("bocage"); // (the list as Brian left it on 23 November: the bocage alone)
+	}
+	for (FString Line : Lines)
+	{
+		int32 Hash = INDEX_NONE;
+		if (Line.FindChar(TEXT('#'), Hash))
+		{
+			Line.LeftInline(Hash);
+		}
+		Line.TrimStartAndEndInline();
+		if (!Line.IsEmpty() && (Line == TEXT("*") || Line.Equals(Look, ESearchCase::IgnoreCase)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ACampaignPlayerController::WeighFieldOffer()
+{
+	FaceOff.FieldOffer = 0;
+	FaceOff.FieldPicks = PickedCorps;
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || PickedCorps.Num() == 0)
+	{
+		return;
+	}
+	if (FaceOff.FieldLook.IsEmpty())
+	{
+		FaceOff.FieldLook = FieldLookAt(Map->GetData(), FaceOff.Region, Session->GetView().Turn);
+	}
+	if (!FieldLookPassed(FaceOff.FieldLook))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF not offered at %d: its battlefield (%s) has not passed yet; SEND THEM IN only"), FaceOff.Region, *FaceOff.FieldLook);
+		return;
+	}
+	// (the field must be able to fight this attack: a ticket, and not a kind of place the staff still settles)
+	const FString IdsText = FString::JoinBy(PickedCorps, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+	FString LookText, LookError;
+	TSharedPtr<FJsonObject> LookAnswer;
+	const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+	if (!Session->CallBattle(TEXT("battleLook"), FString::Printf(TEXT("[[%s],%d]"), *IdsText, FaceOff.Region), LookText, LookError)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(LookText), LookAnswer) || !LookAnswer.IsValid()
+		|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF not offered at %d (%s): no field battle to fight here %s"), FaceOff.Region, *FaceOff.FieldLook, *LookError);
+		return;
+	}
+	FaceOff.FieldOffer = 1;
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF offered at %d (%s)"), FaceOff.Region, *FaceOff.FieldLook);
+}
+
+void ACampaignPlayerController::FightLive()
+{
+	FCampaignSession* Session = GetSession();
+	UWorld* Here = GetWorld();
+	if (!Session || !Map.IsValid() || !Here || !CanFightLive() || IsAnswering() || TActorIterator<ALandBattle>(Here))
+	{
+		return;
+	}
+	const int32 RegionId = FaceOff.Region;
+	const TArray<int32> CorpsIds = PickedCorps;
+	const FString IdsText = FString::JoinBy(CorpsIds, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+	FString LookText, LookError;
+	if (!Session->CallBattle(TEXT("battleLook"), FString::Printf(TEXT("[[%s],%d]"), *IdsText, RegionId), LookText, LookError))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: TC.battleLook failed: %s"), *LookError);
+		Notify(TEXT("This battle cannot be fought in the field: SEND THEM IN lets your generals fight it."), 6.0);
+		return;
+	}
+	TSharedPtr<FJsonObject> LookAnswer;
+	const TSharedRef<TJsonReader<>> LookReader = TJsonReaderFactory<>::Create(LookText);
+	const bool bLookRead = FJsonSerializer::Deserialize(LookReader, LookAnswer) && LookAnswer.IsValid();
+	const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+	if (!bLookRead || !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+	{
+		FString Why;
+		if (bLookRead && LookAnswer->TryGetStringField(TEXT("why"), Why) && !Why.IsEmpty())
+		{
+			// (a kind of place the staff still settles: the card stays, and SEND THEM IN with it)
+			Notify(Why, 7.0);
+			return;
+		}
+		// (no field battle here at all: the generals' answer is the only one there is)
+		Notify(TEXT("There is no field battle to fight here: your generals send them in."), 5.0);
+		ResolveAttack();
+		return;
+	}
+	double TicketSeed = 0.0;
+	(*LookTicket)->TryGetNumberField(TEXT("seed"), TicketSeed);
+	// (release 1.5) The place on the earth, for the land rules' sky: the battle is laid on the look the card weighed
+	// (LandScape::Pick from its latitude and longitude) under that latitude's sun, not Normandy's.
+	if (Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		const FCampaignMapData& Data = Map->GetData();
+		const FVector2D At = Data.Regions[RegionId].Center;
+		double Lon = Data.LongitudeAt(At.X);
+		while (Lon > 180.0) Lon -= 360.0;
+		while (Lon < -180.0) Lon += 360.0;
+		const TSharedPtr<FJsonObject>* Live = nullptr;
+		TSharedPtr<FJsonObject> LiveObject = LookAnswer->TryGetObjectField(TEXT("live"), Live) && Live && Live->IsValid() ? *Live : MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> LatLon;
+		LatLon.Add(MakeShared<FJsonValueNumber>(FMath::RoundToDouble(Data.LatitudeAt(At.Y) * 100.0) / 100.0));
+		LatLon.Add(MakeShared<FJsonValueNumber>(FMath::RoundToDouble(Lon * 100.0) / 100.0));
+		LiveObject->SetArrayField(TEXT("latLon"), LatLon);
+		LookAnswer->SetObjectField(TEXT("live"), LiveObject);
+		FString Placed;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Placed);
+		if (FJsonSerializer::Serialize(LookAnswer.ToSharedRef(), Writer))
+		{
+			LookText = Placed;
+		}
+	}
+	ALandBattle* Field = Here->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (!Field)
+	{
+		return;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FIGHT IT YOURSELF, the attack on %d by [%s] opened live (seed %.0f)"), RegionId, *IdsText, TicketSeed);
+	LiveBattle = Field;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Field->HandBack = [Self, RegionId, CorpsIds, TicketSeed](const FString& ResultJson)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->LiveHandBack(RegionId, CorpsIds, TicketSeed, ResultJson);
+		}
+	};
+	Field->LiveTicketWhenReady(LookText, TEXT("att"), true);
+}
+
+void ACampaignPlayerController::LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson)
+{
+	LiveBattle.Reset();
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	if (ResultJson.IsEmpty())
+	{
+		// (the field closed with no result: the attack card is as he left it, SEND THEM IN and CALL IT OFF still on it)
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: the battle for %d closed with no result; nothing booked"), RegionId);
+		Notify(TEXT("The battle could not be fought to its end, so nothing was booked: SEND THEM IN lets your generals fight it."), 7.0);
+		return;
+	}
+	const FAttackResult Result = Session->SettleLandLive(CorpsIds, RegionId, ResultJson, TicketSeed);
+	UE_LOG(LogTheater, Display, TEXT("Campaign: the battle for %d booked (%s)"), RegionId, Result.bFought ? TEXT("fought") : TEXT("not booked"));
+	FaceOffSince = FPlatformTime::Seconds(); // (the result card's half second before Enter, as after SEND THEM IN)
+	AfterFight(RegionId, false, false, false, Result);
+}
+
+namespace
+{
+	/** (Release 1.6) The raid card's fly act, "raid:<kind>:<target>:<id>.<id>..." (the rules' raid card), read: false where it is not one. */
+	bool ReadFlyAct(const FString& Act, FString& OutKind, int32& OutTarget, TArray<int32>& OutIds)
+	{
+		TArray<FString> Parts;
+		Act.ParseIntoArray(Parts, TEXT(":"), false);
+		if (Parts.Num() != 4 || Parts[0] != TEXT("raid") || Parts[1].IsEmpty() || !Parts[2].IsNumeric())
+		{
+			return false;
+		}
+		OutKind = Parts[1];
+		OutTarget = FCString::Atoi(*Parts[2]);
+		OutIds.Reset();
+		TArray<FString> Picked;
+		Parts[3].ParseIntoArray(Picked, TEXT("."), true);
+		for (const FString& Id : Picked)
+		{
+			if (!Id.IsNumeric())
+			{
+				return false;
+			}
+			OutIds.Add(FCString::Atoi(*Id));
+		}
+		return OutIds.Num() > 0;
+	}
+
+	/** (Release 1.6) The raids he may fly himself: a bombing raid by day and a fight for the sky (the rules' FOUGHT_KINDS). */
+	bool IsFlownKind(const FString& Kind)
+	{
+		return Kind == TEXT("bomb") || Kind == TEXT("superiority");
+	}
+}
+
+bool ACampaignPlayerController::CanFlyLive() const
+{
+	// (the raid card up, a raid by day or for the sky that can go as picked, and no battle of his already open)
+	if (!AAirBattle::CampaignLiveOn() || bScripted || !bPageOpen || !Page.Card.bValid || !Page.Card.Fly.bOk || LiveRaid.IsValid() || LiveBattle.IsValid())
+	{
+		return false;
+	}
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	TArray<int32> Ids;
+	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids) || !IsFlownKind(Kind))
+	{
+		return false;
+	}
+	if (FlyOfferAct != Page.Card.Fly.Act)
+	{
+		// (weighed once a pick, the first time it is asked: the rules must have a battle in the air for this raid)
+		FlyOfferAct = Page.Card.Fly.Act;
+		FlyOffer = 0;
+		FCampaignSession* Session = GetSession();
+		FString LookText, LookError;
+		TSharedPtr<FJsonObject> LookAnswer;
+		const TSharedPtr<FJsonObject>* LookTicket = nullptr;
+		const FString IdsText = FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); });
+		if (!Session || !Session->CallBattle(TEXT("airLook"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *IdsText), LookText, LookError)
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(LookText), LookAnswer) || !LookAnswer.IsValid()
+			|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
+		{
+			FString Why = LookError;
+			if (LookAnswer.IsValid())
+			{
+				LookAnswer->TryGetStringField(TEXT("why"), Why);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF not offered for %s: no battle in the air for it (%s); FLY THE RAID only"), *FlyOfferAct, *Why);
+			return false;
+		}
+		FlyOffer = 1;
+		UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF offered for %s"), *FlyOfferAct);
+	}
+	return FlyOffer > 0;
+}
+
+void ACampaignPlayerController::FlyLive()
+{
+	FCampaignSession* Session = GetSession();
+	UWorld* Here = GetWorld();
+	if (!Session || !Map.IsValid() || !Here || !CanFlyLive() || IsAnswering() || TActorIterator<AAirBattle>(Here) || TActorIterator<ALandBattle>(Here))
+	{
+		return;
+	}
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	TArray<int32> Ids;
+	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids))
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+	AAirBattle* Sky = Here->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (!Sky)
+	{
+		return;
+	}
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Sky->HandBack = [Self, Kind, Target](const FString& EndJson)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->AirHandBack(Kind, Target, EndJson);
+		}
+	};
+	if (!Sky->BeginLive(Session, Kind, Target, Ids))
+	{
+		// (the rules would not open it after all: the card stays, FLY THE RAID with it, and the offer is not made again for this pick)
+		Sky->HandBack = nullptr;
+		Sky->Destroy();
+		FlyOffer = 0;
+		Notify(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."), 6.0);
+		return;
+	}
+	LiveRaid = Sky;
+	UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF, %s on %d by [%s] opened live"), *Kind, Target, *FString::JoinBy(Ids, TEXT(","), [](int32 Id) { return FString::FromInt(Id); }));
+	FlyLivePage = Page.Id;
+	FlyLiveAct = Page.Card.Fly.Act;
+	ClosePage();
+}
+
+void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, const FString& EndJson)
+{
+	LiveRaid.Reset();
+	FlyOfferAct.Reset();
+	FlyOffer = -1;
+	const FString FlownPage = FlyLivePage, FlownAct = FlyLiveAct;
+	FlyLivePage.Reset();
+	FlyLiveAct.Reset();
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	FString Note;
+	TArray<FSortie> Sorties;
+	const bool bBooked = !EndJson.IsEmpty() && Session->SettleAirLive(EndJson, Note, &Sorties);
+	// (whatever came of it, the table is brought up to the rules' picture of the war: the groups away, the target hit)
+	ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	RefreshOrders();
+	if (EndJson.IsEmpty())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Campaign: the raid (%s on %d) closed with no result; nothing booked"), *Kind, Target);
+		// (release 1.5: nothing booked, so the raid card comes back as he left it, FLY THE RAID on it; FLY IT YOURSELF is not
+		// offered again for that pick, whose rules have just failed, as when BeginLive cannot open it)
+		if (!FlownPage.IsEmpty())
+		{
+			OpenPage(FlownPage);
+			if (bPageOpen)
+			{
+				FlyOfferAct = FlownAct;
+				FlyOffer = 0;
+			}
+		}
+		Notify(TEXT("The raid could not be flown to its end, so nothing was booked: FLY THE RAID on its card still sends your crews."), 7.0);
+		return;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Campaign: the raid (%s on %d) flown live, booked: %s"), *Kind, Target, bBooked ? TEXT("yes") : TEXT("no"));
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 12.0);
+	}
+	// The eye goes to the target, where the map now shows what came of it. (Not in a run that takes pictures.)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	if (Sorties.Num() > 0 && !bPictures)
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Eye->GoTo(Map->MapToWorld(Sorties[0].To.X, Sorties[0].To.Y), FMath::Clamp(Eye->GetZoom(), 0.3f, 0.45f));
+		}
+	}
 }
 
 void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result)
@@ -10077,6 +10469,10 @@ void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bSt
 
 void ACampaignPlayerController::CloseFaceOff()
 {
+	if (LiveBattle.IsValid())
+	{
+		return; // (his own battle is open: the card behind it waits for its result)
+	}
 	if (FaceOff.bVisible && !FaceOff.bResolved && IsAnswering())
 	{
 		return; // (the attack has been sent in and its answer is on its way: the card is not called off under it)
@@ -10103,6 +10499,10 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	if (LiveBattle.IsValid() || LiveRaid.IsValid())
+	{
+		return; // (his own battle is open: no key reaches the map behind it)
+	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
 	FinishAnswer();

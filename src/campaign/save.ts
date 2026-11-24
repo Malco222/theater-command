@@ -86,6 +86,10 @@ export function saveGame(g: Game): string {
     atSea: g.atSea?.length ? g.atSea : undefined,
     // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
     ac: g.ac,
+    // Scarred ground (release 1.5's looks): the grand campaign's own; a historical save is written as it always was,
+    // and is given its scars back from its reports when loaded.
+    scars: g.flags.open === 1 ? g.scars : undefined,
+    captured: g.flags.open === 1 ? g.captured : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -240,6 +244,15 @@ export function loadGame(text: string): Game | null {
   // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
+  // Scarred ground: as saved, or for a save without it (release 1's own), from the battles its reports still hold.
+  if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
+  if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
+  else
+    for (const r of g.reports ?? []) {
+      if (r.yielded) continue;
+      const was = (g.scars ??= {})[r.region];
+      g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
+    }
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

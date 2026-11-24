@@ -174,6 +174,9 @@ export const guardPower = (g: Game, r: Region): number => {
 };
 
 /** The men in the guard, for a report. */
+/** The town's guard as a block on the field, by a corps id no corps has (ruling 232): the field's bill names it so. */
+export const guardForce = (r: Region): number => -1 - r.id;
+
 export const guardMen = (g: Game, r: Region): number => Math.round(guardOf(g, r) * MEN_PER_DIV);
 
 /** Puts part of the guard out of action: so many percent of what it was at full strength. */

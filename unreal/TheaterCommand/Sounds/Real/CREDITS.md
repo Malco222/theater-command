@@ -81,23 +81,198 @@ The game is for personal use only.
 | `bomb_stick_01` | `bomb_stick_01.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
 | `dogfight` | `dogfight.wav` | [A6M Zero Chasing P-51D Mustang](https://freesound.org/people/Fight2FlyPhoto/sounds/161120/) | Freesound | CC BY-NC 3.0 | Fight2FlyPhoto |
 | `aircraft_takeoff` | `aircraft_takeoff.wav` | [B-25 TAKEOFF 01](https://freesound.org/people/LOVEBURD/sounds/329616/) | Freesound | CC0 | none |
+| `artillery_fire_01` | `artillery_fire_01.wav` | [File:Croatian artillery units fire artillery.webm](https://commons.wikimedia.org/wiki/File:Croatian_artillery_units_fire_artillery.webm) | Wikimedia Commons | Public domain | none |
+| `battle_far_loop` | `battle_far_loop.wav` | [File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `battle_far_loop` | `battle_far_loop.wav` | [File:M240G Live Fire Prime Cuts.ogv](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
+| `battle_far_loop` | `battle_far_loop.wav` | [File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `battle_far_loop` | `battle_far_loop.wav` | [Distant WW2 Gunfire Kent.wav](https://freesound.org/people/Cheeseheadburger/sounds/170478/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `body_fall_01` | `body_fall_01.wav` | [BODY FALL - V HVY - DIRT](https://freesound.org/people/leonelmail/sounds/504626/) | Freesound | CC0 | none |
+| `body_fall_02` | `body_fall_02.wav` | [A body falling to the ground, with leaf crush](https://freesound.org/people/Wigglesworth/sounds/853591/) | Freesound | CC0 | none |
+| `body_fall_03` | `body_fall_03.wav` | [A body falling to the ground, with leaf crush](https://freesound.org/people/Wigglesworth/sounds/853591/) | Freesound | CC0 | none |
+| `body_fall_04` | `body_fall_04.wav` | [Body fall in grass CLOSE.mp3](https://freesound.org/people/J.Zazvurek/sounds/73583/) | Freesound | CC BY 4.0 | J.Zazvurek |
+| `body_fall_05` | `body_fall_05.wav` | [Body fall_02.wav](https://freesound.org/people/deleted_user_2104797/sounds/346694/) | Freesound | CC0 | none |
+| `body_fall_cry_01` | `body_fall_cry_01.wav` | [S03-19 Body falls on dirt; grunts.wav](https://freesound.org/people/craigsmith/sounds/675923/) | Freesound | CC0 | none |
+| `body_fall_cry_02` | `body_fall_cry_02.wav` | [S03-19 Body falls on dirt; grunts.wav](https://freesound.org/people/craigsmith/sounds/675923/) | Freesound | CC0 | none |
+| `body_fall_cry_03` | `body_fall_cry_03.wav` | [S03-19 Body falls on dirt; grunts.wav](https://freesound.org/people/craigsmith/sounds/675923/) | Freesound | CC0 | none |
+| `body_fall_cry_04` | `body_fall_cry_04.wav` | [S03-19 Body falls on dirt; grunts.wav](https://freesound.org/people/craigsmith/sounds/675923/) | Freesound | CC0 | none |
+| `body_fall_cry_05` | `body_fall_cry_05.wav` | [S03-19 Body falls on dirt; grunts.wav](https://freesound.org/people/craigsmith/sounds/675923/) | Freesound | CC0 | none |
+| `body_fall_rubble` | `body_fall_rubble.wav` | [Body falls into debris](https://freesound.org/people/leonelmail/sounds/461697/) | Freesound | CC0 | none |
+| `bolt_k98` | `bolt_k98.wav` | [Mauser 98k - bolt-action mechanism sound](https://freesound.org/people/Walking.With.Microphones/sounds/802673/) | Freesound | CC0 | none |
+| `bren_far_01` | `bren_far_01.wav` | [S20-23 distant sound of a Bren machine gun.wav](https://freesound.org/people/craigsmith/sounds/675591/) | Freesound | CC0 | none |
+| `bren_far_02` | `bren_far_02.wav` | [S20-23 distant sound of a Bren machine gun.wav](https://freesound.org/people/craigsmith/sounds/675591/) | Freesound | CC0 | none |
+| `bren_far_03` | `bren_far_03.wav` | [S20-23 distant sound of a Bren machine gun.wav](https://freesound.org/people/craigsmith/sounds/675591/) | Freesound | CC0 | none |
+| `building_collapse` | `building_collapse.wav` | [merrimack-st-demolition.aif](https://freesound.org/people/alienistcog/sounds/125937/) | Freesound | CC0 | none |
+| `bullet_crack` | `bullet_crack.wav` | [Real Bullet Flyby Sound](https://freesound.org/people/qubodup/sounds/855248/) | Freesound | CC0 | none |
+| `bullets_incoming_01` | `bullets_incoming_01.wav` | [Incoming Ricochets.wav](https://freesound.org/people/rakurka/sounds/109958/) | Freesound | CC BY 3.0 | rakurka |
+| `bullets_incoming_02` | `bullets_incoming_02.wav` | [Incoming Ricochets.wav](https://freesound.org/people/rakurka/sounds/109958/) | Freesound | CC BY 3.0 | rakurka |
+| `explosion_debris` | `explosion_debris.wav` | [Nearby explosion with debris.wav](https://freesound.org/people/juskiddink/sounds/108641/) | Freesound | CC BY 4.0 | juskiddink |
+| `far_guns_01` | `far_guns_01.wav` | [File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `far_guns_02` | `far_guns_02.wav` | [File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `far_guns_03` | `far_guns_03.wav` | [File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `field_gun_fire_02` | `field_gun_fire_02.wav` | [File:10th Mountain Division Conducts M119A3 Howitzer LFX at AAAB (953744).webm](https://commons.wikimedia.org/wiki/File:10th_Mountain_Division_Conducts_M119A3_Howitzer_LFX_at_AAAB_(953744).webm) | Wikimedia Commons | Public domain | none |
+| `front_rumble_loop` | `front_rumble_loop.wav` | [File:Croatian artillery units fire artillery.webm](https://commons.wikimedia.org/wiki/File:Croatian_artillery_units_fire_artillery.webm) | Wikimedia Commons | Public domain | none |
+| `front_rumble_loop` | `front_rumble_loop.wav` | [distant explosions](https://freesound.org/people/Kostrava/sounds/320788/) | Freesound | CC0 | none |
+| `front_rumble_loop` | `front_rumble_loop.wav` | [File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `front_rumble_loop` | `front_rumble_loop.wav` | [File:10th Mountain Division Conducts M119A3 Howitzer LFX at AAAB (953744).webm](https://commons.wikimedia.org/wiki/File:10th_Mountain_Division_Conducts_M119A3_Howitzer_LFX_at_AAAB_(953744).webm) | Wikimedia Commons | Public domain | none |
+| `front_rumble_loop` | `front_rumble_loop.wav` | [File:Explosions-LS100152.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `garand_clip_ping` | `garand_clip_ping.wav` | [An M1 Garand clip being ejected w/ ping](https://freesound.org/people/serøutōnin--deprivəd/sounds/725398/) | Freesound | CC0 | none |
+| `garand_shot` | `garand_shot.wav` | [M1 Garand Rifle](https://freesound.org/people/nioczkus/sounds/386842/) | Freesound | CC0 | none |
+| `german_los` | `german_los.wav` | [Los, los, los.aif](https://freesound.org/people/boomerangquest/sounds/237290/) | Freesound | CC0 | none |
+| `german_schnell` | `german_schnell.wav` | [Schnell, schnell.aif](https://freesound.org/people/boomerangquest/sounds/237294/) | Freesound | CC0 | none |
+| `grenade_blast` | `grenade_blast.wav` | [File:Explosions-LS100152.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `grenade_blast_02` | `grenade_blast_02.wav` | [Nearby explosion with debris.wav](https://freesound.org/people/juskiddink/sounds/108641/) | Freesound | CC BY 4.0 | juskiddink |
+| `grenade_blast_03` | `grenade_blast_03.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `grenade_throw` | `grenade_throw.wav` | [Grenade with Pin Handling](https://freesound.org/people/loganzsound/sounds/876008/) | Freesound | CC0 | none |
+| `grenade_throw` | `grenade_throw.wav` | [ThrowGrenadeCloth.ogg](https://freesound.org/people/Avreliy/sounds/611613/) | Freesound | CC0 | none |
+| `halftrack_idle_loop` | `halftrack_idle_loop.wav` | [File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv](https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv) | Wikimedia Commons | CC BY 3.0 | rafowell |
+| `kar98_shot` | `kar98_shot.wav` | [Mauser 98k Shooting](https://freesound.org/people/Walking.With.Microphones/sounds/802675/) | Freesound | CC0 | none |
+| `kit_rattle_01` | `kit_rattle_01.wav` | [Harness Armour straps - Baldric or military equipment](https://freesound.org/people/Vrymaa/sounds/805470/) | Freesound | CC0 | none |
+| `kit_rattle_02` | `kit_rattle_02.wav` | [Harness Armour straps - Baldric or military equipment](https://freesound.org/people/Vrymaa/sounds/805470/) | Freesound | CC0 | none |
+| `kit_rattle_03` | `kit_rattle_03.wav` | [Metal_Canteen_Rattle_002.wav](https://freesound.org/people/duckduckpony/sounds/204047/) | Freesound | CC BY 4.0 | duckduckpony |
+| `light_tank_loop` | `light_tank_loop.wav` | [t26_moving_01.wav](https://freesound.org/people/greatmganga/sounds/329800/) | Freesound | CC0 | none |
+| `lmg_burst_01` | `lmg_burst_01.wav` | [File:M240G Live Fire Prime Cuts.ogv](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
+| `lmg_burst_02` | `lmg_burst_02.wav` | [File:M240G Live Fire Prime Cuts.ogv](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
+| `lmg_burst_03` | `lmg_burst_03.wav` | [File:M240G Live Fire Prime Cuts.ogv](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
+| `lorry_idle_loop` | `lorry_idle_loop.wav` | [File:GMC CCKW 353 à Besançon le 8 septembre 2026.webm](https://commons.wikimedia.org/wiki/File:GMC_CCKW_353_%C3%A0_Besan%C3%A7on_le_8_septembre_2026.webm) | Wikimedia Commons | CC0 | none |
+| `marching_loop_02` | `marching_loop_02.wav` | [Marching 3.wav](https://freesound.org/people/WebbFilmsUK/sounds/200322/) | Freesound | CC BY 4.0 | WebbFilmsUK |
+| `mg_town_01` | `mg_town_01.wav` | [Heavy Mashine Guns Around (Background) WW2.wav](https://freesound.org/people/Lubini/sounds/338241/) | Freesound | CC BY 4.0 | Lubini |
+| `mg_town_02` | `mg_town_02.wav` | [Heavy Mashine Guns Around (Background) WW2.wav](https://freesound.org/people/Lubini/sounds/338241/) | Freesound | CC BY 4.0 | Lubini |
+| `mg_town_03` | `mg_town_03.wav` | [Heavy Mashine Guns Around (Background) WW2.wav](https://freesound.org/people/Lubini/sounds/338241/) | Freesound | CC BY 4.0 | Lubini |
+| `mortar_fire` | `mortar_fire.wav` | [120mm Mortar Shell Shot 2](https://freesound.org/people/qubodup/sounds/854478/) | Freesound | CC0 | none |
+| `mp40_burst_01` | `mp40_burst_01.wav` | [mp 38 schmeisser (Variations) WW2.wav](https://freesound.org/people/Lubini/sounds/338046/) | Freesound | CC BY 4.0 | Lubini |
+| `mp40_burst_02` | `mp40_burst_02.wav` | [mp 38 schmeisser (Variations) WW2.wav](https://freesound.org/people/Lubini/sounds/338046/) | Freesound | CC BY 4.0 | Lubini |
+| `order_charge` | `order_charge.wav` | [Charge! - (Version 2) British Warrior](https://freesound.org/people/theuncertainman/sounds/458068/) | Freesound | CC BY 4.0 | theuncertainman |
+| `order_english_01` | `order_english_01.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_02` | `order_english_02.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_03` | `order_english_03.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_04` | `order_english_04.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_05` | `order_english_05.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_06` | `order_english_06.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_07` | `order_english_07.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_08` | `order_english_08.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_09` | `order_english_09.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_10` | `order_english_10.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_11` | `order_english_11.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_12` | `order_english_12.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_13` | `order_english_13.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_14` | `order_english_14.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_15` | `order_english_15.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_16` | `order_english_16.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_english_17` | `order_english_17.wav` | [military01_scottstoked.wav](https://freesound.org/people/shawshank73/sounds/95520/) | Freesound | CC BY 3.0 | shawshank73 |
+| `order_go` | `order_go.wav` | [Go Go Go - (Version 2) Northern British Soldier](https://freesound.org/people/theuncertainman/sounds/402643/) | Freesound | CC BY 4.0 | theuncertainman |
+| `order_move` | `order_move.wav` | [Move!  - British Warrior](https://freesound.org/people/theuncertainman/sounds/458073/) | Freesound | CC BY 4.0 | theuncertainman |
+| `ricochet_01` | `ricochet_01.wav` | [Ricochet 3_2.wav](https://freesound.org/people/Benboncan/sounds/78092/) | Freesound | CC BY 4.0 | Benboncan |
+| `rifle_shot_01` | `rifle_shot_01.wav` | [File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `rifle_shot_02` | `rifle_shot_02.wav` | [File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `rifle_shot_03` | `rifle_shot_03.wav` | [File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `rifle_shot_04` | `rifle_shot_04.wav` | [File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `rifles_far_loop` | `rifles_far_loop.wav` | [Distant WW2 Gunfire Kent.wav](https://freesound.org/people/Cheeseheadburger/sounds/170478/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `shell_impact_far` | `shell_impact_far.wav` | [File:Explosions-LS100152.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `shell_impact_near` | `shell_impact_near.wav` | [File:Explosions-LS100152.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `shell_impact_near_02` | `shell_impact_near_02.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `shell_impact_near_03` | `shell_impact_near_03.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `street_battle` | `street_battle.wav` | [Street Battle: Lviv Ukraine - WW1 Reconstruction.wav](https://freesound.org/people/Lubini/sounds/337773/) | Freesound | CC BY 4.0 | Lubini |
+| `tank_gun_02` | `tank_gun_02.wav` | [File:1st Infantry Division Performs M1A2 Abrams Live Fire in Bulgaria (984396).webm](https://commons.wikimedia.org/wiki/File:1st_Infantry_Division_Performs_M1A2_Abrams_Live_Fire_in_Bulgaria_(984396).webm) | Wikimedia Commons | Public domain | none |
+| `tank_idle_loop` | `tank_idle_loop.wav` | [File:Tank T-34 Eesti Vabadusvõitluse Muuseumis.ogg](https://commons.wikimedia.org/wiki/File:Tank_T-34_Eesti_Vabadusv%C3%B5itluse_Muuseumis.ogg) | Wikimedia Commons | CC0 | none |
+| `tank_idle_sherman_loop` | `tank_idle_sherman_loop.wav` | [Sherman E8 ("Easy 8") tank starting up and running](https://freesound.org/people/nicStage/sounds/368670/) | Freesound | CC BY 4.0 | nicStage |
+| `tank_knocked_out` | `tank_knocked_out.wav` | [File:Explosions-LS100152.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `tank_knocked_out` | `tank_knocked_out.wav` | [File:Explosions-LS100155.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `tank_knocked_out_02` | `tank_knocked_out_02.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `tank_knocked_out_02` | `tank_knocked_out_02.wav` | [File:Explosions-LS100155.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `tank_knocked_out_02` | `tank_knocked_out_02.wav` | [Nearby explosion with debris.wav](https://freesound.org/people/juskiddink/sounds/108641/) | Freesound | CC BY 4.0 | juskiddink |
+| `tank_knocked_out_03` | `tank_knocked_out_03.wav` | [Nearby explosion with debris.wav](https://freesound.org/people/juskiddink/sounds/108641/) | Freesound | CC BY 4.0 | juskiddink |
+| `tank_knocked_out_03` | `tank_knocked_out_03.wav` | [File:Explosions-LS100155.ogg](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `tank_knocked_out_03` | `tank_knocked_out_03.wav` | [2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro](https://freesound.org/people/julujanus/sounds/768370/) | Freesound | CC0 | none |
+| `tank_mg_burst` | `tank_mg_burst.wav` | [File:M240G Live Fire Prime Cuts.ogv](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
+| `tank_shell_case` | `tank_shell_case.wav` | [Bouncing Shell Casings (Various Sizes)](https://freesound.org/people/GryffDavid/sounds/318964/) | Freesound | CC0 | none |
+| `tank_sherman_drive_loop` | `tank_sherman_drive_loop.wav` | [Sherman E8 ("Easy 8") tank driving](https://freesound.org/people/nicStage/sounds/368671/) | Freesound | CC BY 4.0 | nicStage |
+| `tank_start` | `tank_start.wav` | [Sherman E8 ("Easy 8") tank starting up and running](https://freesound.org/people/nicStage/sounds/368670/) | Freesound | CC BY 4.0 | nicStage |
+| `victory_cry` | `victory_cry.wav` | [VICTORY CRY REVERB 1.wav](https://freesound.org/people/chripei/sounds/165492/) | Freesound | CC BY 4.0 | chripei |
+| `whistle_long` | `whistle_long.wav` | [Whistle army old.wav](https://freesound.org/people/deleted_user_2104797/sounds/324539/) | Freesound | CC0 | none |
+| `fire_loop` | `fire_loop.wav` | [Fire Large Roar And Hiss With Crackles.mp3](https://freesound.org/people/theoneandtruelybitch/sounds/698209/) | Freesound | CC0 | none |
+| `fire_small_loop` | `fire_small_loop.wav` | [Fire Burning Loop](https://freesound.org/people/midimagician/sounds/249418/) | Freesound | CC0 | none |
+| `fire_start` | `fire_start.wav` | [R30-09-Fires Burns Wood and Metal Crackling.wav](https://freesound.org/people/craigsmith/sounds/483323/) | Freesound | CC0 | none |
+| `footstep_01` | `footstep_01.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_02` | `footstep_02.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_03` | `footstep_03.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_04` | `footstep_04.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_05` | `footstep_05.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_06` | `footstep_06.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_07` | `footstep_07.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_08` | `footstep_08.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `knee_down` | `knee_down.wav` | [Personaje se arrodilla.wav](https://freesound.org/people/josecruz98/sounds/393021/) | Freesound | CC0 | none |
+| `garand_reload` | `garand_reload.wav` | [An M1 Garand being reloaded while empty; full sequence](https://freesound.org/people/serøutōnin--deprivəd/sounds/725399/) | Freesound | CC0 | none |
+| `bullet_crack` | `crack_woods_01.wav` | [gun shot.aif](https://freesound.org/people/trip2000/sounds/52284/) | Freesound | CC0 | none |
+| `ricochet_whine` | `ricochet_whine_01.wav` | [Ricochet 1.wav](https://freesound.org/people/Benboncan/sounds/74393/) | Freesound | CC BY 4.0 | Benboncan |
+| `ricochet_whine` | `ricochet_whine_02.wav` | [Ricochet 2.wav](https://freesound.org/people/Benboncan/sounds/74394/) | Freesound | CC BY 4.0 | Benboncan |
+| `ricochet_whine` | `ricochet_whine_03.wav` | [Ricochet 3.wav](https://freesound.org/people/Benboncan/sounds/74395/) | Freesound | CC BY 4.0 | Benboncan |
+| `armour_small_arms` | `steel_hit_01.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `armour_small_arms` | `steel_hit_02.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `armour_small_arms` | `steel_hit_03.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `mortar_landing` | `mortar_impact_01.wav` | [M224 Mortar Impact Medium Distance 01](https://freesound.org/people/Nanashi/sounds/426164/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_02.wav` | [M224 Mortar Impact Medium Distance 02](https://freesound.org/people/Nanashi/sounds/426163/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_far_01.wav` | [M224 Mortar Impact  Distant 01](https://freesound.org/people/Nanashi/sounds/426166/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_far_02.wav` | [M224 Mortar Impact  Distant 03](https://freesound.org/people/Nanashi/sounds/426167/) | Freesound | CC BY 4.0 | Nanashi |
+| `tank_engine_german` | `panzer_engine_loop.wav` | [Taistelunäytös Lippujuhlan päivä 2014 16 Stug IIIG](https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm) | Wikimedia Commons | Public domain | none |
+| `maxim_burst` | `maxim_burst.wav` | [Maxim Russian machinegun](https://freesound.org/people/poissonmort/sounds/160773/) | Freesound | CC BY 4.0 | poissonmort |
+| `bolt_mosin` | `bolt_mosin.wav` | [Mosin Nagant Bolt Action Cycle](https://freesound.org/people/Zott820/sounds/370345/) | Freesound | CC0 | none |
+| `russian_order_01` | `russian_order_01.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_02` | `russian_order_02.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_03` | `russian_order_03.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_04` | `russian_order_04.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `fw190_pass` | `fw190_pass.wav` | [Fw-190 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143562/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `p51_pass` | `p51_pass.wav` | [P51 with supercharger](https://freesound.org/people/doubletrigger/sounds/110736/) | Freesound | CC BY 3.0 | doubletrigger |
+| `p47_pass` | `p47_pass.wav` | [P-47 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143560/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `spitfire_pass` | `spitfire_pass.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [G07-18_B-17 4 Engine Prop Steady Engine Noise](https://freesound.org/people/craigsmith/sounds/437862/) | Freesound | CC0 | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Fw-190 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143562/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [M2 browning](https://commons.wikimedia.org/wiki/File:M2_browning.webm) | Wikimedia Commons | Public domain | none |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [MG 42 (Solo) WW2](https://freesound.org/people/Lubini/sounds/338242/) | Freesound | CC BY 4.0 | Lubini |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [P-47 Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/143560/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [P51 with supercharger](https://freesound.org/people/doubletrigger/sounds/110736/) | Freesound | CC BY 3.0 | doubletrigger |
+| `air_battle_far_loop` | `air_battle_far_loop.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `b24_drone_loop` | `b24_drone_loop.wav` | [b24](https://freesound.org/people/relwin/sounds/391516/) | Freesound | CC BY 4.0 | relwin |
+| `stuka_drone_loop` | `stuka_drone_loop.wav` | [G04-07-WWII Stuka engine drone](https://freesound.org/people/craigsmith/sounds/437771/) | Freesound | CC0 | none |
+| `b17_interior_loop` | `b17_interior_loop.wav` | [G07-06_B-17 4 Engine Prop Ambience.wav](https://freesound.org/people/craigsmith/sounds/437850/) | Freesound | CC0 | none |
+| `b17_formation_drone_loop` | `b17_formation_drone_loop.wav` | [B-17 fly-over](https://www.dvidshub.net/video/600861) | DVIDS | Public domain | A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_whiteman_loop.wav` | [Wings Over Whiteman B-roll](https://www.dvidshub.net/video/531502) | DVIDS | Public domain | SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_sioux_loop.wav` | [CAF brings Flying Fortress to Sioux City](https://www.dvidshub.net/video/852294) | DVIDS | Public domain | SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video) |
 
 ## Credits owed
 
-- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain" · CC BY 4.0
+- **A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video)** "B-17 fly-over" · Public domain
+- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav", "Ricochet 1.wav", "Ricochet 2.wav", "Ricochet 3.wav" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
-- **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od" · CC BY 4.0
-- **Fight2FlyPhoto** "B-25 Mitchell Flyby" · CC BY 3.0, "A6M Zero Chasing P-51D Mustang" · CC BY-NC 3.0
+- **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od", "Distant WW2 Gunfire Kent.wav" · CC BY 4.0
+- **chripei** "VICTORY CRY REVERB 1.wav" · CC BY 4.0
+- **doubletrigger** "P51 with supercharger" · CC BY 3.0
+- **duckduckpony** "Metal_Canteen_Rattle_002.wav" · CC BY 4.0
+- **Fight2FlyPhoto** "B-25 Mitchell Flyby" · CC BY 3.0, "A6M Zero Chasing P-51D Mustang" · CC BY-NC 3.0, "Fw-190 Flyby" · CC BY 3.0, "P-47 Flyby" · CC BY 3.0
 - **FLYWITHMETOTHEMOON from Japan** "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a" · CC BY 3.0
 - **Gary Hoover** "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12" · CC BY 3.0
 - **Huggy13ear** "parachute 2" · CC BY 4.0
+- **J.Zazvurek** "Body fall in grass CLOSE.mp3" · CC BY 4.0
+- **juskiddink** "Nearby explosion with debris.wav" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
-- **Lubini** "MG 42 (Solo) WW2" · CC BY 4.0
+- **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav" · CC BY 4.0
+- **Nanashi** "M224 Mortar Impact Medium Distance 01", "M224 Mortar Impact Medium Distance 02", "M224 Mortar Impact  Distant 01", "M224 Mortar Impact  Distant 03" · CC BY 4.0
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
-- **none** "G07-18_B-17 4 Engine Prop Steady Engine Noise" · CC0, "M2 browning" · Public domain, "Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll" · Public domain, "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon" · Public domain, "Explosions-LS100155" · Public domain, "Explosions-LS100152" · Public domain, "distant explosions" · CC0, "B-25 TAKEOFF 01" · CC0
-- **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)" · CC BY 3.0
+- **nicStage** "Sherman E8 ("Easy 8") tank starting up and running", "Sherman E8 ("Easy 8") tank driving" · CC BY 4.0
+- **poissonmort** "Maxim Russian machinegun" · CC BY 4.0
+- **qubodup** "Russian Cheeky Soldier Voice" · CC BY 4.0
+- **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)", "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv" · CC BY 3.0
+- **rakurka** "Incoming Ricochets.wav" · CC BY 3.0
+- **relwin** "b24" · CC BY 4.0
+- **shawshank73** "military01_scottstoked.wav" · CC BY 3.0
+- **SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video)** "CAF brings Flying Fortress to Sioux City" · Public domain
+- **SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video)** "Wings Over Whiteman B-roll" · Public domain
 - **Subhashish Panigrahi** "Rubber seal dabbed on ink pad" · CC BY 3.0
+- **theuncertainman** "Charge! - (Version 2) British Warrior", "Go Go Go - (Version 2) Northern British Soldier", "Move!  - British Warrior" · CC BY 4.0
+- **WebbFilmsUK** "Marching 3.wav" · CC BY 4.0
 - **Work With Sounds / Konrad Gutkowski** "WWS Typewriter" · CC BY 4.0
 - **Work With Sounds / Museum of Municipal Engineering** "WWS Quarter-hourtowerclock" · CC BY 4.0

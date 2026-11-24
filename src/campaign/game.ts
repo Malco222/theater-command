@@ -49,9 +49,9 @@ import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, guardForce, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
-import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
+import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
@@ -607,6 +607,57 @@ export function weather(g: Game): { mud: boolean; winter: boolean; text: string 
 }
 
 /**
+ * The ground's weather over a province this month, in the 3D game's words (release 1.5, from release 2; looks only):
+ * 'mud' in the eastern thaw, 'snow' in its zone's snow months, else under the skies switch 'rain' (a closed sky) or
+ * 'clear'; '' where there is none to tell. Nothing in the war reads it.
+ */
+export function groundWeather(g: Game, r: Region): string {
+  const zone = WEATHER.zones[zoneOfRegion(g, r.id)];
+  const m = turnToDate(g.turn).month;
+  if (zone && (zone.key === 'nrus' || zone.key === 'srus') && weather(g).mud) return 'mud';
+  if (zone && zone.snow.includes(m + 1)) return 'snow';
+  if (!weatherOn(g)) return '';
+  const sky = skyAt(g, r.id);
+  return sky === 'closed' ? 'rain' : sky === 'clear' ? 'clear' : '';
+}
+
+/**
+ * Worn uniforms (release 2's wearMonth, in release 1.5 for its looks): a corps' weeks in the line since it was last
+ * rested or formed. A month fought, attacked, cut off or facing the enemy counts four weeks; a month marching counts
+ * the weeks it marched; a quiet month away from the front clears them. Read only by the battle card's ticket.
+ */
+function wornMonth(g: Game, c: Corps): void {
+  const r = g.regions[c.reg];
+  const facing = !!r && (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))
+    || r.nb.some((j) => { const o = g.regions[j].ctrl; return !!o && o !== c.nat && atWar(g, o, c.nat); }));
+  const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
+  const weeks = c.kind === 'fort' || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || facing ? 4 : marched;
+  if (weeks <= 0) delete c.line;
+  else c.line = (c.line ?? 0) + weeks;
+}
+
+/**
+ * Captured kit (release 2, in release 1.5 for its looks): after a fought battle won heavily over an army with tanks, the
+ * winner keeps a few of them (1 to 3 tank blocks to be drawn as the loser's model in the 3D game), at even odds for a
+ * heroic win or a rout of the attack, and a third for a decisive win; kept six months, the three latest for each nation.
+ */
+function capturedKit(g: Game, rep: BattleReport, target: Region): void {
+  const attWon = rep.level.endsWith('victory');
+  const heavy = rep.level === 'Heroic victory' || rep.level === 'Decisive defeat' ? 50 : rep.level === 'Decisive victory' ? 33 : 0;
+  if (!heavy) return;
+  const losers = (attWon ? rep.defenders : rep.attackers).filter((u) => u.kind === 'arm' && u.divs > 0);
+  if (!losers.length) return;
+  const throwOf = (rep.id * 7919 + target.id * 104729 + g.turn * 31) % 100;
+  if (throwOf >= heavy) return;
+  const winner = attWon ? rep.attNat : rep.defNat;
+  const from = losers.reduce((a, b) => (b.divs > a.divs ? b : a)).nat;
+  if (from === winner) return;
+  const n = Math.min(3, Math.max(1, Math.round(losers.reduce((s2, u) => s2 + u.divs, 0))));
+  const book = (g.captured ??= {});
+  book[winner] = [...(book[winner] ?? []).filter((k) => g.turn - k.turn < 6).slice(-2), { from, n, turn: g.turn }];
+}
+
+/**
  * Whose ground takes the long line in this war: the Soviet Union's at every stop, and that of the owners in east.json
  * 'lineOwners' at the dial's stops in 'lineStops' (ruling 221, L). The Russian winter stays the Soviet Union's alone.
  */
@@ -1087,7 +1138,110 @@ export interface AttackOpts {
    * flew, by group id. Unset, each group flies the strikes the battle card gave its side.
    */
   closeSorties?: Record<number, number>;
+  /**
+   * The battle was fought out on the field by the player (src/battle): the ratio it came to stands in for the day's
+   * luck, and the rules apply their own losses, retreats and prisoners from it. Absent, the dice roll as always.
+   */
+  fought?: number;
+  /** With 'fought': what the field cost each corps and each side, so the bill speaks as the field did (ruling 226(6)). */
+  field?: FieldBill;
 }
+
+/** The share of its strength the attacking army loses at the ratio R, and the defence's (the rules' own, as before). */
+export const attackLoss = (R: number): number => clamp(0.14 / R, 0.02, 0.2);
+export const defenceLoss = (R: number): number => clamp(0.07 + 0.1 * R, 0.06, 0.45);
+
+/**
+ * What a battle fought on the field cost, for the campaign's bill (ruling 226(6)). 'corps': the share of its strength
+ * each corps lost on the field, by corps id: each side's bill falls on its corps as the field had it. 'att' and 'def':
+ * the share each side lost on the field. 'whole': the battle was fought to its end; handed to the staff, only the part
+ * before is the field's, and the bill for the whole day is never less than it. 'broke': the side whose army broke on
+ * the field (routed or driven from it). Where that side lost the day, the rules settle the pursuit (b464): it pays
+ * what the rules charge for the same result at the staff's roll, the odds SEND THEM IN draws (b476(2)), or the field's
+ * loss where that is larger.
+ * 'pulled': the side that withdrew its army after the armies met, and how near breaking it stood (its bar, 0 to 1).
+ * Where that side lost the day it pays the rules' bill for that defeat (at the staff's roll) times the bar squared, or
+ * its field loss where that is larger (b474): an army that pulls out early gets away for little more than it had lost; one on the point of
+ * breaking could not get away at all, and pays the whole.
+ */
+export interface FieldBill {
+  corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number };
+  /** Close air support flown on the field: the strikes each group flew, by group id, booked as AttackOpts.closeSorties. */
+  air?: Record<number, number>;
+}
+
+/**
+ * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one
+ * measure and must agree within a fifth (the design director, after the UI director's slice 3 review). Held a little
+ * inside the fifth, so the whole numbers the card prints agree too.
+ */
+export const FIELD_HOLD = 1.15;
+
+/** Scales a side's planned loss shares so its whole bill stands within FIELD_HOLD of the field's (1 with no field). */
+function fieldScale(cs: Corps[], planned: number[], share: number | undefined, whole: boolean): number {
+  if (share === undefined) return 1;
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  const now = tot > 0 ? cs.reduce((a, _c, i) => a + m[i] * planned[i], 0) / tot : 0;
+  if (now <= 1e-9) return 1;
+  const want = Math.max(share / FIELD_HOLD, whole ? Math.min(now, share * FIELD_HOLD) : now);
+  return want / now;
+}
+
+/**
+ * The scale for a side whose army broke on the field and lost the day (b464): the field settles the clash, the rules the
+ * pursuit. Its whole bill is the rules' own as SEND THEM IN charges it, at the staff's roll ('plain': each corps' share
+ * with no field split, b476(2)), or the field's ('share') where that is larger. It still falls on its corps as the field had it ('part': each
+ * corps' share with the split, before the scale), each held to 'cap' and then times 'mul': where the corps the field hit
+ * hardest reaches its cap, the rest of the bill falls on the others, so the side's whole bill is still the rules'.
+ */
+function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number, mul: number, share: number, of = 1): number {
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  if (tot <= 0 || mul <= 0) return 1;
+  // 'of': the part of the rules' bill it pays; all of it for a pursuit, the bar squared for a withdrawal (b474).
+  const want = Math.max(share / mul, of * (cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, plain[i]), 0) / tot)) * tot;
+  // The bill rises with the scale until each corps reaches its cap: a straight line between caps, so a few steps find it.
+  let k = 1;
+  for (let n = 0; n <= cs.length + 1; n++) {
+    let held = 0, free = 0;
+    cs.forEach((_c, i) => { if (k * part[i] >= cap) held += m[i] * cap; else free += m[i] * part[i]; });
+    if (free <= 1e-12) break;
+    const next = Math.max(0, (want - held) / free);
+    if (Math.abs(next - k) < 1e-9) break;
+    k = next;
+  }
+  // (release 1.5) Where the field's loss fell on one corps, that corps' part can pass its cap at the first step, so the
+  // steps above stop with nothing left to scale and the side paid that corps' cap, more than its whole bill (an army
+  // that fell back after half a minute at Gazala, 6.9% lost on the field and a bill of 6.9%, was booked 17.5%). Where
+  // the bill is short of every corps at its cap and the steps did not reach it, it is found exactly: the corps passing
+  // their caps in turn, each one's part a straight line until it does.
+  const billAt = (s: number) => cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, s * part[i]), 0);
+  const most = cs.reduce((a, _c, i) => a + (part[i] > 0 ? m[i] * cap : 0), 0), near = 1e-9 * Math.max(1, want);
+  if (want < most - near && Math.abs(billAt(k) - want) > near) {
+    const order = cs.map((_c, i) => i).filter((i) => part[i] > 0).sort((x, y) => cap / part[x] - cap / part[y]);
+    let held = 0, free = order.reduce((a, i) => a + m[i] * part[i], 0);
+    for (const i of order) {
+      const at = cap / part[i];
+      const s = free > 1e-12 ? Math.max(0, (want - held) / free) : at;
+      if (s <= at) { k = s; break; }
+      held += m[i] * cap;
+      free -= m[i] * part[i];
+      k = at;
+    }
+  }
+  return k;
+}
+
+/**
+ * Each corps' part of its side's bill as the field had it: its field loss over the side's, weighted by men, so the
+ * side's total is unchanged. 1 for every corps where the field gave nothing to go on.
+ */
+function splitWeights(cs: Corps[], split: Record<number, number> | undefined): number[] {
+  if (!split) return cs.map(() => 1);
+  const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
+  const mean = tot > 0 ? cs.reduce((a, c, i) => a + m[i] * (split[c.id] ?? 0), 0) / tot : 0;
+  return cs.map((c) => (mean > 1e-6 && split[c.id] !== undefined ? Math.min(3, split[c.id] / mean) : 1));
+}
+
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
 export function assess(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): Assessment {
@@ -1927,23 +2081,40 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // A lone gun corps attacked is overrun (ruling 146, the grand campaign): guns with nothing in front of them make
   // no stand in the field. The dice are thrown all the same, so the luck of the battles after it is what it was.
   const overrun = !!a.overrun;
-  const R = a.odds * dice.range(a.dice[0], a.dice[1]);
+  // The staff's roll is thrown on the field too: it sets the odds an army beaten on the field is billed at (b476(2)), and
+  // the luck of the battles after it is what it would have been had the staff settled this one.
+  const rolled = a.odds * dice.range(a.dice[0], a.dice[1]);
+  const R = opts.fought ?? rolled;
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
-  const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
+  const defFrac = defenceLoss(R);
   // Fighting from house to house costs the attackers more.
   // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
   const ready = town ? 0 : a.prepared;
-  const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+  const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
+  const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
+  // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)); an army that broke
+  // on the field and lost the day pays the rules' bill for that result, or the field's if larger (b464).
+  const attPart = (c: Corps, i: number, w = attW[i]): number => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // The bill an army beaten on the field pays is the rules' own at the staff's roll, the odds SEND THEM IN uses, never
+  // the field's: the dice set the odds and the player's hand the result (the design director, b476(2)).
+  const attPlain = (c: Corps): number => attackLoss(rolled) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready) * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // An army that pulled out after contact and lost the day pays that bill times its bar squared, or its field loss (b474).
+  const pulled = (s: 'att' | 'def'): number | null => (opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null);
+  const attOut = pulled('att');
+  const attK = !opts.field ? 1
+    : opts.field.broke === 'att' && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c) => attPlain(c)), 0.6, 1, opts.field.att)
+      : attOut !== null && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut)
+      : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
@@ -1956,10 +2127,19 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+  const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  // The same result at the staff's roll (b476(2)).
+  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[rolled >= 2 ? 1 : 0] : 1;
+  const defPlain = (c: Corps): number => defenceLoss(rolled) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const defOut = pulled('def');
+  const defK = !opts.field ? 1
+    : opts.field.broke === 'def' && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def)
+      : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut)
+      : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
   defenders.forEach((c, i) => {
     const before = men(c);
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
-    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+    c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -2047,7 +2227,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     if ((town || inField) && watch > 0) {
       // The guard has its losses too, and they are not made good while the siege lasts. (Beside the field army, ruling
       // 232, it pays as it would for a storm thrown back.)
-      const share = clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
+      // (Where the battle was fought on the field, the guard stood on it as a block of its own: it pays the share its
+      // side lost there, as the corps beside it are held to (ruling 226(6)), so the after card's headline and its field
+      // line agree (b464).)
+      const onField = inField && opts.field ? (opts.field.corps[guardForce(target)] !== undefined ? opts.field.def : null) : null;
+      const share = onField !== null ? clamp(onField, 0, 1) : clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
       const lost = Math.round(watchMen * share);
       guardAfter(g, target, share);
       defLost += lost;
@@ -2073,8 +2257,22 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.faced) {
     const lost = { foot: 0, tanks: 0, guns: 0 };
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
-    const said = whoPaid(a.faced, lost, true);
-    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false).text, ...(said.sign ? { sign: said.sign } : {}) };
+    // Fought on the field, how the cost fell is read from each corps' share of its own men, as its row gives it, never
+    // from men lost alone (ruling 226(6), b464(6)). "Evenly" only where no corps lost more than a quarter again the share
+    // another did; a corps is named only where its share stands a quarter clear of the next and it lost the most men
+    // too, so "paid most of it" holds either way. Otherwise, as with one corps on a side (the UI director, slice 3), the
+    // line says nothing of how the cost fell.
+    const fell = ((us: typeof attU): { most?: string; quiet: boolean } => {
+      if (!opts.field) return { quiet: false };
+      if (us.length < 2) return { quiet: true };
+      const of = (u: (typeof us)[number]): number => (u.men > 0 ? u.lost / u.men : 0);
+      const by = [...us].sort((x, y) => of(y) - of(x)), top = by[0];
+      if (of(top) <= 0) return { quiet: true };
+      if (of(top) <= 1.25 * of(by[by.length - 1])) return { quiet: false };
+      return of(top) >= 1.25 * of(by[1]) && us.every((u) => u === top || u.lost < top.lost) ? { most: top.name, quiet: false } : { quiet: true };
+    })(attU);
+    const said = whoPaid(a.faced, lost, true, fell.most, fell.quiet);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, fell.most, fell.quiet).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;
@@ -2089,6 +2287,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
+  // (scarred ground, looks only: one more battle fought over this region, this month; a walk-in where the defenders
+  // gave ground fought none, so it leaves none)
+  const scar = (g.scars ??= {})[target.id];
+  const muddy = groundWeather(g, target) === 'mud';
+  g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn, ...(scar?.mudN ? { mudN: scar.mudN, mudLast: scar.mudLast } : {}) };
+  // (mud memory: a battle fought in the thaw leaves its ruts on the field for the next battle there)
+  if (muddy) { g.scars[target.id].mudN = (scar?.mudN ?? 0) + 1; g.scars[target.id].mudLast = g.turn; }
+  // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
+  // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
+  capturedKit(g, rep, target);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
@@ -3701,6 +3909,8 @@ export function startPhase(g: Game, nat: string): void {
         return;
       }
     }
+    // (worn uniforms, looks only: its weeks in the line; a quiet month away from the front clears them)
+    wornMonth(g, c);
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;

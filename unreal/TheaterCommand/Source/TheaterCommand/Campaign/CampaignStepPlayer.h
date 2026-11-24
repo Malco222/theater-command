@@ -3,6 +3,10 @@
 #include "CoreMinimal.h"
 
 class ACampaignPlayerController;
+class AAirBattle;
+class ALandBattle;
+class SLandBattleScreen;
+struct FKey;
 
 /**
  * A development tool, not part of the game. Started with "-TheaterSteps=<file>" beside "-TheaterShots=<folder>", it
@@ -13,6 +17,35 @@ class ACampaignPlayerController;
  *
  * (Brian, 17 November 2026: "i want the playtester to really click everything to make sure it works in the 3d game
  * too". The rule every step is held to: a click does something, or the game says why not.)
+ *
+ * An air battle he flies himself covers the map, and the map's keys do not reach it. Two verbs play it as his hand on
+ * the battle screen does (release 1.5's Mac runs, Part B):
+ * - "air-key WHAT": a key of the air battle screen. continue (Return on the after card; KEEP FIGHTING on a question),
+ *   chase (C: the chase view on or off), next / prev / up / down (the arrows in the chase view: along the squadron, or
+ *   to the last or next squadron), pause / play / space (Space), x0.5 / x1 / x2 / x4 (1 to 4), skip, escape. As on the
+ *   keyboard, any key pressed during the opening flyover only skips it.
+ * - "air-wait WHEN": the picture waits on the battle. A number is the battle's clock (212: battle second 212); a number
+ *   and s is real seconds from the line (20s); flyover waits for the opening flyover to end; card for the after card. A
+ *   wait for seconds ends early if the after card comes. At most 15 minutes. Its frames are timed as any step's, so a
+ *   wait reads the battle's frame rate over that span.
+ * Neither waits for the table to be still first (the raid keeps it busy until it is handed back), and the press that
+ * opens the raid (FLY IT YOURSELF) takes its picture a second in, in the flyover. The picture is the battle screen.
+ *
+ * A land battle he fights himself (FIGHT IT YOURSELF) covers the map too. Three verbs play it with his own keys and
+ * clicks, sent through Slate (FSlateApplication's key and mouse events), so the battle screen's own handlers take them
+ * (release 1.5's ALL FALL BACK checks, the release lead 23 November 19:11Z):
+ * - "land-key KEY": L, Esc, H, G, R, F, X, K, T, B, Tab, C, V, W / A / S / D, Q / E, the arrows, Space, Enter, 1 to 3.
+ *   The view's keys (W A S D, Q E, the arrows) are held a second, as a hand holds them, and let up before the picture.
+ * - "land-click WHAT": a button by its words (ALL FALL BACK: the question's own where it is up, else the bar's; KEEP
+ *   FIGHTING; FILM; CONTINUE; or action:<what it does> for any other), "field" (the left button mid-screen),
+ *   "field-right" (the right button there) or "drag" (a box dragged across the middle with the left button).
+ * - "land-wait WHEN": battle seconds (150), real seconds from the line (20s), "begun" (the night and the placing over),
+ *   "contact" (the armies met) or "card" (the after card). At most 15 minutes.
+ * Each logs what the screen holds as its picture is taken: the battle second and pace (or paused), whether ALL FALL
+ * BACK's question is up, whether the army is falling back, and what the step changed: an order sent, the hand, the
+ * view moved, the pace. Expect words for them: does, nothing (no order, hand, question, film or pace changed), asks (the
+ * question up), closed (no question and not falling back), falls-back, view, paused, running, order (an order went),
+ * card (the after card).
  */
 class FStepPlayer
 {
@@ -44,6 +77,30 @@ private:
 	void Log(ACampaignPlayerController& Player, const FStep& Step);
 	void Sweep(ACampaignPlayerController& Player, const FStep& Step);
 	bool Press(ACampaignPlayerController& Player, const FString& Words);
+	void ActAir(ACampaignPlayerController& Player, const FStep& Step);
+	/** (air-wait) True while what the step waits for has not come. */
+	bool AirWaiting() const;
+	/** (an air step) The battle as the picture is taken, for the log's note. */
+	FString AirNow() const;
+	/** The land battle's field as a step reads it (a land step). */
+	struct FLandSeen
+	{
+		bool bThere = false, bAsk = false, bBack = false, bFilm = false, bCard = false, bNight = false, bSetup = false;
+		double Battle = 0.0, Speed = 0.0, Ping = -10.0;
+		int32 Hand = 0;
+		double Eye[3] = { 0.0, 0.0, 0.0 }, LookAt[3] = { 0.0, 0.0, 0.0 };
+		FString Armed, Said, Held; // Held: the units in hand, by number (Tab moves the hand without changing its size)
+	};
+	void ActLand(ACampaignPlayerController& Player, const FStep& Step);
+	void LandKey(SLandBattleScreen& Screen, const FString& Low);
+	void LandClick(SLandBattleScreen& Screen, const FString& Low);
+	/** One press of a mouse button on the battle screen, from one point to another (the same point for a click). */
+	void LandMouse(SLandBattleScreen& Screen, const FKey& Button, const FVector2D& FromLocal, const FVector2D& ToLocal);
+	FLandSeen LandLook() const;
+	/** (land-wait) True while what the step waits for has not come. */
+	bool LandWaiting() const;
+	/** (a land step) The field as the picture is taken, and what the step changed, for the log's note. */
+	FString LandNow(const FLandSeen& Now) const;
 
 	TArray<FStep> Steps;
 	FString Folder;
@@ -78,4 +135,18 @@ private:
 	bool bLook = false; // the eye goes to a place and the picture waits for its fine ground ("look-at")
 	float LookSettled = 0.0f;
 	int32 OnScreen = -1; // (a press) 1 where the whole button lay inside the window, 0 where part of it lay beyond the edge, -1 for no button
+	// (an air step) the battle it was given to; what it did; what it waits for; the speed a pause held
+	bool bAir = false, bAirDid = false, bAirHandBack = false;
+	float AirSettle = 0.3f;
+	TWeakObjectPtr<AAirBattle> AirOpen;
+	FString AirWait;
+	double AirSpeedBefore = 1.0;
+	// (a land step) the battle it was given to; what it did; what it waits for; the field as it began; a view key held
+	// through the step's settle; what its expect word made of it
+	bool bLand = false, bLandDid = false, bLandHandBack = false;
+	float LandSettle = 0.8f;
+	TWeakObjectPtr<ALandBattle> LandOpen;
+	FString LandWait, LandPass;
+	FName LandHeld;
+	FLandSeen LandBefore;
 };

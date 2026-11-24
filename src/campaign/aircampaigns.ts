@@ -42,6 +42,7 @@ interface BookRow { nat: string; kind: string; what: string; targets: string; ti
 interface RepairRow { target: string; perMonth: number; dispersed?: number }
 
 export const AC = data as unknown as {
+  on?: boolean;
   sky: { months: number; keep: number; knocked: number; idle: number };
   stock: { most: number; least: number };
   use: { night: string; day: string; oilfield: string; oil: string };
@@ -72,7 +73,15 @@ export function recordField(g: Game, region: number): number {
   return out;
 }
 
-/** Turns the air campaigns on or off (a new game, or the test kitchen). */
+/**
+ * True when a new grand campaign opens with air campaigns flown (aircampaigns.json `on`; on as shipped: the design
+ * director, 22 November 12:28Z, b623 and b636). The interfaces read it as a grand campaign starts, right after
+ * startOpen, where the war runners set g.flags.ac with TC_AC=1. Scenarios and history campaigns never read it, and a
+ * saved game keeps the switch it was started with: one saved without the flag plays on with air campaigns off.
+ */
+export const airCampaignsShipped = (): boolean => AC.on === true;
+
+/** Turns the air campaigns on or off (a new grand campaign as shipped, or the test kitchen). The bridge calls it by name. */
 export function setAirCampaigns(g: Game, on: boolean): void {
   if (on) g.flags.ac = 1;
   else delete g.flags.ac;
@@ -135,10 +144,19 @@ function settled(s: SkyFight, turn: number): { state: SkyState; streak: number }
  * A fight for the sky over a province has been flown (fly(), 'superiority'): the month's result is weighed and the
  * fight's state moves on. Several fights by one side in a month count as the month's best one. Returns the state.
  */
-export function skyFought(g: Game, nat: string, region: number, won: boolean): SkyState {
+export function skyFought(g: Game, nat: string, region: number, won: boolean, gaveUp = false): SkyState {
   const M = mem(g);
   let s = M.sky[region];
   const ours = !!s && (s.by === nat || allied(g, s.by, nat));
+  // Release 1.5's FLY IT YOURSELF: a fight given up before it met the enemy (gaveUp) wins nothing and keeps nothing. The
+  // month stands as if the side had stayed at home (no run built, a held sky not kept up), except where the enemy
+  // outnumbers it there: that month counts against it as a fight would, so breaking off never stops a sky going 'lost'
+  // (the playtester's re-run, 23 Nov: breaking off at once each month still built a held sky, the numbers counting).
+  if (gaveUp) {
+    const { a, d } = numbers(g, nat, region);
+    if (!(d >= AIR.sky.least && d >= AIRWAR.sky.own * a)) return s && ours ? settled(s, g.turn).state : 'contested';
+    won = false;
+  }
   if (!s || !ours) {
     // A side that begins to fight for a sky someone else was fighting for begins its own fight.
     s = M.sky[region] = { by: nat, state: 'contested', streak: 0, turn: g.turn, since: g.turn, best: -2, was: { state: 'contested', streak: 0 } };

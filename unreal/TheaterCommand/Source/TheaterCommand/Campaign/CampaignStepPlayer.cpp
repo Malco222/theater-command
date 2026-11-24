@@ -4,8 +4,15 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/TheaterSpeed.h"
+#include "Battle/AirBattle.h"
+#include "Battle/AirBattleState.h"
+#include "Battle/LandBattle.h"
+#include "Battle/LandBattleScreen.h"
+#include "Battle/LandBattleState.h"
+#include "InputCoreTypes.h"
 #include "TheaterCommand.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Input/HittestGrid.h"
@@ -44,6 +51,89 @@ namespace
 		FString Out = Text.ToUpper().Replace(TEXT("·"), TEXT(" ")).Replace(TEXT("\n"), TEXT(" "));
 		while (Out.ReplaceInline(TEXT("  "), TEXT(" ")) > 0) { }
 		return Out.TrimStartAndEnd();
+	}
+
+	/** The air battle he flies himself, where one is up: it stands in the map's world while it is (FlyLive spawns it there). */
+	AAirBattle* OpenAirBattle(const ACampaignPlayerController& Player)
+	{
+		if (UWorld* World = Player.GetWorld())
+		{
+			for (TActorIterator<AAirBattle> It(World); It; ++It)
+			{
+				if (IsValid(*It) && It->GetState())
+				{
+					return *It;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	/** The land battle he fights himself, where one is up (FIGHT IT YOURSELF spawns it in the map's world). */
+	ALandBattle* OpenLandBattle(const ACampaignPlayerController& Player)
+	{
+		if (UWorld* World = Player.GetWorld())
+		{
+			for (TActorIterator<ALandBattle> It(World); It; ++It)
+			{
+				if (IsValid(*It) && It->GetState())
+				{
+					return *It;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	TSharedPtr<SWidget> WidgetOfType(const TSharedRef<SWidget>& Widget, const FName Type)
+	{
+		if (Widget->GetType() == Type)
+		{
+			return Widget;
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 Index = 0; Index < Children->Num(); ++Index)
+			{
+				if (TSharedPtr<SWidget> Found = WidgetOfType(Children->GetChildAt(Index), Type))
+				{
+					return Found;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	/** The land battle's screen in the game's window, where it is up. */
+	TSharedPtr<SLandBattleScreen> LandScreenUp()
+	{
+		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+		if (!Window.IsValid())
+		{
+			return nullptr;
+		}
+		return StaticCastSharedPtr<SLandBattleScreen>(WidgetOfType(Window.ToSharedRef(), FName(TEXT("SLandBattleScreen"))));
+	}
+
+	/** A land step's key by its name in the step file. */
+	FKey LandKeyOf(const FString& Low)
+	{
+		if (Low == TEXT("esc") || Low == TEXT("escape")) { return EKeys::Escape; }
+		if (Low == TEXT("space")) { return EKeys::SpaceBar; }
+		if (Low == TEXT("enter") || Low == TEXT("return")) { return EKeys::Enter; }
+		if (Low == TEXT("tab")) { return EKeys::Tab; }
+		if (Low == TEXT("1")) { return EKeys::One; }
+		if (Low == TEXT("2")) { return EKeys::Two; }
+		if (Low == TEXT("3")) { return EKeys::Three; }
+		if (Low == TEXT("up")) { return EKeys::Up; }
+		if (Low == TEXT("down")) { return EKeys::Down; }
+		if (Low == TEXT("left")) { return EKeys::Left; }
+		if (Low == TEXT("right")) { return EKeys::Right; }
+		if (Low.Len() == 1 && FChar::IsAlpha(Low[0]))
+		{
+			return FKey(FName(*Low.ToUpper()));
+		}
+		return EKeys::Invalid;
 	}
 
 	struct FFoundButton
@@ -378,6 +468,12 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	FCampaignSession* Session = Player.GetSession();
 	const ACampaignMapActor* Map = Player.GetMap();
 	bMissing = bMute = bError = bSaidWhy = bMonth = bPan = bLook = false;
+	bAir = bAirDid = bAirHandBack = false;
+	AirWait.Reset();
+	bLand = bLandDid = bLandHandBack = false;
+	LandWait.Reset();
+	LandPass.Reset();
+	LandHeld = NAME_None;
 	OnScreen = -1;
 	Note.Reset();
 	TargetRegion = INDEX_NONE;
@@ -749,10 +845,26 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		Player.EndMonth();
 		Context.Reset();
 	}
+	else if (Verb == TEXT("air-key") || Verb == TEXT("air-wait"))
+	{
+		ActAir(Player, Step);
+	}
+	else if (Verb == TEXT("land-key") || Verb == TEXT("land-click") || Verb == TEXT("land-wait"))
+	{
+		ActLand(Player, Step);
+	}
 	else
 	{
 		bMissing = true;
 		Note = TEXT("the 3D table does not know this verb");
+	}
+	// (a press that opened his own air battle, FLY IT YOURSELF, is settled as an air step: the raid keeps the table busy
+	// until it is handed back, so the picture is taken a second in, in the opening flyover, and the next line follows)
+	if (Verb == TEXT("press") && !bAir && Player.IsFightingLive())
+	{
+		AirOpen = OpenAirBattle(Player);
+		bAir = AirOpen.IsValid();
+		AirSettle = 1.1f;
 	}
 	// The steps that open a card or put something in hand are remembered: a sweep plays them again after it restores.
 	if (!Step.bReplay && !Step.bSweep)
@@ -774,10 +886,484 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	}
 }
 
+void FStepPlayer::ActAir(ACampaignPlayerController& Player, const FStep& Step)
+{
+	// The screen's keys are played on the battle as SAirBattleScreen::OnKeyDown plays them.
+	bAir = true;
+	AirSettle = 0.3f;
+	AirOpen = OpenAirBattle(Player);
+	AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	const FString What = Step.Target.TrimStartAndEnd().ToLower();
+	if (!S)
+	{
+		Note = TEXT("no air battle is up");
+		return;
+	}
+	if (Step.Verb == TEXT("air-wait"))
+	{
+		const bool bReal = What.EndsWith(TEXT("s")) && What.LeftChop(1).IsNumeric();
+		if (What == TEXT("flyover") || What == TEXT("card") || (What.IsNumeric() && FCString::Atod(*What) >= 0.0) || bReal)
+		{
+			AirWait = What;
+		}
+		else
+		{
+			bMissing = true;
+			Note = TEXT("air-wait takes battle seconds (212), real seconds (20s), flyover or card");
+		}
+		return;
+	}
+	if (S->bFlying)
+	{
+		// (as on the keyboard: any key during the flyover takes command, and does nothing else)
+		Battle->Press(TEXT("skip"));
+		bAirDid = true;
+		AirSettle = 1.5f;
+		Note = What == TEXT("skip") ? FString(TEXT("the flyover skipped")) : FString(TEXT("pressed during the flyover: it only skips it, as any key does"));
+		return;
+	}
+	if (What == TEXT("skip"))
+	{
+		Note = TEXT("no flyover is running");
+		return;
+	}
+	const bool bClose = S->bClose;
+	const int32 Plane = S->Subject.Plane, Group = S->RideGroup;
+	const double Speed = S->Clock.Speed;
+	if (What == TEXT("continue") || What == TEXT("return") || What == TEXT("enter"))
+	{
+		if (S->bCard)
+		{
+			Battle->Press(TEXT("continue"));
+			bAirDid = true;
+			bAirHandBack = true; // (the battle is handed back to the map: the step waits, as any, for the table to be still)
+			AirSettle = 1.1f;
+		}
+		else if (S->Question != 0)
+		{
+			Battle->Answer(false);
+			bAirDid = true;
+			Note = TEXT("KEEP FIGHTING (the question's default)");
+		}
+		else
+		{
+			Note = TEXT("no after card is up");
+		}
+	}
+	else if (What == TEXT("escape") || What == TEXT("esc"))
+	{
+		if (S->Question != 0) { Battle->Answer(false); bAirDid = true; }
+		else if (S->bClose && !S->bCard) { Battle->Press(TEXT("ride")); bAirDid = true; AirSettle = 1.5f; }
+		else { Note = TEXT("nothing for Esc to close"); }
+	}
+	else if (What == TEXT("chase") || What == TEXT("c"))
+	{
+		Battle->Press(TEXT("ride"));
+		bAirDid = S->bClose != bClose;
+		AirSettle = 1.5f; // (the eye glides to the squadron's leader)
+		Note = S->bClose ? TEXT("the chase view") : TEXT("the strategy view");
+	}
+	else if (What == TEXT("next") || What == TEXT("prev") || What == TEXT("up") || What == TEXT("down")
+		|| What == TEXT("right") || What == TEXT("left"))
+	{
+		if (!S->bClose || S->bCard)
+		{
+			Note = TEXT("the arrows step only in the chase view");
+		}
+		else
+		{
+			const FString Way = What == TEXT("right") ? FString(TEXT("next")) : What == TEXT("left") ? FString(TEXT("prev")) : What;
+			Battle->Press(TEXT("ride:") + Way);
+			bAirDid = S->Subject.Plane != Plane || S->RideGroup != Group;
+			AirSettle = 1.5f;
+			if (!bAirDid)
+			{
+				Note = TEXT("no other aircraft or squadron that way");
+			}
+		}
+	}
+	else if (What == TEXT("pause") || What == TEXT("play") || What == TEXT("space"))
+	{
+		const bool bHold = What == TEXT("pause") || (What == TEXT("space") && Speed > 0.0);
+		if (bHold && Speed > 0.0)
+		{
+			AirSpeedBefore = Speed;
+			Battle->SetSpeed(0.0);
+		}
+		else if (!bHold && Speed <= 0.0)
+		{
+			Battle->SetSpeed(AirSpeedBefore > 0.0 ? AirSpeedBefore : 1.0);
+		}
+		bAirDid = S->Clock.Speed != Speed;
+		if (!bAirDid)
+		{
+			Note = bHold ? TEXT("already held") : TEXT("already running");
+		}
+	}
+	else if (What.StartsWith(TEXT("x")) && What.Mid(1).IsNumeric())
+	{
+		const double Want = FCString::Atod(*What.Mid(1));
+		if (Want == 0.5 || Want == 1.0 || Want == 2.0 || Want == 4.0)
+		{
+			AirSpeedBefore = Want;
+			Battle->SetSpeed(Want);
+			bAirDid = S->Clock.Speed != Speed;
+			if (!bAirDid)
+			{
+				Note = TEXT("already at that speed");
+			}
+		}
+		else
+		{
+			bMissing = true;
+			Note = TEXT("the battle runs at x0.5, x1, x2 or x4");
+		}
+	}
+	else
+	{
+		bMissing = true;
+		Note = TEXT("the hook does not press this key of the air battle yet");
+	}
+}
+
+bool FStepPlayer::AirWaiting() const
+{
+	const AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S || AirWait.IsEmpty())
+	{
+		return false; // (handed back, or nothing asked: nothing left to wait for)
+	}
+	if (AirWait == TEXT("card"))
+	{
+		return !S->bCard;
+	}
+	if (AirWait == TEXT("flyover"))
+	{
+		return S->bFlying || !S->bFlyTried;
+	}
+	if (AirWait.EndsWith(TEXT("s")))
+	{
+		return !S->bCard && Clock < FCString::Atof(*AirWait.LeftChop(1)); // (real seconds from this step)
+	}
+	return !S->bCard && S->BattleT < FCString::Atod(*AirWait);
+}
+
+FString FStepPlayer::AirNow() const
+{
+	const AAirBattle* Battle = AirOpen.Get();
+	const FAirBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S)
+	{
+		return TEXT("the air battle handed back");
+	}
+	return FString::Printf(TEXT("battle %.0f s, x%g%s%s%s%s"), S->BattleT, S->Clock.Speed, S->bFlying ? TEXT(", the flyover") : TEXT(""),
+		S->bClose ? TEXT(", the chase view") : TEXT(""), S->bOver ? TEXT(", over") : TEXT(""), S->bCard ? TEXT(", the after card up") : TEXT(""));
+}
+
+void FStepPlayer::ActLand(ACampaignPlayerController& Player, const FStep& Step)
+{
+	// His keys and clicks on the land battle he fights himself, sent through Slate so the battle screen's own handlers
+	// take them (release 1.5's ALL FALL BACK checks, the release lead 23 November 19:11Z).
+	bLand = true;
+	LandSettle = 0.8f;
+	LandOpen = OpenLandBattle(Player);
+	LandBefore = LandLook();
+	const FString Low = Step.Target.TrimStartAndEnd().ToLower();
+	if (!LandBefore.bThere)
+	{
+		Note = TEXT("no land battle is up");
+		return;
+	}
+	if (Step.Verb == TEXT("land-wait"))
+	{
+		const bool bReal = Low.EndsWith(TEXT("s")) && Low.LeftChop(1).IsNumeric();
+		if (Low == TEXT("card") || Low == TEXT("contact") || Low == TEXT("begun") || (Low.IsNumeric() && FCString::Atod(*Low) >= 0.0) || bReal)
+		{
+			LandWait = Low;
+		}
+		else
+		{
+			bMissing = true;
+			Note = TEXT("land-wait takes battle seconds (150), real seconds (20s), begun, contact or card");
+		}
+		return;
+	}
+	const TSharedPtr<SLandBattleScreen> Screen = LandScreenUp();
+	if (!Screen.IsValid())
+	{
+		Note = TEXT("the battle's screen is not in the window");
+		return;
+	}
+	if (Step.Verb == TEXT("land-key"))
+	{
+		LandKey(*Screen, Low);
+	}
+	else
+	{
+		LandClick(*Screen, Low);
+	}
+}
+
+void FStepPlayer::LandKey(SLandBattleScreen& Screen, const FString& Low)
+{
+	const FKey Key = LandKeyOf(Low);
+	if (!Key.IsValid())
+	{
+		bMissing = true;
+		Note = TEXT("land-key takes L, Esc, H, G, R, F, X, K, T, B, Tab, C, V, W A S D, Q E, the arrows, Space, Enter, 1 to 3");
+		return;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	if (!Screen.HasKeyboardFocus())
+	{
+		// (the keys go where the focus is: had it strayed, the screen is given it back, as a click on it would, and the
+		// note says so)
+		Note = TEXT("the battle screen had not the keyboard's focus: given it; ");
+		App.SetKeyboardFocus(Screen.AsShared(), EFocusCause::SetDirectly);
+	}
+	const FModifierKeysState Mods = App.GetModifierKeys();
+	App.ProcessKeyDownEvent(FKeyEvent(Key, Mods, 0u, false, 0u, 0u));
+	const bool bView = Key == EKeys::W || Key == EKeys::A || Key == EKeys::S || Key == EKeys::D || Key == EKeys::Q || Key == EKeys::E
+		|| Key == EKeys::Up || Key == EKeys::Down || Key == EKeys::Left || Key == EKeys::Right;
+	if (bView)
+	{
+		// (held a second, as a hand holds it, and let up before the picture)
+		LandHeld = Key.GetFName();
+		LandSettle = 1.2f;
+	}
+	else
+	{
+		App.ProcessKeyUpEvent(FKeyEvent(Key, Mods, 0u, false, 0u, 0u));
+	}
+	if (Key == EKeys::Enter && LandBefore.bCard)
+	{
+		bLandHandBack = true; // (CONTINUE: the battle is handed back to the map, and the step waits for the table)
+		LandSettle = 1.1f;
+	}
+}
+
+void FStepPlayer::LandClick(SLandBattleScreen& Screen, const FString& Low)
+{
+	const FVector2D Size = Screen.GetTickSpaceGeometry().GetLocalSize();
+	const FVector2D Middle(Size.X * 0.5, Size.Y * 0.5);
+	if (Low == TEXT("field"))
+	{
+		LandMouse(Screen, EKeys::LeftMouseButton, Middle, Middle);
+		return;
+	}
+	if (Low == TEXT("field-right"))
+	{
+		LandMouse(Screen, EKeys::RightMouseButton, Middle, Middle);
+		return;
+	}
+	if (Low == TEXT("drag"))
+	{
+		LandMouse(Screen, EKeys::LeftMouseButton, Middle - FVector2D(160.0, 80.0), Middle + FVector2D(160.0, 80.0));
+		return;
+	}
+	// A button by its words: what it does, in the order it is looked for (ALL FALL BACK is the question's own where it is
+	// up, else the bar's).
+	TArray<FString> Wanted;
+	if (Low == TEXT("all fall back")) { Wanted = { TEXT("general:allback:yes"), TEXT("general:allback") }; }
+	else if (Low == TEXT("keep fighting")) { Wanted = { TEXT("general:allback:no") }; }
+	else if (Low == TEXT("film")) { Wanted = { TEXT("general:film") }; }
+	else if (Low == TEXT("continue")) { Wanted = { TEXT("continue") }; }
+	else if (Low.StartsWith(TEXT("action:"))) { Wanted = { Low.Mid(7).TrimStartAndEnd() }; }
+	else
+	{
+		bMissing = true;
+		Note = TEXT("land-click takes field, field-right, drag, ALL FALL BACK, KEEP FIGHTING, FILM, CONTINUE or action:<what a button does>");
+		return;
+	}
+	for (const FString& Action : Wanted)
+	{
+		for (int32 K = Screen.Buttons.Num() - 1; K >= 0; --K)
+		{
+			if (Screen.Buttons[K].Action == Action)
+			{
+				const FSlateRect& Rect = Screen.Buttons[K].Rect;
+				const FVector2D Center((Rect.Left + Rect.Right) * 0.5, (Rect.Top + Rect.Bottom) * 0.5);
+				if (Action == TEXT("continue"))
+				{
+					bLandHandBack = true;
+					LandSettle = 1.1f;
+				}
+				Note = FString::Printf(TEXT("clicked %s; "), *Action);
+				LandMouse(Screen, EKeys::LeftMouseButton, Center, Center);
+				return;
+			}
+		}
+	}
+	Note = TEXT("no button on the battle screen does that; ");
+}
+
+void FStepPlayer::LandMouse(SLandBattleScreen& Screen, const FKey& Button, const FVector2D& FromLocal, const FVector2D& ToLocal)
+{
+	FSlateApplication& App = FSlateApplication::Get();
+	const FGeometry Geometry = Screen.GetTickSpaceGeometry();
+	const FVector2D From = Geometry.LocalToAbsolute(FromLocal), To = Geometry.LocalToAbsolute(ToLocal);
+	// Slate finds what lies under a point on the Mac's screen; a picture run's 1600 by 1000 window can hang off a smaller
+	// screen, and a point there reaches nothing (the press steps' note of 18 November). There the screen's own handlers are
+	// given the same events directly, and the note says so.
+	const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+	auto Reaches = [&](const FVector2D& Point)
+	{
+		if (!Window.IsValid())
+		{
+			return false;
+		}
+		const TArray<TSharedRef<SWindow>> Windows = { Window.ToSharedRef() };
+		const FWidgetPath Under = App.LocateWindowUnderMouse(Point, Windows, false, 0);
+		for (int32 Index = 0; Under.IsValid() && Index < Under.Widgets.Num(); ++Index)
+		{
+			if (&Under.Widgets[Index].Widget.Get() == static_cast<SWidget*>(&Screen))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	const bool bRouted = Reaches(From) && Reaches(To);
+	const FModifierKeysState Mods = App.GetModifierKeys();
+	TSet<FKey> Down;
+	Down.Add(Button);
+	TArray<FPointerEvent> Events;
+	Events.Add(FPointerEvent(0u, 0u, From, From, TSet<FKey>(), EKeys::Invalid, 0.0f, Mods)); // over the point
+	Events.Add(FPointerEvent(0u, 0u, From, From, Down, Button, 0.0f, Mods)); // pressed
+	FVector2D Last = From;
+	const int32 Moves = FVector2D::Distance(From, To) > 1.0 ? 8 : 0;
+	for (int32 K = 1; K <= Moves; ++K)
+	{
+		const FVector2D Spot = From + (To - From) * (static_cast<double>(K) / Moves);
+		Events.Add(FPointerEvent(0u, 0u, Spot, Last, Down, EKeys::Invalid, 0.0f, Mods)); // dragged
+		Last = Spot;
+	}
+	Events.Add(FPointerEvent(0u, 0u, To, Last, TSet<FKey>(), Button, 0.0f, Mods)); // let up
+	SWidget& Widget = Screen;
+	for (int32 K = 0; K < Events.Num(); ++K)
+	{
+		const FPointerEvent& Each = Events[K];
+		const bool bDown = K == 1, bUp = K == Events.Num() - 1;
+		if (bRouted)
+		{
+			if (bDown) { App.ProcessMouseButtonDownEvent(nullptr, Each); }
+			else if (bUp) { App.ProcessMouseButtonUpEvent(Each); }
+			else { App.ProcessMouseMoveEvent(Each); }
+		}
+		else
+		{
+			if (bDown) { Widget.OnMouseButtonDown(Geometry, Each); }
+			else if (bUp) { Widget.OnMouseButtonUp(Geometry, Each); }
+			else { Widget.OnMouseMove(Geometry, Each); }
+		}
+	}
+	if (!bRouted)
+	{
+		Note += TEXT("Slate found no window at that point (the window hangs off the screen?): the screen's own handlers were given the events; ");
+	}
+}
+
+FStepPlayer::FLandSeen FStepPlayer::LandLook() const
+{
+	FLandSeen Seen;
+	const ALandBattle* Battle = LandOpen.Get();
+	const FLandBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S)
+	{
+		return Seen;
+	}
+	Seen.bThere = true;
+	Seen.bAsk = S->General.bAllBackAsk;
+	Seen.bBack = S->General.bAllBack;
+	Seen.bFilm = S->General.bFilm;
+	Seen.bCard = S->bCard;
+	Seen.bNight = S->NightNow.bNight;
+	Seen.bSetup = S->General.Clipboard.Deploying();
+	Seen.Battle = S->Battle;
+	Seen.Speed = S->Speed;
+	Seen.Ping = S->General.PingAt;
+	const std::vector<int> Chosen = S->General.Clipboard.Chosen();
+	Seen.Hand = static_cast<int32>(Chosen.size());
+	for (const int Id : Chosen)
+	{
+		Seen.Held += FString::Printf(TEXT("%d,"), Id);
+	}
+	Seen.Eye[0] = S->Pose.Eye.X; Seen.Eye[1] = S->Pose.Eye.Y; Seen.Eye[2] = S->Pose.Eye.Z;
+	Seen.LookAt[0] = S->Pose.Look.X; Seen.LookAt[1] = S->Pose.Look.Y; Seen.LookAt[2] = S->Pose.Look.Z;
+	Seen.Armed = UTF8_TO_TCHAR(S->General.Armed.c_str());
+	Seen.Said = UTF8_TO_TCHAR(S->Note.c_str());
+	return Seen;
+}
+
+bool FStepPlayer::LandWaiting() const
+{
+	const ALandBattle* Battle = LandOpen.Get();
+	const FLandBattleState* S = Battle ? Battle->GetState() : nullptr;
+	if (!S || LandWait.IsEmpty())
+	{
+		return false; // (handed back, or nothing asked: nothing left to wait for)
+	}
+	if (LandWait == TEXT("card"))
+	{
+		return !S->bCard;
+	}
+	if (LandWait == TEXT("begun"))
+	{
+		return !S->bCard && (S->NightNow.bNight || S->General.Clipboard.Deploying());
+	}
+	if (LandWait == TEXT("contact"))
+	{
+		return !S->bCard && S->Rec.Contact < 0.0;
+	}
+	if (LandWait.EndsWith(TEXT("s")))
+	{
+		return !S->bCard && Clock < FCString::Atof(*LandWait.LeftChop(1)); // (real seconds from this step)
+	}
+	return !S->bCard && S->Battle < FCString::Atod(*LandWait);
+}
+
+FString FStepPlayer::LandNow(const FLandSeen& Now) const
+{
+	if (!Now.bThere)
+	{
+		return TEXT("the land battle handed back");
+	}
+	const FLandSeen& Was = LandBefore;
+	TArray<FString> Bits;
+	Bits.Add(Now.bNight ? FString(TEXT("the night before")) : Now.bSetup ? FString(TEXT("placing (not begun)")) : FString::Printf(TEXT("battle %.0f s"), Now.Battle));
+	Bits.Add(Now.Speed <= 0.0 ? FString(TEXT("paused")) : FString::Printf(TEXT("x%g"), Now.Speed));
+	Bits.Add(Now.bAsk ? TEXT("QUESTION UP") : TEXT("no question"));
+	if (Now.bBack) { Bits.Add(TEXT("FALLING BACK")); }
+	if (Now.bFilm) { Bits.Add(TEXT("the film")); }
+	if (Now.bCard) { Bits.Add(TEXT("the after card up")); }
+	// What the step changed.
+	if (Was.bThere)
+	{
+		if (Now.bAsk != Was.bAsk) { Bits.Add(Now.bAsk ? TEXT("the question came up") : TEXT("the question closed")); }
+		if (Now.bBack != Was.bBack) { Bits.Add(TEXT("ALL FALL BACK given")); }
+		if (Now.Ping != Was.Ping) { Bits.Add(TEXT("AN ORDER WENT")); }
+		if (Now.Hand != Was.Hand) { Bits.Add(FString::Printf(TEXT("hand %d -> %d"), Was.Hand, Now.Hand)); }
+		else if (Now.Held != Was.Held) { Bits.Add(TEXT("another unit in hand")); }
+		if (Now.Armed != Was.Armed) { Bits.Add(FString::Printf(TEXT("armed '%s' -> '%s'"), *Was.Armed, *Now.Armed)); }
+		const double Moved = FMath::Sqrt(FMath::Square(Now.Eye[0] - Was.Eye[0]) + FMath::Square(Now.Eye[1] - Was.Eye[1]) + FMath::Square(Now.Eye[2] - Was.Eye[2]))
+			+ FMath::Sqrt(FMath::Square(Now.LookAt[0] - Was.LookAt[0]) + FMath::Square(Now.LookAt[1] - Was.LookAt[1]) + FMath::Square(Now.LookAt[2] - Was.LookAt[2]));
+		if (Moved > 0.5) { Bits.Add(FString::Printf(TEXT("view moved %.0f"), Moved)); }
+		if (Now.Speed != Was.Speed) { Bits.Add(FString::Printf(TEXT("pace x%g -> x%g"), Was.Speed, Now.Speed)); }
+		if (Now.bFilm != Was.bFilm) { Bits.Add(Now.bFilm ? TEXT("the film took the camera") : TEXT("the film gave the camera back")); }
+		if (Now.bNight != Was.bNight || Now.bSetup != Was.bSetup) { Bits.Add(TEXT("the battle began")); }
+		if (Now.bCard != Was.bCard) { Bits.Add(TEXT("the after card came")); }
+	}
+	if (!Now.Said.IsEmpty()) { Bits.Add(TEXT("note: ") + Now.Said); }
+	return FString::Join(Bits, TEXT("; "));
+}
+
 void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 {
 	const FSeen After = Look(Player, TargetRegion);
-	const bool bChanged = After.Bare != Before.Bare || After.Open != Before.Open || After.Hand != Before.Hand;
+	// (an air step is judged on the battle it was given to, which the table's reading does not see)
+	const bool bChanged = bAirDid || bLandDid || After.Bare != Before.Bare || After.Open != Before.Open || After.Hand != Before.Hand;
 	// (the pointer's slip counts as an answer only for a step that points: for a click it only names what is under the pointer)
 	const bool bPointing = Step.Verb == TEXT("point-at");
 	FString Words = After.Words;
@@ -812,6 +1398,12 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 	{
 		const FString Title = Plain(Expect.Mid(4));
 		Pass = !After.Open.IsEmpty() && (Title.IsEmpty() || Plain(After.Open).Contains(Title)) ? TEXT("true") : TEXT("false");
+	}
+	// (a land step's expect words are read on the field it was played on: nothing, asks, closed, falls-back, view, paused,
+	// running, order, card)
+	if (bLand && !LandPass.IsEmpty())
+	{
+		Pass = LandPass;
 	}
 	++Logged;
 	const FString Picture = FString::Printf(TEXT("step-%03d.png"), Logged);
@@ -851,8 +1443,10 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 	const FStep Step = Steps[At]; // (a copy: a sweep adds its presses to the list)
 	if (Phase == 0)
 	{
-		// Wait for the table to be still: a month's replay, a newsreel.
-		if (Clock < 0.25f || (Player.IsBusyForSteps() && Clock < 45.0f))
+		// Wait for the table to be still: a month's replay, a newsreel. (An air step is played in the raid, which keeps
+		// the table busy until it is handed back: it does not wait.)
+		const bool bAirStep = Step.Verb.StartsWith(TEXT("air-")) || Step.Verb.StartsWith(TEXT("land-")); // (a land step too, in the battle he fights)
+		if (Clock < 0.25f || (!bAirStep && Player.IsBusyForSteps() && Clock < 45.0f))
 		{
 			return true;
 		}
@@ -882,7 +1476,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 			int32 Region = INDEX_NONE, Sea = INDEX_NONE, Corps = INDEX_NONE, CorpsRegion = INDEX_NONE, Fleet = INDEX_NONE, Group = INDEX_NONE;
 			const bool bOfUnit = Step.Verb == TEXT("select-unit") || Step.Verb == TEXT("order-unit");
 			bFound = false;
-			if (!Name.IsEmpty() && !Step.bReplay && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
+			if (!Name.IsEmpty() && !Step.bReplay && !bAirStep && Step.Verb != TEXT("press") && Step.Verb != TEXT("key") && Step.Verb != TEXT("load") && Step.Verb != TEXT("start") && Step.Verb != TEXT("ask-war")
 				&& Session->StepFind(Name, Region, Sea, Corps, CorpsRegion, Fleet, Group))
 			{
 				Named = bOfUnit ? CorpsRegion : Region;
@@ -991,15 +1585,72 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 				return true;
 			}
 		}
-		// Let it happen: a march is flown across the table, a month is played through, a card opens.
-		const float Settle = bMonth ? 2.5f : 1.1f;
-		if (Clock < Settle || (Player.IsBusyForSteps() && Clock < (bMonth ? 120.0f : 20.0f)))
+		// Let it happen: a march is flown across the table, a month is played through, a card opens. (An air step: the
+		// battle's own clock is waited on, and the table only once the battle is handed back.)
+		const float Settle = bMonth ? 2.5f : bAir ? AirSettle : bLand ? LandSettle : 1.1f;
+		const bool bBusy = Player.IsBusyForSteps() && (!bAir || bAirHandBack) && (!bLand || bLandHandBack);
+		if (Clock < Settle || (bBusy && Clock < (bMonth ? 120.0f : 20.0f)) || (!AirWait.IsEmpty() && Clock < 900.0f && AirWaiting())
+			|| (!LandWait.IsEmpty() && Clock < 900.0f && LandWaiting()))
 		{
 			if (bMonth && Clock > 1.0f)
 			{
 				Player.StepThroughMonth(); // (the questions and the screens a month's end brings are answered as a player in a hurry would)
 			}
 			return true;
+		}
+		if (bAir)
+		{
+			if (!AirWait.IsEmpty())
+			{
+				const bool bCame = !AirWaiting() && AirOpen.IsValid();
+				bAirDid = bCame;
+				Note = bCame ? FString() : AirOpen.IsValid() ? FString(TEXT("waited 15 minutes: ")) : FString(TEXT("the battle ended before it came: "));
+			}
+			Note = Note.IsEmpty() ? AirNow() : Note + (Note.EndsWith(TEXT(": ")) ? TEXT("") : TEXT("; ")) + AirNow();
+		}
+		if (bLand)
+		{
+			if (LandHeld != NAME_None)
+			{
+				// (the view's key, held through the settle, let up before the picture)
+				FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(FKey(LandHeld), FSlateApplication::Get().GetModifierKeys(), 0u, false, 0u, 0u));
+				LandHeld = NAME_None;
+			}
+			const FLandSeen Now = LandLook();
+			if (!LandWait.IsEmpty())
+			{
+				const bool bCame = !LandWaiting() && LandOpen.IsValid();
+				Note += bCame ? FString() : LandOpen.IsValid() ? FString(TEXT("waited 15 minutes: ")) : FString(TEXT("the battle ended before it came: "));
+				bLandDid = bCame;
+			}
+			else if (Now.bThere && LandBefore.bThere)
+			{
+				const double Moved = FMath::Abs(Now.Eye[0] - LandBefore.Eye[0]) + FMath::Abs(Now.Eye[1] - LandBefore.Eye[1]) + FMath::Abs(Now.Eye[2] - LandBefore.Eye[2])
+					+ FMath::Abs(Now.LookAt[0] - LandBefore.LookAt[0]) + FMath::Abs(Now.LookAt[1] - LandBefore.LookAt[1]) + FMath::Abs(Now.LookAt[2] - LandBefore.LookAt[2]);
+				bLandDid = Now.bAsk != LandBefore.bAsk || Now.bBack != LandBefore.bBack || Now.Ping != LandBefore.Ping || Now.Held != LandBefore.Held
+					|| Now.Armed != LandBefore.Armed || Now.Speed != LandBefore.Speed || Now.bFilm != LandBefore.bFilm || Now.bCard != LandBefore.bCard
+					|| Now.bNight != LandBefore.bNight || Now.bSetup != LandBefore.bSetup || Moved > 0.5;
+				// The step's expect word, read on the field (the table's reading does not see the battle).
+				const FString Want = Step.Expect.TrimStartAndEnd().ToLower();
+				const bool bQuiet = Now.bAsk == LandBefore.bAsk && Now.bBack == LandBefore.bBack && Now.Ping == LandBefore.Ping && Now.Held == LandBefore.Held
+					&& Now.Armed == LandBefore.Armed && Now.bFilm == LandBefore.bFilm;
+				// ("nothing": no order, no hand, the question and the fall back as they were, no film, the same pace; the view
+				// may drift as it eases, which is not his order)
+				if (Want == TEXT("nothing")) { LandPass = bQuiet && Now.Speed == LandBefore.Speed && Now.bCard == LandBefore.bCard ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("asks")) { LandPass = Now.bAsk ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("closed")) { LandPass = !Now.bAsk && !Now.bBack ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("falls-back")) { LandPass = Now.bBack && !Now.bAsk ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("view")) { LandPass = Moved > 0.5 && bQuiet ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("paused")) { LandPass = Now.Speed <= 0.0 && bQuiet ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("running")) { LandPass = Now.Speed > 0.0 && bQuiet ? TEXT("true") : TEXT("false"); }
+				else if (Want == TEXT("order")) { LandPass = Now.Ping != LandBefore.Ping ? TEXT("true") : TEXT("false"); }
+			}
+			else if (LandBefore.bThere && !Now.bThere)
+			{
+				bLandDid = true; // (CONTINUE, or Enter on the after card: the battle was handed back to the map)
+			}
+			if (Step.Expect.TrimStartAndEnd().ToLower() == TEXT("card")) { LandPass = Now.bCard ? TEXT("true") : TEXT("false"); }
+			Note += LandNow(Now);
 		}
 		if (!Step.bReplay)
 		{

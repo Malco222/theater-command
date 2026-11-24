@@ -6,6 +6,9 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Battle/LandBattle.h"
+#include "Battle/LandLive.h"
+#include "EngineUtils.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
@@ -6073,11 +6076,14 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false).IsEnabled(false)
-											.Visibility(EVisibility::Collapsed) // (FIGHT IT YOURSELF leaves the foot until that battle exists)
-											.ToolTipText(FText::FromString(TEXT("Fighting the battle yourself, in real time, comes with the battlefield.")))
+											// (release 2; Brian, 22 November 21:21Z: asked before each campaign battle, FIGHT IT YOURSELF as the
+											// general or SEND THEM IN and let the generals decide)
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanFightLive() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText(FText::FromString(TEXT("Fight this battle yourself as the general: place your units, then order them in real time. SEND THEM IN lets your generals decide it.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FightLive(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF  (to come)"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Faint)
+												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
 											]
 										]
 										// (The foot's places never change: CALL IT OFF, then SEND THEM IN, then the siege's order where there is one. Only the light moves.)
@@ -11526,6 +11532,20 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("ANOTHER KIND OF RAID"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
 					])
 				]
+				// (release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D air battles) FLY IT YOURSELF beside
+				// FLY THE RAID, as FIGHT IT YOURSELF stands beside SEND THEM IN: a bombing raid by day or a fight for the sky, flown
+				// by him in the air battle; only where the Battle rules card's "Fly raids yourself" is on and the rules have a
+				// battle in the air for the raid as picked (CanFlyLive)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+					.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanFlyLive() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.ToolTipText(FText::FromString(TEXT("Fly this raid yourself: give your groups their orders in the battle in the air. FLY THE RAID lets your crews fly it.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FlyLive(); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("FLY IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
+					]
+				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
 					Aimed(TEXT("fly"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)
@@ -13475,6 +13495,15 @@ namespace
 				{
 					On = ListLastStop;
 				}
+				// ("-TheaterOpeningScroll" rests the scenarios on their last stop the same way: for the Mac's picture of the
+				// practice and Battle rules cards at the list's foot, under the 38 MORE it cannot press; a scroll to the end
+				// when the list is laid out was undone by the rows still taking their sizes, 22 November 22:25Z)
+				static const bool bScenariosFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOpeningScroll"));
+				if (bScenariosFromEnd && Controller.IsValid() && Controller->GetOpening().Tab != 2
+					&& !(Controller->GetOpening().Tab == 0 && Controller->GetOpening().Years.Num() > 0))
+				{
+					On = ListLastStop;
+				}
 				On = FMath::Min(On, ListLastStop);
 				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
 				{
@@ -14359,6 +14388,163 @@ namespace
 				}
 				AddGrid(Cells, 2);
 			}
+
+			// ---- (release 2) The practice battle: Normandy fought in the 3D scene, the player its American general
+			// (Brian, 22 November 03:09Z: "do 1 2 and 3", the third this door). A battle on its own: no campaign changes.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 8.0f)
+			[
+				ListHead(TEXT("PRACTICE BATTLE: YOU COMMAND"))
+			];
+			{
+				TArray<TSharedRef<SWidget>> Cells;
+				Cells.Add(MakePractice());
+				Cells.Add(MakeBattleRules());
+				AddGrid(Cells, 2);
+				// (for the Mac's pictures, which cannot scroll by hand: "-TheaterOpeningScroll" opens the list at its foot,
+				// where the practice and Battle rules cards are)
+				if (StartsScroll.IsValid() && FParse::Param(FCommandLine::Get(), TEXT("TheaterOpeningScroll")))
+				{
+					StartsScroll->ScrollToEnd();
+				}
+			}
+		}
+
+		/** (release 2) The practice battle's card: the hedgerows before Le Mesnil, July 1944, fought live as he commands. */
+		TSharedRef<SWidget> MakePractice()
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+					[
+						MakeFlag(TEXT("USA"), 36.0f)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Normandy, July 1944"))).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("The hedgerows before Le Mesnil. You are the American general: place your units on your ground, then click a unit and click where it goes or whom it attacks. Your staff fights the units you leave to them.")))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("A battle on its own, in the 3D field: nothing in a campaign changes.")))
+				];
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
+				.OnClicked_Lambda([this]()
+				{
+					UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
+					// (one at a time: a second click while the first is opening does nothing)
+					if (!World || TActorIterator<ALandBattle>(World))
+					{
+						return FReply::Handled();
+					}
+					if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+					{
+						Land->LiveWhenReady(TEXT("normandy-1944"), TEXT("att"), 0, true);
+					}
+					return FReply::Handled();
+				})
+				[
+					Body
+				];
+		}
+
+		/**
+		 * (release 2) The battle rules beside the practice card, each a line he clicks to switch on or off (Brian, 22
+		 * November 17:33Z: "make it where we can toggle it off if someone doesnt want it"). Kept in his settings, read when
+		 * a battle opens (FLandLive's rules).
+		 */
+		TSharedRef<SWidget> MakeBattleRules()
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Battle rules"))).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle.")))
+				];
+			// (the UI director, 22 November 20:56Z: each line a kit switch, lit brass when on and unlit when off, with ON
+			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
+			static const FSlateRoundedBoxBrush SwitchTrack(FLinearColor::White, 8.0f, FLinearColor(FColor::FromHex(TEXT("8A6E44"))), 1.0f);
+			static const FSlateRoundedBoxBrush SwitchKnob(FLinearColor::White, 6.0f);
+			FLandLive::FlipFromCommandLine();
+			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
+			{
+				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
+				Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 4.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(Rule.Tip))
+					.OnClicked_Lambda([Index]()
+					{
+						FLandLive::FlipRule(Index);
+						return FReply::Handled();
+					})
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+						[
+							// The switch: a 30 by 16 track, brass and its knob at the right when on; the dark track and a
+							// muted knob at the left when off.
+							SNew(SBox).WidthOverride(30.0f).HeightOverride(16.0f)
+							[
+								SNew(SBorder).BorderImage(&SwitchTrack).Padding(FMargin(2.0f))
+								.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : FLinearColor(FColor::FromHex(TEXT("2A231B")))); })
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox).WidthOverride_Lambda([Index]() { return FOptionalSize(FLandLive::RuleOn(Index) ? 14.0f : 0.0f); })
+									]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+									[
+										SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)
+										[
+											SNew(SBorder).BorderImage(&SwitchKnob).Padding(0.0f)
+											.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? FLinearColor(FColor::FromHex(TEXT("1E1810"))) : Muted); })
+										]
+									]
+								]
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(30.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 10))
+								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleOn(Index) ? TEXT("ON") : TEXT("OFF")); })
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : Muted); })
+							]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Label)).Font(Font(TEXT("Bold"), 11))
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? Cream : Muted); })
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+						]
+					]
+				];
+			}
+			return SNew(SBorder).BorderImage(&PlainButton.Normal).Padding(FMargin(14.0f, 10.0f, 14.0f, 12.0f))
+				[
+					Body
+				];
 		}
 
 		/** One choice on the opening screen: a nation to lead or a war to watch, and what lies ahead. */

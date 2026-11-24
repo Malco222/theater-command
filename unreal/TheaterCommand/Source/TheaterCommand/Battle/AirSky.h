@@ -71,6 +71,8 @@ namespace AirSky
 	/** Past this distance a cloud is drawn as its far body and its veil only (the rest fading out over the next
 	 * 1.5 km). The far body is drawn from NearAll out, the core under its far puffs. */
 	constexpr double FarAll = 10000.0;
+	/** A small cloud, under 600 m across, is drawn out to this many times its width, thinning over the last fifth. */
+	constexpr double SmallSight = 34.0;
 
 	/** The day's sky as the battle gives it (sky.place.cloud). Absent (a rules bundle from before it): cumulus. */
 	struct Day
@@ -80,7 +82,21 @@ namespace AirSky
 		double Base = 950.0, Top = 2500.0; // metres above the sea (the cloud table's fallback middles when absent)
 		double Chance = 0.0;
 		std::string Zone;
+		/** How much of the sky is cloud (sky.ts's cover, drawn per battle: Brian, 20 November, "make sure the weather is
+		 * different and not always cloudy"): 0 a clear day, 1 a closed overcast; below 0, not given (a bundle from
+		 * before it), and the look the art director passed stands: cumulus DefaultCumulus, a deck DefaultDeck. */
+		double Cover = -1.0;
+		/** Its word (clear, fair, scattered, broken, overcast), as given. */
+		std::string Word;
+		/** The cover the sky is laid to: as given, held to what each kind can draw (cumulus up to CumulusMost, a deck from
+		 * DeckLeast), else the kind's own. */
+		double CoverLaid() const;
 	};
+	constexpr double DefaultCumulus = 0.39, DefaultDeck = 0.77, CumulusMost = 0.55, DeckLeast = 0.6;
+	/** The deck's breaks for a cover: the noise under which a tile is left out (a broad noise and a finer one, 0 to 1),
+	 * measured over the laid square (0.77 is 0.40, Bremen's as the art director passed it on round 18d; 0.6 about 0.48,
+	 * the broadest breaks; all of it, none). */
+	double DeckHoleBelow(double Cover);
 
 	/** Where and for what battle the sky is laid. */
 	struct Placing
@@ -109,11 +125,14 @@ namespace AirSky
 	/**
 	 * The sheet of cloud shapes the puffs are drawn from (the art director's trade-cumulus brief, item 4: torn cloud
 	 * fragments of our own in place of round soft discs; nothing copied, nothing painted by hand): FragmentCells by
-	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each is a body of overlapping
-	 * round lumps; the first ten with small turrets along their edge toward the sheet's top, crisp there and softer
-	 * and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's whole body; the
-	 * last FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into the body
-	 * over it (the art director on round 18c: one base per cloud, no seam, no capsule ends). Every pixel
+	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each but the lids is a body of
+	 * overlapping round lumps; the first eight with small turrets along their edge toward the sheet's top, crisp there
+	 * and softer and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's
+	 * whole body; then FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into
+	 * the body over it (the art director on round 18c: one base per cloud, no seam, no capsule ends); the last
+	 * FragmentLids a deck's cells, a flat body with broad shallow bumps in rolls and a frayed edge, lit by a low sun (her
+	 * round 18d steer: one lid, not a field of heaps). The tops, domes and feet are the ones she passed on round 18c,
+	 * drawn as they were (of the ten tops, four domes and two feet then, the first eight, two and two). Every pixel
 	 * holds the light on the shape three ways, each a share of the cloud's light as painted, halved (128 is that light,
 	 * 255 twice it): red with the sun across the picture toward the sheet's top, green with the sun behind the eye,
 	 * blue with the sun ahead (a darker body, its thin edges bright); and in alpha how much cloud is there. Each shape
@@ -121,8 +140,9 @@ namespace AirSky
 	 */
 	constexpr int FragmentCells = 4;
 	constexpr int FragmentSize = 256;
-	constexpr int FragmentBases = 4;
+	constexpr int FragmentBases = 2;
 	constexpr int FragmentFeet = 2;
+	constexpr int FragmentLids = 4;
 	/** How far under its cell's middle a base's flat underside lies, in the cell's half-widths. */
 	constexpr double FragmentFloor = 0.42;
 	void MakeFragments(std::vector<uint8_t>& OutRgba);
@@ -141,6 +161,11 @@ namespace AirSky
 		double Trough = 0.0;  // how much less lit its rim is than its heart (a deck's cells: darker where they meet)
 		bool bFlatFoot = false; // a cloud's base: its underside drawn straight and crisp, seen from the side
 		double Shadowed = 0.0;  // 0 to 1: how much of its own cloud lies between it and the sun (laid with the cloud)
+		/** Drawn Long times as long along LongWay (radians, board axes, level) as across it: a small cloud's rag drawn
+		 * out along the wind (the art director on a1acb552's frames, 22 November 08:13Z: from above the small ones
+		 * were a field of cotton balls). Its R is across; 1 is round, as every other puff. */
+		double Long = 1.0;
+		double LongWay = 0.0;
 	};
 
 	/** One cloud (a cumulus, or a tile of the deck): its foot's middle on the laid square, its width and height. */
@@ -148,6 +173,8 @@ namespace AirSky
 	{
 		Vec At;
 		double W = 1000.0, H = 500.0;
+		/** A small cloud W long along LongWay (radians, board axes) and W / Long across it; 1 round. */
+		double Long = 1.0, LongWay = 0.0;
 		int First = 0, Count = 0;
 		/** 0.1 to 0.9: how soon the target's clearing (or the ships' hole) takes it. */
 		double Fate = 0.5;
@@ -247,6 +274,45 @@ namespace AirSky
 	/** The day's clouds, the same every time for the same battle. */
 	Field Lay(const Day& D, const Placing& P);
 
+	/**
+	 * The day's light under its cloud, as shares of a clear day's, for any battle's scene: the air battle's for its eye,
+	 * and a ground battle's for its field (its Under 1 on a deck day). Under scattered cumulus the sun stands (each cloud
+	 * casts its own shadow) and the sky's light rises a little with the cloud that throws it back; under a deck the sun's
+	 * light falls with the cover, about a third of it through Bremen's broken deck and a twentieth through a closed
+	 * overcast, and the sky's grey light rises (Brian, 20 November: the weather different from battle to battle).
+	 */
+	struct Lighting
+	{
+		double Sun = 1.0, Sky = 1.0;
+	};
+	/** Under: how far under a deck the lit place lies, 0 over its top to 1 under its base (cumulus: unused). */
+	Lighting LightOf(const Day& D, double Under);
+
+	/**
+	 * The deck's shade on everything under it (the art director, 20 November 22:37Z: under a broken deck the ground and
+	 * the sea darker and flat, with sunlit patches where the sun comes through its holes, about 5 km down-sun of each
+	 * with Bremen's 13 degree sun; under an overcast all of it flat, shadowless grey, darker again). The share of the
+	 * sun that comes through, over the laid square, read along the sun's ray where it crosses the deck's middle: what the
+	 * key light's light function (M_DeckShade) reads, and the pictures. None on a cumulus day (each cloud lays its own
+	 * shadow on the sea).
+	 */
+	struct DeckShade
+	{
+		int Side = 0;               // squares a side over the laid square (0: no deck)
+		Vec Origin;                 // the laid square's corner
+		double Period = 0.0;        // its side, metres
+		double Z = 0.0;             // where the sun's ray is read (the deck's middle)
+		double Top = 0.0;           // over the day's tops nothing is shaded
+		double Through = 1.0;       // the sun's share under a tile of the deck
+		std::vector<uint8_t> Light; // Side by Side, a row for each y, 255 the whole sun
+		/** The sun's share at a point, Sun the way to the sun (between squares, the field repeating, as the light
+		 * function reads it). */
+		double At(const Vec& P, const Vec& Sun) const;
+		/** The share over the whole square. */
+		double Mean() const;
+	};
+	DeckShade ShadeOf(const Field& F, int Side = 256);
+
 	/** The deck's place for the raid's bands (the art director's rule): Base and Top in, moved; returns how far the
 	 * top moved. Band and LowBand as in Placing. */
 	double PlaceDeck(double& Base, double& Top, double Band, double LowBand, std::string& OutWhy);
@@ -310,8 +376,9 @@ namespace AirSky
 		/** How much wider a puff is drawn as a shape than as a soft disc (its shape lies within 0.92 of it, its lumps'
 		 * edges at about 0.75 of it on average: about the soft disc's own edge). */
 		static constexpr double SpriteSpan = 1.2;
-		/** The room for shadows laid apart (the nearest this many). */
-		static constexpr int MostShadows = 96;
+		/** The room for shadows laid apart (the nearest this many; a small cloud's counted as if twice as far, so the big
+		 * ones' keep their room). 96 until the small clouds cast theirs: the art director on a1acb552's frames. */
+		static constexpr int MostShadows = 224;
 		/** The clouds this painter draws (all, unless set); a painter given room for shadows (Paint's OutShadows) lays
 		 * them for every cloud, its own or not. */
 		void SetPart(const Part& InPart) { Only = InPart; }
@@ -461,4 +528,110 @@ namespace AirSky
 	 * there, and some 23 at the heart ring (0.27 was only some 13 per cent). */
 	constexpr double ShadowDark = 0.5;
 	constexpr double ShadowReach = 10000.0;
+
+	/**
+	 * The clouds turned to the eye on the graphics chip (the speed gate's GS6; the graphics audit's item 10). The rooms
+	 * turn every puff to the eye here, on the game's thread, and send all their points to the engine again each time
+	 * the eye moves enough for a turn to show: on the Mac in the ground battle 1.98 ms a turn cool and 5.40 hot, 22 to 64
+	 * turns in 30 s, the near room's 800 puffs (26,400 points) sent each time and the far room's 3,200 on a far turn.
+	 *
+	 * Here the mesh is made once (Triangles, PointPlaces: a slot's 33 points, all at the mesh's own middle) and every
+	 * point is placed, turned, lit and faded where the engine places points (M_CloudTurned, the vertex shader), every
+	 * frame, for the eye as it is then, by AirSkyChip.inl: Painter::Paint's own arithmetic for a puff drawn from the
+	 * sheet's shapes, which the cloud test runs in C++ against the painter's own points. What it reads is a table of
+	 * the puffs round the eye, far to near (Lay, Table): the order the see-through puffs are drawn in is the one thing
+	 * the chip cannot work out for itself, so the table is laid again (and sent: about half a megabyte, no mesh) only
+	 * when the eye has moved far enough for that order to go stale (Wants), a share of the nearest puff's distance
+	 * (SetOrderTurn), and as the wind carries the clouds only while a drawn cloud's lift eases over high ground or a
+	 * cloud stands within the target's clearing.
+	 *
+	 * The table holds every puff that could be drawn while the eye stays within Margin of where it was laid (out past
+	 * the reach and each level's fade by that much), so that a puff the chip fades in between two lays is there.
+	 */
+	class Chip
+	{
+	public:
+		/** Texels (four floats each) a puff, puffs a row, the table's width, and the header's texels in row 0. */
+		static constexpr int TexelsPerPuff = 8;
+		static constexpr int PuffsPerRow = 256;
+		static constexpr int Wide = TexelsPerPuff * PuffsPerRow;
+		static constexpr int HeaderTexels = 5;
+		/** How far the eye may move from where the table was laid before it is laid again whatever else (metres): every
+		 * puff that could be drawn that far off is in the table. */
+		static constexpr double Margin = 400.0;
+		/** The order's staleness: by default the eye may move 2.5 per cent of the nearest drawn puff's distance (the near
+		 * room turned at 0.45 per cent, for the puffs' turn, which the chip makes every frame). */
+		static constexpr double DefaultOrderTurn = 0.025;
+
+		/** InRoom: the puffs the mesh is made with (its slots); a puff a slot. */
+		explicit Chip(int InRoom = 6000, int InSides = 16);
+		int Room() const { return RoomSlots; }
+		int Sides() const { return SideCount; }
+		int PerPuff() const { return 1 + 2 * SideCount; }
+		/** The table's rows: the header's and enough for every slot. */
+		int Rows() const { return 1 + (RoomSlots + PuffsPerRow - 1) / PuffsPerRow; }
+		/** The mesh's triangles: the painter's own for each slot (a middle, a heart ring and a rim ring, both faces). */
+		std::vector<int> Triangles() const;
+		/** Each point's two texture coordinates, two numbers each, a slot's points in a row: its place round its puff
+		 * (OutRing: the point round the ring, 0 to Sides - 1, and which ring, 0 the middle, 1 the heart, 2 the rim) and its
+		 * slot's first texel in the table (OutSlot: column, row). Whole numbers under 2,048, which the engine's half floats
+		 * hold exactly. */
+		void PointPlaces(std::vector<float>& OutRing, std::vector<float>& OutSlot) const;
+		/** The scene's cloud ink, as Painter::SetInk. */
+		void SetInk(double InInk) { Ink = InInk > 0.1 ? InInk : 1.0; }
+		/** The order's staleness, a share of the nearest drawn puff's distance (from 0.002 to 0.2). */
+		void SetOrderTurn(double InTurn);
+		double OrderTurn() const { return Turn; }
+		/** Whether the table wants laying again for this eye (Painter::Paint's terms): never laid, the eye moved past the
+		 * order's slack in the field's own frame, or the wind's carry while a lift eases (3 m) or a cloud stands in the
+		 * clearing (15 m). A few sums: the scene asks it every frame. */
+		bool Wants(const Vec& Eye, const Vec& Drift) const;
+		/** Lays the table for an eye (Painter::Paint's terms; the paints in the header are the painter's Tone for Light
+		 * and the ink). */
+		void Lay(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
+		/** Rows by Wide texels, four floats each, row 0 the header (AirSkyChip.inl gives what each holds). */
+		const std::vector<float>& Table() const { return Cells; }
+		/** The rows the last lay wrote (the header's and the puffs'): the rows to send. Past them, slots the shader
+		 * leaves out by the header's count. */
+		int RowsUsed() const { return 1 + (LastLaid + PuffsPerRow - 1) / PuffsPerRow; }
+		/** The puffs in the table, those it had no room for (the farthest), and those drawn from where it was laid. */
+		int Laid() const { return LastLaid; }
+		int Dropped() const { return LastDropped; }
+		int DrawnThen() const { return LastDrawn; }
+		/** The nearest drawn puff's distance less its radius when laid, and the eye's slack from there (metres). */
+		double Nearest() const { return LastNear; }
+		double Slack() const { return LastSlack; }
+		/** Which of the field's puffs a slot holds (-1 an empty slot), and which cloud. */
+		int SlotPuff(int Slot) const;
+		int SlotCloud(int Slot) const;
+		/** How many times the table has been laid. */
+		int Lays() const { return LayCount; }
+
+	private:
+		int RoomSlots = 6000;
+		int SideCount = 16;
+		double Ink = 1.0;
+		double Turn = DefaultOrderTurn;
+		std::vector<float> Cells;
+		std::vector<double> TurnCos, TurnSin;
+		struct Slotted
+		{
+			int Puff = 0, Cloud = 0;
+			double Deep = 0.0;
+		};
+		std::vector<Slotted> Order;
+		std::vector<Placed> Where;
+		// (each cloud's lift, eased as the painter's: the ground looked up again once its middle has moved 30 m, the lift
+		// drawn eased toward it as the cloud drifts)
+		struct Kept
+		{
+			double X = 1e30, Y = 1e30, PX = 1e30, PY = 1e30, Target = 0.0, Shown = -1.0;
+		};
+		std::vector<Kept> Lifts;
+		uint64_t Serial = 0;
+		bool bLaid = false, bEasing = false, bClearing = false;
+		Vec LastEye, LastDrift;
+		double LastNear = 1000.0, LastSlack = 1.0;
+		int LastLaid = 0, LastDropped = 0, LastDrawn = 0, LayCount = 0;
+	};
 }

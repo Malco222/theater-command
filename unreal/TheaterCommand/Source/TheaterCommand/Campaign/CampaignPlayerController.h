@@ -5,6 +5,8 @@
 #include "Campaign/CampaignView.h"
 #include "CampaignPlayerController.generated.h"
 
+class FCampaignMapData;
+
 class ACampaignMapActor;
 class ACampaignCameraPawn;
 class AArmyPiece;
@@ -401,6 +403,17 @@ struct FFaceOff
 	bool bVisible = false;
 	bool bResolved = false;
 	int32 Region = INDEX_NONE;
+	/**
+	 * (Release 1.5, Brian 23 November 05:18Z) Whether FIGHT IT YOURSELF is offered on this card, worked out once when it is
+	 * first asked (WeighFieldOffer): -1 not yet, 0 no, 1 yes. Offered only where the battlefield's look has passed its Mac
+	 * still, 45 fps and the art director (Content/Rules/fight-yourself-looks.txt) and the field can fight this attack;
+	 * everywhere else the card offers SEND THEM IN only, with no button and no failed press.
+	 */
+	int32 FieldOffer = -1;
+	/** The battlefield's look as the land battle will pick it: "bocage", "farmland+snow", "desert", ... */
+	FString FieldLook;
+	/** The corps FieldOffer was weighed for: a change of pick on the open card weighs it again. */
+	TArray<int32> FieldPicks;
 	FText Title;
 	FText OurName;
 	FText TheirName;
@@ -1059,6 +1072,32 @@ public:
 
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
+	/**
+	 * (release 2; Brian, 22 November 21:21Z, asked "fight it yourself?" before each campaign battle) FIGHT IT YOURSELF on
+	 * the attack card, beside SEND THEM IN, which lets his generals decide: the battle the card shows (TC.battleLook) is
+	 * fought by him as the general in the 3D field, and when he presses CONTINUE on its after card the campaign books its
+	 * result (TC.battleSettleLand) and the card shows it, as SEND THEM IN's does. Off with -TheaterLandNoCampaignLive.
+	 */
+	bool CanFightLive() const;
+	void FightLive();
+	/**
+	 * (Release 1.6; Brian, 23 November 06:52Z: the campaign's air fights open as 3D air battles) FLY IT YOURSELF on the raid
+	 * card, beside FLY THE RAID BY DAY, on a bombing raid by day and a fight for the sky only: the raid the card shows, with
+	 * the groups picked, is flown by him in the 3D sky (TC.airStart), and at CONTINUE on its after card the campaign takes
+	 * what the rules booked (TC.battleEnd books the raid as FLY THE RAID does, with the battle's losses) and the map shows
+	 * it. Behind the Battle rules card's "Fly raids yourself" (AAirBattle::CampaignLiveOn), off until it passes; offered
+	 * only where TC.airLook has a ticket for the raid as picked.
+	 */
+	bool CanFlyLive() const;
+	void FlyLive();
+	/** (Release 1.5) The look of the land a battle for this region is fought on, this month, as LandScape::Pick lays it,
+	 * with "+snow" where snow lies (LandScape::SnowOf a quarter or more). */
+	static FString FieldLookAt(const FCampaignMapData& Data, int32 RegionId, int32 Turn);
+	/** (Release 1.5) Whether a look has passed (Content/Rules/fight-yourself-looks.txt, one look a line; bocage alone
+	 * where the file is missing). -TheaterFightEveryLook offers every look (the Mac's per-theatre runs). */
+	static bool FieldLookPassed(const FString& Look);
+	/** True while his own battle is open: the map takes no order, key or month's end until it is handed back. */
+	bool IsFightingLive() const { return LiveBattle.IsValid() || LiveRaid.IsValid(); }
 	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
 	void ConfirmMarch(bool bAssault);
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
@@ -1162,6 +1201,21 @@ private:
 	void AfterLanding(int32 RegionId, const FLandingResult& Result);
 	void AfterSiege(int32 RegionId, const FAttackResult& Result);
 	void AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result);
+	/** His own battle handed back (FightLive): its result booked by the campaign, then shown on the attack card. */
+	void LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson);
+	/** The field of his own battle while it is open (FightLive). */
+	TWeakObjectPtr<class ALandBattle> LiveBattle;
+	/** (Release 1.6) His own raid handed back (FlyLive): TC.battleEnd's answer taken as the raid's act, the map brought up to date. */
+	void AirHandBack(const FString& Kind, int32 Target, const FString& EndJson);
+	/** (Release 1.6) The sky of his own raid while it is open (FlyLive). */
+	TWeakObjectPtr<class AAirBattle> LiveRaid;
+	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
+	mutable FString FlyOfferAct;
+	mutable int32 FlyOffer = -1;
+	/** (Release 1.5) The raid card his raid was flown from (its page and its fly act), for the card to come back as he left
+	 * it when the raid closes with no result (AirHandBack). */
+	FString FlyLivePage;
+	FString FlyLiveAct;
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
@@ -1249,6 +1303,8 @@ private:
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
 
 	FFaceOff FaceOff;
+	/** Works out FaceOff.FieldOffer, once a card and pick (CanFightLive). */
+	void WeighFieldOffer();
 	FWarPrompt WarPrompt;
 	FLedger Ledger;
 	bool bLedgerOpen = false;

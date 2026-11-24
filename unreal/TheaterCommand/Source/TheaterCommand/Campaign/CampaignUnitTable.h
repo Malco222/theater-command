@@ -61,6 +61,16 @@ namespace UnitTable
 	/** The campaign's month, told by the map whenever it shows a month (turn 1 is September 1939). */
 	void SetTurn(int32 Turn);
 	/**
+	 * The month the painter has, in months from the year 0: the year times 12 and the month counted from 0 (September
+	 * 1939 is 1939 * 12 + 8). An aircraft's paint by date (its model's "schemes") is the one that stands in it.
+	 */
+	int32 Month();
+	/**
+	 * An air battle tells the painter its own month (its year, and its month of the year from 1): its aircraft wear
+	 * the paint of that month. "-TheaterSeason=" still holds the table at one month of the war, for a picture.
+	 */
+	void SetMonth(int32 Year, int32 MonthOfYear);
+	/**
 	 * Which of the country's dated marks stands in the campaign's month: 0 for none, else one more than its place in
 	 * the table's list. A painted model is kept under this as well as under its country, so that a model painted
 	 * before the mark changed is not handed out after.

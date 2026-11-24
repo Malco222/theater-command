@@ -77,6 +77,10 @@ import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
+// (release 1.5) The general's ground battle: the campaign half of FIGHT IT YOURSELF (battle-bridge.ts).
+import { battleCalls } from './battle-bridge';
+import type { FoughtAir } from '../../../src/campaign/airfought';
+import type { FieldBill } from '../../../src/campaign/game';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
@@ -108,7 +112,7 @@ import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
-import { chanceOn } from '../../../src/campaign/game';
+import { chanceOn, headline } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
@@ -1272,11 +1276,14 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   lastReel = -9;
   monthBook = null;
   lastCard = null;
+  // Air campaigns are set right after startOpen, as the war runners set them (TC_AC=1), so a war started here is the
+  // war the gates measured.
   if (options?.view === 'grand') {
     g = grandGame(from, seed, human);
+    openAirCampaigns(g);
   } else {
     g = createGame(seed, from > 1 ? null : human);
-    if (options?.view === 'open') startOpen(g, false);
+    if (options?.view === 'open') { startOpen(g, false); openAirCampaigns(g); }
     while (g.turn < from) runTurnAI(g);
   }
   if (options?.view === 'grand' || options?.view === 'open') { try { repairCalls.on?.(g, true); } catch { /* rules without damaged cities */ } }
@@ -1327,6 +1334,7 @@ function load(text: string) {
   const loaded = loadGame(text);
   if (!loaded) return null;
   g = loaded;
+  airCampaignsOnLoad(g);
   lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
@@ -1388,6 +1396,27 @@ const repairCalls = {
   all: rulesByName['orderRepairAll'] as ((g: Game) => string[]) | undefined,
   undo: rulesByName['orderUndoRepair'] as ((g: Game, region: number) => boolean) | undefined,
 };
+
+// Air campaigns (ruling 236.2): flown in a new grand campaign as shipped (aircampaigns.json `on`; the design director,
+// 22 November 12:28Z, b623 and b636). Asked for by name, so that this bridge builds on rules without the switch too:
+// there the war is played as before. A saved game keeps the switch it was started with.
+const acCalls = {
+  shipped: rulesByName['airCampaignsShipped'] as (() => boolean) | undefined,
+  on: rulesByName['setAirCampaigns'] as ((g: Game, on: boolean) => void) | undefined,
+};
+function openAirCampaigns(g: Game): void {
+  try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
+}
+/**
+ * A grand campaign saved before air campaigns were flown (Brian, 23 November: "i want this in release 1 as its a major
+ * part") flies them from the month it is loaded, as a new one does from its first, with one line in the news. Only a
+ * grand campaign (startOpen's flag): a scenario or a history campaign is never open, so it is never touched.
+ */
+function airCampaignsOnLoad(g: Game): void {
+  if (!isOpen(g) || g.flags.ac) return;
+  openAirCampaigns(g);
+  if (g.flags.ac) headline(g, 'info', 'Air campaigns are flown in this war from this month: the air forces fight standing campaigns for the sky and bomb to a plan.', g.human ?? undefined);
+}
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };
 const leftAloneAt = (g: Game, region: number): string => { try { return leadCalls.leftAlone?.(g, region) ?? ''; } catch { return ''; } };
@@ -2557,11 +2586,16 @@ function gateOrder(gate: number, shut: boolean) {
   return { ok, note, view: view() };
 }
 
-function attack(ids: number[], to: number) {
+/**
+ * The player's attack. Fought out on the field (release 1.5: the land rules' battle, battle-bridge.ts battleSettleLand),
+ * 'fought' is the field's R in place of the dice and 'field' what the field cost each corps and side (ruling 226(6));
+ * without them the dice roll as always.
+ */
+function attack(ids: number[], to: number, fought?: number, field?: FieldBill) {
   const s = game();
   const before = new Map(s.corps.map((c) => [c.id, c.reg]));
   const sent = attackers(s, ids, to);
-  const report = orderAttack(s, sent, s.regions[to]);
+  const report = orderAttack(s, sent, s.regions[to], fought, field);
   if (report) forgetMarch(s, sent.map((c) => c.id)); // (an order carried out ends a standing march; one refused leaves it standing)
   // Corps that followed up into the ground they won, for the game to march across.
   const moved = report
@@ -5172,8 +5206,12 @@ function staffPage(s: Game): Page | null {
   };
 }
 
-/** Something pressed in one of those rooms. Says what came of it; the game then draws the room again. */
-function act(action: string, region = -1) {
+/**
+ * Something pressed in one of those rooms. Says what came of it; the game then draws the room again. A raid fought out
+ * as an air battle (battle-bridge.ts battleEnd; release 1.6) comes with 'fought', what the battle reports, paid in place
+ * of the dice, and says its after card ('after').
+ */
+function act(action: string, region = -1, fought?: FoughtAir) {
   const s = game();
   const h0 = s.headlines.length;
   const part = action.split(':');
@@ -5183,7 +5221,7 @@ function act(action: string, region = -1) {
   let flies: Flight[] = [];
   let open = '';
   const air0 = lastAirReport(s);
-  const air = airAct(s, action);
+  const air = airAct(s, action, fought);
   if (air) {
     // The air war as its own game (the grand campaign): a raid is flown the moment it is ordered, by every group picked.
     ok = air.ok; note = air.note; open = air.ok ? air.open ?? '' : '';
@@ -5209,7 +5247,7 @@ function act(action: string, region = -1) {
         }];
       }
     }
-    return { ok, note, fly, flies, open, view: view() };
+    return { ok, note, fly, flies, open, ...(air.after ? { after: air.after } : {}), view: view() };
   }
   if (part[0] === 'probe') {
     // (Version 64) One corps feels out the line: the attack card is read again with what it found.
@@ -6307,4 +6345,6 @@ function find(name: string) {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
-  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };
+  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
+  // (release 1.5) The general's ground battle (battle-bridge.ts): TC.battleLook and TC.battleSettleLand.
+  ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }) };

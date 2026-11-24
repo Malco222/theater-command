@@ -1,6 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
+import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
@@ -18,6 +19,7 @@ import {
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
   worksMonth,
+  type FieldBill,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -567,11 +569,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, field?: FieldBill): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
-  return resolveBattle(g, ok, target);
+  // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(field ? { field } : {}) });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------
@@ -1820,8 +1823,8 @@ export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: numbe
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
-export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[], fought?: FoughtAir): AirReport | null {
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human, fought) : null;
 }
 
 /**
@@ -1839,6 +1842,13 @@ export function orderScout(g: Game, id: number, target: number): { ok: boolean; 
   if (flown.ok) reconnoitre(g);
   return flown;
 }
+
+// ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+// On in a new grand campaign as shipped (aircampaigns.json `on`; the design director, 22 November 12:28Z, b623 and
+// b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
+// set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
+export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
 
 // ---- Carriers and the air war at sea (the grand campaign) ----
 //
