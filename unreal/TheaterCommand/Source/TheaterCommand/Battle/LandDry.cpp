@@ -75,6 +75,10 @@ namespace LandScape
 		const Tone Dust = Rgb(162, 148, 114);
 		const Tone Rut = Rgb(124, 112, 88);
 		const Tone Felt = Rgb(236, 232, 220);
+		// (the south's summer ground: Iraq, Iran and the Horn burnt beige-ochre, the art director on 849c1bc1 asking some
+		// 175,160,125 on the Mac for Baghdad in July, where the Mongolian summer's green read as a mint lawn)
+		const Tone Ochre = Rgb(114, 96, 66);
+		const Tone Straw = Rgb(132, 114, 80);
 
 		/** A small stone of 15 triangles (as the desert's): a squat cone of five sides, its foot sunk. */
 		void Chip(Writer& W, double CX, double CY, double R, double H, uint64_t S, const Tone& Lit, const Tone& Under)
@@ -154,6 +158,16 @@ namespace LandScape
 				const int M = F.Month;
 				Green = (M >= 6 && M <= 8) ? 1.0 : (M == 5 || M == 9) ? 0.45 : 0.0;
 				bWinter = M <= 3 || M >= 11;
+				// (south of 40 north and west of the Tien Shan, Iraq, Iran and the Horn: the rains come in winter and spring,
+				// and the summer burns the grass to straw on ochre ground; no bleached winter. The Horn's rains in April and
+				// May, October and November)
+				bSouth = F.Lat < 40.0 && F.Lon < 85.0;
+				if (bSouth)
+				{
+					Green = F.Lat < 20.0 ? ((M == 4 || M == 5 || M == 10 || M == 11) ? 0.3 : 0.0)
+						: (M >= 2 && M <= 4) ? 0.5 : (M == 1 || M == 5 || M == 12) ? 0.2 : 0.0;
+					bWinter = false;
+				}
 				// (the Khalkhin Gol: the river and the Mongolian bank's bluffs west of the field)
 				bKhalkha = F.Lat > 46.0 && F.Lat < 49.0 && F.Lon > 116.5 && F.Lon < 120.5;
 				// (the herders' felt tents: Mongolia, Inner Mongolia and Dzungaria; the Kazakh and Iranian steppes have their
@@ -312,6 +326,8 @@ namespace LandScape
 				// the camera sees from above when the clutter has dropped out)
 				T = Mixed(T, Rgb(98, 106, 72), 0.3 * Smooth(-0.1, -0.65, Bn));
 				T = Mixed(T, Plume, 0.15 * Smooth(0.2, 0.7, Pt) * (1.0 - Meadow_));
+				// (the south's burnt summer over it all but the hay meadows: ochre ground, straw in drifts)
+				if (bSouth) T = Mixed(T, Mixed(Ochre, Straw, 0.3 + 0.3 * Pt), 0.9 * (1.0 - 0.7 * Green) * (1.0 - 0.5 * Meadow_));
 				// (the sand: through the thin grass on it, and bare where the wind has blown it out, in blow-outs tens of
 				// metres across on the sandiest ground)
 				const double Bare = std::max(0.85 * Rough, BlownOut(Sd, Pt));
@@ -408,10 +424,12 @@ namespace LandScape
 				// hummocks where the sand is
 				const double Plumed = Smooth(0.2, 0.7, Pt), Thin = Smooth(0.15, 0.7, Read(S.X, S.Y, 4));
 				const double Drift = 0.3 + Smooth(0.4, -0.4, Read(S.X, S.Y, 4));
-				if (Pick < 0.36) return Grown{ ClutOf(CTuft), 1.8 * Drift * (1.0 - 0.3 * Sd) * (1.0 - 0.3 * Plumed) };
-				if (Pick < 0.78) return Grown{ ClutOf(CSward), 2.0 * (1.0 - 0.7 * Thin) * (1.0 - 0.2 * Sd) };
+				// (the south in its dry months: the sward and the feather grass sparse, the ground between them showing)
+				const double Dry_ = bSouth ? 1.0 - Green : 0.0;
+				if (Pick < 0.36) return Grown{ ClutOf(CTuft), 1.8 * Drift * (1.0 - 0.3 * Sd) * (1.0 - 0.3 * Plumed) * (1.0 - 0.5 * Dry_) };
+				if (Pick < 0.78) return Grown{ ClutOf(CSward), 2.0 * (1.0 - 0.7 * Thin) * (1.0 - 0.2 * Sd) * (1.0 - 0.75 * Dry_) };
 				if (Pick < 0.87) return Grown{ ClutOf(CWorm), 0.15 + 1.2 * Wm };
-				if (Pick < 0.97) return Grown{ ClutOf(CFeather), 0.2 + 1.4 * Plumed };
+				if (Pick < 0.97) return Grown{ ClutOf(CFeather), (0.2 + 1.4 * Plumed) * (1.0 - 0.85 * Dry_) };
 				return Grown{ ClutOf(CHummock), 0.3 * Smooth(0.4, 0.9, Sd) };
 			}
 
@@ -426,17 +444,19 @@ namespace LandScape
 					P.Scale = static_cast<float>(0.7 + 0.6 * U4);
 					P.ScaleZ = static_cast<float>(0.6 + 0.7 * U5);
 					P.Tint = bWinter ? Tint(1.08, 1.04, 0.98) : Tint(1.0 - 0.1 * G + 0.05 * U7, 1.0 + 0.04 * G, 0.95 - 0.08 * G);
+					// (the south's dry tufts: half straw, half grey-green; their pale tips read as paper in the high sun)
+					if (bSouth && Green < 0.25) P.Tint = U7 < 0.5 ? Tint(0.9 + 0.06 * U6, 0.76 + 0.05 * U6, 0.54) : Tint(0.74, 0.8, 0.68);
 					return true;
 				case CFeather:
 					P.Scale = static_cast<float>(0.8 + 0.5 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.6 * U5);
 					P.Yaw = static_cast<float>(0.25 * Pi + 0.5 * (U7 - 0.5)); // (all leaning with the north-west wind)
-					P.Tint = Tint(0.97 + 0.06 * U6, 0.97 + 0.05 * U6, 0.95);
+					P.Tint = bSouth ? Tint(0.82 + 0.06 * U6, 0.68 + 0.05 * U6, 0.46) : Tint(0.97 + 0.06 * U6, 0.97 + 0.05 * U6, 0.95);
 					return true;
 				case CWorm:
 					P.Scale = static_cast<float>(0.7 + 0.6 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.5 * U5);
-					P.Tint = Tint(0.96 + 0.08 * U7, 0.98 + 0.06 * U7, 0.98);
+					P.Tint = bSouth ? Tint(0.84 + 0.06 * U7, 0.88 + 0.05 * U7, 0.8) : Tint(0.96 + 0.08 * U7, 0.98 + 0.06 * U7, 0.98); // (the south's a dustier grey-green)
 					return true;
 				case CHummock:
 					P.Scale = static_cast<float>(0.7 + 0.8 * U4);
@@ -448,6 +468,7 @@ namespace LandScape
 					P.Scale = static_cast<float>(0.8 + 0.6 * U4);
 					P.ScaleZ = static_cast<float>(0.6 + 0.8 * U5);
 					P.Tint = bWinter ? Tint(1.08, 1.04, 0.98) : Tint(1.0 - 0.06 * G + 0.04 * U7, 1.0 + 0.03 * G, 0.98 - 0.05 * G);
+					if (bSouth && Green < 0.25) P.Tint = Tint(0.9 + 0.04 * U7, 0.78 + 0.04 * U7, 0.58);
 					return true;
 				case CReed:
 					P.Scale = static_cast<float>(0.8 + 0.5 * U4);
@@ -747,13 +768,13 @@ namespace LandScape
 			{
 				if (Ground == "sand" || Ground == "desert") return 5;
 				if (Ground == "rough" || Ground == "rock") return 7; // (the stony rises: rock)
-				return Else == 4 && !bWinter ? 0 : Else; // (no mud on the summer steppe)
+				return Else == 4 && !bWinter && !(bSouth && Green > 0.0) ? 0 : Else; // (no mud on the summer steppe; the south's in its rains)
 			}
 			const char* Earth() const override { return bSandy ? "sand" : "loam"; }
 
 		private:
 			double Green = 0.0;
-			bool bWinter = false, bKhalkha = false, bYurts = false, bSandy = false;
+			bool bWinter = false, bKhalkha = false, bYurts = false, bSandy = false, bSouth = false;
 			static constexpr double CoarseStep = 12.0;
 			double CX0 = 0.0, CY0 = 0.0;
 			int CNX = 0, CNY = 0;
