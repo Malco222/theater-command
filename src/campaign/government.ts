@@ -37,7 +37,7 @@ import { armyOf } from './joint';
 import { prizeOf, prizesInReach, townName, townSize, type Prize, type TownSize } from './towns';
 import { dealsOf, whyNoTrade } from './trade';
 import { LADDER_GONE, footTrust, replacesLadder } from './footing';
-import { mostCorps } from './units';
+import { mostCorps, seenOdds } from './units';
 
 export type FormId = 'democracy' | 'oneparty' | 'authoritarian';
 /** What a minister or a decree can change: multipliers on income, replacements, the price of new corps, research, trade and the class of men that comes of age each month. */
@@ -452,9 +452,12 @@ function broughtUp(g: Game, nat: string, r: Region, reach: number, deep?: Map<nu
  * reckoning as the card, so works, ground, the quality of the troops and the room on the roads all count. Against
  * an army in the field it is the odds of the battle for the country round the town; with none left there, the odds
  * of storming the town. Where the defenders are not all identified it is the staff's estimate, as on the card.
- * 0 where nothing of his can reach it.
+ * 0 where nothing of his can reach it. `own`: the nation's own reading of a field attack, as its own attack card
+ * shows it (Units decide: at its staff's sight, DD 24 Nov 15:53Z, ruling (14) amended; at sight 1, and off, the
+ * card's odds). An enemy's reading stays on the card's odds, so that a computer staff's misread is never shown, and
+ * a storm on the card's odds, as the storm card does.
  */
-function cardOdds(g: Game, nat: string, r: Region, reach: number, deep?: Map<number, number>): number {
+function cardOdds(g: Game, nat: string, r: Region, reach: number, deep?: Map<number, number>, own = false): number {
   const force = broughtUp(g, nat, r, reach, deep);
   const foes = hostileUnits(g, r, nat);
   let going: Corps[], town = false;
@@ -470,14 +473,15 @@ function cardOdds(g: Game, nat: string, r: Region, reach: number, deep?: Map<num
   }
   if (!going.length) return 0;
   const a = assess(g, going, r, town ? { town: true } : {});
-  const band = oddsBand(g, a.defenders, a.odds, r.id, nat);
-  return Math.min(ODDS_MOST, band.exact ? a.odds : band.mid);
+  const odds = own && !town ? seenOdds(g, a) : a.odds;
+  const band = oddsBand(g, a.defenders, odds, r.id, nat);
+  return Math.min(ODDS_MOST, band.exact ? odds : band.mid);
 }
 
 /** The player's odds against a town, as the cabinet reckons them before it asks for it: what the attack card would read with his corps within two provinces brought up. */
 export function directiveOdds(g: Game, nat: string, region: number): number {
   const r = g.regions[region];
-  return r ? cardOdds(g, nat, r, GOV.directives.take.reach) : 0;
+  return r ? cardOdds(g, nat, r, GOV.directives.take.reach, undefined, true) : 0;
 }
 
 /**
@@ -910,7 +914,7 @@ export interface PromiseTerms {
  */
 function promiseOdds(g: Game, nat: string, r: Region, deep = depths(g, nat)): Reading {
   const P = GOV.promise, depth = deep.get(r.id) ?? P.reach;
-  let best: Reading = { odds: cardOdds(g, nat, r, P.reach, deep), depth, then: null };
+  let best: Reading = { odds: cardOdds(g, nat, r, P.reach, deep, true), depth, then: null };
   for (const m of seen(g, nat)?.reach ?? []) {
     const was = g.turn - m.t < P.memory ? m.odds[r.id] : undefined;
     if (was === undefined) continue;
@@ -942,7 +946,7 @@ function noteReach(g: Game, nat: string, st: GovState): void {
   for (const [id, d] of deep) {
     const r = g.regions[id];
     if (d < 1 || !atWar(g, nat, r.ctrl)) continue;
-    const o = cardOdds(g, nat, r, P.reach, deep);
+    const o = cardOdds(g, nat, r, P.reach, deep, true);
     if (o > 0) { odds[id] = Math.round(o * 100) / 100; depth[id] = d; }
   }
   st.reach = [...kept, { t: g.turn, odds, depth }];

@@ -41,7 +41,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import pursuitData from '../../data/campaign/pursuit.json';
-import { armyTraining, attackCommand, blitzGate, causeLines, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
+import { armyTraining, attackCommand, blitzGate, causeLines, commandOf, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -1773,17 +1773,19 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (wide && defenders.length) {
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     // (Units decide: the attack's command as well, x(0.85 + 0.15c), which prices the attack alone, so that the line can
-    // say which army is the better led apart from the better trained: DD 24 Nov 15:53Z, #2 form 'On the card'.)
-    const grade = (cs: Corps[], att: boolean): { worth: number; army: number; led: number; xp: number } => {
-      let w = 0, worth = 0, army = 0, led = 0, xp = 0;
+    // say which army is the better led apart from the better trained: DD 24 Nov 15:53Z, #2 form 'On the card'. 'cmd' is
+    // each side's own command c, so that the line names the better led army only where it is: the defence's command is
+    // not priced, and a slow attack alone does not make the defenders better led.)
+    const grade = (cs: Corps[], att: boolean): { worth: number; army: number; led: number; cmd: number; xp: number } => {
+      let w = 0, worth = 0, army = 0, led = 0, cmd = 0, xp = 0;
       // (Units decide: the army's training ladder in place of the nation's quality: DD 24 Nov 15:53Z (4).)
       for (const c of cs) {
         const k = c.divs * c.str, t = armyTraining(g, c.nat);
         w += k; army += k * t; xp += k * c.xp;
-        if (eye) { const l = att ? attackCommand(g, c.nat) : 1; worth += k * t * (0.85 + 0.4 * c.xp) * l; led += k * l; }
+        if (eye) { const l = att ? attackCommand(g, c.nat) : 1; worth += k * t * (0.85 + 0.4 * c.xp) * l; led += k * l; cmd += k * commandOf(g, c.nat); }
         else worth += k * t * (0.85 + 0.4 * c.xp);
       }
-      return w > 0 ? { worth: worth / w, army: army / w, led: eye ? led / w : 1, xp: xp / w } : { worth: 1, army: 1, led: 1, xp: 0 };
+      return w > 0 ? { worth: worth / w, army: army / w, led: eye ? led / w : 1, cmd: eye ? cmd / w : 0, xp: xp / w } : { worth: 1, army: 1, led: 1, cmd: 0, xp: 0 };
     };
     const ours = grade(attackers, true), theirs = grade(defenders, false);
     const ratio = theirs.worth / Math.max(0.01, ours.worth);
@@ -1794,8 +1796,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army;
       const ledK = ratio > 1 ? theirs.led / ours.led : ours.led / theirs.led, xpK = eye ? k / (armyK * ledK) : k / armyK;
       // (Units decide: 'the better trained and led army' splits into the better trained army, by training alone, and
-      // the better led, by the attack's command: DD 24 Nov 15:53Z, #2 form 'On the card'.)
-      const why = [armyK >= 1.04 ? (eye ? 'the better trained army' : 'the better trained and led army') : '', eye && ledK >= 1.04 ? 'the better led army' : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
+      // the better led, by the attack's command: DD 24 Nov 15:53Z, #2 form 'On the card'. The stronger side is named the
+      // better led only where its own command is the higher: a line names its true cause. Where the attack's slow command
+      // tells against it but the defenders are led no better, the Command line says so, 'Attack down', and this one
+      // names nothing for it.)
+      const betterLed = eye && ledK >= 1.04 && (ratio > 1 ? theirs.cmd > ours.cmd + 1e-9 : ours.cmd > theirs.cmd + 1e-9);
+      const why = [armyK >= 1.04 ? (eye ? 'the better trained army' : 'the better trained and led army') : '', betterLed ? 'the better led army' : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
       lines.push({
         label: 'Troops', value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
         effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ''}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`,

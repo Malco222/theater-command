@@ -58,6 +58,7 @@ import { chanceOn, men } from '../src/campaign/game';
 import { oddsBand } from '../src/campaign/intel';
 import { landTicket } from '../src/battle/land/ticket';
 import { commandWords, needAt, seenOdds, staffSight, stopAt, trainingWords, wayWords } from '../src/campaign/units';
+import { GOV, directiveOdds, promiseTerms, threatOdds } from '../src/campaign/government';
 
 const ROWS = ['radios', 'nco', 'battledrill', 'officers'];
 
@@ -1668,6 +1669,28 @@ describe('the attack card at the player\'s own sight (ruling (14) amended; #2 fo
     expect(assess(f.g, f.att, f.t).lines.find((l) => l.label === 'Troops')).toBeUndefined();
   });
 
+  it('names the better led army only where its own command is the higher, never for the attack\'s slowness alone', () => {
+    const f = volhynia(4, 2);
+    const troops = () => assess(f.g, f.att, f.t).lines.find((l) => l.label === 'Troops')!.effect!;
+    armsOf(f.g, 'SOV')!.land.train = armyTraining(f.g, 'POL');
+    // Both armies at command 0, trained alike: the slow Soviet attack makes the defence the stronger, but the Polish
+    // army is led no better, and the line does not say it is. The Command line gives the cause.
+    earn(f.g, 'POL', 0);
+    expect(commandOf(f.g, 'SOV')).toBe(commandOf(f.g, 'POL'));
+    expect(troops()).toMatch(/^Division for division the defending side is the stronger: each defending division counts for about 1\.2 attacking ones$/);
+    expect(troops()).not.toContain('the better led army');
+    expect(assess(f.g, f.att, f.t).lines.find((l) => l.label === 'Command')!.effect).toMatch(/^Attack down 15%;/);
+    // The attack led the better (c 0.25 against 0): still not the defence's cause.
+    earn(f.g, 'SOV', 0.25);
+    expect(troops()).not.toContain('the better led army');
+    // The defence's own command the higher (0.3 against 0.25), and it is named.
+    earn(f.g, 'POL', 0.3);
+    expect(troops()).toMatch(/as the better led army: /);
+    // Off, the old words, with no command in them.
+    const o = volhynia(4, 2, false);
+    expect(assess(o.g, o.att, o.t).lines.find((l) => l.label === 'Troops')?.effect ?? '').not.toContain('the better led army');
+  });
+
   it('counts the months an army carries an offensive through, by the earned test, for the player\'s nation and every computer\'s', () => {
     const g = open(true);
     const [a, b] = g.regions.filter((r) => r.ctrl !== 'SOV').slice(0, 2);
@@ -1684,5 +1707,46 @@ describe('the attack card at the player\'s own sight (ruling (14) amended; #2 fo
     armsOf(g, 'UK')!.land.way = { att: { id: 'night', by: 'start' }, def: { id: 'last-stand', by: 'start' } };
     expect(wayWords(g, 'UK', 'att')).toBe('by night');
     expect(wayWords(g, 'UK', 'def')).toBe('to the last man');
+  });
+});
+
+describe('the cabinet quotes the attack card as the player\'s own staff reads it (ruling (14) amended)', () => {
+  /** The Volhynia attack with no other Soviet corps on the map, the Poles dug in and identified, the Soviet player's. */
+  const alone = (on = true) => {
+    const f = volhynia(4, 2, on);
+    for (const u of [...f.g.corps]) if (u.nat === 'SOV' && !u.dead && !f.att.includes(u)) removeCorps(f.g, u);
+    dig(f.def);
+    f.g.human = 'SOV';
+    f.g.phase = f.g.order.indexOf('SOV');
+    f.g.intel.known ??= {};
+    for (const d of f.def) f.g.intel.known[d.id] = f.g.turn;
+    return f;
+  };
+
+  it('at sight 0 quotes the odds the attack card shows, not the card\'s own; an enemy\'s reading stays on the card', () => {
+    const f = alone();
+    expect(staffSight(f.g, 'SOV')).toBe(0);
+    const look = attackOutlook(f.g, f.att, f.t)!, a = assess(f.g, f.att, f.t);
+    expect(look.sight).toBeTruthy();
+    expect(look.odds).toBeGreaterThan(a.odds * 1.5);
+    expect(directiveOdds(f.g, 'SOV', f.t.id)).toBeCloseTo(look.odds, 9);
+    // (The promise's terms give the odds to the hundredth.)
+    expect(promiseTerms(f.g, 'SOV', f.t.id, GOV.promise.months[0])!.odds).toBeCloseTo(look.odds, 2);
+    // The Poles' cabinet, reckoning what the Soviet army could bring against Volhynia, reads the card: a computer
+    // staff's misread is never shown.
+    const t = threatOdds(f.g, 'POL', f.t.id)!;
+    expect(t.by).toBe('SOV');
+    expect(t.odds).toBeCloseTo(a.odds, 9);
+  });
+
+  it('at sight 1, and off, quotes the card\'s own odds, as today', () => {
+    const f = alone();
+    earn(f.g, 'SOV', 1);
+    const a = assess(f.g, f.att, f.t);
+    expect(attackOutlook(f.g, f.att, f.t)!.odds).toBe(a.odds);
+    expect(directiveOdds(f.g, 'SOV', f.t.id)).toBeCloseTo(a.odds, 9);
+    const o = alone(false), oa = assess(o.g, o.att, o.t);
+    expect(directiveOdds(o.g, 'SOV', o.t.id)).toBeCloseTo(oa.odds, 9);
+    expect(promiseTerms(o.g, 'SOV', o.t.id, GOV.promise.months[0])!.odds).toBeCloseTo(oa.odds, 2);
   });
 });
