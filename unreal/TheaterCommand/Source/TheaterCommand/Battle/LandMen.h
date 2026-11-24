@@ -211,6 +211,10 @@ namespace LandMen
 		 * split at the eight cuts, shoulder, elbow, hip and knee), in which a limb is taken off at its joint and flies on
 		 * its own bone's move track. Empty but in a twin (Crowd::AddGore). */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> DeathsGore;
+		/** gore_from[clip] = where a gore fall's burst was against him: "front", "behind", "left", "right" or "under"
+		 * (lying on it). The twin's file-level map, each gore fall's own blast_from where the map does not name it; only
+		 * clips the file has. Empty but in a twin: the crowd weighs a gored man's falls by it (Crowd::SetGore). */
+		std::map<std::string, std::string> GoreFrom;
 		/** A gore twin's cuts (its gore.cuts, in order: bit k of a joined point's mask), each by its bone, and its
 		 * caps' points per level ([first, count], the stump's and the limb's). Empty but in a twin. A cut is off where
 		 * its bone has left the joint its parent holds (more than a centimetre). */
@@ -362,6 +366,7 @@ namespace LandMen
 		float Jitter = 1.f;             // his own play rate on still loops and turns of pose
 		std::string FallClip;           // the fall he took ("settle": a prone man going limp)
 		std::string FallStance, FallKind, FallFrom; // stand|run|kneel|prone|cover; the kind; front|back|side
+		std::string GoreFrom;           // a gored man's burst against him: front|behind|left|right|under (empty: not gored)
 		double FallStarted = -1.0;      // when his fall began, as played
 		double Rested = -1.0;           // when he came to rest and froze
 	};
@@ -406,10 +411,15 @@ namespace LandMen
 		 * Shell and tank hits throw men and take limbs off (release 2, behind -TheaterLandGore; Brian, 22 November: "make
 		 * more graphic animations if a guy gets shot or blown up", "with limbs coming off"). On: a man killed by a shell,
 		 * a tank's gun or a grenade near its burst may fall as his file's gore twin (AddGore), in one of its gore falls:
-		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (a field gun's 0.55 at
-		 * the burst, a tank's 0.5, a mortar's 0.45, a grenade's 0.3) and fall away to none at its reach (12, 10, 8 and 4
-		 * m); a man lying or in cover half that. The same battle gores the same men every time (his own dice). Who dies
-		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 * blown off his feet with a limb gone, an arm or a leg taken off. The odds are by the burst (within 2 m a field
+		 * gun's 0.55, a tank's or a mortar's 0.35, a grenade's 0.25) and fall away to none at its reach (8, 6, 6 and 2 m);
+		 * a man lying or in cover half that. His fall is one whose gore_from is where the burst was against him (front,
+		 * behind, left, right; under within 1 m), of those the ones whose limbs land farthest from it (half a metre or
+		 * more farther than they stood), so he and his limb are thrown away from it; the big throw (die_blast_*) only from
+		 * a field gun's or a howitzer's shell (the round's w "gun"); where his stance's gore falls hold none from that
+		 * side, the kinds weighed as for any man, without the big throw but from a gun or where nothing else is. The same
+		 * battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he falls
+		 * changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */
