@@ -81,8 +81,11 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
   });
 
   it('the field starts each side where the warning puts it, armed without the height, and lands near the card', () => {
+    // Kent: No. 10 Group's fields lie between the raid and the target on the board. Warned, it starts as far from the
+    // raid's way in as the farthest group, and meets the sweep with the rest, not alone (it was 2.5 to the card's 0.35).
     const cases = [
       { make: ger, nat: 'GER', name: 'Hampshire', att: 1, def: 2 },
+      { make: ger, nat: 'GER', name: 'Kent', att: 1, def: 2 },
       { make: uk, nat: 'UK', name: 'Holland', att: 1, def: 1 },
     ];
     for (const c of cases) {
@@ -90,6 +93,10 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
       const tk = airTicket(c.make(true), 'superiority', t, ids, c.nat).ticket!;
       for (const f of tk.att.forces) expect(tk.place.starts[f.corps]).toMatchObject({ band: c.att, wait: false });
       for (const f of tk.def.forces) expect(tk.place.starts[f.corps]).toMatchObject({ band: c.def, wait: false });
+      // Level with each other from the raid's way in (the board's edge may bring one a little nearer).
+      const way = tk.att.forces.map((f) => tk.place.starts[f.corps]), ex = way.reduce((s, p) => s + p.x, 0) / way.length, ey = way.reduce((s, p) => s + p.y, 0) / way.length;
+      const r = tk.def.forces.map((f) => Math.hypot(tk.place.starts[f.corps].x - ex, tk.place.starts[f.corps].y - ey));
+      for (const x of r) expect(x).toBeGreaterThan(0.9 * Math.max(...r));
       const fc = forecastAir(g, on, m, t);
       let A = 0, D = 0;
       for (let s = 1; s <= 20; s++) {
