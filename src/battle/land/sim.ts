@@ -22,7 +22,7 @@ import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
-import { REF_NERVE, ledgerK, nerveSplit, type NerveParts } from './spread';
+import { REF_NERVE, SPREAD, ledgerK, nerveSplit, type NerveParts } from './spread';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -3430,6 +3430,36 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
   private ledgerShare(s: Side): number { const L = this.led; return L ? L.D[s] / Math.max(1e-12, L.K[s] * L.R[s] * L.draw[s]) : 0; }
 
+  /** The level a side's bar is shown at to the other side's player under the field spread (the mask, choice 6 (A)): never its draw. */
+  private shownLevel(s: Side): number { return this.ticket.reckoning.spread?.shown?.[s] ?? SPREAD.level; }
+  /** Whether 'as' sees side s's bar through the mask: under the field spread, the other side's, until it breaks. */
+  private masked(s: Side, as?: Side | null): boolean {
+    return !!this.ticket.reckoning.spread && !!as && as !== s && !this.broke[s] && this.over?.broke !== s;
+  }
+  /**
+   * A side's bar as 'as' sees it (form s8; choice 6 (A), DD 19:47Z): his own true; under the field spread the other's as
+   * his staff reads it, worn against the level shown and held at data mask.hold until it breaks, so neither the bar nor
+   * how fast it fills gives away the enemy's draw. No spread, or nobody ('as' absent: b474 reads breaking()), the true bar.
+   */
+  shownBar(s: Side, as?: Side | null): number {
+    if (!this.masked(s, as)) return this.breaking(s);
+    const b = this.brink(s);
+    return Math.min(SPREAD.mask.hold, Math.max(b.running / LAND.breaks, b.worn / this.shownLevel(s)));
+  }
+  /**
+   * What drives a side's bar as 'as' sees it: under the field spread the other side's read against the level shown, its
+   * bar the shown one, and the hold not told (it too would read the draw); the ledger's share left out (G). Otherwise the
+   * true cause.
+   */
+  causeAs(s: Side, as?: Side | null): BreakCause {
+    const c = this.breakCause(s);
+    if (!this.masked(s, as)) return c;
+    const rest: BreakCause = { ...c };
+    delete rest.ledger;
+    const lv = this.shownLevel(s), w = this.wornShare(s) / lv, r = this.brokenShare(s) / LAND.breaks;
+    return { ...rest, bar: Math.round(this.shownBar(s, as) * 1000) / 1000, spent: lv, by: 'none', nearer: r >= w && r > 0 ? 'running' : 'worn', holding: false, held: false, heldFor: 0 };
+  }
+
   /** The bar, with the two shares it is reckoned from and whether the fresh hold keeps it at the brink. */
   private brink(s: Side): { bar: number; worn: number; running: number; holding: boolean } {
     const worn = this.wornShare(s), running = this.brokenShare(s), over = this.led ? this.ledgerShare(s) : worn / this.spentOf(s);
@@ -4130,8 +4160,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
-    // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+    // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol); and under
+    // the field spread the other side's bar and its cause, as his staff reads them (shownBar, causeAs).
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.shownBar('att', as), def: this.shownBar('def', as) }, breakingBy: { att: this.causeAs('att', as), def: this.causeAs('def', as) }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */
