@@ -55,10 +55,13 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
     expect(on.lines.find((l) => l.label === 'Height')?.value).toBe('The defenders will be above you');
   });
 
-  it('over occupied Holland with no chain the sweep is above (x 1); over its own ground without one, level', () => {
+  it('over ground their side holds, without a chain, observers meet the sweep level (rule C): Holland 1942, Alsace 1939', () => {
+    // (The design director 24 Nov 16:09Z, rule C: observers count on ground held by anyone on the defenders' side, so
+    // occupied Holland is watched by the German posts there. Defenders rise only over their side's ground, so a sweep
+    // over land is never unwarned without an ambush; at sea, with no chain on the coast, it is: see the escort file.)
     const nl = raid(uk, 'UK', 'superiority', 'Holland');
-    expect(nl.on.height).toMatchObject({ W: 0, x: 1 });
-    expect(nl.on.lines.find((l) => l.label === 'Height')?.value).toBe('You will be above them');
+    expect(nl.on.height).toMatchObject({ W: AIR.height.observers, x: 0 });
+    expect(nl.on.lines.find((l) => l.label === 'Height')?.value).toBe('Level');
     // September 1939, an open start: France has no chain yet, so over its own ground its observers meet a German sweep
     // level (Alsace). A fight for the sky with bombers in it is an escort's (air-escort-height-r2.test.ts): unescorted,
     // as Lorraine's pick goes, there is no fighters' fight and no height.
@@ -80,7 +83,7 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
   it('the field starts each side where the warning puts it, armed without the height, and lands near the card', () => {
     const cases = [
       { make: ger, nat: 'GER', name: 'Hampshire', att: 1, def: 2 },
-      { make: uk, nat: 'UK', name: 'Holland', att: 2, def: 1 },
+      { make: uk, nat: 'UK', name: 'Holland', att: 1, def: 1 },
     ];
     for (const c of cases) {
       const { on, g, t, ids, m } = raid(c.make, c.nat, 'superiority', c.name);
@@ -96,7 +99,7 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
         while (!sim.over) sim.step();
         for (const r of sim.outcome().groups) { if (r.side === 'att') A += r.lostFtr; else D += r.lostFtr; }
       }
-      // The card's exchange, and the field's from its own bounce: within a third of each other (measured: 0.46 v 0.41, 0.53 v 0.48).
+      // The card's exchange, and the field's from its own bounce: within a third of each other.
       const card = fc.foeLoss / fc.ftrLoss, field = D / A;
       expect(Math.abs(Math.log(field / card))).toBeLessThan(Math.log(1.35));
     }

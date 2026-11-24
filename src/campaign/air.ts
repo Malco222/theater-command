@@ -1550,17 +1550,17 @@ const mostBomberLoss = (g: Game, night = false): number => (airWar(g) ? (night ?
 
 /** What the map says about one air campaign before it is flown: who can reach, who will meet them, and what helps each side. */
 /**
- * The defenders' warning in time over a fight of fighters alone (Units decide; the design director 24 Nov 15:20Z):
- * 1 with a chain over the place, an order their agent read, or carriers with radar researched; a carrier's lookouts
- * over its own fleet, and ground observers over the defender's own home ground, 0.5 (the range middle, until the
- * historian's lead times); 0 over occupied ground or the sea with none.
+ * The defenders' warning in time over the fighters' own fight (Units decide; the design director 24 Nov 15:20Z and
+ * 16:09Z): 1 with a chain over the place, an order their agent read, or carriers with radar researched; a carrier's
+ * lookouts over its own fleet, and ground observers over ground held by anyone on the defenders' side, 0.5 (the range
+ * middle, until the historian's lead times; rule C); 0 over ground the other side holds, or the sea, with none.
  */
 function warnedIn(g: Game, a: AirAssess, sea: boolean, amb: boolean, target: number): number {
   if (amb || a.radar) return 1;
   if (a.def.length && a.def.every((x) => x.f.ship !== undefined)) return a.def.every((x) => hasTech(g, x.f.nat, AIRWAR.sky.radar)) ? 1 : AIR.height.lookouts;
   if (sea) return 0;
   const r = g.regions[target];
-  return r && r.owner === r.ctrl ? AIR.height.observers : 0;
+  return r && a.def.some((x) => x.f.nat === r.ctrl || allied(g, x.f.nat, r.ctrl)) ? AIR.height.observers : 0;
 }
 
 /**

@@ -99,12 +99,27 @@ describe('an escorted raid under Units decide: height by the escort\'s roles (re
     for (const f of tk.def.forces) expect(tk.place.starts[f.corps]).toMatchObject({ band: 2, wait: false });
   });
 
-  it('over occupied Holland, unwarned: the defenders come up from below, the close escort meets them level, the bombers as before', () => {
+  it('over Holland, watched by observers (rule C): the defenders meet the bombers level; the bombers as before', () => {
     const { on, off } = raid(uk, 'UK', 'Holland', 1);
-    expect(on.a.height).toMatchObject({ W: 0, x: AIR.height.escort.close[0] });
+    expect(on.a.height).toMatchObject({ W: AIR.height.observers, x: AIR.height.escort.close[1] });
     expect(on.a.height!.plain).toBeUndefined();
     expect(on.a.bomberLoss).toBeCloseTo(off.a.bomberLoss, 9);
     expect(on.a.lines.find((l) => l.label === 'Height')?.value).toBe('Level');
+  });
+
+  it('over the Channel with no chain on its coast, unwarned: the defenders come up from below and meet the close escort about level', () => {
+    const make = uk, g0 = make(true);
+    const sea = g0.seas.find((z) => z.name === 'English Channel') ?? g0.seas.find((z) => /Channel/.test(z.name))!;
+    const plan = planRaid(g0, 'strike', sea.id, undefined, 'UK');
+    const ids = [...plan.picked!, ...plan.seats.filter((s) => s.kind === 'ftr' && !plan.picked!.includes(s.id)).slice(0, 2).map((s) => s.id)];
+    const a = assessAir(g0, g0.airFleets.filter((f) => ids.includes(f.id)), 'strike', sea.id);
+    const g1 = make(false), o = assessAir(g1, g1.airFleets.filter((f) => ids.includes(f.id)), 'strike', sea.id);
+    expect(a.B).toBeGreaterThan(0);
+    expect(a.height!.W).toBe(0);
+    expect(a.height!.x).toBeGreaterThanOrEqual(Math.min(AIR.height.escort.close[0], AIR.height.escort.top[0]));
+    expect(a.height!.plain).toBeUndefined();
+    expect(a.bomberLoss).toBeCloseTo(o.bomberLoss, 9);
+    expect(a.lines.find((l) => l.label === 'Height')?.effect).toContain('Unwarned');
   });
 
   it('the field lands near the card: the fighter exchange and the bombers lost, warned and unwarned', () => {
