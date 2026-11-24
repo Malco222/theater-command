@@ -5671,9 +5671,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			LayEdgeNews(bPageOpen && Page.Month.bValid ? &Page.Month : nullptr);
 		}
 	}
-	// ---- (Release 2, new units ready) The READY plate, once nothing else holds the screen and the month's own notice
+	// ---- (Release 2, new units ready) The READY plate, once nothing else holds the screen (no battle being fought, nor,
+	// once 1.5's flown raids are merged in, a raid: IsFightingLive; the 3D pre-check, 19:19Z) and the month's own notice
 	// ("June 1941. Your orders.") has gone.
-	if (bReadyDue && !bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !bPageOpen && FPlatformTime::Seconds() >= NoticeUntil)
+	if (bReadyDue && !bMonthCardDue && !bWatching && !IsFightingLive() && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !bPageOpen && FPlatformTime::Seconds() >= NoticeUntil)
 	{
 		SayReady();
 	}

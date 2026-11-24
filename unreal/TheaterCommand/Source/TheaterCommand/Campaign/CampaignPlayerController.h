@@ -656,7 +656,7 @@ public:
 	 * each in turn and puts a new army in his hand. The plate is said once nothing else holds the screen.
 	 */
 	void ShowReady();
-	bool CanShowReady() const { return bReadyNotice && !bWatching && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
+	bool CanShowReady() const { return bReadyNotice && !bWatching && !IsFightingLive() && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
 	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
 	/** Says the READY plate now (the month's end does, once the screen is free; a picture asks for it at once). */
 	void SayReady();
