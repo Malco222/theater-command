@@ -935,6 +935,27 @@ namespace LandParts
 				S.Sight.Add(M);
 			}
 		}
+		// (the old wrecks, release 2: where the scene laid them, still, so the camera keeps out of them as it keeps out
+		// of the battle's own; none laid, none added)
+		for (size_t K = 0; K < S.OldWrecks.Hulks().size(); ++K)
+		{
+			const LandHulk::Hulk& H = S.OldWrecks.Hulks()[K];
+			const LandKit::Model* Look = S.OldWrecks.ModelOf(K);
+			if (!Look)
+			{
+				continue;
+			}
+			LandSight::Machine M;
+			M.Root = LandPlay::Vec(H.X, H.Y, H.Z);
+			M.Heading = H.Heading;
+			M.Turret = H.Heading + FMath::DegreesToRadians(H.Turret);
+			M.HullLo = LandPlay::Vec(Look->HullLo.X, Look->HullLo.Y, Look->HullLo.Z);
+			M.HullHi = LandPlay::Vec(Look->HullHi.X, Look->HullHi.Y, Look->HullHi.Z);
+			M.bTurret = Look->Turret >= 0 && !H.bTurretOff;
+			M.TurretLo = LandPlay::Vec(Look->TurretLo.X, Look->TurretLo.Y, Look->TurretLo.Z);
+			M.TurretHi = LandPlay::Vec(Look->TurretHi.X, Look->TurretHi.Y, Look->TurretHi.Z);
+			S.Sight.Add(M);
+		}
 	}
 }
 
@@ -2011,6 +2032,7 @@ bool ALandBattle::Open()
 	LayField();
 	LayScars();
 	LayOldRuts();
+	LayOldWrecks();
 	const double LaySeconds = LandParts::Seconds() - Took;
 	MakeFlags();
 	HideTheTable();
@@ -2946,7 +2968,9 @@ void ALandBattle::LayThings()
 	};
 	Carpet->Stands = [this](const LandField::Placed& One) -> bool
 	{
-		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y));
+		// (and none under an old wreck, her thrown turret or her run-off track, nor on her scorched patch while it is
+		// fresh: LandHulk's Covers, false at once where none was laid)
+		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y) && !State->OldWrecks.Covers(One.X, One.Y));
 	};
 	// (the corn's clearing round the lens: none until the eye is low, LayClutter)
 	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
@@ -6743,6 +6767,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the tanks drawn");
 	DrawArmour(EyeWorld);
+	ShowOldWrecks(EyeWorld);
 	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	LandFell::Phase("tick: the men's shades");
 	DrawManShades();
@@ -8385,6 +8410,8 @@ void ALandBattle::LayOldRuts()
 	};
 	const std::vector<std::vector<std::pair<double, double>>> Ways = LandCrater::OldWays(Fought, Battles, Seed, Gates, Heading, Open);
 	const int Laid = S.Ruts.LayOld(Ways, Months, bWet, Seed);
+	// (kept for the old wrecks, which keep off them: LayOldWrecks)
+	S.OldRutWays = Ways;
 	// (the grass laid again without what stands in a bare rut: dried mud or puddled; grassed over, it stands)
 	if (Carpet.IsValid() && (bWet || Months < 3.0))
 	{
@@ -8398,6 +8425,181 @@ void ALandBattle::LayOldRuts()
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle: mud memory: %d pieces of old ruts along %d ways, %d battle(s) fought here in mud before, the last %.0f months ago%s, laid in %.2f s (-TheaterLandNoOldRuts: none)"),
 		Laid, static_cast<int32>(Ways.size()), Battles, Months, bWet ? TEXT(", puddled") : TEXT(""), LandParts::Seconds() - Took);
+}
+
+void ALandBattle::LayOldWrecks()
+{
+	// Old wrecks (release 2; Brian, 23 November 20:09Z: the burnt-out wrecks of a battle stay on the field for the next
+	// battle there; looks only, as the scars and the old ruts: nothing the rules fight reads them): the recording's
+	// "oldWrecks" {count, months, nats}, which the campaign writes only while the player's Battle rules row "Old wrecks"
+	// is on; -TheaterLandOldWrecks=N (the armour burnt out here before) and -TheaterLandOldWreckMonths=M stand in for it
+	// on any field, the nations then the battle's two sides', for the Mac's off/on line; -TheaterLandNoOldWrecks lays
+	// none. With neither the key nor the stand-in nothing is made, nothing asked and nothing said.
+	FLandBattleState& S = *State;
+	if (!S.Field)
+	{
+		return;
+	}
+	int32 Count = S.Rec.OldWreckCount;
+	double Months = S.Rec.OldWreckMonths;
+	std::vector<std::pair<std::string, int>> Nats = S.Rec.OldWreckNats;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWrecks="), Count))
+	{
+		// (the stand-in's: the battle's two sides', not the recording's nations)
+		Nats.clear();
+	}
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandOldWreckMonths="), Months);
+	if (Count <= 0)
+	{
+		return;
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoOldWrecks")))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (-TheaterLandNoOldWrecks; %d asked)"), Count);
+		return;
+	}
+	if (S.Rec.bLive)
+	{
+		// (a live battle opens with no tracks fought yet, so no ground fought over to lay them on: an open question for
+		// the art director, LAND-SCENE.md)
+		UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: none laid (a live battle: no tracks at its open; %d asked)"), Count);
+		return;
+	}
+	const double Took = LandParts::Seconds();
+	// The field as LandHulk reads it (the cloud test, Tools/land_hulk, the same): the recording's ways, this battle's
+	// blasts, the field's lines and what stands on it, the scars' holes and the old ruts laid just before.
+	const LandHulk::Field Lay = LandHulk::FieldOf(S.Rec, *S.Field, &S.Holes, S.OldRutWays);
+	LandHulk::Ask Asked;
+	Asked.Count = Count;
+	Asked.Months = FMath::Max(0.0, Months);
+	Asked.Nats = Nats;
+	if (S.Armour)
+	{
+		Asked.Year = S.Armour->Year;
+		Asked.Month = S.Armour->Month;
+		Asked.Terrain = S.Armour->Terrain;
+	}
+	Asked.Seed = S.Rec.Seed ? S.Rec.Seed : 1;
+	// (each machine from the battle's own models where it has her, else read as MakeArmour reads them)
+	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Battle");
+	const LandKit::Battle::ReadFn Read = [Folder](const std::string& FileName, std::string& OutText)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *(Folder / LandParts::Wide(FileName))))
+		{
+			return false;
+		}
+		OutText = LandParts::Narrow(Text);
+		return true;
+	};
+	const LandKit::Battle* ArmourPtr = S.Armour.get();
+	const LandHulk::Yard::HaveFn Have = [ArmourPtr](const std::string& Name, const std::string& Nation) -> const LandKit::Model*
+	{
+		if (!ArmourPtr)
+		{
+			return nullptr;
+		}
+		const auto Found = ArmourPtr->Models().find(Name + "|" + Nation);
+		return Found == ArmourPtr->Models().end() ? nullptr : &Found->second;
+	};
+	S.OldWrecks.Lay(Lay, Asked, Read, Have);
+	// Each wreck's near and far levels and her scorched patch as static meshes of their own, made now (the vehicles'
+	// steel ink for her, the ground's for the patch), the near shown within LandHulk::NearTo of the eye (ShowOldWrecks).
+	const std::vector<LandHulk::Hulk>& All = S.OldWrecks.Hulks();
+	LandField::Mesh M;
+	int32 Points = 0, Made = 0;
+	for (size_t K = 0; K < All.size(); ++K)
+	{
+		const LandHulk::Hulk& H = All[K];
+		UStaticMeshComponent* Levels[2] = { nullptr, nullptr };
+		for (int32 Level = 0; Level < 3; ++Level)
+		{
+			if (Level < 2)
+			{
+				S.OldWrecks.Dress(K, Level == 0, M);
+			}
+			else
+			{
+				S.OldWrecks.Patch(K, M);
+			}
+			UMaterialInstanceDynamic* Ink = Level < 2 ? SteelInk.Get() : GroundInk.Get();
+			const FString Name = FString::Printf(TEXT("LandOldWreck%d_%d"), static_cast<int32>(K), Level);
+			UStaticMesh* Shape = LandParts::GroundMesh(this, FName(*(Name + TEXT("_Mesh"))), M, Ink, UnitsPerMetre);
+			if (!Shape)
+			{
+				continue;
+			}
+			UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, FName(*Name));
+			Mesh->SetupAttachment(Root);
+			Mesh->SetStaticMesh(Shape);
+			Mesh->SetMaterial(0, Ink);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCanEverAffectNavigation(false);
+			// (her own shadow, as the battle's armour casts; the patch, lying on the ground, none)
+			Mesh->SetCastShadow(Level < 2);
+			Mesh->SetRelativeLocation(World(H.X, H.Y, H.Z));
+			Mesh->SetVisibility(Level != 1);
+			Mesh->RegisterComponent();
+			GroundKept.Add(Shape);
+			GroundKept.Add(Mesh);
+			Points += static_cast<int32>(M.Points());
+			++Made;
+			if (Level < 2)
+			{
+				Levels[Level] = Mesh;
+			}
+		}
+		OldWreckNear.Add(Levels[0]);
+		OldWreckFar.Add(Levels[1]);
+		OldWreckShownNear.Add(1);
+	}
+	// (the grass and corn already laid round the eye laid again without what stands under a wreck)
+	if (Carpet.IsValid())
+	{
+		for (const LandHulk::Hulk& H : All)
+		{
+			for (const LandHulk::Ring& R : H.Rings)
+			{
+				Carpet->Mark(R.X, R.Y, R.R + 0.5);
+			}
+			Carpet->Mark(H.X, H.Y, FMath::Max(H.PatchLong, H.PatchWide) + 0.5);
+		}
+	}
+	FString Lines;
+	for (const std::string& Line : S.OldWrecks.StandIns)
+	{
+		Lines += TEXT("; ") + LandParts::Wide(Line);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: old wrecks: %s; %d meshes, %d points, made in %.2f s%s (-TheaterLandNoOldWrecks: none)"),
+		*LandParts::Wide(S.OldWrecks.Said()), Made, Points, LandParts::Seconds() - Took, *Lines);
+}
+
+void ALandBattle::ShowOldWrecks(const FVector& EyeWorld)
+{
+	if (OldWreckShownNear.Num() == 0 || !State.IsValid())
+	{
+		return;
+	}
+	const std::vector<LandHulk::Hulk>& All = State->OldWrecks.Hulks();
+	const double Ex = EyeWorld.Y / UnitsPerMetre, Ey = EyeWorld.X / UnitsPerMetre, Ez = EyeWorld.Z / UnitsPerMetre;
+	for (int32 K = 0; K < OldWreckShownNear.Num() && K < static_cast<int32>(All.size()); ++K)
+	{
+		const LandHulk::Hulk& H = All[static_cast<size_t>(K)];
+		const bool bNear = FMath::Square(H.X - Ex) + FMath::Square(H.Y - Ey) + FMath::Square(H.Z - Ez) < FMath::Square(LandHulk::NearTo);
+		if ((OldWreckShownNear[K] != 0) == bNear)
+		{
+			continue;
+		}
+		OldWreckShownNear[K] = bNear ? 1 : 0;
+		if (UStaticMeshComponent* Near = OldWreckNear.IsValidIndex(K) ? OldWreckNear[K].Get() : nullptr)
+		{
+			Near->SetVisibility(bNear);
+		}
+		if (UStaticMeshComponent* Far = OldWreckFar.IsValidIndex(K) ? OldWreckFar[K].Get() : nullptr)
+		{
+			Far->SetVisibility(!bNear);
+		}
+	}
 }
 
 void ALandBattle::SendDug()
