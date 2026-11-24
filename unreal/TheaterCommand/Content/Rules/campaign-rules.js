@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0a5664a6 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bc090058 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -94706,6 +94706,13 @@ ${standing5}`,
         massed: p.massed,
         offPatrol: p.offPatrol,
         ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"),
+        // (Release 2; the UI director, 24 Nov 2026, on the air thread's words.) The fighters at the raid's height and which side's
+        // aircraft are stronger (fighters.ts raidCardLines, under its switch or Units decide), and, under Units decide where
+        // both sides' hours are read, the pilots' training. Each '' where the rules give none; the card leaves an empty one out.
+        types: p.why ? "" : p.fighterTypes?.types ?? "",
+        typesEdge: p.why ? "" : p.fighterTypes?.edge ?? "",
+        pilots: p.why ? "" : p.fighterTypes?.pilots ?? "",
+        typesTip: p.why || !p.fighterTypes ? "" : FIGHTERS.words.tooltip,
         // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
         // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
         gunsWords: p.why || p.bombers <= 0 ? "" : gunsOfThem(p.guns),

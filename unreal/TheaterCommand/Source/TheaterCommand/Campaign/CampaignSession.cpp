@@ -4279,6 +4279,10 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
 		Told->TryGetStringField(TEXT("gunsWords"), Card.GunsWords);
 		Told->TryGetStringField(TEXT("toGuns"), Card.ToGuns);
+		Told->TryGetStringField(TEXT("types"), Card.Types);
+		Told->TryGetStringField(TEXT("typesEdge"), Card.TypesEdge);
+		Told->TryGetStringField(TEXT("pilots"), Card.Pilots);
+		Told->TryGetStringField(TEXT("typesTip"), Card.TypesTip);
 		// (Ruling 107(d).) A bombing raid by day and by night.
 		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
 		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())
