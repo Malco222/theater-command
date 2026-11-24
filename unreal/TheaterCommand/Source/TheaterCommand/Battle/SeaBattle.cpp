@@ -1440,6 +1440,9 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 			Value = TCHAR_TO_UTF8(*Got);
 			return bAsked;
 		});
+	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' two meshes sent again in place while their shape holds,
+	// -TheaterSeaMarksPool=1; by default, until the Mac's A/B, both made afresh every frame, as today)
+	bMarksPool = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaMarksPool=");
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -3238,6 +3241,13 @@ void ASeaBattle::DrawMarks()
 		}
 	}
 
+	// (the release 2 ocean plan, step 1(a), pay first: under -TheaterSeaMarksPool=1 the same points and triangles, each
+	// mesh made afresh only when its shape changes, else its points sent again in place; Battle/SeaMarksPool.h)
+	if (bMarksPool)
+	{
+		DrawMarksPooled(FV, FN, FU, FC, FT, DV, DN, DC, DT, bInk);
+		return;
+	}
 	if (Foam && bInk)
 	{
 		if (FV.Num() == 0)
@@ -3275,6 +3285,61 @@ void ASeaBattle::DrawMarks()
 	if (MarkInk)
 	{
 		Marks->SetMaterial(0, MarkInk);
+	}
+}
+
+void ASeaBattle::DrawMarksPooled(const TArray<FVector>& FV, const TArray<FVector>& FN, const TArray<FVector2D>& FU, const TArray<FColor>& FC, const TArray<int32>& FT,
+	TArray<FVector>& DV, TArray<FVector>& DN, TArray<FColor>& DC, TArray<int32>& DT, bool bInk)
+{
+	// (the release 2 ocean plan, step 1(a), pay first: DrawMarks' end as today's, each mesh kept while its shape holds: the
+	// foam on the wake ink where the build has it; the marks, the oil, and the foam too where there is no wake ink, the oil
+	// first, under it)
+	if (Foam && bInk)
+	{
+		PoolMarks(FoamShape, Foam, FV, FT, FN, FU, FC, FoamInk);
+	}
+	if (!Marks)
+	{
+		return;
+	}
+	if (!bInk)
+	{
+		const int32 Base = DV.Num();
+		DV.Append(FV);
+		DN.Append(FN);
+		DC.Append(FC);
+		for (const int32 K : FT)
+		{
+			DT.Add(K + Base);
+		}
+	}
+	PoolMarks(MarksShape, Marks, DV, DT, DN, TArray<FVector2D>(), DC, MarkInk);
+}
+
+void ASeaBattle::PoolMarks(SeaMarksPool::Shape& Into, UProceduralMeshComponent* Mesh, const TArray<FVector>& V, const TArray<int32>& T, const TArray<FVector>& N,
+	const TArray<FVector2D>& U, const TArray<FColor>& C, UMaterialInterface* Ink)
+{
+	// (the release 2 ocean plan, step 1(a): the frame's own points and triangles held to the shape the mesh was last made
+	// with; made afresh, as today, when it is new or changed; while it holds, only the points' places, UVs and colours sent
+	// again in place, the normals as made (DrawMarks lays every one straight up); cleared once when there is nothing to
+	// draw, then nothing sent until there is)
+	switch (SeaMarksPool::Next(Into, T.GetData(), T.Num(), V.Num()))
+	{
+	case SeaMarksPool::Send::Clear:
+		Mesh->ClearMeshSection(0);
+		break;
+	case SeaMarksPool::Send::Make:
+		Mesh->CreateMeshSection(0, V, T, N, U, C, TArray<FProcMeshTangent>(), false);
+		if (Ink)
+		{
+			Mesh->SetMaterial(0, Ink);
+		}
+		break;
+	case SeaMarksPool::Send::Update:
+		Mesh->UpdateMeshSection(0, V, TArray<FVector>(), U, C, TArray<FProcMeshTangent>());
+		break;
+	case SeaMarksPool::Send::Nothing:
+		break;
 	}
 }
 
@@ -5760,6 +5825,11 @@ void ASeaBattle::SayThreadsAndLook() const
 	// every switch of the release 2 sea in force; and any asked for before its step has landed, which changes nothing)
 	const FString Look(UTF8_TO_TCHAR(SeaLookSwitches::Line(SeaLook).c_str()));
 	UE_LOG(LogTheater, Display, TEXT("%s"), *Look);
+	if (bMarksPool) // (the release 2 ocean plan, step 1(a): DrawMarks' meshes, what each was sent, once a battle)
+	{
+		const FString Pools(UTF8_TO_TCHAR(SeaMarksPool::Line(FoamShape, MarksShape).c_str()));
+		UE_LOG(LogTheater, Display, TEXT("%s"), *Pools);
+	}
 }
 
 void ASeaBattle::Quit(const FString& Why)

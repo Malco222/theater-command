@@ -4,8 +4,9 @@
 Tools/sea_bench.sh runs it in the engine's place: it writes down its command line (STAND_IN_CALLS) and writes the log a
 sea battle's bench run leaves (STAND_IN_LOG): release 1.5's frame-time line, the threads' line and the "Sea look:" line,
 in the game's own words (bench_table.py's copies, which its self-test holds to the source), the look's two lines as
-measure_test made them from Battle/SeaLookSwitches (STAND_IN_LOOKS, its measure_lines.txt). Every run of a battle gives
-the same numbers, so an A/A block differs by nothing. Asked for the tier in STAND_IN_HANG, it hangs and will not be
+measure_test made them from Battle/SeaLookSwitches (STAND_IN_LOOKS, its measure_lines.txt): a tier asked for, or step
+1(a)'s -TheaterSeaMarksPool=1 (the line saying it in force, asked). Every run of a battle gives the same numbers, so an
+A/A block differs by nothing. Asked for the tier in STAND_IN_HANG, it hangs and will not be
 asked to stop (it ignores the polite stop), as a hung game thread does. Asked for pictures ("-TheaterSeaBattleShots=",
 a replay of 22 November's picture runs), it writes them into the folder, 24 for a water sheet and 10 for a battle's own
 shots, and says release 1.5's line as 22 November's was, its pictures in it.
@@ -44,6 +45,8 @@ def main():
             if row[0] == "look":
                 looks[row[1]] = row[2]
     look = looks["0||"] if tier is None else looks["0|-TheaterSeaLook=%s|" % tier]
+    if tier is None and value(args, "TheaterSeaMarksPool") == "1":
+        look = looks["0||-TheaterSeaMarksPool=1 (asked)"]
     battle = os.path.basename(value(args, "TheaterSeaBattle") or "?")
     shots = value(args, "TheaterSeaBattleShots")
     pictures = 0

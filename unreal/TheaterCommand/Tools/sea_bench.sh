@@ -20,7 +20,10 @@
 #   replays take the bench's (SEA_BENCH_SOUND).
 # - Then, for each tier asked (1 unless told), a block of rounds, every battle a pair a round, tier 0 and that tier one
 #   after the other, the order turned about every round (0, T in odd rounds; T, 0 in even), so the warming within a
-#   round and the last run's load fall on each side alike; five rounds unless told.
+#   round and the last run's load fall on each side alike; five rounds unless told. Tier 0 asked is a block of tier 0
+#   against tier 0 with the held runs' own switches (SEA_BENCH_HELD_ARGS): an own switch's A/B, as step 1(a)'s
+#   (SEA_BENCH_TIERS=0 SEA_BENCH_HELD_ARGS=-TheaterSeaMarksPool=1 SEA_BENCH_BATTLES="two-lines samar"), each held run
+#   labelled by its "Sea look:" line and held to the plain tier 0 run of its own round; with none, an A/A block.
 # - Each run counts its frames only after its first 60 s of play, while the machine settles, and plays to the battle's
 #   own end ("-TheaterSeaBench=60,end"): the fight is counted, not only the steaming in (the fighting starts at about
 #   210-260 s, and the sinkings, fires and men in the water come after 300). It draws nothing differently.
@@ -40,7 +43,7 @@
 #   SEA_BENCH_BATTLES  the battles, a recording's key or a path under the project (default: two-lines light-ships samar
 #                      Tools/sea_show/stand-ins/convoy-night.json Tools/sea_show/stand-ins/wolf-pack-surrender.json)
 #   SEA_BENCH_TIERS    the tiers held to tier 0, a block each, in turn (default: 1; until step 15 builds the tier every
-#                      block is one more A/A block)
+#                      block is one more A/A block); 0: tier 0 held to tier 0, the held runs with SEA_BENCH_HELD_ARGS
 #   SEA_BENCH_RUNS     the rounds a block, 5 at the least for the table to count (default 5)
 #   SEA_BENCH_DROP     seconds of each run's play left out (default 60)
 #   SEA_BENCH_SPAN     seconds counted after them, or "end" for the battle's end (default end)
@@ -53,6 +56,9 @@
 #                      at all, as Tools/take_pictures.sh runs unless told), the replays' too
 #   SEA_BENCH_ARGS     more for the game's command line, the same for every bench run (e.g. -dpcvars=...); never the
 #                      replays', made as 22 November's were
+#   SEA_BENCH_HELD_ARGS  more for the held runs' command line alone (each block's tier T runs, never its plain tier 0
+#                      runs or the replays): an own switch held to today's, e.g. -TheaterSeaMarksPool=1 (step 1(a)) or
+#                      -TheaterSeaFarEdge=10 (step 1(b), once built)
 #   SEA_BENCH_SLACK    seconds a run may take past its battle (its load, its shaders, slow frames) before it is stopped
 #                      (default 300)
 #   THEATER_WINDOW     the window, e.g. 1600x1000 (default: the game's own); never the replays', always the game's own
@@ -76,6 +82,7 @@ REPLAY="${SEA_BENCH_REPLAY:-5}"
 REPLAYED=(two-lines light-ships samar)
 SOUND="${SEA_BENCH_SOUND:-muted}"
 EXTRA=(${SEA_BENCH_ARGS:-})
+HELD_EXTRA=(${SEA_BENCH_HELD_ARGS:-})
 SLACK="${SEA_BENCH_SLACK:-300}"
 if [ ! -x "$GAME_BIN" ]; then
   echo "sea_bench: no engine at $GAME_BIN (UE_ROOT): this runs on the Mac."
@@ -91,6 +98,18 @@ esac
 case "$REPLAY" in
   ''|*[!0-9]*) echo "sea_bench: SEA_BENCH_REPLAY is a whole number of rounds, not $REPLAY"; exit 2 ;;
 esac
+for T in "${TIERS[@]}"; do
+  case "$T" in
+    ''|*[!0-9]*) echo "sea_bench: SEA_BENCH_TIERS lists tiers 0 to 3, not $T"; exit 2 ;;
+  esac
+  if [ "$T" -gt 3 ]; then
+    echo "sea_bench: SEA_BENCH_TIERS lists tiers 0 to 3, not $T"
+    exit 2
+  fi
+  if [ "$T" -eq 0 ] && [ ${#HELD_EXTRA[@]} -eq 0 ]; then
+    echo "sea_bench: block 0 with no SEA_BENCH_HELD_ARGS: tier 0 against tier 0 as made, an A/A block (the bench's own noise)."
+  fi
+done
 if [ "$REPLAY" -gt 0 ] && [ "$REPLAY" -lt 5 ]; then
   echo "sea_bench: $REPLAY rounds of 22 November's picture runs; the table holds 22 November to 5 at the least (fewer is a look)."
 fi
@@ -190,6 +209,12 @@ echo "sea_bench: $COUNT runs, about $(( (TOTAL * 2 * RUNS * ${#TIERS[@]} + WARM 
 printf '# order\tbattle\tasked tier\tlog\tstatus\tblock\tround\trole\tfirst\tstarted\theat before\theat most\theat after\n' > "$OUT/runs.tsv"
 {
   echo "sea_bench started $(date); tiers ${TIERS[*]} (a block each), $RUNS rounds, drop $DROP s, span $SPAN, warm-up $WARM s, $REPLAY replay rounds"
+  if [ ${#EXTRA[@]} -gt 0 ]; then
+    echo "every bench run also: ${EXTRA[*]} (SEA_BENCH_ARGS)"
+  fi
+  if [ ${#HELD_EXTRA[@]} -gt 0 ]; then
+    echo "the held runs alone also: ${HELD_EXTRA[*]} (SEA_BENCH_HELD_ARGS; never the plain tier 0 runs or the replays)"
+  fi
   echo "battles: ${BATTLES[*]}"
   for B in "${BATTLES[@]}"; do
     echo "  $(name_of "$B"): $(length_of "$B") s of battle, played from $(from_of "$B") s"
@@ -231,8 +256,10 @@ fi
 ORDER=0
 run_one() {
   local BATTLE="$1" TIER="$2" FROM="$3" FOR="$4" BLOCK="$5" ROUND="$6" ROLE="$7" FIRST="$8"
-  local LOOK=() START_AT=() SHOTS="" LIMIT REPLAY_ARGS=()
+  local LOOK=() START_AT=() SHOTS="" LIMIT REPLAY_ARGS=() HELD_ARGS=()
   [ "$TIER" -gt 0 ] && LOOK=("-TheaterSeaLook=$TIER")
+  # (the held runs' own switches, SEA_BENCH_HELD_ARGS: never a plain tier 0 run's, a replay's or the warm-up's)
+  [ "$ROLE" = "held" ] && HELD_ARGS=(${HELD_EXTRA[@]+"${HELD_EXTRA[@]}"})
   local START
   START="$(from_of "$BATTLE")"
   [ "$START" -gt 0 ] && START_AT=("-TheaterSeaBattleFrom=$START")
@@ -259,7 +286,7 @@ run_one() {
   else
     "$GAME_BIN" "$PROJECT" -game -windowed ${WINDOW_ARGS[@]+"${WINDOW_ARGS[@]}"} -unattended -nosplash ${SOUND_ARGS[@]+"${SOUND_ARGS[@]}"} \
       -TheaterSeaBattle="$BATTLE" -TheaterSeaBattleSpeed=1 ${START_AT[@]+"${START_AT[@]}"} -TheaterSeaBench="$FROM,$FOR" \
-      ${LOOK[@]+"${LOOK[@]}"} ${EXTRA[@]+"${EXTRA[@]}"} > /dev/null 2>&1 &
+      ${LOOK[@]+"${LOOK[@]}"} ${EXTRA[@]+"${EXTRA[@]}"} ${HELD_ARGS[@]+"${HELD_ARGS[@]}"} > /dev/null 2>&1 &
   fi
   local GAME=$! WAITED=0 STATUS=done HEAT
   while kill -0 "$GAME" 2> /dev/null; do
@@ -313,7 +340,7 @@ run_one() {
     cp "$LOG" "$OUT/$FILE" 2> /dev/null || STATUS="$STATUS, no log"
     printf '%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ORDER" "$NAME" "$TIER" "$FILE" "$STATUS" "$BLOCK" "$ROUND" "$ROLE" "$FIRST" \
       "$STARTED" "$HEAT_BEFORE" "$HEAT_MOST" "$HEAT_AFTER" >> "$OUT/runs.tsv"
-    echo "  $(date +%H:%M:%S) run $ORDER: $NAME, tier $TIER asked (block $BLOCK, round $ROUND): $STATUS; heat $HEAT_BEFORE/$HEAT_MOST/$HEAT_AFTER; $(grep -h "Sea look:" "$OUT/$FILE" 2> /dev/null | tail -1 | sed -e 's/^.*Sea look: /Sea look: /' -e 's/; none of the release 2 sea.s [0-9]* switches is built yet, so every one is at today.s value//' | cut -c1-160)"
+    echo "  $(date +%H:%M:%S) run $ORDER: $NAME, tier $TIER asked${HELD_ARGS[@]+ with ${HELD_ARGS[*]}} (block $BLOCK, round $ROUND): $STATUS; heat $HEAT_BEFORE/$HEAT_MOST/$HEAT_AFTER; $(grep -h "Sea look:" "$OUT/$FILE" 2> /dev/null | tail -1 | sed -e 's/^.*Sea look: /Sea look: /' -e 's/; none of the release 2 sea.s [0-9]* switches is built yet, so every one is at today.s value//' | cut -c1-160)"
     ORDER=$(( ORDER + 1 ))
   else
     cp "$LOG" "$OUT/logs/warm-up.log" 2> /dev/null
@@ -334,7 +361,7 @@ if [ "$REPLAY" -gt 0 ]; then
   rmdir "$OUT/shots" 2> /dev/null
 fi
 for T in "${TIERS[@]}"; do
-  echo "sea_bench: block $T, tier 0 against tier $T, $RUNS rounds"
+  echo "sea_bench: block $T, tier 0 against tier $T${HELD_EXTRA[@]+ with ${HELD_EXTRA[*]}}, $RUNS rounds"
   for (( R = 1; R <= RUNS; R++ )); do
     for B in "${BATTLES[@]}"; do
       if [ $(( R % 2 )) -eq 1 ]; then

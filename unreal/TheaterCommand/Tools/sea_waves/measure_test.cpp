@@ -292,16 +292,16 @@ int main(int Argc, char** Argv)
 			}
 		}
 		Check("no name with its '=' inside another's, as the engine's value reader would find it", Collide == 0, Collide ? Which : "none");
-		int Built = 0;
+		std::string Built;
 		for (const Switch& One : All)
 		{
-			Built += One.bBuilt ? 1 : 0;
+			Built += One.bBuilt ? (Built.empty() ? "" : ", ") + std::string(One.Name) : "";
 		}
-		Check("step 0: none built yet (each lands with its step)", Built == 0, std::to_string(Built));
+		Check("built so far: step 1(a)'s -TheaterSeaMarksPool= alone (each lands with its step; step 1(b)'s -TheaterSeaFarEdge= not yet)", Built == "TheaterSeaMarksPool=", Built.empty() ? "none" : Built);
 
 		const std::string Plain = Line(0, {});
 		Check("the line with nothing asked: tier 0, release 1.5's sea as made, every switch at today's value",
-			Plain == "Sea look: tier 0 (release 1.5's sea, as made); none of the release 2 sea's 31 switches is built yet, so every one is at today's value.", Plain);
+			Plain == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0.", Plain);
 		Lines << "look\t0||\t" << Plain << '\n';
 		Said.push_back(Plain);
 
@@ -315,7 +315,7 @@ int main(int Argc, char** Argv)
 		Given[1].Value = "2";
 		const std::string AskedLine = Line(0, Given);
 		Check("switches asked for before their step lands: said, in the table's order, to change nothing",
-			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); none of the release 2 sea's 31 switches is built yet, so every one is at today's value; "
+			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0; "
 						 "asked for but not built yet, so nothing changes: -TheaterSeaLook=2, -TheaterSeaProbe.", AskedLine);
 		Lines << "look\t0|-TheaterSeaLook=2, -TheaterSeaProbe|\t" << AskedLine << '\n';
 		Said.push_back(AskedLine);
@@ -328,6 +328,30 @@ int main(int Argc, char** Argv)
 		const std::string BenchLine = Line(0, Bench);
 		Lines << "look\t0|-TheaterSeaLook=1|\t" << BenchLine << '\n';
 		Said.push_back(BenchLine);
+
+		// step 1(a)'s switch as the scene takes it (OpenOn, TakeOnOff): on only when asked for as 1, its value in force
+		// written back, so the line says what was applied (the bench's A/B of the marks' meshes reads it)
+		auto PoolAsked = [](const char* Value)
+		{
+			Look Asks;
+			for (int K = 0; K < Count; ++K)
+			{
+				if (std::string(All[K].Name) == "TheaterSeaMarksPool=")
+				{
+					Asks.Given.push_back(Asked{ K, Value });
+				}
+			}
+			return Asks;
+		};
+		Look On = PoolAsked("1"), Junk = PoolAsked("yes"), None;
+		const bool bOn = TakeOnOff(On, "TheaterSeaMarksPool="), bJunk = TakeOnOff(Junk, "TheaterSeaMarksPool="), bNone = TakeOnOff(None, "TheaterSeaMarksPool=");
+		const std::string PoolLine = Line(On), JunkLine = Line(Junk);
+		Check("-TheaterSeaMarksPool=1 keeps the marks' meshes and says so; anything else asked is today's, said as 0; not asked, today's and said as today's",
+			bOn && !bJunk && !bNone && PoolLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=1 (asked)." &&
+				JunkLine == "Sea look: tier 0 (release 1.5's sea, as made); 1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0 (asked)." && Line(None) == Plain,
+			PoolLine);
+		Lines << "look\t0||-TheaterSeaMarksPool=1 (asked)\t" << PoolLine << '\n';
+		Said.push_back(PoolLine);
 
 		// a table of the test's own, some built: what a later step's line says
 		const Switch Mine[] = {

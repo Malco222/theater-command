@@ -31,7 +31,7 @@ namespace SeaLookSwitches
 
 	inline constexpr Switch All[] = {
 		{ "TheaterSeaLook=", "0", "tier", "15", false },
-		{ "TheaterSeaMarksPool=", "0", "own", "1", false },
+		{ "TheaterSeaMarksPool=", "0", "own", "1", true },
 		{ "TheaterSeaFarEdge=", "15", "own", "1", false },
 		{ "TheaterSeaSwell=", "0", "1", "8, 9", false },
 		{ "TheaterSeaSwellScale=", "1", "with Swell", "9", false },
@@ -105,6 +105,22 @@ namespace SeaLookSwitches
 			}
 		}
 		return Out;
+	}
+
+	/** A built switch of 0 or 1 as the scene takes it (step 1(a)'s -TheaterSeaMarksPool=): on only when asked for as 1. Its
+	 * value in force is written back into the look (1, or 0 for anything else asked), so the "Sea look:" line says what was
+	 * applied, not what was typed. */
+	inline bool TakeOnOff(Look& InForce, const char* Name)
+	{
+		for (Asked& One : InForce.Given)
+		{
+			if (One.Index >= 0 && One.Index < Count && std::string(All[One.Index].Name) == Name)
+			{
+				One.Value = One.Value == "1" ? "1" : "0";
+				return One.Value == "1";
+			}
+		}
+		return false;
 	}
 
 	/** The release 2 sea's switches asked for (ReadOf of All); the tier 0 until step 15 builds it. */

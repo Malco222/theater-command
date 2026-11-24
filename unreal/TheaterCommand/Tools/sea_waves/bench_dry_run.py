@@ -12,7 +12,10 @@ the engine's place (stand_in_game.py), and held to what the Mac run is to do:
     ("-TheaterSeaBench=60,end"); SEA_BENCH_FROM starts a battle later;
   - the table pairs each tier run with its own round's tier 0, counts nothing in an A/A block that differs by nothing,
     and reads 22 November's lines only beside their replays (known by their pictures), never beside the bench's runs;
-  - a run that hangs and will not stop is killed, said "overran, killed", and left out of the table, and the bench goes on.
+  - a run that hangs and will not stop is killed, said "overran, killed", and left out of the table, and the bench goes on;
+  - step 1(a)'s A/B, SEA_BENCH_TIERS=0 SEA_BENCH_HELD_ARGS=-TheaterSeaMarksPool=1: the switch asked of the held runs
+    alone, never of the plain tier 0 runs, and the table pairs each held run, labelled by its "Sea look:" line, with the
+    plain tier 0 run of its own round.
 
 Usage: python3 -I -B Tools/sea_waves/bench_dry_run.py MEASURE_LINES OUT
        (MEASURE_LINES: measure_test's measure_lines.txt, for the "Sea look:" lines; OUT: a folder to work in)
@@ -147,6 +150,25 @@ def main(lines_path, out):
     check("one replay round: under five said, 22 November's line beside it with no spread to hold it to, 22 November's sound not known and the replays' said",
           "1 rounds of 22 November's picture runs; the table holds 22 November to 5 at the least" in done.stdout and "one run: no spread to hold it to" in done.stdout
           and "22 November's sound is not known (no command line was kept); these replays' sound: off" in done.stdout and "not shown beside runs at" not in done.stdout, "light-ships")
+
+    # step 1(a)'s A/B on the Mac: block 0, plain tier 0 against tier 0 with -TheaterSeaMarksPool=1 (the held runs' own
+    # switch, SEA_BENCH_HELD_ARGS), two-lines and samar, five rounds, no replays
+    done, folder, said = bench("marks", {"SEA_BENCH_BATTLES": "two-lines samar", "SEA_BENCH_WARM": "0", "SEA_BENCH_REPLAY": "0", "SEA_BENCH_TIERS": "0",
+                                         "SEA_BENCH_HELD_ARGS": "-TheaterSeaMarksPool=1"})
+    rows = rows_of(folder)
+    held = [("-TheaterSeaMarksPool=1" in c) for c in said]
+    check("SEA_BENCH_TIERS=0 with SEA_BENCH_HELD_ARGS: twenty runs, the switch asked of the held runs alone, no tier asked of any, block 0 said",
+          done.returncode == 0 and len(said) == 20 and len(rows) == 20 and held == [r[7] == "held" for r in rows] and sum(held) == 10
+          and not any(any(a.startswith("-TheaterSeaLook") for a in c) for c in said) and all(r[2] == "0" and r[5] == "0" for r in rows)
+          and "the held runs alone also: -TheaterSeaMarksPool=1" in open(os.path.join(folder, "about.txt"), encoding="utf-8").read()
+          and "block 0, tier 0 against tier 0 with -TheaterSeaMarksPool=1, 5 rounds" in done.stdout,
+          "%d, %d calls, %d with the switch" % (done.returncode, len(said), sum(held)))
+    text = open(os.path.join(folder, "bench_table.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(folder, "bench_table.txt")) else ""
+    check("the table pairs each held run, labelled by its \"Sea look:\" line, with plain tier 0 of its own round, five pairs a battle, nothing counted where nothing differs",
+          text.count("block 0: tier 0 asked, drawn as tier 0, -TheaterSeaMarksPool=1, against plain tier 0 of the same round, at 2881x1786: 5 pairs (rounds 1, 2, 3, 4, 5; "
+                     "plain tier 0 ran first in 3, the held run in 2)") == 2 and text.count("(the difference d, the held run less plain tier 0)") == 2
+          and "COUNTS" not in text and "no whole pairs" not in text and text.count("tier 0, -TheaterSeaMarksPool=1 at 2881x1786 (5 runs)") == 2,
+          "%d blocks" % text.count("block 0: tier 0 asked"))
     print("bench_dry_run: %d checks, %d failed" % (n, failed))
     return failed == 0
 

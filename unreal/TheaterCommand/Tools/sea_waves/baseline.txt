@@ -15,20 +15,29 @@ Tools/sea_show/run.sh
     the stand-ins: convoy-night-air, convoy-night (620 s), sub-34-hunt-central, wolf-pack-abandon, wolf-pack-abeam,
     wolf-pack-surrender (600 s each)
   sea_under_test: 408 checks, 0 failed
-  in all 1,155 "ok" lines in the log (the recordings and sea_under_test), the same in r0pre, r1, r2 and r3
+  in all 1,155 "ok" lines in the log (the recordings and sea_under_test), the same in r0pre, r1, r2 and r3, and in
+  step 1(a)'s ocean-marks-r1 and ocean-marks-r2
   a frame within budget (the show's own frame on the cloud Xeon, the least of three plays; one in a thousand / mean, ms):
                           r0pre            r1               r2               r3
     light-ships           0.506 / 0.065    0.519 / 0.066    0.724 / 0.073    0.389 / 0.067
     samar                 0.768 / 0.112    0.754 / 0.116    0.794 / 0.115    0.768 / 0.125
     two-lines             0.411 / 0.060    0.437 / 0.065    0.369 / 0.061    0.233 / 0.054
+    ocean-marks-r1 (step 1(a)): light-ships 0.457 / 0.063, samar 0.746 / 0.116, two-lines 0.281 / 0.056. (Its first
+    run, beside other runs on the same four cores, load 6 to 13, failed the budget alone, in four recordings, 4.1 to
+    4.6 ms one in a thousand: run again alone, every check passed.)
+    ocean-marks-r2 (step 1(a), the review's fixes; run alone): light-ships 0.444 / 0.062, samar 0.736 / 0.113, two-lines
+    0.376 / 0.062
 
 Tools/convoy_looks/run.sh
   convoy looks: 3,795 checks, 0 failed
   convoy looks against the show: 423 checks, 0 failed
+  (the same in step 1(a)'s ocean-marks-r1 and ocean-marks-r2)
 
 Tools/sea_waves/run.sh (step 0's own)
-  measure_test: 37 checks, 0 failed (31 in r1; r2 adds the RHI thread, the whole frame over the same frames, the
-    battle's span counted, the look read once as the scene opens, and a bench run's quit when its recording fails)
+  measure_test: 38 checks, 0 failed (31 in r1; r2 adds the RHI thread, the whole frame over the same frames, the
+    battle's span counted, the look read once as the scene opens, and a bench run's quit when its recording fails;
+    step 1(a) (ocean-marks-r1 and r2) adds -TheaterSeaMarksPool= as the scene takes it, and its "Sea look:" line now
+    says the one switch built: "1 of the release 2 sea's 31 switches built, in force: -TheaterSeaMarksPool=0.")
   graph_pin: 55 checks, 0 failed; 15 materials pinned in graphs.sha (M_MapSurface, M_Solid, M_Highlight, M_Flag, M_Land,
     M_Sea, M_Wake, M_FlakSmoke, M_Beam, M_FlakLit, M_Glow, M_Cloud, M_DeckShade, M_StageSea, M_UnderSea)
   pearl_pin: 33 pins, 0 changed; bUseUnity = false; CampaignMapActor, CampaignHUD, CampaignPlayerController as at 10f85ffb
@@ -38,8 +47,52 @@ Tools/sea_waves/run.sh (step 0's own)
     runs not done, never pools window sizes, and lists plain tier 0 in run order with the heat; r3 reads 22 November's
     lines only beside their replays, and counts a difference by the 99% interval on the paired differences' mean, with
     each run's own noise in a case of its own)
-  bench_dry_run: 18 checks (14 in r2, new then: Tools/sea_bench.sh itself, with a stand-in for the engine; r3 adds the
-    replays' command lines, their pictures not kept, SEA_BENCH_REPLAY=0, and the replays' own window and sound)
+  bench_dry_run: 20 checks (14 in r2, new then: Tools/sea_bench.sh itself, with a stand-in for the engine; r3 adds the
+    replays' command lines, their pictures not kept, SEA_BENCH_REPLAY=0, and the replays' own window and sound, 18;
+    step 1(a)'s ocean-marks-r2 adds a tier 0 block, SEA_BENCH_TIERS=0 with SEA_BENCH_HELD_ARGS: the switch asked of the
+    held runs alone, and the table's block 0, each held run against plain tier 0 of its own round)
+
+Tools/sea_waves/run.sh, step 1(a)'s (pay first: DrawMarks' meshes kept while their shape holds, -TheaterSeaMarksPool=1;
+run ocean-marks-r2, 24 November 2026, on 16b091e4 and step 1(a)'s lines with the review's fixes; the counts of step 0's
+steps above unchanged but measure_test's and bench_dry_run's)
+  marks_extract: 18 pieces of SeaBattle.cpp cut out (DrawMarks, LayWakes, DrawMarksPooled, PoolMarks, World, BoardOf;
+    SeaParts' helpers; the structs they use)
+  marks_pool_test: 12 checks a recording, 0 failed, each of the 9 (the battles' own three and the six stand-ins), then
+    13 checks over them all, 0 failed (37 lines of the game's pinned and 4 more on the game's source; 5 of the rule's
+    own cases; 9 of 9 played, every kind of mark found, and the gate over them all)
+  every frame at 30 a second to 12 s past the last view, the game's own DrawMarks today's way and kept, with the wake
+  ink and without (four scenes): kept draws today's, triangle for triangle, each the same three points in order; the
+  same bounds and material; made afresh (CreateMeshSection) exactly when the shape changed (the points' count or a
+  triangle), sent again in place (UpdateMeshSection, no normals) while it held, cleared once; no frame sends more points
+  than today's, and no mesh makes its render proxy afresh more often (the gate)
+  the foam's mesh on the wake ink, and the oil's (frames; made afresh / sent again in place; points a frame, today's
+  own; the share of today's render proxies kept), and the marks' mesh with no wake ink (the oil and the foam):
+                          frames   foam: made / again   points   kept     oil: made / again   kept    no ink: kept
+    light-ships           17428    14360 /  3068        21615    17.6%    10 /  9805          99.9%   27.2%
+    samar                 13408    11597 /  1811        23549    13.5%     7 /  5815          99.9%   22.3%
+    two-lines             19498    17128 /  2370        24278    12.2%    12 / 10499          99.9%   20.1%
+    convoy-night-air      18961     4883 / 14078        14855    74.2%     9 / 17747          99.9%   81.2%
+    convoy-night          18961     4493 / 14468        13745    76.3%     6 / 10790          99.9%   82.8%
+    sub-34-hunt-central    9301     1235 /  8066         2744    86.7%     3 /  3542          99.9%   89.7%
+    wolf-pack-abandon     18361     3376 / 14985         7278    81.6%     1 / 10795          100.0%  86.6%
+    wolf-pack-abeam       18361     3330 / 15031         7181    81.9%     4 / 10852          100.0%  86.6%
+    wolf-pack-surrender   18361     3345 / 15016         7233    81.8%     4 / 10852          100.0%  86.5%
+  (sub-34-hunt-central is stand-ins/sub-air-mediterranean-1942.json. Nothing cleared in any: no mesh, once drawn, went
+  empty; the oil's mesh sent nothing on the frames before the first oil.)
+  over them all: the foam's proxies made afresh 63,747 kept against today's 152,640 (58.2% kept), the oil's 56 against
+  90,753 (99.9%), the marks' with no ink 53,857 against 152,640 (64.7%); points a frame the same, today's own
+  every kind of mark found in today's own meshes with the wake ink, by its shape and paint (triangles over every frame):
+  the wakes' churned bands 1,020,202,400; the wakes' foam 897,097,440; bow waves 168,687,552; the white water along her
+  sides 253,031,328; foam walls 337,375,104; the arms of her wave 84,343,776; the boils at her stern 126,515,664;
+  torpedo tracks 92,325,888; men's rings 92,944,320; broken ships' boils and rings 5,777,280; oil 55,895,552; of no kind
+  known 0 of 3,134,196,304
+  The engine's per-point data path, emulated on every 10th frame, costs the same either way (samar's foam 3.450 ms a
+  frame made afresh, 3.469 sent again in place, four recordings at once beside other runs; 2.528 and 2.533 in an
+  earlier pass): what is saved is only the fixed cost of a proxy made afresh, on the frames above, and only the Mac's
+  A/B times it (SEA_BENCH_TIERS=0 SEA_BENCH_HELD_ARGS=-TheaterSeaMarksPool=1). The ledger's -0.3 to -1.0 ms is
+  withdrawn; booked at 0 until then.
+  (ocean-marks-r1's pool of fixed quads was dropped in r2: four points a quad, none shared, it sent four to five times
+  today's points every frame.)
 
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 

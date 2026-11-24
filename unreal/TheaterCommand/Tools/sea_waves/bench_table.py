@@ -18,7 +18,9 @@ from plain tier 0 is the bench's own noise).
 
 runs.tsv (sea_bench.sh's) gives each run its status, its block (the tier T that block holds to tier 0; none for a
 replay), its round, its role (base: plain tier 0; held: tier T; replay: one of 22 November's picture runs again), which of
-the pair ran first, its start and the machine's heat before, at most during and after it. A run whose status is not
+the pair ran first, its start and the machine's heat before, at most during and after it. Block 0 holds tier 0 to tier 0,
+its held runs with the bench's SEA_BENCH_HELD_ARGS: an own switch's A/B (step 1(a)'s -TheaterSeaMarksPool=1, its held runs
+labelled "tier 0, -TheaterSeaMarksPool=1" by their "Sea look:" line), or with none an A/A block. A run whose status is not
 "done" (it overran, crashed, or left no log) is left out and said, whatever its log says.
 
 For each battle and block, each tier T run is paired with the plain tier 0 run of its own round (one after the other,
@@ -428,13 +430,16 @@ def table(rows, about=()):
                     held_labels.append(h["label"])
             if not pairs:
                 lines.append("  block %d (tier 0 against tier %d asked): no whole pairs%s" % (block, block, "; " + "; ".join(unpaired) if unpaired else ""))
+            # (block 0: tier 0 held to tier 0, the held runs with the bench's SEA_BENCH_HELD_ARGS: an own switch's A/B, as
+            # step 1(a)'s -TheaterSeaMarksPool=1, its runs known by their "Sea look:" line; or, with none, an A/A block)
+            base_words, held_words = ("plain tier 0", "the held run") if block == 0 else ("tier 0", "tier %d" % block)
             for arm in held_labels:
                 ps = [p for p in pairs if p[2]["label"] == arm]
                 base_first = sum(1 for _, b, _ in ps if b["first"] == "base")
-                lines.append("  block %d: tier %d asked, drawn as %s, against plain tier 0 of the same round, at %s: %d pairs (rounds %s; tier 0 ran first in %d, tier %d in %d)%s"
-                             % (block, block, arm, ps[0][1]["size"], len(ps), ", ".join(str(p[0]) for p in ps), base_first, block, len(ps) - base_first,
+                lines.append("  block %d: tier %d asked, drawn as %s, against plain tier 0 of the same round, at %s: %d pairs (rounds %s; %s ran first in %d, %s in %d)%s"
+                             % (block, block, arm, ps[0][1]["size"], len(ps), ", ".join(str(p[0]) for p in ps), base_words, base_first, held_words, len(ps) - base_first,
                                 "; left out: " + "; ".join(unpaired) if unpaired else ""))
-                lines.append("    %-48s %9s  %s" % ("(the difference d, tier %d less tier 0)" % block, "mean d",
+                lines.append("    %-48s %9s  %s" % ("(the difference d, %s less %s)" % (held_words, base_words), "mean d",
                                                     "its 99%% interval, +- the least difference %d pairs resolve: verdict" % len(ps)))
                 for key, words in MEASURES:
                     d = [h[key] - b[key] for _, b, h in ps if key in h and key in b]
@@ -451,8 +456,8 @@ def table(rows, about=()):
                     second = [h[key] - b[key] for _, b, h in ps if b["first"] == "held"]
                     if first and second:
                         a, z = mean_sd(first)[0], mean_sd(second)[0]
-                        lines.append("    order, %s: d %+.2f when tier 0 ran first, %+.2f when tier %d did: the second run of a pair %+.2f ms"
-                                     % (dict(MEASURES)[key], a, z, block, (a - z) / 2.0))
+                        lines.append("    order, %s: d %+.2f when %s ran first, %+.2f when %s did: the second run of a pair %+.2f ms"
+                                     % (dict(MEASURES)[key], a, base_words, z, held_words, (a - z) / 2.0))
 
         # plain tier 0 in run order, with the machine's heat: the drift across the bench, and heat against load
         base = [r for r in runs if (r["role"] == "base" if r["block"] is not None else r["plain"] and r["tier"] == 0)]
