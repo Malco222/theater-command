@@ -48,7 +48,7 @@ describe('the fight back', () => {
     try { expect(ratedAir(g, 'MEX')).toBe(2); expect(fightBack(g, 'MEX')).toBe(false); } finally { B.on = true; }
   }, 120_000);
 
-  it('a small air force flies at the invader: Mexico\'s bombers go for the American troops on its soil', () => {
+  it('a small air force goes to the invader: Mexico\'s bombers raid him or its fighters go up over its battles', () => {
     TC.start({ view: 'grand', human: 'USA', from: 1, seed: 11, world: true });
     const g = copy();
     const border = g.regions.filter((r) => r.ctrl === 'USA' && r.nb.some((j) => g.regions[j].ctrl === 'MEX')).map((r) => r.id);
@@ -56,8 +56,9 @@ describe('the fight back', () => {
     for (const r of g.regions) r.units = g.corps.filter((c) => c.reg === r.id);
     TC.load(saveGame(g));
     expect(TC.declare('MEX').ok).toBe(true);
-    let raids = 0;
-    for (let m = 0; m < 3 && !raids; m++) {
+    const capital = g.nations.MEX.capital;
+    let raids = 0, forward = 0;
+    for (let m = 0; m < 6 && !(raids && forward); m++) {
       const h = copy();
       for (const c of h.corps.filter((x) => x.nat === 'USA' && !x.dead && x.kind !== 'fort')) {
         const to = h.regions[c.reg].nb.find((j) => h.regions[j].ctrl === 'MEX');
@@ -65,10 +66,13 @@ describe('the fight back', () => {
       }
       const n0 = copy().airReports.length;
       TC.endMonth();
-      raids += copy().airReports.slice(n0).filter((r) => r.attNat === 'MEX').length;
+      const k = copy();
+      raids += k.airReports.slice(n0).filter((r) => r.attNat === 'MEX').length;
+      forward += k.airFleets.filter((f) => f.nat === 'MEX' && (f.close || f.base !== capital)).length;
     }
-    expect(raids).toBeGreaterThan(0);
-  }, 180_000);
+    // (Release 1.5.1 sees both. Release 2's bombers need a concrete airfield, so there they fly from Mexico City alone.)
+    expect(raids + forward).toBeGreaterThan(0);
+  }, 240_000);
 
   it('a staff defending puts fighters on ground support over its battles, and keeps as many on patrol over each', () => {
     const g = startOpen(createGame(23, null));

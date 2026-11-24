@@ -2325,26 +2325,30 @@ function closeStaff(g: Game, mine: AirFleet[], battles: number[], back = false):
     const over = (f: AirFleet, base: number): number[] => battles.filter((b) => cover(km(g, base, b), ftrR(f)) > 0);
     const patrol = new Map<number, number>(), onCall = new Map<number, number>();
     for (const f of land) if (f.mission === 'support' && !f.close) for (const b of over(f, f.base)) patrol.set(b, (patrol.get(b) ?? 0) + f.ftr);
-    const far: { f: AirFleet; to: Region | null; d: number }[] = [];
-    for (const f of land) {
-      if (f.mission !== 'support' || f.flew === g.turn || f.moved === g.turn || f.ready < CLOSE.least || can.some((x) => x.f === f)) continue;
-      let to: Region | null = null, bv = 0;
-      for (const r of airBases(g, f)) { if (overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue; const v = over(f, r.id).length; if (v > bv) { bv = v; to = r; } }
-      if (to) far.push({ f, to, d: near(f) });
-    }
-    far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
-    for (const { f, to } of [...can.map((x) => ({ f: x.f, to: null as Region | null })), ...far]) {
-      if (f.ftr > left) continue;
+    const put = (f: AirFleet, to: Region | null): void => {
+      if (f.ftr > left) return;
       const bs = over(f, to ? to.id : f.base);
       const stays = (b: number): number => (patrol.get(b) ?? 0) - (to ? 0 : f.ftr);
-      if (!bs.length || bs.some((b) => stays(b) < (onCall.get(b) ?? 0) + f.ftr)) continue;
-      if (to && !rebaseAir(g, f, to)) continue;
+      if (!bs.length || bs.some((b) => stays(b) < (onCall.get(b) ?? 0) + f.ftr)) return;
+      if (to && !rebaseAir(g, f, to)) return;
       if (!to) for (const b of over(f, f.base)) patrol.set(b, (patrol.get(b) ?? 0) - f.ftr);
       for (const b of bs) onCall.set(b, (onCall.get(b) ?? 0) + f.ftr);
       f.close = true;
       delete f.escorts;
       left -= f.ftr;
+    };
+    for (const { f } of can) put(f, null);
+    // (Only groups that could still go are looked at for a field: the share left shrinks and never grows.)
+    const far: { f: AirFleet; to: Region; d: number }[] = [];
+    for (const f of land) {
+      if (left <= 0) break;
+      if (f.ftr > left || f.close || f.mission !== 'support' || f.flew === g.turn || f.moved === g.turn || f.ready < CLOSE.least || can.some((x) => x.f === f)) continue;
+      let to: Region | null = null, bv = 0;
+      for (const r of airBases(g, f)) { if (overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue; const v = over(f, r.id).length; if (v > bv) { bv = v; to = r; } }
+      if (to) far.push({ f, to, d: near(f) });
     }
+    far.sort((a, b) => a.d - b.d || a.f.id - b.f.id);
+    for (const { f, to } of far) put(f, to);
     return;
   }
   for (const { f } of can) {
@@ -2406,9 +2410,14 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
  * its own margin over the one below.
  */
 /** True while a country fights on its own soil: an enemy holds ground it owns, or attacked it on its own ground since last month. */
-const invaded = (g: Game, nat: string): boolean =>
-  g.regions.some((r) => r.owner === nat && r.ctrl !== nat && atWar(g, nat, r.ctrl)) ||
-  g.reports.some((b) => b.turn >= g.turn - 1 && !b.yielded && b.defNat === nat && g.regions[b.region]?.owner === nat && atWar(g, nat, b.attNat));
+function invaded(g: Game, nat: string): boolean {
+  if (g.regions.some((r) => r.owner === nat && r.ctrl !== nat && atWar(g, nat, r.ctrl))) return true;
+  for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn >= g.turn - 1; i--) {
+    const b = g.reports[i];
+    if (!b.yielded && b.defNat === nat && g.regions[b.region]?.owner === nat && atWar(g, nat, b.attNat)) return true;
+  }
+  return false;
+}
 
 function staffRules(g: Game, nat: string) {
   const FB = fightBack(g, nat) ? AIRWAR.ai.back! : null;
