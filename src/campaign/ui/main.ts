@@ -71,6 +71,7 @@ import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
 import { unitsDecide } from '../units';
 import { columnsView } from '../columns';
+import { airKnown, airMetWords, routeSeenWords } from '../seasight';
 import { dumpsView } from '../logistics';
 import { nicknamesOn } from '../nicknames';
 import { UNITS_STAGE } from '../stage';
@@ -92,7 +93,7 @@ import {
 } from '../air';
 import { FIGHTERS, raidCardLines, setFighterTypes } from '../fighters';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip, zoneOf,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -5844,6 +5845,19 @@ function desertNote(route: (typeof NAVY.convoys)[number]): string {
   return ` ${line} ${esc(b.name)} is hunting the convoys${starved ? ', but is itself cut off and short of everything' : ''}. In Axis hands the route would be safe.`;
 }
 
+/**
+ * What the player's side last saw on a convoy route, with the month (release 2, once the sea patrol is live; seasight.ts,
+ * the design director's ruling of 24 November 2026 17:54Z, Q4 (a)), in the words his staff's count is read from: on his
+ * own side's routes the boats last seen on its seas, and on the enemy's the aircraft his side's boats last met over each
+ * of its seas they have been in. Empty otherwise.
+ */
+function seenNote(route: (typeof NAVY.convoys)[number], me: string | null): string {
+  if (!me) return '';
+  const zones = route.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
+  const lines = allied(g, me, route.to) ? [routeSeenWords(g, me, zones)] : atWar(g, me, route.to) ? zones.filter((z) => airKnown(g, me, z)).map((z) => airMetWords(g, me, z)) : [];
+  return lines.filter(Boolean).map((w) => ` ${esc(w)}.`).join('');
+}
+
 /** The convoy war and the ore traffic, for whoever has a stake in them. */
 function seaNotes(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
@@ -5853,7 +5867,7 @@ function seaNotes(): string {
     if (!m || (me && me !== route.to && !atWar(g, me, route.to))) continue;
     const share = m.raid + m.guard > 0 ? m.raid / (m.raid + m.guard * NAVY.convoy.escortWorth) : 0;
     out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'}${m.byAircraft !== undefined && m.subsLost > 0 ? ` (aircraft sank ${m.byAircraft}, the convoys' escorts ${m.byEscorts ?? 0}, hunting groups ${Math.max(0, m.subsLost - m.byAircraft - (m.byEscorts ?? 0))})` : ''} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
-      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. ${seaWar(g) ? 'Fleets ordered to escort the route cut the losses most; destroyers sent to hunt in its seas sink the submarines.' : 'More escorts and patrolling fleets on the route cut the losses.'}${desertNote(route)}</span></div>`;
+      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. ${seaWar(g) ? 'Fleets ordered to escort the route cut the losses most; destroyers sent to hunt in its seas sink the submarines.' : 'More escorts and patrolling fleets on the route cut the losses.'}${desertNote(route)}${seenNote(route, me)}</span></div>`;
   }
   const ore = oreRoute(g);
   const to = NAVY.ore.to;

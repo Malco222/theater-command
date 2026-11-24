@@ -495,6 +495,16 @@ export function fleetFound(g: Game, f: Fleet, nat: string): SeaKnown {
 }
 
 /**
+ * True where a nation's side searches a sea well enough that boats at sea there would be reported to it, as fleetFound
+ * judges a fleet of boats alone: the sea is in its view for boats, whether any are there or not. Release 2, the sea
+ * patrol's record of what each side has seen (seasight.ts), and nothing else, reads it.
+ */
+export function boatsInView(g: Game, nat: string, z: number): boolean {
+  const S = CARRIERS.search;
+  return !!g.seas[z] && searchOf(g, nat, z) >= S.report * openness(g, z) * S.subs;
+}
+
+/**
  * How well a fleet is known to whoever is looking. With nobody at the table, outside the grand campaign, or with
  * the player's fog of war lifted, everything is known.
  */

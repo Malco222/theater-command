@@ -29,6 +29,7 @@ import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
 import { patrolSeas, watchWith } from './seapatrol';
+import { airMetWords, seaSeenWords, seenAir } from './seasight';
 import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
@@ -343,12 +344,16 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
   // The sea patrol against submarines (release 2, Units decide, once it is live; seapatrol.ts): a land bomber
-  // group watches one sea of its side's convoys and sea lanes all month, and flies nothing else.
+  // group watches one sea of its side's convoys and sea lanes all month, and flies nothing else. (Each order says what
+  // its side last saw there, with the month, as its staff counts it (seasight.ts; the design director's ruling of 24
+  // November 2026 17:54Z, Q4 (a)): the boats last seen there, and where its own side's boats have met the enemy's
+  // aircraft there, what they met.)
   if (kind === 'bmr' && !deck) for (const z of patrolSeas(g, f)) {
     const w = watchWith(g, f, z), sea = g.seas[z];
+    const met = seenAir(g, f.nat, z) ? ` ${airMetWords(g, f.nat, z)}.` : '';
     out.push({
       key: `sea:${z}`, label: `Patrol ${seaWhat(sea.name)} against submarines`, on: !away && f.mission === 'seapatrol' && f.target === z, why: gone,
-      forecast: `${patrolDoing(g, f, z, w)}. Its aircraft attack the boats they find there${aswKit(g, f.nat).radar && aswKit(g, f.nat).asdic ? ', by night and in fog too, with their radar' : ', and keep the rest down; without sea-search radar and depth charges they sink few'}. While it patrols it flies no raid, meets no raid and escorts no bomber, and regains ${pct(AIR.ready.flying)} readiness a month in place of ${pct(AIR.ready.support)}.`,
+      forecast: `${patrolDoing(g, f, z, w)}. Its aircraft attack the boats they find there${aswKit(g, f.nat).radar && aswKit(g, f.nat).asdic ? ', by night and in fog too, with their radar' : ', and keep the rest down; without sea-search radar and depth charges they sink few'}. While it patrols it flies no raid, meets no raid and escorts no bomber, and regains ${pct(AIR.ready.flying)} readiness a month in place of ${pct(AIR.ready.support)}. ${seaSeenWords(g, f.nat, z)}.${met}`,
     });
   }
   // Close air support (Brian's ask of 2026-11-18, air.json 'close'): a land fighter group flies over its own side's

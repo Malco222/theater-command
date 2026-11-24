@@ -24,12 +24,19 @@
 // held stand. Once live, 'intensity' gates only the enemy fighters' meeting a patrol: while it is unread none meets one
 // and none of its bombers is lost to them, and the patrol itself works. Off (no Units decide) none of it exists. Nothing
 // in it reads the flag or the date.
-import { CAUSE, NAVY, airKit, aswKit, atSea, onStation, onWatch, quieterBeat, seaLatitude, seaRoutes, seaSquares, zoneOf } from './navy';
+//
+// Each staff counts the other side's units where its own side last saw them, never where they truly are (the design
+// director's 24 November 2026 17:49Z amendment to ruling 1, and his ruling of 17:54Z on
+// naval-battles/convoy-r2/sight-store-form.md, (a) on all five questions). So the patrol staff here sends its groups
+// where its side last saw boats (seasight.ts seenBoats), and the boats' staff moves its beats out of the aircraft its
+// side's boats last met (navy.ts quieterBeat, seenAir); neither predicts the other's move. The record is written only
+// while the patrol is live (seasight.ts noteSeaSight).
+import { CAUSE, NAVY, airKit, aswKit, seaLatitude, seaRoutes, seaSquares, zoneOf } from './navy';
 import { AIR, AIRWAR, CARRIERS, airRange, assessAir, cover, deckBred, kmToSea, setMission, whyNotMission } from './air';
 import { mapDist } from './wrap';
 import { allied, atWar } from './game';
 import { unitsDecide } from './units';
-import { byHand } from './depth';
+import { seenBoats } from './seasight';
 import { dayShare, grounded, skyAtSea, skySupport, weatherOn } from './weather';
 import { turnToDate } from '../core/ticket';
 import type { AirFleet, Game } from './types';
@@ -190,43 +197,41 @@ export function patrolSeas(g: Game, f: AirFleet): number[] {
   return out;
 }
 
-/** The boats of a nation's enemies on station in a sea now (each fleet's boats x its share of the month on station). */
-function boatsOnStation(g: Game, nat: string, z: number): number {
-  let b = 0;
-  for (const q of g.fleets) if (q.zone === z && atSea(q) && q.ships.ss > 0 && atWar(g, q.nat, nat)) b += q.ships.ss * onStation(g, q, z);
-  return b;
-}
+/**
+ * The enemy boats a nation's side last saw on station in a sea (seasight.ts seenBoats), never the boats truly there:
+ * none where its side never saw any (the design director's ruling of 24 November 2026 17:54Z, Q2 (a)).
+ */
+const boatsOnStation = (g: Game, nat: string, z: number): number => seenBoats(g, nat, z)?.n ?? 0;
 
 /**
- * Where the enemy's raiding boats on a route's seas would be this month, as their own staffs set their beats (navy.ts
- * quieterBeat: out of waters aircraft without kit watch, where that keeps them up on station longer by more than the
- * move itself loses; aircraft with kit move no boat): each fleet's boats x its time up on station there (onWatch), by
- * sea. Only a fleet the computer runs is moved so: a navy its own player commands by hand (depth.ts byHand) is not
- * moved by its staff (navalAI leaves it be), so its fleets are counted unmoved, on their beats.
- * Each fleet is counted at its beat ('station'), as before, not at the sea it is in: the design director ruled at 17:49Z
- * that each staff counts the other side's units where its own side last saw them, never where they truly are, and the
- * store of what each side has seen comes with its own form. Until then the beat stands.
+ * The enemy boats on a route's seas as the patrol staff counts them this month, by sea: the boats its side last saw on
+ * station there (boatsOnStation), each for its time up, less the part of it its own side's aircraft without kit keep
+ * them down (the side's own patrols, which it knows; seapatrol.ts watchFor). The boats are counted where they were last
+ * seen, and their own staff's move is not predicted (the design director's ruling of 24 November 2026 17:54Z, Q5 (a)):
+ * the next month's sightings follow the boats once they move. A sea where its side saw none is left out.
  */
 function boatsExpected(g: Game, nat: string, zs: number[]): Map<number, number> {
   const at = new Map<number, number>();
-  for (const q of g.fleets) {
-    if (!atSea(q) || q.ships.ss <= 0 || q.stance !== 'raid' || !atWar(g, q.nat, nat) || !zs.includes(q.station)) continue;
-    const moved = byHand(g, q.nat, 'navy') ? -1 : quieterBeat(g, q);
-    const z = moved >= 0 ? moved : q.station;
-    at.set(z, (at.get(z) ?? 0) + q.ships.ss * onWatch(g, q, z));
+  const side = (n: string): boolean => allied(g, n, nat);
+  for (const z of zs) {
+    const b = boatsOnStation(g, nat, z);
+    if (!(b > 0)) continue;
+    const w = watchFor(g, z, side);
+    at.set(z, b * (w && w.none > 0 ? 1 - w.none : 1));
   }
   return at;
 }
 
 /**
  * What one more group on patrol over a sea of a route is worth to a staff, on its raid scoring's own scale (aircraft),
- * for the boats that would be in that sea as things stand (boatsExpected): those its side's patrols would sink there
- * besides, at a strike's worth of a submarine, and the cargoes saved on the route by those it would keep down or cut
- * (T7) there, by last month's losses on the route a boat on station, at a strike's worth of trade (the share of the
- * receiving nation's goods the route carries, times 3000 for the whole); less the bombers it would lose on patrol
- * (patrolLoss: the operational share of the aircraft on patrol where it is laid, and the enemy's fighters where they
- * meet it), aircraft for aircraft as the raid scoring subtracts a raid's bombers lost. Where the boats then move, the
- * next group goes after them.
+ * for the boats it counts in that sea as things stand (B, boatsExpected: where its side last saw them): those its side's
+ * patrols would sink there besides, at a strike's worth of a submarine, and the cargoes saved on the route by those it
+ * would keep down or cut (T7) there, by last month's losses on the route shared over the boats its side last saw on the
+ * route's seas ('all', never the boats truly on station there), at a strike's worth of trade (the share of the receiving
+ * nation's goods the route carries, times 3000 for the whole); less the bombers it would lose on patrol (patrolLoss: the
+ * operational share of the aircraft on patrol where it is laid, and the enemy's fighters where they meet it), aircraft
+ * for aircraft as the raid scoring subtracts a raid's bombers lost. Where the boats then move, the next month's sightings
+ * show it, and the next groups go after them (the design director's ruling of 24 November 2026 17:54Z, Q5 (a)).
  */
 export function patrolWorth(g: Game, nat: string, f: AirFleet, z: number, route: ConvoyRoute, B: number, all: number): number {
   const F = patrolFigures();
@@ -242,8 +247,7 @@ export function patrolWorth(g: Game, nat: string, f: AirFleet, z: number, route:
   // (Kept down without kit; with it, T7's share of what they would sink cut.)
   const kept = (w1.none - (w0?.none ?? 0)) + (w1.kit - (w0?.kit ?? 0)) * (1 - CAUSE.cover);
   const rec = g.convoys[route.id];
-  const boats = rec?.count?.boats || all;
-  if (rec?.loss && boats > 0) v += 3000 * route.share * rec.loss * ((B * kept) / boats);
+  if (rec?.loss && all > 0) v += 3000 * route.share * rec.loss * ((B * kept) / all);
   const lost = patrolLoss(g, f, z);
   v -= lost.op + lost.fighters;
   return v;
@@ -252,14 +256,14 @@ export function patrolWorth(g: Game, nat: string, f: AirFleet, z: number, route:
 /**
  * The computer's air staff and the sea patrol (Q7 (a)), run after its raid staff and weighed against the raid that staff
  * chose (the design director's ruling of 24 November 2026 17:49Z, 2 (a) and 3 (a)). Over each of its side's convoy
- * routes with enemy boats on station on its seas, the most boats first, it sends its land bomber groups one at a time to
- * the sea of the route where the boats would be (boatsExpected: the staffs of fleets the computer runs move out of
- * waters aircraft without kit watch, where the move pays), the most boats first, the best placed group first, while one
- * more is worth more than what it would give up for it, with no other test. A group whose patrol is not worth that is
- * passed over and the next best placed is tried; the route is left only once no fit group is worth sending. So its
- * patrols follow the boats' best answer and spread over the route, rather than chasing last month's boats from sea to
- * sea (the builder's reading of Q7 (a), for the design director). Its orders stand till its next month (the hunt and
- * the convoys read them at its start).
+ * routes with enemy boats seen on its seas, the most boats first, it sends its land bomber groups one at a time to the
+ * sea of the route where its side last saw boats (boatsExpected, seasight.ts seenBoats: never where the boats truly are,
+ * and with no guess at their own staff's move, the design director's ruling of 17:54Z, Q5 (a)), the most boats first,
+ * less those its own patrols already keep down there, the best placed group first, while one more is worth more than
+ * what it would give up for it, with no other test. A group whose patrol is not worth that is passed over and the next
+ * best placed is tried; the route is left only once no fit group is worth sending. Where the boats have moved since they
+ * were seen, its patrols find them only once its side sees them again. Its orders stand till its next month (the hunt
+ * and the convoys read them at its start).
  * The raid staff flies each raid as soon as it chooses it (air.ts raidStaff). So before a raid flies the staff is asked
  * about that raid's bomber group alone ('raid': the group and the raid's own score on the raid scoring), and weighs its
  * patrol against that score; it returns true where it takes the group onto patrol, and the group then gives up the raid,
@@ -276,6 +280,7 @@ export function patrolStaff(g: Game, nat: string, mine: AirFleet[], raid?: { f: 
   // (What a group gives up to patrol: the raid the raid staff chose for it, at that raid's own score; nothing for a
   // group left on support.)
   const given = (f: AirFleet): number => (raid && f === raid.f ? raid.v : 0);
+  // (Each route by the boats its side last saw on its seas: seasight.ts.)
   const routes: { r: ConvoyRoute; zs: number[]; boats: number }[] = [];
   for (const r of NAVY.convoys) {
     const to = g.nations[r.to];

@@ -1609,8 +1609,12 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
-  /** Release 2, with Units decide and the sea patrol live (seapatrol.ts), record only: the boats each nation's aircraft on patrol sank in its month, by the boats' nation. */
-  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number> }>;
+  /**
+   * Release 2, with Units decide and the sea patrol live (seapatrol.ts): the boats each nation's aircraft on patrol sank
+   * in its month, by the boats' nation ('sunk'), by sea ('seas'), and by sea and the boats' nation ('at'), which the
+   * boats' own side reads as its boats lost to aircraft there (seasight.ts).
+   */
+  patrolSunk?: Record<string, { turn: number; sunk: Record<string, number>; seas: Record<number, number>; at?: Record<number, Record<string, number>> }>;
   /** Release 2 (columns.ts), the grand campaign with supply columns on: each nation's lorry columns of its last month, by nation. Absent otherwise. */
   columns?: Record<string, ColumnRun[]>;
   /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */
@@ -1808,6 +1812,21 @@ export interface StolenOrder {
 /** A line in the secret service's file: what happened, to whom, where, and whether it was good news. */
 export interface IntelNote { turn: number; agent: string; nat: string; reg: number; what: string; text: string; good: boolean }
 
+/** How a side saw the other at sea: its convoys attacked, its escort met them, its patrols sighted them, it sank them, its search found them, or its boats were kept down or attacked from the air. */
+export type SightHow = 'attack' | 'incident' | 'sighting' | 'loss' | 'search' | 'keptDown';
+
+/**
+ * What one side last saw of the other in one sea (seasight.ts): the enemy boats it saw on station there, and the enemy
+ * aircraft on patrol its own boats met there. Each part has its own month, since a side may watch a sea for boats in a
+ * month its own boats are not there, and the other way round.
+ */
+export interface SeaSight {
+  /** The enemy boats seen on station there (an expected count, as the convoy count is), the month, and how they were seen. */
+  boats?: { t: number; n: number; how: SightHow[] };
+  /** The enemy patrol as its own boats met it there: the parts of a boat's time watched by aircraft with anti-submarine kit and without (seapatrol.ts Watch), its boats lost to aircraft there, the month, and how. */
+  air?: { t: number; kit: number; none: number; lost: number; how: SightHow[] };
+}
+
 export interface Intel {
   agents: Agent[];
   next: number;
@@ -1824,6 +1843,12 @@ export interface Intel {
   sea?: Record<number, number>;
   /** Seas each computer staff's aircraft have searched, and the month they did (ruling 52): by nation, then by sea. */
   seaBy?: Record<string, Record<number, number>>;
+  /**
+   * Where each side last saw the other at sea (release 2, Units decide, written and read only while the sea patrol is
+   * live; seasight.ts): by nation, then by sea, the enemy boats it last saw there and the enemy aircraft its own boats
+   * last met there, each with its month. Absent until the patrol is live.
+   */
+  seaSight?: Record<string, Record<number, SeaSight>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.

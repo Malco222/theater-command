@@ -15,6 +15,7 @@ import { AIR, AIRWAR, airAI, airPool, airRange, airfieldsHold, assessAir, fieldC
 import { groupJobs, groupRow } from '../src/campaign/airwar';
 import { byHand } from '../src/campaign/depth';
 import { patrolAircraft, patrolFigures, patrolLoss, patrolMet, patrolOn, patrolReach, patrolSeas, patrolStaff, patrolWorth, watchAgainst, watchFor } from '../src/campaign/seapatrol';
+import { noteSeaSight, seenBoats } from '../src/campaign/seasight';
 import causeData from '../data/campaign/convoycause.json';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -67,6 +68,30 @@ function toFrance(g: Game, f: AirFleet, z: number): void {
 const foe = (g: Game): void => { for (const f of g.airFleets) if (f.nat === 'GER' && f.kind === 'ftr') { f.mission = 'support'; f.target = -1; f.ready = 1; } };
 /** A strong patrol, so that a month's dice sink boats. */
 const STRONG = { ...FIG, attacks: { kit: 6, none: 6 }, kill: { kit: 1, none: 1 } };
+
+// Each staff reads only what its side has seen (seasight.ts; the design director's 24 November 2026 17:49Z amendment to
+// ruling 1, and his ruling of 17:54Z). These give the staffs here their sight, through the record's own writer where a
+// month's events can say it, so that a test of what a staff does with what it knows sets out what it knows.
+/** A side's convoys met these boats in a sea this month: its record, from the record's own writer. */
+const saw = (g: Game, nat: string, z: number, n: number): void => noteSeaSight(g, nat, { attack: { [z]: n }, incident: {}, sunk: {} });
+/** A side's convoys met every enemy boat on station where it is this month (each fleet's boats x its share on station): it then sees the boats as they truly stand. */
+function sawAll(g: Game, nat: string): void {
+  const attack: Record<number, number> = {};
+  for (const f of g.fleets) if (atSea(f) && f.ships.ss > 0 && g.nations[f.nat].atWar.includes(nat)) attack[f.zone] = (attack[f.zone] ?? 0) + f.ships.ss * onStation(g, f, f.zone);
+  noteSeaSight(g, nat, { attack, incident: {}, sunk: {} });
+}
+/**
+ * The boats' side has met the aircraft over every sea of the convoy routes as they now stand, as if its boats had been on
+ * station in each this month: its staff then weighs the patrols truly flown. For the tests of what a move loses, which
+ * are about the arithmetic of the move and not about what the boats have seen.
+ */
+function metEvery(g: Game, nat = 'GER'): void {
+  const book = ((g.intel.seaSight ??= {})[nat] ??= {});
+  for (const r of NAVY.convoys) for (const k of r.zones) {
+    const z = zoneOf(g, k), w = watchAgainst(g, z, nat);
+    (book[z] ??= {}).air = { t: g.turn, kit: w?.kit ?? 0, none: w?.none ?? 0, lost: 0, how: w && w.none > 0 ? ['keptDown'] : [] };
+  }
+}
 
 const SHARE = AIRWAR.ai.raids.share;
 afterEach(() => { Object.assign(CAUSE.patrol, structuredClone(UNREAD)); AIRWAR.ai.raids.share = SHARE; });
@@ -552,13 +577,19 @@ describe('the aircraft lost on patrol: an operational share where it is laid, an
 describe('the computer\'s staffs (Q7, Q5)', () => {
   beforeEach(() => lay({ ...FIG, attacks: { kit: 6, none: 6 }, kill: { kit: 1, none: 1 } }));
 
-  it('send no group where no enemy boat is on station, and one where many are', () => {
+  it('send no group where its side has seen no enemy boat, and one where it saw many (the design director\'s ruling of 17:54Z)', () => {
     const g = open(), wapp = zoneOf(g, 'wapp');
     grantTech(g, 'UK', 'asvradar');
     const mine = g.airFleets.filter((f) => f.nat === 'UK');
     patrolStaff(g, 'UK', mine);
     expect(mine.some((f) => f.mission === 'seapatrol')).toBe(false);
+    // (Sixty boats on station, unseen: the staff never reads where they truly are.)
     sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+    patrolStaff(g, 'UK', mine);
+    expect(mine.some((f) => f.mission === 'seapatrol')).toBe(false);
+    // (Its convoys met them there this month.)
+    sawAll(g, 'UK');
+    expect(seenBoats(g, 'UK', wapp)!.n).toBeGreaterThan(0);
     patrolStaff(g, 'UK', mine);
     expect(mine.some((f) => f.mission === 'seapatrol' && f.target === wapp)).toBe(true);
     expect(mine.filter((f) => f.mission === 'seapatrol').every((f) => f.kind === 'bmr' && f.ship === undefined)).toBe(true);
@@ -568,13 +599,14 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     const g = open(), wapp = zoneOf(g, 'wapp');
     grantTech(g, 'UK', 'asvradar');
     sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+    sawAll(g, 'UK');
     const mine = g.airFleets.filter((f) => f.nat === 'UK');
     for (const f of mine) if (f.kind !== 'ftr' && f.bmr > 0) f.ftr = 5;
     patrolStaff(g, 'UK', mine);
     expect(mine.some((f) => f.mission === 'seapatrol' && f.target === wapp)).toBe(false);
   });
 
-  it('a computer-run raider moves out of waters watched by aircraft without kit, to a sea of the route where its boats stay up longer', () => {
+  it('a computer-run raider moves out of waters where its boats met aircraft without kit, to a sea of the route where its boats stay up longer', () => {
     lay();
     const set = (human: string | null): { g: Game; f: Fleet; wapp: number } => {
       const g = open(), wapp = zoneOf(g, 'wapp');
@@ -584,6 +616,10 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
       expect(quieterBeat(g, f)).toBe(-1);
       setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
       setMission(g, group(g, 'No. 2 Group'), 'seapatrol', wapp);
+      // (Until its boats have met them, the staff does not know the patrols are there.)
+      expect(quieterBeat(g, f)).toBe(-1);
+      // (The close of Germany's month at sea: its boats on station in the Western Approaches met the watch there.)
+      noteSeaSight(g, 'GER');
       return { g, f, wapp };
     };
     const { g, f, wapp } = set(null);
@@ -624,6 +660,7 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
       for (const x of mine) if (x !== n1 && x !== n2 && x.kind !== 'ftr') x.mission = 'rest';
       expect(whyNotMission(g, n1, 'seapatrol', wapp)).toBeNull();
       expect(whyNotMission(g, n2, 'seapatrol', wapp)).toBeNull();
+      sawAll(g, 'UK');
       airAI(g, 'UK');
       return { g, n1, n2, wapp };
     };
@@ -658,6 +695,7 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     const B = f.ships.ss * onWatch(g, f, wapp);
     expect(patrolWorth(g, 'UK', n1, wapp, atlantic, B, B)).toBeGreaterThan(AIRWAR.ai.raids.worth);
     expect(patrolWorth(g, 'UK', n2, wapp, atlantic, B, B)).toBeGreaterThan(AIRWAR.ai.raids.worth);
+    sawAll(g, 'UK');
     airAI(g, 'UK');
     expect(n1.flew).toBe(g.turn);
     expect(n1.mission).toBe('night');
@@ -680,6 +718,7 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     const B = f.ships.ss * onWatch(g, f, wapp);
     const v = patrolWorth(g, 'UK', n1, wapp, atlantic, B, B);
     expect(v).toBeGreaterThan(AIRWAR.ai.raids.worth);
+    sawAll(g, 'UK');
     airAI(g, 'UK');
     expect(g.airFleets.some((x) => x.nat === 'UK' && x.flew === g.turn && isOffensive(x.mission))).toBe(false);
     expect(n1.mission).toBe('seapatrol');
@@ -704,6 +743,7 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     const B = f.ships.ss * onWatch(g, f, wapp);
     expect(patrolWorth(g, 'UK', n1, wapp, atlantic, B, B)).toBeLessThanOrEqual(0);
     expect(patrolWorth(g, 'UK', n2, wapp, atlantic, B, B)).toBeGreaterThan(0);
+    sawAll(g, 'UK');
     expect(patrolStaff(g, 'UK', mine)).toBe(true);
     expect(n2.mission).toBe('seapatrol');
     expect(n2.target).toBe(wapp);
@@ -727,6 +767,7 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
     const v = patrolWorth(g, 'UK', n2, wapp, atlantic, B, B);
     expect(v).toBeGreaterThan(0);
     expect(v).toBeLessThan(AIRWAR.ai.raids.worth);
+    sawAll(g, 'UK');
     const sent = patrolStaff(g, 'UK', mine);
     expect(n2.mission).toBe('seapatrol');
     expect(n2.target).toBe(wapp);
@@ -762,9 +803,11 @@ describe('the computer\'s staffs (Q7, Q5)', () => {
 describe('a raider keeps its beat unless the move\'s gain covers what the move loses (the design director\'s ruling of 17:49Z, 1 (a))', () => {
   /**
    * Germany holding the Atlantic coast of France and the ports of Norway, its U-boat Fleet of 60 based at Bordeaux on
-   * the Western Approaches, and the two staffs month after month: Britain's patrol staff sends its groups where the
-   * boats would be, then Germany's naval staff moves its boats (navalAI). Strong figures and a0 8, so that the patrol
-   * keeps the boats down hard. Each month's beat, base and whether the boats are in harbour, and the watch over them.
+   * the Western Approaches, and the two staffs month after month, each reading only what its side has seen (the design
+   * director's ruling of 17:54Z): Britain's convoys meet the boats where they raid and its patrol staff sends its groups
+   * where its side last saw them; Germany's boats meet the watch over their beat at the close of its month at sea, and
+   * its naval staff then moves them (navalAI). Strong figures and a0 8, so that the patrol keeps the boats down hard.
+   * Each month's beat, base and whether the boats are in harbour, and the watch over them.
    */
   function months(n: number): { g: Game; f: Fleet; log: { beat: number; port: string; harbour: boolean; watched: number }[] } {
     lay({ ...STRONG, a0: 8 });
@@ -778,10 +821,12 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
     const log: { beat: number; port: string; harbour: boolean; watched: number }[] = [];
     for (let m = 0; m < n; m++) {
+      sawAll(g, 'UK');
       const mine = g.airFleets.filter((x) => x.nat === 'UK');
       for (const x of mine) if (x.flew !== g.turn) { x.mission = 'support'; x.target = -1; }
       patrolStaff(g, 'UK', mine);
       const watched = f.stance === 'port' ? 0 : watchAgainst(g, f.station, 'GER')?.s ?? 0;
+      noteSeaSight(g, 'GER');
       navalAI(g, 'GER');
       log.push({ beat: f.station, port: f.port, harbour: f.stance === 'port', watched });
       g.turn++;
@@ -801,6 +846,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     f.duty = 'raid'; f.station = wapp; f.tied = false;
     setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
     setMission(g, group(g, 'No. 2 Group'), 'seapatrol', wapp);
+    metEvery(g);
     const up = onWatch(g, f, wapp), D = CAUSE.station.ss!;
     // (The port the boats' staff would raid a beat from: nearerPort, read with the beat set there.)
     const port = (z: number): string | undefined => { const keep = f.station; f.station = z; try { return nearerPort(g, f)?.name; } finally { f.station = keep; } };
@@ -839,6 +885,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     f.duty = 'raid'; f.station = wapp; f.tied = false;
     setMission(g, group(g, 'No. 1 Group'), 'seapatrol', wapp);
     setMission(g, group(g, 'No. 2 Group'), 'seapatrol', wapp);
+    metEvery(g);
     const up = onWatch(g, f, wapp), D = CAUSE.station.ss!;
     f.station = natl;
     expect(nearerPort(g, f)).toBeNull();
@@ -879,6 +926,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     const f = raider(g, ['Brittany']);
     patrolWith(g, 'No. 1 Group', 'wapp', 140);
     patrolWith(g, 'No. 2 Group', 'natl', 140);
+    metEvery(g);
     expect(portFor(g, f, wapp)).toBe('Brittany');
     expect(portFor(g, f, irish)).toBeUndefined();
     // (Weighed against the beat as kept from Brittany, the Irish Sea's gain is less than the crossing; but keeping the
@@ -905,6 +953,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
       if (harbour) { f.stance = 'port'; f.zone = f.home; }
       patrolWith(g, 'No. 1 Group', 'wapp', 20);
       patrolWith(g, 'No. 2 Group', 'natl', 60);
+      metEvery(g);
       return { g, f };
     };
     const D = CAUSE.station.ss!;
@@ -933,6 +982,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     const f = raider(g, ['Bordeaux', 'Bergen'], 'Bordeaux');
     patrolWith(g, 'No. 1 Group', 'wapp', 400);
     patrolWith(g, 'No. 2 Group', 'irish', 300);
+    metEvery(g);
     expect(portFor(g, f, wapp)).toBeUndefined();
     expect(portFor(g, f, natl)).toBe('Bergen');
     // (The month in harbour: the month's whole time up on the beat, given up.)
@@ -953,6 +1003,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     const g = open(), wapp = zoneOf(g, 'wapp'), natl = zoneOf(g, 'natl');
     const f = raider(g, ['Brittany', 'Highlands']);
     patrolWith(g, 'No. 1 Group', 'wapp', 20);
+    metEvery(g);
     expect(portFor(g, f, wapp)).toBe('Brittany');
     expect(portFor(g, f, natl)).toBe('Highlands');
     // (The gain is less than the month in harbour, but that month is lost whichever the staff does.)
@@ -978,6 +1029,7 @@ describe('a raider keeps its beat unless the move\'s gain covers what the move l
     patrolWith(g, 'No. 1 Group', 'wapp', 10);
     patrolWith(g, 'No. 2 Group', 'natl', 120);
     patrolWith(g, '1st Bomber Group', 'irish', 30, 'Wales');
+    metEvery(g);
     expect(portFor(g, f, wapp)).toBe('Brittany');
     expect(portFor(g, f, natl)).toBe('Highlands');
     expect(portFor(g, f, irish)).toBe('Highlands');
@@ -1006,44 +1058,42 @@ describe('the save', () => {
   });
 });
 
-describe('the staff follows the boats\' best answer, not last month\'s boats', () => {
+describe('the staff counts the boats where its side last saw them, and predicts no move of theirs (the design director\'s ruling of 17:54Z, Q5 (a))', () => {
   beforeEach(() => lay({ ...FIG, attacks: { kit: 6, none: 6 }, kill: { kit: 1, none: 1 } }));
 
-  it('without kit it follows the boats\' best answer: its patrols spread over the route, and the boats\' best sea there is worse for them', () => {
+  it('without kit its groups go to the sea it saw the boats in, though their own staff would move them out of the watch', () => {
+    // (Before the ruling the staff read the boats' own staff's move and spread its groups over the route after them.)
     const g = open(), wapp = zoneOf(g, 'wapp');
     const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
     f.duty = 'raid'; f.station = wapp; f.tied = false;
     g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
-    const zs = atlantic.zones.map((k) => zoneOf(g, k));
-    const best = (): number => Math.max(...zs.map((z) => onWatch(g, f, z)));
-    const before = best();
+    sawAll(g, 'UK');
     const mine = g.airFleets.filter((x) => x.nat === 'UK');
     patrolStaff(g, 'UK', mine);
     const sent = mine.filter((x) => x.mission === 'seapatrol');
-    // (The first group goes where the boats are; the boats would then move, and the next goes after them.)
-    expect(sent.map((x) => x.target)[0]).toBe(wapp);
-    expect(new Set(sent.map((x) => x.target)).size).toBe(sent.length);
-    expect(sent.length).toBeGreaterThan(1);
-    expect(best()).toBeLessThan(before);
-  });
-
-  it('a navy its player commands by hand is not moved by its staff, so the staff expects its boats to stay where they are counted', () => {
-    const g = open(), wapp = zoneOf(g, 'wapp');
-    const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
-    f.duty = 'raid'; f.station = wapp; f.tied = false;
-    g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
-    g.human = 'GER';
-    expect(byHand(g, 'GER', 'navy')).toBe(true);
-    const mine = g.airFleets.filter((x) => x.nat === 'UK');
-    patrolStaff(g, 'UK', mine);
-    const sent = mine.filter((x) => x.mission === 'seapatrol');
-    // (Each group after the first goes where the boats are too: no move is predicted that his staff would not make.)
     expect(sent.length).toBeGreaterThan(1);
     expect(sent.every((x) => x.target === wapp)).toBe(true);
-    // (The computer would move them out of the watch; the player's navy stays.)
+    // (Their own staff, once its boats have met the watch, would move them; the patrol staff did not guess it.)
+    noteSeaSight(g, 'GER');
     expect(quieterBeat(g, f)).toBeGreaterThanOrEqual(0);
-    navalAI(g, 'GER');
-    expect(f.station).toBe(wapp);
+  });
+
+  it('a navy its player commands by hand or one the computer runs: the boats are counted where they were seen, and the same groups go to the same sea', () => {
+    const run = (human: string | null): number[] => {
+      const g = open(), wapp = zoneOf(g, 'wapp');
+      const f = sea(g, 'U-boat Fleet', 'wapp', { ss: 60 }, 'raid');
+      f.duty = 'raid'; f.station = wapp; f.tied = false;
+      g.convoys.atlantic = { ...(g.convoys.atlantic ?? {}), loss: 0.05 } as any;
+      g.human = human;
+      expect(byHand(g, 'GER', 'navy')).toBe(human === 'GER');
+      sawAll(g, 'UK');
+      const mine = g.airFleets.filter((x) => x.nat === 'UK');
+      patrolStaff(g, 'UK', mine);
+      return mine.filter((x) => x.mission === 'seapatrol').map((x) => x.target);
+    };
+    const hand = run('GER');
+    expect(hand.length).toBeGreaterThan(1);
+    expect(run(null)).toEqual(hand);
   });
 });
 
