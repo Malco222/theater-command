@@ -161,13 +161,13 @@ void ACampaignPlayerController::LoadCustomOffer()
 		return;
 	}
 	const TArray<TSharedPtr<FJsonValue>>& Nations = CustomBattle::ArrayOf(Custom.Offer, TEXT("nations"));
-	// His side the first great power, the computer's the next; each army trained as its nation's own army was.
+	// His side the first great power, the computer's the next. Both start trained alike with the same kit, a fair fight
+	// (units decide, never the flag): he raises or lowers either side himself.
 	Custom.Nat[0] = 0;
 	Custom.Nat[1] = Nations.Num() > 1 ? 1 : 0;
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
-		const TSharedPtr<FJsonObject> Nation = Nations.IsValidIndex(Custom.Nat[Side]) ? Nations[Custom.Nat[Side]]->AsObject() : nullptr;
-		Custom.Train[Side] = CustomBattle::NumberOf(Nation, TEXT("train"), 1);
+		Custom.Train[Side] = 1; // ("Trained")
 		Custom.Kit[Side] = CustomBattle::NumberOf(Custom.Offer, TEXT("kit"), 3);
 	}
 	Custom.Size = CustomBattle::StringOf(Custom.Offer, TEXT("size"));
@@ -536,9 +536,7 @@ void ACampaignPlayerController::PressCustom(const FString& What)
 			N = (N + Step + Nations.Num()) % Nations.Num();
 		}
 		while (N == Custom.Nat[1 - Side]);
-		Custom.Nat[Side] = N;
-		const TSharedPtr<FJsonObject> Nation = Nations[N]->AsObject();
-		Custom.Train[Side] = CustomBattle::NumberOf(Nation, TEXT("train"), Custom.Train[Side]);
+		Custom.Nat[Side] = N; // (the training and kit stay as he set them: the flag changes nothing else)
 	}
 	else if (Verb == TEXT("kit"))
 	{
