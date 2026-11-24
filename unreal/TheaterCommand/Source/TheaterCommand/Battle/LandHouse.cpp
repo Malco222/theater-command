@@ -242,6 +242,7 @@ namespace LandHouse
 			                    // door's, its stable door's upper half: swung out)
 			double Swing2 = 0.0; // a cart door's second leaf (hinged at A1), swung out
 			bool bLeaf = true;  // the door's leaf there at all
+			double Arch = 0.0;  // (the church's) its round head's rise over its springing, Z1 - Arch (0: square-headed)
 		};
 
 		/** What an opening is (Opening::What, LandHouse::Hole::What). */
@@ -254,12 +255,20 @@ namespace LandHouse
 			OpSlit = 4,   // a slit for a barn's air
 			OpPitch = 5,  // a pitching door to a loft, high in a gable
 			OpStable = 6, // a stable door, in two halves
-			OpByreWin = 7 // a byre's small window, barred, unglazed, one plank shutter
+			OpByreWin = 7, // a byre's small window, barred, unglazed, one plank shutter
+			OpHidden = 8,  // (the church's) a stretch of wall another part of it stands against or in front of: not drawn
+			OpChWin = 9,   // a church's round-headed window, leaded, under its voussoirs
+			OpChDoor = 10, // a church's round-headed door, its two oak leaves shut under the arch
+			OpBelfry = 11  // the tower's belfry opening, round-headed, its louvres sloping out
 		};
 		/** Whether an opening runs down to the floor (the plinth cut for it, no sill under it). */
-		bool Grounded(int What) { return What == OpDoor || What == OpCart || What == OpStable; }
+		bool Grounded(int What) { return What == OpDoor || What == OpCart || What == OpStable || What == OpChDoor || What == OpHidden; }
 		/** Whether it has a sill. */
-		bool Silled(int What) { return What == OpWindow || What == OpAttic || What == OpSlit || What == OpPitch || What == OpByreWin; }
+		bool Silled(int What) { return What == OpWindow || What == OpAttic || What == OpSlit || What == OpPitch || What == OpByreWin || What == OpChWin || What == OpBelfry; }
+		/** Where an opening's head springs: its top, or under a round head its springing line. */
+		double SpringOf(const Opening& O) { return O.Z1 - O.Arch; }
+		/** The depth of a round head's ring of voussoirs. */
+		double RingOf(const Opening& O) { return std::max(0.26, 0.42 * 0.5 * (O.A1 - O.A0)); }
 
 		/** A wall's face: from its corner O along T, out along N, Len long. Faces in order round the house: 0 the front
 		 * (+y), 1 the gable at -x, 2 the back (-y), 3 the gable at +x; each face's far end meets the next one's start. */
@@ -304,6 +313,8 @@ namespace LandHouse
 			std::vector<Opening> Ops;
 			Look K;
 			uint64_t Key = 1;
+			double NL = 18.0, ND = 8.6; // (a church's part) its nave's length and depth, for where the parts stand against it
+			double AbutZ[4] = { -1e9, -1e9, -1e9, -1e9 }; // (a church's part) how high another part stands against face F: no quoins at its corners below
 			// the roof's hole
 			int HoleSide = 1;
 			double HoleX = 0.0, HoleS = 0.0, HoleRX = 1.3, HoleRS = 1.1;
@@ -328,6 +339,7 @@ namespace LandHouse
 				Fc = { { 0.5 * L, -0.5 * D, 0.0 }, { 0.0, 1.0, 0.0 }, { 1.0, 0.0, 0.0 }, D, true, 1, 0 };
 				break;
 			}
+			if (P.Kind == 5) Fc.bGable = false; // (the church's tower: four walls to its cornice, no gable)
 			return Fc;
 		}
 		/** A point of a face: A along it, Z up, Dd out from its outer plane (in, negative). */
@@ -397,7 +409,7 @@ namespace LandHouse
 		/** The wall's top as built: the long walls' plate, the gables' rake under the deck. */
 		double IntactTop(const Plan& P, const Face& Fc, double A)
 		{
-			if (!Fc.bGable) return P.EW;
+			if (!Fc.bGable || P.Kind == 5) return P.EW;
 			const V3 W = At(Fc, A, 0.0, 0.0);
 			return DeckZ(P, W.Y) - 0.03;
 		}
@@ -680,7 +692,98 @@ namespace LandHouse
 			}
 		}
 
-		Plan MakePlan(const Spec& S)
+		/** The deck of a church's nave's (Kind 3) or chancel's (4) roof, V out from its ridge, D its depth: as MakePlan builds
+		 * them (where one part's roof stands against another's wall). */
+		double ChurchDeck(int Kind, double D, double V)
+		{
+			const double Pitch = 56.0 * Pi / 180.0, Kick = Pitch - 21.0 * Pi / 180.0;
+			const double EW = (Kind == 3 ? 7.5 : 6.2) + 0.12, Vb = 0.5 * D - 0.4, Tan = std::tan(Pitch), TanK = std::tan(Kick);
+			const double Ridge = EW + 0.03 + Vb * Tan + (0.5 * D - Vb) * TanK, Zb = Ridge - Vb * Tan;
+			V = std::fabs(V);
+			return V <= Vb ? Ridge - V * Tan : Zb - (V - Vb) * TanK;
+		}
+		/** The church's chancel's and tower's sizes (LandField's LayChurch): the chancel 7.2 by 6.6 m east of the nave, the
+		 * tower 5.8 m square west of it. */
+		constexpr double ChancelL = 7.2, ChancelD = 6.6, TowerW = 5.8;
+
+		/**
+		 * A church part's openings (MakePlan's, Kind 3 to 5): round-headed, under their voussoirs. The nave's tall windows
+		 * high in its long walls, three a side, its south door toward the west; the chancel's one a side and its east
+		 * window; the tower's west door with a window over it, a slit in each side, two belfry openings in each face under
+		 * its cornice. Where one part's wall stands in front of another's, the one behind is not drawn (OpHidden): the
+		 * nave's west gable behind the tower's east wall, the chancel's west gable inside the nave's east one. (The walls
+		 * that stay run on under the other part's roof, so no stone of theirs stands up through its slates.)
+		 */
+		void ChurchOpenings(Plan& P, Rng& R)
+		{
+			auto Add = [&](int F, double Mid, double Half, double Z0, double Spring, int What) {
+				Opening O;
+				O.Face = F;
+				O.A0 = Mid - Half;
+				O.A1 = Mid + Half;
+				O.Z0 = Z0;
+				O.Arch = Half;
+				O.Z1 = Spring + Half;
+				O.What = What;
+				O.bGlass = What == OpChWin && Half > 0.2; // (the tower's slits open, dark)
+				O.Shutters = 4;
+				P.Ops.push_back(O);
+			};
+			auto Hide = [&](int F, double A0, double A1, double ZTop) {
+				Opening O;
+				O.Face = F;
+				O.A0 = A0;
+				O.A1 = A1;
+				O.Z0 = -P.S.Below - 0.5;
+				O.Z1 = ZTop;
+				O.What = OpHidden;
+				O.bGlass = false;
+				O.bLeaf = false;
+				O.Shutters = 4;
+				P.Ops.push_back(O);
+			};
+			const double L = P.L, D = P.D;
+			if (P.Kind == 3)
+			{
+				// The nave: three tall windows a side, high; its door in the front toward the tower.
+				const double DoorA = 0.67 * L;
+				for (int F : { 0, 2 })
+					for (int K = 0; K < 3; ++K)
+					{
+						const double A = L * (K + 0.5) / 3.0;
+						if (F == 0 && std::fabs(A - DoorA) < 1.4) continue;
+						Add(F, A, 0.42, Snap(P, 2.7), Snap(P, 5.1), OpChWin);
+					}
+				Add(0, DoorA, 0.68, 0.0, Snap(P, 2.55), OpChDoor);
+				Hide(1, 0.5 * D - 0.5 * TowerW - 0.02, 0.5 * D + 0.5 * TowerW + 0.02, P.Ridge + 1.0);
+			}
+			else if (P.Kind == 4)
+			{
+				// The chancel: a window a side, a wider one in its east gable; its west gable inside the nave's.
+				for (int F : { 0, 2 }) Add(F, 0.5 * L, 0.38, Snap(P, 2.5), Snap(P, 4.5), OpChWin);
+				Add(3, 0.5 * D, 0.52, Snap(P, 2.4), Snap(P, 4.5), OpChWin);
+				Hide(1, -0.05, D + 0.05, P.Ridge + 1.0);
+			}
+			else
+			{
+				// The tower: its west door, a window over it; a slit in each side; two belfry openings in each face.
+				Add(1, 0.5 * D, 0.8, 0.0, Snap(P, 2.75), OpChDoor);
+				Add(1, 0.5 * D, 0.3, Snap(P, 5.4), Snap(P, 6.8), OpChWin);
+				for (int F : { 0, 2 }) Add(F, 0.5 * L, 0.16, Snap(P, 8.2), Snap(P, 9.5), OpChWin);
+				for (int F = 0; F < 4; ++F)
+				{
+					const double Len = FaceOf(P, F).Len;
+					for (double T : { 0.32, 0.68 }) Add(F, Len * T, 0.36, Snap(P, P.E - 3.5), Snap(P, P.E - 1.6), OpBelfry);
+				}
+				// (its east wall's corners inside the nave's gable, to where the nave's roof meets them: no quoins there)
+				P.AbutZ[3] = ChurchDeck(3, P.ND, 0.5 * L) - 0.05;
+			}
+			// (a holed nave's blast broke panes on its side)
+			for (Opening& O : P.Ops)
+				if (P.Hurt == 1 && O.What == OpChWin && FaceOf(P, O.Face).Side == P.HoleSide && R.Next() < 0.7) O.Cracked = 1 + R.Below(4);
+		}
+
+		Plan MakePlan(const Spec& S, double NaveL = 18.0, double NaveD = 8.6)
 		{
 			Plan P;
 			P.S = S;
@@ -688,10 +791,12 @@ namespace LandHouse
 			P.L = S.Long;
 			P.D = S.Deep;
 			P.Hurt = std::clamp(S.Hurt, 0, 3);
-			P.Kind = std::clamp(S.Kind, 0, 2);
+			P.Kind = std::clamp(S.Kind, 0, 5);
+			P.NL = NaveL;
+			P.ND = NaveD;
 			Rng R(P.Key ^ 0xFA4A0);
-			// (the barn's and the byre's pitch as LandField builds them, the house's by its roof)
-			const double Pitch = (P.Kind != 0 ? 48.0 : S.Roof == 1 ? 47.0 : 52.0) * Pi / 180.0, Kick = Pitch - 21.0 * Pi / 180.0;
+			// (the barn's and the byre's pitch as LandField builds them, the house's by its roof, the church's steep)
+			const double Pitch = (P.Kind >= 3 ? 56.0 : P.Kind != 0 ? 48.0 : S.Roof == 1 ? 47.0 : 52.0) * Pi / 180.0, Kick = Pitch - 21.0 * Pi / 180.0;
 			P.Tan = std::tan(Pitch);
 			P.TanK = std::tan(Kick);
 			P.SinP = std::sin(Pitch);
@@ -700,8 +805,10 @@ namespace LandHouse
 			P.CosK = std::cos(Kick);
 			// (the eaves as LandField's: the house's storeys and its wall plate; the barn's 5 m, the byre's 3.3 m; the top
 			// floor's boards, the attic's or the hay loft's over the cart doors and the stable doors)
-			P.E = P.Kind == 1 ? 5.0 : P.Kind == 2 ? 3.3 : std::max(1, S.Storeys) * 2.75 + 0.35;
-			P.Loft = P.Kind == 1 ? 3.95 : P.Kind == 2 ? 2.45 : std::max(1, S.Storeys) * 2.75 + 0.1;
+			// (the church's nave 7.5 m to its eaves, its chancel 6.2 m, its tower 17.5 m to its cornice, as LandField's; a
+			// nave's or a chancel's ceiling of boards at its wall plate)
+			P.E = P.Kind == 1 ? 5.0 : P.Kind == 2 ? 3.3 : P.Kind == 3 ? 7.5 : P.Kind == 4 ? 6.2 : P.Kind == 5 ? 17.5 : std::max(1, S.Storeys) * 2.75 + 0.35;
+			P.Loft = P.Kind == 1 ? 3.95 : P.Kind == 2 ? 2.45 : P.Kind >= 3 ? P.E - 0.35 : std::max(1, S.Storeys) * 2.75 + 0.1;
 			P.HS = P.Kind == 1 ? 0.9 : P.Kind == 2 ? 0.6 : 1.0;
 			P.EW = P.E + 0.12;
 			P.Vb = 0.5 * P.D - 0.4;
@@ -711,6 +818,7 @@ namespace LandHouse
 			P.Lk = (0.5 * P.D + P.Over - P.Vb) / P.CosK;
 			P.Lm = P.Vb / P.CosP;
 			P.Ls = P.Lk + P.Lm;
+			if (P.Kind == 5) P.Ridge = P.EW; // (the tower: no roof of its own, its spire on its walls' top)
 			if (S.Roof == 1)
 			{
 				P.Gauge = 0.175;
@@ -747,7 +855,7 @@ namespace LandHouse
 			// Its stone (the art director's round 2): the bocage's own grey-brown schist and granite rubble in a pale lime
 			// mortar, its corners and openings dressed in limestone brought from the Caen plain; or, its second look, that
 			// cream limestone throughout, as the farms toward Caen and the Bessin.
-			P.bLime = Unit(Mix(P.Key ^ 0x11E5)) < 0.35;
+			P.bLime = Unit(Mix(P.Key ^ 0x11E5)) < (P.Kind >= 3 ? 0.55 : 0.35);
 			const double Tone = R.Range(0.93, 1.05), Warm = R.Range(-0.03, 0.04);
 			if (P.bLime)
 			{
@@ -770,6 +878,7 @@ namespace LandHouse
 			// (its door: oak weathered grey-brown, the shutters' old paint, or an ox-blood red)
 			const double DoorPaint = R.Next();
 			K.Door = DoorPaint < 0.45 ? Rgb(146, 128, 104) : DoorPaint < 0.75 ? Mixed(K.Shutter, Rgb(150, 142, 126), 0.2) : Rgb(132, 72, 58);
+			if (P.Kind >= 3) K.Door = DoorPaint < 0.6 ? Rgb(118, 100, 80) : Rgb(112, 60, 50); // (a church's oak, or its ox-blood)
 			K.Frame = R.Next() < 0.6 ? Rgb(184, 180, 168) : Mixed(K.Shutter, Rgb(184, 180, 168), 0.3);
 			// (the art director's barn round 2: silvered oak, grey and only a little warm, not new pine)
 			K.Oak = Varied(Rgb(124, 118, 112), 0.95 + 0.1 * Unit(Mix(P.Key ^ 0x0A4)), 0.0);
@@ -793,6 +902,12 @@ namespace LandHouse
 				K.Wall = Scaled(Mixed(Sum, K.Mortar, WallMortar), WallFar);
 			}
 			K.Soot = Rgb(40, 36, 33);
+			// (a church's three parts share their look; each lays its own stones, by its own key, from here)
+			if (P.Kind >= 3)
+			{
+				P.Key = Hash(P.Key, 0xC40 + static_cast<uint64_t>(P.Kind));
+				R = Rng(P.Key ^ 0xFA4A1);
+			}
 			// Its chimneys: both gables, or one.
 			if (R.Next() < 0.3) P.bChimney[R.Below(2)] = false;
 			// The damage's side.
@@ -805,11 +920,8 @@ namespace LandHouse
 				P.bChimney[P.Keep > 0 ? 0 : 1] = false;
 			}
 			// (a barn and a byre: no chimney, no plaster inside, their rubble bare; their stone a shade rougher than the house's)
-			if (P.Kind != 0)
-			{
-				P.bChimney[0] = P.bChimney[1] = false;
-				K.Plaster = Mixed(Mixed(K.Mortar, K.StoneMean, 0.5), Rgb(92, 86, 76), 0.35);
-			}
+			if (P.Kind != 0) P.bChimney[0] = P.bChimney[1] = false;
+			if (P.Kind == 1 || P.Kind == 2) K.Plaster = Mixed(Mixed(K.Mortar, K.StoneMean, 0.5), Rgb(92, 86, 76), 0.35);
 			P.HoleSide = R.Next() < 0.5 ? -1 : 1;
 			P.HoleX = R.Range(-0.5 * P.L + 2.6, 0.5 * P.L - 2.6);
 			P.HoleS = R.Range(0.38, 0.62) * P.Ls;
@@ -819,7 +931,8 @@ namespace LandHouse
 			// The openings: the front in bays, windows over windows, the door in one of the middle bays; the back with
 			// fewer; a gable without a chimney a small attic window, one with a ground-floor window. (A barn's and a byre's
 			// their own.)
-			if (P.Kind != 0) BarnOpenings(P, R);
+			if (P.Kind == 1 || P.Kind == 2) BarnOpenings(P, R);
+			else if (P.Kind >= 3) ChurchOpenings(P, R);
 			const int Storeys = std::max(1, S.Storeys);
 			const double GZ0 = Snap(P, 0.95), GZ1 = Snap(P, 2.3);
 			const double DZ1 = Snap(P, 2.65);
@@ -1019,6 +1132,14 @@ namespace LandHouse
 		Col StoneOwn(const Plan& P, uint64_t H)
 		{
 			const double U = Unit(Mix(H ^ 0x5A));
+			// (a church's tower: dressed limestone ashlar, each block its own, a few warmer or greyer)
+			if (P.Kind == 5)
+			{
+				Col C = Varied(P.K.Dressed, 0.87 + 0.15 * Unit(H), (Unit(Mix(H)) - 0.5) * 0.05);
+				if (U < 0.1) C = Mixed(C, Rgb(168, 150, 120), 0.35);
+				else if (U < 0.18) C = Mixed(C, Rgb(150, 150, 146), 0.35);
+				return C;
+			}
 			if (P.bLime)
 			{
 				Col C = Varied(P.K.Stone, 0.84 + 0.28 * Unit(H), (Unit(Mix(H)) - 0.5) * 0.08);
@@ -1103,6 +1224,26 @@ namespace LandHouse
 			for (int K = 0; K < 4; ++K) B.Tri(IM, IC[K], IC[(K + 1) % 4], Fc.N);
 		}
 
+		/** An ashlar block (a church's tower): A0 to A1, Z0 to Z1, its face nearly flat, a little proud of thin joints, its
+		 * corners square; its middle swelling a few millimetres so the low sun still finds it. */
+		void Ashlar(Pen& B, const Plan& P, const Face& Fc, int F, double A0, double A1, double Z0, double Z1, uint64_t H)
+		{
+			const double J = 0.006;
+			const Col Own = StoneOwn(P, H);
+			const double MA = 0.5 * (A0 + A1) + (Unit(Mix(H ^ 1)) - 0.5) * 0.2 * (A1 - A0), MZ = 0.5 * (Z0 + Z1) + (Unit(Mix(H ^ 2)) - 0.5) * 0.2 * (Z1 - Z0);
+			const V3 Mid = At(Fc, MA, MZ, 0.008 + 0.004 * Unit(Mix(H ^ 3)));
+			const uint32_t IM = B.Vert(Mid, Fc.N, Scaled(Weathered(P, Fc, F, MA, MZ, Own, true), 1.01));
+			const double CA[4] = { A0 + J, A1 - J, A1 - J, A0 + J }, CZ[4] = { Z0 + J, Z0 + J, Z1 - J, Z1 - J };
+			uint32_t IC[4];
+			for (int K = 0; K < 4; ++K)
+			{
+				const V3 C = At(Fc, CA[K], CZ[K], 0.003);
+				const V3 Lean = Norm(C - Mid - Fc.N * Dot(C - Mid, Fc.N));
+				IC[K] = B.Vert(C, Norm(Fc.N * 0.97 + Lean * 0.16), Scaled(Weathered(P, Fc, F, CA[K], CZ[K], Own, true), 0.95));
+			}
+			for (int K = 0; K < 4; ++K) B.Tri(IM, IC[K], IC[(K + 1) % 4], Fc.N);
+		}
+
 		/** The quoins' length on a face at a corner: long and short in turn up the corner, the two faces opposite. */
 		double QuoinLen(const Plan& P, int Corner, size_t Course, bool bEnding)
 		{
@@ -1123,21 +1264,62 @@ namespace LandHouse
 			return Varied(Oak, 0.9 + 0.14 * Noise01(A / 0.35, 3.0, P.Key ^ 0x0A7), 0.0);
 		}
 
-		/** What is dressed in course I of a face, from and to along it: its quoins, and its openings' jambs and lintels. */
-		std::vector<std::pair<double, double>> DressedIn(const Plan& P, const Face& Fc, int F, size_t I)
+		/** Whether a place on face F is behind another part's wall (a church's: OpHidden), Z0 to Z1 up it. */
+		bool HiddenAt(const Plan& P, int F, double A, double Z0, double Z1)
+		{
+			const double ZM = 0.5 * (Z0 + Z1);
+			for (const Opening& O : P.Ops)
+				if (O.What == OpHidden && O.Face == F && A > O.A0 && A < O.A1 && ZM > O.Z0 && ZM < O.Z1) return true;
+			return false;
+		}
+		/** Whether a corner of face F (its start, or its end) is hidden or stands against another part, Z0 to Z1 up it: no
+		 * quoins there. */
+		bool CornerHid(const Plan& P, int F, bool bEnd, double Z0, double Z1)
+		{
+			if (P.Kind < 3) return false;
+			const int G = bEnd ? (F + 1) % 4 : (F + 3) % 4; // (the face round the corner)
+			const double ZM = 0.5 * (Z0 + Z1);
+			if (P.AbutZ[F] > ZM || P.AbutZ[G] > ZM) return true;
+			const double LF = FaceOf(P, F).Len, LG = FaceOf(P, G).Len;
+			return HiddenAt(P, F, bEnd ? LF - 0.05 : 0.05, Z0, Z1) || HiddenAt(P, G, bEnd ? 0.05 : LG - 0.05, Z0, Z1);
+		}
+		/** The outer edge of what is dressed round a round head: its voussoirs' ring, and a door's hood mould over that. */
+		double ExtradosOf(const Opening& O) { return 0.5 * (O.A1 - O.A0) + RingOf(O) + (O.What == OpChDoor ? 0.15 : 0.0); }
+
+		/**
+		 * What is dressed in course I of a face, from and to along it: its quoins, and its openings' jambs and lintels; a
+		 * round head's jambs to its springing, then (near) the course's chord of its voussoirs' ring, laid by OpeningNear.
+		 * Near, also the stretches behind another part's wall (no stone laid there).
+		 */
+		std::vector<std::pair<double, double>> DressedIn(const Plan& P, const Face& Fc, int F, size_t I, bool bNear = true)
 		{
 			const int CornerStart = (F + 3) % 4, CornerEnd = F;
 			std::vector<std::pair<double, double>> Res;
 			const double Z0 = P.Course[I], Z1 = P.Course[I + 1];
 			if (Z1 <= P.EW + 1e-6)
 			{
-				Res.push_back({ -1.0, QuoinLen(P, CornerStart, I, false) });
-				Res.push_back({ Fc.Len - QuoinLen(P, CornerEnd, I, true), Fc.Len + 1.0 });
+				if (!CornerHid(P, F, false, Z0, Z1)) Res.push_back({ -1.0, QuoinLen(P, CornerStart, I, false) });
+				if (!CornerHid(P, F, true, Z0, Z1)) Res.push_back({ Fc.Len - QuoinLen(P, CornerEnd, I, true), Fc.Len + 1.0 });
 			}
 			for (const Opening& O : P.Ops)
 			{
 				if (O.Face != F) continue;
-				if (Z0 >= O.Z0 - 1e-6 && Z1 <= O.Z1 + 1e-6) Res.push_back({ O.A0 - JambLen(P, I, -1), O.A1 + JambLen(P, I, 1) });
+				if (O.What == OpHidden)
+				{
+					if (bNear && Z1 > O.Z0 + 1e-6 && Z0 < O.Z1 - 1e-6) Res.push_back({ O.A0, O.A1 });
+					continue;
+				}
+				const double SP = SpringOf(O);
+				if (Z0 >= O.Z0 - 1e-6 && Z1 <= SP + 1e-6) Res.push_back({ O.A0 - JambLen(P, I, -1), O.A1 + JambLen(P, I, 1) });
+				else if (O.Arch > 0.0)
+				{
+					const double R2 = ExtradosOf(O), Lo = std::max(Z0, SP) - SP;
+					if (bNear && Z0 >= SP - 1e-6 && Lo < R2)
+					{
+						const double HW = std::sqrt(R2 * R2 - Lo * Lo) + 0.02, AM = 0.5 * (O.A0 + O.A1);
+						Res.push_back({ AM - HW, AM + HW });
+					}
+				}
 				else if (std::fabs(Z0 - O.Z1) < 1e-6) Res.push_back({ O.A0 - LintelOf(O), O.A1 + LintelOf(O) });
 			}
 			return Res;
@@ -1239,6 +1421,8 @@ namespace LandHouse
 		 * leaves, bars or dark, through the wall where their inside is drawn (a gable fallen, a shell). */
 		double RevealOf(const Plan& P, const Opening& O, bool bInside)
 		{
+			// (a church's: its door's leaves well back under the arch, its glass deep in the wall, its belfry's louvres)
+			if (O.What >= OpHidden) return O.What == OpChDoor ? 0.2 : O.What == OpBelfry ? 0.3 : O.What == OpChWin ? 0.26 : 0.0;
 			if (O.What >= OpCart)
 			{
 				if (bInside && P.Hurt >= 2) return P.Thick;
@@ -1391,6 +1575,16 @@ namespace LandHouse
 							A = NextEdge(A);
 							continue;
 						}
+						// (a church's tower: ashlar, in courses as regular as its quarry gave them)
+						if (P.Kind == 5)
+						{
+							double Ln = R.Range(0.5, 0.95);
+							if (F1 - A - Ln < 0.25) Ln = F1 - A;
+							if (Ln > 1.2) Ln = 0.5 * (F1 - A);
+							Ashlar(B, P, Fc, F, A, A + Ln, Z0, Z1, Hash(P.Key ^ 0x570E, static_cast<uint64_t>(F * 4096) + I, static_cast<uint64_t>(std::llround(A * 100.0))));
+							A += Ln;
+							continue;
+						}
 						const double Kind = R.Next();
 						double Ln = Kind < 0.05 ? R.Range(0.7, 0.95) : Kind < 0.13 ? R.Range(0.26, 0.48) : Kind < 0.5 ? R.Range(0.3, 0.72) : 0.13 + 0.47 * std::pow(R.Next(), 1.3);
 						if (F1 - A - Ln < 0.14) Ln = F1 - A;
@@ -1488,13 +1682,13 @@ namespace LandHouse
 				const uint64_t H = Hash(P.Key, 0x0C0, I * 4 + static_cast<uint64_t>(F));
 				const Col C0 = Weathered(P, Fc, F, 0.2, Z0, Varied(P.K.Dressed, 0.94 + 0.1 * Unit(H), 0.0));
 				const Col C1 = Weathered(P, Fc, F, Fc.Len - 0.2, Z0, Varied(P.K.Dressed, 0.94 + 0.1 * Unit(Mix(H)), 0.0));
-				if (Z1 <= Top(0.02) + 1e-6) Block(B, Fc, -0.018, Q0 - 0.008, Z0 + 0.005, Z1 - 0.005, 0.018, C0);
-				if (Z1 <= Top(Fc.Len - 0.02) + 1e-6) Block(B, Fc, Fc.Len - Q1 + 0.008, Fc.Len + 0.018, Z0 + 0.005, Z1 - 0.005, 0.018, C1);
+				if (Z1 <= Top(0.02) + 1e-6 && !CornerHid(P, F, false, Z0, Z1)) Block(B, Fc, -0.018, Q0 - 0.008, Z0 + 0.005, Z1 - 0.005, 0.018, C0);
+				if (Z1 <= Top(Fc.Len - 0.02) + 1e-6 && !CornerHid(P, F, true, Z0, Z1)) Block(B, Fc, Fc.Len - Q1 + 0.008, Fc.Len + 0.018, Z0 + 0.005, Z1 - 0.005, 0.018, C1);
 			}
 			// The openings' dressed jambs, lintels and sills.
 			for (const Opening& O : P.Ops)
 			{
-				if (O.Face != F) continue;
+				if (O.Face != F || O.What == OpHidden) continue;
 				const double TopHere = std::min(Top(O.A0 - 0.2), Top(O.A1 + 0.2));
 				for (size_t I = 0; I + 1 < P.Course.size(); ++I)
 				{
@@ -1502,12 +1696,12 @@ namespace LandHouse
 					if (Z1 > TopHere + 1e-6) break;
 					const uint64_t H = Hash(P.Key, 0x1A, I * 64 + static_cast<uint64_t>(std::llround(O.A0 * 10.0)));
 					const Col C = Varied(P.K.Dressed, 0.95 + 0.09 * Unit(H), 0.0);
-					if (Z0 >= O.Z0 - 1e-6 && Z1 <= O.Z1 + 1e-6)
+					if (Z0 >= O.Z0 - 1e-6 && Z1 <= SpringOf(O) + 1e-6)
 					{
 						Block(B, Fc, O.A0 - JambLen(P, I, -1) + 0.008, O.A0, Z0 + 0.005, Z1 - 0.005, 0.016, Weathered(P, Fc, F, O.A0 - 0.15, Z0, C));
 						Block(B, Fc, O.A1, O.A1 + JambLen(P, I, 1) - 0.008, Z0 + 0.005, Z1 - 0.005, 0.016, Weathered(P, Fc, F, O.A1 + 0.15, Z0, Varied(C, 1.02, 0.0)));
 					}
-					else if (std::fabs(Z0 - O.Z1) < 1e-6)
+					else if (std::fabs(Z0 - O.Z1) < 1e-6 && O.Arch <= 0.0) // (a round head's voussoirs: OpeningNear's)
 					{
 						const Col LC = Weathered(P, Fc, F, 0.5 * (O.A0 + O.A1), Z0, C);
 						if (O.What == 1)
@@ -1635,7 +1829,7 @@ namespace LandHouse
 							}
 							else if (P.Hurt == 2) C = Mixed(C, P.K.Soot, 0.25 * Noise01(A / 0.8, Z / 0.6, P.Key ^ 0x9C));
 							// (a barn's or a byre's: not plaster but its bare rubble's mortar, the stones laid over it by InnerRubble)
-							if (P.Kind != 0) C = Scaled(C, 0.8);
+							if (P.Kind == 1 || P.Kind == 2) C = Scaled(C, 0.8);
 							return Mixed(C, Rgb(70, 66, 58), 0.4 * Smooth(0.8, 0.0, Z));
 						};
 						Cut(B, Fc, A0, A1, IZ0, Z1, L0, L1, -P.Thick, Fc.N * -1.0, PC);
@@ -1660,7 +1854,7 @@ namespace LandHouse
 				}
 			}
 			// A barn's or a byre's inside: its rubble bare, stone by stone.
-			if (bInside && P.Kind != 0) InnerRubble(B, P, F, InnerFrom);
+			if (bInside && (P.Kind == 1 || P.Kind == 2)) InnerRubble(B, P, F, InnerFrom);
 			// A shell's inside: its plaster fallen away in patches, the rubble behind it showing, sooted (the art director's
 			// round 3: not flat, clean plaster like card).
 			if (bInside && P.Hurt == 3 && P.Kind == 0)
@@ -1725,14 +1919,19 @@ namespace LandHouse
 			}
 			// The plinth: a projecting band of larger, darker stone at the foot, its top weathered back, cut by the door.
 			{
-				std::vector<std::pair<double, double>> Runs{ { -0.05, Fc.Len + 0.05 } };
+				// (its runs between the doors, and round what stands behind another part's wall)
+				std::vector<std::pair<double, double>> Cuts;
 				for (const Opening& O : P.Ops)
-					if (O.Face == F && Grounded(O.What))
-					{
-						const double E1 = Runs.back().second;
-						Runs.back().second = O.A0;
-						Runs.push_back({ O.A1, E1 });
-					}
+					if (O.Face == F && Grounded(O.What)) Cuts.push_back({ O.A0, O.A1 });
+				std::sort(Cuts.begin(), Cuts.end());
+				std::vector<std::pair<double, double>> Runs;
+				double RunFrom = -0.05;
+				for (const auto& [C0, C1] : Cuts)
+				{
+					if (C0 > RunFrom + 1e-6) Runs.push_back({ RunFrom, C0 });
+					RunFrom = std::max(RunFrom, C1);
+				}
+				if (RunFrom < Fc.Len + 0.05 - 1e-6) Runs.push_back({ RunFrom, Fc.Len + 0.05 });
 				for (const auto& [R0, R1] : Runs)
 				{
 					for (double A = R0; A < R1 - 1e-6; A += 1.2)
@@ -1749,7 +1948,7 @@ namespace LandHouse
 				}
 			}
 			// Iron anchors where the floor's beams are tied through the wall: an X at each end of the long walls.
-			if (!Fc.bGable)
+			if (!Fc.bGable && P.Kind < 3)
 				for (double A : { 0.85, Fc.Len - 0.85 })
 				{
 					const double Z = P.Kind != 0 ? P.Loft - 0.15 : std::max(1, P.S.Storeys) > 1 ? 2.75 : 1.9;
@@ -2327,6 +2526,189 @@ namespace LandHouse
 			}
 		}
 
+		// ------------------------------------------------------------------ a church's round-headed openings
+
+		/** A round head's point: R out from its centre (AM along the face, SP up it, its springing) at angle T (0 toward A1,
+		 * Pi toward A0), D out from the face. */
+		V3 ArcAt(const Face& Fc, double AM, double SP, double R, double T, double D) { return At(Fc, AM + R * std::cos(T), SP + R * std::sin(T), D); }
+
+		/**
+		 * A round head's ring of dressed stone: wedges from R0 to R1 about its centre, an odd number of them so one is its
+		 * key, each its own tone and weathered as the wall, their joints radial and dark, Proud out from the wall, their
+		 * arrises chamfered; the mortar behind them where the opening's square runs up behind the ring (bBacking).
+		 */
+		void ArchRing(Pen& B, const Plan& P, const Face& Fc, int F, double AM, double SP, double R0, double R1, double Proud, uint64_t H, double Step, bool bBacking)
+		{
+			const double RM = 0.5 * (R0 + R1);
+			int N = std::max(5, static_cast<int>(std::lround(Pi * RM / Step)));
+			if (N % 2 == 0) ++N;
+			const double G = 0.006 / RM, Ch = std::min(0.012, 0.25 * Proud + 0.004);
+			if (bBacking)
+				for (int K = 0; K < N; ++K)
+				{
+					const double T0 = Pi * K / N, T1 = Pi * (K + 1) / N;
+					B.Quad1(ArcAt(Fc, AM, SP, R0, T0, -0.003), ArcAt(Fc, AM, SP, R0, T1, -0.003), ArcAt(Fc, AM, SP, R1, T1, -0.003), ArcAt(Fc, AM, SP, R1, T0, -0.003), Scaled(P.K.Mortar, 0.72), Fc.N);
+				}
+			for (int K = 0; K < N; ++K)
+			{
+				const double T0 = Pi * K / N + G, T1 = Pi * (K + 1) / N - G, TM = 0.5 * (T0 + T1);
+				const uint64_t HK = Hash(H, 0xA2C, static_cast<uint64_t>(K));
+				const Col C = Weathered(P, Fc, F, AM + RM * std::cos(TM), SP + RM * std::sin(TM), Varied(P.K.Dressed, 0.93 + 0.11 * Unit(HK), 0.0));
+				const double I0 = R0 + 0.004, O0 = R1 - 0.004;
+				const V3 B0 = ArcAt(Fc, AM, SP, I0, T0, 0.004), B1 = ArcAt(Fc, AM, SP, I0, T1, 0.004), B2 = ArcAt(Fc, AM, SP, O0, T1, 0.004), B3 = ArcAt(Fc, AM, SP, O0, T0, 0.004);
+				const V3 F0 = ArcAt(Fc, AM, SP, I0 + Ch, T0 + Ch / I0, Proud), F1 = ArcAt(Fc, AM, SP, I0 + Ch, T1 - Ch / I0, Proud);
+				const V3 F2 = ArcAt(Fc, AM, SP, O0 - Ch, T1 - Ch / O0, Proud), F3 = ArcAt(Fc, AM, SP, O0 - Ch, T0 + Ch / O0, Proud);
+				const V3 Rad = Fc.T * std::cos(TM) + Up * std::sin(TM);
+				const V3 Tan0 = Fc.T * -std::sin(T0) + Up * std::cos(T0), Tan1 = Fc.T * -std::sin(T1) + Up * std::cos(T1);
+				B.Quad1(F0, F1, F2, F3, C, Fc.N);
+				B.Quad1(B0, B1, F1, F0, Scaled(C, 0.8), Fc.N * 0.5 - Rad);
+				B.Quad1(B3, B2, F2, F3, Scaled(C, 1.02), Fc.N * 0.5 + Rad);
+				B.Quad1(B0, B3, F3, F0, Scaled(C, 0.9), Fc.N * 0.5 - Tan0);
+				B.Quad1(B1, B2, F2, F1, Scaled(C, 0.9), Fc.N * 0.5 + Tan1);
+			}
+		}
+
+		/** A round-headed opening's reveal: its sides up to the springing, its soffit round under the head, Dp deep; Segs
+		 * pieces round. */
+		void ArchReveal(Pen& B, const Plan& P, const Face& Fc, const Opening& O, double Dp, int Segs)
+		{
+			const double AM = 0.5 * (O.A0 + O.A1), SP = SpringOf(O), R = 0.5 * (O.A1 - O.A0);
+			const Col Rev = Varied(P.K.Dressed, 0.9, 0.0);
+			B.Quad1(At(Fc, O.A0, O.Z0, 0.0), At(Fc, O.A0, O.Z0, -Dp), At(Fc, O.A0, SP, -Dp), At(Fc, O.A0, SP, 0.0), Scaled(Rev, 0.95), Fc.T);
+			B.Quad1(At(Fc, O.A1, O.Z0, 0.0), At(Fc, O.A1, O.Z0, -Dp), At(Fc, O.A1, SP, -Dp), At(Fc, O.A1, SP, 0.0), Scaled(Rev, 0.95), Fc.T * -1.0);
+			for (int I = 0; I < Segs; ++I)
+			{
+				const double T0 = Pi * I / Segs, T1 = Pi * (I + 1) / Segs, TM = 0.5 * (T0 + T1);
+				const V3 In = (Fc.T * std::cos(TM) + Up * std::sin(TM)) * -1.0;
+				// (darker under its crown, where the sky does not reach)
+				const Col C = Scaled(Rev, 0.7 + 0.22 * Sq(std::cos(TM)));
+				B.Quad1(ArcAt(Fc, AM, SP, R, T0, 0.0), ArcAt(Fc, AM, SP, R, T1, 0.0), ArcAt(Fc, AM, SP, R, T1, -Dp), ArcAt(Fc, AM, SP, R, T0, -Dp), C, In);
+			}
+		}
+
+		/** A round-headed opening's shape filled flat at D (out from the face): its square to the springing, coloured C at
+		 * its foot and CT at the springing, and its half-disc over that in CT. */
+		void ArchFill(Pen& B, const Face& Fc, const Opening& O, double D, const Col& C, const Col& CT, int Fan = 8)
+		{
+			const double AM = 0.5 * (O.A0 + O.A1), SP = SpringOf(O), R = 0.5 * (O.A1 - O.A0);
+			B.Quad(At(Fc, O.A0, O.Z0, D), At(Fc, O.A1, O.Z0, D), At(Fc, O.A1, SP, D), At(Fc, O.A0, SP, D), C, C, CT, CT, Fc.N);
+			const V3 M = At(Fc, AM, SP, D);
+			for (int I = 0; I < Fan; ++I) B.Tri1(M, ArcAt(Fc, AM, SP, R, Pi * I / Fan, D), ArcAt(Fc, AM, SP, R, Pi * (I + 1) / Fan, D), CT, Fc.N);
+		}
+
+		/**
+		 * A church's opening, near (OpChWin, OpChDoor, OpBelfry): its reveal and soffit, its ring of voussoirs; a window's
+		 * leaded glass, quarry by quarry, each pane's old glass its own tint with the sky in it, its iron saddle bars; the
+		 * door's two oak leaves of upright planks cut to the arch, their long iron straps, its hood mould and label stops,
+		 * its threshold and step; the belfry's louvres sloping out over the dark.
+		 */
+		void ChurchOpeningNear(Pen& B, const Plan& P, const Opening& O, const Face& Fc, double Dp, uint64_t H)
+		{
+			const int F = O.Face;
+			const double AM = 0.5 * (O.A0 + O.A1), SP = SpringOf(O), R = 0.5 * (O.A1 - O.A0), W = O.A1 - O.A0;
+			const double Ring = RingOf(O);
+			ArchReveal(B, P, Fc, O, Dp, 12);
+			ArchRing(B, P, Fc, F, AM, SP, R, R + Ring, 0.016, H, 0.24, true);
+			if (O.What == OpChDoor)
+			{
+				// The hood mould over its ring, a narrow roll of stone, ending in a block either side at the springing.
+				ArchRing(B, P, Fc, F, AM, SP, R + Ring + 0.015, R + Ring + 0.135, 0.05, H ^ 0x400D, 0.34, false);
+				for (int S = -1; S <= 1; S += 2)
+				{
+					const double A = AM + S * (R + Ring + 0.075);
+					Block(B, Fc, A - 0.09, A + 0.09, SP - 0.2, SP + 0.01, 0.055, Weathered(P, Fc, F, A, SP, Varied(P.K.Dressed, 0.96, 0.0)));
+				}
+				// The threshold, worn, and the step down to the churchyard's path.
+				B.Quad1(At(Fc, O.A0, 0.02, 0.05), At(Fc, O.A1, 0.02, 0.05), At(Fc, O.A1, 0.02, -Dp), At(Fc, O.A0, 0.02, -Dp), Varied(P.K.Dressed, 0.8, 0.0), Up);
+				B.Box(At(Fc, AM, -0.6, 0.34), Fc.T * (0.5 * W + 0.32), Fc.N * 0.29, Up * 0.44, Weathered(P, Fc, F, AM, 0.0, Varied(P.K.Dressed, 0.86, 0.0)), 0);
+				// The leaves: dark behind; upright oak planks, each cut to the arch over it, the joints and the meeting
+				// stiles dark between them.
+				const Col Dark = Scaled(P.K.Door, 0.3);
+				ArchFill(B, Fc, O, -Dp - 0.012, Dark, Dark);
+				const int NP = std::max(6, 2 * static_cast<int>(std::lround(0.5 * W / 0.16)));
+				auto TopAt3 = [&](double A) { return SP + std::sqrt(std::max(0.0, R * R - Sq(A - AM))) - 0.015; };
+				for (int K = 0; K < NP; ++K)
+				{
+					const double Gap0 = K == NP / 2 ? 0.009 : 0.004, Gap1 = K + 1 == NP / 2 ? 0.009 : 0.004;
+					const double A0 = O.A0 + W * K / NP + Gap0, A1 = O.A0 + W * (K + 1) / NP - Gap1;
+					const uint64_t PH = Mix(H + 0x9A0 + static_cast<uint64_t>(K));
+					const Col C = Varied(P.K.Door, 0.86 + 0.24 * Unit(PH), 0.0);
+					B.Quad(At(Fc, A0, 0.03, -Dp), At(Fc, A1, 0.03, -Dp), At(Fc, A1, TopAt3(A1), -Dp), At(Fc, A0, TopAt3(A0), -Dp), Scaled(C, 0.8), Scaled(C, 0.8), C, C, Fc.N);
+				}
+				// (each leaf's long iron straps from its hinges, ending in a split curl; a ring at the meeting stiles)
+				for (int S = -1; S <= 1; S += 2)
+				{
+					const double HA = S < 0 ? O.A0 + 0.03 : O.A1 - 0.03, LW = 0.5 * W - 0.05;
+					for (double Z : { 0.42, 0.5 * (0.42 + SP - 0.2), SP - 0.2 })
+					{
+						const double EA = HA - S * 0.78 * LW;
+						B.Box(At(Fc, 0.5 * (HA + EA), Z, -Dp + 0.007), Fc.T * (0.39 * LW), Up * 0.024, Fc.N * 0.005, P.K.Iron, 16);
+						const V3 C = At(Fc, EA, Z, -Dp + 0.007);
+						const V3 DA = Norm(Fc.T + Up) * 0.05, DB = Norm(Fc.T - Up) * 0.05;
+						B.Box(C, DA, DB, Fc.N * 0.005, P.K.Iron, 16);
+						// (a nail head at the hinge's end)
+						B.Box(At(Fc, HA - S * 0.04, Z, -Dp + 0.012), Fc.T * 0.018, Up * 0.018, Fc.N * 0.006, Scaled(P.K.Iron, 0.8), 16);
+					}
+				}
+				B.Tube(At(Fc, AM + 0.09, 1.05, -Dp + 0.02), At(Fc, AM + 0.09, 1.05, -Dp + 0.03), 0.07, 0.07, 8, P.K.Iron, true, false);
+				return;
+			}
+			if (O.What == OpBelfry)
+			{
+				// The dark of the bell chamber, and its louvres: boards sloping down and out, round to the arch.
+				ArchFill(B, Fc, O, -Dp, Rgb(14, 13, 12), Rgb(12, 11, 11));
+				const double Ang = 0.62;
+				const V3 Dir = Norm(Fc.N * std::cos(Ang) - Up * std::sin(Ang)), Th = Norm(Cross(Fc.T, Dir));
+				int K = 0;
+				for (double Z = O.Z0 + 0.16; Z < O.Z1 - 0.08; Z += 0.21, ++K)
+				{
+					const double HW = Z <= SP ? 0.5 * W - 0.01 : std::sqrt(std::max(0.0, R * R - Sq(Z - SP))) - 0.02;
+					if (HW < 0.08) break;
+					B.Box(At(Fc, AM, Z, -0.5 * Dp), Fc.T * HW, Dir * 0.105, Th * 0.012, Varied(Rgb(96, 90, 82), 0.88 + 0.2 * Unit(Mix(H + static_cast<uint64_t>(K))), 0.0), 0);
+				}
+				return;
+			}
+			// A window: the lead behind, its quarries, each pane's glass its own; its saddle bars. (A slit: open, dark.)
+			ArchFill(B, Fc, O, -Dp - 0.004, O.bGlass ? Rgb(34, 33, 34) : Rgb(14, 13, 12), O.bGlass ? Rgb(34, 33, 34) : Rgb(12, 11, 11), 8);
+			if (!O.bGlass) return;
+			const int NC = std::max(2, static_cast<int>(std::lround(W / 0.17)));
+			const int NR = std::max(2, static_cast<int>(std::lround((SP - O.Z0) / 0.21)));
+			const int NF = std::max(1, static_cast<int>(std::lround(R / 0.19)));
+			const double E = 0.007, Hi = O.Z1 - O.Z0;
+			auto Glass = [&](double Z, uint64_t PH) {
+				const double M = 0.12 + 0.22 * Unit(PH) + 0.12 * (Z - O.Z0) / Hi;
+				Col G = Varied(Mixed(P.K.Glass, P.K.Sky, M), 1.0, (Unit(Mix(PH)) - 0.5) * 0.14);
+				if (static_cast<int>(Unit(Mix(PH ^ 0xC4)) * 8.0) < O.Cracked) G = Rgb(16, 15, 14);
+				return G;
+			};
+			for (int J = 0; J < NR + NF; ++J)
+			{
+				const bool bFan = J >= NR;
+				const double Z0 = bFan ? SP + R * (J - NR) / NF : O.Z0 + (SP - O.Z0) * J / NR;
+				const double Z1 = bFan ? SP + R * (J - NR + 1) / NF : O.Z0 + (SP - O.Z0) * (J + 1) / NR;
+				const double HW0 = bFan ? std::sqrt(std::max(0.0, R * R - Sq(Z0 + E - SP))) - E : 1e9;
+				const double HW1 = bFan ? std::sqrt(std::max(0.0, R * R - Sq(Z1 - E - SP))) - E : 1e9;
+				for (int I = 0; I < NC; ++I)
+				{
+					const double A0 = O.A0 + W * I / NC + E, A1 = O.A0 + W * (I + 1) / NC - E;
+					const double BA0 = std::max(A0, AM - HW0), BA1 = std::min(A1, AM + HW0);
+					double TA0 = std::max(A0, AM - HW1), TA1 = std::min(A1, AM + HW1);
+					if (BA1 - BA0 < 0.015) continue;
+					const uint64_t PH = Hash(H ^ 0x61A55, static_cast<uint64_t>(J), static_cast<uint64_t>(I));
+					const Col G0 = Glass(Z0, PH), G1 = Glass(Z1, PH ^ 1);
+					const V3 Q0 = At(Fc, BA0, Z0 + E, -Dp), Q1 = At(Fc, BA1, Z0 + E, -Dp);
+					if (TA1 - TA0 < 0.01)
+					{
+						B.Tri1(Q0, Q1, At(Fc, std::clamp(0.5 * (TA0 + TA1), BA0, BA1), Z1 - E, -Dp), G0, Fc.N);
+						continue;
+					}
+					B.Quad(Q0, Q1, At(Fc, TA1, Z1 - E, -Dp), At(Fc, TA0, Z1 - E, -Dp), Scaled(G0, 0.94), Scaled(G0, 0.94), G1, G1, Fc.N);
+				}
+			}
+			for (double T : { 1.0 / 3.0, 2.0 / 3.0 })
+				B.Box(At(Fc, AM, O.Z0 + (SP - O.Z0) * T, -Dp + 0.011), Fc.T * (0.5 * W + 0.012), Up * 0.009, Fc.N * 0.009, P.K.Iron, 0);
+		}
+
 		/** A window's frame and two casements with their glazing bars and panes, its shutters; or the door, its fanlight
 		 * and its step. Then the reveal round it. */
 		void OpeningNear(Pen& B, const Plan& P, const Opening& O, bool bInside)
@@ -2336,6 +2718,11 @@ namespace LandHouse
 			const double TopHere = std::min(TopOf(P, Fc, F, O.A0 - 0.1), TopOf(P, Fc, F, O.A1 + 0.1));
 			const double Z1 = std::min(O.Z1, TopHere);
 			const double Dp = RevealOf(P, O, bInside);
+			if (O.What >= OpHidden)
+			{
+				if (O.What != OpHidden) ChurchOpeningNear(B, P, O, Fc, Dp, Hash(P.Key, 0x0BE, static_cast<uint64_t>(F * 1000) + static_cast<uint64_t>(std::llround(O.A0 * 20.0))));
+				return;
+			}
 			const Col Rev = Varied(P.K.Dressed, 0.9, 0.0);
 			// The reveal: its sides, its head (a door's floor is its threshold).
 			B.Quad1(At(Fc, O.A0, O.Z0, 0.0), At(Fc, O.A0, O.Z0, -Dp), At(Fc, O.A0, Z1, -Dp), At(Fc, O.A0, Z1, 0.0), Scaled(Rev, 0.95), Fc.T);
@@ -3024,7 +3411,7 @@ namespace LandHouse
 				Floor(P.Loft, true);
 			}
 			// (hay on a barn's or a byre's loft, seen where its roof is open)
-			if (P.Kind != 0 && (P.Hurt == 1 || P.Hurt == 2))
+			if ((P.Kind == 1 || P.Kind == 2) && (P.Hurt == 1 || P.Hurt == 2))
 			{
 				Rng R(P.Key ^ 0x4A70);
 				const int N = P.Kind == 1 ? 4 : 2;
@@ -3195,9 +3582,21 @@ namespace LandHouse
 				for (size_t I = 0; I < Line.size(); ++I)
 					if (!std::isnan(Line[I])) Hard.push_back({ std::min(Fc.Len, I * MidStep), Line[I] - 0.35 });
 			}
+			// (an opening's sides: a church's cut only in the courses beside it, its walls being tall)
+			struct Side
+			{
+				double A, Z0, Z1;
+			};
+			std::vector<Side> Sides;
 			for (const Opening& O : P.Ops)
 				if (O.Face == F)
 				{
+					if (P.Kind >= 3)
+					{
+						Sides.push_back({ O.A0, O.Z0, O.Z1 });
+						Sides.push_back({ O.A1, O.Z0, O.Z1 });
+						continue;
+					}
 					Hard.push_back({ O.A0, -1e9 });
 					Hard.push_back({ O.A1, -1e9 });
 				}
@@ -3211,7 +3610,7 @@ namespace LandHouse
 			{
 				const double Z0 = P.Course[I], Z1 = P.Course[I + 1];
 				if (Fc.bGable ? Z0 > P.Ridge : Z0 >= P.EW - 1e-6) break;
-				std::vector<std::pair<double, double>> Res = DressedIn(P, Fc, F, I);
+				std::vector<std::pair<double, double>> Res = DressedIn(P, Fc, F, I, false);
 				std::sort(Res.begin(), Res.end());
 				// (the course's stretches: dressed, or stones laid along what is free)
 				std::vector<Run> Runs;
@@ -3220,9 +3619,10 @@ namespace LandHouse
 					double X = S0;
 					while (S1 - X > 0.02)
 					{
-						double Ln = R.Range(0.55, 1.25);
+						// (a tower's ashlar: its even blocks two to a cell)
+						double Ln = P.Kind == 5 ? R.Range(1.0, 1.8) : R.Range(0.55, 1.25);
 						if (S1 - X - Ln < 0.3) Ln = S1 - X;
-						if (Ln > 1.4) Ln = 0.5 * (S1 - X);
+						if (Ln > (P.Kind == 5 ? 2.0 : 1.4)) Ln = 0.5 * (S1 - X);
 						Runs.push_back({ X, X + Ln, false });
 						X += Ln;
 					}
@@ -3241,6 +3641,9 @@ namespace LandHouse
 					std::vector<double> Cuts{ Ru.A0 };
 					for (const auto& [E, Lo] : Hard)
 						if (E > Ru.A0 + 1e-4 && E < Ru.A1 - 1e-4 && Z1 > Lo - 1e-6) Cuts.push_back(E);
+					for (const Side& Sd : Sides)
+						if (Sd.A > Ru.A0 + 1e-4 && Sd.A < Ru.A1 - 1e-4 && Z1 > Sd.Z0 + 1e-6 && Z0 < Sd.Z1 - 1e-6) Cuts.push_back(Sd.A);
+					std::sort(Cuts.begin() + 1, Cuts.end());
 					Cuts.push_back(Ru.A1);
 					const uint64_t H = Hash(P.Key ^ 0x31E, static_cast<uint64_t>(F * 4096) + I, static_cast<uint64_t>(std::llround(Ru.A0 * 100.0)));
 					Col Own = Ru.bDressed ? Varied(P.K.Dressed, 0.94 + 0.1 * Unit(H), 0.0) : Scaled(Mixed(StoneOwn(P, H), P.K.Mortar, WallMortar), WallMid);
@@ -3252,7 +3655,7 @@ namespace LandHouse
 						const double C0 = Cuts[K], C1 = Cuts[K + 1], CM = 0.5 * (C0 + C1);
 						bool bHole = false;
 						for (const Opening& O : P.Ops)
-							if (O.Face == F && Z0 >= O.Z0 - 1e-6 && Z1 <= O.Z1 + 1e-6 && CM > O.A0 && CM < O.A1) bHole = true;
+							if (O.Face == F && Z0 >= O.Z0 - 1e-6 && (O.Arch > 0.0 ? Z0 < O.Z1 - 1e-6 : Z1 <= O.Z1 + 1e-6) && CM > O.A0 && CM < O.A1) bHole = true;
 						if (bHole) continue;
 						double L0 = Z1 + 1.0, L1 = Z1 + 1.0;
 						if (OnMidLine(Line, CM))
@@ -3334,6 +3737,69 @@ namespace LandHouse
 			if (Silled(O.What)) B.Box(At(Fc, AM, O.Z0 - 0.045, 0.02), Fc.T * (0.5 * W + 0.08), Fc.N * 0.05, Up * 0.045, Varied(P.K.Dressed, 1.0, 0.0), 0);
 		}
 
+		/** A church's opening on the middle and far levels: far off its shape painted on the wall (glass, oak or dark); the
+		 * middle's reveal and soffit, the glass or the leaves or the dark at its back, its sill, the ring of its voussoirs
+		 * a pale band proud of the stones. */
+		void ChurchOpeningPlain(Pen& B, const Plan& P, const Opening& O, const Face& Fc, bool bMid)
+		{
+			const double AM = 0.5 * (O.A0 + O.A1), SP = SpringOf(O), R = 0.5 * (O.A1 - O.A0), W = O.A1 - O.A0;
+			const Col Dark = Rgb(15, 14, 13);
+			const Col Glass = Mixed(P.K.Glass, P.K.Sky, 0.2), GlassT = Mixed(P.K.Glass, P.K.Sky, 0.32);
+			const bool bLit = O.What == OpChWin && O.bGlass;
+			const Col C = bLit ? Glass : O.What == OpChDoor ? Scaled(P.K.Door, bMid ? 0.92 : 0.8) : Dark;
+			const Col CT = bLit ? GlassT : O.What == OpChDoor ? Scaled(P.K.Door, bMid ? 0.92 : 0.8) : Dark;
+			if (!bMid)
+			{
+				ArchFill(B, Fc, O, 0.012, Scaled(C, 0.9), Scaled(CT, 0.9), 4);
+				return;
+			}
+			const double Dp = RevealOf(P, O, false);
+			ArchReveal(B, P, Fc, O, Dp, 5);
+			ArchFill(B, Fc, O, -Dp, C, CT, 6);
+			// (MidStones leaves the square over its head open to the course's top its crown is in: the stone between the
+			// head and that square, behind the ring)
+			if (O.What != OpHidden)
+			{
+				double ZT = O.Z1;
+				for (double Cz : P.Course)
+					if (Cz >= O.Z1 - 1e-6)
+					{
+						ZT = Cz;
+						break;
+					}
+				const Col SC = Weathered(P, Fc, O.Face, AM, ZT, Scaled(Mixed(P.K.StoneMean, P.K.Mortar, WallMortar), WallMid));
+				std::vector<double> Ts;
+				for (int K = 0; K <= 8; ++K) Ts.push_back(Pi * K / 8);
+				Ts.push_back(std::atan2(ZT - SP, R));
+				Ts.push_back(Pi - std::atan2(ZT - SP, R));
+				std::sort(Ts.begin(), Ts.end());
+				auto Edge = [&](double T) {
+					const double Cs = std::cos(T), Sn = std::sin(T);
+					double Kk = 1e9;
+					if (std::fabs(Cs) > 1e-9) Kk = std::min(Kk, R / std::fabs(Cs));
+					if (Sn > 1e-9) Kk = std::min(Kk, (ZT - SP) / Sn);
+					return ArcAt(Fc, AM, SP, Kk, T, -0.002);
+				};
+				for (size_t K = 0; K + 1 < Ts.size(); ++K)
+				{
+					if (Ts[K + 1] - Ts[K] < 1e-6) continue;
+					B.Quad1(ArcAt(Fc, AM, SP, R, Ts[K], -0.002), ArcAt(Fc, AM, SP, R, Ts[K + 1], -0.002), Edge(Ts[K + 1]), Edge(Ts[K]), SC, Fc.N);
+				}
+			}
+			// (the ring: a pale band, its stones as the eye mixes them from 90 m)
+			const double R1 = R + RingOf(O);
+			const int N = 7;
+			for (int K = 0; K < N; ++K)
+			{
+				const double T0 = Pi * K / N, T1 = Pi * (K + 1) / N;
+				const Col RC = Weathered(P, Fc, O.Face, AM + R1 * std::cos(0.5 * (T0 + T1)), SP + R1 * std::sin(0.5 * (T0 + T1)), Varied(P.K.Dressed, 0.95 + 0.06 * (K % 2), 0.0));
+				B.Quad1(ArcAt(Fc, AM, SP, R, T0, 0.014), ArcAt(Fc, AM, SP, R, T1, 0.014), ArcAt(Fc, AM, SP, R1, T1, 0.014), ArcAt(Fc, AM, SP, R1, T0, 0.014), RC, Fc.N);
+			}
+			if (O.What == OpChDoor)
+				B.Box(At(Fc, AM, -0.6, 0.34), Fc.T * (0.5 * W + 0.32), Fc.N * 0.29, Up * 0.44, Varied(P.K.Dressed, 0.86, 0.0), 0);
+			if (Silled(O.What)) B.Box(At(Fc, AM, O.Z0 - 0.045, 0.02), Fc.T * (0.5 * W + 0.08), Fc.N * 0.05, Up * 0.045, Varied(P.K.Dressed, 1.0, 0.0), 0);
+		}
+
 		/** A wall's face in cells: Step apart along it, its openings dark, its quoins and surrounds painted on (the middle
 		 * level's: its stones laid by MidStones, its reveals, sills, shutters and frames); cut to the rake and the broken
 		 * top, whose pieces are three times as long on the far level. */
@@ -3359,7 +3825,7 @@ namespace LandHouse
 				ZB.push_back(P.Ridge + 0.1);
 			}
 			for (const Opening& O : P.Ops)
-				if (O.Face == F && bMid)
+				if (O.Face == F && (bMid || O.What == OpHidden))
 				{
 					AB.push_back(O.A0);
 					AB.push_back(O.A1);
@@ -3414,7 +3880,7 @@ namespace LandHouse
 					const double Z = ZB[J];
 					bool bKeep = bMid ? (std::fabs(Z - 0.35) < 1e-6 || std::fabs(Z) < 1e-6) : std::fabs(Z - P.EW) < 1e-6;
 					for (const Opening& O : P.Ops)
-						if (bMid && O.Face == F && AM > O.A0 && AM < O.A1 && (std::fabs(Z - O.Z0) < 1e-6 || std::fabs(Z - O.Z1) < 1e-6)) bKeep = true;
+						if ((bMid || O.What == OpHidden) && O.Face == F && AM > O.A0 && AM < O.A1 && (std::fabs(Z - O.Z0) < 1e-6 || std::fabs(Z - O.Z1) < 1e-6)) bKeep = true;
 					if (bKeep) Rows.push_back(Z);
 				}
 				Rows.push_back(ZB.back());
@@ -3423,14 +3889,15 @@ namespace LandHouse
 					const double Z0 = Rows[J], Z1 = Rows[J + 1], ZM = 0.5 * (Z0 + Z1);
 					bool bHole = false;
 					for (const Opening& O : P.Ops)
-						if (bMid && O.Face == F && AM > O.A0 && AM < O.A1 && ZM > O.Z0 && ZM < O.Z1) bHole = true;
+						if ((bMid || O.What == OpHidden) && O.Face == F && AM > O.A0 && AM < O.A1 && ZM > O.Z0 && ZM < O.Z1) bHole = true;
 					if (bHole) continue;
 					if (std::max(L0, L1) <= Z0 + 1e-6) continue;
 					// (the stone and its mortar as the eye mixes them; the far level's quoins paler)
-					const bool bDressed = !bMid && (AM < QW || AM > Fc.Len - QW) && Z0 < P.EW - 0.01;
+					const bool bDressed = !bMid && (AM < QW || AM > Fc.Len - QW) && Z0 < P.EW - 0.01 && !CornerHid(P, F, AM > 0.5 * Fc.Len, Z0, Z1);
 					const bool bPlinth = bMid && ZM < 0.35;
 					auto WC = [&](double A, double Z) {
 						Col C = Varied(P.K.Wall, 0.97 + 0.06 * Noise(A / 0.9, Z / 0.8, P.Key ^ 0x3A1), 0.0);
+						if (P.Kind == 5) C = Varied(P.K.Dressed, 0.97 + 0.05 * Noise(A / 0.9, Z / 0.8, P.Key ^ 0x3A1), 0.0); // (a tower's ashlar)
 						if (bDressed) C = Varied(Mixed(P.K.Dressed, P.K.Wall, 0.25), 0.97, 0.0);
 						if (bPlinth) C = Varied(Rgb(140, 132, 116), 0.95, 0.0);
 						return Weathered(P, Fc, F, A, Z, C);
@@ -3463,6 +3930,11 @@ namespace LandHouse
 				const double Z1 = std::min(O.Z1, std::min(Top(O.A0 - 0.1), Top(O.A1 + 0.1)));
 				const double W = O.A1 - O.A0;
 				const bool bThrough = bInner && (!O.bGlass || O.What == 1);
+				if (O.What >= OpHidden)
+				{
+					if (O.What != OpHidden) ChurchOpeningPlain(B, P, O, Fc, bMid);
+					continue;
+				}
 				if (O.What >= OpCart)
 				{
 					BarnOpeningPlain(B, P, O, Fc, Z1, bMid, bInner);
@@ -3534,6 +4006,7 @@ namespace LandHouse
 				for (double A = -0.05; A < Fc.Len + 0.05 - 1e-6; A += 2.0)
 				{
 					const double A1 = std::min(Fc.Len + 0.05, A + 2.0);
+					if (HiddenAt(P, F, 0.5 * (A + A1), -0.3, 0.3)) continue; // (a church's: not behind another part's wall)
 					B.Quad1(At(Fc, A, -P.S.Below, 0.05), At(Fc, A1, -P.S.Below, 0.05), At(Fc, A1, 0.33, 0.05), At(Fc, A, 0.33, 0.05), Weathered(P, Fc, F, A, 0.1, Rgb(136, 128, 112)), Fc.N);
 				}
 			}
@@ -3581,7 +4054,7 @@ namespace LandHouse
 						const double XA = X0 + (X1 - X0) * I / NX, XB = X0 + (X1 - X0) * (I + 1) / NX, XM = 0.5 * (XA + XB);
 						if (!DeckThere(P, Side, XM, SM)) continue;
 						const uint64_t H = Hash(P.Key, 0xBA4D, static_cast<uint64_t>(K * 256 + I * 2 + (Side > 0)));
-						Col C = Varied(P.K.Roof, (bMid ? 0.95 : 0.8) + 0.08 * Unit(H), 0.0);
+						Col C = Varied(P.K.Roof, (bMid ? 0.95 : P.Kind >= 3 ? 0.7 : 0.8) + 0.08 * Unit(H), 0.0); // (a church's steep slates darker far off, as near)
 						if (!bMid && P.S.Roof == 0) C = Rgb(C.R, C.G * 1.01, C.B * 1.085); // (the far slate keeps its blue: the art director's round 3)
 						C = Mixed(C, P.S.Roof == 1 ? Rgb(96, 92, 62) : Rgb(138, 140, 118), 0.2 * Smooth(2.2, 0.0, S0));
 						if (P.Hurt == 1) C = Mixed(C, P.K.Soot, 0.7 * Smooth(1.8, 1.0, HoleDist(P, Side, XM, SM)));
@@ -3672,6 +4145,353 @@ namespace LandHouse
 			}
 			if (P.Hurt == 1 && bMid) Heap(B, P, V3{ std::clamp(P.HoleX, -0.5 * P.L + 1.5, 0.5 * P.L - 1.5), P.HoleSide * (0.5 * P.D + 0.75), -0.25 }, 1.1, 0.5, 0.28, 0.0, 8, 2, P.Key ^ 0x51E, false);
 		}
+
+		// ------------------------------------------------------------------ the church's own: its cornices, the tower's top
+
+		/**
+		 * A cornice on its corbels along face F, A0 to A1 along it: the corbels from Z0 up to ZC, each a block tapering
+		 * back to its foot, Step apart; the cornice's stones from ZC to ZT, Out proud of the wall. Level 0 near; 1 the
+		 * middle (a band, the corbels' row a shadow under it); 2 far (the band).
+		 */
+		void Cornice(Pen& B, const Plan& P, int F, double A0, double A1, double Z0, double ZC, double ZT, double Out, double Step, int Level)
+		{
+			const Face Fc = FaceOf(P, F);
+			const double AM = 0.5 * (A0 + A1);
+			if (Level > 0)
+			{
+				B.Box(At(Fc, AM, 0.5 * (ZC + ZT), 0.5 * Out - 0.01), Fc.T * (0.5 * (A1 - A0)), Fc.N * (0.5 * Out + 0.01), Up * (0.5 * (ZT - ZC)), Weathered(P, Fc, F, AM, ZT, Varied(P.K.Dressed, 0.95, 0.0)), 0);
+				if (Level == 1) B.Quad1(At(Fc, A0, Z0, 0.03), At(Fc, A1, Z0, 0.03), At(Fc, A1, ZC, 0.03), At(Fc, A0, ZC, 0.03), Weathered(P, Fc, F, AM, Z0, Scaled(P.K.Dressed, 0.66)), Fc.N);
+				return;
+			}
+			Rng R(Hash(P.Key ^ 0xC0B1, static_cast<uint64_t>(F), static_cast<uint64_t>(std::llround(ZT * 100.0))));
+			for (double A = A0; A < A1 - 1e-6;)
+			{
+				double E = A + R.Range(0.6, 1.1);
+				if (A1 - E < 0.3) E = A1;
+				Block(B, Fc, A + 0.004, E - 0.004, ZC, ZT, Out, Weathered(P, Fc, F, 0.5 * (A + E), ZT, Varied(P.K.Dressed, 0.9 + 0.12 * R.Next(), 0.0)), 0.0);
+				A = E;
+			}
+			const double HW = 0.085, Lo = Z0 + 0.07;
+			for (double A = A0 + 0.5 * Step; A < A1 - 0.3 * Step; A += Step)
+			{
+				const Col C = Weathered(P, Fc, F, A, Z0, Varied(P.K.Dressed, 0.86 + 0.14 * R.Next(), 0.0));
+				const double PT = Out - 0.025, PB = 0.05;
+				for (int S = -1; S <= 1; S += 2)
+					B.Quad1(At(Fc, A + S * HW, ZC, 0.0), At(Fc, A + S * HW, ZC, PT), At(Fc, A + S * HW, Lo, PB), At(Fc, A + S * HW, Z0, 0.0), Scaled(C, 0.84), Fc.T * S);
+				B.Quad1(At(Fc, A - HW, ZC, PT), At(Fc, A + HW, ZC, PT), At(Fc, A + HW, Lo, PB), At(Fc, A - HW, Lo, PB), C, Fc.N * 0.6 - Up * 0.4);
+				B.Quad1(At(Fc, A - HW, Lo, PB), At(Fc, A + HW, Lo, PB), At(Fc, A + HW, Z0, 0.0), At(Fc, A - HW, Z0, 0.0), Scaled(C, 0.62), Fc.N * 0.3 - Up);
+			}
+		}
+
+		/** A string course round the tower: a band of dressed stone, its top at Z, proud of the walls, its corners closed
+		 * (near: stone by stone; the middle: a band; none far). Not on the east wall where it is inside the nave's roof. */
+		void StringCourse(Pen& B, const Plan& P, double Z, int Level)
+		{
+			if (Level == 2) return;
+			for (int F = 0; F < 4; ++F)
+			{
+				if (P.AbutZ[F] > Z) continue;
+				const Face Fc = FaceOf(P, F);
+				if (Level == 1)
+				{
+					B.Box(At(Fc, 0.5 * Fc.Len, Z - 0.08, 0.035), Fc.T * (0.5 * Fc.Len + 0.07), Fc.N * 0.035, Up * 0.08, Weathered(P, Fc, F, 0.5 * Fc.Len, Z, Varied(P.K.Dressed, 0.95, 0.0)), 0);
+					continue;
+				}
+				Rng R(Hash(P.Key ^ 0x57C0, static_cast<uint64_t>(F), static_cast<uint64_t>(std::llround(Z * 100.0))));
+				for (double A = -0.07; A < Fc.Len + 0.07 - 1e-6;)
+				{
+					double E = A + R.Range(0.55, 1.0);
+					if (Fc.Len + 0.07 - E < 0.3) E = Fc.Len + 0.07;
+					Block(B, Fc, A + 0.004, E - 0.004, Z - 0.16, Z, 0.07, Weathered(P, Fc, F, 0.5 * (A + E), Z, Varied(P.K.Dressed, 0.9 + 0.12 * R.Next(), 0.0)), 0.0);
+					A = E;
+				}
+			}
+		}
+
+		/**
+		 * The tower's top: its cornice on corbels round the walls' head; a parapet of dressed stone with its coping; a
+		 * pinnacle on each corner; inside them the octagonal stone spire, course by course, each course's foot standing a
+		 * little proud of the one under it, lichen on it and the weather's side darker; a lucarne at the foot of each of
+		 * its four cardinal faces; its stone finial, the iron cross, and over it a gilt weathercock turned to the wind.
+		 * (Level 0 near, 1 the middle, 2 far.)
+		 */
+		void TowerTop(Pen& B, const Plan& P, int Level)
+		{
+			const double S = 0.5 * P.L, EW = P.EW;
+			const double ZW = EW + 0.2, ZP = EW + 0.95;
+			const double Sa = S - 0.62, ZB = ZW, Za = P.E + 10.5, Hs = Za - ZB;
+			const double T8 = std::tan(Pi / 8.0);
+			const Col Dr = P.K.Dressed;
+			// The cornice.
+			for (int F = 0; F < 4; ++F) Cornice(B, P, F, -0.2, 2.0 * S + 0.2, EW - 0.42, EW - 0.05, ZW, 0.2, 0.52, Level);
+			// The parapet: its blocks in two courses before its mortar, its inside face, its coping; the walk inside it.
+			for (int F = 0; F < 4; ++F)
+			{
+				const Face Fc = FaceOf(P, F);
+				const Col C = Weathered(P, Fc, F, S, ZP, Varied(Dr, 0.94, 0.0));
+				if (Level == 0)
+				{
+					B.Quad1(At(Fc, 0.0, ZW, 0.0), At(Fc, Fc.Len, ZW, 0.0), At(Fc, Fc.Len, ZP, 0.0), At(Fc, 0.0, ZP, 0.0), Scaled(P.K.Mortar, 0.8), Fc.N);
+					Rng R(Hash(P.Key ^ 0x9A4A, static_cast<uint64_t>(F)));
+					for (int Row = 0; Row < 2; ++Row)
+					{
+						const double Z0 = ZW + Row * 0.5 * (ZP - ZW), Z1 = ZW + (Row + 1) * 0.5 * (ZP - ZW);
+						for (double A = -0.05 - (Row ? 0.3 : 0.0); A < Fc.Len + 0.05 - 1e-6;)
+						{
+							double E = A + R.Range(0.55, 0.95);
+							if (Fc.Len + 0.05 - E < 0.3) E = Fc.Len + 0.05;
+							const double A0 = std::max(-0.05, A);
+							Block(B, Fc, A0 + 0.004, E - 0.004, Z0 + 0.004, Z1 - 0.004, 0.045, Weathered(P, Fc, F, 0.5 * (A0 + E), Z0, Varied(Dr, 0.9 + 0.12 * R.Next(), 0.0)), 0.0);
+							A = E;
+						}
+					}
+				}
+				else B.Quad1(At(Fc, -0.05, ZW, 0.03), At(Fc, Fc.Len + 0.05, ZW, 0.03), At(Fc, Fc.Len + 0.05, ZP, 0.03), At(Fc, -0.05, ZP, 0.03), C, Fc.N);
+				if (Level < 2) B.Quad1(At(Fc, 0.3, ZW, -0.3), At(Fc, Fc.Len - 0.3, ZW, -0.3), At(Fc, Fc.Len - 0.3, ZP, -0.3), At(Fc, 0.3, ZP, -0.3), Scaled(C, 0.82), Fc.N * -1.0);
+				B.Box(At(Fc, 0.5 * Fc.Len, ZP + 0.06, -0.125), Fc.T * (0.5 * Fc.Len + 0.08), Fc.N * 0.2, Up * 0.06, Varied(C, 1.04, 0.0), Level == 0 ? 0 : 16);
+			}
+			if (Level < 2) B.Quad1(V3{ -S + 0.3, -S + 0.3, ZW }, V3{ S - 0.3, -S + 0.3, ZW }, V3{ S - 0.3, S - 0.3, ZW }, V3{ -S + 0.3, S - 0.3, ZW }, Rgb(112, 108, 100), Up);
+			// The pinnacles: a pier, its cap's moulding, a steep pyramid, a knob.
+			for (int I = 0; I < 4; ++I)
+			{
+				const double CX = (I & 1 ? 1.0 : -1.0) * (S - 0.28), CY = (I & 2 ? 1.0 : -1.0) * (S - 0.28);
+				const double Top = ZP + 0.45, Apex = Top + 1.35;
+				const Col C = Varied(Dr, 0.92 + 0.08 * Unit(Hash(P.Key, 0x914, static_cast<uint64_t>(I))), 0.0);
+				B.Box(V3{ CX, CY, 0.5 * (ZW + Top) }, V3{ 0.3, 0.0, 0.0 }, V3{ 0.0, 0.3, 0.0 }, V3{ 0.0, 0.0, 0.5 * (Top - ZW) }, C, 16);
+				if (Level < 2) B.Box(V3{ CX, CY, Top + 0.05 }, V3{ 0.36, 0.0, 0.0 }, V3{ 0.0, 0.36, 0.0 }, V3{ 0.0, 0.0, 0.05 }, Varied(C, 1.05, 0.0), 16);
+				const V3 Ap{ CX, CY, Apex };
+				const V3 Q[4] = { { CX - 0.33, CY - 0.33, Top + 0.1 }, { CX + 0.33, CY - 0.33, Top + 0.1 }, { CX + 0.33, CY + 0.33, Top + 0.1 }, { CX - 0.33, CY + 0.33, Top + 0.1 } };
+				for (int K = 0; K < 4; ++K)
+				{
+					const V3 M = (Q[K] + Q[(K + 1) % 4]) * 0.5;
+					B.Tri1(Q[K], Q[(K + 1) % 4], Ap, Scaled(C, K == 1 || K == 2 ? 1.0 : 0.9), Norm(V3{ M.X - CX, M.Y - CY, 0.25 }));
+				}
+				if (Level == 0) B.Tube(Ap - Up * 0.03, Ap + Up * 0.13, 0.06, 0.03, 6, C, true);
+			}
+			// The spire.
+			auto Rad = [&](double Z) { return Sa * (1.0 - Z / Hs); };
+			auto At8 = [&](int K, double Sx, double Z, double Lip) {
+				const double Ph = K * Pi / 4.0, Rr = Rad(Z) + Lip;
+				return V3{ std::cos(Ph), std::sin(Ph), 0.0 } * Rr + V3{ -std::sin(Ph), std::cos(Ph), 0.0 } * (Sx * Rr * T8) + V3{ 0.0, 0.0, ZB + Z };
+			};
+			auto Out8 = [&](int K) { return Norm(V3{ std::cos(K * Pi / 4.0), std::sin(K * Pi / 4.0), Sa / Hs }); };
+			auto Stone = [&](int K, double Z, uint64_t H) {
+				Col C = Varied(Dr, 0.86 + 0.16 * Unit(H), (Unit(Mix(H)) - 0.5) * 0.04);
+				const double Ph = K * Pi / 4.0;
+				C = Mixed(C, Rgb(150, 152, 126), 0.4 * Smooth(0.55, 0.85, Noise01(Ph * 1.7 + Z / 0.9, Z / 0.6, P.Key ^ 0x5B1)));
+				if (std::cos(Ph) < -0.1) C = Scaled(C, 0.93); // (the weather's side, west, darker)
+				return Scaled(C, 1.0 - 0.07 * Z / Hs);
+			};
+			const double ZTop = Hs - 0.6;
+			if (Level == 0)
+			{
+				const int NCo = std::max(6, static_cast<int>(std::lround(ZTop / 0.34)));
+				const double Lip = 0.03;
+				for (int Cc = 0; Cc < NCo; ++Cc)
+				{
+					const double Z0 = ZTop * Cc / NCo, Z1 = ZTop * (Cc + 1) / NCo;
+					for (int K = 0; K < 8; ++K)
+					{
+						const V3 Ot = Out8(K);
+						B.Quad1(At8(K, -1.0, Z0, -0.004), At8(K, 1.0, Z0, -0.004), At8(K, 1.0, Z1, -0.004), At8(K, -1.0, Z1, -0.004), Scaled(P.K.Mortar, 0.75), Ot);
+						const int N = std::max(1, static_cast<int>(std::lround(2.0 * Rad(Z0) * T8 / 0.72)));
+						std::vector<double> Edges{ -1.0 };
+						const bool bOdd = Cc % 2 == 1 && N >= 2;
+						for (int J = 1; J < N + (bOdd ? 1 : 0); ++J) Edges.push_back(-1.0 + 2.0 * (J - (bOdd ? 0.5 : 0.0)) / N);
+						Edges.push_back(1.0);
+						const double G = 0.007 / std::max(0.05, Rad(Z1) * T8);
+						for (size_t J = 0; J + 1 < Edges.size(); ++J)
+						{
+							const double S0 = Edges[J] + (J == 0 ? 0.5 * G : G), S1 = Edges[J + 1] - (J + 2 == Edges.size() ? 0.5 * G : G);
+							if (S1 - S0 < 0.02) continue;
+							const uint64_t H = Hash(P.Key ^ 0x5B1E, static_cast<uint64_t>(Cc * 8 + K), J);
+							const Col C = Stone(K, Z0, H);
+							B.Quad(At8(K, S0, Z0 + 0.006, Lip), At8(K, S1, Z0 + 0.006, Lip), At8(K, S1, Z1 - 0.004, 0.0), At8(K, S0, Z1 - 0.004, 0.0), Scaled(C, 1.03), Scaled(C, 1.03), Scaled(C, 0.95), Scaled(C, 0.95), Ot);
+							B.Quad1(At8(K, S0, Z0 + 0.006, 0.0), At8(K, S1, Z0 + 0.006, 0.0), At8(K, S1, Z0 + 0.006, Lip), At8(K, S0, Z0 + 0.006, Lip), Scaled(C, 0.55), Ot * 0.3 - Up);
+						}
+					}
+				}
+				for (int K = 0; K < 8; ++K) B.Tri1(At8(K, -1.0, ZTop, 0.0), At8(K, 1.0, ZTop, 0.0), V3{ 0.0, 0.0, Za }, Stone(K, ZTop, Hash(P.Key, 0x5B1F, static_cast<uint64_t>(K))), Out8(K));
+			}
+			else
+			{
+				// (plain: each face in bands, or one triangle far off)
+				const int NB = Level == 1 ? 3 : 1;
+				for (int K = 0; K < 8; ++K)
+					for (int I = 0; I < NB; ++I)
+					{
+						const double Z0 = Hs * I / NB, Z1 = Hs * (I + 1) / NB;
+						const Col C = Scaled(Stone(K, Z0, Hash(P.Key, 0x5B20, static_cast<uint64_t>(K * 4 + I))), Level == 1 ? 0.97 : 0.95);
+						if (I + 1 == NB) B.Tri1(At8(K, -1.0, Z0, 0.0), At8(K, 1.0, Z0, 0.0), V3{ 0.0, 0.0, Za }, C, Out8(K));
+						else B.Quad1(At8(K, -1.0, Z0, 0.0), At8(K, 1.0, Z0, 0.0), At8(K, 1.0, Z1, 0.0), At8(K, -1.0, Z1, 0.0), C, Out8(K));
+					}
+			}
+			// The lucarnes at the foot of the four cardinal faces: a small gabled front with its round-headed opening dark
+			// over two louvres, its sides back to the spire, its two stone slopes.
+			if (Level < 2)
+				for (int K = 0; K < 8; K += 2)
+				{
+					const double Ph = K * Pi / 4.0;
+					const V3 Nn{ std::cos(Ph), std::sin(Ph), 0.0 }, Tt{ -std::sin(Ph), std::cos(Ph), 0.0 };
+					const double W = 0.45, Z0 = 0.3, ZT = 1.45, ZA = 2.05, Dd = Sa + 0.04;
+					auto Fr = [&](double U, double Z, double Ex) { return Nn * (Dd + Ex) + Tt * U + Up * (ZB + Z); };
+					auto Bk = [&](double U, double Z) { return Nn * Rad(Z) + Tt * U + Up * (ZB + Z); };
+					const Col C = Stone(K, 0.5, Hash(P.Key, 0x1C4, static_cast<uint64_t>(K)));
+					B.Quad1(Fr(-W, Z0, 0.0), Fr(W, Z0, 0.0), Fr(W, ZT, 0.0), Fr(-W, ZT, 0.0), C, Nn);
+					B.Tri1(Fr(-W, ZT, 0.0), Fr(W, ZT, 0.0), Fr(0.0, ZA, 0.0), C, Nn);
+					for (int Sd = -1; Sd <= 1; Sd += 2)
+					{
+						B.Quad1(Fr(Sd * W, Z0, 0.0), Fr(Sd * W, ZT, 0.0), Bk(Sd * W, ZT), Bk(Sd * W, Z0), Scaled(C, 0.88), Tt * Sd);
+						B.Quad1(Fr(Sd * (W + 0.07), ZT - 0.04, 0.06), Fr(0.0, ZA + 0.05, 0.06), Bk(0.0, ZA + 0.05), Bk(Sd * (W + 0.07), ZT - 0.04), Scaled(C, 0.8), Up + Tt * Sd);
+					}
+					// (its opening: dark, round-headed; near, two louvres in it)
+					const double OW = 0.2, OZ0 = 0.6, OSP = 1.05;
+					const Col Dk = Rgb(14, 13, 12);
+					B.Quad1(Fr(-OW, OZ0, 0.004), Fr(OW, OZ0, 0.004), Fr(OW, OSP, 0.004), Fr(-OW, OSP, 0.004), Dk, Nn);
+					for (int I = 0; I < 4; ++I)
+						B.Tri1(Fr(0.0, OSP, 0.004), Fr(OW * std::cos(Pi * I / 4), OSP + OW * std::sin(Pi * I / 4), 0.004), Fr(OW * std::cos(Pi * (I + 1) / 4), OSP + OW * std::sin(Pi * (I + 1) / 4), 0.004), Dk, Nn);
+					if (Level == 0)
+						for (double Z : { 0.75, 0.95 })
+							B.Box(Fr(0.0, Z, 0.0), Tt * (OW - 0.01), Norm(Nn - Up * 0.7) * 0.06, Norm(Up + Nn * 0.7) * 0.01, Rgb(92, 86, 78), 0);
+				}
+			// The finial, the iron cross and the weathercock.
+			if (Level == 2) return;
+			const Col Iron = Rgb(46, 44, 42);
+			if (Level == 1)
+			{
+				B.Beam(V3{ 0.0, 0.0, Za - 0.1 }, V3{ 0.0, 0.0, Za + 2.1 }, 0.07, 0.07, Iron);
+				B.Beam(V3{ 0.0, -0.36, Za + 1.65 }, V3{ 0.0, 0.36, Za + 1.65 }, 0.07, 0.07, Iron);
+				return;
+			}
+			const Col Fin = Stone(0, Hs, Hash(P.Key, 0xF1A));
+			B.Tube(V3{ 0.0, 0.0, Za - 0.2 }, V3{ 0.0, 0.0, Za + 0.18 }, 0.17, 0.09, 8, Fin, true);
+			B.Tube(V3{ 0.0, 0.0, Za + 0.18 }, V3{ 0.0, 0.0, Za + 0.3 }, 0.09, 0.13, 8, Fin, false);
+			B.Tube(V3{ 0.0, 0.0, Za + 0.3 }, V3{ 0.0, 0.0, Za + 0.44 }, 0.13, 0.0, 8, Fin, false);
+			B.Tube(V3{ 0.0, 0.0, Za + 0.4 }, V3{ 0.0, 0.0, Za + 2.35 }, 0.022, 0.018, 5, Iron, true);
+			B.Tube(V3{ 0.0, 0.0, Za + 0.62 }, V3{ 0.0, 0.0, Za + 0.75 }, 0.024, 0.11, 8, Iron, false);
+			B.Tube(V3{ 0.0, 0.0, Za + 0.75 }, V3{ 0.0, 0.0, Za + 0.88 }, 0.11, 0.024, 8, Iron, false);
+			B.Beam(V3{ 0.0, 0.0, Za + 1.05 }, V3{ 0.0, 0.0, Za + 2.0 }, 0.05, 0.05, Iron);
+			B.Beam(V3{ 0.0, -0.34, Za + 1.65 }, V3{ 0.0, 0.34, Za + 1.65 }, 0.05, 0.05, Iron);
+			for (int Sd = -1; Sd <= 1; Sd += 2)
+				B.Box(V3{ 0.0, Sd * 0.36, Za + 1.65 }, V3{ 0.03, 0.0, 0.0 }, V3{ 0.0, 0.03, 0.0 }, V3{ 0.0, 0.0, 0.06 }, Iron);
+			// (the cockerel, gilt and tarnished, a flat silhouette over the rod, its tail to the wind)
+			{
+				const double Yc = 2.0 * Pi * Unit(Mix(P.Key ^ 0xC0C));
+				const V3 Fw{ std::cos(Yc), std::sin(Yc), 0.0 }, Sd{ -std::sin(Yc), std::cos(Yc), 0.0 };
+				const V3 O{ 0.0, 0.0, Za + 2.32 };
+				auto Pt = [&](double U, double V) { return O + Fw * U + Up * V; };
+				const Col Gilt = Rgb(158, 126, 64), GiltD = Rgb(128, 100, 50);
+				const double Sh[][6] = {
+					{ -0.3, 0.06, -0.36, 0.4, -0.12, 0.14 },  // the tail
+					{ -0.36, 0.4, -0.24, 0.42, -0.14, 0.16 }, // its upper feathers
+					{ -0.16, 0.02, 0.13, 0.02, 0.16, 0.15 },  // the body
+					{ -0.16, 0.02, 0.16, 0.15, -0.14, 0.17 },
+					{ 0.08, 0.12, 0.18, 0.12, 0.2, 0.34 },    // the neck and head
+					{ 0.08, 0.12, 0.2, 0.34, 0.12, 0.34 },
+					{ 0.2, 0.31, 0.27, 0.29, 0.2, 0.27 },     // the beak
+					{ 0.12, 0.34, 0.2, 0.34, 0.15, 0.41 },    // the comb
+					{ -0.02, 0.02, 0.02, 0.02, 0.0, -0.06 }   // the foot on the rod
+				};
+				for (const auto& T : Sh)
+					for (int Face2 = -1; Face2 <= 1; Face2 += 2) B.Tri1(Pt(T[0], T[1]), Pt(T[2], T[3]), Pt(T[4], T[5]), Face2 > 0 ? Gilt : GiltD, Sd * Face2);
+			}
+		}
+
+		/** What a church's part has of its own, at a level: the nave's and the chancel's corbel tables under their eaves;
+		 * the tower's string courses and its top. */
+		void ChurchExtras(Pen& B, const Plan& P, int Level)
+		{
+			if (P.Kind == 3 || P.Kind == 4)
+			{
+				if (Level == 2) return;
+				for (int F : { 0, 2 })
+				{
+					const Face Fc = FaceOf(P, F);
+					Cornice(B, P, F, 0.0, Fc.Len, P.EW - 0.72, P.EW - 0.4, P.EW - 0.16, 0.13, 0.6, Level);
+				}
+				return;
+			}
+			if (P.Kind != 5) return;
+			double ZBel = P.EW;
+			for (const Opening& O : P.Ops)
+				if (O.What == OpBelfry) ZBel = std::min(ZBel, O.Z0);
+			StringCourse(B, P, Snap(P, 7.8), Level);
+			StringCourse(B, P, Quant(P, ZBel - 0.25), Level);
+			TowerTop(B, P, Level);
+		}
+
+		/** One part's three levels (a farmhouse, a barn, a byre, or a church's nave, chancel or tower). */
+		void BuildPart(const Plan& P, Levels& Out)
+		{
+			const bool bInside = P.Hurt >= 1;
+			{
+				Pen B(Out.Near);
+				for (int F = 0; F < 4; ++F) WallNear(B, P, F, bInside);
+				for (const Opening& O : P.Ops) OpeningNear(B, P, O, bInside);
+				BarnRoom(B, P, DayLights(P));
+				if (P.Kind != 5) RoofNear(B, P, bInside);
+				if (bInside) InsideNear(B, P);
+				if (P.Kind >= 3) ChurchExtras(B, P, 0);
+			}
+			{
+				Pen B(Out.Mid);
+				for (int F = 0; F < 4; ++F) WallPlain(B, P, F, 1.75, true);
+				if (P.Kind != 5) RoofPlain(B, P, 3, 2.4, true);
+				if (bInside) InsidePlain(B, P, true);
+				if (P.Kind >= 3) ChurchExtras(B, P, 1);
+			}
+			{
+				Pen B(Out.Far);
+				for (int F = 0; F < 4; ++F) WallPlain(B, P, F, 3.6, false);
+				if (P.Kind != 5) RoofPlain(B, P, 40, P.Hurt == 0 ? 20.0 : 2.4, false);
+				if (bInside) InsidePlain(B, P, false);
+				if (P.Kind >= 3) ChurchExtras(B, P, 2);
+			}
+		}
+
+		/** A mesh added to another, moved DX along x. */
+		void Append(LandField::Mesh& To, const LandField::Mesh& From, double DX)
+		{
+			const uint32_t Base = static_cast<uint32_t>(To.Colours.size());
+			for (size_t I = 0; I + 2 < From.Positions.size(); I += 3)
+			{
+				To.Positions.push_back(static_cast<float>(From.Positions[I] + DX));
+				To.Positions.push_back(From.Positions[I + 1]);
+				To.Positions.push_back(From.Positions[I + 2]);
+			}
+			To.Normals.insert(To.Normals.end(), From.Normals.begin(), From.Normals.end());
+			To.Colours.insert(To.Colours.end(), From.Colours.begin(), From.Colours.end());
+			for (uint32_t T : From.Triangles) To.Triangles.push_back(T + Base);
+		}
+
+		/** The church whole (Spec Kind 3): its nave at the middle, the chancel east of it (+x), the tower west, as LandField's
+		 * LayChurch stands them; only the nave hurt (its roof holed), as the field's. */
+		void BuildChurch(const Spec& S, Levels& Out)
+		{
+			Out = Levels();
+			const double NL = S.Long, ND = S.Deep;
+			struct PartAt
+			{
+				int Kind;
+				double L, D, X;
+			};
+			const PartAt Parts[3] = { { 3, NL, ND, 0.0 }, { 4, ChancelL, ChancelD, 0.5 * NL + 0.5 * ChancelL }, { 5, TowerW, TowerW, -(0.5 * NL + 0.5 * TowerW) } };
+			for (const PartAt& Pa : Parts)
+			{
+				Spec PS = S;
+				PS.Kind = Pa.Kind;
+				PS.Long = Pa.L;
+				PS.Deep = Pa.D;
+				PS.Roof = 0;
+				PS.Storeys = 1;
+				PS.Hurt = Pa.Kind == 3 ? std::min(S.Hurt, 1) : 0;
+				Levels One;
+				BuildPart(MakePlan(PS, NL, ND), One);
+				Append(Out.Near, One.Near, Pa.X);
+				Append(Out.Mid, One.Mid, Pa.X);
+				Append(Out.Far, One.Far, Pa.X);
+			}
+		}
 	}
 
 	double EavesOf(const Spec& S) { return MakePlan(S).E; }
@@ -3683,6 +4503,7 @@ namespace LandHouse
 		const Plan P = MakePlan(S);
 		for (const Opening& O : P.Ops)
 		{
+			if (O.What == OpHidden) continue;
 			const Face Fc = FaceOf(P, O.Face);
 			const V3 M = At(Fc, 0.5 * (O.A0 + O.A1), 0.0, 0.0);
 			Hole H;
@@ -3699,28 +4520,12 @@ namespace LandHouse
 
 	void Build(const Spec& S, Levels& Out)
 	{
+		if (S.Kind == 3)
+		{
+			BuildChurch(S, Out);
+			return;
+		}
 		Out = Levels();
-		const Plan P = MakePlan(S);
-		const bool bInside = P.Hurt >= 1;
-		{
-			Pen B(Out.Near);
-			for (int F = 0; F < 4; ++F) WallNear(B, P, F, bInside);
-			for (const Opening& O : P.Ops) OpeningNear(B, P, O, bInside);
-			BarnRoom(B, P, DayLights(P));
-			RoofNear(B, P, bInside);
-			if (bInside) InsideNear(B, P);
-		}
-		{
-			Pen B(Out.Mid);
-			for (int F = 0; F < 4; ++F) WallPlain(B, P, F, 1.75, true);
-			RoofPlain(B, P, 3, 2.4, true);
-			if (bInside) InsidePlain(B, P, true);
-		}
-		{
-			Pen B(Out.Far);
-			for (int F = 0; F < 4; ++F) WallPlain(B, P, F, 3.6, false);
-			RoofPlain(B, P, 40, P.Hurt == 0 ? 20.0 : 2.4, false);
-			if (bInside) InsidePlain(B, P, false);
-		}
+		BuildPart(MakePlan(S), Out);
 	}
 }

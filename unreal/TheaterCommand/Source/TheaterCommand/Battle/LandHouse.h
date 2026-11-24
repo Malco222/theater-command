@@ -43,6 +43,12 @@
  * byre low, its two stable doors (the upper leaf open on one), a small barred window beside each, a pitching door to its
  * loft in a gable. Inside where they are hurt, bare rubble, unplastered, sooted where they burnt.
  *
+ * The village church (Kind 3) whole, as LandField's LayChurch stands it: the nave (its Long and Deep) at the middle, the
+ * chancel east of it (+x), the tower west; rubble walls under a corbelled cornice, round-headed windows leaded in
+ * quarries under rings of voussoirs, the south door's oak under its hood mould; the tower in ashlar, its string courses,
+ * a louvred belfry, a parapet with four pinnacles, a stone spire with four lucarnes, its cross and gilt cock. Only the
+ * nave is ever hurt (its roof holed).
+ *
  * Its own frame: metres, x along its length, y across it (its door on the +y side), z up from its floor (the floor
  * LandField's FloorOf gives it); the origin at the middle of its footprint. Placed at a house's middle, turned by the
  * house's yaw (and a half turn where its door faces -V). Colours 8-bit sRGB, as the field's; triangles wound
@@ -58,7 +64,8 @@ namespace LandHouse
 		int Hurt = 0;     // 0 whole, 1 its roof holed, 2 a gable fallen, 3 burnt out to a shell
 		uint64_t Key = 1; // its look: the stone's tone, the shutters' paint and which stand open, the chimneys, the damage's side
 		double Below = 2.2; // how far its plinth runs down below its floor (the ground falls away under it on a slope)
-		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these)
+		int Kind = 0;     // 0 the farmhouse, 1 its barn, 2 its byre (LandField's HtFarmhouse, HtBarn, HtByre; Storeys unread for these),
+		                  // 3 the church whole (its nave's Long and Deep; Roof, Storeys unread; Hurt 0 or 1)
 	};
 
 	struct Levels
@@ -72,7 +79,8 @@ namespace LandHouse
 
 	/** Where its windows and doors are, for the pictures and the tests: each opening's middle on the wall's outer face
 	 * (its own frame), its sill and head heights, its width, and what it is (0 a window, 1 the door, 2 an attic window; the
-	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window). */
+	 * barn's and byre's: 3 the cart doors, 4 a slit, 5 a loft's pitching door, 6 a stable door, 7 a byre's barred window;
+ * a church's, its nave's only: 9 a round-headed window, 10 its door). */
 	struct Hole
 	{
 		int Face = 0; // 0 the front (+y), 1 the gable at -x, 2 the back, 3 the gable at +x

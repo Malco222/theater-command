@@ -1056,10 +1056,11 @@ int main(int Argc, char** Argv)
 	// byres: each kind a kit slot drawn as a building, near, its middle level from 90 m and plain from 300 m; every one
 	// standing on its house's floor, its levels within their triangle budgets (a farmhouse's or a barn's near some 25 to 40
 	// thousand, as a vehicle's; a byre's from 18 thousand), every point a number and within the house's reach, and its
-	// normals of unit length.
+	// normals of unit length. The village church the same, whole in one slot (nave, chancel and tower; its near some 75 to
+	// 90 thousand, three buildings' worth, its middle at most 14 thousand), standing once where the village has one.
 	if (F.Tried("houses") && LookLaid == "bocage")
 	{
-		int Kinds = 0, Barns = 0, Byres = 0;
+		int Kinds = 0, Barns = 0, Byres = 0, Churches = 0;
 		size_t Standing = 0, NearFew = static_cast<size_t>(-1), NearMost = 0, MidMost = 0, FarMost = 0;
 		std::string Bad;
 		for (int K = 0; K < LandField::KitSlots; ++K)
@@ -1067,6 +1068,34 @@ int main(int Argc, char** Argv)
 			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
 			const LandField::BaseMesh& Bm = G.BaseOf(B);
 			const bool bByre = Bm.Name.rfind("Byre", 0) == 0;
+			if (Bm.Class == LandField::BaseMesh::Draw::House && Bm.Name.rfind("Church", 0) == 0)
+			{
+				Churches += static_cast<int>(G.Instances(B).size());
+				std::printf("    %-24s %4zu standing   %5zu / %4zu / %3zu tris near / middle from %.0f m / far from %.0f m\n", Bm.Name.c_str(), G.Instances(B).size(), Bm.Near.Tris(), Bm.Mid.Tris(), Bm.Far.Tris(),
+				            Bm.MidFrom, Bm.FarFrom);
+				if (Bm.Near.Tris() < 60000 || Bm.Near.Tris() > 90000 || Bm.Mid.Tris() > 14000 || Bm.Far.Tris() > 1200 || Bm.Mid.Empty() || Bm.Far.Empty() || Bm.MidFrom != 90.0f || Bm.FarFrom != 300.0f || Bm.bSight)
+					Bad += " " + Bm.Name + " (its levels)";
+				for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far })
+				{
+					bool bOk = M->Normals.size() == M->Positions.size() && M->Colours.size() * 3 == M->Positions.size();
+					for (size_t I = 0; bOk && I + 2 < M->Positions.size(); I += 3)
+					{
+						const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
+						const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
+						if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > 18.0f || std::fabs(Y) > 8.0f || Z < -6.0f || Z > 32.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+					}
+					for (const uint32_t Ix : M->Triangles)
+						if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
+					if (!bOk) Bad += " " + Bm.Name + " (a point)";
+				}
+				for (const LandField::Placed& P : G.Instances(B))
+				{
+					LandField::Drawn What = LandField::Drawn::Beyond;
+					const double Z = G.HeightAt(P.X, P.Y, &What);
+					if (What != LandField::Drawn::Floor || std::fabs(Z - P.Z) > 0.02) Bad += Fmt(" church %.0f", P.X) + Fmt(",%.0f (off its floor)", P.Y);
+				}
+				continue;
+			}
 			if (Bm.Class != LandField::BaseMesh::Draw::House || (Bm.Name.rfind("Farmhouse", 0) != 0 && Bm.Name.rfind("Barn", 0) != 0 && !bByre)) continue;
 			++Kinds;
 			Barns += Bm.Name.rfind("Barn", 0) == 0 ? static_cast<int>(G.Instances(B).size()) : 0;
@@ -1101,10 +1130,10 @@ int main(int Argc, char** Argv)
 				if (What != LandField::Drawn::Floor || std::fabs(Z - P.Z) > 0.02) Bad += Fmt(" %.0f", P.X) + Fmt(",%.0f (off its floor)", P.Y);
 			}
 		}
-		std::printf("  farmhouses, barns and byres at the vehicles' detail: %zu standing (%d barns, %d byres) in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the tiles' built %zu\n", Standing, Barns, Byres, Kinds,
-		            NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost, T.BuiltTris);
-		Check(Kinds > 0 && Standing > 0 && Barns > 0 && Byres > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
-		      "the trial \"houses\": each bocage farmhouse, barn and byre at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		std::printf("  farmhouses, barns and byres at the vehicles' detail: %zu standing (%d barns, %d byres) in %d kinds; near %zu to %zu triangles, middle at most %zu, far at most %zu; the church %d; the tiles' built %zu\n", Standing, Barns,
+		            Byres, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, MidMost, FarMost, Churches, T.BuiltTris);
+		Check(Kinds > 0 && Standing > 0 && Barns > 0 && Byres > 0 && Bad.empty() && (NearFew == static_cast<size_t>(-1) || NearFew >= 15000) && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200 && Churches == (T.bChurch ? 1 : 0),
+		      "the trial \"houses\": each bocage farmhouse, barn, byre and the church at the vehicles' detail, on its floor, three levels within budget", Fmt("%.0f standing, ", static_cast<double>(Standing)) + Fmt("church %.0f, ", static_cast<double>(Churches)) + "bad:" + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.

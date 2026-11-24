@@ -440,7 +440,7 @@ namespace LandField
 		int WayGaps = 0;          // hedges opened where the recording's vehicles cross them
 		int Breaches = 0;         // hedgerows blown open where the recording's men went over them in numbers
 		int Houses = 0;           // houses, barns and byres (the church counted apart)
-		int HouseModels = 0;      // the farmhouses, barns and byres built to the vehicles' detail (the trial "houses"), and their kinds
+		int HouseModels = 0;      // the farmhouses, barns, byres and church built to the vehicles' detail (the trial "houses"), and their kinds
 		int HouseKinds = 0;
 		int Damaged = 0;
 		bool bChurch = false;

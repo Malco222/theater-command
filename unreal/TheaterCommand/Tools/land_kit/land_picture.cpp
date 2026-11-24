@@ -746,13 +746,15 @@ int main(int argc, char** argv)
 	// its barn's and byre's)
 	const bool bHouseSheet = std::getenv("LAND_KIT_HOUSE") != nullptr;
 	const bool bFarmSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "farm";
+	const bool bChurchSheet = bHouseSheet && std::string(std::getenv("LAND_KIT_HOUSE")) == "church";
 	auto HouseSpec = [](const Panel& P)
 	{
 		LandHouse::Spec H;
 		// (the bocage's farmstead's three, as LandField lays them)
 		H.Kind = P.HouseKind;
-		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : 14.0;
-		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : 7.2;
+		// (and the village's church, its nave as LandField's LayChurch lays it, its chancel and tower with it)
+		H.Long = P.HouseKind == 1 ? 15.0 : P.HouseKind == 2 ? 13.0 : P.HouseKind == 3 ? 18.0 : 14.0;
+		H.Deep = P.HouseKind == 1 ? 8.4 : P.HouseKind == 2 ? 6.8 : P.HouseKind == 3 ? 8.6 : 7.2;
 		H.Storeys = P.HouseKind == 0 ? 2 : 1;
 		H.Roof = P.HouseRoof;
 		H.Hurt = P.House;
@@ -768,10 +770,11 @@ int main(int argc, char** argv)
 			uint64_t Key;
 			double Bearing, Up, Sun;
 			int Aim; // -1 the whole house; 0 a ground-floor window of the front; 1 the door; 2 the chimney and the eaves;
-			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them)
+			         // 3 the whole house from AimDistance (the level switches' views, painted as the game shows them); the
+			         // church's: 4 its belfry and spire's foot, 5 the tower's west door, 6 the cross, 7 where tower and nave meet
 			double AimDistance;
 			const char* Caption;
-			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre
+			int Kind; // 0 the farmhouse, 1 its barn, 2 its byre, 3 the church
 		};
 		const HouseLook HouseLooks[] = {
 			{ "house_slate", 0, 0, 0, 7, -38.0, 11.0, 62.0, -1, 0.0, "Norman farmhouse: stone by stone, slate by slate", 0 },
@@ -835,9 +838,33 @@ int main(int argc, char** argv)
 			{ "zz_barn_inside", 3, 0, 0, 7, -12.0, 30.0, 62.0, 3, 13.0, "", 1 },
 			{ "zz_barn_pitch", 0, 0, 0, 8, 70.0, 8.0, 62.0, 3, 16.0, "", 1 },
 		};
+		// (the village's church: LAND_KIT_HOUSE=church)
+		const HouseLook ChurchLooks[] = {
+			{ "church_whole", 0, 0, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "Norman church: nave, chancel, tower and stone spire", 3 },
+			{ "church_east", 0, 0, 0, 7, 128.0, 9.0, 210.0, -1, 0.0, "from the east: the chancel, the nave's gable over it", 3 },
+			{ "church_other", 0, 0, 0, 2, 32.0, 12.0, 110.0, -1, 0.0, "another, its other stone", 3 },
+			{ "church_door", 0, 0, 0, 7, 18.0, 4.0, 80.0, 1, 9.0, "close: the south door, voussoirs, hood mould, oak", 3 },
+			{ "church_window", 0, 0, 0, 7, -22.0, 2.0, 62.0, 0, 5.0, "close: a nave window, leaded, under its ring", 3 },
+			{ "church_west", 0, 0, 0, 7, -90.0, 6.0, 120.0, 5, 13.0, "the tower's west door and window", 3 },
+			{ "church_belfry", 0, 0, 0, 7, -60.0, 8.0, 62.0, 4, 15.0, "close: belfry, parapet, pinnacles, lucarnes", 3 },
+			{ "church_cross", 0, 0, 0, 7, -40.0, 6.0, 62.0, 6, 6.5, "close: the finial, the cross, the gilt cock", 3 },
+			{ "church_roofhole", 1, 0, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "damage: a shell through the nave's roof", 3 },
+			{ "church_mid", 0, 1, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 3 },
+			{ "church_far", 0, 2, 0, 7, -38.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 3 },
+			{ "church_roofhole_mid", 1, 1, 0, 7, -38.0, 26.0, 62.0, -1, 0.0, "roof holed, middle level", 3 },
+			{ "church_switch90_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: near level", 3 },
+			{ "church_switch90_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 55.0, "church at 90 m: middle level", 3 },
+			{ "church_switch300_near", 0, 0, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "", 3 }, // (not laid out: for measuring the far against it)
+			{ "church_switch300_mid", 0, 1, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "church at 300 m: middle level", 3 },
+			{ "church_switch300_far", 0, 2, 0, 7, -38.0, 4.0, 62.0, 3, 184.0, "church at 300 m: far level", 3 },
+			// (close looks for working on it, painted only when LAND_KIT_ONLY names them)
+			{ "zz_church_junction", 0, 0, 0, 7, -55.0, 28.0, 62.0, 7, 14.0, "", 3 },
+			{ "zz_church_chancel", 0, 0, 0, 7, 60.0, 22.0, 62.0, 3, 24.0, "", 3 },
+		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
-		const std::vector<HouseLook> Looks = bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
+		const std::vector<HouseLook> Looks = bChurchSheet ? std::vector<HouseLook>(std::begin(ChurchLooks), std::end(ChurchLooks))
+			: bFarmSheet ? std::vector<HouseLook>(std::begin(FarmLooks), std::end(FarmLooks)) : std::vector<HouseLook>(std::begin(HouseLooks), std::end(HouseLooks));
 		for (const HouseLook& K : Looks)
 		{
 			if (!Only && K.File[0] == 'z') continue;
@@ -865,7 +892,7 @@ int main(int argc, char** argv)
 				for (const LandHouse::Hole& H : Holes)
 				{
 					// (a window low in the front, or its door: a barn's cart doors, a byre's stable door)
-					if (H.Face == 0 && ((K.Aim == 0 && (H.What == 0 || H.What == 7) && H.Z0 < 2.0) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6))))
+					if (H.Face == 0 && ((K.Aim == 0 && (((H.What == 0 || H.What == 7) && H.Z0 < 2.0) || H.What == 9)) || (K.Aim == 1 && (H.What == 1 || H.What == 3 || H.What == 6 || H.What == 10))))
 					{
 						At = V3(H.X, H.Y, 0.15 + 0.5 * (H.Z0 + H.Z1));
 						break;
@@ -879,6 +906,12 @@ int main(int argc, char** argv)
 				{
 					At = V3(0.0, 0.0, 0.15 + 0.5 * LandHouse::RidgeOf(HouseSpec(P)));
 				}
+				// (the church's tower stands west of its nave, 18 m long, the tower 5.8 m square, its cornice at 17.5 m and its
+				// spire's point at 28 m)
+				if (K.Aim == 4) At = V3(-11.9, 0.0, 0.15 + 19.6);
+				if (K.Aim == 5) At = V3(-14.8, 0.0, 0.15 + 4.0);
+				if (K.Aim == 6) At = V3(-11.9, 0.0, 0.15 + 29.7);
+				if (K.Aim == 7) At = V3(-8.6, 0.0, 0.15 + 10.5);
 				P.bAim = true;
 				P.AimAt = At;
 				P.AimFrom = V3(std::sin(K.Bearing * Rad) * std::cos(K.Up * Rad), std::cos(K.Bearing * Rad) * std::cos(K.Up * Rad), std::sin(K.Up * Rad));
@@ -982,6 +1015,11 @@ int main(int argc, char** argv)
 			{
 				const LandHouse::Spec Hs = HouseSpec(P);
 				S.Feet.push_back({ -0.5 * Hs.Long, -0.5 * Hs.Deep, 0.5 * Hs.Long, 0.5 * Hs.Deep });
+				if (Hs.Kind == 3)
+				{
+					S.Feet.push_back({ 0.5 * Hs.Long, -3.3, 0.5 * Hs.Long + 7.2, 3.3 });
+					S.Feet.push_back({ -0.5 * Hs.Long - 5.8, -2.9, -0.5 * Hs.Long, 2.9 });
+				}
 			}
 			const std::string Path = OutDir + "/" + P.File + ".ppm";
 			Vehicle None;
@@ -1062,6 +1100,8 @@ int main(int argc, char** argv)
 			{ "house_switch90", "switch90_near", "switch90_mid", 2, "at 90 m, enlarged 2x: near | middle" },
 			{ "house_switch300", "switch300_mid", "switch300_far", 4, "at 300 m, enlarged 4x: middle | far" },
 			{ "house_switch90_shell", "switch90_shell_near", "switch90_shell_mid", 2, "the shell at 90 m, 2x: near | middle" },
+			{ "church_switch90", "church_switch90_near", "church_switch90_mid", 2, "church at 90 m, enlarged 2x: near | middle" },
+			{ "church_switch300", "church_switch300_mid", "church_switch300_far", 4, "church at 300 m, enlarged 4x: middle | far" },
 		};
 		for (const Switch& K : Switches)
 		{
