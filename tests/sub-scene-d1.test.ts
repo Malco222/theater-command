@@ -609,7 +609,7 @@ describe('the submarine scene stager (form D1)', () => {
     const look: SubLook = {
       turn: g.turn, nat: 'UK',
       hunts: [{ zone: natl, hunters: [{ fleet: wa.id, nat: 'UK', n: 5 }], air: 4, quarry: [{ fleet: uboats.id, nat: 'GER', n: 6 }], sunk: 2, cost: 1 }],
-      torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', could: [uboats.id, itaBoats.id], by: itaBoats.id, couldNat: ['GER', 'ITA'], byNat: 'ITA' }],
+      torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', sunk: true, could: [uboats.id, itaBoats.id], by: itaBoats.id, couldNat: ['GER', 'ITA'], byNat: 'ITA' }],
       convoys: [{ route: 'atlantic', tons: 156000, seas: [
         { zone: wapp, raiders: [{ fleet: battle.id, nat: 'GER', n: 0, heavy: battle.ships.bb + battle.ships.cv + battle.ships.ca }], escorts: [{ fleet: wa.id, nat: 'UK', n: 30 }], air: 6, tons: 90000 },
         { zone: natl, raiders: [{ fleet: uboats.id, nat: 'GER', n: 6, heavy: 0 }], escorts: [{ fleet: wa.id, nat: 'UK', n: 3 }], air: 2, tons: 60000 },
@@ -664,6 +664,79 @@ describe('the submarine scene stager (form D1)', () => {
     expect(mixed.caption.lines).toEqual([`2 submarines sunk in the ${seaPlace('natl').name}, September 1939, for the loss of 1 destroyer.`]);
   });
 
+  it('carries a convoy scene\'s sea kit and air cover from the record into the field, and writes neither where the record has none', () => {
+    // The cover's kinds are the mirror's own: when the rules add one, only the mirror's union changes.
+    const COVER_FROM_MIRROR: Both<NonNullable<SeaFact['cover']>, NonNullable<SubLook['convoys'][number]['seas'][number]['cover']>> = true;
+    expect(COVER_FROM_MIRROR).toBe(true);
+    const g = startOpen(createGame(5, 'UK'));
+    const zone = (k: string): number => g.seas.findIndex((z) => z.key === k);
+    const [wapp, natl, irish] = ['wapp', 'natl', 'irish'].map(zone);
+    const fleet = (nat: string, name: string) => g.fleets.find((f) => f.nat === nat && f.name === name)!;
+    const home = fleet('UK', 'Home Fleet'), wa = fleet('UK', 'Western Approaches Fleet');
+    const uboats = fleet('GER', 'U-boat Fleet'), battle = fleet('GER', 'Battle Fleet');
+    const at = g.seas[natl].name;
+    g.headlines.push({ turn: g.turn, week: 1, text: `A submarine torpedoes and sinks a battleship of the Home Fleet in the ${at}: the fleet has too few destroyers to screen its heavy ships.`, kind: 'battle', nat: 'UK', arm: 'sea', lost: 'UK' });
+    g.headlines.push({ turn: g.turn, week: 2, text: `Escorts of the Western Approaches sink 2 German submarines in the ${at}, for the loss of 1 destroyer.`, kind: 'battle', nat: 'UK', arm: 'sea', won: 'UK', lost: 'GER' });
+    g.headlines.push({ turn: g.turn, week: 3, text: 'The Atlantic convoys: 156,000 tons of shipping sunk this month, 2 submarines destroyed.', kind: 'info', nat: 'UK', arm: 'sea', lost: 'UK' });
+    // Britain's month with Units decide on: each convoy sea's kit, air cover and boats sunk. The scene's sea is the
+    // North Atlantic, where the boats raided; the other seas' kit and cover differ, so a wrong sea would show.
+    const look: SubLook = {
+      turn: g.turn, nat: 'UK',
+      hunts: [{ zone: natl, hunters: [{ fleet: wa.id, nat: 'UK', n: 5 }], air: 4, quarry: [{ fleet: uboats.id, nat: 'GER', n: 6 }], sunk: 2, cost: 1 }],
+      torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', sunk: true, could: [uboats.id], by: uboats.id, couldNat: ['GER'], byNat: 'GER' }],
+      convoys: [{ route: 'atlantic', tons: 156000, seas: [
+        { zone: wapp, raiders: [{ fleet: battle.id, nat: 'GER', n: 0, heavy: battle.ships.bb + battle.ships.cv + battle.ships.ca }], escorts: [{ fleet: wa.id, nat: 'UK', n: 30 }], air: 6, tons: 90000, kit: { asdic: true, radar: true, hedgehog: false, hfdf: false }, cover: 'carrier', lost: 0 },
+        { zone: natl, raiders: [{ fleet: uboats.id, nat: 'GER', n: 6, heavy: 0 }], escorts: [{ fleet: wa.id, nat: 'UK', n: 3 }], air: 2, tons: 60000, kit: { asdic: true, radar: false, hedgehog: true, hfdf: false }, cover: 'shore', lost: 2 },
+        { zone: irish, raiders: [], escorts: [], air: 1, tons: 6000, kit: { asdic: true, radar: false, hedgehog: false, hfdf: false }, cover: 'none', lost: 0 }] }],
+    };
+    keepLook(g, look);
+    const before = JSON.stringify(g);
+    const m = factsOf(g, NAVY.convoys);
+    expect(JSON.stringify(g)).toBe(before);
+    const convoy = m.facts.find((f) => f.kind === 'convoy')!;
+    expect([convoy.sea, convoy.kit, convoy.cover]).toEqual(['natl', { asdic: true, radar: false, hedgehog: true, hfdf: false }, 'shore']);
+    for (const f of m.facts.filter((x) => x.kind !== 'convoy')) expect(['kit' in f, 'cover' in f]).toEqual([false, false]);
+    // Staged: the convoy's night carries its sea's kit, keyed by the side whose escorts it draws, and its cover word.
+    // The torpedoing's and the hunt's never do.
+    const scenes = scenesOf(m);
+    expect(scenes.map((p) => p.case)).toEqual(['heavyLost', 'convoy', 'hunt']);
+    for (const p of scenes) {
+      const field = stagePick(m, p).field as Record<string, any>;
+      if (p.case !== 'convoy') { expect(['kit' in field, 'cover' in field]).toEqual([false, false]); continue; }
+      expect(field.def.nat).toBe('UK');
+      expect(field.kit).toEqual({ UK: { asdic: true, radar: false, hedgehog: true, groups: false } });
+      expect(field.cover).toBe('shore');
+    }
+    // ... and only a convoy's night: a hunt or a torpedoing made by hand with a kit and cover writes neither.
+    const by = (kind: string): SeaFact => m.facts.find((f) => f.kind === kind)!;
+    for (const f of [by('torpedo'), by('hunt')]) {
+      const forced = { ...f, kit: { asdic: true, radar: true, hedgehog: true, hfdf: false }, cover: 'carrier' as const };
+      const field = stageScene({ ...m, facts: [forced] })!.field;
+      expect(['kit' in field, 'cover' in field]).toEqual([false, false]);
+    }
+    // Through the bridge's call: the convoy's night, read from the game.
+    g.headlines.splice(-3, 1);
+    const withKit = subSceneOf(g, NAVY.convoys);
+    expect(withKit.pick?.case).toBe('convoy');
+    const rc = JSON.parse(withKit.recording!) as Staged;
+    expectReadable(rc);
+    expect([(rc.field as any).kit, (rc.field as any).cover]).toEqual([{ UK: { asdic: true, radar: false, hedgehog: true, groups: false } }, 'shore']);
+    // The same month with the record's kit and cover taken away (Units decide off, an older save): neither key, and
+    // the recording otherwise byte for byte the same.
+    keepLook(g, { ...look, convoys: look.convoys.map((c) => ({ ...c, seas: c.seas.map(({ kit, cover, ...s }) => s) })) });
+    const without = subSceneOf(g, NAVY.convoys);
+    const r0 = JSON.parse(without.recording!) as Staged;
+    expect(['kit' in r0.field, 'cover' in r0.field]).toEqual([false, false]);
+    delete rc.field.kit; delete rc.field.cover;
+    expect(JSON.stringify(rc)).toBe(without.recording);
+    expect(without.pick).toEqual(withKit.pick);
+    // 'none' is the record's word for a sea without air cover, not a missing word: it reaches the field as it stands,
+    // where a record without the word leaves the scene to the historian's mix.
+    keepLook(g, { ...look, convoys: look.convoys.map((c) => ({ ...c, seas: c.seas.map((s) => (s.zone === natl ? { ...s, cover: 'none' as const } : s)) })) });
+    const bare = JSON.parse(subSceneOf(g, NAVY.convoys).recording!) as Staged;
+    expect([(bare.field as any).kit, (bare.field as any).cover]).toEqual([{ UK: { asdic: true, radar: false, hedgehog: true, groups: false } }, 'none']);
+  });
+
   it('holds to the record\'s own word (review of 22 November): the picked attacker, one fleet a scene, who raided, the boats lost, whose kills', () => {
     const g = startOpen(createGame(5, 'UK'));
     g.nations.ITA.atWar = [...new Set([...g.nations.ITA.atWar, 'UK'])];
@@ -680,7 +753,7 @@ describe('the submarine scene stager (form D1)', () => {
     // (the record names the nations itself, couldNat and byNat; the fleet 9001 is one gone from the list since)
     const NAT: Record<number, string> = { [uboats.id]: 'GER', [itaBoats.id]: 'ITA', 9001: 'ITA' };
     const look = (by: number | null, could = [uboats.id, itaBoats.id]): SubLook => ({ turn: g.turn, nat: 'UK', hunts: [], convoys: [],
-      torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', could, by, couldNat: could.map((id) => NAT[id]), byNat: by === null ? null : NAT[by] }] });
+      torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', sunk: true, could, by, couldNat: could.map((id) => NAT[id]), byNat: by === null ? null : NAT[by] }] });
     /** The same torpedoing as an older save's record holds it (written before the rules' 21a3a759): no couldNat, no byNat. */
     const older = (by: number | null, could = [uboats.id, itaBoats.id]): SubLookSaved => ({ turn: g.turn, nat: 'UK', hunts: [], convoys: [], torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', could, by }] });
     const pickFor = (human: string) => { g.human = human; const p = pickScene(factsOf(g, NAVY.convoys, mark)); g.human = 'UK'; return p ? [p.case, p.boats, p.source] : null; };

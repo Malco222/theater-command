@@ -125,7 +125,18 @@ export interface SeaFact {
   tonsBy?: Record<string, number>;
   /** A convoy month: the nation of the boats lost on the route, where the record shows them all one nation's (else none is named). */
   boatsNat?: string;
+  /**
+   * A convoy month, in the scene's sea, where the record has them (the rules' switch "Units decide" on): the
+   * anti-submarine kit of the navy answering attacks there, as the record holds it, and the kind of its air cover. Both
+   * are typed from the record (SubLook), so a kind the rules add reaches the scene unchanged. Absent otherwise (Units
+   * decide off, an older save, a fact made by hand): the scene then takes the historian's mix by navy and year.
+   */
+  kit?: NonNullable<RecordSea['kit']>;
+  cover?: NonNullable<RecordSea['cover']>;
 }
+
+/** A convoy route's sea in the rules' record (SubLook below). */
+type RecordSea = SubLook['convoys'][number]['seas'][number];
 
 /**
  * A fleet in the rules' record (types.ts SubLookFleet): its id, its nation, and `n`, its boats (a hunter's or an
@@ -140,8 +151,10 @@ export interface SubLookFleet { fleet: number; nat: string; n: number; heavy?: n
  * A heavy ship torpedoed, in the record: its fleet, sea and class; `could`, the enemy boats' fleets in the sea that
  * could have fired, and `couldNat` their nations in the same order; `by`, the one the rules picked on its own key
  * (look:torpedo:<fleet>), and `byNat` its nation, null where `by` is null (since the rules' 21a3a759).
+ * `sunk`, false where damage control kept her afloat (the rules' ruling 240, C3: release 2's navy; the scene is staged
+ * only from a sinking's headline, so a ship kept afloat is never shown going down).
  */
-export interface SubLookTorpedo { fleet: number; zone: number; cls: 'bb' | 'cv' | 'ca' | 'dd' | 'ss'; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }
+export interface SubLookTorpedo { fleet: number; zone: number; cls: 'bb' | 'cv' | 'ca' | 'dd' | 'ss'; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }
 
 /**
  * The rules' record for the scene (release 2, ruling 241 D1; written by navy.ts while the viewing setting is on, this
@@ -155,7 +168,8 @@ export interface SubLook {
   nat: string;
   hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
   torpedoes: SubLookTorpedo[];
-  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
+  /** (release 2's navy, the convoy war by cause, Units decide only) each sea's escorts' kit, its air cover's kind and the boats its escorts sank there. */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number; kit?: { asdic: boolean; radar: boolean; hedgehog: boolean; hfdf: boolean }; cover?: 'none' | 'shore' | 'carrier' | 'long-range'; lost?: number }[] }[];
 }
 
 /**
@@ -163,7 +177,7 @@ export interface SubLook {
  * torpedoings carry no `couldNat` and `byNat` (and whose raiders carry no `heavy`). The record keeps this month and
  * last, so an older save's rows are gone a month after it is loaded and played on. factsOf reads either.
  */
-export type SubLookSaved = Omit<SubLook, 'torpedoes'> & { torpedoes: (Omit<SubLookTorpedo, 'couldNat' | 'byNat'> & Partial<Pick<SubLookTorpedo, 'couldNat' | 'byNat'>>)[] };
+export type SubLookSaved = Omit<SubLook, 'torpedoes'> & { torpedoes: (Omit<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'> & Partial<Pick<SubLookTorpedo, 'couldNat' | 'byNat' | 'sunk'>>)[] };
 
 export interface MonthFacts {
   /** The player's nation. */
@@ -1536,6 +1550,12 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
     date: `${day} ${MONTHS[month0]} ${year}`, when: { year, month: month0 }, lat: sea.lat, lon: sea.lon,
     att: { nat: attNat, adj: attAdj, human: m.human === attNat, fleets: [{ id: 1, name: boatFleet, ships: shipsOf(boats) }] },
     def: { nat: defNat, adj: defAdj, human: m.human === defNat, fleets: [{ id: 2, name: defFleet, ships: shipsOf([...guarded, ...escorts]) }] },
+    // A convoy's night carries its sea's kit and air cover where the record has them, in the convoy nights' shape
+    // (D2): the kit keyed by the side whose escorts the scene draws, without group training (the rules keep no flag for
+    // it yet) and without the direction finder (that shape has none). Without them neither key is written, and the
+    // scene takes the historian's mix by navy and year.
+    ...(pick.case === 'convoy' && f.kit ? { kit: { [defNat]: { asdic: f.kit.asdic, radar: f.kit.radar, hedgehog: f.kit.hedgehog, groups: false } } } : {}),
+    ...(pick.case === 'convoy' && f.cover ? { cover: f.cover } : {}),
     classes,
     torp: { travel: r1(fans.length ? fans[0].running : 60), radius: fans.length ? Math.round(fans[0].range * Math.tan((fans[0].spread / 2) * RAD)) + 60 : 300 },
     strike: { windup: 90, radius: 1500 },
@@ -1608,8 +1628,8 @@ function firstOf(g: Game, from?: number): number {
 /**
  * The month's facts at sea from the news the rules wrote, with the boats at sea as the month closed; and where the
  * rules' record (`g.subLook`, written while the viewing setting is on) has the month's rows, its hunters, aircraft and
- * quarry, the torpedoing's picked attacker and the convoy's raiders, escorts, air guard and tons by sea. It reads the
- * game and writes nothing.
+ * quarry, the torpedoing's picked attacker and the convoy's raiders, escorts, air guard and tons by sea, and its scene
+ * sea's kit and air cover where the record has them. It reads the game and writes nothing.
  */
 export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: SubLookSaved[]): MonthFacts {
   const facts: SeaFact[] = [];
@@ -1751,6 +1771,8 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
         // them, whatever its n, as a history campaign's n there may be after the boats were lost)
         const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
         const lostNats = hunts.length ? byNat(hunts.flatMap((x) => x.quarry)).nats : byNat(all, maybeBoats).nats;
+        // The kit and air cover are the scene's sea's own: the row of the sea the fact names, where the record has them.
+        const own = s0 && g.seas[s0.zone] ? s0 : undefined;
         facts.push({
           kind: 'convoy', sea: z >= 0 && g.seas[z] ? g.seas[z].key : route.zones[0], turn: h.turn, week: h.week, by: '', on: h.nat, route: route.id, routeName: route.name,
           tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : r.tons, boats: lost, escortsLost: same ? book.escortsLost : 0,
@@ -1765,6 +1787,7 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
           raiders: s0 ? byNat(s0.raiders, maybeBoats).nats : [], escorts: s0 ? byNat(s0.escorts).nats : [], escortShips: s0 ? sum(s0.escorts) : 0, airGuard: s0 ? s0.air : 0, tonsBy,
           hunters: hunts.length ? huntersOf(hunts) : { ships: s0 ? sum(s0.escorts) : 0, aircraft: s0 ? s0.air : 0 },
           ...(lostNats.length === 1 ? { boatsNat: lostNats[0] } : {}),
+          ...(own?.kit ? { kit: { ...own.kit } } : {}), ...(own?.cover ? { cover: own.cover } : {}),
         });
         continue;
       }
