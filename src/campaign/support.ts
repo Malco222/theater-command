@@ -14,6 +14,7 @@ import { isFoot } from './ground';
 import { hasTech, techById } from './tech';
 import type { Corps, Game, Region } from './types';
 import { isTeam } from './teams';
+import { UNITS, unitsDecide } from './units';
 
 export const SUPPORT = data as unknown as {
   antiTank: {
@@ -60,6 +61,18 @@ export function gunsOfTheDay(year: number): [number, number] {
   return rows[String(at)];
 }
 
+/**
+ * Units decide: the infantry's own anti-tank guns by the rows its nation holds, in place of the calendar (DD 24 Nov
+ * 15:53Z, #2 form Part 1 section 1; units.json land.antiTank): with neither row, 1939's guns; with Anti-tank guns,
+ * 1941's; with Tank destroyers as well, 1943's. Read only under the switch: [in the open, behind finished fieldworks].
+ */
+export function gunsOfRows(g: Game, nat: string): [number, number] {
+  const A = UNITS.land.antiTank;
+  let k = 0;
+  while (k < A.rows.length && hasTech(g, nat, A.rows[k])) k++;
+  return gunsOfTheDay(A.years[k]);
+}
+
 /** The tank technologies of the day: how many of the tree's steps history had reached by this year. */
 export const armourOfTheDay = (year: number): number => SUPPORT.tech.armour.filter((id) => (techById(id)?.year ?? 9999) <= year).length;
 
@@ -69,7 +82,7 @@ export interface AntiTank {
   strength: number;
   /** The infantry's own guns of the day, by how far its fieldworks have got. */
   guns: number;
-  /** False where the infantry in the line has not researched Anti-tank guns: its guns count at part of their worth. */
+  /** False where the infantry in the line has not researched Anti-tank guns: its guns count at part of their worth (under Units decide, they are 1939's). */
   kit: boolean;
   destroyers: number;
   handHeld: number;
@@ -109,6 +122,9 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
   const S = SUPPORT.antiTank, T = SUPPORT.tech;
   const year = turnToDate(Math.max(1, g.turn)).year;
   const day = gunsOfTheDay(year);
+  // (Units decide: each corps carries its own nation's guns, by the rows it holds, never the calendar's; the row prices a
+  // nation without Anti-tank guns, so 'without' is not read on top of it. DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
+  const units = unitsDecide(g);
   const close = S.handHeld.ground.includes(target.terrain);
   let all = 0, carry = 0, tanks = 0, guns = 0, destroyers = 0, handHeld = 0, kit = true;
   for (const d of defenders) {
@@ -120,7 +136,8 @@ export function antiTank(g: Game, attackers: Corps[], defenders: Corps[], target
     carry += k;
     const has = hasTech(g, d.nat, T.antiTank);
     if (!has) kit = false;
-    guns += k * (day[0] + (day[1] - day[0]) * f.works(d)) * (has ? 1 : S.without);
+    const its = units ? gunsOfRows(g, d.nat) : day;
+    guns += k * (its[0] + (its[1] - its[0]) * f.works(d)) * (units || has ? 1 : S.without);
     if (hasTech(g, d.nat, T.tankDestroyers)) destroyers += k * S.tankDestroyers;
     if (hasTech(g, d.nat, T.handHeld)) handHeld += k * (close ? S.handHeld.close : S.handHeld.open);
   }

@@ -18,6 +18,7 @@ import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
+import { unitsDecide } from './units';
 import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
@@ -549,7 +550,8 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
 /** A cadre takes the field again: the same corps, with its number, its diary and its ribbons, filled with new men. */
 function reform(g: Game, c: Corps, at: Region): void {
   c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
-  c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
+  // (Units decide: every nation's new men join at its own schools' level, DD 24 Nov 15:53Z, #2 form Part 2 section 2.)
+  c.xp = Math.max((c.nat === g.human || unitsDecide(g) ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
   for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
   raiseMorale(g, c);
   g.corps.push(c);
@@ -629,8 +631,9 @@ export function deliver(g: Game, nat: string): void {
       if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
       continue;
     }
-    // The player's new corps are as well trained as the instructors he has sent home can make them.
-    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
+    // The player's new corps are as well trained as the instructors he has sent home can make them. (Under Units
+    // decide, every nation's, from its own schools: DD 24 Nov 15:53Z, #2 form Part 2 section 2.)
+    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human || unitsDecide(g) ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
     c.org = 0.7;
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;

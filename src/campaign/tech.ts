@@ -358,7 +358,9 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
  * that is no ally of his. A computer-run nation keeps history's order, and its mistake.
  */
 export function winterAhead(g: Game, nat: string): boolean {
-  if (g.flags.open !== 1 || nat !== g.human || EASTERN.winter.hardy.includes(nat) || EASTERN.deepOwners.includes(nat)) return false;
+  // (Units decide: an army made for the winter is one that holds winter kit, whoever it is, never the hardy list, DD 24
+  // Nov 15:53Z, #2 form Part 1 section 1.)
+  if (g.flags.open !== 1 || nat !== g.human || (unitsDecide(g) ? winterReady(g, nat) : EASTERN.winter.hardy.includes(nat)) || EASTERN.deepOwners.includes(nat)) return false;
   for (const e of EASTERN.deepOwners) {
     if (!g.nations[e]?.alive || allied(g, nat, e)) continue;
     if (atWar(g, nat, e)) return true;
@@ -548,13 +550,27 @@ const UNLOCK_RULE: Record<string, string> = {
  * What the infantry's four support technologies do (rulings 146 and 152; the rule is in support.ts and the numbers in
  * support.json): each weapon has a job of its own in place of 6% on everything.
  */
-function supportWords(id: string): string | null {
+function supportWords(id: string, cause = false): string | null {
   const S = supportData as unknown as {
-    antiTank: { without: number; tankDestroyers: number; alone: { cut: number }; handHeld: { open: number; close: number } };
+    antiTank: { byYear: Record<string, [number, number]>; without: number; tankDestroyers: number; alone: { cut: number }; handHeld: { open: number; close: number } };
     machineGuns: { defence: number }; mortars: { works: number }; assault: { attack: number };
     tech: { antiTank: string; tankDestroyers: string; handHeld: string; support: string };
   };
   const A = S.antiTank, T = S.tech;
+  // (Units decide: the infantry's own guns go by the rows held, never the calendar, units.json land.antiTank; DD 24 Nov
+  // 15:53Z, #2 form Part 1 section 1. The card gives what each step's guns take off, never a year.)
+  if (cause && (id === T.antiTank || id === T.tankDestroyers)) {
+    const guns = (k: number): string => {
+      const y = UNITS.land.antiTank.years[k];
+      let at = -Infinity;
+      for (const key of Object.keys(A.byYear)) if (Number(key) <= y && Number(key) > at) at = Number(key);
+      const [open, dug] = A.byYear[String(at)];
+      return `${pct(open)} of the shock out of a tank attack in the open and ${pct(dug)} behind finished fieldworks`;
+    };
+    if (id === T.antiTank) return `Its infantry's own anti-tank guns take ${guns(1)}, where without them they take ${guns(0)}. The tanks pay for what they lose. Tanks that come on with no infantry beside them lose up to ${pct(A.alone.cut)} of their attack to the guns.`;
+    const at = techById(T.antiTank)?.name ?? T.antiTank;
+    return `Every line its infantry holds takes ${pct(A.tankDestroyers)} more of the shock out of a tank attack. With ${at} its infantry's own guns are heavier too: they take ${guns(2)}, where ${at} alone take ${guns(1)}.`;
+  }
   if (id === T.antiTank) return `Its infantry keeps up with the anti-tank guns of the day: without this they count at ${pct(A.without)} of their worth. They take the shock out of a tank attack, most from behind finished fieldworks, and the tanks pay for what they lose. Tanks that come on with no infantry beside them lose up to ${pct(A.alone.cut)} of their attack to the guns.`;
   if (id === T.support) return `Machine guns: its infantry defends up to ${pct(S.machineGuns.defence)} stronger against men on foot, most from finished fieldworks, and more of the attacker's losses fall on his infantry. Mortars: its infantry in the attack takes up to ${pct(S.mortars.works)} of the worth out of fieldworks, never out of concrete.`;
   if (id === T.tankDestroyers) return `Every line its infantry holds takes ${pct(A.tankDestroyers)} more of the shock out of a tank attack.`;
@@ -615,7 +631,7 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   // (The two radar steps, with the air campaigns on: what the warning chain and fighter control do, rider b553.)
   const radar = g && nat ? radarWords(g, nat, t.id) : null;
   if (radar) out.push(radar);
-  const kit = supportWords(t.id);
+  const kit = supportWords(t.id, cause);
   if (kit) out.push(kit);
   const ships = shipWords(t);
   if (ships) out.push(ships);

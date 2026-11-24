@@ -461,6 +461,12 @@ export interface Corps extends Storied {
   heir?: number;
   /** One of its nation's special formations (the grand campaign): the id of the unit in traits.json. */
   elite?: string;
+  /**
+   * Units decide (DD 24 Nov 15:53Z, #2 form Part 1 section 1, Part 2 section 4), written only under that switch: the
+   * month its men earned the Guards title in battle (units.ts earnGuards). A name only: its name and card read it, and
+   * nothing else does. Never 'elite'.
+   */
+  guards?: number;
   /** Morale, 0 to 1 (the grand campaign). A corps in a historical scenario carries none. See morale.json. */
   mor?: number;
   /** Why its morale stands where it does: [reason, change, 0 for since its nation's last reckoning or 1 for the month before]. */

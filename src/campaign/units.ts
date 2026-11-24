@@ -14,7 +14,7 @@
 // quality store below, one store for soldiers, pilots and crews (the design director's ruling of 24 Nov 15:53Z on the
 // rules builder's #2 form, rules-builder/release2/soviet/form.md, Part 2).
 
-import type { Air, Arms, Game, Land, LandWay, Nation, QualityStore, Sea, Way } from './types';
+import type { Air, Arms, Corps, Game, Land, LandWay, Nation, QualityStore, Sea, Way } from './types';
 import unitsData from '../../data/campaign/units.json';
 import leanData from '../../data/battle/lean.json';
 import airData from '../../data/campaign/air.json';
@@ -88,7 +88,9 @@ export interface UnitsData {
     byOrders: { need: number; stop: number; main: number };
     xp: { won: number; repulsed: number; held: number; beaten: number };
     label: { share: number; cap: number };
-    guards: { xp: number; won: number };
+    guards: { xp: number; won: number; elite: string[] };
+    raisedBy: Record<string, string>;
+    antiTank: { rows: string[]; years: number[] };
     ways: LandWay[];
     school: number;
   };
@@ -315,3 +317,75 @@ export function reformLeft<T extends object>(to: T): Partial<T> | null {
 
 /** True where a reform's text is told by a cause passing its mark under Units decide, never by the calendar (units.json land.reforms.news). */
 export const toldByCause = (id: string): boolean => UNITS.land.reforms.news.some((r) => r.event === id);
+
+// ---- Experience, schools and titles (DD 24 Nov 15:53Z, #2 form Part 1 2d and section 1; Part 2 sections 2 and 4) ----
+// What a corps' own men have lived through is the corps' xp; what its nation's schools know is land.school, the level
+// new men join at. Each is priced once: xp in corpsBase's 0.85 + 0.4 xp, the schools only through the xp new men bring.
+
+/**
+ * A corps' experience after a battle under Units decide, by its result (#2 form Part 1 2d; units.json land.xp), in
+ * place of today's flat +0.05 attacking and +0.04 defending, win or lose: the attacker +0.05 (1 - xp) if it carried the
+ * day and +0.02 (1 - xp) if it was repulsed; the defender +0.04 (1 - xp) if it held and +0.02 (1 - xp) if it was beaten.
+ * A corps learns most from a fight that goes its way, and less the more it knows already. `carried`: this side won.
+ */
+export function xpByResult(xp: number, side: 'att' | 'def', carried: boolean): number {
+  const X = UNITS.land.xp;
+  const gain = side === 'att' ? (carried ? X.won : X.repulsed) : carried ? X.held : X.beaten;
+  return xp + gain * (1 - xp);
+}
+
+/**
+ * The veteran cadres at a nation's drafts' schools: the count its drafts' training and its new corps' experience read
+ * (stories.ts training, raisedXp). Under Units decide the store's land.school, for every nation (#2 form Part 2
+ * section 2); off g.stories.schools, as today.
+ */
+export function schoolsOf(g: Game, nat: string): number {
+  const land = armsOf(g, nat)?.land;
+  return land ? land.school : g.stories.schools[nat] ?? 0;
+}
+
+/**
+ * Cadres sent home to a nation's schools as instructors, at most `most` in all. Under Units decide they go into the
+ * store's land.school (#2 form Part 2 section 2: a schools order raises land.school); off into g.stories.schools, as
+ * today.
+ */
+export function addSchools(g: Game, nat: string, by: number, most: number): void {
+  const land = armsOf(g, nat)?.land;
+  if (land) land.school = Math.min(most, land.school + by);
+  else g.stories.schools[nat] = Math.min(most, (g.stories.schools[nat] ?? 0) + by);
+}
+
+/**
+ * True where the land's drafts' schools take a schools order from a unit of this arm. Off, every arm's, as today. Under
+ * Units decide, never an airman's: his school step raises the air arm's school (air.school), never the land's (#2 form
+ * Part 2 section 6, confirmed by the air thread at 15:55Z), and that step is not laid yet (U), so an airman sent to
+ * the schools brings his trained pilots and nothing to the army's drafts.
+ */
+export const landSchools = (g: Game, kind: 'corps' | 'air' | 'fleet'): boolean => !unitsDecide(g) || kind !== 'air';
+
+/**
+ * The Guards title under Units decide (#2 form Part 1 section 1, Part 2 section 4; choice 13): every corps in `cs`, of
+ * any nation, at experience 0.5 or more with three attacks won (its record's 'taken': attack wins only, never defences
+ * held) takes it, the month it is earned, in its own field. It is a name only: its card and its name read it, and
+ * nothing else does. Never c.elite, which edge(), eliteCount, fold and the cadres read, since corpsBase's 0.85 + 0.4 xp
+ * already prices that experience. Off, nothing is written.
+ */
+export function earnGuards(g: Game, cs: readonly Corps[]): void {
+  if (!unitsDecide(g)) return;
+  const G = UNITS.land.guards;
+  for (const c of cs) if (!c.dead && c.guards === undefined && c.xp >= G.xp - EPS && (c.rec?.taken ?? 0) >= G.won) c.guards = g.turn;
+}
+
+/**
+ * True for a special formation (a traits.json unit id) whose title is earned in battle under Units decide and never
+ * bought: no nation orders it and it adds nothing in battle (units.json land.guards.elite: the Guards corps). Off,
+ * none.
+ */
+export const titleEarned = (g: Game, id: string | undefined): boolean => !!id && unitsDecide(g) && UNITS.land.guards.elite.includes(id);
+
+/**
+ * The research row that raises a special formation under Units decide, in place of the first year it could be raised
+ * (units.json land.raisedBy: the heavy tank corps needs Heavy tanks; #2 form Part 1 section 1), or undefined. Off,
+ * none: the year, as today.
+ */
+export const raisedBy = (g: Game, id: string): string | undefined => (unitsDecide(g) ? UNITS.land.raisedBy[id] : undefined);

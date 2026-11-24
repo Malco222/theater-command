@@ -11,7 +11,7 @@ import { FORTS_STAGE } from './stage';
 import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
-import { openTech, openUnitsRows } from './tech';
+import { openTech, openUnitsRows, winterReady } from './tech';
 import { openStores } from './resources';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
@@ -49,7 +49,7 @@ import { COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, LORRYSHIFT
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
 import { openLegions } from './legions';
-import { attackCommand, blitzGate, openQuality } from './units';
+import { attackCommand, blitzGate, openQuality, unitsDecide } from './units';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -393,7 +393,10 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     let atk = 0, fixed = 0;
     // Deep in Russia in the bad months an army that has not learned the country attacks at a fraction of its strength.
     const deep = edge.filter((id) => EASTERN.deepOwners.includes(g.regions[id].owner)).length * 2 >= edge.length;
-    let season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
+    // (Units decide: in the winter an army without winter kit, whoever it is, and the mud alike for every staff, since
+    // winter kit is not mud, in place of the hardy list, DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
+    let season = unitsDecide(g) ? (deep ? (wx.winter ? (winterReady(g, nat) ? 1 : EASTERN.winter.attack) : wx.mud ? 0.8 : 1) : 1)
+      : deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
     // Ruling 221 (S): where the long line runs on ground the Russian winter does not reach, a staff reckons it as it
     // reckons the winter: the strength its corps would have one province past the line they hold, averaged along the edge.
     if (EASTERN.lineReckon && !long.includes(nat)) {

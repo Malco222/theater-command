@@ -110,7 +110,7 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vac
 import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
 import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
-import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
+import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, guardsWords, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, titledName, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { setTeams, TEAMS_RELEASE } from '../teams';
@@ -2330,7 +2330,9 @@ function corpsRow(c: Corps, mine: boolean): string {
     if (d) tags.push(`<span class="tag ${d.good ? 'good' : 'bad'}" title="${esc(d.effect)}">${esc(d.label)}</span>`);
   }
   const special = eliteIn(c);
-  if (special) tags.push(`<span class="tag good" title="${esc(special.text)} ${esc(eliteRule(special))}">★ ${esc(special.label)}</span>`);
+  if (special) tags.push(`<span class="tag good" title="${esc(special.text)} ${esc(eliteRule(special, unitsDecide(g)))}">★ ${esc(special.label)}</span>`);
+  // (Units decide: the Guards title its men earned in battle, a name only, DD 24 Nov 15:53Z, #2 form Part 1 section 1.)
+  if (c.guards !== undefined) tags.push(`<span class="tag good" title="${esc(guardsWords(c))}">${esc(designation(c.nat))}</span>`);
   tags.push(...storyTags(c));
   if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
   else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, fortifications, minefields or demolition.">Engineers: ready for work</span>');
@@ -2348,7 +2350,7 @@ function corpsRow(c: Corps, mine: boolean): string {
   const card = corpsDetail(g, c);
   if (card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7)) tags.push(`<span class="tag good" title="${esc(REST_RULE)}">Resting</span>`);
   return `<div class="unit"><${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
-    ${icon(c)}<span class="nm">${esc(c.name)}${c.nick ? ` <i class="nick">${esc(c.nick)}</i>` : ''}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
+    ${icon(c)}<span class="nm">${esc(titledName(c))}${c.nick ? ` <i class="nick">${esc(c.nick)}</i>` : ''}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
     ${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}<span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men · ${esc(card.service)}</span>
     <span class="chits wide">${card.divisions.map((d) => chit(d, true)).join('')}</span>
     ${moodMeters(c, card.mood, true)}${moodWhy(card.mood)}
@@ -2468,9 +2470,9 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${c.school && mine ? '<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>' : resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
-  return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
-    <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
+  const flags = `${mine ? marchTag(c) : ''}${c.school && mine ? '<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>' : resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special, unitsDecide(g)))}">★ ${esc(special.word)}</span>` : ''}${c.guards !== undefined ? `<span class="tag good" title="${esc(guardsWords(c))}">${esc(designation(c.nat))}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(titledName(c))}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
+    <span class="utop"><b>${esc(titledName(c))}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
     <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>${carryRow(c)}
     ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
@@ -4850,7 +4852,7 @@ function heroesBlock(kind: UnitKind, u: AnyUnit): string {
       todo++;
       const opt = (how: Cash, label: string): string => {
         const why = whyNotSend(g, h, how) || (up ? '' : 'Wait for your turn.');
-        return `<button class="btn small" data-act="hero" data-id="${h.id}" data-how="${how}" title="${esc(why || capital(sendWorth(h, how)))}" ${why ? 'disabled' : ''}>${label}</button>`;
+        return `<button class="btn small" data-act="hero" data-id="${h.id}" data-how="${how}" title="${esc(why || capital(sendWorth(h, how, g)))}" ${why ? 'disabled' : ''}>${label}</button>`;
       };
       state = `<small>With the unit</small><div class="seg" style="margin-top:5px">${opt('bonds', 'War bond tour')}${opt('school', 'Train recruits')}</div>`;
     }
@@ -7093,7 +7095,7 @@ function traitList(nat: string, full = false): string {
   // section 1. The words are traits.ts traitCardRule's.)
   const causes = isOpen(g) ? unitsDecide(g) : UNITS_STAGE;
   const rule = (t: Trait): string => traitCardRule(t, BUDGET.scale, causes);
-  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, rule(t))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
+  return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, rule(t))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u, causes)}`, true) : ''}${dom}</ul>`;
 }
 
 /** What a country does best, with every other country's abilities a click away. */

@@ -19,6 +19,7 @@ import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';
 import { thePlace, theUnit } from './bombers';
 import { headline } from './game';
+import { addSchools, landSchools, schoolsOf } from './units';
 import type { AirFleet, Award, Cash, Corps, Fleet, Game, Hero, UnitKind } from './types';
 
 export const VALOUR = (data as unknown as {
@@ -104,15 +105,19 @@ export function whyNotSend(g: Game, h: Hero, how: Cash): string {
   const u = unitFor(g, h.kind, h.unit);
   if (!u) return 'The unit no longer exists.';
   if (h.kind === 'corps' && !(u as Corps).supplied) return 'The corps is cut off. There is no way home.';
-  if (how === 'school' && (g.stories.schools[h.nat] ?? 0) >= VETERANS.maxSchools) return 'The schools have all the instructors they can use.';
+  if (how === 'school' && landSchools(g, h.kind) && schoolsOf(g, h.nat) >= VETERANS.maxSchools) return 'The schools have all the instructors they can use.';
   return '';
 }
 
-/** What sending a holder home would bring, in words, for the card. */
-export function sendWorth(h: Hero, how: Cash): string {
+/**
+ * What sending a holder home would bring, in words, for the card. With the game given, under Units decide an airman
+ * trains pilots and not the army's drafts (units.ts landSchools).
+ */
+export function sendWorth(h: Hero, how: Cash, g?: Game): string {
   const V = VALOUR;
   if (how === 'bonds') return `+${(V.bonds.pp * budget.scale).toLocaleString('en-US')} a month for the treasury, for ${V.bonds.months[0]} to ${V.bonds.months[1]} months`;
   const better = `every later draft and new corps is trained ${Math.round(VETERANS.perSchool * V.school.steps * 100 * 10) / 10} points better`;
+  if (g && !landSchools(g, h.kind)) return `${PILOTS} more trained pilots at once`;
   return h.kind === 'air' ? `${PILOTS} more trained pilots at once, and ${better}` : better;
 }
 
@@ -132,9 +137,12 @@ export function sendHero(g: Game, id: number, how: Cash): boolean {
     h.left = V.bonds.months[0] + new Rng(hashString(`valour:tour:${g.seed}:${h.id}`)).int(V.bonds.months[1] - V.bonds.months[0] + 1);
     headline(g, 'info', `${who} goes home on a war bond tour, which will bring in ${(V.bonds.pp * budget.scale).toLocaleString('en-US')} a month for ${h.left} months.`, h.nat);
   } else {
-    g.stories.schools[h.nat] = Math.min(VETERANS.maxSchools, (g.stories.schools[h.nat] ?? 0) + V.school.steps);
+    // (Under Units decide into the store's land.school, a soldier only: an airman's school is the air arm's, DD 24 Nov
+    // 15:53Z, #2 form Part 2 sections 2 and 6.)
+    const land = landSchools(g, h.kind);
+    if (land) addSchools(g, h.nat, V.school.steps, VETERANS.maxSchools);
     if (h.kind === 'air') { const p = g.airPool[h.nat]; if (p) p.pilots += PILOTS; }
-    headline(g, 'info', `${who} goes home to train recruits. From now on every draft reaches the front better trained.`, h.nat);
+    headline(g, 'info', `${who} goes home to train recruits. ${land ? 'From now on every draft reaches the front better trained.' : `${PILOTS} more trained pilots join the reserve.`}`, h.nat);
   }
   return true;
 }

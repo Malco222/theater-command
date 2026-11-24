@@ -38,11 +38,15 @@
     "xp": { "won": 0.05, "repulsed": 0.02, "held": 0.04, "beaten": 0.02 },
     "_label": "Captured: of the defender's men lost, share x (attacker's per-man attack worth / defender's per-man defence worth) are booked as prisoners, at most 'cap' (Part 1 section 7). A split of men already lost; it adds none and goes in its own report field. D: fit to the record's fail-or-advance pair at Kursk (F, p. 34), 0.147 and 0.149.",
     "label": { "share": 0.148, "cap": 0.9 },
-    "_guards": "The Guards title, as a name only, in its own corps field (Part 1 section 1; choice 13): a corps of any nation at xp at least 'xp' with at least 'won' attacks won. Never c.elite. G.",
-    "guards": { "xp": 0.5, "won": 3 },
+    "_guards": "The Guards title, as a name only, in its own corps field (Part 1 section 1; Part 2 section 4; choice 13): a corps of any nation at xp at least 'xp' with at least 'won' attacks won (its record's 'taken', attack wins only) takes it, the month it is earned, and its card and name carry the word its nation gives such a formation (stories.json designation). Never c.elite, so it adds nothing to the corps' worth: corpsBase's 0.85 + 0.4 xp already prices that experience. 'elite': the special formations (traits.json 'unit' ids) the earned title stands in for: under the switch none is bought (whyNoElite refuses it) and none adds its own edge in battle (the Soviet Guards corps' x1.15 would price experience twice). G.",
+    "guards": { "xp": 0.5, "won": 3, "elite": ["guards"] },
+    "_raisedBy": "Special formations raised by a research row in place of their first year (traits.json 'from'; Part 1 section 1; choice 13): the heavy tank corps needs Heavy tanks, and stays the nation's own unit as traits.json lists it until audit #4 replaces the units by nation. By traits.json 'unit' id, never by nation.",
+    "raisedBy": { "heavy": "heavies" },
+    "_antiTank": "The infantry's own anti-tank guns by the rows the defender's nation holds, in place of the calendar (Part 1 section 1): the year of support.json's antiTank.byYear row a defence takes, by how many of 'rows' its nation holds in order: none, the 1939 row; Anti-tank guns, the 1941 row; Anti-tank guns and Tank destroyers, the 1943 row. No new row. The row itself prices a nation without the research, so support.json's 'without' is not read on top of it; Tank destroyers' own share (support.json tankDestroyers) and the attacker's armour against the tanks of the day are read as before. G.",
+    "antiTank": { "rows": ["antitank", "tankdestroyers"], "years": [1939, 1941, 1943] },
     "_ways": "The land ways a staff may hold (Part 2 section 3; data/battle/lean.json). Night and last-stand are fought as bold (lean.json standIn) until they are built.",
     "ways": ["mass", "methodical", "bold", "night", "last-stand"],
-    "_school": "The drafts' schools: 0 for every nation at every start month, as g.stories.schools holds today (Part 2 section 2). G.",
+    "_school": "The drafts' schools: 0 for every nation at every start month, as g.stories.schools holds today (Part 2 section 2). Under the switch it replaces g.stories.schools as the count the drafts' training and a new corps' experience read (stories.json veterans: green + perSchool x school, raised + perSchool x school), for every nation's corps. Raised by a schools order: the player's honours of the army and holders of the highest award from the army sent home as instructors (stories.ts, valour.ts), to veterans.maxSchools. An airman's school step is the air arm's (air.school, its size U), never the land's. A computer staff's schools order is not laid (U). G.",
     "school": 0
   },
 

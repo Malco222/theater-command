@@ -17,6 +17,7 @@ import { govMul } from './government';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
+import { unitsDecide } from './units';
 import { allied, atWar, headline, theName } from './game';
 import { majorsOf } from './diplomacy';
 import { stopOf } from './history';
@@ -576,7 +577,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const at = raiseSite(g, nat, u.kind, sel);
     const no = gate(`corps:${u.kind}`)?.why ?? whyNoElite(g, nat);
     out.push({
-      key: 'elite', group: 'army', label: u.label, blurb: `${u.text} ${eliteRule(u)}`, size: plural(u.divs, 'division'), cost: u.cost, months: u.months,
+      key: 'elite', group: 'army', label: u.label, blurb: `${u.text} ${eliteRule(u, unitsDecide(g))}`, size: plural(u.divs, 'division'), cost: u.cost, months: u.months,
       upkeep: corpsUpkeep(u.kind, u.divs), at,
       note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${eliteCount(g, nat)} of ${u.most} in the field or on order.`,
       why: no ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : noMen(u.divs) ?? poor(u.cost)),

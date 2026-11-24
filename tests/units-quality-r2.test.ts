@@ -6,7 +6,10 @@
 // are the design director's of 24 Nov 16:06Z (the form's 'Seeds ruled 16:07Z'). Then training and command (Part 1 2a,
 // 2b and section 1, as ruled): training as the ladder, command c from radios and what is earned, the attack, the most
 // corps, the slow habits and the blitz gate read from them for every nation, earned moved by the month's own battles,
-// and history's reforms of an army not applied, their texts told by causes.
+// and history's reforms of an army not applied, their texts told by causes. Then experience, schools, titles and kit
+// (Part 1 2d and section 1; Part 2 sections 2 and 4): experience by result, drafts that dilute every nation's corps at
+// its schools' level (land.school), the Guards title earned as a name only, the heavy corps by its research row, the
+// infantry's anti-tank guns by the defender's own rows, and winter kit in place of the hardy list.
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -29,7 +32,21 @@ import { techMul } from '../src/campaign/research';
 import { runTurnAI } from '../src/campaign/turn';
 import { commandMonth, corpsTakenWhole, provincesTaken } from '../src/campaign/command';
 import { armyTraining, attackCommand, blitzGate, commandOf, mostCorps, slowHabits } from '../src/campaign/units';
-import { KIND, type BattleReport, type Corps, type Region } from '../src/campaign/types';
+import { KIND, type Award, type BattleReport, type Corps, type Hero, type Region } from '../src/campaign/types';
+import { EASTERN, addCorps, capture, frozen, resolveBattle } from '../src/campaign/game';
+import { fronts } from '../src/campaign/staff';
+import { deliver } from '../src/campaign/economy';
+import { campXp } from '../src/campaign/buildings';
+import { STORIES, cashHonour, designation, drafted, fameOf, guardsWords, raisedXp, titledName, training, whyNotCash } from '../src/campaign/stories';
+import { VALOUR, sendHero, sendWorth, whyNotSend } from '../src/campaign/valour';
+import { eliteCount, eliteOf, eliteRule, traitDefence, whyNoElite } from '../src/campaign/traits';
+import { SUPPORT, antiTank, gunsOfRows, type Facing } from '../src/campaign/support';
+import { winterAhead, winterReady } from '../src/campaign/tech';
+import { earnGuards, schoolsOf, xpByResult } from '../src/campaign/units';
+import traitsSource from '../src/campaign/traits.ts?raw';
+import gameSource from '../src/campaign/game.ts?raw';
+import foldSource from '../src/campaign/fold.ts?raw';
+import economySource from '../src/campaign/economy.ts?raw';
 
 const ROWS = ['radios', 'nco', 'battledrill', 'officers'];
 
@@ -842,5 +859,410 @@ describe('the nation card under the switch: the blitz rows are no nation\'s own 
     expect(body).toContain('const causes = isOpen(g) ? unitsDecide(g) : UNITS_STAGE;');
     expect(body).toContain('traitCardRule(t, BUDGET.scale, causes)');
     expect(body).not.toMatch(/traitRule\(/);
+  });
+});
+
+// ---- Experience, schools, titles and kit (DD 24 Nov 15:53Z, #2 form Part 1 2d and section 1; Part 2 sections 2 and 4) ----
+
+/**
+ * September 1939: a Polish stack at Poznan attacked from Neumark by a German one, each of two infantry corps, with the
+ * experience given; nobody else there. A test reads each corps' experience after the fight.
+ */
+function poznan(on: boolean, attXp: number, defXp: number): { g: Game; target: Region; att: Corps[]; def: Corps[] } {
+  const g = startOpen(createGame(3, null));
+  if (on) g.flags.unitsDecide = 1;
+  const target = g.byName['Poznan'], from = g.byName['Neumark'];
+  for (const u of [...target.units, ...from.units]) removeCorps(g, u);
+  const def = [0, 1].map((i) => addCorps(g, 'POL', `Line ${i + 1}`, 'inf', 2, target.id, {}));
+  const att = [0, 1].map((i) => addCorps(g, 'GER', `Storm ${i + 1}`, 'inf', 3, from.id, {}));
+  for (const c of def) c.xp = defXp;
+  for (const c of att) c.xp = attXp;
+  for (const c of [...def, ...att]) { c.supplied = true; c.ap = c.apMax; }
+  return { g, target, att, def };
+}
+
+describe('experience by result (#2 form Part 1 2d)', () => {
+  it('gains 0.05, 0.02, 0.04 and 0.02 of what is left to learn: won, repulsed, held, beaten', () => {
+    expect(xpByResult(0.3, 'att', true)).toBeCloseTo(0.3 + 0.05 * 0.7, 12);
+    expect(xpByResult(0.3, 'att', false)).toBeCloseTo(0.3 + 0.02 * 0.7, 12);
+    expect(xpByResult(0.2, 'def', true)).toBeCloseTo(0.2 + 0.04 * 0.8, 12);
+    expect(xpByResult(0.2, 'def', false)).toBeCloseTo(0.2 + 0.02 * 0.8, 12);
+    // Never past 1, and nothing to learn at 1.
+    expect(xpByResult(1, 'att', true)).toBe(1);
+    expect(xpByResult(0.99, 'att', true)).toBeLessThan(1);
+  });
+
+  it('is what a battle gives under the switch, for the attacker that carries the day and the defender beaten', () => {
+    const f = poznan(true, 0.3, 0.2);
+    resolveBattle(f.g, f.att, f.target, { fought: 3 });
+    for (const c of f.att) expect(c.xp, c.name).toBeCloseTo(0.3 + 0.05 * 0.7, 9);
+    for (const c of f.def) expect(c.xp, c.name).toBeCloseTo(0.2 + 0.02 * 0.8, 9);
+  });
+
+  it('and for the attacker repulsed and the defender that holds', () => {
+    const f = poznan(true, 0.3, 0.2);
+    resolveBattle(f.g, f.att, f.target, { fought: 0.6 });
+    for (const c of f.att) expect(c.xp, c.name).toBeCloseTo(0.3 + 0.02 * 0.7, 9);
+    for (const c of f.def) expect(c.xp, c.name).toBeCloseTo(0.2 + 0.04 * 0.8, 9);
+  });
+
+  it('is today\'s flat +0.05 and +0.04 off, win or lose', () => {
+    for (const fought of [3, 0.6]) {
+      const f = poznan(false, 0.3, 0.2);
+      resolveBattle(f.g, f.att, f.target, { fought });
+      for (const c of f.att) expect(c.xp, `${fought} ${c.name}`).toBeCloseTo(0.35, 9);
+      for (const c of f.def) expect(c.xp, `${fought} ${c.name}`).toBeCloseTo(0.24, 9);
+    }
+  });
+});
+
+describe('drafts and the schools: land.school, for every nation (#2 form Part 1 2d; Part 2 section 2)', () => {
+  it('dilutes every nation\'s corps, the computer\'s too, at the level its schools give; off only the player\'s', () => {
+    for (const on of [true, false]) {
+      const g = open(on);
+      expect(g.human).toBeNull();
+      const c = g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!;
+      c.xp = 0.5;
+      drafted(g, c, 0.6, 0.4);
+      const w = 0.4 * STORIES.veterans.dilute;
+      expect(c.xp, String(on)).toBeCloseTo(on ? (0.5 * 0.6 + STORIES.veterans.green * w) / (0.6 + w) : 0.5, 12);
+    }
+  });
+
+  it('reads the store\'s land.school, never g.stories.schools, under the switch; off g.stories.schools, as today', () => {
+    const g = open(true);
+    const P = STORIES.veterans.perSchool;
+    expect(armsOf(g, 'UK')!.land.school).toBe(0);
+    expect(schoolsOf(g, 'UK')).toBe(0);
+    g.stories.schools.UK = 6;
+    expect(training(g, 'UK')).toBeCloseTo(STORIES.veterans.green, 12);
+    expect(raisedXp(g, 'UK')).toBeCloseTo(STORIES.veterans.raised, 12);
+    armsOf(g, 'UK')!.land.school = 4;
+    expect(schoolsOf(g, 'UK')).toBe(4);
+    expect(training(g, 'UK')).toBeCloseTo(STORIES.veterans.green + 4 * P, 12);
+    expect(raisedXp(g, 'UK')).toBeCloseTo(STORIES.veterans.raised + 4 * P, 12);
+    // A computer corps' drafts come at that level.
+    const c = g.corps.find((x) => x.nat === 'UK' && x.kind === 'inf' && !x.dead)!;
+    c.xp = 0.5;
+    drafted(g, c, 0.5, 0.5);
+    const w = 0.5 * STORIES.veterans.dilute;
+    expect(c.xp).toBeCloseTo((0.5 * 0.5 + (STORIES.veterans.green + 4 * P) * w) / (0.5 + w), 12);
+    // Off, g.stories.schools, as today.
+    const off = open(false);
+    off.stories.schools.UK = 6;
+    expect(schoolsOf(off, 'UK')).toBe(6);
+    expect(training(off, 'UK')).toBeCloseTo(STORIES.veterans.green + 6 * P, 12);
+    expect('qs' in off).toBe(false);
+  });
+
+  it('raises every nation\'s new corps from its schools, the computer\'s too; off a computer\'s at 0.05', () => {
+    for (const on of [true, false]) {
+      const g = open(on);
+      if (on) armsOf(g, 'UK')!.land.school = 4;
+      else g.stories.schools.UK = 4;
+      const n = g.nations.UK;
+      n.queue.push({ id: g.nextBuild++, what: 'corps', kind: 'inf', divs: 3, name: 'CXX Corps', region: n.capital, ordered: g.turn, eta: g.turn, cost: 0 });
+      deliver(g, 'UK');
+      const c = g.corps.find((x) => x.nat === 'UK' && x.name === 'CXX Corps')!;
+      const base = on ? STORIES.veterans.raised + 4 * STORIES.veterans.perSchool : 0.05;
+      expect(c.xp, String(on)).toBeCloseTo(base + campXp(g, c.reg), 12);
+    }
+  });
+
+  it('takes the player\'s schools order into land.school under the switch, and an airman\'s into none', () => {
+    const g = createGame(1, 'GER');
+    g.flags.unitsDecide = 1;
+    startOpen(g);
+    const c = g.corps.find((x) => x.nat === 'GER' && x.kind === 'inf' && !x.dead && x.supplied)!;
+    const a: Award = { id: g.stories.awards.length + 1, turn: g.turn, hon: 'rock', kind: 'corps', unit: c.id, name: c.name, nat: 'GER', at: c.reg };
+    g.stories.awards.push(a);
+    (c.hon ??= []).push(a.id);
+    const fame = fameOf(a);
+    expect(whyNotCash(g, a, 'school')).toBe('');
+    expect(cashHonour(g, a.id, 'school')).toBe(true);
+    expect(armsOf(g, 'GER')!.land.school).toBe(fame);
+    expect(g.stories.schools.GER).toBeUndefined();
+    expect(training(g, 'GER')).toBeCloseTo(STORIES.veterans.green + STORIES.veterans.perSchool * fame, 12);
+    // The holder of the highest award from the army: into land.school too.
+    const soldier: Hero = { id: 1, turn: g.turn, nat: 'GER', kind: 'corps', unit: c.id, name: c.name, who: 'A sergeant', at: -1, award: a.id };
+    (g.stories.heroes ??= []).push(soldier);
+    c.supplied = true;
+    expect(whyNotSend(g, soldier, 'school')).toBe('');
+    expect(sendHero(g, soldier.id, 'school')).toBe(true);
+    expect(armsOf(g, 'GER')!.land.school).toBe(fame + VALOUR.school.steps);
+    // An airman's school is the air arm's, never the army's drafts': his pilots come, and land.school stays.
+    const f = g.airFleets.find((x) => x.nat === 'GER')!;
+    g.airPool.GER = { ftr: 0, bmr: 0, pilots: 100, lostFtr: 0, lostBmr: 0, lostPilots: 0 };
+    const airman: Hero = { id: 2, turn: g.turn, nat: 'GER', kind: 'air', unit: f.id, name: f.name, who: 'A pilot', at: -1, award: a.id };
+    g.stories.heroes.push(airman);
+    expect(sendWorth(airman, 'school', g)).toBe(`${STORIES.cash.pilots} more trained pilots at once`);
+    expect(sendHero(g, airman.id, 'school')).toBe(true);
+    expect(armsOf(g, 'GER')!.land.school).toBe(fame + VALOUR.school.steps);
+    expect(g.airPool.GER.pilots).toBe(100 + STORIES.cash.pilots);
+    expect(g.headlines.at(-1)!.text).toMatch(/more trained pilots join the reserve\.$/);
+    // The schools take so many, counted in land.school.
+    armsOf(g, 'GER')!.land.school = STORIES.veterans.maxSchools;
+    expect(whyNotSend(g, { ...soldier, id: 3, sent: undefined }, 'school')).toBe('The schools have all the instructors they can use.');
+  });
+
+  it('is today\'s off: a schools order into g.stories.schools, an airman\'s too', () => {
+    const g = createGame(1, 'GER');
+    startOpen(g);
+    const f = g.airFleets.find((x) => x.nat === 'GER')!;
+    const airman: Hero = { id: 1, turn: g.turn, nat: 'GER', kind: 'air', unit: f.id, name: f.name, who: 'A pilot', at: -1, award: 1 };
+    (g.stories.heroes ??= []).push(airman);
+    expect(sendWorth(airman, 'school', g)).toBe(sendWorth(airman, 'school'));
+    expect(sendHero(g, airman.id, 'school')).toBe(true);
+    expect(g.stories.schools.GER).toBe(VALOUR.school.steps);
+    expect('qs' in g).toBe(false);
+  });
+});
+
+describe('the Guards title, earned, as a name only (#2 form Part 1 section 1; Part 2 section 4; choice 13)', () => {
+  it('goes to a corps of any nation at experience 0.5 with three attacks won, the month it is earned; off, to none', () => {
+    const g = open(true);
+    const cs = ['UK', 'SOV', 'ITA'].map((n) => g.corps.find((x) => x.nat === n && x.kind === 'inf' && !x.dead)!);
+    for (const c of cs) { c.xp = 0.5; c.rec = { taken: 3 }; }
+    const [, short, green] = cs;
+    short.rec = { taken: 2, won: 6 };
+    green.xp = 0.49;
+    earnGuards(g, cs);
+    expect(cs[0].guards).toBe(g.turn);
+    expect(short.guards).toBeUndefined();
+    expect(green.guards).toBeUndefined();
+    // Earned once: a later month does not move it.
+    g.turn += 3;
+    earnGuards(g, cs);
+    expect(cs[0].guards).toBe(g.turn - 3);
+    const off = open(false);
+    const c = off.corps.find((x) => x.nat === 'UK' && x.kind === 'inf' && !x.dead)!;
+    c.xp = 0.9; c.rec = { taken: 9 };
+    earnGuards(off, [c]);
+    expect('guards' in c).toBe(false);
+  });
+
+  it('is earned in the battle that brings the third attack won and the experience', () => {
+    const f = poznan(true, 0.49, 0.2);
+    for (const c of f.att) c.rec = { taken: 2 };
+    resolveBattle(f.g, f.att, f.target, { fought: 3 });
+    for (const c of f.att) {
+      expect(c.rec!.taken).toBe(3);
+      expect(c.xp).toBeGreaterThanOrEqual(0.5);
+      expect(c.guards, c.name).toBe(f.g.turn);
+      expect(c.elite).toBeUndefined();
+    }
+    for (const c of f.def) expect(c.guards).toBeUndefined();
+    // Off, the same fight writes no title.
+    const o = poznan(false, 0.49, 0.2);
+    for (const c of o.att) c.rec = { taken: 2 };
+    resolveBattle(o.g, o.att, o.target, { fought: 3 });
+    for (const c of o.att) expect('guards' in c).toBe(false);
+  });
+
+  it('adds nothing to a corps\' worth and never touches c.elite or the count of special formations', () => {
+    const g = open(true);
+    const ground = plains(g);
+    const c = g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!;
+    c.xp = 0.6; c.rec = { taken: 4 };
+    const before = { base: corpsBase(g, c), att: traitAttack(g, c, ground), names: traitNames(g, [c], ground, 'attack'), count: eliteCount(g, 'SOV') };
+    earnGuards(g, [c]);
+    expect(c.guards).toBe(g.turn);
+    expect(c.elite).toBeUndefined();
+    expect({ base: corpsBase(g, c), att: traitAttack(g, c, ground), names: traitNames(g, [c], ground, 'attack'), count: eliteCount(g, 'SOV') }).toEqual(before);
+  });
+
+  it('is read only by the corps\' name and card: its nation\'s word after the number', () => {
+    const g = open(true);
+    const sov = twin(g.corps.find((x) => x.nat === 'SOV' && !x.dead)!, { name: 'III Corps', guards: 1 });
+    const ger = twin(g.corps.find((x) => x.nat === 'GER' && !x.dead)!, { name: 'XIX Panzer Corps', guards: 1 });
+    expect(titledName(sov)).toBe(`III ${designation('SOV')} Corps`);
+    expect(titledName(sov)).toBe('III Guards Corps');
+    expect(titledName(ger)).toBe(`XIX ${designation('GER')} Panzer Corps`);
+    expect(titledName({ ...sov, guards: undefined })).toBe('III Corps');
+    expect(titledName({ ...sov, name: 'I Guards Corps' })).toBe('I Guards Corps');
+    expect(guardsWords(sov)).toBe('III Guards Corps: its men earned the title in battle in September 1939, with experience of 0.5 or more and 3 attacks won. A name only: what they have learned already counts in its strength.');
+    expect(guardsWords({ ...sov, guards: undefined })).toBe('');
+    // The card: the corps row and the army's card give the titled name and say what the title is.
+    expect(page).toContain('<span class="nm">${esc(titledName(c))}');
+    expect(page).toContain('<span class="utop"><b>${esc(titledName(c))}</b>');
+    expect(page.match(/guardsWords\(c\)/g)?.length).toBe(2);
+    // No rule reads it: not the battle's worth, the special formations, the folds or the cadres.
+    for (const text of [traitsSource, gameSource, foldSource, economySource]) expect(text).not.toMatch(/(?<!land)\.guards\b/);
+  });
+
+  it('takes the Soviet Guards corps out of the arsenal and out of battle under the switch: neither bought nor applied', () => {
+    const g = open(true);
+    const ground = plains(g);
+    const u = eliteOf('SOV')!;
+    expect(UNITS.land.guards.elite).toContain(u.id);
+    g.turn = 41; // January 1943: past the row's year
+    expect(whyNoElite(g, 'SOV')).toBe('Not raised: the title is earned in battle. A corps of any army with experience of 0.5 or more and 3 attacks won takes it, as a name only, since its experience already counts in its strength.');
+    expect(eliteRule(u, true)).toBe(whyNoElite(g, 'SOV'));
+    const c = twin(g.corps.find((x) => x.nat === 'SOV' && x.kind === 'inf' && !x.dead)!, { id: 93100, elite: u.id });
+    const plain = twin(c, { id: 93101, elite: undefined });
+    expect(traitAttack(g, c, ground)).toBe(traitAttack(g, plain, ground));
+    expect(traitDefence(g, c, ground)).toBe(traitDefence(g, plain, ground));
+    expect(traitNames(g, [c], ground, 'attack')).not.toContain(u.label);
+    // Off, as today: bought from 1942, and worth its x1.15.
+    const off = open(false);
+    expect(whyNoElite(off, 'SOV')).toBe('Not before 1942.');
+    off.turn = 41;
+    expect(whyNoElite(off, 'SOV')).toBeNull();
+    expect(traitAttack(off, c, off.regions[ground.id]) / traitAttack(off, plain, off.regions[ground.id])).toBeCloseTo(u.attack!, 12);
+    expect(eliteRule(u)).toContain('Raised from 1942.');
+  });
+});
+
+describe('the heavy tank corps needs Heavy tanks, not a year (#2 form Part 1 section 1)', () => {
+  it('waits on the research row under the switch, still Germany\'s unit; off, on 1942', () => {
+    const g = open(true);
+    const u = eliteOf('GER')!;
+    expect(UNITS.land.raisedBy[u.id]).toBe('heavies');
+    expect(hasTech(g, 'GER', 'heavies')).toBe(false);
+    expect(whyNoElite(g, 'GER')).toBe('Needs the technology Heavy tanks. Open Research to begin it.');
+    g.turn = 41;
+    expect(whyNoElite(g, 'GER')).toBe('Needs the technology Heavy tanks. Open Research to begin it.');
+    g.turn = 1;
+    give(g, 'GER', 'heavies');
+    expect(whyNoElite(g, 'GER')).toBeNull();
+    expect(eliteRule(u, true)).toContain('Raised once Heavy tanks is researched.');
+    expect(eliteRule(u, true)).not.toContain('1942');
+    // Off, the year, held or not.
+    const off = open(false);
+    give(off, 'GER', 'heavies');
+    expect(whyNoElite(off, 'GER')).toBe('Not before 1942.');
+    expect(eliteRule(u)).toContain('Raised from 1942.');
+    // The cards pass the switch.
+    expect(page).toContain('eliteRule(special, unitsDecide(g))');
+    expect(page).toContain('eliteRule(u, causes)');
+  });
+});
+
+describe('anti-tank guns by the defender\'s own rows, not the year (#2 form Part 1 section 1)', () => {
+  const B = (y: string) => SUPPORT.antiTank.byYear[y];
+  const facing: Facing = { works: () => 0, guns: 0, mines: 0, sappers: 0, fort: 0, foot: 1, tanks: 1 };
+
+  it('gives 1939\'s guns with no row, 1941\'s with Anti-tank guns, 1943\'s with Tank destroyers as well', () => {
+    const g = open(true);
+    take(g, 'UK', 'antitank', 'tankdestroyers');
+    expect(gunsOfRows(g, 'UK')).toEqual(B('1939'));
+    give(g, 'UK', 'tankdestroyers');
+    expect(gunsOfRows(g, 'UK')).toEqual(B('1939'));
+    give(g, 'UK', 'antitank');
+    expect(gunsOfRows(g, 'UK')).toEqual(B('1943'));
+    take(g, 'UK', 'tankdestroyers');
+    expect(gunsOfRows(g, 'UK')).toEqual(B('1941'));
+    expect(UNITS.land.antiTank).toEqual({ rows: ['antitank', 'tankdestroyers'], years: [1939, 1941, 1943] });
+  });
+
+  it('is what a defence carries under the switch, whatever the year; off, the year\'s guns, at half without the row', () => {
+    for (const turn of [1, 41]) {
+      const g = open(true), off = open(false);
+      for (const x of [g, off]) x.turn = turn;
+      const att = (x: Game) => [x.corps.find((c) => c.nat === 'GER' && c.kind === 'arm' && !c.dead)!];
+      const pol = (x: Game) => x.corps.filter((c) => c.nat === 'POL' && c.kind === 'inf' && !c.dead).slice(0, 2);
+      const ger = (x: Game) => x.corps.filter((c) => c.nat === 'GER' && c.kind === 'inf' && !c.dead).slice(0, 2);
+      const at = (x: Game, d: Corps[], works: number) => antiTank(x, att(x), d, plains(x), { ...facing, works: () => works }).guns;
+      expect(hasTech(g, 'POL', 'antitank')).toBe(true);
+      expect(hasTech(g, 'GER', 'antitank')).toBe(false);
+      // Poland holds Anti-tank guns: 1941's guns, in the open and behind works, in 1939 as in 1943.
+      expect(at(g, pol(g), 0)).toBeCloseTo(B('1941')[0], 12);
+      expect(at(g, pol(g), 1)).toBeCloseTo(B('1941')[1], 12);
+      // Germany holds neither row: 1939's guns, in full, since the row prices the want of them.
+      expect(at(g, ger(g), 1)).toBeCloseTo(B('1939')[1], 12);
+      // Off, the year's guns, and half of them without the row.
+      const day = turn === 1 ? B('1939') : B('1943');
+      expect(at(off, pol(off), 1), String(turn)).toBeCloseTo(day[1], 12);
+      expect(at(off, ger(off), 1), String(turn)).toBeCloseTo(day[1] * SUPPORT.antiTank.without, 12);
+    }
+  });
+
+  it('says on the research card what each step\'s guns take off, never a year or the day', () => {
+    const g = open(true), off = open(false);
+    const at = techRule(techById('antitank')!, g, 'GER'), td = techRule(techById('tankdestroyers')!, g, 'GER');
+    expect(at).toContain(`Its infantry's own anti-tank guns take ${Math.round(B('1941')[0] * 100)}% of the shock out of a tank attack in the open and ${Math.round(B('1941')[1] * 100)}% behind finished fieldworks, where without them they take ${Math.round(B('1939')[0] * 100)}%`);
+    expect(td).toContain(`they take ${Math.round(B('1943')[0] * 100)}% of the shock out of a tank attack in the open and ${Math.round(B('1943')[1] * 100)}% behind finished fieldworks, where Anti-tank guns alone take ${Math.round(B('1941')[0] * 100)}%`);
+    for (const w of [at, td]) { expect(w).not.toMatch(/of the day|19\d\d/); }
+    expect(techRule(techById('antitank')!, off, 'GER')).toContain('the anti-tank guns of the day');
+  });
+});
+
+describe('the hardy list\'s three reads go to winter kit, for every nation (#2 form Part 1 section 1)', () => {
+  const DEC = 4; // December 1939
+  const sovGround = (g: Game): Region => g.regions.find((r) => r.owner === 'SOV' && r.ctrl === 'SOV' && r.nb.every((j) => g.regions[j].owner === 'SOV' && g.regions[j].ctrl === 'SOV') && !r.cap && r.terrain === 'plains')!;
+
+  it('frozen: an army without winter kit, whoever it is; off the hardy list spares its own', () => {
+    for (const on of [true, false]) {
+      const g = open(on);
+      g.turn = DEC;
+      const r = sovGround(g);
+      expect(winterReady(g, 'SOV') && winterReady(g, 'FIN')).toBe(true);
+      expect(frozen(g, 'SOV', r)).toBe(false);
+      expect(frozen(g, 'GER', r)).toBe(true);
+      // Sweden and Norway hold the kit from the switch's start list; off the hardy list spares them.
+      expect(frozen(g, 'SWE', r)).toBe(false);
+      expect(winterReady(g, 'SWE'), String(on)).toBe(on);
+      // A hardy army that has lost its kit freezes under the switch; off it is spared.
+      take(g, 'SOV', 'winterkit');
+      expect(frozen(g, 'SOV', r), String(on)).toBe(on);
+      give(g, 'GER', 'winterkit');
+      expect(frozen(g, 'GER', r)).toBe(false);
+    }
+  });
+
+  it('the player\'s winter advice: an army without the kit, never the hardy list', () => {
+    for (const on of [true, false]) {
+      const g = createGame(1, 'FIN');
+      if (on) g.flags.unitsDecide = 1;
+      startOpen(g);
+      expect(winterAhead(g, 'FIN')).toBe(false);
+      take(g, 'FIN', 'winterkit');
+      expect(winterAhead(g, 'FIN'), String(on)).toBe(on);
+    }
+  });
+
+  it('a staff\'s season reckoning: the winter by the kit, and the mud alike for every staff', () => {
+    // A Soviet province deep in the Soviet Union held by Italy, at war with it and with nobody else: each staff's front
+    // there is on Soviet ground, so it is reckoned by the eastern seasons.
+    const season = (on: boolean, turn: number, fix?: (g: Game) => void): { ITA: number; SOV: number } => {
+      const g = open(on);
+      const x = sovGround(g);
+      for (const u of [...x.units]) removeCorps(g, u);
+      capture(g, x, 'ITA');
+      addCorps(g, 'ITA', 'Probe Corps', 'inf', 3, x.id, {}).supplied = true;
+      setWar(g, 'ITA', 'SOV');
+      fix?.(g);
+      g.turn = turn;
+      const atk = (nat: string): number => fronts(g, nat).filter((f) => (nat === 'ITA' ? f.ours : f.edge).includes(x.id)).reduce((s, f) => s + f.atk, 0);
+      return { ITA: atk('ITA'), SOV: atk('SOV') };
+    };
+    const SEP = 1, NOV = 3, JAN = 5;
+    for (const on of [true, false]) {
+      const clear = season(on, SEP), mud = season(on, NOV), winter = season(on, JAN);
+      expect(clear.ITA).toBeGreaterThan(0);
+      expect(clear.SOV).toBeGreaterThan(0);
+      expect(mud.ITA / clear.ITA, `${on} ITA mud`).toBeCloseTo(0.8, 9);
+      expect(winter.ITA / clear.ITA, `${on} ITA winter`).toBeCloseTo(EASTERN.winter.attack, 9);
+      // The Soviet staff: off the hardy list spares it the mud; under the switch the mud is the mud for everyone.
+      expect(mud.SOV / clear.SOV, `${on} SOV mud`).toBeCloseTo(on ? 0.8 : 1, 9);
+      expect(winter.SOV / clear.SOV, `${on} SOV winter`).toBeCloseTo(1, 9);
+    }
+    // The kit, never the list: an Italian staff with winter kit reckons the winter whole under the switch; off it does not.
+    const kit = (g: Game) => give(g, 'ITA', 'winterkit');
+    expect(season(true, JAN, kit).ITA / season(true, SEP, kit).ITA).toBeCloseTo(1, 9);
+    expect(season(false, JAN, kit).ITA / season(false, SEP, kit).ITA).toBeCloseTo(EASTERN.winter.attack, 9);
+    // And a Soviet staff without it reckons the winter's cost.
+    const bare = (g: Game) => take(g, 'SOV', 'winterkit');
+    expect(season(true, JAN, bare).SOV / season(true, SEP, bare).SOV).toBeCloseTo(EASTERN.winter.attack, 9);
+  });
+});
+
+describe('the slice\'s new code names no nation', () => {
+  it('reads no nation id: every per-nation figure is data', () => {
+    const src = unitsSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(src).not.toMatch(/['"`](GER|SOV|FRA|UK|USA|ITA|JAP|SWE|NOR|FIN|HUN|POL)['"`]/);
+    const L = UNITS.land;
+    expect(L.guards).toEqual({ xp: 0.5, won: 3, elite: ['guards'] });
+    expect(L.raisedBy).toEqual({ heavy: 'heavies' });
   });
 });

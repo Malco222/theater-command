@@ -22,6 +22,7 @@ import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
+import { UNITS, addSchools, landSchools, schoolsOf, unitsDecide } from './units';
 import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
 import {
   STACK,
@@ -95,6 +96,27 @@ export function grade(xp: number): string {
 
 /** What a nation calls a formation that has been named in the order of the day. */
 export const designation = (nat: string): string => STORIES.designation[nat] ?? STORIES.designation._default;
+
+/**
+ * A corps' name as its card gives it. A corps whose men earned the Guards title in battle (Units decide, c.guards; DD
+ * 24 Nov 15:53Z, #2 form Part 1 section 1, Part 2 section 4) carries its nation's word for such a formation after its
+ * number: "III Guards Corps". The name it is known by in the orders and the record is unchanged; this is the title
+ * only, and it adds nothing to the corps' strength.
+ */
+export function titledName(c: Corps): string {
+  if (c.guards === undefined) return c.name;
+  const word = designation(c.nat);
+  if (new RegExp(`(^|\\s)${word}(\\s|$)`).test(c.name)) return c.name;
+  const sp = c.name.indexOf(' ');
+  return sp > 0 ? `${c.name.slice(0, sp)} ${word}${c.name.slice(sp)}` : `${word} ${c.name}`;
+}
+
+/** What a corps' card says of its earned title: when its men earned it, by what, and that it is a name only. '' without one. */
+export function guardsWords(c: Corps): string {
+  if (c.guards === undefined) return '';
+  const G = UNITS.land.guards;
+  return `${titledName(c)}: its men earned the title in battle in ${turnToDate(c.guards).label}, with experience of ${G.xp} or more and ${G.won} attacks won. A name only: what they have learned already counts in its strength.`;
+}
 
 /** The honours a unit carries, oldest first. */
 export const honoursOf = (g: Game, u: Storied): Award[] => (u.hon ?? []).map((id) => awardOf(g, id)).filter((a): a is Award => !!a);
@@ -590,18 +612,22 @@ export function inherit(g: Game, c: Corps, id: number): void {
 
 // ---- Veterans and replacements ----------------------------------------------------------------
 
-/** How well a nation's drafts are trained: better for every veteran cadre the player has sent to the schools. */
-export const training = (g: Game, nat: string): number => STORIES.veterans.green + STORIES.veterans.perSchool * (g.stories.schools[nat] ?? 0);
+/**
+ * How well a nation's drafts are trained: better for every veteran cadre the player has sent to the schools. (Under
+ * Units decide the count is the store's land.school, for every nation, DD 24 Nov 15:53Z, #2 form Part 2 section 2.)
+ */
+export const training = (g: Game, nat: string): number => STORIES.veterans.green + STORIES.veterans.perSchool * schoolsOf(g, nat);
 
-/** The experience a new corps of the player's starts with. */
-export const raisedXp = (g: Game, nat: string): number => STORIES.veterans.raised + STORIES.veterans.perSchool * (g.stories.schools[nat] ?? 0);
+/** The experience a new corps of the player's starts with. (Under Units decide, every nation's: economy.ts.) */
+export const raisedXp = (g: Game, nat: string): number => STORIES.veterans.raised + STORIES.veterans.perSchool * schoolsOf(g, nat);
 
 /**
  * Drafts have joined one of the player's corps: 'add' of its full strength, on top of the 'before' it had. Men who
- * have never been under fire thin out what the corps knows, and men trained by veterans thin it less.
+ * have never been under fire thin out what the corps knows, and men trained by veterans thin it less. (Under Units
+ * decide, every nation's corps, the computer's too, DD 24 Nov 15:53Z, #2 form Part 1 2d.)
  */
 export function drafted(g: Game, c: Corps, before: number, add: number): void {
-  if (c.nat !== g.human || add <= 0) return;
+  if ((c.nat !== g.human && !unitsDecide(g)) || add <= 0) return;
   const w = add * STORIES.veterans.dilute;
   const was = c.xp;
   // (A fortress crew's drafts come from its own depots, trained as the crew is: fortrows.json crewXp, under the switch.)
@@ -911,7 +937,7 @@ export function whyNotCash(g: Game, a: Award, how: Cash): string {
     if (!c.supplied) return 'The corps is cut off. There is no way home.';
     if (!homeFor(g, c)) return 'There is nowhere at home for the corps to go.';
   }
-  if (how === 'school' && (g.stories.schools[a.nat] ?? 0) >= STORIES.veterans.maxSchools) return 'The schools have all the instructors they can use.';
+  if (how === 'school' && landSchools(g, a.kind) && schoolsOf(g, a.nat) >= STORIES.veterans.maxSchools) return 'The schools have all the instructors they can use.';
   return '';
 }
 
@@ -919,8 +945,10 @@ export function whyNotCash(g: Game, a: Award, how: Cash): string {
 export function cashWorth(g: Game, a: Award, how: Cash): string {
   const C = STORIES.cash, fame = fameOf(a);
   if (how === 'bonds') return `+${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and +${C.bondsPc * fame} political capital`;
-  const steps = Math.min(fame, STORIES.veterans.maxSchools - (g.stories.schools[a.nat] ?? 0));
+  const steps = Math.min(fame, STORIES.veterans.maxSchools - schoolsOf(g, a.nat));
   const better = `every later draft and new corps is trained ${Math.round(STORIES.veterans.perSchool * steps * 100)} points better`;
+  // (Units decide: an airman's school is the air arm's, never the army's drafts', units.ts landSchools.)
+  if (!landSchools(g, a.kind)) return `${C.pilots * fame} more trained pilots at once`;
   return a.kind === 'air' ? `${C.pilots * fame} more trained pilots at once, and ${better}` : better;
 }
 
@@ -941,9 +969,11 @@ export function cashHonour(g: Game, id: number, how: Cash): boolean {
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
     gain = `The bond drive brings in ${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and ${C.bondsPc * fame} political capital.`;
   } else {
-    g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
+    // (Under Units decide into the store's land.school, never an airman's: DD 24 Nov 15:53Z, #2 form Part 2 sections 2, 6.)
+    const land = landSchools(g, a.kind);
+    if (land) addSchools(g, a.nat, fame, STORIES.veterans.maxSchools);
     if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }
-    gain = 'From now on every draft reaches the front better trained.';
+    gain = land ? 'From now on every draft reaches the front better trained.' : `${C.pilots * fame} more trained pilots join the reserve.`;
   }
   if (a.kind === 'corps') {
     const c = u as Corps;

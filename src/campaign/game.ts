@@ -41,7 +41,7 @@ import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
 import pursuitData from '../../data/campaign/pursuit.json';
-import { armyTraining, attackCommand, blitzGate, mostCorps, unitsDecide } from './units';
+import { armyTraining, attackCommand, blitzGate, earnGuards, mostCorps, unitsDecide, xpByResult } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -768,7 +768,9 @@ export const lineOwner = (g: Game, o: string): boolean => lineOwners(g).includes
 
 /** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
 export function frozen(g: Game, nat: string, r: Region): boolean {
-  return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g, nat);
+  // (Units decide: winter kit alone, for every nation, never the hardy list, DD 24 Nov 15:53Z, #2 form Part 1 section
+  // 1; the Soviet Union and Finland hold the kit from the start, Sweden and Norway from the switch's start list.)
+  return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && (unitsDecide(g) || !EASTERN.winter.hardy.includes(nat)) && !winterReady(g, nat);
 }
 
 /**
@@ -2566,7 +2568,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     const before = men(c);
     c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g, c) * nerve(c), 0, 1);
-    c.xp = Math.min(1, c.xp + 0.05);
+    // (Units decide: by the result, +0.05 (1 - xp) if it carried the day and +0.02 (1 - xp) if repulsed, in place of
+    // the flat +0.05, DD 24 Nov 15:53Z, #2 form Part 1 2d.)
+    c.xp = unitsDecide(g) ? xpByResult(c.xp, 'att', R >= 1.2) : Math.min(1, c.xp + 0.05);
     c.fought = true;
     attU[i].lost = before - men(c);
     attLost += attU[i].lost;
@@ -2591,7 +2595,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
     c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
     c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
-    c.xp = Math.min(1, c.xp + 0.04);
+    // (Units decide: +0.04 (1 - xp) if it held and +0.02 (1 - xp) if beaten, in place of the flat +0.04; #2 form 2d.)
+    c.xp = unitsDecide(g) ? xpByResult(c.xp, 'def', !win) : Math.min(1, c.xp + 0.04);
     c.fought = true;
     defU[i].lost = before - men(c);
     defLost += defU[i].lost;
@@ -2805,6 +2810,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const luck = late ? `late:${target.theatre}:${g.flags[`fought:${target.theatre}`]}` : aside ? `aside:${rep.id - (g.flags.lateBattles ?? 0)}` : `${rep.id - (g.flags.asideBattles ?? 0) - (g.flags.lateWalks ?? 0)}`;
   afterBattle(g, rep, target, a.odds, attackers, attGens, defenders, defGens, luck, evenOdds(a.dice));
   storyBattle(g, rep, target, a.odds, attackers, defenders, { sea: opts.sea, air: opts.air, capital: enemyCapital });
+  // (Units decide: a corps of any nation in the fight that now has the experience and the attacks won takes the Guards
+  // title, as a name only, DD 24 Nov 15:53Z, #2 form Part 1 section 1. Off, nothing.)
+  earnGuards(g, attackers);
+  earnGuards(g, defenders);
   if (prisoners >= 40000) {
     const who = new Set(defU.filter((u) => u.fate === 'surrendered' || u.fate === 'destroyed').map((u) => u.nat));
     const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : bloc(g.nations[defNat]) === 'league' ? 'League' : 'Axis';

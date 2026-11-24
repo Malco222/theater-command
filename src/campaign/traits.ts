@@ -9,11 +9,11 @@ import { allied, atWar, headline, worksFor } from './game';
 import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
-import { techById, techTraits } from './tech';
+import { hasTech, techById, techTraits } from './tech';
 import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
-import { UNITS, blitzGate, unitsDecide } from './units';
+import { UNITS, blitzGate, raisedBy, titleEarned, unitsDecide } from './units';
 
 /** When a trait counts in a battle. Everything listed must hold. */
 export interface When {
@@ -183,7 +183,9 @@ function edge(g: Game, c: Corps, target: Region, landing: boolean, side: 'attack
     m *= x;
     names?.add(t.name);
   }
-  const u = c.elite && row?.unit && row.unit.id === c.elite ? row.unit : null;
+  // (Units decide: a formation whose title is earned, the Guards corps, adds nothing of its own, since corpsBase's
+  // experience already prices it, DD 24 Nov 15:53Z, #2 form Part 1 section 1. Off, as today.)
+  const u = c.elite && row?.unit && row.unit.id === c.elite && !titleEarned(g, c.elite) ? row.unit : null;
   const x = u?.[side];
   if (u && x !== undefined && holds(g, u.when, c, target, landing)) { m *= x; names?.add(u.label); }
   return m;
@@ -299,7 +301,12 @@ export function eliteCount(g: Game, nat: string): number {
 export function whyNoElite(g: Game, nat: string): string | null {
   const u = eliteOf(nat);
   if (!traitRules(g) || !u) return 'This nation has no special formation.';
-  if (u.from !== undefined && sceneOf(g).year < u.from) return `Not before ${u.from}.`;
+  // (Units decide, DD 24 Nov 15:53Z, #2 form Part 1 section 1: a title earned in battle is never bought, and a
+  // formation that waits on its kit waits on the research, not the year. Off, the year, as today.)
+  if (titleEarned(g, u.id)) return earnedWords();
+  const row = raisedBy(g, u.id);
+  if (row) { if (!hasTech(g, nat, row)) return `Needs the technology ${techById(row)?.name ?? row}. Open Research to begin it.`; }
+  else if (u.from !== undefined && sceneOf(g).year < u.from) return `Not before ${u.from}.`;
   if (eliteCount(g, nat) >= u.most) return `The nation can keep ${u.most} of these at once, in the field and on order.`;
   return null;
 }
@@ -477,9 +484,25 @@ export function traitCardRule(t: Trait, scale: number, units: boolean): string {
   return traitRule(t, scale);
 }
 
-/** What a special formation does, in plain words: its size, its edge in battle, when it can be raised and how many. */
-export function eliteRule(u: Elite): string {
+/**
+ * The words for a title earned in battle (Units decide, units.json land.guards): who earns it and what it does,
+ * worked out from the data, never a flag or a date.
+ */
+function earnedWords(): string {
+  const G = UNITS.land.guards;
+  return `Not raised: the title is earned in battle. A corps of any army with experience of ${G.xp} or more and ${G.won} attacks won takes it, as a name only, since its experience already counts in its strength.`;
+}
+
+/**
+ * What a special formation does, in plain words: its size, its edge in battle, when it can be raised and how many.
+ * `units`: under Units decide (as traitCardRule), a title earned in battle says so, and a formation raised by a
+ * research row names the row in place of a year (DD 24 Nov 15:53Z, #2 form Part 1 section 1).
+ */
+export function eliteRule(u: Elite, units = false): string {
+  if (units && UNITS.land.guards.elite.includes(u.id)) return earnedWords();
   const fight = fightWords(u, 'its');
   const size = `${u.divs === 1 ? `One ${DIV_WORD[u.kind] ?? u.kind} division` : `${u.divs} ${DIV_WORD[u.kind] ?? u.kind} divisions`}.`;
-  return [size, fight, u.from !== undefined ? `Raised from ${u.from}.` : '', `At most ${u.most} at once.`].filter(Boolean).join(' ');
+  const row = units ? UNITS.land.raisedBy[u.id] : undefined;
+  const when = row ? `Raised once ${techById(row)?.name ?? row} is researched.` : u.from !== undefined ? `Raised from ${u.from}.` : '';
+  return [size, fight, when, `At most ${u.most} at once.`].filter(Boolean).join(' ');
 }
