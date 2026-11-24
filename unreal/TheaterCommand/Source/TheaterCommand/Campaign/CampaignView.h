@@ -1210,6 +1210,7 @@ struct FCampaignView
 	bool bTaskForce = false; // (release 2, taskforce.ts) a fleet can be made a task force: a standing job, refit, and back
 	bool bFleetWhy = false; // (release 2, fleetwhy.ts) the admirals give a reason for each fleet they order
 	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
+	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
