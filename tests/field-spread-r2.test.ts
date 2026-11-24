@@ -592,5 +592,14 @@ describe('data', () => {
     // Step 1 as laid: step 1b's keys off, so the campaign lays exactly { W }.
     expect(SPREAD.steps).toEqual({ level: false, ledger: false });
     expect(SPREAD.m).toEqual({ flank: true, rear: true, fire: false, ambush: false, air: false });
+    // The readings this build chose where the form left a step-1 detail open, each in its note with its mark.
+    const chose: [string, RegExp][] = [
+      ['_about', /no first-month check[^.]*\(G\)/], ['_about', /not written on the ticket.*?\(G\)/],
+      ['_ref', /the ledger reads each block's, its divisions' mean \(G\)/],
+      ['_m', /stay at the block as built.*?\(G\)/], ['_m', /damage-weighted.*?\(G\)/], ['_m', /Air harm enters the ledger at m = 1.*?\(G\)/], ['_m', /spares.*?as built.*?m = 1 \(G\)/],
+      ['_mask', /never on his true bar.*?\(G\)/], ['_mask', /stays after the battle unless that side broke \(G\)/],
+      ['_residual', /'flankRear'.*?0\.774/],
+    ];
+    for (const [k, re] of chose) expect(d[k] as string, k).toMatch(re);
   });
 });
