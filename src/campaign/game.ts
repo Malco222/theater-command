@@ -1221,6 +1221,8 @@ export interface AttackOpts {
   fought?: number;
   /** With 'fought': what the field cost each corps and each side, so the bill speaks as the field did (ruling 226(6)). */
   field?: FieldBill;
+  /** Units decide (#7 4(b), 12:48Z): a beaten army breaking out through the enemy on its road out. No pursuit follows it. */
+  breakout?: boolean;
 }
 
 /**
@@ -1753,7 +1755,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
   // Units decide (#7 4(b)): what a beaten defence would lose to the chase, read by both sides before the battle (129(d)).
-  if (unitsDecide(g) && !town && defenders.some(fights)) {
+  if (unitsDecide(g) && !town && !opts.breakout && defenders.some(fights)) {
     const ours = g.human !== null && dN.has(g.human);
     const banned = new Set(attackers.map((c) => c.reg)), blocks = new Map<number, Corps>(), cutAt = new Set<number>();
     let chasedBy: Corps | null = null;
@@ -1771,6 +1773,16 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (cutAt.size) {
       const at = listAnd([...cutAt].map((j) => g.regions[j].name));
       lines.push({ label: 'Pursuit', value: `${ours ? 'Our' : 'Their'} road out is cut at ${at}`, effect: `If the line breaks, ${ours ? 'our' : 'their'} men on foot who can go no other way are taken whole by the ${arm(blocks.get([...cutAt][0]))} already there` });
+      // The breakout comes first: against the weakest of the enemy on those roads, by the card's own defence worth there.
+      const breakers = defenders.filter((c) => c.str >= 0.15 && c.kind !== 'fort');
+      let road: Region | null = null, worst = Infinity;
+      for (const j of cutAt) {
+        const u = blocks.get(j), r = g.regions[j];
+        if (!u) continue;
+        const D = onTheRoad(g, u, r, () => assess(g, breakers, r, { breakout: true }).D);
+        if (D < worst) { worst = D; road = r; }
+      }
+      if (road) lines.push({ label: 'Breakout', value: `Breaking out at ${road.name}`, effect: `If the line breaks, ${ours ? 'our' : 'their'} beaten army first attacks the enemy on its road out there; if that fails, ${ours ? 'our' : 'their'} men on foot who can go no other way are taken whole` });
     } else if (chasedBy) {
       lines.push({ label: 'Pursuit', value: `${ours ? 'Our foot cannot outrun their' : 'Their foot cannot outrun our'} ${arm(chasedBy)}`, effect: `If the line breaks, about ${Math.round(PURSUIT.share * 100)}% of ${ours ? 'our' : 'their'} men on foot are taken as they fall back` });
     }
@@ -2079,12 +2091,12 @@ const chaser = (c: Corps): boolean => fights(c) && c.supplied && c.str >= 0.15;
  * gets there at less cost than this corps does. Each such corps cuts one road and pays the action points; a road
  * already cut stays cut for every corps it outruns. Off, or nothing cut, an empty set.
  */
-function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<number>, blocks: Map<number, Corps>, pay = true): Set<number> {
+function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<number>, blocks: Map<number, Corps>, pay = true, open?: Set<number>): Set<number> {
   const cut = new Set<number>();
   if (!unitsDecide(g) || !afoot(c) && lifted(c) >= 1) return cut;
   for (const j of from.nb) {
     const r = g.regions[j];
-    if (!fallsOn(g, c, r, banned) || r.units.some((u) => allied(g, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g, u.nat, c.nat))) continue;
+    if (open?.has(j) || !fallsOn(g, c, r, banned) || r.units.some((u) => allied(g, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g, u.nat, c.nat))) continue;
     const mine = pace(g, c, r);
     const held = blocks.get(j);
     if (held) { if (pace(g, held, r) < mine) cut.add(j); continue; }
@@ -2109,6 +2121,56 @@ function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
   const mine = pace(g, c, to);
   if (!chasers.some((u) => chaser(u) && pace(g, u, to) < mine)) return 0;
   return PURSUIT.share * (1 - lifted(c));
+}
+
+/**
+ * A cutting corps stands on the road it cut while a breakout is fought against it there, out of any works; it goes
+ * back to where it came from, as it was, if the fight leaves it standing on that road. (Moved by hand, not marched:
+ * it never left its province on the map, and nothing else about it changes.)
+ */
+function onTheRoad<T>(g: Game, u: Corps, road: Region, fight: () => T): T {
+  const home = g.regions[u.reg], at = home.units.indexOf(u), dug = u.dug;
+  home.units.splice(at, 1); road.units.push(u); u.reg = road.id; if (dug !== undefined) u.dug = false;
+  try { return fight(); }
+  finally {
+    // (Put back in its own place in the list: whoever was reading the list round it reads it unchanged.)
+    if (!u.dead && u.reg === road.id && road.units.includes(u)) {
+      road.units.splice(road.units.indexOf(u), 1); home.units.splice(Math.min(at, home.units.length), 0, u); u.reg = home.id; if (dug !== undefined) u.dug = dug;
+    }
+  }
+}
+
+/**
+ * The breakout (Units decide, #7 4(b); the design director's 12:48Z and 12:49Z): before a cut road takes any corps
+ * whole, the beaten stack's corps still at 15 in 100 or more attack the weakest cutting corps, by the card's defence
+ * worth on the road it cut, once, as an ordinary battle on the card. Won, that road is open again for the whole
+ * stack; lost, the cut stands. Null where no cut would take anybody. The pursuit is off inside it.
+ */
+function breakOut(g: Game, stack: Corps[], from: Region, winner: string, banned: Set<number>, open: Set<number>): BattleReport | null {
+  const dry = new Map<number, Corps>();
+  let doomed = false;
+  for (const c of stack) {
+    if (c.dead || c.reg !== from.id || c.str < 0.15 || !afoot(c)) continue;
+    const outs = from.nb.filter((j) => fallsOn(g, c, g.regions[j], banned));
+    if (!outs.length) continue;
+    const cut = roadsCut(g, c, from, winner, banned, dry, false, open);
+    if (outs.every((j) => cut.has(j))) doomed = true;
+  }
+  if (!doomed) return null;
+  const breakers = stack.filter((c) => !c.dead && c.reg === from.id && c.str >= 0.15 && c.kind !== 'fort');
+  if (!breakers.some(fights)) return null;
+  let road: Region | null = null, block: Corps | null = null, worst = Infinity;
+  for (const [j, u] of dry) {
+    const r = g.regions[j];
+    const D = onTheRoad(g, u, r, () => assess(g, breakers, r, { breakout: true }).D);
+    if (D < worst) { worst = D; road = r; block = u; }
+  }
+  if (!road || !block) return null;
+  const at = road;
+  const goers = limitAttackers(g, breakers, at);
+  const rep = onTheRoad(g, block, at, () => resolveBattle(g, goers.length ? goers : breakers, at, { breakout: true }));
+  if (rep.taken) open.add(at.id);
+  return rep;
 }
 
 /** The winners move in, fastest first. */
@@ -2412,14 +2474,22 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     // (Units decide, the pursuit: the roads a faster enemy has cut, and by whom; and what the chase takes on the way.)
     const blocks = new Map<number, Corps>();
     const chased = (c: Corps, to: Region, i: number): void => {
-      const share = pursuitTakes(g, c, to, attackers);
+      const share = opts.breakout ? 0 : pursuitTakes(g, c, to, attackers);
       if (share <= 0) return;
       const before = men(c);
       c.str *= 1 - share;
       const took = before - men(c);
       defU[i].lost += took; defU[i].chased = took; prisoners += took;
     };
+    const reopened = new Set<number>();
+    const breakout = !opts.breakout && unitsDecide(g) && !town && !overrun ? breakOut(g, defenders, target, attNat, banned, reopened) : null;
     defenders.forEach((c, i) => {
+      // (Units decide: a corps that broke out through the enemy on its road out is already on it, and is chased there.)
+      if (breakout && !c.dead && c.reg !== target.id) {
+        defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = c.reg; c.ap = 0;
+        chased(c, g.regions[c.reg], i);
+        return;
+      }
       // The fortress rows (06:15Z (b)): a beaten fortress crew stays in its works as the town's garrison, taking no room
       // there, until it is stormed or starves, on its own stores and not the town's. Shattered, at under 15 in 100 of its
       // own size, or beaten in the storm of the town itself, it is taken as before.
@@ -2435,7 +2505,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         return;
       }
       // A garrison has nowhere to go.
-      const cut = town || overrun || c.str < 0.15 ? null : roadsCut(g, c, target, attNat, banned, blocks);
+      const cut = town || overrun || c.str < 0.15 || opts.breakout ? null : roadsCut(g, c, target, attNat, banned, blocks, true, reopened);
       if (cut?.size) defU[i].roadsCut = [...cut];
       const outs = cut?.size ? new Set([...banned, ...cut]) : banned;
       const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, outs);

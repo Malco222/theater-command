@@ -98,17 +98,55 @@ describe('a beaten stack chased off the field', () => {
     expect(chased(fight(field(true, FOOT, PANZERS, 'mountain')))).toEqual([0, 0, 0, 0, 0]);
   });
 
-  it('Beda Fomm: an armoured corps already beside the only road out takes the foot whole; the lorried corps gets out', () => {
+  const blockAt = (f: Field, kind: Kind, divs: number, str = 1): Corps => {
+    const b = addCorps(f.g, 'GER', 'Block', kind, divs, f.flank.id, {});
+    b.supplied = true; b.ap = b.apMax; b.str = str; b.org = 1;
+    return b;
+  };
+  const breakouts = (f: Field) => f.g.reports.filter((r) => r.region === f.rear.id && r.attNat === 'POL');
+
+  it('Mons: a strong block holds the breakout; the foot is taken whole, the lorried corps gets out', () => {
     const f = field(true, FOOT, PANZERS);
-    const block = addCorps(f.g, 'GER', 'Block', 'arm', 2, f.flank.id, {});
-    block.supplied = true; block.ap = block.apMax;
+    const block = blockAt(f, 'arm', 6);
     const ap = block.ap;
     const rep = fight(f);
+    const out = breakouts(f);
+    expect(out.length).toBe(1);
+    expect(out[0].taken).toBe(false);
     expect(fates(rep)).toEqual(['surrendered', 'surrendered', 'surrendered', 'surrendered', 'retreated']);
     expect(f.def[4].reg).toBe(f.rear.id);
     expect(rep.defenders[0].roadsCut).toEqual([f.rear.id]);
+    expect(block.reg).toBe(f.flank.id);
     expect(block.ap).toBe(ap - pace(f.g, block, f.rear));
     expect(rep.prisoners).toBeGreaterThan(0);
+  });
+
+  it('Montelimar: a thin block is broken through; the stack falls back by that road and the foot pays only the share', () => {
+    const f = field(true, FOOT, PANZERS);
+    const block = blockAt(f, 'mot', 1, 0.2);
+    const rep = fight(f);
+    const out = breakouts(f);
+    expect(out.length).toBe(1);
+    expect(out[0].taken).toBe(true);
+    expect(fates(rep)).toEqual(['retreated', 'retreated', 'retreated', 'retreated', 'retreated']);
+    for (const c of f.def) expect(c.reg).toBe(f.rear.id);
+    // Of the men each foot corps had left after the battle and the breakout, a quarter; none of the lorried.
+    const left = rep.defenders.filter((u) => !u.guard).map((u, i) => (u.chased ?? 0) / ((u.chased ?? 0) + f.def[i].divs * f.def[i].str * 15000));
+    for (const s of left.slice(0, 4)) expect(s).toBeCloseTo(0.25, 2);
+    expect(left[4]).toBe(0);
+    // The beaten cutter is booked by the ordinary rules: it falls back off the road or is taken there.
+    expect(f.rear.units).not.toContain(block);
+    expect(block.dead === true || f.g.regions[block.reg].units.includes(block)).toBe(true);
+  });
+
+  it('one breakout per beaten stack, and none where nobody would be cut off', () => {
+    const f = field(true, FOOT, PANZERS);
+    fight(f);
+    expect(breakouts(f).length).toBe(0);
+    const h = field(true, ['mot', 'arm'], PANZERS);
+    blockAt(h, 'arm', 6);
+    fight(h);
+    expect(breakouts(h).length).toBe(0);
   });
 
   it('a road with its own side standing in it cannot be cut', () => {
@@ -155,7 +193,11 @@ describe('the card reads the pursuit to both sides (129(d))', () => {
     block.supplied = true; block.ap = block.apMax;
     f.g.human = 'POL';
     expect(line(f)?.value).toBe(`Our road out is cut at ${f.rear.name}`);
+    expect(assess(f.g, f.att, f.target).lines.find((l) => l.label === 'Breakout')?.value).toBe(`Breaking out at ${f.rear.name}`);
     expect(block.ap).toBe(block.apMax);
+    expect(block.reg).toBe(f.flank.id);
+    expect(f.flank.units).toContain(block);
+    expect(f.rear.units).not.toContain(block);
   });
   it('off, or a stack that rides: no line', () => {
     expect(line(field(false, FOOT, PANZERS))).toBeUndefined();
