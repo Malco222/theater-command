@@ -1035,6 +1035,12 @@ void ACampaignPlayerController::OpenMenu()
 	{
 		return;
 	}
+	if (HeldBackSquadron != INDEX_NONE)
+	{
+		// (the pre-check's read of 24 November: a card left open over the menu is closed first, so the ships left
+		// behind for it rejoin their fleet and the save holds the fleet whole)
+		ClosePage();
+	}
 	if (ACampaignGameMode* Mode = GetMode())
 	{
 		Mode->SaveCampaign();
@@ -1075,6 +1081,9 @@ void ACampaignPlayerController::EnterCampaign()
 	PickedBeforeMass.Reset();
 	PutDownFleet();
 	PutDownAgent();
+	// (Nor a split made for a card in the war before: its ids are that war's, never to be joined in this one.)
+	HeldBackSquadron = HeldBackFrom = INDEX_NONE;
+	HeldBackCard.Reset();
 	WarPrompt = FWarPrompt();
 	EndAsk.bVisible = false;
 	RoundSeen.Reset();
