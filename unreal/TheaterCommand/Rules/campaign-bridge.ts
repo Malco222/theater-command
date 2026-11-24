@@ -1023,10 +1023,18 @@ function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
     done.push(x);
   }
   const out = inside.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
-  const settle = (): void => backInside(looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i])));
+  const settle = (): number => {
+    const back = looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i]));
+    backInside(back);
+    return back.length;
+  };
   let result: R;
   try { result = call(); } catch (e) { settle(); throw e; }
-  settle();
+  const put = settle();
+  // (The 1.5 pre-check, 24 Nov 19:11Z.) An order's answer carries the picture of the war drawn inside the call, with
+  // the garrison still out; the 3D game takes it as the map's (TakeView). Where any corps was put back (a refusal, or
+  // one the order left behind), the picture is drawn again, with it inside its town and its moves as they were.
+  if (!looks && put > 0 && result && typeof result === 'object' && 'view' in result) (result as { view: unknown }).view = view();
   return result;
 }
 /** A call that only looks, made with the garrison in hand as if out: put back after. */

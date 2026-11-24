@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cbc17c98 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c3f5152b 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -59198,7 +59198,11 @@
       done.push(x);
     }
     const out = inside2.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
-    const settle2 = () => backInside(looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i])));
+    const settle2 = () => {
+      const back = looks ? inside2 : inside2.filter((x, i) => !wentOut(s, x, out[i]));
+      backInside(back);
+      return back.length;
+    };
     let result;
     try {
       result = call();
@@ -59206,7 +59210,8 @@
       settle2();
       throw e;
     }
-    settle2();
+    const put = settle2();
+    if (!looks && put > 0 && result && typeof result === "object" && "view" in result) result.view = view2();
     return result;
   }
   var lookOut = (fn) => (...a) => comeOut(a[0], () => fn(...a), true);

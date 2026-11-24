@@ -26,6 +26,7 @@ interface Bridge {
   move(ids: number[], to: number): unknown;
   attack(ids: number[], to: number): { report?: unknown } | null;
   take(ids: number[], to: number): unknown;
+  view(): unknown;
 }
 const TC = (globalThis as Record<string, unknown>).TC as Bridge;
 
@@ -136,6 +137,12 @@ describe('a garrison comes out only as the order goes (release 2 and 1.5.1)', ()
     return { g, r, c, foe, home, far };
   }
   const corpsIn = (text: string, id: number): Corps => loadGame(text)!.corps.find((x) => x.id === id)!;
+  /** How the picture of the war an answer carries shows a corps: inside its town or not, and its moves. */
+  const pictured = (answer: unknown, id: number): { town: boolean; ap: number } | undefined => {
+    const v = (answer as { view?: { corps?: { id: number; town?: boolean; ap: number }[] } } | null)?.view ?? (answer as { corps?: { id: number; town?: boolean; ap: number }[] });
+    const c = v?.corps?.find((x) => x.id === id);
+    return c ? { town: !!c.town, ap: c.ap } : undefined;
+  };
 
   it('the looks see it as if out and leave the game the same to the byte', () => {
     const { c, foe, home } = front();
@@ -164,12 +171,13 @@ describe('a garrison comes out only as the order goes (release 2 and 1.5.1)', ()
     const { c, far } = front();
     const t0 = saved();
     // (an attack on a place with no enemy next door, and on its own ground: refused)
-    TC.attack([c.id], far);
-    expect(saved()).toBe(t0);
-    TC.attack([c.id], c.reg);
-    expect(saved()).toBe(t0);
-    TC.take([c.id], c.reg);
-    expect(saved()).toBe(t0);
+    // The picture of the war each answer carries (the 3D game takes it as the map's) shows it inside, with no move,
+    // as the save and a fresh view do: not as it stood while the call was made (the 1.5 pre-check, 19:11Z).
+    for (const answer of [TC.attack([c.id], far), TC.attack([c.id], c.reg), TC.take([c.id], c.reg), TC.move([c.id], c.reg)]) {
+      expect(saved()).toBe(t0);
+      expect(pictured(answer, c.id)).toEqual({ town: true, ap: 0 });
+    }
+    expect(pictured(TC.view(), c.id)).toEqual({ town: true, ap: 0 });
     const back = corpsIn(saved(), c.id);
     expect(back.town).toBe(EARLIER);
     expect(back.ap).toBe(0);
@@ -256,6 +264,7 @@ describe('a garrison comes out only as the order goes (release 2 and 1.5.1)', ()
     expect(gb.town).toBe(g.turn);
     expect(gb.reg).toBe(g.byName['Saar'].id);
     expect(gb.ap).toBe(0);
+    expect(pictured(rep, b.id)).toEqual({ town: true, ap: 0 }); // (the answer's picture shows it back inside)
     expect(corpsIn(text, a.id).town === EARLIER).toBe(false);
     placedOnce(text, [a.id, b.id]);
   });
