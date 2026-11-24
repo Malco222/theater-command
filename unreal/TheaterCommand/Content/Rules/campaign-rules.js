@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 359d163b 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bcf7335f 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44475,7 +44475,8 @@
   }
   function fleetWhy(g2, f) {
     if (!fleetWhyOn(g2) || f.nat !== g2.human || f.ordered || !f.why || f.why[0] !== g2.turn) return "";
-    return `Your admirals: ${f.why[1]}`;
+    const why = f.why[1];
+    return `Your admirals: ${why.charAt(0).toLowerCase()}${why.slice(1)}`;
   }
 
   // ../../src/campaign/navy.ts
@@ -46821,7 +46822,7 @@
         if (why) say(why);
       };
       if (!n.atWar.length || !shipCount(f.ships) || f.duty !== "raid" && keepsHarbour(g2, nat)) {
-        home("At peace, it lies in harbour.");
+        home(n.atWar.length ? void 0 : "The country is at peace, so it lies in harbour.");
         continue;
       }
       const o = orders2?.find((x) => x.fleet === f.name);
@@ -46830,7 +46831,7 @@
         continue;
       }
       if (f.ready < 0.5 || !atSea(f) && f.ready < NAVY.ready.sortieAt) {
-        home(`Worn down (readiness ${Math.round(f.ready * 100)}%), it refits in harbour until it is fit for sea again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
+        home(`Worn down to ${Math.round(f.ready * 100)}% readiness, it refits in harbour and sails again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
         continue;
       }
       if (f.duty === "raid") {
@@ -46839,11 +46840,11 @@
           const from2 = f.port;
           if (rebase(g2, f, to)) {
             headline(g2, "info", `${cap8(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[f.station].name)}.`, nat, to.id);
-            say(`It moved its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`);
+            say(`It shifts its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`);
             continue;
           }
         }
-        if (sail(g2, f, f.station, "raid")) say(`A raider, it goes for the enemy's merchant ships ${where(f.station)}, its hunting ground.`);
+        if (sail(g2, f, f.station, "raid")) say(`A raider, it hunts the enemy's merchant ships ${where(f.station)}.`);
         else home(`Its hunting ground ${where(f.station)} is out of its reach, so it waits in harbour.`);
         continue;
       }
@@ -46881,12 +46882,12 @@
             why = words();
           }
         };
-        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => sighted(z) ? `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.` : `It patrols ${sea}.`);
+        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => sighted(z) ? `It patrols ${sea} to bring the enemy fleet sighted there to battle: it is judged strong enough to win.` : `It patrols ${sea}.`);
         if (landedLately(g2, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`);
-        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
+        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, which your army's landing must cross.`);
         if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
-        if (invaded) add(60, () => `It patrols ${sea}: the enemy is invading the homeland across it.`);
-        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to close the sea off a port your army is besieging.`);
+        if (invaded) add(60, () => `It patrols ${sea}: the enemy is crossing it to invade the homeland.`);
+        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to blockade the port your army is besieging.`);
         if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) add(5, () => `It patrols ${sea}, its usual beat: no other sea in its reach needs it more.`);
         if (v > bv) {
           bv = v;
@@ -46895,19 +46896,19 @@
         }
       }
       if (lane && f.duty === "patrol" && bv <= 5 && laneLoss(g2, lane.to, lane.zones, lane.id).raid > 0 && escort(g2, f, lane.id)) {
-        say(`It guards ${lane.name}: there is no enemy fleet to fight, and raiders are sinking the cargoes on its beat.`);
+        say(`It guards ${lane.name}: raiders are sinking cargoes on its beat, and there is no enemy fleet to fight.`);
         continue;
       }
       if (seaWar(g2) && f.duty === "patrol" && !f.tied && bv <= 5) {
         const clear = (z2) => !(airOver(g2, z2, nat, true) - airOver(g2, z2, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z2 && g2.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g2));
         const bare = FLEETS.ai.guard ? laneUnguarded(g2, f, reach3.filter(clear)) : null;
         if (bare && escort(g2, f, bare.id)) {
-          say(`It guards ${bare.name}: raiders are sinking its cargoes and no other ship of your side guards it.`);
+          say(`It guards ${bare.name}: raiders are sinking its cargoes, and no other ship of yours guards it.`);
           continue;
         }
         const z = FLEETS.ai.hunt ? huntingGround(g2, f, [...beat].filter((x) => reach3.includes(x) && clear(x))) : -1;
         if (z >= 0 && sail(g2, f, z, "hunt")) {
-          say(says && subsFound(z) ? `Its destroyers hunt the submarines at work ${where(z)}, on its beat.` : `Its destroyers sweep ${where(z)} for submarines, on its beat.`);
+          say(says && subsFound(z) ? `Its destroyers hunt the submarines found ${where(z)}, on its beat.` : `Its destroyers sweep ${where(z)} for submarines, on its beat.`);
           continue;
         }
       }
@@ -51403,7 +51404,7 @@
 
   // ../../data/campaign/rearguard.json
   var rearguard_default = {
-    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps ('most' divisions at most) is ordered to hold where it stands until its side's next month: it marches no further this month. The design director's ruling (24 November 19:18Z, on the historian's read, historian/rearguard-delay-1124.md: no direct relationship between advance rates and force ratios, so the odds act only through the rearguard's own fight): all the attackers in the province fight the rearguard in one fight and share its delay, each losing it once. If the rearguard holds, the delay is 'weeksPerDiv' weeks a division, 'weeks' at most (FM 100-5's delay on a position until nightfall, a position a day; Luzon, five delaying lines in about 14 days); if it is broken, 'broken' of that (a penetrated defender gave way at about twice the rate of one merely pushed back). The time is lost before the pursuit is run. Under Units decide ('screen') a rearguard standing in the province a beaten corps of its side falls back into acts on the pursuit's race only through time: each pursuer loses the rearguard's full delay first; it is never a blanket exemption. The rearguard itself fights as any corps and is chased and cut off by the same pursuit; driven out of its province it is a rearguard no longer. The computer staffs order rearguards by the same rule ('ai'): after their month's moves, a small corps of theirs with no bigger corps of its side beside it, the enemy next door at 'odds' times its side's defence there or more, and a bigger corps of its side in a province next door that no enemy stands in, holds; 'perMonth' at most for each staff. Figures G (the design director's).",
+    _about: "Rearguards (release 2; Brian 24 November 2026 18:24Z, 'i like these', the idea: 'a split-off division can hold a province for a month while your main army pulls back, slowing the enemy's pursuit'). src/campaign/rearguard.ts. A small corps ('most' divisions at most) is ordered to hold where it stands until its side's next month: it marches no further this month. The design director's ruling (24 November 19:18Z, on the historian's read, historian/rearguard-delay-1124.md: no direct relationship between advance rates and force ratios, so the odds act only through the rearguard's own fight): all the attackers in the province fight the rearguard in one fight and share its delay, each losing it once. If the rearguard holds, the delay is 'weeksPerDiv' weeks a division, 'weeks' at most (FM 100-5's delay on a position until nightfall, a position a day; Luzon, five delaying lines in about 14 days); if it is broken, 'broken' of that (a penetrated defender gave way at about twice the rate of one merely pushed back). The time is lost before the pursuit is run. Under Units decide ('screen') rearguards act on the pursuit's race only through time, never by more than the pursuers lose (the design director's 19:22Z): the corps a rearguard fought beside are raced with the attackers' lost time as the fight decided it (half where it broke); and a rearguard standing unfought in the province a beaten corps of its side falls back into costs each pursuer pressing the chase its delay, paid once a battle; it is never a blanket exemption. The rearguard itself fights as any corps and is chased and cut off by the same pursuit; driven out of its province it is a rearguard no longer. The computer staffs order rearguards by the same rule ('ai', staff doctrine): after their month's moves, a small corps of theirs with no bigger corps of its side beside it, the enemy it can see next door (a staff's estimate of divisions counted, never the truth) at 'odds' times its side's divisions at strength there or more, and a bigger corps of its side in a province next door that no enemy stands in, holds; 'perMonth' at most for each staff. Figures G (the design director's).",
     most: 2,
     weeksPerDiv: 1,
     weeks: 2,
@@ -53263,11 +53264,20 @@
     }
     return cut2;
   }
-  function pursuitTakes(g2, c, to, chasers) {
+  function pursuitTakes(g2, c, to, chasers, lost = 0, paid) {
     if (!unitsDecide(g2) || !afoot(c)) return 0;
     const mine4 = pace(g2, c, to);
+    const fast = chasers.filter((u) => chaser(u) && chasePace(g2, u, c, to) < mine4);
+    if (!fast.length) return 0;
     const held3 = screenWeeks(g2, c, to, (nat) => nat === c.nat || allied(g2, nat, c.nat));
-    if (!chasers.some((u) => chaser(u) && chasePace(g2, u, c, to) + held3 < mine4)) return 0;
+    if (held3 > 0) {
+      for (const u of fast) if (!paid?.has(u.id)) {
+        paid?.add(u.id);
+        u.ap = Math.max(0, u.ap - held3);
+      }
+    }
+    const slow = lost + held3;
+    if (slow > 0 && !fast.some((u) => chasePace(g2, u, c, to) + slow < mine4)) return 0;
     return PURSUIT.share * (1 - lifted(c));
   }
   function onTheRoad(g2, u, road, fight2) {
@@ -53557,8 +53567,9 @@
       let intoWorks = false;
       let back = null;
       const blocks = /* @__PURE__ */ new Map();
+      const paidRear = /* @__PURE__ */ new Set();
       const chased = (c, to, i) => {
-        const share = opts.breakout ? 0 : pursuitTakes(g2, c, to, attackers2);
+        const share = opts.breakout ? 0 : pursuitTakes(g2, c, to, attackers2, rears.includes(c) ? 0 : rearWeeks, paidRear);
         if (share <= 0) return;
         const before = men(c);
         c.str *= 1 - share;
@@ -57063,15 +57074,24 @@
   function aiRearguards(g2, nat) {
     if (!rearguardOn(g2) || nat === g2.human || !g2.nations[nat].alive) return;
     const picks = [];
+    let sight2 = null;
     for (const c of g2.corps) {
       if (c.nat !== nat || c.dead || c.rear || c.town !== void 0 || c.divs > REARGUARD.most || !fights(c)) continue;
       const r = g2.regions[c.reg];
       const side5 = friendlyUnits(g2, r, nat).filter((u) => !u.dead && u.town === void 0);
       if (side5.some((u) => u.divs > REARGUARD.most)) continue;
-      let threat2 = 0;
-      for (const j of r.nb) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (!u.dead && u.kind !== "fort" && u.town === void 0) threat2 += atkPower(g2, u);
-      const own = side5.reduce((t, u) => t + defPower(g2, u, r), 0);
-      if (threat2 <= 0 || threat2 < REARGUARD.ai.odds * own) continue;
+      sight2 ?? (sight2 = sightOf(g2, nat));
+      let seen2 = 0;
+      for (const j of r.nb) {
+        if (sight2[j] === SIGHT.none) continue;
+        const foes = hostileUnits(g2, g2.regions[j], nat).filter((u) => !u.dead && u.kind !== "fort" && u.town === void 0);
+        if (!foes.length) continue;
+        const band = divisionsBand(g2, j, nat, foes);
+        seen2 += (band.lo + band.hi) / 2;
+      }
+      const own = side5.reduce((t, u) => t + u.divs * u.str, 0);
+      if (seen2 <= 0 || seen2 < REARGUARD.ai.odds * own) continue;
+      const threat2 = seen2;
       const behind2 = r.nb.some((j) => {
         const q = g2.regions[j];
         return !hostileUnits(g2, q, nat).length && friendlyUnits(g2, q, nat).some((u) => !u.dead && u.divs > c.divs && fights(u));

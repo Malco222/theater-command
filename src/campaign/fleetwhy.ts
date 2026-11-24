@@ -24,5 +24,8 @@ export function setFleetWhy(g: Game, on: boolean): void {
 /** The admirals' reason for one of the player's fleets this month, or '' (none written, or his own orders rule it). */
 export function fleetWhy(g: Game, f: Fleet): string {
   if (!fleetWhyOn(g) || f.nat !== g.human || f.ordered || !f.why || f.why[0] !== g.turn) return '';
-  return `Your admirals: ${f.why[1]}`;
+  // (The UI director's 24 November note: no capital after the colon, so the sentence reads as the fleet's, not the
+  // admirals'. The small-caps YOUR ADMIRALS label above the sentence, its fuller form, waits on the 3D panel.)
+  const why = f.why[1];
+  return `Your admirals: ${why.charAt(0).toLowerCase()}${why.slice(1)}`;
 }
