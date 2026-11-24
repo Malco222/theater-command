@@ -371,6 +371,11 @@ struct FFleetHand
 	TArray<FFleetShipClass> Classes;
 	TArray<FFleetSea> Seas;
 	TArray<int32> Coasts; // enemy coasts it could shell from where it is
+	// (Release 2, fleetattack.ts) Dropped on an enemy fleet, it attacks at once: the enemy fleets it can be sent at now,
+	// whether that is switched on, and why it stays where it is this month once it has attacked.
+	bool bFleetAttack = false;
+	TArray<int32> Attack;
+	FString Held;
 };
 
 /** What else came of something pressed in a room, beyond its words. */
@@ -379,6 +384,9 @@ struct FActExtras
 	int32 Shell = INDEX_NONE; // a coast just shelled
 	int32 Made = INDEX_NONE; // a squadron just split off
 	int32 Joined = INDEX_NONE; // the fleet another was just joined to
+	int32 SeaFight = INDEX_NONE; // (release 2) the sea a fleet's attack was just fought in, or made in
+	FString Outcome; // (release 2) what came of it: fought, missed (not found), declined (he made for port)
+	TArray<FSinking> Sinkings; // (release 2) the ships that went down in it
 };
 
 /** Aircraft seen leaving for their target when a raid is ordered. */
@@ -1129,6 +1137,7 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
+	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

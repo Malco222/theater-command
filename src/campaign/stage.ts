@@ -101,3 +101,8 @@ export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
 export const WAGONS_STAGE: boolean = staged('TC_WAGONS', 'wagons');
 /** True where new grand campaigns open with forward dumps (stage.json 'dumps'). */
 export const DUMPS_STAGE: boolean = staged('TC_DUMPS', 'dumps');
+
+// A fleet sent straight at an enemy fleet (release 2; Brian 23 November 2026 22:23Z, fleetattack.ts): the grand
+// campaigns opened while this is true carry the flag 'fleetAttack'. Forced by TC_FLEETATTACK.
+/** True where new grand campaigns open with the player's fleets able to attack an enemy fleet at once (stage.json 'fleetAttack'). */
+export const FLEETATTACK_STAGE: boolean = staged('TC_FLEETATTACK', 'fleetAttack');

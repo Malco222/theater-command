@@ -18,6 +18,7 @@
 #include <atomic>
 
 static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out);
+static void ReadSinkings(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSinking>& Out);
 
 namespace
 {
@@ -1197,6 +1198,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpsSet"), Out.bDumpsSet);
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
+	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -2641,38 +2643,7 @@ FMonthResult FCampaignSession::EndMonth()
 			const TArray<TSharedPtr<FJsonValue>>* Sunk = nullptr;
 			if (Entry->TryGetArrayField(TEXT("sunk"), Sunk))
 			{
-				for (const TSharedPtr<FJsonValue>& WentDown : *Sunk)
-				{
-					const TSharedPtr<FJsonObject>* Lost = nullptr;
-					if (WentDown->TryGetObject(Lost))
-					{
-						FSinking& Sinking = Step.Sinkings.AddDefaulted_GetRef();
-						(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
-						(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
-						(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
-						(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
-						(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
-						// (Brian's memorial card) The battleships and carriers among them, by name.
-						const TArray<TSharedPtr<FJsonValue>>* Named = nullptr;
-						if ((*Lost)->TryGetArrayField(TEXT("ships"), Named))
-						{
-							for (const TSharedPtr<FJsonValue>& One : *Named)
-							{
-								const TSharedPtr<FJsonObject>* Hers = nullptr;
-								if (One->TryGetObject(Hers))
-								{
-									FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
-									(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
-									(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
-									(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
-									(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
-									(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
-									(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);
-								}
-							}
-						}
-					}
-				}
+				ReadSinkings(*Sunk, Step.Sinkings);
 			}
 			const TArray<TSharedPtr<FJsonValue>>* Raids = nullptr;
 			if (Entry->TryGetArrayField(TEXT("raids"), Raids))
@@ -4293,6 +4264,43 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	return Out;
 }
 
+/** The ships seen to go down, as the bridge lists them under 'sunk' (a month's fights at sea, or a fleet's attack just fought). */
+static void ReadSinkings(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSinking>& Out)
+{
+	for (const TSharedPtr<FJsonValue>& WentDown : List)
+	{
+		const TSharedPtr<FJsonObject>* Lost = nullptr;
+		if (WentDown->TryGetObject(Lost))
+		{
+			FSinking& Sinking = Out.AddDefaulted_GetRef();
+			(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
+			(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
+			(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
+			(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
+			(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
+			// (Brian's memorial card) The battleships and carriers among them, by name.
+			const TArray<TSharedPtr<FJsonValue>>* Named = nullptr;
+			if ((*Lost)->TryGetArrayField(TEXT("ships"), Named))
+			{
+				for (const TSharedPtr<FJsonValue>& One : *Named)
+				{
+					const TSharedPtr<FJsonObject>* Hers = nullptr;
+					if (One->TryGetObject(Hers))
+					{
+						FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
+						(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
+						(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
+						(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
+						(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
+						(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
+						(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);
+					}
+				}
+			}
+		}
+	}
+}
+
 /** The formations of a raid, as the rules list them. */
 static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out)
 {
@@ -4345,6 +4353,17 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	Object->TryGetStringField(TEXT("screen"), Out.Screen);
 	Object->TryGetBoolField(TEXT("shelled"), Out.bShelled);
 	Object->TryGetNumberField(TEXT("guns"), Out.Guns);
+	// (Release 2, fleetattack.ts) The enemy fleets it can be dropped on to attack now, and why it stays put once it has.
+	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack);
+	Object->TryGetStringField(TEXT("held"), Out.Held);
+	const TArray<TSharedPtr<FJsonValue>>* Attack = nullptr;
+	if (Object->TryGetArrayField(TEXT("attack"), Attack))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Attack)
+		{
+			Out.Attack.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	double Ready = 1.0;
 	Object->TryGetNumberField(TEXT("ready"), Ready);
 	Out.Ready = static_cast<float>(Ready);
@@ -4419,6 +4438,15 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 			Object->TryGetNumberField(TEXT("shell"), OutExtras->Shell);
 			Object->TryGetNumberField(TEXT("made"), OutExtras->Made);
 			Object->TryGetNumberField(TEXT("joined"), OutExtras->Joined);
+			// (Release 2, fleetattack.ts) A fleet sent at the enemy: the sea it was fought in, what came of it, and the ships that went down.
+			Object->TryGetNumberField(TEXT("seaFight"), OutExtras->SeaFight);
+			Object->TryGetStringField(TEXT("outcome"), OutExtras->Outcome);
+			const TArray<TSharedPtr<FJsonValue>>* Sunk = nullptr;
+			if (Object->TryGetArrayField(TEXT("sunk"), Sunk))
+			{
+				ReadSinkings(*Sunk, OutExtras->Sinkings);
+			}
+			if (OutExtras->SeaFight < 0) { OutExtras->SeaFight = INDEX_NONE; }
 			if (OutExtras->Shell < 0) { OutExtras->Shell = INDEX_NONE; }
 			if (OutExtras->Made < 0) { OutExtras->Made = INDEX_NONE; }
 			if (OutExtras->Joined < 0) { OutExtras->Joined = INDEX_NONE; }

@@ -2871,64 +2871,86 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
       headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle ${seaWhere(zone.name)} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat, undefined, { arm: 'sea', won: nat, lost: met[0].nat });
       continue;
     }
-    const att = mine.map(sideOf), def = met.map(sideOf);
-    // (src/battle/sea) An action the player fought out on the field hands back the ratio it came to and the ships it cost.
-    const played = seaField.fought?.({ turn: g.turn, zone: z, nat, mine: mine.map((f) => f.id), met: met.map((f) => f.id), A, D, airA, airD });
-    const R = played ? played.R : (A / D) * rng.range(0.8, 1.2);
-    const won = R >= 1;
-    const edge = won ? R : 1 / R;
-    const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
-    // Ruling 240 (C3): each fleet's damage control eases its own losses, its surface ships only, on the same draws.
-    // Who wins, the odds, the cost in readiness and who sails home are not touched. `keptA` and `keptD` are the
-    // ships it kept afloat, fleet by fleet. (An action fought out on the field sinks what the field sank, and keeps afloat
-    // what its damage control kept there; handed back to the dice, the dice sink with damage control, as here.)
-    const keptA = mine.map(() => none()), keptD = met.map(() => none());
-    mine.forEach((f, i) => { att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng, dcOf(g, f.nat), keptA[i]) : sinkShips(f, won ? light : hard, rng, CLASSES, dcOf(g, f.nat), keptA[i]); });
-    met.forEach((f, i) => { def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng, dcOf(g, f.nat), keptD[i]) : sinkShips(f, won ? hard : light, rng, CLASSES, dcOf(g, f.nat), keptD[i]); });
-    if (afloatWatch.tell) { mine.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: att[i].sunk, saved: keptA[i] })); met.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: def[i].sunk, saved: keptD[i] })); }
-    const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
-    const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
-    const lines: TicketLine[] = [
-      { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum(mine))} against ${Math.round(sum(met))} before the battle` },
-    ];
-    if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
-    const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
-    lines.push({ label: 'Admirals', value: `${flag(mine)} against ${flag(met)}` });
-    const kitA = techNotes(g, mine.map((f) => f.nat), ['navy']), kitD = techNotes(g, met.map((f) => f.nat), ['navy']);
-    if (kitA.length || kitD.length) lines.push({ label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`)].join(', ') });
-    const worn = [...mine, ...met].filter((f) => f.ready < 0.8);
-    if (worn.length) lines.push({ label: 'Readiness', value: `${worn.map((f) => f.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
-    mine.forEach((f, i) => afterAction(g, f, att[i], won, rng, keptA[i].bb + keptA[i].cv));
-    met.forEach((f, i) => afterAction(g, f, def[i], !won, rng, keptD[i].bb + keptD[i].cv));
-    // Fleets that have fought are in contact: each side has the other identified this month (the grand campaign's search at sea).
-    if (carrierRules(g)) {
-      for (const f of mine) for (const e of met) (f.seen ??= {})[e.nat] = g.turn;
-      for (const f of met) for (const e of mine) (f.seen ??= {})[e.nat] = g.turn;
-    }
-    // The beaten side breaks off and makes for harbour.
-    for (const f of won ? met : mine) sail(g, f, f.home, 'port');
-    const level: VictoryLevel = won ? (edge >= 2 ? 'Decisive victory' : 'Close victory') : edge >= 2 ? 'Decisive defeat' : 'Close defeat';
-    g.flags.seaBattles = (g.flags.seaBattles ?? 0) + 1;
-    // The battleships and carriers that went down, by name, for the card that marks them (a record only).
-    att.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:a${i}`));
-    def.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:d${i}`));
-    const rep: SeaReport = {
-      id: g.flags.seaBattles, turn: g.turn, zone: z, zoneName: zone.name, attNat: nat, defNat: met[0].nat,
-      att, def, lines, aPower: A, dPower: D, odds: R, level, won,
-    };
-    g.seaReports.push(rep);
-    out.push(rep);
-    const win = won ? mine : met, lose = won ? met : mine;
-    const ws = total(won ? att : def), ls = total(won ? def : att);
-    storySea(g, z, win, lose, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
-    // Battle stars (b477): every ship of the winning fleets still afloat earns this action, on the dice or on the field.
-    // A record only: it draws no dice and changes nothing that is fought.
-    bookSeaAction(g, z, win);
-    // (Ruling 240: the ships damage control kept afloat, a line for each fleet that has any.)
-    const afloat = [...mine.map((f, i) => keptAfloat(f, keptA[i])), ...met.map((f, i) => keptAfloat(f, keptD[i]))].filter(Boolean);
-    headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} ${seaWhere(zone.name)}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.${afloat.length ? ` ${afloat.join(' ')}` : ''}`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
+    out.push(fleetAction(g, zone, nat, mine, met, rng, airA, airD));
   }
   return out;
+}
+
+/**
+ * One fleet action, fought: `mine` (the side of `nat`) against `met` in `zone`, settled on the field where the player
+ * fights it out (seaField) or else by the dice, as every fleet action is. The month's actions (seaBattles) and an attack
+ * the player orders at once (release 2, fleetattack.ts) both fight here, on the same figures and the same draws of `rng`.
+ * `at` (the attack on a fleet in its harbour, release 2): the harbour, the weight its batteries add to the defence
+ * (`shore`), and the share of their weight the ships at anchor fight with (`anchor`). Left out, nothing changes.
+ */
+export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mine: Fleet[], met: Fleet[], rng: Rng, airA: number, airD: number, at?: { port: string; shore: number; anchor: number }): SeaReport {
+  const z = zone.id;
+  const sum = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(g, f), 0);
+  const names = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
+  const where = at ? `at ${at.port}` : seaWhere(zone.name);
+  const A = sum(mine) + airA, D = Math.max(1, (at ? sum(met) * at.anchor + at.shore : sum(met)) + airD);
+  const att = mine.map(sideOf), def = met.map(sideOf);
+  // (src/battle/sea) An action the player fought out on the field hands back the ratio it came to and the ships it cost.
+  const played = seaField.fought?.({ turn: g.turn, zone: z, nat, mine: mine.map((f) => f.id), met: met.map((f) => f.id), A, D, airA, airD });
+  const R = played ? played.R : (A / D) * rng.range(0.8, 1.2);
+  const won = R >= 1;
+  const edge = won ? R : 1 / R;
+  const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
+  // Ruling 240 (C3): each fleet's damage control eases its own losses, its surface ships only, on the same draws.
+  // Who wins, the odds, the cost in readiness and who sails home are not touched. `keptA` and `keptD` are the
+  // ships it kept afloat, fleet by fleet. (An action fought out on the field sinks what the field sank, and keeps afloat
+  // what its damage control kept there; handed back to the dice, the dice sink with damage control, as here.)
+  const keptA = mine.map(() => none()), keptD = met.map(() => none());
+  mine.forEach((f, i) => { att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng, dcOf(g, f.nat), keptA[i]) : sinkShips(f, won ? light : hard, rng, CLASSES, dcOf(g, f.nat), keptA[i]); });
+  met.forEach((f, i) => { def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng, dcOf(g, f.nat), keptD[i]) : sinkShips(f, won ? hard : light, rng, CLASSES, dcOf(g, f.nat), keptD[i]); });
+  if (afloatWatch.tell) { mine.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: att[i].sunk, saved: keptA[i] })); met.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: def[i].sunk, saved: keptD[i] })); }
+  const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
+  const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
+  const lines: TicketLine[] = [
+    { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum(mine))} against ${Math.round(sum(met))} before the battle` },
+  ];
+  if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
+  const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
+  lines.push({ label: 'Admirals', value: `${flag(mine)} against ${flag(met)}` });
+  const kitA = techNotes(g, mine.map((f) => f.nat), ['navy']), kitD = techNotes(g, met.map((f) => f.nat), ['navy']);
+  if (kitA.length || kitD.length) lines.push({ label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`)].join(', ') });
+  const worn = [...mine, ...met].filter((f) => f.ready < 0.8);
+  if (worn.length) lines.push({ label: 'Readiness', value: `${worn.map((f) => f.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
+  mine.forEach((f, i) => afterAction(g, f, att[i], won, rng, keptA[i].bb + keptA[i].cv));
+  met.forEach((f, i) => afterAction(g, f, def[i], !won, rng, keptD[i].bb + keptD[i].cv));
+  // Fleets that have fought are in contact: each side has the other identified this month (the grand campaign's search at sea).
+  if (carrierRules(g)) {
+    for (const f of mine) for (const e of met) (f.seen ??= {})[e.nat] = g.turn;
+    for (const f of met) for (const e of mine) (f.seen ??= {})[e.nat] = g.turn;
+  }
+  // The beaten side breaks off and makes for harbour.
+  for (const f of won ? met : mine) sail(g, f, f.home, 'port');
+  const level: VictoryLevel = won ? (edge >= 2 ? 'Decisive victory' : 'Close victory') : edge >= 2 ? 'Decisive defeat' : 'Close defeat';
+  g.flags.seaBattles = (g.flags.seaBattles ?? 0) + 1;
+  // The battleships and carriers that went down, by name, for the card that marks them (a record only).
+  att.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:a${i}`));
+  def.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:d${i}`));
+  const rep: SeaReport = {
+    id: g.flags.seaBattles, turn: g.turn, zone: z, zoneName: zone.name, attNat: nat, defNat: met[0].nat,
+    att, def, lines, aPower: A, dPower: D, odds: R, level, won,
+  };
+  if (at) {
+    rep.port = at.port;
+    const n = airA > 0.5 || airD > 0.5 ? 2 : 1;
+    lines.splice(n, 0, { label: 'In harbour', value: `The ${names(met)} ${met.length === 1 ? 'was' : 'were'} caught at anchor at ${at.port}`, effect: `Ships at anchor fight at ${Math.round(at.anchor * 100)}% of their weight` });
+    if (at.shore > 0) lines.splice(n + 1, 0, { label: 'Shore batteries', value: `The guns of ${at.port} fire on the attackers`, effect: `Worth ${Math.round(at.shore)} to the defence` });
+  }
+  g.seaReports.push(rep);
+  const win = won ? mine : met, lose = won ? met : mine;
+  const ws = total(won ? att : def), ls = total(won ? def : att);
+  storySea(g, z, win, lose, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
+  // Battle stars (b477): every ship of the winning fleets still afloat earns this action, on the dice or on the field.
+  // A record only: it draws no dice and changes nothing that is fought.
+  bookSeaAction(g, z, win);
+  // (Ruling 240: the ships damage control kept afloat, a line for each fleet that has any.)
+  const afloat = [...mine.map((f, i) => keptAfloat(f, keptA[i])), ...met.map((f, i) => keptAfloat(f, keptD[i]))].filter(Boolean);
+  headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} ${where}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.${afloat.length ? ` ${afloat.join(' ')}` : ''}`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
+  return rep;
 }
 
 /** When a nation falls its navy leaves the war. */
