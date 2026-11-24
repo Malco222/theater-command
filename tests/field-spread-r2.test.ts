@@ -567,6 +567,45 @@ describe("step 1b's keys", () => {
     expect(Wt.led.D.def - D).toBeCloseTo((u.power0 * lost * LAND.nerve.perLoss.def * 1 * Math.max(0.3, 1 - LAND.nerve.xp * u.xp - LAND.nerve.general * gen)) / Wt.power.def, 12);
   });
 
+  /** A set piece with fighters on call on both sides (air support), and its guns. */
+  const onCall = (key: string, seed: number): T => {
+    const t = ticketOf(PIECES.find((p) => p.key === key)!, seed, null);
+    t.att.air = { share: 0.2, strikes: 4, groups: [{ id: 1, name: 'G1', nat: t.att.nat, planes: 12, lose: 1 }] };
+    t.def.air = { share: 0.15, strikes: 3, groups: [{ id: 2, name: 'G2', nat: t.def.nat, planes: 12, lose: 1 }] };
+    return t;
+  };
+
+  it("with the air part at the army, strike harm on a block struck that tick enters the ledger at that tick's blows' weight (as fsx/brk/causes.ts read it)", () => {
+    const t0 = onCall('prokhorovka-1943', 1);
+    const k = spreadKeys(t0, { level: true, ledger: true, m: { fire: true, ambush: true, air: true } });
+    type Blown = { dmg: number; nerve: number };
+    type Suffer = (t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][], blind: boolean, bare: boolean, mArmy: number, nerveBuilt: number) => void;
+    type Air = { blow(u: LandUnit, t: LandUnit): Blown; suffer: Suffer; step(): void };
+    const b = new LandBattle(withSpread(t0, k)), A = b as unknown as Air, blow = A.blow.bind(b), suffer = A.suffer.bind(b);
+    // This tick's blows by the block struck: damage, and damage times the blow's weight as built.
+    let tick = new Map<number, { d: number; dn: number }>(), inTick = false;
+    A.blow = (u, t) => { const r = blow(u, t); const h = tick.get(t.id) ?? { d: 0, dn: 0 }; h.d += r.dmg; h.dn += r.dmg * r.nerve; tick.set(t.id, h); return r; };
+    const seen = { struck: 0, bare: 0, outside: 0 };
+    A.suffer = (t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt) => {
+      // Air harm with the air part at the army: no striker, not kept harm landing; the block reads 1.
+      if (!from.length && !bare) {
+        expect(nerveMul).toBe(1);
+        const h = inTick ? tick.get(t.id) : undefined;
+        if (h && h.d > 0) { expect(Math.abs(mArmy - h.dn / h.d) / mArmy).toBeLessThan(1e-9); seen.struck++; }
+        // No blow struck it this tick, or it lands outside a tick (handed to the staff): the strike's own weight.
+        else { expect(mArmy).toBe(nerveBuilt); if (inTick) seen.bare++; else seen.outside++; }
+      }
+      suffer(t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt);
+    };
+    for (let i = 0; i < 400000 && !b.over && (b.contactAt === null || b.t < b.contactAt + 80); i++) { tick = new Map(); inTick = true; b.step(); inTick = false; }
+    expect(b.over).toBeNull();
+    expect(seen.struck).toBeGreaterThan(0);
+    expect(seen.bare).toBeGreaterThan(0);
+    // Handed to the staff mid-fight: what the bank still owes lands outside any tick, at the strike's own weight.
+    b.toDice();
+    expect(seen.outside).toBeGreaterThan(0);
+  });
+
   it('the residual by what is read', () => {
     const base = lodz(2);
     const sig = (t: T, k: SpreadReckoning): number[] => {

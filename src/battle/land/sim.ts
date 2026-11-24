@@ -249,6 +249,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    * reserve (R), K, its draw and the parts of m it reads. Null without the key.
    */
   private led: { D: Record<Side, number>; R: Record<Side, number>; K: Record<Side, number>; draw: Record<Side, number>; on: Record<NervePart, boolean> } | null = null;
+  /**
+   * Under the field spread's army ledger, within a tick: each block the tick's blows struck, with their nerve weight as
+   * built (every part), damage-weighted, as fsx/brk/causes.ts read harm landing on a block struck that tick. Air harm the
+   * ledger reads at the army reads this where it has one (airHarm). Null outside a tick and without the ledger.
+   */
+  private tickM: Map<number, number> | null = null;
   /** Under reckoning.spread.N (step 1b), blocks read the reference army for their own nerve (form s2c). */
   private refNerve = false;
   /** The move's factor on the blows (reckoning.spread.move, step 1b); undefined without the key. */
@@ -2484,8 +2490,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
     // (Under the field spread's army ledger: dm, the tick's damage times the parts of m read at the army; built, the
-    // blows' nerve weight as built, every part, with which what is held back or spared lands on the block later.)
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number; built?: number }>();
+    // blows' nerve weight as built, every part, with which what is held back or spared lands on the block later; dn, the
+    // tick's damage times that weight.)
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number; built?: number; dn?: number }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2530,8 +2537,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
       h.dmg += blow.dmg;
       // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
-      if (this.led && blow.parts) { const sp = nerveSplit(blow.parts, this.led.on); h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; }
-      else h.nerve += blow.nerve;
+      if (this.led && blow.parts) {
+        const sp = nerveSplit(blow.parts, this.led.on);
+        h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
+      } else h.nerve += blow.nerve;
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
@@ -2546,6 +2555,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     // field spread's army ledger, the blows' weight as built: the strike lands it on the block, or with the air part at
     // the army on the ledger, so each part of it is priced once, never dropped with the split: G.)
     if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? h.nerve)); }
+    // Under the ledger, the tick's blows' weight as built on each block they struck, damage-weighted, for air harm landing
+    // on it this tick (airHarm; cleared once the tick is judged).
+    if (this.led) { this.tickM = new Map(); for (const [id, h] of hurt) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg); }
     // (The ledger reads the damage-weighted m of the tick's blows; the block keeps today's per-blow sum of what it reads.)
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve);
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
@@ -2570,6 +2582,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Cuts whose time is up stand open as gaps, before the drill's men walk this tick (hedge cutters, release 2).
     if (this.cuts.length) this.openCuts();
     this.judge();
+    this.tickM = null;
     this.drill?.step();
   }
 
@@ -3925,12 +3938,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const hurt = new Map<number, [number, number]>();
     for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
-    for (const [id, [d, n]] of hurt) {
-      const w = d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve;
-      // Under the field spread's army ledger with the air part at the army (step 1b), the ledger reads its weight and the
-      // block 1; what a wait's cover spares of it is kept at that weight, to land on the block (suffer's nerveBuilt: G).
-      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w, w); else this.suffer(this.unit(id)!, d, w, []);
-    }
+    for (const [id, [d, n]] of hurt) this.airHarm(id, d, d > 0 ? (n / d) * LAND.air.nerve : LAND.air.nerve);
     this.strikes = this.strikes.filter((k) => !k.ended);
   }
 
@@ -4085,6 +4093,20 @@ export class LandBattle implements BattleSim<LandUnit> {
   }
 
   /**
+   * Air harm landing on a block (flyAir, payAir) at the strike's weight w: today's call, or under the field spread's army
+   * ledger with the air part at the block. With the air part at the army (step 1b) the block reads 1 and the ledger reads
+   * it as fsx/brk/causes.ts did, whose rows its residual is derived from: at the damage-weighted weight of the tick's
+   * blows where they struck that block this tick (tickM), else at w. (w is the bank's: what was held back, at the summed
+   * weight of the blows on that block in the tick it was held, so it would read the harm higher the more blocks fired.)
+   * What a wait's cover spares of it is kept at w, to land on the block (suffer's nerveBuilt: G).
+   */
+  private airHarm(id: number, d: number, w: number): void {
+    const u = this.unit(id)!;
+    if (this.led?.on.air) this.suffer(u, d, 1, [], false, false, this.tickM?.get(id) ?? w, w);
+    else this.suffer(u, d, w, []);
+  }
+
+  /**
    * Handed to the staff, or the day done: what the bank still owes and what strikes in the air still carry is paid
    * where it is owed, at once (the staff settle the rest from where the field stands, the air's share in it).
    */
@@ -4100,10 +4122,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const s of ['att', 'def'] as Side[]) { this.airBank[s].clear(); this.airNerve[s].clear(); this.airLeft[s] = 0; }
     for (const k of this.strikes) { for (const l of k.legs) l.done = Math.max(l.done, 1); k.ended = true; }
-    for (const [id, [d, n]] of hurt) {
-      const w = d > 0 ? n / d : 1;
-      if (this.led?.on.air) this.suffer(this.unit(id)!, d, 1, [], false, false, w, w); else this.suffer(this.unit(id)!, d, w, []);
-    }
+    for (const [id, [d, n]] of hurt) this.airHarm(id, d, d > 0 ? n / d : 1);
   }
 
   /**
