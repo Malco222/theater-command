@@ -20,7 +20,8 @@ import lean from '../data/battle/lean.json';
 import unitsSource from '../src/campaign/units.ts?raw';
 import commandSource from '../src/campaign/command.ts?raw';
 import { assess, corpsBase, freshOffensive, limitAttackers, removeCorps, setWar } from '../src/campaign/game';
-import { traitAttack, traitNames } from '../src/campaign/traits';
+import { traitAttack, traitCardRule, traitNames, traitRule, traitsOf } from '../src/campaign/traits';
+import page from '../src/campaign/ui/main.ts?raw';
 import { DIPLOMACY, fireEvent } from '../src/campaign/diplomacy';
 import { storyFallen } from '../src/campaign/stories';
 import { guardPower, stormForce } from '../src/campaign/siege';
@@ -811,5 +812,35 @@ describe('one rule for every nation: a swap of every cause swaps the attack', ()
     expect(mostCorps(g, 'GER')).toBe(8);
     expect(slowHabits(g, 'GER')).toBe(true);
     expect(slowHabits(g, 'SOV')).toBe(false);
+  });
+});
+
+describe('the nation card under the switch: the blitz rows are no nation\'s own (#2 form Part 1 section 1)', () => {
+  const t = (nat: string, id: string) => traitsOf(nat).find((x) => x.id === id)!;
+  const line = "Not this army's own with Units decide: any army that holds Field radios with a command of 0.6 or more strikes this way.";
+
+  it('gives Germany\'s Lightning war and Armoured spearheads to any army through the gate, with what they do', () => {
+    for (const id of UNITS.land.blitzTraits) {
+      const words = traitCardRule(t('GER', id), 100, true);
+      expect(words.startsWith(line), id).toBe(true);
+      expect(words.endsWith(traitRule(t('GER', id), 100)), id).toBe(true);
+    }
+    expect(traitCardRule(t('GER', 'panzer'), 100, true)).toBe(`${line} Attack up 15% for tanks and motorised troops in plains and desert.`);
+  });
+
+  it('keeps traitRule\'s words off, and for every other row on', () => {
+    for (const id of UNITS.land.blitzTraits) expect(traitCardRule(t('GER', id), 100, false)).toBe(traitRule(t('GER', id), 100));
+    expect(traitCardRule(t('GER', 'uboats'), 100, true)).toBe(traitRule(t('GER', 'uboats'), 100));
+    expect(traitCardRule(t('UK', 'radar'), 100, true)).toBe(traitRule(t('UK', 'radar'), 100));
+    // The convoy war's rows as the convoy slice left them: not in force with the switch, as they were without it.
+    expect(traitCardRule(t('UK', 'signals'), 100, true)).toBe('Not in force: with Units decide, convoys are kept safe by escorts, aircraft and their equipment.');
+    expect(traitCardRule(t('UK', 'signals'), 100, false)).toBe(traitRule(t('UK', 'signals'), 100));
+  });
+
+  it('is what the card shows', () => {
+    const body = page.slice(page.indexOf('function traitList('), page.indexOf('function traitsCard('));
+    expect(body).toContain('const causes = isOpen(g) ? unitsDecide(g) : UNITS_STAGE;');
+    expect(body).toContain('traitCardRule(t, BUDGET.scale, causes)');
+    expect(body).not.toMatch(/traitRule\(/);
   });
 });

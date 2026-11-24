@@ -68,7 +68,7 @@ import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type P
 import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
-import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
+import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitCardRule, traitsOf, type Trait } from '../traits';
 import { mostCorps, unitsDecide } from '../units';
 import { columnsView } from '../columns';
 import { dumpsView } from '../logistics';
@@ -7088,9 +7088,11 @@ function traitList(nat: string, full = false): string {
   // A dominion (ruling 222, the UI director's words): war on it may bring its mother country in, as far as her own war in Europe allows.
   const patron = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
   const dom = patron && g.nations[patron] ? row('Dominion', '', `War on it may bring ${newsName(g.nations[patron])} in, as far as its war in Europe allows.`) : '';
-  // (Units decide: no nation's own trait cuts the convoy war; the escorts, aircraft and their kit decide it, navy.ts.)
+  // (Units decide: no nation's own trait cuts the convoy war, the escorts, aircraft and their kit decide it, navy.ts; and
+  // the tempo and the armoured spearheads go to any army through the blitz gate, DD 24 Nov 15:53Z, #2 form Part 1
+  // section 1. The words are traits.ts traitCardRule's.)
   const causes = isOpen(g) ? unitsDecide(g) : UNITS_STAGE;
-  const rule = (t: Trait): string => (causes && t.seaLoss !== undefined ? traitRule({ ...t, seaLoss: undefined }, BUDGET.scale) || 'Not in force: with Units decide, convoys are kept safe by escorts, aircraft and their equipment.' : traitRule(t, BUDGET.scale));
+  const rule = (t: Trait): string => traitCardRule(t, BUDGET.scale, causes);
   return `<ul class="traits${full ? ' full' : ''}">${traitsOf(nat).map((t) => row(t.name, t.text, rule(t))).join('')}${u ? row(u.label, u.text, `Special formation. ${eliteRule(u)}`, true) : ''}${dom}</ul>`;
 }
 

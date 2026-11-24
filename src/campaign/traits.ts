@@ -9,7 +9,7 @@ import { allied, atWar, headline, worksFor } from './game';
 import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
-import { techTraits } from './tech';
+import { techById, techTraits } from './tech';
 import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
@@ -455,6 +455,26 @@ export function traitRule(t: Trait, scale = 100): string {
   if (t.fleet) out.push(`Fleets fight ${pct(t.fleet)} harder.`);
   if (t.seaLoss) out.push(`Convoy losses down ${pct(t.seaLoss)}.`);
   return out.join(' ');
+}
+
+/**
+ * What an ability does as a nation's card gives it (ui/main.ts traitList). 'units' is true for a game opened, or about
+ * to open, with Units decide; off it is traitRule's words, as they were. Under the switch the card says what the rules
+ * do, so it promises nothing they do not:
+ *  - the tempo and the armoured spearheads (units.json land.blitzTraits) are no nation's own row: any army that holds
+ *    Field radios with a command at the blitz gate or above strikes that way, and the nation that lists them loses them
+ *    when its own gate closes (DD 24 Nov 15:53Z, #2 form Part 1 section 1; Part 2 section 4 'Inert'; edge above and
+ *    game.ts freshOffensive). The gate's row and figure are read from the data, never written in;
+ *  - no trait cuts the convoy war: the escorts, aircraft and their equipment decide it (navy.ts).
+ */
+export function traitCardRule(t: Trait, scale: number, units: boolean): string {
+  if (!units) return traitRule(t, scale);
+  if (UNITS.land.blitzTraits.includes(t.id)) {
+    const radios = techById(UNITS.land.radiosRow)?.name ?? 'field radios';
+    return `Not this army's own with Units decide: any army that holds ${radios} with a command of ${UNITS.land.gates.blitz} or more strikes this way. ${traitRule(t, scale)}`;
+  }
+  if (t.seaLoss !== undefined) return traitRule({ ...t, seaLoss: undefined }, scale) || 'Not in force: with Units decide, convoys are kept safe by escorts, aircraft and their equipment.';
+  return traitRule(t, scale);
 }
 
 /** What a special formation does, in plain words: its size, its edge in battle, when it can be raised and how many. */
