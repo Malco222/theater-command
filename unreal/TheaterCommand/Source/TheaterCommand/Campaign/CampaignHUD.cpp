@@ -17125,6 +17125,11 @@ namespace
 			// The picture on each card is the game's own model of what the division is: this nation's tank of the
 			// year, its gun, its soldier. Where there is no model yet, a plain drawing stands in.
 			const FString Tag = !Card.Ally.IsEmpty() ? Card.Ally : Controller.IsValid() ? Controller->GetArmyTray().Tag : FString();
+			// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z: "see each individual unit ... so I can break it up".)
+			// Where breaking corps up is on, each division's tile takes a click: picked, it is lit in brass and marked to
+			// split off; SPLIT OFF under the tiles makes the picked ones a corps of their own.
+			const bool bBreakable = !Card.bLook && Card.bCanBreak && Controller.IsValid();
+			const int32 Picked = bBreakable ? Controller->DivisionsPicked(Card.CorpsId) : 0;
 			TSharedRef<SHorizontalBox> Divisions = SNew(SHorizontalBox);
 			const int32 Count = Card.Parts.Num() > 0 ? FMath::Min(Card.Parts.Num(), 12) : FMath::Clamp(Card.Divisions, 1, 12);
 			for (int32 Division = 0; Division < Count; ++Division)
@@ -17167,6 +17172,7 @@ namespace
 						]
 					];
 				}
+				const bool bMarked = bBreakable && Controller->IsDivisionPicked(Card.CorpsId, Division);
 				if (!Card.bUnknown)
 				{
 					Face->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Left, bGoing ? (Left < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")))) : Faint, Card.Stale > 0 ? TEXT("Strength, about") : TEXT("Strength"))];
@@ -17176,12 +17182,81 @@ namespace
 					}
 					Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes];
 				}
+				if (bMarked)
+				{
+					Face->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("SPLITS OFF"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+					];
+				}
+				// (release 1) Point at a division's tile for the bigger card of that division: it is laid out above the tray.
+				const TSharedRef<SWidget> Tile = Card.bUnknown
+					? StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))[Face])
+					: BigCardTarget(SNew(SBorder).BorderImage(&CardBrush).BorderBackgroundColor(bMarked ? BrightBrass : FLinearColor::White).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))[Face], Card.CorpsId, Part ? Division : INDEX_NONE);
 				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
-					// (release 1) Point at a division's tile for the bigger card of that division: it is laid out above the tray.
-					Card.bUnknown
-					? StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))[Face])
-					: BigCardTarget(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))[Face], Card.CorpsId, Part ? Division : INDEX_NONE)
+					!bBreakable || Card.bUnknown ? Tile
+					// (its backing keeps the press on the tile: it would otherwise fall through to the card's own press,
+					// which leaves the whole corps behind)
+					: StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&NoBrush).Padding(FMargin(0.0f))
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						.OnMouseDoubleClick_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f)).IsFocusable(false)
+							.OnClicked_Lambda([this, Id = Card.CorpsId, Pick = Division]() { if (Controller.IsValid()) { Controller->ToggleDivision(Id, Pick); } return FReply::Handled(); })
+							[
+								Tile
+							]
+						])
+				];
+			}
+			// SPLIT OFF and REJOIN, under the tiles: each with a backing that keeps its press from the card's own.
+			TSharedRef<SHorizontalBox> BreakRow = SNew(SHorizontalBox);
+			auto BreakButton = [this](const FString& Label, const FString& Tip, bool bLit, TFunction<void()> Press) -> TSharedRef<SWidget>
+			{
+				return SNew(SBorder).BorderImage(&NoBrush).Padding(FMargin(0.0f))
+					.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+					.OnMouseDoubleClick_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 2.0f)).IsFocusable(false).IsEnabled(bLit)
+						.ToolTipText(FText::FromString(Tip))
+						.OnClicked_Lambda([Press]() { Press(); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(SmallCaps()).ColorAndOpacity(bLit ? BrightBrass : Faint)
+						]
+					];
+			};
+			bool bBreakRow = false;
+			if (bBreakable)
+			{
+				bBreakRow = true;
+				if (Picked == 0)
+				{
+					BreakRow->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Click division tiles to split them off"))).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Faint)
+					];
+				}
+				else
+				{
+					const bool bLit = Picked < Card.Divisions;
+					BreakRow->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						BreakButton(FString::Printf(TEXT("SPLIT OFF %d"), Picked),
+							bLit ? FString::Printf(TEXT("The %d division%s picked become%s a corps of %s own here, and stay%s behind when the army moves."), Picked, Picked == 1 ? TEXT("") : TEXT("s"), Picked == 1 ? TEXT("s") : TEXT(""), Picked == 1 ? TEXT("its") : TEXT("their"), Picked == 1 ? TEXT("s") : TEXT(""))
+								: FString(TEXT("Some divisions have to stay with the corps: leave at least one tile unpicked.")),
+							bLit, [this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->SplitOffDivisions(Id); } })
+					];
+				}
+			}
+			if (!Card.bLook && Card.RejoinId != INDEX_NONE && Controller.IsValid())
+			{
+				bBreakRow = true;
+				BreakRow->AddSlot().AutoWidth().VAlign(VAlign_Center)
+				[
+					BreakButton(FString::Printf(TEXT("REJOIN %s"), *Card.RejoinName.ToUpper()),
+						FString::Printf(TEXT("Its divisions go back into %s, which stands here with it."), *Card.RejoinName), true,
+						[this, Id = Card.CorpsId, Into = Card.RejoinId]() { if (Controller.IsValid()) { Controller->RejoinCorps(Id, Into); } })
 				];
 			}
 
@@ -17310,6 +17385,11 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.Carry.Num() >= 4 || Card.bDigging ? 6.0f : 0.0f)[CarryRow(Card, bGoing)]
 					+ SVerticalBox::Slot().AutoHeight()[Divisions]
+					// (release 2, breakup.ts) SPLIT OFF and REJOIN
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, bBreakRow ? 6.0f : 0.0f, 4.0f, 0.0f)
+					[
+						bBreakRow ? StaticCastSharedRef<SWidget>(BreakRow) : SNullWidget::NullWidget
+					]
 				];
 			if (!Card.bUnknown)
 			{

@@ -1249,6 +1249,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	// (Release 2, nicknames.ts) Whether earned names are shown on the flags; and the options page's two switches.
 	Object->TryGetBoolField(TEXT("nickFlags"), Out.bNickFlags);
 	Object->TryGetBoolField(TEXT("fleetAttack"), Out.bFleetAttack); // (release 2, fleetattack.ts)
+	Object->TryGetBoolField(TEXT("breakUp"), Out.bBreakUp); // (release 2, breakup.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -1815,6 +1816,14 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			C.bSchoolKnown = Unit->TryGetBoolField(TEXT("school"), C.bSchool);
 			Unit->TryGetStringField(TEXT("schoolTo"), C.SchoolTo);
 			Unit->TryGetStringField(TEXT("schoolWhy"), C.SchoolWhy);
+			// (Release 2, breakup.ts) Sent only for his own corps, and only where breaking corps up is on.
+			C.bBreakKnown = Unit->TryGetStringField(TEXT("breakWhy"), C.BreakWhy);
+			{
+				double Rejoin = -1.0;
+				Unit->TryGetNumberField(TEXT("rejoinId"), Rejoin);
+				C.RejoinId = Rejoin >= 0.0 ? static_cast<int32>(Rejoin) : INDEX_NONE;
+				Unit->TryGetStringField(TEXT("rejoinName"), C.RejoinName);
+			}
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetStringField(TEXT("vol"), C.Vol); // R2 bargains hook: a volunteer legion's home (sent only when set)
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);

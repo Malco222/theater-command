@@ -106,6 +106,7 @@ import type { FieldBill } from '../../../src/campaign/game';
 import { battleCalls } from './battle-bridge';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
+import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -671,6 +672,12 @@ function drawView() {
       school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
       // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
       wear: wearOf(c), fresh: c.fresh ?? 0,
+      // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
+      // divisions split off now ('' if it can), and the corps it could rejoin here, the first of them.
+      ...(c.nat === s.human && breakUpOn(s) ? (() => {
+        const to = up ? rejoinTargets(s, c)[0] : undefined;
+        return { breakWhy: up ? whyNotBreakUp(s, c, [0]) ?? '' : 'It is not your month.', rejoinId: to?.id ?? -1, rejoinName: to?.name ?? '' };
+      })() : {}),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -889,6 +896,8 @@ function drawView() {
     nickFlags: nicknamesOn(s),
     // (Release 2, fleetattack.ts) Whether the player's fleets can be dropped on an enemy fleet to attack it at once.
     fleetAttack: fleetAttackOn(s),
+    // (Release 2, breakup.ts) Whether the player can split divisions off his corps, and put them back.
+    breakUp: breakUpOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -6173,6 +6182,35 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : 'The secret war is off: you recruit and send agents as before, and the enemy\'s saboteurs are only a chance each month.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'breakuprule') {
+    // (Release 2, breakup.ts) Breaking corps up, switched by the player in any month.
+    setBreakUp(s, part[1] === 'on');
+    ok = true;
+    note = breakUpOn(s)
+      ? 'Breaking corps up is on: pick divisions on a corps\' card in the tray and SPLIT OFF makes them a corps of their own; REJOIN puts them back.'
+      : 'Breaking corps up is off: a corps moves and fights whole.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'breakup') {
+    // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) 'breakup:<corps>:<slot,slot>': the divisions picked on the
+    // corps' card, by their place in it from 0, split off as a corps of their own where it stands.
+    const c = s.corps.find((x) => x.id === Number(part[1]) && !x.dead);
+    const slots = (part[2] ?? '').split(',').filter((x) => x !== '').map(Number);
+    const why = whyNotBreakUp(s, c, slots);
+    const made = !why && c ? breakCorps(s, c, slots) : null;
+    ok = !!made;
+    note = made && c ? `${made.name} ${made.divs === 1 ? 'is' : 'are'} split off from ${c.name}, and stand${made.divs === 1 ? 's' : ''} at ${s.regions[c.reg]?.name ?? 'the same place'} as a corps of ${made.divs === 1 ? 'its' : 'their'} own.` : why ?? 'Those divisions cannot be split off now.';
+    return { ok, note, fly, flies: [], open: '', made: made?.id ?? -1, view: view() };
+  }
+  if (part[0] === 'rejoin') {
+    // (Release 2, breakup.ts) 'rejoin:<part>:<into>': a part goes back into the corps it was split from, or another part of it.
+    const a = s.corps.find((x) => x.id === Number(part[1]) && !x.dead), b = s.corps.find((x) => x.id === Number(part[2]) && !x.dead);
+    const why = whyNotRejoin(s, a, b);
+    const name = a?.name ?? '';
+    ok = !why && !!a && !!b && rejoinCorps(s, a, b);
+    note = ok && b ? `${name} rejoins ${b.name}: ${b.divs} division${b.divs === 1 ? '' : 's'} together again.` : why ?? 'They cannot be put back together now.';
+    return { ok, note, fly, flies: [], open: '', joined: ok ? Number(part[2]) : -1, view: view() };
+  }
   if (part[0] === 'fleetattackrule') {
     // (Release 2, fleetattack.ts) Fleets sent straight at the enemy, switched by the player in any month.
     setFleetAttack(s, part[1] === 'on');
@@ -7256,6 +7294,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
+// (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).breakUp = (on: boolean) => { const s = game(); setBreakUp(s, !!on); return { on: breakUpOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).columns = (on: boolean) => { const s = game(); const set = setColumns(s, !!on); return { set, on: columnsAreOn(s) }; };
 // (Release 2, logistics.ts) The three supply orders: TC.logistics('lorryShift' | 'wagons' | 'dumps', on), in a campaign's opening month only.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };

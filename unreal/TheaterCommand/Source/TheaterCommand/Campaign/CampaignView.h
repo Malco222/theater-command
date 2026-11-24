@@ -141,6 +141,12 @@ struct FViewCorps
 	FString SchoolTo; // the grade a month there brings it to ("Veteran")
 	FString SchoolWhy; // the rules' sentence why it cannot go; empty if it can (and for one already there)
 	// ---- (end of the battle schools)
+	// (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on, for his own corps: whether
+	// divisions can be split off it now (BreakWhy empty) and the corps it could rejoin here, if any.
+	bool bBreakKnown = false;
+	FString BreakWhy;
+	int32 RejoinId = INDEX_NONE;
+	FString RejoinName;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -1187,6 +1193,7 @@ struct FCampaignView
 	TArray<FViewColumn> Columns; // (release 2, columns.ts) the month's supply columns the player can see
 	bool bNickFlags = false; // (release 2, nicknames.ts) the names corps earn are shown on their flags
 	bool bFleetAttack = false; // (release 2, fleetattack.ts) a fleet dropped on an enemy fleet attacks it at once
+	bool bBreakUp = false; // (release 2, breakup.ts) divisions can be split off a corps in the tray, and put back
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;
