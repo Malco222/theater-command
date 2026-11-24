@@ -208,49 +208,88 @@ namespace
 	/**
 	 * Down, in his chute mesh's own space (units, its origin his feet as he landed, x the way his canopy falls, z up):
 	 * while his chute's mesh still draws him (bMan), he goes over from standing on his feet (Fallen 0) to lying flat
-	 * (1) the way he faces (Facing, degrees from x), his feet sliding back under him so that he lies where the crowd's
-	 * man will (his middle over the origin); and his lines from his harness to the near half of his canopy's skirt
-	 * (Silk's seams) as it falls in. Once the crowd's man has him, the lines only, from where he lies.
+	 * (1) the way he faced as he landed (Facing, degrees from x), pitched LandAir::OverPitch about his feet and moved by
+	 * LandAir::OverShift, so that flat his hips lie where the crowd's man's will: go_prone's end offset (EndX forward,
+	 * EndY to his right) forward of his feet, as a rider is posed. The crowd's man was put 0.7 m on from where this one
+	 * had lain, and jumped there in plain view under the canopy (a review of 24 November). And his lines, from his
+	 * harness to the half of his canopy's skirt toward him (LandAir::LineBack) as it falls in; once the crowd's man has
+	 * him, the lines only, to where his harness lies.
 	 */
-	void DownShape(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, bool bMan, double Fallen, double Facing, double U)
+	void DownShape(FMiniatureMesh& M, const LandAir::SilkMesh& Silk, bool bMan, double Fallen, double Facing, double EndX, double EndY, double U)
 	{
 		const double F = FMath::Clamp(Fallen, 0.0, 1.0);
-		const FRotator Over(-84.0 * F, Facing, 0.0);
-		const FVector Shift = FRotator(0.0, Facing, 0.0).RotateVector(FVector(-0.9 * F * U, 0.0, 0.0)) + FVector(0.0, 0.0, 0.2 * F * U);
-		FVector Harness(0.0, 0.0, 0.15 * U);
+		const FRotator Over(-LandAir::OverPitch * F, Facing, 0.0);
+		const LandAir::V3 By = LandAir::OverShift(F, EndX, EndY);
+		const FVector Shift = FRotator(0.0, Facing, 0.0).RotateVector(FVector(By.X * U, By.Y * U, 0.0)) + FVector(0.0, 0.0, By.Z * U);
+		// (his harness, where his lines meet him: at his chest, 1 m up him; where it lies once the crowd's man has him)
+		const FVector Harness = Over.RotateVector(FVector(0.0, 0.0, 1.0 * U)) + Shift;
 		if (bMan)
 		{
-			// (standing as he lands: his feet at the origin, his hands down by his harness)
+			// (standing as he lands: his feet at the origin, his hips OverHip up, his hands down by his harness)
+			const double Hip = LandAir::OverHip;
 			FMiniatureMesh Him;
-			Him.Limb(FVector(0.0, 0.0, 0.8 * U), FVector(0.0, 0.0, 1.45 * U), 0.17 * U, 0.2 * U, ChuteSuit, 8);
+			Him.Limb(FVector(0.0, 0.0, Hip * U), FVector(0.0, 0.0, 1.45 * U), 0.17 * U, 0.2 * U, ChuteSuit, 8);
 			Him.Limb(FVector(0.0, 0.0, 1.48 * U), FVector(0.0, 0.0, 1.72 * U), 0.11 * U, 0.1 * U, ChuteHead, 8);
 			for (const double Side : { -1.0, 1.0 })
 			{
-				Him.Limb(FVector(0.0, Side * 0.1 * U, 0.8 * U), FVector(0.05 * U, Side * 0.12 * U, 0.0), 0.085 * U, 0.065 * U, ChuteSuit, 6);
+				Him.Limb(FVector(0.0, Side * 0.1 * U, Hip * U), FVector(0.05 * U, Side * 0.12 * U, 0.0), 0.085 * U, 0.065 * U, ChuteSuit, 6);
 				Him.Limb(FVector(0.0, Side * 0.2 * U, 1.4 * U), FVector(0.12 * U, Side * 0.18 * U, 0.85 * U), 0.055 * U, 0.05 * U, ChuteSuit, 6);
 			}
 			TurnedInto(M, Him, Over, Shift);
-			Harness = Over.RotateVector(FVector(0.0, 0.0, 1.0 * U)) + Shift;
 		}
-		if (Silk.Seams.empty())
+		// (the same lines all the while it falls in, so that his part of the mesh keeps its make and is moved in place)
+		for (size_t K = 0; K < Silk.Seams.size(); ++K)
 		{
-			return;
-		}
-		// (the near half of its skirt, toward him: its middle the seams' mean)
-		FVector Middle = FVector::ZeroVector;
-		for (const int Seam : Silk.Seams)
-		{
-			Middle += Metres(Silk.Points[static_cast<size_t>(Seam)], U);
-		}
-		Middle /= static_cast<double>(Silk.Seams.size());
-		for (const int Seam : Silk.Seams)
-		{
-			const FVector End = Metres(Silk.Points[static_cast<size_t>(Seam)], U);
-			if (((End - Middle) | (Harness - Middle)) > 0.0)
+			if (LandAir::LineBack(K, Silk.Seams.size()))
 			{
-				M.Rod(Harness, End, 0.012 * U, ChuteCord, 3);
+				M.Rod(Harness, Metres(Silk.Points[static_cast<size_t>(Silk.Seams[K])], U), 0.012 * U, ChuteCord, 3);
 			}
 		}
+	}
+
+	/** A chute mesh's makings, kept from frame to frame so that their storage is used again (the game thread's alone;
+	 * a review of 24 November: each build had made new storage for some 1,500 points). */
+	struct FChuteScratch
+	{
+		LandAir::SilkMesh Silk;
+		FMiniatureMesh Built, Canopy;
+	};
+	FChuteScratch& ChuteScratch()
+	{
+		static FChuteScratch Scratch;
+		return Scratch;
+	}
+	void Emptied(FMiniatureMesh& M)
+	{
+		M.Vertices.Reset();
+		M.Triangles.Reset();
+		M.Normals.Reset();
+		M.Colors.Reset();
+	}
+
+	/** One section of a chute's mesh: moved in place (its points, facings and colours; no new proxy) when bInPlace and
+	 * it is made as it was (as many points and triangles), else made again; cleared when there is nothing of it. True
+	 * when it was made again or cleared (either makes the mesh's proxy again). */
+	bool PutSection(UProceduralMeshComponent* Mesh, int32 Section, const FMiniatureMesh& M, bool bInPlace)
+	{
+		const FProcMeshSection* Had = Section < Mesh->GetNumSections() ? Mesh->GetProcMeshSection(Section) : nullptr;
+		const int32 HadPoints = Had ? Had->ProcVertexBuffer.Num() : 0, HadCorners = Had ? Had->ProcIndexBuffer.Num() : 0;
+		if (M.Triangles.Num() == 0)
+		{
+			if (HadCorners == 0)
+			{
+				return false;
+			}
+			Mesh->ClearMeshSection(Section);
+			return true;
+		}
+		if (bInPlace && HadPoints == M.Vertices.Num() && HadCorners == M.Triangles.Num())
+		{
+			Mesh->UpdateMeshSection(Section, M.Vertices, M.Normals, TArray<FVector2D>(), M.Colors, TArray<FProcMeshTangent>());
+			return false;
+		}
+		Mesh->CreateMeshSection(Section, M.Vertices, M.Triangles, M.Normals, TArray<FVector2D>(), M.Colors, TArray<FProcMeshTangent>(), false);
+		return true;
 	}
 }
 
@@ -356,10 +395,11 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 	// (its first section), his canopy's silk on its own copy of it (its second), so that its glow against the sun is
 	// one number a frame and its seams are in its points' colours (the art director's sixth note, 24 November 02:26Z:
 	// cheaply, no mesh made again a frame and no new material). In the air its pivot is his canopy, so that he swings
-	// under it; it is built again only as his canopy fills (its open share by 0.02). Down, his canopy falls in where it
-	// lies (built again by 0.02 of its slump), and his chute's mesh draws him going over flat under it; there he is
-	// swapped for a man of the crowd (her third note): in his army's tank crews' file where it has one, with its own
-	// head, else its infantry's, bareheaded; unarmed, in the clips LandAir says, at the rates it says.
+	// under it; it is moved in place only as his canopy fills (its open share by 0.02). Down, his canopy falls in where
+	// it lies (made again by 0.05 of its slump: LandAir::SilkMoved says why), and his chute's mesh draws him going over
+	// flat under it (moved in place); there he is swapped for a man of the crowd (her third note): in his army's tank
+	// crews' file where it has one, with its own head, else its infantry's, bareheaded; unarmed, in the clips LandAir
+	// says, at the rates and blends it says.
 	if (A.bChutes)
 	{
 		A.Sky.Chutes(T, A.ChutesNow);
@@ -399,41 +439,68 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			}
 			FLandBattleState::FAirSupport::FChuteMan& Him = A.ChuteMen[C.Key];
 			const double Shape = C.bDown ? 2.0 + C.Slump : C.Open;
-			const double Lying = C.bDown && C.bInMesh ? C.Fallen : -1.0;
-			if (std::abs(Shape - Him.Shape) > 0.02 || (Shape >= 1.0 && Him.Shape < 1.0) || (Shape >= 3.0 && Him.Shape < 3.0) || (C.bDown != (Him.Shape >= 2.0))
-				|| std::abs(Lying - Him.Lying) > 0.05 || (Lying >= 1.0 && Him.Lying < 1.0) || ((Lying < 0.0) != (Him.Lying < 0.0)))
+			// (his chute's mesh lets him go only once the crowd's man has been given his ride and posed with it: the
+			// crowd is posed before FlyOver, so a ride set here shows the frame after; until then, and for good where no
+			// man of the crowd could be made, he lies here flat. A review of 24 November: he had gone for a frame at the
+			// swap)
+			const double Lying = C.bDown && (C.bInMesh || Him.Clip.empty()) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
+			const bool bSilk = LandAir::SilkMoved(Shape, Him.Shape), bMan = LandAir::ManMoved(Lying, Him.Lying);
+			if (bSilk || bMan)
 			{
-				LandAir::SilkMesh Silk;
+				// (his part built against the silk as it is drawn: as it is now if that is built again, else as last built)
+				const double SilkAt = bSilk ? Shape : Him.Shape;
+				FChuteScratch& Make = ChuteScratch();
+				Make.Silk.Clear();
 				if (C.bDown)
 				{
-					LandAir::HeapShape(C, C.Slump, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), Silk);
+					LandAir::HeapShape(C, SilkAt - 2.0, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), Make.Silk);
 				}
-				else if (C.Open > 0.0)
+				else if (SilkAt > 0.0)
 				{
-					LandAir::CanopyShape(C, C.Open, Silk);
+					LandAir::CanopyShape(C, SilkAt, Make.Silk);
 				}
-				FMiniatureMesh Built, Canopy;
+				Emptied(Make.Built);
 				if (C.bDown)
 				{
-					DownShape(Built, Silk, C.bInMesh, C.Fallen, C.Heading - C.HeapHeading, U);
+					// (lying where a rider in go_prone's end lies: by his own file's end offset once it is known)
+					double EndX = LandAir::ProneEndX, EndY = LandAir::ProneEndY;
+					if (const LandMen::Soldier* Own = (S.Men && Him.Man >= 0) ? S.Men->SoldierFile(Him.File) : nullptr)
+					{
+						const int Prone = Own->ClipIndex("go_prone");
+						if (Prone >= 0 && Own->Clips[static_cast<size_t>(Prone)].bEndOffset)
+						{
+							EndX = Own->Clips[static_cast<size_t>(Prone)].EndOffset.X;
+							EndY = Own->Clips[static_cast<size_t>(Prone)].EndOffset.Y;
+						}
+					}
+					DownShape(Make.Built, Make.Silk, Lying >= 0.0, Lying >= 0.0 ? Lying : 1.0, C.Face - C.HeapHeading, EndX, EndY, U);
 				}
 				else
 				{
-					HangingShape(Built, Silk, U);
+					HangingShape(Make.Built, Make.Silk, U);
 				}
-				SilkInto(Canopy, Silk, U);
-				Mesh->ClearMeshSection(0);
-				Mesh->ClearMeshSection(1);
-				if (Built.Triangles.Num() > 0)
+				// (his part moved in place while its make is the same; his silk in the air too, but down made again, its
+				// rumple folding some of its triangles over: LandAir::SilkMoved)
+				bool bMade = PutSection(Mesh, 0, Make.Built, true);
+				if (bSilk)
 				{
-					Mesh->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
+					Emptied(Make.Canopy);
+					SilkInto(Make.Canopy, Make.Silk, U);
+					bMade = PutSection(Mesh, 1, Make.Canopy, !C.bDown) || bMade;
+					Him.Shape = Shape;
 				}
-				if (Canopy.Triangles.Num() > 0)
+				if (bMan)
 				{
-					Mesh->CreateMeshSection(1, Canopy.Vertices, Canopy.Triangles, Canopy.Normals, TArray<FVector2D>(), Canopy.Colors, TArray<FProcMeshTangent>(), false);
+					Him.Lying = Lying;
 				}
-				Him.Shape = Shape;
-				Him.Lying = Lying;
+				// (counted for the 45 fps reading: told once his canopy lies flat)
+				Him.Made += bMade ? 1 : 0;
+				Him.Moved += bMade ? 0 : 1;
+				if (Shape >= 3.0 && !Him.bCounted)
+				{
+					Him.bCounted = true;
+					UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d's chute: its mesh made %d times, moved in place %d"), C.Key, Him.Made, Him.Moved);
+				}
 			}
 			Seen.Add(MeshKey);
 			Mesh->SetVisibility(true);
@@ -504,7 +571,9 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			Him.NowTime = C.Time;
 			Him.NowRate = C.Rate;
 			LandMen::Crowd::Ride Ride;
-			const double Blended = Him.Switched >= 0.0 ? (T - Him.Switched) * S.Life / 0.25 : 1.0;
+			// (over LandAir's time for the clip he goes into: a quarter of a second, half a second into his harness's
+			// kneel)
+			const double Blended = Him.Switched >= 0.0 ? (T - Him.Switched) * S.Life / FMath::Max(0.05, C.Blend) : 1.0;
 			const int WasClip = Him.WasClip.empty() ? -1 : Sol->ClipIndex(Him.WasClip);
 			if (WasClip >= 0 && Blended < 1.0)
 			{

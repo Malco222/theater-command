@@ -36,6 +36,12 @@ namespace LandAir
 		// After a hard landing he limps: his run clip at this share of its pace, hurried off his hurt leg by Hitch (a
 		// share of the loop's pace either way), and only so far as this share of a sound man's run.
 		constexpr double LimpPace = 0.65, Hitch = 0.45, LimpFar = 0.6;
+		// The scene's blend into each of his clips from the one before (real seconds), and into the harness's kneel a
+		// longer one: go_prone on his knees is far from kneel_down's last pose (in the soldier files his pelvis 55
+		// degrees off it, his right thigh 68 to 72, and his pelvis 0.18 m on), and no time of go_prone is much nearer (45
+		// degrees at best, half up). Over 0.5 s he settles into his kneel rather than lurching into it, and is still for
+		// the rest of his 1 to 1.5 s at the harness (a review of 24 November; Mac shot 8 looks for it).
+		constexpr double BlendS = 0.25, KneelBlendS = 0.5;
 
 		struct Dice
 		{
@@ -710,7 +716,9 @@ namespace LandAir
 				C.Heap.Z = GroundAt ? GroundAt(C.Heap.X, C.Heap.Y) : D.Heap.Z;
 				C.At = C.Landed;
 				C.Heading = D.Face;
+				C.Face = D.Face;
 				C.Rate = 0.0;
+				C.Blend = BlendS;
 				C.bInMesh = S < D.SwapS;
 				C.Fallen = Smooth(S / D.FallS);
 				if (C.bInMesh)
@@ -737,6 +745,7 @@ namespace LandAir
 					// first, so that he rises from it without a slide)
 					C.Clip = "kneel_down";
 					C.Time = KneelS;
+					C.Blend = KneelBlendS;
 				}
 				else if (S < Off)
 				{
@@ -923,6 +932,36 @@ namespace LandAir
 		const double Lying = std::max(Radius, C.Across * 0.5);
 		const double Rx = Radius + (Lying * 1.35 - Radius) * K, Ry = Radius + (Lying * 0.7 - Radius) * K;
 		Dome(Out, Base, Rx, Ry, Deep * (1.0 - K) + 0.35 * K, 0.25 * K, C.Gores, C.Silk);
+	}
+
+	bool LineBack(size_t Seam, size_t Seams)
+	{
+		// (Dome's seams go round from x, the way it falls: those whose place round it is behind its middle; one just
+		// abreast of it is left out, its rumple putting it either side)
+		return Seams > 0 && std::cos(2.0 * Pi * static_cast<double>(Seam) / static_cast<double>(Seams)) < -1e-9;
+	}
+
+	V3 OverShift(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0);
+		return { (EndX - OverHip * std::sin(OverPitch * Rad)) * F, EndY * F, (ProneHips - OverHip * std::cos(OverPitch * Rad)) * F };
+	}
+
+	V3 OverHips(double Fallen, double EndX, double EndY)
+	{
+		const double F = std::clamp(Fallen, 0.0, 1.0), Over = OverPitch * F * Rad;
+		return Plus({ OverHip * std::sin(Over), 0.0, OverHip * std::cos(Over) }, OverShift(F, EndX, EndY));
+	}
+
+	bool SilkMoved(double Shape, double WasShape)
+	{
+		const bool bDown = Shape >= 2.0;
+		return bDown != (WasShape >= 2.0) || std::abs(Shape - WasShape) > (bDown ? SlumpStep : OpenStep) || (Shape >= 1.0 && WasShape < 1.0) || (Shape >= 3.0 && WasShape < 3.0);
+	}
+
+	bool ManMoved(double Lying, double WasLying)
+	{
+		return std::abs(Lying - WasLying) > LyingStep || (Lying >= 1.0 && WasLying < 1.0) || ((Lying < 0.0) != (WasLying < 0.0));
 	}
 
 	double Glow(const V3& Eye, const V3& Canopy, const V3& TowardSun)

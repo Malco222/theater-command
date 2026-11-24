@@ -124,12 +124,14 @@ namespace LandAir
 		double Open = 0.0;              // his canopy: 0 still packed (falling free), 1 full; down, as it was as he landed
 		double Swing = 0.0;             // degrees: his swing under it, nose of his drift up
 		double Heading = 0.0;           // degrees: the way he drifts (in the air), the way he faces (down)
+		double Face = 0.0;              // down: the way he faced as he landed (degrees), as he lies and where his harness lies
 		// Down: his army's clip, how far into it (real seconds) and how fast it goes on now (its seconds a real second;
 		// less than nothing, played back): go_prone held as he lies (and is dragged), go_prone played back as he gets up
 		// onto his knees, kneel_down held at its end as he works his harness free, stand_up, run (after a hard landing
-		// slowed, with a hitch), go_prone where he goes to ground, held. Empty while his chute's mesh draws him.
+		// slowed, with a hitch), go_prone where he goes to ground, held. Empty while his chute's mesh draws him. Blend:
+		// how long the scene takes to blend into his clip from the one before (real seconds).
 		std::string Clip;
-		double Time = 0.0, Rate = 1.0;
+		double Time = 0.0, Rate = 1.0, Blend = 0.25;
 		// His canopy: up over him (Slump 0) to fallen in and flat on the ground (1), where it lies then (Heap, its
 		// middle) and the way it lies from where its lines end (degrees); Landed, where they end: him as he lies, dragged
 		// with it in a wind, else where he landed
@@ -150,6 +152,24 @@ namespace LandAir
 	/** A pilot's lines: his harness hangs this far under his canopy's skirt, and his feet HangFeet under that (metres;
 	 * the scene's mesh hangs on it, so that his feet are At). */
 	constexpr double LinesLong = 4.1, HangFeet = 1.1;
+
+	/**
+	 * Down, the scene's chute mesh draws him going over flat before the crowd's man takes him (the art director's third
+	 * note, 24 November 02:26Z: nobody is to see him pop). He pitches OverPitch degrees about his feet, his hips OverHip
+	 * up him, and is moved so that, flat, his hips lie where the crowd's man's do. That man is a rider, posed by go_prone
+	 * held at its end with nothing taken back (LandMen's StepRider: only the crowd's own men have go_prone's end offset
+	 * taken back as it plays), so his hips are go_prone's end offset forward and to the right of his seat, ProneHips up
+	 * (every soldier file's end_offset is 0.59 m forward and 0.14 m right, its pelvis lying 0.14 m up, all within a
+	 * centimetre; the test reads them). ProneEndX and ProneEndY are that offset until the scene knows his file, then his
+	 * file's own. (A review of 24 November: moved back 0.9 m, he had lain 0.7 m short of the crowd's man, who then
+	 * jumped forward in plain view under the canopy.)
+	 */
+	constexpr double OverPitch = 84.0, OverHip = 0.8, ProneEndX = 0.595, ProneEndY = 0.137, ProneHips = 0.143;
+	/** How far the mesh's man is moved as he goes over (metres: forward of his feet the way he faces, to his right, up),
+	 * at Fallen (0 on his feet, 1 flat), for go_prone's end offset EndX forward and EndY right. */
+	V3 OverShift(double Fallen, double EndX, double EndY);
+	/** Where his hips are then (metres: forward, right and up of his feet); flat, EndX, EndY and ProneHips. */
+	V3 OverHips(double Fallen, double EndX, double EndY);
 
 	/**
 	 * A canopy's silk as the scene draws it (Effects, R2; the art director's sixth note, 24 November 02:26Z), in the
@@ -173,6 +193,29 @@ namespace LandAir
 	 * was as he landed (Slump 0) it falls in downwind and settles into a low rumpled heap Off metres off (1), its 7 m of
 	 * silk lying on the field. */
 	void HeapShape(const Chute& C, double Slump, double Off, SilkMesh& Out);
+	/** Down, whether a line runs back to him from the Seam-th of Seams seams (SilkMesh::Seams' order): the half of its
+	 * skirt behind its middle the way it falls, toward where its lines end. Chosen by its place round the skirt, not by
+	 * where its rumple puts it, so that the same lines are drawn all the while it falls in (the mesh keeping its make). */
+	bool LineBack(size_t Seam, size_t Seams);
+
+	/**
+	 * The scene's chute mesh (the art director's sixth note, 24 November 02:26Z: cheaply, no mesh made again a frame) is
+	 * made once for each make it has (falling free, him alone; under his canopy, him, his lines and its silk; down, the
+	 * same going over; once the crowd's man has him, his lines and its silk) and otherwise moved in place where it can
+	 * be, its points only (UpdateMeshSection: no new proxy, its storage kept). Its silk is built again only when its shape
+	 * has moved by a step: Shape (his canopy's open share in the air; 2 and its slump once down) by OpenStep in the air,
+	 * SlumpStep down, or to full or flat, or down from the air (SilkMoved). In the air it is moved in place: a dome
+	 * filling never folds. Down it is made again, and by a coarser step: the scene winds each triangle by where its
+	 * points are, and the heap's rumple folds some over as it falls in (about one in fifty within a step, its crown's
+	 * and its hem's most; a sixth by the time it lies flat), which kept as first wound would show their inside's
+	 * shading. His part (him going over and his lines) is built again when Lying (how far over he has gone in it, from 0
+	 * on his feet to 1 flat; less than nothing once the crowd's man has him) has moved by LyingStep, or to flat, or he is
+	 * handed over (ManMoved), or with the silk; it is moved in place while its make is the same. The Was values are
+	 * those last built (-1 and -9: none yet).
+	 */
+	constexpr double OpenStep = 0.02, SlumpStep = 0.05, LyingStep = 0.05;
+	bool SilkMoved(double Shape, double WasShape);
+	bool ManMoved(double Lying, double WasLying);
 	/**
 	 * How much a canopy at Canopy glows seen from Eye, the sun the way TowardSun goes (all three in one frame, any
 	 * units): its silk lets the light through, so its side turned from the sun gives back a share of its own colour, a

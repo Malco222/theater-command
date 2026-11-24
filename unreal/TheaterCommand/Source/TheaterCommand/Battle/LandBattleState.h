@@ -82,6 +82,8 @@ struct FLandBattleState
 		struct FChuteMan
 		{
 			double Shape = -1.0, Lying = -9.0;
+			int Made = 0, Moved = 0;     // his mesh made, and moved in place (for the 45 fps reading; told once, bCounted)
+			bool bCounted = false;
 			int Man = -1;
 			std::string File, Clip, WasClip;
 			double Switched = -1.0, WasTime = 0.0, NowTime = 0.0, WasRate = 1.0, NowRate = 1.0;

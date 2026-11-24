@@ -17,19 +17,26 @@
 //   chutes   the downed pilots (-TheaterLandChutes): out of the right planes, down, up and away; and the art director's
 //            notes of 24 November (02:26Z) on them, on this field's pilots and a second, windy field's (5.7 m/s; its
 //            Il-2 loses her pilot under 60 m): falling free, filling, the wind, the swap, the harness and the drag, the
-//            hard landing and the limp, the swing, the canopy's shape, seams, silk and glow
+//            hard landing and the limp, the swing, the canopy's shape, seams, silk and glow; and a review's of the same
+//            day: the scene's mesh made and moved in place at 45 frames a second, the swap's frames, his lying pose
+//            against every soldier file's go_prone (LAND_AIR_SOLDIERS, which run.sh sets), the blends, his lines
 // With an out folder it writes air_paths.txt for paths.py (the picture: each strike side-on and from above), and the
 // pilots' frames and chute_silk.txt (his canopy's mesh, full and fallen in) for chutes.py.
 // Usage: Tools/land_air/run.sh [out folder]
 #include "Battle/LandAir.h"
+#include "Battle/LandJson.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <map>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace LandAir;
@@ -469,6 +476,9 @@ int main(int Argc, char** Argv)
 			std::vector<double> Crossings;
 			double SwingEarly = 0.0, SwingLate = 0.0, SwingLateLeast = 1e9, LastSwing = 0.0, SwingT0 = -1.0;
 			Chute Look;
+			// (a review of 24 November: the way he faced as he landed, kept while he is down; his clips' blends)
+			double FaceAt = 1e9;
+			int FaceMoved = 0, BlendBad = 0;
 		};
 		auto Play = [&](const Sky& Sk, const LandFeed::Recording& R, double Wx, double Wy, std::map<int, Watched>& Sn, std::ofstream* To, int Tag)
 		{
@@ -566,7 +576,10 @@ int main(int Argc, char** Argv)
 					}
 					W.bInMeshWas = C.bInMesh;
 					W.FallenWas = C.Fallen;
+					if (W.FaceAt > 1e8) W.FaceAt = C.Face;
+					W.FaceMoved += C.Face != W.FaceAt;
 					if (C.bInMesh) continue;
+					W.BlendBad += C.Blend != (C.Clip == "kneel_down" ? 0.5 : 0.25);
 					if (W.Clips.empty() || W.Clips.substr(W.Clips.rfind(' ') + 1) != C.Clip) W.Clips += " " + C.Clip;
 					// (her fourth: dragged, then back up onto his knees, his harness worked free, up)
 					if (C.Dragged > W.DragMost)
@@ -629,6 +642,7 @@ int main(int Argc, char** Argv)
 		for (const auto& Pair : Sn) All.emplace_back(Pair.first, &Pair.second);
 		for (const auto& Pair : Sw) All.emplace_back(100 + Pair.first, &Pair.second);
 		int Rose = 0, Shallow = 0, Grew = 0, OffWind = 0, FarOff = 0, BadSwap = 0, Swapped = 0, Low = 0, HardBad = 0, KneelBad = 0, DragBad = 0, SwingBad = 0, LookBad = 0;
+		int FaceBad = 0, BlendBad = 0;
 		for (const auto& Each : All)
 		{
 			const Watched& W = *Each.second;
@@ -646,6 +660,8 @@ int main(int Argc, char** Argv)
 			if (!bLow) FarOff += W.FullT < 0.0 || W.DropToFull < 40.0 || W.DropToFull > 75.0 || W.WithAir < 40.0 || W.WithAir > 75.0;
 			BadSwap += W.BadSwap;
 			Swapped += W.Swapped == 1;
+			FaceBad += W.FaceMoved;
+			BlendBad += W.BlendBad;
 			KneelBad += Kneeled < 1.0 - 0.03 || Kneeled > 1.5 + 0.03 || W.BackFrom < 0.0 || W.BackFrom >= W.KneelFrom || W.Clips.find(" kneel_down stand_up ") == std::string::npos;
 			if (bLow)
 			{
@@ -687,6 +703,7 @@ int main(int Argc, char** Argv)
 		Check(FarOff == 0 && Grew == 0 && OffWind == 0, "chutes: about 50 m down before his canopy is full and the wind takes him (within 1 m/s of it; 40 to 75 m), his way through the air only dying away (the wind no push from rest), and with the wind still 3 s after his canopy is full (her second)");
 		Check(BadSwap == 0 && Swapped == static_cast<int>(All.size()), "chutes: drawn in his chute's mesh until he lies flat under his falling canopy, then the crowd's man (her third)");
 		Check(KneelBad == 0, "chutes: up onto his knees (go_prone played back), his harness worked free kneeling 1 to 1.5 s (kneel_down's last pose), then stand_up (her fourth)");
+		Check(BlendBad == 0 && FaceBad == 0, "chutes: each clip blended into over 0.25 s, the harness's kneel over 0.5 s (go_prone's knees far from it); he lies, and his harness, the way he faced as he landed");
 		Check(DragBad == 0, "chutes: in a wind over 4 m/s his canopy drags him 1 to 2 m before he gets up; in a lighter one not at all (her fourth)");
 		Check(Low >= 1 && HardBad == 0, "chutes: out under 60 m his canopy is still filling as he lands, hard (but its way spent: 8 m/s through the air at most); he lies 3 to 5 s and limps off slower; the rest land soft and run (her fifth)");
 		Check(SwingBad == 0, "chutes: his swing about 4 s a swing, from 14 degrees settling to about 5 and never dead still (her answers)");
@@ -696,6 +713,171 @@ int main(int Argc, char** Argv)
 		const double Behind = Glow({ 0.0, 0.0, 300.0 }, { 0.0, 100.0, 100.0 }, { 0.0, -0.6, 0.8 }), Night = Glow({ 0.0, 0.0, 0.0 }, { 0.0, 60.0, 80.0 }, { 0.0, 0.6, -0.1 });
 		std::printf("     glow: seen from under it %.2f, against the sun %.2f, the sun behind the eye %.2f, at night %.2f\n", Below, Against, Behind, Night);
 		Check(Below > 0.05 && Below < 0.3 && Against > 0.8 && Behind < 1e-9 && Night == 0.0, "chutes: his canopy glows against the sun, a little seen from under it, not with the sun behind the eye nor at night (her sixth)");
+
+		// The scene's chute mesh at 45 frames a second (her sixth note, and a review of 24 November: it had been made
+		// again 84 to 101 times a pilot, 54 of them as his canopy fell in). LandAir's steps as the scene takes them: a
+		// section made again when its make changes (him alone; him, his lines and silk; down, with him going over; once
+		// the crowd's man has him), and down its silk each time it moves; else moved in place. With the crowd posed
+		// before the chutes as in the scene (a ride set one frame shows the next), so that the swap shows him in one of
+		// the two every frame, never both and never neither.
+		int MadeMost = 0, AirMade = 0, Gaps = 0, Twice = 0;
+		for (int Field = 0; Field < 2; ++Field)
+		{
+			struct Kept
+			{
+				double Shape = -1.0, Lying = -9.0;
+				int Make0 = -1, Make1 = -1, Made = 0, Moved = 0, SlumpMade = 0, MadeAloft = 0;
+				bool bRide = false;
+			};
+			std::map<int, Kept> Ks;
+			std::vector<Chute> Now;
+			for (double Tf = T0; Tf <= 400.0; Tf += 1.0 / (45.0 * Life))
+			{
+				(Field ? S2 : S).Chutes(Tf, Now);
+				for (const Chute& C : Now)
+				{
+					Kept& K = Ks[C.Key];
+					const bool bCrowd = K.bRide;
+					const double Shape = C.bDown ? 2.0 + C.Slump : C.Open;
+					const double Lying = C.bDown && (C.bInMesh || !K.bRide) ? (C.bInMesh ? C.Fallen : 1.0) : -1.0;
+					const bool bSilk = SilkMoved(Shape, K.Shape), bMan = ManMoved(Lying, K.Lying);
+					if (bSilk || bMan)
+					{
+						const double SilkAt = bSilk ? Shape : K.Shape;
+						const int Make0 = C.bDown ? (Lying >= 0.0 ? 2 : 3) : (SilkAt > 0.0 ? 1 : 0), Make1 = C.bDown || SilkAt > 0.0 ? 1 : 0;
+						const bool bMade = Make0 != K.Make0 || (bSilk && (Make1 != K.Make1 || (Make1 == 1 && C.bDown)));
+						K.Made += bMade;
+						K.Moved += !bMade;
+						K.SlumpMade += bMade && C.bDown && C.Slump > 0.0 && C.Slump < 1.0;
+						K.MadeAloft += bMade && !C.bDown && K.Make1 == 1;
+						K.Make0 = Make0;
+						if (bSilk) { K.Make1 = Make1; K.Shape = Shape; }
+						if (bMan) K.Lying = Lying;
+					}
+					if (C.bDown)
+					{
+						const bool bMesh = K.Lying >= 0.0;
+						Gaps += !bMesh && !bCrowd;
+						Twice += bMesh && bCrowd;
+					}
+					if (!C.bInMesh) K.bRide = true;
+				}
+			}
+			for (const auto& Each : Ks)
+			{
+				std::printf("     %s pilot of plane %d's mesh at 45 fps: made %d times (%d as his canopy falls in), moved in place %d\n", Field ? "windy:" : "calm: ", Each.first,
+					Each.second.Made, Each.second.SlumpMade, Each.second.Moved);
+				MadeMost = std::max(MadeMost, Each.second.Made);
+				AirMade += Each.second.MadeAloft;
+			}
+		}
+		Check(MadeMost <= 30 && AirMade == 0, "chutes: his mesh made again at most 30 times at 45 fps, never in the air once his canopy is out (moved in place as it fills), down each 0.05 of its falling in (her sixth)");
+		Check(Gaps == 0 && Twice == 0, "chutes: at the swap he is drawn every frame, in his chute's mesh or as the crowd's man, never both (the crowd posed before the chutes)");
+		// (moved in place, a triangle keeps the way round it was first wound, which the scene chooses by where its points
+		// are: so a canopy filling must never fold one over; down it is made again, its rumple folding some)
+		auto Windings = [](const SilkMesh& M, std::vector<int>& Into)
+		{
+			Into.clear();
+			for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+			{
+				const V3& A = M.Points[static_cast<size_t>(M.Triangles[K])], &B = M.Points[static_cast<size_t>(M.Triangles[K + 1])], &Cn = M.Points[static_cast<size_t>(M.Triangles[K + 2])];
+				const V3 Ux = Plus(B, Mul(Cn, -1.0)), Vx = Plus(A, Mul(Cn, -1.0));
+				const V3 Nx{ Ux.Y * Vx.Z - Ux.Z * Vx.Y, Ux.Z * Vx.X - Ux.X * Vx.Z, Ux.X * Vx.Y - Ux.Y * Vx.X };
+				const V3& O = M.Outward[K / 3];
+				Into.push_back(Nx.X * O.X + Nx.Y * O.Y + Nx.Z * O.Z >= 0.0 ? 1 : -1);
+			}
+		};
+		int Folded = 0, HeapFolded = 0, LinesBad = 0;
+		for (const auto& Each : All)
+		{
+			const Chute& Lk = Each.second->Look;
+			SilkMesh First, M;
+			std::vector<int> W0, W1;
+			CanopyShape(Lk, 0.001, First);
+			Windings(First, W0);
+			for (double Open = 0.01; Open <= 1.0 + 1e-9; Open += 0.01)
+			{
+				CanopyShape(Lk, Open, M);
+				Windings(M, W1);
+				for (size_t K = 0; K < W0.size() && K < W1.size(); ++K) Folded += W0[K] != W1[K];
+			}
+			// (down: the lines back to him, by their place round the skirt, behind its middle all the while it falls in)
+			Chute Dn = Lk;
+			Dn.Open = 1.0;
+			int Back = 0;
+			for (size_t K = 0; K < static_cast<size_t>(Lk.Gores); ++K) Back += LineBack(K, static_cast<size_t>(Lk.Gores));
+			LinesBad += Back < Lk.Gores / 2 - 2 || Back > Lk.Gores / 2;
+			for (double Sl = 0.0; Sl <= 1.0 + 1e-9; Sl += 0.05)
+			{
+				HeapShape(Dn, Sl, 4.0, M);
+				double Mid = 0.0;
+				for (const int Sm : M.Seams) Mid += M.Points[static_cast<size_t>(Sm)].X / static_cast<double>(M.Seams.size());
+				for (size_t K = 0; K < M.Seams.size(); ++K) LinesBad += LineBack(K, M.Seams.size()) && M.Points[static_cast<size_t>(M.Seams[K])].X >= Mid;
+				if (Sl > 0.99)
+				{
+					Windings(M, W1);
+					for (size_t K = 0; K < W0.size() && K < W1.size(); ++K) HeapFolded += W0[K] != W1[K];
+				}
+			}
+		}
+		std::printf("     moved in place: a canopy filling folds %d triangles over (of its windings as first made); lying flat, its rumple %d\n", Folded, HeapFolded);
+		Check(Folded == 0 && HeapFolded > 0 && LinesBad == 0, "chutes: a canopy filling never folds a triangle over (moved in place); down its lines run back to him from the same half of its skirt all the while it falls in");
+
+		// The swap's lying pose (her third note; a review of 24 November): the crowd's man is a rider in go_prone held at
+		// its end, nothing taken back, so his hips are its end offset forward and right of his feet, and as low as its
+		// pelvis track says; the mesh's man flat must lie there. Every soldier file that has them, read as the game reads
+		// them (its go_prone's end_offset, its pelvis's rest).
+		{
+			std::string Dir = std::getenv("LAND_AIR_SOLDIERS") ? std::getenv("LAND_AIR_SOLDIERS") : "";
+			if (Dir.empty())
+			{
+				const std::string Here = __FILE__;
+				Dir = Here.substr(0, Here.find_last_of('/')) + "/../../Content/Models/Soldiers";
+			}
+			std::vector<std::string> Files;
+			std::error_code Why;
+			for (const std::filesystem::directory_entry& E : std::filesystem::directory_iterator(Dir, Why))
+			{
+				const std::string Name = E.path().filename().string();
+				if (Name.rfind("soldier_", 0) == 0 && Name.size() > 5 && Name.substr(Name.size() - 5) == ".json") Files.push_back(E.path().string());
+			}
+			std::sort(Files.begin(), Files.end());
+			int Read = 0, Offsets = 0, Off = 0, OwnOff = 0;
+			double Most = 0.0, OwnMost = 0.0, WasShort = 1e9;
+			for (const std::string& Path : Files)
+			{
+				std::string Text, Why2;
+				LandJson::Json J;
+				if (!LandJson::ReadFile(Path, Text) || !LandJson::Parse(Text, J, Why2)) continue;
+				++Read;
+				const std::vector<double> End = LandJson::Numbers(J["clips"]["go_prone"]["end_offset"]);
+				double PelvisX = 0.0, PelvisZ = -1.0;
+				const LandJson::Json& Bones = J["bones"];
+				for (size_t K = 0; K < Bones.Count(); ++K)
+				{
+					if (Bones.At(K)["name"].Str("") != "pelvis") continue;
+					const std::vector<double> Head = LandJson::Numbers(Bones.At(K)["head"]);
+					if (Head.size() >= 3) { PelvisX = Head[0]; PelvisZ = Head[2]; }
+				}
+				if (End.size() < 3 || PelvisZ < 0.0) continue;
+				++Offsets;
+				// (where his hips lie in the file: forward, right and up of his seat)
+				const V3 Lies{ PelvisX + End[0], End[1], PelvisZ + End[2] };
+				const V3 ByDefault = OverHips(1.0, ProneEndX, ProneEndY), ByOwn = OverHips(1.0, End[0], End[1]);
+				const double Miss = Length(Plus(ByDefault, Mul(Lies, -1.0))), OwnMiss = Length(Plus(ByOwn, Mul(Lies, -1.0)));
+				Most = std::max(Most, Miss);
+				OwnMost = std::max(OwnMost, OwnMiss);
+				Off += Miss > 0.03;
+				OwnOff += OwnMiss > 0.02;
+				// (as it was: pitched 84 degrees and moved back 0.9 m, his hips 0.1 m behind his feet)
+				WasShort = std::min(WasShort, Lies.X - (0.8 * std::sin(84.0 * 3.14159265358979323846 / 180.0) - 0.9));
+			}
+			const V3 Standing = OverHips(0.0, ProneEndX, ProneEndY);
+			std::printf("     the swap's lying pose: %d soldier files read, %d with go_prone's end offset; the mesh's man flat %.3f m from the crowd's man's hips at most by his own file's offset, %.3f by LandAir's (he had lain %.2f m short)\n",
+				Read, Offsets, OwnMost, Most, WasShort);
+			Check(Offsets >= 10 && Off == 0 && OwnOff == 0 && Length(Plus(Standing, Mul(V3{ 0.0, 0.0, OverHip }, -1.0))) < 1e-12,
+				"chutes: flat in his chute's mesh his hips lie where the crowd's man's do in every soldier file (go_prone's end offset, and its pelvis as it lies), on his feet as he lands (her third: no pop)");
+		}
 		if (Out.is_open())
 		{
 			// (his canopy for chutes.py's look: the first pilot's, full, and on the field fallen half in)
