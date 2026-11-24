@@ -3,7 +3,7 @@
 // junctions by day or night, against the armies on a live front, and fighters for the sky over it. A raid's losses
 // are counted by the record (ruling 227): in 1939 a quarter to well over half of the bombers that go without escort
 // into a strong patrol, and far fewer of those that are escorted. The historical scenarios keep the air war they always had.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import airwar from '../data/campaign/airwar.json';
 import levels from '../data/campaign/difficulty.json';
 import { AIR, AIRWAR, airAI, airFleetsOf, airRange, airWar, assessAir, cover, fly, forecastAir, km } from '../src/campaign/air';
@@ -159,6 +159,9 @@ describe('what a raid costs in the grand campaign', () => {
 });
 
 describe('the computer\'s air staff', () => {
+  // (Release 1.5's staff doctrine, with the fight back off (airwar.json ai.back): the fight back has its own tests, air-fight-back.test.ts.)
+  beforeAll(() => { AIRWAR.ai.back!.on = false; });
+  afterAll(() => { AIRWAR.ai.back!.on = true; });
   it('flies raids of its own at every level, at once, and the groups that went are away for the month', () => {
     for (const id of ['cadet', 'captain', 'colonel', 'general', 'marshal']) {
       const g = grand('FRA', id);

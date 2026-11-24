@@ -14,7 +14,7 @@ import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, leavingThreat, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
-import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
+import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, ratedAir, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
@@ -1066,11 +1066,12 @@ export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFE
 function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
   // An air force short of fuel flies fewer sorties (the grand campaign).
-  for (const id of nats) s += g.nations[id].air * fuelAir(g, id);
+  // (A country whose air force the fight back raised as air groups fights with them, and its rating no longer counts: air.ts ratedAir.)
+  for (const id of nats) s += ratedAir(g, id) * fuelAir(g, id);
   for (const n of Object.values(g.nations)) {
     // An ally at war with the same enemy lends a share of its air force, if it has airfields on the map to fly from.
     if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
-    if ([...nats].some((a) => allied(g, a, n.id)) && [...enemies].some((e) => atWar(g, n.id, e))) s += n.air * 0.25;
+    if ([...nats].some((a) => allied(g, a, n.id)) && [...enemies].some((e) => atWar(g, n.id, e))) s += ratedAir(g, n.id) * 0.25;
   }
   return s;
 }
