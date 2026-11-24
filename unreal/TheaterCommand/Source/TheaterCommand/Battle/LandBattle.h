@@ -24,6 +24,7 @@ class UInstancedStaticMeshComponent;
 class UMeshComponent;
 class UPointLightComponent;
 class UProceduralMeshComponent;
+class USceneCaptureComponent2D;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -31,6 +32,7 @@ class USoundBase;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UTexture2D;
+class UTextureRenderTarget2D;
 struct FLandBattleState;
 namespace LandCarpet
 {
@@ -161,6 +163,16 @@ public:
 	bool IsShotHeld() const { return bShotHeld; }
 	/** The flag pictures for the bar's two ends: the attack's (his) and the defence's. */
 	UTexture2D* FlagOf(int32 Side) const;
+	/** The film in a corner (release 2, "-TheaterLandCorner"): the film director's shot drawn small this frame, for
+	 * the general's screen to show in its window; null where it is off or the film has the whole screen. */
+	UTextureRenderTarget2D* CornerPicture() const
+	{
+		if (!bCornerShown)
+		{
+			return nullptr;
+		}
+		return CornerFilm;
+	}
 
 private:
 	TSharedPtr<FLandBattleState> State;
@@ -834,6 +846,29 @@ private:
 	 * none; -2 not yet read) and how far the check has gone. */
 	double TopCheckAt = -2.0;
 	int32 TopCheckStep = 0;
+	/** The Mac's check of his kept views, the spotter's mark and the film in a corner (release 2,
+	 * "-TheaterLandViewsAt=<battle seconds>": -1 none; -2 not yet read) and how far it has gone. */
+	double ViewsCheckAt = -2.0;
+	int32 ViewsCheckStep = 0;
+	/**
+	 * The film in a corner (release 2; Brian, 24 November 20:38Z): while he commands from his own view, the film
+	 * director's shot in a small window. A second picture of the field, drawn small through the film's lens every few
+	 * frames. Off without "-TheaterLandCorner" until the Mac holds 45 fps with it and the art director has passed it;
+	 * "-TheaterLandCornerWide=<pixels>" (480), "-TheaterLandCornerEvery=<frames>" (2: every other frame) and
+	 * "-TheaterLandCornerNoShadows" are the Mac's trials. CornerOn: 1 on, 0 off, -1 not yet read.
+	 */
+	UPROPERTY()
+	TObjectPtr<USceneCaptureComponent2D> CornerLens;
+	UPROPERTY()
+	TObjectPtr<UTextureRenderTarget2D> CornerFilm;
+	int32 CornerOn = -1, CornerWide = 480, CornerEvery = 2, CornerFrame = 0, CornerTaken = 0;
+	bool bCornerShown = false;
+	double CornerMs = 0.0;
+	/** Each frame after the lens is aimed: the film's shot taken for the window, where it is shown. */
+	void FilmCorner();
+	/** The spotter's mark (release 2, "-TheaterLandSpotter", off without it): 1 on, 0 off, -1 not yet read. On only
+	 * where the battle hides anyone (the Forest ambushes rule). */
+	int32 SpotterOn = -1;
 	/** His units the walk has used, and where it set those it carried into the woods. */
 	TArray<int32> ScriptUsed;
 	TArray<FVector2D> ScriptTaken;

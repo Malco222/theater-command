@@ -94,6 +94,8 @@ private:
 	FVector2D HoverAt = FVector2D(-1.0, -1.0);
 	/** The view's keys held handed to the scene (and let go of all at once when the screen loses the keyboard). */
 	void HandViewKeys();
+	/** The film in a corner's picture (release 2, -TheaterLandCorner), as a brush. */
+	mutable FSlateBrush CornerBrush;
 	/** The two flags' brushes, made once their pictures are there. */
 	mutable FSlateBrush FlagBrush[2];
 	mutable bool bFlagMade[2] = { false, false };

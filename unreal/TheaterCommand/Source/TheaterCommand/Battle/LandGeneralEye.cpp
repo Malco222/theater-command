@@ -149,17 +149,62 @@ namespace LandGeneralEye
 		return TiltFor(S, Tl) / Rad;
 	}
 
+	void Eye::OwnTiltBegin()
+	{
+		if (bOwnTilt) return;
+		bOwnTilt = true;
+		Tl = WantTl = TlGoal = TiltAt(S) - Set.TiltSoft * Rad;
+		SwingTl = 0.0;
+	}
+
+	void Eye::KeepView(int Number)
+	{
+		if (Number < 0 || Number >= ViewCount) return;
+		View& V = Views[Number];
+		V.bKept = true;
+		V.X = Tx;
+		V.Y = Ty;
+		V.H = H;
+		V.S = S;
+		// (his own tilt as it stands, the top view's too; on its way back to the automatic tilt it is not his own)
+		V.bOwn = bOwnTilt && !bToAuto;
+		V.Tl = V.bOwn ? Tl : 0.0;
+		AtView = Number;
+	}
+
+	void Eye::CallView(int Number)
+	{
+		if (Number < 0 || Number >= ViewCount) return;
+		if (!Views[Number].bKept)
+		{
+			KeepView(Number);
+			return;
+		}
+		const View& V = Views[Number];
+		WantX = V.X;
+		WantY = V.Y;
+		WantH = V.H;
+		WantS = V.S;
+		bGliding = true;
+		bFlying = true;
+		Follow = -1;
+		// (the tilt it was kept with: his own, or back to tilting with the zoom; the top view's second press has
+		// nothing to go back to once he has flown elsewhere)
+		bTop = false;
+		if (V.bOwn)
+		{
+			OwnTiltBegin();
+			bToAuto = false;
+			WantTl = V.Tl;
+		}
+		else if (bOwnTilt) bToAuto = true;
+		AtView = Number;
+	}
+
 	void Eye::TiltWish(const Input& In)
 	{
 		const double Soft = Set.TiltSoft * Rad;
-		// (his own tilt begun where the automatic one is, just under its soft floor: the view does not move as it is set)
-		auto Own = [&]()
-		{
-			if (bOwnTilt) return;
-			bOwnTilt = true;
-			Tl = WantTl = TlGoal = TiltAt(S) - Soft;
-			SwingTl = 0.0;
-		};
+		auto Own = [this]() { OwnTiltBegin(); };
 		if (In.bTopView)
 		{
 			if (bTop)
@@ -264,6 +309,15 @@ namespace LandGeneralEye
 		WantX = Tx = LookAtIn.X;
 		WantY = Ty = LookAtIn.Y;
 		WantS = S = 0.5 * (Lo + Hi);
+		// (and the zoom a flight to a kept view climbs to before it crosses the field)
+		Lo = 0.0;
+		Hi = 1.0;
+		for (int K = 0; K < 40; ++K)
+		{
+			const double Mid = 0.5 * (Lo + Hi);
+			(UpAt(Mid) < Set.FlyUp ? Lo : Hi) = Mid;
+		}
+		FlyS = 0.5 * (Lo + Hi);
 		WantH = H = Heading;
 		ClampWanted();
 		Tx = WantX;
@@ -281,6 +335,9 @@ namespace LandGeneralEye
 		Follow = -1;
 		Tl = WantTl = SwingTl = TlGoal = 0.0;
 		bOwnTilt = bToAuto = bTop = bTopWasOwn = false;
+		for (View& V : Views) V = View();
+		AtView = -1;
+		bFlying = false;
 		bFirst = true;
 		Now = LandEye::Pose();
 		return true;
@@ -742,6 +799,8 @@ namespace LandGeneralEye
 		const double Across = Arm * std::cos(TiltAt(S));
 
 		// What the player asked.
+		if (In.KeepView >= 0) KeepView(In.KeepView);
+		if (In.CallView >= 0) CallView(In.CallView);
 		if (In.bGoTo)
 		{
 			WantX = In.GoTo.X;
@@ -761,6 +820,46 @@ namespace LandGeneralEye
 		{
 			Follow = -1;
 			bGliding = false;
+		}
+		// (moved by his own hand, he no longer stands at a kept view: its chip goes out)
+		if (Px != 0.0 || Py != 0.0 || bSlide || In.Zoom != 0.0 || In.Turn != 0.0 || In.Tilt != 0.0 || In.bTopView || In.bGoTo || In.GoBlock >= 0) AtView = -1;
+		// (flying to a kept view he has not since moved from: its place, turn, zoom and tilt are wanted afresh each
+		// frame, so a wait at a hedge on the way, which lets a wish go, does not lose them)
+		if (bFlying && AtView >= 0)
+		{
+			const View& V = Views[AtView];
+			const double Far = std::hypot(V.X - Tx, V.Y - Ty), Round = std::abs(WrapNear(V.H, H) - H);
+			if (Far < 2.0 && Round < 2.0 * Rad)
+			{
+				// (over its place and facing its way: down, or up, to its zoom)
+				WantX = V.X;
+				WantY = V.Y;
+				WantH = V.H;
+				WantS = V.S;
+			}
+			else if (S >= FlyS - 0.03)
+			{
+				// (high enough to cross over everything: across and round, no lower than that on the way)
+				WantX = V.X;
+				WantY = V.Y;
+				WantH = V.H;
+				WantS = std::max(V.S, FlyS);
+				if (Far >= 1.0) bGliding = true;
+			}
+			else
+			{
+				// (low down: up first, where it stands and as it faces)
+				WantX = Tx;
+				WantY = Ty;
+				WantH = H;
+				WantS = std::max(V.S, FlyS);
+				bGliding = false;
+			}
+			if (V.bOwn && bOwnTilt)
+			{
+				bToAuto = false;
+				WantTl = V.Tl;
+			}
 		}
 		if (Px != 0.0 || Py != 0.0)
 		{
@@ -791,8 +890,13 @@ namespace LandGeneralEye
 			else Follow = -1;
 		}
 		WantS -= In.Zoom * Set.ZoomStep;
-		// (following a unit, the view stays a little back from its men: riding with them is the film's)
-		if (Follow >= 0) WantS = std::max(WantS, Set.FollowNearest);
+		// (following a unit, the view stays a little back from its men: riding with them is the film's; called from
+		// nearer than that, it draws back held to the zoom's fastest and hardest, as a flight is, not at a bound)
+		if (Follow >= 0 && WantS < Set.FollowNearest)
+		{
+			WantS = Set.FollowNearest;
+			if (S < Set.FollowNearest - 0.01) bFlying = true;
+		}
 		WantH += In.Turn * Rad;
 		ClampWanted();
 		TiltWish(In);
@@ -839,26 +943,34 @@ namespace LandGeneralEye
 			{
 				Spring(Tx, SwingX, WantX, Rate, Dt);
 				Spring(Ty, SwingY, WantY, Rate, Dt);
-				Spring(H, SwingH, WantH, Set.TurnEase, Dt);
-				// (a spring held to its fastest and hardest: from a swing already faster, slowed no harder than the push)
+				// (a spring held to its fastest and hardest: from a swing already faster, slowed no harder than the push;
+				// and never faster than it can still stop from at that push by where it is wanted, so it comes to rest
+				// there and does not run on past it, into the end of the zoom's range above all)
 				auto Held = [Dt](double& X, double& Swing, double Want, double W, double Fastest, double Push)
 				{
 					double X1 = X, Sw = Swing;
 					Spring(X1, Sw, Want, W, Dt);
-					const double Cap = std::max(Fastest, std::abs(Swing) - Push * Dt);
+					const double StopFrom = std::sqrt(2.0 * Push * std::abs(Want - X));
+					const double Cap = std::max(std::min(Fastest, StopFrom), std::abs(Swing) - Push * Dt);
 					Sw = std::clamp(std::clamp(Sw, Swing - Push * Dt, Swing + Push * Dt), -Cap, Cap);
 					X += 0.5 * (Swing + Sw) * Dt;
 					Swing = Sw;
 				};
+				// (flying to a kept view, the turn held too: a call may ask half a turn about the look-at at once; and
+				// the zoom and the tilt a little slower than by his own hand, as all three may swing together)
+				const double Fly = bFlying ? Set.FlySlower : 1.0;
+				if (bFlying) Held(H, SwingH, WantH, Set.TurnEase, Set.TurnFastest * Rad, Set.TurnPush * Rad);
+				else Spring(H, SwingH, WantH, Set.TurnEase, Dt);
 				if (bOwnTilt)
 				{
 					// (with his own tilt, the zoom and the tilt eased and never faster or harder than the picture bears:
 					// the top view's swing of some fifty degrees and its climb from a man's shoulder take a second or two;
 					// his tilt eases toward what he wants as far as the zoom lets it, handed back toward the shoulder)
-					Held(S, SwingS, WantS, Set.ZoomEase, Set.ZoomFastest, Set.ZoomPush);
+					Held(S, SwingS, WantS, Set.ZoomEase, Set.ZoomFastest * Fly, Set.ZoomPush * Fly);
 					TlGoal = std::min(WantTl, TiltMostAt(S));
-					Held(Tl, SwingTl, TlGoal, Set.TiltEase, Set.TiltFastest * Rad, Set.TiltPush * Rad);
+					Held(Tl, SwingTl, TlGoal, Set.TiltEase, Set.TiltFastest * Rad * Fly, Set.TiltPush * Rad * Fly);
 				}
+				else if (bFlying) Held(S, SwingS, WantS, Set.ZoomEase, Set.ZoomFastest * Fly, Set.ZoomPush * Fly);
 				else Spring(S, SwingS, WantS, Set.ZoomEase, Dt);
 				if (BrakeFor < 0.0) BrakeFor = std::min(0.0, BrakeFor + Dt);
 			}
@@ -933,6 +1045,14 @@ namespace LandGeneralEye
 		{
 			bOwnTilt = bToAuto = false;
 			Tl = WantTl = SwingTl = TlGoal = 0.0;
+		}
+		// (come to rest at the kept view, or wherever his own hand has since taken it: the turn and the zoom go back to
+		// their own easing, at rest, without a step)
+		if (bFlying && !bGliding && !bBrake && std::abs(WantS - S) < 0.005 && std::abs(SwingS) < 0.05 && std::abs(WrapNear(WantH, H) - H) < 0.5 * Rad
+			&& std::abs(SwingH) < 2.0 * Rad
+			&& (AtView < 0 || (std::hypot(Views[AtView].X - Tx, Views[AtView].Y - Ty) < 1.5 && std::abs(Views[AtView].S - S) < 0.005)))
+		{
+			bFlying = false;
 		}
 
 		Now.Eye = EyeAt;

@@ -203,6 +203,9 @@ struct FLandBattleState
 
 	/** The camera's pose this frame and the words on the screen. */
 	LandEye::Pose Pose;
+	/** The film director's own pose this frame, kept while the general's view has the camera (the film in a corner,
+	 * release 2). */
+	LandEye::Pose FilmPose;
 	LandDesk::Words Words;
 
 	/** Battle seconds shown, and real seconds since the battle opened. */
