@@ -1765,7 +1765,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       for (const j of target.nb) {
         const r = g.regions[j];
         if (!fallsOn(g, c, r, banned)) continue;
-        const by = attackers.find((u) => chaser(u) && pace(g, u, r) < pace(g, c, r));
+        const by = attackers.find((u) => chaser(u) && chasePace(g, u, c, r) < pace(g, c, r));
         if (by && (!chasedBy || KIND[by.kind].mobile && !KIND[chasedBy.kind].mobile)) chasedBy = by;
       }
     }
@@ -2069,9 +2069,9 @@ function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Regi
 // mountain troops outrun tanks in their mountains. The record (historian/prisoner-share-1124.md) only sizes it.
 
 /** How hard this corps finds it to get into a province in a pursuit: the ground's cost to its arm, off the roads. */
-export function pace(g: Game, c: Corps, to: Region): number {
-  let cost = KIND[c.kind].move + groundMarch(g, c.kind, to);
-  if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
+export function pace(g: Game, c: Corps, to: Region, kind: Kind = c.kind): number {
+  let cost = KIND[kind].move + groundMarch(g, kind, to);
+  if (to.terrain === 'mountain' && kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
   if (frozen(g, c.nat, to) && cmdWinter(g, c) >= 1) cost += 1;
@@ -2084,6 +2084,11 @@ export const lifted = (c: Corps): number => (c.kind === 'mot' || c.kind === 'arm
 const afoot = (c: Corps): boolean => !KIND[c.kind].mobile && c.kind !== 'fort';
 /** Fit to chase: a fighting arm, fed (no fuel, no chase), at 15 in 100 of its size or more. */
 const chaser = (c: Corps): boolean => fights(c) && c.supplied && c.str >= 0.15;
+/**
+ * A pursuer's pace after a corps it chases: its own, or a man's on foot when it came out of the fight more
+ * disorganised than the men it chases (the design director's 13:10Z: a winner bled to a standstill does not run).
+ */
+const chasePace = (g: Game, u: Corps, c: Corps, to: Region): number => (u.org < c.org && KIND[u.kind].mobile ? pace(g, u, to, 'inf') : pace(g, u, to));
 
 /**
  * The ways out of the field this beaten corps has lost to a faster enemy (a cut road): a province of its side next
@@ -2099,18 +2104,18 @@ function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<n
     if (open?.has(j) || !fallsOn(g, c, r, banned) || r.units.some((u) => allied(g, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g, u.nat, c.nat))) continue;
     const mine = pace(g, c, r);
     const held = blocks.get(j);
-    if (held) { if (pace(g, held, r) < mine) cut.add(j); continue; }
+    if (held) { if (chasePace(g, held, c, r) < mine) cut.add(j); continue; }
     const taken = new Set([...blocks.values()].map((u) => u.id));
     let by: Corps | null = null;
     for (const k of r.nb) {
       if (k === from.id) continue;
       for (const u of g.regions[k].units) {
         if (taken.has(u.id) || (u.kind !== 'mot' && u.kind !== 'arm') || !allied(g, u.nat, winner) || !atWar(g, u.nat, c.nat) || !chaser(u)) continue;
-        const cost = pace(g, u, r);
-        if (cost < mine && u.ap >= cost && (!by || cost < pace(g, by, r))) by = u;
+        const cost = chasePace(g, u, c, r);
+        if (cost < mine && u.ap >= cost && (!by || cost < chasePace(g, by, c, r))) by = u;
       }
     }
-    if (by) { blocks.set(j, by); if (pay) by.ap -= pace(g, by, r); cut.add(j); }
+    if (by) { blocks.set(j, by); if (pay) by.ap -= chasePace(g, by, c, r); cut.add(j); }
   }
   return cut;
 }
@@ -2119,7 +2124,7 @@ function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<n
 function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
   if (!unitsDecide(g) || !afoot(c)) return 0;
   const mine = pace(g, c, to);
-  if (!chasers.some((u) => chaser(u) && pace(g, u, to) < mine)) return 0;
+  if (!chasers.some((u) => chaser(u) && chasePace(g, u, c, to) < mine)) return 0;
   return PURSUIT.share * (1 - lifted(c));
 }
 

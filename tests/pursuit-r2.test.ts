@@ -94,6 +94,15 @@ describe('a beaten stack chased off the field', () => {
     expect(chased(rep)[4]).toBe(0);
   });
 
+  it('a winner more disorganised than the men it chases follows at foot pace (DD 13:10Z): nothing beyond the battle\'s own', () => {
+    const f = field(true, FOOT, PANZERS);
+    for (const c of f.att) c.org = 0.15;
+    const rep = fight(f);
+    expect(fates(rep)).toEqual(['retreated', 'retreated', 'retreated', 'retreated', 'retreated']);
+    for (const c of f.att.filter((u) => !u.dead)) for (const d of f.def) expect(c.org).toBeLessThan(d.org);
+    expect(chased(rep)).toEqual([0, 0, 0, 0, 0]);
+  });
+
   it('mountain: nobody outruns anybody', () => {
     expect(chased(fight(field(true, FOOT, PANZERS, 'mountain')))).toEqual([0, 0, 0, 0, 0]);
   });
@@ -148,6 +157,17 @@ describe('a beaten stack chased off the field', () => {
     blockAt(h, 'arm', 6);
     fight(h);
     expect(breakouts(h).length).toBe(0);
+  });
+
+  it('a block more disorganised than the beaten corps cuts nothing: the stack falls back, the foot pays the share', () => {
+    const f = field(true, FOOT, PANZERS);
+    const block = blockAt(f, 'arm', 6);
+    block.org = 0.05;
+    const ap = block.ap;
+    const rep = fight(f);
+    expect(breakouts(f).length).toBe(0);
+    expect(fates(rep)).toEqual(['retreated', 'retreated', 'retreated', 'retreated', 'retreated']);
+    expect(block.ap).toBe(ap);
   });
 
   it('a road with its own side standing in it cannot be cut', () => {
