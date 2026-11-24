@@ -39,6 +39,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import winData from '../../data/campaign/winchance.json';
+import pursuitData from '../../data/campaign/pursuit.json';
 import { unitsDecide } from './units';
 import { columnShare, columnsMonth } from './columns';
 import rivalsData from '../../data/campaign/rivals.json';
@@ -1077,6 +1078,7 @@ const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
 /** The honest win chance on land (release 2, auto-resolve fix 1; data/campaign/winchance.json): the record's luck in the field. */
 const WIN = winData as unknown as { field: [number, number]; prepared: number };
+const PURSUIT = pursuitData as unknown as { share: number };
 /**
  * True in a grand campaign opened with the honest win chance on land: its own step inside Units decide (the design
  * director, 23 Nov 2026 10:14Z), so it needs both flags, and the other steps can go on without it.
@@ -1750,6 +1752,29 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
       : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
+  // Units decide (#7 4(b)): what a beaten defence would lose to the chase, read by both sides before the battle (129(d)).
+  if (unitsDecide(g) && !town && defenders.some(fights)) {
+    const ours = g.human !== null && dN.has(g.human);
+    const banned = new Set(attackers.map((c) => c.reg)), blocks = new Map<number, Corps>(), cutAt = new Set<number>();
+    let chasedBy: Corps | null = null;
+    for (const c of defenders) {
+      if (c.str < 0.15 || !afoot(c)) continue;
+      for (const j of roadsCut(g, c, target, attNat, banned, blocks, false)) cutAt.add(j);
+      for (const j of target.nb) {
+        const r = g.regions[j];
+        if (!fallsOn(g, c, r, banned)) continue;
+        const by = attackers.find((u) => chaser(u) && pace(g, u, r) < pace(g, c, r));
+        if (by && (!chasedBy || KIND[by.kind].mobile && !KIND[chasedBy.kind].mobile)) chasedBy = by;
+      }
+    }
+    const arm = (u: Corps | undefined): string => (u?.kind === 'arm' ? 'armour' : u?.kind === 'mot' ? 'lorried troops' : u?.kind === 'cav' ? 'cavalry' : 'troops');
+    if (cutAt.size) {
+      const at = listAnd([...cutAt].map((j) => g.regions[j].name));
+      lines.push({ label: 'Pursuit', value: `${ours ? 'Our' : 'Their'} road out is cut at ${at}`, effect: `If the line breaks, ${ours ? 'our' : 'their'} men on foot who can go no other way are taken whole by the ${arm(blocks.get([...cutAt][0]))} already there` });
+    } else if (chasedBy) {
+      lines.push({ label: 'Pursuit', value: `${ours ? 'Our foot cannot outrun their' : 'Their foot cannot outrun our'} ${arm(chasedBy)}`, effect: `If the line breaks, about ${Math.round(PURSUIT.share * 100)}% of ${ours ? 'our' : 'their'} men on foot are taken as they fall back` });
+    }
+  }
   if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
     ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
     : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
@@ -2025,6 +2050,67 @@ function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Regi
   return best;
 }
 
+// ---- The pursuit (Units decide, #7 step 4(b); the design director's rulings of 24 Nov 12:41Z and 12:43Z) ---------
+// A beaten army is chased by whoever is faster over the ground it falls back across. Speed is the ground's own, read
+// as moveCost reads it but without the march road, which both sides would share: on open ground tanks and lorries
+// outrun men on foot; in forest tanks do not, though lorries do; in mountain and marsh nobody outruns anybody, and
+// mountain troops outrun tanks in their mountains. The record (historian/prisoner-share-1124.md) only sizes it.
+
+/** How hard this corps finds it to get into a province in a pursuit: the ground's cost to its arm, off the roads. */
+export function pace(g: Game, c: Corps, to: Region): number {
+  let cost = KIND[c.kind].move + groundMarch(g, c.kind, to);
+  if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
+  if (to.terrain === 'marsh') cost += 1;
+  if (weather(g).mud && EAST.has(to.owner)) cost += 1;
+  if (frozen(g, c.nat, to) && cmdWinter(g, c) >= 1) cost += 1;
+  return cost;
+}
+
+/** The share of a corps that rides: lorries, half-tracks or carriers. By its arm until a corps carries its own lorry share. */
+export const lifted = (c: Corps): number => (c.kind === 'mot' || c.kind === 'arm' ? 1 : 0);
+/** Men on foot: what a pursuit can catch. Horsemen are faster than foot, and tanks and lorries ride. */
+const afoot = (c: Corps): boolean => !KIND[c.kind].mobile && c.kind !== 'fort';
+/** Fit to chase: a fighting arm, fed (no fuel, no chase), at 15 in 100 of its size or more. */
+const chaser = (c: Corps): boolean => fights(c) && c.supplied && c.str >= 0.15;
+
+/**
+ * The ways out of the field this beaten corps has lost to a faster enemy (a cut road): a province of its side next
+ * to the field with none of its side standing in it, where a motor corps of the winning side standing next to it
+ * gets there at less cost than this corps does. Each such corps cuts one road and pays the action points; a road
+ * already cut stays cut for every corps it outruns. Off, or nothing cut, an empty set.
+ */
+function roadsCut(g: Game, c: Corps, from: Region, winner: string, banned: Set<number>, blocks: Map<number, Corps>, pay = true): Set<number> {
+  const cut = new Set<number>();
+  if (!unitsDecide(g) || !afoot(c) && lifted(c) >= 1) return cut;
+  for (const j of from.nb) {
+    const r = g.regions[j];
+    if (!fallsOn(g, c, r, banned) || r.units.some((u) => allied(g, u.nat, c.nat)) || garrisonOf(r).some((u) => allied(g, u.nat, c.nat))) continue;
+    const mine = pace(g, c, r);
+    const held = blocks.get(j);
+    if (held) { if (pace(g, held, r) < mine) cut.add(j); continue; }
+    const taken = new Set([...blocks.values()].map((u) => u.id));
+    let by: Corps | null = null;
+    for (const k of r.nb) {
+      if (k === from.id) continue;
+      for (const u of g.regions[k].units) {
+        if (taken.has(u.id) || (u.kind !== 'mot' && u.kind !== 'arm') || !allied(g, u.nat, winner) || !atWar(g, u.nat, c.nat) || !chaser(u)) continue;
+        const cost = pace(g, u, r);
+        if (cost < mine && u.ap >= cost && (!by || cost < pace(g, by, r))) by = u;
+      }
+    }
+    if (by) { blocks.set(j, by); if (pay) by.ap -= pace(g, by, r); cut.add(j); }
+  }
+  return cut;
+}
+
+/** The men a faster pursuit takes from a corps falling back into this province: its foot that does not ride, a share. */
+function pursuitTakes(g: Game, c: Corps, to: Region, chasers: Corps[]): number {
+  if (!unitsDecide(g) || !afoot(c)) return 0;
+  const mine = pace(g, c, to);
+  if (!chasers.some((u) => chaser(u) && pace(g, u, to) < mine)) return 0;
+  return PURSUIT.share * (1 - lifted(c));
+}
+
 /** The winners move in, fastest first. */
 /**
  * An army that closes round a held town has the rest of its month's work there (the grand campaign): the corps that
@@ -2144,7 +2230,7 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
     const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     const defFrac = defenceLoss(R);
     const stood = win ? 1 : HELD_LOSS;
-    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+    const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
     let ours = 0, theirs = 0;
     for (const c of attackers) ours += men(c) * Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight;
@@ -2280,10 +2366,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
   const stood = win ? 1 : HELD_LOSS;
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
-  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
+  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[RL >= 2 ? 1 : 0] : 1;
   const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   // The same result at the staff's roll (b476(2)).
-  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
+  const caughtRolled = win && mobile && target.terrain === DESERT.terrain && !target.fort && !unitsDecide(g) ? DESERT.retreat[billed >= 2 ? 1 : 0] : 1;
   const defPlain = (c: Corps): number => defenceLoss(billed) * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caughtRolled) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
   const defOut = pulled('def');
   const defK = !opts.field ? 1
@@ -2323,6 +2409,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     const banned = new Set(attackers.map((c) => c.reg));
     let intoWorks = false;
     let back: Region | null = null;
+    // (Units decide, the pursuit: the roads a faster enemy has cut, and by whom; and what the chase takes on the way.)
+    const blocks = new Map<number, Corps>();
+    const chased = (c: Corps, to: Region, i: number): void => {
+      const share = pursuitTakes(g, c, to, attackers);
+      if (share <= 0) return;
+      const before = men(c);
+      c.str *= 1 - share;
+      const took = before - men(c);
+      defU[i].lost += took; defU[i].chased = took; prisoners += took;
+    };
     defenders.forEach((c, i) => {
       // The fortress rows (06:15Z (b)): a beaten fortress crew stays in its works as the town's garrison, taking no room
       // there, until it is stormed or starves, on its own stores and not the town's. Shattered, at under 15 in 100 of its
@@ -2339,7 +2435,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         return;
       }
       // A garrison has nowhere to go.
-      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, banned);
+      const cut = town || overrun || c.str < 0.15 ? null : roadsCut(g, c, target, attNat, banned, blocks);
+      if (cut?.size) defU[i].roadsCut = [...cut];
+      const outs = cut?.size ? new Set([...banned, ...cut]) : banned;
+      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, outs);
       const N = g.nations[c.nat];
       const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
@@ -2351,7 +2450,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         defU[i].fate = 'sheltered';
         tallySiege(g, 'sheltered');
       }
-      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; }
+      else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; chased(c, to, i); }
       else if (away) {
         // Backs to the sea: the navy takes off what it can.
         const dest = refuge(g, c, target);
@@ -2360,9 +2459,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         liftedOut(c, target, dest);
         defU[i].fate = 'evacuated';
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
-      } else if ((back = !town && !overrun && c.str >= 0.15 ? fallThrough(g, c, target, banned) : null)) {
+      } else if ((back = !town && !overrun && c.str >= 0.15 ? fallThrough(g, c, target, outs) : null)) {
         // (Units decide: its side's ground next to the field is full, not lost. It falls back through it, or into it.)
-        place(g, c, back); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = back.id;
+        place(g, c, back); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = back.id; chased(c, back, i);
       } else {
         const left = men(c);
         // (A fortress crew is read against its own size under the fortress rows: a small one taken whole surrenders.)

@@ -545,6 +545,9 @@ export interface ReportUnit {
   /** Ruling 232: the province a beaten field army fell back to, and a field army cut off that laid down its arms. */
   to?: number;
   cut?: boolean;
+  /** Units decide (#7 4(b)): men taken by a faster pursuit as the corps fell back; and the roads out a faster enemy cut first. */
+  chased?: number;
+  roadsCut?: number[];
 }
 
 export interface BattleReport {
