@@ -468,6 +468,8 @@ int main(int Argc, char** Argv)
 			// nearly with the wind (the cosine); his run's speed; his swing's crossings and its most early and late)
 			int Rose = 0, Shallow = 0, Grew = 0, OffWind = 0, Swapped = 0, BadSwap = 0;
 			double FullT = -1.0, DropToFull = 0.0, LastRel = 1e18, OpenDown = -1.0, WithAir = -1.0, LandRel = -1.0;
+			// (and when he pulled and when he was first within 1 m/s of the wind, real seconds after the first frame)
+			double PullT = -1.0, WithAirT = -1.0;
 			bool bHard = false, bInMeshWas = false;
 			double FallenWas = 0.0, SwapSlump = -1.0;
 			double KneelFrom = -1.0, KneelTo = -1.0, BackFrom = -1.0, RiseT = -1.0, DragMost = 0.0, DragWay = 0.0, DragDone = -1.0;
@@ -534,12 +536,16 @@ int main(int Argc, char** Argv)
 							W.Rose += C.At.Z > W.FirstAt.Z + 1e-9;
 							W.Shallow += C.At.Z > W.FirstAt.Z - 0.5 * 9.81 * Since0 * Since0 + 1e-6;
 						}
-						// (her second: his way through the air only ever dies away, and he is with the wind 3 s after his canopy
-						// is full)
+						// (her second, in her words: "Once his own way is spent, he drifts with the air within 2-3 s. The wind
+						// isn't a push that builds from rest." His way through the air only ever dies away, he is with the
+						// wind within 3 s of his pull, and still with it 3 s after his canopy is full. Her first sentence,
+						// "drops about 50 m straight down before the wind takes him", was release 1's fault, as her first
+						// note's "rises about 7 m" was)
 						const double Rel = std::hypot(C.Vel.X - Wx, C.Vel.Y - Wy);
 						W.Grew += Rel > W.LastRel * (1.0 + 1e-9) + 1e-9;
 						W.LastRel = Rel;
-						if (W.WithAir < 0.0 && Rel < 1.0) W.WithAir = W.FirstAt.Z - C.At.Z;
+						if (W.WithAir < 0.0 && Rel < 1.0) { W.WithAir = W.FirstAt.Z - C.At.Z; W.WithAirT = Since0; }
+						if (W.PullT < 0.0 && C.Open > 0.0) W.PullT = Since0;
 						if (C.Open >= 1.0 && W.FullT < 0.0) { W.FullT = Since0; W.DropToFull = W.FirstAt.Z - C.At.Z; }
 						if (W.FullT >= 0.0 && Since0 >= W.FullT + 3.0 && Over > 2.0) W.OffWind += Rel > 1.0;
 						if (C.Open >= 1.0) W.OpenHigh = W.OpenHigh < 0.0 ? Over : W.OpenHigh;
@@ -650,14 +656,15 @@ int main(int Argc, char** Argv)
 			const double Lie = W.RiseT, Kneeled = W.KneelTo - W.KneelFrom, RunSpeed = W.RunTo > W.RunFrom ? std::hypot(W.RunLast.X - W.RunStart.X, W.RunLast.Y - W.RunStart.Y) / (W.RunTo - W.RunFrom) : 0.0;
 			double Period = 0.0;
 			if (W.Crossings.size() >= 5) Period = 2.0 * (W.Crossings.back() - W.Crossings.front()) / static_cast<double>(W.Crossings.size() - 1);
-			std::printf("     %s pilot of plane %d: out %.0f m up%s; free fall rose %d, under half g t^2 %d; canopy full %.1f s out, %.0f m down; with the wind %.0f m down; way grew %d, off the wind %d; landed %s (canopy %.2f open, %.1f m/s through the air); swapped %d at slump %.2f; lay %.1f s, back up from %.1f s, kneeling %.2f s; dragged %.2f m (%.2f with the wind); run %.1f m/s; swing %.2f s a swing, %.1f deg at first, %.1f late\n",
-				bWindy ? "windy:" : "calm: ", Each.first % 100, W.OutHigh, bLow ? " (low)" : "", W.Rose, W.Shallow, W.FullT, W.DropToFull, W.WithAir, W.Grew, W.OffWind, W.bHard ? "hard" : "soft", W.OpenDown, W.LandRel,
+			std::printf("     %s pilot of plane %d: out %.0f m up%s; free fall rose %d, under half g t^2 %d; canopy full %.1f s out, %.0f m down; pulled %.1f s out, with the wind %.1f s out (%.1f s after his pull), %.0f m down; way grew %d, off the wind %d; landed %s (canopy %.2f open, %.1f m/s through the air); swapped %d at slump %.2f; lay %.1f s, back up from %.1f s, kneeling %.2f s; dragged %.2f m (%.2f with the wind); run %.1f m/s; swing %.2f s a swing, %.1f deg at first, %.1f late\n",
+				bWindy ? "windy:" : "calm: ", Each.first % 100, W.OutHigh, bLow ? " (low)" : "", W.Rose, W.Shallow, W.FullT, W.DropToFull, W.PullT, W.WithAirT, W.WithAirT - W.PullT, W.WithAir, W.Grew, W.OffWind, W.bHard ? "hard" : "soft", W.OpenDown, W.LandRel,
 				W.Swapped, W.SwapSlump, Lie, W.BackFrom, Kneeled, W.DragMost, W.DragWay, RunSpeed, Period, W.SwingEarly, W.SwingLate);
 			Rose += W.Rose;
 			Shallow += W.Shallow;
 			Grew += W.Grew;
 			OffWind += W.OffWind;
-			if (!bLow) FarOff += W.FullT < 0.0 || W.DropToFull < 40.0 || W.DropToFull > 75.0 || W.WithAir < 40.0 || W.WithAir > 75.0;
+			// (his canopy full 40 to 75 m under where he left her, its opening's loss; with the air within 3 s of his pull)
+			if (!bLow) FarOff += W.FullT < 0.0 || W.DropToFull < 40.0 || W.DropToFull > 75.0 || W.PullT < 0.0 || W.WithAirT < 0.0 || W.WithAirT - W.PullT > 3.0 + 0.05;
 			BadSwap += W.BadSwap;
 			Swapped += W.Swapped == 1;
 			FaceBad += W.FaceMoved;
@@ -700,7 +707,7 @@ int main(int Argc, char** Argv)
 				|| static_cast<int>(M.Seams.size()) != W.Look.Gores || SeamLow > MinZ + 1e-9;
 		}
 		Check(Rose == 0 && Shallow == 0, "chutes: falling free he is never above where he left her, and at least half g t squared under it (the art director's first note)");
-		Check(FarOff == 0 && Grew == 0 && OffWind == 0, "chutes: about 50 m down before his canopy is full and the wind takes him (within 1 m/s of it; 40 to 75 m), his way through the air only dying away (the wind no push from rest), and with the wind still 3 s after his canopy is full (her second)");
+		Check(FarOff == 0 && Grew == 0 && OffWind == 0, "chutes: with the air (within 1 m/s of the wind) within 3 s of his pull, his way through the air only dying away (the wind no push from rest), and with the wind still 3 s after his canopy is full (her second); his canopy full 40 to 75 m under where he left her");
 		Check(BadSwap == 0 && Swapped == static_cast<int>(All.size()), "chutes: drawn in his chute's mesh until he lies flat under his falling canopy, then the crowd's man (her third)");
 		Check(KneelBad == 0, "chutes: up onto his knees (go_prone played back), his harness worked free kneeling 1 to 1.5 s (kneel_down's last pose), then stand_up (her fourth)");
 		Check(BlendBad == 0 && FaceBad == 0, "chutes: each clip blended into over 0.25 s, the harness's kneel over 0.5 s (go_prone's knees far from it); he lies, and his harness, the way he faced as he landed");

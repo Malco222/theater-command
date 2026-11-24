@@ -102,8 +102,9 @@ namespace LandAir
 	 * -TheaterLandAirSupport; Brian, 23 November 20:09Z). The rules say whether he got out (air:lost's chutes: never
 	 * from a plane blown apart); here only how. He goes over the side a second or two after the hit (a spinning plane's
 	 * pilot sooner) and falls free a second or so, never rising (only a zooming plane throws a man up), his way off her
-	 * dying as a falling man's does; then he pulls, and his canopy fills over the next 45 to 50 m of his fall and takes
-	 * the rest of his way, so that he drops about 50 m before the wind takes him. He comes down at 5 to 6.5 m/s (a
+	 * dying against the air (never the ground: the wind is no push from rest); then he pulls, and his canopy fills over
+	 * the next 45 to 50 m of his fall and takes the rest of his way, so that he is with the air within 3 s of his pull.
+	 * He comes down at 5 to 6.5 m/s (a
 	 * heavy man 6 to 7) drifting with the battle's wind, swinging under it about 4 s a swing, from 14 degrees down to a
 	 * gentle 5. Out under 60 m he pulls at once and his canopy is still filling when he hits: a hard landing. Down, he
 	 * goes over flat under his falling canopy, and the scene swaps him there for a man of the crowd (in his army's tank

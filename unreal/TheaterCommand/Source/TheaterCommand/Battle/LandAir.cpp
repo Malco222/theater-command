@@ -578,8 +578,9 @@ namespace LandAir
 		// (across: her way, less the wind's) dies away as a falling man's does, toward the wind's, which he is in from the
 		// first (her second: the wind is not a push that builds from rest), and at once as his canopy fills. He pulls
 		// after Delay, or sooner once he has fallen as far as a man from rest falls in it (out of a plane already going
-		// down fast), and his canopy fills over FillAt of his fall from there, its hold growing as its mouth does: so that
-		// he drops about 50 m before the wind takes him (his way spent, he is within 1 m/s of it).
+		// down fast), and his canopy fills over FillAt of his fall from there, its hold growing as its mouth does: his way
+		// spent, he is with the air (within 1 m/s of the wind) within 3 s of his pull, and never falls straight down as
+		// release 1's pilot did ("drops about 50 m straight down before the wind takes him" was her note of that fault).
 		// Out under LowExit he pulls at once, and it would fill only Past metres under the ground: he lands before it has.
 		const double Have = At.Z - GroundZ(At.X, At.Y);
 		const bool bLow = Have < LowExit;

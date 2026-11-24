@@ -830,8 +830,9 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; flat,
   up onto his knees, his harness, up, running from the enemy, flat; his canopy 4 m downwind; the same twice). The art
   director's notes, on that field's pilots and on a second, windy one's (5.7 m/s, an Il-2 losing her pilot 35 m up):
-  falling free never above where he left her and at least half g t squared under it (first); about 50 m down before
-  his canopy is full and the wind takes him (40 to 75 m), his way only dying away, with the wind 3 s after (second);
+  falling free never above where he left her and at least half g t squared under it (first); with the air (within
+  1 m/s of the wind) within 3 s of his pull, his way only dying away against the air, with the wind still 3 s after
+  his canopy is full, which is 40 to 75 m under where he left her (second);
   drawn in his chute's mesh till he lies flat under his falling canopy, then the crowd's man (third); up onto his
   knees, kneeling 1 to 1.5 s, then `stand_up`, and in a wind over 4 m/s dragged 1 to 2 m downwind first, none in a
   light one (fourth); out under 60 m a hard landing, his canopy still filling, lying 3 to 5 s and limping off slower,
@@ -856,13 +857,13 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   settles into his kneel off `go_prone` without a lurch) and the drag in a wind over 4 m/s, the limp, and an infantry
   file's rider bareheaded (its scalp under the helmet is the file's own skin). The 45 fps reading counts each pilot's
   mesh made and moved in place (the log, once his canopy lies flat: 23 and 41 to 59 here).
-  - *For the art director.* Her second note's first sentence ("a pilot drops about 50 m straight down before the wind
-    takes him") is read as wanted, as built: the fill is tuned to it and the test holds him to 40 to 75 m. It may
-    instead describe release 1's fault, as her first note's first sentence does (his way died to nothing, so he fell
-    straight down and the wind then pushed him from rest). If so, the fill wants shortening so that he is with the air
-    2 to 3 s after his way is spent, and the test keeps only "within 1 m/s 3 s after" and "his way only dies away".
-    As built the test's pilots are with the air 2.5 to 4.3 s after they leave her, carried 50 to 240 m across first
-    (the low Il-2's lands before).
+  - *Her second note, as read* (her words: "Pilot 11 drops about 50 m straight down before the wind takes him. Once
+    his own way is spent, he drifts with the air within 2-3 s. The wind isn't a push that builds from rest."). Its
+    first sentence is release 1's fault, as her first note's first sentence is (his way died against the ground, so he
+    fell straight down and the wind then pushed him from rest). As built his way dies against the air from the first,
+    so he never falls straight down: the test's pilots are with the air 2.2 to 3.0 s after their pull (2.5 to 4.3 s
+    after leaving her, carried 50 to 240 m across first), and the test holds that to 3 s. The 40 to 75 m to a full
+    canopy is its opening's loss, kept. Her Mac shot of a pilot falling free and filling judges it.
   - *Not done of her third note:* "no pack". The infantry fallback still wears his pack and webbing: the soldier files
     have only a helmet range to leave off (`HelmetFirst`, `HelmetCount`), none for a pack. Owed: a pack range from the
     soldiers' thread, or a flier's own file.
