@@ -1915,9 +1915,13 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
  * A fleet's base moved by order of its staff's book (navy.json 'moves', and the base a planned strike comes home to,
  * carriers.ts): to a harbour its country holds, the sea it lies on named. It lies in harbour there, and the news
  * says so. False where the place is not its country's, or it is there already. `friend`: for a row of the book
- * marked 'ally', whether the harbour's holder is one whose harbour the fleet may take.
+ * marked 'ally', whether the harbour's holder is one whose harbour the fleet may take. False for a fleet the player
+ * keeps by hand.
  */
 export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }, friend?: (holder: string) => boolean): boolean {
+  // (A fleet the player has ordered himself is his until he hands it back: no book row moves it, as no admiral does.
+  // 1.5.1, Brian 24 November 2026 18:32Z, "they dont stay where they were moved"; navalAI skips it the same way.)
+  if (keptByHand(g, f)) return false;
   const r = g.byName[m.base], sea = zoneOf(g, m.home);
   if (!r || (r.ctrl !== f.nat && !friend?.(r.ctrl)) || r.id === f.base || sea < 0) return false;
   f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
@@ -2270,9 +2274,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     } else f.ready = Math.min(1, f.ready + NAVY.ready.port);
     // A month of peace at sea is a cruise, not a patrol: it wears nothing, and the ships are simply not in harbour.
     // (It takes a fleet lying in harbour, as every fleet of a country at war with nobody does: one its admiral has at
-    // sea in another war stays where he sent it.)
+    // sea in another war stays where he sent it; nor does a fleet the player keeps by hand go out on the book's word.)
     const z = out.get(f.id);
-    if (z !== undefined && f.base >= 0 && shipCount(f.ships) > 0 && !atSea(f)) { f.zone = z; f.stance = 'patrol'; f.cruised = g.turn; if (n.atWar.length) g.supplyDirty = true; }
+    if (z !== undefined && !keptByHand(g, f) && f.base >= 0 && shipCount(f.ships) > 0 && !atSea(f)) { f.zone = z; f.stance = 'patrol'; f.cruised = g.turn; if (n.atWar.length) g.supplyDirty = true; }
   }
   // The grand campaign: the destroyers hunt before the month's cargoes are counted, and thin screens pay for it.
   // (Release 2, ruling 241: with the convoy battle on, a night the player fought on one of this nation's routes is
