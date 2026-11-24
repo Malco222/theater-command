@@ -6405,6 +6405,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// The pointer itself says what a right-click would do with what is in hand: cross-hairs over ground or a coast
 	// that would be attacked, a barred circle over what is out of reach this month.
 	EMouseCursor::Type Pointer = HeldPiece.IsValid() && bDragging ? EMouseCursor::GrabHandClosed : (Offered ? EMouseCursor::GrabHand : EMouseCursor::Default);
+	// (The art director's airfield spec, item 2, and her ruling of 18:29Z: what lights up is what takes the click.) A click
+	// here would open the airfield pointed at: as ClickOnTable judges it, with nothing under the pointer that a click
+	// takes first and no army in hand, on a table that takes clicks.
+	const bool bFieldTakesClick = PointedField != INDEX_NONE && !PointedPiece && PointedAgent == INDEX_NONE && ArmyRegion == INDEX_NONE && bOnTable
+		&& !bBusy && !bScripted && !bPointerOverPanel && !bDragging && !IsAnswering() && GetSession() && GetSession()->GetView().Airfields.Num() > 0;
 	// (Ruling 153.) An agent the pointer rests on shows that he can be picked up; one being carried is in a closed hand.
 	Map->SetAgentHovered(bBusy ? INDEX_NONE : PointedAgent);
 	if (bAgentHeld && bDragging)
@@ -6447,7 +6452,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Pointer = bShell ? EMouseCursor::Crosshairs : (PointedRegion == Held->Base || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
 			}
 		}
-		else if (bHandsFree && PointedField != INDEX_NONE && !PointedPiece && PointedAgent == INDEX_NONE && GetSession() && GetSession()->GetView().Airfields.Num() > 0)
+		else if (bHandsFree && bFieldTakesClick)
 		{
 			// (The art director's airfield spec, item 2.) Over an airfield a click would open: the hand.
 			Pointer = EMouseCursor::Hand;
@@ -6457,8 +6462,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (The same, item 2.) That airfield ringed in brass on the screen (CampaignHUD, under the towns' plates), and the one the
 	// photographer's pointer is staged on.
 	{
-		const int32 Ringed = (StagedHover != INDEX_NONE && bStagedField) ? StagedHover
-			: (Pointer == EMouseCursor::Hand && PointedAgent == INDEX_NONE && !bLeftHeld) ? PointedField : INDEX_NONE;
+		const int32 Ringed = (StagedHover != INDEX_NONE && bStagedField) ? StagedHover : bFieldTakesClick ? PointedField : INDEX_NONE;
 		FieldOutline.Reset();
 		TArray<FVector> FieldCorners;
 		if (Ringed != INDEX_NONE && Map->GetAirfieldOutline(Ringed, FieldCorners))
@@ -7808,6 +7812,15 @@ int32 ACampaignPlayerController::FieldInRing(const FVector2D& Mouse, int32 Groun
 {
 	THEATER_SPEED_SCOPE(FieldInRing);
 	bPointerInOverlap = false;
+	// (The art director, 24 November 18:29Z: the trim.) Only from working height down, where the airfields' badges are
+	// drawn (GetTownPlates). From the theatre view a click picks the province, and its panel's airfield row is the way in.
+	if (const ACampaignCameraPawn* Height = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		if (Height->GetDistance() > 12500.0f)
+		{
+			return INDEX_NONE;
+		}
+	}
 	// (on the field itself, close to, it is that field, as it always was)
 	const int32 OnField = Map->AirfieldNear(PointerMap);
 	if (OnField != INDEX_NONE)
