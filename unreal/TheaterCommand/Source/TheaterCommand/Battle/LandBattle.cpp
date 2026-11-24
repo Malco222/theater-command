@@ -4420,11 +4420,12 @@ void ALandBattle::BailOut()
 		}
 		// (tankers where the army has them, the art director's notes of 23 November: "riflemen climbing out of a Tiger
 		// would break it at once". Her second note: an army with no tankers' file still bails out, in its own infantry
-		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; said once,
-		// until the soldiers' thread makes its tankers' file)
-		const std::string Tankers = Veh.Nation == "USA" ? std::string("USA_tanker") : Veh.Nation == "GER" ? std::string("GER_panzer") : std::string();
-		const bool bTankers = !Tankers.empty() && S.Men->SoldierFile(Tankers);
-		const std::string File = bTankers ? Tankers : Veh.Nation;
+		// figure with the rifle hidden, "a man with a pack is a far smaller fault than no one getting out"; and now his pack
+		// and webbing left off where his file marks them, pack_tris (Crowd::CrewDress: "other armies own men, no
+		// rifle/pack"); said once, until the soldiers' thread makes its tankers' file)
+		const LandMen::Crowd::Dress Dressed = S.Men->CrewDress(Veh.Nation);
+		const bool bTankers = Dressed.bTankers;
+		const std::string File = Dressed.File;
 		if (!bTankers)
 		{
 			static TSet<FString> Told;
@@ -4432,10 +4433,12 @@ void ALandBattle::BailOut()
 			if (!Told.Contains(Nation))
 			{
 				Told.Add(Nation);
-				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden (bail-out)"), *Nation);
+				const LandMen::Soldier* Worn = File.empty() ? nullptr : S.Men->SoldierFile(File);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: no tankers' soldier file for %s: their crews bail out in the infantry figure, rifle hidden, %s (bail-out)"), *Nation,
+					!Worn ? TEXT("but no infantry file either: none drawn") : Worn->PackCount[LandMen::Near] > 0 ? TEXT("pack off") : TEXT("pack on (the file marks none)"));
 			}
 		}
-		if (!S.Men->SoldierFile(File))
+		if (File.empty() || !S.Men->SoldierFile(File))
 		{
 			continue;
 		}
@@ -4552,7 +4555,7 @@ void ALandBattle::BailOut()
 			H.Vehicle = static_cast<int>(V);
 			H.K = K;
 			H.File = File;
-			H.Man = S.Men->AddRider(File, Veh.Nation, W.Seed ^ ((K + 1) * 0x9E3779B97F4A7C15ull));
+			H.Man = S.Men->AddRider(File, Veh.Nation, W.Seed ^ ((K + 1) * 0x9E3779B97F4A7C15ull), Dressed.Row, Dressed.bBareHead, Dressed.bNoPack);
 			if (H.Man >= 0)
 			{
 				S.Bails.Men.push_back(H);

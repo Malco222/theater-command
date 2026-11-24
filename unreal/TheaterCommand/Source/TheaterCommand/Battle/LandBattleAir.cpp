@@ -649,26 +649,24 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			// Down: made a man of the crowd as he lands, shown once his chute's mesh lets him go.
 			if (Him.Man < 0 && Him.File.empty())
 			{
-				std::string Row;
-				bool bBare = false;
-				const std::string Crew = C.Nat == "USA" ? "USA_tanker" : C.Nat == "GER" ? "GER_panzer" : std::string();
-				if (!Crew.empty() && S.Men->SoldierFile(Crew))
-				{
-					Him.File = Crew;
-				}
-				else
-				{
-					Him.File = S.Men->RiderFileOf(C.Nat, Row);
-					bBare = true;
-				}
-				Him.Man = Him.File.empty() ? -1 : S.Men->AddRider(Him.File, C.Nat, 0xC47E2ull ^ static_cast<uint64_t>(C.Key) * 0x9E3779B97F4A7C15ull, Row, bBare);
+				// (the tankers' file where his army has one here; else his army's infantry file, bareheaded and his pack and
+				// webbing left off: the art director's notes, 02:26Z 24 November, "no steel helmet, no rifle, no pack")
+				const LandMen::Crowd::Dress Dressed = S.Men->PilotDress(C.Nat);
+				Him.File = Dressed.File;
+				Him.Man = Him.File.empty() ? -1 : S.Men->AddRider(Him.File, C.Nat, 0xC47E2ull ^ static_cast<uint64_t>(C.Key) * 0x9E3779B97F4A7C15ull, Dressed.Row, Dressed.bBareHead,
+					Dressed.bNoPack);
 				if (Him.File.empty())
 				{
 					Him.File = "-";
 				}
 				MenDrawn.SetNum(S.Men->Count());
-				UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d is down%s, a man of the crowd (%s%s)"), C.Key, C.bHard ? TEXT(" hard") : TEXT(""), *AirWide(Him.File),
-					bBare ? TEXT(", bareheaded") : TEXT(""));
+				// (his pack goes only where his file marks it, pack_tris; a file without it draws him with it, as before. How
+				// he is dressed is said only of a man drawn: no file here, "-", no man, no helmet or pack to speak of)
+				const LandMen::Soldier* Worn = Him.Man >= 0 ? S.Men->SoldierFile(Him.File) : nullptr;
+				const bool bPackOff = Dressed.bNoPack && Worn && Worn->PackCount[LandMen::Near] > 0;
+				UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d is down%s, a man of the crowd (%s%s%s)"), C.Key, C.bHard ? TEXT(" hard") : TEXT(""), *AirWide(Him.File),
+					Worn && Dressed.bBareHead ? TEXT(", bareheaded") : TEXT(""),
+					!Worn ? TEXT("") : bPackOff ? TEXT(", no pack") : Dressed.bNoPack ? TEXT(", his pack on (his file marks none)") : TEXT(""));
 			}
 			const LandMen::Soldier* Sol = Him.Man >= 0 ? S.Men->SoldierFile(Him.File) : nullptr;
 			const int Clip = Sol && !C.bInMesh ? Sol->ClipIndex(C.Clip) : -1;

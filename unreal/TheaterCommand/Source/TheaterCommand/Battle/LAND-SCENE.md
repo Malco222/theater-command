@@ -527,8 +527,11 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
 - **The men.** Tankers where the army has them (the art director: "riflemen climbing out of a Tiger would break it at
   once"). They are the crowd's riders, drawn from `USA_tanker` and `GER_panzer` with no rifle (`Crowd::Ride::bUnarmed`:
   those files' infantry clips carry one). An army without a tankers' file (UK, SOV, ITA, JAP, FRA for now) bails out
-  in its own infantry figure, rifle hidden, pack still on (no file carries the pack on a bone of its own): her second
-  note, "a man with a pack is a far smaller fault than no one getting out". The log says so once per army, until the
+  in its own infantry figure, rifle hidden, his helmet on: her second note, "a man with a pack is a far smaller fault
+  than no one getting out". Effects (R2): his pack and webbing are left off where his file marks them
+  (`Crowd::CrewDress`, `AddRider`'s `bNoPack`; the soldiers' `pack_tris`, see *Men out of their machines without their
+  packs* below); a file without `pack_tris` (the game's Content today) still draws him with it.
+  The log says so once per army ("rifle hidden, pack off", or "pack on (the file marks none)"), until the
   soldiers' thread makes its tankers' file (own uniform, no pack; the Soviets' padded tank helmet, the British beret
   or crash helmet). They are posed by `LandBail::PoseAt` with clips the files already have (`stand_up` for the climb, `run`, `advance`, `crawl`,
   `go_prone`, `cower`, `flee`, `die_forward`, `die_back`). Clips for the climb out, the jump down and a burning man are
@@ -560,7 +563,8 @@ own `crew_out` steps (how many, when, running or crawling, to her rear, to cover
   without them (the test, run both ways: the same tallies). Without the clips, the same crew to the last number.
   Picture: `Tools/land_bail/sheet.sh <soldiers folder>` (`bail_clips.ppm`;
   `/mnt/project-files/battle-fx/bail-out/bail-clips-r6.jpg`: three-quarters on, from her front, off her back, the
-  smoke grenade thrown from her front, and the man on fire).
+  smoke grenade thrown from her front, and the man on fire). A crewman of an army with no tankers' file without his
+  pack: `Tools/land_show/pack_picture.sh <soldiers folder with pack_tris>` (`pack_off.png`, with the downed pilots).
 - **Smoke to cover them** (`-TheaterLandBailSmoke`, with `-TheaterLandBailOut`; release 2, off until the art director
   and a 45 fps reading pass; Brian, 23 November 20:09Z). With her enemy close and in sight (`Wreck::Threat` 0.5 or
   more), the fight going on and her ammunition not about to go (no brew-up), six crews in ten have the first man out,
@@ -586,7 +590,11 @@ Sherman's crew (tank.brew_up): 3 out: 2 clear, 1 caught by the blast"). `Tools/l
 with crew_out for 300 seeds and checks each man's pose every 0.1 s for 180 s, then again with the bail clips, then with
 the clips and smoke (`LAND_BAIL_SMOKE=1`: thrown only where it may be, by her first man, toward her enemy, about six
 crews in ten, half the hits under it); `LAND_BREW_WAIT=5.5,10` runs the kit's
-own test with the wait.
+own test with the wait. Its first run also makes the crowd's man of each crew (`Crowd::CrewDress`, `AddRider`, with
+`Battle/LandMen`): USA and GER in the tankers' files as they are; SOV and UK in their own infantry file, helmet on,
+at every level his file's triangles less the pack's run and nothing in its place, every kept point as the whole
+man's; FIN none drawn (no file of its own). `LAND_BAIL_SOLDIERS` reads another soldiers folder (the soldiers thread's
+files before they come into Content).
 
 The art director's Mac shots, with `-TheaterLandBailOut` against without: a brew-up from the hit to 15 s after (the
 crew getting out, the blast), from 30 m and from 150 m; an engine fire's whole crew out; and with
@@ -834,7 +842,8 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     going over flat (0.5 s; 0.35 after a hard landing) under his falling canopy; 0.4 s later, as he lies there, the
     scene swaps him for a man of the crowd: in his army's tank crews' file where it has one (`USA_tanker`,
     `GER_panzer`, with their own heads), else its infantry's (`RiderFileOf`) bareheaded (`AddRider`'s new `bBareHead`:
-    his file's helmet left off, no finish drawn), unarmed. So that nobody sees him pop: the crowd's man is a rider, in
+    his file's helmet left off, no finish drawn) and without his pack (`bNoPack`, where his file marks it:
+    `Crowd::PilotDress`, below), unarmed. So that nobody sees him pop: the crowd's man is a rider, in
     `go_prone` held at its end with its end offset not taken back (`StepRider`), so his hips lie 0.59 m forward of his
     feet, 0.14 m to his right and 0.14 m up (every soldier file's `end_offset` and pelvis, within a centimetre); the
     mesh's man pitches 84 degrees about his feet and is moved so that flat his hips lie there (`LandAir::OverShift`,
@@ -948,6 +957,11 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
   folds' light ridges from above).
   Pictures: `/mnt/project-files/battle-fx/air-support/` (`chutes_r1.png`, `chutes_r2.png`). The bareheaded rider:
   `Tools/land_show/run.sh` (every infantry file's rider without his helmet at each level, none drawn in its place).
+  The crowd's man each pilot becomes (`Crowd::PilotDress`, `AddRider`; with `Battle/LandMen`): a USA or GER pilot in
+  the tankers' file as it is, a SOV or UK pilot in his infantry file bareheaded and without his pack, at every level his
+  file's triangles less the helmet's and the pack's runs (a file without `pack_tris` keeps his pack, and the line says
+  so); `LAND_AIR_SOLDIERS` reads another folder. Run on the soldiers thread's files (fc61734e), only the swap's line
+  changes: "36 soldier files read" for 19, its gore twins being in that folder (none has `go_prone`'s end offset).
 - **Owed.** The Mac shots behind the switch, the art director's look, and the 45 fps gate with a strike overhead.
   With `-TheaterLandChutes`: a pilot under his canopy from 100 m and from 300 m, his landing and run, and his canopy
   lying on the field; and for the notes of 24 November: one from below at 100 m with the sun behind the canopy (its
@@ -977,9 +991,103 @@ past the feed or drawn (the feed keeps the notes in `Recording::Air` either way;
     so he never falls straight down: the test's pilots are with the air 2.2 to 3.0 s after their pull (2.5 to 4.3 s
     after leaving her, carried 50 to 240 m across first), and the test holds that to 3 s. The 40 to 75 m to a full
     canopy is its opening's loss, kept. Her Mac shot of a pilot falling free and filling judges it.
-  - *Not done of her third note:* "no pack". The infantry fallback still wears his pack and webbing: the soldier files
-    have only a helmet range to leave off (`HelmetFirst`, `HelmetCount`), none for a pack. Owed: a pack range from the
-    soldiers' thread, or a flier's own file.
+  - *Her third note's "no pack"* (round 2 had it waiting on the soldiers' thread): done in the code. The soldiers'
+    thread marked each infantry file's pack and webbing as one run of triangles, `pack_tris` (claude/project-thread-
+    labtrr fc61734e: the 19 men and their gore twins; the game's Content has 34 of them, not yet brought in here: the
+    ground thread merges both). Until those files come in, the game's Content has no `pack_tris` and the infantry
+    fallback still wears his pack, exactly as before; the log says "his pack on (his file marks none)".
+
+## Men out of their machines without their packs (release 2, behind the chutes' and the bail-out's switches)
+
+The art director's notes: downed pilots (24 November 02:26Z, note 3: "On the ground: no steel helmet, no rifle, no
+pack. Use the tanker files where they exist (USA, GER) ... Other armies get infantry with the helmet hidden"; round 2,
+14:34Z: "The pack waits on the soldiers' thread") and tank crews bailing out (23 November, note 1: "other armies own
+men, no rifle/pack, pistol at most", built as infantry with the rifle hidden and the pack on, for want of a range).
+
+- **The files' run.** The soldiers' thread (fc61734e) marks his pack and all his webbing at each level as `pack_tris`
+  `{near: [first, count], mid: [...], far: [...]}`, in `helmet_tris`'s shape, each ending where his helmet's run
+  begins: pack, belt, Y-straps or braces, pouches, bags, canteen, shovel, bayonet, gas-mask can and rolls; the radio
+  and its handset; the loader's rocket bag and rocket. Buttons, badges, the medic's armband, the chin strap and the
+  weapon stay drawn. "Leave that run out and draw nothing in its place, because the cloth under it is whole." Only the
+  order of the triangles between his hands and his helmet changed (the weapon's before the kit's); points,
+  `helmet_tris`, clips, deaths and the gore cut points are as they were. `Soldier::PackFirst`, `PackCount` read it,
+  0 where a file has none, or its run is not two whole numbers lying within the level's triangles, or it reaches into
+  his helmet's run (none of fc61734e's does; were one to, a crewman with his helmet on would lose part of it, so such a
+  run is left alone and he is drawn with his pack and all his helmet).
+- **The mesh.** A man's mesh at each level is a variant of his file's (`Crowd`'s `VariantOf`, `FaceRestOf`), now keyed
+  by the runs it leaves out (his own helmet, his pack, both) instead of by his own helmet alone: each run's triangles
+  are cut, and only the points nothing kept uses are dropped (as the helmet's cut always did), the rest in the file's
+  order. A pack cut where the file marks none is no cut: he shares the whole man's mesh. The whole and the helmet-only
+  variants come out as before to the byte (the crowd's men and the riders, whole and bareheaded, hashed against the
+  code before, on Content's files and on fc61734e's). Nothing else of the crowd indexes his triangles: the faces and
+  their tints, a gore twin's joined skin and its caps go by points (unchanged), the rifle is hidden by its bones
+  (`bUnarmed`), and the far men's bank and the vertex-animation sets are only ever the crowd's men, who keep their
+  packs. A gore twin's pack run cuts as its man's (its caps whole: no cap point is a pack's alone; of its joined skin's
+  points, a few with the pack, skipped as the helmet's are).
+- **Who goes without.** `AddRider`'s `bNoPack` (beside `bBareHead`, false by default). `Crowd::PilotDress`: a downed
+  pilot in the tankers' file where his army has one here (as it is: those files carry no pack range), else his army's
+  infantry file (`RiderFileOf`), bareheaded and without his pack (`ALandBattle`'s chutes, LandBattleAir.cpp).
+  `Crowd::CrewDress`: a tank's crewman bailing out in the tankers' file, else his army's own infantry file, his helmet
+  on and without his pack (`ALandBattle::BailOut`). The tank commanders in their hatches and the light cars' riders
+  are as before. With both switches off nothing changes, and a file without `pack_tris` draws every man as before.
+- **Test**: `Tools/land_show/run.sh` builds `land_pack_test` (with `-Wconversion`, g++ and clang) and runs it on the
+  folder it reads (`LAND_SHOW_SOLDIERS`, else Content's), against Content's own files as ones without the run. In every
+  file that marks its pack, at every level, four riders of one seed and ride (whole, bareheaded, no pack, both): each
+  look the file's triangles without its runs to the last index, the pack's not drawn and nothing in its place, only
+  points no kept triangle uses dropped, every kept point skinned and coloured as the whole man's to the bit, the helmet
+  and pack cut the two runs cut at once, the whole and bareheaded men as before; a gore twin's caps whole; a file's run
+  reaching into his helmet's failed; made-up runs not whole, out of range or reaching into the helmet's ignored (one
+  ending where it begins, or just after it, read); Content's files without `pack_tris` drawing a rider with no pack the
+  same to the byte; and each army's `PilotDress` and `CrewDress`. It also reports, without failing, the triangles of
+  each file's near run in the helmet's paint at his collar and shoulders (`CollarInRun`: the neck, head, collarbones,
+  upper arms or the chest's front), which should be none (see the picture's *lost with the pack* below; the files' to
+  mend). On fc61734e's 36 files: 34 mark their pack (17 gore twins), 102 levels, every run ending where the helmet
+  begins, none reaching into it, 136 riders; at the collar CHN, FRA, GER, JAP, POL and UK 24 each, ITA 72, SOV_snow
+  268, and their gore twins alike. On Content's own files every line of the land show
+  tests is as before but the timings (and the new test's). On fc61734e's folder, on both fields, only these differ, and
+  none for the pack: each file's size and clip count (GER's 93 clips to 118, USA's 96 to 121, ...); the seat check's
+  count (621 poses of 207 seat clips to 1188 of 396) and its 108 failures, the soldiers' thread's new clips for getting
+  out (`out_tail_a`/`_b`, `out_doors_a`/`_b`, `out_door_a`/`_b`, `bail_climb_out`), which leave his seat as they
+  should but which that check reads as clips he sits through (the ground thread's to mend when it brings the files
+  in). Its parent's files give the same lines but each file's size (508 or 509 bytes less: the `pack_tris` key). The
+  bank, the vertex-animation sets, the frames and the play are as on Content's. `Tools/land_gore/run.sh` with that
+  folder's twins fails one line, as it does with the code before this and with the parent's files: a gored man's whole
+  joint opens 2.2 mm on its caps (the twins', not the cut's). `Tools/land_air/run.sh` and `Tools/land_bail/run.sh`
+  check the crowd's man a pilot and a crewman become (above); on fc61734e's folder `land_air` reads 36 files for the
+  swap's lying pose (19 in Content), its other lines as before.
+- **Picture**: `Tools/land_show/pack_picture.sh <soldiers folder with pack_tris> [out folder]` (`pack_off.png`): the
+  Russian and the British pilot down (bareheaded) and crewman out (helmet on), rifle and pack off, near from the front
+  and the same as before with his pack, to compare his front (the review's, 24 November), near from behind, mid from
+  behind running, and near from behind as before with his pack, to compare his back. Seen there on
+  fc61734e's files: the baked shade keeps the pack's marks on his cloth, as the soldiers' thread said: on the British
+  back a darker yoke across the shoulder blades where the pack's top sat, a darker band at the waist where the belt
+  ran and a darker patch over the small of his back, and on his front dark blotches on his chest beside the buttons
+  and round his hips where the braces and pouches lay; on the Russian a faint dark diagonal from his left shoulder to
+  his right hip where the greatcoat roll lay and a band at the waist, his front nearly clean; at mid only the British
+  back's yoke, faint. Under the British pack a small dark notch shows below his collar (cloth folded in
+  where the pack hid it). Not new, and as before for a bareheaded man: his helmet's chin strap is drawn (not in either
+  run), two thin straps standing up beside his ears, and his scalp is bare skin.
+  *Lost with the pack that should not be* (the review of 24 November; a fault of fc61734e's run, not of the cut, which
+  leaves out exactly the run the file gives): `pack_range.py` takes a piece more than 2.6 cm across for kit, so some
+  pieces in the helmet's paint (paint 5) that are badges or cloth went into the run, against the soldiers' own note
+  that badges stay drawn. The collar tabs, two small dark-green pieces at the front of his collar on the neck and chest
+  bones (UK, POL and FRA near triangles 7283-7306, GER 6929-6952, CHN 6736-6759, JAP 6716-6739: 24 at near and 8 at
+  mid each, CHN 10, their gore twins alike): a British, Polish, French, Chinese or Japanese pilot or crewman without
+  his pack loses them, and so does a pilot whose army borrows one of those files (FIN's, the German's). The British
+  crewman's front pair on the sheet shows it, small at this size; a close-up from the front, pack off and on, shows it
+  plainly. Of the same kind, found with it: the Italian's collar patches on his lapels (ITA 8534-8605,
+  72 at near, 14 at mid, nearly his tunic's colour: his stars stay, the patches at the top of his lapels go), and the front hem of
+  the snow suit's hood on his shoulders (SOV_snow 8531-8798, 268 at near, 40 at mid, 8 at far; the hood's piece that
+  runs on into the helmet's was kept, these separate ones were not), which no man out of his machine wears today (a
+  Russian pilot in winter is drawn from SOV_winter, a crewman from SOV). The helmet's paint lower down is kit and
+  rightly in the run (the German's gas-mask can on his hip, the pieces on the American's back). Left as the
+  files give it here, until the soldiers' thread keeps those pieces out of the run (or puts them after it) in
+  `pack_range.py`: no code changes then, and `land_pack_test`'s collar line reads none.
+- **Owed.** From the soldiers' thread, the collar tabs, the Italian's collar patches and the snow hood's hem kept out
+  of `pack_tris` (above: against their own note, so theirs to mend before the art director's look). The soldiers'
+  files in Content (the ground thread's merge); then the art director's look on the Mac with
+  `-TheaterLandChutes -TheaterLandAirSupport` and `-TheaterLandBailOut`; the shade's smudges and the chin strap are the
+  soldiers' thread's to mend if she asks.
 
 ## Old wrecks on a field fought over before (release 2, off unless asked)
 

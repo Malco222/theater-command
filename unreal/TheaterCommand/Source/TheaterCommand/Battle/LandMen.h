@@ -204,6 +204,12 @@ namespace LandMen
 		/** Paints past the army's fifteen that the file names (its new_paints), each with the file's own colour. */
 		std::map<int, uint32_t> OwnPaints;
 		int HelmetFirst[LodCount] = { 0, 0, 0 }, HelmetCount[LodCount] = { 0, 0, 0 };
+		/** Effects (R2): his pack and webbing at each level (pack_tris, the soldiers thread's pack_range.py, in
+		 * helmet_tris's shape: one run of triangles [first, count], ending where his helmet's begins), left out of a man
+		 * with no pack (AddRider's bNoPack) with nothing drawn in its place (the cloth under it is whole). 0 where the
+		 * file has none, or where its run is not whole numbers lying within the level's triangles, or reaches into his
+		 * helmet's run (then ignored: drawn with his pack, and a crewman with his helmet on keeps all of it). */
+		int PackFirst[LodCount] = { 0, 0, 0 }, PackCount[LodCount] = { 0, 0, 0 };
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */
 		std::map<std::string, std::map<std::string, std::vector<std::string>>> Deaths;
@@ -459,9 +465,32 @@ namespace LandMen
 		 * by where not his army's own ("UK@desert", "ITA_desert": RiderFileOf's). Appended after the men there are (call
 		 * after Build); -1 where the file was not added. bBareHead (Effects, R2): his file's own helmet left off and no
 		 * finish drawn over him, for a downed pilot in his army's infantry file (the art director, 02:26Z 24 November:
-		 * a flier wears no steel helmet); false, as before.
+		 * a flier wears no steel helmet); false, as before. bNoPack (Effects, R2): his file's pack and webbing left off
+		 * (Soldier::PackFirst, pack_tris) and nothing drawn in their place, for a downed pilot or a tank's crewman
+		 * bailing out in an infantry file (the art director: "no pack"); a file without pack_tris draws him as before.
+		 * False, as before. Left off, only the points nothing else of him uses go (as his helmet's do).
 		 */
-		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string(), bool bBareHead = false);
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed, const std::string& Row = std::string(), bool bBareHead = false,
+			bool bNoPack = false);
+		/**
+		 * Effects (R2): how a man out of his machine is drawn as a rider (AddRider's FileArmy, Row, bBareHead, bNoPack).
+		 * bTankers: in his army's tankers' file where it is here (soldier_USA_tanker, soldier_GER_panzer: his own head and
+		 * kit, as before); else in an infantry file, his pack and webbing left off (pack_tris). File empty: no file here
+		 * draws him.
+		 */
+		struct Dress
+		{
+			std::string File, Row;
+			bool bTankers = false, bBareHead = false, bNoPack = false;
+		};
+		/** A downed pilot (-TheaterLandChutes; the art director, 02:26Z 24 November: "On the ground: no steel helmet, no
+		 * rifle, no pack. Use the tanker files where they exist (USA, GER) ... Other armies get infantry with the helmet
+		 * hidden"): the tankers' file, else his army's infantry file as RiderFileOf dresses him, bareheaded, no pack. */
+		Dress PilotDress(const std::string& Nation) const;
+		/** A tank's crewman bailing out (-TheaterLandBailOut; the art director, 23 November: "other armies own men, no
+		 * rifle/pack, pistol at most"): the tankers' file, else his army's own infantry file (no stand-in, no other dress;
+		 * none here: File empty), his own helmet on, no pack. His rifle is the ride's to hide (Ride::bUnarmed). */
+		Dress CrewDress(const std::string& Nation) const;
 		/**
 		 * The soldier file a rider of that army wears and the colours row he is painted by (OutRow), as a rifleman of
 		 * the army is dressed (MakeMan): the army's own file, else armies.json's stand-in, else the Pole's; in its desert

@@ -19,15 +19,21 @@
 //            Il-2 loses her pilot under 60 m): falling free, filling, the wind, the swap, the harness and the drag, the
 //            hard landing and the limp, the swing, the canopy's shape, seams, silk and glow; and a review's of the same
 //            day: the scene's mesh made and moved in place at 45 frames a second, the swap's frames, his lying pose
-//            against every soldier file's go_prone (LAND_AIR_SOLDIERS, which run.sh sets), the blends, his lines; and her
+//            against every soldier file's go_prone (LAND_AIR_SOLDIERS, which run.sh sets), the blends, his lines; her
 //            verdict of 24 November (14:34Z): his canopy's hem pulled in toward its lines side-on, and down it lies
 //            stretched along the wind in uneven folds of its own, its far end lifted, its near end by his harness,
-//            falling in downwind and never under the ground on a slope
+//            falling in downwind and never under the ground on a slope; and the crowd's man he becomes (LandMen's
+//            Crowd::PilotDress, AddRider; Effects, R2): a USA or GER pilot in the tankers' file as it is, a SOV or UK
+//            pilot (an army without one) in its infantry file bareheaded and without his pack (the art director: "no
+//            steel helmet, no rifle, no pack"), at every level his file's triangles less the helmet's and pack's runs
+//            (pack_tris; a file without them keeps his pack, as before)
 // With an out folder it writes air_paths.txt for paths.py (the picture: each strike side-on and from above), and the
 // pilots' frames and chute_silk.txt (his canopy's mesh: full, lying, two pilots', and falling in) for chutes.py.
 // Usage: Tools/land_air/run.sh [out folder]
 #include "Battle/LandAir.h"
 #include "Battle/LandJson.h"
+#include "Battle/LandMen.h"
+#include "pack_cut.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1378,6 +1384,75 @@ int main(int Argc, char** Argv)
 				Read, Offsets, OwnMost, Most, WasShort);
 			Check(Offsets >= 10 && Off == 0 && OwnOff == 0 && Length(Plus(Standing, Mul(V3{ 0.0, 0.0, OverHip }, -1.0))) < 1e-12,
 				"chutes: flat in his chute's mesh his hips lie where the crowd's man's do in every soldier file (go_prone's end offset, and its pelvis as it lies), on his feet as he lands (her third: no pop)");
+		}
+		// The crowd's man a downed pilot becomes (Effects, R2; the art director, 02:26Z 24 November: "On the ground: no
+		// steel helmet, no rifle, no pack. Use the tanker files where they exist (USA, GER) ... Other armies get infantry
+		// with the helmet hidden"), dressed as LandBattleAir dresses him (Crowd::PilotDress) and made as it makes him
+		// (AddRider): in the soldier files of LAND_AIR_SOLDIERS, each level of his look his file's triangles without the
+		// runs his dress leaves off, nothing in their place, every kept point as the whole man's.
+		{
+			std::string Dir = std::getenv("LAND_AIR_SOLDIERS") ? std::getenv("LAND_AIR_SOLDIERS") : "";
+			std::string ArmiesPath = std::getenv("LAND_AIR_ARMIES") ? std::getenv("LAND_AIR_ARMIES") : "";
+			const std::string Here = __FILE__;
+			if (Dir.empty()) Dir = Here.substr(0, Here.find_last_of('/')) + "/../../Content/Models/Soldiers";
+			if (ArmiesPath.empty()) ArmiesPath = Here.substr(0, Here.find_last_of('/')) + "/../../Content/Data/LandBattles/armies.json";
+			LandMen::Crowd Men;
+			std::string ArmiesText, Why;
+			LandJson::ReadFile(ArmiesPath, ArmiesText);
+			int Files = 0;
+			for (const char* Name : { "USA", "USA_tanker", "GER", "GER_panzer", "SOV", "UK" })
+			{
+				std::string Text;
+				auto Sol = std::make_shared<LandMen::Soldier>();
+				if (!LandJson::ReadFile(Dir + "/soldier_" + Name + ".json", Text) || !Sol->Load(Text, Why)) continue;
+				Men.AddSoldier(Name, Sol);
+				++Files;
+			}
+			const std::string Day = "{\"seed\": 23, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.12, -1.09]}, \"blocks\": [], \"men\": [], \"rounds\": []}";
+			const LandMen::GroundFn Flat = [](double, double) { return LandMen::Ground(); };
+			const bool bBuilt = Men.ReadArmies(ArmiesText, Why) && Men.Build(Day, Flat, Why);
+			int Dressed = 0, Undressed = 0;
+			bool bPackCut = false;
+			for (const char* Nat : { "USA", "GER", "SOV", "UK" })
+			{
+				const LandMen::Crowd::Dress D = Men.PilotDress(Nat);
+				const LandMen::Soldier* Sol = bBuilt ? Men.SoldierFile(D.File) : nullptr;
+				if (!Sol) continue;
+				const std::string Crew = std::string(Nat) == "USA" ? "USA_tanker" : std::string(Nat) == "GER" ? "GER_panzer" : std::string();
+				const bool bCrewHere = !Crew.empty() && Men.SoldierFile(Crew) != nullptr;
+				// (his dress: the tankers' own as it is; else infantry, bareheaded, no pack)
+				const bool bDress = bCrewHere ? D.bTankers && !D.bBareHead && !D.bNoPack : !D.bTankers && D.bBareHead && D.bNoPack;
+				const uint64_t Seed = 0xC47E2ull ^ 7ull * 0x9E3779B97F4A7C15ull;
+				const int Man = Men.AddRider(D.File, Nat, Seed, D.Row, D.bBareHead, D.bNoPack), Whole = Men.AddRider(D.File, Nat, Seed, D.Row);
+				if (Man < 0 || Whole < 0) { ++Undressed; continue; }
+				const int Clip = Sol->ClipIndex("go_prone") >= 0 ? Sol->ClipIndex("go_prone") : 0;
+				Men.SetRide(Man, PackCut::Standing(Clip, 0.1f));
+				Men.SetRide(Whole, PackCut::Standing(Clip, 0.1f));
+				Men.Update(1.0 + 0.1 * Dressed);
+				std::string Line, Fault;
+				for (int L = 0; L < LandMen::LodCount; ++L)
+				{
+					const LandMen::Lod Lv = static_cast<LandMen::Lod>(L);
+					std::vector<PackCut::Run> Runs;
+					if (D.bBareHead) Runs.push_back(PackCut::HelmetRun(*Sol, Lv));
+					if (D.bNoPack) Runs.push_back(PackCut::PackRun(*Sol, Lv));
+					const PackCut::Cut Want = PackCut::CutOf(Sol->Meshes[L], Runs);
+					const std::string Off = PackCut::Compare(Men, Man, Whole, Lv, Want);
+					if (!Off.empty() && Fault.empty()) Fault = Off;
+					bPackCut = bPackCut || (D.bNoPack && Sol->PackCount[L] > 0);
+					char Buf[96];
+					std::snprintf(Buf, sizeof(Buf), "%s%d/%zu", L ? ", " : "", static_cast<int>(Want.Triangles.size() / 3), Sol->Meshes[L].Triangles.size() / 3);
+					Line += Buf;
+				}
+				if (!bDress || !Fault.empty()) ++Undressed;
+				++Dressed;
+				std::printf("     a downed %s pilot: soldier_%s%s%s%s, near/mid/far %s triangles drawn%s%s\n", Nat, D.File.c_str(), D.bTankers ? " (the tankers')" : "",
+					D.bBareHead ? ", bareheaded" : "", D.bNoPack ? (Sol->PackCount[LandMen::Near] > 0 ? ", no pack" : ", no pack asked (his file marks none: his pack on)") : "",
+					Line.c_str(), Fault.empty() ? "" : ": ", Fault.c_str());
+			}
+			Check(bBuilt && Files >= 2 && Dressed >= 2 && Undressed == 0,
+				std::string("chutes: a downed pilot's man of the crowd (PilotDress, AddRider): USA and GER in the tankers' files as they are, SOV and UK in their infantry file bareheaded and without his pack") +
+				(bPackCut ? " (the pack's run left out, nothing in its place)" : " (no file here marks its pack: drawn with it, as before)"));
 		}
 		if (Out.is_open())
 		{
