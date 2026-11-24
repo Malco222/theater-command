@@ -18,6 +18,21 @@ if [ -n "$CLANG" ]; then
 fi
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/LandBattles/*.json; fi
 STATUS=0
+# The spotter's mark's distances (Battle/LandSight.h, Finds) are the rules' own (src/battle/land/rules.ts, LAND.hide's sight
+# and heard): the scene has no word from the rules for them, so they are checked here and the run fails where they differ.
+RULES="$ROOT/../../src/battle/land/rules.ts"
+if [ -f "$RULES" ]; then
+  RULE_SIGHT="$(sed -n 's/^ *sight: { foot: \([0-9]*\), wheels: \([0-9]*\), tracks: \([0-9]*\), guns: \([0-9]*\),.*/\1 \4 \2 \3/p' "$RULES" | head -n 1)"
+  RULE_HEARD="$(sed -n 's/^ *heard: {.*tracks: \([0-9]*\),.*/\1/p' "$RULES" | head -n 1)"
+  CORE_SIGHT="$(sed -n 's/^.*double Foot = \([0-9]*\)\.0, Guns = \([0-9]*\)\.0, Vehicles = \([0-9]*\)\.0;.*/\1 \2 \3 \3/p' "$SRC/Battle/LandSight.h" | head -n 1)"
+  CORE_HEARD="$(sed -n 's/^.*double Heard = \([0-9]*\)\.0;.*/\1/p' "$SRC/Battle/LandSight.h" | head -n 1)"
+  if [ -z "$RULE_SIGHT" ] || [ "$RULE_SIGHT" != "$CORE_SIGHT" ] || [ "$RULE_HEARD" != "$CORE_HEARD" ]; then
+    echo "FAULT: the spotter's mark's distances (LandSight.h Finds: foot guns wheels tracks '$CORE_SIGHT', heard '$CORE_HEARD') are not the rules' (rules.ts LAND.hide: '$RULE_SIGHT', heard '$RULE_HEARD')"
+    STATUS=1
+  else
+    echo "spotter's mark: its distances are the rules' (foot guns wheels tracks $RULE_SIGHT m, a moving tank heard at $RULE_HEARD m)"
+  fi
+fi
 for F in "$@"; do
   case "$F" in *armies.json) continue ;; esac
   "$OUT/land_play_test" "$F" "$ROOT/Content/Data/Sound/mix.json" "$OUT" || STATUS=1
