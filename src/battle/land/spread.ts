@@ -53,3 +53,20 @@ export function nerveSplit(p: NerveParts, on: Record<NervePart, boolean>): { arm
     block: (a ? 1 : p.nm) * (on.fire ? 1 : p.fire) * (on.ambush ? 1 : p.ambush),
   };
 }
+
+/** m's parts, in the data's order. */
+export const NERVE_PARTS: NervePart[] = ['flank', 'rear', 'fire', 'ambush', 'air'];
+/**
+ * The army ledger's trace, per side (step 1b; the bench's, read by nothing in the fight): 'loss', the ledger's loss at
+ * m = 1 (power0 x share lost x perLoss x the block's own steadiness, over its side's power); and for each part of m,
+ * what that part's own weight adds to it (loss x (weight - 1), damage-weighted as the ledger reads m), wherever the part
+ * is read, at the army or at the block. With only some parts at the army, the ledger is loss plus those parts' adds
+ * exactly where no blow carries two of them (flank and rear never do: a blow has one aspect); fire, ambush or air beside
+ * an aspect part multiply, so their adds are each part read apart (the gate), not their product.
+ */
+export type LedgerTrace = Record<Side, { loss: number } & Record<NervePart, number>>;
+export const noTrace = (): LedgerTrace[Side] => ({ loss: 0, flank: 0, rear: 0, fire: 0, ambush: 0, air: 0 });
+/** A tick's blows on one block: damage times each part's own weight (sim.ts step). */
+export type BlowWeights = { flank: number; rear: number; fire: number; ambush: number };
+/** Those weights damage-weighted: each part's own weight on the tick's blows (air: none, so 1). */
+export const weighsOf = (w: BlowWeights, dmg: number): Partial<Record<NervePart, number>> => ({ flank: w.flank / dmg, rear: w.rear / dmg, fire: w.fire / dmg, ambush: w.ambush / dmg });

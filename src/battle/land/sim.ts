@@ -22,7 +22,7 @@ import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
-import { REF_NERVE, SPREAD, ledgerK, nerveSplit, type NerveParts } from './spread';
+import { NERVE_PARTS, REF_NERVE, SPREAD, ledgerK, nerveSplit, noTrace, weighsOf, type BlowWeights, type LedgerTrace, type NerveParts } from './spread';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -246,9 +246,10 @@ export class LandBattle implements BattleSim<LandUnit> {
   private heldFor: Record<Side, number> = { att: 0, def: 0 };
   /**
    * The field spread's army nerve ledger (step 1b, reckoning.spread.ledger; form 13A): each side's nerve spent (D), its
-   * reserve (R), K, its draw and the parts of m it reads. Null without the key.
+   * reserve (R), K, its draw and the parts of m it reads; and T, its trace by part (ledgerTrace), read by nothing in the
+   * fight. Null without the key.
    */
-  private led: { D: Record<Side, number>; R: Record<Side, number>; K: Record<Side, number>; draw: Record<Side, number>; on: Record<NervePart, boolean> } | null = null;
+  private led: { D: Record<Side, number>; R: Record<Side, number>; K: Record<Side, number>; draw: Record<Side, number>; on: Record<NervePart, boolean>; T: LedgerTrace } | null = null;
   /**
    * Under the field spread's army ledger, within a tick: each block the tick's blows struck, with their nerve weight as
    * built (every part), damage-weighted, as fsx/brk/causes.ts read harm landing on a block struck that tick. Air harm the
@@ -471,6 +472,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       this.led = {
         D: { att: 0, def: 0 }, R: { att: R.att / Math.max(1e-9, P.att), def: R.def / Math.max(1e-9, P.def) },
         K: { att: ledgerK('att'), def: ledgerK('def') }, draw: { ...k.ledger.draw }, on: { ...k.ledger.m },
+        T: { att: noTrace(), def: noTrace() },
       };
     }
     if (k?.N) {
@@ -2491,8 +2493,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
     // (Under the field spread's army ledger: dm, the tick's damage times the parts of m read at the army; built, the
     // blows' nerve weight as built, every part, with which what is held back or spared lands on the block later; dn, the
-    // tick's damage times that weight.)
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number; built?: number; dn?: number }>();
+    // tick's damage times that weight; pw, the tick's damage times each part's own weight, for the ledger's trace.)
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; dm?: number; built?: number; dn?: number; pw?: BlowWeights }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2538,8 +2540,11 @@ export class LandBattle implements BattleSim<LandUnit> {
       h.dmg += blow.dmg;
       // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
       if (this.led && blow.parts) {
-        const sp = nerveSplit(blow.parts, this.led.on);
+        const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = (h.pw ??= { flank: 0, rear: 0, fire: 0, ambush: 0 });
         h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
+        // Each part's own weight as built, wherever it is read (the trace: the gate reads each part apart).
+        w.flank += blow.dmg * (pt.aspect === 'flank' ? pt.nm : 1); w.rear += blow.dmg * (pt.aspect === 'rear' ? pt.nm : 1);
+        w.fire += blow.dmg * pt.fire; w.ambush += blow.dmg * pt.ambush;
       } else h.nerve += blow.nerve;
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
@@ -2559,7 +2564,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // on it this tick (airHarm; cleared once the tick is judged).
     if (this.led) { this.tickM = new Map(); for (const [id, h] of hurt) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg); }
     // (The ledger reads the damage-weighted m of the tick's blows; the block keeps today's per-blow sum of what it reads.)
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve);
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : undefined);
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
@@ -2846,7 +2851,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul): void {
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts?: Partial<Record<NervePart, number>>): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
     // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
     if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, 'struck');
@@ -2870,8 +2875,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The field spread's army ledger (step 1b, form 13A): the block's loss at its own experience and its side's general,
     // weighed by the parts of m read at the army, over its side's power.
     if (this.led && lost > 0) {
-      const s = t.side;
-      this.led.D[s] += (t.power0 * lost * LAND.nerve.perLoss[s] * mArmy * Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(s))) / this.power[s];
+      const s = t.side, st = Math.max(0.3, 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(s));
+      this.led.D[s] += (t.power0 * lost * LAND.nerve.perLoss[s] * mArmy * st) / this.power[s];
+      // Its trace, read by nothing in the fight: the loss at m = 1, and what each part's own weight (parts; 1 where not
+      // given) adds to it, wherever that part is read, so the bench can read each part apart (the gate) and derive a
+      // set's residual on the ledger as built (fsx/brk/causes.ts's T, by part).
+      const k = (t.power0 * lost * LAND.nerve.perLoss[s] * st) / this.power[s], T = this.led.T[s];
+      T.loss += k;
+      for (const p of NERVE_PARTS) T[p] += k * ((parts?.[p] ?? 1) - 1);
     }
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
@@ -3447,6 +3458,16 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** The field spread's army ledger's share of its mark (step 1b, form 13A: q = ledger / (K x reserve x draw)); 0 without the ledger. */
   private ledgerShare(s: Side): number { const L = this.led; return L ? L.D[s] / Math.max(1e-12, L.K[s] * L.R[s] * L.draw[s]) : 0; }
+
+  /**
+   * The ledger's trace by part, a copy (step 1b; for the bench, choice 13's gate): each side's loss at m = 1, as the
+   * ledger counts it, and what each part's own weight adds to it, wherever the part is read. Null without the ledger.
+   * Read by nothing in the fight, never in view(), so the mask is untouched.
+   */
+  ledgerTrace(): LedgerTrace | null {
+    const L = this.led;
+    return L ? { att: { ...L.T.att }, def: { ...L.T.def } } : null;
+  }
 
   /** The level a side's bar is shown at to the other side's player under the field spread (the mask, choice 6 (A)): never its draw. */
   private shownLevel(s: Side): number { return this.ticket.reckoning.spread?.shown?.[s] ?? SPREAD.level; }
@@ -4098,12 +4119,15 @@ export class LandBattle implements BattleSim<LandUnit> {
    * it as fsx/brk/causes.ts did, whose rows its residual is derived from: at the damage-weighted weight of the tick's
    * blows where they struck that block this tick (tickM), else at w. (w is the bank's: what was held back, at the summed
    * weight of the blows on that block in the tick it was held, so it would read the harm higher the more blocks fired.)
-   * What a wait's cover spares of it is kept at w, to land on the block (suffer's nerveBuilt: G).
+   * What a wait's cover spares of it is kept at w, to land on the block (suffer's nerveBuilt: G). The ledger's trace reads
+   * its air part at the ledger's weight, whichever way it is read.
    */
   private airHarm(id: number, d: number, w: number): void {
     const u = this.unit(id)!;
-    if (this.led?.on.air) this.suffer(u, d, 1, [], false, false, this.tickM?.get(id) ?? w, w);
-    else this.suffer(u, d, w, []);
+    if (!this.led) { this.suffer(u, d, w, []); return; }
+    const m = this.tickM?.get(id) ?? w;
+    if (this.led.on.air) this.suffer(u, d, 1, [], false, false, m, w, { air: m });
+    else this.suffer(u, d, w, [], false, false, 1, w, { air: m });
   }
 
   /**

@@ -579,23 +579,25 @@ describe("step 1b's keys", () => {
     const t0 = onCall('prokhorovka-1943', 1);
     const k = spreadKeys(t0, { level: true, ledger: true, m: { fire: true, ambush: true, air: true } });
     type Blown = { dmg: number; nerve: number };
-    type Suffer = (t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][], blind: boolean, bare: boolean, mArmy: number, nerveBuilt: number) => void;
+    type Suffer = (t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][], blind: boolean, bare: boolean, mArmy: number, nerveBuilt: number, parts?: Partial<Record<NervePart, number>>) => void;
     type Air = { blow(u: LandUnit, t: LandUnit): Blown; suffer: Suffer; step(): void };
     const b = new LandBattle(withSpread(t0, k)), A = b as unknown as Air, blow = A.blow.bind(b), suffer = A.suffer.bind(b);
     // This tick's blows by the block struck: damage, and damage times the blow's weight as built.
     let tick = new Map<number, { d: number; dn: number }>(), inTick = false;
     A.blow = (u, t) => { const r = blow(u, t); const h = tick.get(t.id) ?? { d: 0, dn: 0 }; h.d += r.dmg; h.dn += r.dmg * r.nerve; tick.set(t.id, h); return r; };
     const seen = { struck: 0, bare: 0, outside: 0 };
-    A.suffer = (t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt) => {
+    A.suffer = (t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt, parts) => {
       // Air harm with the air part at the army: no striker, not kept harm landing; the block reads 1.
       if (!from.length && !bare) {
         expect(nerveMul).toBe(1);
+        // (The ledger's trace reads its air part at the ledger's weight.)
+        expect(parts?.air).toBe(mArmy);
         const h = inTick ? tick.get(t.id) : undefined;
         if (h && h.d > 0) { expect(Math.abs(mArmy - h.dn / h.d) / mArmy).toBeLessThan(1e-9); seen.struck++; }
         // No blow struck it this tick, or it lands outside a tick (handed to the staff): the strike's own weight.
         else { expect(mArmy).toBe(nerveBuilt); if (inTick) seen.bare++; else seen.outside++; }
       }
-      suffer(t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt);
+      suffer(t, dmg, nerveMul, from, blind, bare, mArmy, nerveBuilt, parts);
     };
     for (let i = 0; i < 400000 && !b.over && (b.contactAt === null || b.t < b.contactAt + 80); i++) { tick = new Map(); inTick = true; b.step(); inTick = false; }
     expect(b.over).toBeNull();
@@ -604,6 +606,45 @@ describe("step 1b's keys", () => {
     // Handed to the staff mid-fight: what the bank still owes lands outside any tick, at the strike's own weight.
     b.toDice();
     expect(seen.outside).toBeGreaterThan(0);
+  });
+
+  it("the ledger's trace by part: the loss at m = 1 and what each part's own weight adds, read by nothing in the fight", () => {
+    const t0 = onCall('normandy-1944', 1);
+    const near = (a: number, b: number): void => expect(Math.abs(a - b) / Math.max(1e-12, Math.abs(b))).toBeLessThan(1e-9);
+    const D = (b: LandBattle): Record<Side, number> => inside(b).led!.D;
+    // No ledger, no trace.
+    const plain = new LandBattle(structuredClone(t0));
+    toAfterContact(plain, 30);
+    expect(plain.ledgerTrace()).toBeNull();
+    expect(new LandBattle(withSpread(t0, spreadKeys(t0, { level: true, ledger: false }))).ledgerTrace()).toBeNull();
+    // 13 (B), every part at 1: the ledger is the loss.
+    const all0 = { flank: false, rear: false, fire: false, ambush: false, air: false };
+    const B = new LandBattle(withSpread(t0, spreadKeys(t0, { level: true, ledger: true, m: all0 })));
+    toAfterContact(B, 180);
+    for (const s of SIDES) { const T = B.ledgerTrace()![s]; expect(T.loss).toBeGreaterThan(0); near(D(B)[s], T.loss); }
+    // 13 (A) as the data lays it (flank and rear at the army): the ledger is the loss and the flank and rear adds, the
+    // rest traced beside it at their own weights (each 1 or more, so each add is 0 or more).
+    const A = new LandBattle(withSpread(t0, spreadKeys(t0, { level: true, ledger: true })));
+    toAfterContact(A, 180);
+    const TA = A.ledgerTrace()!;
+    for (const s of SIDES) {
+      near(D(A)[s], TA[s].loss + TA[s].flank + TA[s].rear);
+      for (const p of ['flank', 'rear', 'fire', 'ambush', 'air'] as NervePart[]) expect(TA[s][p]).toBeGreaterThanOrEqual(0);
+    }
+    expect(SIDES.some((s) => TA[s].flank > 0 || TA[s].rear > 0)).toBe(true);
+    expect(SIDES.some((s) => TA[s].fire > 0)).toBe(true);
+    expect(SIDES.some((s) => TA[s].air > 0)).toBe(true);
+    // A copy: the fight's own is untouched.
+    TA.att.loss = -1;
+    expect(A.ledgerTrace()!.att.loss).toBeGreaterThan(0);
+    // Each part alone at the army (the gate's arms; a residual the harness gives): the ledger is the loss and that part's add.
+    for (const p of ['flank', 'rear', 'fire', 'air'] as NervePart[]) {
+      const b = new LandBattle(withSpread(t0, spreadKeys(t0, { level: true, ledger: true, m: { ...all0, [p]: true }, residual: 0.8 })));
+      toAfterContact(b, 180);
+      const T = b.ledgerTrace()!;
+      for (const s of SIDES) near(D(b)[s], T[s].loss + T[s][p]);
+      expect(SIDES.some((s) => T[s][p] > 0)).toBe(true);
+    }
   });
 
   it('the residual by what is read', () => {
