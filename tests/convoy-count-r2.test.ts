@@ -55,7 +55,8 @@ afterEach(() => { convoyField.fought = undefined; });
 describe('time on station: the days, not the shares', () => {
   it('lays the historian\'s days: 20 on station, 5 a sea each way, 40 in port', () => {
     expect(CAUSE.station.ss).toEqual({ patrol: 20, passage: 5, refit: 40 });
-    // A boat's raid weight on station, refit once at T2's window so it keeps its tons: the window's own share undone.
+    // A boat's raid weight on station in the lanes' form, refit once at T2's window so it keeps its tons: the window's
+    // own share undone. (The convoys' side counts a boat on station at 1: convoy-tons-r2.)
     expect(CAUSE.station.raid).toBe(3.5);
   });
 
@@ -93,7 +94,7 @@ describe('time on station: the days, not the shares', () => {
     const all = unread(() => convoyMeeting(g, 'UK', atlantic).raid);
     const q = all / (40 * NAVY.classes.ss.raid + 2 * NAVY.classes.ca.raid);
     expect(raid).toBeCloseTo(q * (40 * NAVY.classes.ss.raid * 0.25 * CAUSE.station.raid! + 2 * NAVY.classes.ca.raid), 9);
-    // So a boat raiding from a port two seas off sinks 0.875 of what it would from one sea off, as at T2.
+    // So in the lanes' form a boat raiding from a port two seas off sinks 0.875 of what it would from one sea off, as at T2.
     expect(0.25 * CAUSE.station.raid!).toBeCloseTo(0.875, 12);
   });
 });

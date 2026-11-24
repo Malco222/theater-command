@@ -2030,7 +2030,7 @@ export const CAUSE = causeData as unknown as {
   /** The on-station share's days by class (null: not read), and a boat's raid weight on station refit with it at T2 (null: 1). */
   station: Partial<Record<ShipClass, { patrol: number | null; passage: number | null; refit: number | null }>> & { raid: number | null };
   /** The convoy-side count's figures; a route with a null in 'ships' or 'grt' keeps the per-boat share ('find'). */
-  count: { attacked: number; sighted: number; boatsT2: number; perAttack: number; ways: number; t2: { convoys: number; months: number }; ships: Record<string, number | null>; grt: Record<string, number | null> };
+  count: { attacked: number; sighted: number; boatsT2: number; perAttack: number; ways: number; t2: { convoys: number; months: number }; sink: number | null; ships: Record<string, number | null>; grt: Record<string, number | null> };
 };
 
 /** A navy's anti-submarine kit: sonar and depth charges, sea-search radar, ahead-throwing weapons, escort-group training, long-range patrol aircraft. */
@@ -2147,10 +2147,18 @@ export function onStation(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, z: n
  * OEG T2's window so that window keeps its tons (convoycause.json station.raid).
  */
 function raidPower(g: Game, f: Fleet, cause: boolean): number {
-  const st = cause && stationDays('ss') ? onStation(g, f, f.zone) * (CAUSE.station.raid ?? 1) : 1;
   let p = 0;
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid * (c === 'ss' ? st : 1);
+  for (const c of CLASSES) p += c === 'ss' ? boatRaid(g, f, cause) : f.ships[c] * NAVY.classes[c].raid;
   return p;
+}
+/**
+ * The boats' part of a fleet's raid strength: on station only, where the days are laid (Units decide). The lanes' form
+ * weighs a boat on station by station.raid (its refit at T2's window); the convoys' side counts it at 1 ('weighed' false),
+ * since there the boats on station that find and attack carry the share.
+ */
+function boatRaid(g: Game, f: Fleet, cause: boolean, weighed = true): number {
+  const st = cause && stationDays('ss') ? onStation(g, f, f.zone) * (weighed ? CAUSE.station.raid ?? 1 : 1) : 1;
+  return f.ships.ss * NAVY.classes.ss.raid * st;
 }
 
 /**
@@ -2517,12 +2525,48 @@ const LANE_CAP = 0.95;
 type ConvoyRoute = (typeof NAVY.convoys)[number];
 
 /**
+ * What a convoy the boats attack loses, from the convoys' side (the design director's tons ruling of 24 November 2026
+ * 14:04Z, naval-battles/convoy-r2/tons-form.md): the pack's raid strength P against the convoy's escort E, the route's
+ * escort worth shared over the convoys sailed. Ships sunk a convoy attacked = its ships x P / (P + k E), k refit once at
+ * OEG T2's window. L is the share of the route's ships sunk, both ways, and so of its cargoes.
+ */
+export interface ConvoySide { P: number; E: number; sunk: number; L: number }
+function convoySide(route: ConvoyRoute, count: ConvoyCount, boats: number, G: number): ConvoySide {
+  const K = CAUSE.count, ships = K.ships[route.id] ?? 0, k = K.sink!;
+  // (The pack, times a boat's raid strength on station: its kit, fit and the air over it, as the lanes count them.)
+  const P = count.boats > 0 ? (count.pack * boats) / count.boats : 0;
+  const E = count.sailed > 0 ? G / count.sailed : 0;
+  const sunk = P > 0 ? (ships * P) / (P + k * E) : 0;
+  return { P, E, sunk, L: count.sailed > 0 && ships > 0 ? (count.attacked * sunk) / (count.sailed * ships) : 0 };
+}
+
+/**
+ * A month's share lost and tons sunk on a route where the boats sink from the convoys' side, with the month's swing w
+ * (1 where none is drawn): the swing acts on the ships sunk a convoy attacked, never past the convoy's ships, and on the
+ * other raiders' share as on the lanes; the two shares together at most LANE_CAP. The boats' tons are of the ships
+ * sailing both ways, the others' of the loaded sailings, as the lanes count them.
+ */
+function sideLoss(route: ConvoyRoute, side: ConvoySide, Lo: number, w: number): { L: number; tons: number; sunk: number } {
+  const ships = CAUSE.count.ships[route.id] ?? 0;
+  const sunk = Math.min(ships, side.sunk * w);
+  const Lb = side.sunk > 0 ? side.L * (sunk / side.sunk) : 0;
+  const lo = Lo * w, sum = Lb + lo, L = Math.min(LANE_CAP, sum);
+  const cut = sum > 0 ? L / sum : 1;
+  return { L, tons: Math.round(((CAUSE.count.ways * route.tons * Lb + route.tons * lo) * cut) / 1000) * 1000, sunk: sunk * cut };
+}
+
+/** A route's tons ruling figures this month as the fleets stand now (Units decide, where laid), for the record and the readings. */
+export function convoySideOf(g: Game, nat: string, route: ConvoyRoute): ConvoySide | undefined {
+  return routeForces(g, nat, route).side;
+}
+
+/**
  * The raiders hunting a convoy route this month and the escorts guarding it, as convoyWar counts them: strength,
  * fleets, the escorts' worth with radar, and the share of the cargoes the raiders would sink. Throws no dice.
  */
-function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[]; raid: number; guard: number; raiders: Fleet[]; escorts: Fleet[]; G: number; L: number; cover?: SeaCover[] } {
+function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[]; raid: number; guard: number; raiders: Fleet[]; escorts: Fleet[]; G: number; L: number; cover?: SeaCover[]; side?: ConvoySide; Lo?: number } {
   const zones = route.zones.map((k) => zoneOf(g, k));
-  let raid = 0, guard = 0;
+  let raid = 0, guard = 0, boats = 0, weighed = 0;
   const raiders: Fleet[] = [], escorts: Fleet[] = [];
   // (Units decide: the raiders in a sea under air cover with anti-submarine kit sink at OEG T7's share of their rate.)
   const cover = unitsDecide(g) ? zones.map((z) => seaCover(g, nat, z, route.id)) : undefined;
@@ -2531,9 +2575,9 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
       // (Units decide: a fleet's boats raid only while on station, the one-pass ruling.)
-      let p = raidPower(g, f, !!cover);
-      p *= quality(g, f.nat) * fit(g, f) * raidShare(f) * (cover ? coverCut(cover[zones.indexOf(f.zone)]) : 1);
-      if (p > 0) { raid += p; raiders.push(f); }
+      const m = quality(g, f.nat) * fit(g, f) * raidShare(f) * (cover ? coverCut(cover[zones.indexOf(f.zone)]) : 1);
+      const p = raidPower(g, f, !!cover) * m;
+      if (p > 0) { raid += p; raiders.push(f); boats += boatRaid(g, f, !!cover, false) * m; weighed += boatRaid(g, f, !!cover) * m; }
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, route.id);
       if (w <= 0) continue;
@@ -2552,6 +2596,16 @@ function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[
   // and radar is each escort's own kit.)
   if (cover) {
     const G = guard * NAVY.convoy.escortWorth;
+    // (The tons ruling: where the route's count and the sinking figure are laid, the boats sink from the convoys' side,
+    // one convoy attacked at a time; any other raider, a surface ship or a fortress astride the route, keeps the lanes' form.)
+    const count = (CAUSE.count.sink ?? null) === null ? null : convoyCount(g, route);
+    if (count) {
+      // (P counts a boat on station at 1; the others' part is the raid less the boats as the lanes weigh them.)
+      const side = convoySide(route, count, boats, G);
+      const rest = raid - weighed;
+      const Lo = rest > 1e-12 ? rest / (rest + G + NAVY.convoy.ocean) : 0;
+      return { zones, raid, guard, raiders, escorts, G, L: sideLoss(route, side, Lo, 1).L, cover, side, Lo };
+    }
     return { zones, raid, guard, raiders, escorts, G, L: raid > 0 ? raid / (raid + G + NAVY.convoy.ocean) : 0, cover };
   }
   for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
@@ -2599,9 +2653,9 @@ export interface ConvoyMeeting {
   count?: ConvoyCountRecord;
 }
 
-/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, and the pack, to two places. */
-export type ConvoyCountRecord = ConvoyCount;
-const countRecord = (c: ConvoyCount): ConvoyCountRecord => ({ boats: r2(c.boats), sailed: r2(c.sailed), sighted: r2(c.sighted), attacked: r2(c.attacked), incidents: r2(c.incidents), pack: r2(c.pack) });
+/** A route's convoy count as the record and the card carry it: boats on station, convoys sailed, sighted and attacked, incidents, the pack, and where the tons are counted from the convoys' side the ships a convoy attacked lost (the card's expected figure; the month's record, after the swing), to two places. */
+export type ConvoyCountRecord = ConvoyCount & { sunk?: number };
+const countRecord = (c: ConvoyCount, sunk?: number): ConvoyCountRecord => ({ boats: r2(c.boats), sailed: r2(c.sailed), sighted: r2(c.sighted), attacked: r2(c.attacked), incidents: r2(c.incidents), pack: r2(c.pack), ...(sunk !== undefined ? { sunk: r2(sunk) } : {}) });
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 
 /** A night the player fought, as the rules take it: the swing, and boats and destroyers lost by fleet id. A fleet left out rolls its dice. */
@@ -2618,7 +2672,7 @@ export type ConvoyNights = Map<string, { fought: ConvoyFought; ss: Set<number>; 
 
 /** The month's meeting on a convoy route, as the fleets stand now. Throws no dice. */
 export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyMeeting {
-  const { zones, raid, guard, raiders, escorts, G, L } = routeForces(g, nat, route);
+  const { zones, raid, guard, raiders, escorts, G, L, side, Lo } = routeForces(g, nat, route);
   const hunt = new Map<number, number>();
   // (Units decide: a night fought on the route is the convoy's incidents, so a raider's expected loss is theirs.)
   const cause = unitsDecide(g) && seaWar(g);
@@ -2627,10 +2681,10 @@ export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyM
     // (The one-pass ruling: the convoys' side of the month, where its figures are laid; the card's sighted line.)
     const count = convoyCount(g, route);
     return {
-      turn: g.turn, route: route.id, owner: nat, zones, raid, guard, G, L, tons: Math.round((route.tons * L) / 1000) * 1000,
+      turn: g.turn, route: route.id, owner: nat, zones, raid, guard, G, L, tons: side ? sideLoss(route, side, Lo ?? 0, 1).tons : Math.round((route.tons * L) / 1000) * 1000,
       raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g, f, count) * (p.get(f.zone) ?? 0), roomLeft(g, f)) })),
       escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid > 0 ? raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
-      ...(count ? { count: countRecord(count) } : {}),
+      ...(count ? { count: countRecord(count, side?.sunk) } : {}),
     };
   }
   if (seaWar(g) && g.nations[nat].atWar.length) {
@@ -2775,13 +2829,15 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     if (route.to !== nat) continue;
     if (!n.atWar.length) { delete g.convoys[route.id]; continue; }
     const rng = seaRng(g, `convoy:${route.id}`);
-    const { zones, raid, guard, raiders, escorts, G, L: L0, cover } = routeForces(g, nat, route);
+    const { zones, raid, guard, raiders, escorts, G, L: L0, cover, side, Lo } = routeForces(g, nat, route);
     // (Release 2, ruling 241: with the convoy battle on, the month's share sunk takes a swing, drawn on its own key, or
     // the night the player fought gives it, inside the same bounds. Off, nothing is drawn and L is release 1's.)
     const night = nights?.get(route.id);
     const swing = convoyRules(g) ? swingOf(g, route.id, night) : undefined;
-    const L = swing === undefined ? L0 : Math.min(LANE_CAP, L0 * swing);
-    const tons = Math.round((route.tons * L) / 1000) * 1000;
+    // (The tons ruling: where the boats sink from the convoys' side, the swing acts on the ships sunk a convoy attacked.)
+    const month = side ? sideLoss(route, side, Lo ?? 0, swing ?? 1) : undefined;
+    const L = month ? month.L : swing === undefined ? L0 : Math.min(LANE_CAP, L0 * swing);
+    const tons = month ? month.tons : Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
     let byEscorts: Record<number, number> | undefined;
     let count: ConvoyCount | null = null;
@@ -2834,7 +2890,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // (Record only, and only with Units decide: the boats the convoy's escorts sank, of subsLost.)
     if (cover) g.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
     // (Record only, with Units decide and the route's count laid: the convoys' side of the month, as the boats stood after the hunt.)
-    if (count) g.convoys[route.id].count = countRecord(count);
+    if (count) g.convoys[route.id].count = countRecord(count, month?.sunk);
     if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons, cover && { cover, lost: byEscorts ?? {} });
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
