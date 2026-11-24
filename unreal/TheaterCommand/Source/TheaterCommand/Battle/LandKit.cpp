@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <tuple>
 #include <unordered_map>
 
 namespace LandKit
@@ -1324,8 +1325,9 @@ namespace LandKit
 			uint8_t R, G, B;
 		};
 		// (sRGB, as the files' own colours: the white the captured kit's stars wear, the black of its crosses, the tank
-		// files' own red, A82020)
-		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 24, 24, 24 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 188, 156, 72 },
+		// files' own red, A82020; the Japanese star a period ochre, the art director's mend of 24 November: lemon read
+		// too bright)
+		constexpr MarkPaint MarkWhite{ 214, 211, 196 }, MarkBlack{ 24, 24, 24 }, MarkRed{ 168, 32, 32 }, MarkYellow{ 172, 134, 58 },
 			MarkBlue{ 40, 58, 120 };
 
 		void MarkBox(std::vector<MarkPiece>& Out, double A0, double U0, double A1, double U1, const MarkPaint& C, int Layer)
@@ -1444,31 +1446,38 @@ namespace LandKit
 			return "none";
 		}
 
+		/** Whether her crews painted the mark by hand (the Soviet star, the British flash, the Italian patch, the Japanese
+		 * star: slightly uneven brushed edges) rather than through a stencil (the German cross, the American star, the
+		 * French roundel: sharp edges, scuffed); the art director, 24 November. */
+		bool MarkByHand(const std::string& Kind)
+		{
+			return Kind == "red star" || Kind == "flash" || Kind == "rectangle" || Kind == "army star";
+		}
+
 		/** A mark's pieces, bottom layer first. */
 		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out)
 		{
 			Out.clear();
 			if (Kind == "cross")
 			{
-				// The straight-armed beam cross, black edged in white (the art director: "the plain beam cross only"), laid
-				// as one coat of pieces side by side: a layer of black over white stood off a stepped plate (the Tiger's
-				// welded seams) let the white show through in cracks.
-				const double E = 1.0, B = 0.91, W = 0.36, K = 0.27;
-				MarkBox(Out, -K, -B, K, B, MarkBlack, 0);
-				MarkBox(Out, -B, -K, -K, K, MarkBlack, 0);
-				MarkBox(Out, K, -K, B, K, MarkBlack, 0);
-				MarkBox(Out, -E, -W, -B, W, MarkWhite, 0);
-				MarkBox(Out, B, -W, E, W, MarkWhite, 0);
-				MarkBox(Out, -W, B, W, E, MarkWhite, 0);
-				MarkBox(Out, -W, -E, W, -B, MarkWhite, 0);
-				MarkBox(Out, -B, K, -K, W, MarkWhite, 0);
-				MarkBox(Out, -B, -W, -K, -K, MarkWhite, 0);
-				MarkBox(Out, K, K, B, W, MarkWhite, 0);
-				MarkBox(Out, K, -W, B, -K, MarkWhite, 0);
-				MarkBox(Out, -W, W, -K, B, MarkWhite, 0);
-				MarkBox(Out, K, W, W, B, MarkWhite, 0);
-				MarkBox(Out, -W, -B, -K, -W, MarkWhite, 0);
-				MarkBox(Out, K, -B, W, -W, MarkWhite, 0);
+				// The straight-armed beam cross (the art director: "the plain beam cross only"): a black cross over a
+				// slightly wider white one of the same length, so the white shows only along the arms' sides and each arm
+				// is black right to its end (the art director's mend of 24 November). Laid as one coat of pieces side by
+				// side: a layer of black over white stood off a stepped plate (the Tiger's welded seams) let the white show
+				// through in cracks.
+				const double E = 1.0, W = 0.36, K = 0.27;
+				MarkBox(Out, -K, -E, K, E, MarkBlack, 0);
+				MarkBox(Out, -E, -K, -K, K, MarkBlack, 0);
+				MarkBox(Out, K, -K, E, K, MarkBlack, 0);
+				// (the white along the upright arms' sides, the four inside corners with them; then along the level arms')
+				MarkBox(Out, K, K, W, E, MarkWhite, 0);
+				MarkBox(Out, -W, K, -K, E, MarkWhite, 0);
+				MarkBox(Out, K, -E, W, -K, MarkWhite, 0);
+				MarkBox(Out, -W, -E, -K, -K, MarkWhite, 0);
+				MarkBox(Out, W, K, E, W, MarkWhite, 0);
+				MarkBox(Out, W, -W, E, -K, MarkWhite, 0);
+				MarkBox(Out, -E, K, -W, W, MarkWhite, 0);
+				MarkBox(Out, -E, -W, -W, -K, MarkWhite, 0);
 			}
 			else if (Kind == "white star")
 			{
@@ -1516,9 +1525,24 @@ namespace LandKit
 		 * (to seven tenths); what still finds no skin is left out. Each point takes some of the skin's own colour under
 		 * it (more where her file's "dust" says the mark is dusty: 0 to 100) and the skin's soot, so it weathers and
 		 * burns as she does. Gives the triangles added (Moved: how far it was moved, metres; Scale: its size kept).
+		 *
+		 * The art director's mends of 24 November ("a mark should never be cleaner than the paint around it"): where Skin
+		 * gives her own dirt, each point of the mark takes exactly what her skin under it took over its paint (her file's
+		 * road dust, haze, chips to the metal, creases' shade and exhaust soot, or the game's own dust and chipped edges);
+		 * its lower third takes more of the track's dust; it is chipped back to her paint here and there (most at a plate's
+		 * edge and round a bolt or a weld); a stencilled mark is scuffed in streaks and a hand-painted one (bHand) has
+		 * slightly uneven brushed edges. bMustFit: none at all where no place within reach takes the whole of it.
 		 */
+		struct MarkSkin
+		{
+			const std::vector<uint32_t>* Raw = nullptr; // her body's points' places in her file's mesh
+			const std::vector<float>* Dirt = nullptr;   // per file point: what her paint was scaled by, then what was added (linear rgb)
+			size_t Count = 0;                           // her own points (before any mark)
+			Lin DustColour = Lin(0.33, 0.27, 0.15);
+		};
 		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
-			double Dust, double Step, double Lift, uint64_t Seed, double* Moved = nullptr, double* Scale = nullptr)
+			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
+			double* Moved = nullptr, double* Scale = nullptr)
 		{
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			// (on a wall its top is toward the sky; on a roof, toward her front)
@@ -1548,6 +1572,10 @@ namespace LandKit
 			for (size_t T = 0; T + 2 < Out.Triangles.size(); T += 3)
 			{
 				const uint32_t I0 = Out.Triangles[T], I1 = Out.Triangles[T + 1], I2 = Out.Triangles[T + 2];
+				if (Skin.Count > 0 && std::max({ I0, I1, I2 }) >= Skin.Count)
+				{
+					continue; // (another mark's: only her own skin takes one)
+				}
 				const V3 A = PointOf(I0), B = PointOf(I1), C = PointOf(I2);
 				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
 				for (const V3& P : { A, B, C })
@@ -1689,6 +1717,10 @@ namespace LandKit
 					bFound = true;
 				}
 			}
+			if (!bFound && bMustFit)
+			{
+				return 0;
+			}
 			if (Moved)
 			{
 				*Moved = (Middle - Place).Length();
@@ -1702,9 +1734,20 @@ namespace LandKit
 			const uint32_t FirstPoint = static_cast<uint32_t>(Out.Count());
 			const size_t FirstTriangle = Out.Triangles.size();
 			std::vector<uint8_t> Missed;
+			const bool bDirt = Skin.Raw && Skin.Dirt && !Skin.Dirt->empty();
 			// One point of the mark: carried onto the skin, coloured, kept.
-			auto Point = [&](double A, double U, int Layer, const MarkPiece& P)
+			auto Point = [&](double A0, double U0, int Layer, const MarkPiece& P)
 			{
+				// (a hand-painted mark's edges wander a little, a few hundredths of its size, as a brush leaves them: every
+				// point is moved by the same smooth noise of its place on the mark, so pieces side by side still meet point
+				// for point)
+				double A = A0, U = U0;
+				if (bHand)
+				{
+					const V3 On(A0 * Size, U0 * Size, 0.0);
+					A += 0.025 * (Noise(On * 8.0 + V3(0.0, 0.0, 0.5), Seed + 11) - 0.5) + 0.03 * (Noise(On * 30.0 + V3(0.0, 0.0, 1.5), Seed + 12) - 0.5);
+					U += 0.025 * (Noise(On * 8.0 + V3(0.0, 0.0, 2.5), Seed + 13) - 0.5) + 0.03 * (Noise(On * 30.0 + V3(0.0, 0.0, 3.5), Seed + 14) - 0.5);
+				}
 				const V3 Flat = Middle + Across * (A * Size) + Up * (U * Size);
 				const Hit H = Cast(Flat);
 				const double Raise = Lift * (1.0 + 0.75 * Layer);
@@ -1738,6 +1781,9 @@ namespace LandKit
 					// coat of paint would, and none pokes through it)
 					double Behind = H.Behind;
 					const double Half = std::min(0.5 * Step, 0.2 * Size);
+					// (how rough her skin is here: a plate's edge, a bolt's head or a weld under the grid's step, where the
+					// paint chips first)
+					double Rough = Clamp((0.97 - Normal.Dot(F)) / 0.12, 0.0, 1.0);
 					for (const V3& Off : { Across * Half, Across * -Half, Up * Half, Up * -Half })
 					{
 						const Hit Round = Cast(Flat + Off);
@@ -1745,11 +1791,53 @@ namespace LandKit
 						{
 							Behind = Round.Behind;
 						}
+						Rough = std::max(Rough, Round.T ? Clamp((std::fabs(Round.Behind - H.Behind) - 0.002) / 0.006, 0.0, 1.0) : 1.0);
 					}
 					Where = Flat - F * Behind + Normal * Raise;
+					if (bDirt)
+					{
+						// Her own dirt over the mark's paint, as over hers: the skin's scale and what was added, at the point.
+						const Lin Paint = FromPicture(R, G, B);
+						double Sc[3] = { 0.0, 0.0, 0.0 }, Ad[3] = { 0.0, 0.0, 0.0 };
+						Lin Under;
+						for (int K = 0; K < 3; ++K)
+						{
+							const size_t RawK = Ix[K] < Skin.Raw->size() ? (*Skin.Raw)[Ix[K]] : 0;
+							for (int Ch = 0; Ch < 3; ++Ch)
+							{
+								Sc[Ch] += (*Skin.Dirt)[RawK * 6 + static_cast<size_t>(Ch)] * Wt[K];
+								Ad[Ch] += (*Skin.Dirt)[RawK * 6 + 3 + static_cast<size_t>(Ch)] * Wt[K];
+							}
+							Under = Under + FromPicture(Out.Colours[Ix[K] * 4], Out.Colours[Ix[K] * 4 + 1], Out.Colours[Ix[K] * 4 + 2]) * Wt[K];
+						}
+						Lin C(Paint.R * Sc[0] + Ad[0], Paint.G * Sc[1] + Ad[1], Paint.B * Sc[2] + Ad[2]);
+						// (the lower third: the track's dust and mud thrown up the plate, in splashes)
+						const double Low = Smooth(-0.3, -1.0, U0) * (0.45 + 0.55 * Noise(V3(Flat.X * 7.0, Flat.Y * 7.0, Flat.Z * 2.5), Seed + 17));
+						C = Mix(C, Mix(Under, Skin.DustColour, 0.5), 0.55 * Low);
+						// (scuffed: a stencilled mark in level streaks, a brushed one less)
+						const V3 OnMark(A0 * Size, U0 * Size, 0.0);
+						const double Scuff = Smooth(0.58, 0.82, Noise(V3(OnMark.X * 5.0, OnMark.Y * 30.0, 7.5), Seed + 19)) * (bHand ? 0.2 : 0.4);
+						C = Mix(C, Under, Scuff);
+						// (chipped back to her paint: a few small flakes anywhere, many at an edge or a bolt)
+						const double Chip = Smooth(0.0, 0.05, Noise(Flat * 45.0, Seed + 21) - (0.8 - 0.22 * Rough));
+						C = Mix(C, Under, Chip);
+						R = ToPicture(C.R);
+						G = ToPicture(C.G);
+						B = ToPicture(C.B);
+					}
+					// (and a share of the skin's colour over it all, as the eye mixes them: a thin coat, dulled)
 					R = Lerp(R, Sk[0], Grime);
 					G = Lerp(G, Sk[1], Grime);
 					B = Lerp(B, Sk[2], Grime);
+					if (bDirt)
+					{
+						// (no mark brighter than the Sherman's star, 184, 177, 157 at its brightest, the art director's mend of
+						// 24 November: the British flash on a clean light tank read the brightest thing on her)
+						const double Down = std::min({ 1.0, 184.0 / std::max(R, 1.0), 177.0 / std::max(G, 1.0), 157.0 / std::max(B, 1.0) });
+						R *= Down;
+						G *= Down;
+						B *= Down;
+					}
 					Soot = static_cast<float>(Burnt);
 				}
 				Missed.push_back(H.T ? 0 : 1);
@@ -1904,6 +1992,87 @@ namespace LandKit
 				Out.Triangles[T] = static_cast<uint32_t>(NewIndex[Out.Triangles[T] - FirstPoint]);
 			}
 			return Added;
+		}
+
+		/** The broadest flat plate of a part's skin that faces Toward (its outward facing within MinDot of it), among
+		 * those within Window metres of the part's outermost that way: where an army painted a mark her file gives no
+		 * place for (the Panther's hull sides, a Japanese tank's front plate). At is on the plate (model frame) and
+		 * Facing its outward facing. False where the part has no such plate. */
+		bool FindPlate(const RawMesh& Raw, int PartIx, const V3& Toward, double MinDot, double Window, V3& OutAt, V3& OutFacing)
+		{
+			struct Bit
+			{
+				V3 Mid, Normal;
+				double Area = 0.0, Out = 0.0;
+			};
+			std::vector<Bit> Bits;
+			double Outermost = -1e9;
+			for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Raw.Triangles[T], I1 = Raw.Triangles[T + 1], I2 = Raw.Triangles[T + 2];
+				if (Raw.Parts[I0] != PartIx || Raw.Parts[I1] != PartIx || Raw.Parts[I2] != PartIx)
+				{
+					continue;
+				}
+				const V3 A(Raw.Points[I0 * 3], Raw.Points[I0 * 3 + 1], Raw.Points[I0 * 3 + 2]);
+				const V3 B(Raw.Points[I1 * 3], Raw.Points[I1 * 3 + 1], Raw.Points[I1 * 3 + 2]);
+				const V3 C(Raw.Points[I2 * 3], Raw.Points[I2 * 3 + 1], Raw.Points[I2 * 3 + 2]);
+				const V3 Cr = (B - A).Cross(C - A);
+				const double Area = 0.5 * Cr.Length();
+				if (Area < 1e-7)
+				{
+					continue;
+				}
+				// (wound as her files wind theirs, counter-clockwise about the outward facing; checked against the points' own)
+				V3 Normal = Cr * (0.5 / Area);
+				const V3 Own(Raw.Facings[I0 * 3] + Raw.Facings[I1 * 3] + Raw.Facings[I2 * 3], Raw.Facings[I0 * 3 + 1] + Raw.Facings[I1 * 3 + 1] + Raw.Facings[I2 * 3 + 1],
+					Raw.Facings[I0 * 3 + 2] + Raw.Facings[I1 * 3 + 2] + Raw.Facings[I2 * 3 + 2]);
+				if (Normal.Dot(Own) < 0.0)
+				{
+					Normal = -Normal;
+				}
+				if (Normal.Dot(Toward) < MinDot)
+				{
+					continue;
+				}
+				const V3 Mid = (A + B + C) * (1.0 / 3.0);
+				Bits.push_back({ Mid, Normal, Area, Mid.Dot(Toward) });
+				Outermost = std::max(Outermost, Mid.Dot(Toward));
+			}
+			// (one plate: one facing to a tenth, one plane to three centimetres)
+			std::map<std::tuple<long, long, long, long>, std::array<double, 7>> Plates; // area; area-weighted mid; area-weighted facing
+			for (const Bit& Bt : Bits)
+			{
+				if (Bt.Out < Outermost - Window)
+				{
+					continue;
+				}
+				const auto Key = std::make_tuple(std::lround(Bt.Normal.X * 10.0), std::lround(Bt.Normal.Y * 10.0), std::lround(Bt.Normal.Z * 10.0),
+					std::lround(Bt.Mid.Dot(Bt.Normal) / 0.03));
+				std::array<double, 7>& P = Plates[Key];
+				P[0] += Bt.Area;
+				P[1] += Bt.Area * Bt.Mid.X;
+				P[2] += Bt.Area * Bt.Mid.Y;
+				P[3] += Bt.Area * Bt.Mid.Z;
+				P[4] += Bt.Area * Bt.Normal.X;
+				P[5] += Bt.Area * Bt.Normal.Y;
+				P[6] += Bt.Area * Bt.Normal.Z;
+			}
+			const std::array<double, 7>* Best = nullptr;
+			for (const auto& Pl : Plates)
+			{
+				if (!Best || Pl.second[0] > (*Best)[0])
+				{
+					Best = &Pl.second;
+				}
+			}
+			if (!Best || (*Best)[0] < 0.02)
+			{
+				return false;
+			}
+			OutAt = V3((*Best)[1], (*Best)[2], (*Best)[3]) * (1.0 / (*Best)[0]);
+			OutFacing = V3((*Best)[4], (*Best)[5], (*Best)[6]).Unit(Toward);
+			return true;
 		}
 	}
 
@@ -2447,6 +2616,11 @@ namespace LandKit
 		const double GreenAt = bCamouflage ? Threshold(Seed, 0.26) : 0.5;
 		const double BrownAt = bCamouflage ? Threshold(BrownSeed, 0.17) : 0.5;
 
+		// (where her national marks go, found on the near level and kept for the far one; those the army painted where
+		// her file gives no place, each only if it fits whole on her near skin)
+		std::vector<uint8_t> PaintedMade;
+		Painted.clear();
+
 		// Each level of detail painted and cut into the bodies.
 		for (int Level = 0; Level < 2; ++Level)
 		{
@@ -2464,6 +2638,7 @@ namespace LandKit
 			const std::vector<float> Edge = Edges(Raw);
 			std::vector<uint8_t> Colour(N * 4, 255);
 			std::vector<float> Burn(N, 0.0f);
+			std::vector<float> Dirt(D.bMarks ? N * 6 : 0, 0.0f);
 			for (size_t K = 0; K < N; ++K)
 			{
 				const int PaintK = std::max(0, std::min(Raw.Paints[K], static_cast<int>(Paint.size()) - 1));
@@ -2511,55 +2686,73 @@ namespace LandKit
 				// (captured: her maker's coat, where the captor's brush missed it, in strokes and patches, most low down
 				// on the running gear and the lower hull, and at the edges where the new paint has chipped)
 				const Lin Old = !bCaptured ? C : PaintK == Upper2 ? OldCoat[1] : PaintK == Shade ? OldCoat[2] : OldCoat[0];
-				if (bCaptured && bCoat)
+				// (everything done to her paint from here: worn edges, dust, soot, her creases' shade; a scale and an addition
+				// to the paint, which the national marks read to take on her own dirt, Dress::bMarks)
+				auto Finish = [&](Lin Cv)
 				{
-					// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
-					// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
-					// lower hull behind the wheels; the art director's mend, 23 November)
-					const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
-					// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
-					// its few corners would each carry a stripe of the old coat down the whole plate)
-					const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
-					const double At0 = 0.71 - 0.17 * Reach;
-					const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
-					C = Mix(C, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
-				}
-				if (bFileDust)
-				{
-					if (bCoat && Raw.Wear[K] > 0)
+					if (bCaptured && bCoat)
 					{
-						// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
-						// third of it shows the old coat through)
-						C = Mix(C, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
+						// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
+						// lower hull behind the wheels; the art director's mend, 23 November)
+						const double Low = Clamp(1.0 - At.Z / 0.75, 0.0, 1.0); // (behind the wheels; the skirts above it covered)
+						// (a plate's edges are left to the chips below: a thin plate such as a skirt is all edges, and
+						// its few corners would each carry a stripe of the old coat down the whole plate)
+						const double Reach = std::max(Low * Low, bSpins ? 1.0 : 0.0);
+						const double At0 = 0.71 - 0.17 * Reach;
+						const double Streak = Noise(V3(Here.X * 0.8, Here.Y * 0.8, Here.Z * 9.0), Seed + 77);
+						Cv = Mix(Cv, Old, 0.9 * Smooth(At0, At0 + 0.025, Streak));
 					}
-				}
-				else if (bCoat && Edge[K] > 0.0f)
+					if (bFileDust)
+					{
+						if (bCoat && Raw.Wear[K] > 0)
+						{
+							// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
+							// third of it shows the old coat through)
+							Cv = Mix(Cv, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+						}
+					}
+					else if (bCoat && Edge[K] > 0.0f)
+					{
+						const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
+						Cv = bCaptured ? Mix(Cv, Old, 0.25 * Chip) : Mix(Cv, Cv * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					}
+					// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
+					if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
+					{
+						const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
+						Cv = Mix(Cv, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
+					}
+					// Exhaust soot as the file lays it.
+					if (Raw.SootIn[K] > 4)
+					{
+						Cv = Mix(Cv, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
+					}
+					if (bFileDust)
+					{
+						// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
+						// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
+						// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
+						// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
+						const double DustBy = bCaptured ? 0.5 : 1.0;
+						Cv = Mix(Cv, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+						Cv = Mix(Cv, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
+						Cv = Cv * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
+					}
+					return Cv;
+				};
+				if (D.bMarks)
 				{
-					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
-					C = bCaptured ? Mix(C, Old, 0.25 * Chip) : Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
+					const Lin Added = Finish(Lin()), Whole = Finish(Lin(1.0, 1.0, 1.0));
+					float* To = &Dirt[K * 6];
+					To[0] = static_cast<float>(Whole.R - Added.R);
+					To[1] = static_cast<float>(Whole.G - Added.G);
+					To[2] = static_cast<float>(Whole.B - Added.B);
+					To[3] = static_cast<float>(Added.R);
+					To[4] = static_cast<float>(Added.G);
+					To[5] = static_cast<float>(Added.B);
 				}
-				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
-				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
-				{
-					const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
-					C = Mix(C, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
-				}
-				// Exhaust soot as the file lays it.
-				if (Raw.SootIn[K] > 4)
-				{
-					C = Mix(C, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
-				}
-				if (bFileDust)
-				{
-					// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
-					// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
-					// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
-					// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
-					const double DustBy = bCaptured ? 0.5 : 1.0;
-					C = Mix(C, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
-					C = Mix(C, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
-					C = C * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
-				}
+				C = Finish(C);
 				Colour[K * 4] = ToPicture(C.R);
 				Colour[K * 4 + 1] = ToPicture(C.G);
 				Colour[K * 4 + 2] = ToPicture(C.B);
@@ -2794,27 +2987,111 @@ namespace LandKit
 			}
 
 			// National marks (release 2, Dress::bMarks, "-TheaterLandMarks"; Brian, 24 November, the tanks' country
-			// markings): her owner's plain period marking at each place her file gives (a "_" place, a lorry's door, is
-			// whoever owns her; any other is her maker's spot, and her owner's mark goes there), painted onto her own skin
-			// at both levels (the far one coarser and a little further off its coarser skin). A captured vehicle keeps the
-			// captor's big marks above; a captor the captured kit has no mark for (the British, the Italians) wears his own
-			// here, half as big again, as the captured kit's are.
+			// markings).
 			const bool bCaptorMarked = bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV");
 			if (D.bMarks && !bCaptorMarked && !Marks.empty())
 			{
+				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"]);
 				std::vector<MarkPiece> Pieces;
-				MarkPieces(MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"]), Pieces);
-				for (size_t I = 0; I < Marks.size() && !Pieces.empty(); ++I)
+				MarkPieces(MarkKind, Pieces);
+				if (Level == 0 && !Pieces.empty())
 				{
-					const Mark& Mk = Marks[I];
+					// Where her owner's army painted it (the art director's mends of 24 November): her file's places, but
+					// the Tiger's and the Panther's crews painted the cross on the hull's sides and a number on the turret
+					// (the Panther's file has only turret places, so hers go on her hull's sides, on its broadest plate),
+					// and the Japanese army's star went on the front plate, not the sides.
+					const bool bNumbered = MarkKind == "cross" && (Name.compare(0, 5, "Tiger") == 0 || Name.compare(0, 7, "Panther") == 0);
+					const int TurretPart = PartIndex("turret"), HullPart = PartIndex("hull");
+					double Biggest = 0.0, DustOf = 0.0;
+					for (const Mark& Mk : Marks)
+					{
+						Biggest = std::max(Biggest, Mk.Radius);
+						DustOf = std::max(DustOf, Mk.Dust);
+						if (MarkKind == "army star" || (bNumbered && Mk.Part == TurretPart))
+						{
+							continue;
+						}
+						Painted.push_back(Mk);
+						PaintedMade.push_back(0);
+					}
+					auto OnPlate = [&](int PartIx, const V3& Toward, double MinDot, double Window, double Radius)
+					{
+						V3 At, Facing;
+						if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0 || !FindPlate(Raw, PartIx, Toward, MinDot, Window, At, Facing))
+						{
+							return false;
+						}
+						Mark Mk;
+						Mk.Tag = "_";
+						Mk.At = At;
+						Mk.Facing = Facing;
+						Mk.Radius = Radius;
+						Mk.Part = PartIx;
+						Mk.Dust = DustOf;
+						Painted.push_back(Mk);
+						PaintedMade.push_back(1);
+						return true;
+					};
+					if (bNumbered)
+					{
+						for (const double Side : { -1.0, 1.0 })
+						{
+							bool bHas = false;
+							for (const Mark& Mk : Painted)
+							{
+								bHas = bHas || (Mk.Part == HullPart && Mk.Facing.Y * Side > 0.5);
+							}
+							if (!bHas)
+							{
+								OnPlate(HullPart, V3(0.0, Side, 0.0), 0.6, 0.3, std::max(0.2, Biggest));
+							}
+						}
+					}
+					if (MarkKind == "army star" && !OnPlate(HullPart, V3(1.0, 0.0, 0.0), 0.75, 0.5, Biggest))
+					{
+						OnPlate(TurretPart, V3(1.0, 0.0, 0.0), 0.75, 0.3, Biggest);
+					}
+				}
+				// Her owner's plain period marking at each of those places (a "_" place, a lorry's door, is whoever owns
+				// her; any other is her maker's spot, and her owner's mark goes there), painted onto her own skin at both
+				// levels (the far one coarser and a little further off its coarser skin), under her own dirt. A captured
+				// vehicle keeps the captor's big marks above; a captor the captured kit has no mark for (the British, the
+				// Italians) wears his own here, half as big again, as the captured kit's are.
+				std::vector<uint8_t> Kept(Painted.size(), 1);
+				for (size_t I = 0; I < Painted.size() && !Pieces.empty(); ++I)
+				{
+					const Mark& Mk = Painted[I];
 					const Part& Pt = Parts[static_cast<size_t>(Mk.Part)];
 					if (Pt.Body < 0 || !Pt.bShown || Bodies[static_cast<size_t>(Pt.Body)].bTrack)
 					{
 						continue;
 					}
 					Body& Bo = Bodies[static_cast<size_t>(Pt.Body)];
-					PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0), Mk.Dust,
-						Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull));
+					MarkSkin Skin;
+					Skin.Raw = &Members[static_cast<size_t>(Pt.Body)];
+					Skin.Dirt = &Dirt;
+					Skin.Count = Members[static_cast<size_t>(Pt.Body)].size();
+					Skin.DustColour = bFileDust ? DustColour : Dust;
+					// (a file that gives no dust for its mark: as dusty as the files' middling marks, 45)
+					const size_t Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0),
+						Mk.Dust > 0.0 ? Mk.Dust : 45.0, Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull),
+						Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I]);
+					Kept[I] = Added > 0 || !(Level == 0 && PaintedMade[I]) ? 1 : 0;
+				}
+				if (Level == 0)
+				{
+					size_t To = 0;
+					for (size_t I = 0; I < Painted.size(); ++I)
+					{
+						if (Kept[I])
+						{
+							Painted[To] = Painted[I];
+							PaintedMade[To] = PaintedMade[I];
+							++To;
+						}
+					}
+					Painted.resize(To);
+					PaintedMade.resize(To);
 				}
 			}
 		}
@@ -5305,7 +5582,7 @@ namespace LandKit
 		{
 			return;
 		}
-		for (const Mark& K : Shape->Marks)
+		for (const Mark& K : Shape->Painted.empty() ? Shape->Marks : Shape->Painted)
 		{
 			const Part& P = Shape->Parts[static_cast<size_t>(K.Part)];
 			if (!P.bShown)

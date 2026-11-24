@@ -352,7 +352,7 @@ namespace
 			{
 				// (her places on this body, in its frame)
 				std::vector<std::pair<V3, V3>> Places;
-				for (const Mark& Mk : On.Marks)
+				for (const Mark& Mk : On.Painted)
 				{
 					if (On.Parts[static_cast<size_t>(Mk.Part)].Body == static_cast<int>(B))
 					{
@@ -462,9 +462,29 @@ namespace
 								}
 							}
 							const double R = Rgb[0], G = Rgb[1], Bc = Rgb[2], Area = 0.5 * Face.Length();
+							// (her own paint under it, the nearest of her skin's triangles: a mark under her dust reads
+							// against her paint, a white lighter and a black darker than it, however dusty both are)
+							const V3 Mid = (A + Bv + Cv) * (1.0 / 3.0);
+							double Under = 1e18, SkinSum = 0.0;
+							for (size_t Ts : Skin)
+							{
+								const V3 Q = NearestOnTriangle(Mid, PointOf(Was, Was.Triangles[Ts]), PointOf(Was, Was.Triangles[Ts + 1]), PointOf(Was, Was.Triangles[Ts + 2]));
+								if ((Mid - Q).Dot(Mid - Q) < Under)
+								{
+									Under = (Mid - Q).Dot(Mid - Q);
+									SkinSum = 0.0;
+									for (int K = 0; K < 3; ++K)
+									{
+										for (int Ch = 0; Ch < 3; ++Ch)
+										{
+											SkinSum += Was.Colours[Was.Triangles[Ts + static_cast<size_t>(K)] * 4 + static_cast<size_t>(Ch)] / 3.0;
+										}
+									}
+								}
+							}
 							AreaAll += Area;
-							White += std::min({ R, G, Bc }) >= 120 && (R + G + Bc) >= 420 ? Area : 0.0;
-							Black += std::max({ R, G, Bc }) <= 80 ? Area : 0.0;
+							White += (std::min({ R, G, Bc }) >= 120 && (R + G + Bc) >= 420) || (std::min({ R, G, Bc }) >= 90 && R + G + Bc >= SkinSum + 60.0) ? Area : 0.0;
+							Black += std::max({ R, G, Bc }) <= 80 || R + G + Bc <= SkinSum - 60.0 ? Area : 0.0;
 							Red += R >= 90 && R >= 1.6 * G ? Area : 0.0;
 							Yellow += R >= 140 && G >= 110 && Bc <= 0.75 * G ? Area : 0.0;
 						}
@@ -489,8 +509,34 @@ namespace
 			{
 				Why = std::to_string(Tris - Wound) + " of " + std::to_string(Tris) + " triangles wound inward";
 			}
+			// (where the army painted it, the art director's mends of 24 November: no cross on a Tiger's or a Panther's
+			// turret, and the cross on both her hull's sides; the Japanese star on her front, not her sides)
+			const int TurretIx = On.PartIndex("turret"), HullIx = On.PartIndex("hull");
+			const bool bBig = C.Expect == "cross" && (On.Name.compare(0, 5, "Tiger") == 0 || On.Name.compare(0, 7, "Panther") == 0);
+			int Sides[2] = { 0, 0 };
+			for (const Mark& Mk : On.Painted)
+			{
+				if (bBig && Mk.Part == TurretIx && Why.empty())
+				{
+					Why = "a cross on her turret";
+				}
+				if (Mk.Part == HullIx && std::fabs(Mk.Facing.Y) > 0.5)
+				{
+					++Sides[Mk.Facing.Y < 0.0 ? 0 : 1];
+				}
+				if (C.Expect == "yellow" && Mk.Facing.X < 0.7 && Why.empty())
+				{
+					Why = "the Japanese star not on her front";
+				}
+			}
+			if (bBig && (Sides[0] == 0 || Sides[1] == 0) && Why.empty())
+			{
+				Why = "no cross on one of her hull's sides";
+			}
 			const double Wh = White / Near, Bl = Black / Near, Rd = Red / Near, Ye = Yellow / Near;
-			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.2 && Bl > 0.35)
+			// (the cross: black over a white one a little wider, of the same length: about a fifth of it white along its
+			// arms' sides; the marks under her own dust, chipped and scuffed)
+			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.1 && Bl > 0.35)
 				|| (C.Expect == "red" && Rd > 0.8) || (C.Expect == "flash" && Wh > 0.45 && Rd > 0.2) || (C.Expect == "rectangle" && Rd > 0.6 && Wh > 0.05)
 				|| (C.Expect == "yellow" && Ye > 0.8);
 			if (Why.empty() && !bPaint)

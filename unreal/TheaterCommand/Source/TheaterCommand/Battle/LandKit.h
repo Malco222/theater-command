@@ -317,6 +317,10 @@ namespace LandKit
 		std::vector<Body> Bodies;
 		std::vector<Socket> Sockets;
 		std::vector<Mark> Marks;
+		/** Where her national marks were painted (release 2, Dress::bMarks): her file's places, less those her owner's
+		 * army left bare (the Tiger's and Panther's turrets carried a number, not the cross), plus those it painted that
+		 * her file lacks (the Panther's hull sides; the Japanese star on her front plate). Empty with the marks off. */
+		std::vector<Mark> Painted;
 		std::map<std::string, Clip> Clips;
 		/** The sooty black-brown a burnt-out wreck goes to (8-bit sRGB): lerp each point toward it by its Soot times the
 		 * vehicle's Vehicle::Soot (0 to 1 over 30 s of burning). */
