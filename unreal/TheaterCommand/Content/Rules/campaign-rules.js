@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0e0d34d0 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cd29bd81 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -13821,6 +13821,10 @@
       { id: "combined", branch: "doctrine", tier: 3, year: 1942, needs: ["mobile", "staff"], name: "Battle groups", text: "Tanks, infantry, guns and engineers put together for the task in hand under whoever is on the spot.", field: "doctrine" },
       { id: "amphibious", branch: "doctrine", tier: 3, year: 1943, needs: ["landingcraft"], name: "Amphibious assault", text: "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", attack: 1.2, when: { landing: true } },
       { id: "deep", branch: "doctrine", tier: 4, year: 1944, needs: ["combined"], name: "Deep operations", text: "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", field: "doctrine" },
+      { id: "radios", branch: "doctrine", tier: 2, year: 1939, needs: ["staff"], name: "Field radios", units: true, text: "Wireless sets down to the battalion and the tank, and signallers trained to work them, so that orders reach the front in hours and reports come back while they still matter." },
+      { id: "nco", branch: "doctrine", tier: 2, year: 1939, needs: [], name: "NCO schools", units: true, text: "Schools for sergeants and corporals: section leaders who can take over when the officer falls and keep the men moving." },
+      { id: "battledrill", branch: "doctrine", tier: 3, year: 1939, needs: ["nco"], name: "Battle drill", units: true, text: "Every section taught the same few movements for attack and defence until they are done without thinking, under fire and in the dark." },
+      { id: "officers", branch: "doctrine", tier: 4, year: 1939, needs: ["battledrill"], name: "Officer schools", units: true, text: "Long courses for junior officers, with exercises against live opposition, so that a company is led by a man who has fought its battle on paper many times." },
       { id: "agents", branch: "intel", tier: 1, year: 1939, needs: [], name: "Trained agents", text: "Schools for the service's people: tradecraft, wireless and the habits that keep an agent alive.", spy: { caught: 0.85 } },
       { id: "cover", branch: "intel", tier: 2, year: 1940, needs: ["agents"], name: "Cover identities", text: "Papers, trades and histories ready made. After an attempt an agent becomes someone else and is back at work a month sooner.", spy: { rest: 1 } },
       { id: "microfilm", branch: "intel", tier: 2, year: 1941, needs: ["agents"], name: "Microfilm", text: "A drawing office's plans photographed in an hour and carried out in a matchbox.", spy: { theft: 0.1 } },
@@ -32319,6 +32323,154 @@
     return out;
   }
 
+  // ../../data/campaign/units.json
+  var units_default = {
+    _about: "Units decide's quality store and the figures its land rules read (the design director's ruling of 24 November 2026 15:53Z on rules-builder/release2/soviet/form.md, the #2 form, with Part 2's one store for soldiers, pilots and crews). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every nation: a nation named here is a seed or a start row, never a rule. Marks as the form uses them: F firm, L likely, D derived from read figures, M from memory, G the rules builder's guess, waiting on the measure, U not laid (the slot exists and nothing reads it).",
+    _startRows: "Rows a nation holds on the first day under Units decide only, never in tech.json 'start' (form, 'Where it goes'): Germany holds Field radios (it holds Staff colleges, tech.json start), and no other nation does; Sweden and Norway hold Winter equipment, so that holding it can stand in for the hardy list (east.json) at its three reads (Part 1 section 1; SOV and FIN already hold it). Applied by startOpen before the opening research (tech.ts openUnitsRows), so a later start's catch-up counts each row once. G.",
+    startRows: { GER: ["radios"], SWE: ["winterkit"], NOR: ["winterkit"] },
+    land: {
+      _ladder: "Training is the ladder (ruling 15:53Z (4)): an army's level is the higher of its start seed (land.train) and this rung for one, two or three of the training rows held, the same ladder for every nation. A start never fixes a ceiling. 1.25 is Germany's level (nations.json). G.",
+      ladder: [0.85, 1.05, 1.25],
+      _trainRows: "The training rows the ladder counts, held live from the tree (Part 1 2a): NCO schools, Battle drill, Officer schools. Each has no other effect. G.",
+      trainRows: ["nco", "battledrill", "officers"],
+      _radios: "Command c = this if the nation holds the row, plus earned, at most 1 (Part 1 2b). Staff colleges, Battle groups and Deep operations keep their one price in techMul and never feed c (choice 15). G.",
+      radios: 0.15,
+      radiosRow: "radios",
+      _earned: "Command earned in war, 0 to 1 (Part 1 2b). seed: the start's c by army, as the design director ruled at 24 Nov 16:06Z (round-2-build-order.md:2159; the form's 'Seeds ruled 16:07Z' under ruling 15:53Z (5)) on the historian's reading of command and signals 1939-41 (historian/prisoners-command-1124.md Part 2, scores D): GER 1, SOV 0 and FRA 0, held (L); POL 0.1 (F/L); ITA 0.25 (L); JAP 0.5 (L); UK 0.5 (F/L); USA 0.5, the range middle, its score leaning on memory until the 1941 manoeuvres are read (M); '_default' 0.5, the range middle, for every army the historian has not read, marked as a stand-in until it is read, never today's 1 (G). No seed is shaved to steer a gate: UK, USA and JAP pass the blitz gate once they research radios (0.5 + 0.15 = 0.65), and that is the cause working. The store holds the seed less 'radios' where the row is held at the start (so GER 0.85), never below 0. The same at every start month: history plays a later start's months with the switch off, and the 1941-42 rises come from the earned test and the radios row in play, never from dates (G). month: added for each month the nation's own attacks take at least 'provinces' provinces from an enemy (one test on the month's battle reports, the player's nation and every computer's alike; sieges, reliefs and sallies left out; a walk-in after the defenders yielded counts; distinct regions). corps: taken off for each corps taken whole (cut off, rule 232, a cut road). All G.",
+      earned: { seed: { _default: 0.5, GER: 1, SOV: 0, FRA: 0, POL: 0.1, ITA: 0.25, JAP: 0.5, UK: 0.5, USA: 0.5 }, month: 0.01, provinces: 2, corps: -0.01 },
+      _attack: "Attack is multiplied by base + perC x c, in place of slowCommand's x0.85 (Part 1 2b): at c 0 today's slow command, at c 1 none. G.",
+      attack: { base: 0.85, perC: 0.15 },
+      _mostCorps: "Most corps one battle can take: base + perC x c, in place of maxAttack (Part 1 2b; choice 11): 8 at c 0 (today's slow command), 20 at c 1. G.",
+      mostCorps: { base: 8, perC: 12 },
+      _gates: "Command gates (Part 1 section 1): below 'renewal' a staff renews no failed attack and counter-attacks late (today's slowCommand habits); from 'blitz', with Field radios held, the tempo x1.2, the +1 move, the opening thrust and the armoured spearheads' x1.15, for any nation. G.",
+      gates: { renewal: 0.3, blitz: 0.6 },
+      _sight: "A staff's sight s = clamp((c - from) / span, 0, 1) (Part 1 section 5). Seen odds = card odds x (q / wk)^(s - 1): at s 0 a staff counts men, kinds and ground, at s 1 it reads the card as today's staff does. The player's card shows the odds as the player's own staff reads them at the player's own sight (ruling 15:53Z (14)). G.",
+      sight: { from: 0.6, span: 0.4 },
+      _byOrders: "The way 'mass', by orders (Part 1 section 5; ruling 15:53Z (1)): ordinary attacks go in at seen odds 'need' and stop adding corps at 'stop'; attacks in the main effort's sector keep today's stop, 'main' (ai.ts). As sight rises, need blends to the temper's minOdds and stop to 'main'. The doctrine's own content, never refit to Lawrence's 1.42, which is a check. Methodical, bold and night keep today's thresholds. G.",
+      byOrders: { need: 0.9, stop: 1.3, main: 2.6 },
+      _xp: "Corps experience by result, each times (1 - xp) (Part 1 2d), in place of today's flat +0.05 attacking and +0.04 defending, win or lose: the attacker that wins, the attacker repulsed, the defender that holds, the defender beaten. Drafts dilute every nation's corps. G.",
+      xp: { won: 0.05, repulsed: 0.02, held: 0.04, beaten: 0.02 },
+      _label: "Captured: of the defender's men lost, share x (attacker's per-man attack worth / defender's per-man defence worth) are booked as prisoners, at most 'cap' (Part 1 section 7). A split of men already lost; it adds none and goes in its own report field. D: fit to the record's fail-or-advance pair at Kursk (F, p. 34), 0.147 and 0.149.",
+      label: { share: 0.148, cap: 0.9 },
+      _guards: "The Guards title, as a name only, in its own corps field (Part 1 section 1; choice 13): a corps of any nation at xp at least 'xp' with at least 'won' attacks won. Never c.elite. G.",
+      guards: { xp: 0.5, won: 3 },
+      _ways: "The land ways a staff may hold (Part 2 section 3; data/battle/lean.json). Night and last-stand are fought as bold (lean.json standIn) until they are built.",
+      ways: ["mass", "methodical", "bold", "night", "last-stand"],
+      _school: "The drafts' schools: 0 for every nation at every start month, as g.stories.schools holds today (Part 2 section 2). G.",
+      school: 0
+    },
+    _trainIn: "Months a change of way takes to train in, one time for every arm (Part 2 section 3). U until the historian reads one; the form's guess is 6 (G).",
+    trainIn: 6,
+    air: {
+      _scale: "One curve from a pilot's hours to a level, the same for every nation (Part 2 section 1). U: not laid; until it is, every group keeps its held level.",
+      scale: null,
+      _school: "Hours before first combat a new pilot leaves school with, by start turn (Part 2 section 2; historian/air-reads-1124.md A). GER about 250 before the cuts (L; the reading dates no cut, so every offered start, 1939-42, takes it: G). RAF and US 350 and 400 are 1944 readings, so null; JAP (land) and SOV not read, null. A nation not listed is null: not laid (no '_default').",
+      school: { "1": { GER: 250 } },
+      _deck: "The same for carrier pilots, kept apart: JAP 500 or more (the navy's carrier school before 1937, F). Others null. By start turn.",
+      deck: { "1": { JAP: 500 } },
+      _fighter: "Fighter doctrines (fighters.ts) and escort doctrines (plan D). No start row is read, so every nation's slot is null (Part 2 section 2).",
+      fighter: ["turn", "dive-zoom"],
+      escort: ["tied", "free"]
+    },
+    sea: {
+      _ways: "The fleet staff's ways (battle/sea/types.ts). No 'night' way: lean.json's night is seeded as its stand-in, bold (Part 2 section 2).",
+      ways: ["methodical", "bold", "mass"],
+      _pack: "Convoy doctrine, by start turn, from the record (Part 2 section 2; naval-battles/wolfpack-r2/form.md:47-49): 1939 and 1940 every navy hunts alone; 1941 GER and ITA homed from ashore; 1942 GER homed; '_default' is every other navy. L.",
+      packs: ["alone", "homed", "led"],
+      pack: { "1": { _default: "alone" }, "5": { _default: "alone" }, "17": { _default: "alone", GER: "homed", ITA: "homed" }, "29": { _default: "alone", GER: "homed" } },
+      _target: "Boats go for warships first: JAP (wolfpack form :47); '_default', every other navy, merchants first. L.",
+      targets: ["merchants", "warships"],
+      target: { "1": { _default: "merchants", JAP: "warships" } }
+    }
+  };
+
+  // ../../data/battle/lean.json
+  var lean_default = {
+    _doc: [
+      "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
+      "Each arm keeps its own style numbers and grows by its own experience and research (land: data/battle/land-styles.json). '_' is every nation not listed.",
+      "A leaning not built yet (night, last-stand: item 6, after release 1) is fought as its stand-in. Japan's land column attacks by night and defends to the last; until item 6 every arm fights those as bold (ruling 239(3)).",
+      "Germany and Britain differ at sea (historian, H): Germany's heavy ships broke off when pressed, the Royal Navy sought action."
+    ],
+    lean: {
+      GER: { land: "bold", sea: "methodical", air: "methodical" },
+      UK: { land: "methodical", sea: "bold", air: "methodical" },
+      USA: { land: "methodical", sea: "methodical", air: "methodical" },
+      ITA: { land: "methodical", sea: "methodical", air: "methodical" },
+      FRA: { land: "methodical", sea: "methodical", air: "methodical" },
+      SOV: { land: "mass", sea: "mass", air: "mass" },
+      JAP: { land: { att: "night", def: "last-stand" }, sea: "night", air: "bold" },
+      _: { land: "methodical", sea: "methodical", air: "methodical" }
+    },
+    standIn: { night: "bold", "last-stand": "bold" }
+  };
+
+  // ../../src/campaign/units.ts
+  var unitsDecide = (g2) => g2.flags.open === 1 && g2.flags.unitsDecide === 1;
+  var UNITS = units_default;
+  var LEAN = lean_default;
+  var AIR_NATIONS = air_default.nations;
+  var DECK_STRIKE = carriers_default.naval.land;
+  var NAVY_QUALITY = navy_default.quality;
+  function atStart(t, from2) {
+    let at4 = -Infinity, out = {};
+    for (const k of Object.keys(t)) if (Number(k) <= from2 && Number(k) > at4) {
+      at4 = Number(k);
+      out = t[k];
+    }
+    return out;
+  }
+  var byNat = (t, nat) => t[nat] ?? t._default;
+  var seeded = (id) => ({ id, by: "start" });
+  function landSeed(n) {
+    const L2 = UNITS.land;
+    const radios = n.tech?.done.includes(L2.radiosRow) ? L2.radios : 0;
+    const lean = (LEAN.lean[n.id] ?? LEAN.lean._).land;
+    const [att, def] = typeof lean === "string" ? [lean, lean] : [lean.att, lean.def];
+    return { train: n.quality, earned: Math.max(0, (byNat(L2.earned.seed, n.id) ?? 0) - radios), school: L2.school, way: { att: seeded(att), def: seeded(def) } };
+  }
+  function airSeed(nat, from2) {
+    const A = UNITS.air;
+    const school = byNat(atStart(A.school, from2), nat) ?? null;
+    return {
+      school,
+      deck: byNat(atStart(A.deck, from2), nat) ?? null,
+      held: (AIR_NATIONS[nat] ?? AIR_NATIONS._default).quality,
+      pool: school,
+      poolXp: 0,
+      strike: DECK_STRIKE[nat] ?? DECK_STRIKE._default,
+      fighter: null,
+      escort: null
+    };
+  }
+  function seaSeed(nat, from2) {
+    const S3 = UNITS.sea;
+    const lean = (LEAN.lean[nat] ?? LEAN.lean._).sea;
+    const way = S3.ways.includes(lean) ? lean : LEAN.standIn[lean];
+    return {
+      crew: NAVY_QUALITY[nat] ?? NAVY_QUALITY._default,
+      night: null,
+      lookout: null,
+      way: seeded(way),
+      pack: seeded(byNat(atStart(S3.pack, from2), nat)),
+      target: seeded(byNat(atStart(S3.target, from2), nat))
+    };
+  }
+  var armsSeed = (n, from2) => ({ land: landSeed(n), air: airSeed(n.id, from2), sea: seaSeed(n.id, from2) });
+  function seedQuality(g2) {
+    const from2 = g2.flags.openFrom ?? 1;
+    const nat = {};
+    for (const n of Object.values(g2.nations)) nat[n.id] = armsSeed(n, from2);
+    return { from: from2, nat, news: {} };
+  }
+  function qualityStore(g2) {
+    if (!unitsDecide(g2)) return void 0;
+    return g2.qs ?? (g2.qs = seedQuality(g2));
+  }
+  function openQuality(g2) {
+    qualityStore(g2);
+  }
+
   // ../../src/campaign/staff.ts
   var OPEN = open_default;
   var FIT_ORG = 0.35;
@@ -32350,12 +32502,14 @@
     }
     startEngineers(g2);
     openTraits(g2);
+    openUnitsRows(g2);
     openTech(g2);
     openWorldAir(g2);
     openStores(g2);
     openAirWar(g2);
     openSmallAir(g2);
     openCarriers(g2);
+    openQuality(g2);
     openSieges(g2);
     openMorale(g2);
     openEscorts(g2);
@@ -40377,9 +40531,6 @@
     g2.nations[nat].sealift += lift2;
   }
 
-  // ../../src/campaign/units.ts
-  var unitsDecide = (g2) => g2.flags.open === 1 && g2.flags.unitsDecide === 1;
-
   // ../../data/campaign/convoycause.json
   var convoycause_default = {
     _about: "The convoy war by cause (audit #5; the design director's ruling of 23 November 2026 07:26Z on the form naval-battles/convoy-r2/form.md). Read only in a grand campaign opened with Units decide (src/campaign/units.ts); off, nothing here is read. One rule for every navy and both sides: the kit a navy holds and the work its ships are given set each figure, never the nation or the month. Every size is OEG Report 51's (naval-battles/wolfpack-r2/history.md, where each is marked).",
@@ -40632,6 +40783,19 @@
     }
     return begun2;
   }
+  function openUnitsRows(g2) {
+    if (!techRules(g2) || !unitsDecide(g2)) return;
+    for (const [nat, ids2] of Object.entries(UNITS.startRows)) {
+      const n = g2.nations[nat];
+      if (!n) continue;
+      const s = n.tech ?? (n.tech = fresh2(nat));
+      for (const id of ids2) {
+        if (!BY_ID[id] || s.done.includes(id)) continue;
+        s.done.push(id);
+        s.work = s.work.filter((w) => w.id !== id);
+      }
+    }
+  }
   function openTech(g2) {
     if (!techRules(g2) || g2.flags["tech:open"]) return;
     g2.flags["tech:open"] = 1;
@@ -40710,6 +40874,13 @@
   }
   var CAUSE = convoycause_default;
   var in100 = (x) => Math.round(x * 100);
+  function unitsWords(id) {
+    const L2 = UNITS.land;
+    if (id === L2.radiosRow) return `Its army's command rises ${in100(L2.radios)} points in 100.`;
+    if (!L2.trainRows.includes(id)) return null;
+    const names = and(L2.trainRows.map((x) => BY_ID[x]?.name ?? x));
+    return `Its army's training is at least ${L2.ladder[0]} with one of ${names}, ${L2.ladder[1]} with two and ${L2.ladder[2]} with all three. An army that began the war better trained keeps its own level.`;
+  }
   function causeWords(id) {
     const I = CAUSE.incident, third = `${in100(CAUSE.cover)} in 100`;
     const kills = `a hunting group sinks the submarine in ${in100(I.coordinatedKit)} of every 100 attacks it answers and a convoy's own escort in ${in100(I.independentKit)}, against ${in100(I.coordinated)} and ${in100(I.independent)} with depth charges alone`;
@@ -40737,6 +40908,8 @@
     if (rest) out.push(rest);
     const convoy = cause || t.units ? causeWords(t.id) : null;
     if (convoy) out.push(convoy);
+    const land2 = t.units ? unitsWords(t.id) : null;
+    if (land2) out.push(land2);
     if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
     if (t.winterKit) out.push("Its troops no longer march and fight worse in the eastern winter.");
     if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
@@ -46137,8 +46310,8 @@
         }
       }
     }
-    const byNat = by2 === null ? null : could.find((x) => x.id === by2).nat;
-    lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, sunk, could: could.map((x) => x.id), by: by2, couldNat: could.map((x) => x.nat), byNat });
+    const byNat2 = by2 === null ? null : could.find((x) => x.id === by2).nat;
+    lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, sunk, could: could.map((x) => x.id), by: by2, couldNat: could.map((x) => x.nat), byNat: byNat2 });
   }
   function lookConvoy(g2, nat, route, zones, raiders, escorts, at4, tons, cause) {
     const power = (f) => raidPower(g2, f, !!cause) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
@@ -59349,6 +59522,9 @@
       bargains: g2.bargains,
       // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
       legions: g2.legions,
+      // Units decide's quality store (DD 24 Nov 15:53Z, #2 form Part 2 section 4): written only under the switch, so a
+      // store left behind by a flag cleared by hand is never saved, and a save with the switch off is written as it always was.
+      qs: unitsDecide(g2) ? g2.qs : void 0,
       // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
       // its scars back from its reports when loaded.
       scars: g2.flags.open === 1 ? g2.scars : void 0,
@@ -59513,6 +59689,7 @@
     if (d.lorryFirst && typeof d.lorryFirst === "object") g2.lorryFirst = d.lorryFirst;
     if (d.bargains && typeof d.bargains === "object") g2.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
     if (d.legions && typeof d.legions === "object") g2.legions = { abroad: {}, done: {}, ...d.legions };
+    if (d.qs && typeof d.qs === "object") g2.qs = d.qs;
     if (d.captured && typeof d.captured === "object") g2.captured = d.captured;
     if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
     else
@@ -64800,27 +64977,6 @@
     dial: { absent: 3, pickFrom: 4 }
   };
 
-  // ../../data/battle/lean.json
-  var lean_default = {
-    _doc: [
-      "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
-      "Each arm keeps its own style numbers and grows by its own experience and research (land: data/battle/land-styles.json). '_' is every nation not listed.",
-      "A leaning not built yet (night, last-stand: item 6, after release 1) is fought as its stand-in. Japan's land column attacks by night and defends to the last; until item 6 every arm fights those as bold (ruling 239(3)).",
-      "Germany and Britain differ at sea (historian, H): Germany's heavy ships broke off when pressed, the Royal Navy sought action."
-    ],
-    lean: {
-      GER: { land: "bold", sea: "methodical", air: "methodical" },
-      UK: { land: "methodical", sea: "bold", air: "methodical" },
-      USA: { land: "methodical", sea: "methodical", air: "methodical" },
-      ITA: { land: "methodical", sea: "methodical", air: "methodical" },
-      FRA: { land: "methodical", sea: "methodical", air: "methodical" },
-      SOV: { land: "mass", sea: "mass", air: "mass" },
-      JAP: { land: { att: "night", def: "last-stand" }, sea: "night", air: "bold" },
-      _: { land: "methodical", sea: "methodical", air: "methodical" }
-    },
-    standIn: { night: "bold", "last-stand": "bold" }
-  };
-
   // ../../src/battle/land/styles.ts
   var D = land_styles_default;
   var STYLES = Object.fromEntries(
@@ -64829,9 +64985,9 @@
   var STYLE = D.shared;
   var PATH = D.path;
   var L = lean_default;
-  var LEAN = Object.fromEntries(Object.entries(L.lean).map(([n, row2]) => [n, row2.land]));
+  var LEAN2 = Object.fromEntries(Object.entries(L.lean).map(([n, row2]) => [n, row2.land]));
   function leaningOf(nat, side5) {
-    const row2 = LEAN[nat];
+    const row2 = LEAN2[nat];
     if (row2 === void 0) return null;
     const s = typeof row2 === "string" ? row2 : row2[side5];
     const id = isStyle(s) ? s : L.standIn[s];
