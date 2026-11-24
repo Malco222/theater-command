@@ -729,7 +729,8 @@ def flight(f, rd, rc):
             from_man=round(float(np.linalg.norm((cen[-1] - Hs[-1][pv])[:2])), 2),
             turns=round(float(ang / (2.0 * math.pi * dur)), 2) if dur > 0.1 else 0.0,
             tilt=round(math.degrees(math.asin(min(1.0, abs(ax[2]) / max(np.linalg.norm(ax), 1e-6)))), 1),
-            away=way(d), came_down=k in f.limb_land)
+            away=way(d), came_down=k in f.limb_land,
+            along=None if away is None else round(float(d[0] * away[0] + d[1] * away[1]), 2))
     p0, p1 = Hs[0][pv], Hs[-1][pv]
     tb = [t for k, t in f.contact_t.items() if rd.parts[k] in ("pelvis", "spine_01", "spine_02", "chest") and t > 0.02]
     ib = at(min(tb)) if tb else len(T) - 1
@@ -1042,21 +1043,65 @@ GORE = [
          fling=[("thigh_r", (1.8, 1.2, 4.6), 1.3)],
          tone={"legs": (0.0, 0.06), "trunk": (0.1, 0.3), "neck": (0.05, 0.2), "arms": (0.0, 0.15)},
          release=0.1, throw=(2.0, 0.8, 1.6)),
+    # ---- the effects thread (24 November): a fall from each side for a kneeling and a lying man that is not the big
+    # throw, and one for a burst under a man on his feet or on a knee; each limb straight away from the burst (within
+    # 30 degrees of it, so that it lands farther from a burst anywhere in that quarter)
+    # kneeling, the burst at his side: his far forearm off and flung clear, the blast shoves him and half-turns him away
+    dict(name="die_arm_off_g", stance="kneel", kind="side", blast_from="right", mirror="die_arm_off_h",
+         start=("fire_kneel", 0.3), blast=(0.2, -1.6, 0.3), spin=(0.0, 0.0, -6.0),
+         cut=[(0.0, "lowerarm_l")], fling=[("lowerarm_l", (0.9, -3.0, 3.0), 1.4)],
+         tone={"legs": (0.1, 0.25), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.06)},
+         release=0.0, throw=(0.8, -2.2, 1.8)),
+    # lying, the burst ahead of him: an arm torn off at the shoulder and flung back past him; his head and chest
+    # snapped back
+    dict(name="die_arm_off_i", stance="prone", kind="back", blast_from="front", start=("fire_prone", 0.6),
+         blast=(-1.0, 0.0, 0.7), spin=(0.0, -2.5, 0.0), cut=[(0.0, "upperarm_l")],
+         fling=[("upperarm_l", (-2.4, -1.1, 4.2), 1.4)],
+         tone={"legs": (0.0, 0.2), "trunk": (0.0, 0.15), "neck": (0.0, 0.1), "arms": (0.0, 0.08)},
+         release=0.0, throw=(-1.6, 0.8, 1.6), helmet=dict(t=0.0, v=(-1.8, 0.3, 2.6))),
+    # lying, the burst at his side: his far forearm off and flung clear, and he is rolled half over, away from it
+    dict(name="die_arm_off_j", stance="prone", kind="side", blast_from="right", mirror="die_arm_off_k",
+         start=("fire_prone", 0.6), blast=(0.0, -1.3, 1.0), spin=(7.0, 0.0, 0.0), cut=[(0.0, "lowerarm_l")],
+         fling=[("lowerarm_l", (0.4, -2.6, 4.2), 1.5)],
+         tone={"legs": (0.0, 0.2), "trunk": (0.0, 0.15), "neck": (0.0, 0.1), "arms": (0.0, 0.08)},
+         release=0.0, throw=(0.6, -1.8, 1.4)),
+    # lying, the burst behind him: a lower leg off at the knee and flung forward over him; his hips shoved on
+    dict(name="die_leg_off_c", stance="prone", kind="forward", blast_from="behind", start=("fire_prone", 0.6),
+         blast=(1.0, 0.0, 0.6), spin=(0.0, 2.0, 0.0), cut=[(0.0, "calf_l")],
+         fling=[("calf_l", (2.1, -1.1, 4.4), 1.4)],
+         tone={"legs": (0.0, 0.15), "trunk": (0.0, 0.2), "neck": (0.0, 0.15), "arms": (0.0, 0.12)},
+         release=0.0, throw=(1.2, -0.6, 1.4)),
+    # on his feet, the burst under him (within a metre: a mortar's, a grenade's): a lower leg torn off and flung up and
+    # out, he drops where he stood and falls to the side it went from
+    dict(name="die_leg_off_d", stance="stand", kind="under", blast_from="under", start=("fire_stand", 0.6),
+         blast=(0.0, 0.4, 1.3), cut=[(0.0, "calf_r")], fling=[("calf_r", (-1.1, 1.9, 4.8), 1.4)],
+         tone={"legs": (0.0, 0.06), "trunk": (0.08, 0.25), "neck": (0.05, 0.2), "arms": (0.0, 0.12)},
+         release=0.05, throw=(0.4, 1.4, 1.6)),
+    # on a knee, the burst under him: the shin he kneels up on torn off and flung out, and he topples
+    dict(name="die_leg_off_e", stance="kneel", kind="under", blast_from="under", start=("fire_kneel", 0.3),
+         blast=(0.0, -0.3, 1.1), cut=[(0.0, "calf_l")], fling=[("calf_l", (-0.4, -2.2, 4.4), 1.4)],
+         tone={"legs": (0.0, 0.06), "trunk": (0.05, 0.25), "neck": (0.0, 0.15), "arms": (0.0, 0.1)},
+         release=0.0, throw=(0.6, -1.2, 1.4)),
 ]
 # (what the art director asked of each, for the checks: a limb's arc and reach by what took it off, the blast's lift
 # and throw)
 GATE = dict(peak=(1.0, 3.0), dist_blast=(2.0, 8.0), dist_arm=(1.0, 4.0), dist_leg=(1.0, 3.0), from_man=1.0,
             turns=(1.0, 2.0), tilt=30.0, away=0.5, lift=(0.5, 1.5), throw=(2.0, 4.0), slide=0.3, turn=35.0, rifle=0.8,
-            high=2.9, gap=1.1)                  # (the effects thread's test: any bone of it 3 m at most; 1 m off its joint)
+            high=2.9, gap=1.1,                  # (the effects thread's test: any bone of it 3 m at most; 1 m off its joint)
+            along=0.5)                          # (and its 24 Nov rule: each limb 0.5 m or more farther from the burst)
 GORE_TABLE = {
     "stand": {"thrown": ["die_blast_a", "die_blast_b", "die_blast_e", "die_blast_f"],
               "back": ["die_arm_off_b", "die_leg_off_a"], "forward": ["die_leg_off_b", "die_arm_off_d"],
-              "side": ["die_arm_off_a", "die_arm_off_c"]},
+              "side": ["die_arm_off_a", "die_arm_off_c"], "under": ["die_leg_off_d"]},
     "run": {"thrown": ["die_blast_a", "die_blast_b"], "back": ["die_arm_off_b", "die_leg_off_a"],
-            "forward": ["die_leg_off_b", "die_arm_off_d"], "side": ["die_arm_off_a", "die_arm_off_c"]},
-    "kneel": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"], "side": ["die_blast_c"]},
-    "cover": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"], "side": ["die_blast_c"]},
-    "prone": {"thrown": ["die_blast_d"]},
+            "forward": ["die_leg_off_b", "die_arm_off_d"], "side": ["die_arm_off_a", "die_arm_off_c"],
+            "under": ["die_leg_off_d"]},
+    "kneel": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"],
+              "side": ["die_arm_off_g", "die_arm_off_h"], "under": ["die_leg_off_e"]},
+    "cover": {"thrown": ["die_blast_c"], "back": ["die_arm_off_e"], "forward": ["die_arm_off_f"],
+              "side": ["die_arm_off_g", "die_arm_off_h"], "under": ["die_leg_off_e"]},
+    "prone": {"thrown": ["die_blast_d"], "back": ["die_arm_off_i"], "forward": ["die_leg_off_c"],
+              "side": ["die_arm_off_j", "die_arm_off_k"]},
 }
 ABOUT_GORE = (
     "Gore deaths (Tools/battle_units/falls.py, GORE; Brian, 22 November 2026: \"graphic animations if a guy gets shot "
@@ -1066,10 +1111,13 @@ ABOUT_GORE = (
     "a shell (an arm 1 to 4 m, a lower leg 1 to 3 m), lying flat where it lands. From the cut the limb's bone carries a "
     "move track: it flies and lands as a body of its own, and lies where it fell for the rest of the battle as he "
     "does. Pick, gore on: deaths_gore[stance][kind] by where the burst was against his facing: back (in front of him: "
-    "thrown back), forward (behind him), side (at his side); thrown (die_blast_*: a field gun's or a howitzer's shell: "
-    "lifted 0.5 to 1.5 m, thrown 2 to 4 m, sliding where he lands); one of the list by a hash of (block id, man). "
-    "Each clip's blast_from (and gore_from, clip to side) says where its burst was: front, behind, left, right "
-    "(under: lying); a side or thrown pick can match left or right by it. Events: limb_off at the cut (socket: the "
+    "thrown back), forward (behind him), side (at his side), under (on his feet or a knee, the burst within a metre, "
+    "under him: a lower leg off); thrown (die_blast_*: a field gun's or a howitzer's shell: lifted 0.5 to 1.5 m, "
+    "thrown 2 to 4 m, sliding where he lands); one of the list by a hash of (block id, man). Every stance has a fall "
+    "from each side (lying: an arm off as he is rolled half away, a lower leg off from behind; on a knee: an arm off "
+    "from either side) besides the thrown. Each clip's blast_from (and gore_from, clip to side) says where its burst "
+    "was: front, behind, left, right, under; a side or thrown pick can match left or right by it, and each limb comes "
+    "to rest 0.5 m or more farther from the burst than it was cut. Events: limb_off at the cut (socket: the "
     "wound on the body, wound_<bone>; end: the limb's cut end, end_<bone>, for the blood), limb_fall where the severed "
     "limb comes down (x, y, z in his own axes, metres); rifle_off where the rifle leaves his hand and rifle_fall where "
     "it first comes down (x, y, z), thrown clear; in some, helmet_off (its middle x y z, v and spin as it leaves his "
@@ -1271,7 +1319,7 @@ def refit(rc, fl):
     if away and B["away"] is not None and B["away"] < G["away"]:
         bl[0], bl[1] = bl[0] + away[0] * 0.8, bl[1] + away[1] * 0.8
     r["blast"] = tuple(bl)
-    if "arm_off" in rc["name"] and abs(B["turn"]) < G["turn"]:
+    if "arm_off" in rc["name"] and rc["stance"] != "prone" and abs(B["turn"]) < G["turn"]:
         sp = rc.get("spin", (0.0, 0.0, 0.0))
         r["spin"] = (sp[0], sp[1], sp[2] * 1.35)
     lo_hi = lambda p: (G["dist_blast"] if blast else G["dist_arm"] if "arm" in p else G["dist_leg"])
@@ -1368,6 +1416,8 @@ def gate_misses(rc, fl):
             out.append("%s on end %s deg" % (p, L["tilt"]))
         if L["away"] is not None and L["away"] < GATE["away"]:
             out.append("%s not away %s" % (p, L["away"]))
+        if L.get("along") is not None and L["along"] < GATE["along"]:
+            out.append("%s only %s m farther from the burst" % (p, L["along"]))
         if not L["came_down"]:
             out.append(p + " never came down")
         if L.get("high", 0.0) > GATE["high"]:
@@ -1382,8 +1432,8 @@ def gate_misses(rc, fl):
             out.append("slide %s" % B["slide"])
     if B["away"] is not None and B["away"] < GATE["away"]:
         out.append("body not away %s" % B["away"])
-    if "arm_off" in rc["name"] and abs(B["turn"]) < GATE["turn"]:
-        out.append("turn %s deg" % B["turn"])
+    if "arm_off" in rc["name"] and rc["stance"] != "prone" and abs(B["turn"]) < GATE["turn"]:
+        out.append("turn %s deg" % B["turn"])           # (lying, he is rolled, not turned)
     if "rifle" in fl and fl["rifle"]["from_man"] < GATE["rifle"]:
         out.append("rifle at his feet %s" % fl["rifle"]["from_man"])
     return out
