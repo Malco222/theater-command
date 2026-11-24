@@ -611,6 +611,12 @@ namespace
 		          ShowSource.find("Stow = H->bAftGun ? 180.0 : 0.0;") != std::string::npos && ShowSource.find("Arc = DeckGunArc;") != std::string::npos &&
 		          ShowSource.find("Arc = MerchantGunArc;") != std::string::npos,
 		      "the show stows an American boat's deck gun aft and any other's forward, each gun bearing no further than its arc");
+		// (a boat's deck-gun bore until the battle names it, by navy: a Japanese boat's the 14 cm most of her fleet boats
+		// carried. The show had her 120 mm until the join of the view under the water; this pin came with that change.)
+		Check(ShowSource.find("if (Class == \"ss\") return Nation == \"GER\" ? 88.0 : Nation == \"UK\" ? 102.0 : Nation == \"USA\" ? (F.Year >= 1944 ? 127.0 : "
+		                      "F.Year >= 1942 ? 102.0 : 76.0) : Nation == \"JAP\" ? 140.0 : 100.0;") != std::string::npos,
+		      "the show's deck-gun bores, by navy, until the battle names one: a German boat's 88 mm, a British boat's 102, an American's 76 to 127 by year, "
+		      "a Japanese boat's 140 (her 14 cm), any other's 100");
 		Check(SceneSource.find("Stage->SocketAt(E.Key, bStern ? TEXT(\"muzzle.turret.Y.1\") : TEXT(\"muzzle.turret.A.1\"), GunMuzzle, GunBore)") != std::string::npos &&
 		          SceneSource.find("const bool bStern = E.What == \"mv\" && Firer->bAftGun;") != std::string::npos &&
 		          SceneSource.find("Stage->TrainGun(Ship.Key, bStern ? TEXT(\"turret.Y\") : TEXT(\"turret.A\"), Ship.Train, Ship.Elevation, Back);") != std::string::npos,

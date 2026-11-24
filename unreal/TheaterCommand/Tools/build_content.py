@@ -1894,6 +1894,30 @@ def build_glow():
     finish(m)
 
 
+def build_under_sea():
+    """The sea's face seen from under it (U1, the underwater war-film view, Battle/SeaUnder): one sheet laid just under
+    the sea about the eye, its paint the light coming down through the face (Snell's window, the sun in it, the dark
+    outside it) in vertex colour, sRGB as M_StageSea's is (raised to 2.2 here), times Brightness and Tint. Unlit and
+    opaque, so it hides the sky that the stage's sea (one-sided, facing up) cannot from below, and takes the height fog
+    like any solid thing, so it fades into the murk with distance. Two-sided: it is only ever seen from below, and the
+    scene winds it to face down anyway."""
+    m = new_material("M_UnderSea")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    bright = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(to_linear, "", bright, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", bright, "B")
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(bright, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, 250), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
 def build_flak_lit():
     """Flak smoke inside a searchlight's beam: the painted shape again, as light added where the smoke is."""
     m = new_material("M_FlakLit")
@@ -1919,7 +1943,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_UnderSea", build_under_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

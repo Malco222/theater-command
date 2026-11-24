@@ -142,7 +142,8 @@ namespace SeaShow
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
 		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
 		 * the enemy piece her deck gun is on while she is up (gun, -1 none: as each view says). An escort: the piece its echo
-		 * is on and how ("asdic", "radar", "sight", "bearing"; echo {on, kind}, -1 and empty without one: as each view says). */
+		 * is on and how ("asdic", "radar", "sight", "bearing"; echo {on, kind}, -1 and empty without one: as each view says).
+		 * U1 hook (under water): the view under the water never reads heard itself; it asks the show (ShipOut::bShown). */
 		std::vector<int> Heard;
 		bool bHeard = false;
 		int GunOn = -1;
@@ -758,6 +759,12 @@ namespace SeaShow
 		const Checks& Checked() const { return Check; }
 		/** One line a ship and a strike: her piece, her place, what she is doing (a debug overlay; the cloud test's trace). */
 		std::string Describe() const;
+		/** U1 hook (under water): a depth charge on its way down, as the view under the water draws it (Battle/SeaUnder): its
+		 * escort's ship key, the boat's piece, where it bursts (Z minus the depth; a charge told on her bursts Off from her,
+		 * where she is then), when it went in and when it bursts, its kind. Whether it is the battle's blow is left out: the
+		 * view draws every charge alike. Read only. */
+		struct ChargeDown { int Escort = -1, Boat = -1; Vec At, Off; double Bursts = 0.0, Dropped = 0.0; std::string Kind; bool bOnBoat = false; };
+		void ChargesDown(std::vector<ChargeDown>& Out) const;
 
 	private:
 		struct View

@@ -164,7 +164,8 @@ namespace SeaFeed
 			P.bScope = X["scope"].Truth(false);
 			if (X["column"].IsNumber()) P.ConvoyColumn = X["column"].Int();
 			// Whether the player's side has her (Show::SetMine): a boat's hunters as last told (the stager writes heard only as
-			// it changes), her deck gun's mark and an escort's echo as each view says (written afresh while they last).
+			// it changes), her deck gun's mark and an escort's echo as each view says (written afresh while they last). The one
+			// reading of heard: the show's hunt reads it, and the view under the water asks the show (U1 hook).
 			const Json& Heard = X["heard"];
 			if (Heard.IsArray())
 			{

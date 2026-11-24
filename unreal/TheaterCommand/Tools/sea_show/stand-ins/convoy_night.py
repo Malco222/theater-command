@@ -246,7 +246,8 @@ EVENTS = [
        sinking=round(70 / 3.0, 1), spread=120, kind="pattern"),
     ev(340, "sea:depthCharge", 21, "def", "Escort 2 drops a pattern on Boat B.", here=pos(21, 340), on=31, x=pos(31, 340)[0], y=pos(31, 340)[1], n=10, set=50,
        sinking=round(50 / 3.0, 1), spread=120, kind="pattern"),
-    # (Boat A's hit told at the moment of the drop, Boat B's ten seconds after the bombs went: the pre-check's what-if)
+    # (Boat A's hit told at the moment of the drop, Boat B's ten seconds after the bombs went: the pre-check's what-if, and
+    # sooner than any bomb could sink to her 80 m, so the view under the water bursts it at the battle's place alone)
     ev(330, "sea:depthChargeHit", 30, "def", "Boat A is damaged.", here=pos(30, 330), harm=0.5, keel=80, **{"from": 22}),
     ev(360, "sea:dive", 30, "att", "Boat A is forced to the surface.", dive="surfaced", why="forced"),
     # (Escort 2 loses Boat B close as it runs in over her, its pattern's charge at 358 the blow the battle books on her: in

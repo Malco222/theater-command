@@ -9,6 +9,7 @@
 #include "HAL/PlatformTime.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
+#include "InputCoreTypes.h"
 #include "Input/Events.h"
 #include "Input/Reply.h"
 #include "Rendering/DrawElements.h"
@@ -60,6 +61,22 @@ FReply SSeaBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 {
 	if (Battle.IsValid() && Battle->IsMonthScene())
 	{
+		// U1 hook (under water): a modifier key alone never skips the scene (Shift+U begins with Shift), and U takes the
+		// camera under the sea or back up; any other key skips, as before.
+		if (Event.GetKey().IsModifierKey())
+		{
+			return FReply::Unhandled();
+		}
+		if (Event.GetKey() == EKeys::U)
+		{
+			// (a key held down repeats: only its first press counts, so holding U never bobs the eye in and out, nor holding
+			// Shift+U flips the switch and writes the setting over and over)
+			if (!Event.IsRepeat())
+			{
+				Battle->UnderKey(Event.IsShiftDown());
+			}
+			return FReply::Handled();
+		}
 		Battle->SkipMonthScene();
 		return FReply::Handled();
 	}
