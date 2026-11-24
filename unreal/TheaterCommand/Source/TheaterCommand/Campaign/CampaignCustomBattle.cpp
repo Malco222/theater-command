@@ -377,14 +377,31 @@ void ACampaignPlayerController::RefreshCustom()
 		}
 		Custom.Works[Side] = CustomBattle::NumberOf(Army, TEXT("works"));
 	};
-	if (!Custom.bPicked && P.Places.Num() > 0)
+	// (the defence first, as the rules settle it: the attack's pick weighs whether the defence dug in)
+	auto PickMine = [&]()
 	{
-		Take(0, CustomBattle::Ask(Rules, TEXT("customArmy"), FString::Printf(TEXT("[%s,\"me\"]"), *CustomSpecJson(false))));
-		Custom.bPicked = true;
+		if (!Custom.bPicked && P.Places.Num() > 0)
+		{
+			Take(0, CustomBattle::Ask(Rules, TEXT("customArmy"), FString::Printf(TEXT("[%s,\"me\"]"), *CustomSpecJson(true))));
+			Custom.bPicked = true;
+		}
+	};
+	auto PickTheirs = [&]()
+	{
+		if (Custom.bTheyPick && P.Places.Num() > 0)
+		{
+			Take(1, CustomBattle::Ask(Rules, TEXT("customArmy"), FString::Printf(TEXT("[%s,\"them\"]"), *CustomSpecJson(true))));
+		}
+	};
+	if (bAttack)
+	{
+		PickTheirs();
+		PickMine();
 	}
-	if (Custom.bTheyPick && P.Places.Num() > 0)
+	else
 	{
-		Take(1, CustomBattle::Ask(Rules, TEXT("customArmy"), FString::Printf(TEXT("[%s,\"them\"]"), *CustomSpecJson(false))));
+		PickMine();
+		PickTheirs();
 	}
 
 	// The price list: what each side has of each, and the defence's works.
