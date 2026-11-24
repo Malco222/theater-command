@@ -24,11 +24,36 @@ import navyData from '../../data/campaign/navy.json';
 /** True where this campaign was opened with Units decide: a grand campaign whose start set the flag. */
 export const unitsDecide = (g: Game): boolean => g.flags.open === 1 && g.flags.unitsDecide === 1;
 
-/** Sets the switch. Only at setup, before the first month has been played; returns whether it was set. */
+/**
+ * Sets the switch. Only at setup, before the first month has been played; returns whether it was set. Set on a campaign
+ * whose research has already opened (startOpen ran without it), it lays the switch's own start list as startOpen would
+ * have (units.json startRows: Germany's Field radios, Sweden's and Norway's winter kit; DD 24 Nov 15:53Z, #2 form 'Where
+ * it goes'), and seeds the quality store again from those rows, so such a campaign starts as one opened with the switch
+ * and never falls back (#2 form Part 2 section 4). A team already set to one of those rows is freed, and its staff sets
+ * it to work again at its next month. Set off, the store goes with it; the rows stay, as the form allows for a flag
+ * cleared by hand.
+ */
 export function setUnitsDecide(g: Game, on: boolean): boolean {
   if (g.turn !== 1 || g.phase !== 0 || g.airReports.length || g.reports.length) return false;
-  if (on) g.flags.unitsDecide = 1;
-  else delete g.flags.unitsDecide;
+  delete g.qs;
+  if (!on) {
+    delete g.flags.unitsDecide;
+    return true;
+  }
+  g.flags.unitsDecide = 1;
+  // The same list as tech.ts openUnitsRows lays in startOpen. Research has opened, so every nation already has its
+  // tree, and there is nothing to create here.
+  if (g.flags['tech:open']) {
+    for (const [nat, ids] of Object.entries(UNITS.startRows)) {
+      const s = g.nations[nat]?.tech;
+      if (!s) continue;
+      for (const id of ids) {
+        if (!s.done.includes(id)) s.done.push(id);
+        s.work = s.work.filter((w) => w.id !== id);
+      }
+    }
+  }
+  qualityStore(g);
   return true;
 }
 
@@ -85,9 +110,11 @@ const seeded = <T extends string>(id: T): Way<T> => ({ id, by: 'start' });
 
 /**
  * A nation's army at the start (Part 2 section 2). train: its quality as the campaign opened, one rule over every
- * source of it (nations.json, the wider world's tables, world.ts's default). earned: the start's command (units.json:
- * 1 for every nation, SOV and FRA 0, ruling 15:53Z (5)) less the radios row's share where the row is held at the start,
- * so the start's c is the seed's (Germany 0.85 + 0.15). school: 0. way: lean.json's land column, by side.
+ * source of it (nations.json, the wider world's tables, world.ts's default). earned: the start's command by army, as
+ * ruled at DD 24 Nov 16:06Z on the historian's reading of 1939-41 (units.json earned.seed: Germany 1, the Soviet Union
+ * and France 0, Poland 0.1, Italy 0.25, Japan, Britain and the United States 0.5, and every army not yet read the range
+ * middle, 0.5), less the radios row's share where the row is held at the start, so the start's c is the seed's
+ * (Germany 0.85 + 0.15). school: 0. way: lean.json's land column, by side.
  */
 function landSeed(n: Nation): Land {
   const L = UNITS.land;
