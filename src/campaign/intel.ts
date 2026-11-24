@@ -25,7 +25,7 @@ import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH, shelved, spyOf, techById, workOf } from './tech';
 import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
-import { DOUBLES, SMALLER, WATCHERS, doublesOn, everyoneOn, huntersOn, ordersKnown, ordersOn, pruneOrders, watchersOn, type DoublesRules, type WatchersRules } from './secretwar';
+import { DOUBLES, NETWORK, SECRET_PARTS, SMALLER, WATCHERS, doublesOn, everyoneOn, huntersOn, networkOn, ordersKnown, ordersOn, pruneOrders, secretWarSettable, setSecretWar, watchersOn, type DoublesRules, type WatchersRules } from './secretwar';
 import { fieldOrder } from './air';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
@@ -484,6 +484,116 @@ export function retire(g: Game, nat: string, id: number): boolean {
   if (!a) return false;
   g.intel.agents.splice(g.intel.agents.indexOf(a), 1);
   note(g, a, a.reg, 'retire', `Agent ${a.name} is retired from the service.`, true);
+  return true;
+}
+
+// ---- A service in being (release 2) -----------------------------------------------------------------------
+// (The spies thread, 24 November 2026: Brian played and saw no spies. A grand campaign opened with an empty service,
+// the agents waited behind the SPIES door, and the enemy's were never on the map. With the switch 'sw:net' the player's
+// service opens the war with a few agents already at work, standing on the map from the first month.)
+
+/** The two camps of September 1939, and the League: the ones a country leans to count with them. */
+const campOf = (g: Game, nat: string): string | null => {
+  const n = g.nations[nat];
+  if (!n) return null;
+  return bloc(n) ?? (n.align === 'leaning_axis' ? 'axis' : n.align === 'leaning_allies' ? 'allies' : null);
+};
+/** A great power: one whose service the data sizes by name (agents.most). */
+const greatPower = (nat: string): boolean => nat !== '_default' && INTEL.agents.most[nat] !== undefined;
+
+/**
+ * The countries the player's service watches first as the war opens, each in its capital while it holds it: those at
+ * war with him, then the other camp's, then the great powers, the nearest capital first within each. Never an ally, a
+ * country with no capital of its own on the map, or one that takes no part yet.
+ */
+export function likeliestFoes(g: Game, nat: string): string[] {
+  const base = homeBase(g, nat);
+  if (base < 0) return [];
+  const from = g.regions[base], mine = campOf(g, nat);
+  const rank = (f: string): number => (atWar(g, nat, f) ? 4 : 0) + (mine !== null && campOf(g, f) !== null && campOf(g, f) !== mine ? 2 : 0) + (greatPower(f) ? 1 : 0);
+  const far = (f: string): number => { const c = g.regions[g.nations[f].capital]; return Math.hypot(c.x - from.x, c.y - from.y); };
+  return g.order
+    .filter((f) => {
+      const n = g.nations[f];
+      if (f === nat || !n?.alive || n.dormant || allied(g, f, nat)) return false;
+      const c = g.regions[n.capital];
+      return !!c && c.ctrl === f;
+    })
+    .sort((a, b) => rank(b) - rank(a) || far(a) - far(b) || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** Where the network's agents stand and what they do, before any is laid: the guard, the hunter if there is one, the watchers. */
+export function networkPlan(g: Game, nat: string): { reg: number; mission: Mission }[] {
+  const base = homeBase(g, nat);
+  if (base < 0 || !g.nations[nat]?.alive) return [];
+  const N = NETWORK();
+  const size = Math.max(0, Math.min(greatPower(nat) ? N.great : N.small, mostAgents(nat, g)));
+  if (!size) return [];
+  const out: { reg: number; mission: Mission }[] = [{ reg: base, mission: 'guard' }];
+  // The hunter: on the province of his front where the enemy's watchers are likeliest, the likeliest first and the
+  // lowest number among equals, with the spy hunters and their watchers on and an enemy at war with him; only in a
+  // network with room for a watcher abroad as well (a smaller country's two are a guard and a watcher).
+  if (size - out.length >= 2 && watchersOn(g) && g.order.some((f) => f !== nat && g.nations[f]?.alive && atWar(g, nat, f))) {
+    let best = -1, most = 0;
+    for (const [reg, w] of watchOdds(g, nat)) if (w > most || (w === most && reg < best)) { best = reg; most = w; }
+    if (best >= 0 && best !== base && g.regions[best].ctrl === nat) out.push({ reg: best, mission: 'hunt' });
+  }
+  for (const f of likeliestFoes(g, nat)) {
+    if (out.length >= size) break;
+    out.push({ reg: g.nations[f].capital, mission: 'watch' });
+  }
+  return out;
+}
+
+/**
+ * Lays the player's network as his campaign opens (the switch 'sw:net'), once: each agent is given a codename, is at work
+ * at once where it stands, and is entered in the service's file. Nothing is paid. Returns the agents laid.
+ */
+export function layNetwork(g: Game, nat: string | null = g.human): Agent[] {
+  if (!nat || !networkOn(g) || g.flags['sw:laid'] === 1 || !intelRules(g)) return [];
+  g.flags['sw:laid'] = 1;
+  g.flags['sw:from'] = g.intel.next; // (the network's first number: taken back with it, the numbers are given out again)
+  const laid: Agent[] = [];
+  for (const p of networkPlan(g, nat)) {
+    const id = g.intel.next++;
+    // (recruited before the war: never 'in training', which is a recruit's first month)
+    const a: Agent = { id, nat, name: codename(g, id, `net:${nat}:`), xp: 0, reg: p.reg, ready: g.turn, mission: p.mission, born: g.turn - INTEL.agents.train - 1, net: true };
+    g.intel.agents.push(a);
+    laid.push(a);
+    const r = g.regions[p.reg];
+    const work = p.mission === 'guard' ? 'standing guard' : p.mission === 'hunt' ? 'hunting enemy agents' : 'watching and reporting';
+    note(g, a, r.id, 'network', `Agent ${a.name} is in place ${inOrAt(r)}, ${work}.`, true);
+  }
+  return laid;
+}
+
+/** Takes back the network laid as the campaign opened (the options page, in its first month): its agents leave the service. */
+function liftNetwork(g: Game): void {
+  const gone = new Set(g.intel.agents.filter((a) => a.net).map((a) => a.name));
+  g.intel.agents = g.intel.agents.filter((a) => !a.net);
+  g.intel.notes = g.intel.notes.filter((n) => !(n.what === 'network' && gone.has(n.agent)));
+  // (with no agent recruited after it, the numbers the network took are given out again)
+  const from = g.flags['sw:from'];
+  if (from !== undefined && !g.intel.agents.some((a) => a.id >= from)) g.intel.next = from;
+  delete g.flags['sw:laid'];
+  delete g.flags['sw:from'];
+}
+
+/**
+ * (The options page, release 2.) Switches all of release 2's secret war on or off in a grand campaign's first month:
+ * the network the service opens with, the hunt for enemy agents and their watchers, every country's service at work,
+ * stolen orders and double agents. Off, the secret service is release 1's. False where it can no longer be switched.
+ */
+export function orderSecretWar(g: Game, on: boolean): boolean {
+  if (!secretWarSettable(g)) return false;
+  for (const part of SECRET_PARTS) setSecretWar(g, part, on);
+  if (on) layNetwork(g);
+  else {
+    liftNetwork(g);
+    // (nothing of the other side's is left on his ground, nor any order read or agent turned: the first month's end has not come)
+    delete g.intel.foes; delete g.intel.foeNext; delete g.intel.orders; delete g.intel.doubles; delete g.intel.doubleNext;
+    for (const a of g.intel.agents) { delete a.turned; delete a.turnedFor; if (a.mission === 'hunt' || a.mission === 'orders') a.mission = abroad(g, a) ? 'watch' : 'guard'; }
+  }
   return true;
 }
 

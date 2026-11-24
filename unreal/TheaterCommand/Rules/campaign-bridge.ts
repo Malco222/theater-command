@@ -92,7 +92,8 @@ import { guardMen, guardOf, garrisonOf, previewSally, salliers } from '../../../
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
-import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown } from '../../../src/campaign/intel';
+import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
+import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
@@ -310,6 +311,30 @@ function agentsOnMap(s: Game, up: boolean) {
         sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? '', nat: x.nat, corps: x.corps, divs: Math.round(x.divs) })),
       })),
       agentMarks: room.notes.filter((n) => n.what === 'caught' && n.turn === s.turn).map((n) => ({ region: n.reg, text: theWords(n.text) })),
+    };
+  } catch { return none; }
+}
+
+/**
+ * (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) The enemy agents his hunters have
+ * uncovered on his ground and not yet arrested or turned, as pieces on the map in their country's colours: the agent's
+ * number, whose it is, where it stands, whether it is a watcher, and the room's sentence for the pointer. A press on
+ * one opens THE SECRET SERVICE, where it is arrested or turned. `spiesWaiting` is the number on the SPIES door: those
+ * agents, and his own agents newly at work this month (none while his staff runs the secret service).
+ */
+function foesOnMap(s: Game) {
+  type Foe = { id: number; nat: string; region: number; watch: boolean; text: string };
+  const none = { foeAgents: [] as Foe[], spiesWaiting: 0 };
+  try {
+    const room = secretService(s);
+    if (!room) return none;
+    const found = room.found ?? [];
+    const fresh = room.agents.filter((a) => a.atWork && s.intel.agents.find((x) => x.id === a.id)?.ready === s.turn).length;
+    let staffed = false;
+    try { staffed = staffRunsDesk(s, 'spies'); } catch { staffed = false; }
+    return {
+      foeAgents: found.map((f): Foe => ({ id: f.id, nat: f.nat, region: f.reg, watch: f.watch, text: theWords(`${f.text}. ${f.then}`) })),
+      spiesWaiting: staffed ? 0 : found.length + fresh,
     };
   } catch { return none; }
 }
@@ -546,6 +571,7 @@ function drawView() {
     glimpsed: s.human ? s.regions.filter((r) => seen[r.id] === 1).map((r) => r.id) : [],
     // (Rulings 153 and 159.) His agents, each a piece on the map that he alone sees, with everything its card says; and where one of his was caught this month.
     ...agentsOnMap(s, up),
+    ...foesOnMap(s),
     // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
     weather: (() => {
       const w = weatherNow(s);
@@ -869,6 +895,10 @@ function drawView() {
     lorryShiftSet: logisticsSet(s, 'lorryShift'),
     wagonsSet: logisticsSet(s, 'wagons'),
     dumpsSet: logisticsSet(s, 'dumps'),
+    // (Release 2, the spies thread of 24 November 2026) The secret war's one switch as the options page shows it: whether
+    // any of release 2's spying is on in this campaign, and whether it can still be switched (its opening month only).
+    secretWar: (() => { try { return secretWarOn(s); } catch { return false; } })(),
+    secretWarCan: (() => { try { return secretWarSettable(s); } catch { return false; } })(),
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -1698,6 +1728,9 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   if (options?.view === 'grand' && options?.history && options.history !== 3) { try { dialCalls.order?.(g, options.history, true); } catch { /* no dial in these rules */ } }
   // The month the player took his seat, kept with the game (the chimneys of an idle country stand cold only from his second month).
   if (human) (g.flags as Record<string, number>).began = g.turn;
+  // (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) With the switch 'sw:net' the
+  // player's service opens the war with its network already at work, standing on the map from the first month.
+  if (human && (options?.view === 'grand' || options?.view === 'open')) layNetwork(g, human);
   // (Rules 84.3.3) The campaign FIRST COMMAND opened, marked as the browser marks it: the notes teach in any campaign
   // while they are on, and the Guide lists them by its months in this one.
   if (human && options?.first) (g.flags as Record<string, number>).firstCommand = 1;
@@ -4317,6 +4350,31 @@ function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[]
     const one = `${ruins[0].town.toUpperCase()} IS IN RUINS`;
     out.push({ k: 'page:repairs', t: ruins.length > 1 ? `${ruins.length} TOWNS IN RUINS` : one.length <= 34 ? one : 'A TOWN IS IN RUINS', tip: `${listNames(ruins.map((t) => `${t.town} (${t.pct}%)`))}: ${ruins.length > 1 ? 'they pay' : 'it pays'} that much less until repaired. Open DAMAGED TOWNS to repair them.` });
   }
+  // (Release 2, the spies thread of 24 November 2026: Brian played and saw no spies.) The secret service asks for him
+  // while an enemy agent his hunters uncovered is still at large, and in the month his network opens the war.
+  try {
+    const room = secretService(s);
+    const found = room?.found ?? [];
+    if (room && found.length) {
+      // ('a' or 'an' by the sound: an Italian watcher, a Ukrainian agent)
+      const aOrAn = (w: string): string => (/^[AEIOU]/i.test(w) && !/^(Uru|Ukr|Uni|Eu|Use|Usu)/i.test(w) ? 'an' : 'a');
+      const what = (f: (typeof found)[number]): string => `${s.nations[f.nat]?.adj ?? 'enemy'} ${f.watch ? 'watcher' : 'agent'} ${inOrAt(s.regions[f.reg])}`;
+      const watchers = found.filter((f) => f.watch).length;
+      out.push({
+        k: 'page:spies',
+        t: found.length === 1 ? (found[0].watch ? 'AN ENEMY WATCHER IS UNCOVERED' : 'AN ENEMY AGENT IS UNCOVERED') : `${found.length} ENEMY AGENTS ARE UNCOVERED`,
+        tip: `${upFirst(theWords(listNames(found.slice(0, 3).map((f) => `${aOrAn(what(f))} ${what(f)}`))))}${found.length > 3 ? ' and more' : ''}. ${watchers === found.length ? 'A watcher helps their side\'s attacks until arrested.' : watchers ? 'A saboteur strikes when their time comes, and a watcher helps their side\'s attacks, until arrested.' : 'A saboteur strikes when their time comes unless arrested.'} They stand on the map in their country\'s colours. Open THE SECRET SERVICE to arrest ${found.length === 1 ? 'them' : 'each'}${room.doubles ? ' or turn them' : ''}.`,
+      });
+    }
+    const laid = room ? room.agents.filter((a) => s.intel.agents.find((x) => x.id === a.id)?.net && a.atWork && s.intel.agents.find((x) => x.id === a.id)?.ready === s.turn) : [];
+    if (room && laid.length && s.turn === (s.flags.openFrom ?? 1)) {
+      const doing = (a: (typeof laid)[number]): string => `${a.name} ${a.mission === 'guard' ? 'on guard' : a.mission === 'hunt' ? 'hunting enemy agents' : 'watching'} ${inOrAt(s.regions[a.reg])}`;
+      out.push({
+        k: 'page:spies', t: 'YOUR SPIES ARE IN PLACE',
+        tip: `Your secret service has ${laid.length === 1 ? 'one agent' : `${inWords(laid.length)} agents`} in place: ${theWords(listNames(laid.map(doing)))}. They stand on the map, the figures with a newspaper: click one to see what they see and give them other work. Open THE SECRET SERVICE.`,
+      });
+    }
+  } catch { /* rules without the secret war */ }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
     out.push({
@@ -5965,6 +6023,17 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     note = nicknamesOn(s)
       ? 'Earned names are on: a corps that wins three hard fights is given a name by its own army, and the name goes on its flag.'
       : 'Earned names are off: no corps is given a new one, and none is shown on the flags. The names already earned are kept.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'secretwar') {
+    // (Release 2, the spies thread of 24 November 2026) The secret war, all of release 2's spying under one switch, in
+    // the campaign's opening month only.
+    ok = orderSecretWar(s, part[1] === 'on');
+    note = !ok
+      ? 'The secret war can be switched only in the campaign\'s first month.'
+      : secretWarOn(s)
+        ? 'The secret war is on: your service opens the war with agents at work on the map, hunts the enemy\'s agents on your ground, steals orders and can turn enemy agents, and every country at war with you spies on you.'
+        : 'The secret war is off: you recruit and send agents as before, and the enemy\'s saboteurs are only a chance each month.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'columns') {

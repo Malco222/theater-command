@@ -48,7 +48,7 @@ import { bargainOutputLoss, bargainRules, bargainsView, goodsOf, heldOf, replace
 import { LEGIONS, legionOffers, legionRules, legionsView, type LegionView } from '../legions';
 import { carried } from '../support';
 import { doublesOn } from '../secretwar';
-import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
+import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, layNetwork, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
@@ -8493,6 +8493,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   // How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of war.
   // (The staff goes to work when his first month opens. A game started with no depth is the full game.)
   if (grand && human && depth) setDepth(g, depth);
+  // A service in being (release 2, the switch 'sw:net'): the player's service opens the war with agents already at work.
+  if (grand && human) layNetwork(g, human);
   // The support teams (release 2, teams.ts): on in a grand campaign once release 2 opens them, or with ?teams.
   if (grand && (TEAMS_RELEASE || /[?&]teams(=|&|$)/.test(location.search))) setTeams(g, true);
   // Honours earned before the player took over are his to carry; their citations are old news.

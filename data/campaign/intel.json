@@ -237,6 +237,12 @@
       "lie": 0.3,
       "betray": 0.5,
       "home": 0.6
+    },
+    "network": {
+      "_about": "A SERVICE IN BEING (the spies thread, 24 November 2026, release 2: Brian played and saw no spies, because a grand campaign opened with none and they waited behind the SPIES door; flag 'sw:net', set for new grand campaigns with 'on'). The player's own service opens the war with agents already at work, standing on the map from the first month: 'great' for a great power (one named in agents.most), 'small' for any other country, never more than its service can run. They cost nothing and are at work at once. The first stands guard at home, in the capital. With the spy hunters and their watchers on and an enemy at war with him, the next HUNTS ENEMY AGENTS on the province of his front where the enemy's watchers are likeliest (intel.ts watchOdds). The rest WATCH abroad, one to a country, in the capitals of the countries likeliest to be his enemies: those at war with him first, then the other camp's, then the great powers, the nearest first (intel.ts likeliestFoes). Only ever for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. The options page can take the whole secret war back in the campaign's first month (secretwar.ts secretWarSettable), the network with it.",
+      "on": true,
+      "great": 4,
+      "small": 2
     }
   }
 }

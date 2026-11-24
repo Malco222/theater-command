@@ -1562,6 +1562,11 @@ export interface Agent {
    */
   turned?: number;
   turnedFor?: string;
+  /**
+   * (Release 2, the spies thread of 24 November 2026.) Set on an agent of the network the player's service opens the
+   * war with (intel.ts layNetwork), so that the options page can take the network back in the campaign's first month.
+   */
+  net?: boolean;
 }
 
 /**

@@ -64,6 +64,8 @@ describe('the switches', () => {
     INTEL.secret.everyone.on = false;
     INTEL.secret.doubles.on = false;
     INTEL.secret.watchers.on = false;
+    // (and the network the service opens with, the spies thread of 24 November 2026: tests/spies-network-r2.test.ts)
+    INTEL.secret.network.on = false;
     const g = free();
     expect(huntersOn(g) || ordersOn(g) || everyoneOn(g) || doublesOn(g) || watchersOn(g)).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('sw:'))).toBe(false);
