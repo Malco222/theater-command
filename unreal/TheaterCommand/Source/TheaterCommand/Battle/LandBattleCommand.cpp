@@ -23,6 +23,8 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "TheaterCommand.h"
 #include "UnrealClient.h"
@@ -1063,7 +1065,32 @@ void ALandBattle::GeneralView(double Real)
 		}
 	}
 	LandGeneralEye::Input& In = S.GeneralIn;
+	// (the Mac's check of his top view, -TheaterLandTopViewAt=<battle seconds>: pressed there, a still 4 s on (into the
+	// -TheaterLandScript folder, if one is given), pressed again 4 s later and a still of the view back as it was 4 s
+	// after that; each step's tilt and height in the log)
+	if (TopCheckAt < -1.0)
+	{
+		double At = -1.0;
+		TopCheckAt = FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTopViewAt="), At) ? At : -1.0;
+	}
+	if (TopCheckAt >= 0.0 && TopCheckStep < 4 && !G.bFilm && S.Battle >= TopCheckAt + 4.0 * TopCheckStep)
+	{
+		if (TopCheckStep == 0 || TopCheckStep == 2)
+		{
+			In.bTopView = true;
+		}
+		else
+		{
+			ScriptStill(TopCheckStep == 1 ? TEXT("top-view") : TEXT("top-view-back"));
+		}
+		UE_LOG(LogTheater, Display, TEXT("Land battle (top view check): step %d at %.1f s of battle: tilt %.1f degrees, top view %s, own tilt %s, the eye %.0f m over what it looks at"),
+			TopCheckStep, S.Battle, S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.GeneralEye.OwnTilt() ? TEXT("on") : TEXT("off"),
+			S.Pose.Eye.Z - S.Pose.Look.Z);
+		++TopCheckStep;
+	}
 	In.Turn += S.GeneralTurnHeld * 75.0 * Real;
+	// (Shift with W or S held: his own tilt, 50 degrees a second)
+	In.Tilt += S.GeneralTiltHeld * 50.0 * Real;
 	if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.EdgeAhead != 0.0 || In.SlideRight != 0.0 || In.SlideAhead != 0.0 || In.bGoTo)
 	{
 		In.bFollow = false;
@@ -1079,8 +1106,9 @@ void ALandBattle::GeneralView(double Real)
 		S.bEyeSwitched = false;
 	}
 	// (this frame's moves spent; the keys held stay held)
-	In.SlideRight = In.SlideAhead = In.Zoom = In.Turn = 0.0;
+	In.SlideRight = In.SlideAhead = In.Zoom = In.Turn = In.Tilt = 0.0;
 	In.bGoTo = false;
+	In.bTopView = false;
 	In.GoBlock = -1;
 }
 
@@ -1114,6 +1142,15 @@ void ALandBattle::GeneralDo(const FString& Word)
 		S.bEyeSwitched = S.bEyeSwitched || G.bFilm;
 		G.bFilm = false;
 		S.Eye.Ride(-1);
+	}
+	else if (Word == TEXT("topview"))
+	{
+		// (O or TOP VIEW: his view swings to look down on the field from about 100 m up; again, back as it was)
+		S.GeneralIn.bTopView = true;
+		if (!S.GeneralEye.TopView())
+		{
+			Say("TOP VIEW: O AGAIN GOES BACK. SHIFT+W OR S, OR OPTION AND TWO FINGERS, TILTS THE VIEW");
+		}
 	}
 	else if (Word.StartsWith(TEXT("follow:")))
 	{

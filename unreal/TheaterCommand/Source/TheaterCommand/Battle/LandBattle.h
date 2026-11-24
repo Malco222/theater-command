@@ -797,6 +797,10 @@ private:
 	/** Pressed through his pointer (the place on the screen), else given directly (off the screen). */
 	bool bScriptByHand = false;
 	int32 ScriptStills = 0;
+	/** "-TheaterLandTopViewAt=<battle seconds>" (the Mac's check of his top view, 24 November): when it is pressed (-1
+	 * none; -2 not yet read) and how far the check has gone. */
+	double TopCheckAt = -2.0;
+	int32 TopCheckStep = 0;
 	/** His units the walk has used, and where it set those it carried into the woods. */
 	TArray<int32> ScriptUsed;
 	TArray<FVector2D> ScriptTaken;

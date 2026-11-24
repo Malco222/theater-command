@@ -18,7 +18,10 @@
  * ground) slides about the field; the string's length is the zoom, from about 400 m up looking down on the whole
  * battle to a man's shoulder looking level along the ground, the view tilting up smoothly as it comes in; turning walks
  * the hawk round the point. Every move is eased, so a key held starts and stops softly and a slide or a pinch is never
- * a jump. Where the eye would stand in a hedge, a house or a tree, or among the stalks, it rises over it as an
+ * a jump. The player may also tilt the string himself (Brian, 24 November: "it's hard to move the angle of the camera
+ * to see a good troop movement from above"): his own tilt, from the automatic one up to almost straight down, is kept
+ * as he zooms; one press of the top view swings the view to look down from about 100 m up, a second press swings it
+ * back. Untouched, the view tilts with the zoom exactly as before. Where the eye would stand in a hedge, a house or a tree, or among the stalks, it rises over it as an
  * operator would stand up, and comes down again gently once past. Where it cannot climb in time it slows and waits at
  * the thing while it rises, as a man stops at a hedge and climbs it; near the ground it never stands under a crown or
  * eaves (it steps out from under first), and a tall thing near a low eye is stepped round. Only where it could not be
@@ -46,6 +49,13 @@ namespace LandGeneralEye
 		double Zoom = 0.0;
 		/** Degrees this frame, + turns the view to the right (clockwise seen from above), about the look-at. */
 		double Turn = 0.0;
+		/** Degrees this frame, + tilts the view further down toward looking straight down on the field, - back toward
+		 * the automatic tilt (Shift with W or S, Option with a two-finger slide or the middle drag): his own tilt, kept
+		 * as the zoom changes; tilted all the way back, the view tilts with the zoom again. */
+		double Tilt = 0.0;
+		/** The top view, one press (O, or TOP VIEW): the view swings to look almost straight down from about 100 m up
+		 * (or from as high as it already was); a second press swings it back to the tilt and the zoom it had. */
+		bool bTopView = false;
 		/** Glide to a field point (a double click on the map). */
 		bool bGoTo = false;
 		Vec GoTo;
@@ -118,6 +128,18 @@ namespace LandGeneralEye
 		double Climb = 2.5;
 		/** The longest the view brakes at a thing while the lift climbs, seconds. */
 		double BrakeLongest = 3.0;
+		/** His own tilt (Input::Tilt, the top view): the steepest it goes, degrees (almost straight down; never quite, so
+		 * the heading keeps its meaning); how softly it meets the automatic tilt, its floor, degrees; the zoom under
+		 * which it is handed back to the automatic tilt toward a man's shoulder (0..1); how fast it eases (a spring's
+		 * rate); and its fastest swing and hardest push, degrees a second and a second squared (a swing to the top view
+		 * held well under the 1,200 degrees a second squared the view is held to). */
+		double TiltMost = 85.0, TiltSoft = 3.0, TiltOwnFrom = 0.2, TiltEase = 6.0, TiltFastest = 70.0, TiltPush = 250.0;
+		/** With his own tilt set, the zoom's fastest swing and hardest push too, shares of the whole zoom a second and a
+		 * second squared: the top view's climb from a man's shoulder to 100 m, two thirds of the zoom in one press, takes
+		 * about two seconds and is not a jolt. */
+		double ZoomFastest = 0.5, ZoomPush = 1.0;
+		/** The top view: its tilt, degrees, and the least height of the eye over the look-at there, metres. */
+		double TopTilt = 80.0, TopUp = 100.0;
 	};
 
 	class Eye
@@ -147,7 +169,12 @@ namespace LandGeneralEye
 		int BrakedFrames() const { return Braked; }
 		/** How many places the last frame asked about (for the cloud test). */
 		int AskedNow() const { return Asked; }
-		/** The eye's height over the look-at at a zoom (0..1). */
+		/** Whether his own tilt is set (else the view tilts with the zoom), whether the top view is on (TOP VIEW lit),
+		 * and the tilt down now, degrees. */
+		bool OwnTilt() const { return bOwnTilt; }
+		bool TopView() const { return bTop; }
+		double TiltDegrees() const;
+		/** The eye's height over the look-at at a zoom (0..1), at the automatic tilt. */
 		double UpAt(double Zoom) const;
 		/** Where a block's men or vehicles stand on average at a battle time (those not fallen or gone); false if none. */
 		bool BlockAt(int Block, double Battle, double& OutX, double& OutY) const;
@@ -182,6 +209,12 @@ namespace LandGeneralEye
 		mutable int Asked = 0;
 		/** How long the lift has been shut in under a thing, seconds. */
 		double StuckFor = 0.0;
+		/** His own tilt, radians: now, wanted and its swing (the tilt the view takes from it is TiltFor's); whether it
+		 * is set, whether it is on its way back to the automatic tilt (switched off once there), and the top view with
+		 * the zoom and the tilt a second press goes back to. */
+		double Tl = 0.0, WantTl = 0.0, SwingTl = 0.0, TlGoal = 0.0;
+		bool bOwnTilt = false, bToAuto = false, bTop = false, bTopWasOwn = false;
+		double TopWasTl = 0.0, TopWasS = 1.0;
 		/** Each block's tracks (the live feed adds tracks: rebuilt when the count changes). */
 		std::vector<std::pair<int, std::vector<int>>> ByBlock;
 		size_t TracksSeen = 0;
@@ -224,5 +257,16 @@ namespace LandGeneralEye
 		double ArmAt(double Zoom) const;
 		double TiltAt(double Zoom) const;
 		double AimAt(double Zoom) const;
+		/** The tilt his own tilt Own gives at a zoom: never shallower than the automatic tilt there (met softly); the
+		 * most his tilt is let ease to at a zoom (handed back to the automatic tilt toward the nearest zoom); the tilt the
+		 * view takes now (his own, or the automatic); the eye's height over the look-at at a zoom and his own tilt; and
+		 * the zoom whose eye stands TopUp over the look-at at the top view's tilt. */
+		double TiltOwn(double Zoom, double Own) const;
+		double TiltMostAt(double Zoom) const;
+		double TiltFor(double Zoom, double Own) const { return bOwnTilt ? TiltOwn(Zoom, Own) : TiltAt(Zoom); }
+		double UpOwn(double Zoom, double Own) const;
+		double TopZoom() const;
+		/** His tilt this frame: the top view pressed, his tilt keys or slide, the way back to the automatic tilt. */
+		void TiltWish(const Input& In);
 	};
 }
