@@ -1378,6 +1378,17 @@ private:
 	/** Where every corps in hand is the garrison of its town: the sentence that says so and how it can be moved. Empty otherwise. */
 	FString GarrisonSays() const;
 	/**
+	 * (Release 2, Brian, 24 November 2026: "if a unit is dug in and i click them to attack and move I want them to over
+	 * ride their orders insted of me having to press a button".) True where the garrison in hand may come out of its
+	 * town (TAKE THE FIELD is offered for every corps in hand) and could reach that place from the open country this
+	 * month (the rules' reach for a garrison is from there): an order to it brings them out first, with no press.
+	 */
+	bool ComesOutTo(int32 RegionId) const;
+	/** True where the garrison in hand may come out of its town and could go somewhere this month once out. */
+	bool ComesOut() const;
+	/** Brings the garrison in hand out of its town, as TAKE THE FIELD does, and sets the hand out again. True where none of it is left inside. */
+	bool BringOutOfTown();
+	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have
 	 * no plan to offer (no enemy army seen there, or it is next door already).

@@ -63,7 +63,7 @@ import { FIELD, fieldRepairView as fieldRepairViewOf, fieldRules as fieldRulesOf
 import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
-import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { SIEGE, apOutOfTown, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
 import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
@@ -1036,6 +1036,21 @@ export function whyNotLeaveTown(g: Game, c: Corps): string | null {
 export function orderTakeField(g: Game, c: Corps): boolean {
   return whyNotLeaveTown(g, c) === null && takeField(g, c);
 }
+
+/**
+ * Where a corps of the player's garrison could go this month if it came out of its town first (release 2, Brian, 24
+ * November 2026: "if a unit is dug in and i click them to attack and move I want them to over ride their orders
+ * insted of me having to press a button"). The 3D game sends such a corps straight out of the town where it is
+ * ordered to march or attack: this is its reach from the open country of its province, with the move that coming
+ * out costs. Empty where it may not come out (shut in by a siege, no room outside, or not the player's to order).
+ */
+export function reachOutOfTown(g: Game, c: Corps): Map<number, Reach> {
+  if (c.town === undefined || whyNotLeaveTown(g, c) !== null) return new Map();
+  return reach(g, { ...c, town: undefined, ap: apOutOfTown(g, c) });
+}
+
+/** The moves a corps of the player's would have for an order this month: a garrison that may come out has what it keeps once out. */
+export const apForOrders = (g: Game, c: Corps): number => (c.town !== undefined && whyNotLeaveTown(g, c) === null ? apOutOfTown(g, c) : c.ap);
 
 /**
  * The player's corps round a town that could go into an assault this month. A town is assaulted once a month, and
