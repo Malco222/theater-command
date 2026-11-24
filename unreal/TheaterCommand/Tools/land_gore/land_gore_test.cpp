@@ -14,27 +14,33 @@
 //         falls, from their first frame and their last, along the line from it to the limb's joint), and every man
 //         standing or running has one from his side; none falls so that his limbs move less far away than another fall
 //         he may take would move them, up to half a metre (so where none from his side does, the best of all he may
-//         take); no limb off a man standing or running moves toward the burst (or the gun) as played, from his pose as
-//         struck to rest (a note under half a metre: his pose as struck is not the fall's first frame; kneeling or in
-//         cover a note, the twins' kneel falls hold none from his right); no man thrown has a limb or his body move
-//         toward it; only a field gun's or a howitzer's shell (w "gun", its block's cal not "light") throws him
-//         (die_blast_*, kind thrown); a man lying is gored only by such a shell bursting on him, in the throw from
-//         under him (die_blast_d); counted by side. Here, in a second battle of 384 men standing, running, kneeling and
-//         lying, killed by a gun, a tank or a mortar 0.5 to 3.2 m from the burst all round, in a third of 240 so killed
-//         by a shell bursting 0.6 m from them, fired by a gun of their own 400 m off all round (a howitzer's, a light
-//         gun's, a tank's or a mortar's), and in the band's battle: every twin in the twins folder with its own file
-//         beside it, 210 men each, standing, running or kneeling, killed by a howitzer's shell, a light gun's, a tank's,
-//         a mortar's or a grenade with the burst 1.6 to 2.4 m off, or the gun where it burst on him, 31 to 49 degrees
-//         round on his left or his right of his nose (the verifier of 35ffc951: there the falls from the front flung a
-//         limb toward it). The off lines and the men not gored print digests of their falls and skins, to be
-//         byte-identical before and after a change to the gore falls that does not change who is gored.
+//         take but those from the side opposite); none falls in one from the side opposite (front and behind, left and
+//         right) where his stance's gore falls hold one from his side he may take (the verifier of f6f8b75c: it throws
+//         him toward the burst); no limb off a man standing or running moves toward the burst (or the gun) as played,
+//         from his pose as struck to rest (a note under half a metre: his pose as struck is not the fall's first frame;
+//         kneeling or in cover a note, the twins' kneel falls hold none from his right), nor his body (his pelvis) more
+//         than 0.1 m where another fall he may take moves it away (kneeling or in cover a note); no man thrown has a
+//         limb or his body move toward it; only a field gun's or a howitzer's shell (w "gun", its block's cal not
+//         "light") throws him (die_blast_*, kind thrown); a man lying is gored only by such a shell bursting on him, in
+//         the throw from under him (die_blast_d); counted by side. Here, in a second battle of 384 men standing,
+//         running, kneeling and lying, killed by a gun, a tank or a mortar 0.5 to 3.2 m from the burst all round, in a
+//         third of 240 so killed by a shell bursting 0.6 m from them, fired by a gun of their own 400 m off all round
+//         (a howitzer's, a light gun's, a tank's or a mortar's), and in the band's battle: every twin in the twins
+//         folder with its own file beside it, 210 men each, standing, running or kneeling, killed by a howitzer's
+//         shell, a light gun's, a tank's, a mortar's or a grenade with the burst 1.6 to 2.4 m off, or the gun where it
+//         burst on him, 31 to 49 degrees round on his left or his right of his nose (the verifier of 35ffc951: there
+//         the falls from the front flung a limb toward it). The off lines and the men not gored print digests of their
+//         falls and skins, to be byte-identical before and after a change to the gore falls that does not change who
+//         is gored.
 //   sweep every twin's gore falls as the crowd gives a gored man them (LandMen::GoreFalls, ChooseFall's own rule):
 //         standing, running, kneeling and in cover; a field gun's or a howitzer's shell, or a light gun's, a tank's, a
 //         mortar's or a grenade's (the falls given differ only so); the burst 1, 1.5, 2, 2.5 or 3 m off, or on him with
 //         his gun 25 or 400 m off; every 3 degrees all round him. Each fall given one of his stance's he may take; only
 //         from his side wherever one from his side moves every limb half a metre away; none moving a limb less far
-//         away than another he may take moves every limb, up to half a metre; and no limb off a man standing or
-//         running moving toward the burst or the gun (the least printed). Kneeling or in cover a note.
+//         away than another he may take moves every limb, up to half a metre (where one from his side, none from the
+//         side opposite weighed); none from the side opposite where one from his side he may take; no limb off a man
+//         standing or running moving toward the burst or the gun (the least printed); and no fall given him moving his
+//         body toward it more than 0.01 m where another he may take moves it away. Kneeling or in cover a note.
 //   same  a second crowd gores the same men with the same falls
 //   back  a replay from the start gives every man his own file again; played on, the same men are gored again
 // With an out folder it also paints gore_falls.ppm: six gored men from the side, each from the hit to rest in six steps.
@@ -571,6 +577,13 @@ namespace
 		int NoneLimbs = 0;               // of those, the limbs off of the men with no fall from their side
 		double NoneLeast = 1e9;
 		int Bodies = 0, BodyToward = 0;  // those men's pelvises; moving toward the burst (a note)
+		int Opposite = 0;                // of those with a fall from their side he may take, in one from the side opposite
+		// (the pelvises of those men standing or running; of them moving toward the burst more than BodySlack where another
+		// fall he may take moves it away; the least moved away. Kneeling or in cover the same, a note, and those toward)
+		int UpBodies = 0, UpBodyWorse = 0;
+		double UpBodyLeast = 1e9;
+		int LowBodies = 0, LowBodyToward = 0, LowBodyWorse = 0;
+		double LowBodyLeast = 1e9;
 		int ThrownRead = 0, ThrownToward = 0; // those men thrown; of them a limb or his body moving toward the burst
 		int GunGored = 0, GunThrown = 0; // the gored men of a shell that may throw (a gun's not light), and of them thrown
 		int OtherThrown = 0;             // thrown by another's (a light gun's, a tank's, a mortar's)
@@ -588,12 +601,14 @@ namespace
 
 	/** A gore fall as the test reads it from the twin: its kind, its side, whether it is the big throw, and each limb it
 	 * takes off (its limb_off events'): the limb's joint, its bone's head, in his own axes on the fall's first frame and
-	 * on its last. */
+	 * on its last; and his body, his pelvis's head, so. */
 	struct FallRead
 	{
 		std::string Kind, Clip, From;
 		bool bThrow = false;
 		std::vector<std::pair<Vec3, Vec3>> Limbs;
+		bool bBody = false;
+		std::pair<Vec3, Vec3> Body;
 	};
 
 	/** His stance's gore falls as the test reads them (none where the twin has no falls for that stance). */
@@ -628,6 +643,13 @@ namespace
 						const Vec3 H = Tw.Bones[static_cast<size_t>(B)].Head;
 						F.Limbs.push_back({ A0[B].Point(H), A1[B].Point(H) });
 					}
+					const int Pv = Tw.BoneIndex("pelvis");
+					if (Pv >= 0)
+					{
+						const Vec3 H = Tw.Bones[static_cast<size_t>(Pv)].Head;
+						F.bBody = true;
+						F.Body = { A0[Pv].Point(H), A1[Pv].Point(H) };
+					}
 				}
 				Out.push_back(F);
 			}
@@ -643,27 +665,48 @@ namespace
 		return Least;
 	}
 
+	/** How far the fall moves his body (his pelvis) away from a point at X, Y in his own axes (m; less than 0 toward it). */
+	double BodyAway(const FallRead& F, double X, double Y) { return F.bBody ? Away(F.Body.first, F.Body.second, X, Y) : 1e9; }
+
 	/** Whether a gored man may take the fall (the test's own reading): any not a throw; a throw only from a field gun's or
 	 * a howitzer's shell, and only from his side. */
 	bool MayTakeRead(const FallRead& F, bool bBig, const std::string& Side) { return !F.bThrow || (bBig && F.From == Side); }
 
+	/** Whether a fall's side (gore_from) is the one opposite Side: front and behind, left and right (under opposite none). */
+	bool OppositeRead(const std::string& From, const std::string& Side)
+	{
+		return (Side == "front" && From == "behind") || (Side == "behind" && From == "front") || (Side == "left" && From == "right") || (Side == "right" && From == "left");
+	}
+
 	/** What his falls do at a point in his own axes: the farthest the falls he may take from his side move their every
-	 * limb away from it (-1e9 where none), and the farthest any he may take does. */
-	void BestAway(const std::vector<FallRead>& Falls, bool bBig, const std::string& Side, double X, double Y, double& OutSide, double& OutAll)
+	 * limb away from it (-1e9 where none), and the farthest any he may take does, but where he may take one from his side
+	 * none from the side opposite (it throws him toward the point: the verifier of f6f8b75c). OutBody: the farthest any he
+	 * may take, from whatever side, moves his body away from it. */
+	void BestAway(const std::vector<FallRead>& Falls, bool bBig, const std::string& Side, double X, double Y, double& OutSide, double& OutAll, double* OutBody = nullptr)
 	{
 		OutSide = OutAll = -1e9;
+		double Body = -1e9;
+		bool bFromSide = false;
+		for (const FallRead& F : Falls) bFromSide = bFromSide || (MayTakeRead(F, bBig, Side) && F.From == Side);
 		for (const FallRead& F : Falls)
 		{
 			if (!MayTakeRead(F, bBig, Side)) continue;
+			Body = std::max(Body, BodyAway(F, X, Y));
+			if (bFromSide && OppositeRead(F.From, Side)) continue;
 			const double G = LeastAway(F, X, Y);
 			OutAll = std::max(OutAll, G);
 			if (F.From == Side) OutSide = std::max(OutSide, G);
 		}
+		if (OutBody) *OutBody = Body;
 	}
 
 	/** The test reads where he stood and faced from his track at the round as the crowd does, but in its own sums: its
 	 * reading of how far a fall moves his limbs away is allowed this much either way (m). */
 	constexpr double Slack = 0.01;
+
+	/** How far a gored man's body (his pelvis) may move toward the burst (or his gun) where another fall he may take
+	 * moves it away, before it fails (m): as played his pose as struck is not his fall's first frame. */
+	constexpr double BodySlack = 0.1;
 
 	/** Each gored man's side, fall and limbs as the test reads them (bNotes: a line for each limb under half a metre away
 	 * that is no failure, and each body toward the burst; the failures' lines always). */
@@ -718,8 +761,8 @@ namespace
 			const double DX = PX - X, DY = PY - Y, Sf = std::sin(F), Cf = std::cos(F);
 			const double OwnX = DX * Sf + DY * Cf, OwnY = DX * Cf - DY * Sf;
 			const std::vector<FallRead> Falls = ReadFalls(Tw, In.FallStance);
-			double SideBest = -1e9, AllBest = -1e9, Taken = 1e9;
-			BestAway(Falls, bBig, Side, OwnX, OwnY, SideBest, AllBest);
+			double SideBest = -1e9, AllBest = -1e9, BodyBest = -1e9, Taken = 1e9;
+			BestAway(Falls, bBig, Side, OwnX, OwnY, SideBest, AllBest, &BodyBest);
 			for (const FallRead& Fr : Falls) if (Fr.Clip == In.FallClip) Taken = std::min(Taken, LeastAway(Fr, OwnX, OwnY));
 			const bool bOwnSide = GoreFromOf(Tw, In.FallClip) == Side;
 			if (!bThere)
@@ -739,6 +782,12 @@ namespace
 				++Out.OffSide;
 				std::printf("     off side: %s %s (%s, %s, %s): one from his side he may take moves every limb %.2f m away\n", In.FileArmy.c_str(), In.FallClip.c_str(),
 					In.FallStance.c_str(), Men[I].W.c_str(), Side.c_str(), SideBest);
+			}
+			if (bThere && OppositeRead(GoreFromOf(Tw, In.FallClip), Side))
+			{
+				++Out.Opposite;
+				std::printf("     opposite: %s %s (%s, %s, %s): a fall from the side opposite, where his stance's gore falls hold one from his side he may take\n",
+					In.FileArmy.c_str(), In.FallClip.c_str(), In.FallStance.c_str(), Men[I].W.c_str(), Side.c_str());
 			}
 			if (Taken < std::min(0.5, AllBest) - Slack)
 			{
@@ -796,7 +845,27 @@ namespace
 				{
 					++Out.Bodies;
 					Out.BodyToward += Gain > 0.0 ? 0 : 1;
-					if (bNotes && Gain <= 0.0) std::printf("     note: %s his body moved %.2f m toward %s (the fall's own way)\n", Where, -Gain, What);
+					// (standing or running, his body never toward it more than BodySlack where another fall he may take moves
+					// it away; kneeling or in cover a note, the twins' kneel falls hold none from his right)
+					const bool bWorse = Gain < -BodySlack && BodyBest >= 0.0;
+					if (bUp)
+					{
+						++Out.UpBodies;
+						Out.UpBodyLeast = std::min(Out.UpBodyLeast, Gain);
+						if (bWorse)
+						{
+							++Out.UpBodyWorse;
+							std::printf("     body toward: %s his body moved %.2f m toward %s where another fall he may take moves it %.2f m away\n", Where, -Gain, What, BodyBest);
+						}
+					}
+					else
+					{
+						++Out.LowBodies;
+						Out.LowBodyLeast = std::min(Out.LowBodyLeast, Gain);
+						Out.LowBodyToward += Gain > 0.0 ? 0 : 1;
+						Out.LowBodyWorse += bWorse ? 1 : 0;
+					}
+					if (bNotes && Gain <= 0.0 && !(bUp && bWorse)) std::printf("     note: %s his body moved %.2f m toward %s (the fall's own way)\n", Where, -Gain, What);
 				}
 			}
 			if (bThrown)
@@ -830,6 +899,10 @@ namespace
 				Label, KV.second, KV.first.c_str());
 		if (S.NoneLimbs)
 			std::printf("     %s: of those men's %d limbs off, the least moved away from the burst %.2f m\n", Label, S.NoneLimbs, S.NoneLeast);
+		if (S.LowBodies)
+			std::printf("     note: %s: kneeling or in cover (the twins' kneel falls hold none from his right, and from his left only a throw), %d bodies read, %d "
+				"moved toward the burst (or the gun), %d of them more than %.1f m where another fall he may take moves it away; the most %.2f m toward\n", Label,
+				S.LowBodies, S.LowBodyToward, S.LowBodyWorse, BodySlack, S.LowBodyLeast < 0.0 ? -S.LowBodyLeast : 0.0);
 	}
 }
 
@@ -1010,13 +1083,25 @@ int main(int Argc, char** Argv)
 			+ "a fall from its side (gore_from) where his stance's gore falls hold one he may take that moves every limb half a metre away from it (the test's reading, "
 			+ "from the falls' first frames and last), and every man standing or running has one from his side (" + std::to_string(Sd.Read) + " read, "
 			+ std::to_string(Sd.OffSide + Sd.NoneUp) + " not)");
-		Check(Sd.Worse == 0, L + ": no gored man read falls so that his limbs move less far away than another fall he may take would move them, up to half a metre "
-			+ "(the test's reading, from the falls' first frames and last; " + std::to_string(Sd.Worse) + " so)");
+		Check(Sd.Worse == 0, L + ": no gored man read falls so that his limbs move less far away than another fall he may take would move them, up to half a metre, "
+			+ "but where his stance's gore falls hold one from his side none from the side opposite (the test's reading, from the falls' first frames and last; "
+			+ std::to_string(Sd.Worse) + " so)");
+		Check(Sd.Opposite == 0, L + ": no gored man read falls in a fall from the side opposite the burst's (front and behind, left and right) where his stance's "
+			+ "gore falls hold one from its side he may take (" + std::to_string(Sd.Opposite) + " so)");
 		char Least[64];
 		std::snprintf(Least, sizeof(Least), "%.2f", Sd.Limbs ? Sd.Least : 0.0);
 		Check(Sd.Limbs > 0 && Sd.Toward == 0, L + ": no limb off those men standing or running moves toward the burst (or the gun), along the line from it to its joint ("
 			+ std::to_string(Sd.Limbs) + " limbs, " + std::to_string(Sd.Toward) + " toward; the least moved " + Least + " m away, " + std::to_string(Sd.Short)
 			+ " under half a metre)");
+		{
+			char Most[64];
+			std::snprintf(Most, sizeof(Most), "%.2f", Sd.UpBodies && Sd.UpBodyLeast < 0.0 ? -Sd.UpBodyLeast : 0.0);
+			char Tol[16];
+			std::snprintf(Tol, sizeof(Tol), "%.1f", BodySlack);
+			Check(Sd.UpBodyWorse == 0, L + ": no body (pelvis) of those men standing or running moves toward the burst (or the gun) more than " + Tol + " m where "
+				+ "another fall he may take moves it away (the test's reading of the falls; " + std::to_string(Sd.UpBodies) + " bodies, " + std::to_string(Sd.UpBodyWorse)
+				+ " so; the most any moved toward " + Most + " m)");
+		}
 		Check(Sd.ThrownToward == 0, L + ": no man of those thrown has a limb or his body move toward the burst (or the gun) (" + std::to_string(Sd.ThrownRead) + " thrown, "
 			+ std::to_string(Sd.ThrownToward) + " so)");
 		Check(Sd.OtherThrown == 0, L + ": only a field gun's or a howitzer's shell throws a gored man (die_blast_*; " + std::to_string(Sd.OtherThrown) + " by another)");
@@ -1175,8 +1260,13 @@ int main(int Argc, char** Argv)
 			double Least = 1e9;
 			std::string Where;
 		};
-		int Given = 0, Cells = 0, NotMay = 0, OffSide = 0, Worse = 0, Wide = 0, WideOff = 0, BandWide = 0;
+		int Given = 0, Cells = 0, NotMay = 0, OffSide = 0, Worse = 0, Wide = 0, WideOff = 0, BandWide = 0, Opposite = 0;
 		Tally Up, Low, Band;
+		// (his body, his pelvis: standing or running, cells given a fall that moves it toward the burst or the gun more than
+		// Slack where another he may take moves it away; kneeling or in cover, a note, cells toward at all and so)
+		int UpBodyWorse = 0, LowBodyToward = 0, LowBodyWorse = 0;
+		double UpBodyLeast = 1e9, LowBodyLeast = 1e9;
+		std::string UpBodyWhere, LowBodyWhere;
 		std::map<std::string, std::pair<Tally, Tally>> ByTwin;
 		// (the burst 1 to 3 m off, by where it fell; one 0.6 m off, on him, by his gun's side, his gun 25 or 400 m off)
 		const double Places[] = { 1.0, 1.5, 2.0, 2.5, 3.0, 25.0, 400.0 };
@@ -1202,14 +1292,14 @@ int main(int Argc, char** Argv)
 							Strike.Y = Far * std::sin(Deg * 3.14159265358979 / 180.0);
 							Strike.bBig = bBig;
 							const std::vector<std::pair<std::string, std::string>> Falls2 = GoreFalls(Tw, Strike);
-							double SideBest = -1e9, AllBest = -1e9;
-							BestAway(Falls, bBig, Strike.Side, Strike.X, Strike.Y, SideBest, AllBest);
+							double SideBest = -1e9, AllBest = -1e9, BodyBest = -1e9;
+							BestAway(Falls, bBig, Strike.Side, Strike.X, Strike.Y, SideBest, AllBest, &BodyBest);
 							const bool bInBand = std::abs(Deg) >= 30 && std::abs(Deg) <= 50 && bUp;
 							++Cells;
 							if (SideBest > -1e9 && SideBest < 0.5) ++Wide;
-							bool bOther = false;
-							double Least = 1e9;
-							std::string LeastClip;
+							bool bOther = false, bBodyToward = false, bBodyWorse = false;
+							double Least = 1e9, BodyLeast = 1e9;
+							std::string LeastClip, BodyClip;
 							if (Falls2.empty()) ++NotMay;
 							for (const auto& Fall : Falls2)
 							{
@@ -1219,7 +1309,12 @@ int main(int Argc, char** Argv)
 								if (!Fr || !MayTakeRead(*Fr, bBig, Strike.Side)) { ++NotMay; continue; }
 								const double G = LeastAway(*Fr, Strike.X, Strike.Y);
 								if (SideBest >= 0.5 && Fr->From != Strike.Side) ++OffSide;
+								if (SideBest > -1e9 && OppositeRead(Fr->From, Strike.Side)) ++Opposite;
 								if (G < std::min(0.5, AllBest) - 1e-9) ++Worse;
+								const double Bd = BodyAway(*Fr, Strike.X, Strike.Y);
+								if (Bd < BodyLeast) { BodyLeast = Bd; BodyClip = Fr->Clip; }
+								bBodyToward = bBodyToward || Bd < 0.0;
+								bBodyWorse = bBodyWorse || (Bd < -Slack && BodyBest >= 0.0);
 								bOther = bOther || Fr->From != Strike.Side;
 								if (G < Least) { Least = G; LeastClip = Fr->Clip; }
 							}
@@ -1236,6 +1331,19 @@ int main(int Argc, char** Argv)
 								Ty->Toward += Least < 0.0 ? 1 : 0;
 								Ty->Short += Least < 0.5 ? 1 : 0;
 								if (Least < Ty->Least) { Ty->Least = Least; Ty->Where = Where; }
+							}
+							std::snprintf(Where, sizeof(Where), "%s %s, %s, %s %.1f m %+d deg, %s", KV.first.c_str(), St, bBig ? "a field gun's or a howitzer's" : "another's",
+								Far > 3.5 ? "his gun" : "the burst", Far, Deg, BodyClip.c_str());
+							if (bUp)
+							{
+								UpBodyWorse += bBodyWorse ? 1 : 0;
+								if (BodyLeast < UpBodyLeast) { UpBodyLeast = BodyLeast; UpBodyWhere = Where; }
+							}
+							else
+							{
+								LowBodyToward += bBodyToward ? 1 : 0;
+								LowBodyWorse += bBodyWorse ? 1 : 0;
+								if (BodyLeast < LowBodyLeast) { LowBodyLeast = BodyLeast; LowBodyWhere = Where; }
 							}
 						}
 					}
@@ -1256,15 +1364,24 @@ int main(int Argc, char** Argv)
 		std::printf("     sweep: kneeling or in cover (a note: the twins' kneel falls hold none from his right, and from his left only a throw), the least a limb moves away "
 			"%.2f m (%s), %d of %d cells toward, %d under 0.5 m\n", Low.Least, Low.Where.c_str(), Low.Toward,
 			Low.Cells, Low.Short);
+		std::printf("     sweep: his body (his pelvis), standing or running: the least it moves away %.2f m (%s); kneeling or in cover (a note) %.2f m (%s), %d of %d "
+			"cells given a fall that moves it toward the burst or the gun, %d of them more than %.2f m where another he may take moves it away\n", UpBodyLeast,
+			UpBodyWhere.c_str(), LowBodyLeast, LowBodyWhere.c_str(), LowBodyToward, Low.Cells, LowBodyWorse, Slack);
 		Check(Cells > 0 && NotMay == 0, "sweep: every fall given one of his stance's he may take (no throw but a field gun's or a howitzer's, none from another side), "
 			"never none (" + std::to_string(NotMay) + " not)");
 		Check(OffSide == 0, "sweep: given only falls from his side wherever one from his side he may take moves every limb half a metre away from the burst or the gun ("
 			+ std::to_string(OffSide) + " not)");
-		Check(Worse == 0, "sweep: no fall given moves a limb less far away than another he may take moves every limb, up to half a metre (" + std::to_string(Worse) + " so)");
+		Check(Worse == 0, "sweep: no fall given moves a limb less far away than another he may take moves every limb, up to half a metre, but where one from his side "
+			"he may take none from the side opposite (" + std::to_string(Worse) + " so)");
+		Check(Opposite == 0, "sweep: never a fall given from the side opposite the burst's or the gun's (front and behind, left and right) where one from its side he "
+			"may take (" + std::to_string(Opposite) + " so)");
 		char Least[256];
 		std::snprintf(Least, sizeof(Least), "%.2f m (%s)", Up.Least, Up.Where.c_str());
 		Check(Up.Cells > 0 && Up.Toward == 0, "sweep: no limb off a man standing or running moves toward the burst or the gun (" + std::to_string(Up.Cells) + " cells, "
 			+ std::to_string(Up.Toward) + " toward; the least a limb moves away " + Least + "; " + std::to_string(Up.Short) + " cells under 0.5 m)");
+		std::snprintf(Least, sizeof(Least), "%.2f m (%s)", UpBodyLeast, UpBodyWhere.c_str());
+		Check(UpBodyWorse == 0, "sweep: no fall given a man standing or running moves his body (his pelvis) toward the burst or the gun more than 0.01 m where "
+			"another he may take moves it away (" + std::to_string(UpBodyWorse) + " cells so; the least his body moves away " + Least + ")");
 	}
 
 	// ---- The picture: six gored men, each in his own fall, from the side.

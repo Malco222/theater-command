@@ -411,8 +411,10 @@ namespace LandMen
 	 * is not a throw (kind thrown, or any die_blast_*), a throw only where bBig and (bAway) from his side. Of them the
 	 * ones from his side (gore_from), where any; where he is thrown away from a point, of those the falls whose every
 	 * limb moves half a metre or more away from it (along the line from it to the limb's joint as he was struck, read
-	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take (the art
-	 * director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move farthest so.
+	 * from the fall's first frame and its last), and where none from his side does, the same of all he may take but
+	 * those from the side opposite his (front and behind, left and right; under opposite none), which would throw him
+	 * toward it (the art director, 23 Nov: the limb flies away from the blast); failing any, the one whose limbs move
+	 * farthest so. Where his stance's gore falls hold none from his side he may take, all he may take.
 	 */
 	std::vector<std::pair<std::string, std::string>> GoreFalls(const Soldier& Twin, const GoreStrike& Strike);
 
@@ -446,9 +448,10 @@ namespace LandMen
 		 * metre or more away from it (or the gun) along the line from it, so he and his limb are thrown away from it;
 		 * the big throw (die_blast_*) only from a field gun's, a howitzer's or a heavy gun's shell (the round's w "gun",
 		 * its block's cal not "light"), and only from his side; where his stance's gore falls hold none from that side
-		 * he may take, or none of those moves its limbs half a metre away, all he may take, the limbs away again
-		 * (GoreFalls). The same battle gores the same men every time (his own dice). Who dies
-		 * and when are the battle's; only how he falls changes. Off unless set: every man falls as before.
+		 * he may take, all he may take, the limbs away again; where none of those from it moves its limbs half a metre
+		 * away, all he may take but those from the side opposite, which would throw him toward it (GoreFalls). The
+		 * same battle gores the same men every time (his own dice). Who dies and when are the battle's; only how he
+		 * falls changes. Off unless set: every man falls as before.
 		 */
 		void SetGore(bool bOn);
 		/** Men who fell as their file's gore twin so far in this play. */

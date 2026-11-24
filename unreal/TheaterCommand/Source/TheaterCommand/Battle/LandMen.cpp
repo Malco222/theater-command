@@ -1667,20 +1667,35 @@ namespace LandMen
 				bAny = bAny || May(KV.first, Name);
 			}
 		}
+		// (where widened past his side's falls, below, never to one from the side opposite it, front and behind, left and
+		// right: such a fall throws him toward the burst, his body and often a limb (the verifier of f6f8b75c: a man
+		// standing with a burst ahead on his left given die_leg_off_b, from behind, his pelvis 1.1 to 1.7 m toward it).
+		// Under is opposite none: the twins' one fall from under is the prone throw, which MayTake gives only a man struck
+		// from under, and a burst under him is no point to be thrown away from, so none is widened then. Widened so, he
+		// keeps his side's own falls, so never none)
+		auto Opposite = [&](const std::string& Name) {
+			const auto From = Tw.GoreFrom.find(Name);
+			if (From == Tw.GoreFrom.end()) return false;
+			const std::string& Fr = From->second;
+			const std::string& Sd = Strike.Side;
+			return (Sd == "front" && Fr == "behind") || (Sd == "behind" && Fr == "front") || (Sd == "left" && Fr == "right") || (Sd == "right" && Fr == "left");
+		};
 		bool bWide = false;
 		auto Base = [&](const std::string& Kind, const std::string& Name) {
-			return !bAny || (bMatched && !bWide ? FromBurst(Kind, Name) : May(Kind, Name));
+			if (!bAny) return true;
+			if (bMatched && !bWide) return FromBurst(Kind, Name);
+			return May(Kind, Name) && !(bWide && Opposite(Name));
 		};
 		// (and of those, where he is thrown away from a point (the burst, or the gun), the falls whose every limb moves at
 		// least half a metre away from it, along the line from it to the limb's joint as he was struck, or failing any
 		// the one whose limbs move farthest so: a limb flying across the burst, or through it to land beyond, is not
 		// thrown away from it. A side is a quarter round, and the twins' falls fling a limb off their side's middle (their
 		// standing and running falls from the front a left arm or leg back and to his left, toward a burst 38 degrees or
-		// more round on his left): where none from his side moves its limbs half a metre away, all he may take are
-		// weighed so (the verifier of 35ffc951: never a limb toward the burst for a fall from his side when another he
-		// may take throws it away). Read from the fall's first frame and its last, in his own axes: the same whatever
-		// frame his fall is first played on and however lately he was posed, his own pose as struck within 0.35 m of the
-		// fall's first at a cut, a running man's calf the most)
+		// more round on his left): where none from his side moves its limbs half a metre away, all he may take but those
+		// from the opposite side are weighed so (the verifier of 35ffc951: never a limb toward the burst for a fall from
+		// his side when another he may take throws it away). Read from the fall's first frame and its last, in his own
+		// axes: the same whatever frame his fall is first played on and however lately he was posed, his own pose as
+		// struck within 0.35 m of the fall's first at a cut, a running man's calf the most)
 		std::map<std::string, double> Gain;
 		double Floor = -1e9;
 		if (Strike.bAway)
@@ -3153,10 +3168,10 @@ namespace LandMen
 					std::vector<std::string> KindOfPick;
 					// Effects (R2), a gored man: only the falls GoreFalls gives him (those from where the burst was against him,
 					// BlastOf, of them those whose limbs move away from the burst or the gun; where none from there he may take,
-					// or none of those moves its limbs half a metre away, of all he may take: no throw but a field gun's or a
-					// howitzer's, BigThrow, and none from another side of him), each kind's weight shared among its falls taken,
-					// the kinds weighed as for any man. Never no fall (GoreTwinFor gores no man whose stance's gore falls hold
-					// none he may take; were it so, all of them).
+					// of all he may take: no throw but a field gun's or a howitzer's, BigThrow, and none from another side of
+					// him; where none from there moves its limbs half a metre away, of all he may take but those from the side
+					// opposite), each kind's weight shared among its falls taken, the kinds weighed as for any man. Never no
+					// fall (GoreTwinFor gores no man whose stance's gore falls hold none he may take; were it so, all of them).
 					const bool bBig = BigThrow(M);
 					std::vector<std::pair<std::string, std::string>> Given;
 					if (M.bGore)
