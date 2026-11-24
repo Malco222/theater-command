@@ -627,6 +627,9 @@ public:
 	FString GetWatchHeading() const;
 	/** Whose month the watch is showing, for the flag beside the heading. */
 	const FString& GetWatchNation() const { return WatchNation; }
+	/** (round 2, Brian 18:01Z) TAKE ME THERE: the watch ends at the stop on screen, the eye stays on it and his nearest army is put in his hand (G). */
+	void TakeMeThere();
+	bool CanTakeMeThere() const { return bWatching && bWatchNear && bTakeMeThere && TakeRegion != INDEX_NONE; }
 	// ---- (end release 2)
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
@@ -1478,6 +1481,8 @@ private:
 	// arrows of the one up as they grow (from ArrowsSince).
 	bool bEnemyMoves = true;
 	bool bAlliesNear = true; // (round 2, Brian 18:01Z) his allies' battles near him stop the watch too
+	bool bTakeMeThere = true; // (round 2) the TAKE ME THERE button on each stop (OPTIONS)
+	int32 TakeRegion = INDEX_NONE; // the stop's place: where its worst arrow ends
 	bool bWatchNear = false;
 	int32 NearCount = 0, NearShown = 0;
 	FString WatchNation;

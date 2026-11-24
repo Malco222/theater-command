@@ -6087,7 +6087,8 @@ namespace
 						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(24.0f, 10.0f))
 						.Visibility_Lambda([this]()
 						{
-							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+							// (release 2: while the watch near him offers TAKE ME THERE, its button can be pressed; the rest stays out of the pointer's way)
+							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? (Controller->CanTakeMeThere() ? EVisibility::SelfHitTestInvisible : EVisibility::HitTestInvisible) : EVisibility::Collapsed;
 						})
 						[
 							SNew(SVerticalBox)
@@ -6117,7 +6118,19 @@ namespace
 								// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
 								.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+								.Visibility(EVisibility::HitTestInvisible)
 							]
+							// ---- (release 2, the enemy's month near you, round 2; Brian 18:01Z) TAKE ME THERE: the watch ends at this
+							// place with his nearest army in hand.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanTakeMeThere() ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									MapButton(TEXT("TAKE ME THERE  \u00B7  G"), TEXT("End the watch here: the eye stays on this place and your nearest army is put in your hand."), [this]() { Controller->TakeMeThere(); })
+								]
+							]
+							// ---- (end release 2)
 						])
 					]
 
