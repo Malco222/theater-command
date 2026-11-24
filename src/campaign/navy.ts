@@ -27,6 +27,7 @@ import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { bookSeaAction, loseStars, mendStars } from './stars';
 import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
+import { fleetWhyOn } from './fleetwhy';
 import { techMul, techNotes } from './research';
 import { dcOf, hasTech, techTraits } from './tech';
 import { PLANS } from './plans';
@@ -3361,30 +3362,39 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   const n = g.nations[nat];
   let cross: { off: Set<number>; way: Set<number> } | null = null;
   let theirs: { off: Set<number>; way: Set<number> } | null = null;
+  // (Release 2, fleetwhy.ts) The admirals' reason for each of the player's fleets, in a sentence, where that is switched on.
+  const says = nat === g.human && fleetWhyOn(g);
   for (const f of fleetsOf(g, nat)) {
     // A fleet the player has ordered himself stays where he sent it (1.5.1).
     if (keptByHand(g, f)) continue;
-    const home = (): void => { sail(g, f, f.home, 'port'); };
-    if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(); continue; }
+    const say = (why: string): void => { if (says) f.why = [g.turn, why]; };
+    const where = (z: number): string => seaWhere(g.seas[z]?.name ?? 'sea');
+    const what = (z: number): string => seaWhat(g.seas[z]?.name ?? 'sea');
+    const home = (why?: string): void => { sail(g, f, f.home, 'port'); if (why) say(why); };
+    if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home('At peace, it lies in harbour.'); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
     // A worn fleet stays in harbour until it is fit for sea again.
-    if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) { home(); continue; }
+    if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) {
+      home(`Worn down (readiness ${Math.round(f.ready * 100)}%), it refits in harbour until it is fit for sea again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
+      continue;
+    }
     if (f.duty === 'raid') {
       // (Units decide, the one-pass ruling: the staff bases a raider at the held port nearest its beat, where its boats
       // spend more time on station. The move takes the month in harbour, as any move of base does.)
       const to = nearerPort(g, f);
       if (to) {
         const from = f.port;
-        if (rebase(g, f, to)) { headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}, nearer its hunting ground ${seaWhere(g.seas[f.station].name)}.`, nat, to.id); continue; }
+        if (rebase(g, f, to)) { headline(g, 'info', `${cap(fleetName(f))} moves its base from ${from} to ${to.name}, nearer its hunting ground ${seaWhere(g.seas[f.station].name)}.`, nat, to.id); say(`It moved its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`); continue; }
       }
-      if (!sail(g, f, f.station, 'raid')) home();
+      if (sail(g, f, f.station, 'raid')) say(`A raider, it goes for the enemy's merchant ships ${where(f.station)}, its hunting ground.`);
+      else home(`Its hunting ground ${where(f.station)} is out of its reach, so it waits in harbour.`);
       continue;
     }
     // The grand campaign: a fleet tied to a station on one of its side's shipping lanes sails with the convoys.
     const lane = seaWar(g) ? laneOnBeat(g, f) : null;
     const tied = tiedNow(g, f);
-    if (lane && tied && escort(g, f, lane.id)) continue;
+    if (lane && tied && escort(g, f, lane.id)) { say(`Tied to ${lane.name}, it sails with the convoys.`); continue; }
     const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
     cross ??= crossings(g, nat);
@@ -3393,43 +3403,50 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
     const beat = new Set([f.station, ...g.seas[f.station].adj]);
     let best = -1, bv = 0;
+    // (Release 2, fleetwhy.ts) What weighed most in the sea chosen, and whether enemy bombers kept it out of any sea.
+    let bestWhy = '', shy = 0;
     for (const z of tied ? [f.station] : reach) {
       const e = seaSide(g, z, nat, true);
       const own = seaSide(g, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine);
       // Keep out of water the enemy's bombers command, unless the homeland is being invaded across it and there is a fighting chance.
       const invaded = invadedHere(g, z, nat) && own >= 0.5 * e.total;
-      if (airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid && !invaded) continue;
+      if (airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid && !invaded) { shy++; continue; }
       // A fleet that aircraft have just struck in a sea keeps out of it for a while (the grand campaign).
       if (f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded && carrierRules(g)) continue;
       // Enemy surface ships that could be brought to battle here. Submarines are no quarry for a battle fleet.
       let quarry = 0;
       for (const x of g.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g, x.nat, nat)) quarry += fleetPower(g, x);
       let v = 0;
-      if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
-      if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
+      // (each reason's weight, and its words for the admirals' note: the heaviest is the one given)
+      let top = 0, why = '';
+      const sea = says ? what(z) : '', at = says ? where(z) : '';
+      const add = (w: number, words: () => string): void => { v += w; if (says && w > top) { top = w; why = words(); } };
+      if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.`); // an enemy fleet that can be beaten
+      if (landedLately(g, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`); // cut the sea lane behind an enemy landing
       // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
-      if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
+      if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
       // An ally's second front, in a month when its own staff has named none (ruling 233(v)).
-      if (f.duty === 'patrol' && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) v += theirs.off.has(z) ? 40 : 25;
-      if (invaded) v += 60;
+      if (f.duty === 'patrol' && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
+      if (invaded) add(60, () => `It patrols ${sea}: the enemy is invading the homeland across it.`);
       // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
-      if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
-      if (z === f.station && f.duty === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) v += 5; // the usual beat
-      if (v > bv) { bv = v; best = z; }
+      if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to close the sea off a port your army is besieging.`);
+      if (z === f.station && f.duty === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) add(5, () => `It patrols ${sea}, its usual beat: no other sea in its reach needs it more.`); // the usual beat
+      if (v > bv) { bv = v; best = z; bestWhy = why; }
     }
     // With no enemy fleet to fight, a fleet whose beat is on a lane the raiders are bleeding guards the cargoes instead.
-    if (lane && f.duty === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) continue;
+    if (lane && f.duty === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) { say(`It guards ${lane.name}: there is no enemy fleet to fight, and raiders are sinking the cargoes on its beat.`); continue; }
     // Ruling 52 (the grand campaign): a fleet with nothing better than its usual beat is not left idle on it. It
     // sails with a lane of its own side's that the raiders are bleeding and nobody guards, anywhere in its reach; and
     // failing that its destroyers hunt the submarines at work on its beat.
     if (seaWar(g) && f.duty === 'patrol' && !f.tied && bv <= 5) {
       const clear = (z: number): boolean => !(airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g));
       const bare = FLEETS.ai.guard ? laneUnguarded(g, f, reach.filter(clear)) : null;
-      if (bare && escort(g, f, bare.id)) continue;
+      if (bare && escort(g, f, bare.id)) { say(`It guards ${bare.name}: raiders are sinking its cargoes and no other ship of your side guards it.`); continue; }
       const z = FLEETS.ai.hunt ? huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x))) : -1;
-      if (z >= 0 && sail(g, f, z, 'hunt')) continue;
+      if (z >= 0 && sail(g, f, z, 'hunt')) { say(`Its destroyers hunt the submarines at work ${where(z)}, on its beat.`); continue; }
     }
-    if (best < 0 || !sail(g, f, best, 'patrol')) home();
+    if (best >= 0 && sail(g, f, best, 'patrol')) say(bestWhy || `It patrols ${what(best)}.`);
+    else home(shy > 0 ? 'Enemy bombers command the seas in its reach, so it waits in harbour.' : 'Nothing in its reach is worth the risk this month, so it waits in harbour.');
   }
 }
 

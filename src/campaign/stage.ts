@@ -116,3 +116,8 @@ export const BREAKUP_STAGE: boolean = staged('TC_BREAKUP', 'breakUp');
 // carry the flag 'taskForce'. Forced by TC_TASKFORCE.
 /** True where new grand campaigns open with the player able to make task forces of his fleets (stage.json 'taskForce'). */
 export const TASKFORCE_STAGE: boolean = staged('TC_TASKFORCE', 'taskForce');
+
+// The admirals' reasons (release 2; fleetwhy.ts): the grand campaigns opened while this is true carry the flag
+// 'fleetWhy'. Forced by TC_FLEETWHY.
+/** True where new grand campaigns open with the admirals giving a reason for each fleet they order (stage.json 'fleetWhy'). */
+export const FLEETWHY_STAGE: boolean = staged('TC_FLEETWHY', 'fleetWhy');

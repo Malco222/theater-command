@@ -109,6 +109,7 @@ import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow
 import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
+import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
 import { inOrAt, townName } from '../../../src/campaign/towns';
@@ -902,6 +903,8 @@ function drawView() {
     breakUp: breakUpOn(s),
     // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
     taskForce: taskForceOn(s),
+    // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
+    fleetWhy: fleetWhyOn(s),
     // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
     // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
     r2Switches: s.flags.open === 1,
@@ -4118,7 +4121,8 @@ function force(kind: string, id: number) {
     }
     const who = mine ? whoSails(s, id) : '';
     const task = mine ? taskLine(s, f) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(task ? [task] : []), ...(who ? [who] : [])], options };
+    const why = mine ? fleetWhy(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -5022,10 +5026,11 @@ function fleetPage(s: Game, id: number): Page | null {
   const who = whoSails(s, id);
   const fl = s.fleets.find((x) => x.id === id);
   const task = fl ? taskLine(s, fl) : '';
+  const why = fl ? fleetWhy(s, fl) : '';
   const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
-    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
+    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
       { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
@@ -6230,6 +6235,15 @@ function act(action: string, region = -1, fought?: FoughtAir) {
         : 'The secret war is off: you recruit and send agents as before, and the enemy\'s saboteurs are only a chance each month.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'fleetwhyrule') {
+    // (Release 2, fleetwhy.ts) The admirals' reasons, switched by the player in any month.
+    setFleetWhy(s, part[1] === 'on');
+    ok = true;
+    note = fleetWhyOn(s)
+      ? 'The admirals give their reasons: from their next month each fleet they order says on its page why it is where it is.'
+      : 'The admirals give no reasons: their month ends in one line of news, as before.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'taskforcerule') {
     // (Release 2, taskforce.ts) Task forces, switched by the player in any month.
     setTaskForce(s, part[1] === 'on');
@@ -7370,6 +7384,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).nicknames = (on: boolean) => { const s = game(); setNicknames(s, !!on); return { on: nicknamesOn(s) }; };
 // (Release 2, fleetattack.ts) Fleets sent straight at the enemy: TC.fleetAttack(on) at any time; the options page uses act('fleetattackrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetAttack = (on: boolean) => { const s = game(); setFleetAttack(s, !!on); return { on: fleetAttackOn(s) }; };
+// (Release 2, fleetwhy.ts) The admirals' reasons: TC.fleetWhy(on) at any time; the options page uses act('fleetwhyrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').

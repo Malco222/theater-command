@@ -731,6 +731,8 @@ export interface Fleet extends Storied {
    * comes in to refit when worn and goes back to the job when fit, every month, until he changes or ends it.
    */
   task?: { zone: number; stance: Stance; lane?: string };
+  /** The month the player's admirals last ordered it and their reason, in a sentence (release 2, fleetwhy.ts). */
+  why?: [number, string];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

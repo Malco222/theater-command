@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9d1e9a45 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c41f0571 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -897,7 +897,9 @@
     _breakUp: `Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: "when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed"; src/campaign/breakup.ts, data/campaign/breakup.json). The player picks divisions of one of his corps and splits them off as a corps of their own where it stands; a part rejoins the corps it came from. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'breakUp' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_BREAKUP=1 or TC_BREAKUP=0.`,
     breakUp: false,
     _taskForce: "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these'; src/campaign/taskforce.ts, data/campaign/taskforce.json). One of the player's fleets at sea on a job is made a task force: each month it comes in to refit when worn and goes back to its job when fit, until he changes it. Off: nothing of it is read. On: the grand campaigns opened from now on carry the flag 'taskForce' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_TASKFORCE=1 or TC_TASKFORCE=0.",
-    taskForce: false
+    taskForce: false,
+    _fleetWhy: "The admirals' reasons (release 2; Brian 24 November 2026 18:32Z, 'the navy needs a lot of work and attention', and the plan sent to him: 'the admirals don't explain themselves'; src/campaign/fleetwhy.ts). Where the player's admirals run the navy for him, each fleet they order carries one sentence saying why it is where it is, on its page and its panel. It changes nothing in the war. Off: nothing is written. On: the grand campaigns opened from now on carry the flag 'fleetWhy' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_FLEETWHY=1 or TC_FLEETWHY=0.",
+    fleetWhy: false
   };
 
   // ../../src/campaign/stage.ts
@@ -937,6 +939,7 @@
   var FLEETATTACK_STAGE = staged("TC_FLEETATTACK", "fleetAttack");
   var BREAKUP_STAGE = staged("TC_BREAKUP", "breakUp");
   var TASKFORCE_STAGE = staged("TC_TASKFORCE", "taskForce");
+  var FLEETWHY_STAGE = staged("TC_FLEETWHY", "fleetWhy");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -32559,6 +32562,7 @@
     if (FLEETATTACK_STAGE) g2.flags.fleetAttack = 1;
     if (BREAKUP_STAGE) g2.flags.breakUp = 1;
     if (TASKFORCE_STAGE) g2.flags.taskForce = 1;
+    if (FLEETWHY_STAGE) g2.flags.fleetWhy = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -44452,6 +44456,20 @@
     return fc;
   }
 
+  // ../../src/campaign/fleetwhy.ts
+  var fleetWhyOn = (g2) => g2.flags.open === 1 && g2.flags.fleetWhy === 1;
+  function setFleetWhy(g2, on) {
+    if (on) g2.flags.fleetWhy = 1;
+    else {
+      delete g2.flags.fleetWhy;
+      for (const f of g2.fleets) delete f.why;
+    }
+  }
+  function fleetWhy(g2, f) {
+    if (!fleetWhyOn(g2) || f.nat !== g2.human || f.ordered || !f.why || f.why[0] !== g2.turn) return "";
+    return `Your admirals: ${f.why[1]}`;
+  }
+
   // ../../src/campaign/navy.ts
   var worldMap2 = FAR_STAGE ? world_whole_default : world_americas_default;
   var NAVY = navy_default;
@@ -46780,13 +46798,20 @@
     const n = g2.nations[nat];
     let cross = null;
     let theirs = null;
+    const says = nat === g2.human && fleetWhyOn(g2);
     for (const f of fleetsOf(g2, nat)) {
       if (keptByHand(g2, f)) continue;
-      const home = () => {
+      const say = (why) => {
+        if (says) f.why = [g2.turn, why];
+      };
+      const where = (z) => seaWhere(g2.seas[z]?.name ?? "sea");
+      const what = (z) => seaWhat(g2.seas[z]?.name ?? "sea");
+      const home = (why) => {
         sail(g2, f, f.home, "port");
+        if (why) say(why);
       };
       if (!n.atWar.length || !shipCount(f.ships) || f.duty !== "raid" && keepsHarbour(g2, nat)) {
-        home();
+        home("At peace, it lies in harbour.");
         continue;
       }
       const o = orders2?.find((x) => x.fleet === f.name);
@@ -46795,7 +46820,7 @@
         continue;
       }
       if (f.ready < 0.5 || !atSea(f) && f.ready < NAVY.ready.sortieAt) {
-        home();
+        home(`Worn down (readiness ${Math.round(f.ready * 100)}%), it refits in harbour until it is fit for sea again at ${Math.round(NAVY.ready.sortieAt * 100)}%.`);
         continue;
       }
       if (f.duty === "raid") {
@@ -46804,51 +46829,80 @@
           const from2 = f.port;
           if (rebase(g2, f, to)) {
             headline(g2, "info", `${cap8(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[f.station].name)}.`, nat, to.id);
+            say(`It moved its base to ${to.name}, nearer its hunting ground ${where(f.station)}.`);
             continue;
           }
         }
-        if (!sail(g2, f, f.station, "raid")) home();
+        if (sail(g2, f, f.station, "raid")) say(`A raider, it goes for the enemy's merchant ships ${where(f.station)}, its hunting ground.`);
+        else home(`Its hunting ground ${where(f.station)} is out of its reach, so it waits in harbour.`);
         continue;
       }
       const lane = seaWar(g2) ? laneOnBeat(g2, f) : null;
       const tied = tiedNow(g2, f);
-      if (lane && tied && escort(g2, f, lane.id)) continue;
+      if (lane && tied && escort(g2, f, lane.id)) {
+        say(`Tied to ${lane.name}, it sails with the convoys.`);
+        continue;
+      }
       const mine4 = fleetPower(g2, f);
       const reach3 = fleetReach(g2, f);
       cross ?? (cross = crossings(g2, nat));
       theirs ?? (theirs = cross.off.size || cross.way.size ? { off: /* @__PURE__ */ new Set(), way: /* @__PURE__ */ new Set() } : alliesCrossings(g2, nat));
       const beat = /* @__PURE__ */ new Set([f.station, ...g2.seas[f.station].adj]);
       let best = -1, bv = 0;
+      let bestWhy = "", shy2 = 0;
       for (const z of tied ? [f.station] : reach3) {
         const e = seaSide(g2, z, nat, true);
         const own = seaSide(g2, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine4);
         const invaded = invadedHere(g2, z, nat) && own >= 0.5 * e.total;
-        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) continue;
+        if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) {
+          shy2++;
+          continue;
+        }
         if (f.struck && f.struck[2] === z && g2.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded && carrierRules(g2)) continue;
         let quarry = 0;
         for (const x of g2.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g2, x.nat, nat)) quarry += fleetPower(g2, x);
         let v = 0;
-        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry;
-        if (landedLately(g2, z, nat) && own >= e.total) v += 30;
-        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
-        if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) v += theirs.off.has(z) ? 40 : 25;
-        if (invaded) v += 60;
-        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) v += SIEGE.ai.sea.blockade;
-        if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) v += 5;
+        let top = 0, why = "";
+        const sea = says ? what(z) : "", at4 = says ? where(z) : "";
+        const add = (w, words) => {
+          v += w;
+          if (says && w > top) {
+            top = w;
+            why = words();
+          }
+        };
+        if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) add(quarry, () => `It patrols ${sea} to bring an enemy fleet there to battle: it is strong enough to beat it.`);
+        if (landedLately(g2, z, nat) && own >= e.total) add(30, () => `It patrols ${sea} to cut the sea lane behind the enemy's landing.`);
+        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) add(cross.off.has(z) ? 40 : 25, cross.off.has(z) ? () => `It stands ${at4}, off the beach your army means to land on.` : () => `It patrols ${sea}, on the way to your army's landing.`);
+        if (f.duty === "patrol" && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) add(theirs.off.has(z) ? 40 : 25, () => `It patrols ${sea} to cover an ally's landing.`);
+        if (invaded) add(60, () => `It patrols ${sea}: the enemy is invading the homeland across it.`);
+        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) add(SIEGE.ai.sea.blockade, () => `It patrols ${sea} to close the sea off a port your army is besieging.`);
+        if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) add(5, () => `It patrols ${sea}, its usual beat: no other sea in its reach needs it more.`);
         if (v > bv) {
           bv = v;
           best = z;
+          bestWhy = why;
         }
       }
-      if (lane && f.duty === "patrol" && bv <= 5 && laneLoss(g2, lane.to, lane.zones, lane.id).raid > 0 && escort(g2, f, lane.id)) continue;
+      if (lane && f.duty === "patrol" && bv <= 5 && laneLoss(g2, lane.to, lane.zones, lane.id).raid > 0 && escort(g2, f, lane.id)) {
+        say(`It guards ${lane.name}: there is no enemy fleet to fight, and raiders are sinking the cargoes on its beat.`);
+        continue;
+      }
       if (seaWar(g2) && f.duty === "patrol" && !f.tied && bv <= 5) {
         const clear = (z2) => !(airOver(g2, z2, nat, true) - airOver(g2, z2, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z2 && g2.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g2));
         const bare = FLEETS.ai.guard ? laneUnguarded(g2, f, reach3.filter(clear)) : null;
-        if (bare && escort(g2, f, bare.id)) continue;
+        if (bare && escort(g2, f, bare.id)) {
+          say(`It guards ${bare.name}: raiders are sinking its cargoes and no other ship of your side guards it.`);
+          continue;
+        }
         const z = FLEETS.ai.hunt ? huntingGround(g2, f, [...beat].filter((x) => reach3.includes(x) && clear(x))) : -1;
-        if (z >= 0 && sail(g2, f, z, "hunt")) continue;
+        if (z >= 0 && sail(g2, f, z, "hunt")) {
+          say(`Its destroyers hunt the submarines at work ${where(z)}, on its beat.`);
+          continue;
+        }
       }
-      if (best < 0 || !sail(g2, f, best, "patrol")) home();
+      if (best >= 0 && sail(g2, f, best, "patrol")) say(bestWhy || `It patrols ${what(best)}.`);
+      else home(shy2 > 0 ? "Enemy bombers command the seas in its reach, so it waits in harbour." : "Nothing in its reach is worth the risk this month, so it waits in harbour.");
     }
   }
   function laneUnguarded(g2, f, seas) {
@@ -88996,6 +89050,8 @@
       breakUp: breakUpOn(s),
       // (Release 2, taskforce.ts) Whether the player can make task forces of his fleets: a standing job, refit, and back.
       taskForce: taskForceOn(s),
+      // (Release 2, fleetwhy.ts) Whether the admirals give a reason for each fleet they order.
+      fleetWhy: fleetWhyOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
       r2Switches: s.flags.open === 1,
@@ -92135,14 +92191,15 @@ ${next.text}` : ""}` : next ? next.also : "";
         if (taskForceOn(s)) {
           if (f2.task) options.push({ key: `fleet:${id}:untask`, label: "Release the task force", detail: RELEASE_TIP, ok: up, why: notNow });
           else {
-            const why = whyNotTaskForce(s, id);
-            options.push({ key: `fleet:${id}:task`, label: "Make it a task force", detail: TASK_TIP, ok: up && !why, why: why ?? notNow });
+            const why2 = whyNotTaskForce(s, id);
+            options.push({ key: `fleet:${id}:task`, label: "Make it a task force", detail: TASK_TIP, ok: up && !why2, why: why2 ?? notNow });
           }
         }
       }
       const who = mine5 ? whoSails(s, id) : "";
       const task = mine5 ? taskLine(s, f2) : "";
-      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...task ? [task] : [], ...who ? [who] : []], options };
+      const why = mine5 ? fleetWhy(s, f2) : "";
+      return { name: f2.name, nat: f2.nat, mine: mine5, lines: [parts2.join(", ") || "No ships left", doing2, ...why ? [why] : [], ...task ? [task] : [], ...who ? [who] : []], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
@@ -93001,12 +93058,13 @@ ${next.text}` : ""}` : next ? next.also : "";
     const who = whoSails(s, id);
     const fl = s.fleets.find((x) => x.id === id);
     const task = fl ? taskLine(s, fl) : "";
+    const why = fl ? fleetWhy(s, fl) : "";
     const whyTask = taskForceOn(s) && fl && !fl.task ? whyNotTaskForce(s, id) : null;
     return {
       id: `fleet:${id}`,
       title: card.name.toUpperCase(),
       headline: `${card.doing}`,
-      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
+      note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ""}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? " Its guns have spoken this month." : ""} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ""}${task ? ` ${task}` : ""}${who ? ` ${who}` : ""}`,
       top: [
         { label: "RETURN TO HARBOUR", act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== "port", tip: "Safe from the enemy fleet, and takes no part at sea." },
         ...staffRunsDesk(s, "navy") && fleetKeptByHand(s, id) ? [{ label: "HAND BACK TO YOUR ADMIRALS", act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : [],
@@ -94297,6 +94355,12 @@ ${standing5}`,
       note4 = !ok2 ? "The secret war can be switched only in the campaign's first month." : secretWarOn(s) ? "The secret war is on: your service opens the war with agents at work on the map, hunts the enemy's agents on your ground, steals orders and can turn enemy agents, and every country at war with you spies on you." : "The secret war is off: you recruit and send agents as before, and the enemy's saboteurs are only a chance each month.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
+    if (part[0] === "fleetwhyrule") {
+      setFleetWhy(s, part[1] === "on");
+      ok2 = true;
+      note4 = fleetWhyOn(s) ? "The admirals give their reasons: from their next month each fleet they order says on its page why it is where it is." : "The admirals give no reasons: their month ends in one line of news, as before.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
+    }
     if (part[0] === "taskforcerule") {
       setTaskForce(s, part[1] === "on");
       ok2 = true;
@@ -95519,6 +95583,11 @@ ${standing5}`,
     const s = game();
     setFleetAttack(s, !!on);
     return { on: fleetAttackOn(s) };
+  };
+  globalThis.TC.fleetWhy = (on) => {
+    const s = game();
+    setFleetWhy(s, !!on);
+    return { on: fleetWhyOn(s) };
   };
   globalThis.TC.taskForce = (on) => {
     const s = game();
