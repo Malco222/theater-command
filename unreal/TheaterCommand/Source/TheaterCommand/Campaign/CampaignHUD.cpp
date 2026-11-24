@@ -18042,6 +18042,32 @@ namespace
 		}
 
 		/**
+		 * (Release 1.5, the UI director, 24 November 2026, e61b81cd, carried to release 2 for the save slots' page: Brian, "when you click on the country name on the home screen it
+		 * flickers".) A line of the opening card that folds to its width. Slate folds a line that wraps by itself
+		 * (AutoWrapText) only once it has been drawn: a line just laid out stands on one line for its first frame and folds
+		 * on the next, and all under it jumps. Every click on the card lays it out afresh, so every click jumped: the list
+		 * under the year's note, the foot under its three settings, and with them the card's height. Each such line now
+		 * folds, on its first frame, at the width the line in its place had when last drawn, and after that at its own
+		 * width, as before. Until a line in its place has been drawn it folds as it always did.
+		 */
+		TSharedRef<STextBlock> Folding(const FString& Place, const TSharedRef<STextBlock>& Line)
+		{
+			const TWeakPtr<STextBlock> Self = Line;
+			Line->SetWrapTextAt(TAttribute<float>::CreateLambda([this, Self, Place]()
+			{
+				const TSharedPtr<STextBlock> Shown = Self.Pin();
+				const float Had = Shown.IsValid() ? static_cast<float>(Shown->GetTickSpaceGeometry().GetLocalSize().X) : 0.0f;
+				float& Kept = OpeningFolds.FindOrAdd(Place);
+				if (Had > 1.0f)
+				{
+					Kept = Had;
+				}
+				return Kept; // (with AutoWrapText Slate folds at the lesser of this and the width it was last drawn at)
+			}));
+			return Line;
+		}
+
+		/**
 		 * One country to lead in the grand campaign. (The UI director, 18 November 2026, on build 1596.) A compact card:
 		 * the flag and the name only, 93 high in the frame's own measure, seven great powers to
 		 * a row and the others eight; the name wraps onto a second line rather than run past the card. Its status line and
@@ -19855,6 +19881,7 @@ namespace
 		TSharedPtr<SBox> OpeningFoot;
 		TSharedPtr<SOverlay> FootSaid; // (item 4: every nation's lines, one over another, the picked one's shown)
 		float FootWide = 0.0f; // (and the width they fold at, as last laid out)
+		TMap<FString, float> OpeningFolds; // (each folding line's width as last drawn, by its place on the card: see Folding)
 		FSlateBrush FootBrush;
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;
