@@ -8147,7 +8147,9 @@ namespace LandHouse
 						// (the way out from it: across its profile, smooth over the rolled edge)
 						const double Dg = Gb - Ga, Dz = Zb - Za, Ln = std::max(1e-9, std::sqrt(Dg * Dg + Dz * Dz));
 						const V3 Nv = Norm(L[C].H * (-Dz / Ln) + Up * (Dg / Ln));
-						Id[C * NR + R] = B.Vert(L[C].B + L[C].H * G + V3{ 0.0, 0.0, Z }, Nv, PlinthCol(P, L[C], Z, Rw[R].Edge));
+						// (the middle level's paint a shade darker: its five rows' smoother normals light it some 16 lighter than the
+						// near's at the switch; art director, 24 Nov)
+						Id[C * NR + R] = B.Vert(L[C].B + L[C].H * G + V3{ 0.0, 0.0, Z }, Nv, Scaled(PlinthCol(P, L[C], Z, Rw[R].Edge), bFine ? 1.0 : 0.89));
 					}
 				for (size_t C = 0; C < N; ++C)
 				{
