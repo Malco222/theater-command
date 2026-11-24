@@ -25,6 +25,7 @@ import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, 
 import { techMul, techNotes } from './research';
 import { fighterMonth, fighterTypesOn, typeEdge } from './fighters';
 import { unitsDecide } from './units';
+import { SKY } from '../battle/air/book';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -69,7 +70,7 @@ export const AIR = data as unknown as {
   range: { fullAt: number; atLimit: number };
   radar: { without: number; chains: Chain[] };
   /** Units decide, fights of fighters alone: the field's height edge a band (measured), and the warning of observers and lookouts. */
-  height: { h: number; observers: number; lookouts: number };
+  height: { h: number; observers: number; lookouts: number; escort: { close: number[]; top: number[] }; bombers: number };
   production: Record<string, Sched>;
   pilots: { home: number; away: number; perMonth: Record<string, [number, number][]> };
   reserve: Record<string, Reserve>;
@@ -1434,11 +1435,13 @@ export interface AirAssess {
    */
   typeEdge?: number;
   /**
-   * Units decide, a fight of fighters alone (sweep-height-form-1124.md): the defenders' warning in time W (0 to 1), who
-   * is above (x = 1 - 2W: 1 the attackers, 0 level, -1 the defenders) and the field's height edge h a band. Absent
-   * otherwise: off, by night, or with bombers in the raid (there the escort's share stands).
+   * Units decide, the fighters' own fight by day (sweep-height-form-1124.md, escort-height-form-1124.md): the defenders'
+   * warning in time W (0 to 1), who is above in bands (x: 1 the attackers, 0 level, -1 the defenders; a sweep's 1 - 2W,
+   * an escort's the mean of its groups' by role) and the field's height edge h a band. Set, the escort's flat share is
+   * gone and the defenders' weight in that fight is without the radar's control. `plain`: a raid's bomber loss before
+   * warned defenders above its bombers (the field's arming; set only where that moved it). Absent: off, or by night.
    */
-  height?: { W: number; x: number; h: number };
+  height?: { W: number; x: number; h: number; plain?: number };
   /** What the bombers that go are worth against ships, beside carrier crews trained for it (1). */
   naval: number;
   /** What is left of a strike on a fleet already struck this month: it is scattered and warned. */
@@ -1560,6 +1563,38 @@ function warnedIn(g: Game, a: AirAssess, sea: boolean, amb: boolean, target: num
   return r && r.owner === r.ctrl ? AIR.height.observers : 0;
 }
 
+/**
+ * Units decide: the role an escort's k-th fighter group flies (its groups in the field's order, air/ticket.ts). Every
+ * nation's the field's present rule until the doctrine store lands (the design director 24 Nov 15:33Z): the first
+ * SKY.escort.topFrom groups close escort, then top cover and close escort by turns.
+ */
+export const UD_ROLES = ['close', 'top'] as const;
+export const udRole = (k: number): 'close' | 'top' => (k < SKY.escort.topFrom ? 'close' : UD_ROLES[(k - SKY.escort.topFrom + 1) % UD_ROLES.length]);
+
+/**
+ * Units decide: an escort's height over the defenders, in bands (1 above, 0 level, -1 below), by its groups' roles and
+ * weighed by their fighters. The form (the design director 15:33Z) put the close escort at the bombers' height, top
+ * cover a band above and the defenders 2W - 1 bands from the bombers by their warning; each role's height is as the
+ * field fights it, measured at W 0, 0.5 and 1 (AIR.height.escort): a close escort cannot leave its bombers to dive on
+ * defenders below, and top cover's dive is about half a band short.
+ */
+function escortAbove(g: Game, a: AirAssess, W: number): number {
+  const at = (row: number[]): number => {
+    const i = clamp(W, 0, 1) * (row.length - 1), lo = Math.floor(i), hi = Math.min(row.length - 1, lo + 1);
+    return row[lo] + (row[hi] - row[lo]) * (i - lo);
+  };
+  const close = at(AIR.height.escort.close), top = at(AIR.height.escort.top);
+  let k = 0, sum = 0, wt = 0;
+  for (const x of a.att) {
+    // The groups the field flies, in its order (air/ticket.ts): those that reach the target with a fighter or more.
+    if (!(x.esc > 0 && Math.round(x.f.ftr * x.crowd) > 0)) continue;
+    const w = x.ftr * worth(g, x.f);
+    sum += w * (udRole(k++) === 'top' ? top : close);
+    wt += w;
+  }
+  return wt > 0 ? sum / wt : 0;
+}
+
 export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: number): AirAssess {
   const C = AIR.combat;
   // A strike on one fleet is fought over the sea that fleet is in.
@@ -1599,8 +1634,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (!out.att.length) { out.why = 'Nothing can reach the target.'; return out; }
   if (m !== 'superiority' && m !== 'ground' && out.B <= 0) { out.why = 'No bombers can reach the target.'; return out; }
 
-  // Units decide: a day fight of fighters alone is decided by height, which follows the defenders' warning (below).
-  const sweep = unitsDecide(g) && !night && out.B <= 0;
+  // Units decide: the fighters' own fight is decided by height, which follows the defenders' warning (below). The
+  // defenders' weight there leaves out the radar's control, which is that warning, priced once (dPlain).
+  let dPlain = 0;
   // Radar, and the fighters that come up to meet the raids.
   if (sea) {
     for (const id of g.seas[zone].coast) {
@@ -1631,9 +1667,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (w <= 0) continue;
     out.def.push({ f, d, w });
     out.D += f.ftr * w;
-    // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid. (In a
-    // sweep under Units decide that control is the warning that gives them the height, priced once there.)
-    out.Dpow += f.ftr * w * worth(g, f) * (sweep ? 1 : techMul(g, f.nat, 'radar'));
+    // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid.
+    out.Dpow += f.ftr * w * worth(g, f) * techMul(g, f.nat, 'radar');
+    dPlain += f.ftr * w * worth(g, f);
   }
   // The fighters' own types (fighters.ts): a small edge from measured performance, off as shipped.
   if (fighterTypesOn(g) && !night && out.Epow > 0 && out.Dpow > 0) {
@@ -1641,17 +1677,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.typeEdge = E;
     out.Epow *= Math.exp(E / 2);
     out.Dpow *= Math.exp(-E / 2);
-  }
-  // Units decide (the design director, 24 Nov 2026 02:28Z and 15:20Z; air-battles/dogfight/sweep-height-form-1124.md):
-  // in a fight of fighters alone the attacker's flat edge (escortShare) gives way to height. The sweep picks its height
-  // and flies high; defenders warned in time climb above it, half-warned meet it level, unwarned are bounced from above.
-  // The edge a band is the field's own bounce as measured there (AIR.height.h), so the card and the field agree.
-  if (sweep && out.Epow > 0 && out.Dpow > 0) {
-    const W = warnedIn(g, out, sea, amb, target), x = 1 - 2 * W, h = AIR.height.h;
-    out.height = { W, x, h };
-    // The exchange goes as the square root of the power ratio: the ratio moves by h^2x, the exchange by h^x.
-    out.Epow *= Math.pow(h, x);
-    out.Dpow *= Math.pow(h, -x);
+    dPlain *= Math.exp(-E / 2);
   }
   // The bombers' own defence: formation, guns and turrets. In the air war a day raid's is the nation's of the month (ruling 227).
   out.defence = bomberDefence(g, nat, night);
@@ -1703,6 +1729,33 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   }
   // What of the bombers' loss is the guns' doing, for the raid card (the player's ask of 2026-11-16).
   if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) * gun + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
+  // Units decide (the design director, 24 Nov 2026 02:28Z, 15:20Z and 15:33Z; air-battles/dogfight/sweep-height-form-1124.md
+  // and escort-height-form-1124.md): by day the attacker's flat edge in the fighters' own fight (escortShare) gives way to
+  // height. A sweep picks its height and flies high; defenders warned in time climb above it, half-warned meet it level,
+  // unwarned are bounced from above. An escort flies where its role puts it, the close escort at the bombers' height and
+  // top cover a band above, and the defenders sit against the bombers by their warning (2W - 1 bands): each group's
+  // height over them, one band at most either way, weighed by its fighters, is the escort's. The edge a band is the
+  // field's own bounce as measured there (AIR.height.h), so the card and the field agree. The bombers' losses above are
+  // not moved by it: what each role saves them is to be measured before it is laid (3.5 for both until then).
+  if (unitsDecide(g) && !night && out.Epow > 0 && out.Dpow > 0) {
+    const W = warnedIn(g, out, sea, amb, target), h = AIR.height.h;
+    const x = out.B <= 0 ? 1 - 2 * W : escortAbove(g, out, W);
+    out.height = { W, x, h };
+    // Defenders warned in time are above the bombers too, and dive on them: the fighters' share of the bombers' loss
+    // moves by what the field measures for a band above them (AIR.height.bombers), not the guns'. The field is armed
+    // without it (plain), as it is without the escort's height, so its own dive brings it back and not twice.
+    const over = 2 * W - 1;
+    if (out.B > 0 && over > 0) {
+      const plain = out.bomberLoss, byFighters = Math.max(0, plain - out.gunLoss);
+      out.bomberLoss = Math.min(most, out.gunLoss + byFighters * Math.pow(AIR.height.bombers, over));
+      out.height.plain = plain;
+    }
+    // The radar's control is the warning: the defenders' weight in this fight is without it, and their height is with W.
+    out.Dpow = dPlain;
+    // The exchange goes as the square root of the power ratio: the ratio moves by h^2x, the exchange by h^x.
+    out.Epow *= Math.pow(h, x);
+    out.Dpow *= Math.pow(h, -x);
+  }
 
   // The Battle Ticket.
   const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
@@ -1734,7 +1787,19 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
     });
   } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
-  if (out.height) {
+  if (out.height && out.B > 0) {
+    // An escorted raid: where the warning puts the defenders against the bombers, and where the escort's roles put it.
+    const { W, x } = out.height, hx = Math.pow(out.height.h, Math.abs(x)).toFixed(1);
+    const them = W >= 1 ? 'Warned in time, they climb above your bombers' : W > 0 ? 'Warned late, they meet your bombers at their height' : 'Unwarned, they come up at your bombers from below';
+    const roles = out.att.filter((a) => a.esc > 0 && Math.round(a.f.ftr * a.crowd) > 0).length > SKY.escort.topFrom ? 'your close escort flies with the bombers and your top cover a band above' : 'your escort flies close, with the bombers';
+    const dive = out.height.plain !== undefined ? ` They dive on your bombers as well: about ${AIR.height.bombers.toFixed(1)} times the bombers lost to fighters.` : '';
+    // (A quarter of a band or less either way reads as level: about 1.1 to 1, inside the field's own spread.)
+    out.lines.push(x <= -0.25
+      ? { label: 'Height', value: 'The defenders will be above your escort', effect: `${them}; ${roles}. About ${hx} to 1 their way on height alone.${dive}` }
+      : x >= 0.25
+        ? { label: 'Height', value: 'Your escort will be above them', effect: `${them}; ${roles}. About ${hx} to 1 your way on height alone.${dive}` }
+        : { label: 'Height', value: 'Level', effect: `${them}; ${roles}. Neither side has the height to speak of.${dive}` });
+  } else if (out.height) {
     const hx = out.height.h.toFixed(1);
     out.lines.push(out.height.x < 0
       ? { label: 'Height', value: 'The defenders will be above you', effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` }

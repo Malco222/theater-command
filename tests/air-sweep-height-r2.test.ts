@@ -60,7 +60,8 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
     expect(nl.on.height).toMatchObject({ W: 0, x: 1 });
     expect(nl.on.lines.find((l) => l.label === 'Height')?.value).toBe('You will be above them');
     // September 1939, an open start: France has no chain yet, so over its own ground its observers meet a German sweep
-    // level (Alsace). A fight for the sky with bombers in it keeps the escort's share and no height (Lorraine's pick).
+    // level (Alsace). A fight for the sky with bombers in it is an escort's (air-escort-height-r2.test.ts): unescorted,
+    // as Lorraine's pick goes, there is no fighters' fight and no height.
     const g = startOpen(createGame(1, null));
     g.flags.unitsDecide = 1;
     const sweepOf = (name: string) => {
@@ -73,15 +74,7 @@ describe('a sweep under Units decide: height follows warning (release 2)', () =>
     expect(al.height).toMatchObject({ W: AIR.height.observers, x: 0 });
     expect(al.lines.find((l) => l.label === 'Height')?.value).toBe('Level');
     const lo = sweepOf('Lorraine');
-    if (lo.B > 0) expect(lo.height).toBeUndefined();
-  });
-
-  it('a raid with bombers keeps the escort share and has no height term', () => {
-    const { on, off } = raid(ger, 'GER', 'bomb', 'Hampshire');
-    expect(on.B).toBeGreaterThan(0);
-    expect(on.height).toBeUndefined();
-    expect(on.Epow).toBeCloseTo(off.Epow, 9);
-    expect(on.Dpow).toBeCloseTo(off.Dpow, 9);
+    if (lo.B > 0 && lo.E <= 0) expect(lo.height).toBeUndefined();
   });
 
   it('the field starts each side where the warning puts it, armed without the height, and lands near the card', () => {
