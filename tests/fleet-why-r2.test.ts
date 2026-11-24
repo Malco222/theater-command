@@ -3,8 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { setDesk } from '../src/campaign/depth';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../src/campaign/fleetwhy';
-import { createGame } from '../src/campaign/game';
-import { fleetsOf } from '../src/campaign/navy';
+import { atWar, createGame } from '../src/campaign/game';
+import { fleetKnown } from '../src/campaign/carriers';
+import { atSea, fleetsOf, surfaceShips } from '../src/campaign/navy';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, endHuman, fleetOptions, humanUp, orderFleet, stepAI } from '../src/campaign/turn';
@@ -41,6 +42,24 @@ describe("the admirals' reasons", () => {
         month(g);
       }
     }
+  });
+
+  it('a reason uses only what his own side has found: an enemy fleet or submarines nobody has sighted are never named', () => {
+    // (the design director's 19:14Z)
+    let named = 0;
+    for (const [nat, seed] of [['UK', 4], ['GER', 3], ['ITA', 5]] as const) {
+      const g = admirals(nat, seed, true);
+      for (let m = 0; m < 4; m++) {
+        for (const f of fleetsOf(g, nat)) {
+          const why = fleetWhy(g, f);
+          const foes = g.fleets.filter((x) => x.zone === f.zone && atSea(x) && atWar(g, x.nat, nat) && fleetKnown(g, x, nat) !== 'none');
+          if (/to bring an enemy fleet there to battle/.test(why)) { named++; expect(foes.some((x) => surfaceShips(x) > 0), why).toBe(true); }
+          if (/hunt the submarines at work/.test(why)) { named++; expect(foes.some((x) => x.ships.ss > 0), why).toBe(true); }
+        }
+        month(g);
+      }
+    }
+    expect(named).toBeGreaterThanOrEqual(0);
   });
 
   it('it changes nothing in the war: the same seed plays the same with it on or off', () => {

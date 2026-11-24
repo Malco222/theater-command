@@ -491,10 +491,11 @@ export interface Corps extends Storied {
   /** The numbers the divisions of the corps it belongs to carried, in order, before it was broken up (breakup.ts): no rejoining makes one bigger, and the parts go back in this order. */
   whole?: number[];
   /**
-   * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, and the weeks of marching
-   * it gave up for it (given back if it is stood down in the same month). Gone at the start of its side's next month.
+   * A rearguard (release 2, rearguard.ts): the month it was ordered to hold where it stands, the weeks of marching it
+   * gave up for it (given back if it is stood down in the same month), and the province it holds (driven out of it, it
+   * is a rearguard no longer). Gone at the start of its side's next month.
    */
-  rear?: [number, number];
+  rear?: [number, number, number];
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -628,7 +629,7 @@ export interface BattleReport {
    * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
    */
   paid?: { att: string; def: string; sign?: 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
-  /** Weeks of their month every attacking corps lost to a rearguard holding the field (release 2, rearguard.ts). */
+  /** Weeks of their month each attacking corps lost to a rearguard holding the field (release 2, rearguard.ts; may be a part of a week). */
   rearguard?: number;
 }
 
