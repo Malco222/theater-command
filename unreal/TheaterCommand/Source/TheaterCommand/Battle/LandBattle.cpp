@@ -4558,6 +4558,8 @@ void ALandBattle::BailOut()
 		W.Seed = (static_cast<uint64_t>(Veh.Index) + 1ull) * 0xC2B2AE3D27D4EB4Full ^ (S.Rec.Seed ? S.Rec.Seed : 1ull);
 		W.Ground = Ground;
 		W.bSmoke = S.Bails.bSmoke;
+		// (the battle's wind, as the kit's smoke drifts in it: her commander throws his smoke a little upwind)
+		W.Wind = S.Rec.Weather.bWind ? LandBail::V3{ S.Rec.Weather.WindX, S.Rec.Weather.WindY, 0.0 } : LandBail::V3{ 2.6, 1.2, 0.0 };
 		S.Bails.Crews[V] = LandBail::Make(W);
 		// (the camera's first bail-out: her crew's first man up and her ammunition going, battle seconds after her kill;
 		// nobody out, -1, and the film holds her end as any other)
@@ -4588,7 +4590,8 @@ void ALandBattle::BailOut()
 	{
 		MenDrawn.SetNum(S.Men->Count());
 	}
-	// (smoke: her commander's grenade gushing white where it landed, from the moment it lands, the kit's canister)
+	// (smoke: her commander's grenade gushing grey-white where it landed, from the moment it lands, drawn down the wind
+	// into a low plume: the kit's "grenade", the art director's 24 November)
 	if (Effects && S.Bails.bSmoke)
 	{
 		for (size_t V = 0; V < S.Bails.Crews.size() && V < All.size(); ++V)
@@ -4603,7 +4606,7 @@ void ALandBattle::BailOut()
 			if (Since < C.SmokeAt + C.SmokeS)
 			{
 				Effects->SmokeScreen(World(C.SmokeTo.X, C.SmokeTo.Y, C.SmokeTo.Z), static_cast<float>(C.SmokeAcross),
-					static_cast<float>(C.SmokeAt + C.SmokeS - Since), TEXT("canister"), -1);
+					static_cast<float>(C.SmokeAt + C.SmokeS - Since), TEXT("grenade"), -1);
 				UE_LOG(LogTheater, Log, TEXT("Land battle: %s's commander's smoke is up, %.0f m across for %.0f s"),
 					*LandParts::Wide(All[V].Look().Name), C.SmokeAcross, C.SmokeS);
 			}

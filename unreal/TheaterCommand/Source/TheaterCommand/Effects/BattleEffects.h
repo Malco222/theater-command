@@ -248,7 +248,8 @@ public:
 	void OilStop(int32 Id);
 	/** A smoke round landing at WorldAt: its burst and the white wall that drifts from it down the wind, AcrossMetres
 	 * wide at its fullest and laid for Seconds (on the kit's life clock). Kind "wp" (white phosphorus: a hard white
-	 * burst of burning streamers) or "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground).
+	 * burst of burning streamers), "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground) or
+	 * "grenade" (a tank commander's smoke grenade: one canister, swelling, drawn down the wind into a low plume).
 	 * No crater. Id: the caller's own number for it, or under 0 none. */
 	void SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind = TEXT("wp"), int32 Id = -1);
 	/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; not SmokeScreen above, a smoke round

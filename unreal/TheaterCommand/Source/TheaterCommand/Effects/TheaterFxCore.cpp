@@ -11865,6 +11865,16 @@ namespace TheaterFx
 		S.Seed = ++Seeds * 0x2545F4914F6CDD1Dull ^ PlaceKey(At);
 		S.bPhos = Kind && std::string(Kind) == "wp";
 		Dice D(S.Seed ^ 0x5C2EE7ull);
+		if (Kind && std::string(Kind) == "grenade")
+		{
+			// (a tank commander's smoke grenade: one canister, its own dice; its lumps live no longer than its plume needs)
+			const std::string G = P + "grenade.";
+			Dice Dg(S.Seed ^ 0x6E7ADEull);
+			S.bGrenade = true;
+			S.GrenadeStart = std::min(S.Across, std::max(0.5, Range(G + "start_m", 3.0, 5.0).Pick(Dg)));
+			S.GrenadePlume = std::max(5.0, Range(G + "plume_m", 30.0, 60.0).Pick(Dg));
+			S.End = S.Flames + std::max(1.0, Num(G + "most_life_s", 30.0) * 1.15);
+		}
 		const Rgb White = Picture(P + "colour", Rgb::FromPicture(232, 233, 230));
 		const Rgb Shadow = Picture(P + "shadow_colour", Rgb::FromPicture(170, 173, 176));
 		const double Ground = Height(At.X, At.Y);
@@ -11874,7 +11884,7 @@ namespace TheaterFx
 			// (a burning bomb or a canister: it lies where it fell, and a base-ejection shell's canisters a few metres
 			// apart along its flight; the wall is laid from them)
 			S.Heads.push_back(Foot);
-			const int More = D.Whole(0, 2);
+			const int More = S.bGrenade ? 0 : D.Whole(0, 2); // (a grenade: the one canister)
 			for (int I = 0; I < More; ++I)
 			{
 				const double A = D.U(0.0, 2.0 * Pi), R = D.U(2.0, 5.0);
@@ -12004,32 +12014,68 @@ namespace TheaterFx
 		const Vec Aside(-Down.Y, Down.X, 0.0);
 		const double Breeze = std::hypot(Wind.X, Wind.Y);
 		const double Creep = Num(P + "creep_mps", 0.6); // (on a still day a screen still creeps)
+		// (a grenade's, smoke_screen.grenade: gushing at once, 3 to 5 m across by 2 s and swelling to its full width at the
+		// canister by swell_s; each lump as wide as the cloud is then at the canister, widening tail_grow times as it goes
+		// and living as long as the wind takes to carry it its plume's length, so the plume is that long whatever the
+		// wind; grey-white, denser; thinning only over its last thin_last_s)
+		const std::string G = P + "grenade.";
+		const bool bG = S.bGrenade;
+		const double Laid = std::max(S.Flames - S.Start, 0.1);
+		const double GBuild = std::max(0.1, Num(G + "build_s", 1.0));
+		const double GFade = std::clamp(1.0 - Num(G + "thin_last_s", 15.0) / Laid, 0.3, 0.97);
+		const double GSwell = std::max(2.5, Num(G + "swell_s", 10.0));
+		const double GGrey = Clamp01(Num(G + "grey", 0.15));
+		const double GGrow = std::max(1.0, Num(G + "tail_grow", 1.8));
+		const double GLeast = std::max(1.0, Num(G + "least_life_s", 8.0)), GMost = std::max(GLeast, Num(G + "most_life_s", 30.0));
+		const Span GAlpha = Range(G + "alpha", 0.65, 0.85);
+		const Span GRise = Range(G + "rise_mps", 0.04, 0.15);
+		const double GLumpR = Num(G + "lump_k", 1.0), GAcross = Num(G + "across_k", 0.18), GHold = Clamp01(Num(G + "hold", 0.15));
+		const double GLife = std::clamp(S.GrenadePlume / std::max(0.9 * Breeze, Creep), GLeast, GMost);
 		while (S.NextSmoke <= Now && S.NextSmoke < S.Flames)
 		{
 			const double T = S.NextSmoke;
 			Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0x9E3779B97F4A7C15ull + 0x5C2Eull));
 			const double Since = T - S.Start;
 			const double X = Since / std::max(S.Flames - S.Start, 0.1);
-			const double Full = Clamp01((Since + 0.3) / Build) * (X < Fade ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade) / (1.0 - Fade)));
+			const double Fade_ = bG ? GFade : Fade;
+			const double Full = Clamp01((Since + 0.3) / (bG ? GBuild : Build)) * (X < Fade_ ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade_) / (1.0 - Fade_)));
+			const double Sw = Clamp01((Since - 2.0) / (GSwell - 2.0));
+			const double Width = !bG ? S.Across : Since < 2.0 ? S.GrenadeStart * (0.3 + 0.7 * Since / 2.0)
+				: S.GrenadeStart + (S.Across - S.GrenadeStart) * Sw * Sw * (3.0 - 2.0 * Sw);
 			const Vec Seat = S.Heads.empty() ? S.At : S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
 			Bit B;
 			B.Born = T;
-			B.Life = Life.Pick(D);
-			B.R1 = LumpR.Pick(D) * S.Across * (0.7 + 0.3 * Full);
-			B.R0 = std::max(0.6, 0.35 * B.R1);
-			B.Grow = 0.35;
-			const Vec Off = Vec(D.Bell(), D.Bell(), 0.0) * (0.06 * S.Across);
+			B.Life = bG ? GLife * D.U(0.85, 1.15) : Life.Pick(D);
+			if (bG)
+			{
+				B.R0 = std::max(0.3, LumpR.Pick(D) * GLumpR * Width * (0.6 + 0.4 * Full));
+				B.R1 = GGrow * B.R0;
+				B.Grow = 0.6;
+			}
+			else
+			{
+				B.R1 = LumpR.Pick(D) * S.Across * (0.7 + 0.3 * Full);
+				B.R0 = std::max(0.6, 0.35 * B.R1);
+				B.Grow = 0.35;
+			}
+			// (a grenade's lumps spread across the wind, so its cloud is wide and low, not a ball)
+			const auto GrenadeOff = [&]()
+			{
+				const double Ba = D.Bell(), Bb = D.Bell();
+				return Aside * (Ba * GAcross * Width) + Down * (Bb * 0.06 * Width);
+			};
+			const Vec Off = bG ? GrenadeOff() : Vec(D.Bell(), D.Bell(), 0.0) * (0.06 * Width);
 			const double Z = Height(Seat.X + Off.X, Seat.Y + Off.Y);
 			B.From = Vec(Seat.X + Off.X, Seat.Y + Off.Y, (Z == Z ? Z : Seat.Z) + 0.6 * B.R0 + D.U(0.0, 0.6));
 			B.Windage = D.U(0.8, 1.0);
-			B.Vel = Aside * (D.Bell() * Spread * S.Across / B.Life) + (Breeze < Creep ? Down * (Creep - Breeze) : Vec());
-			B.Rise = Rise.Pick(D);
+			B.Vel = Aside * (D.Bell() * Spread * Width / B.Life) + (Breeze < Creep ? Down * (Creep - Breeze) : Vec());
+			B.Rise = bG ? GRise.Pick(D) : Rise.Pick(D);
 			const double Tone = D.U(0.93, 1.03);
-			B.Col = White * Tone;
-			B.Col2 = White.Mix(Shadow, 0.35) * Tone;
-			B.Alpha = Alpha.Pick(D) * (0.5 + 0.5 * Full);
-			B.FadeIn = 0.6;
-			B.Hold = 0.4;
+			B.Col = White.Mix(Shadow, bG ? GGrey : 0.0) * Tone;
+			B.Col2 = White.Mix(Shadow, 0.35 + (bG ? GGrey : 0.0)) * Tone;
+			B.Alpha = (bG ? GAlpha.Pick(D) : Alpha.Pick(D)) * (0.5 + 0.5 * Full);
+			B.FadeIn = bG ? 0.3 : 0.6;
+			B.Hold = bG ? GHold : 0.4; // (a grenade's: thinning from early on, so its plume thins down the wind)
 			B.Heart = 0.7;
 			B.HeartEnd = 0.3;
 			B.Inner = 0.55;

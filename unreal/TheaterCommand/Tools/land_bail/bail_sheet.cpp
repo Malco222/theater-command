@@ -100,12 +100,12 @@ int main(int Argc, char** Argv)
 	LandBail::Man Tm = M;
 	Tm.ThrowAt = 0.0;
 	Tm.ThrowFace = W.Away + 3.14159265358979;
-	Tm.Out = 1.6;
+	Tm.Out = 1.45; // (the art director: a quarter-second follow-through, then he turns and ducks into his climb)
 	const std::vector<std::pair<const LandBail::Man*, std::vector<double>>> Rows = {
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
 		{ &M, { 0.2, 0.7, 1.1, 1.5 + 0.5 * M.RoofS, OnRoof + 0.1, OnRoof + 0.35, OnRoof + 0.6, Jump + 0.3, Jump + 0.75, Jump + 1.1, OnGround + 0.4 } },
 		{ &B, { 0.7, 1.1, 1.5 + 0.5 * B.RoofS, BRoof + 0.1, BRoof + 0.35, BRoof + 0.6, BJump - 0.5 * B.DeckS, BJump + 0.3, BJump + 0.75, BJump + 1.1, BGround + 0.4 } },
-		{ &Tm, { 0.1, 0.5, 0.8, 0.95, 1.15, 1.45, 1.6 + 0.2, 1.6 + 0.7, 1.6 + 1.1, 1.6 + OnRoof + 0.35, 1.6 + Jump + 0.75 } },
+		{ &Tm, { 0.1, 0.5, 0.8, 0.95, 1.1, 1.3, 1.45 + 0.2, 1.45 + 0.7, 1.45 + 1.1, 1.45 + OnRoof + 0.35, 1.45 + Jump + 0.75 } },
 		{ &F, { OnGround + 0.6, OnGround + 1.0, OnGround + 1.4, OnGround + 1.8, F.FallAt + 0.1, F.FallAt + 0.6, F.FallAt + 1.1, F.FallAt + 1.8, F.FallAt + 2.6, F.FallAt + 3.2, F.FallAt + 3.6 } },
 	};
 	const int Cols = 11, CellH = 240, SheetW = 2640;

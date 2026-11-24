@@ -6212,7 +6212,24 @@
   "spread": 0.25,
   "creep_mps": 0.6,
   "lumps": 3,
-  "lumps_px": 120
+  "lumps_px": 120,
+  "grenade": {
+   "_why": "A tank commander's smoke grenade covering his crew's bail-out (release 2, -TheaterLandBailSmoke; the art director, 24 November 02:04Z): not a static puff but a screen. One canister gushing at once (build_s), start_m across within 2 s, swelling to the caller's width at the canister by swell_s; its lumps lump_r times lump_k of the cloud's width there in radius, spread across the wind across_k of it, so it is wide and low, not a ball; each widening tail_grow times as it goes, rising rise_mps, and thinning from hold of its life, and living as long as the wind takes to carry it plume_m (least_life_s to most_life_s on a still day or a gale), so it stretches downwind into a plume that thins with distance; grey-white (grey of the way to shadow_colour), densest at the canister (alpha); laid until the last thin_last_s of its time, then thinning out.",
+   "build_s": 1.0,
+   "start_m": [3, 5],
+   "swell_s": 10.0,
+   "plume_m": [30, 60],
+   "least_life_s": 8,
+   "most_life_s": 30,
+   "tail_grow": 1.5,
+   "lump_k": 1.0,
+   "across_k": 0.18,
+   "hold": 0.15,
+   "rise_mps": [0.04, 0.15],
+   "grey": 0.15,
+   "alpha": [0.65, 0.85],
+   "thin_last_s": 15
+  }
  },
  "sea_splash": {
   "_why": "A shell falling in the sea by its calibre, SeaSplash(At, CalibreMm, Dye): the art director's columns by calibre (sea-guns-ruling.md part 5, 06:12Z 21 November) on the passed column's build (grounds.water.spout), and the dye its ship loaded (historian/dye-loaded-shell-splashes.md, 22 November). The table runs by calibre_mm, each number between the two calibres either side and held at its ends: height_m, the column's height (heavy 14 to 18 inch 50 to 70 m, medium 8 inch 25 to 35, light 5 to 6 inch 12 to 20); rise_s, about its full height by then; hang_s, it stands near that height so long; fall_s, then it falls as a curtain and is back on the sea, its top the last down; foam_m and foam_s, the patch it leaves, across and how long; crown_wide, its head's half width for its height (a light one a short bushy plume). mist_s: the fine spray at its foot hangs about so long (4 to 6 s at a heavy column's, less by the root of the height). foot_white: as it stands its foot is broken at least that far to white water, so the dark wet water is the first moment's and never a dark lump under it for seconds (0: as the passed column). far_px: where the whole column stands under that many pixels tall in the last frame's picture (in full from half that down), its white water is written up to far_over past white so it stands over a pale sky (the ruling: lit side 20 over the sky) and its dark foot goes far_foot of the way to the column's shade colour, so it is never a small dark puff. Dyes: a name the scene passes for the firing ship (Nagato pink, Kongo red, Haruna yellow, Yamato none; the US heavy ships by the historian's table; British from late 1942; everyone else none, white): colour, its water in the sun, written to land; shade, its shade side; shift, what it turns toward against the sun or with the sun low, shift_k of the way (Kongo's red to purple); stain, the foam patch's tint, stain of the way; strength, 0 to 1. The column is dye_k of the way to the dye through its body, dye_top of that at its crown and dye_foot in the dark water at its foot, and pales dye_pale of the way back to white as it falls; its mist mist_dye. shake_within_k: a near miss jolts an eye within that many times its height. Without this row SeaSplash draws Shell on water with bomb500, bomb250 or how150 as the scene did.",

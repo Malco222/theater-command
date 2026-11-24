@@ -618,7 +618,11 @@ namespace TheaterFx
 		 * trailing its own white smoke and curling over as it falls, and the wall built from where they came down;
 		 * "canister" (a burning smoke bomb's or a base-ejection shell's, the British and German): no burst, a gush of
 		 * white from the ground that thickens into the wall over its first seconds. Never a crater, never a black or
-		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it. */
+		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it.
+		 * Kind "grenade" (release 2: a tank commander's smoke grenade covering his crew's bail-out; the art director, 24
+		 * November): one canister gushing grey-white, 3 to 5 m across within 2 s, swelling to Across at the canister,
+		 * densest there, and drawn down the wind into a plume 30 to 60 m long that widens and thins with distance; laid
+		 * until the last 15 s of Seconds, then thinning out (smoke_screen.grenade). */
 		void Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind = "wp", int Id = -1);
 		/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; nothing to do with Screen above, a
 		 * smoke round on land). Every frame while she lays it: Id, her own number for this screen; At, where the smoke
@@ -1160,6 +1164,10 @@ namespace TheaterFx
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off, 6 a smoke screen
 			bool bPhos = false; // (a smoke screen: a phosphorus round's, its wall laid from where its streamers fell, Heads; Flames is when it is laid no more)
+			// (a smoke screen, Kind "grenade": a tank commander's smoke grenade, smoke_screen.grenade; its width at 2 s, metres,
+			// and the length of its plume down the wind, metres)
+			bool bGrenade = false;
+			double GrenadeStart = 0.0, GrenadePlume = 0.0;
 			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
 			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
 			Vec Vel;
