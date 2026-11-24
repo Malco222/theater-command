@@ -33,6 +33,20 @@
 
 namespace
 {
+	/**
+	 * (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) On a field
+	 * another country holds, how many of the groups based there are the player's: ", 1 of them yours", ", yours" or "".
+	 */
+	FString YoursAmong(const FViewAirfield& Field)
+	{
+		if (Field.YourGroups <= 0 || Field.Groups <= 0)
+		{
+			return FString();
+		}
+		return Field.YourGroups >= Field.Groups ? FString(Field.Groups == 1 ? TEXT(", yours") : TEXT(", all yours"))
+			: FString::Printf(TEXT(", %d of them yours"), Field.YourGroups);
+	}
+
 	/** (Speed, b414 mark 1: see ACampaignPlayerController::Afterwards.) */
 	TAutoConsoleVariable<int32> CVarPictureFirst(
 		TEXT("tc.Speed.PictureFirst"), 1,
@@ -387,6 +401,17 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, voyage.ts; Brian 24 November 2026 19:47Z) Each fleet's log of where it sailed and what it fought.
 			Add(TEXT("voyagelogrule"), TEXT("Voyage log"), TEXT("Each fleet writes one line at every month's end: where it was, what it was doing there, and the fleet actions it fought, with the ships sunk and lost. The log is on the fleet's page, newest first, three years of it. It changes nothing in the war. It can be switched in any month."),
 				Now.bVoyageLog ? TEXT("ON") : TEXT("OFF"), Now.bVoyageLog);
+			// (Release 2, mines.ts; Brian 24 November 2026 20:38Z) Minefields laid across a narrow sea or off an enemy harbour.
+			Add(TEXT("seaminesrule"), TEXT("Mines at sea"), TEXT("A fleet with destroyers, cruisers or submarines can lay a field of mines from its page with LAY MINES, across a narrow sea or off a harbour an enemy fleet sails from. Enemy ships at sea there, or sailing from a harbour on it, may lose a ship each month until their destroyers sweep it, and a field wears down over a few months. The computer's admirals lay fields too. It can be switched in any month: off, every field is gone."),
+				Now.bSeaMines ? TEXT("ON") : TEXT("OFF"), Now.bSeaMines);
+			// (Release 2, heavyseas.ts; Brian 24 November 2026 20:38Z) Gales at sea slow fleets, delay convoys and lose shadows.
+			Add(TEXT("heavyseasrule"), TEXT("Heavy seas"), TEXT("Gales blow at sea under a closed sky, mostly in winter and in the northern oceans. Ships can sail into a sea in a gale but not on through it that month, convoys through one are late with some of their cargoes, and a shadow may lose its quarry in one. The same for every country. It can be switched in any month."),
+				Now.bHeavySeas ? TEXT("ON") : TEXT("OFF"), Now.bHeavySeas);
+			// (Release 2, shadow.ts; Brian 24 November 2026 20:38Z) A fresh squadron takes over a shadow whose fuel has run out.
+			Add(TEXT("shadowrelayrule"), TEXT("Shadow relay"), Now.bShadowRule
+					? TEXT("A shadow's fuel lasts three months on station. Then it makes for harbour, and a fresh cruiser fleet of yours lying in harbour takes over the shadow without losing contact, like a relay runner handing on the baton. With none in harbour, contact is lost. The computer's admirals work the same way. It can be switched in any month.")
+					: TEXT("A shadow's fuel lasts three months on station, and then a fresh cruiser fleet from harbour takes over without losing contact. It works only with Shadowing on. It can be switched in any month."),
+				Now.bShadowRelay ? TEXT("ON") : TEXT("OFF"), Now.bShadowRelay);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -627,7 +652,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -635,7 +660,8 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
-				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Now.bColumnsOn;
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -5904,7 +5930,7 @@ namespace
 	{
 		return Field.Groups < 0 ? FString(TEXT("what flies from it is not known"))
 			: Field.Groups == 0 ? FString(TEXT("no aircraft based here"))
-			: FString::Printf(TEXT("%d air group%s based here"), Field.Groups, Field.Groups == 1 ? TEXT("") : TEXT("s"));
+			: FString::Printf(TEXT("%d air group%s based here%s"), Field.Groups, Field.Groups == 1 ? TEXT("") : TEXT("s"), *YoursAmong(Field));
 	}
 }
 
@@ -6354,11 +6380,23 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				PointedPiece = nullptr;
 			}
+			// (Brian, 24 November 2026 21:53Z: "i cant click on the london airfield".) Where another country's corps stands on
+			// or beside a field, as an ally's do at London, its pole and counters took the pointer from the field. With nothing
+			// in hand, inside an airfield's ring, another country's piece keeps it only on its colours; its pole, counters and
+			// guns leave it to the field. (A click on another country's flag only looks at the ground it stands on.) The
+			// player's own pieces still win.
+			if (PointedPiece && PointedField != INDEX_NONE && bHandsFree && bFieldsKept && GetSession()
+				&& PointedPiece->GetNationTag() != GetSession()->GetView().Human && !PointedPiece->ColoursHitByRay(RayOrigin, RayDirection))
+			{
+				PointedPiece = nullptr;
+				AimedPiece = nullptr;
+			}
 		}
 	}
 
 	// (The same spec.) Inside its ring the airfield wins over the province and the town's plate: the pointer points at the
-	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins.
+	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins
+	// (another country's piece only on its colours, above).
 	if (OnFieldBadge == INDEX_NONE && (PointedPiece || PointedAgent != INDEX_NONE))
 	{
 		PointedField = INDEX_NONE; // (a piece or an agent under the pointer takes the click, so neither the tip nor the card is the airfield's)
@@ -7090,7 +7128,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				// stands there is said first and plainly, and the field's room is never worded as aircraft.)
 				const FString Stands = Field->Groups < 0 ? FString(TEXT("What flies from it is not known."))
 					: Field->Groups == 0 ? FString(TEXT("No aircraft are based here."))
-					: FString::Printf(TEXT("%d air group%s based here: %s aircraft%s."), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
+					: FString::Printf(TEXT("%d air group%s based here%s: %s aircraft%s."), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *YoursAmong(*Field), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\n%s It has room for %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *Stands, *FText::AsNumber(Field->Holds).ToString());
 				FieldSlipEnds = Line.Len();
 				// (Brian, 24 November 2026: "its hard to click on an airfield"; the art director's spec, item 2.) With nothing in
@@ -7125,6 +7163,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 								BasedHere.Add(&BasedGroup);
 							}
 						}
+						// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".)
+						// On a field another country holds, the player's own groups come first, each said to be his.
+						if (Field->YourGroups > 0)
+						{
+							BasedHere.StableSort([&View](const FViewAirFleet& A, const FViewAirFleet& B) { return A.Nation == View.Human && B.Nation != View.Human; });
+						}
 					}
 					const int32 SlotsLeft = 4 - HoverGlance.Lines.Num();
 					for (int32 Slot = 0; Slot < BasedHere.Num(); ++Slot)
@@ -7139,7 +7183,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						FieldSaid.bOrderSign = true;
 						FieldSaid.Sign = BasedHere[Slot]->Bombers > BasedHere[Slot]->Fighters ? TEXT("bmr") : TEXT("ftr");
 						FieldSaid.Figure = FText::AsNumber(BasedHere[Slot]->Fighters + BasedHere[Slot]->Bombers).ToString();
-						FieldSaid.Words = BasedHere[Slot]->Name;
+						FieldSaid.Words = Field->YourGroups > 0 && BasedHere[Slot]->Nation == View.Human ? BasedHere[Slot]->Name + TEXT(", yours") : BasedHere[Slot]->Name;
 					}
 					if (BasedHere.Num() == 0)
 					{
@@ -12082,6 +12126,17 @@ void ACampaignPlayerController::EndMonth()
 	{
 		return; // (his own battle is open: no key reaches the map behind it)
 	}
+	// (Release 2, tc.Speed.MonthAside) The others' months are still being played on the rules' thread: a second press
+	// (the END THE MONTH button is not gated as the keys are) ends nothing more and waits for nothing.
+	if (bMonthTurning)
+	{
+		const FCampaignSession* Turning = GetSession();
+		if (Turning && Turning->IsAnswering())
+		{
+			return;
+		}
+		bMonthTurning = false; // (its answer went with the war it belonged to: a war begun or read in since drops it)
+	}
 	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
 	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
 	FinishAnswer();
@@ -12231,7 +12286,26 @@ void ACampaignPlayerController::EndMonth()
 	{
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
-	Month = Session->EndMonth();
+	// (Release 2, tc.Speed.MonthAside; the map-speed lane, the whole-world map's month end.) The others' months are
+	// played and read on the rules' own thread, so the table's frames go on while they are (1.0 to 1.7 s on the
+	// whole-world map in a cloud run); the table takes no order meanwhile (IsAnswering), and the watch or the month's
+	// card follows once they are in. The switch off, or a run that takes pictures: at once, as before, inside this call.
+	const bool bWatchAsked = bAlwaysWatch; // (END THE MONTH AND WATCH holds it for this press only)
+	bMonthTurning = true;
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	Session->EndMonthAside(!bScripted, [Self, bWatchAsked](FMonthResult&& Played)
+	{
+		if (ACampaignPlayerController* Me = Self.Get())
+		{
+			Me->bMonthTurning = false;
+			Me->Month = MoveTemp(Played);
+			Me->MonthPlayed(bWatchAsked);
+		}
+	});
+}
+
+void ACampaignPlayerController::MonthPlayed(bool bWatchAsked)
+{
 	if (!bHelpSeen)
 	{
 		bHelpSeen = true; // a month has been played: the reminder of the keys folds away into its mark
@@ -12251,7 +12325,7 @@ void ACampaignPlayerController::EndMonth()
 	// touched him, draws its moves, and comes back; the card follows. "-TheaterWatchNear" has a run that takes
 	// pictures watch the month so where it would have watched every move.
 	static const bool bNearPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterWatchNear"));
-	const bool bWatchEvery = (bAlwaysWatch && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
+	const bool bWatchEvery = (bWatchAsked && !(bNearPictures && bEnemyMoves)) || (bShowsFirst && !bScripted);
 	NearCount = 0;
 	NearShown = 0;
 	NearStopPlaces.Reset();
@@ -12263,7 +12337,7 @@ void ACampaignPlayerController::EndMonth()
 	ReadyUnits.Reset();
 	bReadyDue = false;
 	ReadySaid = -1;
-	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bAlwaysWatch && bNearPictures)))
+	if (bEnemyMoves && !bWatchEvery && (!bScripted || (bWatchAsked && bNearPictures)))
 	{
 		for (const FMonthStep& Step : Month.Steps)
 		{

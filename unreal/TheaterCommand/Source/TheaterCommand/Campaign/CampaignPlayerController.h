@@ -1433,6 +1433,8 @@ private:
 	void SetPending(int32 RegionId);
 	void DropArmy(int32 RegionId, bool bOnTable);
 	void WatchNextStep();
+	/** (Release 2, tc.Speed.MonthAside) The others' months are in (Month): the watch, or the month's card. bWatchAsked: END THE MONTH AND WATCH was pressed. */
+	void MonthPlayed(bool bWatchAsked);
 	void FinishMonth();
 	void SpaceBar();
 	void ToggleMusic();
@@ -1861,6 +1863,8 @@ private:
 	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second
 	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	bool bAlwaysWatch = false;
+	/** (Release 2, tc.Speed.MonthAside) The others' months are being played on the rules' thread: END THE MONTH waits for them. */
+	bool bMonthTurning = false;
 	bool bByRail = false;
 	bool bBySea = false;
 	int32 PanelRevision = 0;

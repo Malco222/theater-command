@@ -1,0 +1,9 @@
+{
+  "_about": "Mines at sea (release 2; Brian, 24 November 2026 20:38Z, 'yes to all'; src/campaign/mines.ts). A fleet with destroyers, cruisers or submarines lays a field in a sea in its reach that is narrow or lies off an enemy fleet's harbour, once a month. A new field is at 'lay' strength. At the start of each country's month, each of its fleets at sea in a field of an enemy's sea, or sailing from a harbour on it, loses a ship 'hit' times the field's strength of the time. At each month's end a field loses 'decay' of its strength, and 'sweep' more for each enemy fleet with destroyers at sea in it; under 'gone' it is gone. The computer's admirals lay fields too: at most 'ai.most' a nation, 'ai.chance' of the months, with a fleet at 'ai.ready' or better.",
+  "lay": 1,
+  "hit": 0.35,
+  "decay": 0.15,
+  "sweep": 0.4,
+  "gone": 0.15,
+  "ai": { "most": 2, "chance": 0.35, "ready": 0.8 }
+}

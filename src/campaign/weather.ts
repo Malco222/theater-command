@@ -126,6 +126,13 @@ function skiesOf(g: Game, turn: number): Sky[] {
   return skies;
 }
 
+/**
+ * The sky dealt over a zone in a month whether or not the weather's switch is on (the same deal skyOf reads where it is):
+ * heavy seas (release 2, heavyseas.ts) blow their gales under a closed one, so that with weather on a gale's sea also has
+ * nothing flying over it. Reads nothing else and moves nothing.
+ */
+export const dealtSky = (g: Game, zone: number, turn = g.turn): Sky => (zone < 0 ? 'clear' : skiesOf(g, turn)[zone]);
+
 /** A zone's sky in a month (this month by default). Clear where there is no weather. */
 export function skyOf(g: Game, zone: number, turn = g.turn): Sky {
   if (!weatherOn(g) || zone < 0) return 'clear';

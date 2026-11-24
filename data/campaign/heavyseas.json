@@ -1,0 +1,8 @@
+{
+  "_about": "Heavy seas (release 2; Brian, 24 November 2026 20:38Z, 'yes to all'; src/campaign/heavyseas.ts). A gale blows over a sea in a month when the sky dealt over its weather zone is closed (weather.ts, the same deal the weather reads, so that with weather on nothing flies there either) and the sea's own draw falls under 'share': about half the seas of a stormy zone, mostly in winter, as the closed sky's odds run. A fleet can sail into a sea in a gale but not on through it that month. Each convoy route to a nation through a sea in a gale costs that nation 'convoy' of its production for the month, at most 'convoyMost' in all; a shipping lane through one loses 'lane' more of its cargoes. A shadow whose quarry is in a gale loses it 'contact' of the time.",
+  "share": 0.5,
+  "convoy": 0.03,
+  "convoyMost": 0.06,
+  "lane": 0.1,
+  "contact": 0.5
+}

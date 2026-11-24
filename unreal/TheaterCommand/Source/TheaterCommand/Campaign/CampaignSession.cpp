@@ -168,6 +168,14 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, the whole world) -TheaterFar beside -TheaterWorld: the rules play the far side, Asia, the Indies and
+	// the Pacific, on the whole world's chart (src/campaign/stage.ts reads TC_FAR when its bundle loads), as the table
+	// draws it (FCampaignMapData::FarSwitch). With stage.json's "far" on, the bundle is built with it and needs nothing.
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) && FParse::Param(FCommandLine::Get(), TEXT("TheaterFar"))
+		&& !Host->Evaluate(TEXT("globalThis.TC_FAR = 1;"), TEXT("release 2 the far side"), OutError))
+	{
+		return false;
+	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
@@ -1267,6 +1275,9 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
+	Object->TryGetBoolField(TEXT("seaMines"), Out.bSeaMines); // (release 2, mines.ts)
+	Object->TryGetBoolField(TEXT("heavySeas"), Out.bHeavySeas); // (release 2, heavyseas.ts)
+	Object->TryGetBoolField(TEXT("shadowRelay"), Out.bShadowRelay); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
@@ -1705,6 +1716,24 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 		Out.AirFleets = MoveTemp(Stood);
+		// (Brian, 24 November 2026: "when i have a unit on an allied airfield there is no way to know its there".) On a
+		// field another country holds, the player's own groups are counted apart, for the map to show them as his.
+		for (FViewAirfield& Field : Out.Airfields)
+		{
+			if (Out.Human.IsEmpty() || Field.Nation == Out.Human || Field.Groups <= 0)
+			{
+				continue;
+			}
+			for (const FViewAirFleet& Group : Out.AirFleets)
+			{
+				if (Group.Base == Field.Region && Group.Nation == Out.Human)
+				{
+					Field.YourGroups += Group.Groups;
+					Field.YourAircraft += Group.Fighters + Group.Bombers;
+					Field.YourNation = Out.Human;
+				}
+			}
+		}
 	}
 
 	{
@@ -2716,12 +2745,40 @@ bool FCampaignSession::StepFind(const FString& Name, int32& OutRegion, int32& Ou
 
 FMonthResult FCampaignSession::EndMonth()
 {
-	FMonthResult Out;
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(TEXT("endMonth"), TEXT("[]"), Object))
 	{
-		return Out;
+		return FMonthResult();
 	}
+	FMonthResult Out = ReadMonth(Object, true);
+	TakeView(Object);
+	return Out;
+}
+
+void FCampaignSession::EndMonthAside(bool bAside, TFunction<void(FMonthResult&&)>&& InThen)
+{
+	if (!bAside || !TheaterSpeed::MonthAside() || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	{
+		InThen(EndMonth()); // (at once, as before)
+		return;
+	}
+	// (the month played and its answer read on the rules' thread; the picture of the war is taken by Settle, then Then runs)
+	const TSharedRef<FMonthResult, ESPMode::ThreadSafe> Read = MakeShared<FMonthResult, ESPMode::ThreadSafe>();
+	Order(TEXT("endMonth"), TEXT("[]"), true,
+		[Read](const TSharedPtr<FJsonObject>& Answer)
+		{
+			*Read = ReadMonth(Answer, false);
+			return FHandNext();
+		},
+		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? MoveTemp(*Read) : FMonthResult());
+		});
+}
+
+FMonthResult FCampaignSession::ReadMonth(const TSharedPtr<FJsonObject>& Object, bool bGameThread)
+{
+	FMonthResult Out;
 	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
 	if (Object->TryGetArrayField(TEXT("steps"), Steps))
 	{
@@ -2817,7 +2874,7 @@ FMonthResult FCampaignSession::EndMonth()
 			const TSharedPtr<FJsonObject>* StepView = nullptr;
 			if (Entry->TryGetObjectField(TEXT("view"), StepView))
 			{
-				Step.View = ParseView(*StepView);
+				Step.View = bGameThread ? ParseView(*StepView) : ReadView(*StepView);
 			}
 			Out.Steps.Add(MoveTemp(Step));
 		}
@@ -2917,7 +2974,6 @@ FMonthResult FCampaignSession::EndMonth()
 		(*Year)->TryGetStringField(TEXT("kicker"), Out.Year.Kicker);
 		(*Year)->TryGetStringArrayField(TEXT("lines"), Out.Year.Lines);
 	}
-	TakeView(Object);
 	return Out;
 }
 
@@ -4279,6 +4335,10 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
 		Told->TryGetStringField(TEXT("gunsWords"), Card.GunsWords);
 		Told->TryGetStringField(TEXT("toGuns"), Card.ToGuns);
+		Told->TryGetStringField(TEXT("types"), Card.Types);
+		Told->TryGetStringField(TEXT("typesEdge"), Card.TypesEdge);
+		Told->TryGetStringField(TEXT("pilots"), Card.Pilots);
+		Told->TryGetStringField(TEXT("typesTip"), Card.TypesTip);
 		// (Ruling 107(d).) A bombing raid by day and by night.
 		const TSharedPtr<FJsonObject>* WaysObject = nullptr;
 		if (Told->TryGetObjectField(TEXT("ways"), WaysObject) && WaysObject && WaysObject->IsValid())
