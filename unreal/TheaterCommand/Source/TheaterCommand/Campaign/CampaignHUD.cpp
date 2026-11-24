@@ -5133,13 +5133,48 @@ namespace
 						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(24.0f, 10.0f))
 						.Visibility_Lambda([this]()
 						{
-							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+							// (release 1.5.1: while the READY plate offers SHOW ME, its button can be pressed; the rest stays out of the pointer's way)
+							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? (Controller->CanShowReady() ? EVisibility::SelfHitTestInvisible : EVisibility::HitTestInvisible) : EVisibility::Collapsed;
 						})
 						[
-							SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream).Justification(ETextJustify::Center).LineHeightPercentage(1.1f)
-							// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
-							.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
-							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+							SNew(SVerticalBox)
+							// ---- (Release 1.5.1, new units ready; Brian, 24 November 2026 18:30Z) READY FOR ORDERS, in brass with
+							// his flag, over the plate's lines while it names his new units.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 5.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetReadyHeading().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(21.0f).HeightOverride(14.0f)
+									[
+										SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetReadyNation() : FString()); })
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Typed(10)).ColorAndOpacity(BrightBrass)
+									.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->GetReadyHeading() : FString()); })
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream).Justification(ETextJustify::Center).LineHeightPercentage(1.1f)
+								// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
+								.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
+								.Visibility(EVisibility::HitTestInvisible)
+							]
+							// SHOW ME: the eye goes to each new unit in turn, and a new army is put in his hand.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanShowReady() ? EVisibility::Visible : EVisibility::Collapsed; })
+								[
+									MapButton(TEXT("SHOW ME  \u00B7  G"), TEXT("Go to each new unit in turn: the eye flies to it, and a new army is put in your hand, ready for its first orders."), [this]() { Controller->ShowReady(); })
+								]
+							]
+							// ---- (end release 1.5.1)
 						])
 					]
 

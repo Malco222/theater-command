@@ -69,7 +69,7 @@ import {
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, orderCorps, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
@@ -427,6 +427,24 @@ function view() {
   } finally {
     if (--pictureDepth === 0) { pictureTradeKept = null; pictureCommandKept = null; pictureBriefKept = null; }
   }
+}
+
+/**
+ * (Release 1.5.1; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) The units handed over
+ * to the player as his new month opened (a nation's builds are handed over as its month begins, startPhase; the rules
+ * tag that news 'ready'), for the month's end to tell: what each is, its line of news, where it stands now and, for a
+ * corps, which one (one lost since is left out).
+ */
+function readyOf(s: Game, from: number): { what: string; text: string; region: number; corps: number; name: string }[] {
+  if (!s.human) return [];
+  const out: { what: string; text: string; region: number; corps: number; name: string }[] = [];
+  for (const h of s.headlines.slice(from)) {
+    if (!h.ready || h.nat !== s.human) continue;
+    const c = h.ready === 'corps' ? s.corps.find((x) => x.id === h.unit && !x.dead && x.nat === s.human) : undefined;
+    if (h.ready === 'corps' && !c) continue;
+    out.push({ what: h.ready, text: h.text, region: c ? c.reg : h.region ?? -1, corps: c ? c.id : -1, name: c ? c.name : '' });
+  }
+  return out;
 }
 
 function drawView() {
@@ -1399,6 +1417,14 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
       runOthers(g, null);
       arrive(g);
     }
+  }
+  // (Release 1.5.1, new units ready; development only) "-TheaterReadyDemo" sets TC_READY_DEMO: the player's month
+  // opens with one infantry corps on order at his capital, paid for as usual and due next month, so that the Mac's
+  // check can see it handed over.
+  if (human && (globalThis as { TC_READY_DEMO?: unknown }).TC_READY_DEMO && humanUp(g)) {
+    const n = g.nations[human];
+    const b = n && n.capital >= 0 ? orderCorps(g, human, 'inf' as Kind, n.capital) : null;
+    if (b) b.eta = g.turn + 1;
   }
   try { openMonthBook(g); } catch { monthBook = null; }
   return view();
@@ -2985,7 +3011,9 @@ function endMonth() {
   } catch { month = null; }
   lastCard = month;
   try { openMonthBook(s); } catch { monthBook = null; }
-  return { steps, headlines, events, fallen, announce, newsreel, year, month, view: view() };
+  // (Release 1.5.1; Brian, 24 November 2026 18:30Z) The units handed over to him this month, for the table to say plainly.
+  const ready = fallen ? [] : readyOf(s, h0);
+  return { steps, headlines, events, fallen, announce, newsreel, year, month, ready, view: view() };
 }
 
 /** The player's standing order for the picked corps on the day the enemy comes. */

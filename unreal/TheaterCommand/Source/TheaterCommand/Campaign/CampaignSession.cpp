@@ -136,6 +136,12 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 1.5.1, new units ready; development only) "-TheaterReadyDemo": a campaign begun opens his month with an
+	// infantry corps on order at his capital, due next month, so that the Mac's check sees one handed over.
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterReadyDemo")) && !Host->Evaluate(TEXT("globalThis.TC_READY_DEMO = 1;"), TEXT("new units ready demo"), OutError))
+	{
+		return false;
+	}
 	bReady = true;
 	ReadNotebook();
 	return true;
@@ -2419,6 +2425,32 @@ FMonthResult FCampaignSession::EndMonth()
 		}
 	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	// (Release 1.5.1; Brian, 24 November 2026 18:30Z) The units handed over to him as his month opened.
+	const TArray<TSharedPtr<FJsonValue>>* ReadyList = nullptr;
+	if (Object->TryGetArrayField(TEXT("ready"), ReadyList))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ReadyList)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FReadyUnit& Unit = Out.Ready.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("what"), Unit.What);
+			Entry->TryGetStringField(TEXT("text"), Unit.Text);
+			Entry->TryGetStringField(TEXT("name"), Unit.Name);
+			double Number = 0.0;
+			if (Entry->TryGetNumberField(TEXT("region"), Number) && Number >= 0.0)
+			{
+				Unit.Region = FMath::RoundToInt32(Number);
+			}
+			if (Entry->TryGetNumberField(TEXT("corps"), Number) && Number >= 0.0)
+			{
+				Unit.Corps = FMath::RoundToInt32(Number);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Announce = nullptr;
 	if (Object->TryGetArrayField(TEXT("announce"), Announce))
 	{

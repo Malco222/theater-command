@@ -27484,7 +27484,7 @@
       }
       if (to === g2.human && made.length) {
         const from2 = giver === to ? "from its own works" : `from ${g2.nations[giver].name}`;
-        headline(g2, "info", `${cap6(made.join(" and "))} arrive ${from2} and form on the airfield at ${r.name}.`, to, r.id);
+        headline(g2, "info", `${cap6(made.join(" and "))} arrive ${from2} and form on the airfield at ${r.name}.`, to, r.id, { ready: "air" });
       }
     });
     const me = g2.human;
@@ -27792,15 +27792,15 @@
   function deliverArsenal(g2, nat, b, air2) {
     const n = g2.nations[nat];
     const r = g2.regions[b.region];
-    const tell2 = (text) => {
-      if (nat === g2.human) headline(g2, "info", text, nat, r.id);
+    const tell2 = (text, ready) => {
+      if (nat === g2.human) headline(g2, "info", text, nat, r.id, ready ? { ready } : void 0);
     };
     if (b.what === "air") {
       const seller = b.from && g2.nations[b.from] ? theName(g2.nations[b.from]) : "";
       const tellAir = (d) => {
         if (nat !== g2.human) return;
         if (air2 && !seller) air2.push(d);
-        else headline(g2, "info", d.text, nat, d.region);
+        else headline(g2, "info", d.text, nat, d.region, { ready: "air" });
       };
       const wing = b.item, count4 = b.count ?? ARSENAL.air[wing].count;
       const word2 = `${count4} ${wing === "ftr" ? "fighters" : "bombers"}`;
@@ -27831,7 +27831,7 @@
       if (hull === "tp") {
         n.sealift += count4;
         g2.flags[`wk:tp:${nat}`] = (g2.flags[`wk:tp:${nat}`] ?? 0) + 1;
-        tell2(`New troopships are ready: the nation can now move ${plural3(n.sealift, "corps", "corps")} by sea each month.`);
+        tell2(`New troopships are ready: the nation can now move ${plural3(n.sealift, "corps", "corps")} by sea each month.`, "ship");
         return;
       }
       let f = joinsFleet(g2, nat, hull, r.id);
@@ -27843,7 +27843,7 @@
       f.ships[hull] += count4;
       const decks = hull === "cv" && carrierRules(g2);
       if (decks) syncWings(g2);
-      tell2(`${cap6(plural3(count4, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count4 === 1 ? "joins" : "join"} the ${f.name}${decks ? ", with fighters and strike aircraft aboard" : ""}.`);
+      tell2(`${cap6(plural3(count4, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count4 === 1 ? "joins" : "join"} the ${f.name}${decks ? ", with fighters and strike aircraft aboard" : ""}.`, "ship");
       return;
     }
     const what = b.item;
@@ -35898,7 +35898,7 @@
         if (i < 0) continue;
         const c2 = n.cadres.splice(i, 1)[0];
         reform(g2, c2, at4);
-        if (nat === g2.human) headline(g2, "info", `${c2.name} has been raised again round its cadre at ${at4.name}, and is ready for orders.`, nat, at4.id);
+        if (nat === g2.human) headline(g2, "info", `${c2.name} has been raised again round its cadre at ${at4.name}, and is ready for orders.`, nat, at4.id, { ready: "corps", unit: c2.id });
         continue;
       }
       const c = addCorps(g2, nat, b.name, b.kind, b.divs, at4.id, { xp: (nat === g2.human ? raisedXp(g2, nat) : 0.05) + campXp(g2, at4.id), airborne: b.airborne });
@@ -35906,10 +35906,10 @@
       if (b.elite) c.elite = b.elite;
       const old = b.revive !== void 0 ? fallenOf(g2, b.revive) : void 0;
       if (old && old.heir === void 0) inherit(g2, c, old.id);
-      if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at4.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at4.name} and is ready for orders.`, nat, at4.id);
+      if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at4.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at4.name} and is ready for orders.`, nat, at4.id, { ready: "corps", unit: c.id });
     }
     const line = airLine(air2);
-    if (line) headline(g2, "info", line.text, nat, line.region);
+    if (line) headline(g2, "info", line.text, nat, line.region, { ready: "air" });
   }
   function armyWorn(g2, nat) {
     const n = g2.nations[nat];
@@ -58518,6 +58518,17 @@
       }
     }
   }
+  function readyOf(s, from2) {
+    if (!s.human) return [];
+    const out = [];
+    for (const h of s.headlines.slice(from2)) {
+      if (!h.ready || h.nat !== s.human) continue;
+      const c = h.ready === "corps" ? s.corps.find((x) => x.id === h.unit && !x.dead && x.nat === s.human) : void 0;
+      if (h.ready === "corps" && !c) continue;
+      out.push({ what: h.ready, text: h.text, region: c ? c.reg : h.region ?? -1, corps: c ? c.id : -1, name: c ? c.name : "" });
+    }
+    return out;
+  }
   function drawView() {
     const s = game();
     const up = humanUp(s);
@@ -59536,6 +59547,11 @@
         runOthers(g, null);
         arrive2(g);
       }
+    }
+    if (human && globalThis.TC_READY_DEMO && humanUp(g)) {
+      const n = g.nations[human];
+      const b = n && n.capital >= 0 ? orderCorps(g, human, "inf", n.capital) : null;
+      if (b) b.eta = g.turn + 1;
     }
     try {
       openMonthBook(g);
@@ -61094,7 +61110,8 @@
     } catch {
       monthBook = null;
     }
-    return { steps, headlines, events, fallen, announce, newsreel, year, month: month3, view: view2() };
+    const ready = fallen ? [] : readyOf(s, h0);
+    return { steps, headlines, events, fallen, announce, newsreel, year, month: month3, ready, view: view2() };
   }
   function stance(ids2, posture) {
     const s = game();

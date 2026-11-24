@@ -259,7 +259,7 @@ export function newsWeek(g: Game): number {
 }
 
 /** The two tags on news of fighting (Version 80, display only): the arm that fought, and who had the better and the worse of it. */
-export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost'>;
+export type NewsTag = Pick<Headline, 'arm' | 'won' | 'lost' | 'ready' | 'unit'>;
 
 /** News the player must not miss: a warning with a short title, set out as a card of its own in the month's news. */
 export function warning(g: Game, title: string, text: string, nat?: string, region?: number, about?: string): void {

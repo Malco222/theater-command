@@ -1202,6 +1202,20 @@ struct FYearCard
 	TArray<FString> Lines;
 };
 
+/**
+ * (Release 1.5.1; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".) A unit the player
+ * raised or bought, handed over as his month opened: what it is ("corps", "air", "ship"), the rules' line of news, where
+ * it stands, and for a corps, which one.
+ */
+struct FReadyUnit
+{
+	FString What;
+	FString Text;
+	FString Name;
+	int32 Region = INDEX_NONE;
+	int32 Corps = INDEX_NONE;
+};
+
 /** Everything that happened between the player ending one month and beginning the next. */
 struct FMonthResult
 {
@@ -1212,6 +1226,7 @@ struct FMonthResult
 	FString ReelDate; // the month the newsreel is of
 	FYearCard Year; // set when the month that opens is a January
 	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
+	TArray<FReadyUnit> Ready; // (release 1.5.1) the units handed over to him as his month opened
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */

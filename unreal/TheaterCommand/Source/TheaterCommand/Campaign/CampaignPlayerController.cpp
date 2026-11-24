@@ -289,6 +289,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
 	// (The 1.5 patch; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".)
+	// (Release 1.5.1; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered")
+	Add(TEXT("readynotice"), TEXT("New units ready"), TEXT("On: when a corps, aircraft or ships you raised or bought are handed over, a READY FOR ORDERS plate names them as your month opens, once the month's card is closed. SHOW ME (or press G) takes the eye to each in turn and puts a new army in your hand. Off: they are told only in the month's news."), bReadyNotice ? TEXT("ON") : TEXT("OFF"), bReadyNotice);
 	Add(TEXT("sail"), TEXT("Ships sail on the map"), TEXT("A fleet sent to another sea, into harbour or out of it sails there by water, round the land, its bows the way it goes, in two or three seconds. Off, it is simply found where it now is. Fleets only reported, not seen, are never shown sailing."), bShipsSail ? TEXT("ON") : TEXT("OFF"), bShipsSail);
 	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
@@ -349,6 +351,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("moments"))
 	{
 		bMoments = !bMoments;
+	}
+	else if (Id == TEXT("readynotice")) // (release 1.5.1, new units ready)
+	{
+		bReadyNotice = !bReadyNotice;
 	}
 	else if (Id == TEXT("sail")) // (release 2: ships that sail)
 	{
@@ -484,7 +490,8 @@ void ACampaignPlayerController::SaveOptions() const
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (The 1.5 patch) "Ships sail on the map", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"sail\":%s}\n"), Word(bShipsSail)), *OptionsFile());
+	// (Release 1.5.1) "New units ready", kept with the rest.
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"sail\":%s,\"readyNotice\":%s}\n"), Word(bShipsSail), Word(bReadyNotice)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -529,6 +536,7 @@ void ACampaignPlayerController::LoadOptions()
 	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
 	bShipsSail = Yes(TEXT("sail"), true); // (the 1.5 patch: ships that sail, on unless switched off)
+	bReadyNotice = Yes(TEXT("readyNotice"), true); // (release 1.5.1: new units ready, on unless switched off)
 	if (Map.IsValid())
 	{
 		Map->SetShipsSail(bShipsSail);
@@ -973,6 +981,9 @@ void ACampaignPlayerController::EnterCampaign()
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
+	ReadyUnits.Reset(); // (release 1.5.1, new units ready: nor a READY plate of the campaign left)
+	bReadyDue = false;
+	ReadySaid = -1;
 	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
@@ -1156,6 +1167,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACampaignPlayerController::OpenScreen3);
 	InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACampaignPlayerController::OpenScreen4);
 	InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACampaignPlayerController::OpenScreen5);
+	InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACampaignPlayerController::ShowReady); // (release 1.5.1: new units ready, SHOW ME)
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -5225,6 +5237,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		bMonthCardDue = false;
 		OpenPage(TEXT("reports"));
+	}
+	// (Release 1.5.1, new units ready) The READY plate, once nothing else holds the screen (the month's card closed) and
+	// the month's own notice ("June 1941. Your orders.") has gone.
+	if (bReadyDue && !bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !bPageOpen && FPlatformTime::Seconds() >= NoticeUntil)
+	{
+		SayReady();
 	}
 	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
 	// asked again whenever what only the screen sees has changed (the card open, the ARSENAL open, the army in hand, his
@@ -10964,6 +10982,10 @@ void ACampaignPlayerController::EndMonth()
 	{
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
+	// (release 1.5.1, new units ready: last month's plate goes as this month ends)
+	ReadyUnits.Reset();
+	bReadyDue = false;
+	ReadySaid = -1;
 	Month = Session->EndMonth();
 	if (!bHelpSeen)
 	{
@@ -11227,6 +11249,14 @@ void ACampaignPlayerController::FinishMonth()
 		bMonthCardDue = true;
 		return;
 	}
+	// (Release 1.5.1, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".)
+	// The units handed over to him as his month opened are named on a plate once nothing else holds the screen, the
+	// month's card closed (PlayerTick); while pictures are taken, at once (below).
+	ReadyUnits = Month.Fallen.IsEmpty() && !View.Human.IsEmpty() ? Month.Ready : TArray<FReadyUnit>();
+	ReadyNext = 0;
+	ReadySaid = -1;
+	ReadyNation = View.Human;
+	bReadyDue = bReadyNotice && ReadyUnits.Num() > 0;
 
 	// The campaign is kept every month, so it can be continued another day.
 	if (ACampaignGameMode* Mode = GetMode())
@@ -11332,6 +11362,77 @@ void ACampaignPlayerController::FinishMonth()
 		}
 		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning), Warning.IsEmpty() ? 4.0 : 10.0);
 	}
+	if (bReadyDue && bScripted)
+	{
+		SayReady(); // (release 1.5.1, new units ready: a picture has the plate at once)
+	}
+}
+
+// (Release 1.5.1, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered")
+void ACampaignPlayerController::SayReady()
+{
+	bReadyDue = false;
+	if (!bReadyNotice || ReadyUnits.Num() == 0)
+	{
+		return;
+	}
+	// Each unit in the rules' own line ("XXXI Corps has finished forming at Paris and is ready for orders."), three at most.
+	TArray<FString> Lines;
+	for (int32 K = 0; K < ReadyUnits.Num() && K < 3; ++K)
+	{
+		Lines.Add(ReadyUnits[K].Text);
+	}
+	if (ReadyUnits.Num() > 3)
+	{
+		Lines.Add(FString::Printf(TEXT("And %d more: press R for the month's report."), ReadyUnits.Num() - 3));
+	}
+	ReadyHeading = ReadyUnits.Num() == 1 ? FString(TEXT("READY FOR ORDERS")) : FString::Printf(TEXT("READY FOR ORDERS  \u00B7  %d NEW"), ReadyUnits.Num());
+	Notify(FString::Join(Lines, TEXT("\n")), 8.0 + 3.0 * FMath::Min(ReadyUnits.Num(), 3));
+	ReadySaid = NoticesSaid;
+	ReadyNext = 0;
+}
+
+void ACampaignPlayerController::ShowReady()
+{
+	if (!CanShowReady() || !Map.IsValid())
+	{
+		return;
+	}
+	const TArray<FCampaignRegion>& Regions = Map->GetData().Regions;
+	const int32 Count = ReadyUnits.Num();
+	const int32 Index = ReadyNext % Count;
+	ReadyNext = Index + 1;
+	const FReadyUnit& Unit = ReadyUnits[Index];
+	// (a corps is looked for where it stands now: it may have been moved since)
+	int32 Place = Unit.Region;
+	if (const FCampaignSession* ReadySession = GetSession(); ReadySession && Unit.Corps != INDEX_NONE)
+	{
+		for (const FViewCorps& Corps : ReadySession->GetView().Corps)
+		{
+			if (Corps.Id == Unit.Corps)
+			{
+				Place = Corps.Region;
+				break;
+			}
+		}
+	}
+	if (Regions.IsValidIndex(Place))
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Eye->GoTo(Map->MapToWorld(Regions[Place].Center.X, Regions[Place].Center.Y), 0.42f);
+		}
+		// (the place picked, and a new army there put in his hand)
+		SelectRegion(Place);
+		if (Unit.Corps != INDEX_NONE && PickUpArmyIn(Place))
+		{
+			CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+		}
+	}
+	// The plate says the one looked at, and stands a while longer.
+	ReadyHeading = Count == 1 ? FString(TEXT("READY FOR ORDERS")) : FString::Printf(TEXT("READY FOR ORDERS  \u00B7  %d OF %d"), Index + 1, Count);
+	Notify(Unit.Text, 10.0);
+	ReadySaid = NoticesSaid;
 }
 
 void ACampaignPlayerController::Notify(const FString& Text, double Seconds)

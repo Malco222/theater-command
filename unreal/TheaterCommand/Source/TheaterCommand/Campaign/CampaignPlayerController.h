@@ -602,6 +602,20 @@ public:
 	FText GetRulesNote() const;
 	/** A line of news for the player, shown for a few seconds. Empty when there is none. */
 	FText GetNotice() const;
+	/**
+	 * (Release 1.5.1, new units ready; Brian, 24 November 2026 18:30Z: "let me know when a unit has been delivered".)
+	 * As his month opens, a READY FOR ORDERS plate names the units handed over to him; SHOW ME (or G) takes the eye to
+	 * each in turn and puts a new army in his hand. The plate is said once nothing else holds the screen.
+	 */
+	void ShowReady();
+	bool CanShowReady() const { return bReadyNotice && !bWatching && ReadyUnits.Num() > 0 && ReadySaid >= 0 && ReadySaid == NoticesSaid && FPlatformTime::Seconds() < NoticeUntil; }
+	const TArray<FReadyUnit>& GetReadyUnits() const { return ReadyUnits; }
+	/** The brass heading over the plate while it is up ("READY FOR ORDERS · 1 OF 2"); empty otherwise. */
+	FString GetReadyHeading() const { return CanShowReady() ? ReadyHeading : FString(); }
+	/** Whose flag stands beside that heading: his own. */
+	const FString& GetReadyNation() const { return ReadyNation; }
+	/** Says the READY plate now (the month's end does, once the screen is free; a picture asks for it at once). */
+	void SayReady();
 	/** (Brian's memorial card) The plate for the capital ships just lost, and how far it is shown (0 none, 1 whole: it fades in and out). */
 	const FMemorialShow& GetMemorial() const { return Memorial; }
 	float GetMemorialShown() const;
@@ -1502,6 +1516,16 @@ private:
 	double FrameHintUntil = 0.0;
 	bool bMoments = true; // the eye drops to the front for a few seconds when a capital falls or a great battle is decided
 	bool bShipsSail = true; // (the 1.5 patch) a fleet that moves sails there on the map (ACampaignMapActor::SetShipsSail)
+	// (Release 1.5.1, new units ready; Brian 24 Nov 18:30Z, his card 19:00Z) The option (on unless he turns it off), the
+	// units handed over as this month opened, the next SHOW ME goes to, whether the plate is still to be said, and the
+	// notice that said it.
+	bool bReadyNotice = true;
+	TArray<FReadyUnit> ReadyUnits;
+	int32 ReadyNext = 0;
+	bool bReadyDue = false;
+	int32 ReadySaid = -1;
+	FString ReadyNation;
+	FString ReadyHeading;
 	bool bMomentDue = false; // such a thing has just happened: the moment begins when its result has been read
 	bool bMomentOn = false;
 	double MomentUntil = 0.0;
