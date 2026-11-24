@@ -958,7 +958,7 @@ int main(int argc, char** argv)
 			{ "khata_front", 0, 0, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the steppe: a whitewashed khata, hipped thatch", 8, 9.18, 6.46, 1 },
 			{ "khata_other", 0, 0, 0, 4, -40.0, 11.0, 62.0, -1, 0.0, "another: its wash, its paint", 8, 9.18, 6.46, 1 },
 			{ "khata_back", 0, 0, 0, 7, 210.0, 12.0, 250.0, -1, 0.0, "from behind", 8, 9.18, 6.46, 1 },
-			{ "khata_window", 0, 0, 0, 7, 16.0, 4.0, 62.0, 0, 3.4, "close: a window deep in the clay, its band (about half have shutters)", 8, 9.18, 6.46, 1 },
+			{ "khata_window", 0, 0, 0, 7, 16.0, 4.0, 62.0, 0, 3.4, "close: a window deep in the clay (some shuttered)", 8, 9.18, 6.46, 1 },
 			{ "khata_door", 0, 0, 0, 7, -20.0, 6.0, 62.0, 1, 5.0, "close: the door, the prizba", 8, 9.18, 6.46, 1 },
 			{ "khata_eaves", 0, 0, 0, 7, 50.0, 8.0, 62.0, 20, 3.4, "close: the eaves cut over the rafters' ends", 8, 9.18, 6.46, 1 },
 			{ "khata_hip", 0, 0, 0, 7, 60.0, 22.0, 62.0, 21, 4.5, "close: the hip, the ridge's roll, the chimney", 8, 9.18, 6.46, 1 },
