@@ -4640,6 +4640,9 @@ void ALandBattle::RideLorries()
 	if (bAdded)
 	{
 		MenDrawn.SetNum(S.Men->Count());
+	}
+}
+
 void ALandBattle::BailOut()
 {
 	// Effects (R2): the crews' bail-out (-TheaterLandBailOut, LandBail; Brian, 23 November: "if a tank gets hit people
