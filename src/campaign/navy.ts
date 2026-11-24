@@ -93,7 +93,9 @@ export interface ArrivalDial { stops?: number[]; sunk?: boolean; from?: string; 
  * name, home sea]. It sails from the latest of them (its row's own base the first) that its side holds.
  */
 export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
-  name: string; held?: string; stations?: [number, string][]; hunts?: { to: string; seas: [number, string[]][] }; admirals?: [number, string][];
+  name: string; held?: string; stations?: [number, string][]; admirals?: [number, string][];
+  /** The nation a far-side group hunts and the record's seas by half-year. 'after' "fleet": its boats were sent against that nation's fleet and its landings, not its cargoes (`fleetBeat`). */
+  hunts?: { to: string; after?: string; seas: [number, string[]][] };
   bases?: [number, string, string, string][];
 }
 /**
@@ -110,7 +112,8 @@ export interface BeatFloor { groups: string[]; least: [number, number]; seas: st
  */
 export interface Beats {
   groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor;
-  far?: { war: number }; pools?: string[];
+  /** 'all': the rows' counts are the first month's and no ceiling, so every boat the pools have goes to the groups, in the row's shares. */
+  far?: { war: number; all?: boolean }; pools?: string[];
   /** The far side's one measure: of a navy's boats at sea, the share out on patrol, as rows of [from this turn, boats out, of this many on hand]. */
   patrol?: [number, number, number][];
 }
@@ -2501,14 +2504,48 @@ export function placeBoats(g: Game, nat: string): void {
   });
 }
 
-/** The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own the first. */
+/**
+ * The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own
+ * the first. At stops 1 and 2 the list keeps the record's dates. At stops 3 to 5 a date gives way when every base
+ * before it is lost (the design director's ruling of 21:00Z and 21:04Z, 22 November 2026, on Japan's boats that stood
+ * down from January to July 1943 with Kwajalein lost and Saipan dated February 1944): with none of the bases whose
+ * date has come in its side's hands, the group sails from the first of the later ones that its side holds, the
+ * earliest date first. A base whose date has come, retaken, takes the group back. None on the whole list, and the
+ * group stands down. Every navy's groups.
+ */
 export function baseInForce(g: Game, nat: string, G: BeatGroup): { base: string; port: string; home: string } | null {
   const list: [number, string, string, string][] = [[0, G.base ?? '', G.port ?? '', G.home ?? ''], ...(G.bases ?? [])];
+  const held = ([, base, , home]: [number, string, string, string]): boolean => { const r = g.byName[base]; return !!r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home)); };
   for (let i = list.length - 1; i >= 0; i--) {
-    const [from, base, port, home] = list[i], r = g.byName[base];
-    if (from <= g.turn && r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home))) return { base, port, home };
+    const [from, base, port, home] = list[i];
+    if (from <= g.turn && held(list[i])) return { base, port, home };
   }
-  return null;
+  if (stopOf(g) <= 2) return null;
+  const later = list.filter((x) => x[0] > g.turn && held(x)).sort((a, b) => a[0] - b[0])[0];
+  return later ? { base: later[1], port: later[2], home: later[3] } : null;
+}
+
+/**
+ * The beat of a group whose boats were sent against the enemy's fleet and not its cargoes (Japan's: the design
+ * director's ruling of 20:03Z of 22 November 2026, on the historian's table of where its boats were lost). Of the
+ * record's seas for the half-year that it can reach, the one where the hunted side's fleet stands this month, the
+ * strongest in surface ships; failing a fleet, one where that side has landed troops this month or last. None
+ * where neither is so, and the group then keeps the first of the list it can reach, as any group does.
+ */
+export function fleetBeat(g: Game, f: Sailing, H: NonNullable<BeatGroup['hunts']>, month: number = g.turn): number {
+  let list: string[] = [];
+  for (const [turn, seas] of H.seas) if (month >= turn) list = seas;
+  const reach = new Set(fleetReach(g, f, true));
+  let best = -1, most = 0;
+  for (const k of list) {
+    const z = zoneOf(g, k);
+    if (z < 0 || !reach.has(z)) continue;
+    let n = 0;
+    for (const x of g.fleets) if (x.zone === z && atSea(x) && atWar(g, x.nat, f.nat) && (x.nat === H.to || allied(g, x.nat, H.to))) n += surfaceShips(x);
+    if (n <= 0 && landedLately(g, z, f.nat)) n = 1;
+    if (n > most) { most = n; best = z; }
+  }
+  return best;
 }
 
 /** The record's seas where a group hunted in the half-year a month falls in (its 'hunts' list in force), or none before the first. */
@@ -2534,8 +2571,8 @@ export function boatsReach(g: Game, f: Sailing, G: BeatGroup, month: number = g.
  * How far the player's own boats raid from the base they are in (the design director's ruling of 17:42Z, 22 November
  * 2026: a player never lacks a tool the computer has). No staff places his boats after his first month, so no group
  * carries a reach for him. A fleet of submarines alone raids as far from its base as his navy's group raids from that
- * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place,
- * and the farther where two groups share it. A war that comes before the record's is read by the record's first
+ * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place
+ * (or the later base its date gave way to, `baseInForce`), and the farther where two groups share it. A war that comes before the record's is read by the record's first
  * month, as the staff's placing reads it. From any other base, with a surface ship in company, and for a navy whose
  * beats are not the far side's form: any fleet's reach.
  */
@@ -2545,7 +2582,7 @@ export function ownBoatsReach(g: Game, f: Sailing): number {
   const at = g.regions[f.base].name;
   let far = NAVY.range;
   for (const G of B.groups) {
-    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at))) continue;
+    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at) && baseInForce(g, f.nat, G)?.base !== at)) continue;
     far = Math.max(far, boatsReach(g, f, G, atWar(g, f.nat, G.hunts.to) ? Math.max(g.turn, B.far.war) : g.turn));
   }
   return far;
@@ -2558,7 +2595,9 @@ export function ownBoatsReach(g: Game, f: Sailing): number {
  *
  * The rows are boats on hand by command, in port or at sea, the measure of Germany's rows. They are lent from the
  * navy's own fleets ('pools', in their order) and come home to the first of them: as many as the row asks, up to what
- * the navy has, so a row above that is a split among the commands and no demand. They are read while the navy is at
+ * the navy has, so a row above that is a split among the commands and no demand. A navy whose rows are marked
+ * 'far.all' (Japan's, whose one row is the record's 63 of December 1941) sends its groups every boat it has, in the
+ * row's shares: the count is the first month's and no ceiling. They are read while the navy is at
  * war with a nation its groups hunt, and at no other time: with that war over, or not begun, every boat is with its
  * pool. A war that comes before the record's ('far.war') is read as the record's first month.
  *
@@ -2584,7 +2623,11 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
   const held = fleets.map((f) => f?.ships.ss ?? 0);
   const out = held.reduce((a, b) => a + b, 0);
   // (With no pool left to go home to, the boats stay with the groups: shared by the row, or where they are.)
-  const total = pools.length ? Math.min(want.reduce((a, b) => a + b, 0), out + pools.reduce((n, f) => n + f.ships.ss, 0)) : out;
+  // (A navy whose row is its first month's count and no ceiling, 'far.all': every boat it has goes to its groups, in
+  // the row's shares, the month it is built. The design director's ruling of 21:00Z, 22 November 2026, on Japan's 141
+  // boats on hand in August 1945 with 71 of them lying in the 6th Fleet's harbour, where no hunter reached them.)
+  const asked = want.reduce((a, b) => a + b, 0), onHand = out + pools.reduce((n, f) => n + f.ships.ss, 0);
+  const total = pools.length ? (B.far!.all && asked > 0 ? onHand : Math.min(asked, onHand)) : out;
   const parts = wholeShares(total, pools.length || want.some((x) => x > 0) ? want : held);
   // Boats come home before others go out: home to the first pool, out from the pools in their order.
   if (pools.length) {
@@ -2609,16 +2652,28 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
     if (!G.hunts) return;
     const reach = fleetReach(g, f, true);
     let beat = -1;
-    if (stop <= 2) beat = huntBeat(g, f, G.hunts, month);
+    if (stop <= 2) beat = G.hunts.after === 'fleet' ? fleetBeat(g, f, G.hunts, month) : huntBeat(g, f, G.hunts, month);
     else { let most = 0; for (const z of reach) { const n = shippingIn(g, nat, z); if (n > most) { beat = z; most = n; } } }
     if (beat < 0) beat = huntSeas(G, month).map((k) => zoneOf(g, k)).find((z) => z >= 0 && reach.includes(z)) ?? -1;
     if (beat >= 0) f.station = beat;
   });
 }
 
-/** How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort whose lane crosses it or a patrol there. */
+/**
+ * The far side (the design director's ruling of 19:52Z of 22 November 2026): a fleet laid for harbour, lying in it,
+ * keeps the patrol's share of its destroyers on the sea at its own door, as navies kept local patrols on their
+ * approaches. No fleet does with the far side off.
+ */
+export const harbourPatrol = (g: Game, f: Fleet): boolean => f.duty === 'port' && !atSea(f) && f.ships.dd > 0 && farOn(g);
+
+/**
+ * How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort
+ * whose lane crosses it or a patrol there (and, on the far side, for the harbour patrols of a fleet laid for harbour
+ * in the sea its port stands on).
+ */
 function huntShare(g: Game, f: Fleet, z: number): number {
   const H = FLEETS.hunt;
+  if (!atSea(f)) return f.home === z && harbourPatrol(g, f) ? H.loose : 0;
   if (f.stance === 'escort') {
     const rt = seaRoutes(g).find((r) => r.id === f.lane);
     return rt && rt.zones.includes(z) ? H.escort : f.zone === z ? H.loose : 0;
@@ -2628,13 +2683,16 @@ function huntShare(g: Game, f: Fleet, z: number): number {
 }
 
 /** What a nation's hunters are worth against the submarines in one sea: its destroyers and carriers there, and the aircraft on the coasts. */
-export function huntersIn(g: Game, nat: string, z: number): { weight: number; fleets: Fleet[] } {
+export function huntersIn(g: Game, nat: string, z: number, but?: Fleet): { weight: number; fleets: Fleet[] } {
   const H = FLEETS.hunt;
   let w = 0;
   const fleets: Fleet[] = [];
   for (const f of g.fleets) {
-    if (f.nat !== nat || !atSea(f)) continue;
-    const p = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
+    if (f.nat !== nat || f === but) continue;
+    // (A fleet in harbour sends its destroyers alone: its carriers' aircraft are not flown from the anchorage.)
+    const out = atSea(f);
+    if (!out && !harbourPatrol(g, f)) continue;
+    const p = (f.ships.dd + (out ? f.ships.cv * H.carrier * deckWorth(g, f) : 0)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
     if (p > 0) { w += p; fleets.push(f); }
   }
   w += ownAirOver(g, z, nat) * H.air;
@@ -2707,10 +2765,14 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
       loseStars(f, 'dd', k);
     }
     if (look) look.cost = cost;
-    const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g.nations[nat].adj} aircraft`;
+    // (A fleet at sea is named before one whose harbour patrols alone were out: the far side's.)
+    const first = h.fleets.find(atSea) ?? h.fleets[0];
+    const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : first ? `${atSea(first) ? 'The escorts' : 'The harbour patrols'} of ${fleetName(first)}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
-    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
+    // (The harbour patrols' line counts one boat in words, the UI director's of 20:04Z; the older lines stand as they were.)
+    const sinks = groups.length || !first || atSea(first) || sunk !== 1 ? subsSunk : `a ${g.nations[quarry[0].nat].adj} submarine`;
+    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${sinks} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
   }
   return out;
 }
@@ -2856,12 +2918,16 @@ export function torpedoFault(g: Game, nat: string): { share: number; until: numb
   if (since <= 0) return { share: S.share, until: null };
   return g.turn - since + 1 >= S.month ? null : { share: S.share, until: since + S.month - 1 };
 }
-/** The sentence: "Faulty torpedoes: your submarines raid at a quarter of their worth until September 1943." `boats` is "your submarines", "these boats" or "your boats". */
+/**
+ * The sentence: "Faulty torpedoes: your submarines raid at a quarter of their worth until September 1943." `boats` is
+ * "your submarines", "these boats" or "your boats". Where no month can be named yet it ends "until the fault is
+ * found" (the UI director's words of 20:04Z, 22 November 2026).
+ */
 export function torpedoWords(g: Game, nat: string, boats: string, month = true): string | null {
   const t = torpedoFault(g, nat);
   if (!t) return null;
   const share = t.share === 0.25 ? 'a quarter' : t.share === 0.5 ? 'half' : `${Math.round(t.share * 100)}%`;
-  return `Faulty torpedoes: ${boats} raid at ${share} of their worth${month && t.until !== null ? ` until ${turnToDate(t.until).label}` : ''}.`;
+  return `Faulty torpedoes: ${boats} raid at ${share} of their worth${!month ? '' : t.until !== null ? ` until ${turnToDate(t.until).label}` : ' until the fault is found'}.`;
 }
 /** Whether a navy's faulty boats are among the raiders in these seas: a fleet of its own at sea there with boats, raiding or on patrol, in a sea of the far side. */
 export const faultyRaiders = (g: Game, nat: string, zones: number[]): boolean =>
@@ -3716,7 +3782,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       const clear = (z: number): boolean => !(airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g));
       const bare = FLEETS.ai.guard ? laneUnguarded(g, f, reach.filter(clear)) : null;
       if (bare && escort(g, f, bare.id)) continue;
-      const z = FLEETS.ai.hunt ? huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x))) : -1;
+      // (The far side: it hunts wherever the enemy's boats are out within its reach, not on its own beat alone.)
+      const z = !FLEETS.ai.hunt ? -1 : farOn(g) ? huntingSea(g, f, reach.filter(clear)) : huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x)));
       if (z >= 0 && sail(g, f, z, 'hunt')) continue;
     }
     if (best < 0 || !sail(g, f, best, 'patrol')) home();
@@ -3758,6 +3825,36 @@ function huntingGround(g: Game, f: Fleet, seas: number[]): number {
       subs += boatsOut(g, x);
     }
     if (subs > most) { most = subs; best = z; }
+  }
+  return best;
+}
+
+/**
+ * The far side's hunting ground (the design director's ruling of 19:52Z of 22 November 2026). Each month a staff at
+ * war has the seas where the enemy's boats are out, and its fleets with destroyers and nothing better to do hunt
+ * there wherever they can reach and live, not on their own beat alone. They are sent one at a time, each to the sea
+ * where its own hunters would sink the most boats by the hunt's rule, counting the hunters of its side already
+ * there: so many boats draw it, and hunters enough already there send it on to the next sea. A sea where enemy
+ * surface ships are out is no hunting ground. Any fleet the hunt counts as a hunter goes, its carriers' aircraft as
+ * its destroyers (the director's 20:03Z): a fleet with neither has no hunting ground.
+ */
+export function huntingSea(g: Game, f: Fleet, seas: number[]): number {
+  const H = FLEETS.hunt;
+  const mine = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * H.hunter * quality(g, f.nat) * fit(g, f) * techMul(g, f.nat, 'radar');
+  if (!(mine > 0)) return -1;
+  let best = -1, most = 0;
+  for (const z of seas) {
+    let subs = 0, surface = false;
+    for (const x of g.fleets) {
+      if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
+      if (surfaceShips(x) > 0) { surface = true; break; }
+      subs += boatsOut(g, x);
+    }
+    if (surface || subs <= 0) continue;
+    let there = 0;
+    for (const nat of Object.keys(g.nations)) if (nat === f.nat || allied(g, nat, f.nat)) there += huntersIn(g, nat, z, f).weight;
+    const gain = subs * (huntShareSunk(there + mine, subs) - huntShareSunk(there, subs));
+    if (gain > most) { most = gain; best = z; }
   }
   return best;
 }

@@ -39,9 +39,18 @@ const allBoats = <T>(nat: string, fn: () => T): T => {
 const war = (g: Game): Game => { declareWar(g, 'JAP', 'USA'); return g; };
 
 describe("the far side's one measure for the boat", () => {
-  it('one boat in three is out, for the four navies of the paper, in the far side\'s seas alone', () => {
+  it('one boat in three is out for America, Britain and the Netherlands, and Japan\'s own share for Japan, in the far side\'s seas alone', () => {
     const rows = (farBooks as any)['navy.json'].beats;
-    for (const nat of ['USA', 'NED', 'UK', 'JAP']) expect(rows[nat].patrol, nat).toEqual([[0, 1, 3]]);
+    for (const nat of ['USA', 'NED', 'UK']) expect(rows[nat].patrol, nat).toEqual([[0, 1, 3]]);
+    // Japan's, like for like with the record (the director's 21:04Z and 21:23Z): a third of its 40 to 45 operational
+    // boats, of all 64 on hand, and the middle of the counts is laid: 85 boats out of 384, 0.221.
+    expect(rows.JAP.patrol).toEqual([[0, 85, 384]]);
+    expect(85 / 384).toBeCloseTo((40 / 64 / 3 + 45 / 64 / 3) / 2, 12);
+    {
+      const j = war(grand());
+      const boats = squadron(j, named(j, 'JAP', '6th Fleet'), { ss: 384 }, 'schina', 'raid');
+      expect(boatsOut(j, boats)).toBeCloseTo(85, 12);
+    }
     expect(Object.keys(NAVY.beats!).filter((nat) => NAVY.beats![nat].patrol).sort()).toEqual(['JAP', 'NED', 'UK', 'USA']);
     const g = war(grand());
     const f = squadron(g, named(g, 'USA', 'Asiatic Fleet'), { ss: 60 }, 'schina', 'raid');
@@ -113,18 +122,19 @@ describe("the far side's one measure for the boat", () => {
   it('the boats out burn as ships at sea in the oil book, and the rest at the harbour\'s rate', () => {
     const g = war(grand());
     const N = RES.oil.need;
-    const f = squadron(g, named(g, 'JAP', '6th Fleet'), { ss: 60 }, 'schina', 'raid');
+    // (Japan's share is 85 boats out of 384 on hand: 384 boats, so that the counts are whole.)
+    const f = squadron(g, named(g, 'JAP', '6th Fleet'), { ss: 384 }, 'schina', 'raid');
     const spend = (key: string): { amount: number; count: number } => { const l = stores(g, 'JAP')!.oil.spend.find((x) => x.key === key); return { amount: l?.amount ?? 0, count: l?.count ?? 0 }; };
     const sea = spend('sea'), port = spend('port');
     const was = allBoats('JAP', () => ({ sea: spend('sea'), port: spend('port') }));
-    // Forty boats leave the count of ships at sea for the count in harbour.
-    expect(was.sea.count - sea.count).toBe(40);
-    expect(port.count - was.port.count).toBe(40);
-    // The ships at sea burn what they would with twenty boats in that fleet and every boat counted.
-    const twenty = allBoats('JAP', () => { f.ships.ss = 20; const a = spend('sea').amount; f.ships.ss = 60; return a; });
-    expect(sea.amount).toBeCloseTo(twenty, 9);
+    // The 299 boats not out leave the count of ships at sea for the count in harbour.
+    expect(was.sea.count - sea.count).toBe(299);
+    expect(port.count - was.port.count).toBe(299);
+    // The ships at sea burn what they would with 85 boats in that fleet and every boat counted.
+    const out = allBoats('JAP', () => { f.ships.ss = 85; const a = spend('sea').amount; f.ships.ss = 384; return a; });
+    expect(sea.amount).toBeCloseTo(out, 9);
     expect(sea.amount).toBeLessThan(was.sea.amount);
-    // And the forty at the base burn at the harbour's rate: a quarter of what they burned at sea.
+    // And the boats at the base burn at the harbour's rate: a quarter of what they burned at sea.
     expect(N.port).toBe(0.25);
     expect(port.amount - was.port.amount).toBeCloseTo((was.sea.amount - sea.amount) * N.port, 9);
     // In harbour the fleet burns as it always did.

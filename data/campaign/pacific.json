@@ -45,6 +45,34 @@
       "UK"
     ]
   },
+  "west": {
+    "_about": "The Soviet Far East's divisions that go west (the design director's rulings of 19:45Z and 20:03Z, 22 November 2026; the historian's far-east-west-and-us-divisions-dec41.md, section (c), and the notes of 20:00Z and 20:03Z). Two in the first month after Germany's attack (the rail order of 25 June 1941); three, five and three in the first, second and third months after the freeze, while Germany is at war with the Soviet Union; three in the seventh month after Japan's war with America or Britain (July 1942). Each only while Japan is at peace with the Soviet Union. At the stops that keep the book the months are the book's: 23, 25, 26, 27 and 35. Only the divisions whose row the historian has named are laid, with no stand-in for the rest: the 114th (September) is not found, the 78th (October) lies between two rows that are both spent, and the 82nd Motorised (November) came from Mongolia, whose rows are not held. A row is named by the far chart's own name for it; the third word is the record's formation. 'leaves': the 16th Army went west from Chita and Dauria in late May 1941 and the old chart's own book raises it at Kiev that month, so the Chita row leaves the far chart then.",
+    "nat": "SOV",
+    "foe": "GER",
+    "while": ["USA", "UK"],
+    "leaves": [
+      [21, "Transbaikal Military District (Chita)", "The 16th Army entrains at Chita for Kiev."]
+    ],
+    "waves": [
+      {"cause": "foe", "after": 1, "book": 23, "rows": [
+        ["2nd Red Banner Army (the Amur)", 1, "69th Motorised Division"],
+        ["2nd Red Banner Army (Khabarovsk)", 1, "59th Tank Division"]]},
+      {"cause": "freeze", "after": 1, "book": 25, "needs": "foe", "rows": [
+        ["1st Red Banner Army (Primorye)", 2, "21st and 26th Rifle Divisions"]]},
+      {"cause": "freeze", "after": 2, "book": 26, "needs": "foe", "rows": [
+        ["1st Red Banner Army (Posyet and the Khasan border)", 1, "32nd Rifle Division"],
+        ["1st Red Banner Army (Primorye)", 1, "92nd Rifle Division"],
+        ["Transbaikal Military District (Chita, new divisions)", 1, "93rd Rifle Division"],
+        ["2nd Red Banner Army (Birobidzhan)", 1, "60th Tank Division"]]},
+      {"cause": "freeze", "after": 3, "book": 27, "needs": "foe", "rows": [
+        ["Transbaikal Military District (facing Manchouli)", 1, "65th Rifle Division"],
+        ["1st Red Banner Army (Primorye)", 1, "58th Tank Division"]]},
+      {"cause": "war", "after": 7, "book": 35, "rows": [
+        ["2nd Red Banner Army (Svobodny)", 1, "204th Rifle Division"],
+        ["2nd Red Banner Army (Khabarovsk)", 1, "205th Rifle Division"],
+        ["1st Red Banner Army (the Ussuri, new divisions)", 1, "422nd Rifle Division"]]}
+    ]
+  },
   "demand": {
     "of": "VIC",
     "key": "Saigon",
@@ -347,6 +375,7 @@
     "freezeBritain": " Britain has done the same.",
     "freezeDutch": " The Dutch have done the same.",
     "north": "Three months after {fallen}'s defeat, {nat} turns east and declares war on {power}.",
+    "west": "The Far East can spare {n} {divisions} for the war in the west: {list}. Nothing has been moved. They are yours to send.",
     "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison keeps its posts under its own officers.",
     "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days.",
     "post": "The French garrison of Indochina answers to its own officers, not to you.",

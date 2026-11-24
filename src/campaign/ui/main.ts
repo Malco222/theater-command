@@ -2562,12 +2562,22 @@ function fleetFuelLine(card: FleetCard): string {
   const F = card.fuel;
   if (!F) return '';
   if (F.kind === 'wells') return `<small class="sub fuel" style="color:var(--ink)"><b>Fuelled from the wells at ${esc(F.field)}:</b> it is not short of fuel while it is based there.</small>`;
-  return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> ${F.less}% less fit for sea.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
+  return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> its strength at sea is ${F.less}% lower.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
+}
+
+/**
+ * The fleet tray's line on its harbour patrols (the far side; the design director's ruling of 19:52Z of 22 November
+ * 2026): a fleet laid for harbour keeps a share of its destroyers hunting submarines off its own port.
+ */
+function harbourPatrolLine(card: FleetCard): string {
+  if (!card.harbour) return '';
+  const share = card.harbour === 0.25 ? 'a quarter' : `${Math.round(card.harbour * 100)}%`;
+  return `<small class="sub" style="color:var(--ink)"><b>Harbour patrols:</b> ${share} of its destroyers hunt submarines ${esc(seaWhere(card.sea))} while it lies in port.</small>`;
 }
 
 /** The fleet tray's line on the boats out on patrol (the far side's one measure; the UI director's words of 22 November 2026). */
 function boatsOutWords(out: number, boats: number): string {
-  if (boats === 1) return out >= 1 ? 'Its submarine is out on patrol' : 'Its submarine is not out on patrol';
+  if (boats === 1) return out >= 1 ? 'Its one submarine is out on patrol' : 'Its one submarine is not out on patrol';
   return out <= 0 ? `None of its ${boats} submarines out on patrol` : out >= boats ? `All ${boats} of its submarines out on patrol` : `${out} of its ${boats} submarines out on patrol`;
 }
 
@@ -2595,7 +2605,7 @@ function drawFleetTray(f: Fleet): void {
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${fleetFuelLine(card)}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${card.torpedoes && f.nat === g.human && f.stance === 'raid' ? `<small class="sub typed" style="font-family:'Courier Prime',monospace;color:var(--ink)">${esc(card.torpedoes)}</small>` : ''}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${fleetFuelLine(card)}${f.nat === g.human ? harbourPatrolLine(card) : ''}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${card.torpedoes && f.nat === g.human && f.stance === 'raid' ? `<small class="sub typed" style="font-family:'Courier Prime',monospace;color:var(--ink)">${esc(card.torpedoes)}</small>` : ''}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
   articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
@@ -8881,7 +8891,7 @@ function onSea(z: number): void {
       // A sea its submarines alone can reach (the far side's beats): the click sends them to raid there, whatever work was lit, and says so.
       if (ui.stance !== 'raid' && !fleetReach(g, fl).includes(z) && orderFleet(g, fl.id, z, 'raid')) {
         ui.stance = 'raid';
-        ui.msg = `Ordered: the ${fl.name} sails to raid shipping ${seaWhere(g.seas[z].name)}. That sea is beyond its patrols from ${fl.port}: its submarines can only raid there.`;
+        ui.msg = `Ordered: the ${fl.name} sails to raid shipping ${seaWhere(g.seas[z].name)}. That sea is beyond its patrols from ${fl.port}: its submarines can raid shipping there, but not patrol.`;
       } else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `${seaHead(g.seas[z].name)} ${seaIs(g.seas[z].name)} out of reach of the ${fl.name} from ${fl.port}.`;
       // The piece does not move when only its work changes, so the line says what was ordered.
       else ui.msg = stayed ? `The ${fl.name} stays ${seaWhere(g.seas[z].name)} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`

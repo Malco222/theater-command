@@ -13,7 +13,7 @@ import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
 import { liftByRecord } from './pacific';
 import { traitRule, type Trait, type When } from './traits';
-import { RES, keepsStores, oilMonths } from './resources';
+import { RES, keepsStores, oilMonths, plantsMost, plantsSpent } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
 import { PLANS, planRules, whyNoTechPlans } from './plans';
@@ -386,7 +386,8 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
-    const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
+    // (The far side: a staff whose plants already make all the record allows them gains no oil by more of it.)
+    const fuel = t.oil && thirsty && !plantsSpent(g, nat) ? A.fuel ?? 0 : 0;
     // A small country buys its oil abroad and has no use for fuel chemistry.
     const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
     // The player's advisers take up winter equipment as soon as a winter in the east is in sight.
@@ -566,7 +567,18 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   if (rest) out.push(rest);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
-  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
+  // (The far side: a nation whose plants never made what the tree gives reads the record's yield, `plantsMost`.)
+  const most = t.oil && g && nat ? plantsMost(g, nat) : null;
+  // (The UI director's words of 20:45Z and 20:48Z, 22 November 2026: "your" to its own player, the country's name to anyone
+  // else; a step that adds nothing says so; and the fact the design director ruled at 20:46Z in a sentence of its own:
+  // submarines cannot touch this oil, but bombers can hit the plants.)
+  if (t.oil && most !== null && g && nat) {
+    const whose = g.human === nat ? 'your' : `${g.nations[nat].name}'s`;
+    out.push(plantsSpent(g, nat, t.id)
+      ? `${whose[0].toUpperCase()}${whose.slice(1)} fuel plants already make all they can: this adds no oil.`
+      : `With every factory at home working, ${whose} fuel plants make ${most} oil a month between them, far less than was planned for them. Submarines cannot touch this oil, but bombers can hit the plants.`);
+  }
+  else if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
   // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
   const x = t.spy;
   if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);
