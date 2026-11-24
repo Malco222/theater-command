@@ -1,7 +1,8 @@
 #!/bin/bash
 # The gore falls' cloud test (Effects, release 2, -TheaterLandGore): builds Battle/LandMen (the game's own code, no engine)
 # and plays a small battle of its own, shell, mortar and rifle kills at known distances from their bursts, with the gore
-# twins off and on. See land_gore_test.cpp for what it checks.
+# twins off and on, then a second of 384 men killed all round their bursts (the bursts' sides, the limbs away from them,
+# the big throw a gun's alone). See land_gore_test.cpp for what it checks.
 # Usage: Tools/land_gore/run.sh [twins folder] [out folder]  (twins: Content/Models/Soldiers unless given; with an out
 # folder it paints gore_falls.ppm there)
 set -euo pipefail

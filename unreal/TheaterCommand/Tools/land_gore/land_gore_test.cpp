@@ -6,6 +6,15 @@
 //         one of his twin's gore falls, keeps his clips, a limb leaves its joint, his limb_off events come; no whole
 //         joint of his opens on its caps (the twin's joined skin); no man's skin holds a NaN. Notes: a limb resting
 //         under 1 m from its joint, or flying over 3 m high (the art director's asks: the clips' own to mend)
+//   sides each gored man 1.5 m or more from the burst falls in a fall whose gore_from is where the burst was against
+//         him (front, behind, left, right: the test's own reading, from where he fell and his heading), every limb he
+//         loses comes to rest farther from the burst than its joint stood, and only a field gun's or a howitzer's shell
+//         (w "gun") throws him (die_blast_*, kind thrown); counted by side. Here and in a second battle of 384 men
+//         standing, running, kneeling and lying, killed by a gun, a tank or a mortar 0.5 to 3.2 m from the burst all
+//         round: there a standing or running man as strictly; a kneeling or lying one whose stance's gore falls hold
+//         none from his side (the twins' kneel and prone tables) a note, as a prone man thrown by a tank or a mortar
+//         (die_blast_d, the prone table's only fall). The off line and the men not gored print digests of their falls
+//         and skins, to be byte-identical before and after a change to the gore falls.
 //   same  a second crowd gores the same men with the same falls
 //   back  a replay from the start gives every man his own file again; played on, the same men are gored again
 // With an out folder it also paints gore_falls.ppm: six gored men from the side, each from the hit to rest in six steps.
@@ -14,6 +23,7 @@
 #include "land_men_picture.cpp"
 #undef main
 
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <set>
@@ -30,6 +40,7 @@ namespace
 		int B = 1, K = 1;
 		std::string W;
 		double Burst = 0.0;
+		double BX = 0.0, BY = 0.0; // the burst's place (the round's x, y)
 	};
 
 	std::string Recording(std::vector<Who>& Men)
@@ -56,10 +67,62 @@ namespace
 			const double A = 0.7 * I;
 			Rounds << "{\"t\": " << Hit << ", \"w\": \"" << Wh.W << "\", \"on\": " << Wh.B << ", \"ok\": " << Wh.K << ", \"x\": " << X + Wh.Burst * std::cos(A)
 			       << ", \"y\": " << Y + Wh.Burst * std::sin(A) << ", \"r\": \"kill\"}";
+			Wh.BX = X + Wh.Burst * std::cos(A);
+			Wh.BY = Y + Wh.Burst * std::sin(A);
 			Men.push_back(Wh);
 		}
 		R << "], " << Rounds.str() << "]}";
 		return R.str();
+	}
+
+	/**
+	 * The sides' battle: 384 men, an American and a German line, each killed at 3 s by a field gun's shell, a tank's or
+	 * a mortar's, standing (fire_stand, wait), running (advance, 2.5 m a second), kneeling or lying (fire_kneel,
+	 * fire_prone), the burst 0.5 to 3.2 m from where he is struck, all round him, his heading a little each way.
+	 */
+	std::string SidesRecording(std::vector<Who>& Men)
+	{
+		std::ostringstream R, Rounds;
+		R.precision(10);
+		Rounds.precision(10);
+		R << "{\"seed\": 29, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.12, -1.09]},"
+		  << "\"blocks\": [{\"id\": 1, \"army\": \"USA\", \"nat\": \"USA\", \"standIn\": \"POL\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\"}],"
+		  << "\"men\": [";
+		Rounds << "\"rounds\": [";
+		const char* const Guns[] = { "gun", "tank", "mortar" };
+		const char* const Stances[] = { "fire_stand", "wait", "advance", "fire_kneel", "fire_prone" };
+		const double Fars[] = { 0.5, 1.6, 2.0, 2.6, 3.2 }, Pace = 2.5;
+		for (int I = 0; I < 384; ++I)
+		{
+			const int N = I / 2;
+			Who Wh;
+			Wh.B = I % 2 ? 2 : 1;
+			Wh.K = N + 1;
+			Wh.W = Guns[N % 3];
+			Wh.Burst = Fars[(N / 15) % 5];
+			const char* Stance = Stances[(N / 3) % 5];
+			const double X = 30.0 * N, Y = Wh.B == 1 ? 0.0 : 60.0, F = (Wh.B == 1 ? 0.0 : 3.14159265358979) + 0.25 * (N % 5 - 2);
+			const double A = 0.5 + 0.9 * I;
+			// (a running man passes his spot at the hit; the others stand on it)
+			const double Go = std::strcmp(Stance, "advance") == 0 ? Pace : 0.0;
+			if (I) { R << ","; Rounds << ","; }
+			R << "{\"b\": " << Wh.B << ", \"k\": " << Wh.K << ", \"r\": \"rifle\", \"at\": [[0, " << X - std::sin(F) * Go * Hit << ", " << Y - std::cos(F) * Go * Hit << ", " << F
+			  << "], [10, " << X + std::sin(F) * Go * (10.0 - Hit) << ", " << Y + std::cos(F) * Go * (10.0 - Hit) << ", " << F << "]], \"ch\": [[0, \"" << Stance
+			  << "\", \"none\", 0, 0, 0, 0]], \"d\": " << Hit << "}";
+			Wh.BX = X + Wh.Burst * std::cos(A);
+			Wh.BY = Y + Wh.Burst * std::sin(A);
+			Rounds << "{\"t\": " << Hit << ", \"w\": \"" << Wh.W << "\", \"on\": " << Wh.B << ", \"ok\": " << Wh.K << ", \"x\": " << Wh.BX << ", \"y\": " << Wh.BY
+			       << ", \"r\": \"kill\"}";
+			Men.push_back(Wh);
+		}
+		R << "], " << Rounds.str() << "]}";
+		return R.str();
+	}
+
+	uint64_t HashText(const std::string& T, uint64_t H)
+	{
+		for (const unsigned char Ch : T) H = (H ^ Ch) * 1099511628211ull;
+		return (H ^ 0xFFu) * 1099511628211ull;
 	}
 
 	uint64_t HashOf(const std::vector<float>& V, uint64_t H)
@@ -220,6 +283,36 @@ namespace
 		return Most;
 	}
 
+	/** A gore fall's side as the twin gives it (gore_from), or empty. */
+	std::string GoreFromOf(const Soldier& S, const std::string& Clip)
+	{
+		const auto Found = S.GoreFrom.find(Clip);
+		return Found == S.GoreFrom.end() ? std::string() : Found->second;
+	}
+
+	/** The big throw: a fall of kind thrown, or any die_blast_* (the art director's: a field gun's or a howitzer's). */
+	bool Throws(const std::string& Kind, const std::string& Clip) { return Kind == "thrown" || Clip.rfind("die_blast_", 0) == 0; }
+
+	/** On the field now: the head of each bone his fall takes off (its limb_off events'), then his pelvis's. */
+	std::vector<Vec3> CutHeads(const Crowd& C, int Man)
+	{
+		std::vector<Vec3> Out;
+		const Soldier& S = *C.SoldierOf(Man);
+		const Xform* Fr = C.FramesOf(Man);
+		const int Ix = S.ClipIndex(C.Info(Man).FallClip);
+		if (Ix >= 0)
+		{
+			for (const ClipEvent& E : S.Clips[static_cast<size_t>(Ix)].Events)
+			{
+				const int B = E.Fx == "limb_off" ? S.BoneIndex(E.BoneName) : -1;
+				if (B >= 0) Out.push_back(Fr[B].Point(S.Bones[static_cast<size_t>(B)].Head));
+			}
+		}
+		const int P = S.BoneIndex("pelvis");
+		if (P >= 0) Out.push_back(Fr[P].Point(S.Bones[static_cast<size_t>(P)].Head));
+		return Out;
+	}
+
 	struct Result
 	{
 		std::vector<std::string> Clip;
@@ -228,7 +321,25 @@ namespace
 		uint64_t Skin = 1469598103934665603ull;
 		int LimbOff = 0, NaN = 0;
 		double Ms = 0.0;
+		std::vector<std::string> Fall;              // each man's fall: clip, kind, from, stance
+		std::vector<uint64_t> SkinOf;               // each man's skin at the end, hashed
+		std::vector<std::vector<Vec3>> Joint, End;  // a gored man's CutHeads on his fall's first frame, and at the end
 	};
+
+	/** The digest of some men's falls and skins: "falls <hash>, skins <hash>". */
+	std::string Digest(const Result& R, const std::vector<char>& Take)
+	{
+		uint64_t Fa = 1469598103934665603ull, Sk = 1469598103934665603ull;
+		for (size_t I = 0; I < R.Fall.size(); ++I)
+		{
+			if (!Take[I]) continue;
+			Fa = HashText(R.Fall[I], Fa);
+			Sk = (Sk ^ R.SkinOf[I]) * 1099511628211ull;
+		}
+		char Words[80];
+		std::snprintf(Words, sizeof(Words), "falls %016llx, skins %016llx", static_cast<unsigned long long>(Fa), static_cast<unsigned long long>(Sk));
+		return Words;
+	}
 
 	Result Play(Crowd& C, const std::vector<Who>& Men, double From, double To)
 	{
@@ -236,27 +347,167 @@ namespace
 		const auto T0 = std::chrono::steady_clock::now();
 		double Measured = 0.0;
 		Out.High.assign(Men.size(), 0.0);
+		Out.Joint.assign(Men.size(), {});
+		Out.End.assign(Men.size(), {});
+		std::vector<char> Struck(Men.size(), 0);
 		for (double T = From; T <= To; T += 1.0 / 60.0)
 		{
 			C.Update(T);
 			for (const Event& E : C.Events()) Out.LimbOff += E.Fx == "limb_off" ? 1 : 0;
-			// (the limbs' arcs, every frame: the art director's 3 m cap, 18:34Z; not in the time)
+			// (the limbs' arcs, every frame: the art director's 3 m cap, 18:34Z; not in the time; and a gored man's cut
+			// bones where his fall begins, his joints as he was struck)
 			const auto M0 = std::chrono::steady_clock::now();
-			for (size_t I = 0; I < Men.size(); ++I) Out.High[I] = std::max(Out.High[I], LimbHigh(C, C.Find(Men[I].B, Men[I].K)));
+			for (size_t I = 0; I < Men.size(); ++I)
+			{
+				const int Man = C.Find(Men[I].B, Men[I].K);
+				Out.High[I] = std::max(Out.High[I], LimbHigh(C, Man));
+				if (!Struck[I] && C.Info(Man).FallStarted >= 0.0)
+				{
+					Struck[I] = 1;
+					if (!C.SoldierOf(Man)->DeathsGore.empty()) Out.Joint[I] = CutHeads(C, Man);
+				}
+			}
 			Measured += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - M0).count();
 		}
 		Out.Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count() - Measured;
 		for (size_t I = 0; I < Men.size(); ++I)
 		{
 			const int Man = C.Find(Men[I].B, Men[I].K);
-			Out.Clip.push_back(C.Info(Man).FallClip);
+			const ManInfo& In = C.Info(Man);
+			Out.Clip.push_back(In.FallClip);
+			Out.Fall.push_back(In.FallClip + "/" + In.FallKind + "/" + In.FallFrom + "/" + In.FallStance);
 			std::vector<float> At, Fa;
 			Skinned(C, Man, At, Fa);
 			for (const float F : At) Out.NaN += std::isfinite(F) ? 0 : 1;
 			Out.Skin = HashOf(At, Out.Skin);
+			Out.SkinOf.push_back(HashOf(At, 1469598103934665603ull));
 			Out.Gap.push_back(LimbGap(C, Man));
+			if (!Out.Joint[I].empty()) Out.End[I] = CutHeads(C, Man);
 		}
 		return Out;
+	}
+
+	/** What the gored men of a play show of their bursts' sides (the art director, 23 Nov 17:52Z: the limb flies away
+	 * from the blast; die_blast_* a field gun's or a howitzer's; the deaths thread's gore_from). */
+	struct Sided
+	{
+		int Gored = 0, Read = 0;         // gored; of them 1.5 m or more from the burst
+		int Mismatch = 0;                // of those, in a fall from another side where his stance's gore falls hold one from his
+		int NoneThere = 0, NoneUp = 0;   // of those, his stance's gore falls none from his side he may take (of them standing or running)
+		int Limbs = 0, Toward = 0;       // the limbs off of those men in a fall from their side; of them resting no farther from the burst than their joint stood
+		double Least = 1e9;              // the least a limb's distance from the burst grew from its joint's (m)
+		int Bodies = 0, BodyToward = 0;  // those men's pelvises; resting no farther from the burst than they stood (a note)
+		int NoneLimbs = 0, NoneToward = 0; // the limbs off of the men with no fall from their side, and of them resting nearer
+		int GunGored = 0, GunThrown = 0; // a gun's gored men, and of them thrown
+		int OtherThrown = 0;             // thrown by a tank's or a mortar's where his stance's gore falls hold another
+		int OtherForced = 0;             // thrown by one where they hold nothing else (the prone table: die_blast_d alone)
+		std::map<std::string, std::array<int, 3>> By; // side: gored, thrown, with no fall from there in his stance's table
+		std::map<std::string, int> None;              // "stance side": no fall from there
+	};
+
+	Sided ReadSides(Crowd& C, const std::vector<Who>& Men, const Result& R, std::map<std::string, std::shared_ptr<Soldier>>& Files)
+	{
+		Sided Out;
+		for (const char* Side : { "front", "behind", "left", "right", "under" }) Out.By[Side] = { 0, 0, 0 };
+		for (size_t I = 0; I < Men.size(); ++I)
+		{
+			const int Man = C.Find(Men[I].B, Men[I].K);
+			const ManInfo& In = C.Info(Man);
+			if (C.SoldierOf(Man) == Files[In.FileArmy].get()) continue;
+			const Soldier& Tw = *C.SoldierOf(Man);
+			++Out.Gored;
+			// (the burst against him: from where he fell and his heading, clockwise from north; his right is clockwise of
+			// it, the field's x east and y north)
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			float F = 0.f;
+			C.PlaceOf(Man, X, Y, Z, F);
+			const double DX = Men[I].BX - X, DY = Men[I].BY - Y, Far = std::hypot(DX, DY);
+			double Off = std::atan2(DX, DY) - static_cast<double>(F);
+			while (Off > 3.14159265358979) Off -= 6.28318530717959;
+			while (Off < -3.14159265358979) Off += 6.28318530717959;
+			const std::string Side = Far < 1.0 ? "under" : std::fabs(Off) < 1.22 ? "front" : std::fabs(Off) > 1.92 ? "behind" : Off > 0.0 ? "right" : "left";
+			const bool bGun = Men[I].W == "gun", bThrown = Throws(In.FallKind, In.FallClip);
+			// (what his stance's gore falls hold: one from his burst's side he may take, a throw only from a gun; one not
+			// a throw)
+			bool bThere = false, bOther = false;
+			const auto St = Tw.DeathsGore.find(In.FallStance);
+			if (St != Tw.DeathsGore.end())
+			{
+				for (const auto& Kd : St->second)
+				{
+					for (const std::string& N : Kd.second)
+					{
+						bOther = bOther || !Throws(Kd.first, N);
+						bThere = bThere || ((bGun || !Throws(Kd.first, N)) && GoreFromOf(Tw, N) == Side);
+					}
+				}
+			}
+			std::array<int, 3>& Row = Out.By[Side];
+			++Row[0];
+			Row[1] += bThrown ? 1 : 0;
+			Row[2] += bThere ? 0 : 1;
+			if (bGun) { ++Out.GunGored; Out.GunThrown += bThrown ? 1 : 0; }
+			else if (bThrown) ++(bOther ? Out.OtherThrown : Out.OtherForced);
+			if (Far < 1.5) continue;
+			++Out.Read;
+			if (!bThere)
+			{
+				++Out.NoneThere;
+				Out.NoneUp += In.FallStance == "stand" || In.FallStance == "run" ? 1 : 0;
+				++Out.None[In.FallStance + " " + Side];
+			}
+			else if (GoreFromOf(Tw, In.FallClip) != Side) ++Out.Mismatch;
+			// (each limb off, and his pelvis last: how far from the burst it stood as he was struck, and where it rests)
+			const std::vector<Vec3>& J0 = R.Joint[I];
+			const std::vector<Vec3>& J1 = R.End[I];
+			for (size_t L = 0; L < J0.size() && L < J1.size(); ++L)
+			{
+				const double D0 = std::hypot(static_cast<double>(J0[L].X) - Men[I].BX, static_cast<double>(J0[L].Y) - Men[I].BY);
+				const double D1 = std::hypot(static_cast<double>(J1[L].X) - Men[I].BX, static_cast<double>(J1[L].Y) - Men[I].BY);
+				if (!bThere)
+				{
+					// (fallen as any man: a note)
+					if (L + 1 < J0.size()) { ++Out.NoneLimbs; Out.NoneToward += D1 > D0 ? 0 : 1; }
+					continue;
+				}
+				if (L + 1 < J0.size())
+				{
+					++Out.Limbs;
+					Out.Toward += D1 > D0 ? 0 : 1;
+					Out.Least = std::min(Out.Least, D1 - D0);
+					if (D1 <= D0)
+						std::printf("     limb toward: %s %s (%s, %s, burst %s %.1f m %.0f deg) a limb rests %.2f m from the burst, its joint stood %.2f m\n", In.FileArmy.c_str(),
+							In.FallClip.c_str(), In.FallStance.c_str(), Men[I].W.c_str(), Side.c_str(), Far, Off * 57.2957795, D1, D0);
+				}
+				else
+				{
+					++Out.Bodies;
+					Out.BodyToward += D1 > D0 ? 0 : 1;
+					if (D1 <= D0)
+						std::printf("     note: %s %s (%s, %s, burst %s %.1f m %.0f deg): his body rests %.2f m from the burst, it stood %.2f m (the fall's own way)\n", In.FileArmy.c_str(),
+							In.FallClip.c_str(), In.FallStance.c_str(), Men[I].W.c_str(), Side.c_str(), Far, Off * 57.2957795, D1, D0);
+				}
+			}
+		}
+		return Out;
+	}
+
+	void PrintSides(const char* Label, const Sided& S)
+	{
+		std::printf("     %s: %d gored, %d of them 1.5 m or more from the burst; by the burst's side (gored, thrown, no fall from there):", Label, S.Gored, S.Read);
+		for (const char* Side : { "front", "behind", "left", "right", "under" })
+		{
+			const auto Found = S.By.find(Side);
+			if (Found != S.By.end()) std::printf(" %s %d/%d/%d", Side, Found->second[0], Found->second[1], Found->second[2]);
+		}
+		std::printf("\n     %s: a gun's gored men %d, thrown %d; limbs off %d, the least any came to rest farther from the burst than its joint %.2f m; "
+			"bodies resting farther from it than they stood %d of %d\n", Label, S.GunGored, S.GunThrown, S.Limbs, S.Limbs ? S.Least : 0.0, S.Bodies - S.BodyToward, S.Bodies);
+		for (const auto& KV : S.None)
+			std::printf("     note: %s: %d gored men %s of the burst: their stance's gore falls hold none from there he may take; fallen as any man\n", Label, KV.second, KV.first.c_str());
+		if (S.NoneLimbs)
+			std::printf("     note: %s: of those men's %d limbs off, %d rest no farther from the burst than their joint stood\n", Label, S.NoneLimbs, S.NoneToward);
+		if (S.OtherForced)
+			std::printf("     note: %s: %d gored men thrown by a tank's or a mortar's burst, their stance's gore falls holding nothing else (prone: die_blast_d alone)\n", Label, S.OtherForced);
 	}
 }
 
@@ -312,6 +563,7 @@ int main(int Argc, char** Argv)
 		const Result Ra = Play(A, Men, 0.0, Until), Rb = Play(B, Men, 0.0, Until);
 		Check(Ra.Clip == Rb.Clip && Ra.Skin == Rb.Skin && B.Gored() == 0 && Rb.LimbOff == 0, "off: every fall and every skin as with no twins, none gored");
 		std::printf("     (%.0f ms against %.0f ms for %d frames)\n", Rb.Ms, Ra.Ms, static_cast<int>(Until * 60.0));
+		std::printf("     off: %d men, %s\n", static_cast<int>(Men.size()), Digest(Rb, std::vector<char>(Men.size(), 1)).c_str());
 	}
 
 	// ---- On.
@@ -381,6 +633,29 @@ int main(int Argc, char** Argv)
 	Check(JointsRead > 0 && MostOpen < 0.002, OpenWords);
 	Check(Rc.NaN == 0, "on: no NaN in any skin");
 	std::printf("     (%.0f ms for %d frames)\n", Rc.Ms, static_cast<int>(Until * 60.0));
+	{
+		std::vector<char> Whole(Men.size(), 0);
+		int Kept = 0;
+		for (size_t I = 0; I < Men.size(); ++I)
+		{
+			const int Man = C.Find(Men[I].B, Men[I].K);
+			Whole[I] = C.SoldierOf(Man) == Files[C.Info(Man).FileArmy].get() ? 1 : 0;
+			Kept += Whole[I];
+		}
+		std::printf("     not gored: %d men, %s\n", Kept, Digest(Rc, Whole).c_str());
+	}
+
+	// ---- Sides: the burst's side against each gored man, his limbs away from it, the big throw a gun's alone.
+	auto SideChecks = [&](const char* Label, const Sided& Sd, bool bStrict) {
+		PrintSides(Label, Sd);
+		Check(Sd.Read > 0 && Sd.Mismatch == 0 && (bStrict ? Sd.NoneThere : Sd.NoneUp) == 0,
+			std::string(Label) + ": each gored man " + (bStrict ? "" : "standing or running ") + "1.5 m or more from the burst falls in a fall from its side (gore_from; "
+				+ std::to_string(Sd.Read) + " read, " + std::to_string(Sd.Mismatch + (bStrict ? Sd.NoneThere : Sd.NoneUp)) + " not)");
+		Check(Sd.Limbs > 0 && Sd.Toward == 0, std::string(Label) + ": every limb off those men rests farther from the burst than its joint stood (" + std::to_string(Sd.Limbs)
+			+ " limbs, " + std::to_string(Sd.Toward) + " not)");
+		Check(Sd.OtherThrown == 0, std::string(Label) + ": only a field gun's or a howitzer's shell throws a gored man (die_blast_*; " + std::to_string(Sd.OtherThrown) + " by another)");
+	};
+	SideChecks("on", ReadSides(C, Men, Rc, Files), true);
 
 	// ---- Same: another crowd, built alike.
 	{
@@ -405,6 +680,44 @@ int main(int Argc, char** Argv)
 		Check(bOwn, "back: a replay from the start gives every gored man his own file and mesh again");
 		const Result Re = Play(C, Men, 0.5, Until);
 		Check(Re.Clip == Rc.Clip && Re.Skin == Rc.Skin, "back: played on, the same men are gored with the same falls");
+	}
+
+	// ---- The sides' battle: more men, all round their bursts, every stance.
+	{
+		std::vector<Who> Many;
+		const std::string RecMany = SidesRecording(Many);
+		auto MakeMany = [&](Crowd& M, bool bTwins, bool bOn) {
+			for (const auto& KV : Files) M.AddSoldier(KV.first, KV.second);
+			if (bTwins)
+			{
+				for (const auto& KV : Twins)
+				{
+					std::string Why;
+					if (!M.AddGore(KV.first, KV.second, Why)) std::printf("twin %s not used: %s\n", KV.first.c_str(), Why.c_str());
+				}
+			}
+			M.SetGore(bOn);
+			if (!M.ReadArmies(Armies, Err) || !M.Build(RecMany, Flat, Err)) { std::printf("build: %s\n", Err.c_str()); std::exit(1); }
+			M.SetEye(-1000, -1000, 2);
+		};
+		Crowd Ma, Mb, Mc;
+		MakeMany(Ma, false, false);
+		MakeMany(Mb, true, false);
+		MakeMany(Mc, true, true);
+		const Result Pa = Play(Ma, Many, 0.0, Until), Pb = Play(Mb, Many, 0.0, Until), Pc = Play(Mc, Many, 0.0, Until);
+		Check(Pa.Clip == Pb.Clip && Pa.Skin == Pb.Skin && Mb.Gored() == 0, "sides' battle off: every fall and every skin as with no twins, none gored");
+		std::printf("     sides' battle off: %d men, %s\n", static_cast<int>(Many.size()), Digest(Pb, std::vector<char>(Many.size(), 1)).c_str());
+		std::vector<char> Whole(Many.size(), 0);
+		int Kept = 0;
+		for (size_t I = 0; I < Many.size(); ++I)
+		{
+			const int Man = Mc.Find(Many[I].B, Many[I].K);
+			Whole[I] = Mc.SoldierOf(Man) == Files[Mc.Info(Man).FileArmy].get() ? 1 : 0;
+			Kept += Whole[I];
+		}
+		std::printf("     sides' battle not gored: %d men, %s\n", Kept, Digest(Pc, Whole).c_str());
+		Check(Pc.NaN == 0 && Mc.Gored() == static_cast<int>(Many.size()) - Kept, "sides' battle: the crowd's count of the gored, and no NaN in any skin");
+		SideChecks("sides' battle", ReadSides(Mc, Many, Pc, Files), false);
 	}
 
 	// ---- The picture: six gored men, each in his own fall, from the side.
