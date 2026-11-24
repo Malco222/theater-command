@@ -123,10 +123,12 @@ namespace
 	 * copy, at the same rest place, skinned; only at cuts still whole (a copy and its point skinned alike once joined).
 	 * His own file can hold several points at one rest place, each side of his own seams, weighted a little apart (the
 	 * German's right knee: four, w2 0.119 and 0.106): a copy carries the weights of the one it copies (gore.py), so it is
-	 * read against the nearest of them as skinned; the others stand off it only as far as his own seam opens, in his own
-	 * file as much as in the twin. -1 where it cannot be read.
+	 * read against the point it copies, found from the triangles (the twin keeps his own file's triangles first and in
+	 * order, pointing each at a copy where a copy took its place); only where his file and the twin's triangles do not
+	 * line up (a base file of another delivery) against the nearest of the points at its rest place, which cannot see a
+	 * copy given the weights of another of them (bExact false). -1 where it cannot be read.
 	 */
-	double JointOpen(Crowd& C, int Man, const Soldier& Own)
+	double JointOpen(Crowd& C, int Man, const Soldier& Own, bool& bExact)
 	{
 		const Soldier& Tw = *C.SoldierOf(Man);
 		const int N = Own.Meshes[Near].Points, All = Tw.Meshes[Near].Points;
@@ -149,6 +151,25 @@ namespace
 		if (C.PointsOf(Man, Near) < Kept) return -1.0;
 		int Caps = All;
 		for (const Soldier::Cut& K : Tw.Cuts) Caps = std::min({ Caps, K.Stump[Near][0], K.Limb[Near][0] });
+		// (each copy's own point, from the triangles: Src[copy] = his point; any triangle that does not line up, or a copy
+		// standing for two points, and the nearest is read instead)
+		std::vector<int> Src(static_cast<size_t>(All), -1);
+		bExact = true;
+		{
+			const std::vector<uint32_t>& Bt = Own.Meshes[Near].Triangles;
+			const std::vector<uint32_t>& Tt = Tw.Meshes[Near].Triangles;
+			if (Bt.size() > Tt.size()) bExact = false;
+			for (size_t K = 0; bExact && K < Bt.size(); ++K)
+			{
+				const uint32_t B = Bt[K], T = Tt[K];
+				if (T == B) continue;
+				if (static_cast<int>(T) < N || static_cast<int>(T) >= All || static_cast<int>(B) >= N) { bExact = false; break; }
+				int& Of = Src[static_cast<size_t>(T)];
+				if (Of >= 0 && Of != static_cast<int>(B)) { bExact = false; break; }
+				Of = static_cast<int>(B);
+			}
+			if (!bExact) std::fill(Src.begin(), Src.end(), -1);
+		}
 		std::multimap<std::tuple<float, float, float>, int> Orig;
 		const std::vector<float>& R = Tw.Meshes[Near].At;
 		for (int P = 0; P < N; ++P) Orig.emplace(std::make_tuple(R[static_cast<size_t>(P) * 3], R[static_cast<size_t>(P) * 3 + 1], R[static_cast<size_t>(P) * 3 + 2]), P);
@@ -184,9 +205,11 @@ namespace
 			if (AtOff(P) || Ix[static_cast<size_t>(P)] < 0) continue;
 			const size_t A = static_cast<size_t>(Ix[static_cast<size_t>(P)]) * 3;
 			double Least = -1.0;
+			const int Exact = bExact ? Src[static_cast<size_t>(P)] : -1;
 			const auto Span = Orig.equal_range(std::make_tuple(R[O], R[O + 1], R[O + 2]));
 			for (auto Found = Span.first; Found != Span.second; ++Found)
 			{
+				if (Exact >= 0 && Found->second != Exact) continue;
 				if (AtOff(Found->second) || Ix[static_cast<size_t>(Found->second)] < 0) continue;
 				const size_t Q = static_cast<size_t>(Ix[static_cast<size_t>(Found->second)]) * 3;
 				const double G = std::sqrt(static_cast<double>((At[A] - At[Q]) * (At[A] - At[Q]) + (At[A + 1] - At[Q + 1]) * (At[A + 1] - At[Q + 1]) + (At[A + 2] - At[Q + 2]) * (At[A + 2] - At[Q + 2])));
@@ -295,7 +318,7 @@ int main(int Argc, char** Argv)
 	Crowd C;
 	Make(C, true, true);
 	const Result Rc = Play(C, Men, 0.0, Until);
-	int Gored = 0, RifleGored = 0, FarGored = 0, BadClip = 0, NoLimb = 0, LimbOnWhole = 0, LostClips = 0, JointsRead = 0;
+	int Gored = 0, RifleGored = 0, FarGored = 0, BadClip = 0, NoLimb = 0, LimbOnWhole = 0, LostClips = 0, JointsRead = 0, JointsExact = 0;
 	double MostOpen = 0.0;
 	int ByD[14] = {}, ShellD[14] = {}, WrongSide = 0;
 	std::vector<int> GoredMen;
@@ -334,8 +357,9 @@ int main(int Argc, char** Argv)
 		if (Rc.Gap[I] < 0.1) ++NoLimb;
 		if (Rc.Gap[I] < 1.0) std::printf("     note: %s %s's limb rests %.2f m from its joint (the art director asks 1 m or more)\n", C.Info(Man).FileArmy.c_str(), Rc.Clip[I].c_str(), Rc.Gap[I]);
 		if (Rc.High[I] > 3.0) std::printf("     note: %s %s's limb flies %.1f m high (the art director asks 3 m at most)\n", C.Info(Man).FileArmy.c_str(), Rc.Clip[I].c_str(), Rc.High[I]);
-		const double Open = JointOpen(C, Man, *Own);
-		if (Open >= 0.0) { ++JointsRead; MostOpen = std::max(MostOpen, Open); }
+		bool bExact = false;
+		const double Open = JointOpen(C, Man, *Own, bExact);
+		if (Open >= 0.0) { ++JointsRead; JointsExact += bExact ? 1 : 0; MostOpen = std::max(MostOpen, Open); }
 		for (const Clip& Cl : Own->Clips) LostClips += S.ClipIndex(Cl.Name) == Own->ClipIndex(Cl.Name) ? 0 : 1;
 	}
 	std::printf("     gored %d of %d men (%d twins read); by the burst's distance (shell kills):", Gored, static_cast<int>(Men.size()), static_cast<int>(Twins.size()));
@@ -353,7 +377,7 @@ int main(int Argc, char** Argv)
 	Check(LimbOnWhole == 0, "on: no other man's limb leaves its joint");
 	Check(Rc.LimbOff >= Gored, "on: the limb_off events come (" + std::to_string(Rc.LimbOff) + ")");
 	char OpenWords[160];
-	std::snprintf(OpenWords, sizeof(OpenWords), "on: no whole joint of a gored man opens on its caps (widest %.1f mm, %d men read)", MostOpen * 1000.0, JointsRead);
+	std::snprintf(OpenWords, sizeof(OpenWords), "on: no whole joint of a gored man opens on its caps (widest %.1f mm, %d men read, %d each copy against the point it copies)", MostOpen * 1000.0, JointsRead, JointsExact);
 	Check(JointsRead > 0 && MostOpen < 0.002, OpenWords);
 	Check(Rc.NaN == 0, "on: no NaN in any skin");
 	std::printf("     (%.0f ms for %d frames)\n", Rc.Ms, static_cast<int>(Until * 60.0));
