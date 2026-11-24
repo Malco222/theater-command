@@ -3564,7 +3564,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       // comes on the bar his player is shown (the mask, choice 6 (A)): on its true bar, the moment it came would tell the
       // enemy's drawn point (worn / 0.75). Without the spread that bar is the true one.
       const own = !!this.ticket[s].human;
-      if (!this.warned[s] && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other(s)) : near) >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
+      if (!this.warned[s] && (this.ticket.att.human || this.ticket.def.human) && (!own && this.ticket.reckoning.spread ? this.shownBar(s, other(s)) : near) >= 0.75) {
         this.warned[s] = true;
         // By what drives the bar (the UI director, 14:44Z); the enemy's stays one plain dispatch, with no fields.
         const why = own ? this.breakCause(s) : undefined;
