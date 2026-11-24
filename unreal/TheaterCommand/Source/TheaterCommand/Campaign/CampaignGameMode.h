@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Campaign/CampaignView.h"
 #include "CampaignGameMode.generated.h"
 
 class FCampaignSession;
@@ -85,9 +86,27 @@ public:
 	/** A line about the campaign saved on this computer, or empty if there is none. */
 	FString DescribeSavedCampaign();
 
+	/**
+	 * (Release 1.5.1; Brian, 24 November 2026: "yes add save button so i can save multiple games".) The wars the
+	 * player keeps with SAVE, beside the campaign kept by itself (which CONTINUE picks up, and which is written over
+	 * every month as before). SaveWarAs keeps a copy of the war under way; KeepAutosaveAsWar keeps the campaign kept by
+	 * itself as one (before another war is loaded over it); SavedWars lists them, the newest first; LoadSavedWar lays
+	 * one on the table as CONTINUE does (Why says what stopped it); DeleteSavedWar throws one away; IsAutosaveKept says
+	 * whether the campaign kept by itself is kept as a saved war too, word for word, so that loading another loses nothing.
+	 */
+	bool SaveWarAs(FSavedWar& Out);
+	bool KeepAutosaveAsWar(FSavedWar& Out);
+	TArray<FSavedWar> SavedWars() const;
+	bool LoadSavedWar(const FString& Id, FString& Why);
+	bool DeleteSavedWar(const FString& Id);
+	bool IsAutosaveKept() const;
+
 private:
 	void LayOutWar();
 	static FString SaveFile();
+	static FString SavedWarsFolder();
+	static bool IsSavedWarId(const FString& Id);
+	bool WriteSavedWar(const FString& Text, FSavedWar& Out);
 
 	TSharedPtr<FCampaignSession> Session;
 
