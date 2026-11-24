@@ -47,7 +47,7 @@ export const STRATEGY = data as unknown as {
   /** The one-map fault's mend (the design director, 22 November 2026, 13:27Z; its own key, off): a front counts only what the month's moves can bring. */
   fronts?: { month: boolean };
   /**
-   * The strait: every short crossing is water (a key of its own). `more`: borders of the map that are crossings too
+   * The strait: every short crossing is water (a key of its own; on in release 2's rules from 22 November 2026). `more`: borders of the map that are crossings too
    * (the Dardanelles); `cut`: borders that are open sea, where no army goes but by a landing (the Kattegat); `craft`:
    * what a crossing's own craft carry in a month to a bank the side holds, in divisions' worth, the record's busiest
    * month there; `lift`: the record's sea lift for a nation whose sealift is a stand-in, in corps a month, read at
@@ -95,7 +95,8 @@ export const torchWeek = (g: Game): number => (torchBook(g) ? Math.max(0, Math.m
 export const frontMonth = (g: Game): boolean => !!STRATEGY.fronts?.month && g.flags.open === 1;
 /**
  * True where every short crossing of the sea is water (strategy.json 'straits'; the design director, 22 November
- * 2026, 09:20Z): the grand campaign, every nation, every stop. A key of its own; off, a crossing is a land border.
+ * 2026, 09:20Z): the grand campaign, every nation, every stop. A key of its own, on in release 2's rules (Brian's
+ * choice of 22 November 2026, 20:19Z); off, a crossing is a land border, as in release 1.
  */
 export const straitsOn = (g: Game): boolean => !!STRATEGY.straits?.on && g.flags.open === 1;
 /** True for the event that is the French turn where Torch is the book's: its partition runs as the record wrote it. */

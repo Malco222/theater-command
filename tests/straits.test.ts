@@ -2,7 +2,9 @@
 // crossing of the sea is water: a corps crosses by ship (its month, one of its nation's lifts, room on the far bank),
 // a side that holds both banks crosses whoever holds the seas beyond, an attack across onto an enemy bank is a
 // landing, and the test of strength reads the enemy's reinforcement over a crossing as it reads ships. Supply and
-// the railways run over a crossing as they did. It ships switched off, and off a crossing is a land border.
+// the railways run over a crossing as they did. It shipped switched off; it was switched on in release 2's rules on
+// 22 November 2026 (the design director's ruling of 19:12Z once its 96 wars held the gate, Brian's choice of 20:19Z).
+// Off, a crossing is a land border, as in release 1.
 //
 // The rulings of 18:07Z and 18:19Z the same day, with the historian's rows: a crossing's own craft carry its record's
 // busiest month to a bank the side holds, with no lift (Messina 7, Kerch 17, the Oresund 3.7, in divisions' worth);
@@ -11,7 +13,7 @@
 // enemy's; the Dardanelles are the tenth crossing and the Kattegat is open sea; the Kerch railway bridge is a land
 // link in its months while the Soviet Union holds both banks.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { STRENGTH, reckon } from '../src/campaign/ashore';
 import { addCorps, assess, computeSupply, createGame, declareWar, moveCorps, railInto, resolveBattle } from '../src/campaign/game';
 import { railOpen } from '../src/campaign/rails';
@@ -24,19 +26,27 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 
 const start = (seed = 17): Game => startOpen(createGame(seed, null));
 const on = (): void => { STRATEGY.straits!.on = true; };
+const off = (): void => { STRATEGY.straits!.on = false; };
+const SHIPPED = STRATEGY.straits!.on;
 const corps = (g: Game, nat: string, at: string, n: number, kind: 'inf' | 'arm' = 'inf'): Corps[] => Array.from({ length: n }, (_, k) => addCorps(g, nat, `Test ${nat} ${at} ${k}`, kind, 2, at, {}));
 /** Hands a province to a nation and clears the field there. */
 const give = (g: Game, r: Region, nat: string): void => { for (const u of [...r.units]) { u.dead = true; } r.units.length = 0; r.ctrl = nat; };
 
 describe('the strait: every short crossing is water', () => {
   const CRAFT = STRATEGY.straits!.craft;
-  afterEach(() => { STRATEGY.straits!.on = false; STRATEGY.straits!.craft = CRAFT; });
+  // Each test starts with the switch off (a crossing is a land border, as in release 1) and switches it on where it
+  // reads the crossings: that is how each was written and measured, and it reads both sides of the key.
+  beforeEach(off);
+  afterEach(() => { STRATEGY.straits!.on = SHIPPED; STRATEGY.straits!.craft = CRAFT; });
   /** Reads a war with no craft counted at any crossing: every corps that crosses takes one of its nation's lifts. */
   const noCraft = (): void => { STRATEGY.straits!.craft = []; };
 
-  it('ships switched off, is the grand campaign\'s alone, and knows the game\'s own crossings', () => {
-    expect(STRATEGY.straits!.on).toBe(false);
+  it('ships switched on in release 2\'s rules, is the grand campaign\'s alone, and knows the game\'s own crossings', () => {
+    expect(SHIPPED).toBe(true);
     const g = start();
+    STRATEGY.straits!.on = SHIPPED;
+    expect(straitsOn(g)).toBe(true);
+    off();
     expect(straitsOn(g)).toBe(false);
     const pairs = g.links.map(([a, b]) => [g.regions[a].name, g.regions[b].name].join('-'));
     for (const nm of ['Jutland-Zealand', 'Calabria-Sicily', 'Istanbul-Bursa', 'Zealand-Scania', 'Crimea-Novorossiysk']) expect(pairs, nm).toContain(nm);
