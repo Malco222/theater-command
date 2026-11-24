@@ -1170,8 +1170,11 @@ int main(int Argc, char** Argv)
 		{
 			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
 			const LandField::BaseMesh& Bm = G.BaseOf(B);
-			if (Bm.Name.rfind("Izba", 0) != 0 || Bm.Class != LandField::BaseMesh::Draw::House) continue;
+			const bool bKhata = Bm.Name.rfind("Khata", 0) == 0;
+			if ((Bm.Name.rfind("Izba", 0) != 0 && !bKhata) || Bm.Class != LandField::BaseMesh::Draw::House) continue;
 			++Kinds;
+			// (an izba 7.5 by 7.2 m with its porch and woodpile; a khata 9.18 by 6.46 m, its snow lip some 0.2 m past the eaves)
+			const float HalfX = bKhata ? 4.85f : 4.6f, HalfY = bKhata ? 3.5f : 4.0f;
 			Standing += G.Instances(B).size();
 			Near += Bm.Near.Tris() * G.Instances(B).size();
 			NearFew = std::min(NearFew, Bm.Near.Tris());
@@ -1190,16 +1193,16 @@ int main(int Argc, char** Argv)
 				{
 					const float X = M->Positions[I], Y = M->Positions[I + 1], Z = M->Positions[I + 2];
 					const double Nl = std::hypot(M->Normals[I], M->Normals[I + 1], M->Normals[I + 2]);
-					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > 4.6f || std::fabs(Y) > 4.0f || Z < -6.0f || Z > 9.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
+					if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Z) || std::fabs(X) > HalfX || std::fabs(Y) > HalfY || Z < -6.0f || Z > 9.0f || std::fabs(Nl - 1.0) > 0.01) bOk = false;
 				}
 				for (const uint32_t Ix : M->Triangles)
 					if (static_cast<size_t>(Ix) * 3 >= M->Positions.size()) bOk = false;
 				if (!bOk) Bad += " " + Bm.Name + " (a point)";
 			}
 		}
-		std::printf("  the east's izbas at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, Near, MidMost, FarMost);
+		std::printf("  the east's izbas and khatas at the vehicles' detail: %zu standing in %d looks; near %zu to %zu triangles (%zu in all), middle at most %zu, far at most %zu\n", Standing, Kinds, NearFew == static_cast<size_t>(-1) ? 0 : NearFew, NearMost, Near, MidMost, FarMost);
 		Check(Kinds > 0 && Standing > 0 && Bad.empty() && NearFew >= 15000 && NearMost <= 45000 && MidMost <= 6000 && FarMost <= 1200,
-		      "the trial \"houses\": the east's izbas at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
+		      "the trial \"houses\": the east's izbas and khatas at the vehicles' detail, three levels within budget", Fmt("%.0f standing, bad:", static_cast<double>(Standing)) + (Bad.empty() ? std::string(" none") : Bad.substr(0, 200)));
 	}
 	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
 	// point's normal turned out, its underside darker than its top.

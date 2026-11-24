@@ -7065,8 +7065,8 @@ namespace LandField
 			M.FarFrom = 300.0f;
 			M.Class = BaseMesh::Draw::House;
 			static const char* const Hurts[4] = { "Whole", "RoofHole", "Gable", "Shell" };
-			static const char* const Kinds[8] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba" };
-			const int Kd = std::clamp(HouseModels[K].Kind, 0, 7);
+			static const char* const Kinds[9] = { "Farmhouse", "Barn", "Byre", "Church", "Church", "Church", "House", "Izba", "Khata" };
+			const int Kd = std::clamp(HouseModels[K].Kind, 0, 8);
 			const char* const Roofs = Kd >= 7 ? (HouseModels[K].Roof == 1 ? "Thatch" : "Plank") : (HouseModels[K].Roof == 1 ? "Tile" : "Slate");
 			M.Name = std::string(Kinds[Kd]) + Roofs + Hurts[std::clamp(HouseModels[K].Hurt, 0, 3)] + std::to_string(K);
 		}

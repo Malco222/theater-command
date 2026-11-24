@@ -954,6 +954,23 @@ int main(int argc, char** argv)
 			{ "izba_switch300_far", 0, 2, 0, 7, 42.0, 4.0, 62.0, 3, 184.0, "izba at 300 m: far level", 7, 7.5, 7.2, 1 },
 			{ "izba_thatch_switch90_near", 0, 0, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: near level", 7, 7.5, 7.2, 1 },
 			{ "izba_thatch_switch90_mid", 0, 1, 1, 3, 38.0, 4.0, 62.0, 3, 55.0, "thatched at 90 m: middle level", 7, 7.5, 7.2, 1 },
+			// (the khata, Kind 8, the kit's Khata's footprint 9.18 by 6.46 m; aim 20 its eaves' corner, 21 a hip by the ridge)
+			{ "khata_front", 0, 0, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the steppe: a whitewashed khata, hipped thatch", 8, 9.18, 6.46, 1 },
+			{ "khata_other", 0, 0, 0, 4, -40.0, 11.0, 62.0, -1, 0.0, "another: its wash, its paint", 8, 9.18, 6.46, 1 },
+			{ "khata_back", 0, 0, 0, 7, 210.0, 12.0, 250.0, -1, 0.0, "from behind", 8, 9.18, 6.46, 1 },
+			{ "khata_window", 0, 0, 0, 7, 16.0, 4.0, 62.0, 0, 3.4, "close: a window deep in the clay, its band, shutters", 8, 9.18, 6.46, 1 },
+			{ "khata_door", 0, 0, 0, 7, -20.0, 6.0, 62.0, 1, 5.0, "close: the door, the prizba", 8, 9.18, 6.46, 1 },
+			{ "khata_eaves", 0, 0, 0, 7, 50.0, 8.0, 62.0, 20, 3.4, "close: the eaves cut over the rafters' ends", 8, 9.18, 6.46, 1 },
+			{ "khata_hip", 0, 0, 0, 7, 60.0, 22.0, 62.0, 21, 4.5, "close: the hip, the ridge's roll, the chimney", 8, 9.18, 6.46, 1 },
+			{ "khata_snow", 0, 0, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "in winter", 8, 9.18, 6.46, 1, 1.0 },
+			{ "khata_mid", 0, 1, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the middle level (from about 90 m)", 8, 9.18, 6.46, 1 },
+			{ "khata_far", 0, 2, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "the far level (from 300 m)", 8, 9.18, 6.46, 1 },
+			{ "khata_snow_mid", 0, 1, 0, 7, 36.0, 10.0, 62.0, -1, 0.0, "in winter, middle level", 8, 9.18, 6.46, 1, 1.0 },
+			{ "khata_switch90_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "khata at 90 m: near level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch90_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 55.0, "khata at 90 m: middle level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch300_near", 0, 0, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "", 8, 9.18, 6.46, 1 }, // (not laid out: for measuring)
+			{ "khata_switch300_mid", 0, 1, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: middle level", 8, 9.18, 6.46, 1 },
+			{ "khata_switch300_far", 0, 2, 0, 7, 36.0, 4.0, 62.0, 3, 184.0, "khata at 300 m: far level", 8, 9.18, 6.46, 1 },
 		};
 		// LAND_KIT_ONLY=<name,name>: only these panels (and a switch's two halves), for a quick look
 		const char* Only = std::getenv("LAND_KIT_ONLY");
@@ -1032,6 +1049,9 @@ int main(int argc, char** argv)
 				if (K.Aim == 17) At = V3(0.5 * K.Long - 0.4, -0.3, 0.15 + 2.6);
 				if (K.Aim == 18) At = V3(0.5 * K.Long - 0.45, 0.5 * K.Deep - 0.9, 0.15 + 1.2);
 				if (K.Aim == 19) At = V3(0.5 * K.Long - 0.3, -0.3, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.6);
+				// (the khata's: its eaves' front corner over the +x end; a hip by the ridge's end)
+				if (K.Aim == 20) At = V3(0.5 * K.Long - 0.7, 0.5 * K.Deep - 0.7, 0.15 + LandHouse::EavesOf(HouseSpec(P)) - 0.3);
+				if (K.Aim == 21) At = V3(0.5 * K.Long - 2.2, 0.0, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.5);
 				if (K.Aim == 2)
 				{
 					At = V3(6.4, 0.9, 0.15 + LandHouse::RidgeOf(HouseSpec(P)) - 0.2);
