@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9fa93f40 2026-11-24. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d60ea9cb 2026-11-24. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40391,7 +40391,11 @@
     _radar: "Radar on escorts: what sea-search radar adds to a ship's guard and hunting weight. Not laid (the historian's figure from OEG 10.1.2 and the HF/DF record): 0 until it is read.",
     radar: 0,
     _seaLoss: "The tree's flat cuts to convoy losses that stay: the convoy system that comes with 'sonar'. Escort groups act through their incidents instead, and no nation's own trait (Britain's signals) is read.",
-    seaLoss: ["sonar"]
+    seaLoss: ["sonar"],
+    _station: "The share of a month a raiding fleet's boats are on station in the sea they raid (the design director's one-pass ruling of 24 November 2026 13:23Z, Q3(a)(i), and the days of 13:31Z; naval-battles/convoy-r2/one-pass-form.md). A cause, not a scale: a patrol's days on station ('patrol') over its whole cycle, which adds the passage out from the fleet's port and back ('passage' days for each sea crossed by the sea graph, through the straits open to it) and the refit in port before the next patrol ('refit'). Share = patrol / (patrol + 2 x passage x seas + refit). It acts wherever boats raiding are counted: the raid strength that sinks tons and the incidents with the convoys' escorts. By class: 'ss' alone has rows; a class without rows is on station all month. The days are laid, never the shares (historian/convoy-build-reads-1124.md): patrol 20, a Biscay boat's days on station of about 40 out (D from L: U-96's 11 patrols averaged 38.6 days out; McCue, NDU 1990); refit 40, its days in port before the next (D from L: U-96's 38.2); passage 5, fitted so the Bay of Biscay to the North Atlantic, two seas on the chart, is McCue's 10 days each way ('20 or more days on the trip to port and back', D). German and Norwegian ports take the same days a sea. Checks, not figures: about 0.25 of boats in commission on station, 0.5 of boats at sea (D), and the record's third (about 104 boats at sea of 240-300 in 1943). Tankers at sea are a cause not yet laid. 'raid': a boat's raid weight while on station (navy.json classes.ss.raid is 1, a boat there all month), refit once at OEG T2's window (Oct 1942 to May 1943) so the window keeps its tons with the share: 3.5 (D, the six-war reading of 24 November, naval-battles/convoy-r2/onepass-reading-1124.md; it comes to 1 / 0.286, the window's own share, all raiders then a sea from the Western Approaches). The lanes' ocean term, the ruling's first choice, cannot carry it: it would have to be -328, below zero, since the escorts' worth is twelve times the raiders' there. Null: a weight of 1.",
+    station: { ss: { patrol: 20, passage: 5, refit: 40 }, raid: 3.5 },
+    _count: "The convoy-side count (one-pass ruling Q1(a), Q2(a), Q4, and the reading ruling of 24 November 13:50Z): a route's convoys attacked a month = convoys sailed x the share attacked. attacked 0.42 and sighted 0.68: OEG ch. 10 Table 2, northern routes, Oct 1942 to May 1943, 80 convoys (F; historian/convoy-reads-1124.md); a contact is a convoy sighted. The share attacked is 1 - exp(-phi x F x B), B the boats on station on the route's seas (station above), F finding from kit (none laid: 1), one phi for every route, fitted so the share is 0.42 at boatsT2. boatsT2 40: the boats at sea in the northwest Atlantic over T2's window, 22 to 60 (D from F, the middle). perAttack 2: boats a convoy attacked (F, OEG's own estimate). Convoys sailed a month = ways x the route's tons / (ships a convoy x GRT a ship). ways 2: T2's 0.42 is over its convoys both ways, so the count takes the return sailings as well as the loaded ones (D, the ruling of 13:50Z: about 10.4 a month on the Atlantic route). The incidents with the escort are counted from the boats' side, at T2's own rate: t2 80 convoys over 8 months (F, OEG T2's window) x 0.42 x 2 boats / 40 on station = 0.21 a boat on station a month (D). The pack, the boats a convoy attacked, follows from the two (incidents / attacked), and the card shows it. ships: atlantic 44 (D from L, historian/convoy-size-1124.md); libya 2 (D from L: Bragadin's 883 escorted convoys, the usual operation 2 ships, O'Hara; 1 to 7). grt: atlantic 5,200 (D: every pair read gives 4,400-5,800; ruling 241 Q8); libya 3,800 (D from L: 342 Axis freighters lost, 1,299,777 tons). historian/convoy-build-reads-1124.md. A route whose count is not laid (a null) keeps the per-boat share above ('find').",
+    count: { attacked: 0.42, sighted: 0.68, boatsT2: 40, perAttack: 2, ways: 2, t2: { convoys: 80, months: 8 }, ships: { atlantic: 44, libya: 2 }, grt: { atlantic: 5200, libya: 3800 } }
   };
 
   // ../../src/campaign/tech.ts
@@ -45087,6 +45091,78 @@
     return best;
   }
   var coverCut = (c) => 1 - c.share * (1 - CAUSE2.cover);
+  function passageSeas(g2, f, z) {
+    for (const open2 of [true, false]) {
+      const d = new Int16Array(g2.seas.length).fill(-1);
+      const q = [];
+      for (const s of f.base >= 0 ? g2.regions[f.base].seas : [f.home]) if (d[s] < 0) {
+        d[s] = 0;
+        q.push(s);
+      }
+      for (let i = 0; i < q.length; i++) {
+        if (q[i] === z) return d[z];
+        for (const j of g2.seas[q[i]].adj) if (d[j] < 0 && (!open2 || canPass(g2, q[i], j, f.nat))) {
+          d[j] = d[q[i]] + 1;
+          q.push(j);
+        }
+      }
+    }
+    return 0;
+  }
+  function stationDays(c) {
+    const r = CAUSE2.station[c];
+    return r && r.patrol !== null && r.passage !== null && r.refit !== null ? r : null;
+  }
+  function onStation(g2, f, z, c = "ss") {
+    const D2 = unitsDecide(g2) ? stationDays(c) : null;
+    if (!D2) return 1;
+    return D2.patrol / (D2.patrol + 2 * D2.passage * passageSeas(g2, f, z) + D2.refit);
+  }
+  function raidPower(g2, f, cause) {
+    const st = cause && stationDays("ss") ? onStation(g2, f, f.zone) * (CAUSE2.station.raid ?? 1) : 1;
+    let p = 0;
+    for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid * (c === "ss" ? st : 1);
+    return p;
+  }
+  function nearerPort(g2, f) {
+    if (!unitsDecide(g2) || f.tied || f.duty !== "raid" || f.ships.ss <= 0 || !stationDays("ss")) return null;
+    const z = f.station;
+    const here = onStation(g2, f, z);
+    const at4 = g2.seas[z];
+    let best = null, bv = here, bd = Infinity;
+    for (const r of g2.regions) {
+      if (!r.port || !r.seas.length || r.id === f.base || r.since >= g2.turn || !allied(g2, f.nat, r.ctrl) || !canSailTo(g2, f, r)) continue;
+      const v = onStation(g2, { nat: f.nat, base: r.id, home: r.seas[0] }, z);
+      const d = mapDist(g2, r.x, r.y, at4.x, at4.y);
+      if (v > bv + 1e-9 || best && Math.abs(v - bv) <= 1e-9 && d < bd) {
+        best = r;
+        bv = v;
+        bd = d;
+      }
+    }
+    return best;
+  }
+  var escortRate = () => {
+    const K2 = CAUSE2.count;
+    return K2.t2.convoys / K2.t2.months * K2.attacked * K2.perAttack / K2.boatsT2;
+  };
+  function convoyCount(g2, route) {
+    const K2 = CAUSE2.count;
+    const ships = K2.ships[route.id], grt = K2.grt[route.id];
+    if (!unitsDecide(g2) || ships === null || ships === void 0 || grt === null || grt === void 0) return null;
+    const zones = route.zones.map((k) => zoneOf(g2, k));
+    let boats = 0;
+    for (const f of g2.fleets) {
+      if (!atSea(f) || f.ships.ss <= 0 || !zones.includes(f.zone) || !atWar(g2, f.nat, route.to)) continue;
+      boats += f.ships.ss * raidShare(f) * onStation(g2, f, f.zone);
+    }
+    const sailed = K2.ways * route.tons / (ships * grt);
+    const phi = -Math.log(1 - K2.attacked) / K2.boatsT2;
+    const attacked = sailed * (1 - Math.exp(-phi * boats));
+    const incidents = boats * escortRate();
+    return { boats, sailed, sighted: Math.min(sailed, attacked * K2.sighted / K2.attacked), attacked, incidents, pack: attacked > 0 ? incidents / attacked : 0 };
+  }
+  var incidentsPerBoat = (g2, f, count4) => raidShare(f) * onStation(g2, f, f.zone) * (count4 ? escortRate() : CAUSE2.find);
   function onRouteOf(g2, nat, f) {
     for (const r of NAVY.convoys) {
       const to = g2.nations[r.to];
@@ -45239,7 +45315,7 @@
       if (raiding > 0) {
         for (const r of NAVY.convoys) {
           const to = g2.nations[r.to];
-          if (to?.alive && to.atWar.length && allied(g2, r.to, nat) && atWar(g2, f.nat, r.to) && r.zones.some((k) => zoneOf(g2, k) === z)) x += raiding * CAUSE2.find * incidentChance(g2, r.to, r.id, z);
+          if (to?.alive && to.atWar.length && allied(g2, r.to, nat) && atWar(g2, f.nat, r.to) && r.zones.some((k) => zoneOf(g2, k) === z)) x += incidentsPerBoat(g2, f, convoyCount(g2, r)) * incidentChance(g2, r.to, r.id, z);
         }
       }
       n += Math.min(f.ships.ss * Math.min(FLEETS.hunt.most, x), roomLeft(g2, f));
@@ -45345,8 +45421,7 @@
       if (!atSea(f)) continue;
       if (atWar(g2, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+        let p = raidPower(g2, f, !!cover3);
         p *= quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? coverCut(cover3[zones.indexOf(f.zone)]) : 1);
         if (p > 0) {
           raid2 += p;
@@ -45379,6 +45454,8 @@
   }
   var CONVOY_BATTLE = convoybattle_default;
   var convoyRules = (g2) => g2.flags.open === 1 && g2.flags.convoyBattle === 1;
+  var countRecord = (c) => ({ boats: r22(c.boats), sailed: r22(c.sailed), sighted: r22(c.sighted), attacked: r22(c.attacked), incidents: r22(c.incidents), pack: r22(c.pack) });
+  var r22 = (x) => Math.round(x * 100) / 100;
   var convoyField = {};
   function convoyMeeting(g2, nat, route) {
     const { zones, raid: raid2, guard, raiders, escorts, G: G5, L: L2 } = routeForces(g2, nat, route);
@@ -45386,6 +45463,7 @@
     const cause = unitsDecide(g2) && seaWar(g2);
     if (cause) {
       const p = new Map(zones.map((z) => [z, incidentChance(g2, nat, route.id, z)]));
+      const count4 = convoyCount(g2, route);
       return {
         turn: g2.turn,
         route: route.id,
@@ -45396,8 +45474,9 @@
         G: G5,
         L: L2,
         tons: Math.round(route.tons * L2 / 1e3) * 1e3,
-        raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * raidShare(f) * CAUSE2.find * (p.get(f.zone) ?? 0), roomLeft(g2, f)) })),
-        escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 }))
+        raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: Math.min(f.ships.ss * incidentsPerBoat(g2, f, count4) * (p.get(f.zone) ?? 0), roomLeft(g2, f)) })),
+        escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, escorts.reduce((s, e) => s + e.ships.dd, 0))) : 0 })),
+        ...count4 ? { count: countRecord(count4) } : {}
       };
     }
     if (seaWar(g2) && g2.nations[nat].atWar.length) {
@@ -45490,11 +45569,7 @@
     lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, sunk, could: could.map((x) => x.id), by: by2, couldNat: could.map((x) => x.nat), byNat });
   }
   function lookConvoy(g2, nat, route, zones, raiders, escorts, at4, tons, cause) {
-    const power = (f) => {
-      let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-      return p * quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
-    };
+    const power = (f) => raidPower(g2, f, !!cause) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
     const by2 = zones.map((z) => raiders.filter((f) => f.zone === z).reduce((a, f) => a + power(f), 0));
     const all = by2.reduce((a, b) => a + b, 0);
     const most = zones[by2.indexOf(Math.max(...by2))];
@@ -45539,6 +45614,7 @@
       const tons = Math.round(route.tons * L2 / 1e3) * 1e3;
       let subsLost = 0, escortsLost = 0;
       let byEscorts;
+      let count4 = null;
       const at4 = subScene.on ? { dd: new Map(escorts.map((f) => [f.id, f.ships.dd])), ss: new Map(raiders.map((f) => [f.id, f.ships.ss])) } : null;
       if (raid2 > 0) {
         if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
@@ -45563,12 +45639,13 @@
         }
         if (cover3 && sunkAt) {
           const irng = seaRng(g2, `incident:${route.id}`);
+          count4 = convoyCount(g2, route);
           for (const z of zones) {
             const p = incidentChance(g2, nat, route.id, z);
             let lost = 0;
             for (const f of raiders) {
               if (f.zone !== z || f.ships.ss <= 0) continue;
-              const x = Math.min(f.ships.ss * raidShare(f) * CAUSE2.find * p, roomLeft(g2, f));
+              const x = Math.min(f.ships.ss * incidentsPerBoat(g2, f, count4) * p, roomLeft(g2, f));
               const k = Math.min(f.ships.ss, booked(nights, "ss", f.id, irng.roll(x), night?.expect?.get(f.id) ?? x, route.id));
               noteLost(g2, f, k);
               f.ships.ss -= k;
@@ -45585,6 +45662,7 @@
       if (swing !== void 0) g2.convoys[route.id].swing = swing;
       if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
       if (cover3) g2.convoys[route.id].byEscorts = Object.values(byEscorts ?? {}).reduce((a, b) => a + b, 0);
+      if (count4) g2.convoys[route.id].count = countRecord(count4);
       if (at4) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at4, tons, cover3 && { cover: cover3, lost: byEscorts ?? {} });
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
       if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
@@ -45599,9 +45677,7 @@
       if (!atSea(f)) continue;
       if (atWar(g2, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        raid2 += p * quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? cover3[zones.indexOf(f.zone)] : 1);
+        raid2 += raidPower(g2, f, !!cover3) * quality(g2, f.nat) * fit2(g2, f) * raidShare(f) * (cover3 ? cover3[zones.indexOf(f.zone)] : 1);
       } else if (allied(g2, f.nat, nat)) {
         const w = guardShare(g2, f, zones, lane);
         if (w <= 0) continue;
@@ -45860,6 +45936,14 @@
         continue;
       }
       if (f.duty === "raid") {
+        const to = nearerPort(g2, f);
+        if (to) {
+          const from2 = f.port;
+          if (rebase(g2, f, to)) {
+            headline(g2, "info", `${cap8(fleetName(f))} moves its base from ${from2} to ${to.name}, nearer its hunting ground ${seaWhere(g2.seas[f.station].name)}.`, nat, to.id);
+            continue;
+          }
+        }
         if (!sail(g2, f, f.station, "raid")) home();
         continue;
       }
@@ -53554,7 +53638,7 @@
       }
       if (g2.flags.open === 1 && o.takes) {
         const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
-        const j = setup_1939_default.expeditions.findIndex((r22) => r22[1] === nat && r22[2] === o.takes.name);
+        const j = setup_1939_default.expeditions.findIndex((r23) => r23[1] === nat && r23[2] === o.takes.name);
         if (x) {
           x.str *= 1 - o.takes.share;
           if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
@@ -53562,12 +53646,12 @@
       }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
-        (setup_1939_default.expeditions ?? []).forEach((r22, j) => {
-          if (r22[6]?.unless !== row2[2] || r22[1] !== nat) return;
+        (setup_1939_default.expeditions ?? []).forEach((r23, j) => {
+          if (r23[6]?.unless !== row2[2] || r23[1] !== nat) return;
           if (!g2.flags[`sent:${j}`]) g2.flags[`sent:${j}`] = 2;
-          const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === r22[2]);
+          const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === r23[2]);
           if (!x) return;
-          if (nat === g2.human && r22[6].leaves) headline(g2, "event", r22[6].leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
+          if (nat === g2.human && r23[6].leaves) headline(g2, "event", r23[6].leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
           removeCorps(g2, x);
           g2.supplyDirty = true;
         });
@@ -64799,11 +64883,11 @@
     if (c === null) return null;
     return Math.min(hi, Math.max(lo, c * ARMOUR.models[shooter].kills / PAR[face]));
   }
-  function fateOf(target, face, r12, r22) {
+  function fateOf(target, face, r12, r23) {
     const m = target ? ARMOUR.models[target] : void 0;
     const fire2 = m?.fire?.[face] ?? 0.5;
     if (r12 >= fire2) return "out";
-    return r22 < (m?.explodes ?? 0.2) ? "blow" : "burn";
+    return r23 < (m?.explodes ?? 0.2) ? "blow" : "burn";
   }
 
   // ../../src/battle/land/units.ts
@@ -66370,8 +66454,8 @@
      */
     liftAim(sq, g2, e, kind) {
       const b = this.b, u = sq.u, t = b.t;
-      const r12 = roll(this.seed, u.id, g2.n, t), r22 = roll(this.seed, u.id, g2.n, t, 1);
-      const plain2 = [e.x + (r12 - 0.5) * e.w * 0.6, e.y + (r22 - 0.5) * e.d * 0.6];
+      const r12 = roll(this.seed, u.id, g2.n, t), r23 = roll(this.seed, u.id, g2.n, t, 1);
+      const plain2 = [e.x + (r12 - 0.5) * e.w * 0.6, e.y + (r23 - 0.5) * e.d * 0.6];
       if (!this.byBook) return plain2;
       let near2 = null, gap = BOOK2.lift[kind];
       for (const f of b.units) if (f.side === u.side && fighting(f) && FOOT_KINDS.includes(f.kind)) {
@@ -68962,9 +69046,9 @@
     }
     view(as) {
       const b = this.b, out = [];
-      const r12 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
+      const r12 = (v) => Math.round(v * 10) / 10, r23 = (v) => Math.round(v * 100) / 100;
       const one = (m) => {
-        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r23(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r12(m.aim[0]), r12(m.aim[1])];
         if (m.shot !== void 0) o.s = r12(m.shot);
@@ -69016,7 +69100,7 @@
      */
     linemen(id) {
       const b = this.b, t = b.t, out = [], pace2 = LAND2.speed.inf;
-      const r12 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
+      const r12 = (v) => Math.round(v * 10) / 10, r23 = (v) => Math.round(v * 100) / 100;
       for (const m of b.wireMends) {
         const w = b.wires[m.wire - 1];
         if (!w || w.unit !== id || t < m.t0) continue;
@@ -69025,7 +69109,7 @@
         const out1 = bearing2(hx, hy, m.x, m.y);
         const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace2 / d) : 0;
         const p = t < m.t1 ? "reel" : t < m.t ? "splice" : "walk";
-        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r22(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace2, c: "none", ln: 1 });
+        out.push({ k: 300 + m.man, r: "rifle", x: r12(hx + (m.x - hx) * k), y: r12(hy + (m.y - hy) * k), f: r23(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace2, c: "none", ln: 1 });
       }
       return out;
     }
@@ -80941,10 +81025,10 @@
   var DECK_LEAST = 0.6;
   function coverOf(kind, chance, u) {
     const v = Math.max(0, Math.min(1, u));
-    const r22 = (x) => Math.round(x * 100) / 100;
-    if (kind === "deck") return r22(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
+    const r23 = (x) => Math.round(x * 100) / 100;
+    if (kind === "deck") return r23(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
     const lean = Math.max(0.8, Math.min(2, 2 - 1.8 * chance));
-    return r22(CUMULUS_MOST * Math.pow(v, lean));
+    return r23(CUMULUS_MOST * Math.pow(v, lean));
   }
   var ZONES = air_cloud_default.zones;
   var FALLBACK = air_cloud_default.fallback;
