@@ -58,8 +58,10 @@ describe("a front's month of moves", () => {
   });
 
   it('on: a front never counts more than it did, the enemy\'s side of the sum is untouched, and an army a season away is not counted', () => {
-    const g = start(20, 1);
-    // (The war is played to month 34 by the old sum, the war the fault was found in; the two sums are then read side by side.)
+    const g = start(19, 1);
+    // (The war is played to month 34 by the old sum; the two sums are then read side by side. The war is seed 19: on
+    // release 2's map branch it is the one of seeds 17 to 36 where a British front stands at Cairo in month 34, as seed 20,
+    // the war the fault was found in, did on the release 1 rules. What is asked of it is unchanged.)
     STRATEGY.fronts!.month = false;
     while (g.turn < 34) runTurnAI(g);
     let seen = 0, less = 0;
