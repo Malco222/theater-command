@@ -20,7 +20,7 @@ function germany(on: boolean): { g: Game; battle: number; home: number } {
   let guard = 0;
   while (!humanUp(g) && guard++ < 200) stepAI(g);
   beginHuman(g);
-  if (on) setFleetAttack(g, true);
+  setFleetAttack(g, on); // (on unless switched off since the 1.5.1 patch shipped it on)
   setFog(g, false);
   return { g, battle: g.fleets.find((f) => f.name === 'Battle Fleet')!.id, home: g.fleets.find((f) => f.name === 'Home Fleet')!.id };
 }

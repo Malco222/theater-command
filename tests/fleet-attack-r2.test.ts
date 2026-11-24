@@ -21,18 +21,18 @@ function germany(on = true, seed = 3, fog = false): { g: Game; battle: Fleet; ho
   let guard = 0;
   while (!humanUp(g) && guard++ < 50) stepAI(g);
   expect(humanUp(g)).toBe(true);
-  if (on) setFleetAttack(g, true);
+  setFleetAttack(g, on); // (on unless switched off since the 1.5.1 patch shipped it on)
   if (!fog) setFog(g, false);
   return { g, battle: fleet(g, 'Battle Fleet'), home: fleet(g, 'Home Fleet') };
 }
 
 describe('the switch', () => {
-  it('ships off, and off nothing of it is read', () => {
+  it('switched off, nothing of it is read (the 1.5.1 patch ships it on: the flag 0 turns it off)', () => {
     expect((stage as { fleetAttack?: boolean }).fleetAttack).toBe(false);
     expect(FLEETATTACK_STAGE).toBe(false);
     const { g, battle, home } = germany(false);
     expect(fleetAttackOn(g)).toBe(false);
-    expect(g.flags.fleetAttack).toBeUndefined();
+    expect(g.flags.fleetAttack).toBe(0);
     expect(whyNotFleetAttack(g, battle.id, home.id)).toMatch(/switched on/);
     const before = saveGame(g);
     expect(orderFleetAttack(g, battle.id, home.id)).toBeNull();
