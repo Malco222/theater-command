@@ -4227,7 +4227,7 @@ namespace LandHouse
 				const int Sd = P.HoleSide;
 				const double Sa = P.HoleS - 1.15 * P.HoleRS, Sb = P.HoleS + 1.05 * P.HoleRS;
 				const double XR0 = 0.45 * std::round((P.HoleX - 0.38 * P.HoleRX) / 0.45), XR1 = XR0 + 0.9;
-				const Col Burnt = Mixed(P.K.Char, Rgb(112, 102, 92), 0.4); // (charred, the ash grey on it catching the light)
+				const Col Burnt = Mixed(P.K.Char, Rgb(112, 102, 92), 0.06); // (charred black, 25 to 35 lit: the art director's carry)
 				const RoofPt R0 = RoofAt(P, Sd, XR0, Sa, -0.11), R1 = RoofAt(P, Sd, XR0, Sb, -0.11);
 				B.Beam(R0.P, R1.P, 0.08, 0.13, Burnt, R0.N);
 				if (bMid)
