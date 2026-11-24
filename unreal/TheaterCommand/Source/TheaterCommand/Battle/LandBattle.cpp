@@ -6694,7 +6694,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
 	// in FieldMs).
 	PlayEffects();
-	FlyOver(); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
+	FlyOver(EyeWorld); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the breaches");
 	MakeBreaches();
