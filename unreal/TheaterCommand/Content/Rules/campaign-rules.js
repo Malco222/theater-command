@@ -55679,6 +55679,8 @@
   function seaAtWide(x, y) {
     const W2 = worldMap2;
     const md = W2.seas;
+    const span2 = W2.frame.x1 - W2.frame.x0 >= W2.world.width - 0.5 ? W2.world.width : 0;
+    if (span2 > 0 && (x < W2.frame.x0 || x >= W2.frame.x0 + span2)) x -= Math.floor((x - W2.frame.x0) / span2) * span2;
     if (!wide) {
       wide = new Int16Array(md.cols * md.grid.length).fill(-1);
       md.grid.forEach((row2, r4) => {
@@ -103847,6 +103849,20 @@
     }).filter((n) => n.corps > 0 || n.regions > 0).sort((a, b) => a.major === b.major ? a.major ? order2.indexOf(a.nat) - order2.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1 : a.major ? -1 : 1);
     return { from: from2, nations };
   }
+  var bookDays = /* @__PURE__ */ new Map();
+  function nationsBook(world = false) {
+    let s = g;
+    if (!s) {
+      const wide3 = world === true;
+      s = bookDays.get(wide3) ?? null;
+      if (!s) {
+        s = createGame(1, null);
+        if (wide3) attachWorld(s);
+        bookDays.set(wide3, s);
+      }
+    }
+    return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
+  }
   function listNames2(names) {
     if (names.length <= 2) return names.join(" and ");
     if (names.length > 4) return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
@@ -109638,6 +109654,7 @@ ${standing5}`,
     order: playerOrder(order),
     starts,
     grand,
+    nationsBook,
     start,
     save,
     peek,

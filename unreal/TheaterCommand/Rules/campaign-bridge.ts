@@ -9,6 +9,7 @@
 //
 //   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
 //   TC.grand(from, seed)                -> { from, nations: [{ nat, name, major, blurb, standing, corps, regions }] }: who can be led in the grand campaign from that month
+//   TC.nationsBook(world)               -> [{ tag, name, adjective, colour, alignment }]: every country the rules know (the running campaign's, else a first day's on that chart)
 //   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
@@ -135,7 +136,7 @@ import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
-import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
+import { answersOf, attachWorld, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, fleetsSeen, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
@@ -1941,6 +1942,31 @@ function grand(from = 1, seed = 1939, world = false) {
     .filter((n) => n.corps > 0 || n.regions > 0)
     .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1) : a.major ? -1 : 1));
   return { from, nations };
+}
+
+/**
+ * (Release 2, Japan and the Pacific, 24 November 2026) Every country the rules know, for the 3D table's own list: its
+ * tag, name, adjective, colour ('#rrggbb') and where it stands, in the rules' own words as the data files write
+ * `align`: 'allies', 'allies_cobelligerent', 'leaning_allies', 'independent', 'leaning_axis', 'axis_cobelligerent'
+ * or 'axis'. The table kept its own list from the data files, and so lagged the rules wherever a chart added
+ * countries (the far side's fourteen; Tibet stands in no file at all). With a campaign running it is that campaign's
+ * countries as they stand today, so it may be asked again after one changes sides. With none, it is the countries of
+ * a first day on the chart asked for: `world` as TC.grand and TC.start take it (the wider chart, which is the whole
+ * world where the far switch is on). That first day is laid once and kept. It changes nothing.
+ */
+const bookDays = new Map<boolean, Game>();
+function nationsBook(world = false) {
+  let s = g;
+  if (!s) {
+    const wide = world === true;
+    s = bookDays.get(wide) ?? null;
+    if (!s) {
+      s = createGame(1, null);
+      if (wide) attachWorld(s);
+      bookDays.set(wide, s);
+    }
+  }
+  return Object.values(s.nations).map((n) => ({ tag: n.id, name: n.name, adjective: n.adj, colour: n.color, alignment: n.align }));
 }
 
 function listNames(names: string[]): string {
@@ -7720,7 +7746,7 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's

@@ -272,8 +272,14 @@ let wide: Int16Array | null = null;
 
 /** The same on the wider world: its chart is laid out in the same squares, from its own west edge, each row as runs of [sea, squares]. */
 function seaAtWide(x: number, y: number): number {
-  const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
+  const W = worldMap as any as { frame: { x0: number; x1: number; y0: number }; world: { width: number }; seas: { cell: number; cols: number; grid: number[][] } };
   const md = W.seas;
+  // Where the chart goes all the way round the world (the far side on: its frame is as wide as the world), a point a
+  // whole turn east or west of the frame is the same place, and is read there. The 3D table's eye follows the map
+  // round, so the pointer's place may lie a turn outside the frame (seam-3 of the 3D map audit, 24 November 2026).
+  // A point inside the frame is read exactly as before, and on a narrower chart no point is moved.
+  const span = W.frame.x1 - W.frame.x0 >= W.world.width - 0.5 ? W.world.width : 0;
+  if (span > 0 && (x < W.frame.x0 || x >= W.frame.x0 + span)) x -= Math.floor((x - W.frame.x0) / span) * span;
   if (!wide) {
     wide = new Int16Array(md.cols * md.grid.length).fill(-1);
     md.grid.forEach((row, r) => {
