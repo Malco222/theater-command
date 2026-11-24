@@ -353,6 +353,17 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
 			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
 				Now.bRearguard ? TEXT("ON") : TEXT("OFF"), Now.bRearguard);
+			// (Release 2, rearguard.ts; Brian 24 November 2026 19:47Z) A rearguard blows the bridges behind it.
+			Add(TEXT("rearbridgesrule"), TEXT("Rearguards blow the bridges"), Now.bRearguard
+					? TEXT("A rearguard's engineers lay charges on the bridges behind it as it takes up its position. If the province it holds is lost, the bridges over the rivers between it and your ground beyond go up almost every time, and enemy tanks, lorries and guns wait on the bank until their engineers rebuild them. Held, nothing is blown. Every country's rearguards do the same. It can be switched in any month.")
+					: TEXT("A rearguard's engineers lay charges on the bridges behind it, and blow them if its province is lost. It works only with Rearguards on. It can be switched in any month."),
+				Now.bRearBridges ? TEXT("ON") : TEXT("OFF"), Now.bRearBridges);
+			// (Release 2, shadow.ts; Brian 24 November 2026 19:47Z) A cruiser follows an enemy fleet and reports where it goes.
+			Add(TEXT("shadowrule"), TEXT("Shadowing"), TEXT("A fleet of cruisers (destroyers may sail with them, but no battleship or carrier: split the cruisers off) can be set on an enemy fleet in its reach from its page with SHADOW IT. Each month it follows that fleet, keeps it identified for you on the map, and reports where it is. It seeks no battle, and found alone it is usually fast enough to keep its distance. Out of its reach, contact is lost. The computer's admirals shadow your fleets the same way. It can be switched in any month."),
+				Now.bShadowRule ? TEXT("ON") : TEXT("OFF"), Now.bShadowRule);
+			// (Release 2, voyage.ts; Brian 24 November 2026 19:47Z) Each fleet's log of where it sailed and what it fought.
+			Add(TEXT("voyagelogrule"), TEXT("Voyage log"), TEXT("Each fleet writes one line at every month's end: where it was, what it was doing there, and the fleet actions it fought, with the ships sunk and lost. The log is on the fleet's page, newest first, three years of it. It changes nothing in the war. It can be switched in any month."),
+				Now.bVoyageLog ? TEXT("ON") : TEXT("OFF"), Now.bVoyageLog);
 			Add(TEXT("fleetwhyrule"), TEXT("Admirals' reasons"), TEXT("Where your admirals run the navy for you, each fleet they order says on its page and its card why it is where it is: the enemy fleet it is after, the convoys it guards, the landing it covers, or why it waits in harbour. It changes nothing in the war. It can be switched in any month."),
 				Now.bFleetWhy ? TEXT("ON") : TEXT("OFF"), Now.bFleetWhy);
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
@@ -593,14 +604,15 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("settledtownsrule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Now.bColumnsOn;
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("settledtownsrule") ? Now.bSettledTowns
+				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				ShowWar(Session->GetView(), TArray<FCorpsMove>());

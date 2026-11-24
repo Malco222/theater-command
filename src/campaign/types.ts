@@ -754,6 +754,14 @@ export interface Fleet extends Storied {
   task?: { zone: number; stance: Stance; lane?: string };
   /** The month the player's admirals last ordered it and their reason, in a sentence (release 2, fleetwhy.ts). */
   why?: [number, string];
+  /** The enemy fleet it shadows (release 2, shadow.ts): it follows that fleet each month and keeps it in contact. Written only under that switch. */
+  shadow?: number;
+  /**
+   * Its voyage log (release 2, voyage.ts), oldest first: for each month, what it was doing at the month's end (`s`), the
+   * sea (`z`) or harbour (`p`), and the fleet actions it fought (`f`, a sentence each). A record only, apart from its
+   * diary (`log`, stories.ts). Written only under that switch.
+   */
+  voyage?: { t: number; s: Stance; z: number; p: string; f?: string[] }[];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

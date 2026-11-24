@@ -17,7 +17,7 @@ import type { Corps, Game, Region } from './types';
 
 // (Who is friend and who foe is asked of game.ts by its caller, so that this file and game.ts do not import each other.)
 
-export const REARGUARD = data as unknown as { most: number; weeksPerDiv: number; weeks: number; broken: number; screen: boolean; ai: { odds: number; perMonth: number } };
+export const REARGUARD = data as unknown as { most: number; weeksPerDiv: number; weeks: number; broken: number; screen: boolean; ai: { odds: number; perMonth: number }; bridges: number };
 
 /** True where the player may order rearguards: the grand campaign, with the switch on. */
 export const rearguardOn = (g: Game): boolean => g.flags.open === 1 && g.flags.rearguard === 1;
@@ -32,6 +32,26 @@ export function setRearguard(g: Game, on: boolean): void {
 }
 
 const hisMonth = (g: Game): boolean => g.human !== null && g.order[g.phase] === g.human;
+
+/**
+ * True where rearguards blow the bridges behind them (release 2; Brian 24 November 2026 19:47Z, "yes to all"): its own
+ * switch (stage.json 'rearBridges', the flag 'rearBridges'), read only with rearguards on. Off, the bridges of a province
+ * a rearguard held go up on the usual chance (rivers.ts bridgesOnCapture), as any other province's.
+ */
+export const rearBridgesOn = (g: Game): boolean => rearguardOn(g) && g.flags.rearBridges === 1;
+
+/** Turns the rearguards' bridges on or off in a campaign under way. */
+export function setRearBridges(g: Game, on: boolean): void {
+  if (on) g.flags.rearBridges = 1;
+  else delete g.flags.rearBridges;
+}
+
+/**
+ * True where a rearguard of the side `ofSide` names held province `region` and had the charges laid: ordered this month
+ * or last and not yet stood down, whether it was driven out or destroyed there. Only with the bridges' switch on.
+ */
+export const chargesLaid = (g: Game, region: number, ofSide: (nat: string) => boolean): boolean =>
+  rearBridgesOn(g) && g.corps.some((c) => !!c.rear && c.rear[2] === region && ofSide(c.nat));
 
 /** True while this corps holds as a rearguard: ordered, still in the province it holds, its side's next month not yet begun. */
 export const isRearguard = (g: Game, c: Corps): boolean => rearguardOn(g) && !!c.rear && !c.dead && c.reg === c.rear[2] && c.town === undefined;
