@@ -1419,6 +1419,47 @@ int main(int Argc, char** Argv)
 		if (Riders > 0)
 			std::printf("  %d poses of %d seat clips in %d files checked (on his seat, his gun as the clip says, shown as told); sitting, his head %.2f to %.2f m over the seat\n",
 				Checked, Seats, Riders, SitLo, SitHi);
+		// Effects (R2): a downed pilot in his army's infantry file is drawn bareheaded (AddRider's bBareHead; the art
+		// director, 02:26Z 24 November: a flier wears no steel helmet): his file's own helmet left off at each level and
+		// no finish drawn in its place, the rest of him as the same file's rider (his head under it is the file's own).
+		int Bare = 0, LeastOff = 1 << 30;
+		for (const auto& KV : Files)
+		{
+			const Soldier& S = *KV.second;
+			if (S.HelmetCount[Near] <= 0) continue;
+			const std::string Army = KV.first.substr(0, 3);
+			const int Helmeted = C4.AddRider(KV.first, Army, 0xC47E2ull), Man = C4.AddRider(KV.first, Army, 0xC47E2ull, std::string(), true);
+			if (Helmeted < 0 || Man < 0) { Fail("soldier_%s.json: no bareheaded rider made", KV.first.c_str()); continue; }
+			Crowd::Ride R;
+			R.bShown = true;
+			R.Clip = S.ClipIndex("go_prone");
+			R.Time = 0.1f;
+			R.bUnarmed = true;
+			float* M = R.Seat.R;
+			M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;
+			M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+			M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+			R.Seat.T[0] = 300.f; R.Seat.T[1] = 200.f; R.Seat.T[2] = 0.f;
+			C4.SetRide(Helmeted, R);
+			C4.SetRide(Man, R);
+			C4.Update(4.0);
+			if (!C4.Visible(Man) || C4.HelmetOf(Man) != -1) { Fail("soldier_%s.json: a bareheaded rider not shown, or a helmet's finish on him", KV.first.c_str()); continue; }
+			for (int L = 0; L < LodCount; ++L)
+			{
+				const int Pc = C4.PointsOf(Helmeted, static_cast<Lod>(L)), Pb = C4.PointsOf(Man, static_cast<Lod>(L));
+				std::vector<float> Ba(static_cast<size_t>(Pb) * 3);
+				C4.Skin(Man, static_cast<Lod>(L), Ba.data(), nullptr);
+				bool bFinite = true;
+				for (size_t K = 0; K < Ba.size(); ++K) bFinite = bFinite && std::isfinite(Ba[K]);
+				if (!bFinite || Pb <= 0 || Pb >= Pc || Pb < Pc * 8 / 10)
+					Fail("soldier_%s.json at level %d: bareheaded, %d points to his helmeted %d%s", KV.first.c_str(), L, Pb, Pc, bFinite ? "" : " (NaN skinned)");
+				LeastOff = std::min(LeastOff, Pc - Pb);
+			}
+			++Bare;
+		}
+		if (Bare > 0)
+			std::printf("  %d infantry files' riders bareheaded (a downed pilot): their helmets left off at each level, none drawn in their place (%d points fewer at the least)\n",
+				Bare, LeastOff);
 	}
 
 	// Frame time.
