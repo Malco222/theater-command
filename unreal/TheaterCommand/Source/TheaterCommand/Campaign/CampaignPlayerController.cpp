@@ -371,6 +371,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
+	// (Release 2; Brian 24 November 2026 18:13Z: "when i move a navy I want to see the boats sail to it as well".)
+	Add(TEXT("sail"), TEXT("Ships sail on the map"), TEXT("A fleet sent to another sea, into harbour or out of it sails there by water, round the land, its bows the way it goes, in two or three seconds. Off, it is simply found where it now is. Fleets only reported, not seen, are never shown sailing."), bShipsSail ? TEXT("ON") : TEXT("OFF"), bShipsSail);
 	// (Release 2, D1: ruling 241) The month at sea: the month's war at sea staged as it opens. The viewer's own, kept in
 	// its own file by the session (Saved/Campaign/subscene.json), not with these options nor in the save. A run that
 	// has it "off" reads as NEVER here.
@@ -442,6 +444,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("moments"))
 	{
 		bMoments = !bMoments;
+	}
+	else if (Id == TEXT("sail")) // (release 2: ships that sail)
+	{
+		bShipsSail = !bShipsSail;
+		if (Map.IsValid())
+		{
+			Map->SetShipsSail(bShipsSail);
+		}
 	}
 	else if (Id == TEXT("askend"))
 	{
@@ -619,7 +629,7 @@ void ACampaignPlayerController::SaveOptions() const
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
 	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
-	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s}\n"), Word(bMonthReportOpens)), *OptionsFile());
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s,\"sail\":%s}\n"), Word(bMonthReportOpens), Word(bShipsSail)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -664,6 +674,11 @@ void ACampaignPlayerController::LoadOptions()
 	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
 	bMonthReportOpens = Yes(TEXT("reportOpens"), false); // (Release 2, news at the map's edge; ruling 131: merge by hand)
+	bShipsSail = Yes(TEXT("sail"), false); // (release 2: ships that sail)
+	if (Map.IsValid())
+	{
+		Map->SetShipsSail(bShipsSail);
+	}
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -895,6 +910,10 @@ void ACampaignPlayerController::BeginWar(TFunction<bool(ACampaignGameMode&)>&& S
 		return; // (a war is already being begun)
 	}
 	bNationsAsked = false; // (tc.Speed.NationsAside: a war begun or read in drops a list still being worked out; the screen asks again when it next opens)
+	if (Map.IsValid())
+	{
+		Map->ForgetFleetPlaces(); // (release 2: the fleets of the war begun are laid out where they are, not sailed from the last war's places)
+	}
 	if (!TheaterSpeed::WarSpread() || bScripted || TheaterSpeed::PictureRun())
 	{
 		// At once, as before (and always in a run that only takes pictures, which looks at the war the moment it is begun).
