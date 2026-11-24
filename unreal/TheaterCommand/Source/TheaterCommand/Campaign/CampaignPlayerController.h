@@ -1072,7 +1072,7 @@ public:
 	void OrderTo(int32 RegionId, const FVector* CarriedFrom = nullptr);
 
 	/** A click on a territory, as the mouse makes it: for scripts. */
-	void ClickRegion(int32 RegionId) { ClickOnTable(nullptr, RegionId); }
+	void ClickRegion(int32 RegionId) { PointedField = INDEX_NONE; ClickOnTable(nullptr, RegionId); } // (a step's click on a province is never the airfield the real pointer happens to rest by)
 	// ---- For the playtester's click-through (CampaignStepPlayer: a development tool) ----
 	/** What the player has in front of him: the card or page on top, the words he is shown, and what is in hand. */
 	void DescribeScreen(FString& OutOpen, FString& OutWords, FString& OutHand) const;

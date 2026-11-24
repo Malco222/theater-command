@@ -5595,8 +5595,17 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// in hand an airfield is pointed at from anywhere in a ring 28 of the screen's units across round the middle of its
 	// runway, whatever the height of the eye (FieldInRing). With an army, a fleet or an agent in hand only on the field
 	// itself, as before, so that no order is turned into a look at an airfield.
+	// (Only where the rules keep airfields, the grand campaign's air war: elsewhere the field spots are works on the
+	// ground, and the ring would only steal the province's clicks.) The overlap is judged afresh each frame, and a click's
+	// swap lasts until the pointer moves 6 units off, whatever it moves over (the code review of 18:30Z).
 	const bool bHandsFree = ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && AgentInHand == INDEX_NONE;
-	PointedField = !bOnTable ? INDEX_NONE : bHandsFree && !bScripted ? FieldInRing(Mouse, PointedRegion) : Map->AirfieldNear(PointerMap);
+	const bool bFieldsKept = GetSession() && GetSession()->GetView().Airfields.Num() > 0;
+	bPointerInOverlap = false;
+	if (!bHaveMouse || FVector2D::DistSquared(Mouse, OverlapClickAt) > FMath::Square(6.0 * GateMarkScale))
+	{
+		bOverlapSwapped = false;
+	}
+	PointedField = !bOnTable ? INDEX_NONE : bHandsFree && bFieldsKept && !bScripted ? FieldInRing(Mouse, PointedRegion) : Map->AirfieldNear(PointerMap);
 	AArmyPiece* PointedPiece = nullptr;
 	AArmyPiece* AimedPiece = nullptr; // (what an order would go to: never the flag that is being carried)
 	int32 PointedAgent = INDEX_NONE;
@@ -5625,7 +5634,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// (What an order would go to: the army whose figure is under the pointer, or else the ground. See AimedOf.)
 	// (The same spec.) Inside its ring the airfield wins over the province and the town's plate: the pointer points at the
 	// field's own province, for the lit ground, the tip and the click. A piece or an agent under the pointer still wins.
-	if (PointedField != INDEX_NONE && bHandsFree && !PointedPiece && PointedAgent == INDEX_NONE)
+	if (PointedPiece || PointedAgent != INDEX_NONE)
+	{
+		PointedField = INDEX_NONE; // (a piece or an agent under the pointer takes the click, so the tip is not the airfield's)
+	}
+	if (PointedField != INDEX_NONE && bHandsFree && bFieldsKept)
 	{
 		PointedRegion = PointedField;
 		bPointerOnWater = false;
@@ -7071,7 +7084,10 @@ int32 ACampaignPlayerController::FieldInRing(const FVector2D& Mouse, int32 Groun
 	}
 	// How many pixels a step of the map is here, the shorter way: every field that might be inside the ring is taken, and
 	// each is then measured on the screen.
-	const double Step = FMath::Max(FMath::Min(FVector2D::Distance(Here, East), FVector2D::Distance(Here, North)), 0.05);
+	// (the smaller stretch of the map onto the screen here, so that a turned and tilted view misses no field)
+	const FVector2D AlongX = East - Here, AlongY = North - Here;
+	const double XX = AlongX.SizeSquared(), YY = AlongY.SizeSquared(), XY = FVector2D::DotProduct(AlongX, AlongY);
+	const double Step = FMath::Max(FMath::Sqrt(FMath::Max(0.5 * (XX + YY - FMath::Sqrt(FMath::Square(XX - YY) + 4.0 * XY * XY)), 0.0)), 0.05);
 	TArray<TPair<int32, FVector2D>> Near;
 	Map->AirfieldsWithin(PointerMap, FMath::Min(Ring / Step * 1.25 + 1.0, 400.0), Near);
 	int32 Best = INDEX_NONE;
@@ -7096,10 +7112,6 @@ int32 ACampaignPlayerController::FieldInRing(const FVector2D& Mouse, int32 Groun
 	}
 	// Where the town of the ground under the pointer is in the same ring round its own middle, the rings overlap: the
 	// nearer middle wins, and a click there turns it to the other until the pointer moves off (see the click).
-	if (FVector2D::DistSquared(Mouse, OverlapClickAt) > FMath::Square(6.0 * GateMarkScale))
-	{
-		bOverlapSwapped = false;
-	}
 	const FCampaignMapData& Data = Map->GetData();
 	if (Data.Regions.IsValidIndex(Ground))
 	{
