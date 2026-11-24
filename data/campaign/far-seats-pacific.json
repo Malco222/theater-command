@@ -7,7 +7,8 @@
   "commanders.names": "the clerk, /mnt/project-files/map-tables/officer-names-208b-world.json, unchanged",
   "setup-1939.formations": "the historian's dated rows for Australia's territories (seats-209-pacific.json, arrivals_aus_territories), less the optional one",
   "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
-  "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it"
+  "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it",
+  "CHN corps, the three rows of the west (item 7 of the rider of 19:25Z, 20 November 2026, to ruling 234)": "the historian, /mnt/project-files/historian/sinkiang-karakoram-1937-45.md, section 4: the record's people on ground the chart had empty. Sinkiang Provincial Army at Tihwa (Sheng Shicai's, Soviet-armed, 10,000 to 20,000 men: strength L, who and where H); Qinghai Army at Sining (Ma Bufang's Hui and Salar cavalry and infantry, 20,000 to 30,000 at home: strength L, who and where H); Hexi Cavalry at Liangchow (Ma Buqing's cavalry in the Kansu corridor, 10,000 to 20,000: strength L, who H, Liangchow as its base M). All three held and all war (held H, all war M): regional armies loyal to their own generals, which stayed home. One division of a row is four of the record's, about 40,000 men at full. Carried by hand, at the end of the list, until the planner's first-day-corps.json and make_seats.py write the same. Named and not built: the Soviet regiment at Hami (1937 to 1943) and Sinkiang as Moscow's guarded sphere."
  },
  "grand": {
   "nations": [
@@ -832,6 +833,42 @@
      "str": 0.5,
      "hold": 1
     }
+   ],
+   [
+    "CHN",
+    "Sinkiang Provincial Army",
+    "inf",
+    1,
+    "Tihwa",
+    {
+     "xp": 0.1,
+     "str": 0.4,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Qinghai Army",
+    "cav",
+    1,
+    "Sining",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Hexi Cavalry",
+    "cav",
+    1,
+    "Liangchow",
+    {
+     "xp": 0.15,
+     "str": 0.4,
+     "hold": 1
+    }
    ]
   ],
   "fleets": [
@@ -1264,8 +1301,9 @@
     "Rabaul",
     {
      "xp": 0,
-     "str": 0.2,
-     "hold": 1
+     "str": 0.15,
+     "hold": 1,
+     "est": 0.15
     }
    ],
    [
@@ -1277,8 +1315,9 @@
     "Port Moresby",
     {
      "xp": 0,
-     "str": 0.2,
-     "hold": 1
+     "str": 0.1,
+     "hold": 1,
+     "est": 0.1
     }
    ],
    [
@@ -1290,7 +1329,8 @@
     "Port Moresby",
     {
      "xp": 0,
-     "str": 0.2
+     "str": 0.15,
+     "est": 0.15
     }
    ]
   ]

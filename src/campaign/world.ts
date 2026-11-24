@@ -23,6 +23,7 @@ import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { clientMonth, farCountries, farGround, farSettle } from './far';
+import { keepersOf, onRun, pacificFreed, pacificRuns } from './pacific';
 import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
 import { rearmedAt } from './footing';
@@ -90,6 +91,12 @@ export const WORLD_STAGES = FAR_STAGE ? [104, 201, 540] : [104, 201];
  * (the rules builder's numbering, 17 November 2026: 915 to 1226, 1227 to 1593, 1594 to 2065).
  */
 export const FAR_FIRST = WORLD_FIRST + (wholeMap as unknown as WorldMap).stages![1];
+
+/**
+ * The first sea of the far side. The seas keep one order on every stage of the chart, the old chart's first and the
+ * far side's after them, so a sea of the far side is one the old chart (Europe and the Americas) does not draw.
+ */
+export const FAR_SEAS_FIRST = (americasMap as unknown as WorldMap).seas.zones.length;
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
@@ -242,13 +249,27 @@ const STAND_IN: Record<string, [string, string, string]> = {
   MGL: ['Mongolia', 'Mongolian', '#8c5a3c'], THA: ['Thailand', 'Thai', '#5b8c8a'], AUS: ['Australia', 'Australian', '#2f7d5b'],
   NZL: ['New Zealand', 'New Zealand', '#40507a'], SAF: ['South Africa', 'South African', '#d98a2b'], SAU: ['Saudi Arabia', 'Saudi', '#3f8f5a'],
   YEM: ['Yemen', 'Yemeni', '#b0563f'], AFG: ['Afghanistan', 'Afghan', '#6f7f4a'], NEP: ['Nepal', 'Nepalese', '#9c3d54'], LBR: ['Liberia', 'Liberian', '#4a6fa5'],
+  // (Tibet, governed from Lhasa and neutral throughout: rider b632 to ruling 234.)
+  TIB: ['Tibet', 'Tibetan', '#8f6f5a'],
 };
+
+/**
+ * Closed ground, by its owner's code: what its provinces say of themselves (rider b632 to ruling 234). The high
+ * plateau is a neutral's, and at the game's scale no army enters or crosses it: every border out of Tibet's five
+ * provinces is struck on the chart (far.mjs, PACIFIC_NO_BORDER), so no march, attack or supply line has a road
+ * there and the staffs see none. Aircraft fly over the ranges as they did. (The words are the builder's until the
+ * UI director's review.)
+ */
+const CLOSED_GROUND: Record<string, string> = { TIB: 'Tibet: neutral. No army can cross the high plateau.' };
+/** The line a province of closed ground carries on its page, or null: its owner's while it is still in its owner's hands. */
+export const closedGround = (g: Game, r: Region): string | null => (farOn(g) && r.ctrl === r.owner ? CLOSED_GROUND[r.owner] ?? null : null);
 
 /**
  * The far stage's guard: a bare country for every owner code on the chart that is still no country once the far
  * side's own rows are laid (far.ts). It stands at home, at peace and independent, with no army, so the map and every
  * page can name whoever owns a province. Where every code has its own row it does nothing; on a narrower chart it
- * is never reached.
+ * is never reached. Tibet is the one country that stands by it for good: a neutral with no row and no army, whose
+ * ground no army enters (rider b632 to ruling 234; `closedGround` above).
  */
 function standInCountries(g: Game): void {
   if (!farOn(g)) return;
@@ -316,7 +337,7 @@ function settleFallen(g: Game, from: number): void {
     const r = g.regions[i], n = g.nations[r.ctrl];
     if (n?.alive || !n?.fellOn) continue;
     const by = n.fellOn.to;
-    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
+    r.ctrl = (r.overseas ? protectorOf(g, by, r) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
     r.since = g.turn;
   }
 }
@@ -566,13 +587,36 @@ export function standWithAllies(g: Game, nat: string, was: string | null = null)
   return true;
 }
 
+/**
+ * The runs a country's shipping works this month, each with its share of the sea lift: the table's own ('oceans'),
+ * and with the far side on the Pacific's (ruling 190; pacific.ts `pacificRuns`: none before the country is at war
+ * there). A share moves to the other ocean when its own has no enemy left (190, point 4): with nobody alive across
+ * the Atlantic that the country is at war with, that ocean's share is added to the Pacific's runs in their own
+ * proportion; with the Pacific's power beaten first, the Pacific's share is added to the table's. With the far side
+ * off, the table as it stands.
+ */
+export function oceanShares(g: Game, nat: string, O: OverseasRules): [string, number][] {
+  const table = Object.entries(O.oceans);
+  const far = pacificRuns(g, nat), freed = far.length ? 0 : pacificFreed(g, nat);
+  if (!far.length && !freed) return table;
+  const sum = (xs: [string, number][]): number => xs.reduce((s, x) => s + x[1], 0);
+  const n = g.nations[nat];
+  // (An enemy across the Atlantic: one whose capital stands on the old chart.)
+  const east = n.atWar.some((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && !beyondEurope(x.capital); });
+  if (freed) { const k = east ? (sum(table) + freed) / sum(table) : 1; return table.map(([o, x]) => [o, x * k]); }
+  if (east) return [...table, ...far];
+  const k = (sum(table) + sum(far)) / sum(far);
+  return far.map(([o, x]) => [o, x * k]);
+}
+
 /** How many corps a month the country's shipping carries across its oceans, all runs together. */
-export const sailings = (g: Game, nat: string, O: OverseasRules): number => Object.values(O.oceans).reduce((s, x) => s + x, 0) * g.nations[nat].sealift;
+export const sailings = (g: Game, nat: string, O: OverseasRules): number => oceanShares(g, nat, O).reduce((s, x) => s + x[1], 0) * g.nations[nat].sealift;
 
 /** Whether a province lies across the named ocean from the Americas: where that run's ships can put an army down. */
-export function acrossOcean(ocean: string, r: Region): boolean {
-  // The Atlantic run ends on the old chart: Europe, Africa's northern shore and the Near East. (The Pacific's entry comes with its own slice.)
-  return ocean === 'atlantic' ? !beyondEurope(r) : false;
+export function acrossOcean(g: Game, ocean: string, r: Region): boolean {
+  // The Atlantic run ends on the old chart: Europe, Africa's northern shore and the Near East. A run of the Pacific's
+  // ends on its own side of the equator on the Pacific's ground (pacific.ts).
+  return ocean === 'atlantic' ? !beyondEurope(r) : onRun(g, ocean, r) ?? false;
 }
 
 /**
@@ -580,9 +624,10 @@ export function acrossOcean(ocean: string, r: Region): boolean {
  * victor's armies. The first power on the list that is alive, lives by its ships and is at war with the victor;
  * null where there is none, and the ground goes with the rest.
  */
-export function protectorOf(g: Game, by: string): string | null {
+export function protectorOf(g: Game, by: string, r?: Region): string | null {
   if (!worldOn(g)) return null;
-  for (const id of WORLD.protector) {
+  // (Ground on the far side of the world has keepers of its own, ruling 199(c): pacific.ts.)
+  for (const id of (r && keepersOf(g, r)) || WORLD.protector) {
     const n = g.nations[id];
     if (n?.alive && n.seaSupply && n.atWar.includes(by)) return id;
   }

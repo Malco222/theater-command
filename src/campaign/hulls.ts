@@ -5,12 +5,15 @@
 import data from '../../data/campaign/hulls.json';
 import { Rng, hashString } from '../core/rng';
 import type { Game, LostHull, SeaSide, Ships } from './types';
+import { farOn } from './world';
 
 type Big = 'bb' | 'cv';
 /** A change to a ship from a month on (the historian's check): a new name ('name') or a move to another fleet ('fleet'). */
 interface Later { from: number; name?: string; fleet?: string }
 export interface HullRow { name: string; crew: number; from?: number; fleet?: string; pair?: boolean; type?: 'battlecruiser'; later?: Later[] }
-const HULLS = data as unknown as { share: Record<Big, number[]>; crew: Record<Big, number>; navies: Record<string, Partial<Record<Big, HullRow[]>>> };
+const HULLS = data as unknown as { share: Record<Big, number[]>; crew: Record<Big, number>; navies: Record<string, Partial<Record<Big, HullRow[]>>>;
+  /** The far chart's fleet for a class of a navy's ships, where it differs from the old chart's fleet the rows name: [nation][class][old fleet] = far fleet. */
+  far?: Record<string, Partial<Record<Big, Record<string, string>>>> };
 
 /** A ship's name and fleet in a month: her first ones, then each change of 'later' that has come by then, in order. */
 export function hullAt(r: HullRow, turn: number): { name: string; fleet?: string } {
@@ -36,7 +39,10 @@ export function nameLosses(g: Game, nat: string, fleet: string, sunk: Ships, key
     for (let k = 0; k < (sunk[cls] ?? 0); k++) {
       const share = shares[Math.floor(draw(g, `${key}:${cls}:${k}:men`) * shares.length)];
       const afloat = rows.map((r, i) => ({ r, i })).filter(({ r, i }) => (r.from ?? 1) <= g.turn && g.flags[`hull:${nat}:${cls}:${i}`] === undefined);
-      const near = afloat.filter(({ r }) => hullAt(r, g.turn).fleet === fleet);
+      // (On the far chart a navy's ships may sail in a fleet the old chart does not have: America's carriers are a fleet of
+      // their own there. The record names the old chart's fleet, and 'far' gives the far chart's for that class.)
+      const far = farOn(g) ? HULLS.far?.[nat]?.[cls] : undefined;
+      const near = afloat.filter(({ r }) => { const at = hullAt(r, g.turn).fleet; return (at !== undefined && far?.[at] !== undefined ? far[at] : at) === fleet; });
       const pool = near.length ? near : afloat;
       if (!pool.length) {
         out.push({ name: null, cls, crew: HULLS.crew[cls], lost: Math.round(HULLS.crew[cls] * share) });

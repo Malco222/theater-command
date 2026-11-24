@@ -55,12 +55,18 @@ export const restWord = (org: number): string => named(MORALE.restWords, org);
 /** Gives every corps that has none its starting morale. Called when a grand campaign opens, and when an older save of one is loaded. */
 export function openMorale(g: Game): void {
   if (!moraleRules(g)) return;
-  for (const c of g.corps) if (c.mor === undefined) c.mor = MORALE.start;
+  for (const c of g.corps) if (c.mor === undefined) c.mor = fresh(c);
 }
+
+/** Where a corps' morale settles when nothing is happening to it: its row's own will where the record gives it one (the far side), the common level otherwise. */
+export const levelOf = (c: Corps): number => c.will ?? MORALE.level;
+
+/** The morale of a fresh formation: as far above its own level as any other's is above the common one. */
+const fresh = (c: Corps): number => (c.will === undefined ? MORALE.start : r3(clamp(MORALE.start - MORALE.level + c.will, 0, 1)));
 
 /** A new corps raised in the grand campaign starts with the morale of a fresh formation. */
 export function raiseMorale(g: Game, c: Corps): void {
-  if (moraleRules(g)) c.mor = MORALE.start;
+  if (moraleRules(g)) c.mor = fresh(c);
 }
 
 /** Moves a corps' morale and writes down why. Nothing happens to a corps that keeps no morale. */
@@ -133,7 +139,7 @@ export function moraleMonth(g: Game, c: Corps, facts: { owed: number; cold: bool
   c.mw = (c.mw ?? []).filter((e) => e[2] === 0 && !MONTHLY.has(e[0])).map((e) => [e[0], e[1], 1]);
   const M = MORALE.month;
   const here = g.regions[c.reg];
-  feel(c, 'time', (MORALE.level - c.mor) * MORALE.drift);
+  feel(c, 'time', (levelOf(c) - c.mor) * MORALE.drift);
   if (here.owner === c.nat && !here.overseas) feel(c, 'home', M.home);
   const friend = (u: Corps): boolean => u !== c && !u.dead && allied(g, u.nat, c.nat);
   const beside = here.units.some(friend);

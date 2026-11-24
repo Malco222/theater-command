@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, keptByHand, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
@@ -739,12 +739,54 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
 }
 
 /**
+ * A strike the staff's plan orders by name (the far side, ruling 200(c): the carrier striking force on Pearl Harbor
+ * in the month Japan's blow falls). The fleet puts to sea, to the nearest sea in its reach from which its strike wing
+ * can fly at the harbour, and the wing goes for what lies there that month, with the fleet's fighters where fighters
+ * will come up. None of the admirals' sums is asked: the plan orders it. A harbour with no ship of an enemy's in it
+ * is not struck and nothing sails; afterwards the admirals' own rule decides. A player who runs his navy himself
+ * keeps his fleets his own; where his staff runs it, the plan's strike is flown as he declares (turn.ts, orderDeclare).
+ * `home`: the base the fleet makes for once the strike is flown, that same month (the force was back in the Inland Sea
+ * before December 1941 was out; its country moves last in a month, and left at its northern anchorage it would lie in
+ * reach of the fleet it had just struck through all of that fleet's January).
+ */
+export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string, home?: { base: string; port: string; home: string; words: string }): boolean {
+  if (!carrierRules(g) || byHand(g, nat, 'navy')) return false;
+  const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
+  if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
+  const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
+  if (!lead || lead.bmr <= 0 || lead.flew === g.turn || lead.mission !== 'support') return false;
+  const can = (): boolean => whyNotMission(g, lead, 'harbour', r.id) === null && !assessAir(g, [lead], 'harbour', r.id).why;
+  const keep = { zone: c.zone, stance: c.stance };
+  let at = atSea(c) && can() ? c.zone : -1;
+  if (at < 0) {
+    // (The reach is told nearest first.)
+    for (const z of fleetReach(g, c)) {
+      c.zone = z; c.stance = 'patrol';
+      const ok = can();
+      c.zone = keep.zone; c.stance = keep.stance;
+      if (ok) { at = z; break; }
+    }
+    if (at < 0 || !sail(g, c, at, 'patrol')) return false;
+  }
+  let fleets = [lead];
+  const a = assessAir(g, fleets, 'harbour', r.id);
+  if (a.why) return false;
+  if (a.D >= 1 && cap && cap.ftr > 0 && cap.flew !== g.turn && cap.mission === 'support' && whyNotMission(g, cap, 'harbour', r.id) === null) fleets = [lead, cap];
+  const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
+  if (!rep) return false;
+  for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
+  if (home) orderedTo(g, c, home);
+  return true;
+}
+
+/**
  * The computer's strikes on ships for one nation, flown at once as the player's are. Each carrier fleet's strike
  * wing goes for the best fleet its side has found in reach, or for ships in a harbour; a carrier fleet lying in
  * harbour with nothing in reach puts to sea for the month to strike, where its side would be much the stronger.
  * A few of the land bombers may go for ships too. A strike is flown only where the forecast says it should pay.
+ * 'not' are the land groups a landing plan has named for its sky this month: they fly nothing else (air.ts, planSky).
  */
-export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all'): void {
+export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all', not?: Set<number>): void {
   // The player's carriers go with his navy and his land bombers with his air force: each flies for him only where
   // he has handed that desk to his staff (depth.ts), and then it is asked for by itself.
   const his = what === 'decks' ? byHand(g, nat, 'navy') : what === 'land' ? byHand(g, nat, 'air') : nat === g.human;
@@ -755,7 +797,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const trade = !!A.trade;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f) && !not?.has(f.id);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);

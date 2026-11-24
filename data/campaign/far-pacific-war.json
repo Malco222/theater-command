@@ -1,0 +1,3577 @@
+{
+ "_about": "The Pacific war's rows (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on). Ruling 197, the offer of war (the Pacific planner's paper 12): the entry of December 1941 as the far side reads it. 'pearl-harbor-world' takes the place of the row of that name: the same month and the same conditions, read as the month closes ('when': 'close'), after every country has moved, so that Japan's blow comes before Germany's declaration as it did, and both of the month's first blows fall on countries at peace. Its words name Pearl Harbor only where Japan's aircraft have raided the harbour ('says': the flag a harbour raid leaves, src/campaign/air.ts; rider b641 (e) to ruling 234), and where Japan is at war with America and flew no raid there they are the plain words of the entry; and the republics that follow America are read the day it fires ('then'), as they were when the entry stood at the month's opening. 'pact-binds' is the same entry come sooner (the ruling's second tie): the month after Japan and America go to war, once a pact binds Germany and Italy to Japan and only for a war begun since it did ('pact:JAP,USA', src/campaign/pacific.ts; the months are in pacific.json). The ties that are no events (Britain and America with each other, the dominions and the Dutch with Britain, Japan beside the Axis, China with the Allies, the freeze, the Soviet month) are pacific.ts's, on pacific.json. Ruling 200 (the staffs' plans, the planner's paper 14, sections 2 and 10) and paper 18: Japan's opening by the book. 'open'.ops under 'JAP+' (a code followed by '+' lays over what stands under the code: the China front's choices are china-line.json's) is the great choice 'south', The strike south: it declares on America first, then Britain and the Dutch, dated December 1941 ('history'.dates), with the ten named landings of paper 18 in the order the lift of six serves them and, last, the eleventh crossing of its point 4 (Hong Kong touches only ground China holds on today's chart, so the 38th Division crosses from Canton by sea, one sea, until the map builder cuts that coast finer; a corps the plan names comes out of its town to sail), and 'quays', the harbours Japan holds without owning them from which they may sail (Hainan and Canton; Cam Ranh is Japan's own after the demand). Off the book it waits on 'flag:pac:strike', which the readiness test raises (ruling 200(m) and rider b586 to ruling 234; src/campaign/readiness.ts, on pacific.json 'ready'), and 'sure' sends it the month the flag is up with no second draw. 'history': the Pacific's theatre, which comes after the west, with its marks (the four of the opening, the fourth told three ways so that the news names the fortress that stands; and Pearl Harbor and Brisbane, which close the book for America's roads; the reasons' words are the UI director's, ui-director/words-pacific-news.md; 'expect' is how the dial words a mark beforehand where the reason would not read in that sentence, and an empty one keeps a mark off the dial's list), and Siam among the countries that really joined. The event 'siam-beside-japan' (ruling 200(b), with the rider to 202; the seat's name in the game is Thailand, and the news says so): at stops 1 to 3 of the history dial Siam joins the Axis and declares on Britain the day Japan is at war with Britain ('when': 'war', read at a declaration), so the army for Malaya lands at Singora that month: Siam let Japan pass within hours on 8 December 1941, a fact of the day and not a choice of the book's (riders b591 and b593 to ruling 234; 'stop:1,2,3', the dial at one of the stops named). At stops 4 and 5 it chooses by its character: 'siam-chooses-japan' is the same row, read only while Siam leans to the Axis that day ('step>=:THA,1'); otherwise it stays neutral, and the rules have no right of passage. 'navy'.moves: the carrier striking force gathers at Etorofu in November 1941 and is home at Kure in January 1942, as it was by the last week of December. The Asiatic Fleet's four rows are the design director's rulings of 03:55Z and 04:25Z, 22 November 2026, on the historian's paper (asiatic-fleet-south-1941-42.md). Hart had sent most of his surface ships south before the war (Houston lay at Iloilo from 2 December, Marblehead and five destroyers at Tarakan, four more at Balikpapan), so the first row, marked 'eve', takes the fleet to Iloilo on Panay, America's own ground, in the strike's own month and before the blow, on the book's word that the blow falls that month; no such row is read where the book lays no blow (a player's Japan). After the blow the fleet is based at Surabaya from January 1942, at Tjilatjap (the chart's Semarang, whose harbour it is) from February and at Fremantle (the chart's Perth) from March: those three are read only at war with Japan and are marked 'ally', so the harbour may be one an ally at war with Japan holds. All four are named 'with' the strike south and keep its month where the stop draws it (navy.ts, FleetMove). Its ships are lost in fights, never by date. 'strikes' on the great choice: in the month it goes the carrier striking force puts to sea and its wing flies at Pearl Harbor and what lies in it that month (ruling 200(c): a fleet that is not there is not struck there; after the strike the admirals' own rule decides; src/campaign/carriers.ts, plannedStrike), and the strike once flown the force makes for Kure that same month ('home' on the row: the record has it in the Inland Sea by 23 December, and Japan moves last in a month; the row of January 1942 under 'navy'.moves brings it home where no strike was flown). 'frees' on the great choice: the corps that come off hold the month it goes (the Imperial Guards, who march through Siam to Malaya, and the naval landing forces kept for Menado, Kendari and Ambon: the planner's paper 18); 'freesAfter': two months after, its own landing forces that still wait on a quay are the staff's to use (ai.ts hop). The file is laid before china-line.json, so that the strike south stands first in Japan's list and has the first call of a month. 'history'.'hops' (ruling 200, finding 2 and clause (i), with ruling 202(e); the planner's plan-test.md, sections 1 and 3): the Pacific's own shores rows, read by src/campaign/pacific.ts while the Pacific's book stands at a stop that keeps one. Each row is a place and the month it opens (1 = September 1939). 'axis': where Japan's staff may land of its own accord, in the record's order (the named landings of the great choice are not bound by it). 'allies': America's thirty-six places and Britain's thirteen, each with its earliest month; while the book stands their staffs land on nothing else that history's Japan held, and ground Japan's side takes that is not among 'axis' is open to them from the month it is lost. Whose road a row of 'allies' is (rider b585 to ruling 234, item 1(c); the planner's paper 14, section 4, points 4 and 8, and paper 15): a place named under 'roads' is that country's road and no other staff's (Britain's thirteen, the road back to Burma and Malaya); every other row is the road of 'lead' (America's thirty-six); a country under 'behind' goes behind the lead's army and lands of its own accord only on the places named for it (Australia: Buna, and Borneo in 1945; New Zealand: none); any other country of that side reads none of the rows. Ground Japan's side takes that is not among 'axis' stays open to them all. With the book closed, or at a stop that keeps none, every enemy shore of the Pacific's ground is open (pacific.json 'shores' says which ground that is). 'slides': at a stop with slack the rows' months move with the month of the great choice named, by that choice's own draw. 'navy'.'landing'.'craft' (ruling 234(b)2, the historian's ruling-234-facts.md section 2): Japan's landing craft, a row beside Britain's and America's of June 1943: [month, nations, the share of its strength a force keeps fighting its way off a beach]. From the first month, as the record has it (the Daihatsu and the Shinshu Maru were at work in China from 1937), at the worth the Allies' row reaches; it never grows.",
+ "diplomacy": {
+  "events": [
+   {
+    "id": "pearl-harbor-world",
+    "from": 28,
+    "to": 99,
+    "mode": "open",
+    "when": "close",
+    "if": [
+     "flag:world",
+     "alive:GER",
+     "alive:USA",
+     "openTo:USA,allies",
+     "anyPeace:USA,GER,ITA",
+     "binds:USA"
+    ],
+    "enter": {
+     "nations": [
+      "USA"
+     ],
+     "align": "allies"
+    },
+    "war": [
+     [
+      "USA",
+      "GER"
+     ],
+     [
+      "USA",
+      "ITA"
+     ]
+    ],
+    "then": [
+     "usa-italy",
+     "cuba-war",
+     "isthmus-war"
+    ],
+    "text": "America has entered the war: Germany and Italy declare war on the United States, and the greatest industry on earth is behind the Allies.",
+    "says": [
+     {
+      "if": [
+       "flag:harbour:JAP:Pearl Harbor"
+      ],
+      "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+     }
+    ]
+   },
+   {
+    "id": "pact-binds",
+    "from": 1,
+    "to": 99,
+    "mode": "open",
+    "if": [
+     "flag:world",
+     "alive:GER",
+     "alive:USA",
+     "alive:JAP",
+     "war:JAP,USA",
+     "pact:JAP,USA",
+     "openTo:USA,allies",
+     "anyPeace:USA,GER,ITA",
+     "binds:USA"
+    ],
+    "enter": {
+     "nations": [
+      "USA"
+     ],
+     "align": "allies"
+    },
+    "war": [
+     [
+      "USA",
+      "GER"
+     ],
+     [
+      "USA",
+      "ITA"
+     ]
+    ],
+    "then": [
+     "usa-italy",
+     "cuba-war",
+     "isthmus-war"
+    ],
+    "text": "America has entered the war. It is at war with Japan, and Germany and Italy, standing by their pact with Japan, declare war on it. The greatest industry on earth is behind the Allies.",
+    "says": [
+     {
+      "if": [
+       "flag:war:JAP:USA"
+      ],
+      "text": "Japan has attacked the United States, and Germany and Italy stand by their pact with Japan: they declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+     }
+    ]
+   },
+   {
+    "id": "siam-beside-japan",
+    "from": 1,
+    "to": 99,
+    "mode": "open",
+    "when": "war",
+    "if": [
+     "flag:world",
+     "stop:1,2,3",
+     "alive:THA",
+     "alive:JAP",
+     "alive:UK",
+     "war:JAP,UK",
+     "peace:JAP,THA",
+     "peace:THA,UK",
+     "notInBloc:THA",
+     "inBloc:JAP,axis"
+    ],
+    "enter": {
+     "nations": [
+      "THA"
+     ],
+     "align": "axis"
+    },
+    "war": [
+     [
+      "THA",
+      "UK"
+     ]
+    ],
+    "text": "Thailand stands with Japan: Bangkok lets the Japanese army pass and declares war on Britain."
+   },
+   {
+    "id": "siam-chooses-japan",
+    "from": 1,
+    "to": 99,
+    "mode": "open",
+    "when": "war",
+    "if": [
+     "flag:world",
+     "stop:4,5",
+     "step>=:THA,1",
+     "alive:THA",
+     "alive:JAP",
+     "alive:UK",
+     "war:JAP,UK",
+     "peace:JAP,THA",
+     "peace:THA,UK",
+     "notInBloc:THA",
+     "inBloc:JAP,axis"
+    ],
+    "enter": {
+     "nations": [
+      "THA"
+     ],
+     "align": "axis"
+    },
+    "war": [
+     [
+      "THA",
+      "UK"
+     ]
+    ],
+    "text": "Thailand stands with Japan: Bangkok lets the Japanese army pass and declares war on Britain."
+   }
+  ]
+ },
+ "history": {
+  "dates": {
+   "JAP+": {
+    "south": 28
+   }
+  },
+  "theatre": {
+   "JAP:south": "pacific"
+  },
+  "theatres": {
+   "pacific": {
+    "name": "the Pacific",
+    "after": [
+     "west"
+    ]
+   }
+  },
+  "bookIf": {
+   "JAP:south": [
+    "alive:JAP"
+   ]
+  },
+  "joined": {
+   "axis": [
+    "THA"
+   ]
+  },
+  "hops": {
+   "theatre": "pacific",
+   "slides": "JAP:south",
+   "axis": [
+    [
+     "Singora",
+     28
+    ],
+    [
+     "Kota Bharu",
+     28
+    ],
+    [
+     "Guam",
+     28
+    ],
+    [
+     "Wake",
+     28
+    ],
+    [
+     "Hong Kong",
+     28
+    ],
+    [
+     "Aparri",
+     28
+    ],
+    [
+     "Lingayen",
+     28
+    ],
+    [
+     "Legaspi",
+     28
+    ],
+    [
+     "Davao",
+     28
+    ],
+    [
+     "Jolo",
+     28
+    ],
+    [
+     "Kuching",
+     28
+    ],
+    [
+     "Brunei",
+     28
+    ],
+    [
+     "Manila",
+     29
+    ],
+    [
+     "Penang",
+     29
+    ],
+    [
+     "Ipoh",
+     29
+    ],
+    [
+     "Kuantan",
+     29
+    ],
+    [
+     "Kuala Lumpur",
+     29
+    ],
+    [
+     "Johore",
+     29
+    ],
+    [
+     "Jesselton",
+     29
+    ],
+    [
+     "Sandakan",
+     29
+    ],
+    [
+     "Pontianak",
+     29
+    ],
+    [
+     "Tarakan",
+     29
+    ],
+    [
+     "Menado",
+     29
+    ],
+    [
+     "Balikpapan",
+     29
+    ],
+    [
+     "Kendari",
+     29
+    ],
+    [
+     "Ambon",
+     29
+    ],
+    [
+     "Rabaul",
+     29
+    ],
+    [
+     "Mergui",
+     29
+    ],
+    [
+     "Moulmein",
+     29
+    ],
+    [
+     "Singapore",
+     30
+    ],
+    [
+     "Mindoro",
+     30
+    ],
+    [
+     "Palembang",
+     30
+    ],
+    [
+     "Bandjermasin",
+     30
+    ],
+    [
+     "Makassar",
+     30
+    ],
+    [
+     "Palu",
+     30
+    ],
+    [
+     "Bali",
+     30
+    ],
+    [
+     "Koepang",
+     30
+    ],
+    [
+     "Dili",
+     30
+    ],
+    [
+     "Batavia",
+     31
+    ],
+    [
+     "Bandoeng",
+     31
+    ],
+    [
+     "Semarang",
+     31
+    ],
+    [
+     "Soerabaja",
+     31
+    ],
+    [
+     "Oosthaven",
+     31
+    ],
+    [
+     "Djambi",
+     31
+    ],
+    [
+     "Padang",
+     31
+    ],
+    [
+     "Pakanbaru",
+     31
+    ],
+    [
+     "Medan",
+     31
+    ],
+    [
+     "Atjeh",
+     31
+    ],
+    [
+     "Rangoon",
+     31
+    ],
+    [
+     "Toungoo",
+     31
+    ],
+    [
+     "Prome",
+     31
+    ],
+    [
+     "Lae",
+     31
+    ],
+    [
+     "Cape Gloucester",
+     31
+    ],
+    [
+     "Bougainville",
+     31
+    ],
+    [
+     "Bataan",
+     32
+    ],
+    [
+     "Cebu",
+     32
+    ],
+    [
+     "Panay",
+     32
+    ],
+    [
+     "Admiralty Islands",
+     32
+    ],
+    [
+     "Halmahera",
+     32
+    ],
+    [
+     "Morotai",
+     32
+    ],
+    [
+     "Vogelkop",
+     32
+    ],
+    [
+     "Biak",
+     32
+    ],
+    [
+     "Sarmi",
+     32
+    ],
+    [
+     "Hollandia",
+     32
+    ],
+    [
+     "Yenangyaung",
+     32
+    ],
+    [
+     "Mandalay",
+     32
+    ],
+    [
+     "Leyte",
+     33
+    ],
+    [
+     "Del Monte",
+     33
+    ],
+    [
+     "Zamboanga",
+     33
+    ],
+    [
+     "Palawan",
+     33
+    ],
+    [
+     "Flores",
+     33
+    ],
+    [
+     "Guadalcanal",
+     33
+    ],
+    [
+     "Lashio",
+     33
+    ],
+    [
+     "Myitkyina",
+     33
+    ],
+    [
+     "Kalewa",
+     33
+    ],
+    [
+     "Akyab",
+     33
+    ],
+    [
+     "Attu",
+     34
+    ],
+    [
+     "Kiska",
+     34
+    ],
+    [
+     "Buna",
+     35
+    ],
+    [
+     "Nauru",
+     36
+    ],
+    [
+     "Mimika",
+     36
+    ],
+    [
+     "New Georgia",
+     39
+    ],
+    [
+     "Madang",
+     40
+    ],
+    [
+     "Wewak",
+     40
+    ]
+   ],
+   "allies": [
+    [
+     "Guadalcanal",
+     36
+    ],
+    [
+     "Buna",
+     40
+    ],
+    [
+     "Akyab",
+     40
+    ],
+    [
+     "Attu",
+     45
+    ],
+    [
+     "New Georgia",
+     46
+    ],
+    [
+     "Kiska",
+     48
+    ],
+    [
+     "Lae",
+     49
+    ],
+    [
+     "Myitkyina",
+     50
+    ],
+    [
+     "Bougainville",
+     51
+    ],
+    [
+     "Tarawa",
+     51
+    ],
+    [
+     "Cape Gloucester",
+     52
+    ],
+    [
+     "Kwajalein",
+     53
+    ],
+    [
+     "Eniwetok",
+     54
+    ],
+    [
+     "Admiralty Islands",
+     54
+    ],
+    [
+     "Madang",
+     56
+    ],
+    [
+     "Hollandia",
+     56
+    ],
+    [
+     "Biak",
+     57
+    ],
+    [
+     "Saipan",
+     58
+    ],
+    [
+     "Guam",
+     59
+    ],
+    [
+     "Vogelkop",
+     59
+    ],
+    [
+     "Kalewa",
+     60
+    ],
+    [
+     "Morotai",
+     61
+    ],
+    [
+     "Palau",
+     61
+    ],
+    [
+     "Ulithi",
+     61
+    ],
+    [
+     "Leyte",
+     62
+    ],
+    [
+     "Mindoro",
+     64
+    ],
+    [
+     "Lingayen",
+     65
+    ],
+    [
+     "Mandalay",
+     65
+    ],
+    [
+     "Lashio",
+     65
+    ],
+    [
+     "Manila",
+     66
+    ],
+    [
+     "Iwo Jima",
+     66
+    ],
+    [
+     "Palawan",
+     66
+    ],
+    [
+     "Yenangyaung",
+     66
+    ],
+    [
+     "Zamboanga",
+     67
+    ],
+    [
+     "Panay",
+     67
+    ],
+    [
+     "Cebu",
+     67
+    ],
+    [
+     "Jolo",
+     68
+    ],
+    [
+     "Okinawa",
+     68
+    ],
+    [
+     "Toungoo",
+     68
+    ],
+    [
+     "Davao",
+     69
+    ],
+    [
+     "Tarakan",
+     69
+    ],
+    [
+     "Prome",
+     69
+    ],
+    [
+     "Rangoon",
+     69
+    ],
+    [
+     "Brunei",
+     70
+    ],
+    [
+     "Balikpapan",
+     71
+    ],
+    [
+     "Kuala Lumpur",
+     73
+    ],
+    [
+     "Penang",
+     73
+    ],
+    [
+     "Johore",
+     74
+    ],
+    [
+     "Singapore",
+     76
+    ]
+   ],
+   "lead": "USA",
+   "roads": {
+    "UK": [
+     "Akyab",
+     "Myitkyina",
+     "Kalewa",
+     "Mandalay",
+     "Lashio",
+     "Yenangyaung",
+     "Toungoo",
+     "Prome",
+     "Rangoon",
+     "Kuala Lumpur",
+     "Penang",
+     "Johore",
+     "Singapore"
+    ]
+   },
+   "behind": {
+    "AUS": [
+     "Buna",
+     "Tarakan",
+     "Brunei",
+     "Balikpapan"
+    ],
+    "NZL": []
+   }
+  },
+  "marks": [
+   {
+    "theatre": "pacific",
+    "until": 28,
+    "if": [
+     "peace:JAP,USA",
+     "peace:JAP,UK"
+    ],
+    "why": "war came there before its time",
+    "expect": "Japan goes to war with America or Britain before its time"
+   },
+   {
+    "theatre": "pacific",
+    "by": 24,
+    "if": [
+     "holds:JAP,Saigon"
+    ],
+    "why": "Japan has stayed out of Indochina"
+   },
+   {
+    "theatre": "pacific",
+    "by": 29,
+    "if": [
+     "war:JAP,USA"
+    ],
+    "why": "Japan did not strike when history's Japan did",
+    "expect": "Japan has not yet struck"
+   },
+   {
+    "theatre": "pacific",
+    "by": 34,
+    "if": [
+     "allHeld:axis,Singapore|allHeld:axis,Manila"
+    ],
+    "why": "Singapore and Manila still stand",
+    "expect": "Singapore or Manila still stands"
+   },
+   {
+    "theatre": "pacific",
+    "by": 34,
+    "if": [
+     "allHeld:axis,Singapore"
+    ],
+    "why": "Singapore still stands",
+    "expect": ""
+   },
+   {
+    "theatre": "pacific",
+    "by": 34,
+    "if": [
+     "allHeld:axis,Manila"
+    ],
+    "why": "Manila still stands",
+    "expect": ""
+   },
+   {
+    "theatre": "pacific",
+    "until": 72,
+    "if": [
+     "holds:USA,Pearl Harbor"
+    ],
+    "why": "Pearl Harbor has fallen",
+    "expect": "Pearl Harbor falls"
+   },
+   {
+    "theatre": "pacific",
+    "until": 72,
+    "if": [
+     "holds:AUS,Brisbane"
+    ],
+    "why": "Brisbane has fallen",
+    "expect": "Brisbane falls"
+   }
+  ],
+  "stations": {
+   "_about": "(Riders b580 and b581: 'met' on an attack is the record's fight, [attacker, defender], the fighting worth of each side that met in it, from the historian's table card-beside-record-b579.md; 'ground' the ground it was fought on where not the province's own; 'back' where the broken line stood next inside the month; 'until' the last month of an attack the record called off. A row with 'beside' is a tank regiment that goes with its division.) (Riders b573, b575 and b577: 'worth' is the record's strength along the road, [month, fighting worth], a ceiling and never a gift, from the historian's table strength-and-attacks-b573.md: the strength with which each command met that month's fight; Luzon's fit strength of 4.4, 4.0, 3.0, 2.0 and 1.0 is shared by what each command brought to Bataan. 'attacks' are the record's big attacks, each on its month whatever the odds: at, the place; force, the corps by name; from, the ground or, for a landing (sea), the ports they went from. 'fleets' are the record's covering forces in the Java Sea. See src/campaign/stations.ts.) Ruling 234, rider b568 (the design director, 18 Nov 2026), from the historian's table (historian/defenders-book-b568.md): by the book the defenders play the record too. A step is [month, place, months of works, {joins}]: 0 is the open, 1 the least step of works the game has (the table's 'partial'), 3 prepared positions (Bataan, Kampar in Ipoh, Toungoo). Rows marked free are only put down in their place on their month and are the staff's from there: the 38th Division and the 23rd Army's heavy guns on the frontier at Tungkun on the eve (rider b572: Hong Kong was taken overland and needs no ships, so it is no row of the landings); the guns to Luzon for Bataan (rider b563); the Guards' road through Siam by Bangkok and the railway. Rider b621 (19 Nov 2026): Batavia was given up, not lost. West Java's rows (the KNIL 1st Division, Blackforce, the 2/131st's guns) step to Bandoeng in March 1942, the month of the landing and before it is fought, so the 2nd Division lands on a province with nothing of the West Group in it; the landing's row keeps Leuwiliang's figures (0.25 against 0.3, the historian's card), a two-day rearguard on the road that is under the card's month and is not fought. Rider b599 (i) (19 Nov 2026): Japan's second ring is the book's too, as dated landings from the historian's rows (historian/japan-second-ring-b599.md): Wake's try of 11 December 1941 from Kwajalein and its taking of 23 December (if the try takes Wake the taking lapses); Menado and Tarakan, Rabaul, Kendari, Balikpapan and Ambon in January 1942; Palembang in February; Lae and Medan in March; Tulagi in May (the game's Guadalcanal, whose chief place it is) and the Guadalcanal airfield party in July. Within a month they run in the record's date order: a force that made a landing earlier in its month sails again on its next one (the record's pace of a landing every one to two weeks, each from the place just taken), and a row whose port has not fallen waits a month. Each row's cover is a dated fleet move in 'fleets'. The table runs to July 1942 (turn 35). Read by src/campaign/stations.ts. (The design director's of 11:17Z of 21 November 2026: the 56th Division took Lashio, then Bhamo on 4 May and Myitkyina on 8 May 1942, so Bhamo and Myitkyina are the last places of its row, each owed until it is taken; the 18th Division's row is Mandalay alone.) (Riders b626 and b628, 19 Nov 2026: a dated landing sails on the record's own shipping and draws nothing from the month's lift. 'works' on an attack is the historian's mark of whether the record's fight met prepared works: true where it met the place's own works, which then count in full; a list names the defending rows whose fieldworks it met, the place's works and every other row's fieldworks being set aside, and an empty list is a landing made where the works were not. With no mark a fight is read as b580 built it. Java's three landings carry the historian's marks J1 to J3: Blackforce's line on the Tjianten, the Tjiater pass in full, nothing at Kragan. A set-aside holds for the fight only, never for supply or stores. The design director's rulings of 22:34Z and 22:42Z of 21 November 2026 on the Lingayen reading (pacific-r2/indies/TRACE-LUZON-LINGAYEN-1121.md): the 16th Division's Kimura Detachment and its 9th Infantry, and the 14th Army's heavy guns, are rows of their own that go 'beside' as the tank regiments do. Kimura sails with the 16th's main body for Legaspi's province. The 9th Infantry and the guns sail with the 48th for Lingayen; from month 29 both stand with the 65th Brigade before Bataan (the 9th fought under it at Abucay), and the 9th is back with its division from month 32, for the last offensive. At the stops without the book each lands in its division's lift and is its staff's own after, as rider b604 has it.) (The design director's rulings of 03:59Z and 04:06Z of 22 November 2026, from the historian's second-division-and-british-borneo-1941-42.md: British Borneo is the book's too. The Kawaguchi Detachment takes Miri and Seria from Cam Ranh, Brunei overland and Kuching by sea in December 1941, Kuching at the record's figures (about 0.2 of the detachment against the Punjabis and Sarawak's forces, 0.1), and Jesselton and Sandakan in January 1942, each from the place just taken or from Brunei Bay. Labuan and Beaufort lie in the chart's Brunei and Jesselton and are no rows. The 16th Army's 2nd Division is stationed where the record had it before Java: Narashino (the game's Tokyo) in December, Takao on Formosa in January, Cam Ranh in February. Its row is held and not free: a free row is its staff's from the day it is put down, and the army's railways carried it from its quay the month before its landing.) (The director's rulings of 07:16Z, 07:33Z and 07:40Z of 22 November 2026, from the historian's second-division-and-british-borneo-1941-42.md, section 4, and luzon-leyte-1944-45-2nd-tank-26th.md. The Kawaguchi Detachment splits in January 1942 (far-shores.json, '_borneo'): Kuching, Jesselton and Sandakan each name the detachment and the part that makes the landing after the split, whichever of the two lives; the western force takes Singkawang, at the record's figures (about 0.13 against the Punjabis and the KNIL's West Borneo detachment, 0.1), and Pontianak in January, and the four parts leave Borneo together for Cebu in April 1942, marked unsure as the historian marks it: the record gives neither their port nor their strength there, so the force is brought to its quay in its landing month and the fight is the rules' own. The 2/15th Punjab is a row of the book: beaten at Kuching it falls back by its own next step to Singkawang (Sanggau Ledo and the Singkawang II airfield, reached on 29 December), where it held the frontier with half-dug positions; beaten there, to Sintang (Nanga Pinoh, 3 February); Sampit from March; about 0.05 from January; and gone in April 1942, when it handed over its arms at Kumai after the Dutch capitulation: it yielded with the army. Late rows, with a last month of their own past the table's ('until'): the 14th Area Army's 2nd Tank Division at Manila from August 1944, in the Lingayen plain in January 1945 and in the Cagayan valley (Aparri) from February to the end; its 26th Division at Manila from August 1944 at about 0.75 (the Tamatsu Maru went down with a regiment's staff and a battalion on 19 August: marked unsure), by sea to Ormoc on Leyte in November at about 0.65, where the fight decides; and the Tsuda Detachment, the part of it left on Luzon, at Manila's ground and from February 1945 at Aparri. No loss is dated for them: the fights give it.)",
+   "theatre": "pacific",
+   "slides": "JAP:south",
+   "taker": "JAP",
+   "until": 35,
+   "raised": {
+    "_about": "(Riders b626 and b628 to ruling 234, 19 Nov 2026: a row fights at the figure of the army that raised it, whoever's flag it stands under. Rider b630: a row's quality is a fact, so it is read at every stop of the history dial, with the book open or shut. 'armies' gives it for every corps a fallen country left in keeping: the Netherlands' regular KNIL infantry at 0.8 against the British line's 1.05 and Japan's 1.0, from the historian's addendum to japan-second-ring-b599.md; and Vichy's corps in Indochina, who answer to Japan from the demand and stay at their posts (the design director's 16:46Z of 21 November 2026, pacific.ts demand), at Vichy's own figure, 0.8, so that they fight as they did the day before and not as Japan's line. 'rows' gives it by a row's name: a figure (the KNIL's reinforcement of the outer islands, laid under Britain's flag, 0.8; Java's militia and home guard, held together, 0.5), a figure with its last month (the Indian Army, 0.95 to the end of 1942), or the country whose own army's figure the row takes (Australia's, New Zealand's and America's rows laid under Britain's flag). From the historian's addendum for b628, accepted by the director at 09:47Z: the Philippine Scouts 1.0, the Philippine Army's reserve divisions 0.5 and its regulars and Constabulary 0.6. From the addendum for b628b, the rows the game holds together, weighted by their men: the 1st Burma Division 0.75 (the row as it stands from July 1941; nothing of it fights before), the 12th Indian Brigade with the Argylls 1.0, Malaya Command and China Command 0.85, the 44th Indian Brigade with Dalforce and the Jind battalion 0.8, the Philippine Division 1.0, Ceylon's garrison 0.55; and the Chinese armies in Burma, under Britain's flag in the game: the 5th 0.65, the 6th China's own, the 66th 0.55. From the historian's indies-landings-1941-42.md, section 4, accepted by the director at 15:16Z of 21 November 2026: the KNIL's regulars in their posts stay at the army's 0.8; a Java division in the open field 0.7 (the 1st, 2nd and 3rd Divisions: never moved or fought as divisions, few anti-tank guns and radios, half their native infantry conscripts of 1940 and 1941; no lower, since the air's work on them is the air rules'); the Molukken Brigade at Ambon, the Great East row, 0.85 as the director set it for the Ambonese companies; the mobilisation row's 0.5 stands for the militia 0.6, the Landstorm 0.5 and the town guards 0.35 it holds together. From the historian's japan-taken-towns-1942.md, section 1 (21 November 2026): the Celebes' garrisons by place: Menado's, the Menadonese, 0.85; Kendari's the army's 0.8; Makassar's, native regulars with militia and Landstorm, 0.7. From the director's order for Luzon, (3), of 21 November 2026: the 65th Brigade, a garrison brigade of older reservists trained for occupation duty, 0.65, the middle of the historian's 0.6 to 0.7 (historian/luzon-1941-42-philippine-army-feaf.md). From the director's order for Luzon, (4), of 21 November 2026 and his 22:50Z, on the historian's sections 1 and 2 of the same file: the Philippine Army's divisions as they stood in the open in December 1941, weeks into their call-up. The 41st 0.45; the 11th, 31st, 51st, 71st and 91st 0.3 and the 21st 0.45, so the North Luzon Force (the 11th, 21st, 31st and 71st held together) 0.35 by its men; the 1st Regular, the first-day 'Philippine Army' row, 0.5; the 61st, 81st and 101st the reserve divisions' general figure, 0.35, the middle of 0.3 to 0.4. The 0.5 they read before was Bataan's figure with its works counted, and the works are the fieldworks rule's to give, as for every army.)",
+    "armies": {
+     "NED": 0.8,
+     "VIC": 0.8
+    },
+    "rows": {
+     "Outer Islands reinforcement (Tarakan, Menado, Koepang)": 0.8,
+     "KNIL mobilisation (Java's militia and the Landstorm)": 0.5,
+     "KNIL 1st Division (West Java)": 0.7,
+     "KNIL 2nd Division (Central Java)": 0.7,
+     "KNIL 3rd Division (East Java)": 0.7,
+     "Great East garrisons (Ambon, Celebes, Timor)": 0.85,
+     "Gull Force (2/21st Battalion)": "AUS",
+     "Sparrow Force (2/40th Battalion)": "AUS",
+     "Blackforce (2/3rd Machine Gun and 2/2nd Pioneer Battalions)": "AUS",
+     "8th Australian Division (22nd Brigade)": "AUS",
+     "8th Brigade Group, New Zealand (Fiji)": "NZL",
+     "2nd Battalion, 131st Field Artillery (United States)": "USA",
+     "12th Indian Infantry Brigade (from India, August 1939)": 1.0,
+     "11th Indian Division (6th and 15th Brigades)": [
+      0.95,
+      40
+     ],
+     "9th Indian Division (8th Brigade)": [
+      0.95,
+      40
+     ],
+     "9th Indian Division (22nd Brigade)": [
+      0.95,
+      40
+     ],
+     "2/15th Punjab (Kuching)": [
+      0.95,
+      40
+     ],
+     "17th Indian Division": [
+      0.95,
+      40
+     ],
+     "34th Indian Division (Ceylon)": [
+      0.95,
+      40
+     ],
+     "45th Indian Infantry Brigade": [
+      0.95,
+      40
+     ],
+     "IV Corps (23rd Indian Division)": [
+      0.95,
+      40
+     ],
+     "XV Corps (14th Indian Division)": [
+      0.95,
+      40
+     ],
+     "Eastern Command (Presidency and Assam District)": [
+      0.95,
+      40
+     ],
+     "Burma Army (the Burma Rifles; the 1st Burma Division from July 1941)": 0.75,
+     "26th Cavalry, Philippine Scouts": 1.0,
+     "Philippine Army": 0.5,
+     "North Luzon Force": 0.35,
+     "91st Division, Philippine Army": 0.3,
+     "41st Division, Philippine Army": 0.45,
+     "51st Division, Philippine Army": 0.3,
+     "61st Division, Philippine Army": 0.35,
+     "81st Division, Philippine Army": 0.35,
+     "101st Division, Philippine Army": 0.35,
+     "Chinese 5th Army (200th, 22nd and 96th Divisions)": 0.65,
+     "Chinese 6th Army (49th, 55th and 93rd Divisions)": "CHN",
+     "Chinese 66th Army (38th, 28th and 29th Divisions)": 0.55,
+     "Malaya Command (Singapore garrison, the Malay Regiment and the Volunteers)": 0.85,
+     "China Command (Hong Kong garrison)": 0.85,
+     "44th Indian Infantry Brigade (with Dalforce and the Jind battalion)": 0.8,
+     "Philippine Division": 1.0,
+     "Ceylon Garrison (the Ceylon Defence Force)": 0.55,
+     "Menado garrison (Troepencommando Menado)": 0.85,
+     "Makassar garrison (the KNIL's South Celebes command)": 0.7,
+     "14th Army (65th Brigade)": 0.65
+    }
+   },
+   "rows": [
+    {
+     "nat": "USA",
+     "corps": "North Luzon Force",
+     "steps": [
+      [
+       28,
+       "Lingayen",
+       1
+      ],
+      [
+       29,
+       "Bataan",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       1.82
+      ],
+      [
+       30,
+       1.36
+      ],
+      [
+       31,
+       0.91
+      ],
+      [
+       32,
+       0.45
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "91st Division, Philippine Army",
+     "steps": [
+      [
+       28,
+       "Lingayen",
+       1
+      ],
+      [
+       29,
+       "Bataan",
+       3,
+       {
+        "joins": "North Luzon Force"
+       }
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.36
+      ],
+      [
+       30,
+       0.27
+      ],
+      [
+       31,
+       0.18
+      ],
+      [
+       32,
+       0.09
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "26th Cavalry, Philippine Scouts",
+     "steps": [
+      [
+       28,
+       "Lingayen",
+       1
+      ],
+      [
+       29,
+       "Bataan",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.23
+      ],
+      [
+       30,
+       0.17
+      ],
+      [
+       31,
+       0.11
+      ],
+      [
+       32,
+       0.06
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "Provisional Tank Group",
+     "steps": [
+      [
+       28,
+       "Lingayen",
+       1
+      ],
+      [
+       29,
+       "Bataan",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.26
+      ],
+      [
+       30,
+       0.2
+      ],
+      [
+       31,
+       0.13
+      ],
+      [
+       32,
+       0.07
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "Philippine Division",
+     "steps": [
+      [
+       28,
+       "Manila",
+       0
+      ],
+      [
+       29,
+       "Bataan",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.64
+      ],
+      [
+       30,
+       0.48
+      ],
+      [
+       31,
+       0.32
+      ],
+      [
+       32,
+       0.16
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "41st Division, Philippine Army",
+     "steps": [
+      [
+       28,
+       "Manila",
+       0
+      ],
+      [
+       29,
+       "Bataan",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       1.05
+      ],
+      [
+       30,
+       0.78
+      ],
+      [
+       31,
+       0.52
+      ],
+      [
+       32,
+       0.26
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "Philippine Army",
+     "steps": [
+      [
+       28,
+       "Manila",
+       0
+      ],
+      [
+       29,
+       "Bataan",
+       3,
+       {
+        "joins": "41st Division, Philippine Army"
+       }
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.32
+      ],
+      [
+       30,
+       0.24
+      ],
+      [
+       31,
+       0.16
+      ],
+      [
+       32,
+       0.08
+      ]
+     ]
+    },
+    {
+     "nat": "USA",
+     "corps": "51st Division, Philippine Army",
+     "steps": [
+      [
+       28,
+       "Legaspi",
+       0
+      ],
+      [
+       29,
+       "Bataan",
+       3,
+       {
+        "joins": "41st Division, Philippine Army"
+       }
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.36
+      ],
+      [
+       30,
+       0.27
+      ],
+      [
+       31,
+       0.18
+      ],
+      [
+       32,
+       0.09
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "11th Indian Division (6th and 15th Brigades)",
+     "steps": [
+      [
+       28,
+       "Penang",
+       0
+      ],
+      [
+       29,
+       "Kuala Lumpur",
+       1
+      ],
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.55
+      ],
+      [
+       30,
+       0.5
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "12th Indian Infantry Brigade (from India, August 1939)",
+     "steps": [
+      [
+       28,
+       "Kuala Lumpur",
+       0
+      ],
+      [
+       29,
+       "Kuala Lumpur",
+       1,
+       {
+        "joins": "11th Indian Division (6th and 15th Brigades)"
+       }
+      ],
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "9th Indian Division (8th Brigade)",
+     "steps": [
+      [
+       28,
+       "Kota Bharu",
+       1
+      ],
+      [
+       29,
+       "Johore",
+       1
+      ],
+      [
+       30,
+       "Singapore",
+       0,
+       {
+        "joins": "11th Indian Division (6th and 15th Brigades)"
+       }
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.6
+      ],
+      [
+       30,
+       0.25
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "9th Indian Division (22nd Brigade)",
+     "steps": [
+      [
+       28,
+       "Kuantan",
+       1
+      ],
+      [
+       29,
+       "Johore",
+       1,
+       {
+        "joins": "9th Indian Division (8th Brigade)"
+       }
+      ],
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.3
+      ],
+      [
+       30,
+       0.12
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "8th Australian Division (22nd Brigade)",
+     "steps": [
+      [
+       28,
+       "Johore",
+       1
+      ],
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       30,
+       0.5
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Malaya Command (Singapore garrison, the Malay Regiment and the Volunteers)",
+     "steps": [
+      [
+       28,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       30,
+       0.7
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Burma Army (the Burma Rifles; the 1st Burma Division from July 1941)",
+     "steps": [
+      [
+       28,
+       "Taunggyi",
+       0
+      ],
+      [
+       31,
+       "Prome",
+       0
+      ],
+      [
+       32,
+       "Yenangyaung",
+       0
+      ],
+      [
+       33,
+       "Kalewa",
+       0
+      ],
+      [
+       34,
+       "Imphal",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.5
+      ],
+      [
+       31,
+       0.45
+      ],
+      [
+       33,
+       0.15
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "17th Indian Division",
+     "steps": [
+      [
+       29,
+       "Moulmein",
+       0
+      ],
+      [
+       30,
+       "Rangoon",
+       0
+      ],
+      [
+       31,
+       "Prome",
+       0
+      ],
+      [
+       32,
+       "Yenangyaung",
+       0
+      ],
+      [
+       33,
+       "Kalewa",
+       0
+      ],
+      [
+       34,
+       "Imphal",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.6
+      ],
+      [
+       30,
+       0.75
+      ],
+      [
+       31,
+       0.45
+      ],
+      [
+       32,
+       0.4
+      ],
+      [
+       33,
+       0.3
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "7th Armoured Brigade",
+     "steps": [
+      [
+       30,
+       "Rangoon",
+       0
+      ],
+      [
+       31,
+       "Prome",
+       0
+      ],
+      [
+       32,
+       "Yenangyaung",
+       0
+      ],
+      [
+       33,
+       "Kalewa",
+       0
+      ],
+      [
+       34,
+       "Imphal",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       30,
+       0.35
+      ],
+      [
+       32,
+       0.25
+      ],
+      [
+       33,
+       0.05
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Chinese 6th Army (49th, 55th and 93rd Divisions)",
+     "steps": [
+      [
+       30,
+       "Loikaw",
+       0
+      ],
+      [
+       33,
+       "Paoshan",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       33,
+       0.3
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Chinese 5th Army (200th, 22nd and 96th Divisions)",
+     "steps": [
+      [
+       31,
+       "Toungoo",
+       3
+      ],
+      [
+       32,
+       "Mandalay",
+       0
+      ],
+      [
+       33,
+       "Myitkyina",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       31,
+       0.6
+      ],
+      [
+       32,
+       1.2
+      ],
+      [
+       33,
+       0.5
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Chinese 66th Army (38th, 28th and 29th Divisions)",
+     "steps": [
+      [
+       32,
+       "Lashio",
+       0
+      ],
+      [
+       33,
+       "Paoshan",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       33,
+       0.6
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "38th Division (Canton)",
+     "free": true,
+     "steps": [
+      [
+       28,
+       [
+        "Tungkun"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "23rd Army artillery (1st Artillery Group)",
+     "free": true,
+     "steps": [
+      [
+       28,
+       [
+        "Tungkun"
+       ]
+      ],
+      [
+       31,
+       [
+        "Manila",
+        "Lingayen"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "25th Army (Imperial Guards Division)",
+     "free": true,
+     "steps": [
+      [
+       29,
+       [
+        "Singora"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "18th British Division",
+     "steps": [
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "45th Indian Infantry Brigade",
+     "steps": [
+      [
+       29,
+       "Johore",
+       1
+      ],
+      [
+       30,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       30,
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Singapore Fortress (the coast guns)",
+     "coast": true,
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "14th Army (48th Division)",
+     "free": true,
+     "steps": [
+      [
+       30,
+       [
+        "Jolo"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+     "free": true,
+     "steps": [
+      [
+       30,
+       [
+        "Jolo"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "44th Indian Infantry Brigade (with Dalforce and the Jind battalion)",
+     "steps": [
+      [
+       29,
+       "Singapore",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.25
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "KNIL 1st Division (West Java)",
+     "steps": [
+      [
+       28,
+       "Batavia",
+       0
+      ],
+      [
+       31,
+       "Bandoeng",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       31,
+       0.6
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "KNIL mobilisation (Java's militia and the Landstorm)",
+     "steps": [
+      [
+       28,
+       "Bandoeng",
+       3
+      ]
+     ],
+     "worth": [
+      [
+       31,
+       0.25
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "KNIL 2nd Division (Central Java)",
+     "steps": [
+      [
+       28,
+       "Semarang",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       31,
+       0.1
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "KNIL 3rd Division (East Java)",
+     "steps": [
+      [
+       28,
+       "Soerabaja",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       31,
+       0.25
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "Blackforce (2/3rd Machine Gun and 2/2nd Pioneer Battalions)",
+     "steps": [
+      [
+       30,
+       "Batavia",
+       0
+      ],
+      [
+       31,
+       "Bandoeng",
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "2nd Battalion, 131st Field Artillery (United States)",
+     "steps": [
+      [
+       30,
+       "Batavia",
+       0
+      ],
+      [
+       31,
+       "Bandoeng",
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "1st Tank Regiment",
+     "beside": [
+      [
+       28,
+       "25th Army (5th Division)"
+      ],
+      [
+       32,
+       "15th Army (33rd and 55th Divisions)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "6th Tank Regiment",
+     "beside": [
+      [
+       28,
+       "25th Army (5th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "14th Tank Regiment",
+     "beside": [
+      [
+       28,
+       "25th Army (Imperial Guards Division)"
+      ],
+      [
+       32,
+       "56th Division"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "4th Tank Regiment",
+     "beside": [
+      [
+       28,
+       "14th Army (48th Division)"
+      ]
+     ],
+     "steps": [],
+     "worth": [
+      [
+       31,
+       0.2
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "7th Tank Regiment",
+     "beside": [
+      [
+       28,
+       "14th Army (48th Division)"
+      ],
+      [
+       30,
+       "14th Army (16th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "2nd Tank Regiment",
+     "beside": [
+      [
+       29,
+       "25th Army (5th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "2nd Raiding Regiment (paratroops of the 1st Raiding Group)",
+     "beside": [
+      [
+       30,
+       "229th Infantry Regiment (with the 38th Division's headquarters)"
+      ],
+      [
+       30,
+       "229th Infantry (of the 38th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "Shoji Detachment's light tank company",
+     "beside": [
+      [
+       30,
+       "Shoji Detachment (230th Infantry, of the 38th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "16th Army troops (landing with the 2nd Division)",
+     "beside": [
+      [
+       30,
+       "16th Army (2nd Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "Kimura Detachment (16th Division)",
+     "beside": [
+      [
+       28,
+       "14th Army (16th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "16th Division (9th Infantry)",
+     "beside": [
+      [
+       28,
+       "14th Army (48th Division)"
+      ],
+      [
+       29,
+       "14th Army (65th Brigade)"
+      ],
+      [
+       32,
+       "14th Army (16th Division)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "14th Army artillery (1st and 8th Field Heavy Artillery)",
+     "beside": [
+      [
+       28,
+       "14th Army (48th Division)"
+      ],
+      [
+       29,
+       "14th Army (65th Brigade)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
+     "corps": "16th Army (2nd Division)",
+     "steps": [
+      [
+       28,
+       [
+        "Tokyo"
+       ]
+      ],
+      [
+       29,
+       [
+        "Formosa"
+       ]
+      ],
+      [
+       30,
+       [
+        "Cam Ranh"
+       ]
+      ]
+     ]
+    },
+    {
+     "nat": "UK",
+     "corps": "2/15th Punjab (Kuching)",
+     "steps": [
+      [
+       28,
+       "Kuching",
+       0
+      ],
+      [
+       29,
+       "Singkawang",
+       1
+      ],
+      [
+       30,
+       "Sintang",
+       0
+      ],
+      [
+       31,
+       "Sampit",
+       0
+      ]
+     ],
+     "worth": [
+      [
+       29,
+       0.05
+      ],
+      [
+       32,
+       0
+      ]
+     ]
+    },
+    {
+     "nat": "JAP",
+     "corps": "14th Area Army (2nd Tank Division)",
+     "steps": [
+      [
+       60,
+       [
+        "Manila"
+       ]
+      ],
+      [
+       65,
+       [
+        "Lingayen"
+       ]
+      ],
+      [
+       66,
+       [
+        "Aparri"
+       ]
+      ]
+     ],
+     "until": 73
+    },
+    {
+     "nat": "JAP",
+     "corps": "14th Area Army (26th Division)",
+     "steps": [
+      [
+       60,
+       [
+        "Manila"
+       ]
+      ],
+      [
+       63,
+       [
+        "Leyte"
+       ]
+      ]
+     ],
+     "worth": [
+      [
+       60,
+       0.75
+      ],
+      [
+       63,
+       0.65
+      ]
+     ],
+     "until": 64
+    },
+    {
+     "nat": "JAP",
+     "corps": "Tsuda Detachment (11th Independent Infantry less a battalion, of the 26th Division)",
+     "steps": [
+      [
+       63,
+       [
+        "Manila"
+       ]
+      ],
+      [
+       66,
+       [
+        "Aparri"
+       ]
+      ]
+     ],
+     "until": 73
+    }
+   ],
+   "attacks": [
+    {
+     "month": 28,
+     "name": "Jitra",
+     "at": [
+      "Penang"
+     ],
+     "force": [
+      "25th Army (5th Division)",
+      "1st Tank Regiment"
+     ],
+     "met": [
+      0.35,
+      0.55
+     ],
+     "back": [
+      "Ipoh",
+      3
+     ]
+    },
+    {
+     "month": 28,
+     "name": "Kampar",
+     "at": [
+      "Ipoh"
+     ],
+     "force": [
+      "25th Army (5th Division)"
+     ],
+     "from": [
+      "Penang"
+     ],
+     "met": [
+      0.3,
+      0.28
+     ]
+    },
+    {
+     "month": 29,
+     "name": "The Slim River",
+     "at": [
+      "Kuala Lumpur"
+     ],
+     "force": [
+      "25th Army (5th Division)",
+      "1st Tank Regiment",
+      "6th Tank Regiment"
+     ],
+     "from": [
+      "Ipoh"
+     ],
+     "met": [
+      0.3,
+      0.3
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Bataan, January",
+     "at": [
+      "Bataan"
+     ],
+     "force": [
+      "14th Army (65th Brigade)",
+      "14th Army (16th Division)"
+     ],
+     "from": [
+      "Manila",
+      "Lingayen"
+     ],
+     "until": 30,
+     "met": [
+      0.7,
+      1.25
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Gemas and Muar",
+     "at": [
+      "Johore"
+     ],
+     "force": [
+      "25th Army (Imperial Guards Division)",
+      "14th Tank Regiment"
+     ],
+     "from": [
+      "Kuala Lumpur",
+      "Kuantan"
+     ],
+     "met": [
+      0.65,
+      0.5
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Kawkareik and Moulmein",
+     "at": [
+      "Moulmein"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)"
+     ],
+     "from": [
+      "Mergui",
+      "Raheng",
+      "Bangkok",
+      "Kanchanaburi"
+     ]
+    },
+    {
+     "month": 30,
+     "name": "The crossing to Singapore Island",
+     "at": [
+      "Singapore"
+     ],
+     "force": [
+      "25th Army (5th Division)",
+      "25th Army (18th Division)",
+      "25th Army (Imperial Guards Division)",
+      "1st Tank Regiment",
+      "6th Tank Regiment",
+      "14th Tank Regiment"
+     ],
+     "from": [
+      "Johore"
+     ],
+     "met": [
+      2.4,
+      1.0
+     ],
+     "ground": "forest"
+    },
+    {
+     "month": 30,
+     "name": "The Bilin and the Sittang",
+     "at": [
+      "Rangoon"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)"
+     ],
+     "from": [
+      "Moulmein"
+     ],
+     "until": 30,
+     "met": [
+      0.6,
+      0.75
+     ]
+    },
+    {
+     "month": 31,
+     "name": "Java: Bantam Bay and Merak",
+     "sea": true,
+     "at": [
+      "Batavia"
+     ],
+     "force": [
+      "16th Army (2nd Division)",
+      "16th Army troops (landing with the 2nd Division)"
+     ],
+     "from": [
+      "Cam Ranh",
+      "Saigon",
+      "Qui Nhon"
+     ],
+     "met": [
+      0.25,
+      0.3
+     ],
+     "works": [
+      "Blackforce (2/3rd Machine Gun and 2/2nd Pioneer Battalions)"
+     ]
+    },
+    {
+     "month": 31,
+     "name": "Java: Eretan Wetan",
+     "sea": true,
+     "at": [
+      "Bandoeng"
+     ],
+     "force": [
+      "Shoji Detachment (230th Infantry, of the 38th Division)",
+      "Shoji Detachment's light tank company"
+     ],
+     "from": [
+      "Cam Ranh",
+      "Saigon"
+     ],
+     "met": [
+      0.18,
+      0.13
+     ],
+     "works": true
+    },
+    {
+     "month": 31,
+     "name": "Java: Kragan",
+     "sea": true,
+     "at": [
+      "Semarang"
+     ],
+     "force": [
+      "14th Army (48th Division)",
+      "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+      "Sakaguchi Detachment (56th Mixed Infantry Group)",
+      "4th Tank Regiment"
+     ],
+     "from": [
+      "Balikpapan",
+      "Jolo",
+      "Davao"
+     ],
+     "met": [
+      1.3,
+      0.1
+     ],
+     "works": []
+    },
+    {
+     "month": 31,
+     "name": "Java: the road to Soerabaja",
+     "at": [
+      "Soerabaja"
+     ],
+     "force": [
+      "14th Army (48th Division)",
+      "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+      "4th Tank Regiment"
+     ],
+     "from": [
+      "Semarang"
+     ],
+     "met": [
+      1.0,
+      0.35
+     ]
+    },
+    {
+     "month": 31,
+     "name": "Pegu and Rangoon",
+     "at": [
+      "Rangoon"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)"
+     ],
+     "from": [
+      "Moulmein"
+     ]
+    },
+    {
+     "month": 31,
+     "name": "Toungoo",
+     "at": [
+      "Toungoo"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)"
+     ],
+     "from": [
+      "Rangoon"
+     ]
+    },
+    {
+     "month": 32,
+     "name": "Bataan, the last offensive",
+     "at": [
+      "Bataan"
+     ],
+     "force": [
+      "14th Army (4th Division)",
+      "14th Army (65th Brigade)",
+      "14th Army (16th Division)",
+      "21st Division detachment (for Bataan)",
+      "23rd Army artillery (1st Artillery Group)",
+      "7th Tank Regiment"
+     ],
+     "from": [
+      "Manila",
+      "Lingayen"
+     ],
+     "met": [
+      2.6,
+      1.0
+     ]
+    },
+    {
+     "month": 32,
+     "name": "Prome and Yenangyaung",
+     "at": [
+      "Prome",
+      "Yenangyaung"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)",
+      "1st Tank Regiment"
+     ],
+     "from": [
+      "Rangoon",
+      "Prome"
+     ]
+    },
+    {
+     "month": 32,
+     "name": "The Shan States, Lashio and Myitkyina",
+     "at": [
+      "Loikaw",
+      "Taunggyi",
+      "Lashio",
+      "Bhamo",
+      "Myitkyina"
+     ],
+     "force": [
+      "56th Division",
+      "14th Tank Regiment"
+     ],
+     "from": [
+      "Toungoo",
+      "Loikaw",
+      "Taunggyi",
+      "Lashio",
+      "Bhamo"
+     ]
+    },
+    {
+     "month": 33,
+     "name": "Corregidor",
+     "at": [
+      "Bataan"
+     ],
+     "force": [
+      "14th Army (4th Division)"
+     ],
+     "from": [
+      "Manila",
+      "Lingayen"
+     ]
+    },
+    {
+     "month": 33,
+     "name": "Mandalay",
+     "at": [
+      "Mandalay"
+     ],
+     "force": [
+      "18th Division"
+     ],
+     "from": [
+      "Toungoo",
+      "Yenangyaung",
+      "Mandalay"
+     ]
+    },
+    {
+     "month": 33,
+     "name": "The pursuit to the Chindwin",
+     "at": [
+      "Kalewa"
+     ],
+     "force": [
+      "15th Army (33rd and 55th Divisions)"
+     ],
+     "from": [
+      "Yenangyaung",
+      "Mandalay"
+     ]
+    },
+    {
+     "month": 28,
+     "name": "Wake: the first try",
+     "sea": true,
+     "at": [
+      "Wake"
+     ],
+     "force": [
+      "Naval landing force (Maizuru 2nd, for Wake)"
+     ],
+     "from": [
+      "Kwajalein"
+     ],
+     "until": 28,
+     "met": [
+      0.03,
+      0.035
+     ],
+     "works": true
+    },
+    {
+     "month": 28,
+     "name": "Wake: the taking",
+     "sea": true,
+     "at": [
+      "Wake"
+     ],
+     "force": [
+      "Naval landing force (Maizuru 2nd, for Wake)"
+     ],
+     "from": [
+      "Kwajalein"
+     ],
+     "met": [
+      0.1,
+      0.035
+     ],
+     "works": true
+    },
+    {
+     "month": 29,
+     "name": "Menado",
+     "sea": true,
+     "at": [
+      "Menado"
+     ],
+     "force": [
+      "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)"
+     ],
+     "from": [
+      "Davao"
+     ],
+     "met": [
+      0.25,
+      0.1
+     ],
+     "works": []
+    },
+    {
+     "month": 29,
+     "name": "Tarakan",
+     "sea": true,
+     "at": [
+      "Tarakan"
+     ],
+     "force": [
+      "Sakaguchi Detachment (56th Mixed Infantry Group)"
+     ],
+     "from": [
+      "Davao"
+     ],
+     "met": [
+      0.3,
+      0.09
+     ],
+     "works": []
+    },
+    {
+     "month": 29,
+     "name": "Rabaul",
+     "sea": true,
+     "at": [
+      "Rabaul"
+     ],
+     "force": [
+      "South Seas Detachment"
+     ],
+     "from": [
+      "Guam",
+      "Truk"
+     ],
+     "met": [
+      0.35,
+      0.1
+     ],
+     "works": [
+      "Lark Force (2/22nd Battalion)"
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Kendari",
+     "sea": true,
+     "at": [
+      "Kendari"
+     ],
+     "force": [
+      "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)"
+     ],
+     "from": [
+      "Menado"
+     ],
+     "met": [
+      0.2,
+      0.03
+     ],
+     "works": []
+    },
+    {
+     "month": 29,
+     "name": "Balikpapan",
+     "sea": true,
+     "at": [
+      "Balikpapan"
+     ],
+     "force": [
+      "Sakaguchi Detachment (56th Mixed Infantry Group)"
+     ],
+     "from": [
+      "Tarakan"
+     ],
+     "met": [
+      0.45,
+      0.07
+     ],
+     "works": []
+    },
+    {
+     "month": 29,
+     "name": "Ambon",
+     "sea": true,
+     "at": [
+      "Ambon"
+     ],
+     "force": [
+      "Ito Detachment (228th Infantry and the 1st Kure landing force)"
+     ],
+     "from": [
+      "Davao"
+     ],
+     "met": [
+      0.35,
+      0.26
+     ],
+     "works": [
+      "Gull Force (2/21st Battalion)"
+     ]
+    },
+    {
+     "month": 30,
+     "name": "Palembang",
+     "sea": true,
+     "at": [
+      "Palembang"
+     ],
+     "force": [
+      "229th Infantry (of the 38th Division)",
+      "2nd Raiding Regiment (paratroops of the 1st Raiding Group)"
+     ],
+     "from": [
+      "Cam Ranh"
+     ],
+     "met": [
+      0.25,
+      0.15
+     ],
+     "works": []
+    },
+    {
+     "month": 31,
+     "name": "Lae and Salamaua",
+     "sea": true,
+     "at": [
+      "Lae"
+     ],
+     "force": [
+      "South Seas Detachment"
+     ],
+     "from": [
+      "Rabaul"
+     ],
+     "met": [
+      0.2,
+      0.01
+     ],
+     "works": []
+    },
+    {
+     "month": 31,
+     "name": "Medan",
+     "sea": true,
+     "at": [
+      "Medan"
+     ],
+     "force": [
+      "25th Army (Imperial Guards Division)"
+     ],
+     "from": [
+      "Singapore"
+     ],
+     "met": [
+      1.2,
+      0.15
+     ],
+     "works": []
+    },
+    {
+     "month": 33,
+     "name": "Tulagi",
+     "sea": true,
+     "at": [
+      "Guadalcanal"
+     ],
+     "force": [
+      "Naval landing force (Kure 3rd, for Tulagi)"
+     ],
+     "from": [
+      "Rabaul"
+     ]
+    },
+    {
+     "month": 35,
+     "name": "Guadalcanal: the airfield party",
+     "sea": true,
+     "at": [
+      "Guadalcanal"
+     ],
+     "force": [
+      "Naval landing force (the Guadalcanal airfield party)"
+     ],
+     "from": [
+      "Rabaul",
+      "Truk"
+     ]
+    },
+    {
+     "month": 28,
+     "name": "Miri and Seria",
+     "sea": true,
+     "at": [
+      "Miri"
+     ],
+     "force": [
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)"
+     ],
+     "from": [
+      "Cam Ranh"
+     ]
+    },
+    {
+     "month": 28,
+     "name": "Brunei",
+     "at": [
+      "Brunei"
+     ],
+     "force": [
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)"
+     ],
+     "from": [
+      "Miri"
+     ]
+    },
+    {
+     "month": 28,
+     "name": "Kuching",
+     "sea": true,
+     "at": [
+      "Kuching"
+     ],
+     "force": [
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+      "Kawaguchi Detachment (the western force, for Pontianak)"
+     ],
+     "from": [
+      "Miri",
+      "Brunei"
+     ],
+     "met": [
+      0.2,
+      0.1
+     ],
+     "works": []
+    },
+    {
+     "month": 29,
+     "name": "Jesselton",
+     "sea": true,
+     "at": [
+      "Jesselton"
+     ],
+     "force": [
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+      "Kawaguchi Detachment (the North Borneo battalion)"
+     ],
+     "from": [
+      "Brunei",
+      "Miri"
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Sandakan",
+     "sea": true,
+     "at": [
+      "Sandakan"
+     ],
+     "force": [
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+      "Kawaguchi Detachment (the North Borneo battalion)"
+     ],
+     "from": [
+      "Jesselton"
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Singkawang",
+     "at": [
+      "Singkawang"
+     ],
+     "force": [
+      "Kawaguchi Detachment (the western force, for Pontianak)"
+     ],
+     "from": [
+      "Kuching"
+     ],
+     "met": [
+      0.13,
+      0.1
+     ]
+    },
+    {
+     "month": 29,
+     "name": "Pontianak",
+     "at": [
+      "Pontianak"
+     ],
+     "force": [
+      "Kawaguchi Detachment (the western force, for Pontianak)"
+     ],
+     "from": [
+      "Singkawang",
+      "Kuching"
+     ]
+    },
+    {
+     "month": 32,
+     "name": "Cebu",
+     "sea": true,
+     "at": [
+      "Cebu"
+     ],
+     "force": [
+      "Kawaguchi Detachment (the western force, for Pontianak)",
+      "Kawaguchi Detachment (the Kuching guard)",
+      "Kawaguchi Detachment (the North Borneo battalion)",
+      "Kawaguchi Detachment (the Miri and Seria party)"
+     ],
+     "from": [
+      "Jesselton",
+      "Sandakan",
+      "Brunei",
+      "Kuching"
+     ]
+    }
+   ],
+   "fleets": [
+    {
+     "month": 28,
+     "fleet": "4th Fleet",
+     "sea": "wake",
+     "base": [
+      "Kwajalein",
+      "Truk"
+     ]
+    },
+    {
+     "month": 29,
+     "fleet": "Mobile Fleet",
+     "sea": "bismarck",
+     "base": [
+      "Truk"
+     ]
+    },
+    {
+     "month": 29,
+     "fleet": "4th Fleet",
+     "sea": "bismarck",
+     "base": [
+      "Truk"
+     ]
+    },
+    {
+     "month": 29,
+     "fleet": "3rd Fleet",
+     "sea": "molucca",
+     "base": [
+      "Davao",
+      "Jolo"
+     ]
+    },
+    {
+     "month": 29,
+     "fleet": "2nd Fleet",
+     "sea": "makassar",
+     "base": [
+      "Davao",
+      "Jolo"
+     ]
+    },
+    {
+     "month": 30,
+     "until": 31,
+     "fleet": "3rd Fleet",
+     "sea": "java",
+     "base": [
+      "Balikpapan",
+      "Jolo",
+      "Davao"
+     ]
+    },
+    {
+     "month": 30,
+     "until": 31,
+     "fleet": "Southern Expeditionary Fleet",
+     "sea": "java",
+     "base": [
+      "Cam Ranh"
+     ]
+    },
+    {
+     "nat": "UK",
+     "month": 30,
+     "fleet": "China Fleet",
+     "base": [
+      "Colombo"
+     ]
+    },
+    {
+     "month": 31,
+     "fleet": "4th Fleet",
+     "sea": "solomon",
+     "base": [
+      "Rabaul",
+      "Truk"
+     ]
+    },
+    {
+     "month": 33,
+     "fleet": "4th Fleet",
+     "sea": "eastsol",
+     "base": [
+      "Rabaul",
+      "Truk"
+     ]
+    },
+    {
+     "month": 35,
+     "fleet": "4th Fleet",
+     "sea": "eastsol",
+     "base": [
+      "Rabaul",
+      "Truk"
+     ]
+    }
+   ]
+  }
+ },
+ "open": {
+  "ops": {
+   "JAP+": [
+    {
+     "id": "south",
+     "name": "The strike south",
+     "declare": [
+      "USA",
+      "UK",
+      "NED"
+     ],
+     "if": [
+      "flag:pac:strike"
+     ],
+     "sure": true,
+     "from": 1,
+     "to": 99,
+     "chance": 1,
+     "side": true,
+     "push": 6,
+     "quays": [
+      "Hainan",
+      "Cam Ranh",
+      "Canton"
+     ],
+     "frees": [
+      "25th Army (Imperial Guards Division)",
+      "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)"
+     ],
+     "freesAfter": 2,
+     "strikes": [
+      {
+       "fleet": "Mobile Fleet",
+       "harbour": "Pearl Harbor",
+       "home": {
+        "base": "Hiroshima",
+        "port": "Kure",
+        "home": "inland",
+        "words": "The carrier striking force comes home to Kure"
+       }
+      }
+     ],
+     "landings": [
+      {
+       "corps": "25th Army (5th Division)",
+       "to": [
+        "Singora",
+        "Kota Bharu"
+       ]
+      },
+      {
+       "corps": "25th Army (18th Division)",
+       "to": [
+        "Kota Bharu",
+        "Singora"
+       ]
+      },
+      {
+       "corps": "South Seas Detachment",
+       "to": [
+        "Guam"
+       ]
+      },
+      {
+       "corps": "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+       "to": [
+        "Aparri"
+       ]
+      },
+      {
+       "corps": "14th Army (16th Division)",
+       "to": [
+        "Legaspi"
+       ]
+      },
+      {
+       "corps": "Naval landing force (Maizuru 2nd, for Wake)",
+       "to": [
+        "Wake"
+       ]
+      },
+      {
+       "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+       "to": [
+        "Brunei",
+        "Kuching"
+       ]
+      },
+      {
+       "corps": "Sakaguchi Detachment (56th Mixed Infantry Group)",
+       "to": [
+        "Davao"
+       ]
+      },
+      {
+       "corps": "14th Army (48th Division)",
+       "to": [
+        "Lingayen",
+        "Aparri"
+       ]
+      },
+      {
+       "corps": "Naval landing forces (Kure 1st and 2nd)",
+       "to": [
+        "Jolo",
+        "Davao"
+       ]
+      }
+     ],
+     "_fronts": "(Rider b633 to ruling 234, 19 Nov 2026, with the director's notes of 11:17Z and 11:28Z; the record and the hop before each follow-on are the historian's, historian/japan-plan-nov41-b631.md. Read where no book dates Japan's rows: planfronts.ts. A front holds its rows until its place, the November plan's aim, falls. 'then' are the planned follow-ons, months counted from the blow; 'after' the places to be Japan's first; 'from' the harbours the record staged the row at, used where the shore is out of reach. Whole rows, as the book has them, but the 38th Division: by ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026 it comes as its three regimental rows at the record's weights (far-shores.json), all three for Hong Kong first, then the 228th for Ambon and Timor (Koepang, the last follow-on of the list, so that the others keep their places), the 229th with the headquarters for Palembang, and the 230th for Bandoeng's Java Sea coast, Eretan Wetan's ground on this chart. Other part rows are for after release. 'land' are the moves by road: the Guards to Singora, and Hong Kong's rows to Tungkun, the book's own step, where the plan takes up the division rider b423 holds for the book. Burma's front ends at Myitkyina, where the record's campaign ended in May 1942 (Moulmein, Rangoon, Toungoo, Mandalay and Lashio lie on the road to it), and the 56th and 18th Divisions are on its list: the 15th Army is not let go at Mergui (the director's notes of 05:30Z and 05:35Z of 21 November 2026). The Indies' record of 21 November 2026 (the historian's indies-landings-1941-42.md, accepted as data by the director at 15:16Z and ordered laid at 15:27Z): the Kawaguchi Detachment's follow-ons on the record's dates, after the list's others so that those keep their places: Miri (16 December 1941) and Kuching (24 December), month 0, made after the strike's own landing at Brunei; Jesselton (8 January 1942), Sandakan (19 January), Singkawang (about 27 January) and Pontianak (29 January), month 1; then Cebu (10 April) and Mindanao (Parang, 29 April: Del Monte's ground on this chart), month 4. The whole row makes each, as whole rows make every follow-on here; the record's companies are part rows, for after release. And the 48th Division goes to Jolo and to Kragan whole: its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row on Luzon's list, sails with it as the 4th Tank Regiment does (the record's 48th at Kragan, about 1.0 with its armour). The 2nd Division's follow-on takes the 16th Army's troops with it, the 0.1 the record lands above the division's cap (the director's 16:08Z of 21 November 2026; far-shores.json, '_indies'). The 48th's sailing for Jolo waits for Manila, its own front's place: where no book dates the rows nothing sails by its date alone, and the record's 48th left Luzon with Manila taken (the director's order for Luzon, (2), of 21 November 2026; Luzon's trace of that day had it sail in month 31 with Manila American). The 65th Brigade follows the Luzon landing: a move, 'stage', to Lingayen from the month after the blow, made once the beach is Japan's and never before, by sea from wherever its dated row put it down (Formosa, where the beach was still the enemy's on its date: the trace found it standing there to month 37 under no order). Where the book dates the rows it lands at Lingayen on its date, month 29, as before (the director's order for Luzon, (3), of 21 November 2026). The luzon front's rows are the record's 14th Army by its landings (the director's 22:34Z and 22:42Z of that day): with the 16th Division's main body its Kimura Detachment, and with the 48th the 16th's 9th Infantry and the army's heavy guns, each in its division's lift.)",
+     "fronts": [
+      {
+       "id": "malaya",
+       "place": "Singapore",
+       "rows": [
+        "25th Army (5th Division)",
+        "1st Tank Regiment",
+        "6th Tank Regiment",
+        "25th Army (18th Division)",
+        "25th Army (Imperial Guards Division)",
+        "14th Tank Regiment",
+        "2nd Tank Regiment"
+       ],
+       "land": [
+        {
+         "corps": "25th Army (Imperial Guards Division)",
+         "with": [
+          "14th Tank Regiment"
+         ],
+         "to": "Singora"
+        }
+       ]
+      },
+      {
+       "id": "luzon",
+       "place": "Manila",
+       "rows": [
+        "14th Army (48th Division)",
+        "4th Tank Regiment",
+        "7th Tank Regiment",
+        "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+        "14th Army (16th Division)",
+        "14th Army (65th Brigade)",
+        "Kimura Detachment (16th Division)",
+        "16th Division (9th Infantry)",
+        "14th Army artillery (1st and 8th Field Heavy Artillery)"
+       ],
+       "then": [
+        {
+         "month": 1,
+         "corps": "14th Army (65th Brigade)",
+         "to": [
+          "Lingayen"
+         ],
+         "stage": true
+        }
+       ]
+      },
+      {
+       "id": "burma",
+       "place": "Myitkyina",
+       "rows": [
+        "15th Army (33rd and 55th Divisions)",
+        "Uno Detachment (143rd Infantry Regiment, of the 55th Division)",
+        "56th Division",
+        "18th Division"
+       ],
+       "land": [
+        {
+         "corps": "Uno Detachment (143rd Infantry Regiment, of the 55th Division)",
+         "to": "Kra"
+        }
+       ]
+      },
+      {
+       "id": "hongkong",
+       "place": "Hong Kong",
+       "rows": [
+        "229th Infantry Regiment (with the 38th Division's headquarters)",
+        "228th Infantry Regiment (the Ito Detachment)",
+        "230th Infantry Regiment (the Shoji Detachment)",
+        "23rd Army artillery (1st Artillery Group)"
+       ],
+       "land": [
+        {
+         "corps": "229th Infantry Regiment (with the 38th Division's headquarters)",
+         "with": [
+          "228th Infantry Regiment (the Ito Detachment)",
+          "230th Infantry Regiment (the Shoji Detachment)",
+          "23rd Army artillery (1st Artillery Group)"
+         ],
+         "to": "Tungkun"
+        }
+       ]
+      },
+      {
+       "id": "indies",
+       "place": "Batavia",
+       "rows": [
+        "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+        "Sakaguchi Detachment (56th Mixed Infantry Group)",
+        "Naval landing forces (Kure 1st and 2nd)",
+        "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)",
+        "16th Army (2nd Division)"
+       ],
+       "held": [
+        "16th Army (2nd Division)"
+       ],
+       "then": [
+        {
+         "month": 1,
+         "corps": "Sakaguchi Detachment (56th Mixed Infantry Group)",
+         "to": [
+          "Tarakan"
+         ],
+         "after": [
+          "Jolo"
+         ],
+         "from": [
+          "Davao"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Sakaguchi Detachment (56th Mixed Infantry Group)",
+         "to": [
+          "Balikpapan"
+         ],
+         "after": [
+          "Tarakan"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)",
+         "to": [
+          "Menado"
+         ],
+         "after": [
+          "Davao"
+         ],
+         "from": [
+          "Davao"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)",
+         "to": [
+          "Kendari"
+         ],
+         "after": [
+          "Menado"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Naval landing forces (Kure 1st and 2nd)",
+         "to": [
+          "Ambon"
+         ],
+         "after": [
+          "Kendari"
+         ],
+         "from": [
+          "Davao"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "228th Infantry Regiment (the Ito Detachment)",
+         "to": [
+          "Ambon"
+         ],
+         "after": [
+          "Hong Kong",
+          "Kendari"
+         ],
+         "from": [
+          "Davao"
+         ]
+        },
+        {
+         "month": 2,
+         "corps": "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)",
+         "to": [
+          "Makassar"
+         ],
+         "after": [
+          "Kendari"
+         ]
+        },
+        {
+         "month": 2,
+         "corps": "229th Infantry Regiment (with the 38th Division's headquarters)",
+         "with": [
+          "2nd Raiding Regiment (paratroops of the 1st Raiding Group)"
+         ],
+         "to": [
+          "Palembang"
+         ],
+         "after": [
+          "Hong Kong",
+          "Johore"
+         ],
+         "from": [
+          "Cam Ranh"
+         ]
+        },
+        {
+         "month": 2,
+         "corps": "14th Army (48th Division)",
+         "with": [
+          "4th Tank Regiment",
+          "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)"
+         ],
+         "to": [
+          "Jolo"
+         ],
+         "after": [
+          "Manila"
+         ],
+         "stage": true
+        },
+        {
+         "month": 3,
+         "corps": "14th Army (48th Division)",
+         "with": [
+          "4th Tank Regiment",
+          "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)"
+         ],
+         "to": [
+          "Semarang"
+         ],
+         "after": [
+          "Makassar"
+         ],
+         "from": [
+          "Jolo",
+          "Balikpapan"
+         ]
+        },
+        {
+         "month": 3,
+         "corps": "Sakaguchi Detachment (56th Mixed Infantry Group)",
+         "to": [
+          "Semarang"
+         ],
+         "after": [
+          "Makassar"
+         ],
+         "from": [
+          "Balikpapan"
+         ]
+        },
+        {
+         "month": 3,
+         "corps": "230th Infantry Regiment (the Shoji Detachment)",
+         "to": [
+          "Bandoeng"
+         ],
+         "after": [
+          "Hong Kong",
+          "Palembang"
+         ],
+         "from": [
+          "Cam Ranh"
+         ]
+        },
+        {
+         "month": 3,
+         "corps": "16th Army (2nd Division)",
+         "with": [
+          "16th Army troops (landing with the 2nd Division)"
+         ],
+         "to": [
+          "Batavia"
+         ],
+         "after": [
+          "Palembang"
+         ],
+         "from": [
+          "Cam Ranh"
+         ]
+        },
+        {
+         "month": 3,
+         "corps": "25th Army (Imperial Guards Division)",
+         "to": [
+          "Medan"
+         ],
+         "after": [
+          "Singapore"
+         ],
+         "from": [
+          "Singapore"
+         ]
+        },
+        {
+         "month": 2,
+         "corps": "228th Infantry Regiment (the Ito Detachment)",
+         "to": [
+          "Koepang"
+         ],
+         "after": [
+          "Ambon"
+         ],
+         "from": [
+          "Ambon"
+         ]
+        },
+        {
+         "month": 0,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Miri"
+         ]
+        },
+        {
+         "month": 0,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Kuching"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Jesselton"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Sandakan"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Singkawang"
+         ]
+        },
+        {
+         "month": 1,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Pontianak"
+         ]
+        },
+        {
+         "month": 4,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Cebu"
+         ]
+        },
+        {
+         "month": 4,
+         "corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+         "to": [
+          "Del Monte"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "southseas",
+       "place": "Rabaul",
+       "rows": [
+        "South Seas Detachment"
+       ],
+       "then": [
+        {
+         "month": 1,
+         "corps": "South Seas Detachment",
+         "to": [
+          "Rabaul"
+         ],
+         "after": [
+          "Guam"
+         ],
+         "from": [
+          "Guam"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "wake",
+       "place": "Wake",
+       "rows": [
+        "Naval landing force (Maizuru 2nd, for Wake)"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "navy": {
+  "landing": {
+   "craft": [
+    [
+     1,
+     [
+      "JAP"
+     ],
+     0.8
+    ]
+   ]
+  },
+  "moves": [
+   {
+    "turn": 27,
+    "nat": "JAP",
+    "fleet": "Mobile Fleet",
+    "base": "Etorofu",
+    "port": "Hitokappu Bay",
+    "home": "kurile",
+    "words": "The carrier striking force gathers at Hitokappu Bay in the Kuriles",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 29,
+    "nat": "JAP",
+    "fleet": "Mobile Fleet",
+    "base": "Hiroshima",
+    "port": "Kure",
+    "home": "inland",
+    "words": "The carrier striking force comes home to Kure",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 28,
+    "nat": "USA",
+    "fleet": "Asiatic Fleet",
+    "base": "Panay",
+    "port": "Iloilo",
+    "home": "sulu",
+    "words": "The Asiatic Fleet leaves Manila for Iloilo, on Panay",
+    "stops": [
+     1,
+     2
+    ],
+    "with": "JAP:south",
+    "eve": true
+   },
+   {
+    "turn": 29,
+    "nat": "USA",
+    "fleet": "Asiatic Fleet",
+    "base": "Soerabaja",
+    "port": "Surabaya",
+    "home": "java",
+    "words": "The Asiatic Fleet goes south to Surabaya",
+    "stops": [
+     1,
+     2
+    ],
+    "with": "JAP:south",
+    "ally": true
+   },
+   {
+    "turn": 30,
+    "nat": "USA",
+    "fleet": "Asiatic Fleet",
+    "base": "Semarang",
+    "port": "Tjilatjap",
+    "home": "eindian",
+    "words": "The Asiatic Fleet moves to Tjilatjap, on Java's south coast",
+    "stops": [
+     1,
+     2
+    ],
+    "with": "JAP:south",
+    "ally": true
+   },
+   {
+    "turn": 31,
+    "nat": "USA",
+    "fleet": "Asiatic Fleet",
+    "base": "Perth",
+    "port": "Fremantle",
+    "home": "westaus",
+    "words": "The Asiatic Fleet falls back to Fremantle",
+    "stops": [
+     1,
+     2
+    ],
+    "with": "JAP:south",
+    "ally": true
+   }
+  ]
+ }
+}

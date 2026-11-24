@@ -14,7 +14,7 @@ const seaData = JSON.parse(fs.readFileSync(new URL('../data/campaign/world-seas.
 
 // The frame and scale of the map of Europe (build-geo-campaign.mjs). The chart shares its top edge and its scale.
 const CW = -11, CE = 47, CS = 28.6, N = 71.4;
-const SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
+const SCALE = 40, PARALLEL = 50, KX = Math.cos((PARALLEL * Math.PI) / 180);
 const proj = ([lon, lat]) => [(lon - CW) * KX * SCALE, (N - lat) * SCALE];
 const coreW = (CE - CW) * KX * SCALE, coreH = (N - CS) * SCALE;
 if (FRAME.north !== N) throw new Error('the chart must share the top edge of the map of Europe');
@@ -454,7 +454,10 @@ const out = {
   frame: { x0: gx0, y0: 0, x1: Math.round(x1), y1: Math.round(y1) },
   // The whole world's own coordinates, for whoever draws it as one sheet or a globe: 40 units a degree of latitude
   // from 71.4 N, 25.7115 a degree of longitude eastward from the seam at 30.45 W. This file's x is the rules' x.
-  world: { width: 9256.14, height: 5096, shift: 500, seam: -30.45, x: 'world x = (x + 500) mod 9256.14', y: 'world y = y' },
+  // The projection itself is written beside them, for whoever measures on the chart (src/campaign/wrap.ts, the
+  // globe's distance): `scale` units a degree of latitude southward from `north`, and a degree of longitude drawn
+  // everywhere as long as it is at `parallel`. No rule carries these figures: they are read from here.
+  world: { width: 9256.14, height: 5096, shift: 500, seam: -30.45, x: 'world x = (x + 500) mod 9256.14', y: 'world y = y', north: N, scale: SCALE, parallel: PARALLEL },
   first,
   land: land.map((p) => p.map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]))),
   lakes: lakes.map((l) => {

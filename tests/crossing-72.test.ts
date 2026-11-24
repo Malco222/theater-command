@@ -15,7 +15,7 @@ import { setDesk } from '../src/campaign/depth';
 import { addCorps, atWar, computeSupply, createGame, endPhase } from '../src/campaign/game';
 import { onBook, setStop, shoreOpen } from '../src/campaign/history';
 import {
-  NAVY, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, openSeas, planCrossing, planLanding,
+  NAVY, SeaPicture, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, openSeas, planCrossing, planLanding,
   plannedCrossing, sail, seaPath, sortieAgainst, surfaceShips, whyNotLand, type CrossingOutlook,
 } from '../src/campaign/navy';
 import { coastWatch, seaBase, startOpen } from '../src/campaign/staff';
@@ -686,6 +686,22 @@ describe('an army across a narrow sea is fed from the conquered coast it sailed 
     const { channel } = lodged(hist);
     expect(closedTo(hist, channel, 'GER')).toBe(false);
     expect(openSeas(hist, 'GER')[channel]).toBe(0);
+  });
+
+  it('the far side\'s home-port form is not this chart\'s: a home port across the water still sends out its own supply ships', () => {
+    // (The director's ruling of 03:01Z, 22 November 2026; tests/far-home-ports.test.ts. With the far side off the
+    // old form stands; the form for this chart is after release.)
+    const g = opened();
+    const rhodes = g.byName['Rhodes'];
+    expect([rhodes.owner, rhodes.ctrl, rhodes.port]).toEqual(['ITA', 'ITA', true]);
+    // No other harbour of Italy's stands on its seas, and every other sea is closed to Italy by hand: no ship from
+    // Italy reaches it.
+    for (const r of g.regions) if (r !== rhodes && r.port && r.owner === 'ITA') expect(r.seas.some((z) => rhodes.seas.includes(z)), r.name).toBe(false);
+    const pic = new SeaPicture(g);
+    pic.closed = (z: number): boolean => !rhodes.seas.includes(z);
+    for (const z of rhodes.seas) expect(openSeas(g, 'ITA', pic)[z]).toBe(1);
+    // The form itself, asked for by hand, would leave them shut: the switch is what keeps it off here.
+    for (const z of rhodes.seas) expect(openSeas(g, 'ITA', pic, true)[z]).toBe(0);
   });
 });
 

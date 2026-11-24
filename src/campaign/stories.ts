@@ -8,7 +8,7 @@
 // home ties, rivalries and postings home apply to the player's own units alone, and
 // nothing here draws on the dice of the land war. History's wars play out as they did.
 
-import { mapDist } from './wrap';
+import { chartDist } from './wrap';
 import data from '../../data/campaign/stories.json';
 import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
@@ -897,7 +897,7 @@ function homeFor(g: Game, c: Corps): Region | null {
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!room(r) || r.fac <= 0) continue;
-    const d = mapDist(g, r.x, r.y, here.x, here.y);
+    const d = chartDist(g, r, here);
     if (d < bd) { bd = d; best = r; }
   }
   return best;

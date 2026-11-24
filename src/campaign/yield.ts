@@ -34,7 +34,7 @@ import { lineShut } from './line';
 import { standsFreed } from './liberation';
 import { farGround, marchMonths } from './marches';
 import { fieldCtrl } from './siege';
-import { NAVY, landingOpts, seaPath, surpriseOn } from './navy';
+import { NAVY, landingOpts, sailWay, seaPath, surpriseOn } from './navy';
 import { prizeOut } from './prizes';
 import { KIND, STACK, type Corps, type Game, type Region } from './types';
 
@@ -140,7 +140,7 @@ function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, kept:
   // By ship, into a harbour of its side beside the place.
   for (const p of beside) {
     if (!p.port || thornGround(g, p, c.nat) || lineShut(g, c.nat, p) || prizeOut(g, p, 'harbour') > 0 || whyBarred(g, c, p)) continue;
-    if (seaPath(g, c.nat, at, p) && !blocked(g, c, t, p.id)) from.add(p.id);
+    if (sailWay(g, c.nat, at, p) && !blocked(g, c, t, p.id)) from.add(p.id);
   }
   if (from.size) return { from: [...from], ship: true };
   // A landing on the place itself, where it is the enemy's.

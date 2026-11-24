@@ -16,7 +16,8 @@ import data from '../../data/campaign/liberation.json';
 import { clamp } from '../core/math';
 import { turnToDate } from '../core/ticket';
 import { STACK, type Game, type Nation, type Passing, type Region } from './types';
-import { addCorps, allied, armySize, atWar, bloc, headline, newsWeek, setWar, theName, roomless, type Bloc } from './game';
+import { addCorps, allied, armySize, atWar, bloc, goHome, headline, newsWeek, setWar, theName, roomless, type Bloc } from './game';
+import { farOn } from './world';
 import { corpsName } from './economy';
 import { DIPLOMACY, homeOpinion } from './diplomacy';
 import { enrol, small } from './league';
@@ -179,6 +180,11 @@ export function handBack(g: Game, X: Nation): number {
     r.ctrl = X.id;
     if (r.owner !== X.id) { r.owner = X.id; r.cap = false; }
     back++;
+    // A corps left on it of a country at peace with the returned one and not its ally goes home, as on any ground
+    // that changes hands (game.ts, `goHome`; rulings b341(b) and b343): Mongolia's cavalry, tied to the Soviet Union
+    // alone, stood on for good on Chinese ground the Red Army handed back (the Pacific playtester's finding 6,
+    // 19 November 2026). The far side only: on the old chart nothing is changed.
+    if (farOn(g)) goHome(g, r);
   }
   if (back) g.supplyDirty = true;
   return back;

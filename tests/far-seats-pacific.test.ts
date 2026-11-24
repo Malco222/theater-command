@@ -175,10 +175,14 @@ describe('the rows as they wait', () => {
       expect(nat, name).toBe('AUS');
       expect(turn, name).toBeGreaterThan(1);
       expect(Object.keys(KIND), name).toContain(kind);
-      // A battalion or a brigade: one division on paper at the floor of strength, never a full one.
+      // A battalion or a brigade: one division on paper at the record's own weight, never a full one, and it draws
+      // to no more (ruling 234(b)1: the record's numbers first. Rider b534(a): Lark Force 0.15. Rider b541: Port
+      // Moresby 0.25 in all, the 49th Battalion 0.1 and the 30th Brigade's two battalions 0.15).
       expect(divs, name).toBe(1);
-      expect(o.str, name).toBe(0.2);
-      expect(Object.keys(o).every((k) => ['xp', 'str', 'hold'].includes(k)), name).toBe(true);
+      const weight = name.startsWith('Lark Force') ? 0.15 : name.startsWith('49th Battalion') ? 0.1 : 0.15;
+      expect(o.str, name).toBe(weight);
+      expect(o.est, name).toBe(weight);
+      expect(Object.keys(o).every((k) => ['xp', 'str', 'hold', 'est'].includes(k)), name).toBe(true);
     }
     // They are 'formations' and never 'reinforcements': a computer-run country orders nothing new until its last
     // 'reinforcements' row has come (economy.ts lastScheduled), and a row of January 1942 would idle Australia's
@@ -203,7 +207,10 @@ describe.runIf(merged)('the seats on the map (the far side\'s switch on)', () =>
       expect(n.alive, id).toBe(true);
       expect(g.regions[n.capital].ctrl, id).toBe(id);
       const mine = g.corps.filter((c) => c.nat === id && !c.dead);
-      expect(mine.length, id).toBe(corps.filter((c) => c[0] === id).length);
+      // (China's file of the record's rows lays two first-day rows of China's beside the seats file's: Wenchow's
+      // garrison and the 10th Group Army's Taichow part, the design director's rulings of 00:43Z and 05:04Z,
+      // 21 November 2026.)
+      expect(mine.length, id).toBe(corps.filter((c) => c[0] === id).length + (id === 'CHN' ? 2 : 0));
       for (const c of mine) expect(g.regions[c.reg].ctrl, `${id} ${c.name}`).toBe(id);
     }
   });
@@ -302,9 +309,9 @@ describe.runIf(merged)("a client's tie: Manchukuo and Mongolia (the rider to rul
       declareWar(g, 'SOV', 'JAP');
       month(g);
       red.ap = red.apMax;
-      // Japan's 6th Army stands at Hailar beside Manchukuo's cavalry, and a corps marches into no province an enemy
-      // stands in: it fights for it.
-      expect(hailar.units.map((u) => u.nat).sort()).toEqual(['JAP', 'MAN']);
+      // Japan's 6th Army stands at Hailar beside Manchukuo's cavalry (two rows of it: its 7th Division is a row of
+      // its own, rider b641 to ruling 234), and a corps marches into no province an enemy stands in: it fights for it.
+      expect(hailar.units.map((u) => u.nat).sort()).toEqual(['JAP', 'JAP', 'MAN']);
       expect(moveCorps(g, red, hailar)).toBe(false);
       // With the garrison set aside the frontier itself is open to him: the ground is at war with him, and shelters nobody.
       hailar.units = [];

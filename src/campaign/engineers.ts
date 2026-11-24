@@ -169,7 +169,8 @@ export function startEngineers(g: Game): void {
 
 /** A bank where bridging would help this nation: it holds the bank, and the far side is its own or its enemy's. */
 /** True while this nation's staff has an offensive under way against that enemy (the staff's own mark, see staff.ts). */
-const marching = (g: Game, nat: string, enemy: string): boolean => (g.flags[`st:on:${nat}:${enemy}`] ?? 0) > 0;
+// (The far-side fronts' word is kept under a key of its own, staff.ts `farWordKey`: never written with the far side off.)
+const marching = (g: Game, nat: string, enemy: string): boolean => (g.flags[`st:on:${nat}:${enemy}`] ?? 0) > 0 || (g.flags[`st:on:${nat}:${enemy}:far`] ?? 0) > 0;
 
 /** Repair work this nation wants done in a province, and how much it matters. For bridges, the crossings in question. */
 interface Site { reg: number; score: number; what: JobKind; spans: Crossing[] }
