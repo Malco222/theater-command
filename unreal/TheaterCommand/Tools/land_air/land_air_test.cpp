@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -95,7 +96,7 @@ namespace
 			if (*S.Lost)
 			{
 				Lo << "{\"t\": " << S.T + Secs + 0.1 << ", \"what\": \"air:lost\", \"side\": \"" << S.Side << "\", \"text\": \"\", \"x\": " << S.Run[2] << ", \"y\": " << S.Run[3]
-				   << ", \"extra\": {\"flight\": " << S.Flight << ", \"kind\": \"" << S.Lost << "\", \"chutes\": 0, \"over\": \"enemy\", \"air\": \"ftr\", \"alt\": 60}, \"cue\": \"plane_down\"}";
+				   << ", \"extra\": {\"flight\": " << S.Flight << ", \"kind\": \"" << S.Lost << "\", \"chutes\": " << (std::strcmp(S.Lost, "explode") ? 1 : 0) << ", \"over\": \"enemy\", \"air\": \"ftr\", \"alt\": 60}, \"cue\": \"plane_down\"}";
 				Add(Lo.str());
 			}
 		}
@@ -112,6 +113,10 @@ namespace
 		for (const Gunner& G : Gs) { Mix(G.Key); Mix(G.To.X); Mix(G.To.Y); Mix(G.To.Z); }
 		return H;
 	}
+
+	V3 Plus(const V3& A, const V3& B) { return { A.X + B.X, A.Y + B.Y, A.Z + B.Z }; }
+	V3 Mul(const V3& A, double K) { return { A.X * K, A.Y * K, A.Z * K }; }
+	double Length(const V3& A) { return std::sqrt(A.X * A.X + A.Y * A.Y + A.Z * A.Z); }
 
 	double Turn(double A, double B)
 	{
@@ -412,6 +417,93 @@ int main(int Argc, char** Argv)
 		std::printf("     rounds at 22 a second: %d whole, %d at 23 frames a second, %d at 60\n", S.Rounds(T0, T1, 22.0), Coarse, RoundsSum);
 		Check(Coarse == S.Rounds(T0, T1, 22.0) && std::abs(RoundsSum - S.Rounds(T0, T1, 22.0)) <= 2, "same: the rounds the same however the frames fall");
 		Check(Nans == 0, "same: no NaN");
+	}
+	// ---- chutes (-TheaterLandChutes): the burning plane's and the spinning plane's pilots get out (the rules' chutes),
+	// the blown-up one's not
+	{
+		Check(S.ChutesPlanned() == 2, "chutes: a pilot out of each plane the rules say he got out of, none out of the one blown apart");
+		std::map<int, double> HitT, CrashT;
+		std::map<int, V3> HitAt;
+		std::vector<Happen> Hc;
+		S.Between(0.0, 400.0, Hc);
+		for (const Happen& H : Hc) { if (H.Kind == Happen::What::Hit) { HitT[H.Key] = H.T; HitAt[H.Key] = H.At; } else CrashT[H.Key] = H.T; }
+		struct Seen { double First = -1.0, OutHigh = 0.0, OpenHigh = -1.0, LandT = -1.0, MostStep = 0.0, MinSink = 1e9, MaxSink = 0.0; V3 Was, FirstAt; bool bWas = false; std::string Clips; double FirstFromPlane = 1e9; int Under = 0; double HeapOff = 0.0, SlumpEnd = 0.0, EnemyAtLand = 0.0, EnemyAtEnd = 0.0; };
+		std::map<int, Seen> Sn;
+		const double Dc = 1.0 / 60.0;
+		auto NearestEnemy = [&](const V3& At, int Side)
+		{
+			double Best = 1e18;
+			const LandFeed::View* V = Rec.ViewAt(200.0);
+			if (V) for (const LandFeed::Unit& U : V->Units) if (U.Side >= 0 && U.Side != Side && U.Str > 0.05) Best = std::min(Best, std::hypot(U.X - At.X, U.Y - At.Y));
+			return Best;
+		};
+		std::vector<Chute> Cs;
+		std::vector<Plane> Pl;
+		std::vector<Gunner> Gn;
+		for (double T = T0; T <= 400.0; T += Dc)
+		{
+			S.Chutes(T, Cs);
+			S.At(T, Pl, Gn);
+			for (const Chute& C : Cs)
+			{
+				if (Out.is_open() && std::fmod(T, 0.25) < Dc) Out << "c " << C.Key << " " << T << " " << C.At.X << " " << C.At.Y << " " << C.At.Z << " " << C.Open << " " << C.Swing << " " << (C.bDown ? 1 : 0) << " " << (C.Clip.empty() ? "-" : C.Clip) << " " << C.Heap.X << " " << C.Heap.Y << " " << C.Slump << "\n";
+				Seen& W = Sn[C.Key];
+				const double Over = C.At.Z - Flat(C.At.X, C.At.Y);
+				if (W.First < 0.0)
+				{
+					W.First = T;
+					W.OutHigh = Over;
+					W.FirstAt = C.At;
+					for (const Plane& P : Pl) if (P.Key == C.Key) W.FirstFromPlane = Length(Plus(P.At, Mul(C.At, -1.0)));
+				}
+				if (!std::isfinite(C.At.X) || !std::isfinite(C.At.Z) || !std::isfinite(C.Swing) || !std::isfinite(C.Time)) ++Nans;
+				W.Under += Over < -0.01;
+				if (W.bWas) W.MostStep = std::max(W.MostStep, Length(Plus(C.At, Mul(W.Was, -1.0))) / (Dc * Life));
+				W.Was = C.At;
+				W.bWas = true;
+				if (!C.bDown)
+				{
+					if (C.Open >= 1.0 && W.OpenHigh < 0.0) W.OpenHigh = Over;
+					if (C.Open >= 1.0 && T > W.First + 8.0 / Life && Over > 3.0) { W.MinSink = std::min(W.MinSink, -C.Vel.Z); W.MaxSink = std::max(W.MaxSink, -C.Vel.Z); }
+					continue;
+				}
+				if (W.LandT < 0.0)
+				{
+					W.LandT = T;
+					W.EnemyAtLand = NearestEnemy(C.At, C.Side);
+					W.HeapOff = std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y);
+				}
+				if (W.Clips.empty() || W.Clips.substr(W.Clips.rfind(' ') + 1) != C.Clip) W.Clips += " " + C.Clip;
+				W.SlumpEnd = C.Slump;
+				W.EnemyAtEnd = NearestEnemy(C.At, C.Side);
+			}
+		}
+		int Bad = 0;
+		for (const auto& Pair : Sn)
+		{
+			const Seen& W = Pair.second;
+			const double HitAtT = HitT.count(Pair.first) ? HitT[Pair.first] : -1.0, CrashAtT = CrashT.count(Pair.first) ? CrashT[Pair.first] : -1.0;
+			std::printf("     pilot of plane %d: out %.2f s after the hit (%.0f m up, %.1f m from her), canopy full %.0f m up, down at %.1f m/s to %.1f, landed %.0f s after he left;%s; canopy %.1f m downwind, fallen in %.2f; %.0f m from the nearest enemy, then %.0f; step %.0f m/s, under %d\n",
+				Pair.first, (W.First - HitAtT) * Life, W.OutHigh, W.FirstFromPlane, W.OpenHigh, W.MinSink, W.MaxSink, (W.LandT - W.First) * Life, W.Clips.c_str(), W.HeapOff, W.SlumpEnd, W.EnemyAtLand, W.EnemyAtEnd, W.MostStep, W.Under);
+			const bool bOk = HitAtT >= 0.0 && W.First > HitAtT && W.First < CrashAtT && W.FirstFromPlane < 6.0 && W.OutHigh >= 30.0 && W.OpenHigh > 15.0
+				&& W.MinSink >= 4.5 && W.MaxSink <= 7.0 && W.LandT > W.First && W.Under == 0 && W.MostStep < 170.0
+				&& W.Clips == " go_prone stand_up run go_prone" && std::abs(W.HeapOff - 4.0) < 0.01 && W.SlumpEnd > 0.999 && W.EnemyAtEnd > W.EnemyAtLand + 15.0;
+			Bad += !bOk;
+		}
+		Check(Sn.size() == 2 && Bad == 0, "chutes: out of her just after the hit and before she strikes, his canopy full well up, down at 5 to 6.5 m/s, never under the ground; down, flat, up, running from the enemy, flat; his canopy fallen in 4 m downwind");
+		Sky B2;
+		B2.Build(Rec, Flat, Life);
+		bool bSameChutes = true;
+		std::vector<Chute> C1, C2;
+		for (double T = T0; T <= 400.0; T += 0.25)
+		{
+			S.Chutes(T, C1);
+			B2.Chutes(T, C2);
+			bSameChutes = bSameChutes && C1.size() == C2.size();
+			for (size_t K = 0; K < C1.size() && K < C2.size(); ++K) bSameChutes = bSameChutes && C1[K].At.X == C2[K].At.X && C1[K].At.Z == C2[K].At.Z && C1[K].Clip == C2[K].Clip;
+		}
+		Check(bSameChutes, "chutes: the same twice");
+		Check(Nans == 0, "chutes: no NaN");
 	}
 	std::printf("land_air_test: %s\n", Failed ? "FAILED" : "all passed");
 	return Failed ? 1 : 0;

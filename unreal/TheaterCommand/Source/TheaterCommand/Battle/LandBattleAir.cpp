@@ -125,6 +125,63 @@ namespace
 	/** Each wing's guns laid this far to its own side of the aim (metres): converged just beyond, a pass leaves two
 	 * lines of strikes a few metres apart down its lane, not one. */
 	constexpr double WingApart = 1.2;
+
+	/** A downed pilot's mesh's own number among the planes' (AirSupportMeshes). */
+	int32 ChuteMeshKey(int Key) { return (1 << 20) + Key; }
+	/** His lines' length, his harness under his canopy's skirt (metres). */
+	constexpr double LinesLong = 4.1;
+	const FLinearColor ChuteSilk(0.86f, 0.85f, 0.80f), ChuteSuit(0.30f, 0.26f, 0.19f), ChuteHead(0.22f, 0.15f, 0.10f);
+
+	/**
+	 * A downed pilot under his canopy, in the mesh's own space (x the way he drifts, z up, units), its origin the middle
+	 * of his canopy's skirt so that he swings under it: packed (Open 0) a streamer of silk over him, blossoming to a
+	 * full canopy 7 m across; his lines to his risers; he hangs in his harness 4.1 m under it, his legs a little forward,
+	 * his hands up on his risers.
+	 */
+	void ChuteShape(FMiniatureMesh& M, double Open, double U)
+	{
+		const double Riser = -(LinesLong - 0.8) * U;
+		if (Open < 0.05)
+		{
+			M.Limb(FVector(0.0, 0.0, Riser), FVector(0.0, 0.0, Riser + 2.6 * U), 0.06 * U, 0.22 * U, ChuteSilk, 6);
+		}
+		else
+		{
+			const double R = (0.5 + 3.0 * Open) * U, H = (0.5 + 1.3 * Open) * U;
+			M.Pillar(FVector::ZeroVector, R, 0.35 * R, H, ChuteSilk, 16);
+			for (int32 K = 0; K < 8; ++K)
+			{
+				const double A = 2.0 * PI * (K + 0.5) / 8.0;
+				M.Rod(FVector(0.0, 0.0, Riser), FVector(R * std::cos(A), R * std::sin(A), 0.0), 0.02 * U, ChuteSilk, 3);
+			}
+		}
+		const double Hip = -(LinesLong + 0.3) * U, Feet = -(LinesLong + 1.1) * U;
+		M.Limb(FVector(0.0, 0.0, Hip), FVector(0.0, 0.0, -(LinesLong - 0.35) * U), 0.17 * U, 0.2 * U, ChuteSuit, 8);
+		M.Limb(FVector(0.0, 0.0, -(LinesLong - 0.38) * U), FVector(0.0, 0.0, -(LinesLong - 0.62) * U), 0.11 * U, 0.1 * U, ChuteHead, 8);
+		for (const double Side : { -1.0, 1.0 })
+		{
+			M.Limb(FVector(0.0, Side * 0.1 * U, Hip), FVector(0.18 * U, Side * 0.13 * U, Feet), 0.085 * U, 0.065 * U, ChuteSuit, 6);
+			M.Limb(FVector(0.0, Side * 0.2 * U, -(LinesLong - 0.3) * U), FVector(0.0, Side * 0.26 * U, Riser - 0.1 * U), 0.055 * U, 0.05 * U, ChuteSuit, 6);
+		}
+	}
+
+	/**
+	 * His canopy once he is down, in the mesh's own space (origin where his feet came down, x the way it falls, the
+	 * wind's, z up, units): from standing over him (Slump 0) it falls in downwind and settles flat 4 m off (1), a low
+	 * rumpled heap, its lines run back along the ground to where he landed.
+	 */
+	void HeapShape(FMiniatureMesh& M, double Slump, double Off, double U)
+	{
+		const double K = FMath::Clamp(Slump, 0.0, 1.0);
+		const FVector Middle(Off * K * U, 0.0, LinesLong * (1.0 - K) * U);
+		const double R = (3.5 - 0.4 * K) * U, Top = (1.2 + 1.1 * K) * U, H = (1.7 - 1.35 * K) * U;
+		M.Pillar(Middle, R, Top, H, ChuteSilk, 16);
+		for (int32 L = 0; L < 4; ++L)
+		{
+			const double A = PI * (0.62 + 0.25 * L); // (the near half of its skirt, toward him)
+			M.Rod(FVector(0.0, 0.0, 0.05 * U), Middle + FVector(R * std::cos(A), R * std::sin(A), 0.0), 0.02 * U, ChuteSilk, 3);
+		}
+	}
 }
 
 void ALandBattle::FlyOver()
@@ -139,6 +196,10 @@ void ALandBattle::FlyOver()
 		A.bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandAirSupport"));
 		UE_LOG(LogTheater, Log, TEXT("Land battle: the fighters on call %s"),
 			A.bOn ? TEXT("flown over the field, fired on, the few lost going down (-TheaterLandAirSupport, release 2)") : TEXT("not drawn, as before"));
+		// (their downed pilots under their parachutes, where the rules say they got out: release 2, off until the art
+		// director and a 45 fps reading pass; Brian, 23 November 20:09Z)
+		A.bChutes = A.bOn && FParse::Param(FCommandLine::Get(), TEXT("TheaterLandChutes"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: downed pilots %s"), A.bChutes ? TEXT("come down under their parachutes (-TheaterLandChutes, release 2)") : TEXT("not drawn"));
 	}
 	if (!A.bOn || !S.Field)
 	{
@@ -220,6 +281,126 @@ void ALandBattle::FlyOver()
 		Seen.Add(P.Key);
 		Mesh->SetVisibility(true);
 		Mesh->SetWorldLocationAndRotation(World(P.At.X, P.At.Y, P.At.Z), FRotator(P.Pitch, P.Heading, P.Bank).Quaternion() * HalfRound);
+	}
+	// Effects (R2): the downed pilots (-TheaterLandChutes). In the air each is one small mesh, its canopy and he, its
+	// pivot his canopy so that he swings under it, built again only as his canopy blossoms; down, his canopy falls in
+	// where it lies, and he is a man of the crowd in his army's infantry clips, unarmed (a pilot has no rifle).
+	if (A.bChutes)
+	{
+		A.Sky.Chutes(T, A.ChutesNow);
+		std::set<int> Down;
+		for (const LandAir::Chute& C : A.ChutesNow)
+		{
+			const int32 MeshKey = ChuteMeshKey(C.Key);
+			TObjectPtr<UProceduralMeshComponent>* Have = AirSupportMeshes.Find(MeshKey);
+			UProceduralMeshComponent* Mesh = Have ? Have->Get() : nullptr;
+			if (!Mesh)
+			{
+				Mesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("LandAirChute_%d"), C.Key)));
+				Mesh->SetupAttachment(Root);
+				Mesh->SetMobility(EComponentMobility::Movable);
+				Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Mesh->SetCastShadow(true);
+				Mesh->bUseAsyncCooking = false;
+				Mesh->RegisterComponent();
+				AirSupportMeshes.Add(MeshKey, Mesh);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d is out under his parachute, %.0f m up"), C.Key, C.At.Z - FieldPtr->HeightAt(C.At.X, C.At.Y));
+			}
+			FLandBattleState::FAirSupport::FChuteMan& Him = A.ChuteMen[C.Key];
+			const double Shape = C.bDown ? 2.0 + C.Slump : C.Open;
+			if (std::abs(Shape - Him.Shape) > 0.02 || (Shape >= 1.0 && Him.Shape < 1.0) || (Shape >= 3.0 && Him.Shape < 3.0) || (C.bDown != (Him.Shape >= 2.0)))
+			{
+				FMiniatureMesh Built;
+				if (C.bDown)
+				{
+					HeapShape(Built, C.Slump, std::hypot(C.Heap.X - C.Landed.X, C.Heap.Y - C.Landed.Y), U);
+				}
+				else
+				{
+					ChuteShape(Built, C.Open, U);
+				}
+				Mesh->ClearMeshSection(0);
+				Mesh->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
+				if (ThingInk)
+				{
+					Mesh->SetMaterial(0, ThingInk.Get());
+				}
+				Him.Shape = Shape;
+			}
+			Seen.Add(MeshKey);
+			Mesh->SetVisibility(true);
+			if (C.bDown)
+			{
+				Mesh->SetWorldLocationAndRotation(World(C.Landed.X, C.Landed.Y, C.Landed.Z), FRotator(0.0, C.HeapHeading, 0.0).Quaternion());
+			}
+			else
+			{
+				Mesh->SetWorldLocationAndRotation(World(C.At.X, C.At.Y, C.At.Z + LinesLong), FRotator(C.Swing, C.Heading, 0.0).Quaternion());
+			}
+			if (!C.bDown || !S.Men)
+			{
+				continue;
+			}
+			// Down: he is a man of the crowd, in his army's infantry clips with no rifle.
+			Down.insert(C.Key);
+			if (Him.Man < 0 && Him.File.empty())
+			{
+				std::string Row;
+				Him.File = S.Men->RiderFileOf(C.Nat, Row);
+				Him.Man = Him.File.empty() ? -1 : S.Men->AddRider(Him.File, C.Nat, 0xC47E2ull ^ static_cast<uint64_t>(C.Key) * 0x9E3779B97F4A7C15ull, Row);
+				if (Him.File.empty())
+				{
+					Him.File = "-";
+				}
+				MenDrawn.SetNum(S.Men->Count());
+				UE_LOG(LogTheater, Log, TEXT("Land battle: the pilot of plane %d is down, a man of the crowd (%s)"), C.Key, *AirWide(Him.File));
+			}
+			const LandMen::Soldier* Sol = Him.Man >= 0 ? S.Men->SoldierFile(Him.File) : nullptr;
+			const int Clip = Sol ? Sol->ClipIndex(C.Clip) : -1;
+			if (Clip < 0)
+			{
+				continue;
+			}
+			if (C.Clip != Him.Clip)
+			{
+				Him.WasClip = Him.Clip;
+				Him.WasTime = Him.NowTime;
+				Him.Switched = T;
+				Him.Clip = C.Clip;
+			}
+			Him.NowTime = C.Time;
+			LandMen::Crowd::Ride Ride;
+			const double Blended = Him.Switched >= 0.0 ? (T - Him.Switched) * S.Life / 0.25 : 1.0;
+			const int WasClip = Him.WasClip.empty() ? -1 : Sol->ClipIndex(Him.WasClip);
+			if (WasClip >= 0 && Blended < 1.0)
+			{
+				Ride.FromClip = WasClip;
+				Ride.FromTime = static_cast<float>(Him.WasTime + (T - Him.Switched) * S.Life);
+				Ride.W = static_cast<float>(FMath::Clamp(Blended, 0.0, 1.0));
+			}
+			const double Fx = std::sin(FMath::DegreesToRadians(C.Heading)), Fy = std::cos(FMath::DegreesToRadians(C.Heading));
+			float* Rm = Ride.Seat.R;
+			Rm[0] = static_cast<float>(Fx); Rm[1] = static_cast<float>(Fy); Rm[2] = 0.f;
+			Rm[3] = static_cast<float>(Fy); Rm[4] = static_cast<float>(-Fx); Rm[5] = 0.f;
+			Rm[6] = 0.f; Rm[7] = 0.f; Rm[8] = 1.f;
+			Ride.Seat.T[0] = static_cast<float>(C.At.X);
+			Ride.Seat.T[1] = static_cast<float>(C.At.Y);
+			Ride.Seat.T[2] = static_cast<float>(C.At.Z);
+			Ride.bShown = true;
+			Ride.Clip = Clip;
+			Ride.Time = static_cast<float>(C.Time);
+			Ride.bUnarmed = true;
+			S.Men->SetRide(Him.Man, Ride);
+		}
+		// (a battle wound back to before a pilot came down: his man is put away again)
+		for (std::pair<const int, FLandBattleState::FAirSupport::FChuteMan>& Each : A.ChuteMen)
+		{
+			if (Each.second.Man >= 0 && !Down.count(Each.first) && !Each.second.Clip.empty())
+			{
+				S.Men->SetRide(Each.second.Man, LandMen::Crowd::Ride());
+				Each.second.Clip.clear();
+			}
+		}
 	}
 	for (TPair<int32, TObjectPtr<UProceduralMeshComponent>>& Each : AirSupportMeshes)
 	{

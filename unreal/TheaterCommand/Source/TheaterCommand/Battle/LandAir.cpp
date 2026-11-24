@@ -20,6 +20,10 @@ namespace LandAir
 		// how far they reach (metres), and their tracers' speed (the kit's tracer.speed_mps).
 		constexpr double PostsWithin = 800.0, Reach = 900.0, TracerMps = 760.0;
 		constexpr int PostBlocks = 4, PostGuns = 2;
+		// A downed pilot (-TheaterLandChutes): his army's infantry clips' lengths (go_prone, stand_up) and the run's
+		// stride (metres a loop of run, its loop's seconds), his canopy's blossoming (seconds), and how far his lines hold
+		// it over his harness (metres).
+		constexpr double ProneS = 1.9, StandS = 0.6, RunStride = 2.451, RunLoop = 0.8, BlossomS = 1.0;
 
 		struct Dice
 		{
@@ -218,6 +222,31 @@ namespace LandAir
 			if (Slot < 0) continue;
 			const Fall How = N.Kind == "explode" ? Fall::Explode : N.Kind == "spin" ? Fall::Spin : Fall::Burn;
 			PlanFall(*P, Slot, How, (N.T - P->Tin) * Life);
+			// (its pilot, where the rules say he got out: never from a plane blown apart)
+			if (N.Chutes > 0 && How != Fall::Explode && P->Falls[static_cast<size_t>(Slot)].How != Fall::None)
+			{
+				const V3 Wind = Rec.Weather.bWind ? V3{ Rec.Weather.WindX, Rec.Weather.WindY, 0.0 } : V3{ 2.6, 1.2, 0.0 };
+				PlanChute(*P, Slot, Wind);
+				Down& D = P->Falls[static_cast<size_t>(Slot)];
+				// (down, he runs from the nearest enemy block as he lands: the other side's, by the view then)
+				const LandFeed::View* V = Rec.ViewAt(P->Tin + D.Landed / Life);
+				double Best = 1e18, Ex = 0.0, Ey = 0.0;
+				if (V)
+				{
+					for (const LandFeed::Unit& U : V->Units)
+					{
+						if (U.Side < 0 || U.Side == P->Side || U.Str <= 0.05) continue;
+						const double Dd = std::hypot(U.X - D.LandAt.X, U.Y - D.LandAt.Y);
+						if (Dd < Best) { Best = Dd; Ex = U.X; Ey = U.Y; }
+					}
+				}
+				D.RunHeading = Best < 1e17 && Best > 1.0 ? std::atan2(D.LandAt.X - Ex, D.LandAt.Y - Ey) / Rad : D.Face;
+				Dice Dr(static_cast<uint64_t>(P->Flight) * 92821ull + static_cast<uint64_t>(Slot) * 7193ull + 0xC47E0ull);
+				const double Far = Dr.U(20.0, 40.0), Speed = Dr.U(4.2, 5.0);
+				D.RunTo = Plus(D.LandAt, Times(Ahead(D.RunHeading), Far));
+				D.RunTo.Z = GroundZ(D.RunTo.X, D.RunTo.Y);
+				D.RunS = Far / Speed;
+			}
 		}
 		// The ground's guns: the other side's blocks nearest the run's middle as the leg comes, two guns a block, each
 		// in its own ragged bursts from as the first plane dives till the last has gone.
@@ -461,6 +490,178 @@ namespace LandAir
 		D.CrashAt = D.Path.back().At;
 		const Sample& Before = D.Path.size() >= 2 ? D.Path[D.Path.size() - 2] : D.Path.back();
 		D.CrashVel = Times(Plus(D.CrashAt, Times(Before.At, -1.0)), 1.0 / std::max(1e-3, D.Crash - Before.T));
+	}
+
+	void Sky::PlanChute(Plan& P, int Slot, const V3& Wind)
+	{
+		Down& D = P.Falls[static_cast<size_t>(Slot)];
+		if (D.Path.size() < 2) return;
+		auto GroundZ = [this](double X, double Y) { return GroundAt ? GroundAt(X, Y) : 0.0; };
+		auto PathAt = [&D](double Tau, V3& At, V3& Vel)
+		{
+			auto It = std::upper_bound(D.Path.begin(), D.Path.end(), Tau, [](double Tm, const Sample& S) { return Tm < S.T; });
+			const Sample& B = It == D.Path.end() ? D.Path.back() : *It;
+			const Sample& A = It == D.Path.begin() ? D.Path.front() : *(It - 1);
+			const double K = B.T > A.T ? std::clamp((Tau - A.T) / (B.T - A.T), 0.0, 1.0) : 0.0;
+			At = Plus(A.At, Times(Plus(B.At, Times(A.At, -1.0)), K));
+			Vel = Times(Plus(B.At, Times(A.At, -1.0)), 1.0 / std::max(1e-3, B.T - A.T));
+		};
+		Dice Dc(static_cast<uint64_t>(P.Flight) * 15485863ull + static_cast<uint64_t>(Slot) * 3571ull + 0xC47E1ull);
+		// Over the side a second or two after the hit (out of a spin sooner, while he still can), never in her last
+		// 0.8 s; and where she is too low by then, at the highest she is after the hit.
+		const double Last = std::max(D.Hit + 0.1, D.Crash - 0.8);
+		double Leave = std::min(D.Hit + (D.How == Fall::Spin ? Dc.U(0.5, 0.9) : Dc.U(1.0, 2.0)), Last);
+		V3 At, Vel;
+		PathAt(Leave, At, Vel);
+		if (At.Z - GroundZ(At.X, At.Y) < 60.0)
+		{
+			double High = -1e9;
+			for (const Sample& S : D.Path)
+			{
+				if (S.T < D.Hit + 0.3 || S.T > Last) continue;
+				const double H = S.At.Z - GroundZ(S.At.X, S.At.Y);
+				if (H > High) { High = H; Leave = S.T; }
+			}
+			PathAt(Leave, At, Vel);
+		}
+		D.bChute = true;
+		D.Out = Leave;
+		D.Drop.clear();
+		// Free a second or so (pulling at once when under 70 m), his way off her dying fast; then his canopy blossoms
+		// over BlossomS and he comes down at 5 to 6.5 m/s, drifting with the wind.
+		const double Delay = Dc.U(1.0, 1.6), Sink = Dc.U(5.0, 6.5), Dt = 1.0 / 30.0;
+		const V3 Drift = Times(Wind, 0.95);
+		double Deploy = -1.0, T = 0.0, Heading = std::atan2(Vel.X, Vel.Y) / Rad;
+		V3 Pos = At;
+		D.Opened = -1.0;
+		while (T < 400.0)
+		{
+			const double G = GroundZ(Pos.X, Pos.Y);
+			if (Deploy < 0.0 && (T >= Delay || Pos.Z - G < 70.0)) Deploy = T;
+			const double Open = Deploy < 0.0 ? 0.0 : std::clamp((T - Deploy) / BlossomS, 0.0, 1.0);
+			if (Open >= 1.0 && D.Opened < 0.0) D.Opened = D.Out + T;
+			if (Open <= 0.0)
+			{
+				Vel.X *= std::exp(-Dt / 1.5);
+				Vel.Y *= std::exp(-Dt / 1.5);
+				Vel.Z = std::max(Vel.Z - 9.81 * Dt, -50.0);
+			}
+			else
+			{
+				const double K = std::min(1.0, Dt * 3.0 * Open);
+				Vel = Plus(Vel, Times(Plus(V3{ Drift.X, Drift.Y, -Sink }, Times(Vel, -1.0)), K));
+			}
+			if (Vel.X * Vel.X + Vel.Y * Vel.Y > 0.04) Heading = std::atan2(Vel.X, Vel.Y) / Rad;
+			D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
+			Pos = Plus(Pos, Times(Vel, Dt));
+			T += Dt;
+			const double Gn = GroundZ(Pos.X, Pos.Y);
+			if (Pos.Z <= Gn)
+			{
+				Pos.Z = Gn;
+				D.Drop.push_back({ D.Out + T, Pos, Heading, Open, 0.0 });
+				break;
+			}
+		}
+		if (D.Opened < 0.0) D.Opened = D.Out + T;
+		D.Landed = D.Out + T;
+		D.LandAt = Pos;
+		D.Face = Heading;
+		D.Lie = Dc.U(1.5, 3.5);
+		// (his canopy falls in downwind of him, its lines run out: about 4 m off, the way the wind goes, or his own)
+		const double Wh = Wind.X * Wind.X + Wind.Y * Wind.Y > 0.04 ? std::atan2(Wind.X, Wind.Y) / Rad : Heading;
+		D.Heap = Plus(Pos, Times(Ahead(Wh), 4.0));
+		D.Heap.Z = GroundZ(D.Heap.X, D.Heap.Y);
+	}
+
+	size_t Sky::ChutesPlanned() const
+	{
+		size_t N = 0;
+		for (const Plan& P : Plans)
+		{
+			for (const Down& D : P.Falls) N += D.bChute ? 1u : 0u;
+		}
+		return N;
+	}
+
+	void Sky::Chutes(double T, std::vector<Chute>& Out) const
+	{
+		Out.clear();
+		for (size_t I = 0; I < Plans.size(); ++I)
+		{
+			const Plan& P = Plans[I];
+			const double Tau = (T - P.Tin) * Life;
+			for (int Slot = 0; Slot < P.Models; ++Slot)
+			{
+				const Down& D = P.Falls[static_cast<size_t>(Slot)];
+				if (!D.bChute || D.Drop.empty() || Tau < D.Out) continue;
+				Chute C;
+				C.Key = static_cast<int>(I) * 8 + Slot;
+				C.Side = P.Side;
+				C.Nat = P.Nat;
+				C.Landed = D.LandAt;
+				C.Heap = D.Heap;
+				C.HeapHeading = std::atan2(D.Heap.X - D.LandAt.X, D.Heap.Y - D.LandAt.Y) / Rad;
+				if (Tau < D.Landed)
+				{
+					auto It = std::upper_bound(D.Drop.begin(), D.Drop.end(), Tau, [](double Tm, const Sample& S) { return Tm < S.T; });
+					const Sample& B = It == D.Drop.end() ? D.Drop.back() : *It;
+					const Sample& A = It == D.Drop.begin() ? D.Drop.front() : *(It - 1);
+					const double K = B.T > A.T ? std::clamp((Tau - A.T) / (B.T - A.T), 0.0, 1.0) : 0.0;
+					C.At = Plus(A.At, Times(Plus(B.At, Times(A.At, -1.0)), K));
+					C.Vel = Times(Plus(B.At, Times(A.At, -1.0)), 1.0 / std::max(1e-3, B.T - A.T));
+					C.Open = A.Pitch + (B.Pitch - A.Pitch) * K;
+					C.Heading = A.Heading;
+					// (his swing under it once it is full: a long pendulum, about 3.2 s a swing, dying away)
+					const double Since = Tau - D.Opened;
+					C.Swing = Since > 0.0 ? 14.0 * std::exp(-Since / 6.0) * std::sin(2.0 * Pi * Since / 3.2) : 0.0;
+					Out.push_back(C);
+					continue;
+				}
+				// Down: flat as he lands, lying a moment, up, running from the enemy, flat again where he goes to ground.
+				C.bDown = true;
+				C.Open = 1.0;
+				C.Slump = Smooth((Tau - D.Landed) / 2.5);
+				const double S = Tau - D.Landed;
+				const double Up = ProneS + D.Lie, Off = Up + StandS, Gone = Off + D.RunS;
+				C.At = D.LandAt;
+				C.Heading = D.Face;
+				if (S < Up)
+				{
+					C.Clip = "go_prone";
+					C.Time = std::min(S, ProneS);
+				}
+				else if (S < Off)
+				{
+					C.Clip = "stand_up";
+					C.Time = S - Up;
+					// (turning to the way he will run as he gets up)
+					double Turn = std::fmod(D.RunHeading - D.Face, 360.0);
+					if (Turn > 180.0) Turn -= 360.0;
+					if (Turn < -180.0) Turn += 360.0;
+					C.Heading = D.Face + Turn * Smooth((S - Up) / StandS);
+				}
+				else if (S < Gone)
+				{
+					const double K = (S - Off) / std::max(1e-3, D.RunS);
+					const double Far = Length(Plus(D.RunTo, Times(D.LandAt, -1.0)));
+					C.Clip = "run";
+					C.Time = std::fmod(K * Far / RunStride * RunLoop, RunLoop);
+					C.At = Plus(D.LandAt, Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), K));
+					C.At.Z = GroundAt ? GroundAt(C.At.X, C.At.Y) : D.RunTo.Z;
+					C.Heading = D.RunHeading;
+					C.Vel = Times(Plus(D.RunTo, Times(D.LandAt, -1.0)), 1.0 / std::max(1e-3, D.RunS));
+				}
+				else
+				{
+					C.Clip = "go_prone";
+					C.Time = std::min(S - Gone, ProneS);
+					C.At = D.RunTo;
+					C.Heading = D.RunHeading;
+				}
+				Out.push_back(C);
+			}
+		}
 	}
 
 	void Sky::At(double T, std::vector<Plane>& OutPlanes, std::vector<Gunner>& OutGuns) const

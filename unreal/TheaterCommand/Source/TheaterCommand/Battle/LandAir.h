@@ -97,6 +97,36 @@ namespace LandAir
 		double Span = 11.0;
 	};
 
+	/**
+	 * A downed pilot under his parachute, then down on the field (Effects, release 2: -TheaterLandChutes with
+	 * -TheaterLandAirSupport; Brian, 23 November 20:09Z). The rules say whether he got out (air:lost's chutes: never
+	 * from a plane blown apart); here only how. He goes over the side a second or two after the hit (a spinning plane's
+	 * pilot sooner), falls free a second or so (sooner when low), his canopy blossoms over a second and he comes down at
+	 * 5 to 6.5 m/s drifting with the battle's wind, swinging under it; down, he goes flat as he lands, lies a moment,
+	 * gets up and runs 20 to 40 m away from the nearest enemy, and goes to ground there for the rest of the battle; his
+	 * canopy falls in downwind of where he landed and lies there.
+	 */
+	struct Chute
+	{
+		int Key = 0;                    // his plane's
+		int Side = -1;
+		std::string Nat;                // his air force's (his army's soldier file, on the ground)
+		bool bDown = false;             // on the ground
+		V3 At;                          // in the air: the middle of his harness; down: his feet
+		V3 Vel;                         // metres a real second
+		double Open = 0.0;              // his canopy: 0 still packed (falling free), 1 full
+		double Swing = 0.0;             // degrees: his swing under it, nose of his drift up
+		double Heading = 0.0;           // degrees: the way he drifts (in the air), the way he faces (down)
+		// Down: his army's infantry clip and how far into it (real seconds): go_prone as he lands, held as he lies,
+		// stand_up, run, go_prone where he goes to ground, held
+		std::string Clip;
+		double Time = 0.0;
+		// His canopy: up over him (Slump 0) to fallen in and flat on the ground (1), where it lies then (Heap, its
+		// middle) and the way it lies from where he landed (degrees); Landed, where he landed
+		V3 Heap, Landed;
+		double HeapHeading = 0.0, Slump = 0.0;
+	};
+
 	/** The kit's numbers for a plane's guns (Shots), a ground gun's, and a plane's trail, fall and fire (one each). */
 	inline int GunIdOf(int Key, int Wing) { return 90000 + (Key % 2400) * 2 + (Wing & 1); }
 	inline int GunnerIdOf(int Key) { return 95000 + Key % 4800; }
@@ -117,6 +147,10 @@ namespace LandAir
 		void At(double T, std::vector<Plane>& OutPlanes, std::vector<Gunner>& OutGuns) const;
 		/** What happened in (From, To], in time's order. */
 		void Between(double From, double To, std::vector<Happen>& Out) const;
+		/** Every downed pilot out of his plane by battle time T: under his canopy, or down (Chute). */
+		void Chutes(double T, std::vector<Chute>& Out) const;
+		/** The pilots who get out (the rules' chutes), planned. */
+		size_t ChutesPlanned() const;
 		/** Rounds a gun firing Rate a real second fires in (From, To] (by the battle's clock: the same however the
 		 * frames fall). */
 		int Rounds(double From, double To, double Rate) const;
@@ -134,6 +168,14 @@ namespace LandAir
 			double Hit = 0.0, Crash = 0.0; // real seconds since its leg came
 			std::vector<Sample> Path;   // hit to crash (none for an explosion: its pieces fall in the kit)
 			V3 HitAt, HitVel, CrashAt, CrashVel;
+			// (its pilot, where the rules say he got out: real seconds since its leg came he leaves her, his canopy is
+			// full, his feet are down; his way down, each sample's Pitch his canopy's open share; then on the ground: how
+			// long he lies, how long he runs, where to, and the way he faces as he lands; where his canopy comes to lie)
+			bool bChute = false;
+			double Out = 0.0, Opened = 0.0, Landed = 0.0;
+			std::vector<Sample> Drop;
+			double Lie = 2.0, RunS = 0.0, Face = 0.0, RunHeading = 0.0;
+			V3 LandAt, RunTo, Heap;
 		};
 		struct Burst
 		{
@@ -174,6 +216,7 @@ namespace LandAir
 		bool Fly(const Plan& P, int Slot, double Tau, Sample& Out) const;
 		void Flown(const Plan& P, int Slot, double Tau, Plane& Out) const;
 		void PlanFall(Plan& P, int Slot, Fall How, double Tau);
+		void PlanChute(Plan& P, int Slot, const V3& Wind);
 
 		std::vector<Plan> Plans;
 		GroundFn GroundAt;
