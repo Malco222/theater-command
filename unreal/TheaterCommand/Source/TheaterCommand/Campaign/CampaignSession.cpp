@@ -168,6 +168,14 @@ bool FCampaignSession::Prepare(FString& OutError)
 	{
 		return false;
 	}
+	// (Release 2, the whole world) -TheaterFar beside -TheaterWorld: the rules play the far side, Asia, the Indies and
+	// the Pacific, on the whole world's chart (src/campaign/stage.ts reads TC_FAR when its bundle loads), as the table
+	// draws it (FCampaignMapData::FarSwitch). With stage.json's "far" on, the bundle is built with it and needs nothing.
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) && FParse::Param(FCommandLine::Get(), TEXT("TheaterFar"))
+		&& !Host->Evaluate(TEXT("globalThis.TC_FAR = 1;"), TEXT("release 2 the far side"), OutError))
+	{
+		return false;
+	}
 #endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
